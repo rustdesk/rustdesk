@@ -1,6 +1,13 @@
 import 'package:flutter/material.dart';
+import 'dart:io' show Platform;
+import 'dart:ffi';
 
 void main() {
+  final dylib = Platform.isAndroid ? DynamicLibrary.open('librustdesk.so') : DynamicLibrary.process();
+  final initialize = dylib.lookupFunction<Void Function(), void Function()>('initialize');
+  initialize();
+  // final connect = dylib.lookupFunction<Void Function(Pointer<Utf8>), void Function(Pointer<Utf8>)>('connect');
+  // connect(Utf8.toUtf8('test'));
   runApp(MyApp());
 }
 
