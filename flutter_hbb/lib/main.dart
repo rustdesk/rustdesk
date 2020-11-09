@@ -1,20 +1,28 @@
+import 'package:ffi/ffi.dart';
 import 'package:flutter/material.dart';
-import 'dart:io' show Platform;
+import 'package:path_provider/path_provider.dart';
+import 'dart:io';
 import 'dart:ffi';
+import 'dart:async';
 
 void main() {
-  final dylib = Platform.isAndroid ? DynamicLibrary.open('librustdesk.so') : DynamicLibrary.process();
-  final initialize = dylib.lookupFunction<Void Function(), void Function()>('initialize');
-  initialize();
   // final connect = dylib.lookupFunction<Void Function(Pointer<Utf8>), void Function(Pointer<Utf8>)>('connect');
   // connect(Utf8.toUtf8('test'));
   runApp(MyApp());
+}
+
+Future<Null> initialzeFFI() async {
+  final dylib = Platform.isAndroid ? DynamicLibrary.open('librustdesk.so') : DynamicLibrary.process();
+  String dir = (await getApplicationDocumentsDirectory()).path;
+  final initialize = dylib.lookupFunction<Void Function(Pointer<Utf8>), void Function(Pointer<Utf8>)>('initialize');
+  initialize(Utf8.toUtf8(dir));
 }
 
 class MyApp extends StatelessWidget {
   // This widget is the root of your application.
   @override
   Widget build(BuildContext context) {
+    initialzeFFI();
     return MaterialApp(
       title: 'Flutter Demo',
       theme: ThemeData(
