@@ -6,8 +6,8 @@ import 'dart:ffi';
 import 'dart:async';
 
 void main() {
-  // final connect = dylib.lookupFunction<Void Function(Pointer<Utf8>), void Function(Pointer<Utf8>)>('connect');
-  // connect(Utf8.toUtf8('test'));
+  // final connect_remote = dylib.lookupFunction<Void Function(Pointer<Utf8>), void Function(Pointer<Utf8>)>('connect_remote');
+  // connect_remote(Utf8.toUtf8('test'));
   runApp(MyApp());
 }
 
