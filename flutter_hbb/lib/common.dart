@@ -23,10 +23,13 @@ class MyTheme {
 }
 
 typedef F1 = void Function(Pointer<Utf8>);
+typedef F2 = Pointer<Utf8> Function();
 
 // https://juejin.im/post/6844903864852807694
 class FfiModel with ChangeNotifier {
   F1 _connectRemote;
+  F2 _getPeers;
+  F1 _freeCString;
 
   FfiModel() {
     initialzeFFI();
@@ -40,6 +43,17 @@ class FfiModel with ChangeNotifier {
     _connectRemote(Utf8.toUtf8(id));
   }
 
+  String getId() {
+    return "";
+  }
+
+  void peers() {
+    var p = _getPeers();
+    var x = Utf8.fromUtf8(p);
+    // https://github.com/brickpop/flutter-rust-ffi
+    _freeCString(p);
+  }
+
   Future<Null> initialzeFFI() async {
     final dylib = Platform.isAndroid
         ? DynamicLibrary.open('librustdesk.so')
@@ -48,6 +62,9 @@ class FfiModel with ChangeNotifier {
         void Function(Pointer<Utf8>)>('initialize');
     _connectRemote = dylib
         .lookupFunction<Void Function(Pointer<Utf8>), F1>('connect_remote');
+    _getPeers = dylib.lookupFunction<F2, F2>('get_peers');
+    _freeCString = dylib
+        .lookupFunction<Void Function(Pointer<Utf8>), F1>('rust_cstr_free');
     final dir = (await getApplicationDocumentsDirectory()).path;
     initialize(Utf8.toUtf8(dir));
     notifyListeners();

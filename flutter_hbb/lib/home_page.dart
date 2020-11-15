@@ -43,6 +43,7 @@ class _HomePageState extends State<HomePage> {
   }
 
   Widget getSearchBarUI() {
+    var id = ffi.getId();
     return Padding(
       padding: const EdgeInsets.only(top: 8.0),
       child: Container(
@@ -65,6 +66,7 @@ class _HomePageState extends State<HomePage> {
                   child: Container(
                     padding: const EdgeInsets.only(left: 16, right: 16),
                     child: TextFormField(
+                      initialValue: id,
                       style: TextStyle(
                         fontFamily: 'WorkSans',
                         fontWeight: FontWeight.bold,
