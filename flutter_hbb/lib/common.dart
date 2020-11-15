@@ -17,9 +17,16 @@ class HexColor extends Color {
   }
 }
 
+class MyTheme {
+  static const Color grayBg = Color(0xFFEEEEEE);
+  static const Color white = Color(0xFFFFFFFF);
+}
+
+typedef F1 = void Function(Pointer<Utf8>);
+
 // https://juejin.im/post/6844903864852807694
 class FfiModel with ChangeNotifier {
-  var _connectRemote;
+  F1 _connectRemote;
 
   FfiModel() {
     initialzeFFI();
@@ -39,8 +46,8 @@ class FfiModel with ChangeNotifier {
         : DynamicLibrary.process();
     final initialize = dylib.lookupFunction<Void Function(Pointer<Utf8>),
         void Function(Pointer<Utf8>)>('initialize');
-    _connectRemote = dylib.lookupFunction<Void Function(Pointer<Utf8>),
-        void Function(Pointer<Utf8>)>('connect_remote');
+    _connectRemote = dylib
+        .lookupFunction<Void Function(Pointer<Utf8>), F1>('connect_remote');
     final dir = (await getApplicationDocumentsDirectory()).path;
     initialize(Utf8.toUtf8(dir));
     notifyListeners();

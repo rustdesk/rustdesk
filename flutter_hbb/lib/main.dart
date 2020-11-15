@@ -4,10 +4,10 @@ import 'common.dart';
 import 'home_page.dart';
 
 void main() {
-  runApp(_App());
+  runApp(App());
 }
 
-class _App extends StatelessWidget {
+class App extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     var ffi = FfiModel();
