@@ -4,6 +4,7 @@ import 'package:path_provider/path_provider.dart';
 import 'dart:io';
 import 'dart:ffi';
 import 'dart:async';
+import 'dart:convert';
 
 class HexColor extends Color {
   HexColor(final String hexColor) : super(_getColorFromHex(hexColor));
@@ -49,9 +50,18 @@ class FfiModel with ChangeNotifier {
 
   void peers() {
     var p = _getPeers();
-    var x = Utf8.fromUtf8(p);
-    // https://github.com/brickpop/flutter-rust-ffi
-    _freeCString(p);
+    try {
+      List<dynamic> peers = json.decode(Utf8.fromUtf8(p));
+      // https://github.com/brickpop/flutter-rust-ffi
+      _freeCString(p);
+      peers = peers
+          .map((s) => s as List<dynamic>)
+          .map((s) =>
+              [s[0] as String, Peer.fromJson(s[1] as Map<String, dynamic>)])
+          .toList();
+    } catch (e) {
+      print(e);
+    }
   }
 
   Future<Null> initialzeFFI() async {
@@ -69,4 +79,20 @@ class FfiModel with ChangeNotifier {
     initialize(Utf8.toUtf8(dir));
     notifyListeners();
   }
+}
+
+class Peer {
+  final String name;
+  final String email;
+
+  Peer(this.name, this.email);
+
+  Peer.fromJson(Map<String, dynamic> json)
+      : name = json['name'],
+        email = json['email'];
+
+  Map<String, dynamic> toJson() => {
+        'name': name,
+        'email': email,
+      };
 }
