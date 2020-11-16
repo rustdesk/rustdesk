@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'common.dart';
+import 'remote_page.dart';
 
 class HomePage extends StatefulWidget {
   HomePage({Key key, this.title}) : super(key: key);
@@ -12,13 +13,13 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> {
-  final idController = TextEditingController();
-  FfiModel ffi;
+  final _idController = TextEditingController();
+  FfiModel _ffi;
 
   @override
   Widget build(BuildContext context) {
-    ffi = Provider.of<FfiModel>(context);
-    idController.text = ffi.getId();
+    _ffi = Provider.of<FfiModel>(context);
+    _idController.text = _ffi.getId();
 
     // This method is rerun every time setState is called
     return Scaffold(
@@ -40,7 +41,14 @@ class _HomePageState extends State<HomePage> {
   }
 
   void onConnect() {
-    ffi.connect(idController.text);
+    var id = _idController.text.trim();
+    if (id == "") return;
+    Navigator.push<dynamic>(
+      context,
+      MaterialPageRoute<dynamic>(
+        builder: (BuildContext context) => RemotePage(id: id),
+      ),
+    );
   }
 
   Widget getSearchBarUI() {
@@ -89,7 +97,7 @@ class _HomePageState extends State<HomePage> {
                         ),
                       ),
                       autofocus: false,
-                      controller: idController,
+                      controller: _idController,
                     ),
                   ),
                 ),
@@ -112,7 +120,7 @@ class _HomePageState extends State<HomePage> {
 
   @override
   void dispose() {
-    idController.dispose();
+    _idController.dispose();
     super.dispose();
   }
 }
