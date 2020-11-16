@@ -121,10 +121,10 @@ void showSuccess(String text) {
   EasyLoading.showSuccess(text);
 }
 
-AlertDialog enterPasswordDialog(String id, BuildContext context) {
+void enterPasswordDialog(String id, BuildContext context) {
   var ffi = Provider.of<FfiModel>(context);
   var remember = ffi.getByName("remember", arg: id) == "true";
-  return AlertDialog(
+  var dialog = AlertDialog(
     title: Text('Please enter your password'),
     contentPadding: EdgeInsets.zero,
     content: Column(
@@ -160,10 +160,11 @@ AlertDialog enterPasswordDialog(String id, BuildContext context) {
       ),
     ],
   );
+  showDialog<void>(context: context, builder: (context) => dialog);
 }
 
-AlertDialog wrongPasswordDialog(String id, BuildContext context) {
-  return AlertDialog(
+void wrongPasswordDialog(String id, BuildContext context) {
+  var dialog = AlertDialog(
     title: Text('Please enter your password'),
     contentPadding: EdgeInsets.zero,
     content: Text('Do you want to enter again?'),
@@ -183,4 +184,5 @@ AlertDialog wrongPasswordDialog(String id, BuildContext context) {
       ),
     ],
   );
+  showDialog<void>(context: context, builder: (context) => dialog);
 }
