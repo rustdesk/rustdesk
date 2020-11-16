@@ -121,6 +121,7 @@ void showSuccess(String text) {
   EasyLoading.showSuccess(text);
 }
 
+// https://material.io/develop/flutter/components/dialogs
 void enterPasswordDialog(String id, BuildContext context) {
   var ffi = Provider.of<FfiModel>(context);
   var remember = ffi.getByName("remember", arg: id) == "true";
