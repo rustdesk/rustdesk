@@ -40,27 +40,6 @@ class FfiModel with ChangeNotifier {
     initialzeFFI();
   }
 
-  void addRemote() {
-    notifyListeners();
-  }
-
-  void connect(String id) {
-    setByName("connect", id);
-    _setByName(Utf8.toUtf8("connect"), Utf8.toUtf8(id));
-  }
-
-  void setByName(String name, String value) {
-    _setByName(Utf8.toUtf8(name), Utf8.toUtf8(value));
-  }
-
-  String getByName(String name, {String arg = ""}) {
-    var p = _getByName(Utf8.toUtf8(name), Utf8.toUtf8(arg));
-    var res = Utf8.fromUtf8(p);
-    // https://github.com/brickpop/flutter-rust-ffi
-    _freeCString(p);
-    return res;
-  }
-
   String getId() {
     return getByName("remote_id");
   }
@@ -77,6 +56,52 @@ class FfiModel with ChangeNotifier {
       print(e);
     }
     return [];
+  }
+
+  void addRemote() {
+    notifyListeners();
+  }
+
+  void connect(String id) {
+    setByName("connect", id);
+  }
+
+  Map<String, String> popEvent() {
+    var s = getByName("event");
+    if (s == "") return null;
+    try {
+      Map<String, String> event = json.decode(s);
+      return event;
+    } catch (e) {
+      print(e);
+    }
+    return null;
+  }
+
+  void login(String password, bool remember) {
+    setByName(
+        "login",
+        json.encode({
+          "password": password,
+          "remember": remember ? "true" : "false",
+        }));
+  }
+
+  void close() {
+    setByName("close", "");
+  }
+
+  void setByName(String name, String value) {
+    _setByName(Utf8.toUtf8(name), Utf8.toUtf8(value));
+  }
+
+  String getByName(String name, {String arg = ""}) {
+    var p = _getByName(Utf8.toUtf8(name), Utf8.toUtf8(arg));
+    assert(p != null);
+    var res = Utf8.fromUtf8(p);
+    // https://github.com/brickpop/flutter-rust-ffi
+    _freeCString(p);
+    return res;
   }
 
   Future<Null> initialzeFFI() async {
