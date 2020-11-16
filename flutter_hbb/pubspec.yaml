@@ -31,6 +31,7 @@ dependencies:
   ffi: ^0.1.3
   path_provider: ^1.6.24
   provider: ^4.3.2+2
+  flutter_easyloading: ^2.1.3
 
 dev_dependencies:
   flutter_test:

@@ -72,7 +72,7 @@ class _HomePageState extends State<HomePage> {
                         fontSize: 30,
                         color: Color(0xFF00B6F0),
                       ),
-                      keyboardType: TextInputType.text,
+                      keyboardType: TextInputType.number,
                       decoration: InputDecoration(
                         labelText: 'Remote ID',
                         border: InputBorder.none,

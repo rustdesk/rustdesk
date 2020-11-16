@@ -5,6 +5,7 @@ import 'dart:io';
 import 'dart:ffi';
 import 'dart:async';
 import 'dart:convert';
+import 'package:flutter_easyloading/flutter_easyloading.dart';
 
 class HexColor extends Color {
   HexColor(final String hexColor) : super(_getColorFromHex(hexColor));
@@ -103,4 +104,13 @@ class Peer {
         username = json['username'],
         hostname = json['hostname'],
         platform = json['platform'];
+}
+
+// https://github.com/huangjianke/flutter_easyloading
+void showLoading(String text) {
+  EasyLoading.show(status: text);
+}
+
+void dismissLoading() {
+  EasyLoading.dismiss();
 }
