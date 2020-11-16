@@ -117,10 +117,14 @@ void dismissLoading() {
   EasyLoading.dismiss();
 }
 
-void enterPasswordDialog(String id, BuildContext context) {
+void showSuccess(String text) {
+  EasyLoading.showSuccess(text);
+}
+
+AlertDialog enterPasswordDialog(String id, BuildContext context) {
   var ffi = Provider.of<FfiModel>(context);
   var remember = ffi.getByName("remember", arg: id) == "true";
-  AlertDialog(
+  return AlertDialog(
     title: Text('Please enter your password'),
     contentPadding: EdgeInsets.zero,
     content: Column(
@@ -153,6 +157,29 @@ void enterPasswordDialog(String id, BuildContext context) {
         textColor: MyTheme.accent,
         onPressed: () => Navigator.pop(context),
         child: Text('OK'),
+      ),
+    ],
+  );
+}
+
+AlertDialog wrongPasswordDialog(String id, BuildContext context) {
+  return AlertDialog(
+    title: Text('Please enter your password'),
+    contentPadding: EdgeInsets.zero,
+    content: Text('Do you want to enter again?'),
+    actions: [
+      FlatButton(
+        textColor: MyTheme.accent,
+        onPressed: () => Navigator.pop(context),
+        child: Text('Cancel'),
+      ),
+      FlatButton(
+        textColor: MyTheme.accent,
+        onPressed: () {
+          Navigator.pop(context);
+          enterPasswordDialog(id, context);
+        },
+        child: Text('Retry'),
       ),
     ],
   );
