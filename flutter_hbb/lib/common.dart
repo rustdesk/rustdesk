@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'package:ffi/ffi.dart';
 import 'package:path_provider/path_provider.dart';
 import 'dart:io';
@@ -22,10 +23,11 @@ class HexColor extends Color {
 class MyTheme {
   static const Color grayBg = Color(0xFFEEEEEE);
   static const Color white = Color(0xFFFFFFFF);
+  static const Color accent = Color(0xFF0071FF);
 }
 
 typedef F1 = void Function(Pointer<Utf8>);
-typedef F2 = Pointer<Utf8> Function(Pointer<Utf8>);
+typedef F2 = Pointer<Utf8> Function(Pointer<Utf8>, Pointer<Utf8>);
 typedef F3 = void Function(Pointer<Utf8>, Pointer<Utf8>);
 
 // https://juejin.im/post/6844903864852807694
@@ -51,8 +53,8 @@ class FfiModel with ChangeNotifier {
     _setByName(Utf8.toUtf8(name), Utf8.toUtf8(value));
   }
 
-  String getByName(String name) {
-    var p = _getByName(Utf8.toUtf8(name));
+  String getByName(String name, {String arg = ""}) {
+    var p = _getByName(Utf8.toUtf8(name), Utf8.toUtf8(arg));
     var res = Utf8.fromUtf8(p);
     // https://github.com/brickpop/flutter-rust-ffi
     _freeCString(p);
@@ -113,4 +115,45 @@ void showLoading(String text) {
 
 void dismissLoading() {
   EasyLoading.dismiss();
+}
+
+void enterPasswordDialog(String id, BuildContext context) {
+  var ffi = Provider.of<FfiModel>(context);
+  var remember = ffi.getByName("remember", arg: id) == "true";
+  AlertDialog(
+    title: Text('Please enter your password'),
+    contentPadding: EdgeInsets.zero,
+    content: Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        TextField(
+          obscureText: true,
+          decoration: const InputDecoration(
+            labelText: 'Password',
+          ),
+        ),
+        ListTile(
+          title: Text(
+            'Remember the password',
+          ),
+          leading: Checkbox(
+            value: remember,
+            onChanged: (_) {},
+          ),
+        ),
+      ],
+    ),
+    actions: [
+      FlatButton(
+        textColor: MyTheme.accent,
+        onPressed: () => Navigator.pop(context),
+        child: Text('Cancel'),
+      ),
+      FlatButton(
+        textColor: MyTheme.accent,
+        onPressed: () => Navigator.pop(context),
+        child: Text('OK'),
+      ),
+    ],
+  );
 }
