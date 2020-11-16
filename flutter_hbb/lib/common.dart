@@ -24,13 +24,14 @@ class MyTheme {
 }
 
 typedef F1 = void Function(Pointer<Utf8>);
-typedef F2 = Pointer<Utf8> Function();
+typedef F2 = Pointer<Utf8> Function(Pointer<Utf8>);
+typedef F3 = void Function(Pointer<Utf8>, Pointer<Utf8>);
 
 // https://juejin.im/post/6844903864852807694
 class FfiModel with ChangeNotifier {
-  F1 _connectRemote;
-  F2 _getPeers;
   F1 _freeCString;
+  F2 _getByName;
+  F3 _setByName;
 
   FfiModel() {
     initialzeFFI();
@@ -41,58 +42,65 @@ class FfiModel with ChangeNotifier {
   }
 
   void connect(String id) {
-    _connectRemote(Utf8.toUtf8(id));
+    setByName("connect", id);
+    _setByName(Utf8.toUtf8("connect"), Utf8.toUtf8(id));
+  }
+
+  void setByName(String name, String value) {
+    _setByName(Utf8.toUtf8(name), Utf8.toUtf8(value));
+  }
+
+  String getByName(String name) {
+    var p = _getByName(Utf8.toUtf8(name));
+    var res = Utf8.fromUtf8(p);
+    // https://github.com/brickpop/flutter-rust-ffi
+    _freeCString(p);
+    return res;
   }
 
   String getId() {
-    return "";
+    return getByName("remote_id");
   }
 
-  void peers() {
-    var p = _getPeers();
+  List<Peer> peers() {
     try {
-      List<dynamic> peers = json.decode(Utf8.fromUtf8(p));
-      // https://github.com/brickpop/flutter-rust-ffi
-      _freeCString(p);
-      peers = peers
+      List<dynamic> peers = json.decode(getByName("peers"));
+      return peers
           .map((s) => s as List<dynamic>)
           .map((s) =>
-              [s[0] as String, Peer.fromJson(s[1] as Map<String, dynamic>)])
+              Peer.fromJson(s[0] as String, s[1] as Map<String, dynamic>))
           .toList();
     } catch (e) {
       print(e);
     }
+    return [];
   }
 
   Future<Null> initialzeFFI() async {
     final dylib = Platform.isAndroid
         ? DynamicLibrary.open('librustdesk.so')
         : DynamicLibrary.process();
-    final initialize = dylib.lookupFunction<Void Function(Pointer<Utf8>),
-        void Function(Pointer<Utf8>)>('initialize');
-    _connectRemote = dylib
-        .lookupFunction<Void Function(Pointer<Utf8>), F1>('connect_remote');
-    _getPeers = dylib.lookupFunction<F2, F2>('get_peers');
+    _getByName = dylib.lookupFunction<F2, F2>('get_by_name');
+    _setByName =
+        dylib.lookupFunction<Void Function(Pointer<Utf8>, Pointer<Utf8>), F3>(
+            'set_by_name');
     _freeCString = dylib
         .lookupFunction<Void Function(Pointer<Utf8>), F1>('rust_cstr_free');
     final dir = (await getApplicationDocumentsDirectory()).path;
-    initialize(Utf8.toUtf8(dir));
+    setByName("init", dir);
     notifyListeners();
   }
 }
 
 class Peer {
-  final String name;
-  final String email;
+  final String id;
+  final String username;
+  final String hostname;
+  final String platform;
 
-  Peer(this.name, this.email);
-
-  Peer.fromJson(Map<String, dynamic> json)
-      : name = json['name'],
-        email = json['email'];
-
-  Map<String, dynamic> toJson() => {
-        'name': name,
-        'email': email,
-      };
+  Peer.fromJson(String id, Map<String, dynamic> json)
+      : id = id,
+        username = json['username'],
+        hostname = json['hostname'],
+        platform = json['platform'];
 }
