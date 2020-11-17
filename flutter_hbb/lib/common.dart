@@ -93,11 +93,11 @@ class FFI {
     return Uint8List.sublistView(ref.data.asTypedList(ref.len));
   }
 
-  static Map<String, String> popEvent() {
+  static Map<String, dynamic> popEvent() {
     var s = getByName('event');
     if (s == '') return null;
     try {
-      Map<String, String> event = json.decode(s);
+      Map<String, dynamic> event = json.decode(s);
       return event;
     } catch (e) {
       print(e);
@@ -178,6 +178,7 @@ void showSuccess(String text) {
 
 // https://material.io/develop/flutter/components/dialogs
 void enterPasswordDialog(String id, BuildContext context) {
+  dismissLoading();
   var remember = FFI.getByName('remember', arg: id) == 'true';
   var dialog = AlertDialog(
     title: Text('Please enter your password'),
@@ -219,6 +220,7 @@ void enterPasswordDialog(String id, BuildContext context) {
 }
 
 void wrongPasswordDialog(String id, BuildContext context) {
+  dismissLoading();
   var dialog = AlertDialog(
     title: Text('Please enter your password'),
     contentPadding: EdgeInsets.zero,
@@ -236,6 +238,26 @@ void wrongPasswordDialog(String id, BuildContext context) {
           enterPasswordDialog(id, context);
         },
         child: Text('Retry'),
+      ),
+    ],
+  );
+  showDialog<void>(context: context, builder: (context) => dialog);
+}
+
+void msgbox(String type, String title, String text, BuildContext context) {
+  dismissLoading();
+  var dialog = AlertDialog(
+    title: Text(title),
+    contentPadding: EdgeInsets.zero,
+    content: Text(text),
+    actions: [
+      FlatButton(
+        textColor: MyTheme.accent,
+        onPressed: () {
+          Navigator.pop(context);
+          Navigator.pop(context);
+        },
+        child: Text('OK'),
       ),
     ],
   );

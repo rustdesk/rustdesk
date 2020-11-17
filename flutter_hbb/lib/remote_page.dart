@@ -60,15 +60,16 @@ class _RemotePageState extends State<RemotePage> {
     }
   }
 
-  void handleMsgbox(evt) {
+  void handleMsgbox(Map<String, dynamic> evt) {
     var type = evt['type'];
     var title = evt['title'];
     var text = evt['text'];
-    if (type == 'error') {
-    } else if (type == 're-input-password') {
+    if (type == 're-input-password') {
       wrongPasswordDialog(widget.id, context);
     } else if (type == 'input-password') {
       enterPasswordDialog(widget.id, context);
+    } else {
+      msgbox(type, title, text, context);
     }
   }
 
