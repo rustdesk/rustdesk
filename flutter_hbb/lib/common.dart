@@ -179,6 +179,7 @@ void showSuccess(String text) {
 // https://material.io/develop/flutter/components/dialogs
 void enterPasswordDialog(String id, BuildContext context) {
   dismissLoading();
+  final controller = TextEditingController();
   var remember = FFI.getByName('remember', arg: id) == 'true';
   var dialog = AlertDialog(
     title: Text('Please enter your password'),
@@ -187,7 +188,9 @@ void enterPasswordDialog(String id, BuildContext context) {
       mainAxisSize: MainAxisSize.min,
       children: [
         TextField(
+          autofocus: true,
           obscureText: true,
+          controller: controller,
           decoration: const InputDecoration(
             labelText: 'Password',
           ),
@@ -198,7 +201,9 @@ void enterPasswordDialog(String id, BuildContext context) {
           ),
           leading: Checkbox(
             value: remember,
-            onChanged: (_) {},
+            onChanged: (v) {
+              remember = v;
+            },
           ),
         ),
       ],
@@ -206,12 +211,21 @@ void enterPasswordDialog(String id, BuildContext context) {
     actions: [
       FlatButton(
         textColor: MyTheme.accent,
-        onPressed: () => Navigator.pop(context),
+        onPressed: () {
+          Navigator.pop(context);
+          Navigator.pop(context);
+        },
         child: Text('Cancel'),
       ),
       FlatButton(
         textColor: MyTheme.accent,
-        onPressed: () => Navigator.pop(context),
+        onPressed: () {
+          var text = controller.text.trim();
+          if (text == '') return;
+          FFI.login(text, remember);
+          showLoading('Logging in...');
+          Navigator.pop(context);
+        },
         child: Text('OK'),
       ),
     ],
@@ -222,7 +236,7 @@ void enterPasswordDialog(String id, BuildContext context) {
 void wrongPasswordDialog(String id, BuildContext context) {
   dismissLoading();
   var dialog = AlertDialog(
-    title: Text('Please enter your password'),
+    title: Text('Wrong Password'),
     contentPadding: EdgeInsets.zero,
     content: Text('Do you want to enter again?'),
     actions: [
