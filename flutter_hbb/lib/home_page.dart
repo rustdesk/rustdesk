@@ -14,13 +14,11 @@ class HomePage extends StatefulWidget {
 
 class _HomePageState extends State<HomePage> {
   final _idController = TextEditingController();
-  FfiModel _ffi;
 
   @override
   Widget build(BuildContext context) {
-    _ffi = Provider.of<FfiModel>(context);
-    _idController.text = _ffi.getId();
-
+    Provider.of<FfiModel>(context);
+    _idController.text = FFI.getId();
     // This method is rerun every time setState is called
     return Scaffold(
         appBar: AppBar(

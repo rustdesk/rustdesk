@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
 import 'package:ffi/ffi.dart';
 import 'package:path_provider/path_provider.dart';
 import 'dart:io';
@@ -32,19 +31,26 @@ typedef F3 = void Function(Pointer<Utf8>, Pointer<Utf8>);
 
 // https://juejin.im/post/6844903864852807694
 class FfiModel with ChangeNotifier {
-  F1 _freeCString;
-  F2 _getByName;
-  F3 _setByName;
-
   FfiModel() {
-    initialzeFFI();
+    init();
   }
 
-  String getId() {
+  Future<Null> init() async {
+    await FFI.init();
+    notifyListeners();
+  }
+}
+
+class FFI {
+  static F1 _freeCString;
+  static F2 _getByName;
+  static F3 _setByName;
+
+  static String getId() {
     return getByName("remote_id");
   }
 
-  List<Peer> peers() {
+  static List<Peer> peers() {
     try {
       List<dynamic> peers = json.decode(getByName("peers"));
       return peers
@@ -58,15 +64,11 @@ class FfiModel with ChangeNotifier {
     return [];
   }
 
-  void addRemote() {
-    notifyListeners();
-  }
-
-  void connect(String id) {
+  static void connect(String id) {
     setByName("connect", id);
   }
 
-  Map<String, String> popEvent() {
+  static Map<String, String> popEvent() {
     var s = getByName("event");
     if (s == "") return null;
     try {
@@ -78,7 +80,7 @@ class FfiModel with ChangeNotifier {
     return null;
   }
 
-  void login(String password, bool remember) {
+  static void login(String password, bool remember) {
     setByName(
         "login",
         json.encode({
@@ -87,15 +89,15 @@ class FfiModel with ChangeNotifier {
         }));
   }
 
-  void close() {
+  static void close() {
     setByName("close", "");
   }
 
-  void setByName(String name, String value) {
+  static void setByName(String name, String value) {
     _setByName(Utf8.toUtf8(name), Utf8.toUtf8(value));
   }
 
-  String getByName(String name, {String arg = ""}) {
+  static String getByName(String name, {String arg = ""}) {
     var p = _getByName(Utf8.toUtf8(name), Utf8.toUtf8(arg));
     assert(p != null);
     var res = Utf8.fromUtf8(p);
@@ -104,7 +106,7 @@ class FfiModel with ChangeNotifier {
     return res;
   }
 
-  Future<Null> initialzeFFI() async {
+  static Future<Null> init() async {
     final dylib = Platform.isAndroid
         ? DynamicLibrary.open('librustdesk.so')
         : DynamicLibrary.process();
@@ -116,7 +118,6 @@ class FfiModel with ChangeNotifier {
         .lookupFunction<Void Function(Pointer<Utf8>), F1>('rust_cstr_free');
     final dir = (await getApplicationDocumentsDirectory()).path;
     setByName("init", dir);
-    notifyListeners();
   }
 }
 
@@ -148,8 +149,7 @@ void showSuccess(String text) {
 
 // https://material.io/develop/flutter/components/dialogs
 void enterPasswordDialog(String id, BuildContext context) {
-  var ffi = Provider.of<FfiModel>(context);
-  var remember = ffi.getByName("remember", arg: id) == "true";
+  var remember = FFI.getByName("remember", arg: id) == "true";
   var dialog = AlertDialog(
     title: Text('Please enter your password'),
     contentPadding: EdgeInsets.zero,
