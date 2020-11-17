@@ -17,13 +17,18 @@ class RemotePage extends StatefulWidget {
 // https://github.com/hanxu317317/flutter_plan_demo/blob/master/lib/src/enter.dart
 class _RemotePageState extends State<RemotePage> {
   Timer _interval;
+  int x = 0;
+  int y = 0;
+  int width = 0;
+  int height = 0;
+  ui.Image image;
 
   @override
   void initState() {
     super.initState();
     FFI.connect(widget.id);
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      showLoading("Connecting...");
+      showLoading('Connecting...');
       _interval =
           Timer.periodic(Duration(milliseconds: 30), (timer) => interval());
     });
@@ -38,22 +43,33 @@ class _RemotePageState extends State<RemotePage> {
   }
 
   void interval() {
-    print(DateTime.now());
     var evt = FFI.popEvent();
     if (evt == null) return;
-    var name = evt["name"];
-    if (name == "msgbox") {
+    var name = evt['name'];
+    if (name == 'msgbox') {
       handleMsgbox(evt);
+    }
+    var rgba = FFI.getRgba();
+    if (rgba != null) {
+      ui.decodeImageFromPixels(rgba, width, height, ui.PixelFormat.rgba8888,
+          (_image) {
+        setState(() {
+          image = _image;
+        });
+      });
     }
   }
 
   void handleMsgbox(evt) {
-    var type = evt["type"];
-    var title = evt["title"];
-    var text = evt["text"];
-    if (type == "error") {
-    } else if (type == "re-input-password") {
-    } else if (type == "input-password") {}
+    var type = evt['type'];
+    var title = evt['title'];
+    var text = evt['text'];
+    if (type == 'error') {
+    } else if (type == 're-input-password') {
+      wrongPasswordDialog(widget.id, context);
+    } else if (type == 'input-password') {
+      enterPasswordDialog(widget.id, context);
+    }
   }
 
   @override
@@ -65,14 +81,14 @@ class _RemotePageState extends State<RemotePage> {
     return FlutterEasyLoading(
         child: GestureDetector(
             child: CustomPaint(
-              painter: new ImageEditor(image: null),
+              painter: new ImageEditor(image: image),
             ),
             onPanStart: (DragDownDetails) {
-              print("onPanStart $DragDownDetails");
+              print('onPanStart $DragDownDetails');
               // hero.moveTo(DragDownDetails.globalPosition.dx, DragDownDetails.globalPosition.dy);
             },
             onPanUpdate: (DragDownDetails) {
-              print("onPanUpdate $DragDownDetails");
+              print('onPanUpdate $DragDownDetails');
               // hero.moveTo(DragDownDetails.globalPosition.dx, DragDownDetails.globalPosition.dy);
             }));
   }

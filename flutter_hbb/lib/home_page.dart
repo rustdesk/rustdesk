@@ -45,7 +45,7 @@ class _HomePageState extends State<HomePage> {
 
   void onConnect() {
     var id = _idController.text.trim();
-    if (id == "") return;
+    if (id == '') return;
     Navigator.push<dynamic>(
       context,
       MaterialPageRoute<dynamic>(

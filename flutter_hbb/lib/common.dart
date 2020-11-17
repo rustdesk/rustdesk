@@ -6,6 +6,7 @@ import 'dart:ffi';
 import 'dart:async';
 import 'dart:convert';
 import 'package:flutter_easyloading/flutter_easyloading.dart';
+import 'dart:typed_data';
 
 class RgbaFrame extends Struct {
   @Uint32()
@@ -55,14 +56,15 @@ class FFI {
   static F3 _setByName;
   static F4 _freeRgba;
   static F5 _getRgba;
+  static Pointer<RgbaFrame> _lastRgbaFrame;
 
   static String getId() {
-    return getByName("remote_id");
+    return getByName('remote_id');
   }
 
   static List<Peer> peers() {
     try {
-      List<dynamic> peers = json.decode(getByName("peers"));
+      List<dynamic> peers = json.decode(getByName('peers'));
       return peers
           .map((s) => s as List<dynamic>)
           .map((s) =>
@@ -75,12 +77,25 @@ class FFI {
   }
 
   static void connect(String id) {
-    setByName("connect", id);
+    setByName('connect', id);
+  }
+
+  static void _clearRgbaFrame() {
+    if (_lastRgbaFrame != null && _lastRgbaFrame != nullptr)
+      _freeRgba(_lastRgbaFrame);
+  }
+
+  static Uint8List getRgba() {
+    _clearRgbaFrame();
+    _lastRgbaFrame = _getRgba();
+    if (_lastRgbaFrame == null || _lastRgbaFrame == nullptr) return null;
+    final ref = _lastRgbaFrame.ref;
+    return Uint8List.sublistView(ref.data.asTypedList(ref.len));
   }
 
   static Map<String, String> popEvent() {
-    var s = getByName("event");
-    if (s == "") return null;
+    var s = getByName('event');
+    if (s == '') return null;
     try {
       Map<String, String> event = json.decode(s);
       return event;
@@ -92,24 +107,25 @@ class FFI {
 
   static void login(String password, bool remember) {
     setByName(
-        "login",
+        'login',
         json.encode({
-          "password": password,
-          "remember": remember ? "true" : "false",
+          'password': password,
+          'remember': remember ? 'true' : 'false',
         }));
   }
 
   static void close() {
-    setByName("close", "");
+    _clearRgbaFrame();
+    setByName('close', '');
   }
 
   static void setByName(String name, String value) {
     _setByName(Utf8.toUtf8(name), Utf8.toUtf8(value));
   }
 
-  static String getByName(String name, {String arg = ""}) {
+  static String getByName(String name, {String arg = ''}) {
     var p = _getByName(Utf8.toUtf8(name), Utf8.toUtf8(arg));
-    assert(p != null);
+    assert(p != nullptr && p != null);
     var res = Utf8.fromUtf8(p);
     // https://github.com/brickpop/flutter-rust-ffi
     _freeCString(p);
@@ -130,7 +146,7 @@ class FFI {
         .lookupFunction<Void Function(Pointer<RgbaFrame>), F4>('free_rgba');
     _getRgba = dylib.lookupFunction<F5, F5>('get_rgba');
     final dir = (await getApplicationDocumentsDirectory()).path;
-    setByName("init", dir);
+    setByName('init', dir);
   }
 }
 
@@ -162,7 +178,7 @@ void showSuccess(String text) {
 
 // https://material.io/develop/flutter/components/dialogs
 void enterPasswordDialog(String id, BuildContext context) {
-  var remember = FFI.getByName("remember", arg: id) == "true";
+  var remember = FFI.getByName('remember', arg: id) == 'true';
   var dialog = AlertDialog(
     title: Text('Please enter your password'),
     contentPadding: EdgeInsets.zero,
