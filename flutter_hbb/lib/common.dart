@@ -7,6 +7,12 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:flutter_easyloading/flutter_easyloading.dart';
 
+class RgbaFrame extends Struct {
+  @Uint32()
+  int len;
+  Pointer<Uint8> data;
+}
+
 class HexColor extends Color {
   HexColor(final String hexColor) : super(_getColorFromHex(hexColor));
 
@@ -28,6 +34,8 @@ class MyTheme {
 typedef F1 = void Function(Pointer<Utf8>);
 typedef F2 = Pointer<Utf8> Function(Pointer<Utf8>, Pointer<Utf8>);
 typedef F3 = void Function(Pointer<Utf8>, Pointer<Utf8>);
+typedef F4 = void Function(Pointer<RgbaFrame>);
+typedef F5 = Pointer<RgbaFrame> Function();
 
 // https://juejin.im/post/6844903864852807694
 class FfiModel with ChangeNotifier {
@@ -45,6 +53,8 @@ class FFI {
   static F1 _freeCString;
   static F2 _getByName;
   static F3 _setByName;
+  static F4 _freeRgba;
+  static F5 _getRgba;
 
   static String getId() {
     return getByName("remote_id");
@@ -116,6 +126,9 @@ class FFI {
             'set_by_name');
     _freeCString = dylib
         .lookupFunction<Void Function(Pointer<Utf8>), F1>('rust_cstr_free');
+    _freeRgba = dylib
+        .lookupFunction<Void Function(Pointer<RgbaFrame>), F4>('free_rgba');
+    _getRgba = dylib.lookupFunction<F5, F5>('get_rgba');
     final dir = (await getApplicationDocumentsDirectory()).path;
     setByName("init", dir);
   }
