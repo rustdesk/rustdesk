@@ -32,24 +32,34 @@ class _RemotePageState extends State<RemotePage> {
   @override
   void dispose() {
     super.dispose();
+    FFI.close();
     _interval.cancel();
     dismissLoading();
-    FFI.close();
   }
 
   void interval() {
-    print(1);
+    print(DateTime.now());
   }
 
   @override
   Widget build(BuildContext context) {
     // Size size = MediaQueryData.fromWindow(ui.window).size;
+    // MediaQuery.of(context).size.height;
     // https://stackoverflow.com/questions/46640116/make-flutter-application-fullscreen
     SystemChrome.setEnabledSystemUIOverlays([]);
     return FlutterEasyLoading(
-        child: CustomPaint(
-      painter: new ImageEditor(image: null),
-    ));
+        child: GestureDetector(
+            child: CustomPaint(
+              painter: new ImageEditor(image: null),
+            ),
+            onPanStart: (DragDownDetails) {
+              print("onPanStart $DragDownDetails");
+              // hero.moveTo(DragDownDetails.globalPosition.dx, DragDownDetails.globalPosition.dy);
+            },
+            onPanUpdate: (DragDownDetails) {
+              print("onPanUpdate $DragDownDetails");
+              // hero.moveTo(DragDownDetails.globalPosition.dx, DragDownDetails.globalPosition.dy);
+            }));
   }
 }
 
