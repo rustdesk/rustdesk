@@ -39,6 +39,21 @@ class _RemotePageState extends State<RemotePage> {
 
   void interval() {
     print(DateTime.now());
+    var evt = FFI.popEvent();
+    if (evt == null) return;
+    var name = evt["name"];
+    if (name == "msgbox") {
+      handleMsgbox(evt);
+    }
+  }
+
+  void handleMsgbox(evt) {
+    var type = evt["type"];
+    var title = evt["title"];
+    var text = evt["text"];
+    if (type == "error") {
+    } else if (type == "re-input-password") {
+    } else if (type == "input-password") {}
   }
 
   @override
