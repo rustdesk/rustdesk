@@ -189,55 +189,59 @@ Future<Null> enterPasswordDialog(String id, BuildContext context) async {
   _hasDialog = true;
   final controller = TextEditingController();
   var remember = FFI.getByName('remember', arg: id) == 'true';
-  var dialog = AlertDialog(
-    title: Text('Please enter your password'),
-    contentPadding: const EdgeInsets.all(20.0),
-    content: Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        TextField(
-          autofocus: true,
-          obscureText: true,
-          controller: controller,
-          decoration: const InputDecoration(
-            labelText: 'Password',
+  var dialog = StatefulBuilder(builder: (context, setState) {
+    return AlertDialog(
+      title: Text('Please enter your password'),
+      contentPadding: const EdgeInsets.all(20.0),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          TextField(
+            autofocus: true,
+            obscureText: true,
+            controller: controller,
+            decoration: const InputDecoration(
+              labelText: 'Password',
+            ),
           ),
+          ListTile(
+            title: Text(
+              'Remember the password',
+            ),
+            leading: Checkbox(
+              value: remember,
+              onChanged: (v) {
+                setState(() {
+                  remember = v;
+                });
+              },
+            ),
+          ),
+        ],
+      ),
+      actions: [
+        FlatButton(
+          textColor: MyTheme.accent,
+          onPressed: () {
+            Navigator.pop(context);
+            Navigator.pop(context);
+          },
+          child: Text('Cancel'),
         ),
-        ListTile(
-          title: Text(
-            'Remember the password',
-          ),
-          leading: Checkbox(
-            value: remember,
-            onChanged: (v) {
-              remember = v;
-            },
-          ),
+        FlatButton(
+          textColor: MyTheme.accent,
+          onPressed: () {
+            var text = controller.text.trim();
+            if (text == '') return;
+            FFI.login(text, remember);
+            showLoading('Logging in...');
+            Navigator.pop(context);
+          },
+          child: Text('OK'),
         ),
       ],
-    ),
-    actions: [
-      FlatButton(
-        textColor: MyTheme.accent,
-        onPressed: () {
-          Navigator.pop(context);
-          Navigator.pop(context);
-        },
-        child: Text('Cancel'),
-      ),
-      FlatButton(
-        textColor: MyTheme.accent,
-        onPressed: () {
-          var text = controller.text.trim();
-          if (text == '') return;
-          FFI.login(text, remember);
-          showLoading('Logging in...');
-          Navigator.pop(context);
-        },
-        child: Text('OK'),
-      ),
-    ],
-  );
+    );
+  });
   await showDialog<void>(
       context: context,
       barrierDismissible: false,
