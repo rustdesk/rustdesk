@@ -118,20 +118,18 @@ class _RemotePageState extends State<RemotePage> {
     // https://stackoverflow.com/questions/46640116/make-flutter-application-fullscreen
     SystemChrome.setEnabledSystemUIOverlays([]);
     return FlutterEasyLoading(
-        child: GestureDetector(
-            child: Container(
-                child: CustomPaint(
-                  painter: new ImageEditor(image: _image),
-                ),
-                color: MyTheme.grayBg),
-            onPanStart: (DragDownDetails) {
-              print('onPanStart $DragDownDetails');
-              // hero.moveTo(DragDownDetails.globalPosition.dx, DragDownDetails.globalPosition.dy);
-            },
-            onPanUpdate: (DragDownDetails) {
-              print('onPanUpdate $DragDownDetails');
-              // hero.moveTo(DragDownDetails.globalPosition.dx, DragDownDetails.globalPosition.dy);
-            }));
+        child: InteractiveViewer(
+      constrained: false,
+      panEnabled: true,
+      onInteractionUpdate: (details) {
+        print("$details");
+      },
+      child: Container(
+          child: CustomPaint(
+            painter: new ImageEditor(image: _image),
+          ),
+          color: MyTheme.grayBg),
+    ));
   }
 }
 
@@ -145,7 +143,7 @@ class ImageEditor extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     if (image == null) return;
-    canvas.drawImage(image, new Offset(0.0, 0.0), new Paint());
+    canvas.drawImage(image, new Offset(0, 0), new Paint());
   }
 
   @override
