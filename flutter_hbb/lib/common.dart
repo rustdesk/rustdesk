@@ -80,13 +80,12 @@ class FFI {
     setByName('connect', id);
   }
 
-  static void _clearRgbaFrame() {
+  static void clearRgbaFrame() {
     if (_lastRgbaFrame != null && _lastRgbaFrame != nullptr)
       _freeRgba(_lastRgbaFrame);
   }
 
   static Uint8List getRgba() {
-    _clearRgbaFrame();
     _lastRgbaFrame = _getRgba();
     if (_lastRgbaFrame == null || _lastRgbaFrame == nullptr) return null;
     final ref = _lastRgbaFrame.ref;
@@ -115,7 +114,6 @@ class FFI {
   }
 
   static void close() {
-    _clearRgbaFrame();
     setByName('close', '');
   }
 

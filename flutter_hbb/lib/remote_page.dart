@@ -21,6 +21,7 @@ class _RemotePageState extends State<RemotePage> {
   ui.Image _image;
   PeerInfo _pi = PeerInfo();
   Display _display = Display();
+  bool _decoding = false;
 
   @override
   void initState() {
@@ -39,6 +40,7 @@ class _RemotePageState extends State<RemotePage> {
     FFI.close();
     _interval.cancel();
     dismissLoading();
+    _decoding = null;
   }
 
   void interval() {
@@ -53,15 +55,21 @@ class _RemotePageState extends State<RemotePage> {
         handleSwitchDisplay(evt);
       }
     }
-    var rgba = FFI.getRgba();
-    if (rgba != null) {
-      ui.decodeImageFromPixels(
-          rgba, _display.width, _display.height, ui.PixelFormat.bgra8888,
-          (__image) {
-        setState(() {
-          _image = __image;
+    if (!_decoding) {
+      var rgba = FFI.getRgba();
+      if (rgba != null) {
+        _decoding = true;
+        ui.decodeImageFromPixels(
+            rgba, _display.width, _display.height, ui.PixelFormat.bgra8888,
+            (__image) {
+          FFI.clearRgbaFrame();
+          if (_decoding == null) return;
+          _decoding = false;
+          setState(() {
+            _image = __image;
+          });
         });
-      });
+      }
     }
   }
 
