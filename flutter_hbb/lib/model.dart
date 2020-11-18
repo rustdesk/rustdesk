@@ -26,6 +26,7 @@ class FfiModel with ChangeNotifier {
   PeerInfo _pi = PeerInfo();
   Display _display = Display();
   bool _decoding = false;
+  bool _waitForImage = false;
 
   FfiModel() {
     init();
@@ -61,6 +62,10 @@ class FfiModel with ChangeNotifier {
     if (!_decoding) {
       var rgba = FFI.getRgba();
       if (rgba != null) {
+        if (_waitForImage) {
+          _waitForImage = false;
+          dismissLoading();
+        }
         _decoding = true;
         ui.decodeImageFromPixels(
             rgba, _display.width, _display.height, ui.PixelFormat.bgra8888,
@@ -119,6 +124,10 @@ class FfiModel with ChangeNotifier {
     if (_pi.currentDisplay < _pi.displays.length) {
       _display = _pi.displays[_pi.currentDisplay];
       FFI.cursorModel.updateDisplayOrigin(_display.x, _display.y);
+    }
+    if (displays.length > 1) {
+      showLoading('Waiting for image...');
+      _waitForImage = true;
     }
   }
 }
