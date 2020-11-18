@@ -28,6 +28,8 @@ class _RemotePageState extends State<RemotePage> {
     super.initState();
     FFI.connect(widget.id);
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      // https://stackoverflow.com/questions/46640116/make-flutter-application-fullscreen
+      SystemChrome.setEnabledSystemUIOverlays([]);
       showLoading('Connecting...');
       _interval =
           Timer.periodic(Duration(milliseconds: 30), (timer) => interval());
@@ -41,6 +43,7 @@ class _RemotePageState extends State<RemotePage> {
     _interval.cancel();
     dismissLoading();
     _decoding = null;
+    SystemChrome.setEnabledSystemUIOverlays(SystemUiOverlay.values);
   }
 
   void interval() {
@@ -123,8 +126,6 @@ class _RemotePageState extends State<RemotePage> {
   Widget build(BuildContext context) {
     // Size size = MediaQueryData.fromWindow(ui.window).size;
     // MediaQuery.of(context).size.height;
-    // https://stackoverflow.com/questions/46640116/make-flutter-application-fullscreen
-    SystemChrome.setEnabledSystemUIOverlays([]);
     return FlutterEasyLoading(
         child: InteractiveViewer(
       constrained: false,
