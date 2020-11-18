@@ -7,6 +7,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:flutter_easyloading/flutter_easyloading.dart';
 import 'dart:typed_data';
+import 'dart:ui' as ui;
 
 class RgbaFrame extends Struct {
   @Uint32()
@@ -50,6 +51,17 @@ class FfiModel with ChangeNotifier {
   }
 }
 
+class ImageModel with ChangeNotifier {
+  ui.Image _image;
+
+  ui.Image get image => _image;
+
+  void update(ui.Image image) {
+    _image = image;
+    notifyListeners();
+  }
+}
+
 class FFI {
   static F1 _freeCString;
   static F2 _getByName;
@@ -57,6 +69,8 @@ class FFI {
   static F4 _freeRgba;
   static F5 _getRgba;
   static Pointer<RgbaFrame> _lastRgbaFrame;
+  static final imageModel = ImageModel();
+  static final ffiModel = FfiModel();
 
   static String getId() {
     return getByName('remote_id');
@@ -115,6 +129,7 @@ class FFI {
 
   static void close() {
     setByName('close', '');
+    FFI.imageModel.update(null);
   }
 
   static void setByName(String name, String value) {

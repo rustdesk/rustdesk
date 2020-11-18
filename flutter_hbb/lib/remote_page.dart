@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'common.dart';
 import 'package:flutter/services.dart';
 import 'dart:ui' as ui;
@@ -18,7 +19,6 @@ class RemotePage extends StatefulWidget {
 // https://github.com/hanxu317317/flutter_plan_demo/blob/master/lib/src/enter.dart
 class _RemotePageState extends State<RemotePage> {
   Timer _interval;
-  ui.Image _image;
   PeerInfo _pi = PeerInfo();
   Display _display = Display();
   bool _decoding = false;
@@ -64,13 +64,11 @@ class _RemotePageState extends State<RemotePage> {
         _decoding = true;
         ui.decodeImageFromPixels(
             rgba, _display.width, _display.height, ui.PixelFormat.bgra8888,
-            (__image) {
+            (image) {
           FFI.clearRgbaFrame();
           if (_decoding == null) return;
           _decoding = false;
-          setState(() {
-            _image = __image;
-          });
+          FFI.imageModel.update(image);
         });
       }
     }
@@ -133,17 +131,23 @@ class _RemotePageState extends State<RemotePage> {
       onInteractionUpdate: (details) {
         print("$details");
       },
-      child: Container(
-          child: CustomPaint(
-            painter: new ImageEditor(image: _image),
-          ),
-          color: MyTheme.grayBg),
+      child: Container(child: ImagePaint(), color: MyTheme.grayBg),
     ));
   }
 }
 
-class ImageEditor extends CustomPainter {
-  ImageEditor({
+class ImagePaint extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    final m = Provider.of<ImageModel>(context);
+    return CustomPaint(
+      painter: new ImagePainter(image: m.image),
+    );
+  }
+}
+
+class ImagePainter extends CustomPainter {
+  ImagePainter({
     this.image,
   });
 
