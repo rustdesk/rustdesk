@@ -165,6 +165,7 @@ class Peer {
 
 // https://github.com/huangjianke/flutter_easyloading
 void showLoading(String text) {
+  dismissLoading();
   EasyLoading.show(status: text);
 }
 
@@ -173,17 +174,24 @@ void dismissLoading() {
 }
 
 void showSuccess(String text) {
+  dismissLoading();
   EasyLoading.showSuccess(text);
 }
 
+bool _hasDialog = false;
+
 // https://material.io/develop/flutter/components/dialogs
-void enterPasswordDialog(String id, BuildContext context) {
+Future<Null> enterPasswordDialog(String id, BuildContext context) async {
   dismissLoading();
+  if (_hasDialog) {
+    Navigator.pop(context);
+  }
+  _hasDialog = true;
   final controller = TextEditingController();
   var remember = FFI.getByName('remember', arg: id) == 'true';
   var dialog = AlertDialog(
     title: Text('Please enter your password'),
-    contentPadding: EdgeInsets.zero,
+    contentPadding: const EdgeInsets.all(20.0),
     content: Column(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -230,19 +238,30 @@ void enterPasswordDialog(String id, BuildContext context) {
       ),
     ],
   );
-  showDialog<void>(context: context, builder: (context) => dialog);
+  await showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => dialog);
+  _hasDialog = false;
 }
 
-void wrongPasswordDialog(String id, BuildContext context) {
+Future<Null> wrongPasswordDialog(String id, BuildContext context) async {
   dismissLoading();
+  if (_hasDialog) {
+    Navigator.pop(context);
+  }
+  _hasDialog = true;
   var dialog = AlertDialog(
     title: Text('Wrong Password'),
-    contentPadding: EdgeInsets.zero,
+    contentPadding: const EdgeInsets.all(20.0),
     content: Text('Do you want to enter again?'),
     actions: [
       FlatButton(
         textColor: MyTheme.accent,
-        onPressed: () => Navigator.pop(context),
+        onPressed: () {
+          Navigator.pop(context);
+          Navigator.pop(context);
+        },
         child: Text('Cancel'),
       ),
       FlatButton(
@@ -255,14 +274,23 @@ void wrongPasswordDialog(String id, BuildContext context) {
       ),
     ],
   );
-  showDialog<void>(context: context, builder: (context) => dialog);
+  await showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => dialog);
+  _hasDialog = false;
 }
 
-void msgbox(String type, String title, String text, BuildContext context) {
+Future<Null> msgbox(
+    String type, String title, String text, BuildContext context) async {
   dismissLoading();
+  if (_hasDialog) {
+    Navigator.pop(context);
+  }
+  _hasDialog = true;
   var dialog = AlertDialog(
     title: Text(title),
-    contentPadding: EdgeInsets.zero,
+    contentPadding: const EdgeInsets.all(20.0),
     content: Text(text),
     actions: [
       FlatButton(
@@ -275,5 +303,9 @@ void msgbox(String type, String title, String text, BuildContext context) {
       ),
     ],
   );
-  showDialog<void>(context: context, builder: (context) => dialog);
+  await showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => dialog);
+  _hasDialog = false;
 }

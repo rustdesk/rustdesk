@@ -16,14 +16,9 @@ class _HomePageState extends State<HomePage> {
   final _idController = TextEditingController();
 
   @override
-  void initState() {
-    super.initState();
-    _idController.text = FFI.getId();
-  }
-
-  @override
   Widget build(BuildContext context) {
     Provider.of<FfiModel>(context);
+    if (_idController.text.isEmpty) _idController.text = FFI.getId();
     // This method is rerun every time setState is called
     return Scaffold(
         appBar: AppBar(
