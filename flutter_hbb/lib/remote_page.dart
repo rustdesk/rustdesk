@@ -56,6 +56,12 @@ class _RemotePageState extends State<RemotePage> {
         handlePeerInfo(evt);
       } else if (name == 'switch_display') {
         handleSwitchDisplay(evt);
+      } else if (name == 'cursor_data') {
+        FFI.cursorModel.updateCursorData(evt);
+      } else if (name == 'cursor_id') {
+        FFI.cursorModel.updateCursorId(evt);
+      } else if (name == 'cursor_position') {
+        FFI.cursorModel.updateCursorPosition(evt);
       }
     }
     if (!_decoding) {

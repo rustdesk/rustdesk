@@ -62,6 +62,54 @@ class ImageModel with ChangeNotifier {
   }
 }
 
+class CursorModel with ChangeNotifier {
+  ui.Image _image;
+  final _images = Map<int, ui.Image>();
+  double _x = 0;
+  double _y = 0;
+  double _hotx = 0;
+  double _hoty = 0;
+
+  ui.Image get image => _image;
+  double get x => _x;
+  double get y => _y;
+
+  void updateCursorData(Map<String, dynamic> evt) {
+    var id = int.parse(evt['id']);
+    _hotx = double.parse(evt['hotx']);
+    _hoty = double.parse(evt['hoty']);
+    var width = int.parse(evt['width']);
+    var height = int.parse(evt['height']);
+    List<dynamic> colors = json.decode(evt['colors']);
+    final rgba = Uint8List.fromList(colors.map((s) => s as int).toList());
+    ui.decodeImageFromPixels(rgba, width, height, ui.PixelFormat.rgba8888,
+        (image) {
+      _image = image;
+      _images[id] = image;
+      notifyListeners();
+    });
+  }
+
+  void updateCursorId(Map<String, dynamic> evt) {
+    final tmp = _images[int.parse(evt['id'])];
+    if (tmp != null) {
+      _image = tmp;
+      notifyListeners();
+    }
+  }
+
+  void updateCursorPosition(Map<String, dynamic> evt) {
+    _x = double.parse(evt['x']);
+    _y = double.parse(evt['y']);
+    notifyListeners();
+  }
+
+  void clear() {
+    _image = null;
+    _images.clear();
+  }
+}
+
 class FFI {
   static F1 _freeCString;
   static F2 _getByName;
@@ -71,6 +119,7 @@ class FFI {
   static Pointer<RgbaFrame> _lastRgbaFrame;
   static final imageModel = ImageModel();
   static final ffiModel = FfiModel();
+  static final cursorModel = CursorModel();
 
   static String getId() {
     return getByName('remote_id');
@@ -130,6 +179,7 @@ class FFI {
   static void close() {
     setByName('close', '');
     FFI.imageModel.update(null);
+    FFI.cursorModel.clear();
   }
 
   static void setByName(String name, String value) {
