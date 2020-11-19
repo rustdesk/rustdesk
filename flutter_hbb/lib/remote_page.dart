@@ -7,6 +7,7 @@ import 'dart:async';
 import 'dart:math' as math;
 import 'common.dart';
 import 'model.dart';
+import 'package:tuple/tuple.dart';
 
 class RemotePage extends StatefulWidget {
   RemotePage({Key key, this.id}) : super(key: key);
@@ -45,7 +46,20 @@ class _RemotePageState extends State<RemotePage> {
   }
 
   void interval() {
-    FFI.ffiModel.update(widget.id, context);
+    FFI.ffiModel.update(widget.id, context, handleMsgbox);
+  }
+
+  void handleMsgbox(Map<String, dynamic> evt, String id, BuildContext context) {
+    var type = evt['type'];
+    var title = evt['title'];
+    var text = evt['text'];
+    if (type == 're-input-password') {
+      wrongPasswordDialog(id, context);
+    } else if (type == 'input-password') {
+      enterPasswordDialog(id, context);
+    } else {
+      msgbox(type, title, text, context);
+    }
   }
 
   @override
@@ -168,4 +182,83 @@ class ImagePainter extends CustomPainter {
   bool shouldRepaint(CustomPainter oldDelegate) {
     return oldDelegate != this;
   }
+}
+
+void enterPasswordDialog(String id, BuildContext context) {
+  final controller = TextEditingController();
+  var remember = FFI.getByName('remember', arg: id) == 'true';
+  showAlertDialog(
+      context,
+      (setState) => Tuple3(
+              Text('Please enter your password'),
+              Column(mainAxisSize: MainAxisSize.min, children: [
+                TextField(
+                  autofocus: true,
+                  obscureText: true,
+                  controller: controller,
+                  decoration: const InputDecoration(
+                    labelText: 'Password',
+                  ),
+                ),
+                ListTile(
+                  title: Text(
+                    'Remember the password',
+                  ),
+                  leading: Checkbox(
+                    value: remember,
+                    onChanged: (v) {
+                      setState(() {
+                        remember = v;
+                      });
+                    },
+                  ),
+                ),
+              ]),
+              [
+                TextField(
+                  autofocus: true,
+                  obscureText: true,
+                  controller: controller,
+                  decoration: const InputDecoration(
+                    labelText: 'Password',
+                  ),
+                ),
+                ListTile(
+                  title: Text(
+                    'Remember the password',
+                  ),
+                  leading: Checkbox(
+                    value: remember,
+                    onChanged: (v) {
+                      setState(() {
+                        remember = v;
+                      });
+                    },
+                  ),
+                ),
+              ]));
+}
+
+void wrongPasswordDialog(String id, BuildContext context) {
+  showAlertDialog(
+      context,
+      (_) =>
+          Tuple3(Text('Wrong Password'), Text('Do you want to enter again?'), [
+            FlatButton(
+              textColor: MyTheme.accent,
+              onPressed: () {
+                Navigator.pop(context);
+                Navigator.pop(context);
+              },
+              child: Text('Cancel'),
+            ),
+            FlatButton(
+              textColor: MyTheme.accent,
+              onPressed: () {
+                Navigator.pop(context);
+                enterPasswordDialog(id, context);
+              },
+              child: Text('Retry'),
+            ),
+          ]));
 }

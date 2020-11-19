@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'dart:async';
 import 'package:flutter_easyloading/flutter_easyloading.dart';
-import 'model.dart';
+import 'package:tuple/tuple.dart';
 
 class HexColor extends Color {
   HexColor(final String hexColor) : super(_getColorFromHex(hexColor));
@@ -41,65 +41,23 @@ void showSuccess(String text) {
 bool _hasDialog = false;
 
 // https://material.io/develop/flutter/components/dialogs
-Future<Null> enterPasswordDialog(String id, BuildContext context) async {
+Future<Null> showAlertDialog(
+    BuildContext context,
+    Tuple3<Widget, Widget, List<Widget>> Function(
+            void Function(void Function()))
+        build) async {
   dismissLoading();
   if (_hasDialog) {
     Navigator.pop(context);
   }
   _hasDialog = true;
-  final controller = TextEditingController();
-  var remember = FFI.getByName('remember', arg: id) == 'true';
   var dialog = StatefulBuilder(builder: (context, setState) {
+    var widgets = build(setState);
     return AlertDialog(
-      title: Text('Please enter your password'),
+      title: widgets.item1,
       contentPadding: const EdgeInsets.all(20.0),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          TextField(
-            autofocus: true,
-            obscureText: true,
-            controller: controller,
-            decoration: const InputDecoration(
-              labelText: 'Password',
-            ),
-          ),
-          ListTile(
-            title: Text(
-              'Remember the password',
-            ),
-            leading: Checkbox(
-              value: remember,
-              onChanged: (v) {
-                setState(() {
-                  remember = v;
-                });
-              },
-            ),
-          ),
-        ],
-      ),
-      actions: [
-        FlatButton(
-          textColor: MyTheme.accent,
-          onPressed: () {
-            Navigator.pop(context);
-            Navigator.pop(context);
-          },
-          child: Text('Cancel'),
-        ),
-        FlatButton(
-          textColor: MyTheme.accent,
-          onPressed: () {
-            var text = controller.text.trim();
-            if (text == '') return;
-            FFI.login(text, remember);
-            showLoading('Logging in...');
-            Navigator.pop(context);
-          },
-          child: Text('OK'),
-        ),
-      ],
+      content: widgets.item2,
+      actions: widgets.item3,
     );
   });
   await showDialog<void>(
@@ -109,67 +67,17 @@ Future<Null> enterPasswordDialog(String id, BuildContext context) async {
   _hasDialog = false;
 }
 
-Future<Null> wrongPasswordDialog(String id, BuildContext context) async {
-  dismissLoading();
-  if (_hasDialog) {
-    Navigator.pop(context);
-  }
-  _hasDialog = true;
-  var dialog = AlertDialog(
-    title: Text('Wrong Password'),
-    contentPadding: const EdgeInsets.all(20.0),
-    content: Text('Do you want to enter again?'),
-    actions: [
-      FlatButton(
-        textColor: MyTheme.accent,
-        onPressed: () {
-          Navigator.pop(context);
-          Navigator.pop(context);
-        },
-        child: Text('Cancel'),
-      ),
-      FlatButton(
-        textColor: MyTheme.accent,
-        onPressed: () {
-          Navigator.pop(context);
-          enterPasswordDialog(id, context);
-        },
-        child: Text('Retry'),
-      ),
-    ],
-  );
-  await showDialog<void>(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => dialog);
-  _hasDialog = false;
-}
-
-Future<Null> msgbox(
-    String type, String title, String text, BuildContext context) async {
-  dismissLoading();
-  if (_hasDialog) {
-    Navigator.pop(context);
-  }
-  _hasDialog = true;
-  var dialog = AlertDialog(
-    title: Text(title),
-    contentPadding: const EdgeInsets.all(20.0),
-    content: Text(text),
-    actions: [
-      FlatButton(
-        textColor: MyTheme.accent,
-        onPressed: () {
-          Navigator.pop(context);
-          Navigator.pop(context);
-        },
-        child: Text('OK'),
-      ),
-    ],
-  );
-  await showDialog<void>(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => dialog);
-  _hasDialog = false;
+void msgbox(String type, String title, String text, BuildContext context) {
+  showAlertDialog(
+      context,
+      (_) => Tuple3(Text(title), Text(text), [
+            FlatButton(
+              textColor: MyTheme.accent,
+              onPressed: () {
+                Navigator.pop(context);
+                Navigator.pop(context);
+              },
+              child: Text('OK'),
+            ),
+          ]));
 }

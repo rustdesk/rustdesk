@@ -41,7 +41,11 @@ class FfiModel with ChangeNotifier {
     _decoding = false;
   }
 
-  void update(String id, BuildContext context) {
+  void update(
+      String id,
+      BuildContext context,
+      void Function(Map<String, dynamic> evt, String id, BuildContext context)
+          handleMsgbox) {
     for (;;) {
       var evt = FFI.popEvent();
       if (evt == null) break;
@@ -79,19 +83,6 @@ class FfiModel with ChangeNotifier {
           } catch (e) {}
         });
       }
-    }
-  }
-
-  void handleMsgbox(Map<String, dynamic> evt, String id, BuildContext context) {
-    var type = evt['type'];
-    var title = evt['title'];
-    var text = evt['text'];
-    if (type == 're-input-password') {
-      wrongPasswordDialog(id, context);
-    } else if (type == 'input-password') {
-      enterPasswordDialog(id, context);
-    } else {
-      msgbox(type, title, text, context);
     }
   }
 
