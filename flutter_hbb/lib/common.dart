@@ -39,13 +39,11 @@ void showSuccess(String text) {
 }
 
 bool _hasDialog = false;
+typedef BuildAlertDailog = Tuple3<Widget, Widget, List<Widget>> Function(
+    void Function(void Function()));
 
 // https://material.io/develop/flutter/components/dialogs
-Future<Null> showAlertDialog(
-    BuildContext context,
-    Tuple3<Widget, Widget, List<Widget>> Function(
-            void Function(void Function()))
-        build,
+Future<Null> showAlertDialog(BuildContext context, BuildAlertDailog build,
     {WillPopCallback onWillPop}) async {
   dismissLoading();
   if (_hasDialog) {
