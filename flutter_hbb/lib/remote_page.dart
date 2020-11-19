@@ -105,7 +105,9 @@ class _RemotePageState extends State<RemotePage> {
                       IconButton(
                         color: Colors.white,
                         icon: Icon(Icons.tv),
-                        onPressed: () {},
+                        onPressed: () {
+                          showOptions(widget.id, context);
+                        },
                       ),
                       IconButton(
                         color: Colors.white,
@@ -130,7 +132,7 @@ class _RemotePageState extends State<RemotePage> {
             constrained: false,
             panEnabled: true,
             onInteractionUpdate: (details) {
-              print("$details");
+              print('$details');
             },
             child: Stack(children: [
               ImagePaint(),
@@ -186,57 +188,54 @@ class ImagePainter extends CustomPainter {
 
 void enterPasswordDialog(String id, BuildContext context) {
   final controller = TextEditingController();
-  var remember = FFI.getByName('remember', arg: id) == 'true';
+  var remember = FFI.getByName('remember', id) == 'true';
   showAlertDialog(
       context,
       (setState) => Tuple3(
-              Text('Please enter your password'),
-              Column(mainAxisSize: MainAxisSize.min, children: [
-                TextField(
-                  autofocus: true,
-                  obscureText: true,
-                  controller: controller,
-                  decoration: const InputDecoration(
-                    labelText: 'Password',
-                  ),
+            Text('Please enter your password'),
+            Column(mainAxisSize: MainAxisSize.min, children: [
+              TextField(
+                autofocus: true,
+                obscureText: true,
+                controller: controller,
+                decoration: const InputDecoration(
+                  labelText: 'Password',
                 ),
-                ListTile(
-                  title: Text(
-                    'Remember the password',
-                  ),
-                  leading: Checkbox(
-                    value: remember,
-                    onChanged: (v) {
-                      setState(() {
-                        remember = v;
-                      });
-                    },
-                  ),
+              ),
+              ListTile(
+                title: Text(
+                  'Remember the password',
                 ),
-              ]),
-              [
-                TextField(
-                  autofocus: true,
-                  obscureText: true,
-                  controller: controller,
-                  decoration: const InputDecoration(
-                    labelText: 'Password',
-                  ),
+                leading: Checkbox(
+                  value: remember,
+                  onChanged: (v) {
+                    setState(() => remember = v);
+                  },
                 ),
-                ListTile(
-                  title: Text(
-                    'Remember the password',
-                  ),
-                  leading: Checkbox(
-                    value: remember,
-                    onChanged: (v) {
-                      setState(() {
-                        remember = v;
-                      });
-                    },
-                  ),
-                ),
-              ]));
+              ),
+            ]),
+            [
+              FlatButton(
+                textColor: MyTheme.accent,
+                onPressed: () {
+                  Navigator.pop(context);
+                  Navigator.pop(context);
+                },
+                child: Text('Cancel'),
+              ),
+              FlatButton(
+                textColor: MyTheme.accent,
+                onPressed: () {
+                  var text = controller.text.trim();
+                  if (text == '') return;
+                  FFI.login(text, remember);
+                  showLoading('Logging in...');
+                  Navigator.pop(context);
+                },
+                child: Text('OK'),
+              ),
+            ],
+          ));
 }
 
 void wrongPasswordDialog(String id, BuildContext context) {
@@ -261,4 +260,39 @@ void wrongPasswordDialog(String id, BuildContext context) {
               child: Text('Retry'),
             ),
           ]));
+}
+
+void showOptions(String id, BuildContext context) {
+  var showRemoteCursor =
+      FFI.getByName('toggle_option', 'show-remote-cursor') == 'true';
+  var lockAfterSessionEnd =
+      FFI.getByName('toggle_option', 'lock-after-session-end') == 'true';
+  showAlertDialog(
+      context,
+      (setState) => Tuple3(
+          null,
+          Column(mainAxisSize: MainAxisSize.min, children: [
+            CheckboxListTile(
+                value: showRemoteCursor,
+                onChanged: (v) {
+                  setState(() {
+                    showRemoteCursor = v;
+                    FFI.setByName('toggle_option', 'show-remote-cursor');
+                  });
+                },
+                title: Text('Show remote cursor')),
+            CheckboxListTile(
+                value: lockAfterSessionEnd,
+                onChanged: (v) {
+                  setState(() {
+                    lockAfterSessionEnd = v;
+                    FFI.setByName('toggle_option', 'lock-after-session-end');
+                  });
+                },
+                title: Text('Lock after session end'))
+          ]),
+          null),
+      () async => true,
+      true,
+      10);
 }

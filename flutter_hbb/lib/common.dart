@@ -43,8 +43,10 @@ typedef BuildAlertDailog = Tuple3<Widget, Widget, List<Widget>> Function(
     void Function(void Function()));
 
 // https://material.io/develop/flutter/components/dialogs
-Future<Null> showAlertDialog(BuildContext context, BuildAlertDailog build,
-    {WillPopCallback onWillPop}) async {
+Future<T> showAlertDialog<T>(BuildContext context, BuildAlertDailog build,
+    [WillPopCallback onWillPop,
+    bool barrierDismissible,
+    double contentPadding = 20]) async {
   dismissLoading();
   if (_hasDialog) {
     Navigator.pop(context);
@@ -57,16 +59,17 @@ Future<Null> showAlertDialog(BuildContext context, BuildAlertDailog build,
         onWillPop: onWillPop,
         child: AlertDialog(
           title: widgets.item1,
-          contentPadding: const EdgeInsets.all(20.0),
+          contentPadding: EdgeInsets.all(contentPadding),
           content: widgets.item2,
           actions: widgets.item3,
         ));
   });
-  await showDialog<void>(
+  var res = await showDialog<T>(
       context: context,
-      barrierDismissible: false,
+      barrierDismissible: barrierDismissible,
       builder: (context) => dialog);
   _hasDialog = false;
+  return res;
 }
 
 void msgbox(String type, String title, String text, BuildContext context) {

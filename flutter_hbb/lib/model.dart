@@ -271,7 +271,7 @@ class FFI {
     _setByName(Utf8.toUtf8(name), Utf8.toUtf8(value));
   }
 
-  static String getByName(String name, {String arg = ''}) {
+  static String getByName(String name, [String arg = '']) {
     var p = _getByName(Utf8.toUtf8(name), Utf8.toUtf8(arg));
     assert(p != nullptr && p != null);
     var res = Utf8.fromUtf8(p);
