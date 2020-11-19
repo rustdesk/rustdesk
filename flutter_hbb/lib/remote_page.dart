@@ -52,8 +52,8 @@ class _RemotePageState extends State<RemotePage> {
   Widget build(BuildContext context) {
     // Size size = MediaQueryData.fromWindow(ui.window).size;
     // MediaQuery.of(context).size.height;
+    EasyLoading.instance.loadingStyle = EasyLoadingStyle.light;
     return Scaffold(
-        backgroundColor: MyTheme.grayBg,
         floatingActionButton: _show_bar
             ? null
             : FloatingActionButton(
@@ -110,6 +110,8 @@ class _RemotePageState extends State<RemotePage> {
               )
             : null,
         body: FlutterEasyLoading(
+            child: Container(
+          color: MyTheme.canvasColor,
           child: InteractiveViewer(
             constrained: false,
             panEnabled: true,
@@ -121,7 +123,7 @@ class _RemotePageState extends State<RemotePage> {
               CursorPaint(),
             ]),
           ),
-        ));
+        )));
   }
 }
 

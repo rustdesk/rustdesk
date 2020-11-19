@@ -20,6 +20,7 @@ class MyTheme {
   static const Color white = Color(0xFFFFFFFF);
   static const Color accent = Color(0xFF0071FF);
   static const Color accent50 = Color(0x770071FF);
+  static const Color canvasColor = Color(0xFF212121);
 }
 
 // https://github.com/huangjianke/flutter_easyloading
