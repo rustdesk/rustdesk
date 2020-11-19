@@ -22,6 +22,7 @@ class _HomePageState extends State<HomePage> {
     if (_idController.text.isEmpty) _idController.text = FFI.getId();
     // This method is rerun every time setState is called
     return Scaffold(
+        backgroundColor: MyTheme.grayBg,
         appBar: AppBar(
           title: Text(widget.title),
         ),
@@ -34,7 +35,6 @@ class _HomePageState extends State<HomePage> {
                 getSearchBarUI(),
                 Expanded(child: Container())
               ]),
-          color: MyTheme.grayBg,
           padding: const EdgeInsets.fromLTRB(16.0, 0.0, 16.0, 0.0),
         ));
   }

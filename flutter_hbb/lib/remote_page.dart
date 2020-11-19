@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'dart:ui' as ui;
 import 'package:flutter_easyloading/flutter_easyloading.dart';
 import 'dart:async';
+import 'dart:math' as math;
 import 'common.dart';
 import 'model.dart';
 
@@ -52,6 +53,7 @@ class _RemotePageState extends State<RemotePage> {
     // Size size = MediaQueryData.fromWindow(ui.window).size;
     // MediaQuery.of(context).size.height;
     return Scaffold(
+        backgroundColor: MyTheme.grayBg,
         floatingActionButton: _show_bar
             ? null
             : FloatingActionButton(
@@ -79,6 +81,13 @@ class _RemotePageState extends State<RemotePage> {
                         icon: Icon(Icons.keyboard),
                         onPressed: () {},
                       ),
+                      Transform.rotate(
+                          angle: 15 * math.pi / 180,
+                          child: IconButton(
+                            color: Colors.white,
+                            icon: Icon(Icons.flash_on),
+                            onPressed: () {},
+                          )),
                       IconButton(
                         color: Colors.white,
                         icon: Icon(Icons.tv),
@@ -101,14 +110,18 @@ class _RemotePageState extends State<RemotePage> {
               )
             : null,
         body: FlutterEasyLoading(
-            child: InteractiveViewer(
-          constrained: false,
-          panEnabled: true,
-          onInteractionUpdate: (details) {
-            print("$details");
-          },
-          child: Container(child: ImagePaint(), color: MyTheme.grayBg),
-        )));
+          child: InteractiveViewer(
+            constrained: false,
+            panEnabled: true,
+            onInteractionUpdate: (details) {
+              print("$details");
+            },
+            child: Stack(children: [
+              ImagePaint(),
+              CursorPaint(),
+            ]),
+          ),
+        ));
   }
 }
 
@@ -117,7 +130,17 @@ class ImagePaint extends StatelessWidget {
   Widget build(BuildContext context) {
     final m = Provider.of<ImageModel>(context);
     return CustomPaint(
-      painter: new ImagePainter(image: m.image),
+      painter: new ImagePainter(image: m.image, x: 0, y: 0),
+    );
+  }
+}
+
+class CursorPaint extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    final m = Provider.of<CursorModel>(context);
+    return CustomPaint(
+      painter: new ImagePainter(image: m.image, x: m.x, y: m.y),
     );
   }
 }
@@ -125,14 +148,18 @@ class ImagePaint extends StatelessWidget {
 class ImagePainter extends CustomPainter {
   ImagePainter({
     this.image,
+    this.x,
+    this.y,
   });
 
   ui.Image image;
+  double x;
+  double y;
 
   @override
   void paint(Canvas canvas, Size size) {
     if (image == null) return;
-    canvas.drawImage(image, new Offset(0, 0), new Paint());
+    canvas.drawImage(image, new Offset(x, y), new Paint());
   }
 
   @override

@@ -42,8 +42,9 @@ class FfiModel with ChangeNotifier {
   }
 
   void update(String id, BuildContext context) {
-    var evt = FFI.popEvent();
-    if (evt != null) {
+    for (;;) {
+      var evt = FFI.popEvent();
+      if (evt == null) break;
       var name = evt['name'];
       if (name == 'msgbox') {
         handleMsgbox(evt, id, context);
@@ -139,7 +140,7 @@ class ImageModel with ChangeNotifier {
 
   void update(ui.Image image) {
     _image = image;
-    notifyListeners();
+    if (image != null) notifyListeners();
   }
 }
 
