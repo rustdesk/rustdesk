@@ -21,7 +21,7 @@ class RemotePage extends StatefulWidget {
 // https://github.com/hanxu317317/flutter_plan_demo/blob/master/lib/src/enter.dart
 class _RemotePageState extends State<RemotePage> {
   Timer _interval;
-  bool _show_bar = true;
+  bool _showBar = true;
 
   @override
   void initState() {
@@ -68,16 +68,16 @@ class _RemotePageState extends State<RemotePage> {
     // MediaQuery.of(context).size.height;
     EasyLoading.instance.loadingStyle = EasyLoadingStyle.light;
     return Scaffold(
-        floatingActionButton: _show_bar
+        floatingActionButton: _showBar
             ? null
             : FloatingActionButton(
                 mini: true,
                 child: Icon(Icons.expand_less),
                 backgroundColor: MyTheme.accent50,
                 onPressed: () {
-                  setState(() => _show_bar = !_show_bar);
+                  setState(() => _showBar = !_showBar);
                 }),
-        bottomNavigationBar: _show_bar
+        bottomNavigationBar: _showBar
             ? BottomAppBar(
                 color: MyTheme.accent,
                 child: Row(
@@ -117,7 +117,7 @@ class _RemotePageState extends State<RemotePage> {
                         color: Colors.white,
                         icon: Icon(Icons.expand_more),
                         onPressed: () {
-                          setState(() => _show_bar = !_show_bar);
+                          setState(() => _showBar = !_showBar);
                         }),
                   ],
                 ),

@@ -53,12 +53,14 @@ Future<Null> showAlertDialog(
   _hasDialog = true;
   var dialog = StatefulBuilder(builder: (context, setState) {
     var widgets = build(setState);
-    return AlertDialog(
-      title: widgets.item1,
-      contentPadding: const EdgeInsets.all(20.0),
-      content: widgets.item2,
-      actions: widgets.item3,
-    );
+    return WillPopScope(
+        onWillPop: () async => false,
+        child: AlertDialog(
+          title: widgets.item1,
+          contentPadding: const EdgeInsets.all(20.0),
+          content: widgets.item2,
+          actions: widgets.item3,
+        ));
   });
   await showDialog<void>(
       context: context,
