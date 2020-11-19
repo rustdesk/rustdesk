@@ -45,7 +45,8 @@ Future<Null> showAlertDialog(
     BuildContext context,
     Tuple3<Widget, Widget, List<Widget>> Function(
             void Function(void Function()))
-        build) async {
+        build,
+    {WillPopCallback onWillPop}) async {
   dismissLoading();
   if (_hasDialog) {
     Navigator.pop(context);
@@ -53,8 +54,9 @@ Future<Null> showAlertDialog(
   _hasDialog = true;
   var dialog = StatefulBuilder(builder: (context, setState) {
     var widgets = build(setState);
+    if (onWillPop == null) onWillPop = () async => false;
     return WillPopScope(
-        onWillPop: () async => false,
+        onWillPop: onWillPop,
         child: AlertDialog(
           title: widgets.item1,
           contentPadding: const EdgeInsets.all(20.0),
