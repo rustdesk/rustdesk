@@ -19,6 +19,7 @@ class RemotePage extends StatefulWidget {
 // https://github.com/hanxu317317/flutter_plan_demo/blob/master/lib/src/enter.dart
 class _RemotePageState extends State<RemotePage> {
   Timer _interval;
+  bool _show_bar = true;
 
   @override
   void initState() {
@@ -50,15 +51,64 @@ class _RemotePageState extends State<RemotePage> {
   Widget build(BuildContext context) {
     // Size size = MediaQueryData.fromWindow(ui.window).size;
     // MediaQuery.of(context).size.height;
-    return FlutterEasyLoading(
-        child: InteractiveViewer(
-      constrained: false,
-      panEnabled: true,
-      onInteractionUpdate: (details) {
-        print("$details");
-      },
-      child: Container(child: ImagePaint(), color: MyTheme.grayBg),
-    ));
+    return Scaffold(
+        floatingActionButton: _show_bar
+            ? null
+            : FloatingActionButton(
+                mini: true,
+                child: Icon(Icons.expand_less),
+                backgroundColor: MyTheme.accent50,
+                onPressed: () {
+                  setState(() => _show_bar = !_show_bar);
+                }),
+        bottomNavigationBar: _show_bar
+            ? BottomAppBar(
+                color: MyTheme.accent,
+                child: Row(
+                  mainAxisSize: MainAxisSize.max,
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: <Widget>[
+                    Row(children: [
+                      IconButton(
+                        color: Colors.white,
+                        icon: Icon(Icons.clear),
+                        onPressed: () {},
+                      ),
+                      IconButton(
+                        color: Colors.white,
+                        icon: Icon(Icons.keyboard),
+                        onPressed: () {},
+                      ),
+                      IconButton(
+                        color: Colors.white,
+                        icon: Icon(Icons.tv),
+                        onPressed: () {},
+                      ),
+                      IconButton(
+                        color: Colors.white,
+                        icon: Icon(Icons.settings),
+                        onPressed: () {},
+                      )
+                    ]),
+                    IconButton(
+                        color: Colors.white,
+                        icon: Icon(Icons.expand_more),
+                        onPressed: () {
+                          setState(() => _show_bar = !_show_bar);
+                        }),
+                  ],
+                ),
+              )
+            : null,
+        body: FlutterEasyLoading(
+            child: InteractiveViewer(
+          constrained: false,
+          panEnabled: true,
+          onInteractionUpdate: (details) {
+            print("$details");
+          },
+          child: Container(child: ImagePaint(), color: MyTheme.grayBg),
+        )));
   }
 }
 

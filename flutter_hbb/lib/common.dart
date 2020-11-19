@@ -19,6 +19,7 @@ class MyTheme {
   static const Color grayBg = Color(0xFFEEEEEE);
   static const Color white = Color(0xFFFFFFFF);
   static const Color accent = Color(0xFF0071FF);
+  static const Color accent50 = Color(0x770071FF);
 }
 
 // https://github.com/huangjianke/flutter_easyloading
