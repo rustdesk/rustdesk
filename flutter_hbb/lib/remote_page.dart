@@ -23,6 +23,7 @@ class _RemotePageState extends State<RemotePage> {
   Timer _interval;
   bool _showBar = true;
   double _bottom = 0;
+  bool _pan = false;
   final FocusNode _focusNode = FocusNode();
 
   @override
@@ -140,11 +141,15 @@ class _RemotePageState extends State<RemotePage> {
                                   showOptions(context);
                                 },
                               ),
-                              IconButton(
-                                color: Colors.white,
-                                icon: Icon(Icons.settings),
-                                onPressed: () {},
-                              )
+                              Container(
+                                  color: _pan ? Colors.blue[500] : null,
+                                  child: IconButton(
+                                    color: Colors.white,
+                                    icon: Icon(Icons.pan_tool),
+                                    onPressed: () {
+                                      setState(() => _pan = !_pan);
+                                    },
+                                  ))
                             ]),
                             IconButton(
                                 color: Colors.white,
@@ -159,16 +164,32 @@ class _RemotePageState extends State<RemotePage> {
                 body: FlutterEasyLoading(
                     child: Container(
                   color: MyTheme.canvasColor,
-                  child: InteractiveViewer(
-                    constrained: false,
-                    panEnabled: true,
-                    onInteractionUpdate: (details) {
-                      print('$details');
+                  child: GestureDetector(
+                    onTap: () {
+                      if (_pan) return;
                     },
-                    child: Stack(children: [
-                      ImagePaint(),
-                      CursorPaint(),
-                    ]),
+                    onDoubleTap: () {
+                      if (_pan) return;
+                    },
+                    onLongPress: () {
+                      if (_pan) return;
+                    },
+                    child: InteractiveViewer(
+                        constrained: false,
+                        panEnabled: _pan,
+                        onInteractionUpdate: (details) {
+                          // print('$details');
+                        },
+                        onInteractionStart: (s) {
+                          print('$s');
+                        },
+                        onInteractionEnd: (x) {
+                          print('$x');
+                        },
+                        child: Stack(children: [
+                          ImagePaint(),
+                          CursorPaint(),
+                        ])),
                   ),
                 )))));
   }
@@ -344,7 +365,7 @@ void showOptions(BuildContext context) {
                 });
               },
             ),
-            Divider(color: MyTheme.border),
+            Divider(color: Colors.black),
             CheckboxListTile(
                 value: showRemoteCursor,
                 onChanged: (v) {
