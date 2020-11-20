@@ -5,9 +5,9 @@ import 'dart:ui' as ui;
 import 'package:flutter_easyloading/flutter_easyloading.dart';
 import 'dart:async';
 import 'dart:math' as math;
+import 'package:tuple/tuple.dart';
 import 'common.dart';
 import 'model.dart';
-import 'package:tuple/tuple.dart';
 
 class RemotePage extends StatefulWidget {
   RemotePage({Key key, this.id}) : super(key: key);
@@ -22,6 +22,7 @@ class RemotePage extends StatefulWidget {
 class _RemotePageState extends State<RemotePage> {
   Timer _interval;
   bool _showBar = true;
+  double _bottom = 0;
 
   @override
   void initState() {
@@ -46,6 +47,15 @@ class _RemotePageState extends State<RemotePage> {
   }
 
   void interval() {
+    var v = MediaQuery.of(context).viewInsets.bottom;
+    if (v != _bottom) {
+      setState(() {
+        _bottom = v;
+        if (v < 80) {
+          SystemChrome.setEnabledSystemUIOverlays([]);
+        }
+      });
+    }
     FFI.ffiModel.update(widget.id, context, handleMsgbox);
   }
 
@@ -100,7 +110,8 @@ class _RemotePageState extends State<RemotePage> {
                           IconButton(
                             color: Colors.white,
                             icon: Icon(Icons.keyboard),
-                            onPressed: () {},
+                            onPressed: () => SystemChannels.textInput
+                                .invokeMethod('TextInput.show'),
                           ),
                           Transform.rotate(
                               angle: 15 * math.pi / 180,
