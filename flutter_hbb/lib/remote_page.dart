@@ -67,79 +67,92 @@ class _RemotePageState extends State<RemotePage> {
     // Size size = MediaQueryData.fromWindow(ui.window).size;
     // MediaQuery.of(context).size.height;
     EasyLoading.instance.loadingStyle = EasyLoadingStyle.light;
-    return Scaffold(
-        floatingActionButton: _showBar
-            ? null
-            : FloatingActionButton(
-                mini: true,
-                child: Icon(Icons.expand_less),
-                backgroundColor: MyTheme.accent50,
-                onPressed: () {
-                  setState(() => _showBar = !_showBar);
-                }),
-        bottomNavigationBar: _showBar
-            ? BottomAppBar(
-                color: MyTheme.accent,
-                child: Row(
-                  mainAxisSize: MainAxisSize.max,
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: <Widget>[
-                    Row(children: [
-                      IconButton(
-                        color: Colors.white,
-                        icon: Icon(Icons.clear),
-                        onPressed: () {},
-                      ),
-                      IconButton(
-                        color: Colors.white,
-                        icon: Icon(Icons.keyboard),
-                        onPressed: () {},
-                      ),
-                      Transform.rotate(
-                          angle: 15 * math.pi / 180,
-                          child: IconButton(
+    return WillPopScope(
+        onWillPop: () async {
+          close();
+          return false;
+        },
+        child: Scaffold(
+            floatingActionButton: _showBar
+                ? null
+                : FloatingActionButton(
+                    mini: true,
+                    child: Icon(Icons.expand_less),
+                    backgroundColor: MyTheme.accent50,
+                    onPressed: () {
+                      setState(() => _showBar = !_showBar);
+                    }),
+            bottomNavigationBar: _showBar
+                ? BottomAppBar(
+                    color: MyTheme.accent,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.max,
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: <Widget>[
+                        Row(children: [
+                          IconButton(
                             color: Colors.white,
-                            icon: Icon(Icons.flash_on),
+                            icon: Icon(Icons.clear),
+                            onPressed: () {
+                              close();
+                            },
+                          ),
+                          IconButton(
+                            color: Colors.white,
+                            icon: Icon(Icons.keyboard),
                             onPressed: () {},
-                          )),
-                      IconButton(
-                        color: Colors.white,
-                        icon: Icon(Icons.tv),
-                        onPressed: () {
-                          showOptions(widget.id, context);
-                        },
-                      ),
-                      IconButton(
-                        color: Colors.white,
-                        icon: Icon(Icons.settings),
-                        onPressed: () {},
-                      )
-                    ]),
-                    IconButton(
-                        color: Colors.white,
-                        icon: Icon(Icons.expand_more),
-                        onPressed: () {
-                          setState(() => _showBar = !_showBar);
-                        }),
-                  ],
-                ),
-              )
-            : null,
-        body: FlutterEasyLoading(
-            child: Container(
-          color: MyTheme.canvasColor,
-          child: InteractiveViewer(
-            constrained: false,
-            panEnabled: true,
-            onInteractionUpdate: (details) {
-              print('$details');
-            },
-            child: Stack(children: [
-              ImagePaint(),
-              CursorPaint(),
-            ]),
-          ),
-        )));
+                          ),
+                          Transform.rotate(
+                              angle: 15 * math.pi / 180,
+                              child: IconButton(
+                                color: Colors.white,
+                                icon: Icon(Icons.flash_on),
+                                onPressed: () {
+                                  showActions(context);
+                                },
+                              )),
+                          IconButton(
+                            color: Colors.white,
+                            icon: Icon(Icons.tv),
+                            onPressed: () {
+                              showOptions(context);
+                            },
+                          ),
+                          IconButton(
+                            color: Colors.white,
+                            icon: Icon(Icons.settings),
+                            onPressed: () {},
+                          )
+                        ]),
+                        IconButton(
+                            color: Colors.white,
+                            icon: Icon(Icons.expand_more),
+                            onPressed: () {
+                              setState(() => _showBar = !_showBar);
+                            }),
+                      ],
+                    ),
+                  )
+                : null,
+            body: FlutterEasyLoading(
+                child: Container(
+              color: MyTheme.canvasColor,
+              child: InteractiveViewer(
+                constrained: false,
+                panEnabled: true,
+                onInteractionUpdate: (details) {
+                  print('$details');
+                },
+                child: Stack(children: [
+                  ImagePaint(),
+                  CursorPaint(),
+                ]),
+              ),
+            ))));
+  }
+
+  void close() {
+    msgbox('', 'Close', 'Are you sure to close the connection?', context);
   }
 }
 
@@ -261,7 +274,7 @@ void wrongPasswordDialog(String id, BuildContext context) {
           ]));
 }
 
-void showOptions(String id, BuildContext context) {
+void showOptions(BuildContext context) {
   var showRemoteCursor =
       FFI.getByName('toggle_option', 'show-remote-cursor') == 'true';
   var lockAfterSessionEnd =
@@ -332,5 +345,32 @@ void showOptions(String id, BuildContext context) {
           null),
       () async => true,
       true,
-      10);
+      0);
+}
+
+void showActions(BuildContext context) {
+  showAlertDialog(
+      context,
+      (setState) => Tuple3(
+          null,
+          Column(mainAxisSize: MainAxisSize.min, children: [
+            ListTile(
+              onTap: () {
+                Navigator.pop(context);
+                FFI.setByName('ctrl_alt_del');
+              },
+              title: Text('Insert Ctrl + Alt + Del'),
+            ),
+            ListTile(
+              onTap: () {
+                Navigator.pop(context);
+                FFI.setByName('lock_screen');
+              },
+              title: Text('Insert Lock'),
+            ),
+          ]),
+          null),
+      () async => true,
+      true,
+      0);
 }

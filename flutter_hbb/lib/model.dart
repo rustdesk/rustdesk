@@ -267,7 +267,7 @@ class FFI {
     FFI.ffiModel.clear();
   }
 
-  static void setByName(String name, String value) {
+  static void setByName(String name, [String value = '']) {
     _setByName(Utf8.toUtf8(name), Utf8.toUtf8(value));
   }
 

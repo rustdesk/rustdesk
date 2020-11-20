@@ -16,6 +16,7 @@ class HexColor extends Color {
 }
 
 class MyTheme {
+  MyTheme._();
   static const Color grayBg = Color(0xFFEEEEEE);
   static const Color white = Color(0xFFFFFFFF);
   static const Color accent = Color(0xFF0071FF);
@@ -46,7 +47,7 @@ typedef BuildAlertDailog = Tuple3<Widget, Widget, List<Widget>> Function(
 // https://material.io/develop/flutter/components/dialogs
 Future<T> showAlertDialog<T>(BuildContext context, BuildAlertDailog build,
     [WillPopCallback onWillPop,
-    bool barrierDismissible,
+    bool barrierDismissible = false,
     double contentPadding = 20]) async {
   dismissLoading();
   if (_hasDialog) {
@@ -73,10 +74,20 @@ Future<T> showAlertDialog<T>(BuildContext context, BuildAlertDailog build,
   return res;
 }
 
-void msgbox(String type, String title, String text, BuildContext context) {
+void msgbox(String type, String title, String text, BuildContext context,
+    [hasCancel = false]) {
   showAlertDialog(
       context,
       (_) => Tuple3(Text(title), Text(text), [
+            hasCancel
+                ? Spacer()
+                : FlatButton(
+                    textColor: MyTheme.accent,
+                    onPressed: () {
+                      Navigator.pop(context);
+                    },
+                    child: Text('Cancel'),
+                  ),
             FlatButton(
               textColor: MyTheme.accent,
               onPressed: () {
