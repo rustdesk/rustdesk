@@ -23,6 +23,7 @@ class _RemotePageState extends State<RemotePage> {
   Timer _interval;
   bool _showBar = true;
   double _bottom = 0;
+  final FocusNode _focusNode = FocusNode();
 
   @override
   void initState() {
@@ -39,6 +40,7 @@ class _RemotePageState extends State<RemotePage> {
 
   @override
   void dispose() {
+    _focusNode.dispose();
     super.dispose();
     FFI.close();
     _interval.cancel();
@@ -72,94 +74,103 @@ class _RemotePageState extends State<RemotePage> {
     }
   }
 
+  void _handleKeyEvent(RawKeyEvent event) {
+    print('$event');
+  }
+
   @override
   Widget build(BuildContext context) {
     // Size size = MediaQueryData.fromWindow(ui.window).size;
     // MediaQuery.of(context).size.height;
     EasyLoading.instance.loadingStyle = EasyLoadingStyle.light;
-    return WillPopScope(
-        onWillPop: () async {
-          close();
-          return false;
-        },
-        child: Scaffold(
-            floatingActionButton: _showBar
-                ? null
-                : FloatingActionButton(
-                    mini: true,
-                    child: Icon(Icons.expand_less),
-                    backgroundColor: MyTheme.accent50,
-                    onPressed: () {
-                      setState(() => _showBar = !_showBar);
-                    }),
-            bottomNavigationBar: _showBar
-                ? BottomAppBar(
-                    color: MyTheme.accent,
-                    child: Row(
-                      mainAxisSize: MainAxisSize.max,
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: <Widget>[
-                        Row(children: [
-                          IconButton(
-                            color: Colors.white,
-                            icon: Icon(Icons.clear),
-                            onPressed: () {
-                              close();
-                            },
-                          ),
-                          IconButton(
-                            color: Colors.white,
-                            icon: Icon(Icons.keyboard),
-                            onPressed: () => SystemChannels.textInput
-                                .invokeMethod('TextInput.show'),
-                          ),
-                          Transform.rotate(
-                              angle: 15 * math.pi / 180,
-                              child: IconButton(
+    return RawKeyboardListener(
+        focusNode: _focusNode,
+        onKey: _handleKeyEvent,
+        child: WillPopScope(
+            onWillPop: () async {
+              close();
+              return false;
+            },
+            child: Scaffold(
+                floatingActionButton: _showBar
+                    ? null
+                    : FloatingActionButton(
+                        mini: true,
+                        child: Icon(Icons.expand_less),
+                        backgroundColor: MyTheme.accent50,
+                        onPressed: () {
+                          setState(() => _showBar = !_showBar);
+                        }),
+                bottomNavigationBar: _showBar
+                    ? BottomAppBar(
+                        color: MyTheme.accent,
+                        child: Row(
+                          mainAxisSize: MainAxisSize.max,
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: <Widget>[
+                            Row(children: [
+                              IconButton(
                                 color: Colors.white,
-                                icon: Icon(Icons.flash_on),
+                                icon: Icon(Icons.clear),
                                 onPressed: () {
-                                  showActions(context);
+                                  close();
                                 },
-                              )),
-                          IconButton(
-                            color: Colors.white,
-                            icon: Icon(Icons.tv),
-                            onPressed: () {
-                              showOptions(context);
-                            },
-                          ),
-                          IconButton(
-                            color: Colors.white,
-                            icon: Icon(Icons.settings),
-                            onPressed: () {},
-                          )
-                        ]),
-                        IconButton(
-                            color: Colors.white,
-                            icon: Icon(Icons.expand_more),
-                            onPressed: () {
-                              setState(() => _showBar = !_showBar);
-                            }),
-                      ],
-                    ),
-                  )
-                : null,
-            body: FlutterEasyLoading(
-                child: Container(
-              color: MyTheme.canvasColor,
-              child: InteractiveViewer(
-                constrained: false,
-                panEnabled: true,
-                onInteractionUpdate: (details) {
-                  print('$details');
-                },
-                child: Stack(children: [
-                  ImagePaint(),
-                  CursorPaint(),
-                ]),
-              ),
-            ))));
+                              ),
+                              IconButton(
+                                  color: Colors.white,
+                                  icon: Icon(Icons.keyboard),
+                                  onPressed: () {
+                                    SystemChannels.textInput
+                                        .invokeMethod('TextInput.show');
+                                    _focusNode.requestFocus();
+                                  }),
+                              Transform.rotate(
+                                  angle: 15 * math.pi / 180,
+                                  child: IconButton(
+                                    color: Colors.white,
+                                    icon: Icon(Icons.flash_on),
+                                    onPressed: () {
+                                      showActions(context);
+                                    },
+                                  )),
+                              IconButton(
+                                color: Colors.white,
+                                icon: Icon(Icons.tv),
+                                onPressed: () {
+                                  showOptions(context);
+                                },
+                              ),
+                              IconButton(
+                                color: Colors.white,
+                                icon: Icon(Icons.settings),
+                                onPressed: () {},
+                              )
+                            ]),
+                            IconButton(
+                                color: Colors.white,
+                                icon: Icon(Icons.expand_more),
+                                onPressed: () {
+                                  setState(() => _showBar = !_showBar);
+                                }),
+                          ],
+                        ),
+                      )
+                    : null,
+                body: FlutterEasyLoading(
+                    child: Container(
+                  color: MyTheme.canvasColor,
+                  child: InteractiveViewer(
+                    constrained: false,
+                    panEnabled: true,
+                    onInteractionUpdate: (details) {
+                      print('$details');
+                    },
+                    child: Stack(children: [
+                      ImagePaint(),
+                      CursorPaint(),
+                    ]),
+                  ),
+                )))));
   }
 
   void close() {
