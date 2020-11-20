@@ -202,16 +202,15 @@ void enterPasswordDialog(String id, BuildContext context) {
                   labelText: 'Password',
                 ),
               ),
-              ListTile(
+              CheckboxListTile(
+                controlAffinity: ListTileControlAffinity.leading,
                 title: Text(
                   'Remember the password',
                 ),
-                leading: Checkbox(
-                  value: remember,
-                  onChanged: (v) {
-                    setState(() => remember = v);
-                  },
-                ),
+                value: remember,
+                onChanged: (v) {
+                  setState(() => remember = v);
+                },
               ),
             ]),
             [
@@ -267,11 +266,50 @@ void showOptions(String id, BuildContext context) {
       FFI.getByName('toggle_option', 'show-remote-cursor') == 'true';
   var lockAfterSessionEnd =
       FFI.getByName('toggle_option', 'lock-after-session-end') == 'true';
+  String quality = FFI.getByName('image_quality');
+  if (quality == '') quality = 'balanced';
   showAlertDialog(
       context,
       (setState) => Tuple3(
           null,
           Column(mainAxisSize: MainAxisSize.min, children: [
+            RadioListTile<String>(
+              controlAffinity: ListTileControlAffinity.trailing,
+              title: const Text('Good image quality'),
+              value: 'best',
+              groupValue: quality,
+              onChanged: (String value) {
+                setState(() {
+                  quality = value;
+                  FFI.setByName('image_quality', value);
+                });
+              },
+            ),
+            RadioListTile<String>(
+              controlAffinity: ListTileControlAffinity.trailing,
+              title: const Text('Balanced'),
+              value: 'balanced',
+              groupValue: quality,
+              onChanged: (String value) {
+                setState(() {
+                  quality = value;
+                  FFI.setByName('image_quality', value);
+                });
+              },
+            ),
+            RadioListTile<String>(
+              controlAffinity: ListTileControlAffinity.trailing,
+              title: const Text('Optimize reaction time'),
+              value: 'low',
+              groupValue: quality,
+              onChanged: (String value) {
+                setState(() {
+                  quality = value;
+                  FFI.setByName('image_quality', value);
+                });
+              },
+            ),
+            Divider(color: MyTheme.border),
             CheckboxListTile(
                 value: showRemoteCursor,
                 onChanged: (v) {
