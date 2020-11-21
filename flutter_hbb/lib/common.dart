@@ -98,3 +98,43 @@ void msgbox(String type, String title, String text, BuildContext context,
             ),
           ]));
 }
+
+class PasswordWidget extends StatefulWidget {
+  PasswordWidget({Key key, this.controller}) : super(key: key);
+
+  final TextEditingController controller;
+
+  @override
+  _PasswordWidgetState createState() => _PasswordWidgetState();
+}
+
+class _PasswordWidgetState extends State<PasswordWidget> {
+  bool _passwordVisible = false;
+  @override
+  Widget build(BuildContext context) {
+    return TextFormField(
+      autofocus: true,
+      keyboardType: TextInputType.text,
+      controller: widget.controller,
+      obscureText: !_passwordVisible, //This will obscure text dynamically
+      decoration: InputDecoration(
+        labelText: 'Password',
+        hintText: 'Enter your password',
+        // Here is key idea
+        suffixIcon: IconButton(
+          icon: Icon(
+            // Based on passwordVisible state choose the icon
+            _passwordVisible ? Icons.visibility : Icons.visibility_off,
+            color: Theme.of(context).primaryColorDark,
+          ),
+          onPressed: () {
+            // Update the state i.e. toogle the state of passwordVisible variable
+            setState(() {
+              _passwordVisible = !_passwordVisible;
+            });
+          },
+        ),
+      ),
+    );
+  }
+}

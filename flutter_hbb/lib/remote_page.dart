@@ -250,14 +250,7 @@ void enterPasswordDialog(String id, BuildContext context) {
       (setState) => Tuple3(
             Text('Please enter your password'),
             Column(mainAxisSize: MainAxisSize.min, children: [
-              TextField(
-                autofocus: true,
-                obscureText: true,
-                controller: controller,
-                decoration: const InputDecoration(
-                  labelText: 'Password',
-                ),
-              ),
+              PasswordWidget(controller: controller),
               CheckboxListTile(
                 controlAffinity: ListTileControlAffinity.leading,
                 title: Text(

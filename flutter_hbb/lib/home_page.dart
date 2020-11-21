@@ -82,6 +82,7 @@ class _HomePageState extends State<HomePage> {
                       // keyboardType: TextInputType.number,
                       decoration: InputDecoration(
                         labelText: 'Remote ID',
+                        hintText: 'Enter your remote ID',
                         border: InputBorder.none,
                         helperStyle: TextStyle(
                           fontWeight: FontWeight.bold,
