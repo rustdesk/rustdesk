@@ -85,132 +85,144 @@ class _RemotePageState extends State<RemotePage> {
     // Size size = MediaQueryData.fromWindow(ui.window).size;
     // MediaQuery.of(context).size.height;
     EasyLoading.instance.loadingStyle = EasyLoadingStyle.light;
-    return RawKeyboardListener(
-        focusNode: _focusNode,
-        onKey: _handleKeyEvent,
-        child: WillPopScope(
-            onWillPop: () async {
-              close();
-              return false;
-            },
-            child: Scaffold(
-                floatingActionButton: _showBar
-                    ? null
-                    : FloatingActionButton(
-                        mini: true,
-                        child: Icon(Icons.expand_less),
-                        backgroundColor: MyTheme.accent50,
-                        onPressed: () {
-                          setState(() => _showBar = !_showBar);
-                        }),
-                bottomNavigationBar: _showBar
-                    ? BottomAppBar(
-                        elevation: 10,
-                        color: MyTheme.accent,
-                        child: Row(
-                          mainAxisSize: MainAxisSize.max,
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: <Widget>[
-                            Row(children: [
-                              IconButton(
+    return WillPopScope(
+        onWillPop: () async {
+          close();
+          return false;
+        },
+        child: Scaffold(
+            floatingActionButton: _showBar
+                ? null
+                : FloatingActionButton(
+                    mini: true,
+                    child: Icon(Icons.expand_less),
+                    backgroundColor: MyTheme.accent50,
+                    onPressed: () {
+                      setState(() => _showBar = !_showBar);
+                    }),
+            bottomNavigationBar: _showBar
+                ? BottomAppBar(
+                    elevation: 10,
+                    color: MyTheme.accent,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.max,
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: <Widget>[
+                        Row(children: [
+                          IconButton(
+                            color: Colors.white,
+                            icon: Icon(Icons.clear),
+                            onPressed: () {
+                              close();
+                            },
+                          ),
+                          IconButton(
+                              color: Colors.white,
+                              icon: Icon(Icons.keyboard),
+                              onPressed: () {
+                                SystemChrome.setEnabledSystemUIOverlays(
+                                    SystemUiOverlay.values);
+                                _focusNode.requestFocus();
+                                SystemChannels.textInput
+                                    .invokeMethod('TextInput.show');
+                              }),
+                          Transform.rotate(
+                              angle: 15 * math.pi / 180,
+                              child: IconButton(
                                 color: Colors.white,
-                                icon: Icon(Icons.clear),
+                                icon: Icon(Icons.flash_on),
                                 onPressed: () {
-                                  close();
+                                  showActions(context);
                                 },
-                              ),
-                              IconButton(
-                                  color: Colors.white,
-                                  icon: Icon(Icons.keyboard),
-                                  onPressed: () {
-                                    SystemChrome.setEnabledSystemUIOverlays(
-                                        SystemUiOverlay.values);
-                                    SystemChannels.textInput
-                                        .invokeMethod('TextInput.show');
-                                    _focusNode.requestFocus();
-                                  }),
-                              Transform.rotate(
-                                  angle: 15 * math.pi / 180,
-                                  child: IconButton(
-                                    color: Colors.white,
-                                    icon: Icon(Icons.flash_on),
-                                    onPressed: () {
-                                      showActions(context);
-                                    },
-                                  )),
-                              IconButton(
+                              )),
+                          IconButton(
+                            color: Colors.white,
+                            icon: Icon(Icons.tv),
+                            onPressed: () {
+                              showOptions(context);
+                            },
+                          ),
+                          Container(
+                              color: _pan ? Colors.blue[500] : null,
+                              child: IconButton(
                                 color: Colors.white,
-                                icon: Icon(Icons.tv),
+                                icon: Icon(Icons.pan_tool),
                                 onPressed: () {
-                                  showOptions(context);
+                                  setState(() => _pan = !_pan);
                                 },
-                              ),
-                              Container(
-                                  color: _pan ? Colors.blue[500] : null,
-                                  child: IconButton(
-                                    color: Colors.white,
-                                    icon: Icon(Icons.pan_tool),
-                                    onPressed: () {
-                                      setState(() => _pan = !_pan);
-                                    },
-                                  ))
-                            ]),
-                            IconButton(
-                                color: Colors.white,
-                                icon: Icon(Icons.expand_more),
-                                onPressed: () {
-                                  setState(() => _showBar = !_showBar);
-                                }),
-                          ],
-                        ),
-                      )
-                    : null,
-                body: FlutterEasyLoading(
-                    child: Container(
-                  color: MyTheme.canvasColor,
-                  child: RawGestureDetector(
-                      gestures: {
-                        MultiTouchGestureRecognizer:
-                            GestureRecognizerFactoryWithHandlers<
-                                MultiTouchGestureRecognizer>(
-                          () => MultiTouchGestureRecognizer(),
-                          (MultiTouchGestureRecognizer instance) {
-                            instance.onMultiTap = (
-                              touchCount,
-                              addOrRemove,
-                            ) =>
-                                print('$touchCount, $addOrRemove');
-                          },
-                        ),
+                              ))
+                        ]),
+                        IconButton(
+                            color: Colors.white,
+                            icon: Icon(Icons.expand_more),
+                            onPressed: () {
+                              setState(() => _showBar = !_showBar);
+                            }),
+                      ],
+                    ),
+                  )
+                : null,
+            body: FlutterEasyLoading(
+                child: Container(
+              color: MyTheme.canvasColor,
+              child: RawGestureDetector(
+                  gestures: {
+                    MultiTouchGestureRecognizer:
+                        GestureRecognizerFactoryWithHandlers<
+                            MultiTouchGestureRecognizer>(
+                      () => MultiTouchGestureRecognizer(),
+                      (MultiTouchGestureRecognizer instance) {
+                        instance.onMultiTap = (
+                          touchCount,
+                          addOrRemove,
+                        ) =>
+                            print('$touchCount, $addOrRemove');
                       },
-                      child: GestureDetector(
-                        onTap: () {
-                          if (_pan) return;
+                    ),
+                  },
+                  child: GestureDetector(
+                    onTap: () {
+                      if (_pan) return;
+                    },
+                    onDoubleTap: () {
+                      if (_pan) return;
+                    },
+                    onLongPress: () {
+                      if (_pan) return;
+                    },
+                    child: InteractiveViewer(
+                        constrained: false,
+                        panEnabled: _pan,
+                        onInteractionUpdate: (details) {
+                          // print('$details');
                         },
-                        onDoubleTap: () {
-                          if (_pan) return;
+                        onInteractionStart: (s) {
+                          print('$s');
                         },
-                        onLongPress: () {
-                          if (_pan) return;
+                        onInteractionEnd: (x) {
+                          print('$x');
                         },
-                        child: InteractiveViewer(
-                            constrained: false,
-                            panEnabled: _pan,
-                            onInteractionUpdate: (details) {
-                              // print('$details');
-                            },
-                            onInteractionStart: (s) {
-                              print('$s');
-                            },
-                            onInteractionEnd: (x) {
-                              print('$x');
-                            },
-                            child: Stack(children: [
-                              ImagePaint(),
-                              CursorPaint(),
-                            ])),
-                      )),
-                )))));
+                        child: Stack(children: [
+                          ImagePaint(),
+                          CursorPaint(),
+                          SizedBox(
+                            width: 0,
+                            height: 0,
+                            child: _bottom < 100
+                                ? Container()
+                                : TextFormField(
+                                    textInputAction: TextInputAction.newline,
+                                    autocorrect: false,
+                                    enableSuggestions: false,
+                                    focusNode: _focusNode,
+                                    maxLines: null,
+                                    keyboardType: TextInputType.multiline,
+                                    onChanged: (x) => print('$x'),
+                                  ),
+                          ),
+                        ])),
+                  )),
+            ))));
   }
 
   void close() {

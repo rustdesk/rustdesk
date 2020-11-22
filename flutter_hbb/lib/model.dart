@@ -138,8 +138,8 @@ class ImageModel with ChangeNotifier {
 class CursorModel with ChangeNotifier {
   ui.Image _image;
   final _images = Map<int, ui.Image>();
-  double _x = 0;
-  double _y = 0;
+  double _x = -10000;
+  double _y = -10000;
   double _hotx = 0;
   double _hoty = 0;
   double _displayOriginX = 0;
@@ -189,6 +189,8 @@ class CursorModel with ChangeNotifier {
   }
 
   void clear() {
+    _x = -10000;
+    _x = -10000;
     _image = null;
     _images.clear();
   }
