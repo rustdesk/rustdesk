@@ -102,8 +102,9 @@ class _RemotePageState extends State<RemotePage> {
                         onPressed: () {
                           setState(() => _showBar = !_showBar);
                         }),
-                bottomNavigationBar: _showBar
+                bottomNavigationBar: _showBar && _bottom < 100
                     ? BottomAppBar(
+                        elevation: 10,
                         color: MyTheme.accent,
                         child: Row(
                           mainAxisSize: MainAxisSize.max,
