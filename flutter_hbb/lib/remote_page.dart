@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/gestures.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter/services.dart';
 import 'dart:ui' as ui;
@@ -102,7 +103,7 @@ class _RemotePageState extends State<RemotePage> {
                         onPressed: () {
                           setState(() => _showBar = !_showBar);
                         }),
-                bottomNavigationBar: _showBar && _bottom < 100
+                bottomNavigationBar: _showBar
                     ? BottomAppBar(
                         elevation: 10,
                         color: MyTheme.accent,
@@ -122,6 +123,8 @@ class _RemotePageState extends State<RemotePage> {
                                   color: Colors.white,
                                   icon: Icon(Icons.keyboard),
                                   onPressed: () {
+                                    SystemChrome.setEnabledSystemUIOverlays(
+                                        SystemUiOverlay.values);
                                     SystemChannels.textInput
                                         .invokeMethod('TextInput.show');
                                     _focusNode.requestFocus();
@@ -165,33 +168,48 @@ class _RemotePageState extends State<RemotePage> {
                 body: FlutterEasyLoading(
                     child: Container(
                   color: MyTheme.canvasColor,
-                  child: GestureDetector(
-                    onTap: () {
-                      if (_pan) return;
-                    },
-                    onDoubleTap: () {
-                      if (_pan) return;
-                    },
-                    onLongPress: () {
-                      if (_pan) return;
-                    },
-                    child: InteractiveViewer(
-                        constrained: false,
-                        panEnabled: _pan,
-                        onInteractionUpdate: (details) {
-                          // print('$details');
+                  child: RawGestureDetector(
+                      gestures: {
+                        MultiTouchGestureRecognizer:
+                            GestureRecognizerFactoryWithHandlers<
+                                MultiTouchGestureRecognizer>(
+                          () => MultiTouchGestureRecognizer(),
+                          (MultiTouchGestureRecognizer instance) {
+                            instance.onMultiTap = (
+                              touchCount,
+                              addOrRemove,
+                            ) =>
+                                print('$touchCount, $addOrRemove');
+                          },
+                        ),
+                      },
+                      child: GestureDetector(
+                        onTap: () {
+                          if (_pan) return;
                         },
-                        onInteractionStart: (s) {
-                          print('$s');
+                        onDoubleTap: () {
+                          if (_pan) return;
                         },
-                        onInteractionEnd: (x) {
-                          print('$x');
+                        onLongPress: () {
+                          if (_pan) return;
                         },
-                        child: Stack(children: [
-                          ImagePaint(),
-                          CursorPaint(),
-                        ])),
-                  ),
+                        child: InteractiveViewer(
+                            constrained: false,
+                            panEnabled: _pan,
+                            onInteractionUpdate: (details) {
+                              // print('$details');
+                            },
+                            onInteractionStart: (s) {
+                              print('$s');
+                            },
+                            onInteractionEnd: (x) {
+                              print('$x');
+                            },
+                            child: Stack(children: [
+                              ImagePaint(),
+                              CursorPaint(),
+                            ])),
+                      )),
                 )))));
   }
 
@@ -411,3 +429,34 @@ void showActions(BuildContext context) {
       true,
       0);
 }
+
+class MultiTouchGestureRecognizer extends MultiTapGestureRecognizer {
+  MultiTouchGestureRecognizerCallback onMultiTap;
+  var numberOfTouches = 0;
+
+  MultiTouchGestureRecognizer() {
+    super.onTapDown = (pointer, details) => addTouch(pointer, details);
+    super.onTapUp = (pointer, details) => removeTouch(pointer, details);
+    super.onTapCancel = (pointer) => cancelTouch(pointer);
+    super.onTap = (pointer) => captureDefaultTap(pointer);
+  }
+
+  void addTouch(int pointer, TapDownDetails details) {
+    numberOfTouches++;
+    onMultiTap(numberOfTouches, true);
+  }
+
+  void removeTouch(int pointer, TapUpDetails details) {
+    numberOfTouches--;
+    onMultiTap(numberOfTouches, false);
+  }
+
+  void cancelTouch(int pointer) {
+    numberOfTouches = 0;
+  }
+
+  void captureDefaultTap(int pointer) {}
+}
+
+typedef MultiTouchGestureRecognizerCallback = void Function(
+    int touchCount, bool addOrRemove);
