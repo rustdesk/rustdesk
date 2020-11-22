@@ -87,138 +87,182 @@ class _RemotePageState extends State<RemotePage> {
           return false;
         },
         child: Scaffold(
-            floatingActionButton: _showBar
-                ? null
-                : FloatingActionButton(
-                    mini: true,
-                    child: Icon(Icons.expand_less),
-                    backgroundColor: MyTheme.accent50,
-                    onPressed: () {
-                      setState(() => _showBar = !_showBar);
-                    }),
-            bottomNavigationBar: _showBar
-                ? BottomAppBar(
-                    elevation: 10,
-                    color: MyTheme.accent,
-                    child: Row(
-                      mainAxisSize: MainAxisSize.max,
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: <Widget>[
-                        Row(children: [
-                          IconButton(
-                            color: Colors.white,
-                            icon: Icon(Icons.clear),
-                            onPressed: () {
-                              close();
-                            },
-                          ),
-                          IconButton(
-                              color: Colors.white,
-                              icon: Icon(Icons.keyboard),
-                              onPressed: () {
-                                SystemChrome.setEnabledSystemUIOverlays(
-                                    SystemUiOverlay.values);
-                                _focusNode.requestFocus();
-                                SystemChannels.textInput
-                                    .invokeMethod('TextInput.show');
-                              }),
-                          Transform.rotate(
-                              angle: 15 * math.pi / 180,
-                              child: IconButton(
-                                color: Colors.white,
-                                icon: Icon(Icons.flash_on),
-                                onPressed: () {
-                                  showActions(context);
-                                },
-                              )),
-                          IconButton(
-                            color: Colors.white,
-                            icon: Icon(Icons.tv),
-                            onPressed: () {
-                              showOptions(context);
-                            },
-                          ),
-                          Container(
-                              color: _pan ? Colors.blue[500] : null,
-                              child: IconButton(
-                                color: Colors.white,
-                                icon: Icon(Icons.pan_tool),
-                                onPressed: () {
-                                  setState(() => _pan = !_pan);
-                                },
-                              ))
-                        ]),
+          floatingActionButton: _showBar
+              ? null
+              : FloatingActionButton(
+                  mini: true,
+                  child: Icon(Icons.expand_less),
+                  backgroundColor: MyTheme.accent50,
+                  onPressed: () {
+                    setState(() => _showBar = !_showBar);
+                  }),
+          bottomNavigationBar: _showBar
+              ? BottomAppBar(
+                  elevation: 10,
+                  color: MyTheme.accent,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.max,
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: <Widget>[
+                      Row(children: [
+                        IconButton(
+                          color: Colors.white,
+                          icon: Icon(Icons.clear),
+                          onPressed: () {
+                            close();
+                          },
+                        ),
                         IconButton(
                             color: Colors.white,
-                            icon: Icon(Icons.expand_more),
+                            icon: Icon(Icons.keyboard),
                             onPressed: () {
-                              setState(() => _showBar = !_showBar);
+                              SystemChrome.setEnabledSystemUIOverlays(
+                                  SystemUiOverlay.values);
+                              _focusNode.requestFocus();
+                              SystemChannels.textInput
+                                  .invokeMethod('TextInput.show');
                             }),
-                      ],
-                    ),
-                  )
-                : null,
-            body: FlutterEasyLoading(
-                child: Container(
-              color: MyTheme.canvasColor,
-              child: RawGestureDetector(
-                  gestures: {
-                    MultiTouchGestureRecognizer:
-                        GestureRecognizerFactoryWithHandlers<
-                            MultiTouchGestureRecognizer>(
-                      () => MultiTouchGestureRecognizer(),
-                      (MultiTouchGestureRecognizer instance) {
-                        instance.onMultiTap = (
-                          touchCount,
-                          addOrRemove,
-                        ) =>
-                            print('$touchCount, $addOrRemove');
-                      },
-                    ),
+                        Transform.rotate(
+                            angle: 15 * math.pi / 180,
+                            child: IconButton(
+                              color: Colors.white,
+                              icon: Icon(Icons.flash_on),
+                              onPressed: () {
+                                showActions(context);
+                              },
+                            )),
+                        IconButton(
+                          color: Colors.white,
+                          icon: Icon(Icons.tv),
+                          onPressed: () {
+                            showOptions(context);
+                          },
+                        ),
+                        Container(
+                            color: _pan ? Colors.blue[500] : null,
+                            child: IconButton(
+                              color: Colors.white,
+                              icon: Icon(Icons.pan_tool),
+                              onPressed: () {
+                                setState(() => _pan = !_pan);
+                              },
+                            ))
+                      ]),
+                      IconButton(
+                          color: Colors.white,
+                          icon: Icon(Icons.expand_more),
+                          onPressed: () {
+                            setState(() => _showBar = !_showBar);
+                          }),
+                    ],
+                  ),
+                )
+              : null,
+          body: RawGestureDetector(
+              gestures: {
+                MultiTouchGestureRecognizer:
+                    GestureRecognizerFactoryWithHandlers<
+                        MultiTouchGestureRecognizer>(
+                  () => MultiTouchGestureRecognizer(),
+                  (MultiTouchGestureRecognizer instance) {
+                    instance.onMultiTap = (
+                      touchCount,
+                      addOrRemove,
+                    ) =>
+                        print('$touchCount, $addOrRemove');
                   },
-                  child: GestureDetector(
-                    onTap: () {
-                      if (_pan) return;
-                    },
-                    onDoubleTap: () {
-                      if (_pan) return;
-                    },
-                    onLongPress: () {
-                      if (_pan) return;
-                    },
-                    child: InteractiveViewer(
-                        constrained: false,
-                        panEnabled: _pan,
-                        onInteractionUpdate: (details) {
-                          // print('$details');
-                        },
-                        onInteractionStart: (s) {
-                          print('$s');
-                        },
-                        onInteractionEnd: (x) {
-                          print('$x');
-                        },
-                        child: Stack(children: [
-                          ImagePaint(),
-                          CursorPaint(),
-                          SizedBox(
-                            width: 0,
-                            height: 0,
-                            child: _bottom < 100
-                                ? Container()
-                                : TextField(
-                                    textInputAction: TextInputAction.newline,
-                                    autocorrect: false,
-                                    enableSuggestions: false,
-                                    focusNode: _focusNode,
-                                    maxLines: null,
-                                    keyboardType: TextInputType.multiline,
-                                    onChanged: (x) => print('$x'),
-                                  ),
-                          ),
-                        ])),
-                  )),
-            ))));
+                ),
+                TapGestureRecognizer:
+                    GestureRecognizerFactoryWithHandlers<TapGestureRecognizer>(
+                  () => TapGestureRecognizer(),
+                  (TapGestureRecognizer instance) {
+                    instance.onTap = () {
+                      print('tap');
+                    };
+                  },
+                ),
+                ImmediateMultiDragGestureRecognizer:
+                    GestureRecognizerFactoryWithHandlers<
+                        ImmediateMultiDragGestureRecognizer>(
+                  () => ImmediateMultiDragGestureRecognizer(),
+                  (ImmediateMultiDragGestureRecognizer instance) {
+                    instance
+                      ..onStart = (x) {
+                        return CustomDrag();
+                      };
+                  },
+                ),
+                LongPressGestureRecognizer:
+                    GestureRecognizerFactoryWithHandlers<
+                        LongPressGestureRecognizer>(
+                  () => LongPressGestureRecognizer(),
+                  (LongPressGestureRecognizer instance) {
+                    instance.onLongPress = () {
+                      print('long press');
+                    };
+                  },
+                ),
+                PanGestureRecognizer:
+                    GestureRecognizerFactoryWithHandlers<PanGestureRecognizer>(
+                  () => PanGestureRecognizer(),
+                  (PanGestureRecognizer instance) {
+                    instance
+                      ..onStart = (detail) {
+                        print('pan start');
+                      }
+                      ..onUpdate = (detail) {
+                        print('$detail');
+                      };
+                  },
+                ),
+                ScaleGestureRecognizer: GestureRecognizerFactoryWithHandlers<
+                    ScaleGestureRecognizer>(
+                  () => ScaleGestureRecognizer(),
+                  (ScaleGestureRecognizer instance) {
+                    instance
+                      ..onStart = (detail) {
+                        print('scale start');
+                      }
+                      ..onUpdate = (detail) {
+                        print('$detail');
+                      };
+                  },
+                ),
+                DoubleTapGestureRecognizer:
+                    GestureRecognizerFactoryWithHandlers<
+                        DoubleTapGestureRecognizer>(
+                  () => DoubleTapGestureRecognizer(),
+                  (DoubleTapGestureRecognizer instance) {
+                    instance.onDoubleTap = () {
+                      print('double tap');
+                    };
+                  },
+                ),
+              },
+              child: FlutterEasyLoading(
+                child: Container(
+                    color: MyTheme.canvasColor,
+                    child: Stack(children: [
+                      ImagePaint(),
+                      CursorPaint(),
+                      SizedBox(
+                        width: 0,
+                        height: 0,
+                        child: _bottom < 100
+                            ? Container()
+                            : TextField(
+                                textInputAction: TextInputAction.newline,
+                                autocorrect: false,
+                                enableSuggestions: false,
+                                focusNode: _focusNode,
+                                maxLines: null,
+                                keyboardType: TextInputType.multiline,
+                                onChanged: (x) => print('$x'),
+                              ),
+                      ),
+                    ])),
+              )),
+        ));
   }
 
   void close() {
@@ -329,7 +373,6 @@ void wrongPasswordDialog(String id, BuildContext context) {
             FlatButton(
               textColor: MyTheme.accent,
               onPressed: () {
-                Navigator.pop(context);
                 enterPasswordDialog(id, context);
               },
               child: Text('Retry'),
@@ -443,10 +486,11 @@ class MultiTouchGestureRecognizer extends MultiTapGestureRecognizer {
   var numberOfTouches = 0;
 
   MultiTouchGestureRecognizer() {
-    super.onTapDown = (pointer, details) => addTouch(pointer, details);
-    super.onTapUp = (pointer, details) => removeTouch(pointer, details);
-    super.onTapCancel = (pointer) => cancelTouch(pointer);
-    super.onTap = (pointer) => captureDefaultTap(pointer);
+    this
+      ..onTapDown = addTouch
+      ..onTapUp = removeTouch
+      ..onTapCancel = cancelTouch
+      ..onTap = captureDefaultTap;
   }
 
   void addTouch(int pointer, TapDownDetails details) {
@@ -460,11 +504,28 @@ class MultiTouchGestureRecognizer extends MultiTapGestureRecognizer {
   }
 
   void cancelTouch(int pointer) {
-    numberOfTouches = 0;
+    numberOfTouches--;
+    print('$numberOfTouches x');
   }
 
-  void captureDefaultTap(int pointer) {}
+  void captureDefaultTap(int pointer) {
+    print('$pointer');
+  }
 }
 
 typedef MultiTouchGestureRecognizerCallback = void Function(
     int touchCount, bool addOrRemove);
+
+typedef OnUpdate(DragUpdateDetails details);
+
+class CustomDrag extends Drag {
+  @override
+  void update(DragUpdateDetails details) {
+    print('xx $details');
+  }
+
+  @override
+  void end(DragEndDetails details) {
+    super.end(details);
+  }
+}

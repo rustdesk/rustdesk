@@ -3,18 +3,6 @@ import 'dart:async';
 import 'package:flutter_easyloading/flutter_easyloading.dart';
 import 'package:tuple/tuple.dart';
 
-class HexColor extends Color {
-  HexColor(final String hexColor) : super(_getColorFromHex(hexColor));
-
-  static int _getColorFromHex(String hexColor) {
-    hexColor = hexColor.toUpperCase().replaceAll('#', '');
-    if (hexColor.length == 6) {
-      hexColor = 'FF' + hexColor;
-    }
-    return int.parse(hexColor, radix: 16);
-  }
-}
-
 class MyTheme {
   MyTheme._();
   static const Color grayBg = Color(0xFFEEEEEE);
@@ -112,7 +100,7 @@ class _PasswordWidgetState extends State<PasswordWidget> {
   bool _passwordVisible = false;
   @override
   Widget build(BuildContext context) {
-    return TextFormField(
+    return TextField(
       autofocus: true,
       keyboardType: TextInputType.text,
       controller: widget.controller,

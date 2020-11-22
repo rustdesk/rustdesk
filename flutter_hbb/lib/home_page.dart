@@ -72,7 +72,9 @@ class _HomePageState extends State<HomePage> {
                 Expanded(
                   child: Container(
                     padding: const EdgeInsets.only(left: 16, right: 16),
-                    child: TextFormField(
+                    child: TextField(
+                      autocorrect: false,
+                      enableSuggestions: false,
                       style: TextStyle(
                         fontFamily: 'WorkSans',
                         fontWeight: FontWeight.bold,
@@ -82,18 +84,18 @@ class _HomePageState extends State<HomePage> {
                       // keyboardType: TextInputType.number,
                       decoration: InputDecoration(
                         labelText: 'Remote ID',
-                        hintText: 'Enter your remote ID',
+                        // hintText: 'Enter your remote ID',
                         border: InputBorder.none,
                         helperStyle: TextStyle(
                           fontWeight: FontWeight.bold,
                           fontSize: 16,
-                          color: HexColor('#B9BABC'),
+                          color: Color(0xFFB9BABC),
                         ),
                         labelStyle: TextStyle(
                           fontWeight: FontWeight.w600,
                           fontSize: 16,
                           letterSpacing: 0.2,
-                          color: HexColor('#B9BABC'),
+                          color: Color(0xFFB9BABC),
                         ),
                       ),
                       autofocus: false,
@@ -106,7 +108,7 @@ class _HomePageState extends State<HomePage> {
                   height: 60,
                   child: IconButton(
                     icon: Icon(Icons.arrow_forward,
-                        color: HexColor('#B9BABC'), size: 45),
+                        color: Color(0xFFB9BABC), size: 45),
                     onPressed: onConnect,
                   ),
                 )

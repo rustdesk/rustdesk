@@ -132,7 +132,7 @@ class FfiModel with ChangeNotifier {
       _display = _pi.displays[_pi.currentDisplay];
       FFI.cursorModel.updateDisplayOrigin(_display.x, _display.y);
     }
-    if (displays.length > 1) {
+    if (displays.length > 0) {
       showLoading('Waiting for image...');
       _waitForImage = true;
     }
