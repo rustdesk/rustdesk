@@ -1,5 +1,3 @@
-import 'dart:html';
-
 import 'package:ffi/ffi.dart';
 import 'package:path_provider/path_provider.dart';
 import 'dart:io';
