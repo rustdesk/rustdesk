@@ -1,3 +1,5 @@
+import 'dart:html';
+
 import 'package:ffi/ffi.dart';
 import 'package:path_provider/path_provider.dart';
 import 'dart:io';
@@ -23,22 +25,35 @@ typedef F5 = Pointer<RgbaFrame> Function();
 
 // https://juejin.im/post/6844903864852807694
 class FfiModel with ChangeNotifier {
-  PeerInfo _pi = PeerInfo();
-  Display _display = Display();
-  bool _decoding = false;
-  bool _waitForImage = false;
+  PeerInfo _pi;
+  Display _display;
+  bool _decoding;
+  bool _waitForImage;
+  final _permissions = Map<String, bool>();
+
+  get permissions => _permissions;
 
   FfiModel() {
-    init();
+    clear();
+    () async {
+      await FFI.init();
+      notifyListeners();
+    }();
   }
 
-  Future<Null> init() async {
-    await FFI.init();
-    notifyListeners();
+  void updatePermission(Map<String, dynamic> evt) {
+    evt.forEach((k, v) {
+      if (k == 'name') return;
+      _permissions[k] = v == 'true';
+    });
   }
 
   void clear() {
+    _pi = PeerInfo();
+    _display = Display();
     _decoding = false;
+    _waitForImage = false;
+    _permissions.clear();
   }
 
   void update(
@@ -62,6 +77,8 @@ class FfiModel with ChangeNotifier {
         FFI.cursorModel.updateCursorId(evt);
       } else if (name == 'cursor_position') {
         FFI.cursorModel.updateCursorPosition(evt);
+      } else if (name == 'permission') {
+        FFI.ffiModel.updatePermission(evt);
       }
     }
     if (!_decoding) {

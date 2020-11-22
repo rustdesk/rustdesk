@@ -76,10 +76,6 @@ class _RemotePageState extends State<RemotePage> {
     }
   }
 
-  void _handleKeyEvent(RawKeyEvent event) {
-    print('$event');
-  }
-
   @override
   Widget build(BuildContext context) {
     // Size size = MediaQueryData.fromWindow(ui.window).size;
@@ -210,7 +206,7 @@ class _RemotePageState extends State<RemotePage> {
                             height: 0,
                             child: _bottom < 100
                                 ? Container()
-                                : TextFormField(
+                                : TextField(
                                     textInputAction: TextInputAction.newline,
                                     autocorrect: false,
                                     enableSuggestions: false,
