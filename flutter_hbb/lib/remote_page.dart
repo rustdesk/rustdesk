@@ -26,7 +26,6 @@ class _RemotePageState extends State<RemotePage> {
   Timer _interval;
   bool _showBar = true;
   double _bottom = 0;
-  bool _pan = false;
   var _scaleMode = false;
   final FocusNode _focusNode = FocusNode();
 
@@ -143,15 +142,6 @@ class _RemotePageState extends State<RemotePage> {
                             showOptions(context);
                           },
                         ),
-                        Container(
-                            color: _pan ? Colors.blue[500] : null,
-                            child: IconButton(
-                              color: Colors.white,
-                              icon: Icon(Icons.pan_tool),
-                              onPressed: () {
-                                setState(() => _pan = !_pan);
-                              },
-                            ))
                       ]),
                       IconButton(
                           color: Colors.white,
@@ -238,19 +228,22 @@ class _RemotePageState extends State<RemotePage> {
               y = details.globalPosition.dy;
             }
             ..onLongPress = () {
-              print('long press');
               () async {
-                await showMenu(
+                print('long press: $x $y');
+                var value = await showMenu(
                   context: context,
-                  position: RelativeRect.fromLTRB(x, y, 0, 0),
+                  position:
+                      RelativeRect.fromLTRB(x + 20, y + 20, x + 20, y + 20),
                   items: [
                     PopupMenuItem<String>(
-                        child: const Text('Doge'), value: 'Doge'),
-                    PopupMenuItem<String>(
-                        child: const Text('Lion'), value: 'Lion'),
+                        child: Text(_scaleMode ? 'Pan Mode' : 'Scale Mode'),
+                        value: 'mode'),
                   ],
                   elevation: 8.0,
                 );
+                if (value == 'mode') {
+                  setState(() => _scaleMode = !_scaleMode);
+                }
               }();
             };
         },

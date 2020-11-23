@@ -44,6 +44,7 @@ class FfiModel with ChangeNotifier {
       if (k == 'name') return;
       _permissions[k] = v == 'true';
     });
+    print('$_permissions');
   }
 
   void clear() {
