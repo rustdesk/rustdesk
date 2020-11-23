@@ -16,13 +16,15 @@ class App extends StatelessWidget {
             value: FFI.imageModel,
             child: ChangeNotifierProvider.value(
                 value: FFI.cursorModel,
-                child: MaterialApp(
-                  title: 'RustDesk',
-                  theme: ThemeData(
-                    primarySwatch: Colors.blue,
-                    visualDensity: VisualDensity.adaptivePlatformDensity,
-                  ),
-                  home: HomePage(title: 'RustDesk'),
-                ))));
+                child: ChangeNotifierProvider.value(
+                    value: FFI.canvasModel,
+                    child: MaterialApp(
+                      title: 'RustDesk',
+                      theme: ThemeData(
+                        primarySwatch: Colors.blue,
+                        visualDensity: VisualDensity.adaptivePlatformDensity,
+                      ),
+                      home: HomePage(title: 'RustDesk'),
+                    )))));
   }
 }

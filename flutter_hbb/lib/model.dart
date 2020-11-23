@@ -6,6 +6,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
+import 'package:tuple/tuple.dart';
 import 'dart:async';
 import 'common.dart';
 
@@ -46,6 +47,8 @@ class FfiModel with ChangeNotifier {
     });
     print('$_permissions');
   }
+
+  bool keyboard() => _permissions['keyboard'] == true;
 
   void clear() {
     _pi = PeerInfo();
@@ -151,9 +154,50 @@ class ImageModel with ChangeNotifier {
   }
 }
 
+class CanvasModel with ChangeNotifier {
+  double _x;
+  double _y;
+  double _scale;
+  double _xPan;
+  double _yPan;
+
+  CanvasModel() {
+    clear();
+  }
+
+  double get x => _x;
+  double get y => _y;
+  double get scale => _scale;
+
+  void startPan() {
+    _xPan = 0;
+    _yPan = 0;
+  }
+
+  void updateOffset(double dx, double dy) {
+    _x += dx;
+    _y += dy;
+    notifyListeners();
+  }
+
+  void updateScale(double v) {
+    _scale *= v;
+    if (_scale > 1) _scale = 1;
+    notifyListeners();
+  }
+
+  void clear() {
+    _x = 0;
+    _y = 0;
+    _scale = 1.0;
+    _xPan = 0;
+    _yPan = 0;
+  }
+}
+
 class CursorModel with ChangeNotifier {
   ui.Image _image;
-  final _images = Map<int, ui.Image>();
+  final _images = Map<int, Tuple3<ui.Image, double, double>>();
   double _x = -10000;
   double _y = -10000;
   double _hotx = 0;
@@ -162,8 +206,10 @@ class CursorModel with ChangeNotifier {
   double _displayOriginY = 0;
 
   ui.Image get image => _image;
-  double get x => _x - _displayOriginX - _hotx;
-  double get y => _y - _displayOriginY - _hoty;
+  double get x => _x - _displayOriginX;
+  double get y => _y - _displayOriginY;
+  double get hotx => _hotx;
+  double get hoty => _hoty;
 
   void updateCursorData(Map<String, dynamic> evt) {
     var id = int.parse(evt['id']);
@@ -176,7 +222,7 @@ class CursorModel with ChangeNotifier {
     ui.decodeImageFromPixels(rgba, width, height, ui.PixelFormat.rgba8888,
         (image) {
       _image = image;
-      _images[id] = image;
+      _images[id] = Tuple3(image, _hotx, _hoty);
       try {
         // my throw exception, because the listener maybe already dispose
         notifyListeners();
@@ -187,7 +233,9 @@ class CursorModel with ChangeNotifier {
   void updateCursorId(Map<String, dynamic> evt) {
     final tmp = _images[int.parse(evt['id'])];
     if (tmp != null) {
-      _image = tmp;
+      _image = tmp.item1;
+      _hotx = tmp.item2;
+      _hoty = tmp.item3;
       notifyListeners();
     }
   }
@@ -222,6 +270,7 @@ class FFI {
   static final imageModel = ImageModel();
   static final ffiModel = FfiModel();
   static final cursorModel = CursorModel();
+  static final canvasModel = CanvasModel();
 
   static String getId() {
     return getByName('remote_id');
@@ -283,6 +332,7 @@ class FFI {
     FFI.imageModel.update(null);
     FFI.cursorModel.clear();
     FFI.ffiModel.clear();
+    FFI.canvasModel.clear();
   }
 
   static void setByName(String name, [String value = '']) {

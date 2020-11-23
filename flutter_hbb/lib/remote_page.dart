@@ -27,6 +27,9 @@ class _RemotePageState extends State<RemotePage> {
   bool _showBar = true;
   double _bottom = 0;
   var _scaleMode = false;
+  double _xOffset = 0;
+  double _yOffset = 0;
+  double _scale = 1;
   final FocusNode _focusNode = FocusNode();
 
   @override
@@ -153,8 +156,55 @@ class _RemotePageState extends State<RemotePage> {
                   ),
                 )
               : null,
-          body: RawGestureDetector(
-              gestures: buildGuestures(),
+          body: GestureDetector(
+              onLongPressStart: (details) {
+                var x = details.globalPosition.dx;
+                var y = details.globalPosition.dy;
+                print('long press');
+                () async {
+                  var value = await showMenu(
+                    context: context,
+                    position:
+                        RelativeRect.fromLTRB(x + 20, y + 20, x + 20, y + 20),
+                    items: [
+                      PopupMenuItem<String>(
+                          child: Text(_scaleMode ? 'Pan Mode' : 'Scale Mode'),
+                          value: 'mode'),
+                    ],
+                    elevation: 8.0,
+                  );
+                  if (value == 'mode') {
+                    setState(() => _scaleMode = !_scaleMode);
+                  }
+                }();
+              },
+              onDoubleTap: () {
+                print('double tap');
+              },
+              onTap: () {
+                print('tap');
+              },
+              onScaleStart: (details) {
+                _scale = 1;
+                _xOffset = details.focalPoint.dx;
+                _yOffset = details.focalPoint.dy;
+                FFI.canvasModel.startPan();
+              },
+              onScaleUpdate: (details) {
+                var scale = details.scale;
+                if (scale == 1) {
+                  var x = details.focalPoint.dx;
+                  var y = details.focalPoint.dy;
+                  var dx = x - _xOffset;
+                  var dy = y - _yOffset;
+                  FFI.canvasModel.updateOffset(dx, dy);
+                  _xOffset = x;
+                  _yOffset = y;
+                } else {
+                  FFI.canvasModel.updateScale(scale / _scale);
+                  _scale = scale;
+                }
+              },
               child: FlutterEasyLoading(
                 child: Container(
                     color: MyTheme.canvasColor,
@@ -288,8 +338,11 @@ class ImagePaint extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final m = Provider.of<ImageModel>(context);
+    final c = Provider.of<CanvasModel>(context);
+    var s = c.scale;
     return CustomPaint(
-      painter: new ImagePainter(image: m.image, x: 0, y: 0),
+      painter:
+          new ImagePainter(image: m.image, x: c.x / s, y: c.y / s, scale: s),
     );
   }
 }
@@ -298,8 +351,14 @@ class CursorPaint extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final m = Provider.of<CursorModel>(context);
+    final c = Provider.of<CanvasModel>(context);
+    var s = c.scale;
     return CustomPaint(
-      painter: new ImagePainter(image: m.image, x: m.x, y: m.y),
+      painter: new ImagePainter(
+          image: m.image,
+          x: m.x * s - m.hotx + c.x,
+          y: m.y * s - m.hoty + c.y,
+          scale: 1),
     );
   }
 }
@@ -309,15 +368,18 @@ class ImagePainter extends CustomPainter {
     this.image,
     this.x,
     this.y,
+    this.scale,
   });
 
   ui.Image image;
   double x;
   double y;
+  double scale;
 
   @override
   void paint(Canvas canvas, Size size) {
     if (image == null) return;
+    canvas.scale(scale, scale);
     canvas.drawImage(image, new Offset(x, y), new Paint());
   }
 
