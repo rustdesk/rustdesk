@@ -9,6 +9,7 @@ import 'dart:math' as math;
 import 'package:tuple/tuple.dart';
 import 'common.dart';
 import 'model.dart';
+import 'package:wakelock/wakelock.dart';
 
 class RemotePage extends StatefulWidget {
   RemotePage({Key key, this.id}) : super(key: key);
@@ -38,6 +39,7 @@ class _RemotePageState extends State<RemotePage> {
       _interval =
           Timer.periodic(Duration(milliseconds: 30), (timer) => interval());
     });
+    Wakelock.enable();
   }
 
   @override
@@ -48,6 +50,7 @@ class _RemotePageState extends State<RemotePage> {
     _interval.cancel();
     dismissLoading();
     SystemChrome.setEnabledSystemUIOverlays(SystemUiOverlay.values);
+    Wakelock.disable();
   }
 
   void interval() {
@@ -197,9 +200,29 @@ class _RemotePageState extends State<RemotePage> {
                         LongPressGestureRecognizer>(
                   () => LongPressGestureRecognizer(),
                   (LongPressGestureRecognizer instance) {
-                    instance.onLongPress = () {
-                      print('long press');
-                    };
+                    var x = 0.0;
+                    var y = 0.0;
+                    instance
+                      ..onLongPressStart = (details) {
+                        x = details.globalPosition.dx;
+                        y = details.globalPosition.dy;
+                      }
+                      ..onLongPress = () {
+                        print('long press');
+                        () async {
+                          await showMenu(
+                            context: context,
+                            position: RelativeRect.fromLTRB(x, y, 0, 0),
+                            items: [
+                              PopupMenuItem<String>(
+                                  child: const Text('Doge'), value: 'Doge'),
+                              PopupMenuItem<String>(
+                                  child: const Text('Lion'), value: 'Lion'),
+                            ],
+                            elevation: 8.0,
+                          );
+                        }();
+                      };
                   },
                 ),
                 PanGestureRecognizer:

@@ -33,6 +33,7 @@ dependencies:
   provider: ^4.3.2+2
   flutter_easyloading: ^2.1.3
   tuple: ^1.0.1
+  wakelock: ^0.2.1+1
 
 dev_dependencies:
   flutter_test:
