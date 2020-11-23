@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/gestures.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter/services.dart';
 import 'dart:ui' as ui;
@@ -9,7 +8,6 @@ import 'dart:math' as math;
 import 'package:tuple/tuple.dart';
 import 'package:wakelock/wakelock.dart';
 import 'common.dart';
-import 'drag.dart';
 import 'model.dart';
 
 class RemotePage extends StatefulWidget {
@@ -26,7 +24,6 @@ class _RemotePageState extends State<RemotePage> {
   Timer _interval;
   bool _showBar = true;
   double _bottom = 0;
-  var _scaleMode = false;
   double _xOffset = 0;
   double _yOffset = 0;
   double _scale = 1;
@@ -167,15 +164,11 @@ class _RemotePageState extends State<RemotePage> {
                     position:
                         RelativeRect.fromLTRB(x + 20, y + 20, x + 20, y + 20),
                     items: [
-                      PopupMenuItem<String>(
-                          child: Text(_scaleMode ? 'Pan Mode' : 'Scale Mode'),
-                          value: 'mode'),
+                      PopupMenuItem<String>(child: Text('Test'), value: 'mode'),
                     ],
                     elevation: 8.0,
                   );
-                  if (value == 'mode') {
-                    setState(() => _scaleMode = !_scaleMode);
-                  }
+                  if (value == 'mode') {}
                 }();
               },
               onDoubleTap: () {
@@ -229,104 +222,6 @@ class _RemotePageState extends State<RemotePage> {
                     ])),
               )),
         ));
-  }
-
-  Map<Type, GestureRecognizerFactory> buildGuestures() {
-    var m = {
-      TapGestureRecognizer:
-          GestureRecognizerFactoryWithHandlers<TapGestureRecognizer>(
-        () => TapGestureRecognizer(),
-        (TapGestureRecognizer instance) {
-          instance.onTap = () {
-            print('tap');
-          };
-        },
-      ),
-      MultiTouchGestureRecognizer:
-          GestureRecognizerFactoryWithHandlers<MultiTouchGestureRecognizer>(
-        () => MultiTouchGestureRecognizer(),
-        (MultiTouchGestureRecognizer instance) {
-          instance.onMultiTap = (
-            touchCount,
-            addOrRemove,
-          ) {
-            if (touchCount == 3 && addOrRemove) {
-              setState(() => _scaleMode = !_scaleMode);
-            }
-          };
-        },
-      ),
-      CustomMultiDragGestureRecognizer: GestureRecognizerFactoryWithHandlers<
-          CustomMultiDragGestureRecognizer>(
-        () => CustomMultiDragGestureRecognizer(),
-        (CustomMultiDragGestureRecognizer instance) {
-          instance
-            ..onStart = (offset) {
-              return CustomMultiDrag(events: instance.events, offset: offset);
-            };
-        },
-      ),
-      LongPressGestureRecognizer:
-          GestureRecognizerFactoryWithHandlers<LongPressGestureRecognizer>(
-        () => LongPressGestureRecognizer(),
-        (LongPressGestureRecognizer instance) {
-          var x = 0.0;
-          var y = 0.0;
-          instance
-            ..onLongPressStart = (details) {
-              x = details.globalPosition.dx;
-              y = details.globalPosition.dy;
-            }
-            ..onLongPress = () {
-              () async {
-                print('long press: $x $y');
-                var value = await showMenu(
-                  context: context,
-                  position:
-                      RelativeRect.fromLTRB(x + 20, y + 20, x + 20, y + 20),
-                  items: [
-                    PopupMenuItem<String>(
-                        child: Text(_scaleMode ? 'Pan Mode' : 'Scale Mode'),
-                        value: 'mode'),
-                  ],
-                  elevation: 8.0,
-                );
-                if (value == 'mode') {
-                  setState(() => _scaleMode = !_scaleMode);
-                }
-              }();
-            };
-        },
-      ),
-      ScaleGestureRecognizer:
-          GestureRecognizerFactoryWithHandlers<ScaleGestureRecognizer>(
-        () => ScaleGestureRecognizer(),
-        (ScaleGestureRecognizer instance) {
-          instance
-            ..onStart = (detail) {
-              print('scale start');
-            }
-            ..onUpdate = (detail) {
-              print('$detail');
-            };
-        },
-      ),
-      DoubleTapGestureRecognizer:
-          GestureRecognizerFactoryWithHandlers<DoubleTapGestureRecognizer>(
-        () => DoubleTapGestureRecognizer(),
-        (DoubleTapGestureRecognizer instance) {
-          instance.onDoubleTap = () {
-            print('double tap');
-          };
-        },
-      ),
-    };
-    if (_scaleMode) {
-      m.remove(CustomMultiDragGestureRecognizer);
-    } else {
-      m.remove(ScaleGestureRecognizer);
-    }
-    return m;
   }
 
   void close() {
