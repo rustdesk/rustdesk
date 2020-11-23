@@ -13,7 +13,6 @@ class MyTheme {
   static const Color border = Color(0xFFCCCCCC);
 }
 
-// https://github.com/huangjianke/flutter_easyloading
 void showLoading(String text) {
   dismissLoading();
   EasyLoading.show(status: text);
@@ -32,7 +31,6 @@ bool _hasDialog = false;
 typedef BuildAlertDailog = Tuple3<Widget, Widget, List<Widget>> Function(
     void Function(void Function()));
 
-// https://material.io/develop/flutter/components/dialogs
 Future<T> showAlertDialog<T>(BuildContext context, BuildAlertDailog build,
     [WillPopCallback onWillPop,
     bool barrierDismissible = false,

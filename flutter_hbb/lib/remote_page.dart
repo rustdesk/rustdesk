@@ -19,7 +19,6 @@ class RemotePage extends StatefulWidget {
   _RemotePageState createState() => _RemotePageState();
 }
 
-// https://github.com/hanxu317317/flutter_plan_demo/blob/master/lib/src/enter.dart
 class _RemotePageState extends State<RemotePage> {
   Timer _interval;
   bool _showBar = true;
@@ -34,7 +33,6 @@ class _RemotePageState extends State<RemotePage> {
     super.initState();
     FFI.connect(widget.id);
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      // https://stackoverflow.com/questions/46640116/make-flutter-application-fullscreen
       SystemChrome.setEnabledSystemUIOverlays([]);
       showLoading('Connecting...');
       _interval =
@@ -82,8 +80,8 @@ class _RemotePageState extends State<RemotePage> {
 
   @override
   Widget build(BuildContext context) {
-    // Size size = MediaQueryData.fromWindow(ui.window).size;
-    // MediaQuery.of(context).size.height;
+    print('${MediaQueryData.fromWindow(ui.window).size}');
+    print('${MediaQuery.of(context).size}');
     EasyLoading.instance.loadingStyle = EasyLoadingStyle.light;
     return WillPopScope(
         onWillPop: () async {

@@ -22,7 +22,6 @@ typedef F3 = void Function(Pointer<Utf8>, Pointer<Utf8>);
 typedef F4 = void Function(Pointer<RgbaFrame>);
 typedef F5 = Pointer<RgbaFrame> Function();
 
-// https://juejin.im/post/6844903864852807694
 class FfiModel with ChangeNotifier {
   PeerInfo _pi;
   Display _display;
@@ -63,6 +62,7 @@ class FfiModel with ChangeNotifier {
       BuildContext context,
       void Function(Map<String, dynamic> evt, String id, BuildContext context)
           handleMsgbox) {
+    var pos;
     for (;;) {
       var evt = FFI.popEvent();
       if (evt == null) break;
@@ -78,11 +78,12 @@ class FfiModel with ChangeNotifier {
       } else if (name == 'cursor_id') {
         FFI.cursorModel.updateCursorId(evt);
       } else if (name == 'cursor_position') {
-        FFI.cursorModel.updateCursorPosition(evt);
+        pos = evt;
       } else if (name == 'permission') {
         FFI.ffiModel.updatePermission(evt);
       }
     }
+    if (pos != null) FFI.cursorModel.updateCursorPosition(pos);
     if (!_decoding) {
       var rgba = FFI.getRgba();
       if (rgba != null) {
@@ -343,7 +344,6 @@ class FFI {
     var p = _getByName(Utf8.toUtf8(name), Utf8.toUtf8(arg));
     assert(p != nullptr && p != null);
     var res = Utf8.fromUtf8(p);
-    // https://github.com/brickpop/flutter-rust-ffi
     _freeCString(p);
     return res;
   }
