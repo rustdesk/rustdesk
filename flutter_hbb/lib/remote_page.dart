@@ -7,9 +7,10 @@ import 'package:flutter_easyloading/flutter_easyloading.dart';
 import 'dart:async';
 import 'dart:math' as math;
 import 'package:tuple/tuple.dart';
-import 'common.dart';
-import 'model.dart';
 import 'package:wakelock/wakelock.dart';
+import 'common.dart';
+import 'drag.dart';
+import 'model.dart';
 
 class RemotePage extends StatefulWidget {
   RemotePage({Key key, this.id}) : super(key: key);
@@ -26,6 +27,7 @@ class _RemotePageState extends State<RemotePage> {
   bool _showBar = true;
   double _bottom = 0;
   bool _pan = false;
+  var _scaleMode = false;
   final FocusNode _focusNode = FocusNode();
 
   @override
@@ -162,106 +164,7 @@ class _RemotePageState extends State<RemotePage> {
                 )
               : null,
           body: RawGestureDetector(
-              gestures: {
-                MultiTouchGestureRecognizer:
-                    GestureRecognizerFactoryWithHandlers<
-                        MultiTouchGestureRecognizer>(
-                  () => MultiTouchGestureRecognizer(),
-                  (MultiTouchGestureRecognizer instance) {
-                    instance.onMultiTap = (
-                      touchCount,
-                      addOrRemove,
-                    ) =>
-                        print('$touchCount, $addOrRemove');
-                  },
-                ),
-                TapGestureRecognizer:
-                    GestureRecognizerFactoryWithHandlers<TapGestureRecognizer>(
-                  () => TapGestureRecognizer(),
-                  (TapGestureRecognizer instance) {
-                    instance.onTap = () {
-                      print('tap');
-                    };
-                  },
-                ),
-                ImmediateMultiDragGestureRecognizer:
-                    GestureRecognizerFactoryWithHandlers<
-                        ImmediateMultiDragGestureRecognizer>(
-                  () => ImmediateMultiDragGestureRecognizer(),
-                  (ImmediateMultiDragGestureRecognizer instance) {
-                    instance
-                      ..onStart = (x) {
-                        return CustomDrag();
-                      };
-                  },
-                ),
-                LongPressGestureRecognizer:
-                    GestureRecognizerFactoryWithHandlers<
-                        LongPressGestureRecognizer>(
-                  () => LongPressGestureRecognizer(),
-                  (LongPressGestureRecognizer instance) {
-                    var x = 0.0;
-                    var y = 0.0;
-                    instance
-                      ..onLongPressStart = (details) {
-                        x = details.globalPosition.dx;
-                        y = details.globalPosition.dy;
-                      }
-                      ..onLongPress = () {
-                        print('long press');
-                        () async {
-                          await showMenu(
-                            context: context,
-                            position: RelativeRect.fromLTRB(x, y, 0, 0),
-                            items: [
-                              PopupMenuItem<String>(
-                                  child: const Text('Doge'), value: 'Doge'),
-                              PopupMenuItem<String>(
-                                  child: const Text('Lion'), value: 'Lion'),
-                            ],
-                            elevation: 8.0,
-                          );
-                        }();
-                      };
-                  },
-                ),
-                PanGestureRecognizer:
-                    GestureRecognizerFactoryWithHandlers<PanGestureRecognizer>(
-                  () => PanGestureRecognizer(),
-                  (PanGestureRecognizer instance) {
-                    instance
-                      ..onStart = (detail) {
-                        print('pan start');
-                      }
-                      ..onUpdate = (detail) {
-                        print('$detail');
-                      };
-                  },
-                ),
-                ScaleGestureRecognizer: GestureRecognizerFactoryWithHandlers<
-                    ScaleGestureRecognizer>(
-                  () => ScaleGestureRecognizer(),
-                  (ScaleGestureRecognizer instance) {
-                    instance
-                      ..onStart = (detail) {
-                        print('scale start');
-                      }
-                      ..onUpdate = (detail) {
-                        print('$detail');
-                      };
-                  },
-                ),
-                DoubleTapGestureRecognizer:
-                    GestureRecognizerFactoryWithHandlers<
-                        DoubleTapGestureRecognizer>(
-                  () => DoubleTapGestureRecognizer(),
-                  (DoubleTapGestureRecognizer instance) {
-                    instance.onDoubleTap = () {
-                      print('double tap');
-                    };
-                  },
-                ),
-              },
+              gestures: buildGuestures(),
               child: FlutterEasyLoading(
                 child: Container(
                     color: MyTheme.canvasColor,
@@ -286,6 +189,101 @@ class _RemotePageState extends State<RemotePage> {
                     ])),
               )),
         ));
+  }
+
+  Map<Type, GestureRecognizerFactory> buildGuestures() {
+    var m = {
+      TapGestureRecognizer:
+          GestureRecognizerFactoryWithHandlers<TapGestureRecognizer>(
+        () => TapGestureRecognizer(),
+        (TapGestureRecognizer instance) {
+          instance.onTap = () {
+            print('tap');
+          };
+        },
+      ),
+      MultiTouchGestureRecognizer:
+          GestureRecognizerFactoryWithHandlers<MultiTouchGestureRecognizer>(
+        () => MultiTouchGestureRecognizer(),
+        (MultiTouchGestureRecognizer instance) {
+          instance.onMultiTap = (
+            touchCount,
+            addOrRemove,
+          ) {
+            if (touchCount == 3 && addOrRemove) {
+              setState(() => _scaleMode = !_scaleMode);
+            }
+          };
+        },
+      ),
+      CustomMultiDragGestureRecognizer: GestureRecognizerFactoryWithHandlers<
+          CustomMultiDragGestureRecognizer>(
+        () => CustomMultiDragGestureRecognizer(),
+        (CustomMultiDragGestureRecognizer instance) {
+          instance
+            ..onStart = (offset) {
+              return CustomMultiDrag(events: instance.events, offset: offset);
+            };
+        },
+      ),
+      LongPressGestureRecognizer:
+          GestureRecognizerFactoryWithHandlers<LongPressGestureRecognizer>(
+        () => LongPressGestureRecognizer(),
+        (LongPressGestureRecognizer instance) {
+          var x = 0.0;
+          var y = 0.0;
+          instance
+            ..onLongPressStart = (details) {
+              x = details.globalPosition.dx;
+              y = details.globalPosition.dy;
+            }
+            ..onLongPress = () {
+              print('long press');
+              () async {
+                await showMenu(
+                  context: context,
+                  position: RelativeRect.fromLTRB(x, y, 0, 0),
+                  items: [
+                    PopupMenuItem<String>(
+                        child: const Text('Doge'), value: 'Doge'),
+                    PopupMenuItem<String>(
+                        child: const Text('Lion'), value: 'Lion'),
+                  ],
+                  elevation: 8.0,
+                );
+              }();
+            };
+        },
+      ),
+      ScaleGestureRecognizer:
+          GestureRecognizerFactoryWithHandlers<ScaleGestureRecognizer>(
+        () => ScaleGestureRecognizer(),
+        (ScaleGestureRecognizer instance) {
+          instance
+            ..onStart = (detail) {
+              print('scale start');
+            }
+            ..onUpdate = (detail) {
+              print('$detail');
+            };
+        },
+      ),
+      DoubleTapGestureRecognizer:
+          GestureRecognizerFactoryWithHandlers<DoubleTapGestureRecognizer>(
+        () => DoubleTapGestureRecognizer(),
+        (DoubleTapGestureRecognizer instance) {
+          instance.onDoubleTap = () {
+            print('double tap');
+          };
+        },
+      ),
+    };
+    if (_scaleMode) {
+      m.remove(CustomMultiDragGestureRecognizer);
+    } else {
+      m.remove(ScaleGestureRecognizer);
+    }
+    return m;
   }
 
   void close() {
@@ -502,53 +500,4 @@ void showActions(BuildContext context) {
       () async => true,
       true,
       0);
-}
-
-class MultiTouchGestureRecognizer extends MultiTapGestureRecognizer {
-  MultiTouchGestureRecognizerCallback onMultiTap;
-  var numberOfTouches = 0;
-
-  MultiTouchGestureRecognizer() {
-    this
-      ..onTapDown = addTouch
-      ..onTapUp = removeTouch
-      ..onTapCancel = cancelTouch
-      ..onTap = captureDefaultTap;
-  }
-
-  void addTouch(int pointer, TapDownDetails details) {
-    numberOfTouches++;
-    onMultiTap(numberOfTouches, true);
-  }
-
-  void removeTouch(int pointer, TapUpDetails details) {
-    numberOfTouches--;
-    onMultiTap(numberOfTouches, false);
-  }
-
-  void cancelTouch(int pointer) {
-    numberOfTouches--;
-    print('$numberOfTouches x');
-  }
-
-  void captureDefaultTap(int pointer) {
-    print('$pointer');
-  }
-}
-
-typedef MultiTouchGestureRecognizerCallback = void Function(
-    int touchCount, bool addOrRemove);
-
-typedef OnUpdate(DragUpdateDetails details);
-
-class CustomDrag extends Drag {
-  @override
-  void update(DragUpdateDetails details) {
-    print('xx $details');
-  }
-
-  @override
-  void end(DragEndDetails details) {
-    super.end(details);
-  }
 }
