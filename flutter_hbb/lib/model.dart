@@ -51,7 +51,7 @@ class FfiModel with ChangeNotifier {
     print('$_permissions');
   }
 
-  bool keyboard() => _permissions['keyboard'] == true;
+  bool keyboard() => _permissions['keyboard'] != false;
 
   void clear() {
     _pi = PeerInfo();
@@ -287,21 +287,21 @@ class CursorModel with ChangeNotifier {
     var tryMoveCanvasY = false;
     if (dy > 0) {
       final mayCanvasCanMove =
-          _displayOriginY + FFI.imageModel.image.width - r.right;
+          _displayOriginY + FFI.imageModel.image.height - r.bottom;
       tryMoveCanvasY = _y + dy > cy && mayCanvasCanMove > 0;
       if (tryMoveCanvasY) {
         dy = min(dy, mayCanvasCanMove);
       } else {
-        final mayCursorCanMove = r.right - _y;
+        final mayCursorCanMove = r.bottom - _y;
         dy = min(dy, mayCursorCanMove);
       }
     } else if (dy < 0) {
-      final mayCanvasCanMove = _displayOriginY - r.left;
+      final mayCanvasCanMove = _displayOriginY - r.top;
       tryMoveCanvasY = _y + dy < cy && mayCanvasCanMove < 0;
       if (tryMoveCanvasY) {
         dy = max(dy, mayCanvasCanMove);
       } else {
-        final mayCursorCanMove = r.left - _y;
+        final mayCursorCanMove = r.top - _y;
         dy = max(dy, mayCursorCanMove);
       }
     }
@@ -310,10 +310,10 @@ class CursorModel with ChangeNotifier {
     _x += dx;
     _y += dy;
     if (tryMoveCanvasX && dx != 0) {
-      FFI.canvasModel.panX(dx);
+      FFI.canvasModel.panX(-dx);
     }
     if (tryMoveCanvasY && dy != 0) {
-      FFI.canvasModel.panY(dy);
+      FFI.canvasModel.panY(-dy);
     }
 
     _xPan += dx;
@@ -321,7 +321,7 @@ class CursorModel with ChangeNotifier {
     var px = (_xPan > 0 ? _xPan.floor() : _xPan.ceil()).toDouble();
     var py = (_yPan > 0 ? _yPan.floor() : _yPan.ceil()).toDouble();
     if (px != 0 || py != 0) {
-      FFI.cursorModel.update(-px, -py);
+      FFI.cursorModel.update(px, py);
       _xPan -= px;
       _yPan -= py;
     }
@@ -366,15 +366,16 @@ class CursorModel with ChangeNotifier {
   void updateDisplayOrigin(double x, double y) {
     _displayOriginX = x;
     _displayOriginY = y;
+    _x = x;
+    _y = y;
+    FFI.moveMouse(x, y);
     notifyListeners();
   }
 
   void update(double dx, double dy) {
     _x += dx;
     _y += dy;
-    var x = _x.toInt();
-    var y = _y.toInt();
-    FFI.setByName('send_mouse', json.encode({'x': '$x', 'y': '$y'}));
+    FFI.moveMouse(_x, _y);
   }
 
   void clear() {
@@ -409,8 +410,16 @@ class FFI {
   }
 
   static void sendMouse(String type, String buttons) {
+    if (!FFI.ffiModel.keyboard()) return;
     FFI.setByName(
         'send_mouse', json.encode({'type': type, 'buttons': buttons}));
+  }
+
+  static void moveMouse(double x, double y) {
+    if (!FFI.ffiModel.keyboard()) return;
+    var x2 = x.toInt();
+    var y2 = y.toInt();
+    FFI.setByName('send_mouse', json.encode({'x': '$x2', 'y': '$y2'}));
   }
 
   static List<Peer> peers() {
