@@ -153,23 +153,6 @@ class _RemotePageState extends State<RemotePage> {
                 )
               : null,
           body: GestureDetector(
-              onLongPressStart: (details) {
-                var x = details.globalPosition.dx;
-                var y = details.globalPosition.dy;
-                print('long press');
-                () async {
-                  var value = await showMenu(
-                    context: context,
-                    position:
-                        RelativeRect.fromLTRB(x + 20, y + 20, x + 20, y + 20),
-                    items: [
-                      PopupMenuItem<String>(child: Text('Test'), value: 'mode'),
-                    ],
-                    elevation: 8.0,
-                  );
-                  if (value == 'mode') {}
-                }();
-              },
               onTap: () {
                 FFI.tap();
               },
@@ -421,28 +404,25 @@ void showOptions(BuildContext context) {
 }
 
 void showActions(BuildContext context) {
-  showAlertDialog(
-      context,
-      (setState) => Tuple3(
-          null,
-          Column(mainAxisSize: MainAxisSize.min, children: [
-            ListTile(
-              onTap: () {
-                Navigator.pop(context);
-                FFI.setByName('ctrl_alt_del');
-              },
-              title: Text('Insert Ctrl + Alt + Del'),
-            ),
-            ListTile(
-              onTap: () {
-                Navigator.pop(context);
-                FFI.setByName('lock_screen');
-              },
-              title: Text('Insert Lock'),
-            ),
-          ]),
-          null),
-      () async => true,
-      true,
-      0);
+  final size = MediaQueryData.fromWindow(ui.window).size;
+  final x = 150.0;
+  final y = size.height;
+  () async {
+    var value = await showMenu(
+      context: context,
+      position: RelativeRect.fromLTRB(x, y, x, y),
+      items: [
+        PopupMenuItem<String>(
+            child: Text('Insert Ctrl + Alt + Del'), value: 'cad'),
+        PopupMenuItem<String>(child: Text('Insert Lock'), value: 'lock'),
+      ],
+      elevation: 8.0,
+    );
+    if (value == 'cad') {
+      FFI.setByName('ctrl_alt_del');
+    }
+    if (value == 'lock') {
+      FFI.setByName('lock_screen');
+    }
+  }();
 }
