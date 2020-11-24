@@ -26,6 +26,7 @@ class _RemotePageState extends State<RemotePage> {
   double _xOffset = 0;
   double _yOffset = 0;
   double _scale = 1;
+  bool _mouseTools = false;
   final FocusNode _focusNode = FocusNode();
 
   @override
@@ -125,20 +126,27 @@ class _RemotePageState extends State<RemotePage> {
                               SystemChannels.textInput
                                   .invokeMethod('TextInput.show');
                             }),
-                        Transform.rotate(
-                            angle: 15 * math.pi / 180,
-                            child: IconButton(
-                              color: Colors.white,
-                              icon: Icon(Icons.flash_on),
-                              onPressed: () {
-                                showActions(context);
-                              },
-                            )),
                         IconButton(
                           color: Colors.white,
                           icon: Icon(Icons.tv),
                           onPressed: () {
                             showOptions(context);
+                          },
+                        ),
+                        Container(
+                            color: _mouseTools ? Colors.blue[500] : null,
+                            child: IconButton(
+                              color: Colors.white,
+                              icon: Icon(Icons.mouse),
+                              onPressed: () {
+                                setState(() => _mouseTools = !_mouseTools);
+                              },
+                            )),
+                        IconButton(
+                          color: Colors.white,
+                          icon: Icon(Icons.more_vert),
+                          onPressed: () {
+                            showActions(context);
                           },
                         ),
                       ]),
@@ -176,6 +184,7 @@ class _RemotePageState extends State<RemotePage> {
                   _scale = scale;
                 }
               },
+              onScaleEnd: (_) {},
               child: FlutterEasyLoading(
                 child: Container(
                     color: MyTheme.canvasColor,
@@ -404,8 +413,8 @@ void showOptions(BuildContext context) {
 }
 
 void showActions(BuildContext context) {
-  final size = MediaQueryData.fromWindow(ui.window).size;
-  final x = 150.0;
+  final size = MediaQuery.of(context).size;
+  final x = 120.0;
   final y = size.height;
   () async {
     var value = await showMenu(
