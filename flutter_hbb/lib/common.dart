@@ -61,19 +61,22 @@ Future<T> showAlertDialog<T>(BuildContext context, BuildAlertDailog build,
 }
 
 void msgbox(String type, String title, String text, BuildContext context,
-    [hasCancel = false]) {
+    [bool hasCancel]) {
+  if (hasCancel == null) {
+    hasCancel = type != 'error';
+  }
   showAlertDialog(
       context,
       (_) => Tuple3(Text(title), Text(text), [
             hasCancel
-                ? Spacer()
-                : FlatButton(
+                ? FlatButton(
                     textColor: MyTheme.accent,
                     onPressed: () {
                       Navigator.pop(context);
                     },
                     child: Text('Cancel'),
-                  ),
+                  )
+                : Spacer(),
             FlatButton(
               textColor: MyTheme.accent,
               onPressed: () {

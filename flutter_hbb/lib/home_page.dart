@@ -48,6 +48,10 @@ class _HomePageState extends State<HomePage> {
         builder: (BuildContext context) => RemotePage(id: id),
       ),
     );
+    FocusScopeNode currentFocus = FocusScope.of(context);
+    if (!currentFocus.hasPrimaryFocus) {
+      currentFocus.unfocus();
+    }
   }
 
   Widget getSearchBarUI() {
@@ -98,7 +102,7 @@ class _HomePageState extends State<HomePage> {
                           color: Color(0xFFB9BABC),
                         ),
                       ),
-                      autofocus: false,
+                      autofocus: _idController.text.isEmpty,
                       controller: _idController,
                     ),
                   ),
@@ -110,6 +114,7 @@ class _HomePageState extends State<HomePage> {
                     icon: Icon(Icons.arrow_forward,
                         color: Color(0xFFB9BABC), size: 45),
                     onPressed: onConnect,
+                    autofocus: _idController.text.isNotEmpty,
                   ),
                 )
               ],

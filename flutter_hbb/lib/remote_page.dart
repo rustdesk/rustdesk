@@ -169,9 +169,6 @@ class _RemotePageState extends State<RemotePage> {
                   if (value == 'mode') {}
                 }();
               },
-              onDoubleTap: () {
-                print('double tap');
-              },
               onTap: () {
                 print('tap');
               },

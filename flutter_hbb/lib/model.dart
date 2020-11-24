@@ -177,7 +177,24 @@ class CanvasModel with ChangeNotifier {
 
   void updateOffset(double dx, double dy) {
     _x += dx;
+    if (_x > 0) {
+      _x = 0;
+      dx = -dx;
+    }
     _y += dy;
+    if (_y > 0) {
+      _y = 0;
+      dy = -dy;
+    }
+    _xPan += dx;
+    _yPan += dy;
+    var px = (_xPan > 0 ? _xPan.floor() : _xPan.ceil()).toDouble();
+    var py = (_yPan > 0 ? _yPan.floor() : _yPan.ceil()).toDouble();
+    if (px != 0 || py != 0) {
+      FFI.cursorModel.update(-px, -py);
+      _xPan -= px;
+      _yPan -= py;
+    }
     notifyListeners();
   }
 
@@ -251,6 +268,14 @@ class CursorModel with ChangeNotifier {
     _displayOriginX = x;
     _displayOriginY = y;
     notifyListeners();
+  }
+
+  void update(double dx, double dy) {
+    _x += dx;
+    _y += dy;
+    var x = _x.toInt();
+    var y = _y.toInt();
+    FFI.setByName('send_mouse', json.encode({'x': '$x', 'y': '$y'}));
   }
 
   void clear() {
