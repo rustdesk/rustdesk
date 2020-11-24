@@ -1,6 +1,7 @@
 import 'package:ffi/ffi.dart';
 import 'package:path_provider/path_provider.dart';
 import 'dart:io';
+import 'dart:math';
 import 'dart:ffi';
 import 'dart:convert';
 import 'dart:typed_data';
@@ -89,6 +90,10 @@ class FfiModel with ChangeNotifier {
       if (rgba != null) {
         if (_waitForImage) {
           _waitForImage = false;
+          final size = MediaQueryData.fromWindow(ui.window).size;
+          final xscale = size.width / _display.width.toDouble();
+          final yscale = size.height / _display.height.toDouble();
+          FFI.canvasModel.scale = max(xscale, yscale);
           dismissLoading();
         }
         _decoding = true;
@@ -153,6 +158,22 @@ class ImageModel with ChangeNotifier {
     _image = image;
     if (image != null) notifyListeners();
   }
+
+  double get maxScale {
+    if (_image == null) return 1.0;
+    final size = MediaQueryData.fromWindow(ui.window).size;
+    final xscale = size.width / _image.width;
+    final yscale = size.height / _image.height;
+    return max(1.0, max(xscale, yscale));
+  }
+
+  double get minScale {
+    if (_image == null) return 1.0;
+    final size = MediaQueryData.fromWindow(ui.window).size;
+    final xscale = size.width / _image.width;
+    final yscale = size.height / _image.height;
+    return min(xscale, yscale);
+  }
 }
 
 class CanvasModel with ChangeNotifier {
@@ -169,6 +190,11 @@ class CanvasModel with ChangeNotifier {
   double get x => _x;
   double get y => _y;
   double get scale => _scale;
+
+  set scale(v) {
+    _scale = v;
+    notifyListeners();
+  }
 
   void startPan() {
     _xPan = 0;
@@ -200,7 +226,10 @@ class CanvasModel with ChangeNotifier {
 
   void updateScale(double v) {
     _scale *= v;
-    if (_scale > 1) _scale = 1;
+    final maxs = FFI.imageModel.maxScale;
+    final mins = FFI.imageModel.minScale;
+    if (_scale > maxs) _scale = maxs;
+    if (_scale < mins) _scale = mins;
     notifyListeners();
   }
 
@@ -300,6 +329,16 @@ class FFI {
 
   static String getId() {
     return getByName('remote_id');
+  }
+
+  static void tap() {
+    FFI.sendMouse('down', 'left');
+    FFI.sendMouse('up', 'left');
+  }
+
+  static void sendMouse(String type, String buttons) {
+    FFI.setByName(
+        'send_mouse', json.encode({'type': type, 'buttons': buttons}));
   }
 
   static List<Peer> peers() {

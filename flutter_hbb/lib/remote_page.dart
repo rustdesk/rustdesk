@@ -80,7 +80,8 @@ class _RemotePageState extends State<RemotePage> {
 
   @override
   Widget build(BuildContext context) {
-    print('${MediaQueryData.fromWindow(ui.window).size}');
+    final size = MediaQueryData.fromWindow(ui.window).size;
+    print('$size');
     print('${MediaQuery.of(context).size}');
     EasyLoading.instance.loadingStyle = EasyLoadingStyle.light;
     return WillPopScope(
@@ -170,7 +171,7 @@ class _RemotePageState extends State<RemotePage> {
                 }();
               },
               onTap: () {
-                print('tap');
+                FFI.tap();
               },
               onScaleStart: (details) {
                 _scale = 1;
