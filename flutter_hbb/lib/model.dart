@@ -234,19 +234,12 @@ class CursorModel with ChangeNotifier {
   double _hoty = 0;
   double _displayOriginX = 0;
   double _displayOriginY = 0;
-  double _xPan;
-  double _yPan;
 
   ui.Image get image => _image;
   double get x => _x - _displayOriginX;
   double get y => _y - _displayOriginY;
   double get hotx => _hotx;
   double get hoty => _hoty;
-
-  void startPan() {
-    _xPan = 0;
-    _yPan = 0;
-  }
 
   // physical display coordinate
   Rect getVisibleRect() {
@@ -260,6 +253,9 @@ class CursorModel with ChangeNotifier {
   }
 
   void updatePan(double dx, double dy) {
+    final scale = FFI.canvasModel.scale;
+    dx /= scale;
+    dy /= scale;
     final r = getVisibleRect();
     var cx = r.center.dx;
     var cy = r.center.dy;
@@ -316,15 +312,7 @@ class CursorModel with ChangeNotifier {
       FFI.canvasModel.panY(-dy);
     }
 
-    _xPan += dx;
-    _yPan += dy;
-    var px = (_xPan > 0 ? _xPan.floor() : _xPan.ceil()).toDouble();
-    var py = (_yPan > 0 ? _yPan.floor() : _yPan.ceil()).toDouble();
-    if (px != 0 || py != 0) {
-      FFI.cursorModel.update(px, py);
-      _xPan -= px;
-      _yPan -= py;
-    }
+    FFI.moveMouse(_x, _y);
     notifyListeners();
   }
 
@@ -372,15 +360,7 @@ class CursorModel with ChangeNotifier {
     notifyListeners();
   }
 
-  void update(double dx, double dy) {
-    _x += dx;
-    _y += dy;
-    FFI.moveMouse(_x, _y);
-  }
-
   void clear() {
-    _xPan = 0;
-    _yPan = 0;
     _x = -10000;
     _x = -10000;
     _image = null;
