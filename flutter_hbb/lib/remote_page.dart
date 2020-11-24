@@ -177,7 +177,7 @@ class _RemotePageState extends State<RemotePage> {
                 _scale = 1;
                 _xOffset = details.focalPoint.dx;
                 _yOffset = details.focalPoint.dy;
-                FFI.canvasModel.startPan();
+                FFI.cursorModel.startPan();
               },
               onScaleUpdate: (details) {
                 var scale = details.scale;
@@ -186,7 +186,7 @@ class _RemotePageState extends State<RemotePage> {
                   var y = details.focalPoint.dy;
                   var dx = x - _xOffset;
                   var dy = y - _yOffset;
-                  FFI.canvasModel.updateOffset(dx, dy);
+                  FFI.cursorModel.updatePan(dx, dy);
                   _xOffset = x;
                   _yOffset = y;
                 } else {

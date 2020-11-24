@@ -55,6 +55,9 @@ class _HomePageState extends State<HomePage> {
   }
 
   Widget getSearchBarUI() {
+    if (!FFI.ffiModel.initialized) {
+      return Container();
+    }
     return Padding(
       padding: const EdgeInsets.only(top: 8.0),
       child: Container(

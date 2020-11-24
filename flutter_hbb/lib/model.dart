@@ -28,14 +28,17 @@ class FfiModel with ChangeNotifier {
   Display _display;
   bool _decoding;
   bool _waitForImage;
+  bool _initialized = false;
   final _permissions = Map<String, bool>();
 
   get permissions => _permissions;
+  get initialized => _initialized;
 
   FfiModel() {
     clear();
     () async {
       await FFI.init();
+      _initialized = true;
       notifyListeners();
     }();
   }
@@ -90,10 +93,6 @@ class FfiModel with ChangeNotifier {
       if (rgba != null) {
         if (_waitForImage) {
           _waitForImage = false;
-          final size = MediaQueryData.fromWindow(ui.window).size;
-          final xscale = size.width / _display.width.toDouble();
-          final yscale = size.height / _display.height.toDouble();
-          FFI.canvasModel.scale = max(xscale, yscale);
           dismissLoading();
         }
         _decoding = true;
@@ -155,6 +154,12 @@ class ImageModel with ChangeNotifier {
   ui.Image get image => _image;
 
   void update(ui.Image image) {
+    if (_image == null && image != null) {
+      final size = MediaQueryData.fromWindow(ui.window).size;
+      final xscale = size.width / image.width;
+      final yscale = size.height / image.height;
+      FFI.canvasModel.scale = max(xscale, yscale);
+    }
     _image = image;
     if (image != null) notifyListeners();
   }
@@ -180,8 +185,6 @@ class CanvasModel with ChangeNotifier {
   double _x;
   double _y;
   double _scale;
-  double _xPan;
-  double _yPan;
 
   CanvasModel() {
     clear();
@@ -196,31 +199,13 @@ class CanvasModel with ChangeNotifier {
     notifyListeners();
   }
 
-  void startPan() {
-    _xPan = 0;
-    _yPan = 0;
+  void panX(double dx) {
+    _x += dx;
+    notifyListeners();
   }
 
-  void updateOffset(double dx, double dy) {
-    _x += dx;
-    if (_x > 0) {
-      _x = 0;
-      dx = -dx;
-    }
+  void panY(double dy) {
     _y += dy;
-    if (_y > 0) {
-      _y = 0;
-      dy = -dy;
-    }
-    _xPan += dx;
-    _yPan += dy;
-    var px = (_xPan > 0 ? _xPan.floor() : _xPan.ceil()).toDouble();
-    var py = (_yPan > 0 ? _yPan.floor() : _yPan.ceil()).toDouble();
-    if (px != 0 || py != 0) {
-      FFI.cursorModel.update(-px, -py);
-      _xPan -= px;
-      _yPan -= py;
-    }
     notifyListeners();
   }
 
@@ -237,8 +222,6 @@ class CanvasModel with ChangeNotifier {
     _x = 0;
     _y = 0;
     _scale = 1.0;
-    _xPan = 0;
-    _yPan = 0;
   }
 }
 
@@ -251,12 +234,99 @@ class CursorModel with ChangeNotifier {
   double _hoty = 0;
   double _displayOriginX = 0;
   double _displayOriginY = 0;
+  double _xPan;
+  double _yPan;
 
   ui.Image get image => _image;
   double get x => _x - _displayOriginX;
   double get y => _y - _displayOriginY;
   double get hotx => _hotx;
   double get hoty => _hoty;
+
+  void startPan() {
+    _xPan = 0;
+    _yPan = 0;
+  }
+
+  // physical display coordinate
+  Rect getVisibleRect() {
+    final size = MediaQueryData.fromWindow(ui.window).size;
+    final xoffset = FFI.canvasModel.x;
+    final yoffset = FFI.canvasModel.y;
+    final scale = FFI.canvasModel.scale;
+    final x0 = _displayOriginX - xoffset / scale;
+    final y0 = _displayOriginY - yoffset / scale;
+    return Rect.fromLTWH(x0, y0, size.width / scale, size.height / scale);
+  }
+
+  void updatePan(double dx, double dy) {
+    final r = getVisibleRect();
+    var cx = r.center.dx;
+    var cy = r.center.dy;
+    var tryMoveCanvasX = false;
+    if (dx > 0) {
+      final maxCanvasCanMove =
+          _displayOriginX + FFI.imageModel.image.width - r.right;
+      tryMoveCanvasX = _x + dx > cx && maxCanvasCanMove > 0;
+      if (tryMoveCanvasX) {
+        dx = min(dx, maxCanvasCanMove);
+      } else {
+        final maxCursorCanMove = r.right - _x;
+        dx = min(dx, maxCursorCanMove);
+      }
+    } else if (dx < 0) {
+      final maxCanvasCanMove = _displayOriginX - r.left;
+      tryMoveCanvasX = _x + dx < cx && maxCanvasCanMove < 0;
+      if (tryMoveCanvasX) {
+        dx = max(dx, maxCanvasCanMove);
+      } else {
+        final maxCursorCanMove = r.left - _x;
+        dx = max(dx, maxCursorCanMove);
+      }
+    }
+    var tryMoveCanvasY = false;
+    if (dy > 0) {
+      final mayCanvasCanMove =
+          _displayOriginY + FFI.imageModel.image.width - r.right;
+      tryMoveCanvasY = _y + dy > cy && mayCanvasCanMove > 0;
+      if (tryMoveCanvasY) {
+        dy = min(dy, mayCanvasCanMove);
+      } else {
+        final mayCursorCanMove = r.right - _y;
+        dy = min(dy, mayCursorCanMove);
+      }
+    } else if (dy < 0) {
+      final mayCanvasCanMove = _displayOriginY - r.left;
+      tryMoveCanvasY = _y + dy < cy && mayCanvasCanMove < 0;
+      if (tryMoveCanvasY) {
+        dy = max(dy, mayCanvasCanMove);
+      } else {
+        final mayCursorCanMove = r.left - _y;
+        dy = max(dy, mayCursorCanMove);
+      }
+    }
+
+    if (dx == 0 && dy == 0) return;
+    _x += dx;
+    _y += dy;
+    if (tryMoveCanvasX && dx != 0) {
+      FFI.canvasModel.panX(dx);
+    }
+    if (tryMoveCanvasY && dy != 0) {
+      FFI.canvasModel.panY(dy);
+    }
+
+    _xPan += dx;
+    _yPan += dy;
+    var px = (_xPan > 0 ? _xPan.floor() : _xPan.ceil()).toDouble();
+    var py = (_yPan > 0 ? _yPan.floor() : _yPan.ceil()).toDouble();
+    if (px != 0 || py != 0) {
+      FFI.cursorModel.update(-px, -py);
+      _xPan -= px;
+      _yPan -= py;
+    }
+    notifyListeners();
+  }
 
   void updateCursorData(Map<String, dynamic> evt) {
     var id = int.parse(evt['id']);
@@ -308,6 +378,8 @@ class CursorModel with ChangeNotifier {
   }
 
   void clear() {
+    _xPan = 0;
+    _yPan = 0;
     _x = -10000;
     _x = -10000;
     _image = null;
