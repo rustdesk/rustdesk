@@ -221,10 +221,11 @@ class ImagePaint extends StatelessWidget {
   Widget build(BuildContext context) {
     final m = Provider.of<ImageModel>(context);
     final c = Provider.of<CanvasModel>(context);
+    final adjust = FFI.cursorModel.adjustForKeyboard();
     var s = c.scale;
     return CustomPaint(
-      painter:
-          new ImagePainter(image: m.image, x: c.x / s, y: c.y / s, scale: s),
+      painter: new ImagePainter(
+          image: m.image, x: c.x / s, y: (c.y - adjust) / s, scale: s),
     );
   }
 }
@@ -234,12 +235,13 @@ class CursorPaint extends StatelessWidget {
   Widget build(BuildContext context) {
     final m = Provider.of<CursorModel>(context);
     final c = Provider.of<CanvasModel>(context);
+    final adjust = FFI.cursorModel.adjustForKeyboard();
     var s = c.scale;
     return CustomPaint(
       painter: new ImagePainter(
           image: m.image,
           x: m.x * s - m.hotx + c.x,
-          y: m.y * s - m.hoty + c.y,
+          y: m.y * s - m.hoty + c.y - adjust,
           scale: 1),
     );
   }

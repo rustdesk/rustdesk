@@ -252,6 +252,13 @@ class CursorModel with ChangeNotifier {
     return Rect.fromLTWH(x0, y0, size.width / scale, size.height / scale);
   }
 
+  double adjustForKeyboard() {
+    var keyboardHeight = MediaQueryData.fromWindow(ui.window).viewInsets.bottom;
+    if (keyboardHeight < 100) return 0;
+    var h = _y - getVisibleRect().top;
+    return h > 200 ? h - 200 : 0;
+  }
+
   void updatePan(double dx, double dy) {
     final scale = FFI.canvasModel.scale;
     dx /= scale;
