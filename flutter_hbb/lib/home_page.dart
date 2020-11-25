@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:tuple/tuple.dart';
 import 'common.dart';
 import 'model.dart';
 import 'remote_page.dart';
@@ -24,6 +25,27 @@ class _HomePageState extends State<HomePage> {
     return Scaffold(
         backgroundColor: MyTheme.grayBg,
         appBar: AppBar(
+          centerTitle: true,
+          actions: [
+            IconButton(
+                icon: Icon(Icons.more_vert),
+                onPressed: () {
+                  () async {
+                    var value = await showMenu(
+                      context: context,
+                      position: RelativeRect.fromLTRB(3000, 70, 3000, 70),
+                      items: [
+                        PopupMenuItem<String>(
+                            child: Text('ID/Relay Server'), value: 'server'),
+                      ],
+                      elevation: 8,
+                    );
+                    if (value == 'server') {
+                      showServer(context);
+                    }
+                  }();
+                })
+          ],
           title: Text(widget.title),
         ),
         body: SingleChildScrollView(
@@ -185,4 +207,42 @@ class _HomePageState extends State<HomePage> {
     });
     return Wrap(children: cards);
   }
+}
+
+void showServer(BuildContext context) {
+  showAlertDialog(
+      context,
+      (setState) => Tuple3(
+            Text('ID/Relay Server'),
+            Column(mainAxisSize: MainAxisSize.min, children: <Widget>[
+              TextFormField(
+                decoration: InputDecoration(
+                  labelText: 'ID Server',
+                ),
+              ),
+              TextFormField(
+                decoration: InputDecoration(
+                  labelText: 'Relay Server',
+                ),
+              ),
+            ]),
+            [
+              FlatButton(
+                textColor: MyTheme.accent,
+                onPressed: () {
+                  Navigator.pop(context);
+                },
+                child: Text('Cancel'),
+              ),
+              FlatButton(
+                textColor: MyTheme.accent,
+                onPressed: () {
+                  Navigator.pop(context);
+                },
+                child: Text('OK'),
+              ),
+            ],
+          ),
+      () async => true,
+      true);
 }
