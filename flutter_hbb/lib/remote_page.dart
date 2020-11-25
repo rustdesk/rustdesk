@@ -4,7 +4,6 @@ import 'package:flutter/services.dart';
 import 'dart:ui' as ui;
 import 'package:flutter_easyloading/flutter_easyloading.dart';
 import 'dart:async';
-import 'dart:math' as math;
 import 'package:tuple/tuple.dart';
 import 'package:wakelock/wakelock.dart';
 import 'common.dart';
@@ -27,6 +26,13 @@ class _RemotePageState extends State<RemotePage> {
   double _yOffset = 0;
   double _scale = 1;
   bool _mouseTools = false;
+  var _shift = false;
+  var _ctrl = false;
+  var _alt = false;
+  var _command = false;
+  var _drag = false;
+  var _right = false;
+  var _scroll = false;
   final FocusNode _focusNode = FocusNode();
 
   @override
@@ -139,7 +145,11 @@ class _RemotePageState extends State<RemotePage> {
                               color: Colors.white,
                               icon: Icon(Icons.mouse),
                               onPressed: () {
-                                setState(() => _mouseTools = !_mouseTools);
+                                setState(() {
+                                  _mouseTools = !_mouseTools;
+                                  _command = _ctrl = _shift =
+                                      _alt = _scroll = _drag = _right = false;
+                                });
                               },
                             )),
                         IconButton(
@@ -191,6 +201,7 @@ class _RemotePageState extends State<RemotePage> {
                     child: Stack(children: [
                       ImagePaint(),
                       CursorPaint(),
+                      getHelpTools(),
                       SizedBox(
                         width: 0,
                         height: 0,
@@ -213,6 +224,82 @@ class _RemotePageState extends State<RemotePage> {
 
   void close() {
     msgbox('', 'Close', 'Are you sure to close the connection?', context);
+  }
+
+  Widget getHelpTools() {
+    if (!_mouseTools) {
+      return SizedBox();
+    }
+    var textStyle = TextStyle(color: Colors.white, fontSize: 11);
+    var wrap = (String text, void Function() onPressed, [bool active]) {
+      return ButtonTheme(
+          padding: EdgeInsets.symmetric(
+              vertical: 6, horizontal: 12), //adds padding inside the button
+          materialTapTargetSize: MaterialTapTargetSize
+              .shrinkWrap, //limits the touch area to the button area
+          minWidth: 0, //wraps child's width
+          height: 0,
+          child: FlatButton(
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(5.0),
+              ),
+              color: active == true ? MyTheme.accent50 : null,
+              child: Text(text, style: textStyle),
+              onPressed: onPressed));
+    };
+    return Stack(children: [
+      SizedBox(
+        height: 80,
+        child: Container(child: null, color: Color(0x66000000)),
+      ),
+      Container(
+          padding: const EdgeInsets.only(top: 20, left: 8, right: 8),
+          child: Wrap(
+            spacing: 5,
+            runSpacing: 5,
+            children: [
+              wrap('Drag', () {
+                setState(() {
+                  _drag = !_drag;
+                  if (_drag) {
+                    _scroll = false;
+                    _right = false;
+                  }
+                });
+              }, _drag),
+              wrap('Scroll', () {
+                setState(() {
+                  _scroll = !_scroll;
+                  if (_drag) {
+                    _drag = false;
+                    _right = false;
+                  }
+                });
+              }, _scroll),
+              wrap('Right', () {
+                setState(() {
+                  _right = !_right;
+                  if (_drag) {
+                    _scroll = false;
+                    _drag = false;
+                  }
+                });
+              }, _right),
+              wrap('Ctrl', () {
+                setState(() => _ctrl = !_ctrl);
+              }, _ctrl),
+              wrap('Alt', () {
+                setState(() => _alt = !_alt);
+              }, _alt),
+              wrap('Shift', () {
+                setState(() => _shift = !_shift);
+              }, _shift),
+              wrap('Command', () {
+                setState(() => _command = !_command);
+              }, _command),
+            ],
+          ))
+    ]);
   }
 }
 
