@@ -22,17 +22,17 @@ class _RemotePageState extends State<RemotePage> {
   Timer _interval;
   bool _showBar = true;
   double _bottom = 0;
+  String _value = '';
   double _xOffset = 0;
   double _yOffset = 0;
   double _scale = 1;
   bool _mouseTools = false;
-  var _shift = false;
-  var _ctrl = false;
-  var _alt = false;
-  var _command = false;
   var _drag = false;
   var _right = false;
   var _scroll = false;
+  var _arrows = false;
+  var _more = false;
+  var _fn = false;
   final FocusNode _focusNode = FocusNode();
 
   @override
@@ -59,12 +59,19 @@ class _RemotePageState extends State<RemotePage> {
     Wakelock.disable();
   }
 
+  void resetTool() {
+    _scroll = _drag = _right = false;
+    FFI.resetModifiers();
+  }
+
   void interval() {
     var v = MediaQuery.of(context).viewInsets.bottom;
     if (v != _bottom) {
+      resetTool();
+      _value = '';
       setState(() {
         _bottom = v;
-        if (v < 80) {
+        if (v < 100) {
           SystemChrome.setEnabledSystemUIOverlays([]);
         }
       });
@@ -147,8 +154,7 @@ class _RemotePageState extends State<RemotePage> {
                               onPressed: () {
                                 setState(() {
                                   _mouseTools = !_mouseTools;
-                                  _command = _ctrl = _shift =
-                                      _alt = _scroll = _drag = _right = false;
+                                  resetTool();
                                 });
                               },
                             )),
@@ -214,7 +220,17 @@ class _RemotePageState extends State<RemotePage> {
                                 focusNode: _focusNode,
                                 maxLines: null,
                                 keyboardType: TextInputType.multiline,
-                                onChanged: (x) => print('$x'),
+                                onChanged: (x) {
+                                  var char = x[x.length - 1];
+                                  if (x.length < _value.length) {
+                                    char = 'VK_BACK';
+                                  } else if (char == '\n') {
+                                    char = 'VK_RETURN';
+                                  }
+                                  if (char != '' && char != null)
+                                    FFI.inputKey(char);
+                                  _value = x;
+                                },
                               ),
                       ),
                     ])),
@@ -227,11 +243,12 @@ class _RemotePageState extends State<RemotePage> {
   }
 
   Widget getHelpTools() {
-    if (!_mouseTools) {
+    final keyboard = _bottom >= 100;
+    if (!_mouseTools && !keyboard) {
       return SizedBox();
     }
-    var textStyle = TextStyle(color: Colors.white, fontSize: 11);
-    var wrap = (String text, void Function() onPressed, [bool active]) {
+    var wrap =
+        (String text, void Function() onPressed, [bool active, IconData icon]) {
       return ButtonTheme(
           padding: EdgeInsets.symmetric(
               vertical: 6, horizontal: 12), //adds padding inside the button
@@ -244,62 +261,157 @@ class _RemotePageState extends State<RemotePage> {
                 borderRadius: BorderRadius.circular(5.0),
               ),
               color: active == true ? MyTheme.accent50 : null,
-              child: Text(text, style: textStyle),
+              child: icon != null
+                  ? Icon(icon, color: Colors.white)
+                  : Text(text,
+                      style: TextStyle(color: Colors.white, fontSize: 11)),
               onPressed: onPressed));
     };
-    return Stack(children: [
-      SizedBox(
-        height: 80,
-        child: Container(child: null, color: Color(0x66000000)),
-      ),
-      Container(
-          padding: const EdgeInsets.only(top: 20, left: 8, right: 8),
-          child: Wrap(
-            spacing: 5,
-            runSpacing: 5,
-            children: [
-              wrap('Drag', () {
+    final mouse = <Widget>[
+      wrap('Drag', () {
+        setState(() {
+          _drag = !_drag;
+          if (_drag) {
+            _scroll = false;
+            _right = false;
+          }
+        });
+      }, _drag),
+      wrap('Scroll', () {
+        setState(() {
+          _scroll = !_scroll;
+          if (_drag) {
+            _drag = false;
+            _right = false;
+          }
+        });
+      }, _scroll),
+      wrap('Right', () {
+        setState(() {
+          _right = !_right;
+          if (_drag) {
+            _scroll = false;
+            _drag = false;
+          }
+        });
+      }, _right)
+    ];
+    final modifiers = <Widget>[
+      wrap('Ctrl', () {
+        setState(() => FFI.ctrl = !FFI.ctrl);
+      }, FFI.ctrl),
+      wrap('Alt', () {
+        setState(() => FFI.alt = !FFI.alt);
+      }, FFI.alt),
+      wrap('Shift', () {
+        setState(() => FFI.shift = !FFI.shift);
+      }, FFI.shift),
+      wrap('Command', () {
+        setState(() => FFI.command = !FFI.command);
+      }, FFI.command),
+    ];
+    final keys = <Widget>[
+      wrap(
+          'Arrows',
+          () => setState(() {
                 setState(() {
-                  _drag = !_drag;
-                  if (_drag) {
-                    _scroll = false;
-                    _right = false;
+                  _arrows = !_arrows;
+                  if (_arrows) {
+                    _fn = false;
+                    _more = false;
                   }
                 });
-              }, _drag),
-              wrap('Scroll', () {
-                setState(() {
-                  _scroll = !_scroll;
-                  if (_drag) {
-                    _drag = false;
-                    _right = false;
+              }),
+          _arrows),
+      wrap(
+          'Fn',
+          () => setState(
+                () {
+                  _fn = !_fn;
+                  if (_fn) {
+                    _arrows = false;
+                    _more = false;
                   }
-                });
-              }, _scroll),
-              wrap('Right', () {
-                setState(() {
-                  _right = !_right;
-                  if (_drag) {
-                    _scroll = false;
-                    _drag = false;
+                },
+              ),
+          _fn),
+      wrap(
+          'More',
+          () => setState(
+                () {
+                  _more = !_more;
+                  if (_more) {
+                    _arrows = false;
+                    _fn = false;
                   }
-                });
-              }, _right),
-              wrap('Ctrl', () {
-                setState(() => _ctrl = !_ctrl);
-              }, _ctrl),
-              wrap('Alt', () {
-                setState(() => _alt = !_alt);
-              }, _alt),
-              wrap('Shift', () {
-                setState(() => _shift = !_shift);
-              }, _shift),
-              wrap('Command', () {
-                setState(() => _command = !_command);
-              }, _command),
-            ],
-          ))
-    ]);
+                },
+              ),
+          _more),
+    ];
+    final arrows = <Widget>[
+      SizedBox(width: 9999),
+      wrap('', () {
+        FFI.inputKey('VK_LEFT');
+      }, false, Icons.keyboard_arrow_left),
+      wrap('', () {
+        FFI.inputKey('VK_UP');
+      }, false, Icons.keyboard_arrow_up),
+      wrap('', () {
+        FFI.inputKey('VK_DOWN');
+      }, false, Icons.keyboard_arrow_down),
+      wrap('', () {
+        FFI.inputKey('VK_RIGHT');
+      }, false, Icons.keyboard_arrow_right),
+    ];
+    final fn = <Widget>[
+      SizedBox(width: 9999),
+    ];
+    for (var i = 1; i <= 12; ++i) {
+      final name = 'F' + i.toString();
+      fn.add(wrap(name, () {
+        FFI.inputKey('VK_' + name);
+      }));
+    }
+    final more = <Widget>[
+      SizedBox(width: 9999),
+      wrap('Esc', () {
+        FFI.inputKey('VK_ESCAPE');
+      }),
+      wrap('Tab', () {
+        FFI.inputKey('VK_TAB');
+      }),
+      wrap('Home', () {
+        FFI.inputKey('VK_HOME');
+      }),
+      wrap('End', () {
+        FFI.inputKey('VK_END');
+      }),
+      wrap('Del', () {
+        FFI.inputKey('VK_DELETE');
+      }),
+      wrap('PeUp', () {
+        FFI.inputKey('VK_PRIOR');
+      }),
+      wrap('PgDown', () {
+        FFI.inputKey('VK_NEXT');
+      }),
+    ];
+    return Container(
+        color: Color(0x77000000),
+        padding: EdgeInsets.only(
+            top: keyboard ? 24 : 4, left: 8, right: 8, bottom: 8),
+        child: Wrap(
+          spacing: 4,
+          runSpacing: 4,
+          children: <Widget>[SizedBox(width: 9999)] +
+              (keyboard
+                  ? modifiers +
+                      keys +
+                      (_arrows ? arrows : []) +
+                      (_fn ? fn : []) +
+                      (_more ? more : [])
+                  : mouse + modifiers),
+        ));
   }
 }
 
@@ -514,7 +626,7 @@ void showActions(BuildContext context) {
             child: Text('Insert Ctrl + Alt + Del'), value: 'cad'),
         PopupMenuItem<String>(child: Text('Insert Lock'), value: 'lock'),
       ],
-      elevation: 8.0,
+      elevation: 8,
     );
     if (value == 'cad') {
       FFI.setByName('ctrl_alt_del');

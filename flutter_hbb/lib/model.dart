@@ -395,6 +395,10 @@ class FFI {
   static F4 _freeRgba;
   static F5 _getRgba;
   static Pointer<RgbaFrame> _lastRgbaFrame;
+  static var shift = false;
+  static var ctrl = false;
+  static var alt = false;
+  static var command = false;
   static final imageModel = ImageModel();
   static final ffiModel = FfiModel();
   static final cursorModel = CursorModel();
@@ -405,21 +409,38 @@ class FFI {
   }
 
   static void tap() {
-    FFI.sendMouse('down', 'left');
-    FFI.sendMouse('up', 'left');
+    sendMouse('down', 'left');
+    sendMouse('up', 'left');
+  }
+
+  static void resetModifiers() {
+    shift = ctrl = alt = command = false;
+  }
+
+  static Map<String, String> modify(Map<String, String> evt) {
+    if (ctrl) evt['ctrl'] = 'true';
+    if (shift) evt['shift'] = 'true';
+    if (alt) evt['alt'] = 'true';
+    if (command) evt['command'] = 'true';
+    return evt;
   }
 
   static void sendMouse(String type, String buttons) {
-    if (!FFI.ffiModel.keyboard()) return;
-    FFI.setByName(
-        'send_mouse', json.encode({'type': type, 'buttons': buttons}));
+    if (!ffiModel.keyboard()) return;
+    setByName(
+        'send_mouse', json.encode(modify({'type': type, 'buttons': buttons})));
+  }
+
+  static void inputKey(String name) {
+    if (!ffiModel.keyboard()) return;
+    setByName('input_key', json.encode(modify({'name': name})));
   }
 
   static void moveMouse(double x, double y) {
-    if (!FFI.ffiModel.keyboard()) return;
+    if (!ffiModel.keyboard()) return;
     var x2 = x.toInt();
     var y2 = y.toInt();
-    FFI.setByName('send_mouse', json.encode({'x': '$x2', 'y': '$y2'}));
+    setByName('send_mouse', json.encode(modify({'x': '$x2', 'y': '$y2'})));
   }
 
   static List<Peer> peers() {
@@ -475,10 +496,11 @@ class FFI {
 
   static void close() {
     setByName('close', '');
-    FFI.imageModel.update(null);
-    FFI.cursorModel.clear();
-    FFI.ffiModel.clear();
-    FFI.canvasModel.clear();
+    imageModel.update(null);
+    cursorModel.clear();
+    ffiModel.clear();
+    canvasModel.clear();
+    resetModifiers();
   }
 
   static void setByName(String name, [String value = '']) {
