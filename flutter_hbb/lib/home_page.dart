@@ -26,7 +26,7 @@ class _HomePageState extends State<HomePage> {
         appBar: AppBar(
           title: Text(widget.title),
         ),
-        body: Container(
+        body: SingleChildScrollView(
           child: Column(
               mainAxisAlignment: MainAxisAlignment.start,
               mainAxisSize: MainAxisSize.max,
@@ -34,7 +34,6 @@ class _HomePageState extends State<HomePage> {
               children: <Widget>[
                 getSearchBarUI(),
                 getPeers(),
-                Expanded(child: Container())
               ]),
           padding: const EdgeInsets.fromLTRB(16.0, 0.0, 16.0, 0.0),
         ));
