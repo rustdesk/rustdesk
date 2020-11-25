@@ -34,6 +34,7 @@ class FfiModel with ChangeNotifier {
 
   get permissions => _permissions;
   get initialized => _initialized;
+  get pi => _pi;
 
   FfiModel() {
     clear();
@@ -118,6 +119,7 @@ class FfiModel with ChangeNotifier {
     _display.width = int.parse(evt['width']);
     _display.height = int.parse(evt['height']);
     FFI.cursorModel.updateDisplayOrigin(_display.x, _display.y);
+    notifyListeners();
   }
 
   void handlePeerInfo(Map<String, dynamic> evt) {

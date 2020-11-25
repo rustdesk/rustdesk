@@ -279,6 +279,7 @@ class _RemotePageState extends State<RemotePage> {
           minWidth: 0, //wraps child's width
           height: 0,
           child: FlatButton(
+              splashColor: Colors.black,
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(5.0),
               ),
@@ -568,67 +569,103 @@ void showOptions(BuildContext context) {
       FFI.getByName('toggle_option', 'lock-after-session-end') == 'true';
   String quality = FFI.getByName('image_quality');
   if (quality == '') quality = 'balanced';
+  var displays = <Widget>[];
+  final pi = FFI.ffiModel.pi;
+  if (pi.displays.length > 1) {
+    final cur = pi.currentDisplay;
+    final children = <Widget>[];
+    for (var i = 0; i < pi.displays.length; ++i)
+      children.add(InkWell(
+          onTap: () {
+            if (i == cur) return;
+            FFI.setByName('switch_display', i.toString());
+            Navigator.pop(context);
+          },
+          child: Ink(
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(
+                  border: Border.all(color: Colors.black87),
+                  color: i == cur ? Colors.black87 : Colors.white),
+              child: Center(
+                  child: Text((i + 1).toString(),
+                      style: TextStyle(
+                          color: i == cur ? Colors.white : Colors.black87))))));
+    displays.add(Padding(
+        padding: const EdgeInsets.only(top: 8),
+        child: Wrap(
+          alignment: WrapAlignment.center,
+          spacing: 8,
+          children: children,
+        )));
+    displays.add(Divider(color: MyTheme.border));
+  }
   showAlertDialog(
       context,
       (setState) => Tuple3(
           null,
-          Column(mainAxisSize: MainAxisSize.min, children: [
-            RadioListTile<String>(
-              controlAffinity: ListTileControlAffinity.trailing,
-              title: const Text('Good image quality'),
-              value: 'best',
-              groupValue: quality,
-              onChanged: (String value) {
-                setState(() {
-                  quality = value;
-                  FFI.setByName('image_quality', value);
-                });
-              },
-            ),
-            RadioListTile<String>(
-              controlAffinity: ListTileControlAffinity.trailing,
-              title: const Text('Balanced'),
-              value: 'balanced',
-              groupValue: quality,
-              onChanged: (String value) {
-                setState(() {
-                  quality = value;
-                  FFI.setByName('image_quality', value);
-                });
-              },
-            ),
-            RadioListTile<String>(
-              controlAffinity: ListTileControlAffinity.trailing,
-              title: const Text('Optimize reaction time'),
-              value: 'low',
-              groupValue: quality,
-              onChanged: (String value) {
-                setState(() {
-                  quality = value;
-                  FFI.setByName('image_quality', value);
-                });
-              },
-            ),
-            Divider(color: Colors.black),
-            CheckboxListTile(
-                value: showRemoteCursor,
-                onChanged: (v) {
-                  setState(() {
-                    showRemoteCursor = v;
-                    FFI.setByName('toggle_option', 'show-remote-cursor');
-                  });
-                },
-                title: Text('Show remote cursor')),
-            CheckboxListTile(
-                value: lockAfterSessionEnd,
-                onChanged: (v) {
-                  setState(() {
-                    lockAfterSessionEnd = v;
-                    FFI.setByName('toggle_option', 'lock-after-session-end');
-                  });
-                },
-                title: Text('Lock after session end'))
-          ]),
+          Column(
+              mainAxisSize: MainAxisSize.min,
+              children: displays +
+                  <Widget>[
+                    RadioListTile<String>(
+                      controlAffinity: ListTileControlAffinity.trailing,
+                      title: const Text('Good image quality'),
+                      value: 'best',
+                      groupValue: quality,
+                      onChanged: (String value) {
+                        setState(() {
+                          quality = value;
+                          FFI.setByName('image_quality', value);
+                        });
+                      },
+                    ),
+                    RadioListTile<String>(
+                      controlAffinity: ListTileControlAffinity.trailing,
+                      title: const Text('Balanced'),
+                      value: 'balanced',
+                      groupValue: quality,
+                      onChanged: (String value) {
+                        setState(() {
+                          quality = value;
+                          FFI.setByName('image_quality', value);
+                        });
+                      },
+                    ),
+                    RadioListTile<String>(
+                      controlAffinity: ListTileControlAffinity.trailing,
+                      title: const Text('Optimize reaction time'),
+                      value: 'low',
+                      groupValue: quality,
+                      onChanged: (String value) {
+                        setState(() {
+                          quality = value;
+                          FFI.setByName('image_quality', value);
+                        });
+                      },
+                    ),
+                    Divider(color: MyTheme.border),
+                    CheckboxListTile(
+                        value: showRemoteCursor,
+                        onChanged: (v) {
+                          setState(() {
+                            showRemoteCursor = v;
+                            FFI.setByName(
+                                'toggle_option', 'show-remote-cursor');
+                          });
+                        },
+                        title: Text('Show remote cursor')),
+                    CheckboxListTile(
+                        value: lockAfterSessionEnd,
+                        onChanged: (v) {
+                          setState(() {
+                            lockAfterSessionEnd = v;
+                            FFI.setByName(
+                                'toggle_option', 'lock-after-session-end');
+                          });
+                        },
+                        title: Text('Lock after session end'))
+                  ]),
           null),
       () async => true,
       true,
