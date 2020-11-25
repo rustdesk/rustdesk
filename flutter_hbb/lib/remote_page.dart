@@ -68,7 +68,7 @@ class _RemotePageState extends State<RemotePage> {
     var v = MediaQuery.of(context).viewInsets.bottom;
     if (v != _bottom) {
       resetTool();
-      _value = '';
+      _value = ' ' * 1000;
       setState(() {
         _bottom = v;
         if (v < 100) {
@@ -222,16 +222,18 @@ class _RemotePageState extends State<RemotePage> {
                         height: 0,
                         child: _bottom < 100
                             ? Container()
-                            : TextField(
+                            : TextFormField(
                                 textInputAction: TextInputAction.newline,
                                 autocorrect: false,
                                 enableSuggestions: false,
                                 focusNode: _focusNode,
                                 maxLines: null,
+                                initialValue:
+                                    _value, // trick way to make backspace work always
                                 keyboardType: TextInputType.multiline,
                                 onChanged: (x) {
                                   var char = x[x.length - 1];
-                                  if (x.length < _value.length) {
+                                  if (x.length <= _value.length) {
                                     char = 'VK_BACK';
                                   } else if (char == '\n') {
                                     char = 'VK_RETURN';
