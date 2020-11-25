@@ -33,6 +33,7 @@ class _HomePageState extends State<HomePage> {
               crossAxisAlignment: CrossAxisAlignment.center,
               children: <Widget>[
                 getSearchBarUI(),
+                getPeers(),
                 Expanded(child: Container())
               ]),
           padding: const EdgeInsets.fromLTRB(16.0, 0.0, 16.0, 0.0),
@@ -41,13 +42,20 @@ class _HomePageState extends State<HomePage> {
 
   void onConnect() {
     var id = _idController.text.trim();
+    connect(id);
+  }
+
+  void connect(String id) {
     if (id == '') return;
-    Navigator.push<dynamic>(
-      context,
-      MaterialPageRoute<dynamic>(
-        builder: (BuildContext context) => RemotePage(id: id),
-      ),
-    );
+    () async {
+      await Navigator.push<dynamic>(
+        context,
+        MaterialPageRoute<dynamic>(
+          builder: (BuildContext context) => RemotePage(id: id),
+        ),
+      );
+      setState(() {});
+    }();
     FocusScopeNode currentFocus = FocusScope.of(context);
     if (!currentFocus.hasPrimaryFocus) {
       currentFocus.unfocus();
@@ -132,5 +140,50 @@ class _HomePageState extends State<HomePage> {
   void dispose() {
     _idController.dispose();
     super.dispose();
+  }
+
+  Widget getPlatformImage(String platform) {
+    platform = platform.toLowerCase();
+    if (platform == 'osx')
+      platform = 'mac';
+    else if (platform != 'linux') platform = 'win';
+    return Image.asset('assets/$platform.png', width: 36, height: 36);
+  }
+
+  Widget getPeers() {
+    final cards = <Widget>[];
+    var peers = FFI.peers();
+    peers.forEach((p) {
+      cards.add(Card(
+          child: GestureDetector(
+              onTap: () => connect('${p.id}'),
+              onLongPressStart: (details) {
+                var x = details.globalPosition.dx;
+                var y = details.globalPosition.dy;
+                () async {
+                  var value = await showMenu(
+                    context: context,
+                    position: RelativeRect.fromLTRB(x, y, x, y),
+                    items: [
+                      PopupMenuItem<String>(
+                          child: Text('Remove'), value: 'remove'),
+                    ],
+                    elevation: 8,
+                  );
+                  if (value == 'remove') {
+                    setState(() => FFI.setByName('remove', '${p.id}'));
+                  }
+                }();
+              },
+              child: ListTile(
+                subtitle: Text('${p.username}@${p.hostname}'),
+                title: Text('${p.id}'),
+                leading: Container(
+                    padding: const EdgeInsets.all(6),
+                    child: getPlatformImage('${p.platform}'),
+                    color: str2color('${p.id}${p.platform}', 0x77)),
+              ))));
+    });
+    return Wrap(children: cards);
   }
 }

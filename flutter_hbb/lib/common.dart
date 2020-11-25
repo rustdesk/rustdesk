@@ -127,3 +127,11 @@ class _PasswordWidgetState extends State<PasswordWidget> {
     );
   }
 }
+
+Color str2color(String str, [alpha = 0xFF]) {
+  var hash = 160 << 16 + 114 << 8 + 91;
+  for (var i = 0; i < str.length; i += 1) {
+    hash = str.codeUnitAt(i) + ((hash << 5) - hash);
+  }
+  return Color((hash & 0xFFFFFF) | (alpha << 24));
+}

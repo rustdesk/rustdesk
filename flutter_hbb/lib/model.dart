@@ -389,6 +389,7 @@ class CursorModel with ChangeNotifier {
 }
 
 class FFI {
+  static String _dir = '';
   static F1 _freeCString;
   static F2 _getByName;
   static F3 _setByName;
@@ -535,8 +536,8 @@ class FFI {
     _freeRgba = dylib
         .lookupFunction<Void Function(Pointer<RgbaFrame>), F4>('free_rgba');
     _getRgba = dylib.lookupFunction<F5, F5>('get_rgba');
-    final dir = (await getApplicationDocumentsDirectory()).path;
-    setByName('init', dir);
+    _dir = (await getApplicationDocumentsDirectory()).path;
+    setByName('init', _dir);
   }
 }
 
