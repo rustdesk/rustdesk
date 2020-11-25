@@ -144,7 +144,7 @@ class _HomePageState extends State<HomePage> {
 
   Widget getPlatformImage(String platform) {
     platform = platform.toLowerCase();
-    if (platform == 'osx')
+    if (platform == 'mac os')
       platform = 'mac';
     else if (platform != 'linux') platform = 'win';
     return Image.asset('assets/$platform.png', width: 36, height: 36);
