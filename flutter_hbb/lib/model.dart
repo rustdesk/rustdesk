@@ -408,9 +408,16 @@ class FFI {
     return getByName('remote_id');
   }
 
-  static void tap() {
-    sendMouse('down', 'left');
-    sendMouse('up', 'left');
+  static void tap(bool right) {
+    sendMouse('down', right ? 'right' : 'left');
+    sendMouse('up', right ? 'right' : 'left');
+  }
+
+  static void scroll(double y) {
+    var y2 = y.round();
+    if (y2 == 0) return;
+    setByName('send_mouse',
+        json.encode(modify({'type': 'wheel', 'y': y2.toString()})));
   }
 
   static void resetModifiers() {

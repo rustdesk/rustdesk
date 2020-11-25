@@ -94,9 +94,6 @@ class _RemotePageState extends State<RemotePage> {
 
   @override
   Widget build(BuildContext context) {
-    final size = MediaQueryData.fromWindow(ui.window).size;
-    print('$size');
-    print('${MediaQuery.of(context).size}');
     EasyLoading.instance.loadingStyle = EasyLoadingStyle.light;
     return WillPopScope(
         onWillPop: () async {
@@ -178,12 +175,16 @@ class _RemotePageState extends State<RemotePage> {
               : null,
           body: GestureDetector(
               onTap: () {
-                FFI.tap();
+                if (_drag || _scroll) return;
+                FFI.tap(_right);
               },
               onScaleStart: (details) {
                 _scale = 1;
                 _xOffset = details.focalPoint.dx;
                 _yOffset = details.focalPoint.dy;
+                if (_drag) {
+                  FFI.sendMouse('down', 'left');
+                }
               },
               onScaleUpdate: (details) {
                 var scale = details.scale;
@@ -192,15 +193,23 @@ class _RemotePageState extends State<RemotePage> {
                   var y = details.focalPoint.dy;
                   var dx = x - _xOffset;
                   var dy = y - _yOffset;
-                  FFI.cursorModel.updatePan(dx, dy);
+                  if (_scroll) {
+                    FFI.scroll(-dy);
+                  } else {
+                    FFI.cursorModel.updatePan(dx, dy);
+                  }
                   _xOffset = x;
                   _yOffset = y;
-                } else {
+                } else if (!_drag && !_scroll) {
                   FFI.canvasModel.updateScale(scale / _scale);
                   _scale = scale;
                 }
               },
-              onScaleEnd: (_) {},
+              onScaleEnd: (_) {
+                if (_drag) {
+                  FFI.sendMouse('up', 'left');
+                }
+              },
               child: FlutterEasyLoading(
                 child: Container(
                     color: MyTheme.canvasColor,
