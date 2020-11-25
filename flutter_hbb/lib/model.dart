@@ -1,4 +1,5 @@
 import 'package:ffi/ffi.dart';
+import 'package:flutter/gestures.dart';
 import 'package:path_provider/path_provider.dart';
 import 'dart:io';
 import 'dart:math';
@@ -210,11 +211,20 @@ class CanvasModel with ChangeNotifier {
   }
 
   void updateScale(double v) {
+    final offset = FFI.cursorModel.offset;
+    var r = FFI.cursorModel.getVisibleRect();
+    final px0 = (offset.dx - r.left) * _scale;
+    final py0 = (offset.dy - r.top) * _scale;
     _scale *= v;
     final maxs = FFI.imageModel.maxScale;
     final mins = FFI.imageModel.minScale;
     if (_scale > maxs) _scale = maxs;
     if (_scale < mins) _scale = mins;
+    r = FFI.cursorModel.getVisibleRect();
+    final px1 = (offset.dx - r.left) * _scale;
+    final py1 = (offset.dy - r.top) * _scale;
+    _x -= px1 - px0;
+    _y -= py1 - py0;
     notifyListeners();
   }
 
@@ -238,10 +248,11 @@ class CursorModel with ChangeNotifier {
   ui.Image get image => _image;
   double get x => _x - _displayOriginX;
   double get y => _y - _displayOriginY;
+  Offset get offset => Offset(_x, _y);
   double get hotx => _hotx;
   double get hoty => _hoty;
 
-  // physical display coordinate
+  // remote physical display coordinate
   Rect getVisibleRect() {
     final size = MediaQueryData.fromWindow(ui.window).size;
     final xoffset = FFI.canvasModel.x;
@@ -255,8 +266,10 @@ class CursorModel with ChangeNotifier {
   double adjustForKeyboard() {
     var keyboardHeight = MediaQueryData.fromWindow(ui.window).viewInsets.bottom;
     if (keyboardHeight < 100) return 0;
-    var h = _y - getVisibleRect().top;
-    return h > 200 ? h - 200 : 0;
+    final s = FFI.canvasModel.scale;
+    final thresh = 120;
+    var h = (_y - getVisibleRect().top) * s; // local physical display height
+    return h > thresh ? h - thresh : 0;
   }
 
   void updatePan(double dx, double dy) {
