@@ -210,22 +210,46 @@ class _HomePageState extends State<HomePage> {
 }
 
 void showServer(BuildContext context) {
+  final formKey = GlobalKey<FormState>();
+  var id = '';
+  var relay = '';
   showAlertDialog(
       context,
       (setState) => Tuple3(
             Text('ID/Relay Server'),
-            Column(mainAxisSize: MainAxisSize.min, children: <Widget>[
-              TextFormField(
-                decoration: InputDecoration(
-                  labelText: 'ID Server',
-                ),
-              ),
-              TextFormField(
-                decoration: InputDecoration(
-                  labelText: 'Relay Server',
-                ),
-              ),
-            ]),
+            Form(
+                key: formKey,
+                child:
+                    Column(mainAxisSize: MainAxisSize.min, children: <Widget>[
+                  TextFormField(
+                    decoration: InputDecoration(
+                      labelText: 'ID Server',
+                    ),
+                    validator: (value) {
+                      if (value.isEmpty) {
+                        return 'Please enter valid server address';
+                      }
+                      return null;
+                    },
+                    onSaved: (String value) {
+                      id = value;
+                    },
+                  ),
+                  TextFormField(
+                    decoration: InputDecoration(
+                      labelText: 'Relay Server',
+                    ),
+                    validator: (value) {
+                      if (value.isEmpty) {
+                        return 'Please enter valid server address';
+                      }
+                      return null;
+                    },
+                    onSaved: (String value) {
+                      relay = value;
+                    },
+                  ),
+                ])),
             [
               FlatButton(
                 textColor: MyTheme.accent,
@@ -237,7 +261,10 @@ void showServer(BuildContext context) {
               FlatButton(
                 textColor: MyTheme.accent,
                 onPressed: () {
-                  Navigator.pop(context);
+                  if (formKey.currentState.validate()) {
+                    formKey.currentState.save();
+                    Navigator.pop(context);
+                  }
                 },
                 child: Text('OK'),
               ),
