@@ -178,6 +178,17 @@ class _RemotePageState extends State<RemotePage> {
                 if (_drag || _scroll) return;
                 FFI.tap(_right);
               },
+              onLongPressStart: (_) {
+                if (_drag) {
+                  // case: to show password on windows
+                  FFI.sendMouse('down', 'left');
+                }
+              },
+              onLongPressEnd: (_) {
+                if (_drag) {
+                  FFI.sendMouse('up', 'left');
+                }
+              },
               onScaleStart: (details) {
                 _scale = 1;
                 _xOffset = details.focalPoint.dx;
