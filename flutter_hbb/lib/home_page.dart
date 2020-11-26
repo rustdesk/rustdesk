@@ -172,6 +172,9 @@ class _HomePageState extends State<HomePage> {
   }
 
   Widget getPeers() {
+    if (!FFI.ffiModel.initialized) {
+      return Container();
+    }
     final cards = <Widget>[];
     var peers = FFI.peers();
     peers.forEach((p) {
@@ -211,6 +214,8 @@ class _HomePageState extends State<HomePage> {
 
 void showServer(BuildContext context) {
   final formKey = GlobalKey<FormState>();
+  final id0 = FFI.getByName('custom-rendezvous-server');
+  final relay0 = FFI.getByName('relay-server');
   var id = '';
   var relay = '';
   showAlertDialog(
@@ -222,31 +227,23 @@ void showServer(BuildContext context) {
                 child:
                     Column(mainAxisSize: MainAxisSize.min, children: <Widget>[
                   TextFormField(
+                    initialValue: id0,
                     decoration: InputDecoration(
                       labelText: 'ID Server',
                     ),
-                    validator: (value) {
-                      if (value.isEmpty) {
-                        return 'Please enter valid server address';
-                      }
-                      return null;
-                    },
+                    validator: validate,
                     onSaved: (String value) {
-                      id = value;
+                      id = value.trim();
                     },
                   ),
                   TextFormField(
+                    initialValue: relay0,
                     decoration: InputDecoration(
                       labelText: 'Relay Server',
                     ),
-                    validator: (value) {
-                      if (value.isEmpty) {
-                        return 'Please enter valid server address';
-                      }
-                      return null;
-                    },
+                    validator: validate,
                     onSaved: (String value) {
-                      relay = value;
+                      relay = value.trim();
                     },
                   ),
                 ])),
@@ -263,6 +260,9 @@ void showServer(BuildContext context) {
                 onPressed: () {
                   if (formKey.currentState.validate()) {
                     formKey.currentState.save();
+                    if (id != id0)
+                      FFI.setByName('custom-rendezvous-server', id);
+                    if (relay != relay0) FFI.setByName('relay-server', relay);
                     Navigator.pop(context);
                   }
                 },
@@ -272,4 +272,13 @@ void showServer(BuildContext context) {
           ),
       () async => true,
       true);
+}
+
+String validate(value) {
+  value = value.trim();
+  if (value.isEmpty) {
+    return null;
+  }
+  final res = FFI.getByName('test_if_valid_server', value);
+  return res.isEmpty ? null : res;
 }

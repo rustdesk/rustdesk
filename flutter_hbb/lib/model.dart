@@ -1,6 +1,8 @@
 import 'package:ffi/ffi.dart';
 import 'package:flutter/gestures.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:flutter_sound/flutter_sound.dart';
+import 'package:device_info/device_info.dart';
 import 'dart:io';
 import 'dart:math';
 import 'dart:ffi';
@@ -31,6 +33,7 @@ class FfiModel with ChangeNotifier {
   bool _waitForImage;
   bool _initialized = false;
   final _permissions = Map<String, bool>();
+  final _audioPlayer = FlutterSoundPlayer();
 
   get permissions => _permissions;
   get initialized => _initialized;
@@ -40,6 +43,7 @@ class FfiModel with ChangeNotifier {
     clear();
     () async {
       await FFI.init();
+      await _audioPlayer.openAudioSession();
       _initialized = true;
       notifyListeners();
     }();
@@ -63,11 +67,17 @@ class FfiModel with ChangeNotifier {
     _permissions.clear();
   }
 
-  void update(
+  Future<Null> stopAudio() async {
+    final st = await _audioPlayer.getPlayerState();
+    if (st != PlayerState.isPlaying) return;
+    await _audioPlayer.stopPlayer();
+  }
+
+  Future<Null> update(
       String id,
       BuildContext context,
       void Function(Map<String, dynamic> evt, String id, BuildContext context)
-          handleMsgbox) {
+          handleMsgbox) async {
     var pos;
     for (;;) {
       var evt = FFI.popEvent();
@@ -88,7 +98,15 @@ class FfiModel with ChangeNotifier {
       } else if (name == 'permission') {
         FFI.ffiModel.updatePermission(evt);
       } else if (name == "audio_format") {
-        //
+        try {
+          var s = int.parse(evt['sample_rate']);
+          var c = int.parse(evt['channels']);
+          await stopAudio();
+          await _audioPlayer.startPlayerFromStream(
+              codec: Codec.opusWebM, numChannels: c, sampleRate: s);
+        } catch (e) {
+          print('audio_format: $e');
+        }
       }
     }
     if (pos != null) FFI.cursorModel.updateCursorPosition(pos);
@@ -108,8 +126,21 @@ class FfiModel with ChangeNotifier {
           try {
             // my throw exception, because the listener maybe already dispose
             FFI.imageModel.update(image);
-          } catch (e) {}
+          } catch (e) {
+            print('update image: $e');
+          }
         });
+      }
+      var frame = FFI._getAudio();
+      if (frame != null && frame != nullptr) {
+        final ref = frame.ref;
+        final bytes = Uint8List.sublistView(ref.data.asTypedList(ref.len));
+        try {
+          await _audioPlayer.feedFromStream(bytes);
+        } catch (e) {
+          print('play audio frame: $e');
+        }
+        FFI._freeRgba(frame);
       }
     }
   }
@@ -355,7 +386,9 @@ class CursorModel with ChangeNotifier {
       try {
         // my throw exception, because the listener maybe already dispose
         notifyListeners();
-      } catch (e) {}
+      } catch (e) {
+        print('notify cursor: $e');
+      }
     });
   }
 
@@ -465,7 +498,7 @@ class FFI {
               Peer.fromJson(s[0] as String, s[1] as Map<String, dynamic>))
           .toList();
     } catch (e) {
-      print(e);
+      print('peers(): $e');
     }
     return [];
   }
@@ -493,7 +526,7 @@ class FFI {
       Map<String, dynamic> event = json.decode(s);
       return event;
     } catch (e) {
-      print(e);
+      print('popEvent(): $e');
     }
     return null;
   }
@@ -543,6 +576,10 @@ class FFI {
     _getRgba = dylib.lookupFunction<F5, F5>('get_rgba');
     _getAudio = dylib.lookupFunction<F5, F5>('get_audio');
     _dir = (await getApplicationDocumentsDirectory()).path;
+    DeviceInfoPlugin deviceInfo = DeviceInfoPlugin();
+    AndroidDeviceInfo androidInfo = await deviceInfo.androidInfo;
+    print(
+        '${androidInfo.product} ${androidInfo.brand} ${androidInfo.device} ${androidInfo.model} ${androidInfo.brand} ${androidInfo.manufacturer}');
     setByName('init', _dir);
   }
 }
