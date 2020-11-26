@@ -87,6 +87,8 @@ class FfiModel with ChangeNotifier {
         pos = evt;
       } else if (name == 'permission') {
         FFI.ffiModel.updatePermission(evt);
+      } else if (name == "audio_format") {
+        //
       }
     }
     if (pos != null) FFI.cursorModel.updateCursorPosition(pos);
@@ -397,6 +399,7 @@ class FFI {
   static F3 _setByName;
   static F4 _freeRgba;
   static F5 _getRgba;
+  static F5 _getAudio;
   static Pointer<RgbaFrame> _lastRgbaFrame;
   static var shift = false;
   static var ctrl = false;
@@ -538,6 +541,7 @@ class FFI {
     _freeRgba = dylib
         .lookupFunction<Void Function(Pointer<RgbaFrame>), F4>('free_rgba');
     _getRgba = dylib.lookupFunction<F5, F5>('get_rgba');
+    _getAudio = dylib.lookupFunction<F5, F5>('get_audio');
     _dir = (await getApplicationDocumentsDirectory()).path;
     setByName('init', _dir);
   }
