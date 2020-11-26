@@ -243,14 +243,19 @@ class _RemotePageState extends State<RemotePage> {
                                     _value, // trick way to make backspace work always
                                 keyboardType: TextInputType.multiline,
                                 onChanged: (x) {
-                                  var char = x[x.length - 1];
                                   if (x.length <= _value.length) {
-                                    char = 'VK_BACK';
-                                  } else if (char == '\n') {
-                                    char = 'VK_RETURN';
-                                  }
-                                  if (char != '' && char != null)
+                                    final char = 'VK_BACK';
                                     FFI.inputKey(char);
+                                  }
+                                  for (var i = _value.length;
+                                      i < x.length;
+                                      ++i) {
+                                    var char = x[i];
+                                    if (char == '\n') {
+                                      char = 'VK_RETURN';
+                                    }
+                                    FFI.inputKey(char);
+                                  }
                                   _value = x;
                                 },
                               ),
