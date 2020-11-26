@@ -278,7 +278,7 @@ class _RemotePageState extends State<RemotePage> {
         (String text, void Function() onPressed, [bool active, IconData icon]) {
       return ButtonTheme(
           padding: EdgeInsets.symmetric(
-              vertical: 6, horizontal: 12), //adds padding inside the button
+              vertical: 6, horizontal: 11), //adds padding inside the button
           materialTapTargetSize: MaterialTapTargetSize
               .shrinkWrap, //limits the touch area to the button area
           minWidth: 0, //wraps child's width
@@ -288,7 +288,7 @@ class _RemotePageState extends State<RemotePage> {
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(5.0),
               ),
-              color: active == true ? MyTheme.accent50 : null,
+              color: active == true ? MyTheme.accent80 : null,
               child: icon != null
                   ? Icon(icon, color: Colors.white)
                   : Text(text,
@@ -334,7 +334,7 @@ class _RemotePageState extends State<RemotePage> {
       wrap('Shift', () {
         setState(() => FFI.shift = !FFI.shift);
       }, FFI.shift),
-      wrap('Command', () {
+      wrap('Cmd', () {
         setState(() => FFI.command = !FFI.command);
       }, FFI.command),
     ];
@@ -364,7 +364,7 @@ class _RemotePageState extends State<RemotePage> {
               ),
           _fn),
       wrap(
-          'More',
+          '...',
           () => setState(
                 () {
                   _more = !_more;
@@ -417,7 +417,7 @@ class _RemotePageState extends State<RemotePage> {
       wrap('Del', () {
         FFI.inputKey('VK_DELETE');
       }),
-      wrap('PeUp', () {
+      wrap('PgUp', () {
         FFI.inputKey('VK_PRIOR');
       }),
       wrap('PgDown', () {
@@ -425,7 +425,7 @@ class _RemotePageState extends State<RemotePage> {
       }),
     ];
     return Container(
-        color: Color(0x77000000),
+        color: Color(0xAA000000),
         padding: EdgeInsets.only(
             top: keyboard ? 24 : 4, left: 8, right: 8, bottom: 8),
         child: Wrap(
