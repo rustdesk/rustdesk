@@ -100,10 +100,12 @@ class FfiModel with ChangeNotifier {
       } else if (name == "audio_format") {
         try {
           var s = int.parse(evt['sample_rate']);
-          var c = int.parse(evt['channels']);
+          // var c = int.parse(evt['channels']);
+          // Flutter Sound does not support Floating Point PCM data, nor records with more that one audio channel.
+          // On Flutter Sound, Raw PCM is only PCM INT-Linerar 16 monophony
           await stopAudio();
           await _audioPlayer.startPlayerFromStream(
-              codec: Codec.opusWebM, numChannels: c, sampleRate: s);
+              codec: Codec.pcm16, numChannels: 1, sampleRate: s);
         } catch (e) {
           print('audio_format: $e');
         }

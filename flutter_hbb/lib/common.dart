@@ -14,7 +14,7 @@ class MyTheme {
 }
 
 void showLoading(String text, BuildContext context) {
-  if (_hasDialog) {
+  if (_hasDialog && context != null) {
     Navigator.pop(context);
   }
   dismissLoading();

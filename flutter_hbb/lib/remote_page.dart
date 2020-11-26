@@ -530,7 +530,7 @@ void enterPasswordDialog(String id, BuildContext context) {
                   var text = controller.text.trim();
                   if (text == '') return;
                   FFI.login(text, remember);
-                  showLoading('Logging in...', context);
+                  showLoading('Logging in...', null);
                   Navigator.pop(context);
                 },
                 child: Text('OK'),
