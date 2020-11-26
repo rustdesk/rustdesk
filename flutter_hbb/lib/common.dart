@@ -13,7 +13,10 @@ class MyTheme {
   static const Color border = Color(0xFFCCCCCC);
 }
 
-void showLoading(String text) {
+void showLoading(String text, BuildContext context) {
+  if (_hasDialog) {
+    Navigator.pop(context);
+  }
   dismissLoading();
   EasyLoading.show(status: text);
 }

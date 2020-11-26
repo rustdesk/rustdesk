@@ -86,7 +86,7 @@ class FfiModel with ChangeNotifier {
       if (name == 'msgbox') {
         handleMsgbox(evt, id, context);
       } else if (name == 'peer_info') {
-        handlePeerInfo(evt);
+        handlePeerInfo(evt, context);
       } else if (name == 'switch_display') {
         handleSwitchDisplay(evt);
       } else if (name == 'cursor_data') {
@@ -155,7 +155,7 @@ class FfiModel with ChangeNotifier {
     notifyListeners();
   }
 
-  void handlePeerInfo(Map<String, dynamic> evt) {
+  void handlePeerInfo(Map<String, dynamic> evt, BuildContext context) {
     dismissLoading();
     _pi.username = evt['username'];
     _pi.hostname = evt['hostname'];
@@ -178,7 +178,7 @@ class FfiModel with ChangeNotifier {
       FFI.cursorModel.updateDisplayOrigin(_display.x, _display.y);
     }
     if (displays.length > 0) {
-      showLoading('Waiting for image...');
+      showLoading('Waiting for image...', context);
       _waitForImage = true;
     }
   }
@@ -578,8 +578,10 @@ class FFI {
     _dir = (await getApplicationDocumentsDirectory()).path;
     DeviceInfoPlugin deviceInfo = DeviceInfoPlugin();
     AndroidDeviceInfo androidInfo = await deviceInfo.androidInfo;
-    print(
-        '${androidInfo.product} ${androidInfo.brand} ${androidInfo.device} ${androidInfo.model} ${androidInfo.brand} ${androidInfo.manufacturer}');
+    final name = '${androidInfo.brand}-${androidInfo.model}';
+    final id = androidInfo.id;
+    setByName('info1', id);
+    setByName('info2', name);
     setByName('init', _dir);
   }
 }

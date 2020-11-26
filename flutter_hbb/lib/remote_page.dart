@@ -41,7 +41,7 @@ class _RemotePageState extends State<RemotePage> {
     FFI.connect(widget.id);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       SystemChrome.setEnabledSystemUIOverlays([]);
-      showLoading('Connecting...');
+      showLoading('Connecting...', context);
       _interval =
           Timer.periodic(Duration(milliseconds: 30), (timer) => interval());
     });
@@ -530,7 +530,7 @@ void enterPasswordDialog(String id, BuildContext context) {
                   var text = controller.text.trim();
                   if (text == '') return;
                   FFI.login(text, remember);
-                  showLoading('Logging in...');
+                  showLoading('Logging in...', context);
                   Navigator.pop(context);
                 },
                 child: Text('OK'),
