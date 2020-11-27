@@ -163,6 +163,7 @@ class FfiModel with ChangeNotifier {
     _display.width = int.parse(evt['width']);
     _display.height = int.parse(evt['height']);
     FFI.cursorModel.updateDisplayOrigin(_display.x, _display.y);
+    FFI.canvasModel.resetOffset();
     notifyListeners();
   }
 
@@ -249,6 +250,12 @@ class CanvasModel with ChangeNotifier {
 
   void panX(double dx) {
     _x += dx;
+    notifyListeners();
+  }
+
+  void resetOffset() {
+    _x = 0;
+    _y = 0;
     notifyListeners();
   }
 

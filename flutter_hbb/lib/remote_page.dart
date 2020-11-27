@@ -721,16 +721,16 @@ void showActions(BuildContext context) {
       context: context,
       position: RelativeRect.fromLTRB(x, y, x, y),
       items: [
-                PopupMenuItem<String>(
-                    child: Text('Insert Ctrl + Alt + Del'), value: 'cad'),
-                PopupMenuItem<String>(
-                    child: Text('Insert Lock'), value: 'lock'),
-              ] +
-              FFI.ffiModel.pi.version.isEmpty
-          ? []
-          : [
-              PopupMenuItem<String>(child: Text('Refresh'), value: 'refresh'),
-            ],
+            PopupMenuItem<String>(
+                child: Text('Insert Ctrl + Alt + Del'), value: 'cad'),
+            PopupMenuItem<String>(child: Text('Insert Lock'), value: 'lock'),
+          ] +
+          (FFI.ffiModel.pi.version.isEmpty
+              ? []
+              : [
+                  PopupMenuItem<String>(
+                      child: Text('Refresh'), value: 'refresh'),
+                ]),
       elevation: 8,
     );
     if (value == 'cad') {
