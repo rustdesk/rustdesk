@@ -721,10 +721,16 @@ void showActions(BuildContext context) {
       context: context,
       position: RelativeRect.fromLTRB(x, y, x, y),
       items: [
-        PopupMenuItem<String>(
-            child: Text('Insert Ctrl + Alt + Del'), value: 'cad'),
-        PopupMenuItem<String>(child: Text('Insert Lock'), value: 'lock'),
-      ],
+                PopupMenuItem<String>(
+                    child: Text('Insert Ctrl + Alt + Del'), value: 'cad'),
+                PopupMenuItem<String>(
+                    child: Text('Insert Lock'), value: 'lock'),
+              ] +
+              FFI.ffiModel.pi.version.isEmpty
+          ? []
+          : [
+              PopupMenuItem<String>(child: Text('Refresh'), value: 'refresh'),
+            ],
       elevation: 8,
     );
     if (value == 'cad') {
@@ -732,6 +738,9 @@ void showActions(BuildContext context) {
     }
     if (value == 'lock') {
       FFI.setByName('lock_screen');
+    }
+    if (value == 'refresh') {
+      FFI.setByName('refresh');
     }
   }();
 }

@@ -168,6 +168,7 @@ class FfiModel with ChangeNotifier {
 
   void handlePeerInfo(Map<String, dynamic> evt, BuildContext context) {
     dismissLoading();
+    _pi.version = evt['version'];
     _pi.username = evt['username'];
     _pi.hostname = evt['hostname'];
     _pi.platform = evt['platform'];
@@ -620,6 +621,7 @@ class Display {
 }
 
 class PeerInfo {
+  String version;
   String username;
   String hostname;
   String platform;
