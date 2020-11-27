@@ -520,9 +520,11 @@ void enterPasswordDialog(String id, BuildContext context) {
             Column(mainAxisSize: MainAxisSize.min, children: [
               PasswordWidget(controller: controller),
               CheckboxListTile(
+                contentPadding: const EdgeInsets.all(0),
+                dense: true,
                 controlAffinity: ListTileControlAffinity.leading,
                 title: Text(
-                  'Remember the password',
+                  'Remember password',
                 ),
                 value: remember,
                 onChanged: (v) {
