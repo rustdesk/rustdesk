@@ -20,6 +20,7 @@ class RemotePage extends StatefulWidget {
 
 class _RemotePageState extends State<RemotePage> {
   Timer _interval;
+  Timer _timer;
   bool _showBar = true;
   double _bottom = 0;
   String _value = '';
@@ -35,6 +36,7 @@ class _RemotePageState extends State<RemotePage> {
   var _fn = false;
   final FocusNode _focusNode = FocusNode();
   var _showEdit = true;
+  var _reconnects = 1;
 
   @override
   void initState() {
@@ -55,6 +57,7 @@ class _RemotePageState extends State<RemotePage> {
     super.dispose();
     FFI.close();
     _interval.cancel();
+    _timer?.cancel();
     dismissLoading();
     SystemChrome.setEnabledSystemUIOverlays(SystemUiOverlay.values);
     Wakelock.disable();
@@ -90,6 +93,24 @@ class _RemotePageState extends State<RemotePage> {
       enterPasswordDialog(id, context);
     } else {
       msgbox(type, title, text, context);
+      final hasRetry = type == "error" &&
+          title == "Connection Error" &&
+          text.toLowerCase().indexOf("offline") < 0 &&
+          text.toLowerCase().indexOf("exist") < 0 &&
+          text.toLowerCase().indexOf("handshake") < 0 &&
+          text.toLowerCase().indexOf("failed") < 0 &&
+          text.toLowerCase().indexOf("resolve") < 0 &&
+          text.toLowerCase().indexOf("manually") < 0;
+      if (hasRetry) {
+        _timer?.cancel();
+        _timer = Timer(Duration(seconds: _reconnects), () {
+          FFI.setByName('reconnect');
+          showLoading('Connecting...', context);
+        });
+        _reconnects *= 2;
+      } else {
+        _reconnects = 1;
+      }
     }
   }
 
@@ -133,11 +154,13 @@ class _RemotePageState extends State<RemotePage> {
                             onPressed: () {
                               // destroy first, so that our _value trick can work
                               setState(() => _showEdit = false);
-                              Timer(Duration(milliseconds: 30), () {
+                              _timer?.cancel();
+                              _timer = Timer(Duration(milliseconds: 30), () {
                                 // show now, and sleep a while to requestFocus to
                                 // make sure edit ready, so that keyboard wont show/hide/show/hide happen
                                 setState(() => _showEdit = true);
-                                Timer(Duration(milliseconds: 30), () {
+                                _timer?.cancel();
+                                _timer = Timer(Duration(milliseconds: 30), () {
                                   SystemChrome.setEnabledSystemUIOverlays(
                                       SystemUiOverlay.values);
                                   _focusNode.requestFocus();
