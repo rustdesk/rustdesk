@@ -1,7 +1,6 @@
 import 'package:ffi/ffi.dart';
 import 'package:flutter/gestures.dart';
 import 'package:path_provider/path_provider.dart';
-import 'package:flutter_sound/flutter_sound.dart';
 import 'package:device_info/device_info.dart';
 import 'dart:io';
 import 'dart:math';
@@ -33,7 +32,6 @@ class FfiModel with ChangeNotifier {
   bool _waitForImage;
   bool _initialized = false;
   final _permissions = Map<String, bool>();
-  final _audioPlayer = FlutterSoundPlayer();
 
   get permissions => _permissions;
   get initialized => _initialized;
@@ -66,13 +64,6 @@ class FfiModel with ChangeNotifier {
     _permissions.clear();
   }
 
-  Future<Null> stopAudio() async {
-    final st = await _audioPlayer.getPlayerState();
-    if (st != PlayerState.isPlaying) return;
-    await _audioPlayer.stopPlayer();
-    await _audioPlayer.closeAudioSession();
-  }
-
   void update(
       String id,
       BuildContext context,
@@ -97,23 +88,6 @@ class FfiModel with ChangeNotifier {
         pos = evt;
       } else if (name == 'permission') {
         FFI.ffiModel.updatePermission(evt);
-      } else if (name == "audio_format") {
-        () async {
-          try {
-            /*
-            var s = int.parse(evt['sample_rate']);
-            // var c = int.parse(evt['channels']);
-            // Flutter Sound does not support Floating Point PCM data, nor records with more that one audio channel.
-            // On Flutter Sound, Raw PCM is only PCM INT-Linerar 16 monophony
-            await stopAudio();
-            await _audioPlayer.openAudioSession();
-            await _audioPlayer.startPlayerFromStream(
-                codec: Codec.pcm16, numChannels: 1, sampleRate: s);
-            */
-          } catch (e) {
-            print('audio_format: $e');
-          }
-        }();
       }
     }
     if (pos != null) FFI.cursorModel.updateCursorPosition(pos);
@@ -138,21 +112,6 @@ class FfiModel with ChangeNotifier {
           }
         });
       }
-    }
-    var frame = FFI._getAudio();
-    if (frame != null && frame != nullptr) {
-      () async {
-        try {
-          /*
-      final ref = frame.ref;
-          final bytes = Uint8List.sublistView(ref.data.asTypedList(ref.len));
-          await _audioPlayer.feedFromStream(bytes);
-          */
-        } catch (e) {
-          print('play audio frame: $e');
-        }
-        FFI._freeRgba(frame);
-      }();
     }
   }
 
@@ -453,7 +412,6 @@ class FFI {
   static F3 _setByName;
   static F4 _freeRgba;
   static F5 _getRgba;
-  static F5 _getAudio;
   static Pointer<RgbaFrame> _lastRgbaFrame;
   static var shift = false;
   static var ctrl = false;
@@ -595,7 +553,6 @@ class FFI {
     _freeRgba = dylib
         .lookupFunction<Void Function(Pointer<RgbaFrame>), F4>('free_rgba');
     _getRgba = dylib.lookupFunction<F5, F5>('get_rgba');
-    _getAudio = dylib.lookupFunction<F5, F5>('get_audio');
     _dir = (await getApplicationDocumentsDirectory()).path;
     DeviceInfoPlugin deviceInfo = DeviceInfoPlugin();
     AndroidDeviceInfo androidInfo = await deviceInfo.androidInfo;
