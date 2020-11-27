@@ -516,7 +516,7 @@ void enterPasswordDialog(String id, BuildContext context) {
   showAlertDialog(
       context,
       (setState) => Tuple3(
-            Text('Please enter your password'),
+            Text('Password required'),
             Column(mainAxisSize: MainAxisSize.min, children: [
               PasswordWidget(controller: controller),
               CheckboxListTile(
