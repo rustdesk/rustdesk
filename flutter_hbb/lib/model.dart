@@ -143,7 +143,7 @@ class FfiModel with ChangeNotifier {
       () async {
         try {
           /*
-          final ref = frame.ref;
+      final ref = frame.ref;
           final bytes = Uint8List.sublistView(ref.data.asTypedList(ref.len));
           await _audioPlayer.feedFromStream(bytes);
           */
@@ -315,7 +315,7 @@ class CursorModel with ChangeNotifier {
     final s = FFI.canvasModel.scale;
     final thresh = 120;
     var h = (_y - getVisibleRect().top) * s; // local physical display height
-    return h > thresh ? h - thresh : 0;
+    return h - thresh;
   }
 
   void updatePan(double dx, double dy) {
