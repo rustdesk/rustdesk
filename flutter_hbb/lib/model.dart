@@ -43,7 +43,6 @@ class FfiModel with ChangeNotifier {
     clear();
     () async {
       await FFI.init();
-      await _audioPlayer.openAudioSession();
       _initialized = true;
       notifyListeners();
     }();
@@ -71,6 +70,7 @@ class FfiModel with ChangeNotifier {
     final st = await _audioPlayer.getPlayerState();
     if (st != PlayerState.isPlaying) return;
     await _audioPlayer.stopPlayer();
+    await _audioPlayer.closeAudioSession();
   }
 
   void update(
@@ -106,6 +106,7 @@ class FfiModel with ChangeNotifier {
             // Flutter Sound does not support Floating Point PCM data, nor records with more that one audio channel.
             // On Flutter Sound, Raw PCM is only PCM INT-Linerar 16 monophony
             await stopAudio();
+            await _audioPlayer.openAudioSession();
             await _audioPlayer.startPlayerFromStream(
                 codec: Codec.pcm16, numChannels: 1, sampleRate: s);
             */
