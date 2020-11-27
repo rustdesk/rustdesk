@@ -34,6 +34,7 @@ class _RemotePageState extends State<RemotePage> {
   var _more = false;
   var _fn = false;
   final FocusNode _focusNode = FocusNode();
+  var _showEdit = true;
 
   @override
   void initState() {
@@ -130,11 +131,20 @@ class _RemotePageState extends State<RemotePage> {
                             color: Colors.white,
                             icon: Icon(Icons.keyboard),
                             onPressed: () {
-                              SystemChrome.setEnabledSystemUIOverlays(
-                                  SystemUiOverlay.values);
-                              _focusNode.requestFocus();
-                              SystemChannels.textInput
-                                  .invokeMethod('TextInput.show');
+                              // destroy first, so that our _value trick can work
+                              setState(() => _showEdit = false);
+                              Timer(Duration(milliseconds: 30), () {
+                                // show now, and sleep a while to requestFocus to
+                                // make sure edit ready, so that keyboard wont show/hide/show/hide happen
+                                setState(() => _showEdit = true);
+                                Timer(Duration(milliseconds: 30), () {
+                                  SystemChrome.setEnabledSystemUIOverlays(
+                                      SystemUiOverlay.values);
+                                  _focusNode.requestFocus();
+                                  SystemChannels.textInput
+                                      .invokeMethod('TextInput.show');
+                                });
+                              });
                             }),
                         IconButton(
                           color: Colors.white,
@@ -231,7 +241,7 @@ class _RemotePageState extends State<RemotePage> {
                       SizedBox(
                         width: 0,
                         height: 0,
-                        child: _bottom < 100
+                        child: !_showEdit
                             ? Container()
                             : TextFormField(
                                 textInputAction: TextInputAction.newline,
