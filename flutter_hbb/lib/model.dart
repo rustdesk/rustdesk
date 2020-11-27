@@ -73,11 +73,11 @@ class FfiModel with ChangeNotifier {
     await _audioPlayer.stopPlayer();
   }
 
-  Future<Null> update(
+  void update(
       String id,
       BuildContext context,
       void Function(Map<String, dynamic> evt, String id, BuildContext context)
-          handleMsgbox) async {
+          handleMsgbox) {
     var pos;
     for (;;) {
       var evt = FFI.popEvent();
@@ -98,17 +98,19 @@ class FfiModel with ChangeNotifier {
       } else if (name == 'permission') {
         FFI.ffiModel.updatePermission(evt);
       } else if (name == "audio_format") {
-        try {
-          var s = int.parse(evt['sample_rate']);
-          // var c = int.parse(evt['channels']);
-          // Flutter Sound does not support Floating Point PCM data, nor records with more that one audio channel.
-          // On Flutter Sound, Raw PCM is only PCM INT-Linerar 16 monophony
-          await stopAudio();
-          await _audioPlayer.startPlayerFromStream(
-              codec: Codec.pcm16, numChannels: 1, sampleRate: s);
-        } catch (e) {
-          print('audio_format: $e');
-        }
+        () async {
+          try {
+            var s = int.parse(evt['sample_rate']);
+            // var c = int.parse(evt['channels']);
+            // Flutter Sound does not support Floating Point PCM data, nor records with more that one audio channel.
+            // On Flutter Sound, Raw PCM is only PCM INT-Linerar 16 monophony
+            await stopAudio();
+            await _audioPlayer.startPlayerFromStream(
+                codec: Codec.pcm16, numChannels: 1, sampleRate: s);
+          } catch (e) {
+            print('audio_format: $e');
+          }
+        }();
       }
     }
     if (pos != null) FFI.cursorModel.updateCursorPosition(pos);
@@ -133,17 +135,19 @@ class FfiModel with ChangeNotifier {
           }
         });
       }
-      var frame = FFI._getAudio();
-      if (frame != null && frame != nullptr) {
-        final ref = frame.ref;
-        final bytes = Uint8List.sublistView(ref.data.asTypedList(ref.len));
+    }
+    var frame = FFI._getAudio();
+    if (frame != null && frame != nullptr) {
+      final ref = frame.ref;
+      final bytes = Uint8List.sublistView(ref.data.asTypedList(ref.len));
+      () async {
         try {
-          await _audioPlayer.feedFromStream(bytes);
+          // await _audioPlayer.feedFromStream(bytes);
         } catch (e) {
           print('play audio frame: $e');
         }
         FFI._freeRgba(frame);
-      }
+      }();
     }
   }
 
@@ -248,6 +252,7 @@ class CanvasModel with ChangeNotifier {
   }
 
   void updateScale(double v) {
+    if (FFI.imageModel.image == null) return;
     final offset = FFI.cursorModel.offset;
     var r = FFI.cursorModel.getVisibleRect();
     final px0 = (offset.dx - r.left) * _scale;
@@ -310,6 +315,7 @@ class CursorModel with ChangeNotifier {
   }
 
   void updatePan(double dx, double dy) {
+    if (FFI.imageModel.image == null) return;
     final scale = FFI.canvasModel.scale;
     dx /= scale;
     dy /= scale;
