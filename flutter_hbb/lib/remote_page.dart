@@ -639,7 +639,7 @@ void showOptions(BuildContext context) {
     displays.add(Divider(color: MyTheme.border));
   }
   showAlertDialog(context, (setState) {
-    final more = [];
+    final more = <Widget>[];
     if (FFI.ffiModel.permissions['audio'] != false) {
       more.add(CheckboxListTile(
           value: FFI.getByName('toggle_option', 'disable-audio') == 'true',
@@ -724,7 +724,7 @@ void showActions(BuildContext context) {
   final size = MediaQuery.of(context).size;
   final x = 120.0;
   final y = size.height;
-  final more = <Widget>[];
+  final more = <PopupMenuItem<String>>[];
   if (FFI.ffiModel.pi.version.isNotEmpty) {
     more.add(PopupMenuItem<String>(child: Text('Refresh'), value: 'refresh'));
   }
@@ -736,7 +736,7 @@ void showActions(BuildContext context) {
     var value = await showMenu(
       context: context,
       position: RelativeRect.fromLTRB(x, y, x, y),
-      items: <Widget>[
+      items: [
             PopupMenuItem<String>(
                 child: Text('Insert Ctrl + Alt + Del'), value: 'cad'),
             PopupMenuItem<String>(child: Text('Insert Lock'), value: 'lock'),
