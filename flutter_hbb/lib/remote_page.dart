@@ -41,6 +41,7 @@ class _RemotePageState extends State<RemotePage> {
   @override
   void initState() {
     super.initState();
+    _value = ' ' * 1000;
     FFI.connect(widget.id);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       SystemChrome.setEnabledSystemUIOverlays([]);
@@ -55,9 +56,9 @@ class _RemotePageState extends State<RemotePage> {
   void dispose() {
     _focusNode.dispose();
     super.dispose();
-    FFI.close();
     _interval.cancel();
     _timer?.cancel();
+    FFI.close();
     dismissLoading();
     SystemChrome.setEnabledSystemUIOverlays(SystemUiOverlay.values);
     Wakelock.disable();
@@ -163,9 +164,9 @@ class _RemotePageState extends State<RemotePage> {
                                 _timer = Timer(Duration(milliseconds: 30), () {
                                   SystemChrome.setEnabledSystemUIOverlays(
                                       SystemUiOverlay.values);
-                                  _focusNode.requestFocus();
                                   SystemChannels.textInput
                                       .invokeMethod('TextInput.show');
+                                  _focusNode.requestFocus();
                                 });
                               });
                             }),
