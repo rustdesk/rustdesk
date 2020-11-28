@@ -168,7 +168,7 @@ class _HomePageState extends State<HomePage> {
     if (platform == 'mac os')
       platform = 'mac';
     else if (platform != 'linux') platform = 'win';
-    return Image.asset('assets/$platform.png', width: 36, height: 36);
+    return Image.asset('assets/$platform.png', width: 24, height: 24);
   }
 
   Widget getPeers() {

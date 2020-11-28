@@ -64,12 +64,13 @@ Future<T> showAlertDialog<T>(BuildContext context, BuildAlertDailog build,
   return res;
 }
 
-void msgbox(String type, String title, String text, BuildContext context,
-    [bool hasCancel]) {
+Future<T> msgbox<T>(
+    String type, String title, String text, BuildContext context,
+    [bool hasCancel]) async {
   if (hasCancel == null) {
     hasCancel = type != 'error';
   }
-  showAlertDialog(
+  return await showAlertDialog<T>(
       context,
       (_) => Tuple3(Text(title), Text(text), [
             hasCancel

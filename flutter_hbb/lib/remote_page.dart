@@ -86,7 +86,7 @@ class _RemotePageState extends State<RemotePage> {
     FFI.ffiModel.update(widget.id, context, handleMsgbox);
   }
 
-  void handleMsgbox(Map<String, dynamic> evt, String id, BuildContext context) {
+  void handleMsgbox(Map<String, dynamic> evt, String id) {
     var type = evt['type'];
     var title = evt['title'];
     var text = evt['text'];
@@ -95,25 +95,29 @@ class _RemotePageState extends State<RemotePage> {
     } else if (type == 'input-password') {
       enterPasswordDialog(id, context);
     } else {
-      msgbox(type, title, text, context);
-      final hasRetry = type == "error" &&
-          title == "Connection Error" &&
-          text.toLowerCase().indexOf("offline") < 0 &&
-          text.toLowerCase().indexOf("exist") < 0 &&
-          text.toLowerCase().indexOf("handshake") < 0 &&
-          text.toLowerCase().indexOf("failed") < 0 &&
-          text.toLowerCase().indexOf("resolve") < 0 &&
-          text.toLowerCase().indexOf("manually") < 0;
-      if (hasRetry) {
-        _timer?.cancel();
-        _timer = Timer(Duration(seconds: _reconnects), () {
-          FFI.reconnect();
-          showLoading('Connecting...', context);
-        });
-        _reconnects *= 2;
-      } else {
-        _reconnects = 1;
-      }
+      showMsgBox(type, title, text);
+    }
+  }
+
+  Future<Null> showMsgBox(String type, String title, String text) async {
+    await msgbox(type, title, text, context);
+    final hasRetry = type == "error" &&
+        title == "Connection Error" &&
+        text.toLowerCase().indexOf("offline") < 0 &&
+        text.toLowerCase().indexOf("exist") < 0 &&
+        text.toLowerCase().indexOf("handshake") < 0 &&
+        text.toLowerCase().indexOf("failed") < 0 &&
+        text.toLowerCase().indexOf("resolve") < 0 &&
+        text.toLowerCase().indexOf("manually") < 0;
+    if (hasRetry) {
+      _timer?.cancel();
+      _timer = Timer(Duration(seconds: _reconnects), () {
+        FFI.reconnect();
+        showLoading('Connecting...', context);
+      });
+      _reconnects *= 2;
+    } else {
+      _reconnects = 1;
     }
   }
 
@@ -330,7 +334,7 @@ class _RemotePageState extends State<RemotePage> {
           minWidth: 0, //wraps child's width
           height: 0,
           child: FlatButton(
-              splashColor: Colors.black,
+              splashColor: MyTheme.accent,
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(5.0),
               ),
@@ -620,6 +624,9 @@ void showOptions(BuildContext context) {
   if (quality == '') quality = 'balanced';
   var displays = <Widget>[];
   final pi = FFI.ffiModel.pi;
+  final image = FFI.ffiModel.getConnectionImage();
+  if (image != null)
+    displays.add(Padding(padding: const EdgeInsets.only(top: 8), child: image));
   if (pi.displays.length > 1) {
     final cur = pi.currentDisplay;
     final children = <Widget>[];
@@ -647,6 +654,8 @@ void showOptions(BuildContext context) {
           spacing: 8,
           children: children,
         )));
+  }
+  if (displays.isNotEmpty) {
     displays.add(Divider(color: MyTheme.border));
   }
   showAlertDialog(context, (setState) {

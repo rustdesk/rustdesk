@@ -33,9 +33,13 @@ class FfiModel with ChangeNotifier {
   bool _waitForImage;
   bool _initialized = false;
   final _permissions = Map<String, bool>();
+  bool _secure;
+  bool _direct;
 
   get permissions => _permissions;
   get initialized => _initialized;
+  get secure => _secure;
+  get direct => _direct;
   get pi => _pi;
 
   FfiModel() {
@@ -61,7 +65,30 @@ class FfiModel with ChangeNotifier {
     _pi = PeerInfo();
     _display = Display();
     _waitForImage = false;
+    _secure = null;
+    _direct = null;
     clearPermissions();
+  }
+
+  void setConnectionType(bool secure, bool direct) {
+    _secure = secure;
+    _direct = direct;
+  }
+
+  Image getConnectionImage() {
+    String icon;
+    if (secure == true && direct == true) {
+      icon = 'secure';
+    } else if (secure == false && direct == true) {
+      icon = 'insecure';
+    } else if (secure == false && direct == false) {
+      icon = 'insecure_relay';
+    } else if (secure == true && direct == false) {
+      icon = 'secure_relay';
+    }
+    return icon == null
+        ? null
+        : Image.asset('assets/$icon.png', width: 48, height: 48);
   }
 
   void clearPermissions() {
@@ -71,7 +98,10 @@ class FfiModel with ChangeNotifier {
   void update(
       String id,
       BuildContext context,
-      void Function(Map<String, dynamic> evt, String id, BuildContext context)
+      void Function(
+    Map<String, dynamic> evt,
+    String id,
+  )
           handleMsgbox) {
     var pos;
     for (;;) {
@@ -79,9 +109,12 @@ class FfiModel with ChangeNotifier {
       if (evt == null) break;
       var name = evt['name'];
       if (name == 'msgbox') {
-        handleMsgbox(evt, id, context);
+        handleMsgbox(evt, id);
       } else if (name == 'peer_info') {
         handlePeerInfo(evt, context);
+      } else if (name == 'connection_ready') {
+        FFI.ffiModel.setConnectionType(
+            evt['secure'] == 'true', evt['direct'] == 'true');
       } else if (name == 'switch_display') {
         handleSwitchDisplay(evt);
       } else if (name == 'cursor_data') {
