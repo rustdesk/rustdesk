@@ -173,6 +173,7 @@ class _RemotePageState extends State<RemotePage> {
                           color: Colors.white,
                           icon: Icon(Icons.tv),
                           onPressed: () {
+                            setState(() => _showEdit = false);
                             showOptions(context);
                           },
                         ),
@@ -192,6 +193,7 @@ class _RemotePageState extends State<RemotePage> {
                           color: Colors.white,
                           icon: Icon(Icons.more_vert),
                           onPressed: () {
+                            setState(() => _showEdit = false);
                             showActions(context);
                           },
                         ),
