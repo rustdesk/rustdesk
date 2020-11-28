@@ -642,83 +642,92 @@ void showOptions(BuildContext context) {
         )));
     displays.add(Divider(color: MyTheme.border));
   }
-  showAlertDialog(
-      context,
-      (setState) => Tuple3(
-          null,
-          Column(
-              mainAxisSize: MainAxisSize.min,
-              children: displays +
-                  <Widget>[
-                    RadioListTile<String>(
-                      controlAffinity: ListTileControlAffinity.trailing,
-                      title: const Text('Good image quality'),
-                      value: 'best',
-                      groupValue: quality,
-                      onChanged: (String value) {
+  showAlertDialog(context, (setState) {
+    final more = [];
+    if (FFI.ffiModel.permissions['audio'] != false) {
+      more.add(CheckboxListTile(
+          value: FFI.getByName('toggle_option', 'disable-audio') == 'true',
+          onChanged: (v) {
+            setState(() {
+              lockAfterSessionEnd = v;
+              FFI.setByName('toggle_option', 'disable-audio');
+            });
+          },
+          title: Text('Mute')));
+    }
+    return Tuple3(
+        null,
+        Column(
+            mainAxisSize: MainAxisSize.min,
+            children: displays +
+                <Widget>[
+                  RadioListTile<String>(
+                    controlAffinity: ListTileControlAffinity.trailing,
+                    title: const Text('Good image quality'),
+                    value: 'best',
+                    groupValue: quality,
+                    onChanged: (String value) {
+                      setState(() {
+                        quality = value;
+                        FFI.setByName('image_quality', value);
+                      });
+                    },
+                  ),
+                  RadioListTile<String>(
+                    controlAffinity: ListTileControlAffinity.trailing,
+                    title: const Text('Balanced'),
+                    value: 'balanced',
+                    groupValue: quality,
+                    onChanged: (String value) {
+                      setState(() {
+                        quality = value;
+                        FFI.setByName('image_quality', value);
+                      });
+                    },
+                  ),
+                  RadioListTile<String>(
+                    controlAffinity: ListTileControlAffinity.trailing,
+                    title: const Text('Optimize reaction time'),
+                    value: 'low',
+                    groupValue: quality,
+                    onChanged: (String value) {
+                      setState(() {
+                        quality = value;
+                        FFI.setByName('image_quality', value);
+                      });
+                    },
+                  ),
+                  Divider(color: MyTheme.border),
+                  CheckboxListTile(
+                      value: showRemoteCursor,
+                      onChanged: (v) {
                         setState(() {
-                          quality = value;
-                          FFI.setByName('image_quality', value);
+                          showRemoteCursor = v;
+                          FFI.setByName('toggle_option', 'show-remote-cursor');
                         });
                       },
-                    ),
-                    RadioListTile<String>(
-                      controlAffinity: ListTileControlAffinity.trailing,
-                      title: const Text('Balanced'),
-                      value: 'balanced',
-                      groupValue: quality,
-                      onChanged: (String value) {
+                      title: Text('Show remote cursor')),
+                  CheckboxListTile(
+                      value: lockAfterSessionEnd,
+                      onChanged: (v) {
                         setState(() {
-                          quality = value;
-                          FFI.setByName('image_quality', value);
+                          lockAfterSessionEnd = v;
+                          FFI.setByName(
+                              'toggle_option', 'lock-after-session-end');
                         });
                       },
-                    ),
-                    RadioListTile<String>(
-                      controlAffinity: ListTileControlAffinity.trailing,
-                      title: const Text('Optimize reaction time'),
-                      value: 'low',
-                      groupValue: quality,
-                      onChanged: (String value) {
-                        setState(() {
-                          quality = value;
-                          FFI.setByName('image_quality', value);
-                        });
-                      },
-                    ),
-                    Divider(color: MyTheme.border),
-                    CheckboxListTile(
-                        value: showRemoteCursor,
-                        onChanged: (v) {
-                          setState(() {
-                            showRemoteCursor = v;
-                            FFI.setByName(
-                                'toggle_option', 'show-remote-cursor');
-                          });
-                        },
-                        title: Text('Show remote cursor')),
-                    CheckboxListTile(
-                        value: lockAfterSessionEnd,
-                        onChanged: (v) {
-                          setState(() {
-                            lockAfterSessionEnd = v;
-                            FFI.setByName(
-                                'toggle_option', 'lock-after-session-end');
-                          });
-                        },
-                        title: Text('Lock after session end'))
-                  ]),
-          null),
-      () async => true,
-      true,
-      0);
+                      title: Text('Lock after session end'))
+                ] +
+                more),
+        null);
+  }, () async => true, true, 0);
 }
 
 void showActions(BuildContext context) {
   final size = MediaQuery.of(context).size;
   final x = 120.0;
   final y = size.height;
-  var more = <Widget>[];
+  final more = <Widget>[];
   if (FFI.ffiModel.pi.version.isNotEmpty) {
     more.add(PopupMenuItem<String>(child: Text('Refresh'), value: 'refresh'));
   }
