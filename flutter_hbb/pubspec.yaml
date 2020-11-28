@@ -31,7 +31,10 @@ dependencies:
   ffi: ^0.1.3
   path_provider: ^1.6.24
   provider: ^4.3.2+2
-  flutter_easyloading: ^2.1.3
+  flutter_easyloading:
+    git:
+      url: git://github.com/open-trade/flutter_easyloading
+    #path: flutter_easyloading
   tuple: ^1.0.1
   wakelock: ^0.2.1+1
   device_info: ^1.0.0 

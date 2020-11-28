@@ -64,33 +64,52 @@ Future<T> showAlertDialog<T>(BuildContext context, BuildAlertDailog build,
   return res;
 }
 
-Future<T> msgbox<T>(
-    String type, String title, String text, BuildContext context,
-    [bool hasCancel]) async {
+void msgbox(String type, String title, String text, BuildContext context,
+    [bool hasCancel]) {
+  var wrap = (String text, void Function() onPressed) => ButtonTheme(
+      padding: EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+      materialTapTargetSize: MaterialTapTargetSize
+          .shrinkWrap, //limits the touch area to the button area
+      minWidth: 0, //wraps child's width
+      height: 0,
+      child: FlatButton(
+          focusColor: MyTheme.accent,
+          onPressed: onPressed,
+          child: Text(text, style: TextStyle(color: MyTheme.accent))));
+
+  dismissLoading();
+  if (_hasDialog) {
+    Navigator.pop(context);
+  }
+  final buttons = [
+    Expanded(child: Container()),
+    wrap('OK', () {
+      dismissLoading();
+      Navigator.pop(context);
+    })
+  ];
   if (hasCancel == null) {
     hasCancel = type != 'error';
   }
-  return await showAlertDialog<T>(
-      context,
-      (_) => Tuple3(Text(title), Text(text), [
-            hasCancel
-                ? FlatButton(
-                    textColor: MyTheme.accent,
-                    onPressed: () {
-                      Navigator.pop(context);
-                    },
-                    child: Text('Cancel'),
-                  )
-                : Spacer(),
-            FlatButton(
-              textColor: MyTheme.accent,
-              onPressed: () {
-                Navigator.pop(context);
-                Navigator.pop(context);
-              },
-              child: Text('OK'),
-            ),
-          ]));
+  if (hasCancel) {
+    buttons.insert(
+        1,
+        wrap('Cancel', () {
+          dismissLoading();
+        }));
+  }
+  EasyLoading.showWidget(Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Text(title, style: TextStyle(fontSize: 21)),
+      SizedBox(height: 20),
+      Text(text, style: TextStyle(fontSize: 15)),
+      SizedBox(height: 20),
+      Row(
+        children: buttons,
+      )
+    ],
+  ));
 }
 
 class PasswordWidget extends StatefulWidget {

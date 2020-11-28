@@ -99,8 +99,8 @@ class _RemotePageState extends State<RemotePage> {
     }
   }
 
-  Future<Null> showMsgBox(String type, String title, String text) async {
-    await msgbox(type, title, text, context);
+  void showMsgBox(String type, String title, String text) {
+    msgbox(type, title, text, context);
     final hasRetry = type == "error" &&
         title == "Connection Error" &&
         text.toLowerCase().indexOf("offline") < 0 &&
@@ -179,7 +179,7 @@ class _RemotePageState extends State<RemotePage> {
                   onPressed: () {
                     setState(() => _showBar = !_showBar);
                   }),
-          bottomNavigationBar: _showBar
+          bottomNavigationBar: _showBar && FFI.ffiModel.pi.displays != null
               ? BottomAppBar(
                   elevation: 10,
                   color: MyTheme.accent,
