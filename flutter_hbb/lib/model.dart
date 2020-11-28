@@ -29,7 +29,7 @@ typedef F5 = Pointer<RgbaFrame> Function();
 class FfiModel with ChangeNotifier {
   PeerInfo _pi;
   Display _display;
-  bool _decoding;
+  var _decoding = false;
   bool _waitForImage;
   bool _initialized = false;
   final _permissions = Map<String, bool>();
@@ -60,7 +60,6 @@ class FfiModel with ChangeNotifier {
   void clear() {
     _pi = PeerInfo();
     _display = Display();
-    _decoding = false;
     _waitForImage = false;
     clearPermissions();
   }
@@ -106,11 +105,13 @@ class FfiModel with ChangeNotifier {
           dismissLoading();
         }
         _decoding = true;
+        final pid = FFI.id;
         ui.decodeImageFromPixels(
             rgba, _display.width, _display.height, ui.PixelFormat.bgra8888,
             (image) {
           FFI.clearRgbaFrame();
           _decoding = false;
+          if (FFI.id != pid) return;
           try {
             // my throw exception, because the listener maybe already dispose
             FFI.imageModel.update(image);
@@ -365,8 +366,10 @@ class CursorModel with ChangeNotifier {
     var height = int.parse(evt['height']);
     List<dynamic> colors = json.decode(evt['colors']);
     final rgba = Uint8List.fromList(colors.map((s) => s as int).toList());
+    var pid = FFI.id;
     ui.decodeImageFromPixels(rgba, width, height, ui.PixelFormat.rgba8888,
         (image) {
+      if (FFI.id != pid) return;
       _image = image;
       _images[id] = Tuple3(image, _hotx, _hoty);
       try {
@@ -413,6 +416,7 @@ class CursorModel with ChangeNotifier {
 }
 
 class FFI {
+  static String id = "";
   static String _dir = '';
   static F1 _freeCString;
   static F2 _getByName;
@@ -496,6 +500,7 @@ class FFI {
 
   static void connect(String id) {
     setByName('connect', id);
+    FFI.id = id;
   }
 
   static void clearRgbaFrame() {
@@ -532,6 +537,7 @@ class FFI {
   }
 
   static void close() {
+    id = "";
     setByName('close', '');
     imageModel.update(null);
     cursorModel.clear();
