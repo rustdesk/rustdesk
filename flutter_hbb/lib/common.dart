@@ -19,7 +19,7 @@ void showLoading(String text, BuildContext context) {
     Navigator.pop(context);
   }
   dismissLoading();
-  EasyLoading.show(status: text);
+  EasyLoading.show(status: text, maskType: EasyLoadingMaskType.black);
 }
 
 void dismissLoading() {
@@ -28,7 +28,7 @@ void dismissLoading() {
 
 void showSuccess(String text) {
   dismissLoading();
-  EasyLoading.showSuccess(text);
+  EasyLoading.showSuccess(text, maskType: EasyLoadingMaskType.black);
 }
 
 bool _hasDialog = false;
@@ -98,18 +98,20 @@ void msgbox(String type, String title, String text, BuildContext context,
           dismissLoading();
         }));
   }
-  EasyLoading.showWidget(Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      Text(title, style: TextStyle(fontSize: 21)),
-      SizedBox(height: 20),
-      Text(text, style: TextStyle(fontSize: 15)),
-      SizedBox(height: 20),
-      Row(
-        children: buttons,
-      )
-    ],
-  ));
+  EasyLoading.showWidget(
+      Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(title, style: TextStyle(fontSize: 21)),
+          SizedBox(height: 20),
+          Text(text, style: TextStyle(fontSize: 15)),
+          SizedBox(height: 20),
+          Row(
+            children: buttons,
+          )
+        ],
+      ),
+      maskType: EasyLoadingMaskType.black);
 }
 
 class PasswordWidget extends StatefulWidget {
