@@ -605,10 +605,6 @@ void wrongPasswordDialog(String id, BuildContext context) {
 }
 
 void showOptions(BuildContext context) {
-  var showRemoteCursor =
-      FFI.getByName('toggle_option', 'show-remote-cursor') == 'true';
-  var lockAfterSessionEnd =
-      FFI.getByName('toggle_option', 'lock-after-session-end') == 'true';
   String quality = FFI.getByName('image_quality');
   if (quality == '') quality = 'balanced';
   var displays = <Widget>[];
@@ -649,7 +645,6 @@ void showOptions(BuildContext context) {
           value: FFI.getByName('toggle_option', 'disable-audio') == 'true',
           onChanged: (v) {
             setState(() {
-              lockAfterSessionEnd = v;
               FFI.setByName('toggle_option', 'disable-audio');
             });
           },
@@ -699,19 +694,21 @@ void showOptions(BuildContext context) {
                   ),
                   Divider(color: MyTheme.border),
                   CheckboxListTile(
-                      value: showRemoteCursor,
+                      value: FFI.getByName(
+                              'toggle_option', 'show-remote-cursor') ==
+                          'true',
                       onChanged: (v) {
                         setState(() {
-                          showRemoteCursor = v;
                           FFI.setByName('toggle_option', 'show-remote-cursor');
                         });
                       },
                       title: Text('Show remote cursor')),
                   CheckboxListTile(
-                      value: lockAfterSessionEnd,
+                      value: FFI.getByName(
+                              'toggle_option', 'lock-after-session-end') ==
+                          'true',
                       onChanged: (v) {
                         setState(() {
-                          lockAfterSessionEnd = v;
                           FFI.setByName(
                               'toggle_option', 'lock-after-session-end');
                         });
