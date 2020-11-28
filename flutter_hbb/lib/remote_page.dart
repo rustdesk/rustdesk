@@ -9,6 +9,8 @@ import 'package:wakelock/wakelock.dart';
 import 'common.dart';
 import 'model.dart';
 
+final initText = '\1' * 1024;
+
 class RemotePage extends StatefulWidget {
   RemotePage({Key key, this.id}) : super(key: key);
 
@@ -41,7 +43,7 @@ class _RemotePageState extends State<RemotePage> {
   @override
   void initState() {
     super.initState();
-    _value = ' ' * 1000;
+    _value = initText;
     FFI.connect(widget.id);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       SystemChrome.setEnabledSystemUIOverlays([]);
@@ -56,9 +58,9 @@ class _RemotePageState extends State<RemotePage> {
   void dispose() {
     _focusNode.dispose();
     super.dispose();
+    FFI.close();
     _interval.cancel();
     _timer?.cancel();
-    FFI.close();
     dismissLoading();
     SystemChrome.setEnabledSystemUIOverlays(SystemUiOverlay.values);
     Wakelock.disable();
@@ -73,7 +75,7 @@ class _RemotePageState extends State<RemotePage> {
     var v = MediaQuery.of(context).viewInsets.bottom;
     if (v != _bottom) {
       resetTool();
-      _value = ' ' * 1000;
+      _value = initText;
       setState(() {
         _bottom = v;
         if (v < 100) {
@@ -115,6 +117,46 @@ class _RemotePageState extends State<RemotePage> {
     }
   }
 
+  void handleInput(String newValue) {
+    if (_value[0] == '\1' && newValue[0] != '\1') {
+      // clipboard
+      _value = '';
+    }
+    if (newValue.length <= _value.length) {
+      final char = 'VK_BACK';
+      FFI.inputKey(char);
+    } else {
+      final content = newValue.substring(_value.length);
+      if (content.length > 1) {
+        FFI.setByName('input_string', content);
+      } else {
+        var char = content;
+        if (char == '\n') {
+          char = 'VK_RETURN';
+        }
+        FFI.inputKey(char);
+      }
+    }
+    _value = newValue;
+  }
+
+  void openKeyboard() {
+    // destroy first, so that our _value trick can work
+    setState(() => _showEdit = false);
+    _timer?.cancel();
+    _timer = Timer(Duration(milliseconds: 30), () {
+      // show now, and sleep a while to requestFocus to
+      // make sure edit ready, so that keyboard wont show/hide/show/hide happen
+      setState(() => _showEdit = true);
+      _timer?.cancel();
+      _timer = Timer(Duration(milliseconds: 30), () {
+        SystemChrome.setEnabledSystemUIOverlays(SystemUiOverlay.values);
+        SystemChannels.textInput.invokeMethod('TextInput.show');
+        _focusNode.requestFocus();
+      });
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     EasyLoading.instance.loadingStyle = EasyLoadingStyle.light;
@@ -152,24 +194,7 @@ class _RemotePageState extends State<RemotePage> {
                         IconButton(
                             color: Colors.white,
                             icon: Icon(Icons.keyboard),
-                            onPressed: () {
-                              // destroy first, so that our _value trick can work
-                              setState(() => _showEdit = false);
-                              _timer?.cancel();
-                              _timer = Timer(Duration(milliseconds: 30), () {
-                                // show now, and sleep a while to requestFocus to
-                                // make sure edit ready, so that keyboard wont show/hide/show/hide happen
-                                setState(() => _showEdit = true);
-                                _timer?.cancel();
-                                _timer = Timer(Duration(milliseconds: 30), () {
-                                  SystemChrome.setEnabledSystemUIOverlays(
-                                      SystemUiOverlay.values);
-                                  SystemChannels.textInput
-                                      .invokeMethod('TextInput.show');
-                                  _focusNode.requestFocus();
-                                });
-                              });
-                            }),
+                            onPressed: openKeyboard),
                         IconButton(
                           color: Colors.white,
                           icon: Icon(Icons.tv),
@@ -278,22 +303,7 @@ class _RemotePageState extends State<RemotePage> {
                                 initialValue:
                                     _value, // trick way to make backspace work always
                                 keyboardType: TextInputType.multiline,
-                                onChanged: (x) {
-                                  if (x.length <= _value.length) {
-                                    final char = 'VK_BACK';
-                                    FFI.inputKey(char);
-                                  }
-                                  for (var i = _value.length;
-                                      i < x.length;
-                                      ++i) {
-                                    var char = x[i];
-                                    if (char == '\n') {
-                                      char = 'VK_RETURN';
-                                    }
-                                    FFI.inputKey(char);
-                                  }
-                                  _value = x;
-                                },
+                                onChanged: handleInput,
                               ),
                       ),
                     ])),
