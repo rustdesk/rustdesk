@@ -104,7 +104,7 @@ class _RemotePageState extends State<RemotePage> {
       if (hasRetry) {
         _timer?.cancel();
         _timer = Timer(Duration(seconds: _reconnects), () {
-          FFI.setByName('reconnect');
+          FFI.reconnect();
           showLoading('Connecting...', context);
         });
         _reconnects *= 2;
@@ -718,31 +718,39 @@ void showActions(BuildContext context) {
   final size = MediaQuery.of(context).size;
   final x = 120.0;
   final y = size.height;
+  var more = <Widget>[];
+  if (FFI.ffiModel.pi.version.isNotEmpty) {
+    more.add(PopupMenuItem<String>(child: Text('Refresh'), value: 'refresh'));
+  }
+  if (FFI.ffiModel.permissions['keyboard'] != false &&
+      FFI.ffiModel.permissions['clipboard'] != false) {
+    more.add(PopupMenuItem<String>(child: Text('Paste'), value: 'paste'));
+  }
   () async {
     var value = await showMenu(
       context: context,
       position: RelativeRect.fromLTRB(x, y, x, y),
-      items: [
+      items: <Widget>[
             PopupMenuItem<String>(
                 child: Text('Insert Ctrl + Alt + Del'), value: 'cad'),
             PopupMenuItem<String>(child: Text('Insert Lock'), value: 'lock'),
           ] +
-          (FFI.ffiModel.pi.version.isEmpty
-              ? []
-              : [
-                  PopupMenuItem<String>(
-                      child: Text('Refresh'), value: 'refresh'),
-                ]),
+          more,
       elevation: 8,
     );
     if (value == 'cad') {
       FFI.setByName('ctrl_alt_del');
-    }
-    if (value == 'lock') {
+    } else if (value == 'lock') {
       FFI.setByName('lock_screen');
-    }
-    if (value == 'refresh') {
+    } else if (value == 'refresh') {
       FFI.setByName('refresh');
+    } else if (value == 'paste') {
+      () async {
+        ClipboardData data = await Clipboard.getData(Clipboard.kTextPlain);
+        if (data.text != null) {
+          FFI.setByName('input_string', '${data.text}');
+        }
+      }();
     }
   }();
 }

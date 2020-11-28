@@ -1,4 +1,5 @@
 import 'package:ffi/ffi.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter/gestures.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:device_info/device_info.dart';
@@ -61,6 +62,10 @@ class FfiModel with ChangeNotifier {
     _display = Display();
     _decoding = false;
     _waitForImage = false;
+    clearPermissions();
+  }
+
+  void clearPermissions() {
     _permissions.clear();
   }
 
@@ -86,6 +91,8 @@ class FfiModel with ChangeNotifier {
         FFI.cursorModel.updateCursorId(evt);
       } else if (name == 'cursor_position') {
         pos = evt;
+      } else if (name == 'clipboard') {
+        Clipboard.setData(ClipboardData(text: evt['content']));
       } else if (name == 'permission') {
         FFI.ffiModel.updatePermission(evt);
       }
@@ -436,6 +443,11 @@ class FFI {
     if (y2 == 0) return;
     setByName('send_mouse',
         json.encode(modify({'type': 'wheel', 'y': y2.toString()})));
+  }
+
+  static void reconnect() {
+    setByName('reconnect');
+    FFI.ffiModel.clearPermissions();
   }
 
   static void resetModifiers() {
