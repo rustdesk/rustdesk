@@ -267,25 +267,26 @@ class _RemotePageState extends State<RemotePage> {
                 onScaleUpdate: (details) {
                   var scale = details.scale;
                   if (scale == 1) {
-                    var x = details.focalPoint.dx;
-                    var y = details.focalPoint.dy;
-                    var dx = x - _xOffset;
-                    var dy = y - _yOffset;
-                    if (_scroll) {
-                      FFI.scroll(-dy);
-                    } else {
+                    if (!_scroll) {
+                      var x = details.focalPoint.dx;
+                      var y = details.focalPoint.dy;
+                      var dx = x - _xOffset;
+                      var dy = y - _yOffset;
                       FFI.cursorModel.updatePan(dx, dy);
+                      _xOffset = x;
+                      _yOffset = y;
                     }
-                    _xOffset = x;
-                    _yOffset = y;
                   } else if (!_drag && !_scroll) {
                     FFI.canvasModel.updateScale(scale / _scale);
                     _scale = scale;
                   }
                 },
-                onScaleEnd: (_) {
+                onScaleEnd: (details) {
                   if (_drag) {
                     FFI.sendMouse('up', 'left');
+                  } else if (_scroll) {
+                    FFI.scroll(
+                        details.velocity.pixelsPerSecond.dy > 0 ? -1 : 1);
                   }
                 },
                 child: Container(
@@ -359,7 +360,7 @@ class _RemotePageState extends State<RemotePage> {
       wrap('Scroll', () {
         setState(() {
           _scroll = !_scroll;
-          if (_drag) {
+          if (_scroll) {
             _drag = false;
             _right = false;
           }
@@ -368,7 +369,7 @@ class _RemotePageState extends State<RemotePage> {
       wrap('Right', () {
         setState(() {
           _right = !_right;
-          if (_drag) {
+          if (_right) {
             _scroll = false;
             _drag = false;
           }
