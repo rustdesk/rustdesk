@@ -193,6 +193,7 @@ class FfiModel with ChangeNotifier {
       showLoading('Waiting for image...', context);
       _waitForImage = true;
     }
+    notifyListeners();
   }
 }
 

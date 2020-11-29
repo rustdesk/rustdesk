@@ -163,6 +163,7 @@ class _RemotePageState extends State<RemotePage> {
 
   @override
   Widget build(BuildContext context) {
+    final pi = Provider.of<FfiModel>(context).pi;
     EasyLoading.instance.loadingStyle = EasyLoadingStyle.light;
     return WillPopScope(
       onWillPop: () async {
@@ -179,7 +180,7 @@ class _RemotePageState extends State<RemotePage> {
                   onPressed: () {
                     setState(() => _showBar = !_showBar);
                   }),
-          bottomNavigationBar: _showBar && FFI.ffiModel.pi.displays != null
+          bottomNavigationBar: _showBar && pi.displays != null
               ? BottomAppBar(
                   elevation: 10,
                   color: MyTheme.accent,
