@@ -149,11 +149,9 @@ packages:
   flutter_easyloading:
     dependency: "direct main"
     description:
-      path: "."
-      ref: HEAD
-      resolved-ref: "2d085c411dc262043b6173c3b962d3e66ce657b1"
-      url: "git://github.com/open-trade/flutter_easyloading"
-    source: git
+      path: flutter_easyloading
+      relative: true
+    source: path
     version: "2.2.0"
   flutter_spinkit:
     dependency: transitive

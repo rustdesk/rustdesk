@@ -165,82 +165,81 @@ class _RemotePageState extends State<RemotePage> {
   Widget build(BuildContext context) {
     EasyLoading.instance.loadingStyle = EasyLoadingStyle.light;
     return WillPopScope(
-        onWillPop: () async {
-          close();
-          return false;
-        },
-        child: FlutterEasyLoading(
-          child: Scaffold(
-              backgroundColor: MyTheme.canvasColor,
-              floatingActionButton: _showBar
-                  ? null
-                  : FloatingActionButton(
-                      mini: true,
-                      child: Icon(Icons.expand_less),
-                      backgroundColor: MyTheme.accent50,
-                      onPressed: () {
-                        setState(() => _showBar = !_showBar);
-                      }),
-              bottomNavigationBar: _showBar && FFI.ffiModel.pi.displays != null
-                  ? BottomAppBar(
-                      elevation: 10,
-                      color: MyTheme.accent,
-                      child: Row(
-                        mainAxisSize: MainAxisSize.max,
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: <Widget>[
-                          Row(children: [
-                            IconButton(
+      onWillPop: () async {
+        close();
+        return false;
+      },
+      child: Scaffold(
+          floatingActionButton: _showBar
+              ? null
+              : FloatingActionButton(
+                  mini: true,
+                  child: Icon(Icons.expand_less),
+                  backgroundColor: MyTheme.accent50,
+                  onPressed: () {
+                    setState(() => _showBar = !_showBar);
+                  }),
+          bottomNavigationBar: _showBar && FFI.ffiModel.pi.displays != null
+              ? BottomAppBar(
+                  elevation: 10,
+                  color: MyTheme.accent,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.max,
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: <Widget>[
+                      Row(children: [
+                        IconButton(
+                          color: Colors.white,
+                          icon: Icon(Icons.clear),
+                          onPressed: () {
+                            close();
+                          },
+                        ),
+                        IconButton(
+                            color: Colors.white,
+                            icon: Icon(Icons.keyboard),
+                            onPressed: openKeyboard),
+                        IconButton(
+                          color: Colors.white,
+                          icon: Icon(Icons.tv),
+                          onPressed: () {
+                            setState(() => _showEdit = false);
+                            showOptions(context);
+                          },
+                        ),
+                        Container(
+                            color: _mouseTools ? Colors.blue[500] : null,
+                            child: IconButton(
                               color: Colors.white,
-                              icon: Icon(Icons.clear),
+                              icon: Icon(Icons.mouse),
                               onPressed: () {
-                                close();
+                                setState(() {
+                                  _mouseTools = !_mouseTools;
+                                  resetTool();
+                                });
                               },
-                            ),
-                            IconButton(
-                                color: Colors.white,
-                                icon: Icon(Icons.keyboard),
-                                onPressed: openKeyboard),
-                            IconButton(
-                              color: Colors.white,
-                              icon: Icon(Icons.tv),
-                              onPressed: () {
-                                setState(() => _showEdit = false);
-                                showOptions(context);
-                              },
-                            ),
-                            Container(
-                                color: _mouseTools ? Colors.blue[500] : null,
-                                child: IconButton(
-                                  color: Colors.white,
-                                  icon: Icon(Icons.mouse),
-                                  onPressed: () {
-                                    setState(() {
-                                      _mouseTools = !_mouseTools;
-                                      resetTool();
-                                    });
-                                  },
-                                )),
-                            IconButton(
-                              color: Colors.white,
-                              icon: Icon(Icons.more_vert),
-                              onPressed: () {
-                                setState(() => _showEdit = false);
-                                showActions(context);
-                              },
-                            ),
-                          ]),
-                          IconButton(
-                              color: Colors.white,
-                              icon: Icon(Icons.expand_more),
-                              onPressed: () {
-                                setState(() => _showBar = !_showBar);
-                              }),
-                        ],
-                      ),
-                    )
-                  : null,
-              body: GestureDetector(
+                            )),
+                        IconButton(
+                          color: Colors.white,
+                          icon: Icon(Icons.more_vert),
+                          onPressed: () {
+                            setState(() => _showEdit = false);
+                            showActions(context);
+                          },
+                        ),
+                      ]),
+                      IconButton(
+                          color: Colors.white,
+                          icon: Icon(Icons.expand_more),
+                          onPressed: () {
+                            setState(() => _showBar = !_showBar);
+                          }),
+                    ],
+                  ),
+                )
+              : null,
+          body: FlutterEasyLoading(
+            child: GestureDetector(
                 onTap: () {
                   if (_drag || _scroll) return;
                   FFI.tap(_right);
@@ -288,30 +287,32 @@ class _RemotePageState extends State<RemotePage> {
                     FFI.sendMouse('up', 'left');
                   }
                 },
-                child: Stack(children: [
-                  ImagePaint(),
-                  CursorPaint(),
-                  getHelpTools(),
-                  SizedBox(
-                    width: 0,
-                    height: 0,
-                    child: !_showEdit
-                        ? Container()
-                        : TextFormField(
-                            textInputAction: TextInputAction.newline,
-                            autocorrect: false,
-                            enableSuggestions: false,
-                            focusNode: _focusNode,
-                            maxLines: null,
-                            initialValue:
-                                _value, // trick way to make backspace work always
-                            keyboardType: TextInputType.multiline,
-                            onChanged: handleInput,
-                          ),
-                  ),
-                ]),
-              )),
-        ));
+                child: Container(
+                    color: MyTheme.canvasColor,
+                    child: Stack(children: [
+                      ImagePaint(),
+                      CursorPaint(),
+                      getHelpTools(),
+                      SizedBox(
+                        width: 0,
+                        height: 0,
+                        child: !_showEdit
+                            ? Container()
+                            : TextFormField(
+                                textInputAction: TextInputAction.newline,
+                                autocorrect: false,
+                                enableSuggestions: false,
+                                focusNode: _focusNode,
+                                maxLines: null,
+                                initialValue:
+                                    _value, // trick way to make backspace work always
+                                keyboardType: TextInputType.multiline,
+                                onChanged: handleInput,
+                              ),
+                      ),
+                    ]))),
+          )),
+    );
   }
 
   void close() {
