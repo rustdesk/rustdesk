@@ -38,6 +38,7 @@ dependencies:
   tuple: ^1.0.1
   wakelock: ^0.2.1+1
   device_info: ^1.0.0 
+  firebase_analytics: ^6.2.0
 
 dev_dependencies:
   flutter_test:
