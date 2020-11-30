@@ -673,7 +673,7 @@ void showOptions(BuildContext context) {
           title: Text('Mute')));
     }
     if (FFI.ffiModel.permissions['keyboard'] != false) {
-      CheckboxListTile(
+      more.add(CheckboxListTile(
           value: FFI.getByName('toggle_option', 'lock-after-session-end') ==
               'true',
           onChanged: (v) {
@@ -681,7 +681,7 @@ void showOptions(BuildContext context) {
               FFI.setByName('toggle_option', 'lock-after-session-end');
             });
           },
-          title: Text('Lock after session end'));
+          title: Text('Lock after session end')));
     }
     return Tuple3(
         null,
