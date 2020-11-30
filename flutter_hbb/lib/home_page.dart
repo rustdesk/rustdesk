@@ -212,35 +212,37 @@ class _HomePageState extends State<HomePage> {
     final cards = <Widget>[];
     var peers = FFI.peers();
     peers.forEach((p) {
-      cards.add(Card(
-          child: GestureDetector(
-              onTap: () => connect('${p.id}'),
-              onLongPressStart: (details) {
-                var x = details.globalPosition.dx;
-                var y = details.globalPosition.dy;
-                () async {
-                  var value = await showMenu(
-                    context: context,
-                    position: RelativeRect.fromLTRB(x, y, x, y),
-                    items: [
-                      PopupMenuItem<String>(
-                          child: Text('Remove'), value: 'remove'),
-                    ],
-                    elevation: 8,
-                  );
-                  if (value == 'remove') {
-                    setState(() => FFI.setByName('remove', '${p.id}'));
-                  }
-                }();
-              },
-              child: ListTile(
-                subtitle: Text('${p.username}@${p.hostname}'),
-                title: Text('${p.id}'),
-                leading: Container(
-                    padding: const EdgeInsets.all(6),
-                    child: getPlatformImage('${p.platform}'),
-                    color: str2color('${p.id}${p.platform}', 0x77)),
-              ))));
+      cards.add(Padding(
+          padding: EdgeInsets.symmetric(horizontal: 12),
+          child: Card(
+              child: GestureDetector(
+                  onTap: () => connect('${p.id}'),
+                  onLongPressStart: (details) {
+                    var x = details.globalPosition.dx;
+                    var y = details.globalPosition.dy;
+                    () async {
+                      var value = await showMenu(
+                        context: context,
+                        position: RelativeRect.fromLTRB(x, y, x, y),
+                        items: [
+                          PopupMenuItem<String>(
+                              child: Text('Remove'), value: 'remove'),
+                        ],
+                        elevation: 8,
+                      );
+                      if (value == 'remove') {
+                        setState(() => FFI.setByName('remove', '${p.id}'));
+                      }
+                    }();
+                  },
+                  child: ListTile(
+                    subtitle: Text('${p.username}@${p.hostname}'),
+                    title: Text('${p.id}'),
+                    leading: Container(
+                        padding: const EdgeInsets.all(6),
+                        child: getPlatformImage('${p.platform}'),
+                        color: str2color('${p.id}${p.platform}', 0x77)),
+                  )))));
     });
     return Wrap(children: cards);
   }
