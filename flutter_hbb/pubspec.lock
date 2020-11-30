@@ -179,7 +179,7 @@ packages:
     description:
       path: "."
       ref: HEAD
-      resolved-ref: "2d085c411dc262043b6173c3b962d3e66ce657b1"
+      resolved-ref: "663154242c05ccf85d4dde984852095664493e46"
       url: "git://github.com/open-trade/flutter_easyloading"
     source: git
     version: "2.2.0"

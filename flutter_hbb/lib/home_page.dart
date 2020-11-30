@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:tuple/tuple.dart';
 import 'package:package_info/package_info.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'dart:async';
 import 'common.dart';
 import 'model.dart';
 import 'remote_page.dart';
@@ -18,6 +19,16 @@ class HomePage extends StatefulWidget {
 
 class _HomePageState extends State<HomePage> {
   final _idController = TextEditingController();
+  var _updateUrl = '';
+
+  @override
+  void initState() {
+    super.initState();
+    Timer(Duration(seconds: 5), () {
+      _updateUrl = FFI.getByName('software_update_url');
+      if (_updateUrl.isNotEmpty) setState(() {});
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -60,10 +71,27 @@ class _HomePageState extends State<HomePage> {
               mainAxisSize: MainAxisSize.max,
               crossAxisAlignment: CrossAxisAlignment.center,
               children: <Widget>[
+                _updateUrl.isEmpty
+                    ? SizedBox(height: 0)
+                    : InkWell(
+                        onTap: () async {
+                          final url = _updateUrl + '.apk';
+                          if (await canLaunch(url)) {
+                            await launch(url);
+                          }
+                        },
+                        child: Container(
+                            alignment: AlignmentDirectional.center,
+                            width: double.infinity,
+                            color: Colors.pinkAccent,
+                            padding: EdgeInsets.symmetric(vertical: 12),
+                            child: Text('Download new version',
+                                style: TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.bold)))),
                 getSearchBarUI(),
                 getPeers(),
               ]),
-          padding: const EdgeInsets.fromLTRB(16.0, 0.0, 16.0, 0.0),
         ));
   }
 
@@ -94,7 +122,7 @@ class _HomePageState extends State<HomePage> {
       return Container();
     }
     return Padding(
-      padding: const EdgeInsets.only(top: 8.0),
+      padding: const EdgeInsets.fromLTRB(16.0, 8.0, 16.0, 0.0),
       child: Container(
         height: 84,
         child: Padding(
