@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:tuple/tuple.dart';
+import 'package:package_info/package_info.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'common.dart';
 import 'model.dart';
 import 'remote_page.dart';
@@ -37,11 +39,15 @@ class _HomePageState extends State<HomePage> {
                       items: [
                         PopupMenuItem<String>(
                             child: Text('ID/Relay Server'), value: 'server'),
+                        PopupMenuItem<String>(
+                            child: Text('About RustDesk'), value: 'about'),
                       ],
                       elevation: 8,
                     );
                     if (value == 'server') {
                       showServer(context);
+                    } else if (value == 'about') {
+                      showAbout(context);
                     }
                   }();
                 })
@@ -269,7 +275,33 @@ void showServer(BuildContext context) {
                 child: Text('OK'),
               ),
             ],
-          ),
+          ));
+}
+
+Future<Null> showAbout(BuildContext context) async {
+  PackageInfo packageInfo = await PackageInfo.fromPlatform();
+  showAlertDialog(
+      context,
+      (setState) => Tuple3(
+          null,
+          Wrap(direction: Axis.vertical, spacing: 12, children: [
+            Text('Version: ${packageInfo.version}'),
+            InkWell(
+                onTap: () async {
+                  const url = 'https://forum.rustdesk.com/';
+                  if (await canLaunch(url)) {
+                    await launch(url);
+                  }
+                },
+                child: Padding(
+                  padding: EdgeInsets.symmetric(vertical: 8),
+                  child: Text('Support',
+                      style: TextStyle(
+                        decoration: TextDecoration.underline,
+                      )),
+                )),
+          ]),
+          null),
       () async => true,
       true);
 }
