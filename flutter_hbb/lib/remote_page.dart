@@ -672,6 +672,17 @@ void showOptions(BuildContext context) {
           },
           title: Text('Mute')));
     }
+    if (FFI.ffiModel.permissions['keyboard'] != false) {
+      CheckboxListTile(
+          value: FFI.getByName('toggle_option', 'lock-after-session-end') ==
+              'true',
+          onChanged: (v) {
+            setState(() {
+              FFI.setByName('toggle_option', 'lock-after-session-end');
+            });
+          },
+          title: Text('Lock after session end'));
+    }
     return Tuple3(
         null,
         Column(
@@ -725,17 +736,6 @@ void showOptions(BuildContext context) {
                         });
                       },
                       title: Text('Show remote cursor')),
-                  CheckboxListTile(
-                      value: FFI.getByName(
-                              'toggle_option', 'lock-after-session-end') ==
-                          'true',
-                      onChanged: (v) {
-                        setState(() {
-                          FFI.setByName(
-                              'toggle_option', 'lock-after-session-end');
-                        });
-                      },
-                      title: Text('Lock after session end'))
                 ] +
                 more),
         null);
