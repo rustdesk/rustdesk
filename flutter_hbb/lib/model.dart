@@ -319,10 +319,12 @@ class CursorModel with ChangeNotifier {
   }
 
   double adjustForKeyboard() {
-    var keyboardHeight = MediaQueryData.fromWindow(ui.window).viewInsets.bottom;
+    final m = MediaQueryData.fromWindow(ui.window);
+    var keyboardHeight = m.viewInsets.bottom;
+    final size = m.size;
     if (keyboardHeight < 100) return 0;
     final s = FFI.canvasModel.scale;
-    final thresh = 120;
+    final thresh = (size.height - keyboardHeight) / 2;
     var h = (_y - getVisibleRect().top) * s; // local physical display height
     return h - thresh;
   }

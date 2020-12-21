@@ -28,6 +28,8 @@ class _RemotePageState extends State<RemotePage> {
   String _value = '';
   double _xOffset = 0;
   double _yOffset = 0;
+  double _xOffset0 = 0;
+  double _yOffset0 = 0;
   double _scale = 1;
   bool _mouseTools = false;
   var _drag = false;
@@ -258,8 +260,8 @@ class _RemotePageState extends State<RemotePage> {
                 },
                 onScaleStart: (details) {
                   _scale = 1;
-                  _xOffset = details.focalPoint.dx;
-                  _yOffset = details.focalPoint.dy;
+                  _xOffset = _xOffset0 = details.focalPoint.dx;
+                  _yOffset = _yOffset0 = details.focalPoint.dy;
                   if (_drag) {
                     FFI.sendMouse('down', 'left');
                   }
@@ -275,6 +277,9 @@ class _RemotePageState extends State<RemotePage> {
                       FFI.cursorModel.updatePan(dx, dy);
                       _xOffset = x;
                       _yOffset = y;
+                    } else {
+                      _xOffset = details.focalPoint.dx;
+                      _yOffset = details.focalPoint.dy;
                     }
                   } else if (!_drag && !_scroll) {
                     FFI.canvasModel.updateScale(scale / _scale);
@@ -285,8 +290,12 @@ class _RemotePageState extends State<RemotePage> {
                   if (_drag) {
                     FFI.sendMouse('up', 'left');
                   } else if (_scroll) {
-                    FFI.scroll(
-                        details.velocity.pixelsPerSecond.dy > 0 ? -1 : 1);
+                    var dy = (_yOffset - _yOffset0) / 10;
+                    if (dy.abs() > 0.1) {
+                      if (dy > 0 && dy < 1) dy = 1;
+                      if (dy < 0 && dy > -1) dy = -1;
+                      FFI.scroll(dy);
+                    }
                   }
                 },
                 child: Container(
