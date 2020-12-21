@@ -804,7 +804,10 @@ void showActions(BuildContext context) async {
         }
       }();
     } else if (value == 'enter_os_password') {
-      if (password != "") FFI.setByName('input_string', password);
+      if (password != "") {
+        FFI.setByName('input_string', password);
+        FFI.inputKey('VK_RETURN');
+      }
     }
   }();
 }
