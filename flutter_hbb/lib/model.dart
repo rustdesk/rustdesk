@@ -690,6 +690,18 @@ Future<Map<String, dynamic>> getPreference(String id) async {
   return m;
 }
 
+Future<String> getPassword(String id) async {
+  SharedPreferences prefs = await SharedPreferences.getInstance();
+  var p = prefs.getString('peer' + id + '-password');
+  if (p == null) return "";
+  return p;
+}
+
+void savePassword(String id, String password) async {
+  SharedPreferences prefs = await SharedPreferences.getInstance();
+  prefs.setString('peer' + id + '-password', password);
+}
+
 void initializeCursorAndCanvas() async {
   var p = await getPreference(FFI.id);
   int currentDisplay = 0;

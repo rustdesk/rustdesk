@@ -751,7 +751,7 @@ void showOptions(BuildContext context) {
   }, () async => true, true, 0);
 }
 
-void showActions(BuildContext context) {
+void showActions(BuildContext context) async {
   final size = MediaQuery.of(context).size;
   final x = 120.0;
   final y = size.height;
@@ -763,6 +763,21 @@ void showActions(BuildContext context) {
       FFI.ffiModel.permissions['clipboard'] != false) {
     more.add(PopupMenuItem<String>(child: Text('Paste'), value: 'paste'));
   }
+  var password = await getPassword(FFI.id);
+  more.add(PopupMenuItem<String>(
+      child: Row(
+          children: ([
+        Text('OS Password'),
+        FlatButton(
+          textColor: MyTheme.accent,
+          onPressed: () {
+            showSetOSPassword(context);
+            Navigator.pop(context);
+          },
+          child: Icon(Icons.edit),
+        )
+      ])),
+      value: 'enter_os_password'));
   () async {
     var value = await showMenu(
       context: context,
@@ -788,6 +803,40 @@ void showActions(BuildContext context) {
           FFI.setByName('input_string', '${data.text}');
         }
       }();
+    } else if (value == 'enter_os_password') {
+      if (password != "") FFI.setByName('input_string', password);
     }
   }();
+}
+
+void showSetOSPassword(BuildContext context) async {
+  final controller = TextEditingController();
+  var password = await getPassword(FFI.id);
+  controller.text = password;
+  showAlertDialog(
+      context,
+      (setState) => Tuple3(
+            Text('Password required'),
+            Column(mainAxisSize: MainAxisSize.min, children: [
+              PasswordWidget(controller: controller),
+            ]),
+            [
+              FlatButton(
+                textColor: MyTheme.accent,
+                onPressed: () {
+                  Navigator.pop(context);
+                },
+                child: Text('Cancel'),
+              ),
+              FlatButton(
+                textColor: MyTheme.accent,
+                onPressed: () {
+                  var text = controller.text.trim();
+                  savePassword(FFI.id, text);
+                  Navigator.pop(context);
+                },
+                child: Text('OK'),
+              ),
+            ],
+          ));
 }
