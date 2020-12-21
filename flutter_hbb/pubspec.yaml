@@ -41,6 +41,7 @@ dependencies:
   firebase_analytics: ^6.2.0
   package_info: ^0.4.3+2
   url_launcher: ^5.7.10
+  shared_preferences: ^0.5.12+4
 
 dev_dependencies:
   flutter_launcher_icons: "^0.8.0"

@@ -2,6 +2,7 @@ import 'package:ffi/ffi.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/gestures.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:device_info/device_info.dart';
 import 'dart:io';
 import 'dart:math';
@@ -38,6 +39,7 @@ class FfiModel with ChangeNotifier {
 
   get permissions => _permissions;
   get initialized => _initialized;
+  get display => _display;
   get secure => _secure;
   get direct => _direct;
   get pi => _pi;
@@ -187,7 +189,7 @@ class FfiModel with ChangeNotifier {
     }
     if (_pi.currentDisplay < _pi.displays.length) {
       _display = _pi.displays[_pi.currentDisplay];
-      FFI.cursorModel.updateDisplayOrigin(_display.x, _display.y);
+      initializeCursorAndCanvas();
     }
     if (displays.length > 0) {
       showLoading('Waiting for image...', context);
@@ -242,6 +244,13 @@ class CanvasModel with ChangeNotifier {
   double get x => _x;
   double get y => _y;
   double get scale => _scale;
+
+  void update(double x, double y, double scale) {
+    _x = x;
+    _y = y;
+    _scale = scale;
+    notifyListeners();
+  }
 
   set scale(v) {
     _scale = v;
@@ -443,6 +452,16 @@ class CursorModel with ChangeNotifier {
     notifyListeners();
   }
 
+  void updateDisplayOriginWithCursor(
+      double x, double y, double xCursor, double yCursor) {
+    _displayOriginX = x;
+    _displayOriginY = y;
+    _x = xCursor;
+    _y = yCursor;
+    FFI.moveMouse(x, y);
+    notifyListeners();
+  }
+
   void clear() {
     _x = -10000;
     _x = -10000;
@@ -573,6 +592,8 @@ class FFI {
   }
 
   static void close() {
+    savePreference(id, cursorModel.x, cursorModel.y, canvasModel.x,
+        canvasModel.y, canvasModel.scale, ffiModel.pi.currentDisplay);
     id = "";
     setByName('close', '');
     imageModel.update(null);
@@ -646,4 +667,46 @@ class PeerInfo {
   bool sasEnabled;
   int currentDisplay;
   List<Display> displays;
+}
+
+void savePreference(String id, double xCursor, double yCursor, double xCanvas,
+    double yCanvas, double scale, int currentDisplay) async {
+  SharedPreferences prefs = await SharedPreferences.getInstance();
+  final p = Map<String, dynamic>();
+  p['xCursor'] = xCursor;
+  p['yCursor'] = yCursor;
+  p['xCanvas'] = xCanvas;
+  p['yCanvas'] = yCanvas;
+  p['scale'] = scale;
+  p['currentDisplay'] = currentDisplay;
+  prefs.setString('peer' + id, json.encode(p));
+}
+
+Future<Map<String, dynamic>> getPreference(String id) async {
+  SharedPreferences prefs = await SharedPreferences.getInstance();
+  var p = prefs.getString('peer' + id);
+  if (p == null) return null;
+  Map<String, dynamic> m = json.decode(p);
+  return m;
+}
+
+void initializeCursorAndCanvas() async {
+  var p = await getPreference(FFI.id);
+  int currentDisplay = 0;
+  if (p != null) {
+    currentDisplay = p['currentDisplay'];
+  }
+  if (p == null || currentDisplay != FFI.ffiModel.pi.currentDisplay) {
+    FFI.cursorModel
+        .updateDisplayOrigin(FFI.ffiModel.display.x, FFI.ffiModel.display.y);
+    return;
+  }
+  double xCursor = p['xCursor'];
+  double yCursor = p['yCursor'];
+  double xCanvas = p['xCanvas'];
+  double yCanvas = p['yCanvas'];
+  double scale = p['scale'];
+  FFI.cursorModel.updateDisplayOriginWithCursor(
+      FFI.ffiModel.display.x, FFI.ffiModel.display.y, xCursor, yCursor);
+  FFI.canvasModel.update(xCanvas, yCanvas, scale);
 }
