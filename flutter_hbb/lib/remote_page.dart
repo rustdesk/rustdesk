@@ -751,7 +751,7 @@ void showOptions(BuildContext context) {
   }, () async => true, true, 0);
 }
 
-void showActions(BuildContext context) async {
+void showActions(BuildContext context) {
   final size = MediaQuery.of(context).size;
   final x = 120.0;
   final y = size.height;
@@ -763,7 +763,6 @@ void showActions(BuildContext context) async {
       FFI.ffiModel.permissions['clipboard'] != false) {
     more.add(PopupMenuItem<String>(child: Text('Paste'), value: 'paste'));
   }
-  var password = await getPassword(FFI.id);
   more.add(PopupMenuItem<String>(
       child: Row(
           children: ([
@@ -804,10 +803,21 @@ void showActions(BuildContext context) async {
         }
       }();
     } else if (value == 'enter_os_password') {
-      if (password != "") {
-        FFI.setByName('input_string', password);
-        FFI.inputKey('VK_RETURN');
-      }
+      () async {
+        var password = await getPassword(FFI.id);
+        if (password != "") {
+          var x = FFI.cursorModel.x;
+          var y = FFI.cursorModel.y;
+          FFI.moveMouse(x + 3, y + 3);
+          await Future.delayed(Duration(milliseconds: 50));
+          FFI.moveMouse(x, y);
+          await Future.delayed(Duration(milliseconds: 50));
+          FFI.tap(true);
+          await Future.delayed(Duration(milliseconds: 300));
+          FFI.setByName('input_string', password);
+          FFI.inputKey('VK_RETURN');
+        }
+      }();
     }
   }();
 }

@@ -445,8 +445,8 @@ class CursorModel with ChangeNotifier {
   void updateDisplayOrigin(double x, double y) {
     _displayOriginX = x;
     _displayOriginY = y;
-    _x = x;
-    _y = y;
+    _x = x + 1;
+    _y = y + 1;
     FFI.moveMouse(x, y);
     FFI.canvasModel.resetOffset();
     notifyListeners();
