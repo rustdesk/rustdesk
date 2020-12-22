@@ -141,6 +141,8 @@ class _RemotePageState extends State<RemotePage> {
         FFI.inputKey(char);
         final brackets = '("[<{（“【《{';
         if (brackets.indexOf(char) >= 0) {
+          SystemChannels.textInput.invokeMethod('TextInput.hide');
+          setState(() => _showEdit = false);
           _timer?.cancel();
           _timer = Timer(Duration(milliseconds: 30), () {
             openKeyboard();
