@@ -132,6 +132,21 @@ class _RemotePageState extends State<RemotePage> {
     } else {
       final content = newValue.substring(_value.length);
       if (content.length > 1) {
+        if (_value != '' &&
+            content.length == 2 &&
+            (content == '""' ||
+                content == '()' ||
+                content == '[]' ||
+                content == '<>' ||
+                content == "{}" ||
+                content == '”“' ||
+                content == '《》' ||
+                content == '（）' ||
+                content == '【】')) {
+          FFI.inputKey(content[0]);
+          openKeyboard();
+          return;
+        }
         FFI.setByName('input_string', content);
       } else {
         var char = content;
@@ -139,15 +154,6 @@ class _RemotePageState extends State<RemotePage> {
           char = 'VK_RETURN';
         }
         FFI.inputKey(char);
-        final brackets = '("[<{（“【《{';
-        if (brackets.indexOf(char) >= 0) {
-          SystemChannels.textInput.invokeMethod('TextInput.hide');
-          setState(() => _showEdit = false);
-          _timer?.cancel();
-          _timer = Timer(Duration(milliseconds: 30), () {
-            openKeyboard();
-          });
-        }
       }
     }
     _value = newValue;
