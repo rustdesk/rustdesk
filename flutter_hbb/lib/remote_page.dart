@@ -45,7 +45,6 @@ class _RemotePageState extends State<RemotePage> {
   @override
   void initState() {
     super.initState();
-    _value = initText;
     FFI.connect(widget.id);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       SystemChrome.setEnabledSystemUIOverlays([]);
@@ -77,7 +76,6 @@ class _RemotePageState extends State<RemotePage> {
     var v = MediaQuery.of(context).viewInsets.bottom;
     if (v != _bottom) {
       resetTool();
-      _value = initText;
       setState(() {
         _bottom = v;
         if (v < 100) {
@@ -141,6 +139,11 @@ class _RemotePageState extends State<RemotePage> {
           char = 'VK_RETURN';
         }
         FFI.inputKey(char);
+        final brackets = '("[<{（“【《{';
+        if (brackets.indexOf(char) >= 0) {
+          openKeyboard();
+          return;
+        }
       }
     }
     _value = newValue;
@@ -148,6 +151,7 @@ class _RemotePageState extends State<RemotePage> {
 
   void openKeyboard() {
     // destroy first, so that our _value trick can work
+    _value = initText;
     setState(() => _showEdit = false);
     _timer?.cancel();
     _timer = Timer(Duration(milliseconds: 30), () {
