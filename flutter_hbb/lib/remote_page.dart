@@ -317,7 +317,8 @@ class _RemotePageState extends State<RemotePage> {
                                 maxLines: null,
                                 initialValue:
                                     _value, // trick way to make backspace work always
-                                keyboardType: TextInputType.multiline,
+                                keyboardType: TextInputType
+                                    .visiblePassword, // must use visiblePassword here, if else when input '(', new ')' will be auto appended on android, cause our proboems
                                 onChanged: handleInput,
                               ),
                       ),

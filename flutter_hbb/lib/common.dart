@@ -129,9 +129,9 @@ class _PasswordWidgetState extends State<PasswordWidget> {
   Widget build(BuildContext context) {
     return TextField(
       autofocus: true,
-      keyboardType: TextInputType.text,
       controller: widget.controller,
       obscureText: !_passwordVisible, //This will obscure text dynamically
+      keyboardType: TextInputType.visiblePassword,
       decoration: InputDecoration(
         labelText: 'Password',
         hintText: 'Enter your password',

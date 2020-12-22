@@ -145,13 +145,14 @@ class _HomePageState extends State<HomePage> {
                     child: TextField(
                       autocorrect: false,
                       enableSuggestions: false,
+                      keyboardType: TextInputType.visiblePassword,
+                      // keyboardType: TextInputType.number,
                       style: TextStyle(
                         fontFamily: 'WorkSans',
                         fontWeight: FontWeight.bold,
                         fontSize: 30,
                         color: Color(0xFF00B6F0),
                       ),
-                      // keyboardType: TextInputType.number,
                       decoration: InputDecoration(
                         labelText: 'Remote ID',
                         // hintText: 'Enter your remote ID',
