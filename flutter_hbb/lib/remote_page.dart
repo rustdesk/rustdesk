@@ -143,7 +143,8 @@ class _RemotePageState extends State<RemotePage> {
                 content == '《》' ||
                 content == '（）' ||
                 content == '【】')) {
-          FFI.inputKey(content[0]);
+          // can not only input content[0], because when input ], [ are also auo insert, which cause ] never be input
+          FFI.setByName('input_string', content);
           openKeyboard();
           return;
         }
