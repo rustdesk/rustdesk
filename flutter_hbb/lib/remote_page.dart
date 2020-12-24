@@ -35,8 +35,7 @@ class _RemotePageState extends State<RemotePage> {
   var _drag = false;
   var _right = false;
   var _scroll = false;
-  var _arrows = false;
-  var _more = false;
+  var _more = true;
   var _fn = false;
   final FocusNode _focusNode = FocusNode();
   var _showEdit = true;
@@ -354,7 +353,8 @@ class _RemotePageState extends State<RemotePage> {
         (String text, void Function() onPressed, [bool active, IconData icon]) {
       return ButtonTheme(
           padding: EdgeInsets.symmetric(
-              vertical: 6, horizontal: 11), //adds padding inside the button
+              vertical: icon != null ? 3 : 6,
+              horizontal: 6), //adds padding inside the button
           materialTapTargetSize: MaterialTapTargetSize
               .shrinkWrap, //limits the touch area to the button area
           minWidth: 0, //wraps child's width
@@ -366,7 +366,7 @@ class _RemotePageState extends State<RemotePage> {
               ),
               color: active == true ? MyTheme.accent80 : null,
               child: icon != null
-                  ? Icon(icon, color: Colors.white)
+                  ? Icon(icon, size: 17, color: Colors.white)
                   : Text(text,
                       style: TextStyle(color: Colors.white, fontSize: 11)),
               onPressed: onPressed));
@@ -416,24 +416,11 @@ class _RemotePageState extends State<RemotePage> {
     ];
     final keys = <Widget>[
       wrap(
-          'Arrows',
-          () => setState(() {
-                setState(() {
-                  _arrows = !_arrows;
-                  if (_arrows) {
-                    _fn = false;
-                    _more = false;
-                  }
-                });
-              }),
-          _arrows),
-      wrap(
           'Fn',
           () => setState(
                 () {
                   _fn = !_fn;
                   if (_fn) {
-                    _arrows = false;
                     _more = false;
                   }
                 },
@@ -445,27 +432,11 @@ class _RemotePageState extends State<RemotePage> {
                 () {
                   _more = !_more;
                   if (_more) {
-                    _arrows = false;
                     _fn = false;
                   }
                 },
               ),
           _more),
-    ];
-    final arrows = <Widget>[
-      SizedBox(width: 9999),
-      wrap('', () {
-        FFI.inputKey('VK_LEFT');
-      }, false, Icons.keyboard_arrow_left),
-      wrap('', () {
-        FFI.inputKey('VK_UP');
-      }, false, Icons.keyboard_arrow_up),
-      wrap('', () {
-        FFI.inputKey('VK_DOWN');
-      }, false, Icons.keyboard_arrow_down),
-      wrap('', () {
-        FFI.inputKey('VK_RIGHT');
-      }, false, Icons.keyboard_arrow_right),
     ];
     final fn = <Widget>[
       SizedBox(width: 9999),
@@ -499,6 +470,35 @@ class _RemotePageState extends State<RemotePage> {
       wrap('PgDown', () {
         FFI.inputKey('VK_NEXT');
       }),
+      SizedBox(width: 9999),
+      wrap('', () {
+        FFI.inputKey('VK_LEFT');
+      }, false, Icons.keyboard_arrow_left),
+      wrap('', () {
+        FFI.inputKey('VK_UP');
+      }, false, Icons.keyboard_arrow_up),
+      wrap('', () {
+        FFI.inputKey('VK_DOWN');
+      }, false, Icons.keyboard_arrow_down),
+      wrap('', () {
+        FFI.inputKey('VK_RIGHT');
+      }, false, Icons.keyboard_arrow_right),
+      wrap('Ctrl+C', () {
+        var old = FFI.ctrl;
+        FFI.ctrl = true;
+        FFI.inputKey(
+          'VK_C',
+        );
+        FFI.ctrl = old;
+      }),
+      wrap('Ctrl+S', () {
+        var old = FFI.ctrl;
+        FFI.ctrl = true;
+        FFI.inputKey(
+          'VK_S',
+        );
+        FFI.ctrl = old;
+      }),
     ];
     return Container(
         color: Color(0xAA000000),
@@ -509,11 +509,7 @@ class _RemotePageState extends State<RemotePage> {
           runSpacing: 4,
           children: <Widget>[SizedBox(width: 9999)] +
               (keyboard
-                  ? modifiers +
-                      keys +
-                      (_arrows ? arrows : []) +
-                      (_fn ? fn : []) +
-                      (_more ? more : [])
+                  ? modifiers + keys + (_fn ? fn : []) + (_more ? more : [])
                   : mouse + modifiers),
         ));
   }

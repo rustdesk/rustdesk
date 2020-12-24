@@ -159,12 +159,14 @@ class FfiModel with ChangeNotifier {
   }
 
   void handleSwitchDisplay(Map<String, dynamic> evt) {
+    var old = _pi.currentDisplay;
     _pi.currentDisplay = int.parse(evt['display']);
     _display.x = double.parse(evt['x']);
     _display.y = double.parse(evt['y']);
     _display.width = int.parse(evt['width']);
     _display.height = int.parse(evt['height']);
-    FFI.cursorModel.updateDisplayOrigin(_display.x, _display.y);
+    if (old != _pi.currentDisplay)
+      FFI.cursorModel.updateDisplayOrigin(_display.x, _display.y);
     notifyListeners();
   }
 
