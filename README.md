@@ -1,6 +1,6 @@
 ### RustDesk | Your Remote Desktop Software
 
-Yet another open source remote desktop software.
+Yet another open source remote desktop software. [rustdesk-server](https://github.com/rustdesk/rustdesk-server) and mobile version are not open source yet.
 
 [**BINARY DOWNLOAD**](https://github.com/rustdesk/rustdesk/releases)
 
