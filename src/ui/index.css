@@ -1,0 +1,261 @@
+html {
+    background-color: transparent;
+    var(gray-bg-osx): rgba(238, 238, 238, 0.75);
+}
+
+body {
+    overflow: hidden;
+}
+
+@media platform != "OSX" {
+    body {
+        border-top: color(border) solid 1px;
+    }
+}
+
+.title {
+    font-size: 1.4em;
+}
+
+.app {
+    flow: horizontal;
+    size: *;
+}
+
+.lighter-text {
+    color: color(lighter-text);
+    font-size: 0.9em;
+}
+
+.left-pane {
+    width: 200px;
+    height: *;
+    background: color(bg);
+    border-right: color(border) 1px solid;
+}
+
+.left-pane > div:nth-child(1) {
+    border-spacing: 1em;
+    padding: 20px;
+}
+
+.your-desktop {
+    border-spacing: 0.5em;
+    border-left: color(accent) solid 2px;
+    padding-left: 0.5em;
+}
+
+.your-desktop input[type=text] {
+    padding: 0;
+    border: none;
+    height: 1.5em;
+}
+
+.your-desktop > div {
+    color: color(light-text);
+}
+
+.right-pane {
+    size: *;
+    background: color(gray-bg);
+}
+
+.right-content {
+    overflow: scroll-indicator;
+    padding: 1.6em;
+    border-spacing: 1.6em;
+    size: *;
+    flow: vertical;
+}
+
+@media platform == "OSX" {
+    .right-pane {
+        background: color(gray-bg-osx);
+    }
+}
+
+@mixin CARD {
+    padding: 1.6em;
+    border-spacing: 1em;
+    background: color(bg);
+    border-radius: 1em;
+}
+
+.card-connect {
+    @CARD;
+    width: 320px;
+}
+
+.right-buttons {
+    text-align: right;
+}
+
+.right-buttons>button {
+    margin-left: 1.6em;
+}
+
+div.connect-status {
+    left: 240px;
+    border-top: color(border) solid 1px;
+    width: 100%;
+    background: color(gray-bg);
+    padding: 1em;
+}
+
+div.connect-status > span.connect-status-icon {
+    border-radius: 4px;
+    width: 8px;
+    height: 8px;
+    display: inline-block;
+    margin-right: 1em;
+}
+
+div.connect-status > span.link {
+  margin-left: 1em;
+  display: inline-block;
+}
+
+span.connect-status-1 {
+    background: #e04f5f;
+}
+
+span.connect-status1 {
+    background: #32bea6;
+}
+
+span.connect-status0 {
+    background: #F5853B;
+}
+
+div.recent-sessions-content {
+    border-spacing: 1em;
+    flow: horizontal-flow;
+}
+
+div.recent-sessions-title {
+    color: color(light-text);
+    padding-top: 0.5em;
+    border-top: color(border) solid 1px;
+    margin-bottom: 1em;
+}
+
+div.remote-session {
+    border-radius: 1em;
+    height: 140px;
+    width: 220px;
+    padding: 0;
+    position: relative;
+    border: none;
+}
+
+div.remote-session:hover {
+    outline: color(button) solid 2px -2px;
+}
+
+div.remote-session .platform {
+    width: *;
+    height: 120px;
+    padding: *;
+    position: relative;
+}
+
+div.remote-session .platform .username{
+    left: 0;
+    color: #eee;
+    position: absolute;
+    bottom: 38px;
+    font-size: 0.8em;
+    width: 220px;
+    overflow: hidden;
+    text-align: center;
+}
+
+div.remote-session .platform svg {
+    width: 60px;
+    height: 60px;
+    background: none;
+}
+
+div.remote-session .text {
+    background: white;
+    position: absolute;
+    height: 3em;
+    width: 100%;
+    border-radius: 0 0 1em 1em;
+    bottom: 0;
+    flow: horizontal;
+}
+
+div.remote-session .text > div {
+    padding-top: 1em;
+    padding-left: 1em;
+    width: *;
+}
+
+svg#menu {
+    size: 1em;
+    background: none;
+    padding: 0.5em;
+    margin: 0.5em;
+    color: color(light-text);
+}
+
+svg#menu:active {
+    color: black;
+    border-radius: 1em;
+    background: color(gray-bg);
+}
+
+svg#edit:active {
+    opacity: 0.5;
+}
+
+svg#edit {
+    display: inline-block;
+    margin-top: 0.25em;
+    margin-bottom: 0;
+}
+
+div.install-me, div.trust-me {
+    margin-top: 0.5em;
+    padding: 20px;
+    color: white;
+    background: linear-gradient(left,#e242bc,#f4727c);
+}
+
+div.install-me > div:nth-child(1) {
+    font-size: 1.2em;
+    font-weight: bold;
+    margin-bottom: 0.5em;
+}
+
+div.install-me > div:nth-child(2) {
+    line-height: 1.4em;
+}
+
+div.trust-me > div:nth-child(1) {
+    font-size: 1.2em;
+    text-align: center;
+    font-weight: bold;
+    margin-bottom: 0.5em;
+}
+
+div.trust-me > div:nth-child(2) {
+    font-size: 0.9em;
+    margin-bottom: 1em;
+}
+
+div.trust-me > div:nth-child(3) {
+    text-align: center;
+    font-size: 1.5em;
+    font-weight: bold;
+}
+
+div#myid {
+    position: relative;
+}
+
+div#myid svg#menu {
+    position: absolute;
+    right: -1em;
+}

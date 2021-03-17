@@ -1,0 +1,121 @@
+# Appveyor configuration template for Rust using rustup for Rust installation
+# https://github.com/starkat99/appveyor-rust
+
+## Operating System (VM environment) ##
+
+# Rust needs at least Visual Studio 2013 Appveyor OS for MSVC targets.
+os: Visual Studio 2015
+
+## Build Matrix ##
+
+# This configuration will setup a build for each channel & target combination (12 windows
+# combinations in all).
+#
+# There are 3 channels: stable, beta, and nightly.
+#
+# Alternatively, the full version may be specified for the channel to build using that specific
+# version (e.g. channel: 1.5.0)
+#
+# The values for target are the set of windows Rust build targets. Each value is of the form
+#
+# ARCH-pc-windows-TOOLCHAIN
+#
+# Where ARCH is the target architecture, either x86_64 or i686, and TOOLCHAIN is the linker
+# toolchain to use, either msvc or gnu. See https://www.rust-lang.org/downloads.html#win-foot for
+# a description of the toolchain differences.
+# See https://github.com/rust-lang-nursery/rustup.rs/#toolchain-specification for description of
+# toolchains and host triples.
+#
+# Comment out channel/target combos you do not wish to build in CI.
+#
+# You may use the `cargoflags` and `RUSTFLAGS` variables to set additional flags for cargo commands
+# and rustc, respectively. For instance, you can uncomment the cargoflags lines in the nightly
+# channels to enable unstable features when building for nightly. Or you could add additional
+# matrix entries to test different combinations of features.
+environment:
+  matrix:
+
+### MSVC Toolchains ###
+
+  # Stable 64-bit MSVC
+    - channel: stable
+      target: x86_64-pc-windows-msvc
+  # Stable 32-bit MSVC
+    - channel: stable
+      target: i686-pc-windows-msvc
+  # Beta 64-bit MSVC
+    - channel: beta
+      target: x86_64-pc-windows-msvc
+  # Beta 32-bit MSVC
+    - channel: beta
+      target: i686-pc-windows-msvc
+  # Nightly 64-bit MSVC
+    - channel: nightly
+      target: x86_64-pc-windows-msvc
+      #cargoflags: --features "unstable"
+  # Nightly 32-bit MSVC
+    - channel: nightly
+      target: i686-pc-windows-msvc
+      #cargoflags: --features "unstable"
+
+### GNU Toolchains ###
+
+  # Stable 64-bit GNU
+    - channel: stable
+      target: x86_64-pc-windows-gnu
+  # Stable 32-bit GNU
+    - channel: stable
+      target: i686-pc-windows-gnu
+  # Beta 64-bit GNU
+    - channel: beta
+      target: x86_64-pc-windows-gnu
+  # Beta 32-bit GNU
+    - channel: beta
+      target: i686-pc-windows-gnu
+  # Nightly 64-bit GNU
+    - channel: nightly
+      target: x86_64-pc-windows-gnu
+      #cargoflags: --features "unstable"
+  # Nightly 32-bit GNU
+    - channel: nightly
+      target: i686-pc-windows-gnu
+      #cargoflags: --features "unstable"
+
+### Allowed failures ###
+
+# See Appveyor documentation for specific details. In short, place any channel or targets you wish
+# to allow build failures on (usually nightly at least is a wise choice). This will prevent a build
+# or test failure in the matching channels/targets from failing the entire build.
+matrix:
+  allow_failures:
+    - channel: nightly
+
+# If you only care about stable channel build failures, uncomment the following line:
+    #- channel: beta
+
+## Install Script ##
+
+# This is the most important part of the Appveyor configuration. This installs the version of Rust
+# specified by the 'channel' and 'target' environment variables from the build matrix. This uses
+# rustup to install Rust.
+#
+# For simple configurations, instead of using the build matrix, you can simply set the
+# default-toolchain and default-host manually here.
+install:
+  - appveyor DownloadFile https://win.rustup.rs/ -FileName rustup-init.exe
+  - rustup-init -yv --default-toolchain %channel% --default-host %target%
+  - set PATH=%PATH%;%USERPROFILE%\.cargo\bin
+  - rustc -vV
+  - cargo -vV
+
+## Build Script ##
+
+# 'cargo test' takes care of building for us, so disable Appveyor's build stage. This prevents
+# the "directory does not contain a project or solution file" error.
+build: false
+
+# Uses 'cargo test' to run tests and build. Alternatively, the project may call compiled programs
+#directly or perform other testing commands. Rust will automatically be placed in the PATH
+# environment variable.
+test_script:
+  - cargo test --verbose %cargoflags%

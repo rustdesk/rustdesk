@@ -1,0 +1,49 @@
+<assembly xmlns="urn:schemas-microsoft-com:asm.v1" manifestVersion="1.0">
+  <compatibility xmlns="urn:schemas-microsoft-com:compatibility.v1">
+    <application>
+      <!-- Windows 10.0 -->
+      <supportedOS Id="{8e0f7a12-bfb3-4fe8-b9a5-48fd50a15a9a}"/>
+    </application>
+  </compatibility>
+  <trustInfo xmlns="urn:schemas-microsoft-com:asm.v3">
+    <security>
+      <requestedPrivileges>
+        <requestedExecutionLevel level="asInvoker" />
+      </requestedPrivileges>
+    </security>
+  </trustInfo>
+</assembly>
+<!--
+  // 从下面购买
+  https://www.ksoftware.net/code-signing-certificates/
+  https://cheapsslsecurity.com/sslproducts/codesigningcertificate.html
+-->
+<!--
+创建测试证书：
+https://docs.microsoft.com/zh-cn/dotnet/framework/wcf/feature-details/how-to-create-temporary-certificates-for-use-during-development
+
+note: don't follow above, because above certificates is not valid for code signing, use below, after RootCA.cert is generated, double click -> Install Certificate -> Local Machine -> Place all certifiates in the following store "Trusted Root Certification Authorities" (certmgr.msc)
+
+note: signtool is under C:\Program Files (x86)\Windows Kits\10\App Certification Kit,
+add it to path.
+
+open powershell as administrator, 
+
+cd \
+
+$rootcert = New-SelfSignedCertificate -Type Custom -KeySpec Signature `
+-Subject "CN=RootCert" `
+-KeyExportPolicy Exportable `
+-HashAlgorithm sha256 -KeyLength 4096 `
+-CertStoreLocation "Cert:\CurrentUser\My" `
+-KeyUsageProperty Sign `
+-KeyUsage CertSign `
+-NotAfter (Get-Date).AddYears(5)
+
+[System.Security.SecureString]$rootcertPassword = ConvertTo-SecureString -String "password" -Force -AsPlainText
+[String]$rootCertPath = Join-Path -Path 'cert:\CurrentUser\My\' -ChildPath "$($rootcert.Thumbprint)"
+Export-PfxCertificate -Cert $rootCertPath -FilePath 'RootCA.pfx' -Password $rootcertPassword
+Export-Certificate -Cert $rootCertPath -FilePath 'RootCA.crt'
+
+signtool sign /a /v /p password /debug /f c:\rootca.pfx /t http://timestamp.digicert.com  target\release\rustdesk.exe
+-->

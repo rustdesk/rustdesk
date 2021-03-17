@@ -1,0 +1,24 @@
+[package]
+name = "parity-tokio-ipc"
+version = "0.7.2"
+edition = "2018"
+authors = ["NikVolf <nikvolf@gmail.com>"]
+license = "MIT/Apache-2.0"
+readme = "README.md"
+repository = "https://github.com/nikvolf/parity-tokio-ipc"
+homepage = "https://github.com/nikvolf/parity-tokio-ipc"
+description = """
+Interprocess communication library for tokio.
+"""
+
+[dependencies]
+futures = "0.3"
+log = "0.4"
+mio-named-pipes = "0.1"
+miow = "0.3"
+rand = "0.7"
+tokio = { version = "0.2", features = ["io-driver", "io-util", "uds", "stream", "rt-core", "macros", "time"] }
+libc = "0.2"
+
+[target.'cfg(windows)'.dependencies]
+winapi = { version = "0.3", features = ["winbase", "winnt", "accctrl", "aclapi", "securitybaseapi", "minwinbase", "winbase"] }
