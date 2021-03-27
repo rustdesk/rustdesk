@@ -1,0 +1,27 @@
+<html window-resizable>
+    <head>
+        <style>
+            @import url(common.css);
+            @media platform != "OSX" {
+                body {
+                    border-top: color(border) solid 1px;
+                }
+            }
+        </style>
+        <script type="text/tiscript">
+            include "common.tis";
+            var p = view.parameters;
+            view.refresh = function() {
+                $(body).content(<ChatBox msgs={p.msgs} callback={p.callback} />);
+                view.focus = $(input);
+            }
+            view.refresh();
+            function self.closing() {
+                view.windowState = View.WINDOW_HIDDEN;
+                return false;
+            }
+            view.windowIcon = self.url(p.icon);
+        </script>
+    </head>
+    <body></body>
+</html>

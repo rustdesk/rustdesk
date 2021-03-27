@@ -1,0 +1,401 @@
+syntax = "proto3";
+package hbb;
+
+message VP9 {
+  bytes data = 1;
+  bool key = 2;
+  int64 pts = 3;
+}
+
+message VP9s { repeated VP9 frames = 1; }
+
+message RGB { bool compress = 1; }
+
+// planes data send directly in binary for better use arraybuffer on web
+message YUV {
+  bool compress = 1;
+  int32 stride = 2;
+}
+
+message VideoFrame {
+  oneof union {
+    VP9s vp9s = 6;
+    RGB rgb = 7;
+    YUV yuv = 8;
+  }
+}
+
+message DisplayInfo {
+  sint32 x = 1;
+  sint32 y = 2;
+  int32 width = 3;
+  int32 height = 4;
+  string name = 5;
+  bool online = 6;
+}
+
+message PortForward {
+  string host = 1;
+  int32 port = 2;
+}
+
+message FileTransfer {
+  string dir = 1;
+  bool show_hidden = 2;
+}
+
+message LoginRequest {
+  string username = 1;
+  bytes password = 2;
+  string my_id = 4;
+  string my_name = 5;
+  OptionMessage option = 6;
+  oneof union {
+    FileTransfer file_transfer = 7;
+    PortForward port_forward = 8;
+  }
+}
+
+message ChatMessage { string text = 1; }
+
+message PeerInfo {
+  string username = 1;
+  string hostname = 2;
+  string platform = 3;
+  repeated DisplayInfo displays = 4;
+  int32 current_display = 5;
+  bool sas_enabled = 6;
+  string version = 7;
+}
+
+message LoginResponse {
+  oneof union {
+    string error = 1;
+    PeerInfo peer_info = 2;
+  }
+}
+
+message MouseEvent {
+  int32 mask = 1;
+  sint32 x = 2;
+  sint32 y = 3;
+  repeated ControlKey modifiers = 4;
+}
+
+enum ControlKey {
+  Alt = 1;
+  Backspace = 2;
+  CapsLock = 3;
+  Control = 4;
+  Delete = 5;
+  DownArrow = 6;
+  End = 7;
+  Escape = 8;
+  F1 = 9;
+  F10 = 10;
+  F11 = 11;
+  F12 = 12;
+  F2 = 13;
+  F3 = 14;
+  F4 = 15;
+  F5 = 16;
+  F6 = 17;
+  F7 = 18;
+  F8 = 19;
+  F9 = 20;
+  Home = 21;
+  LeftArrow = 22;
+  /// meta key (also known as "windows"; "super"; and "command")
+  Meta = 23;
+  /// option key on macOS (alt key on Linux and Windows)
+  Option = 24;
+  PageDown = 25;
+  PageUp = 26;
+  Return = 27;
+  RightArrow = 28;
+  Shift = 29;
+  Space = 30;
+  Tab = 31;
+  UpArrow = 32;
+  Numpad0 = 33;
+  Numpad1 = 34;
+  Numpad2 = 35;
+  Numpad3 = 36;
+  Numpad4 = 37;
+  Numpad5 = 38;
+  Numpad6 = 39;
+  Numpad7 = 40;
+  Numpad8 = 41;
+  Numpad9 = 42;
+  Cancel = 43;
+  Clear = 44;
+  Menu = 45;
+  Pause = 46;
+  Kana = 47;
+  Hangul = 48;
+  Junja = 49;
+  Final = 50;
+  Hanja = 51;
+  Kanji = 52;
+  Convert = 53;
+  Select = 54;
+  Print = 55;
+  Execute = 56;
+  Snapshot = 57;
+  Insert = 58;
+  Help = 59;
+  Sleep = 60;
+  Separator = 61;
+  Scroll = 62;
+  NumLock = 63;
+  RWin = 64;
+  Apps = 65;
+  Multiply = 66;
+  Add = 67;
+  Subtract = 68;
+  Decimal = 69;
+  Divide = 70;
+  Equals = 71;
+  NumpadEnter = 72;
+  CtrlAltDel = 100;
+  LockScreen = 101;
+}
+
+message KeyEvent {
+  bool down = 1;
+  bool press = 2;
+  oneof union {
+    ControlKey control_key = 3;
+    uint32 chr = 4;
+    uint32 unicode = 5;
+    string seq = 6;
+  }
+  repeated ControlKey modifiers = 8;
+}
+
+message CursorData {
+  uint64 id = 1;
+  sint32 hotx = 2;
+  sint32 hoty = 3;
+  int32 width = 4;
+  int32 height = 5;
+  bytes colors = 6;
+}
+
+message CursorPosition {
+  sint32 x = 1;
+  sint32 y = 2;
+}
+
+message Hash {
+  string salt = 1;
+  string challenge = 2;
+};
+
+message Clipboard {
+  bool compress = 1;
+  bytes content = 2;
+};
+
+enum FileType {
+  Dir = 1;
+  DirLink = 2;
+  DirDrive = 3;
+  File = 4;
+  FileLink = 5;
+}
+
+message FileEntry {
+  FileType entry_type = 1;
+  string name = 2;
+  bool is_hidden = 3;
+  uint64 size = 4;
+  uint64 modified_time = 5;
+}
+
+message FileDirectory {
+  int32 id = 1;
+  string path = 2;
+  repeated FileEntry entries = 3;
+}
+
+message ReadDir {
+  string path = 1;
+  bool include_hidden = 2;
+}
+
+message ReadAllFiles {
+  int32 id = 1;
+  string path = 2;
+  bool include_hidden = 3;
+}
+
+message FileAction {
+  oneof union {
+    ReadDir read_dir = 1;
+    FileTransferSendRequest send = 2;
+    FileTransferReceiveRequest receive = 3;
+    FileDirCreate create = 4;
+    FileRemoveDir remove_dir = 5;
+    FileRemoveFile remove_file = 6;
+    ReadAllFiles all_files = 7;
+    FileTransferCancel cancel = 8;
+  }
+}
+
+message FileTransferCancel { int32 id = 1; }
+
+message FileResponse {
+  oneof union {
+    FileDirectory dir = 1;
+    FileTransferBlock block = 2;
+    FileTransferError error = 3;
+    FileTransferDone done = 4;
+  }
+}
+
+message FileTransferBlock {
+  int32 id = 1;
+  sint32 file_num = 2;
+  bytes data = 3;
+  bool compressed = 4;
+}
+
+message FileTransferError {
+  int32 id = 1;
+  string error = 2;
+  sint32 file_num = 3;
+}
+
+message FileTransferSendRequest {
+  int32 id = 1;
+  string path = 2;
+  bool include_hidden = 3;
+}
+
+message FileTransferDone {
+  int32 id = 1;
+  sint32 file_num = 2;
+}
+
+message FileTransferReceiveRequest {
+  int32 id = 1;
+  string path = 2; // path written to
+  repeated FileEntry files = 3;
+}
+
+message FileRemoveDir {
+  int32 id = 1;
+  string path = 2;
+  bool recursive = 3;
+}
+
+message FileRemoveFile {
+  int32 id = 1;
+  string path = 2;
+  sint32 file_num = 3;
+}
+
+message FileDirCreate {
+  int32 id = 1;
+  string path = 2;
+}
+
+message SwitchDisplay {
+  int32 display = 1;
+  sint32 x = 2;
+  sint32 y = 3;
+  int32 width = 4;
+  int32 height = 5;
+}
+
+enum Permission {
+  Keyboard = 1;
+  Clipboard = 2;
+  Audio = 3;
+}
+
+message PermissionInfo {
+  Permission permission = 1;
+  bool enabled = 2;
+}
+
+enum ImageQuality {
+  NotSet = 0;
+  Low = 2;
+  Balanced = 3;
+  Best = 4;
+}
+
+enum BoolOption {
+  NotSet = 0;
+  No = 1;
+  Yes = 2;
+}
+
+message OptionMessage {
+  ImageQuality image_quality = 1;
+  BoolOption lock_after_session_end = 2;
+  BoolOption show_remote_cursor = 3;
+  BoolOption privacy_mode = 4;
+  BoolOption block_input = 5;
+  int32 custom_image_quality = 6;
+  BoolOption disable_audio = 7;
+  BoolOption disable_clipboard = 8;
+}
+
+message TestDelay {
+  int64 time = 1;
+  bool from_client = 2;
+}
+
+message PublicKey {
+  bytes asymmetric_value = 1;
+  bytes symmetric_value = 2;
+}
+
+message SignedId {
+  bytes id = 1;
+  bytes pk = 2;
+}
+
+message AudioFormat {
+  uint32 sample_rate = 1;
+  uint32 channels = 2;
+}
+
+message AudioFrame { bytes data = 1; }
+
+message Misc {
+  oneof union {
+    ChatMessage chat_message = 4;
+    SwitchDisplay switch_display = 5;
+    PermissionInfo permission_info = 6;
+    OptionMessage option = 7;
+    AudioFormat audio_format = 8;
+    string close_reason = 9;
+    bool refresh_video = 10;
+  }
+}
+
+message Message {
+  oneof union {
+    SignedId signed_id = 3;
+    PublicKey public_key = 4;
+    TestDelay test_delay = 5;
+    VideoFrame video_frame = 6;
+    LoginRequest login_request = 7;
+    LoginResponse login_response = 8;
+    Hash hash = 9;
+    MouseEvent mouse_event = 10;
+    AudioFrame audio_frame = 11;
+    CursorData cursor_data = 12;
+    CursorPosition cursor_position = 13;
+    uint64 cursor_id = 14;
+    KeyEvent key_event = 15;
+    Clipboard clipboard = 16;
+    FileAction file_action = 17;
+    FileResponse file_response = 18;
+    Misc misc = 19;
+  }
+}

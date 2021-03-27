@@ -1,0 +1,16 @@
+environment:
+  matrix:
+  - TARGET: x86_64-pc-windows-msvc
+
+install:
+  - curl -sSf -o rustup-init.exe https://win.rustup.rs/
+  - rustup-init.exe -y --default-host %TARGET%
+  - set PATH=%PATH%;C:\Users\appveyor\.cargo\bin;C:\MinGW\bin
+
+  - rustc -vV
+  - cargo -vV
+
+build: false
+
+test_script:
+  - cargo test

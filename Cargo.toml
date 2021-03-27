@@ -1,0 +1,109 @@
+[package]
+name = "rustdesk"
+version = "1.1.2"
+authors = ["rustdesk <info@rustdesk.com>"]
+edition = "2018"
+build= "build.rs"
+description = "A remote control software."
+
+[lib]
+crate-type = ["cdylib", "staticlib", "rlib"] 
+
+[features]
+inline = []
+cli = []
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+whoami = "0.9"
+scrap = { path = "libs/scrap" }
+hbb_common = { path = "libs/hbb_common" }
+enigo = { path = "libs/enigo" }
+serde_derive = "1.0"
+serde = "1.0"
+serde_json = "1.0"
+cfg-if = "1.0"
+lazy_static = "1.4"
+sha2 = "0.9"
+repng = "0.2"
+libc = "0.2"
+parity-tokio-ipc = { path = "libs/parity-tokio-ipc" }
+flexi_logger = "0.16"
+runas = "0.2"
+magnum-opus = { path = "libs/magnum-opus" }
+dasp = { version = "0.11", features = ["signal", "interpolate-linear", "interpolate"] }
+async-trait = "0.1"
+crc32fast = "1.2"
+uuid = { version = "0.8", features = ["v4"] }
+copypasta = "0.7"
+clap = "2.33"
+rpassword = "5.0"
+
+[target.'cfg(not(any(target_os = "android")))'.dependencies]
+cpal = { git = "https://github.com/rustaudio/cpal" }
+
+[target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
+machine-uid = "0.2"
+mac_address = "1.1"
+sciter-rs = { git = "https://github.com/sciter-sdk/rust-sciter" }
+
+[target.'cfg(target_os = "windows")'.dependencies]
+systray = { path = "libs/systray-rs" }
+winapi = { version = "0.3", features = ["winuser"] }
+winreg = "0.7"
+windows-service = { git = 'https://github.com/mullvad/windows-service-rs.git' }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+objc = "0.2"
+cocoa = "0.24"
+dispatch = "0.2"
+core-foundation = "0.9"
+core-graphics = "0.22"
+
+[target.'cfg(target_os = "linux")'.dependencies]
+libpulse-simple-binding = "2.16"
+libpulse-binding = "2.16"
+rust-pulsectl = { path = "libs/pulsectl" }
+ctrlc = "3.1"
+
+[target.'cfg(not(any(target_os = "windows", target_os = "android", target_os = "ios")))'.dependencies]
+psutil = "3.2"
+
+[target.'cfg(target_os = "android")'.dependencies]
+android_logger = "0.9"
+
+[workspace]
+members = ["libs/scrap", "libs/hbb_common", "libs/enigo"]
+
+[package.metadata.winres]
+LegalCopyright = "Copyright © 2020"
+# this FileDescription overrides package.description
+FileDescription = "RustDesk"
+
+[target.'cfg(target_os="windows")'.build-dependencies]
+winres = "0.1"
+winapi = { version = "0.3", features = [ "winnt" ] }
+
+[build-dependencies]
+cc = "1.0"
+hbb_common = { path = "libs/hbb_common" }
+
+[dev-dependencies]
+hound = "3.4"
+
+[package.metadata.bundle]
+name = "RustDesk"
+identifier = "com.carriez.rustdesk"
+icon = ["32x32.png", "128x128.png", "128x128@2x.png"]
+deb_depends = ["libgtk-3-0", "libxcb-randr0", "libxdo3", "libxfixes3", "libxcb-shape0", "libxcb-xfixes0", "libasound2", "libsystemd0", "pulseaudio"]
+osx_minimum_system_version = "10.14"
+
+#https://github.com/johnthagen/min-sized-rust
+#!!! rembember call "strip target/release/rustdesk"
+# which reduce binary size a lot
+[profile.release]
+#lto = true
+#codegen-units = 1
+#panic = 'abort'
+#opt-level = 'z' # only have smaller size after strip
