@@ -1,0 +1,32 @@
+[package]
+name = "scrap"
+description = "Screen capture made easy."
+version = "0.5.0"
+repository = "https://github.com/quadrupleslap/scrap"
+documentation = "https://docs.rs/scrap"
+keywords = ["screen", "capture", "record"]
+license = "MIT"
+authors = ["Ram <quadrupleslap@gmail.com>"]
+edition = "2018"
+
+[dependencies]
+block = "0.1"
+cfg-if = "1.0"
+libc = "0.2"
+num_cpus = "1.13"
+
+[dependencies.winapi]
+version = "0.3"
+default-features = true
+features = ["dxgi", "dxgi1_2", "dxgi1_5", "d3d11"]
+
+[dev-dependencies]
+repng = "0.2"
+docopt = "1.1"
+webm = "1.0"
+serde = {version="1.0", features=["derive"]}
+quest = "0.3"
+
+[build-dependencies]
+target_build_utils = "0.3"
+bindgen = "0.53"

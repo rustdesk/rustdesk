@@ -1,0 +1,46 @@
+[package]
+name = "hbb_common"
+version = "0.1.0"
+authors = ["rustdesk<info@rustdesk.com>"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+protobuf = { version = "3.0.0-pre", git = "https://github.com/stepancheg/rust-protobuf" }
+tokio = { version = "0.2", features = ["full"] }
+tokio-util = { version = "0.3", features = ["full"] }
+futures = "0.3"
+bytes = "0.5"
+log = "0.4"
+env_logger = "0.8"
+socket2 = { version = "0.3", features = ["reuseport"] }
+zstd = "0.5"
+quinn = {version = "0.6", optional = true }
+anyhow = "1.0"
+futures-util = "0.3"
+directories-next = "2.0"
+rand = "0.7"
+serde_derive = "1.0"
+serde = "1.0"
+lazy_static = "1.4"
+confy = { git = "https://github.com/open-trade/confy" }
+dirs-next = "2.0"
+filetime = "0.2"
+sodiumoxide = "0.2"
+
+[target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
+mac_address = "1.1"
+
+[features]
+quic = ["quinn"]
+
+[build-dependencies]
+protobuf-codegen-pure = { version = "3.0.0-pre", git = "https://github.com/stepancheg/rust-protobuf" }
+
+[target.'cfg(target_os = "windows")'.dependencies]
+winapi = { version = "0.3", features = ["winuser"] }
+
+[dev-dependencies]
+toml = "0.5"
+serde_json = "1.0"
