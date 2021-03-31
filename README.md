@@ -33,3 +33,13 @@ Desktop versions use [sciter](https://sciter.com/) for GUI, please download scit
 - **[src/client.rs](https://github.com/rustdesk/rustdesk/tree/master/src/client.rs)**: start a peer connection
 - **[src/rendezvous_mediator.rs](https://github.com/rustdesk/rustdesk/tree/master/src/rendezvous_mediator.rs)**: Communicate with [rustdesk-server](https://github.com/rustdesk/rustdesk-server), wait for remote direct (TCP hole punching) or relayed connection
 - **[src/platform](https://github.com/rustdesk/rustdesk/tree/master/src/platform)**: platform specific code
+
+## Snapshot
+![image](https://user-images.githubusercontent.com/71636191/113111561-e0ab1900-923a-11eb-9328-51cc6a019751.png)
+
+![image](https://user-images.githubusercontent.com/71636191/113111665-fcaeba80-923a-11eb-8e8e-f8aed58a6293.png)
+
+![image](https://user-images.githubusercontent.com/71636191/113111628-f3bde900-923a-11eb-8ff6-21633e787d6e.png)
+
+![image](https://user-images.githubusercontent.com/71636191/113111647-f8829d00-923a-11eb-96a8-1fa035d9574f.png)
+
