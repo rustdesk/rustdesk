@@ -35,11 +35,12 @@ Desktop versions use [sciter](https://sciter.com/) for GUI, please download scit
 - **[src/platform](https://github.com/rustdesk/rustdesk/tree/master/src/platform)**: platform specific code
 
 ## Snapshot
-![image](https://user-images.githubusercontent.com/71636191/113111561-e0ab1900-923a-11eb-9328-51cc6a019751.png)
+![image](https://user-images.githubusercontent.com/71636191/113112362-ae4deb80-923b-11eb-957d-ff88daad4f06.png)
 
-![image](https://user-images.githubusercontent.com/71636191/113111665-fcaeba80-923a-11eb-8e8e-f8aed58a6293.png)
+![image](https://user-images.githubusercontent.com/71636191/113112619-f705a480-923b-11eb-911d-97e984ef52b6.png)
 
-![image](https://user-images.githubusercontent.com/71636191/113111628-f3bde900-923a-11eb-8ff6-21633e787d6e.png)
+![image](https://user-images.githubusercontent.com/71636191/113112857-3fbd5d80-923c-11eb-9836-768325faf906.png)
 
-![image](https://user-images.githubusercontent.com/71636191/113111647-f8829d00-923a-11eb-96a8-1fa035d9574f.png)
+![image](https://user-images.githubusercontent.com/71636191/113112990-65e2fd80-923c-11eb-840e-349b4d6e340d.png)
+
 
