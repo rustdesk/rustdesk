@@ -107,6 +107,7 @@ class _RemotePageState extends State<RemotePage> {
         text.toLowerCase().indexOf("handshake") < 0 &&
         text.toLowerCase().indexOf("failed") < 0 &&
         text.toLowerCase().indexOf("resolve") < 0 &&
+        text.toLowerCase().indexOf("mismatch") < 0 &&
         text.toLowerCase().indexOf("manually") < 0;
     if (hasRetry) {
       _timer?.cancel();
