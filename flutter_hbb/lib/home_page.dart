@@ -253,8 +253,10 @@ void showServer(BuildContext context) {
   final formKey = GlobalKey<FormState>();
   final id0 = FFI.getByName('custom-rendezvous-server');
   final relay0 = FFI.getByName('relay-server');
+  final key0 = FFI.getByName('key');
   var id = '';
   var relay = '';
+  var key = '';
   showAlertDialog(
       context,
       (setState) => Tuple3(
@@ -283,6 +285,16 @@ void showServer(BuildContext context) {
                       relay = value.trim();
                     },
                   ),
+                  TextFormField(
+                    initialValue: key0,
+                    decoration: InputDecoration(
+                      labelText: 'Key',
+                    ),
+                    validator: null,
+                    onSaved: (String value) {
+                      key = value.trim();
+                    },
+                  ),
                 ])),
             [
               FlatButton(
@@ -300,6 +312,7 @@ void showServer(BuildContext context) {
                     if (id != id0)
                       FFI.setByName('custom-rendezvous-server', id);
                     if (relay != relay0) FFI.setByName('relay-server', relay);
+                    if (key != key0) FFI.setByName('key', key);
                     Navigator.pop(context);
                   }
                 },
