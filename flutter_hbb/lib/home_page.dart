@@ -332,7 +332,7 @@ Future<Null> showAbout(BuildContext context) async {
             Text('Version: ${packageInfo.version}'),
             InkWell(
                 onTap: () async {
-                  const url = 'https://forum.rustdesk.com/';
+                  const url = 'https://rustdesk.com/';
                   if (await canLaunch(url)) {
                     await launch(url);
                   }
