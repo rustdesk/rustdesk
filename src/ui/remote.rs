@@ -1582,7 +1582,7 @@ impl Interface for Handler {
         pi_sciter.set_item("sas_enabled", pi.sas_enabled);
         if self.is_file_transfer() {
             if pi.username.is_empty() {
-                self.on_error("No active console user logged on, please connect and logon first.");
+                self.on_error("No active user logged on, please connect and logon first.");
                 return;
             }
         } else if !self.is_port_forward() {

@@ -634,19 +634,20 @@ fn get_error() -> String {
 }
 
 pub fn get_active_username() -> String {
+    use std::os::windows::process::CommandExt;
     let name = crate::username();
     if name != "SYSTEM" {
         return name;
     }
-    if let Ok(output) = std::process::Command::new("query").arg("user").output() {
+    const CREATE_NO_WINDOW: u32 = 0x08000000;
+    let mut cmd = std::process::Command::new("query");
+    cmd.arg("user");
+    cmd.creation_flags(CREATE_NO_WINDOW);
+    if let Ok(output) = cmd.output() {
         for line in String::from_utf8_lossy(&output.stdout).lines() {
-            if line.contains("Active") {
-                if let Some(name) = line.split_whitespace().next() {
-                    if name.starts_with(">") {
-                        return name.replace(">", "");
-                    } else {
-                        return name.to_string();
-                    }
+            if let Some(name) = line.split_whitespace().next() {
+                if name.starts_with(">") {
+                    return name.replace(">", "");
                 }
             }
         }
