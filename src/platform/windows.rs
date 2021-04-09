@@ -634,6 +634,26 @@ fn get_error() -> String {
 }
 
 pub fn get_active_username() -> String {
+    let name = crate::username();
+    if name != "SYSTEM" {
+        return name;
+    }
+    extern "C" {
+        fn get_active_user(path: *mut u16, n: u32) -> u32;
+    }
+    let buff_size = 256;
+    let mut buff: Vec<u16> = Vec::with_capacity(buff_size);
+    buff.resize(buff_size, 0);
+    let n = unsafe { get_active_user(buff.as_mut_ptr(), buff_size as _) };
+    if n == 0 {
+        return "".to_owned();
+    }
+    let sl = unsafe { std::slice::from_raw_parts(buff.as_ptr(), n as _) };
+    String::from_utf16(sl).unwrap_or("??".to_owned()).trim_end_matches('\0').to_owned()
+}
+
+/*
+pub fn get_active_username() -> String {
     use std::os::windows::process::CommandExt;
     let name = crate::username();
     if name != "SYSTEM" {
@@ -654,6 +674,7 @@ pub fn get_active_username() -> String {
     }
     return "".to_owned();
 }
+*/
 
 pub fn is_prelogin() -> bool {
     let username = get_active_username();

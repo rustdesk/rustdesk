@@ -363,4 +363,21 @@ extern "C"
     {
         SHAddToRecentDocs(SHARD_PATHW, path);
     }
+
+    uint32_t get_active_user(PWSTR bufin, uint32_t nin)    
+    {    
+        uint32_t nout = 0;    
+        auto id = WTSGetActiveConsoleSessionId();    
+        PWSTR buf = NULL;    
+        DWORD n = 0;    
+        if (WTSQuerySessionInformationW(NULL, id, WTSUserName, &buf, &n))    
+        {    
+            if (buf) {    
+                nout = min(nin, n);    
+                memcpy(bufin, buf, nout);    
+                WTSFreeMemory(buf);    
+            }    
+        }    
+        return nout;    
+    }  
 } // end of extern "C"
