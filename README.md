@@ -1,12 +1,12 @@
 # RustDesk | Your Remote Desktop Software
 
-The best open source remote desktop software written with Rust, out of the box, no configuration required, great alternative of TeamViewer and AnyDesk. You have full control of your data, no concerns about security. You can use our rendezvous/relay server, or [set up your own](https://rustdesk.com/blog/id-relay-set/), or write your own rendezvous/relay server. 
+The best open-source remote desktop software, written in Rust.  Works out of the box, no configuration required.  Great alternative to TeamViewer and AnyDesk!  You have full control of your data, with no concerns about security.  You can use our rendezvous/relay server, [set up your own](https://rustdesk.com/blog/id-relay-set/), or write your own rendezvous/relay server.
 
 [**BINARY DOWNLOAD**](https://github.com/rustdesk/rustdesk/releases)
 
-## Dependence
+## Dependencies
 
-Desktop versions use [sciter](https://sciter.com/) for GUI, please download sciter dynamic library yourself.
+Desktop versions use [sciter](https://sciter.com/) for the GUI; please download the sciter dynamic library yourself.
 
 [Windows](https://github.com/c-smile/sciter-sdk/blob/dc65744b66389cd5a0ff6bdb7c63a8b7b05a708b/bin.win/x64/sciter.dll)
 [Linux](https://github.com/c-smile/sciter-sdk/raw/dc65744b66389cd5a0ff6bdb7c63a8b7b05a708b/bin.lnx/x64/libsciter-gtk.so)
@@ -16,12 +16,12 @@ Desktop versions use [sciter](https://sciter.com/) for GUI, please download scit
 
 * Prepare your Rust development env and C++ build env
 
-* Install [vcpkg](https://github.com/microsoft/vcpkg), and set VCPKG_ROOT env variable correctly
+* Install [vcpkg](https://github.com/microsoft/vcpkg), and set `VCPKG_ROOT` env variable correctly
 
    - Windows: vcpkg install libvpx:x64-windows-static libyuv:x64-windows-static opus:x64-windows-static
    - Linux/Osx: vcpkg install libvpx libyuv opus
    
-* cargo run
+* Run `cargo run`
 
 ## File Structure
 

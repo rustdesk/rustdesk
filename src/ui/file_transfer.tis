@@ -567,7 +567,7 @@ var create_dir_jobs = {}
 
 function confirmDelete(path, is_remote) {
   handler.msgbox("custom-skip", "Confirm Delete", "<div .form> \
-        <div>Are you sure you want to deelte this file?</div> \
+        <div>Are you sure you want to delete this file?</div> \
         <div.ellipsis style=\"font-weight: bold;\">" + path + "</div> \
     </div>", function(res=null) {
       if (res) {
@@ -588,7 +588,7 @@ handler.confirmDeleteFiles = function(id, i, name) {
   if (name) file_path += handler.get_path_sep(job.is_remote) + name;
   handler.msgbox("custom-skip", "Confirm Delete", "<div .form> \
         <div>Deleting #" + (i + 1) + " of " + n + " files.</div> \
-        <div>Are you sure you want to deelte this file?</div> \
+        <div>Are you sure you want to delete this file?</div> \
         <div.ellipsis style=\"font-weight: bold;\" .text>" + name + "</div> \
         <div><button|checkbox(remember) {ts}>Do this for all conflicts</button></div> \
     </div>", function(res=null) {
