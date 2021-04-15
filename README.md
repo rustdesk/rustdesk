@@ -1,10 +1,10 @@
 # RustDesk | Your Remote Desktop Software
 
-The best open source remote desktop software written with Rust, out of the box, no configuration required, great alternative of TeamViewer and AnyDesk. You have full control of your data, no concerns about security. You can use our rendezvous/relay server, or [set up your own](https://rustdesk.com/blog/id-relay-set/), or write your own rendezvous/relay server. 
+The best open-source remote desktop software, written in Rust. Works out of the box, no configuration required. Great alternative to TeamViewer and AnyDesk! You have full control of your data, with no concerns about security. You can use our rendezvous/relay server, [set up your own](https://rustdesk.com/blog/id-relay-set/), or write your own rendezvous/relay server. 
 
 [**BINARY DOWNLOAD**](https://github.com/rustdesk/rustdesk/releases)
 
-## Dependence
+## Dependences
 
 Desktop versions use [sciter](https://sciter.com/) for GUI, please download sciter dynamic library yourself.
 
@@ -16,12 +16,12 @@ Desktop versions use [sciter](https://sciter.com/) for GUI, please download scit
 
 * Prepare your Rust development env and C++ build env
 
-* Install [vcpkg](https://github.com/microsoft/vcpkg), and set VCPKG_ROOT env variable correctly
+* Install [vcpkg](https://github.com/microsoft/vcpkg), and set `VCPKG_ROOT` env variable correctly
 
    - Windows: vcpkg install libvpx:x64-windows-static libyuv:x64-windows-static opus:x64-windows-static
    - Linux/Osx: vcpkg install libvpx libyuv opus
    
-* cargo run
+* run `cargo run`
 
 ## File Structure
 
