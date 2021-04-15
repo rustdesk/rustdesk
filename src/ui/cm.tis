@@ -41,9 +41,9 @@ class Body: Reactor.Component
                 <div />
                 {c.is_file_transfer || c.port_forward ? "" : <div>Permissions</div>}
                 {c.is_file_transfer || c.port_forward ? "" : <div .permissions>
-                    <div class={!c.keyboard ? "disabled" : ""} title="Allow to use keyboard and mouse"><icon .keyboard /></div>
-                    <div class={!c.clipboard ? "disabled" : ""} title="Allow to use clipboard"><icon .clipboard /></div>
-                    <div class={!c.audio ? "disabled" : ""} title="Allow to hear sound"><icon .audio /></div>
+                    <div class={!c.keyboard ? "disabled" : ""} title="Allow using keyboard and mouse"><icon .keyboard /></div>
+                    <div class={!c.clipboard ? "disabled" : ""} title="Allow using clipboard"><icon .clipboard /></div>
+                    <div class={!c.audio ? "disabled" : ""} title="Allow hearing sound"><icon .audio /></div>
                 </div>}
                 {c.port_forward ? <div>Port Forwarding: {c.port_forward}</div> : ""}
                 <div style="size:*"/>
