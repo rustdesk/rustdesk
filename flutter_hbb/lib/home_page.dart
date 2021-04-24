@@ -49,9 +49,11 @@ class _HomePageState extends State<HomePage> {
                       position: RelativeRect.fromLTRB(3000, 70, 3000, 70),
                       items: [
                         PopupMenuItem<String>(
-                            child: Text('ID/Relay Server'), value: 'server'),
+                            child: Text(translate('ID/Relay Server')),
+                            value: 'server'),
                         PopupMenuItem<String>(
-                            child: Text('About RustDesk'), value: 'about'),
+                            child: Text(translate('About') + ' RustDesk'),
+                            value: 'about'),
                       ],
                       elevation: 8,
                     );
@@ -154,7 +156,7 @@ class _HomePageState extends State<HomePage> {
                         color: Color(0xFF00B6F0),
                       ),
                       decoration: InputDecoration(
-                        labelText: 'Remote ID',
+                        labelText: translate('Remote ID'),
                         // hintText: 'Enter your remote ID',
                         border: InputBorder.none,
                         helperStyle: TextStyle(
@@ -227,7 +229,8 @@ class _HomePageState extends State<HomePage> {
                         position: RelativeRect.fromLTRB(x, y, x, y),
                         items: [
                           PopupMenuItem<String>(
-                              child: Text('Remove'), value: 'remove'),
+                              child: Text(translate('Remove')),
+                              value: 'remove'),
                         ],
                         elevation: 8,
                       );
@@ -260,7 +263,7 @@ void showServer(BuildContext context) {
   showAlertDialog(
       context,
       (setState) => Tuple3(
-            Text('ID/Relay Server'),
+            Text(translate('ID/Relay Server')),
             Form(
                 key: formKey,
                 child:
@@ -268,7 +271,7 @@ void showServer(BuildContext context) {
                   TextFormField(
                     initialValue: id0,
                     decoration: InputDecoration(
-                      labelText: 'ID Server',
+                      labelText: translate('ID Server'),
                     ),
                     validator: validate,
                     onSaved: (String value) {
@@ -278,7 +281,7 @@ void showServer(BuildContext context) {
                   TextFormField(
                     initialValue: relay0,
                     decoration: InputDecoration(
-                      labelText: 'Relay Server',
+                      labelText: translate('Relay Server'),
                     ),
                     validator: validate,
                     onSaved: (String value) {
@@ -316,7 +319,7 @@ void showServer(BuildContext context) {
                     Navigator.pop(context);
                   }
                 },
-                child: Text('OK'),
+                child: Text(translate('OK')),
               ),
             ],
           ));

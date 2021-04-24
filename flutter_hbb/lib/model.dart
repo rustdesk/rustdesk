@@ -179,7 +179,7 @@ class FfiModel with ChangeNotifier {
     _pi.sasEnabled = evt['sas_enabled'] == "true";
     _pi.currentDisplay = int.parse(evt['current_display']);
     List<dynamic> displays = json.decode(evt['displays']);
-    _pi.displays = List<Display>();
+    _pi.displays = [];
     for (int i = 0; i < displays.length; ++i) {
       Map<String, dynamic> d0 = displays[i];
       var d = Display();

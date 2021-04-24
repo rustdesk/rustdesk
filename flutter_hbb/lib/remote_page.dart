@@ -47,7 +47,7 @@ class _RemotePageState extends State<RemotePage> {
     FFI.connect(widget.id);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       SystemChrome.setEnabledSystemUIOverlays([]);
-      showLoading('Connecting...', context);
+      showLoading(translate('Connecting...'), context);
       _interval =
           Timer.periodic(Duration(milliseconds: 30), (timer) => interval());
     });
@@ -113,7 +113,7 @@ class _RemotePageState extends State<RemotePage> {
       _timer?.cancel();
       _timer = Timer(Duration(seconds: _reconnects), () {
         FFI.reconnect();
-        showLoading('Connecting...', context);
+        showLoading(translate('Connecting...'), context);
       });
       _reconnects *= 2;
     } else {
@@ -579,7 +579,7 @@ void enterPasswordDialog(String id, BuildContext context) {
   showAlertDialog(
       context,
       (setState) => Tuple3(
-            Text('Password required'),
+            Text(translate('Password required')),
             Column(mainAxisSize: MainAxisSize.min, children: [
               PasswordWidget(controller: controller),
               CheckboxListTile(
@@ -587,7 +587,7 @@ void enterPasswordDialog(String id, BuildContext context) {
                 dense: true,
                 controlAffinity: ListTileControlAffinity.leading,
                 title: Text(
-                  'Remember password',
+                  translate('Remember password'),
                 ),
                 value: remember,
                 onChanged: (v) {
@@ -602,7 +602,7 @@ void enterPasswordDialog(String id, BuildContext context) {
                   Navigator.pop(context);
                   Navigator.pop(context);
                 },
-                child: Text('Cancel'),
+                child: Text(translate('Cancel')),
               ),
               FlatButton(
                 textColor: MyTheme.accent,
@@ -610,10 +610,10 @@ void enterPasswordDialog(String id, BuildContext context) {
                   var text = controller.text.trim();
                   if (text == '') return;
                   FFI.login(text, remember);
-                  showLoading('Logging in...', null);
+                  showLoading(translate('Logging in...'), null);
                   Navigator.pop(context);
                 },
-                child: Text('OK'),
+                child: Text(translate('OK')),
               ),
             ],
           ));
@@ -622,22 +622,22 @@ void enterPasswordDialog(String id, BuildContext context) {
 void wrongPasswordDialog(String id, BuildContext context) {
   showAlertDialog(
       context,
-      (_) =>
-          Tuple3(Text('Wrong Password'), Text('Do you want to enter again?'), [
+      (_) => Tuple3(Text(translate('Wrong Password')),
+              Text(translate('Do you want to enter again?')), [
             FlatButton(
               textColor: MyTheme.accent,
               onPressed: () {
                 Navigator.pop(context);
                 Navigator.pop(context);
               },
-              child: Text('Cancel'),
+              child: Text(translate('Cancel')),
             ),
             FlatButton(
               textColor: MyTheme.accent,
               onPressed: () {
                 enterPasswordDialog(id, context);
               },
-              child: Text('Retry'),
+              child: Text(translate('Retry')),
             ),
           ]));
 }
@@ -691,7 +691,7 @@ void showOptions(BuildContext context) {
               FFI.setByName('toggle_option', 'disable-audio');
             });
           },
-          title: Text('Mute')));
+          title: Text(translate('Mute'))));
     }
     if (FFI.ffiModel.permissions['keyboard'] != false) {
       more.add(CheckboxListTile(
@@ -702,7 +702,7 @@ void showOptions(BuildContext context) {
               FFI.setByName('toggle_option', 'lock-after-session-end');
             });
           },
-          title: Text('Lock after session end')));
+          title: Text(translate('Lock after session end'))));
     }
     return Tuple3(
         null,
@@ -712,7 +712,7 @@ void showOptions(BuildContext context) {
                 <Widget>[
                   RadioListTile<String>(
                     controlAffinity: ListTileControlAffinity.trailing,
-                    title: const Text('Good image quality'),
+                    title: Text(translate('Good image quality')),
                     value: 'best',
                     groupValue: quality,
                     onChanged: (String value) {
@@ -724,7 +724,7 @@ void showOptions(BuildContext context) {
                   ),
                   RadioListTile<String>(
                     controlAffinity: ListTileControlAffinity.trailing,
-                    title: const Text('Balanced'),
+                    title: Text(translate('Balanced')),
                     value: 'balanced',
                     groupValue: quality,
                     onChanged: (String value) {
@@ -736,7 +736,7 @@ void showOptions(BuildContext context) {
                   ),
                   RadioListTile<String>(
                     controlAffinity: ListTileControlAffinity.trailing,
-                    title: const Text('Optimize reaction time'),
+                    title: Text(translate('Optimize reaction time')),
                     value: 'low',
                     groupValue: quality,
                     onChanged: (String value) {
@@ -756,7 +756,7 @@ void showOptions(BuildContext context) {
                           FFI.setByName('toggle_option', 'show-remote-cursor');
                         });
                       },
-                      title: Text('Show remote cursor')),
+                      title: Text(translate('Show remote cursor'))),
                 ] +
                 more),
         null);
@@ -769,11 +769,13 @@ void showActions(BuildContext context) {
   final y = size.height;
   final more = <PopupMenuItem<String>>[];
   if (FFI.ffiModel.pi.version.isNotEmpty) {
-    more.add(PopupMenuItem<String>(child: Text('Refresh'), value: 'refresh'));
+    more.add(PopupMenuItem<String>(
+        child: Text(translate('Refresh')), value: 'refresh'));
   }
   if (FFI.ffiModel.permissions['keyboard'] != false &&
       FFI.ffiModel.permissions['clipboard'] != false) {
-    more.add(PopupMenuItem<String>(child: Text('Paste'), value: 'paste'));
+    more.add(
+        PopupMenuItem<String>(child: Text(translate('Paste')), value: 'paste'));
   }
   more.add(PopupMenuItem<String>(
       child: Row(
@@ -795,8 +797,10 @@ void showActions(BuildContext context) {
       position: RelativeRect.fromLTRB(x, y, x, y),
       items: [
             PopupMenuItem<String>(
-                child: Text('Insert Ctrl + Alt + Del'), value: 'cad'),
-            PopupMenuItem<String>(child: Text('Insert Lock'), value: 'lock'),
+                child: Text(translate('Insert') + ' Ctrl + Alt + Del'),
+                value: 'cad'),
+            PopupMenuItem<String>(
+                child: Text(translate('Insert Lock')), value: 'lock'),
           ] +
           more,
       elevation: 8,
@@ -841,7 +845,7 @@ void showSetOSPassword(BuildContext context) async {
   showAlertDialog(
       context,
       (setState) => Tuple3(
-            Text('Password required'),
+            Text(translate('Password required')),
             Column(mainAxisSize: MainAxisSize.min, children: [
               PasswordWidget(controller: controller),
             ]),
@@ -851,7 +855,7 @@ void showSetOSPassword(BuildContext context) async {
                 onPressed: () {
                   Navigator.pop(context);
                 },
-                child: Text('Cancel'),
+                child: Text(translate('Cancel')),
               ),
               FlatButton(
                 textColor: MyTheme.accent,
@@ -860,7 +864,7 @@ void showSetOSPassword(BuildContext context) async {
                   savePassword(FFI.id, text);
                   Navigator.pop(context);
                 },
-                child: Text('OK'),
+                child: Text(translate('OK')),
               ),
             ],
           ));

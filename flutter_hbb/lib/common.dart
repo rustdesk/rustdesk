@@ -2,6 +2,73 @@ import 'package:flutter/material.dart';
 import 'dart:async';
 import 'package:flutter_easyloading/flutter_easyloading.dart';
 import 'package:tuple/tuple.dart';
+import 'dart:io';
+
+final bool isZh = Platform.localeName == "zh_CN";
+
+final langs = <String, Map<String, String>>{
+  'zh': <String, String>{
+    'Remote ID': '远程',
+    'ID/Relay Server': 'ID/中继服务器',
+    'About': '关于',
+    'Mute': '静音',
+    'ID Server': 'ID服务器',
+    'Relay Server': '中继服务器',
+    'Invalid IP': '无效IP',
+    'Invalid format': '无效格式',
+    'Cancel': '取消',
+    'Close': '关闭',
+    'Retry': '再试',
+    'OK': '确认',
+    'Password Required': '需要密码',
+    'Please enter your password': '请输入密码',
+    'Remember password': '记住密码',
+    'Wrong Password': '密码错误',
+    'Do you want to enter again?': '还想输入一次吗?',
+    'Connection Error': '连接错误',
+    'Error': '错误',
+    'Reset by the peer': '连接被对方关闭',
+    'Connecting...': '正在连接...',
+    'Connection in progress. Please wait.': '连接进行中，请稍等。',
+    'Please try 1 minute later': '一分钟后再试',
+    'Login Error': '登录错误',
+    'Successful': '成功',
+    'Connected, waiting for image...': '已连接，等待画面传输...',
+    'Custom Image Quality': '设置画面质量',
+    'Privacy mode': '隐私模式',
+    'Remove': '删除',
+    'Adjust Window': '调节窗口',
+    'Good image quality': '好画质',
+    'Balanced': '一般画质',
+    'Optimize reaction time': '优化反应时间',
+    'Custom': '自定义画质',
+    'Show remote cursor': '显示远程光标',
+    'Disable clipboard': '禁止剪贴板',
+    'Lock after session end': '断开后锁定远程电脑',
+    'Insert': '插入',
+    'Insert Lock': '锁定远程电脑',
+    'Refresh': '刷新画面',
+    'ID not exist': 'ID不存在',
+    'Failed to connect to rendezvous server': '连接服务器失败',
+    'Remote desktop is offline': '远程电脑不在线',
+    'Key mismatch': 'Key不匹配',
+    'Timeout': '连接超时',
+    'Failed to connect to relay server': '无法连接到中继服务器',
+    'Failed to connect via rendezvous server': '无法通过服务器建立连接',
+    'Failed to make direct connection to remote desktop': '无法建立直接连接',
+    'OS Password': '操作系统密码',
+    'Paste': '粘贴',
+    'Logging in...': '正在登录...',
+    'Are you sure to close the connection?': '是否确认关闭连接？',
+  },
+  'en': <String, String>{}
+};
+
+String translate(name) {
+  final tmp = isZh ? langs['zh'] : langs['en'];
+  final v = tmp[name];
+  return v != null ? v : name;
+}
 
 class MyTheme {
   MyTheme._();
@@ -83,7 +150,7 @@ void msgbox(String type, String title, String text, BuildContext context,
   }
   final buttons = [
     Expanded(child: Container()),
-    wrap('OK', () {
+    wrap(translate('OK'), () {
       dismissLoading();
       Navigator.pop(context);
     })
@@ -94,7 +161,7 @@ void msgbox(String type, String title, String text, BuildContext context,
   if (hasCancel) {
     buttons.insert(
         1,
-        wrap('Cancel', () {
+        wrap(translate('Cancel'), () {
           dismissLoading();
         }));
   }
@@ -102,9 +169,9 @@ void msgbox(String type, String title, String text, BuildContext context,
       Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(title, style: TextStyle(fontSize: 21)),
+          Text(translate(title), style: TextStyle(fontSize: 21)),
           SizedBox(height: 20),
-          Text(text, style: TextStyle(fontSize: 15)),
+          Text(translate(text), style: TextStyle(fontSize: 15)),
           SizedBox(height: 20),
           Row(
             children: buttons,
