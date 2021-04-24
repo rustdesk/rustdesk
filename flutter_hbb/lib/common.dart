@@ -8,7 +8,7 @@ final bool isZh = Platform.localeName == "zh_CN";
 
 final langs = <String, Map<String, String>>{
   'zh': <String, String>{
-    'Remote ID': '远程',
+    'Remote ID': '远程ID',
     'ID/Relay Server': 'ID/中继服务器',
     'About': '关于',
     'Mute': '静音',
