@@ -249,7 +249,7 @@ class MyIdMenu: Reactor.Component {
                 }
                 if (value == old_value) return;
                 configOptions["whitelist"] = value.replace("\n", ",");
-                stdin.println("whitelist updated");
+                stdout.println("whitelist updated");
                 handler.set_options(configOptions);
             }, 300);
         } else if (me.id == "custom-server") {
