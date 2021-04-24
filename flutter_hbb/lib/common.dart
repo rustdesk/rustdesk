@@ -33,7 +33,6 @@ final langs = <String, Map<String, String>>{
     'Please try 1 minute later': '一分钟后再试',
     'Login Error': '登录错误',
     'Successful': '成功',
-    'Connected, waiting for image...': '已连接，等待画面传输...',
     'Custom Image Quality': '设置画面质量',
     'Privacy mode': '隐私模式',
     'Remove': '删除',
@@ -60,6 +59,7 @@ final langs = <String, Map<String, String>>{
     'Paste': '粘贴',
     'Logging in...': '正在登录...',
     'Are you sure to close the connection?': '是否确认关闭连接？',
+    'Waiting for image...': '等待画面传输...',
   },
   'en': <String, String>{}
 };

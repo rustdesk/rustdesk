@@ -194,7 +194,7 @@ class FfiModel with ChangeNotifier {
       initializeCursorAndCanvas();
     }
     if (displays.length > 0) {
-      showLoading('Waiting for image...', context);
+      showLoading(translate('Waiting for image...'), context);
       _waitForImage = true;
     }
     notifyListeners();
