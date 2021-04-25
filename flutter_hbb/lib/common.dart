@@ -4,7 +4,7 @@ import 'package:flutter_easyloading/flutter_easyloading.dart';
 import 'package:tuple/tuple.dart';
 import 'dart:io';
 
-final bool isZh = Platform.localeName == "zh_CN";
+final bool isZh = Platform.localeName.startsWith('zh');
 
 final langs = <String, Map<String, String>>{
   'zh': <String, String>{
