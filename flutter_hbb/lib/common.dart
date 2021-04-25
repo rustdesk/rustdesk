@@ -21,6 +21,7 @@ final langs = <String, Map<String, String>>{
     'Retry': '再试',
     'OK': '确认',
     'Password Required': '需要密码',
+    'Enter your password': '输入你的密码',
     'Please enter your password': '请输入密码',
     'Remember password': '记住密码',
     'Wrong Password': '密码错误',
@@ -56,6 +57,7 @@ final langs = <String, Map<String, String>>{
     'Failed to connect via rendezvous server': '无法通过服务器建立连接',
     'Failed to make direct connection to remote desktop': '无法建立直接连接',
     'OS Password': '操作系统密码',
+    'Password': '密码',
     'Paste': '粘贴',
     'Logging in...': '正在登录...',
     'Are you sure to close the connection?': '是否确认关闭连接？',
@@ -142,7 +144,8 @@ void msgbox(String type, String title, String text, BuildContext context,
       child: FlatButton(
           focusColor: MyTheme.accent,
           onPressed: onPressed,
-          child: Text(text, style: TextStyle(color: MyTheme.accent))));
+          child:
+              Text(translate(text), style: TextStyle(color: MyTheme.accent))));
 
   dismissLoading();
   if (_hasDialog) {
@@ -200,8 +203,8 @@ class _PasswordWidgetState extends State<PasswordWidget> {
       obscureText: !_passwordVisible, //This will obscure text dynamically
       keyboardType: TextInputType.visiblePassword,
       decoration: InputDecoration(
-        labelText: 'Password',
-        hintText: 'Enter your password',
+        labelText: translate('Password'),
+        hintText: translate('Enter your password'),
         // Here is key idea
         suffixIcon: IconButton(
           icon: Icon(

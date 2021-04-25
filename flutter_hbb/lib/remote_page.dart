@@ -368,7 +368,7 @@ class _RemotePageState extends State<RemotePage> {
               color: active == true ? MyTheme.accent80 : null,
               child: icon != null
                   ? Icon(icon, size: 17, color: Colors.white)
-                  : Text(text,
+                  : Text(translate(text),
                       style: TextStyle(color: Colors.white, fontSize: 11)),
               onPressed: onPressed));
     };
@@ -579,7 +579,7 @@ void enterPasswordDialog(String id, BuildContext context) {
   showAlertDialog(
       context,
       (setState) => Tuple3(
-            Text(translate('Password required')),
+            Text(translate('Password Required')),
             Column(mainAxisSize: MainAxisSize.min, children: [
               PasswordWidget(controller: controller),
               CheckboxListTile(
@@ -780,7 +780,7 @@ void showActions(BuildContext context) {
   more.add(PopupMenuItem<String>(
       child: Row(
           children: ([
-        Text('OS Password'),
+        Text(translate('OS Password')),
         FlatButton(
           textColor: MyTheme.accent,
           onPressed: () {
@@ -845,7 +845,7 @@ void showSetOSPassword(BuildContext context) async {
   showAlertDialog(
       context,
       (setState) => Tuple3(
-            Text(translate('Password required')),
+            Text(translate('Password Required')),
             Column(mainAxisSize: MainAxisSize.min, children: [
               PasswordWidget(controller: controller),
             ]),

@@ -305,7 +305,7 @@ void showServer(BuildContext context) {
                 onPressed: () {
                   Navigator.pop(context);
                 },
-                child: Text('Cancel'),
+                child: Text(translate('Cancel')),
               ),
               FlatButton(
                 textColor: MyTheme.accent,
