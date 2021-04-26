@@ -211,7 +211,11 @@ impl RendezvousMediator {
                                 Config::update_latency(&host, -1);
                                 old_latency = 0;
                                 if now.duration_since(last_dns_check).map(|d| d.as_millis() as i64).unwrap_or(0) > DNS_INTERVAL {
-                                    allow_err!(rz.dns_check());
+                                    if let Ok(_) = rz.dns_check() {
+                                        // in some case of network reconnect (dial IP network),
+                                        // old UDP socket not work any more after network recover
+                                        socket = FramedSocket::new(Config::get_any_listen_addr()).await?;
+                                    }
                                     last_dns_check = now;
                                 }
                             } else if fails > MAX_FAILS1 {
