@@ -12,9 +12,8 @@ Desktop versions use [sciter](https://sciter.com/) for GUI, please download scit
 [Linux](https://github.com/c-smile/sciter-sdk/raw/dc65744b66389cd5a0ff6bdb7c63a8b7b05a708b/bin.lnx/x64/libsciter-gtk.so)
 [Osx](https://github.com/c-smile/sciter-sdk/raw/dc65744b66389cd5a0ff6bdb7c63a8b7b05a708b/bin.osx/sciter-osx-64.dylib)
 
-## How To Build
 
-### Steps
+## Raw Steps to build
 * Prepare your Rust development env and C++ build env
 
 * Install [vcpkg](https://github.com/microsoft/vcpkg), and set `VCPKG_ROOT` env variable correctly
@@ -23,13 +22,41 @@ Desktop versions use [sciter](https://sciter.com/) for GUI, please download scit
    - Linux/Osx: vcpkg install libvpx libyuv opus
    
 * run `cargo run`
-### Build on Debain
+
+## How to build on Linux
+
+### Ubuntu 18 (Debain 10)
 ```
-sudo apt install -y git curl wget nasm libgtk-3-dev clang libxcb-randr0-dev libxdo-dev libxfixes-dev libxcb-shape0-dev libxcb-xfixes0-dev libasound2-dev libpulse-dev cmake
-git clone https://github.com/microsoft/vcpkg
+sudo apt install -y g++ gcc git curl wget nasm libgtk-3-dev clang libxcb-randr0-dev libxdo-dev libxfixes-dev libxcb-shape0-dev libxcb-xfixes0-dev libasound2-dev libpulse-dev cmake
+```
+
+### Fedora 28
+```
+yum -y install gcc-c++ git curl wget nasm gcc gtk3-devel clang libxcb-devel libxdo-devel libXfixes-devel pulseaudio-libs-devel cmake alsa-lib-devel
+```
+
+### Install VCPKG
+```
+git clone https://github.com/microsoft/vcpkg --branch 2020.11-1
 vcpkg/bootstrap-vcpkg.sh
 export VCPKG_ROOT=$HOME/vcpkg
 vcpkg/vcpkg install libvpx libyuv opus
+```
+
+### Fix libvpx (For Fedora)
+```
+cd vcpkg/buildtrees/libvpx/src
+cd *
+./configure
+sed -i 's/CFLAGS+=-I/CFLAGS+=-fPIC -I/g' Makefile
+sed -i 's/CXXFLAGS+=-I/CXXFLAGS+=-fPIC -I/g' Makefile
+make
+cp libvpx.a $HOME/vcpkg/installed/x64-linux/lib/
+cd
+```
+
+### Build
+```
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 source $HOME/.cargo/env
 git clone https://github.com/rustdesk/rustdesk

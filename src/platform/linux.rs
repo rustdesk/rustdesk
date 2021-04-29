@@ -1,6 +1,7 @@
 use super::{CursorData, ResultType};
 use hbb_common::{allow_err, bail, log};
 use libc::{c_char, c_int, c_void};
+use std::io::prelude::*;
 use std::{
     cell::RefCell,
     sync::{
@@ -30,7 +31,7 @@ extern "C" {
 #[link(name = "X11")]
 extern "C" {
     fn XOpenDisplay(display_name: *const c_char) -> *mut c_void;
-// fn XCloseDisplay(d: *mut c_void) -> c_int;
+    // fn XCloseDisplay(d: *mut c_void) -> c_int;
 }
 
 #[link(name = "Xfixes")]
@@ -162,8 +163,36 @@ pub fn start_os_service() {
         if tmp != uid && !tmp.is_empty() {
             uid = tmp;
             log::info!("uid of seat0: {}", uid);
-            std::env::set_var("XAUTHORITY", format!("/run/user/{}/gdm/Xauthority", uid));
-            std::env::set_var("DISPLAY", get_display());
+            let gdm = format!("/run/user/{}/gdm/Xauthority", uid);
+            let mut auth = get_env("XAUTHORITY", &uid);
+            if auth.is_empty() {
+                auth = if std::path::Path::new(&gdm).exists() {
+                    gdm
+                } else {
+                    let username = get_active_username();
+                    if username == "root" {
+                        format!("/{}/.Xauthority", username)
+                    } else {
+                        let tmp = format!("/home/{}/.Xauthority", username);
+                        if std::path::Path::new(&tmp).exists() {
+                            tmp
+                        } else {
+                            format!("/var/lib/{}/.Xauthority", username)
+                        }
+                    }
+                };
+            }
+            let mut d = get_env("DISPLAY", &uid);
+            if d.is_empty() {
+                d = get_display();
+            }
+            if d.is_empty() {
+                d = ":0".to_owned()
+            }
+            log::info!("DISPLAY: {}", d);
+            log::info!("XAUTHORITY: {}", auth);
+            std::env::set_var("XAUTHORITY", auth);
+            std::env::set_var("DISPLAY", d);
             if let Some(ps) = server.as_mut() {
                 allow_err!(ps.kill());
                 std::thread::sleep(std::time::Duration::from_millis(30));
@@ -245,26 +274,27 @@ fn get_cm() -> bool {
 
 fn get_display() -> String {
     let user = get_active_username();
+    log::debug!("w {}", &user);
     if let Ok(output) = std::process::Command::new("w").arg(&user).output() {
         for line in String::from_utf8_lossy(&output.stdout).lines() {
+            log::debug!("  {}", line);
             let mut iter = line.split_whitespace();
-            let a = iter.nth(1);
-            let b = iter.next();
-            if a == b {
-                if let Some(b) = b {
-                    if b.starts_with(":") {
-                        return b.to_owned();
-                    }
+            let b = iter.nth(2);
+            if let Some(b) = b {
+                if b.starts_with(":") {
+                    return b.to_owned();
                 }
             }
         }
     }
     // above not work for gdm user
+    log::debug!("ls -l /tmp/.X11-unix/");
     if let Ok(output) = std::process::Command::new("ls")
         .args(vec!["-l", "/tmp/.X11-unix/"])
         .output()
     {
         for line in String::from_utf8_lossy(&output.stdout).lines() {
+            log::debug!("  {}", line);
             let mut iter = line.split_whitespace();
             if iter.nth(2) == Some(&user) {
                 if let Some(x) = iter.last() {
@@ -443,4 +473,34 @@ pub fn block_input(_v: bool) {
 
 pub fn is_installed() -> bool {
     true
+}
+
+fn run_cmds(cmds: String) -> ResultType<Option<String>> {
+    let mut tmp = std::env::temp_dir();
+    tmp.push(format!(
+        "{}_{}",
+        hbb_common::config::APP_NAME,
+        crate::get_time()
+    ));
+    let mut file = std::fs::File::create(&tmp)?;
+    file.write_all(cmds.as_bytes())?;
+    file.sync_all()?;
+    if let Ok(output) = std::process::Command::new("bash")
+        .arg(tmp.to_str().unwrap_or(""))
+        .output()
+    {
+        Ok(Some(String::from_utf8_lossy(&output.stdout).to_string()))
+    } else {
+        Ok(None)
+    }
+}
+
+fn get_env(name: &str, uid: &str) -> String {
+    let cmd = format!("ps -u {} -o pid= | xargs -I__ cat /proc/__/environ 2>/dev/null | tr '\\0' '\\n' | grep -m1 '^{}=' | sed 's/{}=//g'", uid, name, name);
+    log::debug!("Run: {}", &cmd);
+    if let Ok(Some(x)) = run_cmds(cmd) {
+        x.trim_end().to_string()
+    } else {
+        "".to_owned()
+    }
 }
