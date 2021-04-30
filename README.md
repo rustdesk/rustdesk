@@ -27,12 +27,12 @@ Desktop versions use [sciter](https://sciter.com/) for GUI, please download scit
 
 ### Ubuntu 18 (Debain 10)
 ```
-sudo apt install -y g++ gcc git curl wget nasm libgtk-3-dev clang libxcb-randr0-dev libxdo-dev libxfixes-dev libxcb-shape0-dev libxcb-xfixes0-dev libasound2-dev libpulse-dev cmake
+sudo apt install -y g++ gcc git curl wget nasm yasm libgtk-3-dev clang libxcb-randr0-dev libxdo-dev libxfixes-dev libxcb-shape0-dev libxcb-xfixes0-dev libasound2-dev libpulse-dev cmake
 ```
 
 ### Fedora 28
 ```
-yum -y install gcc-c++ git curl wget nasm gcc gtk3-devel clang libxcb-devel libxdo-devel libXfixes-devel pulseaudio-libs-devel cmake alsa-lib-devel
+yum -y install gcc-c++ git curl wget nasm yasm gcc gtk3-devel clang libxcb-devel libxdo-devel libXfixes-devel pulseaudio-libs-devel cmake alsa-lib-devel
 ```
 
 ### Install VCPKG
