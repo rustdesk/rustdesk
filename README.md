@@ -30,14 +30,14 @@ Desktop versions use [sciter](https://sciter.com/) for GUI, please download scit
 sudo apt install -y g++ gcc git curl wget nasm yasm libgtk-3-dev clang libxcb-randr0-dev libxdo-dev libxfixes-dev libxcb-shape0-dev libxcb-xfixes0-dev libasound2-dev libpulse-dev cmake
 ```
 
-### Fedora 28
+### Fedora 28 (CentOS 8)
 ```
 sudo yum -y install gcc-c++ git curl wget nasm yasm gcc gtk3-devel clang libxcb-devel libxdo-devel libXfixes-devel pulseaudio-libs-devel cmake alsa-lib-devel
 ```
 
 ### Arch (Manjaro)
 ```
-sudo pacman -Syu unzip git cmake gcc curl wget yasm zip make pkg-config clang gtk3 xdotool libxcb libxfixes alsa-lib pulseaudio
+sudo pacman -Syu unzip git cmake gcc curl wget yasm nasm zip make pkg-config clang gtk3 xdotool libxcb libxfixes alsa-lib pulseaudio
 ```
 
 ### Install vcpkg
