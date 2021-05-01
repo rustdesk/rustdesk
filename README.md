@@ -13,7 +13,7 @@ Desktop versions use [sciter](https://sciter.com/) for GUI, please download scit
 [Osx](https://github.com/c-smile/sciter-sdk/raw/dc65744b66389cd5a0ff6bdb7c63a8b7b05a708b/bin.osx/sciter-osx-64.dylib)
 
 
-## Raw Steps to build
+## Raw steps to build
 * Prepare your Rust development env and C++ build env
 
 * Install [vcpkg](https://github.com/microsoft/vcpkg), and set `VCPKG_ROOT` env variable correctly
@@ -32,10 +32,15 @@ sudo apt install -y g++ gcc git curl wget nasm yasm libgtk-3-dev clang libxcb-ra
 
 ### Fedora 28
 ```
-yum -y install gcc-c++ git curl wget nasm yasm gcc gtk3-devel clang libxcb-devel libxdo-devel libXfixes-devel pulseaudio-libs-devel cmake alsa-lib-devel
+sudo yum -y install gcc-c++ git curl wget nasm yasm gcc gtk3-devel clang libxcb-devel libxdo-devel libXfixes-devel pulseaudio-libs-devel cmake alsa-lib-devel
 ```
 
-### Install VCPKG
+### Arch (Manjaro)
+```
+sudo pacman -Syu unzip git cmake gcc curl wget yasm zip make pkg-config clang gtk3 xdotool libxcb libxfixes alsa-lib pulseaudio
+```
+
+### Install vcpkg
 ```
 git clone https://github.com/microsoft/vcpkg --branch 2020.11-1
 vcpkg/bootstrap-vcpkg.sh
