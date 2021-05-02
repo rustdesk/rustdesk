@@ -86,7 +86,7 @@ class Header: Reactor.Component {
         if (is_osx) style += "margin: *";
         self.timer(1ms, toggleMenuState);
         return <div style={style}>
-            {is_osx ? "" : <span #fullscreen>{svg_fullscreen}</span>}
+            {is_osx || is_xfce ? "" : <span #fullscreen>{svg_fullscreen}</span>}
             <div #screens>
                 <span #secure title={title_conn}>{icon_conn}</span>
                 <div .remote-id>{handler.get_id()}</div>
