@@ -396,10 +396,12 @@ handler.adaptSize = function() {
     if (is_osx) workarea_offset = sy;
     var r = handler.get_size();
     if (r[2] > 0) {
-        if (r[2] >= fw && r[3] >= fh) {
+        if (r[2] >= fw && r[3] >= fh && !is_linux) {
             view.windowState = View.WINDOW_FULL_SCREEN;
+            stdout.println("Initialize to full screen");
         } else if (r[2] >= sw && r[3] >= sh) {
             view.windowState = View.WINDOW_MAXIMIZED;
+            stdout.println("Initialize to full screen");
         } else {
             view.move(r[0], r[1], r[2], r[3]);
         }

@@ -182,6 +182,7 @@ class Header: Reactor.Component {
                 view.windowState = View.WINDOW_SHOWN;
             }
             view.windowState = View.WINDOW_FULL_SCREEN;
+            if (is_linux) { self.timer(150ms, function() { view.windowState = View.WINDOW_FULL_SCREEN; }); }
         }
     }
     
