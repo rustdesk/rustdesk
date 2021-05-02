@@ -44,6 +44,11 @@ function stateChanged() {
     if (el) {
         el.state.disabled = fs;
     }
+    if (fs) {
+        $(header).style.set {
+            display: "none",
+        };
+    }
 }
 
 var header;
