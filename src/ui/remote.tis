@@ -407,11 +407,11 @@ handler.adaptSize = function() {
         }
     } else {
         var w = handler.box(#width, #border)
-        if (sw == w) {
+        var h = handler.box(#height, #border)
+        if (w >= sw || h >= sh) {
             view.windowState = View.WINDOW_MAXIMIZED;
             return;
         }
-        var h = $(header).box(#height, #border);
         // extra for border
         var extra = 2;
         centerize(w + extra, handler.box(#height, #border) + h + extra);
