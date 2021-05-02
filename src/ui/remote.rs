@@ -139,6 +139,7 @@ impl sciter::EventHandler for Handler {
     }
 
     sciter::dispatch_script_call! {
+        fn is_xfce();
         fn get_id();
         fn get_default_pi();
         fn get_option(String);
@@ -277,6 +278,10 @@ impl Handler {
 
     fn get_remember(&mut self) -> bool {
         self.lc.read().unwrap().remember
+    }
+
+    fn is_xfce(&self) -> bool {
+        crate::platform::is_xfce()
     }
 
     fn save_size(&mut self, x: i32, y: i32, w: i32, h: i32) {
