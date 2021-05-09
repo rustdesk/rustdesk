@@ -4,7 +4,7 @@ The best open-source remote desktop client software, written in Rust. Works out 
 
 [**BINARY DOWNLOAD**](https://github.com/rustdesk/rustdesk/releases)
 
-## Dependences
+## Dependencies
 
 Desktop versions use [sciter](https://sciter.com/) for GUI, please download sciter dynamic library yourself.
 
@@ -25,7 +25,7 @@ Desktop versions use [sciter](https://sciter.com/) for GUI, please download scit
 
 ## How to build on Linux
 
-### Ubuntu 18 (Debain 10)
+### Ubuntu 18 (Debian 10)
 ```
 sudo apt install -y g++ gcc git curl wget nasm yasm libgtk-3-dev clang libxcb-randr0-dev libxdo-dev libxfixes-dev libxcb-shape0-dev libxcb-xfixes0-dev libasound2-dev libpulse-dev cmake
 ```
