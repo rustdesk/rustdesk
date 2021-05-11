@@ -310,7 +310,7 @@ impl RendezvousMediator {
         });
         let bytes = msg_out.write_to_bytes()?;
         socket.send_raw(bytes).await?;
-        crate::accept_connection(server.clone(), socket, peer_addr, false).await;
+        crate::accept_connection(server.clone(), socket, peer_addr, true).await;
         Ok(())
     }
 
