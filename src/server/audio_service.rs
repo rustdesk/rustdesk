@@ -198,6 +198,7 @@ mod cpal_impl {
             log::error!("an error occurred on stream: {}", err);
         };
         // Sample rate must be one of 8000, 12000, 16000, 24000, or 48000.
+        // Note: somehow 48000 not work
         let sample_rate_0 = config.sample_rate().0;
         let sample_rate = if sample_rate_0 < 12000 {
             8000
@@ -205,10 +206,8 @@ mod cpal_impl {
             12000
         } else if sample_rate_0 < 24000 {
             16000
-        } else if sample_rate_0 < 48000 {
-            24000
         } else {
-            48000
+            24000
         };
         let mut encoder = Encoder::new(
             sample_rate,
