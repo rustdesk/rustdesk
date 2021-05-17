@@ -109,6 +109,7 @@ message LocalAddr {
   bytes socket_addr = 1;
   bytes local_addr = 2;
   string relay_server = 3;
+  string id = 4;
 }
 
 message RendezvousMessage {

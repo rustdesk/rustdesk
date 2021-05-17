@@ -12,7 +12,7 @@ use winapi::{
     // shared::dxgiformat::{DXGI_FORMAT, DXGI_FORMAT_B8G8R8A8_UNORM, DXGI_FORMAT_420_OPAQUE},
     shared::dxgi1_2::{IDXGIOutput1, IID_IDXGIOutput1},
     shared::dxgitype::DXGI_MODE_ROTATION,
-    shared::minwindef::{TRUE, UINT},
+    shared::minwindef::{DWORD, FALSE, TRUE, UINT},
     shared::ntdef::LONG,
     shared::windef::HMONITOR,
     shared::winerror::{
@@ -25,7 +25,9 @@ use winapi::{
         D3D11_CPU_ACCESS_READ, D3D11_SDK_VERSION, D3D11_USAGE_STAGING,
     },
     um::d3dcommon::D3D_DRIVER_TYPE_UNKNOWN,
+    um::wingdi::*,
     um::winnt::HRESULT,
+    um::winuser::*,
 };
 
 //TODO: Split up into files.
@@ -55,20 +57,24 @@ impl Capturer {
         let mut desc = unsafe { mem::MaybeUninit::uninit().assume_init() };
         let mut gdi_capturer = None;
 
-        let mut res = wrap_hresult(unsafe {
-            D3D11CreateDevice(
-                display.adapter as *mut _,
-                D3D_DRIVER_TYPE_UNKNOWN,
-                ptr::null_mut(), // No software rasterizer.
-                0,               // No device flags.
-                ptr::null_mut(), // Feature levels.
-                0,               // Feature levels' length.
-                D3D11_SDK_VERSION,
-                &mut device,
-                ptr::null_mut(),
-                &mut context,
-            )
-        });
+        let mut res = if display.gdi {
+            wrap_hresult(1)
+        } else {
+            wrap_hresult(unsafe {
+                D3D11CreateDevice(
+                    display.adapter as *mut _,
+                    D3D_DRIVER_TYPE_UNKNOWN,
+                    ptr::null_mut(), // No software rasterizer.
+                    0,               // No device flags.
+                    ptr::null_mut(), // Feature levels.
+                    0,               // Feature levels' length.
+                    D3D11_SDK_VERSION,
+                    &mut device,
+                    ptr::null_mut(),
+                    &mut context,
+                )
+            })
+        };
 
         if res.is_err() {
             gdi_capturer = display.create_gdi();
@@ -346,6 +352,56 @@ impl Displays {
         })
     }
 
+    pub fn get_from_gdi() -> Vec<Display> {
+        let mut all = Vec::new();
+        let mut i: DWORD = 0;
+        loop {
+            let mut d: DISPLAY_DEVICEW = unsafe { std::mem::MaybeUninit::uninit().assume_init() };
+            d.cb = std::mem::size_of::<DISPLAY_DEVICEW>() as _;
+            let ok = unsafe { EnumDisplayDevicesW(std::ptr::null(), i, &mut d as _, 0) };
+            if ok == FALSE {
+                break;
+            }
+            i += 1;
+            if 0 == (d.StateFlags & DISPLAY_DEVICE_ACTIVE)
+                || (d.StateFlags & DISPLAY_DEVICE_MIRRORING_DRIVER) > 0
+            {
+                continue;
+            }
+            // let is_primary = (d.StateFlags & DISPLAY_DEVICE_PRIMARY_DEVICE) > 0;
+            let mut disp = Display {
+                inner: std::ptr::null_mut(),
+                adapter: std::ptr::null_mut(),
+                desc: unsafe { std::mem::zeroed() },
+                gdi: true,
+            };
+            disp.desc.DeviceName = d.DeviceName;
+            let mut m: DEVMODEW = unsafe { std::mem::MaybeUninit::uninit().assume_init() };
+            m.dmSize = std::mem::size_of::<DEVMODEW>() as _;
+            m.dmDriverExtra = 0;
+            let ok = unsafe {
+                EnumDisplaySettingsExW(
+                    disp.desc.DeviceName.as_ptr(),
+                    ENUM_CURRENT_SETTINGS,
+                    &mut m as _,
+                    0,
+                )
+            };
+            if ok == FALSE {
+                continue;
+            }
+            disp.desc.DesktopCoordinates.left = unsafe { m.u1.s2().dmPosition.x };
+            disp.desc.DesktopCoordinates.top = unsafe { m.u1.s2().dmPosition.y };
+            disp.desc.DesktopCoordinates.right =
+                disp.desc.DesktopCoordinates.left + m.dmPelsWidth as i32;
+            disp.desc.DesktopCoordinates.bottom =
+                disp.desc.DesktopCoordinates.top + m.dmPelsHeight as i32;
+            disp.desc.AttachedToDesktop = 1;
+            all.push(disp);
+        }
+        all
+    }
+
     // No Adapter => Some(None)
     // Non-Empty Adapter => Some(Some(OUTPUT))
     // End of Adapter => None
@@ -414,6 +470,7 @@ impl Displays {
             inner,
             adapter: self.adapter,
             desc,
+            gdi: false,
         }))
     }
 }
@@ -460,7 +517,10 @@ pub struct Display {
     inner: *mut IDXGIOutput1,
     adapter: *mut IDXGIAdapter1,
     desc: DXGI_OUTPUT_DESC,
+    gdi: bool,
 }
+
+// https://github.com/dchapyshev/aspia/blob/59233c5d01a4d03ed6de19b03ce77d61a6facf79/source/base/desktop/win/screen_capture_utils.cc
 
 impl Display {
     pub fn width(&self) -> LONG {
@@ -511,6 +571,9 @@ impl Display {
 
 impl Drop for Display {
     fn drop(&mut self) {
+        if self.inner.is_null() {
+            return;
+        }
         unsafe {
             (*self.inner).Release();
             (*self.adapter).Release();

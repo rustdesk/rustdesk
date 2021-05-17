@@ -105,6 +105,9 @@ pub fn get_cursor_data(hcursor: u64) -> ResultType<CursorData> {
             bm_mask.bmHeight / 2
         };
         let cbits_size = width * height * 4;
+        if cbits_size < 16 {
+            bail!("Invalid icon: too small"); // solve some crash
+        }
         let mut cbits: Vec<u8> = Vec::new();
         cbits.resize(cbits_size as _, 0);
         let mut mbits: Vec<u8> = Vec::new();

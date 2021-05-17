@@ -73,7 +73,11 @@ fn run(sp: GenericService) -> ResultType<()> {
         rc_max_quantizer,
         speed,
     };
-    let mut vpx = Encoder::new(&cfg, 1).with_context(|| "Failed to create encoder")?;
+    let mut vpx;
+    match Encoder::new(&cfg, 1) {
+        Ok(x) => vpx = x,
+        Err(err) => bail!("Failed to create encoder: {}", err),
+    }
 
     if *SWITCH.lock().unwrap() {
         log::debug!("Broadcasting display switch");

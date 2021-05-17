@@ -31,7 +31,7 @@ fn find_package(name: &str) -> Vec<PathBuf> {
     if lib == "vpx" && target_os == "windows" {
         lib = format!("{}mt", lib);
     }
-    println!("{}", format!("cargo:rustc-link-lib={}", lib));
+    println!("{}", format!("cargo:rustc-link-lib=static={}", lib));
     println!(
         "{}",
         format!(

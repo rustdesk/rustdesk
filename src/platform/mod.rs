@@ -17,6 +17,17 @@ pub mod linux;
 use hbb_common::{message_proto::CursorData, ResultType};
 const SERVICE_INTERVAL: u64 = 300;
 
+pub fn is_xfce() -> bool {
+    #[cfg(target_os = "linux")]
+    {
+        return std::env::var_os("XDG_CURRENT_DESKTOP") == Some(std::ffi::OsString::from("XFCE"));
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        return false;
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

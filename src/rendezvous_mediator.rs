@@ -302,6 +302,7 @@ impl RendezvousMediator {
             relay_server = fla.relay_server;
         }
         msg_out.set_local_addr(LocalAddr {
+            id: Config::get_id(),
             socket_addr: AddrMangle::encode(peer_addr),
             local_addr: AddrMangle::encode(local_addr),
             relay_server,
@@ -309,7 +310,7 @@ impl RendezvousMediator {
         });
         let bytes = msg_out.write_to_bytes()?;
         socket.send_raw(bytes).await?;
-        crate::accept_connection(server.clone(), socket, peer_addr, false).await;
+        crate::accept_connection(server.clone(), socket, peer_addr, true).await;
         Ok(())
     }
 

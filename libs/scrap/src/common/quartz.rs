@@ -114,9 +114,9 @@ impl Display {
         self.0.is_online()
     }
 
-    pub fn origin(&self) -> (usize, usize) {
+    pub fn origin(&self) -> (i32, i32) {
         let o = self.0.bounds().origin;
-        (o.x as usize, o.y as usize)
+        (o.x as _, o.y as _)
     }
 
     pub fn is_primary(&self) -> bool {

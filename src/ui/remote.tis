@@ -10,6 +10,7 @@ var display_scale = 1;
 var keyboard_enabled = true; // server side
 var clipboard_enabled = true; // server side
 var audio_enabled = true; // server side
+var scroll_body = $(body);
 
 handler.setDisplay = function(x, y, w, h) {
     display_width = w;
@@ -166,7 +167,7 @@ function handler.onMouse(evt)
 {
     if (is_file_transfer || is_port_forward) return false;
     if (view.windowState == View.WINDOW_FULL_SCREEN && !dragging) {
-        if (evt.y < 10) {
+        if (evt.y - scroll_body.scroll(#top) < 10) {
             if (!wait_window_toolbar) {
                 wait_window_toolbar = true;
                 self.timer(300ms, function() {
@@ -392,23 +393,25 @@ handler.adaptSize = function() {
     size_adapted = true;
     var (sx, sy, sw, sh) = view.screenBox(#workarea, #rectw);
     var (fx, fy, fw, fh) = view.screenBox(#frame, #rectw);
-    workarea_offset = sy;
+    if (is_osx) workarea_offset = sy;
     var r = handler.get_size();
     if (r[2] > 0) {
-        if (r[2] >= fw && r[3] >= fh) {
+        if (r[2] >= fw && r[3] >= fh && !is_linux) {
             view.windowState = View.WINDOW_FULL_SCREEN;
+            stdout.println("Initialize to full screen");
         } else if (r[2] >= sw && r[3] >= sh) {
             view.windowState = View.WINDOW_MAXIMIZED;
+            stdout.println("Initialize to full screen");
         } else {
             view.move(r[0], r[1], r[2], r[3]);
         }
     } else {
         var w = handler.box(#width, #border)
-        if (sw == w) {
+        var h = handler.box(#height, #border)
+        if (w >= sw || h >= sh) {
             view.windowState = View.WINDOW_MAXIMIZED;
             return;
         }
-        var h = $(header).box(#height, #border);
         // extra for border
         var extra = 2;
         centerize(w + extra, handler.box(#height, #border) + h + extra);
