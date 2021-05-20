@@ -726,6 +726,7 @@ pub fn update_me() -> ResultType<()> {
     let src_exe = std::env::current_exe()?.to_str().unwrap_or("").to_owned();
     let cmds = format!(
         "
+        chcp 65001
         sc stop {app_name}
         taskkill /F /IM {app_name}.exe
         copy /Y \"{src_exe}\" \"{exe}\"
@@ -802,6 +803,26 @@ oLink.Save
     .to_str()
     .unwrap_or("")
     .to_owned();
+    let tray_shortcut = write_cmds(
+        format!(
+            "
+Set oWS = WScript.CreateObject(\"WScript.Shell\")
+sLinkFile = \"{tmp_path}\\{app_name} Tray.lnk\"
+
+Set oLink = oWS.CreateShortcut(sLinkFile)
+    oLink.TargetPath = \"{exe}\"
+    oLink.Arguments = \"--tray\"
+oLink.Save
+        ",
+            tmp_path = tmp_path,
+            app_name = APP_NAME,
+            exe = exe,
+        ),
+        "vbs",
+    )?
+    .to_str()
+    .unwrap_or("")
+    .to_owned();
     let mut shortcuts = Default::default();
     if options.contains("desktopicon") {
         shortcuts = format!(
@@ -833,6 +854,7 @@ copy /Y \"{tmp_path}\\Uninstall {app_name}.lnk\" \"{start_menu}\\\"
     // https://www.tenforums.com/tutorials/70903-add-remove-allowed-apps-through-windows-firewall-windows-10-a.html
     let cmds = format!(
         "
+chcp 65001
 md \"{path}\"
 copy /Y \"{src_exe}\" \"{exe}\"
 reg add {subkey} /f
@@ -850,11 +872,15 @@ reg add {subkey} /f /v WindowsInstaller /t REG_DWORD /d 0
 reg add HKEY_LOCAL_MACHINE\\Software\\Microsoft\\Windows\\CurrentVersion\\Policies\\System /f /v SoftwareSASGeneration /t REG_DWORD /d 1
 \"{mk_shortcut}\"
 \"{uninstall_shortcut}\"
+\"{tray_shortcut}\"
+copy /Y \"{tmp_path}\\{app_name} Tray.lnk\" \"C:\\ProgramData\\Microsoft\\Windows\\Start Menu\\Programs\\Startup\\\"
 {shortcuts}
 del /f \"{mk_shortcut}\"
 del /f \"{uninstall_shortcut}\"
+del /f \"{tray_shortcut}\"
 del /f \"{tmp_path}\\{app_name}.lnk\"
 del /f \"{tmp_path}\\Uninstall {app_name}.lnk\"
+del /f \"{tmp_path}\\{app_name} Tray.lnk\"
 reg add HKEY_CLASSES_ROOT\\.{ext} /f
 reg add HKEY_CLASSES_ROOT\\.{ext}\\DefaultIcon /f
 reg add HKEY_CLASSES_ROOT\\.{ext}\\DefaultIcon /f /ve /t REG_SZ  /d \"\\\"{exe}\\\",0\"
@@ -884,6 +910,7 @@ sc start {app_name}
         size=size,
         mk_shortcut=mk_shortcut,
         uninstall_shortcut=uninstall_shortcut,
+        tray_shortcut=tray_shortcut,
         tmp_path=tmp_path,
         shortcuts=shortcuts,
         config_path=config_path,
@@ -892,7 +919,8 @@ sc start {app_name}
     );
     run_cmds(cmds, false)?;
     std::thread::sleep(std::time::Duration::from_millis(2000));
-    std::process::Command::new(exe).spawn()?;
+    std::process::Command::new(&exe).spawn()?;
+    std::process::Command::new(&exe).arg("--tray").spawn()?;
     std::thread::sleep(std::time::Duration::from_millis(1000));
     Ok(())
 }
@@ -902,6 +930,7 @@ pub fn uninstall_me() -> ResultType<()> {
     let ext = APP_NAME.to_lowercase();
     let cmds = format!(
         "
+chcp 65001
 sc stop {app_name}
 sc delete {app_name}
 taskkill /F /IM {app_name}.exe
@@ -910,6 +939,7 @@ reg delete HKEY_CLASSES_ROOT\\.{ext} /f
 rd /s /q \"{path}\"
 rd /s /q \"{start_menu}\"
 del /f /q \"%PUBLIC%\\Desktop\\{app_name}*\"
+del /f /q \"C:\\ProgramData\\Microsoft\\Windows\\Start Menu\\Programs\\Startup\\{app_name} Tray.lnk\"
 netsh advfirewall firewall delete rule name=\"{app_name} Service\"
     ",
         app_name = APP_NAME,
@@ -929,6 +959,9 @@ fn write_cmds(cmds: String, ext: &str) -> ResultType<std::path::PathBuf> {
         cmds = format!("{}\ndel /f \"{}\"", cmds, tmp.to_str().unwrap_or(""));
     }
     let mut file = std::fs::File::create(&tmp)?;
+    // in case cmds mixed with \r\n and \n, make sure all ending with \r\n
+    // in some windows, \r\n required for cmd file to run
+    let cmds = cmds.replace("\r\n", "\n").replace("\n", "\r\n");
     file.write_all(cmds.as_bytes())?;
     file.sync_all()?;
     return Ok(tmp);

@@ -269,29 +269,6 @@ pub async fn start_server(is_server: bool, _tray: bool) {
                 std::process::exit(-1);
             }
         });
-        /*
-        tray is buggy, and not work on win10 2004, also cause crash, disable it
-        #[cfg(windows)]
-        if _tray {
-            std::thread::spawn(move || loop {
-                std::thread::sleep(std::time::Duration::from_secs(1));
-                if !crate::platform::is_prelogin() {
-                    let mut res = Ok(None);
-                    // while switching from prelogin to user screen, run_as_user may fails,
-                    // so we try more times
-                    for _ in 0..10 {
-                        res = crate::platform::run_as_user("--tray");
-                        if res.is_ok() {
-                            break;
-                        }
-                        std::thread::sleep(std::time::Duration::from_secs(1));
-                    }
-                    allow_err!(res);
-                    break;
-                }
-            });
-        }
-        */
         crate::RendezvousMediator::start_all().await;
     } else {
         match crate::ipc::connect(1000, "").await {
