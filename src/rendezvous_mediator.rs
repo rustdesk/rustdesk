@@ -39,11 +39,20 @@ pub struct RendezvousMediator {
 
 impl RendezvousMediator {
     pub async fn start_all() {
+        let mut nat_tested = false;
         check_zombie();
         let server = new_server();
+        if Config::get_nat_type() == NatType::UNKNOWN_NAT as i32 {
+            crate::common::test_nat_type();
+            nat_tested = true;
+        }
         loop {
             Config::reset_online();
             if Config::get_option("stop-service").is_empty() {
+                if !nat_tested {
+                    crate::common::test_nat_type();
+                    nat_tested = true;
+                }
                 let mut futs = Vec::new();
                 let servers = Config::get_rendezvous_servers();
                 for host in servers.clone() {
