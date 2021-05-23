@@ -1,0 +1,111 @@
+[package]
+name = "sciter-rs"
+version = "0.5.53"
+description = "Rust bindings for Sciter - Embeddable HTML/CSS/script engine (cross-platform desktop GUI toolkit). Also capable with DirectX / OpenGL."
+keywords = ["gui", "gtk", "cocoa", "opengl", "skia"]
+categories = ["gui", "web-programming", "rendering::graphics-api", "api-bindings"]
+
+authors = ["pravic <ehysta@gmail.com>"]
+repository = "https://github.com/sciter-sdk/rust-sciter"
+documentation = "https://docs.rs/sciter-rs"
+readme = "README.md"
+license = "MIT"
+
+exclude = [".gitignore", ".editorconfig", ".appveyor.yml", "clippy.toml"]
+
+[badges]
+appveyor = { repository = "sciter-sdk/rust-sciter" }
+travis-ci = { repository = "sciter-sdk/rust-sciter" }
+
+maintenance = { status = "passively-maintained" }
+
+[lib]
+name = "sciter"
+path = "src/lib.rs"
+crate-type = ["rlib"]
+
+[features]
+default = ["dynamic"]
+
+# Enable nightly compiler features (currently doesn't use any).
+nightly = []
+
+# Build as a Sciter extension library.
+# see "examples/extension"
+# note: this feature can't be tested.
+extension = []
+
+# Load Sciter DLL dynamically from the path specified by `sciter::set_library`.
+# Otherwise, links statically to `libsciter-gtk.so` or `sciter-osx-64.dylib`.
+dynamic = []
+
+# Build this crate specifically for Sciter.Lite versions
+# which are incompatible with the regular ones.
+windowless = []
+
+
+[dependencies]
+libc = "0.2"
+lazy_static = "1.0"
+
+[target.x86_64-apple-darwin.dependencies]
+objc = "0.2"
+objc-foundation = "0.1"
+
+[dev-dependencies]
+winit = "0.19"
+winapi = { version = "0.3", features = [
+  "impl-default",
+  "winuser",
+  "wingdi",
+  "sysinfoapi",
+] }
+raw-window-handle = "0.3"
+
+[[example]]
+name = "first"
+path = "examples/first.rs"
+
+[[example]]
+name = "minimal"
+path = "examples/minimal.rs"
+
+[[example]]
+name = "download"
+path = "examples/download.rs"
+
+[[example]]
+name = "dom"
+path = "examples/dom.rs"
+
+[[example]]
+name = "fire_event"
+path = "examples/fire_event.rs"
+
+[[example]]
+name = "interop"
+path = "examples/interop.rs"
+
+[[example]]
+name = "threads"
+path = "examples/threads.rs"
+
+[[example]]
+name = "archived"
+path = "examples/archived.rs"
+
+[[example]]
+name = "video"
+path = "examples/video.rs"
+
+[[example]]
+name = "clock"
+path = "examples/clock.rs"
+
+[[example]]
+name = "windowless"
+path = "examples/windowless.rs"
+
+[[example]]
+name = "som"
+path = "examples/som.rs"

@@ -1,0 +1,115 @@
+name: Build-n-Test
+
+on:
+  push:
+    branches:
+    - master
+    - travis
+
+  pull_request:
+    branches:
+    - master
+
+# Look:
+# https://github.com/actions/starter-workflows/blob/master/ci/rust.yml
+#
+# Simple, right? Right.
+# But we need to:
+# * download a specific Sciter library matching the running OS
+# * figure out where to save it
+# * add it to the $PATH
+#
+# yet,
+# * in case of macOS realize that it doesn't have Rust installed, so
+# * install it manually and don't forget to add cargo and rustc to the $PATH on each step
+# * and in case of Linux install additional packages for GTK3
+#
+# So, now we're ended up with this ugly script.
+
+jobs:
+  fetch:
+    name: Fetch dependencies
+
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        # macOS doesn't have Rust installed
+        # https://help.github.com/en/actions/automating-your-workflow-with-github-actions/software-installed-on-github-hosted-runners#macos-1015
+        # we will try to install it manually below.
+        os: [macos-latest, ubuntu-latest, windows-latest]
+
+    steps:
+      - name: Environment
+        shell: bash
+        env:
+          RUNNER_CONTEXT: ${{ toJson(runner) }}
+          SCITER_DEPS: ${{ runner.workspace }}
+        run: |
+          echo HOME is "$HOME"
+          echo workspace is "$SCITER_DEPS"
+          echo temp is "$TEMP"
+          echo runner is "$RUNNER_CONTEXT"
+          echo cargo is at `which cargo`
+          echo rustc is at `which rustc`
+          command -v cargo && rustc -vV
+          echo done
+
+  build:
+    needs: [fetch]
+    name: Build and test
+
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, ubuntu-latest, windows-latest]
+
+    steps:
+    - uses: actions/checkout@v2
+
+    - name: Windows deps
+      if: runner.os == 'Windows'
+      # Windows: download sciter library
+      run: curl -sSLo "%SCITER_DEPS%/sciter.dll" "https://raw.githubusercontent.com/c-smile/sciter-sdk/master/bin.win/x64/sciter.dll"
+      shell: cmd
+      env:
+        SCITER_DEPS: ${{ runner.workspace }}
+
+    - name: Linux deps
+      if: runner.os == 'Linux'
+      # Linux: download sciter library && install libgtk-3-dev
+      run: |
+        curl -so "$SCITER_DEPS/libsciter-gtk.so" "https://raw.githubusercontent.com/c-smile/sciter-sdk/master/bin.lnx/x64/libsciter-gtk.so"
+        sudo apt-get update -y && sudo apt-get install libgtk-3-dev libgtk-3-0 libstdc++-6-pic -y
+      env:
+        SCITER_DEPS: ${{ runner.workspace }}
+
+    - name: macOS deps
+      if: runner.os == 'macOS'
+      # OSX: download sciter library && install rustup
+      run: |
+        curl -so "$SCITER_DEPS/sciter-osx-64.dylib" "https://raw.githubusercontent.com/c-smile/sciter-sdk/master/bin.osx/sciter-osx-64.dylib"
+        curl https://sh.rustup.rs -sSf | sh -s -- --profile minimal -y
+        test -f $HOME/.cargo/env && source $HOME/.cargo/env
+        echo cargo is at `which cargo`
+        echo rustc is at `which rustc`
+      env:
+        SCITER_DEPS: ${{ runner.workspace }}
+
+    - name: Build
+      shell: bash
+      run: |
+        test -f $HOME/.cargo/env && source $HOME/.cargo/env
+        cargo build --all
+        cargo build --examples
+
+    - name: Tests
+      shell: bash
+      run: |
+        test -f $HOME/.cargo/env && source $HOME/.cargo/env
+        export PATH="$PATH:$SCITER_DEPS"
+        cargo run --example first
+        cargo test -p sciter-rs
+        cargo test -p sciter-serde
+      env:
+        SCITER_DEPS: ${{ runner.workspace }}

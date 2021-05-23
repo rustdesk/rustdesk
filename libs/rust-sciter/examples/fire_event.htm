@@ -1,0 +1,50 @@
+<html>
+<head>
+    <title>Fire event demo</title>
+    <style>
+
+        html {
+            background: radial-gradient(75% 75%, circle farthest-side, white, orange, rgb(0, 0, 204));
+            color: #fff;
+        }
+
+        #message {
+          margin: 10dip 0dip;
+          padding: 5dip;
+          width: 60%%;
+          min-height: 60dip;
+
+          color: black;
+          background: #ccc;
+          outline: 1px solid orange;
+        }
+
+    </style>
+    <script type="text/tiscript">
+      view.caption = $(head > title).value;
+
+      $(#machine).text = Sciter.machineName();
+
+      $(#post).on("click", : {
+        $(#message).postEvent(Event.CHANGE, 0, this, "hello?");
+      });
+
+      $(#message).on("change", function(e) {
+         this.text = String.printf("Event from `%s`: %v\n", e.source.id, e.data);
+      });
+
+    </script>
+</head>
+<body>
+
+  <h1>Fire event</h1>
+  <p>Running on <em #machine/> machine</p>
+
+  <button id="post">Post event</button>
+  <button id="send">Send event</button>
+  <button id="fire">Fire event</button>
+
+  <div id="message"></div>
+
+</body>
+</html>
