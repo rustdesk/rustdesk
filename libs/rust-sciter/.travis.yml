@@ -1,0 +1,99 @@
+# Based on the "trust" template v0.1.2
+# https://github.com/japaric/trust/tree/v0.1.2
+
+dist: xenial
+sudo: false
+language: rust
+compiler: gcc
+
+os:
+  - linux
+  - osx
+
+rust:
+  - stable
+  - nightly
+  - 1.40.0
+
+matrix:
+  include:
+    - os: osx
+      osx_image: xcode8
+    - os: osx
+      osx_image: xcode11
+
+branches:
+  only:
+    - master
+    - travis
+
+notifications:
+  email: change
+
+
+cache: cargo
+before_cache:
+  # Travis can't cache files that are not readable by "others"
+  - chmod -R a+r $HOME/.cargo
+
+addons:
+  apt:
+    sources:
+    - ubuntu-toolchain-r-test
+
+    packages:
+    - libgtk-3-dev
+    - libgtk-3-0
+    - libstdc++-6-pic
+
+
+before_install:
+  - set -e
+  - rustup self update
+
+install:
+  - source ~/.cargo/env || true
+  - export SDK_URL=https://raw.githubusercontent.com/c-smile/sciter-sdk/master
+  - if [ "$TRAVIS_OS_NAME" = "osx" ]; then export SDK_DLL="$TRAVIS_BUILD_DIR/sciter-osx-64.dylib"; fi
+  - if [ "$TRAVIS_OS_NAME" = "linux" ]; then export SDK_DLL="$TRAVIS_BUILD_DIR/libsciter-gtk.so"; fi
+
+  - if [ "$TRAVIS_OS_NAME" = "osx"   ]; then curl -so "$SDK_DLL" $SDK_URL/bin.osx/sciter-osx-64.dylib; fi
+  - if [ "$TRAVIS_OS_NAME" = "linux" ]; then curl -so "$SDK_DLL" $SDK_URL/bin.lnx/x64/libsciter-gtk.so; fi
+
+before_script:
+  - if [ "$TRAVIS_OS_NAME" = "osx" ]; then export DYLD_LIBRARY_PATH="$DYLD_LIBRARY_PATH:$TRAVIS_BUILD_DIR"; fi
+  - if [ "$TRAVIS_OS_NAME" = "osx" ]; then cp "$TRAVIS_BUILD_DIR/sciter-osx-64.dylib" "$TRAVIS_BUILD_DIR/libsciter-osx-64.dylib"; fi
+
+  - if [ "$TRAVIS_OS_NAME" = "linux" ]; then export LD_LIBRARY_PATH="$LD_LIBRARY_PATH:$TRAVIS_BUILD_DIR"; fi
+  - if [ "$TRAVIS_OS_NAME" = "linux" ]; then export RUSTFLAGS='-C link-arg=-Wl,--unresolved-symbols=ignore-in-shared-libs'; fi
+
+  - export PATH="$PATH:$TRAVIS_BUILD_DIR"
+  - export LIBRARY_PATH="$LIBRARY_PATH:$TRAVIS_BUILD_DIR"
+  - export RUST_BACKTRACE=full
+
+  - #ls /usr/lib/x86_64-linux-gnu/libstdc++*
+  - #strings /usr/lib/x86_64-linux-gnu/libstdc++.so.6 | grep GLIBC
+  - #file $SDK_DLL
+  - gcc --version
+  - rustc --version
+
+script:
+  - cargo update
+
+  - cargo build --example first --verbose
+  - cargo run --example first
+  - cargo run --example first --features "dynamic"
+  - cargo run --example first --features "dynamic" -- "$SDK_DLL"
+
+  - cargo build --all
+  - cargo build --all --release
+  - cargo build --examples --release
+  - cargo build --example windowless --features windowless
+
+  - cargo test -p sciter-rs
+  - cargo test -p sciter-rs --release
+
+  - cargo test -p sciter-serde
+  - cargo test -p sciter-serde --release
+
+after_script: set +e

@@ -148,6 +148,17 @@ fn patch(path: PathBuf) -> PathBuf {
             .into();
         #[cfg(target_os = "macos")]
         return _tmp.replace("Application Support", "Preferences").into();
+        #[cfg(target_os = "linux")]
+        {
+            if _tmp == "/root" {
+                if let Ok(output) = std::process::Command::new("whoami").output() {
+                    let user = String::from_utf8_lossy(&output.stdout).to_string().trim().to_owned();
+                    if user != "root" {
+                        return format!("/home/{}", user).into();
+                    }
+                }
+            }
+        }
     }
     path
 }
@@ -269,11 +280,10 @@ impl Config {
         }
         #[cfg(target_os = "linux")]
         {
-            if let Some(path) = dirs_next::home_dir().as_mut() {
-                path.push(format!(".local/share/logs/{}", APP_NAME));
-                std::fs::create_dir_all(&path).ok();
-                return path.clone();
-            }
+            let mut path = Self::get_home();
+            path.push(format!(".local/share/logs/{}", APP_NAME));
+            std::fs::create_dir_all(&path).ok();
+            return path;
         }
         if let Some(path) = Self::path("").parent() {
             let mut path: PathBuf = path.into();

@@ -1,0 +1,88 @@
+<html window-icon="https://sciter.com/wp-content/themes/sciter/!images/favicon.ico">
+  <head>
+    <title>Minimalistic Sciter demo</title>
+    <style>
+
+      html {
+        background: radial-gradient(75% 75%, circle farthest-side, white, orange, rgb(0,0,204));
+        color: #fff;
+      }
+
+      html:rtl {
+        mapping: left-to-right(background);
+      }
+
+      a { color: white; }
+      code { font-weight: bold; }
+
+    </style>
+    <script type="text/tiscript">
+      view.caption = $(head > title).value;
+
+      $(#machine).text = Sciter.machineName();
+      $(#version).text = String.printf("%d.%d.%d.%d",
+        (Sciter.VERSION >> 16) & 0xffff, Sciter.VERSION & 0xffff,
+        (Sciter.REVISION >> 16) & 0xffff, Sciter.REVISION & 0xffff);
+
+      try {
+        // since 4.2.5.0
+        $(#revision).text = Sciter.BUILD.toString();
+      } catch(e) {
+        $(#revision).text = "N/A";
+      }
+
+      var counter = 0;
+
+      $(button#append).on("click", function() {
+        $(body).$append(<h1#test>{ ++counter }</h1>);
+      });
+
+      $(button#open).on("click", function() {
+
+        var fn = view.selectFile(#open,
+          "HTML Files (*.htm,*.html)|*.HTM;*.HTML|All Files (*.*)|*.*" , "html" );
+
+        // if the dialog was closed or
+        // filesystem interaction was disabled via `ALLOW_FILE_IO`
+        // the selected file `fn` would be `undefined`.
+        stdout.println("selected file: " + fn);
+
+        if (fn) {
+          $(body).$append(<h1#test>{fn}</h1>);
+        }
+      });
+
+      // Some tricks with hyperlinks:
+      $(a).on("click", function() {
+        Sciter.launch(this.attributes["href"]);
+        return true;
+      });
+
+      for (var a in $$(a)) {
+        a.attributes["title"] = a.attributes["href"];
+      }
+
+    </script>
+  </head>
+<body>
+
+  <h1>Minimal Sciter Application</h1>
+  <p>Running on <em #machine /> machine</p>
+  <p>Sciter version <span #version /> rev <span #revision /></p>
+
+  <button #append>Append</button>
+  <button #open>Open</button>
+  <select>
+    <option>Some</option>
+    <option>Items</option>
+    <option>in select</option>
+  </select>
+
+  <section class=footer>
+    <p>You can inspect this window in the <a href="https://sciter.com/developers/development-tools/">Inspector tool</a>
+    from the <a href="https://sciter.com/download/">Sciter SDK</a>.</p>
+    <p>Run the Inspector first and then press <code>CTRL+SHIFT+I</code> in this window.</p>
+  </section>
+
+</body>
+</html>

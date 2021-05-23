@@ -1,0 +1,17 @@
+[package]
+name = "extension"
+version = "0.1.0"
+description = "A simple Sciter extension library"
+authors = ["pravic <ehysta@gmail.com>"]
+homepage = "https://sciter.com/include-library-name-native-extensions/"
+edition = "2018"
+publish = false
+
+[lib]
+path = "src/extension.rs"
+crate-type = ["cdylib"]
+test = false
+bench = false
+
+[dependencies]
+sciter-rs = { version = "0.5", path="../../", features = ["extension"] }

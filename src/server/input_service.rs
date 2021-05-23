@@ -188,6 +188,17 @@ fn modifier_sleep() {
 }
 
 pub fn handle_mouse(evt: &MouseEvent, conn: i32) {
+    #[cfg(target_os = "macos")]
+    if !*IS_SERVER {
+        // having GUI, run main GUI thread, otherwise crash
+        let evt = evt.clone();
+        QUEUE.exec_async(move || handle_mouse_(&evt, conn));
+        return;
+    }
+    handle_mouse_(evt, conn);
+}
+
+fn handle_mouse_(evt: &MouseEvent, conn: i32) {
     #[cfg(windows)]
     crate::platform::windows::try_change_desktop();
     let buttons = evt.mask >> 3;

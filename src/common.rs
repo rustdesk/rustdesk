@@ -154,6 +154,7 @@ pub fn test_nat_type() {
 
 #[tokio::main(basic_scheduler)]
 async fn test_nat_type_() -> ResultType<bool> {
+    log::info!("Testing nat ...");
     let start = std::time::Instant::now();
     let rendezvous_server = get_rendezvous_server(100).await;
     let server1 = rendezvous_server;
@@ -206,7 +207,7 @@ async fn test_nat_type_() -> ResultType<bool> {
             NatType::SYMMETRIC
         };
         Config::set_nat_type(t as _);
-        log::info!("tested nat type: {:?} in {:?}", t, start.elapsed());
+        log::info!("Tested nat type: {:?} in {:?}", t, start.elapsed());
     }
     Ok(ok)
 }
@@ -235,6 +236,7 @@ pub async fn get_nat_type(ms_timeout: u64) -> i32 {
 #[tokio::main(basic_scheduler)]
 async fn test_rendezvous_server_() {
     let servers = Config::get_rendezvous_servers();
+    hbb_common::config::ONLINE.lock().unwrap().clear();
     let mut futs = Vec::new();
     for host in servers {
         futs.push(tokio::spawn(async move {

@@ -93,9 +93,6 @@ pub enum Data {
 
 #[tokio::main(basic_scheduler)]
 pub async fn start(postfix: &str) -> ResultType<()> {
-    if postfix.is_empty() {
-        crate::common::test_nat_type();
-    }
     let mut incoming = new_listener(postfix).await?;
     loop {
         if let Some(result) = incoming.next().await {

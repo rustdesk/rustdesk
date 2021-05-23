@@ -1,0 +1,162 @@
+<html>
+<head>
+  <title>Clock</title>
+  <style>
+    body { padding: 5dip; }
+
+    #clocks {
+      size: *;
+      flow: horizontal-flow;
+    }
+
+    .city {
+      flow: vertical;
+      size: *;
+    }
+
+    .city > caption {
+      width: *;
+      padding: 5dip;
+      flow:horizontal;
+      horizontal-align: center;
+      font-size: 11pt;
+      font-weight: 700;
+    }
+
+    .city > clock, .edit {
+      margin-right: *;
+      margin-left: *;
+      margin-bottom: 5dip;
+    }
+
+    .city > .edit {
+      flow: horizontal;
+      width: max-content;
+    }
+
+    clock {
+      behavior: native-clock;
+      display: block;
+      min-width: 150dip;
+      min-height: 150dip;
+    }
+
+    .native-text {
+      behavior: native-text;
+      display: block;
+      min-height: 100dip;
+      min-width: 100dip;
+      outline: 1px solid orange;
+    }
+
+    .italic {
+      font-style: italic;
+    }
+    .bold {
+      font-weight: bold;
+    }
+  </style>
+  <script type="text/tiscript">
+
+    // called from Rust
+    function getLocalTime() {
+      var d = new Date();
+      return [d.hour, d.minute, d.second];
+    }
+
+    function getUtcTime(offset) {
+      var d = new Date();
+      d.UTChour += offset;
+      return [d.UTChour, d.UTCminute, d.UTCsecond];
+    }
+
+    var timeSet = $(#set-time);
+    var timeEdit = $(#edit-time);
+    var timeShow = $(#show-time);
+
+    timeEdit << event change {
+      var now = this.value;
+      var local = [now.hour, now.minute, now.second];
+      stdout.printf("timeEdit: %v %v\n", now, local);
+      timeShow.value = local;
+    }
+
+    timeSet << event click {
+      var now = new Date();
+      var local = [now.hour, now.minute, now.second];
+      stdout.printf("timeSet: %v %v\n", now, local);
+      timeEdit.value = now;
+      timeShow.value = local;
+    }
+
+    function self.ready() {
+      var now = new Date();
+      var local = [now.hour, now.minute, now.second];
+      stdout.printf("initial time: %v %v\n", now, local);
+      timeShow.value = local;
+    }
+
+    // update window icon
+    function setIcon() {
+      var clock = $(clock);
+
+      // get clock element size
+      var (w, h) = clock.box(#dimension, #border);
+      if (w == 0 || h == 0)
+        return;
+
+      // make a snapshot of it with 32x32 size
+      var img = new Image(clock, w, h, 32, 32);
+      var png = img.toBytes();
+      img.destroy();
+
+      // make an icon from the snapshot
+      var icon = Image.fromBytes(png);
+      view.windowIcon = icon;
+
+      return true; // continue to update icon ;)
+    }
+    self.timer(1000, setIcon);
+
+  </script>
+</head>
+<body>
+
+  <div id="clocks" some>
+    <div class="city">
+      <caption>London</caption>
+      <clock utc="0" title="UTC+0"></clock>
+    </div>
+
+    <div class="city">
+      <caption>Tokyo</caption>
+      <clock utc="+9" title="UTC+9"></clock>
+    </div>
+
+    <div class="city">
+      <caption>New York</caption>
+      <clock utc="-4" title="UTC-4"></clock>
+    </div>
+  </div>
+
+  <div id="local" some>
+    <div class="city">
+      <caption>Frozen time</caption>
+      <clock frozen id="show-time"></clock>
+      <div class="edit">
+        <widget type="time" value="now" id="edit-time" title="Change time of the drawn clock" />
+        <widget type="button" id="set-time" title="Reset back to local time">=</widget>
+      </div>
+    </div>
+  </div>
+
+  <div>
+    <div class="city">
+      <caption>Text</caption>
+      <div class="native-text">static text</div>
+    </div>
+  </div>
+
+
+</body>
+</html>
