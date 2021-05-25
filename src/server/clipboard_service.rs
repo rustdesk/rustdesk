@@ -6,7 +6,6 @@ pub use crate::common::{
 
 struct State {
     ctx: Option<ClipboardContext>,
-    initialized: bool,
 }
 
 impl Default for State {
@@ -18,22 +17,18 @@ impl Default for State {
                 None
             }
         };
-        Self {
-            ctx,
-            initialized: false,
-        }
+        Self { ctx }
     }
 }
 
 impl super::service::Reset for State {
     fn reset(&mut self) {
         *CONTENT.lock().unwrap() = Default::default();
-        self.initialized = false;
     }
 }
 
 pub fn new() -> GenericService {
-    let sp = GenericService::new(NAME, false);
+    let sp = GenericService::new(NAME, true);
     sp.repeat::<State, _>(INTERVAL, run);
     sp
 }
@@ -41,13 +36,16 @@ pub fn new() -> GenericService {
 fn run(sp: GenericService, state: &mut State) -> ResultType<()> {
     if let Some(ctx) = state.ctx.as_mut() {
         if let Some(msg) = check_clipboard(ctx, None) {
-            if !state.initialized {
-                state.initialized = true;
-                // ignore clipboard update before service start
-                return Ok(());
-            }
             sp.send(msg);
         }
+        sp.snapshot(|sps| {
+            let txt = crate::CONTENT.lock().unwrap().clone();
+            if !txt.is_empty() {
+                let msg_out = crate::create_clipboard_msg(txt);
+                sps.send_shared(Arc::new(msg_out));
+            }
+            Ok(())
+        })?;
     }
     Ok(())
 }

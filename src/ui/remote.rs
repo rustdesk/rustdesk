@@ -9,6 +9,7 @@ use hbb_common::{
     fs, log,
     message_proto::*,
     protobuf::Message as _,
+    sleep,
     tokio::{
         self,
         sync::mpsc,
@@ -1145,7 +1146,7 @@ impl Remote {
     }
 
     fn start_clipboard(&mut self) -> Option<std::sync::mpsc::Sender<()>> {
-        if self.handler.is_file_transfer() {
+        if self.handler.is_file_transfer() || self.handler.is_port_forward() {
             return None;
         }
         let (tx, rx) = std::sync::mpsc::channel();
@@ -1430,6 +1431,23 @@ impl Remote {
                     }
                     Some(login_response::Union::peer_info(pi)) => {
                         self.handler.handle_peer_info(pi);
+                        if !(self.handler.is_file_transfer()
+                            || self.handler.is_port_forward()
+                            || !*self.clipboard.read().unwrap()
+                            || !*self.keyboard.read().unwrap()
+                            || self.handler.lc.read().unwrap().disable_clipboard)
+                        {
+                            let txt = self.old_clipboard.lock().unwrap().clone();
+                            if !txt.is_empty() {
+                                let msg_out = crate::create_clipboard_msg(txt);
+                                let sender = self.sender.clone();
+                                tokio::spawn(async move {
+                                    // due to clipboard service interval time
+                                    sleep(common::CLIPBOARD_INTERVAL as f32 / 1_000.).await;
+                                    sender.send(Data::Message(msg_out)).ok();
+                                });
+                            }
+                        }
                     }
                     _ => {}
                 },
@@ -1587,7 +1605,7 @@ impl Interface for Handler {
         pi_sciter.set_item("sas_enabled", pi.sas_enabled);
         if self.is_file_transfer() {
             if pi.username.is_empty() {
-                self.on_error("No active user logged on, please connect and logon first.");
+                self.on_error("No active console user logged on, please connect and logon first.");
                 return;
             }
         } else if !self.is_port_forward() {

@@ -50,6 +50,20 @@ pub fn valid_for_capslock(evt: &KeyEvent) -> bool {
     }
 }
 
+pub fn create_clipboard_msg(content: String) -> Message {
+    let bytes = content.into_bytes();
+    let compressed = compress_func(&bytes, COMPRESS_LEVEL);
+    let compress = compressed.len() < bytes.len();
+    let content = if compress { compressed } else { bytes };
+    let mut msg = Message::new();
+    msg.set_clipboard(Clipboard {
+        compress,
+        content,
+        ..Default::default()
+    });
+    msg
+}
+
 pub fn check_clipboard(
     ctx: &mut ClipboardContext,
     old: Option<&Arc<Mutex<String>>>,
@@ -61,18 +75,8 @@ pub fn check_clipboard(
             let changed = content != *old.lock().unwrap();
             if changed {
                 log::info!("{} update found on {}", CLIPBOARD_NAME, side);
-                let bytes = content.clone().into_bytes();
-                *old.lock().unwrap() = content;
-                let compressed = compress_func(&bytes, COMPRESS_LEVEL);
-                let compress = compressed.len() < bytes.len();
-                let content = if compress { compressed } else { bytes };
-                let mut msg = Message::new();
-                msg.set_clipboard(Clipboard {
-                    compress,
-                    content,
-                    ..Default::default()
-                });
-                return Some(msg);
+                *old.lock().unwrap() = content.clone();
+                return Some(create_clipboard_msg(content));
             }
         }
     }

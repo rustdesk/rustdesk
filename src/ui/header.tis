@@ -36,7 +36,9 @@ function stateChanged() {
     cur_window_state = view.windowState;
     adjustBorder();
     adaptDisplay();
-    if (!is_linux) view.focus = handler; // this cause windows always topmost on linux
+    if (cur_window_state != View.WINDOW_MINIMIZED) {
+        view.focus = handler; // to make focus away from restore/maximize button, so that enter key work
+    }
     var fs = view.windowState == View.WINDOW_FULL_SCREEN;
     var el = $(#fullscreen);
     if (el) el.attributes.toggleClass("active", fs);
