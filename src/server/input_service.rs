@@ -174,7 +174,6 @@ pub fn is_left_up(evt: &MouseEvent) -> bool {
 
 #[cfg(windows)]
 pub fn mouse_move_relative(x: i32, y: i32) {
-    #[cfg(windows)]
     crate::platform::windows::try_change_desktop();
     let mut en = ENIGO.lock().unwrap();
     en.mouse_move_relative(x, y);
@@ -340,7 +339,7 @@ lazy_static::lazy_static! {
         (ControlKey::Numpad9, enigo::Key::Numpad9),
         (ControlKey::Cancel, enigo::Key::Cancel),
         (ControlKey::Clear, enigo::Key::Clear),
-        (ControlKey::Menu, enigo::Key::Menu),
+        (ControlKey::Menu, enigo::Key::Alt),
         (ControlKey::Pause, enigo::Key::Pause),
         (ControlKey::Kana, enigo::Key::Kana),
         (ControlKey::Hangul, enigo::Key::Hangul),
@@ -368,6 +367,10 @@ lazy_static::lazy_static! {
         (ControlKey::Divide, enigo::Key::Divide),
         (ControlKey::Equals, enigo::Key::Equals),
         (ControlKey::NumpadEnter, enigo::Key::NumpadEnter),
+        (ControlKey::RAlt, enigo::Key::RightAlt),
+        (ControlKey::RWin, enigo::Key::RWin),
+        (ControlKey::RControl, enigo::Key::RightControl),
+        (ControlKey::RShift, enigo::Key::RightShift),
     ].iter().map(|(a, b)| (a.value(), b.clone())).collect();
     static ref NUMPAD_KEY_MAP: HashMap<i32, bool> =
     [

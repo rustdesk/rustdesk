@@ -711,6 +711,7 @@ impl Handler {
                     0x4C => key_event.set_control_key(ControlKey::NumpadEnter), // numpad enter
                     0x69 => key_event.set_control_key(ControlKey::Snapshot),
                     0x72 => key_event.set_control_key(ControlKey::Help),
+                    0x6E => key_event.set_control_key(ControlKey::Apps),
                     0x47 => {
                         key_event.set_control_key(if self.peer_platform() == "Mac OS" {
                             ControlKey::Clear
@@ -732,9 +733,48 @@ impl Handler {
                     0x91 => key_event.set_control_key(ControlKey::Scroll),
                     0x90 => key_event.set_control_key(ControlKey::NumLock),
                     0x5C => key_event.set_control_key(ControlKey::RWin),
+                    0x5B => key_event.set_control_key(ControlKey::Meta),
                     0x5D => key_event.set_control_key(ControlKey::Apps),
                     0xBE => key_event.set_chr('.' as _),
                     0xC0 => key_event.set_chr('`' as _),
+                    _ => {
+                        log::error!("Unknown key code {}", code);
+                        return None;
+                    }
+                }
+            } else if cfg!(target_os = "linux") {
+                match code {
+                    65300 => key_event.set_control_key(ControlKey::Scroll),
+                    65421 => key_event.set_control_key(ControlKey::NumpadEnter), // numpad enter
+                    65407 => key_event.set_control_key(ControlKey::NumLock),
+                    65516 => key_event.set_control_key(ControlKey::RWin),
+                    65513 => key_event.set_control_key(ControlKey::Alt),
+                    65514 => key_event.set_control_key(ControlKey::RAlt),
+                    65508 => key_event.set_control_key(ControlKey::RControl),
+                    65506 => key_event.set_control_key(ControlKey::RShift),
+                    96 => key_event.set_chr('`' as _),
+                    46 => key_event.set_chr('.' as _),
+                    126 => key_event.set_chr('`' as _),
+                    33 => key_event.set_chr('1' as _),
+                    64 => key_event.set_chr('2' as _),
+                    35 => key_event.set_chr('3' as _),
+                    36 => key_event.set_chr('4' as _),
+                    37 => key_event.set_chr('5' as _),
+                    94 => key_event.set_chr('6' as _),
+                    38 => key_event.set_chr('7' as _),
+                    42 => key_event.set_chr('8' as _),
+                    40 => key_event.set_chr('9' as _),
+                    41 => key_event.set_chr('0' as _),
+                    95 => key_event.set_chr('-' as _),
+                    43 => key_event.set_chr('=' as _),
+                    123 => key_event.set_chr('[' as _),
+                    125 => key_event.set_chr(']' as _),
+                    124 => key_event.set_chr('\\' as _),
+                    58 => key_event.set_chr(';' as _),
+                    34 => key_event.set_chr('\'' as _),
+                    60 => key_event.set_chr(',' as _),
+                    62 => key_event.set_chr('.' as _),
+                    63 => key_event.set_chr('/' as _),
                     _ => {
                         log::error!("Unknown key code {}", code);
                         return None;
@@ -819,6 +859,17 @@ impl Handler {
             command,
             extended,
         );
+
+        let mut name = name;
+
+        if extended {
+            match name.as_ref() {
+                "VK_CONTROL" => name = "RControl".to_owned(),
+                "VK_MENU" => name = "RAlt".to_owned(),
+                "VK_SHIFT" => name = "RShift".to_owned(),
+                _ => {}
+            }
+        }
 
         if let Some(mut key_event) = self.get_key_event(down_or_up, &name, code) {
             // Linux has different repeated key down handling from mac and windows

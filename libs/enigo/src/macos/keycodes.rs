@@ -70,3 +70,4 @@ pub const kVK_ANSI_KeypadDivide: u16 = 0x4B;
 pub const kVK_ANSI_KeypadEnter: u16 = 0x4C;
 pub const kVK_ANSI_KeypadMinus: u16 = 0x4E;
 pub const kVK_ANSI_KeypadEquals: u16 = 0x51;
+pub const kVK_RIGHT_COMMAND: u16 = 0x36;
