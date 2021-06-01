@@ -899,16 +899,28 @@ impl Handler {
                 }
             }
             */
-            if alt && !crate::is_control_key(&key_event, &ControlKey::Alt) {
+            if alt
+                && !crate::is_control_key(&key_event, &ControlKey::Alt)
+                && !crate::is_control_key(&key_event, &ControlKey::RAlt)
+            {
                 key_event.modifiers.push(ControlKey::Alt.into());
             }
-            if shift && !crate::is_control_key(&key_event, &ControlKey::Shift) {
+            if shift
+                && !crate::is_control_key(&key_event, &ControlKey::Shift)
+                && !crate::is_control_key(&key_event, &ControlKey::RShift)
+            {
                 key_event.modifiers.push(ControlKey::Shift.into());
             }
-            if ctrl && !crate::is_control_key(&key_event, &ControlKey::Control) {
+            if ctrl
+                && !crate::is_control_key(&key_event, &ControlKey::Control)
+                && !crate::is_control_key(&key_event, &ControlKey::RControl)
+            {
                 key_event.modifiers.push(ControlKey::Control.into());
             }
-            if command && !crate::is_control_key(&key_event, &ControlKey::Meta) {
+            if command
+                && !crate::is_control_key(&key_event, &ControlKey::Meta)
+                && !crate::is_control_key(&key_event, &ControlKey::RWin)
+            {
                 key_event.modifiers.push(ControlKey::Meta.into());
             }
             if crate::is_control_key(&key_event, &ControlKey::CapsLock) {

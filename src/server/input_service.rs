@@ -186,6 +186,19 @@ fn modifier_sleep() {
     std::thread::sleep(std::time::Duration::from_nanos(1));
 }
 
+#[cfg(not(target_os = "macos"))]
+#[inline]
+fn get_modifier_state(key: enigo::Key, en: &mut Enigo) -> bool {
+    let x = en.get_key_state(key.clone());
+    match key {
+        enigo::Key::Shift => x || en.get_key_state(enigo::Key::RightShift),
+        enigo::Key::Control => x || en.get_key_state(enigo::Key::RightControl),
+        enigo::Key::Alt => x || en.get_key_state(enigo::Key::RightAlt),
+        enigo::Key::Meta => x || en.get_key_state(enigo::Key::RWin),
+        _ => x,
+    }
+}
+
 pub fn handle_mouse(evt: &MouseEvent, conn: i32) {
     #[cfg(target_os = "macos")]
     if !*IS_SERVER {
@@ -220,7 +233,7 @@ fn handle_mouse_(evt: &MouseEvent, conn: i32) {
                 en.add_flag(key);
                 #[cfg(not(target_os = "macos"))]
                 if key != &enigo::Key::CapsLock && key != &enigo::Key::NumLock {
-                    if !en.get_key_state(key.clone()) {
+                    if !get_modifier_state(key.clone(), &mut en) {
                         en.key_down(key.clone()).ok();
                         modifier_sleep();
                         to_release.push(key);
@@ -428,7 +441,7 @@ fn handle_key_(evt: &KeyEvent) {
                         has_numlock = true;
                     }
                 } else {
-                    if !en.get_key_state(key.clone()) {
+                    if !get_modifier_state(key.clone(), &mut en) {
                         en.key_down(key.clone()).ok();
                         modifier_sleep();
                         to_release.push(key);
