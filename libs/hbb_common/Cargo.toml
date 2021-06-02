@@ -24,7 +24,7 @@ rand = "0.7"
 serde_derive = "1.0"
 serde = "1.0"
 lazy_static = "1.4"
-confy = { git = "https://github.com/open-trade/confy" }
+confy = { path = "../confy" }
 dirs-next = "2.0"
 filetime = "0.2"
 sodiumoxide = "0.2"
