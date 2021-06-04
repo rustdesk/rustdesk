@@ -22,7 +22,7 @@ class PortForward: Reactor.Component {
       return <div #file-transfer><section>
         {pfs.length ? <div style="background: green; color: white; text-align: center; padding: 0.5em;">
           <span style="font-size: 1.2em">Listening ...</span><br/>
-          <span style="font-size: 0.8em; color: #ddd">Don't close this window while your are using tunnel</span>
+          <span style="font-size: 0.8em; color: #ddd">Don't close this window while you are using the tunnel</span>
         </div> : ""}
         <table #port-forward>    
         <thead>    

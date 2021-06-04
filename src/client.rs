@@ -135,7 +135,7 @@ impl Client {
                             if ph.socket_addr.is_empty() {
                                 match ph.failure.enum_value_or_default() {
                                     punch_hole_response::Failure::ID_NOT_EXIST => {
-                                        bail!("ID not exist");
+                                        bail!("ID does not exist");
                                     }
                                     punch_hole_response::Failure::OFFLINE => {
                                         bail!("Remote desktop is offline");
