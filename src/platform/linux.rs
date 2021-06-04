@@ -187,8 +187,9 @@ pub fn start_os_service() {
                 d = get_display();
             }
             if d.is_empty() {
-                d = ":0".to_owned()
+                d = ":0".to_owned();
             }
+            d = d.replace(&whoami::hostname(), "").replace("localhost", "");
             log::info!("DISPLAY: {}", d);
             log::info!("XAUTHORITY: {}", auth);
             std::env::set_var("XAUTHORITY", auth);
@@ -343,18 +344,24 @@ pub fn get_display_server() -> String {
 pub fn is_login_wayland() -> bool {
     if let Ok(contents) = std::fs::read_to_string("/etc/gdm3/custom.conf") {
         contents.contains("#WaylandEnable=false")
+    } else if let Ok(contents) = std::fs::read_to_string("/etc/gdm/custom.conf") {
+        contents.contains("#WaylandEnable=false")
     } else {
         false
     }
 }
 
 pub fn fix_login_wayland() {
+    let mut file = "/etc/gdm3/custom.conf".to_owned();
+    if !std::path::Path::new(&file).exists() {
+        file = "/etc/gdm/custom.conf".to_owned();
+    }
     match std::process::Command::new("pkexec")
         .args(vec![
             "sed",
             "-i",
             "s/#WaylandEnable=false/WaylandEnable=false/g",
-            "/etc/gdm3/custom.conf",
+            &file
         ])
         .output()
     {
