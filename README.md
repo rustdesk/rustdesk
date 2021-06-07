@@ -6,6 +6,8 @@ Chat with us: [Discord](https://discord.gg/nDceKgxnkV)
 
 An open-source remote desktop client software, written in Rust. Works out of the box, no configuration required. Great alternative to TeamViewer and AnyDesk! You have full control of your data, with no concerns about security. You can use our rendezvous/relay server, [set up your own](https://rustdesk.com/blog/id-relay-set/), or [write your own rendezvous/relay server](https://github.com/rustdesk/rustdesk-server-demo). 
 
+RustDesk welcomes contribution from everyone.  See [`CONTRIBUTING.md`](CONTRIBUTING.md) for help getting started.
+
 [**BINARY DOWNLOAD**](https://github.com/rustdesk/rustdesk/releases)
 
 ## Dependencies
