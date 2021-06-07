@@ -318,6 +318,7 @@ impl Client {
                             }
                         } else {
                             // fall back to non-secure connection in case pk mismatch
+                            // to-do: pop up a warning dialog to let user choose if continue
                             let mut msg_out = Message::new();
                             msg_out.set_public_key(PublicKey::new());
                             timeout(CONNECT_TIMEOUT, conn.send(&msg_out)).await??;
