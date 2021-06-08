@@ -164,7 +164,7 @@ pub fn start_os_service() {
             uid = tmp;
             log::info!("uid of seat0: {}", uid);
             let gdm = format!("/run/user/{}/gdm/Xauthority", uid);
-            let mut auth = get_env("XAUTHORITY", &uid);
+            let mut auth = get_env_tries("XAUTHORITY", &uid, 10);
             if auth.is_empty() {
                 auth = if std::path::Path::new(&gdm).exists() {
                     gdm
@@ -500,6 +500,17 @@ fn run_cmds(cmds: String) -> ResultType<Option<String>> {
     } else {
         Ok(None)
     }
+}
+
+fn get_env_tries(name: &str, uid: &str, n: usize) -> String {
+    for _ in 0..n {
+        let x = get_env(name, uid);
+        if !x.is_empty() {
+            return x;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(300));
+    }
+    "".to_owned()
 }
 
 fn get_env(name: &str, uid: &str) -> String {
