@@ -290,6 +290,7 @@ fn get_display() -> String {
     }
     // above not work for gdm user
     log::debug!("ls -l /tmp/.X11-unix/");
+    let mut last = "".to_owned();
     if let Ok(output) = std::process::Command::new("ls")
         .args(vec!["-l", "/tmp/.X11-unix/"])
         .output()
@@ -297,16 +298,18 @@ fn get_display() -> String {
         for line in String::from_utf8_lossy(&output.stdout).lines() {
             log::debug!("  {}", line);
             let mut iter = line.split_whitespace();
-            if iter.nth(2) == Some(&user) {
-                if let Some(x) = iter.last() {
-                    if x.starts_with("X") {
-                        return x.replace("X", ":").to_owned();
+            let user_field = iter.nth(2);
+            if let Some(x) = iter.last() {
+                if x.starts_with("X") {
+                    last = x.replace("X", ":").to_owned();
+                    if user_field == Some(&user) {
+                        return last;
                     }
                 }
             }
         }
     }
-    "".to_owned()
+    last
 }
 
 fn get_value_of_seat0(i: usize) -> String {
