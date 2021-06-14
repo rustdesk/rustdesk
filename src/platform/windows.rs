@@ -1037,3 +1037,33 @@ pub fn get_installed_version() -> String {
     }
     "".to_owned()
 }
+
+
+pub fn create_shortcut(id: &str) -> ResultType<()> {
+    let exe = std::env::current_exe()?.to_str().unwrap_or("").to_owned();
+    let shortcut = write_cmds(
+        format!(
+            "
+Set oWS = WScript.CreateObject(\"WScript.Shell\")
+strDesktop = oWS.SpecialFolders(\"Desktop\")
+Set objFSO = CreateObject(\"Scripting.FileSystemObject\")
+sLinkFile = objFSO.BuildPath(strDesktop, \"{id}.lnk\")
+Set oLink = oWS.CreateShortcut(sLinkFile)
+    oLink.TargetPath = \"{exe}\"
+    oLink.Arguments = \"--connect {id}\"
+oLink.Save
+        ",
+            exe = exe,
+            id = id,
+        ),
+        "vbs",
+    )?
+    .to_str()
+    .unwrap_or("")
+    .to_owned();
+    std::process::Command::new("cscript")
+        .arg(&shortcut)
+        .output()?;
+    allow_err!(std::fs::remove_file(shortcut));
+    Ok(())
+}

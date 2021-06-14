@@ -121,7 +121,10 @@ async fn create_tcp_connection_(
                             let mut key = [0u8; secretbox::KEYBYTES];
                             key[..].copy_from_slice(&symmetric_key);
                             stream.set_key(secretbox::Key(key));
-                        } else if !pk.asymmetric_value.is_empty() {
+                        } else if pk.asymmetric_value.is_empty() {
+                            // force a trial to update_pk to rendezvous server
+                            Config::set_key_confirmed(false);
+                        } else {
                             bail!("Handshake failed: invalid public sign key length from peer");
                         }
                     } else {

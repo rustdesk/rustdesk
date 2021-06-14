@@ -260,7 +260,7 @@ fn keysequence<'a>(key: Key) -> Cow<'a, str> {
         Key::Mute => "",
         Key::Scroll => "Scroll_Lock",
         Key::NumLock => "Num_Lock",
-        Key::RWin => "",
+        Key::RWin => "Super_R",
         Key::Apps => "",
         Key::Multiply => "KP_Multiply",
         Key::Add => "KP_Add",
@@ -268,6 +268,9 @@ fn keysequence<'a>(key: Key) -> Cow<'a, str> {
         Key::Divide => "KP_Divide",
         Key::Equals => "KP_Equal",
         Key::NumpadEnter => "KP_Enter",
+        Key::RightShift => "Shift_R",
+        Key::RightControl => "Control_R",
+        Key::RightAlt => "Alt_R",
 
         Key::Command | Key::Super | Key::Windows | Key::Meta => "Super",
 

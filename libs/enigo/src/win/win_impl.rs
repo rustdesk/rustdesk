@@ -338,10 +338,14 @@ impl Enigo {
             Key::Divide => EVK_DIVIDE,
             Key::NumpadEnter => EVK_RETURN,
             Key::Equals => '=' as _,
+            Key::RightShift => EVK_RSHIFT,
+            Key::RightControl => EVK_RCONTROL,
+            Key::RightAlt => EVK_RMENU,
 
             Key::Raw(raw_keycode) => raw_keycode,
             Key::Layout(c) => self.get_layoutdependent_keycode(c.to_string()),
             Key::Super | Key::Command | Key::Windows | Key::Meta => EVK_LWIN,
+            _ => 0,
         }
     }
 

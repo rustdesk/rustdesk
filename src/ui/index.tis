@@ -103,6 +103,8 @@ event click $(menu#remote-context li) (evt, me) {
     } else if (action == "remove") {
         handler.remove_peer(id);
         app.recent_sessions.update();
+    } else if (action == "shortcut") {
+        handler.create_shortcut(id);
     } else if (action == "rdp") {
         createNewConnect(id, "rdp");
     } else if (action == "tunnel") {
@@ -115,7 +117,7 @@ function createNewConnect(id, type) {
     app.remote_id.value = formatId(id);
     if (!id) return;
     if (id == handler.get_id()) {
-        handler.msgbox("custom-error", "Error", "Sorry, it is yourself");
+        handler.msgbox("custom-error", "Error", "You cannot connect to your own computer");
         return;
     }
     handler.set_remote_id(id);
@@ -310,6 +312,22 @@ class App: Reactor.Component
         var is_can_screen_recording = handler.is_can_screen_recording(false);
         return
             <div .app>
+              <popup>
+              <menu.context #remote-context>
+                <li #connect>Connect</li>
+                <li #transfer>Transfer File</li>
+                <li #tunnel>TCP Tunneling</li>
+                <li #rdp>RDP</li>
+                <li #remove>Remove</li>
+                {is_win && <li #shortcut>Create Desktop Shortcut</li>}
+              </menu>
+              </popup>
+              <popup>
+              <menu.context #edit-password-context>
+                <li #refresh-password>Refresh random password</li>
+                <li #set-password>Set your own password</li>
+              </menu>
+              </popup>
                 <div .left-pane>
                     <div>
                         <div .title>Your Desktop</div>
@@ -421,7 +439,7 @@ class UpgradeMe: Reactor.Component {
         var update_or_download = is_osx ? "download" : "update";
         return <div .install-me>
             <div>{handler.get_app_name()} Status</div>
-            <div>Your installation is lower version.</div>
+            <div>An update is available for RustDesk.</div>
             <div #install-me .link style="padding-top: 1em">Click to upgrade</div>
         </div>;
     }
@@ -444,7 +462,7 @@ class UpdateMe: Reactor.Component {
 
     event click $(#install-me) {
         if (is_osx) {
-            handler.open_url("http://rustdesk.com");
+            handler.open_url("https://rustdesk.com");
             return;
         }
         var url = software_update_url + '.' + handler.get_software_ext();

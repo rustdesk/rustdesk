@@ -9,6 +9,7 @@ use hbb_common::{
     fs, log,
     message_proto::*,
     protobuf::Message as _,
+    sleep,
     tokio::{
         self,
         sync::mpsc,
@@ -62,6 +63,7 @@ pub struct Handler {
     id: String,
     args: Vec<String>,
     lc: Arc<RwLock<LoginConfigHandler>>,
+    super_on: bool,
 }
 
 impl Deref for Handler {
@@ -152,6 +154,9 @@ impl sciter::EventHandler for Handler {
         fn send_mouse(i32, i32, i32, bool, bool, bool, bool);
         fn key_down_or_up(bool, String, i32, bool, bool, bool, bool, bool);
         fn ctrl_alt_del();
+        fn ctrl_space();
+        fn alt_tab();
+        fn super_x();
         fn transfer_file();
         fn tunnel();
         fn lock_screen();
@@ -710,6 +715,7 @@ impl Handler {
                     0x4C => key_event.set_control_key(ControlKey::NumpadEnter), // numpad enter
                     0x69 => key_event.set_control_key(ControlKey::Snapshot),
                     0x72 => key_event.set_control_key(ControlKey::Help),
+                    0x6E => key_event.set_control_key(ControlKey::Apps),
                     0x47 => {
                         key_event.set_control_key(if self.peer_platform() == "Mac OS" {
                             ControlKey::Clear
@@ -731,9 +737,48 @@ impl Handler {
                     0x91 => key_event.set_control_key(ControlKey::Scroll),
                     0x90 => key_event.set_control_key(ControlKey::NumLock),
                     0x5C => key_event.set_control_key(ControlKey::RWin),
+                    0x5B => key_event.set_control_key(ControlKey::Meta),
                     0x5D => key_event.set_control_key(ControlKey::Apps),
                     0xBE => key_event.set_chr('.' as _),
                     0xC0 => key_event.set_chr('`' as _),
+                    _ => {
+                        log::error!("Unknown key code {}", code);
+                        return None;
+                    }
+                }
+            } else if cfg!(target_os = "linux") {
+                match code {
+                    65300 => key_event.set_control_key(ControlKey::Scroll),
+                    65421 => key_event.set_control_key(ControlKey::NumpadEnter), // numpad enter
+                    65407 => key_event.set_control_key(ControlKey::NumLock),
+                    65516 => key_event.set_control_key(ControlKey::RWin),
+                    65513 => key_event.set_control_key(ControlKey::Alt),
+                    65514 => key_event.set_control_key(ControlKey::RAlt),
+                    65508 => key_event.set_control_key(ControlKey::RControl),
+                    65506 => key_event.set_control_key(ControlKey::RShift),
+                    96 => key_event.set_chr('`' as _),
+                    46 => key_event.set_chr('.' as _),
+                    126 => key_event.set_chr('`' as _),
+                    33 => key_event.set_chr('1' as _),
+                    64 => key_event.set_chr('2' as _),
+                    35 => key_event.set_chr('3' as _),
+                    36 => key_event.set_chr('4' as _),
+                    37 => key_event.set_chr('5' as _),
+                    94 => key_event.set_chr('6' as _),
+                    38 => key_event.set_chr('7' as _),
+                    42 => key_event.set_chr('8' as _),
+                    40 => key_event.set_chr('9' as _),
+                    41 => key_event.set_chr('0' as _),
+                    95 => key_event.set_chr('-' as _),
+                    43 => key_event.set_chr('=' as _),
+                    123 => key_event.set_chr('[' as _),
+                    125 => key_event.set_chr(']' as _),
+                    124 => key_event.set_chr('\\' as _),
+                    58 => key_event.set_chr(';' as _),
+                    34 => key_event.set_chr('\'' as _),
+                    60 => key_event.set_chr(',' as _),
+                    62 => key_event.set_chr('.' as _),
+                    63 => key_event.set_chr('/' as _),
                     _ => {
                         log::error!("Unknown key code {}", code);
                         return None;
@@ -770,6 +815,20 @@ impl Handler {
             self.key_down_or_up(1, del.clone(), 0, true, true, false, false, false);
             self.key_down_or_up(0, del, 0, true, true, false, false, false);
         }
+    }
+
+    fn super_x(&mut self) {
+        self.super_on = true;
+    }
+
+    fn ctrl_space(&mut self) {
+        let key = "VK_SPACE".to_owned();
+        self.key_down_or_up(3, key, 0, false, true, false, false, false);
+    }
+
+    fn alt_tab(&mut self) {
+        let key = "VK_TAB".to_owned();
+        self.key_down_or_up(3, key, 0, true, false, false, false, false);
     }
 
     fn lock_screen(&mut self) {
@@ -819,6 +878,26 @@ impl Handler {
             extended,
         );
 
+        let mut command = command;
+        if self.super_on {
+            command = true;
+        }
+
+        if down_or_up == 0 {
+            self.super_on = false;
+        }
+
+        let mut name = name;
+
+        if extended {
+            match name.as_ref() {
+                "VK_CONTROL" => name = "RControl".to_owned(),
+                "VK_MENU" => name = "RAlt".to_owned(),
+                "VK_SHIFT" => name = "RShift".to_owned(),
+                _ => {}
+            }
+        }
+
         if let Some(mut key_event) = self.get_key_event(down_or_up, &name, code) {
             // Linux has different repeated key down handling from mac and windows
             /* // below cause hang some time, not find why, so disable. so shift + repeat char not work for mac->linux, win->linux works fine, linux->linux not test yet
@@ -847,16 +926,28 @@ impl Handler {
                 }
             }
             */
-            if alt && !crate::is_control_key(&key_event, &ControlKey::Alt) {
+            if alt
+                && !crate::is_control_key(&key_event, &ControlKey::Alt)
+                && !crate::is_control_key(&key_event, &ControlKey::RAlt)
+            {
                 key_event.modifiers.push(ControlKey::Alt.into());
             }
-            if shift && !crate::is_control_key(&key_event, &ControlKey::Shift) {
+            if shift
+                && !crate::is_control_key(&key_event, &ControlKey::Shift)
+                && !crate::is_control_key(&key_event, &ControlKey::RShift)
+            {
                 key_event.modifiers.push(ControlKey::Shift.into());
             }
-            if ctrl && !crate::is_control_key(&key_event, &ControlKey::Control) {
+            if ctrl
+                && !crate::is_control_key(&key_event, &ControlKey::Control)
+                && !crate::is_control_key(&key_event, &ControlKey::RControl)
+            {
                 key_event.modifiers.push(ControlKey::Control.into());
             }
-            if command && !crate::is_control_key(&key_event, &ControlKey::Meta) {
+            if command
+                && !crate::is_control_key(&key_event, &ControlKey::Meta)
+                && !crate::is_control_key(&key_event, &ControlKey::RWin)
+            {
                 key_event.modifiers.push(ControlKey::Meta.into());
             }
             if crate::is_control_key(&key_event, &ControlKey::CapsLock) {
@@ -1145,7 +1236,7 @@ impl Remote {
     }
 
     fn start_clipboard(&mut self) -> Option<std::sync::mpsc::Sender<()>> {
-        if self.handler.is_file_transfer() {
+        if self.handler.is_file_transfer() || self.handler.is_port_forward() {
             return None;
         }
         let (tx, rx) = std::sync::mpsc::channel();
@@ -1430,6 +1521,23 @@ impl Remote {
                     }
                     Some(login_response::Union::peer_info(pi)) => {
                         self.handler.handle_peer_info(pi);
+                        if !(self.handler.is_file_transfer()
+                            || self.handler.is_port_forward()
+                            || !*self.clipboard.read().unwrap()
+                            || !*self.keyboard.read().unwrap()
+                            || self.handler.lc.read().unwrap().disable_clipboard)
+                        {
+                            let txt = self.old_clipboard.lock().unwrap().clone();
+                            if !txt.is_empty() {
+                                let msg_out = crate::create_clipboard_msg(txt);
+                                let sender = self.sender.clone();
+                                tokio::spawn(async move {
+                                    // due to clipboard service interval time
+                                    sleep(common::CLIPBOARD_INTERVAL as f32 / 1_000.).await;
+                                    sender.send(Data::Message(msg_out)).ok();
+                                });
+                            }
+                        }
                     }
                     _ => {}
                 },
@@ -1587,7 +1695,7 @@ impl Interface for Handler {
         pi_sciter.set_item("sas_enabled", pi.sas_enabled);
         if self.is_file_transfer() {
             if pi.username.is_empty() {
-                self.on_error("No active user logged on, please connect and logon first.");
+                self.on_error("No active console user logged on, please connect and logon first.");
                 return;
             }
         } else if !self.is_port_forward() {

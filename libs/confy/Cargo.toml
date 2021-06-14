@@ -1,0 +1,26 @@
+[package]
+name = "confy"
+version = "0.4.1"
+authors = ["Katharina Fey <kookie@spacekookie.de>"]
+description = "Boilerplate-free configuration management"
+license = "MIT/X11 OR Apache-2.0"
+documentation = "https://docs.rs/confy"
+repository = "https://github.com/rust-clique/confy"
+edition = "2018"
+
+[dependencies]
+serde = "^1.0"
+toml = { version = "^0.5", optional = true }
+directories = "^2.0"
+serde_yaml = { version = "0.8", optional = true }
+
+[features]
+default = ["toml_conf"]
+toml_conf = ["toml"]
+yaml_conf = ["serde_yaml"]
+
+[[example]]
+name = "simple"
+
+[dev-dependencies]
+serde_derive = "^1.0"

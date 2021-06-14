@@ -36,7 +36,9 @@ function stateChanged() {
     cur_window_state = view.windowState;
     adjustBorder();
     adaptDisplay();
-    if (!is_linux) view.focus = handler; // this cause windows always topmost on linux
+    if (cur_window_state != View.WINDOW_MINIMIZED) {
+        view.focus = handler; // to make focus away from restore/maximize button, so that enter key work
+    }
     var fs = view.windowState == View.WINDOW_FULL_SCREEN;
     var el = $(#fullscreen);
     if (el) el.attributes.toggleClass("active", fs);
@@ -133,8 +135,13 @@ class Header: Reactor.Component {
         return <popup>
             <menu.context #action-options>
                 <li #transfer-file>Transfer File</li> 
-                <li #tunnel>TCP Tunneling</li> 
+                <li #tunnel>TCP Tunneling</li>
+                <div .separator />
                 {keyboard_enabled && (pi.platform == "Linux" || pi.sas_enabled) ? <li #ctrl-alt-del>Insert Ctrl + Alt + Del</li> : ""}
+                <li #ctrl-space>Insert Ctrl + Space</li>
+                <li #alt-tab>Insert Alt + Tab</li>
+                {false && <li #super-x>Insert Win/Super + ...</li>}
+                <div .separator />
                 {keyboard_enabled ? <li #lock-screen>Insert Lock</li> : ""}
                 {false && pi.platform == "Windows" ? <li #block-input>Block user input </li> : ""}
                 {handler.support_refresh() ? <li #refresh>Refresh</li> : ""}
@@ -220,6 +227,18 @@ class Header: Reactor.Component {
 
     event click $(#ctrl-alt-del) {
         handler.ctrl_alt_del();
+    }
+
+    event click $(#alt-tab) {
+        handler.alt_tab();
+    }
+
+    event click $(#ctrl-space) {
+        handler.ctrl_space();
+    }
+
+    event click $(#super-x) {
+        handler.super_x();
     }
     
     event click $(#lock-screen) {

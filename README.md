@@ -1,6 +1,12 @@
 # RustDesk | Your Remote Desktop Software
 
-The best open-source remote desktop client software, written in Rust. Works out of the box, no configuration required. Great alternative to TeamViewer and AnyDesk! You have full control of your data, with no concerns about security. You can use our rendezvous/relay server, [set up your own](https://rustdesk.com/blog/id-relay-set/), or write your own rendezvous/relay server. 
+Chat with us: [Discord](https://discord.gg/nDceKgxnkV)
+
+[![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/I2I04VU09)
+
+An open-source remote desktop client software, written in Rust. Works out of the box, no configuration required. Great alternative to TeamViewer and AnyDesk! You have full control of your data, with no concerns about security. You can use our rendezvous/relay server, [set up your own](https://rustdesk.com/blog/id-relay-set/), or [write your own rendezvous/relay server](https://github.com/rustdesk/rustdesk-server-demo). 
+
+RustDesk welcomes contribution from everyone.  See [`CONTRIBUTING.md`](CONTRIBUTING.md) for help getting started.
 
 [**BINARY DOWNLOAD**](https://github.com/rustdesk/rustdesk/releases)
 
@@ -8,10 +14,9 @@ The best open-source remote desktop client software, written in Rust. Works out 
 
 Desktop versions use [sciter](https://sciter.com/) for GUI, please download sciter dynamic library yourself.
 
-[Windows](https://github.com/c-smile/sciter-sdk/blob/dc65744b66389cd5a0ff6bdb7c63a8b7b05a708b/bin.win/x64/sciter.dll)
-[Linux](https://github.com/c-smile/sciter-sdk/raw/dc65744b66389cd5a0ff6bdb7c63a8b7b05a708b/bin.lnx/x64/libsciter-gtk.so)
-[Osx](https://github.com/c-smile/sciter-sdk/raw/dc65744b66389cd5a0ff6bdb7c63a8b7b05a708b/bin.osx/sciter-osx-64.dylib)
-
+[Windows](https://github.com/c-smile/sciter-sdk/blob/dc65744b66389cd5a0ff6bdb7c63a8b7b05a708b/bin.win/x64/sciter.dll) | 
+[Linux](https://github.com/c-smile/sciter-sdk/raw/dc65744b66389cd5a0ff6bdb7c63a8b7b05a708b/bin.lnx/x64/libsciter-gtk.so) |
+[macOS](https://github.com/c-smile/sciter-sdk/raw/dc65744b66389cd5a0ff6bdb7c63a8b7b05a708b/bin.osx/sciter-osx-64.dylib)
 
 ## Raw steps to build
 * Prepare your Rust development env and C++ build env
@@ -37,7 +42,7 @@ sudo yum -y install gcc-c++ git curl wget nasm yasm gcc gtk3-devel clang libxcb-
 
 ### Arch (Manjaro)
 ```
-sudo pacman -Syu unzip git cmake gcc curl wget yasm nasm zip make pkg-config clang gtk3 xdotool libxcb libxfixes alsa-lib pulseaudio
+sudo pacman -Syu --needed unzip git cmake gcc curl wget yasm nasm zip make pkg-config clang gtk3 xdotool libxcb libxfixes alsa-lib pulseaudio
 ```
 
 ### Install vcpkg
@@ -94,5 +99,3 @@ RustDesk does not support Wayland. Check [this](https://docs.fedoraproject.org/e
 ![image](https://user-images.githubusercontent.com/71636191/113112857-3fbd5d80-923c-11eb-9836-768325faf906.png)
 
 ![image](https://user-images.githubusercontent.com/71636191/113112990-65e2fd80-923c-11eb-840e-349b4d6e340d.png)
-
-

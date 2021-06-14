@@ -142,6 +142,8 @@ pub const kCFStringEncodingUTF8: u32 = 134_217_984;
 #[link(name = "Carbon", kind = "framework")]
 extern "C" {
     fn TISCopyCurrentKeyboardInputSource() -> TISInputSourceRef;
+    fn TISCopyCurrentKeyboardLayoutInputSource() -> TISInputSourceRef;
+    fn TISCopyCurrentASCIICapableKeyboardLayoutInputSource() -> TISInputSourceRef;
 
     //     extern void *
     // TISGetInputSourceProperty(
@@ -583,6 +585,10 @@ impl Enigo {
             Key::Subtract => kVK_ANSI_KeypadMinus,
             Key::Equals => kVK_ANSI_KeypadEquals,
             Key::NumLock => kVK_ANSI_KeypadClear,
+            Key::RWin => kVK_RIGHT_COMMAND,
+            Key::RightShift => kVK_RightShift,
+            Key::RightControl => kVK_RightControl,
+            Key::RightAlt => kVK_RightOption,
 
             Key::Raw(raw_keycode) => raw_keycode,
             Key::Layout(c) => self.get_layoutdependent_keycode(c.to_string()),
@@ -600,6 +606,7 @@ impl Enigo {
     }
 
     fn init_map(&mut self) {
+        println!("init_map");
         self.keycode_to_string_map.insert("".to_owned(), 0);
         // loop through every keycode (0 - 127)
         for keycode in 0..128 {
@@ -649,14 +656,44 @@ impl Enigo {
 
     fn create_string_for_key(&self, keycode: u16, modifier: u32) -> CFStringRef {
         let current_keyboard = unsafe { TISCopyCurrentKeyboardInputSource() };
-        let layout_data = unsafe {
-            TISGetInputSourceProperty(current_keyboard, kTISPropertyUnicodeKeyLayoutData)
-        };
+        let mut layout_data = std::ptr::null_mut();
+        if !current_keyboard.is_null() {
+            layout_data = unsafe {
+                TISGetInputSourceProperty(current_keyboard, kTISPropertyUnicodeKeyLayoutData)
+            };
+        }
+        if layout_data.is_null() {
+            // https://github.com/microsoft/vscode/issues/23833
+            let current_keyboard = unsafe { TISCopyCurrentKeyboardLayoutInputSource() };
+            if !current_keyboard.is_null() {
+                layout_data = unsafe {
+                    TISGetInputSourceProperty(current_keyboard, kTISPropertyUnicodeKeyLayoutData)
+                };
+            }
+        }
+        if layout_data.is_null() {
+            let current_keyboard = unsafe { TISCopyCurrentASCIICapableKeyboardLayoutInputSource() };
+            if !current_keyboard.is_null() {
+                layout_data = unsafe {
+                    TISGetInputSourceProperty(current_keyboard, kTISPropertyUnicodeKeyLayoutData)
+                };
+            }
+        }
+        if layout_data.is_null() {
+            // to-do: try out manual mapping in https://github.com/stweil/OSXvnc
+			// we do see crash like this, also not easy to reproduce, no sure if it related
+/*
+0   rustdesk                      	0x000000010f921bc9 std::collections::hash::map::HashMap$LT$K$C$V$C$S$GT$::insert::h84e28c51a3292e7a + 473
+1   rustdesk                      	0x000000010f921884 enigo::macos::macos_impl::Enigo::key_to_keycode::h85ead82e9b1075ae + 1428
+2   rustdesk                      	0x000000010f922a8c _$LT$enigo..macos..macos_impl..Enigo$u20$as$u20$enigo..KeyboardControllable$GT$::key_down::h54f24da6d274b948 + 44
+*/
+            return std::ptr::null() as _;
+        }
         let keyboard_layout = unsafe { CFDataGetBytePtr(layout_data) };
 
         let mut keys_down: UInt32 = 0;
-        // let mut chars: *mut c_void;//[UniChar; 4];
         let mut chars: u16 = 0;
+        // let mut chars: *mut c_void;//[UniChar; 4];
         let mut real_length: UniCharCount = 0;
         unsafe {
             UCKeyTranslate(

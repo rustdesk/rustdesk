@@ -129,7 +129,7 @@ enum ControlKey {
   Numpad9 = 42;
   Cancel = 43;
   Clear = 44;
-  Menu = 45;
+  Menu = 45; // deprecated, use Alt instead
   Pause = 46;
   Kana = 47;
   Hangul = 48;
@@ -157,6 +157,9 @@ enum ControlKey {
   Divide = 70;
   Equals = 71;
   NumpadEnter = 72;
+  RShift= 73;
+  RControl = 74;
+  RAlt = 75;
   CtrlAltDel = 100;
   LockScreen = 101;
 }

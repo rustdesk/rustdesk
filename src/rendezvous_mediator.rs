@@ -109,46 +109,48 @@ impl RendezvousMediator {
         let mut old_latency = 0;
         let mut ema_latency = 0;
         loop {
+            let mut update_latency = || {
+                last_register_resp = SystemTime::now();
+                let mut latency = last_register_resp
+                    .duration_since(last_register_sent)
+                    .map(|d| d.as_micros() as i64)
+                    .unwrap_or(0);
+                if ema_latency == 0 {
+                    ema_latency = latency;
+                } else {
+                    ema_latency = latency / 30 + (ema_latency * 29 / 30);
+                    latency = ema_latency;
+                }
+                let mut n = latency / 5;
+                if n < 3000 {
+                    n = 3000;
+                }
+                if (latency - old_latency).abs() > n || old_latency <= 0 {
+                    Config::update_latency(&host, latency);
+                    log::debug!("Latency of {}: {}ms", host, latency as f64 / 1000.);
+                    old_latency = latency;
+                }
+                fails = 0;
+            };
             select! {
                 Some(Ok((bytes, _))) = socket.next() => {
                     if let Ok(msg_in) = Message::parse_from_bytes(&bytes) {
                         match msg_in.union {
                             Some(rendezvous_message::Union::register_peer_response(rpr)) => {
+                                update_latency();
                                 if rpr.request_pk {
                                     log::info!("request_pk received from {}", host);
                                     allow_err!(rz.register_pk(&mut socket).await);
                                     continue;
                                 }
-                                last_register_resp = SystemTime::now();
-                                let mut latency = last_register_resp.duration_since(last_register_sent).map(|d| d.as_micros() as i64).unwrap_or(0);
-                                if ema_latency == 0 {
-                                    ema_latency = latency;
-                                } else {
-                                    ema_latency = latency / 30 + (ema_latency * 29 / 30);
-                                    latency = ema_latency;
-                                }
-                                let mut n = latency / 5;
-                                if n < 3000 {
-                                    n = 3000;
-                                }
-                                if (latency - old_latency).abs() > n || old_latency <= 0 {
-                                    Config::update_latency(&host, latency);
-                                    log::debug!("Latency of {}: {}ms", host, latency as f64 / 1000.);
-                                    old_latency = latency;
-                                }
-                                fails = 0;
                             }
                             Some(rendezvous_message::Union::register_pk_response(rpr)) => {
+                                update_latency();
                                 match rpr.result.enum_value_or_default() {
                                     register_pk_response::Result::OK => {
                                         Config::set_key_confirmed(true);
                                         Config::set_host_key_confirmed(&rz.host_prefix, true);
                                         *SOLVING_PK_MISMATCH.lock().unwrap() = "".to_owned();
-                                        last_register_resp = SystemTime::now();
-                                        let latency = last_register_resp.duration_since(last_register_sent).map(|d| d.as_micros() as i64).unwrap_or(0);
-                                        Config::update_latency(&host, latency);
-                                        log::debug!("Latency of {}: {}ms", host, latency as f64 / 1000.);
-                                        fails = 0;
                                     }
                                     register_pk_response::Result::UUID_MISMATCH => {
                                         allow_err!(rz.handle_uuid_mismatch(&mut socket).await);

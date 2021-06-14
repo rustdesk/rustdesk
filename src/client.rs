@@ -135,7 +135,7 @@ impl Client {
                             if ph.socket_addr.is_empty() {
                                 match ph.failure.enum_value_or_default() {
                                     punch_hole_response::Failure::ID_NOT_EXIST => {
-                                        bail!("ID not exist");
+                                        bail!("ID does not exist");
                                     }
                                     punch_hole_response::Failure::OFFLINE => {
                                         bail!("Remote desktop is offline");
@@ -318,6 +318,7 @@ impl Client {
                             }
                         } else {
                             // fall back to non-secure connection in case pk mismatch
+                            // to-do: pop up a warning dialog to let user choose if continue
                             let mut msg_out = Message::new();
                             msg_out.set_public_key(PublicKey::new());
                             timeout(CONNECT_TIMEOUT, conn.send(&msg_out)).await??;
@@ -1068,7 +1069,7 @@ lazy_static::lazy_static! {
         ("VK_RETURN", Key::ControlKey(ControlKey::Return)),
         ("VK_SHIFT", Key::ControlKey(ControlKey::Shift)),
         ("VK_CONTROL", Key::ControlKey(ControlKey::Control)),
-        ("VK_MENU", Key::ControlKey(ControlKey::Menu)),
+        ("VK_MENU", Key::ControlKey(ControlKey::Alt)),
         ("VK_PAUSE", Key::ControlKey(ControlKey::Pause)),
         ("VK_CAPITAL", Key::ControlKey(ControlKey::CapsLock)),
         ("VK_KANA", Key::ControlKey(ControlKey::Kana)),
@@ -1107,6 +1108,10 @@ lazy_static::lazy_static! {
         ("VK_NUMPAD7", Key::ControlKey(ControlKey::Numpad7)),
         ("VK_NUMPAD8", Key::ControlKey(ControlKey::Numpad8)),
         ("VK_NUMPAD9", Key::ControlKey(ControlKey::Numpad9)),
+        ("RAlt", Key::ControlKey(ControlKey::RAlt)),
+        ("RWin", Key::ControlKey(ControlKey::RWin)),
+        ("RControl", Key::ControlKey(ControlKey::RControl)),
+        ("RShift", Key::ControlKey(ControlKey::RShift)),
         ("CTRL_ALT_DEL", Key::ControlKey(ControlKey::CtrlAltDel)),
         ("LOCK_SCREEN", Key::ControlKey(ControlKey::LockScreen)),
     ].iter().cloned().collect();

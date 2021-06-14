@@ -174,7 +174,6 @@ pub fn is_left_up(evt: &MouseEvent) -> bool {
 
 #[cfg(windows)]
 pub fn mouse_move_relative(x: i32, y: i32) {
-    #[cfg(windows)]
     crate::platform::windows::try_change_desktop();
     let mut en = ENIGO.lock().unwrap();
     en.mouse_move_relative(x, y);
@@ -185,6 +184,19 @@ fn modifier_sleep() {
     // sleep for a while, this is only for keying in rdp in peer so far
     #[cfg(windows)]
     std::thread::sleep(std::time::Duration::from_nanos(1));
+}
+
+#[cfg(not(target_os = "macos"))]
+#[inline]
+fn get_modifier_state(key: enigo::Key, en: &mut Enigo) -> bool {
+    let x = en.get_key_state(key.clone());
+    match key {
+        enigo::Key::Shift => x || en.get_key_state(enigo::Key::RightShift),
+        enigo::Key::Control => x || en.get_key_state(enigo::Key::RightControl),
+        enigo::Key::Alt => x || en.get_key_state(enigo::Key::RightAlt),
+        enigo::Key::Meta => x || en.get_key_state(enigo::Key::RWin),
+        _ => x,
+    }
 }
 
 pub fn handle_mouse(evt: &MouseEvent, conn: i32) {
@@ -221,7 +233,7 @@ fn handle_mouse_(evt: &MouseEvent, conn: i32) {
                 en.add_flag(key);
                 #[cfg(not(target_os = "macos"))]
                 if key != &enigo::Key::CapsLock && key != &enigo::Key::NumLock {
-                    if !en.get_key_state(key.clone()) {
+                    if !get_modifier_state(key.clone(), &mut en) {
                         en.key_down(key.clone()).ok();
                         modifier_sleep();
                         to_release.push(key);
@@ -340,7 +352,7 @@ lazy_static::lazy_static! {
         (ControlKey::Numpad9, enigo::Key::Numpad9),
         (ControlKey::Cancel, enigo::Key::Cancel),
         (ControlKey::Clear, enigo::Key::Clear),
-        (ControlKey::Menu, enigo::Key::Menu),
+        (ControlKey::Menu, enigo::Key::Alt),
         (ControlKey::Pause, enigo::Key::Pause),
         (ControlKey::Kana, enigo::Key::Kana),
         (ControlKey::Hangul, enigo::Key::Hangul),
@@ -368,6 +380,10 @@ lazy_static::lazy_static! {
         (ControlKey::Divide, enigo::Key::Divide),
         (ControlKey::Equals, enigo::Key::Equals),
         (ControlKey::NumpadEnter, enigo::Key::NumpadEnter),
+        (ControlKey::RAlt, enigo::Key::RightAlt),
+        (ControlKey::RWin, enigo::Key::RWin),
+        (ControlKey::RControl, enigo::Key::RightControl),
+        (ControlKey::RShift, enigo::Key::RightShift),
     ].iter().map(|(a, b)| (a.value(), b.clone())).collect();
     static ref NUMPAD_KEY_MAP: HashMap<i32, bool> =
     [
@@ -425,7 +441,7 @@ fn handle_key_(evt: &KeyEvent) {
                         has_numlock = true;
                     }
                 } else {
-                    if !en.get_key_state(key.clone()) {
+                    if !get_modifier_state(key.clone(), &mut en) {
                         en.key_down(key.clone()).ok();
                         modifier_sleep();
                         to_release.push(key);

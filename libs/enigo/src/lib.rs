@@ -347,7 +347,7 @@ pub enum Key {
     ///
     Clear,
     ///
-    Menu,
+    Menu, // deprecated, use alt instead
     ///
     Pause,
     ///
@@ -408,6 +408,12 @@ pub enum Key {
     Equals,
     ///
     NumpadEnter,
+    ///
+    RightShift,
+    ///
+    RightControl,
+    ///
+    RightAlt,
     ///
     /// Function, /// mac
     /// keyboard layout dependent key
@@ -485,7 +491,7 @@ impl Enigo {
     /// ```
     pub fn new() -> Self {
         #[cfg(any(target_os = "android", target_os = "ios"))]
-        return Enigo{};
+        return Enigo {};
         #[cfg(not(any(target_os = "android", target_os = "ios")))]
         Self::default()
     }
