@@ -103,6 +103,8 @@ event click $(menu#remote-context li) (evt, me) {
     } else if (action == "remove") {
         handler.remove_peer(id);
         app.recent_sessions.update();
+    } else if (action == "shortcut") {
+        handler.create_shortcut(id);
     } else if (action == "rdp") {
         createNewConnect(id, "rdp");
     } else if (action == "tunnel") {
@@ -310,6 +312,22 @@ class App: Reactor.Component
         var is_can_screen_recording = handler.is_can_screen_recording(false);
         return
             <div .app>
+              <popup>
+              <menu.context #remote-context>
+                <li #connect>Connect</li>
+                <li #transfer>Transfer File</li>
+                <li #tunnel>TCP Tunneling</li>
+                <li #rdp>RDP</li>
+                <li #remove>Remove</li>
+                {is_win && <li #shortcut>Create Desktop Shortcut</li>}
+              </menu>
+              </popup>
+              <popup>
+              <menu.context #edit-password-context>
+                <li #refresh-password>Refresh random password</li>
+                <li #set-password>Set your own password</li>
+              </menu>
+              </popup>
                 <div .left-pane>
                     <div>
                         <div .title>Your Desktop</div>

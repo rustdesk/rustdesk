@@ -486,6 +486,11 @@ impl UI {
         format!("{}.{}", p.to_string_lossy(), self.get_software_ext())
     }
 
+    fn create_shortcut(&self, id: String) {
+        #[cfg(windows)]
+        crate::platform::windows::create_shortcut(&id).ok();
+    }
+
     fn open_url(&self, url: String) {
         #[cfg(windows)]
         let p = "explorer";
@@ -541,6 +546,7 @@ impl sciter::EventHandler for UI {
         fn get_software_store_path();
         fn get_software_ext();
         fn open_url(String);
+        fn create_shortcut(String);
     }
 }
 
