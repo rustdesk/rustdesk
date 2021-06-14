@@ -63,6 +63,7 @@ pub struct Handler {
     id: String,
     args: Vec<String>,
     lc: Arc<RwLock<LoginConfigHandler>>,
+    super_on: bool,
 }
 
 impl Deref for Handler {
@@ -153,6 +154,9 @@ impl sciter::EventHandler for Handler {
         fn send_mouse(i32, i32, i32, bool, bool, bool, bool);
         fn key_down_or_up(bool, String, i32, bool, bool, bool, bool, bool);
         fn ctrl_alt_del();
+        fn ctrl_space();
+        fn alt_tab();
+        fn super_x();
         fn transfer_file();
         fn tunnel();
         fn lock_screen();
@@ -813,6 +817,20 @@ impl Handler {
         }
     }
 
+    fn super_x(&mut self) {
+        self.super_on = true;
+    }
+
+    fn ctrl_space(&mut self) {
+        let key = "VK_SPACE".to_owned();
+        self.key_down_or_up(3, key, 0, false, true, false, false, false);
+    }
+
+    fn alt_tab(&mut self) {
+        let key = "VK_TAB".to_owned();
+        self.key_down_or_up(3, key, 0, true, false, false, false, false);
+    }
+
     fn lock_screen(&mut self) {
         let lock = "LOCK_SCREEN".to_owned();
         self.key_down_or_up(1, lock, 0, false, false, false, false, false);
@@ -859,6 +877,15 @@ impl Handler {
             command,
             extended,
         );
+
+        let mut command = command;
+        if self.super_on {
+            command = true;
+        }
+
+        if down_or_up == 0 {
+            self.super_on = false;
+        }
 
         let mut name = name;
 
