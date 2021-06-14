@@ -266,6 +266,21 @@ impl UI {
         }
     }
 
+    fn get_peer_option(&self, id: String, name: String) -> String {
+        let c = PeerConfig::load(&id);
+        c.options.get(&name).unwrap_or(&"".to_owned()).to_owned()
+    }
+
+    fn set_peer_option(&self, id: String, name: String, value: String) {
+        let mut c = PeerConfig::load(&id);
+        if value.is_empty() {
+            c.options.remove(&name);
+        } else {
+            c.options.insert(name, value);
+        }
+        c.store(&id);
+    }
+
     fn get_options(&self) -> Value {
         let mut m = Value::map();
         for (k, v) in self.2.lock().unwrap().iter() {
@@ -364,9 +379,13 @@ impl UI {
             .map(|p| {
                 let values = vec![
                     p.0.clone(),
-                    p.2.username.clone(),
-                    p.2.hostname.clone(),
-                    p.2.platform.clone(),
+                    p.2.info.username.clone(),
+                    p.2.info.hostname.clone(),
+                    p.2.info.platform.clone(),
+                    p.2.options
+                        .get("alias")
+                        .unwrap_or(&"".to_owned())
+                        .to_owned(),
                 ];
                 Value::from_iter(values)
             })
@@ -535,6 +554,8 @@ impl sciter::EventHandler for UI {
         fn fix_login_wayland();
         fn get_options();
         fn get_option(String);
+        fn get_peer_option(String, String);
+        fn set_peer_option(String, String, String);
         fn test_if_valid_server(String);
         fn get_sound_inputs();
         fn set_options(Value);

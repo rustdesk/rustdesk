@@ -646,7 +646,7 @@ impl PeerConfig {
         Config::path(path).with_extension("toml")
     }
 
-    pub fn peers() -> Vec<(String, SystemTime, PeerInfoSerde)> {
+    pub fn peers() -> Vec<(String, SystemTime, PeerConfig)> {
         if let Ok(peers) = Config::path(PEERS).read_dir() {
             if let Ok(peers) = peers
                 .map(|res| res.map(|e| e.path()))
@@ -667,13 +667,13 @@ impl PeerConfig {
                             .map(|p| p.to_str().unwrap_or(""))
                             .unwrap_or("")
                             .to_owned();
-                        let info = PeerConfig::load(&id).info;
-                        if info.platform.is_empty() {
+                        let c = PeerConfig::load(&id);
+                        if c.info.platform.is_empty() {
                             fs::remove_file(&p).ok();
                         }
-                        (id, t, info)
+                        (id, t, c)
                     })
-                    .filter(|p| !p.2.platform.is_empty())
+                    .filter(|p| !p.2.info.platform.is_empty())
                     .collect();
                 peers.sort_unstable_by(|a, b| b.1.cmp(&a.1));
                 return peers;

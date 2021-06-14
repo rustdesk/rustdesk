@@ -64,13 +64,14 @@ class RecentSessions: Reactor.Component {
         var username = s[1];
         var hostname = s[2];
         var platform = s[3];
+        var alias = s[4];
         return <div .remote-session id={id} platform={platform} style={"background:"+string2RGB(id+platform, 0.5)}>
             <div .platform>
                 {platformSvg(platform, "white")}
                 <div .username>{username}@{hostname}</div>
             </div>
             <div .text>
-                <div>{formatId(id)}</div>
+                <div #alias>{alias ? alias : formatId(id)}</div>
                 {svg_menu}
             </div>
         </div>;
@@ -109,6 +110,17 @@ event click $(menu#remote-context li) (evt, me) {
         createNewConnect(id, "rdp");
     } else if (action == "tunnel") {
         createNewConnect(id, "port-forward");
+    } else if (action == "rename") {
+        var old_name = handler.get_peer_option(id, "alias");
+        handler.msgbox("custom-rename", "Rename", "<div .form> \
+            <div><input name='name' style='width: *; height: 23px', value='" + old_name + "' /></div> \
+            </div> \
+            ", function(res=null) {
+                if (!res) return;
+                var name = (res.name || "").trim();
+                if (name != old_name) handler.set_peer_option(id, "alias", name);
+                self.select('#' + id).select('#alias').text = name || id;
+            });
     }
 }
 
@@ -318,6 +330,7 @@ class App: Reactor.Component
                 <li #transfer>Transfer File</li>
                 <li #tunnel>TCP Tunneling</li>
                 <li #rdp>RDP</li>
+                <li #rename>Rename</li>
                 <li #remove>Remove</li>
                 {is_win && <li #shortcut>Create Desktop Shortcut</li>}
               </menu>
