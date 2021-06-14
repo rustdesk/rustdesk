@@ -326,13 +326,32 @@ fn get_value_of_seat0(i: usize) -> String {
             }
         }
     }
+
+    // some case, there is no seat0 https://github.com/rustdesk/rustdesk/issues/73
+    if let Ok(output) = std::process::Command::new("loginctl").output() {
+        for line in String::from_utf8_lossy(&output.stdout).lines() {
+            if let Some(sid) = line.split_whitespace().nth(0) {
+                let d = get_display_server_of_session(sid);
+                if is_active(sid) && d != "tty" {
+                    if let Some(uid) = line.split_whitespace().nth(i) {
+                        return uid.to_owned();
+                    }
+                }
+            }
+        }
+    }
+
     return "".to_owned();
 }
 
 pub fn get_display_server() -> String {
     let session = get_value_of_seat0(0);
+    get_display_server_of_session(&session)
+}
+
+fn get_display_server_of_session(session: &str) -> String {
     if let Ok(output) = std::process::Command::new("loginctl")
-        .args(vec!["show-session", "-p", "Type", &session])
+        .args(vec!["show-session", "-p", "Type", session])
         .output()
     {
         String::from_utf8_lossy(&output.stdout)
