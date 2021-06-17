@@ -10,6 +10,12 @@ RustDesk welcomes contribution from everyone.  See [`CONTRIBUTING.md`](CONTRIBUT
 
 [**BINARY DOWNLOAD**](https://github.com/rustdesk/rustdesk/releases)
 
+## Free Public Servers
+Below are the servers you are using for free, it may change along the time. If you are not close to one of these, your network may be slow.
+- Seoul, AWS lightsail, 1 VCPU/0.5G RAM
+- Singapore, Vultr, 1 VCPU/1G RAM
+- Virginia, AWS EC2, 4 VCPUs/32G RAM, donated by [tensorsurgical.com](tensorsurgical.com)
+
 ## Dependencies
 
 Desktop versions use [sciter](https://sciter.com/) for GUI, please download sciter dynamic library yourself.
