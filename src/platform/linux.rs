@@ -353,11 +353,44 @@ fn get_display_server_of_session(session: &str) -> String {
     if let Ok(output) = std::process::Command::new("loginctl")
         .args(vec!["show-session", "-p", "Type", session])
         .output()
+    // Check session type of the session
     {
-        String::from_utf8_lossy(&output.stdout)
+        let display_server = String::from_utf8_lossy(&output.stdout)
             .replace("Type=", "")
             .trim_end()
-            .into()
+            .into();
+        if display_server == "tty" {
+            // If the type is tty...
+            if let Ok(output) = std::process::Command::new("loginctl")
+                .args(vec!["show-session", "-p", "TTY", session])
+                .output()
+            // Get the tty number
+            {
+                let tty: String = String::from_utf8_lossy(&output.stdout)
+                    .replace("TTY=", "")
+                    .trim_end()
+                    .into();
+                if let Ok(Some(xorg_results)) =
+                    run_cmds(format!("ps -e | grep \"{}.\\\\+Xorg\"", tty))
+                // And check if Xorg is running on that tty
+                {
+                    if xorg_results.trim_end().to_string() != "" {
+                        // If it is, manually return "x11", otherwise return tty
+                        "x11".to_owned()
+                    } else {
+                        display_server
+                    }
+                } else {
+                    // If any of these commands fail just fall back to the display server
+                    display_server
+                }
+            } else {
+                display_server
+            }
+        } else {
+            // If the session is not a tty, then just return the type as usual
+            display_server
+        }
     } else {
         "".to_owned()
     }
