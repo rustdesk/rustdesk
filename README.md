@@ -1,4 +1,11 @@
 # RustDesk | Your Remote Desktop Software
+<p align="center">
+  <a href="#free-public-servers">Servers</a> •
+  <a href="#raw-steps-to-build">Build</a> •
+  <a href="#file-structure">Structure</a> •
+  <a href="#snapshot">Snapshot</a><br>
+  [<a href="README-ZH.md">中文</a>] [<a href="README-DE.md">Deutsche</a>]
+</p>
 
 Chat with us: [Discord](https://discord.gg/nDceKgxnkV) | [Reddit](https://www.reddit.com/r/rustdesk)
 
