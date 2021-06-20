@@ -1,6 +1,6 @@
 # RustDesk | Your Remote Desktop Software
 
-Chat with us: [Discord](https://discord.gg/nDceKgxnkV)
+Chat with us: [Discord](https://discord.gg/nDceKgxnkV) | [Reddit](https://www.reddit.com/r/rustdesk)
 
 [![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/I2I04VU09)
 
