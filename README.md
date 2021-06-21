@@ -5,7 +5,7 @@
   <a href="#how-to-build-with-docker">Docker</a> •
   <a href="#file-structure">Structure</a> •
   <a href="#snapshot">Snapshot</a><br>
-  [<a href="README-ZH.md">中文</a>] | [<a href="README-ES.md">Española</a>] | [<a href="README-DE.md">Deutsche</a>] | [<a href="README-JP.md">日本語</a>] | [<a href="README-RU.md">Русский</a>] | [<a href="README-PT.md">Português</a>]<br>
+  [<a href="README-ZH.md">中文</a>] | [<a href="README-ES.md">Española</a>] | [<a href="README-FR.md">français</a>] | [<a href="README-DE.md">Deutsche</a>] | [<a href="README-JP.md">日本語</a>] | [<a href="README-RU.md">Русский</a>] | [<a href="README-PT.md">Português</a>]<br>
   <b>We need your help to translate this README to your native language</b>
 </p>
 
@@ -31,7 +31,7 @@ Desktop versions use [sciter](https://sciter.com/) for GUI, please download scit
 
 [Windows](https://github.com/c-smile/sciter-sdk/blob/dc65744b66389cd5a0ff6bdb7c63a8b7b05a708b/bin.win/x64/sciter.dll) | 
 [Linux](https://github.com/c-smile/sciter-sdk/raw/dc65744b66389cd5a0ff6bdb7c63a8b7b05a708b/bin.lnx/x64/libsciter-gtk.so) |
-[macOS](https://github.com/c-smile/sciter-sdk/raw/dc65744b66389cd5a0ff6bdb7c63a8b7b05a708b/bin.osx/sciter-osx-64.dylib)
+[MacOS](https://github.com/c-smile/sciter-sdk/raw/dc65744b66389cd5a0ff6bdb7c63a8b7b05a708b/bin.osx/sciter-osx-64.dylib)
 
 ## Raw steps to build
 * Prepare your Rust development env and C++ build env
@@ -39,7 +39,7 @@ Desktop versions use [sciter](https://sciter.com/) for GUI, please download scit
 * Install [vcpkg](https://github.com/microsoft/vcpkg), and set `VCPKG_ROOT` env variable correctly
 
    - Windows: vcpkg install libvpx:x64-windows-static libyuv:x64-windows-static opus:x64-windows-static
-   - Linux/Osx: vcpkg install libvpx libyuv opus
+   - Linux/MacOS: vcpkg install libvpx libyuv opus
    
 * run `cargo run`
 
