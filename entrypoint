@@ -1,0 +1,42 @@
+#!/bin/sh
+
+if [ "$(id -u)" != "${PUID:-1000}" ] || [ "$(id -g)" != "${PGID:-1000}" ]; then
+  usermod -o -u "${PUID:-1000}" user
+  groupmod -o -g "${PGID:-1000}" user
+  chown -R user /home/user
+  sudo -u user /entrypoint $@
+  exit 0
+fi
+
+cd $HOME/rustdesk
+. $HOME/.cargo/env
+
+argv=$@
+
+while test $# -gt 0; do
+  case "$1" in
+    --release)
+      mkdir -p target/release
+      test -f target/release/libsciter-gtk.so || cp $HOME/libsciter-gtk.so target/release/
+      release=1
+      shift
+      ;;
+    --target)
+      shift
+      if test $# -gt 0; then
+        rustup target add $1
+        shift
+      fi
+      ;;
+    *)
+      shift
+      ;;
+  esac
+done
+
+if [ -z $release ]; then
+  mkdir -p target/debug
+  test -f target/debug/libsciter-gtk.so || cp $HOME/libsciter-gtk.so target/debug/
+fi
+
+VCPKG_ROOT=/vcpkg cargo build $argv
