@@ -23,7 +23,7 @@ Chat with us: [知乎](https://www.zhihu.com/people/rustdesk) | [Discord](https:
 以下是您免费使用的服务器，它可能会随着时间的推移而变化。如果您不靠近其中之一，您的网络可能会很慢。
 - 首尔, AWS lightsail, 1 VCPU/0.5G RAM
 - 新加坡, Vultr, 1 VCPU/1G RAM
-- 美国佛吉利亚, AWS EC2, 4 VCPUs/32G RAM, 由[tensorsurgical.com](https://tensorsurgical.com)赞助
+- 美国佛吉利亚, AWS EC2, 4 VCPUs/32G RAM, 由[g9md.tv](https://g9md.tv)赞助
 
 ## 依赖
 
