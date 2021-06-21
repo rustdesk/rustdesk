@@ -23,7 +23,7 @@ RustDesk agradece la contribución de todo el mundo.  Ve [`CONTRIBUTING.md`](CON
 A continuación se muestran los servidores que está utilizando de forma gratuita, puede cambiar en algún momento. Si no estás cerca de uno de ellos, tu red puede ser lenta.
 - Seoul, AWS lightsail, 1 VCPU/0.5G RAM
 - Singapore, Vultr, 1 VCPU/1G RAM
-- Virginia, AWS EC2, 4 VCPUs/32G RAM, donated by [tensorsurgical.com](https://tensorsurgical.com)
+- Virginia, AWS EC2, 4 VCPUs/32G RAM, donated by [g9md.tv](https://g9md.tv)
 
 ## Dependencies
 
