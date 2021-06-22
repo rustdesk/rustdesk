@@ -1,5 +1,5 @@
-# RustDesk | Your Remote Desktop Software
 <p align="center">
+  <img src="logo-header.svg" alt="RustDesk - Your remote desktop"><br>
   <a href="#free-public-servers">Servers</a> •
   <a href="#raw-steps-to-build">Build</a> •
   <a href="#how-to-build-with-docker">Docker</a> •
