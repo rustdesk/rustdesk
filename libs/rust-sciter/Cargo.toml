@@ -46,7 +46,7 @@ windowless = []
 
 [dependencies]
 libc = "0.2"
-lazy_static = "1.0"
+lazy_static = "1.4"
 
 [target.x86_64-apple-darwin.dependencies]
 objc = "0.2"

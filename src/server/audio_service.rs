@@ -34,7 +34,7 @@ pub fn new() -> GenericService {
 #[cfg(target_os = "linux")]
 mod pa_impl {
     use super::*;
-    #[tokio::main(basic_scheduler)]
+    #[tokio::main(flavor = "current_thread")]
     pub async fn run(sp: GenericService) -> ResultType<()> {
         if let Ok(mut stream) = crate::ipc::connect(1000, "_pa").await {
             let mut encoder =

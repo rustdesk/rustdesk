@@ -5,11 +5,10 @@ use crate::ipc;
 use hbb_common::{
     config::Config,
     fs,
-    futures::SinkExt,
+    futures::{SinkExt, StreamExt},
     sleep, timeout,
     tokio::{
         net::TcpStream,
-        stream::StreamExt,
         sync::mpsc,
         time::{self, Duration, Instant, Interval},
     },

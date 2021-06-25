@@ -2,12 +2,12 @@ use crate::client::*;
 use hbb_common::{
     allow_err, bail,
     config::CONNECT_TIMEOUT,
-    futures::SinkExt,
+    futures::{SinkExt, StreamExt},
     log,
     message_proto::*,
     protobuf::Message as _,
     tcp, timeout,
-    tokio::{self, net::TcpStream, stream::StreamExt, sync::mpsc},
+    tokio::{self, net::TcpStream, sync::mpsc},
     tokio_util::codec::{BytesCodec, Framed},
     ResultType, Stream,
 };

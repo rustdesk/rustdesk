@@ -1019,7 +1019,7 @@ async fn start_one_port_forward(
     log::info!("port forward (:{}) exit", port);
 }
 
-#[tokio::main(basic_scheduler)]
+#[tokio::main(flavor = "current_thread")]
 async fn io_loop(handler: Handler) {
     let (sender, mut receiver) = mpsc::unbounded_channel::<Data>();
     handler.write().unwrap().sender = Some(sender.clone());

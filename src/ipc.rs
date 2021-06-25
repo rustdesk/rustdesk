@@ -91,7 +91,7 @@ pub enum Data {
     Test,
 }
 
-#[tokio::main(basic_scheduler)]
+#[tokio::main(flavor = "current_thread")]
 pub async fn start(postfix: &str) -> ResultType<()> {
     let mut incoming = new_listener(postfix).await?;
     loop {
@@ -336,7 +336,7 @@ impl Connection {
     }
 }
 
-#[tokio::main(basic_scheduler)]
+#[tokio::main(flavor = "current_thread")]
 async fn get_config(name: &str) -> ResultType<Option<String>> {
     get_config_async(name, 1_000).await
 }
@@ -352,7 +352,7 @@ async fn get_config_async(name: &str, ms_timeout: u64) -> ResultType<Option<Stri
     return Ok(None);
 }
 
-#[tokio::main(basic_scheduler)]
+#[tokio::main(flavor = "current_thread")]
 async fn set_config(name: &str, value: String) -> ResultType<()> {
     let mut c = connect(1000, "").await?;
     c.send_config(name, value).await?;
@@ -409,7 +409,7 @@ async fn get_options_(ms_timeout: u64) -> ResultType<HashMap<String, String>> {
     }
 }
 
-#[tokio::main(basic_scheduler)]
+#[tokio::main(flavor = "current_thread")]
 pub async fn get_options() -> HashMap<String, String> {
     get_options_(1000).await.unwrap_or(Config::get_options())
 }
@@ -432,7 +432,7 @@ pub fn set_option(key: &str, value: &str) {
     set_options(options).ok();
 }
 
-#[tokio::main(basic_scheduler)]
+#[tokio::main(flavor = "current_thread")]
 pub async fn set_options(value: HashMap<String, String>) -> ResultType<()> {
     Config::set_options(value.clone());
     connect(1000, "")

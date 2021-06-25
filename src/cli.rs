@@ -78,7 +78,7 @@ impl Interface for Session {
     }
 }
 
-#[tokio::main(basic_scheduler)]
+#[tokio::main(flavor = "current_thread")]
 pub async fn start_one_port_forward(id: String, port: i32, remote_host: String, remote_port: i32) {
     crate::common::test_rendezvous_server();
     crate::common::test_nat_type();

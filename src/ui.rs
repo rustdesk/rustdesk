@@ -595,7 +595,7 @@ pub fn check_zombie(childs: Childs) {
 
 // notice: avoiding create ipc connecton repeatly,
 // because windows named pipe has serious memory leak issue.
-#[tokio::main(basic_scheduler)]
+#[tokio::main(flavor = "current_thread")]
 async fn check_connect_status_(
     reconnect: bool,
     status: Arc<Mutex<(i32, bool)>>,

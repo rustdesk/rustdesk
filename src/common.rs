@@ -156,7 +156,7 @@ pub fn test_nat_type() {
     });
 }
 
-#[tokio::main(basic_scheduler)]
+#[tokio::main(flavor = "current_thread")]
 async fn test_nat_type_() -> ResultType<bool> {
     log::info!("Testing nat ...");
     let start = std::time::Instant::now();
@@ -237,7 +237,7 @@ pub async fn get_nat_type(ms_timeout: u64) -> i32 {
 }
 
 #[cfg(any(target_os = "android", target_os = "ios", feature = "cli"))]
-#[tokio::main(basic_scheduler)]
+#[tokio::main(flavor = "current_thread")]
 async fn test_rendezvous_server_() {
     let servers = Config::get_rendezvous_servers();
     hbb_common::config::ONLINE.lock().unwrap().clear();
@@ -345,7 +345,7 @@ pub fn check_software_update() {
     std::thread::spawn(move || allow_err!(_check_software_update()));
 }
 
-#[tokio::main(basic_scheduler)]
+#[tokio::main(flavor = "current_thread")]
 async fn _check_software_update() -> hbb_common::ResultType<()> {
     sleep(3.).await;
     let rendezvous_server = get_rendezvous_server(1_000).await;

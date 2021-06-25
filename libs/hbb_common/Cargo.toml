@@ -8,19 +8,19 @@ edition = "2018"
 
 [dependencies]
 protobuf = { version = "3.0.0-pre", git = "https://github.com/stepancheg/rust-protobuf" }
-tokio = { version = "0.2", features = ["full"] }
-tokio-util = { version = "0.3", features = ["full"] }
+tokio = { version = "1.7", features = ["full"] }
+tokio-util = { version = "0.6", features = ["full"] }
 futures = "0.3"
-bytes = "0.5"
+bytes = "1.0"
 log = "0.4"
 env_logger = "0.8"
 socket2 = { version = "0.3", features = ["reuseport"] }
-zstd = "0.5"
+zstd = "0.9"
 quinn = {version = "0.6", optional = true }
 anyhow = "1.0"
 futures-util = "0.3"
 directories-next = "2.0"
-rand = "0.7"
+rand = "0.8"
 serde_derive = "1.0"
 serde = "1.0"
 lazy_static = "1.4"
