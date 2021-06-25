@@ -1,6 +1,5 @@
-use futures::StreamExt as _;
 use tokio::{
-	prelude::*,
+	io::*,
 	self,
 	io::split,
 };

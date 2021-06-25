@@ -156,3 +156,5 @@ impl AsyncWrite for Connection {
         Pin::new(&mut this.inner).poll_shutdown(ctx)
     }
 }
+
+pub type ConnectionClient = Connection;

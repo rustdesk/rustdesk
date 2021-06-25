@@ -1,4 +1,4 @@
-use tokio::{self, prelude::*};
+use tokio::{self, io::*};
 use parity_tokio_ipc::Endpoint;
 
 #[tokio::main]
@@ -19,6 +19,6 @@ async fn main() {
 			break;
 		}
 
-		tokio::time::delay_for(std::time::Duration::from_secs(2)).await;
+		tokio::time::sleep(std::time::Duration::from_secs(2)).await;
 	}
 }
