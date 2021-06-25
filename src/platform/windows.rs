@@ -386,7 +386,7 @@ extern "C" {
     fn BlockInput(v: BOOL) -> BOOL;
 }
 
-#[tokio::main(basic_scheduler)]
+#[tokio::main(flavor = "current_thread")]
 async fn run_service(_arguments: Vec<OsString>) -> ResultType<()> {
     let event_handler = move |control_event| -> ServiceControlHandlerResult {
         log::info!("Got service control event: {:?}", control_event);
@@ -546,7 +546,7 @@ pub fn run_as_user(arg: &str) -> ResultType<Option<std::process::Child>> {
     Ok(None)
 }
 
-#[tokio::main(basic_scheduler)]
+#[tokio::main(flavor = "current_thread")]
 async fn send_close(postfix: &str) -> ResultType<()> {
     send_close_async(postfix).await
 }

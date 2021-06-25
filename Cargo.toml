@@ -16,7 +16,7 @@ cli = []
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-whoami = "0.9"
+whoami = "1.1"
 scrap = { path = "libs/scrap" }
 hbb_common = { path = "libs/hbb_common" }
 enigo = { path = "libs/enigo" }

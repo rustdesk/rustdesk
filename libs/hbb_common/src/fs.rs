@@ -7,7 +7,7 @@ use crate::{
 };
 #[cfg(windows)]
 use std::os::windows::prelude::*;
-use tokio::{fs::File, prelude::*};
+use tokio::{fs::File, io::*};
 
 pub fn read_dir(path: &PathBuf, include_hidden: bool) -> ResultType<FileDirectory> {
     let mut dir = FileDirectory {

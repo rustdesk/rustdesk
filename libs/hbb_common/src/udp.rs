@@ -1,13 +1,14 @@
 use crate::{bail, ResultType};
 use bytes::BytesMut;
-use futures::SinkExt;
+use futures::{SinkExt, StreamExt};
 use protobuf::Message;
+use socket2::{Domain, Socket, Type};
 use std::{
     io::Error,
     net::SocketAddr,
     ops::{Deref, DerefMut},
 };
-use tokio::{net::ToSocketAddrs, net::UdpSocket, stream::StreamExt};
+use tokio::{net::ToSocketAddrs, net::UdpSocket};
 use tokio_util::{codec::BytesCodec, udp::UdpFramed};
 
 pub struct FramedSocket(UdpFramed<BytesCodec>);
@@ -18,6 +19,23 @@ impl Deref for FramedSocket {
     fn deref(&self) -> &Self::Target {
         &self.0
     }
+}
+
+fn new_socket(addr: SocketAddr, reuse: bool) -> Result<Socket, std::io::Error> {
+    let socket = match addr {
+        SocketAddr::V4(..) => Socket::new(Domain::ipv4(), Type::dgram(), None),
+        SocketAddr::V6(..) => Socket::new(Domain::ipv6(), Type::dgram(), None),
+    }?;
+    if reuse {
+        // windows has no reuse_port, but it's reuse_address
+        // almost equals to unix's reuse_port + reuse_address,
+        // though may introduce nondeterministic bahavior
+        #[cfg(unix)]
+        socket.set_reuse_port(true)?;
+        socket.set_reuse_address(true)?;
+    }
+    socket.bind(&addr.into())?;
+    Ok(socket)
 }
 
 impl DerefMut for FramedSocket {
@@ -33,10 +51,10 @@ impl FramedSocket {
     }
 
     #[allow(clippy::never_loop)]
-    pub async fn new_reuse<T: ToSocketAddrs>(addr: T) -> ResultType<Self> {
-        for addr in addr.to_socket_addrs().await? {
+    pub async fn new_reuse<T: std::net::ToSocketAddrs>(addr: T) -> ResultType<Self> {
+        for addr in addr.to_socket_addrs()? {
             return Ok(Self(UdpFramed::new(
-                UdpSocket::from_std(super::new_socket(addr, false, true)?.into_udp_socket())?,
+                UdpSocket::from_std(new_socket(addr, true)?.into_udp_socket())?,
                 BytesCodec::new(),
             )));
         }

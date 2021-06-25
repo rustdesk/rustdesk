@@ -330,7 +330,7 @@ impl sciter::EventHandler for ConnectionManager {
     }
 }
 
-#[tokio::main(basic_scheduler)]
+#[tokio::main(flavor = "current_thread")]
 async fn start_ipc(cm: ConnectionManager) {
     match new_listener("_cm").await {
         Ok(mut incoming) => {
@@ -387,7 +387,7 @@ async fn start_ipc(cm: ConnectionManager) {
 }
 
 #[cfg(target_os = "linux")]
-#[tokio::main(basic_scheduler)]
+#[tokio::main(flavor = "current_thread")]
 async fn start_pa() {
     use hbb_common::config::APP_NAME;
     use libpulse_binding as pulse;

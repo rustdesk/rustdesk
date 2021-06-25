@@ -6,7 +6,6 @@ pub mod rendezvous_proto;
 pub use bytes;
 pub use futures;
 pub use protobuf;
-use socket2::{Domain, Socket, Type};
 use std::{
     fs::File,
     io::{self, BufRead},
@@ -36,7 +35,7 @@ pub type Stream = tcp::FramedStream;
 
 #[inline]
 pub async fn sleep(sec: f32) {
-    tokio::time::delay_for(time::Duration::from_secs_f32(sec)).await;
+    tokio::time::sleep(time::Duration::from_secs_f32(sec)).await;
 }
 
 #[macro_export]
@@ -61,30 +60,6 @@ pub fn timeout<T: std::future::Future>(ms: u64, future: T) -> tokio::time::Timeo
     tokio::time::timeout(std::time::Duration::from_millis(ms), future)
 }
 
-fn new_socket(addr: SocketAddr, tcp: bool, reuse: bool) -> Result<Socket, std::io::Error> {
-    let stype = {
-        if tcp {
-            Type::stream()
-        } else {
-            Type::dgram()
-        }
-    };
-    let socket = match addr {
-        SocketAddr::V4(..) => Socket::new(Domain::ipv4(), stype, None),
-        SocketAddr::V6(..) => Socket::new(Domain::ipv6(), stype, None),
-    }?;
-    if reuse {
-        // windows has no reuse_port, but it's reuse_address
-        // almost equals to unix's reuse_port + reuse_address,
-        // though may introduce nondeterministic bahavior
-        #[cfg(unix)]
-        socket.set_reuse_port(true)?;
-        socket.set_reuse_address(true)?;
-    }
-    socket.bind(&addr.into())?;
-    Ok(socket)
-}
-
 pub type ResultType<F, E = anyhow::Error> = anyhow::Result<F, E>;
 
 /// Certain router and firewalls scan the packet and if they
@@ -100,10 +75,10 @@ impl AddrMangle {
                     .duration_since(UNIX_EPOCH)
                     .unwrap()
                     .as_micros() as u32) as u128;
-                let ip = u32::from_ne_bytes(addr_v4.ip().octets()) as u128;
+                let ip = u32::from_le_bytes(addr_v4.ip().octets()) as u128;
                 let port = addr.port() as u128;
                 let v = ((ip + tm) << 49) | (tm << 17) | (port + (tm & 0xFFFF));
-                let bytes = v.to_ne_bytes();
+                let bytes = v.to_le_bytes();
                 let mut n_padding = 0;
                 for i in bytes.iter().rev() {
                     if i == &0u8 {
@@ -123,9 +98,9 @@ impl AddrMangle {
     pub fn decode(bytes: &[u8]) -> SocketAddr {
         let mut padded = [0u8; 16];
         padded[..bytes.len()].copy_from_slice(&bytes);
-        let number = u128::from_ne_bytes(padded);
+        let number = u128::from_le_bytes(padded);
         let tm = (number >> 17) & (u32::max_value() as u128);
-        let ip = (((number >> 49) - tm) as u32).to_ne_bytes();
+        let ip = (((number >> 49) - tm) as u32).to_le_bytes();
         let port = (number & 0xFFFFFF) - (tm & 0xFFFF);
         SocketAddr::V4(SocketAddrV4::new(
             Ipv4Addr::new(ip[0], ip[1], ip[2], ip[3]),
