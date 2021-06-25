@@ -1,6 +1,4 @@
 use crate::ipc::{self, new_listener, Connection, Data};
-#[cfg(windows)]
-use hbb_common::futures_util::stream::StreamExt;
 use hbb_common::{
     allow_err,
     config::{Config, ICON},

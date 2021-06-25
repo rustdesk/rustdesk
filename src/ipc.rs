@@ -5,10 +5,13 @@ use hbb_common::{
     futures::StreamExt as _,
     futures_util::sink::SinkExt,
     log, timeout, tokio,
+    tokio::io::{AsyncRead, AsyncWrite},
     tokio_util::codec::Framed,
     ResultType,
 };
-use parity_tokio_ipc::{Connection as Conn, Endpoint, Incoming, SecurityAttributes};
+use parity_tokio_ipc::{
+    Connection as Conn, ConnectionClient as ConnClient, Endpoint, Incoming, SecurityAttributes,
+};
 use serde_derive::{Deserialize, Serialize};
 use std::{collections::HashMap, net::SocketAddr};
 #[cfg(not(windows))]
@@ -235,10 +238,10 @@ async fn handle(data: Data, stream: &mut Connection) {
     }
 }
 
-pub async fn connect(ms_timeout: u64, postfix: &str) -> ResultType<Connection> {
+pub async fn connect(ms_timeout: u64, postfix: &str) -> ResultType<ConnectionTmpl<ConnClient>> {
     let path = Config::ipc_path(postfix);
     let client = timeout(ms_timeout, Endpoint::connect(&path)).await??;
-    Ok(Connection::new(client))
+    Ok(ConnectionTmpl::new(client))
 }
 
 #[inline]
@@ -284,12 +287,17 @@ fn write_pid(postfix: &str) {
     }
 }
 
-pub struct Connection {
-    inner: Framed<Conn, BytesCodec>,
+pub struct ConnectionTmpl<T> {
+    inner: Framed<T, BytesCodec>,
 }
 
-impl Connection {
-    pub fn new(conn: Conn) -> Self {
+pub type Connection = ConnectionTmpl<Conn>;
+
+impl<T> ConnectionTmpl<T>
+where
+    T: AsyncRead + AsyncWrite + std::marker::Unpin,
+{
+    pub fn new(conn: T) -> Self {
         Self {
             inner: Framed::new(conn, BytesCodec::new()),
         }

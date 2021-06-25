@@ -25,7 +25,7 @@ pub async fn listen(
     interface: impl Interface,
     ui_receiver: mpsc::UnboundedReceiver<Data>,
 ) -> ResultType<()> {
-    let mut listener = tcp::new_listener(format!("0.0.0.0:{}", port), true).await?;
+    let listener = tcp::new_listener(format!("0.0.0.0:{}", port), true).await?;
     let addr = listener.local_addr()?;
     log::info!("listening on port {:?}", addr);
     let is_rdp = port == 0;

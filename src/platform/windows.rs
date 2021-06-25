@@ -3,7 +3,6 @@ use crate::ipc;
 use hbb_common::{
     allow_err, bail,
     config::{Config, APP_NAME},
-    futures_util::stream::StreamExt,
     log, sleep, timeout, tokio,
 };
 use std::io::prelude::*;
@@ -652,7 +651,10 @@ pub fn get_active_username() -> String {
         return "".to_owned();
     }
     let sl = unsafe { std::slice::from_raw_parts(buff.as_ptr(), n as _) };
-    String::from_utf16(sl).unwrap_or("??".to_owned()).trim_end_matches('\0').to_owned()
+    String::from_utf16(sl)
+        .unwrap_or("??".to_owned())
+        .trim_end_matches('\0')
+        .to_owned()
 }
 
 /*
@@ -1037,7 +1039,6 @@ pub fn get_installed_version() -> String {
     }
     "".to_owned()
 }
-
 
 pub fn create_shortcut(id: &str) -> ResultType<()> {
     let exe = std::env::current_exe()?.to_str().unwrap_or("").to_owned();
