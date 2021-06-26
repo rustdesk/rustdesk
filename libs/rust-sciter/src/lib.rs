@@ -349,7 +349,7 @@ mod ext {
   pub fn SciterAPI() -> *const ISciterAPI {
     match try_load_library(true) {
       Ok(api) => api,
-      Err(error) => panic!(error),
+      Err(error) => panic!("{}", error),
     }
   }
 }
