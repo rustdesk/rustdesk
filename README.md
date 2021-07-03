@@ -25,7 +25,7 @@ Below are the servers you are using for free, it may change along the time. If y
 | --------- | ------------- | ------------------ |
 | Seoul     | AWS lightsail | 1 VCPU / 0.5GB RAM |
 | Singapore | Vultr         | 1 VCPU / 1GB RAM   |
-| New York  | DigitOcean    | 1 VCPU / 1GB RAM   |
+| Dallas    | Vultr         | 1 VCPU / 1GB RAM   |                                          |
 
 ## Dependencies
 
