@@ -23,7 +23,7 @@ RustDesk accueille les contributions de tout le monde.  Voir [`CONTRIBUTING.md`]
 Ci-dessous se trouvent les serveurs que vous utilisez gratuitement, cela peut changer au fil du temps. Si vous n'êtes pas proche de l'un d'entre eux, votre réseau peut être lent.
 - Séoul, AWS lightsail, 1 VCPU/0.5G RAM
 - Singapour, Vultr, 1 VCPU/1G RAM
-- Virginie, AWS EC2, 4 VCPU/32G RAM, offert par [g9md.tv](https://g9md.tv)
+- New York, DigitOcean, 1 VCPU/1G RAM
 
 ## Dépendances
 

@@ -26,7 +26,7 @@ Hier sind die Server die du kostenlos nutzen kannst, es kann sein das sich diese
 | --------- | ------------- | ------------------ | ---------------------------------------- |
 | Seoul     | AWS lightsail | 1 VCPU / 0.5GB RAM |                                          |
 | Singapore | Vultr         | 1 VCPU / 1GB RAM   |                                          |
-| Virginia  | AWS EC2       | 4 VCPUs / 32GB RAM | gespendet von [g9md.tv](https://g9md.tv) |
+| New York  | DigitOcean    | 1 VCPU / 1GB RAM   |                                          |
 
 ## Abhängigkeiten
 
