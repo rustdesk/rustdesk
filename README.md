@@ -1,51 +1,51 @@
 <p align="center">
   <img src="logo-header.svg" alt="RustDesk - Your remote desktop"><br>
-  <a href="#free-public-servers">Servers</a> •
-  <a href="#raw-steps-to-build">Build</a> •
+  <a href="#free-public-servers">Serwery</a> •
+  <a href="#raw-steps-to-build">Kompilacja</a> •
   <a href="#how-to-build-with-docker">Docker</a> •
-  <a href="#file-structure">Structure</a> •
+  <a href="#file-structure">Struktura</a> •
   <a href="#snapshot">Snapshot</a><br>
   [<a href="README-ZH.md">中文</a>] | [<a href="README-ES.md">Español</a>] | [<a href="README-FR.md">Français</a>] | [<a href="README-DE.md">Deutsch</a>] | [<a href="README-JP.md">日本語</a>] | [<a href="README-RU.md">Русский</a>] | [<a href="README-PT.md">Português</a>]<br>
-  <b>We need your help to translate this README to your native language</b>
+  <b>Potrzebujemy twojej pomocy w tłumaczeniu README na twój ojczysty język</b>
 </p>
 
-Chat with us: [Discord](https://discord.gg/nDceKgxnkV) | [Reddit](https://www.reddit.com/r/rustdesk)
+Porozmawiaj z nami na: [Discord](https://discord.gg/nDceKgxnkV) | [Reddit](https://www.reddit.com/r/rustdesk)
 
 [![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/I2I04VU09)
 
-Yet another remote desktop software, written in Rust. Works out of the box, no configuration required. Great alternative to TeamViewer and AnyDesk! You have full control of your data, with no concerns about security. You can use our rendezvous/relay server, [set up your own](https://rustdesk.com/blog/id-relay-set/), or [write your own rendezvous/relay server](https://github.com/rustdesk/rustdesk-server-demo). 
+Kolejny program do zdalnego pulpitu, napisany w Rust. Działa od samego początku, nie wymaga konfiguracji. Świetna alternatywa dla TeamViewera i AnyDesk! Masz pełną kontrolę nad swoimi danymi, bez obaw o bezpieczeństwo. Możesz skorzystać z naszego darmowego serwera publicznego , [skonfigurować własny](https://rustdesk.com/blog/id-relay-set/), lub [napisać własny serwer rendezvous/relay server](https://github.com/rustdesk/rustdesk-server-demo). 
 
-RustDesk welcomes contribution from everyone.  See [`CONTRIBUTING.md`](CONTRIBUTING.md) for help getting started.
+RustDesk zaprasza do współpracy każdego.  Zobacz [`CONTRIBUTING.md`](CONTRIBUTING.md) pomoc w uruchomieniu programu.
 
-[**BINARY DOWNLOAD**](https://github.com/rustdesk/rustdesk/releases)
+[**POBIERZ KOMPILACJE**](https://github.com/rustdesk/rustdesk/releases)
 
-## Free Public Servers
-Below are the servers you are using for free, it may change along the time. If you are not close to one of these, your network may be slow.
-| Location  | Vendor        | Specification      |
+## Darmowe Serwery Publiczne
+Poniżej znajdują się serwery, z których można korzystać za darmo, może się to zmienić z upływem czasu. Jeśli nie znajdujesz się w pobliżu jednego z nich, Twoja prędkość połączenia może być niska.
+| Lokalizacja  | Dostawca        | Specyfikacja      |
 | --------- | ------------- | ------------------ |
-| Seoul     | AWS lightsail | 1 VCPU / 0.5GB RAM |
-| Singapore | Vultr         | 1 VCPU / 1GB RAM   |
-| Dallas    | Vultr         | 1 VCPU / 1GB RAM   |                                          |
+| Seul     | AWS lightsail | 1 VCPU / 0.5GB RAM |
+| Singapur | Vultr         | 1 VCPU / 1GB RAM   |
+| Dallas    | Vultr         | 1 VCPU / 1GB RAM   |        |
 
-## Dependencies
+## Zależności
 
-Desktop versions use [sciter](https://sciter.com/) for GUI, please download sciter dynamic library yourself.
+Wersje desktopowe używają [sciter](https://sciter.com/) dla GUI, proszę pobrać bibliotekę dynamiczną sciter samodzielnie.
 
 [Windows](https://github.com/c-smile/sciter-sdk/blob/dc65744b66389cd5a0ff6bdb7c63a8b7b05a708b/bin.win/x64/sciter.dll) | 
 [Linux](https://github.com/c-smile/sciter-sdk/raw/dc65744b66389cd5a0ff6bdb7c63a8b7b05a708b/bin.lnx/x64/libsciter-gtk.so) |
 [MacOS](https://github.com/c-smile/sciter-sdk/raw/dc65744b66389cd5a0ff6bdb7c63a8b7b05a708b/bin.osx/sciter-osx-64.dylib)
 
-## Raw steps to build
-* Prepare your Rust development env and C++ build env
+## Podstawowe kroki do kompilacji.
+* Przygotuj środowisko programistyczne Rust i środowisko programowania C++
 
-* Install [vcpkg](https://github.com/microsoft/vcpkg), and set `VCPKG_ROOT` env variable correctly
+* Zainstaluj [vcpkg](https://github.com/microsoft/vcpkg), i ustaw `VCPKG_ROOT` env zmienną prawidłowo
 
    - Windows: vcpkg install libvpx:x64-windows-static libyuv:x64-windows-static opus:x64-windows-static
    - Linux/MacOS: vcpkg install libvpx libyuv opus
    
-* run `cargo run`
+* uruchom `cargo run`
 
-## How to build on Linux
+## Jak Kompilować na Linuxie
 
 ### Ubuntu 18 (Debian 10)
 ```sh
@@ -62,7 +62,7 @@ sudo yum -y install gcc-c++ git curl wget nasm yasm gcc gtk3-devel clang libxcb-
 sudo pacman -Syu --needed unzip git cmake gcc curl wget yasm nasm zip make pkg-config clang gtk3 xdotool libxcb libxfixes alsa-lib pulseaudio
 ```
 
-### Install vcpkg
+### Zainstaluj vcpkg
 ```sh
 git clone https://github.com/microsoft/vcpkg --branch 2020.11-1
 vcpkg/bootstrap-vcpkg.sh
@@ -82,7 +82,7 @@ cp libvpx.a $HOME/vcpkg/installed/x64-linux/lib/
 cd
 ```
 
-### Build
+### Kompilacja
 ```sh
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 source $HOME/.cargo/env
@@ -94,9 +94,9 @@ mv libsciter-gtk.so target/debug
 cargo run
 ```
 
-## How to build with Docker
+## Jak kompilować za pomocą Dockera
 
-Begin by cloning the repository and building the docker container:
+Rozpocznij od sklonowania repozytorium i stworzenia kontenera docker:
 
 ```sh
 git clone https://github.com/rustdesk/rustdesk
@@ -104,41 +104,42 @@ cd rustdesk
 docker build -t "rustdesk-builder" .
 ```
 
-Then, each time you need to build the application, run the following command:
+Następnie, za każdym razem, gdy potrzebujesz skompilować aplikację, uruchom następujące polecenie:
 
 ```sh
 docker run --rm -it -v $PWD:/home/user/rustdesk -v rustdesk-git-cache:/home/user/.cargo/git -v rustdesk-registry-cache:/home/user/.cargo/registry -e PUID="$(id -u)" -e PGID="$(id -g)" rustdesk-builder
 ```
 
-Note that the first build may take longer before dependencies are cached, subsequent builds will be faster. Additionally, if you need to specify different arguments to the build command, you may do so at the end of the command in the `<OPTIONAL-ARGS>` position. For instance, if you wanted to build an optimized release version, you would run the command above followed by `---release`. The resulting executable will be available in the target folder on your system, and can be run with:
+Zauważ, że pierwsza kompilacja może potrwać dłużej zanim zależności zostaną zbuforowane, kolejne będą szybsze. Dodatkowo, jeśli potrzebujesz określić inne argumenty dla polecenia budowania, możesz to zrobić na końcu komendy w miejscu `<OPTIONAL-ARGS>`. Na przykład, jeśli chciałbyś zbudować zoptymalizowaną wersję wydania, uruchomiłbyś powyższą komendę a następnie `---release`. Powstały plik wykonywalny będzie dostępny w folderze docelowym w twoim systemie, i może być uruchomiony z:
+
 
 ```sh
 target/debug/rustdesk
 ```
 
-Or, if you're running a release executable:
+Lub, jeśli uruchamiasz plik wykonywalny wersji:
 
 ```sh
 target/release/rustdesk
 ```
 
-Please ensure that you are running these commands from the root of the RustDesk repository, otherwise the application may be unable to find the required resources. Also note that other cargo subcommands such as `install` or `run` are not currently supported via this method as they would install or run the program inside the container instead of the host.
+Upewnij się, że uruchamiasz te polecenia z katalogu głównego repozytorium RustDesk, w przeciwnym razie aplikacja może nie być w stanie znaleźć wymaganych zasobów. Należy również pamiętać, że inne podpolecenia ładowania, takie jak `install` lub `run` nie są obecnie obsługiwane za pomocą tej metody, ponieważ instalowałyby lub uruchamiały program wewnątrz kontenera zamiast na hoście.
 
-### Change Wayland to X11 (Xorg)
-RustDesk does not support Wayland. Check [this](https://docs.fedoraproject.org/en-US/quick-docs/configuring-xorg-as-default-gnome-session/) to configuring Xorg as the default GNOME session.
+### Zmień Wayland na X11 (Xorg)
+RustDesk nie obsługuje Waylanda. Sprawdź [this](https://docs.fedoraproject.org/en-US/quick-docs/configuring-xorg-as-default-gnome-session/) by skonfigurować Xorg jako domyślną sesję GNOME.
 
-## File Structure
+## Struktura plików
 
-- **[libs/hbb_common](https://github.com/rustdesk/rustdesk/tree/master/libs/hbb_common)**: video codec, config, tcp/udp wrapper, protobuf, fs functions for file transfer, and some other utility functions
-- **[libs/scrap](https://github.com/rustdesk/rustdesk/tree/master/libs/scrap)**: screen capture
-- **[libs/enigo](https://github.com/rustdesk/rustdesk/tree/master/libs/enigo)**: platform specific keyboard/mouse control
+- **[libs/hbb_common](https://github.com/rustdesk/rustdesk/tree/master/libs/hbb_common)**: kodek wideo, config, wrapper tcp/udp, protobuf, funkcje fs do transferu plików i kilka innych funkcji użytkowych
+- **[libs/scrap](https://github.com/rustdesk/rustdesk/tree/master/libs/scrap)**: przechwytywanie ekranu
+- **[libs/enigo](https://github.com/rustdesk/rustdesk/tree/master/libs/enigo)**: specyficzne dla danej platformy sterowanie klawiaturą/myszą
 - **[src/ui](https://github.com/rustdesk/rustdesk/tree/master/src/ui)**: GUI
-- **[src/server](https://github.com/rustdesk/rustdesk/tree/master/src/server)**: audio/clipboard/input/video services, and network connections
-- **[src/client.rs](https://github.com/rustdesk/rustdesk/tree/master/src/client.rs)**: start a peer connection
-- **[src/rendezvous_mediator.rs](https://github.com/rustdesk/rustdesk/tree/master/src/rendezvous_mediator.rs)**: Communicate with [rustdesk-server](https://github.com/rustdesk/rustdesk-server), wait for remote direct (TCP hole punching) or relayed connection
-- **[src/platform](https://github.com/rustdesk/rustdesk/tree/master/src/platform)**: platform specific code
+- **[src/server](https://github.com/rustdesk/rustdesk/tree/master/src/server)**: audio/schowek/wejście(input)/wideo oraz połączenia sieciowe
+- **[src/client.rs](https://github.com/rustdesk/rustdesk/tree/master/src/client.rs)**: uruchamia połączenie peer
+- **[src/rendezvous_mediator.rs](https://github.com/rustdesk/rustdesk/tree/master/src/rendezvous_mediator.rs)**: Komunikacja z [rustdesk-server](https://github.com/rustdesk/rustdesk-server), wait for remote direct (TCP hole punching) or relayed connection
+- **[src/platform](https://github.com/rustdesk/rustdesk/tree/master/src/platform)**: specyficzny dla danej platformy kod
 
-## Snapshot
+## Migawki(Snapshoty)
 ![image](https://user-images.githubusercontent.com/71636191/113112362-ae4deb80-923b-11eb-957d-ff88daad4f06.png)
 
 ![image](https://user-images.githubusercontent.com/71636191/113112619-f705a480-923b-11eb-911d-97e984ef52b6.png)
