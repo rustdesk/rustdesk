@@ -24,7 +24,7 @@ Poniżej znajdują się serwery, z których można korzystać za darmo, może si
 | Lokalizacja  | Dostawca        | Specyfikacja      |
 | --------- | ------------- | ------------------ |
 | Seul     | AWS lightsail | 1 VCPU / 0.5GB RAM |
-| Singapor | Vultr         | 1 VCPU / 1GB RAM   |
+| Singapur | Vultr         | 1 VCPU / 1GB RAM   |
 | Dallas    | Vultr         | 1 VCPU / 1GB RAM   |        |
 
 ## Zależności
