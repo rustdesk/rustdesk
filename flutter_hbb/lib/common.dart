@@ -48,7 +48,7 @@ final langs = <String, Map<String, String>>{
     'Insert': '插入',
     'Insert Lock': '锁定远程电脑',
     'Refresh': '刷新画面',
-    'ID not exist': 'ID不存在',
+    'ID does not exist': 'ID不存在',
     'Failed to connect to rendezvous server': '连接服务器失败',
     'Remote desktop is offline': '远程电脑不在线',
     'Key mismatch': 'Key不匹配',
