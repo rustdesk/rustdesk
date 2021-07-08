@@ -1,11 +1,11 @@
-# RustDesk | Your Remote Desktop Software
 <p align="center">
-  <a href="#free-public-servers">Servers</a> •
-  <a href="#raw-steps-to-build">Build</a> •
-  <a href="#how-to-build-with-docker">Docker</a> •
-  <a href="#file-structure">Structure</a> •
-  <a href="#snapshot">Snapshot</a><br>
-  [<a href="README-ZH.md">中文</a>] | [<a href="README-DE.md">Deutsch</a>] | [<a href="README-JP.md">日本語</a>] | [<a href="README-RU.md">Русский</a>] | [<a href="README-PT.md">Português</a>]<br>
+  <img src="logo-header.svg" alt="RustDesk - Your remote desktop"><br>
+  <a href="#servidores-gratis-de-uso-público">Servidores</a> •
+  <a href="#pasos-para-compilar-desde-el-inicio">Compilar</a> •
+  <a href="#como-compilar-con-docker">Docker</a> •
+  <a href="#estructura-de-archivos">Estructura</a> •
+  <a href="#captura-de-pantalla">Captura de pantalla</a><br>
+  [<a href="README.md">English</a>] | [<a href="README-ZH.md">中文</a>] | [<a href="README-DE.md">Deutsch</a>] | [<a href="README-FR.md">Français</a>] | [<a href="README-PL.md">Polski</a>] | [<a href="README-JP.md">日本語</a>] | [<a href="README-RU.md">Русский</a>] | [<a href="README-PT.md">Português</a>]<br>
   <b>Necesitamos tu ayuda para traducir este README a tu idioma</b>
 </p>
 

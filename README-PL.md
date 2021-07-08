@@ -1,11 +1,11 @@
 <p align="center">
   <img src="logo-header.svg" alt="RustDesk - Your remote desktop"><br>
-  <a href="#free-public-servers">Serwery</a> •
-  <a href="#raw-steps-to-build">Kompilacja</a> •
-  <a href="#how-to-build-with-docker">Docker</a> •
-  <a href="#file-structure">Struktura</a> •
-  <a href="#snapshot">Snapshot</a><br>
-  [<a href="README-ZH.md">中文</a>] | [<a href="README-ES.md">Español</a>] | [<a href="README-FR.md">Français</a>] | [<a href="README-DE.md">Deutsch</a>] | [<a href="README-JP.md">日本語</a>] | [<a href="README-RU.md">Русский</a>] | [<a href="README-PT.md">Português</a>]<br>
+  <a href="#darmowe-serwery-publiczne">Serwery</a> •
+  <a href="#podstawowe-kroki-do-kompilacji">Kompilacja</a> •
+  <a href="#jak-kompilować-za-pomocą-dockera">Docker</a> •
+  <a href="#struktura-plików">Struktura</a> •
+  <a href="#migawkisnapshoty">Snapshot</a><br>
+  [<a href="README.md">English</a>] | [<a href="README-ZH.md">中文</a>] | [<a href="README-DE.md">Deutsch</a>] | [<a href="README-ES.md">Española</a>] | [<a href="README-FR.md">Français</a>] | [<a href="README-JP.md">日本語</a>] | [<a href="README-RU.md">Русский</a>] | [<a href="README-PT.md">Português</a>]<br>
   <b>Potrzebujemy twojej pomocy w tłumaczeniu README na twój ojczysty język</b>
 </p>
 

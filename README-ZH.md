@@ -1,10 +1,11 @@
-# RustDesk | Your Remote Desktop Software
 <p align="center">
+  <img src="logo-header.svg" alt="RustDesk - Your remote desktop"><br>
   <a href="#免费公共服务器">服务器</a> •
   <a href="#基本构建步骤">编译</a> •
   <a href="#使用Docker编译">Docker</a> •
   <a href="#文件结构">结构</a> •
   <a href="#截图">截图</a><br>
+  [<a href="README.md">English</a>] | [<a href="README-ES.md">Español</a>] | [<a href="README-FR.md">Français</a>] | [<a href="README-DE.md">Deutsch</a>] | [<a href="README-PL.md">Polski</a>] | [<a href="README-JP.md">日本語</a>] | [<a href="README-RU.md">Русский</a>] | [<a href="README-PT.md">Português</a>]<br>
 </p>
 
 Chat with us: [知乎](https://www.zhihu.com/people/rustdesk) | [Discord](https://discord.gg/nDceKgxnkV) | [Reddit](https://www.reddit.com/r/rustdesk)
