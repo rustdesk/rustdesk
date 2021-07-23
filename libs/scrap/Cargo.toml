@@ -9,6 +9,9 @@ license = "MIT"
 authors = ["Ram <quadrupleslap@gmail.com>"]
 edition = "2018"
 
+[features]
+wayland = ["gstreamer", "gstreamer-app", "gstreamer-video", "dbus", "tracing"]
+
 [dependencies]
 block = "0.1"
 cfg-if = "1.0"
@@ -18,7 +21,7 @@ num_cpus = "1.13"
 [dependencies.winapi]
 version = "0.3"
 default-features = true
-features = ["dxgi", "dxgi1_2", "dxgi1_5", "d3d11"]
+features = ["dxgi", "dxgi1_2", "dxgi1_5", "d3d11", "winuser"]
 
 [dev-dependencies]
 repng = "0.2"
@@ -30,3 +33,10 @@ quest = "0.3"
 [build-dependencies]
 target_build_utils = "0.3"
 bindgen = "0.53"
+
+[target.'cfg(target_os = "linux")'.dependencies]
+dbus = { version = "0.9", optional = true }
+tracing = { version = "0.1", optional = true }
+gstreamer = { version = "0.16", optional = true }
+gstreamer-app = { version = "0.16", features = ["v1_10"], optional = true }
+gstreamer-video = { version = "0.16", optional = true }

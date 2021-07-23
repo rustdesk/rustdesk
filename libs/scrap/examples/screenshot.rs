@@ -23,6 +23,10 @@ fn record(i: usize) {
     let one_second = Duration::new(1, 0);
     let one_frame = one_second / 60;
 
+    for d in Display::all().unwrap() {
+        println!("{:?} {} {}", d.origin(), d.width(), d.height());
+    }
+
     let display = get_display(i);
     let mut capturer = Capturer::new(display, false).expect("Couldn't begin capture.");
     let (w, h) = (capturer.width(), capturer.height());

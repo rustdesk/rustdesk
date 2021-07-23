@@ -21,7 +21,7 @@ impl Capturer {
     }
 }
 
-pub struct Frame<'a>(&'a [u8]);
+pub struct Frame<'a>(pub(crate) &'a [u8]);
 
 impl<'a> ops::Deref for Frame<'a> {
     type Target = [u8];
