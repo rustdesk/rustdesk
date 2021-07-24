@@ -28,9 +28,6 @@ fn find_package(name: &str) -> Vec<PathBuf> {
     path.push("installed");
     path.push(target);
     let mut lib = name.trim_start_matches("lib").to_string();
-    if lib == "vpx" && target_os == "windows" {
-        lib = format!("{}mt", lib);
-    }
     println!("{}", format!("cargo:rustc-link-lib=static={}", lib));
     println!(
         "{}",
