@@ -37,6 +37,12 @@ fn get_msgbox() -> String {
 }
 
 pub fn start(args: &mut [String]) {
+    // https://github.com/c-smile/sciter-sdk/blob/master/include/sciter-x-types.h
+    // https://github.com/rustdesk/rustdesk/issues/132#issuecomment-886069737
+    #[cfg(windows)]
+    allow_err!(sciter::set_options(sciter::RuntimeOptions::GfxLayer(
+        sciter::GFX_LAYER::WARP
+    )));
     #[cfg(windows)]
     if args.len() > 0 && args[0] == "--tray" {
         let mut res;
