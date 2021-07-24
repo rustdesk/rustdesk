@@ -28,10 +28,10 @@ lazy_static = "1.4"
 sha2 = "0.9"
 repng = "0.2"
 libc = "0.2"
-parity-tokio-ipc = { path = "libs/parity-tokio-ipc" }
+parity-tokio-ipc = { git = "https://github.com/open-trade/parity-tokio-ipc" }
 flexi_logger = "0.16"
 runas = "0.2"
-magnum-opus = { path = "libs/magnum-opus" }
+magnum-opus = { git = "https://github.com/open-trade/magnum-opus" }
 dasp = { version = "0.11", features = ["signal", "interpolate-linear", "interpolate"] }
 async-trait = "0.1"
 crc32fast = "1.2"
@@ -46,10 +46,10 @@ cpal = { git = "https://github.com/rustaudio/cpal" }
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
 machine-uid = "0.2"
 mac_address = "1.1"
-sciter-rs = { path = "libs/rust-sciter" }
+sciter-rs = { git = "https://github.com/sciter-sdk/rust-sciter" }
 
 [target.'cfg(target_os = "windows")'.dependencies]
-systray = { path = "libs/systray-rs" }
+systray = { git = "https://github.com/open-trade/systray-rs" }
 winapi = { version = "0.3", features = ["winuser"] }
 winreg = "0.7"
 windows-service = { git = 'https://github.com/mullvad/windows-service-rs.git' }
@@ -64,7 +64,7 @@ core-graphics = "0.22"
 [target.'cfg(target_os = "linux")'.dependencies]
 libpulse-simple-binding = "2.16"
 libpulse-binding = "2.16"
-rust-pulsectl = { path = "libs/pulsectl" }
+rust-pulsectl = { git = "https://github.com/open-trade/pulsectl" }
 ctrlc = "3.1"
 
 [target.'cfg(not(any(target_os = "windows", target_os = "android", target_os = "ios")))'.dependencies]

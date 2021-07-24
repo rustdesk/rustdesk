@@ -32,9 +32,9 @@ Hier sind die Server die du kostenlos nutzen kannst, es kann sein das sich diese
 
 Die Desktop Versionen nutzen [Sciter](https://sciter.com/) für die Oberfläche, bitte lade die dynamische Sciter Bibliothek selbst herunter.
 
-[Windows](https://github.com/c-smile/sciter-sdk/blob/dc65744b66389cd5a0ff6bdb7c63a8b7b05a708b/bin.win/x64/sciter.dll) | 
-[Linux](https://github.com/c-smile/sciter-sdk/raw/dc65744b66389cd5a0ff6bdb7c63a8b7b05a708b/bin.lnx/x64/libsciter-gtk.so) |
-[MacOS](https://github.com/c-smile/sciter-sdk/raw/dc65744b66389cd5a0ff6bdb7c63a8b7b05a708b/bin.osx/sciter-osx-64.dylib)
+[Windows](https://raw.githubusercontent.com/c-smile/sciter-sdk/master/bin.win/x64/sciter.dll) | 
+[Linux](https://raw.githubusercontent.com/c-smile/sciter-sdk/master/bin.lnx/x64/libsciter-gtk.so) |
+[MacOS](https://raw.githubusercontent.com/c-smile/sciter-sdk/master/bin.osx/libsciter.dylib)
 
 ## Die groben Schritte zum Kompilieren
 * Bereite deine Rust Entwicklungsumgebung und C++ Entwicklungsumgebung vor
@@ -90,7 +90,7 @@ source $HOME/.cargo/env
 git clone https://github.com/rustdesk/rustdesk
 cd rustdesk
 mkdir -p target/debug
-wget https://github.com/c-smile/sciter-sdk/raw/dc65744b66389cd5a0ff6bdb7c63a8b7b05a708b/bin.lnx/x64/libsciter-gtk.so
+wget https://raw.githubusercontent.com/c-smile/sciter-sdk/master/bin.lnx/x64/libsciter-gtk.so
 mv libsciter-gtk.so target/debug
 cargo run
 ```
