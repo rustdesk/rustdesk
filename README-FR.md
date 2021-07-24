@@ -62,22 +62,13 @@ sudo pacman -Syu --needed unzip git cmake gcc curl wget yasm nasm zip make pkg-c
 
 ### Installer vcpkg
 ```sh
-git clone https://github.com/microsoft/vcpkg --branch 2020.11-1
+git clone https://github.com/microsoft/vcpkg 
+cd vcpkg
+git checkout 134505003bb46e20fbace51ccfb69243fbbc5f82
+cd ..
 vcpkg/bootstrap-vcpkg.sh
 export VCPKG_ROOT=$HOME/vcpkg
 vcpkg/vcpkg install libvpx libyuv opus
-```
-
-### Corriger libvpx (Pour Fedora)
-```sh
-cd vcpkg/buildtrees/libvpx/src
-cd *
-./configure
-sed -i 's/CFLAGS+=-I/CFLAGS+=-fPIC -I/g' Makefile
-sed -i 's/CXXFLAGS+=-I/CXXFLAGS+=-fPIC -I/g' Makefile
-make
-cp libvpx.a $HOME/vcpkg/installed/x64-linux/lib/
-cd
 ```
 
 ### Construire
