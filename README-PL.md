@@ -73,6 +73,18 @@ export VCPKG_ROOT=$HOME/vcpkg
 vcpkg/vcpkg install libvpx libyuv opus
 ```
 
+### Fix libvpx (For Fedora)
+```sh
+cd vcpkg/buildtrees/libvpx/src
+cd *
+./configure
+sed -i 's/CFLAGS+=-I/CFLAGS+=-fPIC -I/g' Makefile
+sed -i 's/CXXFLAGS+=-I/CXXFLAGS+=-fPIC -I/g' Makefile
+make
+cp libvpx.a $HOME/vcpkg/installed/x64-linux/lib/
+cd
+```
+
 ### Kompilacja
 ```sh
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
