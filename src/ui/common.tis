@@ -19,7 +19,7 @@ function hashCode(str) {
 }
 
 function intToRGB(i, a = 1) {
-  return 'rgba(' + ((i >> 16) & 0xFF) + ', ' + ((i >> 8) & 0xFF)
+  return 'rgba(' + ((i >> 16) & 0xFF) + ', ' + ((i >> 8) & 0x7F)
     + ',' + (i & 0xFF) + ',' + a + ')';
 }
 
