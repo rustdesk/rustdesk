@@ -139,12 +139,13 @@ pub fn get_cursor_data(hcursor: u64) -> ResultType<CursorData> {
                 width,
                 height,
                 bm_mask.bmWidthBytes,
+                bm_mask.bmHeight,
             ) > 0;
         }
         if do_outline {
             let mut outline = Vec::new();
             outline.resize(((width + 2) * (height + 2) * 4) as _, 0);
-            drawOutline(outline.as_mut_ptr(), cbits.as_ptr(), width, height);
+            drawOutline(outline.as_mut_ptr(), cbits.as_ptr(), width, height, outline.len() as _);
             cbits = outline;
             width += 2;
             height += 2;
@@ -285,7 +286,7 @@ fn fix_cursor_mask(
     cbits: &mut Vec<u8>,
     width: usize,
     height: usize,
-    width_bytes: usize,
+    bm_width_bytes: usize,
 ) -> bool {
     let mut pix_idx = 0;
     for _ in 0..height {
@@ -298,12 +299,18 @@ fn fix_cursor_mask(
     }
 
     let packed_width_bytes = (width + 7) >> 3;
+    let bm_size = mbits.len();
+    let c_size = cbits.len();
 
     // Pack and invert bitmap data (mbits)
     // borrow from tigervnc
     for y in 0..height {
         for x in 0..packed_width_bytes {
-            mbits[y * packed_width_bytes + x] = !mbits[y * width_bytes + x];
+            let a = y * packed_width_bytes + x;
+            let b = y * bm_width_bytes + x;
+            if a < bm_size && b < bm_size {
+                mbits[a] = !mbits[b];
+            }
         }
     }
 
@@ -315,15 +322,23 @@ fn fix_cursor_mask(
         let mut bitmask: u8 = 0x80;
         for x in 0..width {
             let mask_idx = y * packed_width_bytes + (x >> 3);
-            let pix_idx = y * bytes_row + (x << 2);
-            if (mbits[mask_idx] & bitmask) == 0 {
-                for b1 in 0..4 {
-                    if cbits[pix_idx + b1] != 0 {
-                        mbits[mask_idx] ^= bitmask;
-                        for b2 in b1..4 {
-                            cbits[pix_idx + b2] = 0x00;
+            if mask_idx < bm_size {
+                let pix_idx = y * bytes_row + (x << 2);
+                if (mbits[mask_idx] & bitmask) == 0 {
+                    for b1 in 0..4 {
+                        let a = pix_idx + b1;
+                        if a < c_size {
+                            if cbits[a] != 0 {
+                                mbits[mask_idx] ^= bitmask;
+                                for b2 in b1..4 {
+                                    let b = pix_idx + b2;
+                                    if b < c_size {
+                                        cbits[b] = 0x00;
+                                    }
+                                }
+                                break;
+                            }
                         }
-                        break;
                     }
                 }
             }
@@ -339,11 +354,12 @@ fn fix_cursor_mask(
     for y in 0..height {
         for x in 0..width {
             let mask_idx = y * packed_width_bytes + (x >> 3);
-            let alpha = if (mbits[mask_idx] << (x & 0x7)) & 0x80 == 0 {
-                0
-            } else {
-                255
-            };
+            let mut alpha = 255;
+            if mask_idx < bm_size {
+                if (mbits[mask_idx] << (x & 0x7)) & 0x80 == 0 {
+                   alpha =  0;
+                }
+            }
             let a = cbits[pix_idx + 2];
             let b = cbits[pix_idx + 1];
             let c = cbits[pix_idx];
@@ -377,9 +393,9 @@ extern "C" {
     fn LaunchProcessWin(cmd: *const u16, session_id: DWORD, as_user: BOOL) -> HANDLE;
     fn selectInputDesktop() -> BOOL;
     fn inputDesktopSelected() -> BOOL;
-    fn handleMask(out: *mut u8, mask: *const u8, width: i32, height: i32, bmWidthBytes: i32)
+    fn handleMask(out: *mut u8, mask: *const u8, width: i32, height: i32, bmWidthBytes: i32, bmHeight: i32)
         -> i32;
-    fn drawOutline(out: *mut u8, in_: *const u8, width: i32, height: i32);
+    fn drawOutline(out: *mut u8, in_: *const u8, width: i32, height: i32, out_size: i32);
     fn get_di_bits(out: *mut u8, dc: HDC, hbmColor: HBITMAP, width: i32, height: i32) -> i32;
     fn blank_screen(v: BOOL);
     fn BlockInput(v: BOOL) -> BOOL;

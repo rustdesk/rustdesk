@@ -192,10 +192,13 @@ extern "C"
         return true;
     }
 
-    int handleMask(uint8_t *rwbuffer, const uint8_t *mask, int width, int height, int bmWidthBytes)
+    int handleMask(uint8_t *rwbuffer, const uint8_t *mask, int width, int height, int bmWidthBytes, int bmHeight)
     {
         auto andMask = mask;
-        auto xorMask = mask + height * bmWidthBytes;
+        auto andMaskSize = bmWidthBytes * bmHeight;
+        auto offset = height * bmWidthBytes;
+        auto xorMask = mask + offset;
+        auto xorMaskSize = andMaskSize - offset;
         int doOutline = 0;
         for (int y = 0; y < height; y++)
         {
@@ -204,7 +207,7 @@ extern "C"
                 int byte = y * bmWidthBytes + x / 8;
                 int bit = 7 - x % 8;
 
-                if (!(andMask[byte] & (1 << bit)))
+                if (byte < andMaskSize && !(andMask[byte] & (1 << bit)))
                 {
                     // Valid pixel, so make it opaque
                     rwbuffer[3] = 0xff;
@@ -215,7 +218,7 @@ extern "C"
                     else
                         rwbuffer[0] = rwbuffer[1] = rwbuffer[2] = 0;
                 }
-                else if (xorMask[byte] & (1 << bit))
+                else if (byte < xorMaskSize && xorMask[byte] & (1 << bit))
                 {
                     // Replace any XORed pixels with black, because RFB doesn't support
                     // XORing of cursors.  XORing is used for the I-beam cursor, which is most
@@ -240,10 +243,12 @@ extern "C"
         return doOutline;
     }
 
-    void drawOutline(uint8_t *out0, const uint8_t *in0, int width, int height)
+    void drawOutline(uint8_t *out0, const uint8_t *in0, int width, int height, int out0_size)
     {
         auto in = in0;
-        auto out = out0 + width * 4 + 4;
+        auto out0_end = out0 + out0_size;
+        auto offset = width * 4 + 4;
+        auto out = out0 + offset;
         for (int y = 0; y < height; y++)
         {
             for (int x = 0; x < width; x++)
@@ -251,12 +256,16 @@ extern "C"
                 // Visible pixel?
                 if (in[3] > 0)
                 {
+                    auto n = 4 * 3;
+                    auto p = out - (width + 2) * 4 - 4;
                     // Outline above...
-                    memset(out - (width + 2) * 4 - 4, 0xff, 4 * 3);
+                    if (p >= out0 && p + n <= out0_end) memset(p, 0xff, n);
                     // ...besides...
-                    memset(out - 4, 0xff, 4 * 3);
+                    p = out - 4;
+                    if (p + n <= out0_end) memset(p, 0xff, n);
                     // ...and above
-                    memset(out + (width + 2) * 4 - 4, 0xff, 4 * 3);
+                    p = out + (width + 2) * 4 - 4;
+                    if (p + n <= out0_end) memset(p, 0xff, n);
                 }
                 in += 4;
                 out += 4;
@@ -267,12 +276,12 @@ extern "C"
 
         // Pass 2, overwrite with actual cursor
         in = in0;
-        out = out0 + width * 4 + 4;
+        out = out0 + offset;
         for (int y = 0; y < height; y++)
         {
             for (int x = 0; x < width; x++)
             {
-                if (in[3] > 0)
+                if (in[3] > 0 && out + 4 <= out0_end)
                     memcpy(out, in, 4);
                 in += 4;
                 out += 4;
