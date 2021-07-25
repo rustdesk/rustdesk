@@ -168,11 +168,15 @@ class Header: Reactor.Component {
         var scale = 16. / h;
         var screens = pi.displays.map(function(d, i) {
             var min_wh = d.width > d.height ? d.height : d.width;
+            var fs = min_wh * 0.9 * scale;
             var style = "width:" + (d.width * scale) + "px;" +
                         "height:" + (d.height * scale) + "px;" +
                         "left:" + ((d.x - x0) * scale) + "px;" +
                         "top:" + ((d.y - y0) * scale) + "px;" +
-                        "font-size:" + (min_wh * 0.9 * scale) + "px;";
+                        "font-size:" + fs + "px;";
+            if (is_osx) {
+              style += "line-height:" + fs + "px;";
+            }
             return <div style={style} class={pi.current_display == i ? "current" : ""}>{i+1}</div>;
         });
 

@@ -14,7 +14,6 @@ video#handler {
     size: *;
     margin: *;
     foreground-size: contain;
-    position: relative;
 }
 
 img#cursor {

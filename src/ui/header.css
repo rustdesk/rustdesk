@@ -19,6 +19,12 @@ header #screen {
   color: color(light-text);
 }
 
+@media platform == "OSX" {
+  header #screen {
+    line-height: 11px;
+  }
+}
+
 header #secure {
   position: absolute;
   left: -10px;
