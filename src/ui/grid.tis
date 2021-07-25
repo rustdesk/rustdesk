@@ -73,7 +73,7 @@ class Grid: Behavior {
       var getValue = function(x) {
         var value = x.attributes["value"];
         if (value == undefined) return x.text.toLowerCase();
-        return value.toInteger();
+        return value.toFloat();
       }
       var sort = function(r1, r2, asc) {
         if (r1[1].text == "..") {

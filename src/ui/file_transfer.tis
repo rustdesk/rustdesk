@@ -146,11 +146,15 @@ class JobTable: Reactor.Component {
     var n = job.num_entries || job.entries.length;
     if (i > n) i = n;
     var res = i + ' / ' + n + " files";
-    if (job.total_size > 0) res += ", " + getSize(0, job.finished_size) + ' / ' + getSize(0, job.total_size);
+    if (job.total_size > 0) {
+      var s = getSize(0, job.finished_size);
+      if (s) s += " / ";
+      res += ", " + s + getSize(0, job.total_size);
+    }
     // below has problem if some file skipped
-    var percent = (100. * job.finished_size / job.total_size).toInteger(); // (100. * i / (n || 1)).toInteger();
+    var percent = job.total_size == 0 ? 100 : (100. * job.finished_size / job.total_size).toInteger(); // (100. * i / (n || 1)).toInteger();
     if (job.finished) percent = '100';
-    res += ", " + percent + "%";
+    if (percent) res += ", " + percent + "%";
     if (job.finished) res = "Finished " + res;
     if (job.speed) res += ", " + getSize(0, job.speed) + "/s";
     return res;
