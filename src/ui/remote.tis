@@ -202,11 +202,13 @@ function handler.onMouse(evt)
         break;
       case Event.MOUSE_WHEEL:
         // mouseWheelDistance = 8 * [currentUserDefs floatForKey:@"com.apple.scrollwheel.scaling"];
-        // seems buggy, it always -1 or 1, even I change system scrolling speed.
-        // to-do: should we use client side prefrence or server side?
         mask = 3; 
         {
             var (dx, dy) = evt.wheelDeltas;
+            if (dx > 0) dx = 1;
+            else if (dx < 0) dx = -1;
+            if (dy > 0) dy = 1;
+            else if (dy < 0) dy = -1;
             if (Math.abs(dx) > Math.abs(dy)) {
                 dy = 0;
             } else {
