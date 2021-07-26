@@ -167,7 +167,8 @@ function handler.onMouse(evt)
 {
     if (is_file_transfer || is_port_forward) return false;
     if (view.windowState == View.WINDOW_FULL_SCREEN && !dragging) {
-        if (evt.y - scroll_body.scroll(#top) < 10) {
+        var dy = evt.y - scroll_body.scroll(#top);
+        if (dy <= 1) {
             if (!wait_window_toolbar) {
                 wait_window_toolbar = true;
                 self.timer(300ms, function() {
@@ -183,7 +184,13 @@ function handler.onMouse(evt)
             }
         } else {
             wait_window_toolbar = false;
-        }
+            var h = $(header).style;
+            if (dy > 20 && h#display != "none") {
+              h.set {
+                  display: "none",
+              };
+            }
+        } 
     }
     var mask = 0;
     var wheel_delta_x;
@@ -263,12 +270,6 @@ function handler.onMouse(evt)
       case Event.MOUSE_ENTER:
         entered = true;
         stdout.println("enter");
-        if (view.windowState == View.WINDOW_FULL_SCREEN && !dragging) {
-            wait_window_toolbar = false;
-            $(header).style.set {
-                display: "none",
-            };
-        }
         return keyboard_enabled;
       case Event.MOUSE_LEAVE:
         entered = false;
