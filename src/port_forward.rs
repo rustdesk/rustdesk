@@ -6,6 +6,7 @@ use hbb_common::{
     log,
     message_proto::*,
     protobuf::Message as _,
+    rendezvous_proto::ConnType,
     tcp, timeout,
     tokio::{self, net::TcpStream, sync::mpsc},
     tokio_util::codec::{BytesCodec, Framed},
@@ -39,7 +40,7 @@ pub async fn listen(
                 log::info!("new connection from {:?}", addr);
                 let id = id.clone();
                 let mut forward = Framed::new(forward, BytesCodec::new());
-                match connect_and_login(&id, &mut ui_receiver, interface.clone(), &mut forward).await {
+                match connect_and_login(&id, &mut ui_receiver, interface.clone(), &mut forward, is_rdp).await {
                     Ok(Some(stream)) => {
                         let interface = interface.clone();
                         tokio::spawn(async move {
@@ -76,8 +77,14 @@ async fn connect_and_login(
     ui_receiver: &mut mpsc::UnboundedReceiver<Data>,
     interface: impl Interface,
     forward: &mut Framed<TcpStream, BytesCodec>,
+    is_rdp: bool,
 ) -> ResultType<Option<Stream>> {
-    let (mut stream, _) = Client::start(&id).await?;
+    let conn_type = if is_rdp {
+        ConnType::RDP
+    } else {
+        ConnType::PORT_FORWARD
+    };
+    let (mut stream, _) = Client::start(id, conn_type).await?;
     let mut interface = interface;
     let mut buffer = Vec::new();
     loop {

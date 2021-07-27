@@ -511,9 +511,9 @@ impl UI {
         format!("{}.{}", p.to_string_lossy(), self.get_software_ext())
     }
 
-    fn create_shortcut(&self, id: String) {
+    fn create_shortcut(&self, _id: String) {
         #[cfg(windows)]
-        crate::platform::windows::create_shortcut(&id).ok();
+        crate::platform::windows::create_shortcut(&_id).ok();
     }
 
     fn open_url(&self, url: String) {

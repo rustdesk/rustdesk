@@ -27,7 +27,7 @@ fn find_package(name: &str) -> Vec<PathBuf> {
     println!("cargo:info={}", target);
     path.push("installed");
     path.push(target);
-    let mut lib = name.trim_start_matches("lib").to_string();
+    let lib = name.trim_start_matches("lib").to_string();
     println!("{}", format!("cargo:rustc-link-lib=static={}", lib));
     println!(
         "{}",

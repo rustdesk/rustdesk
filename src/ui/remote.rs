@@ -9,6 +9,7 @@ use hbb_common::{
     fs, log,
     message_proto::*,
     protobuf::Message as _,
+    rendezvous_proto::ConnType,
     sleep,
     tokio::{
         self,
@@ -494,6 +495,7 @@ impl Handler {
     fn set_no_confirm(&mut self, id: i32) {
         self.send(Data::SetNoConfirm(id));
     }
+
     fn remove_dir(&mut self, id: i32, path: String, is_remote: bool) {
         if is_remote {
             self.send(Data::RemoveDir((id, path)));
@@ -1144,7 +1146,12 @@ impl Remote {
     async fn io_loop(&mut self) {
         let stop_clipboard = self.start_clipboard();
         let mut last_recv_time = Instant::now();
-        match Client::start(&self.handler.id).await {
+        let conn_type = if self.handler.is_file_transfer() {
+            ConnType::FILE_TRANSFER
+        } else {
+            ConnType::default()
+        };
+        match Client::start(&self.handler.id, conn_type).await {
             Ok((mut peer, direct)) => {
                 self.handler
                     .call("setConnectionType", &make_args!(peer.is_secured(), direct));

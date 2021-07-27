@@ -6,11 +6,19 @@ message RegisterPeer {
   int32 serial = 2;
 }
 
+enum ConnType {
+  DEFAULT_CONN = 0;
+  FILE_TRANSFER = 1;
+  PORT_FORWARD = 2;
+  RDP = 3;
+}
+
 message RegisterPeerResponse { bool request_pk = 2; }
 
 message PunchHoleRequest { 
   string id = 1; 
   NatType nat_type = 2;
+  ConnType conn_type = 4;
 }
 
 message PunchHole { 
@@ -52,6 +60,11 @@ message RegisterPkResponse {
   enum Result {
     OK = 1;
     UUID_MISMATCH = 2;
+    ID_EXISTS = 3;
+    TOO_FREQUENT = 4;
+    INVALID_ID_FORMAT = 5;
+    NOT_SUPPORT = 6;
+    SERVER_ERROR = 7;
   }
   Result result = 1;
 }
@@ -62,6 +75,8 @@ message PunchHoleResponse {
   enum Failure {
     ID_NOT_EXIST = 1;
     OFFLINE = 2;
+    LICENCE_MISMATCH = 3;
+    LICENCE_OVERUSE = 4;
   }
   Failure failure = 3;
   string relay_server = 4;
@@ -69,6 +84,7 @@ message PunchHoleResponse {
     NatType nat_type = 5;
     bool is_local = 6;
   }
+  string other_failure = 7;
 }
 
 message ConfigUpdate {
@@ -82,6 +98,7 @@ message RequestRelay {
   bytes socket_addr = 3;
   string relay_server = 4;
   bool secure = 5;
+  ConnType conn_type = 7;
 }
 
 message RelayResponse {
@@ -92,6 +109,7 @@ message RelayResponse {
     string id = 4;
     bytes pk = 5;
   }
+  string refuse_reason = 6;
 }
 
 message SoftwareUpdate { string url = 1; }

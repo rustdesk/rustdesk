@@ -155,6 +155,7 @@ impl RendezvousMediator {
                                     register_pk_response::Result::UUID_MISMATCH => {
                                         allow_err!(rz.handle_uuid_mismatch(&mut socket).await);
                                     }
+                                    _ => {}
                                 }
                             }
                             Some(rendezvous_message::Union::punch_hole(ph)) => {
