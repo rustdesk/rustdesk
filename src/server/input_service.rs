@@ -1,9 +1,9 @@
 use super::*;
 #[cfg(target_os = "macos")]
 use dispatch::Queue;
-use enigo::{Enigo, KeyboardControllable, MouseButton, MouseControllable};
-use hbb_common::config::COMPRESS_LEVEL;
-use std::convert::TryFrom;
+use enigo::{Enigo, Key, KeyboardControllable, MouseButton, MouseControllable};
+use hbb_common::{config::COMPRESS_LEVEL, protobuf::ProtobufEnumOrUnknown};
+use std::{convert::TryFrom, time::Instant};
 
 #[derive(Default)]
 struct StateCursor {
@@ -37,6 +37,7 @@ struct Input {
 }
 
 static mut LATEST_INPUT: Input = Input { conn: 0, time: 0 };
+const KEY_CHAR_START: i32 = 9999;
 
 #[derive(Clone, Default)]
 pub struct MouseCursorSub {
@@ -157,6 +158,7 @@ fn run_cursor(sp: MouseCursorService, state: &mut StateCursor) -> ResultType<()>
 
 lazy_static::lazy_static! {
     static ref ENIGO: Arc<Mutex<Enigo>> = Arc::new(Mutex::new(Enigo::new()));
+    static ref KEYS_DOWN: Arc<Mutex<HashMap<i32, Instant>>> = Default::default();
 }
 
 // mac key input must be run in main thread, otherwise crash on >= osx 10.15
@@ -188,13 +190,13 @@ fn modifier_sleep() {
 
 #[cfg(not(target_os = "macos"))]
 #[inline]
-fn get_modifier_state(key: enigo::Key, en: &mut Enigo) -> bool {
+fn get_modifier_state(key: Key, en: &mut Enigo) -> bool {
     let x = en.get_key_state(key.clone());
     match key {
-        enigo::Key::Shift => x || en.get_key_state(enigo::Key::RightShift),
-        enigo::Key::Control => x || en.get_key_state(enigo::Key::RightControl),
-        enigo::Key::Alt => x || en.get_key_state(enigo::Key::RightAlt),
-        enigo::Key::Meta => x || en.get_key_state(enigo::Key::RWin),
+        Key::Shift => x || en.get_key_state(Key::RightShift),
+        Key::Control => x || en.get_key_state(Key::RightControl),
+        Key::Alt => x || en.get_key_state(Key::RightAlt),
+        Key::Meta => x || en.get_key_state(Key::RWin),
         _ => x,
     }
 }
@@ -208,6 +210,85 @@ pub fn handle_mouse(evt: &MouseEvent, conn: i32) {
         return;
     }
     handle_mouse_(evt, conn);
+}
+
+pub fn fix_key_down_timeout() {
+    std::thread::spawn(move || loop {
+        std::thread::sleep(std::time::Duration::from_millis(300));
+        if KEYS_DOWN.lock().unwrap().is_empty() {
+            continue;
+        }
+        let cloned = (*KEYS_DOWN.lock().unwrap()).clone();
+        log::debug!("{} keys in key down timeout map", cloned.len());
+        for (key, value) in cloned.into_iter() {
+            if value.elapsed().as_millis() >= 3_000 {
+                KEYS_DOWN.lock().unwrap().remove(&key);
+                let key = if key < KEY_CHAR_START {
+                    if let Some(key) = KEY_MAP.get(&key) {
+                        Some(*key)
+                    } else {
+                        None
+                    }
+                } else {
+                    Some(Key::Layout(((key - KEY_CHAR_START) as u8) as _))
+                };
+                if let Some(key) = key {
+                    let func = move || {
+                        let mut en = ENIGO.lock().unwrap();
+                        if en.get_key_state(key) {
+                            en.key_up(key);
+                            log::debug!("Fixed {:?} timeout", key);
+                        }
+                    };
+                    #[cfg(target_os = "macos")]
+                    QUEUE.exec_async(func);
+                    #[cfg(not(target_os = "macos"))]
+                    func();
+                }
+            }
+        }
+    });
+}
+
+// e.g. current state of ctrl is down, but ctrl not in modifier, we should change ctrl to up, to make modifier state sync between remote and local
+#[inline]
+fn fix_modifier(
+    modifiers: &[ProtobufEnumOrUnknown<ControlKey>],
+    key0: ControlKey,
+    key1: Key,
+    en: &mut Enigo,
+) {
+    if en.get_key_state(key1) && !modifiers.contains(&ProtobufEnumOrUnknown::new(key0)) {
+        en.key_up(key1);
+        log::debug!("Fixed {:?}", key1);
+    }
+}
+
+fn fix_modifiers(modifiers: &[ProtobufEnumOrUnknown<ControlKey>], en: &mut Enigo, ck: i32) {
+    if ck != ControlKey::Shift.value() {
+        fix_modifier(modifiers, ControlKey::Shift, Key::Shift, en);
+    }
+    if ck != ControlKey::RShift.value() {
+        fix_modifier(modifiers, ControlKey::Shift, Key::RightShift, en);
+    }
+    if ck != ControlKey::Alt.value() {
+        fix_modifier(modifiers, ControlKey::Alt, Key::Alt, en);
+    }
+    if ck != ControlKey::RAlt.value() {
+        fix_modifier(modifiers, ControlKey::Alt, Key::RightAlt, en);
+    }
+    if ck != ControlKey::Control.value() {
+        fix_modifier(modifiers, ControlKey::Control, Key::Control, en);
+    }
+    if ck != ControlKey::RControl.value() {
+        fix_modifier(modifiers, ControlKey::Control, Key::RightControl, en);
+    }
+    if ck != ControlKey::Meta.value() {
+        fix_modifier(modifiers, ControlKey::Meta, Key::Meta, en);
+    }
+    if ck != ControlKey::RWin.value() {
+        fix_modifier(modifiers, ControlKey::Meta, Key::RWin, en);
+    }
 }
 
 fn handle_mouse_(evt: &MouseEvent, conn: i32) {
@@ -226,13 +307,16 @@ fn handle_mouse_(evt: &MouseEvent, conn: i32) {
     let mut to_release = Vec::new();
     #[cfg(target_os = "macos")]
     en.reset_flag();
+    if evt_type == 1 || evt_type == 2 {
+        fix_modifiers(&evt.modifiers[..], &mut en, 0);
+    }
     for ref ck in evt.modifiers.iter() {
         if let Some(key) = KEY_MAP.get(&ck.value()) {
             if evt_type == 1 || evt_type == 2 {
                 #[cfg(target_os = "macos")]
                 en.add_flag(key);
                 #[cfg(not(target_os = "macos"))]
-                if key != &enigo::Key::CapsLock && key != &enigo::Key::NumLock {
+                if key != &Key::CapsLock && key != &Key::NumLock {
                     if !get_modifier_state(key.clone(), &mut en) {
                         en.key_down(key.clone()).ok();
                         modifier_sleep();
@@ -306,84 +390,84 @@ pub fn is_enter(evt: &KeyEvent) -> bool {
 }
 
 lazy_static::lazy_static! {
-    static ref KEY_MAP: HashMap<i32, enigo::Key> =
+    static ref KEY_MAP: HashMap<i32, Key> =
     [
-        (ControlKey::Alt, enigo::Key::Alt),
-        (ControlKey::Backspace, enigo::Key::Backspace),
-        (ControlKey::CapsLock, enigo::Key::CapsLock),
-        (ControlKey::Control, enigo::Key::Control),
-        (ControlKey::Delete, enigo::Key::Delete),
-        (ControlKey::DownArrow, enigo::Key::DownArrow),
-        (ControlKey::End, enigo::Key::End),
-        (ControlKey::Escape, enigo::Key::Escape),
-        (ControlKey::F1, enigo::Key::F1),
-        (ControlKey::F10, enigo::Key::F10),
-        (ControlKey::F11, enigo::Key::F11),
-        (ControlKey::F12, enigo::Key::F12),
-        (ControlKey::F2, enigo::Key::F2),
-        (ControlKey::F3, enigo::Key::F3),
-        (ControlKey::F4, enigo::Key::F4),
-        (ControlKey::F5, enigo::Key::F5),
-        (ControlKey::F6, enigo::Key::F6),
-        (ControlKey::F7, enigo::Key::F7),
-        (ControlKey::F8, enigo::Key::F8),
-        (ControlKey::F9, enigo::Key::F9),
-        (ControlKey::Home, enigo::Key::Home),
-        (ControlKey::LeftArrow, enigo::Key::LeftArrow),
-        (ControlKey::Meta, enigo::Key::Meta),
-        (ControlKey::Option, enigo::Key::Option),
-        (ControlKey::PageDown, enigo::Key::PageDown),
-        (ControlKey::PageUp, enigo::Key::PageUp),
-        (ControlKey::Return, enigo::Key::Return),
-        (ControlKey::RightArrow, enigo::Key::RightArrow),
-        (ControlKey::Shift, enigo::Key::Shift),
-        (ControlKey::Space, enigo::Key::Space),
-        (ControlKey::Tab, enigo::Key::Tab),
-        (ControlKey::UpArrow, enigo::Key::UpArrow),
-        (ControlKey::Numpad0, enigo::Key::Numpad0),
-        (ControlKey::Numpad1, enigo::Key::Numpad1),
-        (ControlKey::Numpad2, enigo::Key::Numpad2),
-        (ControlKey::Numpad3, enigo::Key::Numpad3),
-        (ControlKey::Numpad4, enigo::Key::Numpad4),
-        (ControlKey::Numpad5, enigo::Key::Numpad5),
-        (ControlKey::Numpad6, enigo::Key::Numpad6),
-        (ControlKey::Numpad7, enigo::Key::Numpad7),
-        (ControlKey::Numpad8, enigo::Key::Numpad8),
-        (ControlKey::Numpad9, enigo::Key::Numpad9),
-        (ControlKey::Cancel, enigo::Key::Cancel),
-        (ControlKey::Clear, enigo::Key::Clear),
-        (ControlKey::Menu, enigo::Key::Alt),
-        (ControlKey::Pause, enigo::Key::Pause),
-        (ControlKey::Kana, enigo::Key::Kana),
-        (ControlKey::Hangul, enigo::Key::Hangul),
-        (ControlKey::Junja, enigo::Key::Junja),
-        (ControlKey::Final, enigo::Key::Final),
-        (ControlKey::Hanja, enigo::Key::Hanja),
-        (ControlKey::Kanji, enigo::Key::Kanji),
-        (ControlKey::Convert, enigo::Key::Convert),
-        (ControlKey::Select, enigo::Key::Select),
-        (ControlKey::Print, enigo::Key::Print),
-        (ControlKey::Execute, enigo::Key::Execute),
-        (ControlKey::Snapshot, enigo::Key::Snapshot),
-        (ControlKey::Insert, enigo::Key::Insert),
-        (ControlKey::Help, enigo::Key::Help),
-        (ControlKey::Sleep, enigo::Key::Sleep),
-        (ControlKey::Separator, enigo::Key::Separator),
-        (ControlKey::Scroll, enigo::Key::Scroll),
-        (ControlKey::NumLock, enigo::Key::NumLock),
-        (ControlKey::RWin, enigo::Key::RWin),
-        (ControlKey::Apps, enigo::Key::Apps),
-        (ControlKey::Multiply, enigo::Key::Multiply),
-        (ControlKey::Add, enigo::Key::Add),
-        (ControlKey::Subtract, enigo::Key::Subtract),
-        (ControlKey::Decimal, enigo::Key::Decimal),
-        (ControlKey::Divide, enigo::Key::Divide),
-        (ControlKey::Equals, enigo::Key::Equals),
-        (ControlKey::NumpadEnter, enigo::Key::NumpadEnter),
-        (ControlKey::RAlt, enigo::Key::RightAlt),
-        (ControlKey::RWin, enigo::Key::RWin),
-        (ControlKey::RControl, enigo::Key::RightControl),
-        (ControlKey::RShift, enigo::Key::RightShift),
+        (ControlKey::Alt, Key::Alt),
+        (ControlKey::Backspace, Key::Backspace),
+        (ControlKey::CapsLock, Key::CapsLock),
+        (ControlKey::Control, Key::Control),
+        (ControlKey::Delete, Key::Delete),
+        (ControlKey::DownArrow, Key::DownArrow),
+        (ControlKey::End, Key::End),
+        (ControlKey::Escape, Key::Escape),
+        (ControlKey::F1, Key::F1),
+        (ControlKey::F10, Key::F10),
+        (ControlKey::F11, Key::F11),
+        (ControlKey::F12, Key::F12),
+        (ControlKey::F2, Key::F2),
+        (ControlKey::F3, Key::F3),
+        (ControlKey::F4, Key::F4),
+        (ControlKey::F5, Key::F5),
+        (ControlKey::F6, Key::F6),
+        (ControlKey::F7, Key::F7),
+        (ControlKey::F8, Key::F8),
+        (ControlKey::F9, Key::F9),
+        (ControlKey::Home, Key::Home),
+        (ControlKey::LeftArrow, Key::LeftArrow),
+        (ControlKey::Meta, Key::Meta),
+        (ControlKey::Option, Key::Option),
+        (ControlKey::PageDown, Key::PageDown),
+        (ControlKey::PageUp, Key::PageUp),
+        (ControlKey::Return, Key::Return),
+        (ControlKey::RightArrow, Key::RightArrow),
+        (ControlKey::Shift, Key::Shift),
+        (ControlKey::Space, Key::Space),
+        (ControlKey::Tab, Key::Tab),
+        (ControlKey::UpArrow, Key::UpArrow),
+        (ControlKey::Numpad0, Key::Numpad0),
+        (ControlKey::Numpad1, Key::Numpad1),
+        (ControlKey::Numpad2, Key::Numpad2),
+        (ControlKey::Numpad3, Key::Numpad3),
+        (ControlKey::Numpad4, Key::Numpad4),
+        (ControlKey::Numpad5, Key::Numpad5),
+        (ControlKey::Numpad6, Key::Numpad6),
+        (ControlKey::Numpad7, Key::Numpad7),
+        (ControlKey::Numpad8, Key::Numpad8),
+        (ControlKey::Numpad9, Key::Numpad9),
+        (ControlKey::Cancel, Key::Cancel),
+        (ControlKey::Clear, Key::Clear),
+        (ControlKey::Menu, Key::Alt),
+        (ControlKey::Pause, Key::Pause),
+        (ControlKey::Kana, Key::Kana),
+        (ControlKey::Hangul, Key::Hangul),
+        (ControlKey::Junja, Key::Junja),
+        (ControlKey::Final, Key::Final),
+        (ControlKey::Hanja, Key::Hanja),
+        (ControlKey::Kanji, Key::Kanji),
+        (ControlKey::Convert, Key::Convert),
+        (ControlKey::Select, Key::Select),
+        (ControlKey::Print, Key::Print),
+        (ControlKey::Execute, Key::Execute),
+        (ControlKey::Snapshot, Key::Snapshot),
+        (ControlKey::Insert, Key::Insert),
+        (ControlKey::Help, Key::Help),
+        (ControlKey::Sleep, Key::Sleep),
+        (ControlKey::Separator, Key::Separator),
+        (ControlKey::Scroll, Key::Scroll),
+        (ControlKey::NumLock, Key::NumLock),
+        (ControlKey::RWin, Key::RWin),
+        (ControlKey::Apps, Key::Apps),
+        (ControlKey::Multiply, Key::Multiply),
+        (ControlKey::Add, Key::Add),
+        (ControlKey::Subtract, Key::Subtract),
+        (ControlKey::Decimal, Key::Decimal),
+        (ControlKey::Divide, Key::Divide),
+        (ControlKey::Equals, Key::Equals),
+        (ControlKey::NumpadEnter, Key::NumpadEnter),
+        (ControlKey::RAlt, Key::RightAlt),
+        (ControlKey::RWin, Key::RWin),
+        (ControlKey::RControl, Key::RightControl),
+        (ControlKey::RShift, Key::RightShift),
     ].iter().map(|(a, b)| (a.value(), b.clone())).collect();
     static ref NUMPAD_KEY_MAP: HashMap<i32, bool> =
     [
@@ -427,15 +511,21 @@ fn handle_key_(evt: &KeyEvent) {
     let mut has_cap = false;
     #[cfg(windows)]
     let mut has_numlock = false;
+    let ck = if let Some(key_event::Union::control_key(ck)) = evt.union {
+        ck.value()
+    } else {
+        -1
+    };
+    fix_modifiers(&evt.modifiers[..], &mut en, ck);
     for ref ck in evt.modifiers.iter() {
         if let Some(key) = KEY_MAP.get(&ck.value()) {
             #[cfg(target_os = "macos")]
             en.add_flag(key);
             #[cfg(not(target_os = "macos"))]
             {
-                if key == &enigo::Key::CapsLock {
+                if key == &Key::CapsLock {
                     has_cap = true;
-                } else if key == &enigo::Key::NumLock {
+                } else if key == &Key::NumLock {
                     #[cfg(windows)]
                     {
                         has_numlock = true;
@@ -452,16 +542,16 @@ fn handle_key_(evt: &KeyEvent) {
     }
     #[cfg(not(target_os = "macos"))]
     if crate::common::valid_for_capslock(evt) {
-        if has_cap != en.get_key_state(enigo::Key::CapsLock) {
-            en.key_down(enigo::Key::CapsLock).ok();
-            en.key_up(enigo::Key::CapsLock);
+        if has_cap != en.get_key_state(Key::CapsLock) {
+            en.key_down(Key::CapsLock).ok();
+            en.key_up(Key::CapsLock);
         }
     }
     #[cfg(windows)]
     if crate::common::valid_for_numlock(evt) {
-        if has_numlock != en.get_key_state(enigo::Key::NumLock) {
-            en.key_down(enigo::Key::NumLock).ok();
-            en.key_up(enigo::Key::NumLock);
+        if has_numlock != en.get_key_state(Key::NumLock) {
+            en.key_down(Key::NumLock).ok();
+            en.key_up(Key::NumLock);
         }
     }
     match evt.union {
@@ -469,16 +559,18 @@ fn handle_key_(evt: &KeyEvent) {
             if let Some(key) = KEY_MAP.get(&ck.value()) {
                 #[cfg(windows)]
                 if let Some(_) = NUMPAD_KEY_MAP.get(&ck.value()) {
-                    disable_numlock = en.get_key_state(enigo::Key::NumLock);
+                    disable_numlock = en.get_key_state(Key::NumLock);
                     if disable_numlock {
-                        en.key_down(enigo::Key::NumLock).ok();
-                        en.key_up(enigo::Key::NumLock);
+                        en.key_down(Key::NumLock).ok();
+                        en.key_up(Key::NumLock);
                     }
                 }
                 if evt.down {
                     allow_err!(en.key_down(key.clone()));
+                    KEYS_DOWN.lock().unwrap().insert(ck.value(), Instant::now());
                 } else {
                     en.key_up(key.clone());
+                    KEYS_DOWN.lock().unwrap().remove(&ck.value());
                 }
             } else if ck.value() == ControlKey::CtrlAltDel.value() {
                 // have to spawn new thread because send_sas is tokio_main, the caller can not be tokio_main.
@@ -492,9 +584,17 @@ fn handle_key_(evt: &KeyEvent) {
         }
         Some(key_event::Union::chr(chr)) => {
             if evt.down {
-                allow_err!(en.key_down(enigo::Key::Layout(chr as u8 as _)));
+                allow_err!(en.key_down(Key::Layout(chr as u8 as _)));
+                KEYS_DOWN
+                    .lock()
+                    .unwrap()
+                    .insert(chr as i32 + KEY_CHAR_START, Instant::now());
             } else {
-                en.key_up(enigo::Key::Layout(chr as u8 as _));
+                en.key_up(Key::Layout(chr as u8 as _));
+                KEYS_DOWN
+                    .lock()
+                    .unwrap()
+                    .remove(&(chr as i32 + KEY_CHAR_START));
             }
         }
         Some(key_event::Union::unicode(chr)) => {
@@ -513,8 +613,8 @@ fn handle_key_(evt: &KeyEvent) {
     }
     #[cfg(windows)]
     if disable_numlock {
-        en.key_down(enigo::Key::NumLock).ok();
-        en.key_up(enigo::Key::NumLock);
+        en.key_down(Key::NumLock).ok();
+        en.key_up(Key::NumLock);
     }
 }
 
