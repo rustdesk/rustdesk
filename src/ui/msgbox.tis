@@ -230,7 +230,8 @@ event click $(button#submit) {
 event keydown (evt) {
     if (!evt.shortcutKey) {
         if (evt.keyCode == Event.VK_ENTER || 
-            (view.mediaVar("platform") == "OSX" && evt.keyCode == 0x4C)) {
+            (is_osx && evt.keyCode == 0x4C) ||
+            (is_linux && evt.keyCode == 65421)) {
             submit();
         }
         if (evt.keyCode == Event.VK_ESCAPE) {
