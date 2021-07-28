@@ -386,7 +386,7 @@ impl Client {
                 ..Default::default()
             });
             socket.send(&msg_out).await?;
-            if let Some(Ok(bytes)) = socket.next_timeout(i * 3000).await {
+            if let Some(Ok(bytes)) = socket.next_timeout(CONNECT_TIMEOUT).await {
                 if let Ok(msg_in) = RendezvousMessage::parse_from_bytes(&bytes) {
                     if let Some(rendezvous_message::Union::relay_response(rs)) = msg_in.union {
                         if !rs.refuse_reason.is_empty() {
@@ -399,7 +399,7 @@ impl Client {
             }
         }
         if !succeed {
-            bail!("");
+            bail!("Timeout");
         }
         Self::create_relay(peer, uuid, relay_server, conn_type).await
     }
