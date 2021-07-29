@@ -19,10 +19,8 @@ fn find_package(name: &str) -> Vec<PathBuf> {
         "x64-osx".to_owned()
     } else if target_os == "windows" {
         "x64-windows-static".to_owned()
-    } else if target_os == "android" {
-        format!("{}-android-static", target_arch)
     } else {
-        "x64-linux".to_owned()
+        format!("{}-{}", target_arch, target_os)
     };
     println!("cargo:info={}", target);
     path.push("installed");
