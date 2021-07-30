@@ -25,20 +25,35 @@ use winapi::{
         D3D11_CPU_ACCESS_READ, D3D11_SDK_VERSION, D3D11_USAGE_STAGING,
     },
     um::d3dcommon::D3D_DRIVER_TYPE_UNKNOWN,
+    um::unknwnbase::IUnknown,
     um::wingdi::*,
     um::winnt::HRESULT,
     um::winuser::*,
 };
 
-//TODO: Split up into files.
+pub struct ComPtr<T>(*mut T);
+impl<T> ComPtr<T> {
+    fn is_null(&self) -> bool {
+        self.0.is_null()
+    }
+}
+impl<T> Drop for ComPtr<T> {
+    fn drop(&mut self) {
+        unsafe {
+            if !self.is_null() {
+                (*(self.0 as *mut IUnknown)).Release();
+            }
+        }
+    }
+}
 
 pub struct Capturer {
-    device: *mut ID3D11Device,
+    device: ComPtr<ID3D11Device>,
     display: Display,
-    context: *mut ID3D11DeviceContext,
-    duplication: *mut IDXGIOutputDuplication,
+    context: ComPtr<ID3D11DeviceContext>,
+    duplication: ComPtr<IDXGIOutputDuplication>,
     fastlane: bool,
-    surface: *mut IDXGISurface,
+    surface: ComPtr<IDXGISurface>,
     data: *const u8,
     len: usize,
     width: usize,
@@ -62,7 +77,7 @@ impl Capturer {
         } else {
             wrap_hresult(unsafe {
                 D3D11CreateDevice(
-                    display.adapter as *mut _,
+                    display.adapter.0 as *mut _,
                     D3D_DRIVER_TYPE_UNKNOWN,
                     ptr::null_mut(), // No software rasterizer.
                     0,               // No device flags.
@@ -75,6 +90,8 @@ impl Capturer {
                 )
             })
         };
+        let device = ComPtr(device);
+        let context = ComPtr(context);
 
         if res.is_err() {
             gdi_capturer = display.create_gdi();
@@ -84,7 +101,7 @@ impl Capturer {
             }
         } else {
             res = wrap_hresult(unsafe {
-                let hres = (*display.inner).DuplicateOutput(device as *mut _, &mut duplication);
+                let hres = (*display.inner.0).DuplicateOutput(device.0 as *mut _, &mut duplication);
                 if hres != S_OK {
                     gdi_capturer = display.create_gdi();
                     println!("Fallback to GDI");
@@ -124,17 +141,7 @@ impl Capturer {
             });
         }
 
-        if let Err(err) = res {
-            unsafe {
-                if !device.is_null() {
-                    (*device).Release();
-                }
-                if !context.is_null() {
-                    (*context).Release();
-                }
-            }
-            return Err(err);
-        }
+        res?;
 
         if !duplication.is_null() {
             unsafe {
@@ -145,9 +152,9 @@ impl Capturer {
         Ok(Capturer {
             device,
             context,
-            duplication,
+            duplication: ComPtr(duplication),
             fastlane: desc.DesktopImageInSystemMemory == TRUE,
-            surface: ptr::null_mut(),
+            surface: ComPtr(ptr::null_mut()),
             width: display.width() as usize,
             height: display.height() as usize,
             display,
@@ -179,36 +186,23 @@ impl Capturer {
         let mut info = mem::MaybeUninit::uninit().assume_init();
         self.data = ptr::null();
 
-        wrap_hresult((*self.duplication).AcquireNextFrame(timeout, &mut info, &mut frame))?;
+        wrap_hresult((*self.duplication.0).AcquireNextFrame(timeout, &mut info, &mut frame))?;
+        let frame = ComPtr(frame);
 
         if *info.LastPresentTime.QuadPart() == 0 {
             return Err(std::io::ErrorKind::WouldBlock.into());
         }
 
+        let mut rect = mem::MaybeUninit::uninit().assume_init();
         if self.fastlane {
-            let mut rect = mem::MaybeUninit::uninit().assume_init();
-            let res = wrap_hresult((*self.duplication).MapDesktopSurface(&mut rect));
-
-            (*frame).Release();
-
-            if let Err(err) = res {
-                Err(err)
-            } else {
-                self.data = rect.pBits;
-                self.len = self.height * rect.Pitch as usize;
-                Ok(())
-            }
+            wrap_hresult((*self.duplication.0).MapDesktopSurface(&mut rect))?;
         } else {
-            self.surface = ptr::null_mut();
-            self.surface = self.ohgodwhat(frame)?;
-
-            let mut rect = mem::MaybeUninit::uninit().assume_init();
-            wrap_hresult((*self.surface).Map(&mut rect, DXGI_MAP_READ))?;
-
-            self.data = rect.pBits;
-            self.len = self.height * rect.Pitch as usize;
-            Ok(())
+            self.surface = ComPtr(self.ohgodwhat(frame.0)?);
+            wrap_hresult((*self.surface.0).Map(&mut rect, DXGI_MAP_READ))?;
         }
+        self.data = rect.pBits;
+        self.len = self.height * rect.Pitch as usize;
+        Ok(())
     }
 
     // copy from GPU memory to system memory
@@ -218,9 +212,10 @@ impl Capturer {
             &IID_ID3D11Texture2D,
             &mut texture as *mut *mut _ as *mut *mut _,
         );
+        let texture = ComPtr(texture);
 
         let mut texture_desc = mem::MaybeUninit::uninit().assume_init();
-        (*texture).GetDesc(&mut texture_desc);
+        (*texture.0).GetDesc(&mut texture_desc);
 
         texture_desc.Usage = D3D11_USAGE_STAGING;
         texture_desc.BindFlags = 0;
@@ -228,33 +223,23 @@ impl Capturer {
         texture_desc.MiscFlags = 0;
 
         let mut readable = ptr::null_mut();
-        let res = wrap_hresult((*self.device).CreateTexture2D(
+        wrap_hresult((*self.device.0).CreateTexture2D(
             &mut texture_desc,
             ptr::null(),
             &mut readable,
-        ));
+        ))?;
+        (*readable).SetEvictionPriority(DXGI_RESOURCE_PRIORITY_MAXIMUM);
+        let readable = ComPtr(readable);
 
-        if let Err(err) = res {
-            (*frame).Release();
-            (*texture).Release();
-            (*readable).Release();
-            Err(err)
-        } else {
-            (*readable).SetEvictionPriority(DXGI_RESOURCE_PRIORITY_MAXIMUM);
+        let mut surface = ptr::null_mut();
+        (*readable.0).QueryInterface(
+            &IID_IDXGISurface,
+            &mut surface as *mut *mut _ as *mut *mut _,
+        );
 
-            let mut surface = ptr::null_mut();
-            (*readable).QueryInterface(
-                &IID_IDXGISurface,
-                &mut surface as *mut *mut _ as *mut *mut _,
-            );
+        (*self.context.0).CopyResource(readable.0 as *mut _, texture.0 as *mut _);
 
-            (*self.context).CopyResource(readable as *mut _, texture as *mut _);
-
-            (*frame).Release();
-            (*texture).Release();
-            (*readable).Release();
-            Ok(surface)
-        }
+        Ok(surface)
     }
 
     pub fn frame<'a>(&'a mut self, timeout: UINT) -> io::Result<&'a [u8]> {
@@ -271,17 +256,7 @@ impl Capturer {
                         }
                     }
                 } else {
-                    if self.fastlane {
-                        (*self.duplication).UnMapDesktopSurface();
-                    } else {
-                        if !self.surface.is_null() {
-                            (*self.surface).Unmap();
-                            (*self.surface).Release();
-                            self.surface = ptr::null_mut();
-                        }
-                    }
-
-                    (*self.duplication).ReleaseFrame();
+                    self.unmap();
                     self.load_frame(timeout)?;
                     slice::from_raw_parts(self.data, self.len)
                 }
@@ -301,31 +276,32 @@ impl Capturer {
             })
         }
     }
-}
 
-impl Drop for Capturer {
-    fn drop(&mut self) {
+    fn unmap(&self) {
         unsafe {
-            if !self.surface.is_null() {
-                (*self.surface).Unmap();
-                (*self.surface).Release();
-            }
-            if !self.duplication.is_null() {
-                (*self.duplication).Release();
-            }
-            if !self.device.is_null() {
-                (*self.device).Release();
-            }
-            if !self.context.is_null() {
-                (*self.context).Release();
+            (*self.duplication.0).ReleaseFrame();
+            if self.fastlane {
+                (*self.duplication.0).UnMapDesktopSurface();
+            } else {
+                if !self.surface.is_null() {
+                    (*self.surface.0).Unmap();
+                }
             }
         }
     }
 }
 
+impl Drop for Capturer {
+    fn drop(&mut self) {
+        if !self.duplication.is_null() {
+            self.unmap();
+        }
+    }
+}
+
 pub struct Displays {
-    factory: *mut IDXGIFactory1,
-    adapter: *mut IDXGIAdapter1,
+    factory: ComPtr<IDXGIFactory1>,
+    adapter: ComPtr<IDXGIAdapter1>,
     /// Index of the CURRENT adapter.
     nadapter: UINT,
     /// Index of the NEXT display to fetch.
@@ -345,8 +321,8 @@ impl Displays {
         };
 
         Ok(Displays {
-            factory,
-            adapter,
+            factory: ComPtr(factory),
+            adapter: ComPtr(adapter),
             nadapter: 0,
             ndisplay: 0,
         })
@@ -370,8 +346,8 @@ impl Displays {
             }
             // let is_primary = (d.StateFlags & DISPLAY_DEVICE_PRIMARY_DEVICE) > 0;
             let mut disp = Display {
-                inner: std::ptr::null_mut(),
-                adapter: std::ptr::null_mut(),
+                inner: ComPtr(std::ptr::null_mut()),
+                adapter: ComPtr(std::ptr::null_mut()),
                 desc: unsafe { std::mem::zeroed() },
                 gdi: true,
             };
@@ -416,18 +392,15 @@ impl Displays {
 
         let output = unsafe {
             let mut output = ptr::null_mut();
-            (*self.adapter).EnumOutputs(self.ndisplay, &mut output);
-            output
+            (*self.adapter.0).EnumOutputs(self.ndisplay, &mut output);
+            ComPtr(output)
         };
 
         // If the current adapter is done, we free it.
         // We return None so the caller gets the next adapter and tries again.
 
         if output.is_null() {
-            unsafe {
-                (*self.adapter).Release();
-                self.adapter = ptr::null_mut();
-            }
+            self.adapter = ComPtr(ptr::null_mut());
             return None;
         }
 
@@ -439,7 +412,7 @@ impl Displays {
 
         let desc = unsafe {
             let mut desc = mem::MaybeUninit::uninit().assume_init();
-            (*output).GetDesc(&mut desc);
+            (*output.0).GetDesc(&mut desc);
             desc
         };
 
@@ -447,28 +420,24 @@ impl Displays {
 
         let mut inner: *mut IDXGIOutput1 = ptr::null_mut();
         unsafe {
-            (*output).QueryInterface(&IID_IDXGIOutput1, &mut inner as *mut *mut _ as *mut *mut _);
-            (*output).Release();
+            (*output.0).QueryInterface(&IID_IDXGIOutput1, &mut inner as *mut *mut _ as *mut *mut _);
         }
 
         // If it's null, we have an error.
         // So we act like the adapter is done.
 
         if inner.is_null() {
-            unsafe {
-                (*self.adapter).Release();
-                self.adapter = ptr::null_mut();
-            }
+            self.adapter = ComPtr(ptr::null_mut());
             return None;
         }
 
         unsafe {
-            (*self.adapter).AddRef();
+            (*self.adapter.0).AddRef();
         }
 
         Some(Some(Display {
-            inner,
-            adapter: self.adapter,
+            inner: ComPtr(inner),
+            adapter: ComPtr(self.adapter.0),
             desc,
             gdi: false,
         }))
@@ -488,8 +457,8 @@ impl Iterator for Displays {
 
             self.adapter = unsafe {
                 let mut adapter = ptr::null_mut();
-                (*self.factory).EnumAdapters1(self.nadapter, &mut adapter);
-                adapter
+                (*self.factory.0).EnumAdapters1(self.nadapter, &mut adapter);
+                ComPtr(adapter)
             };
 
             if let Some(res) = self.read_and_invalidate() {
@@ -502,20 +471,9 @@ impl Iterator for Displays {
     }
 }
 
-impl Drop for Displays {
-    fn drop(&mut self) {
-        unsafe {
-            (*self.factory).Release();
-            if !self.adapter.is_null() {
-                (*self.adapter).Release();
-            }
-        }
-    }
-}
-
 pub struct Display {
-    inner: *mut IDXGIOutput1,
-    adapter: *mut IDXGIAdapter1,
+    inner: ComPtr<IDXGIOutput1>,
+    adapter: ComPtr<IDXGIAdapter1>,
     desc: DXGI_OUTPUT_DESC,
     gdi: bool,
 }
@@ -566,18 +524,6 @@ impl Display {
             self.desc.DesktopCoordinates.left,
             self.desc.DesktopCoordinates.top,
         )
-    }
-}
-
-impl Drop for Display {
-    fn drop(&mut self) {
-        if self.inner.is_null() {
-            return;
-        }
-        unsafe {
-            (*self.inner).Release();
-            (*self.adapter).Release();
-        }
     }
 }
 

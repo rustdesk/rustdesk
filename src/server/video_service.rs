@@ -99,23 +99,9 @@ fn run(sp: GenericService) -> ResultType<()> {
         *SWITCH.lock().unwrap() = false;
         sp.send(msg_out);
     }
-
-    #[cfg(windows)]
-    if !c.is_gdi() {
-        // dxgi duplicateoutput has no output if display no change, so we use gdi this as workaround
-        if c.set_gdi() {
-            // dgx capture release has memory leak somehow, so use gdi always before fixing it, just sacrificing some cpu
-            /*
-            if let Ok(frame) = c.frame(wait as _) {
-                handle_one_frame(&sp, &frame, 0, &mut vpx)?;
-            }
-            c.cancel_gdi();
-            */
-        }
-    }
-
-    let start = time::Instant::now();
+    
     let mut crc = (0, 0);
+    let start = time::Instant::now();
     let mut last_sent = time::Instant::now();
     let mut last_check_displays = time::Instant::now();
     while sp.ok() {
