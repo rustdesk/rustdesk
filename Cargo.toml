@@ -6,9 +6,6 @@ edition = "2018"
 build= "build.rs"
 description = "A remote control software."
 
-[lib]
-crate-type = ["cdylib", "staticlib", "rlib"] 
-
 [features]
 inline = []
 cli = []
@@ -49,7 +46,7 @@ mac_address = "1.1"
 sciter-rs = { git = "https://github.com/open-trade/rust-sciter", branch = "dyn" }
 
 [target.'cfg(target_os = "windows")'.dependencies]
-systray = { git = "https://github.com/open-trade/systray-rs" }
+#systray = { git = "https://github.com/open-trade/systray-rs" }
 winapi = { version = "0.3", features = ["winuser"] }
 winreg = "0.7"
 windows-service = { git = 'https://github.com/mullvad/windows-service-rs.git' }
