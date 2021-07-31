@@ -98,6 +98,7 @@ div.password svg {
     size: 16px;
     color: #ddd;
     background: none;
+    padding-top: 4px!important;
 }
 
 div.password input {
