@@ -690,6 +690,9 @@ impl Enigo {
             return std::ptr::null() as _;
         }
         let keyboard_layout = unsafe { CFDataGetBytePtr(layout_data) };
+        if keyboard_layout.is_null() {
+            return std::ptr::null() as _;
+        }
 
         let mut keys_down: UInt32 = 0;
         let mut chars: u16 = 0;
