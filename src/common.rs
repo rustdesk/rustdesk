@@ -149,15 +149,15 @@ pub fn resample_channels(
     if let Ok(x) = resampler.process(&waves_in) {
         if x.is_empty() {
             Vec::new()
-        } else if waves_in.len() == 2 {
-            waves_in[0]
+        } else if x.len() == 2 {
+            x[0]
                 .chunks(1)
-                .zip(waves_in[1].chunks(1))
+                .zip(x[1].chunks(1))
                 .flat_map(|(a, b)| a.into_iter().chain(b))
                 .map(|x| *x as f32)
                 .collect()
         } else {
-            waves_in[0].iter().map(|x| *x as f32).collect()
+            x[0].iter().map(|x| *x as f32).collect()
         }
     } else {
         Vec::new()
