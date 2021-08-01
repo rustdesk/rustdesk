@@ -105,6 +105,66 @@ pub fn update_clipboard(clipboard: Clipboard, old: Option<&Arc<Mutex<String>>>) 
     }
 }
 
+#[cfg(feature = "use_rubato")]
+pub fn resample_channels(
+    data: &[f32],
+    sample_rate0: u32,
+    sample_rate: u32,
+    channels: u16,
+) -> Vec<f32> {
+    use rubato::{
+        InterpolationParameters, InterpolationType, Resampler, SincFixedIn, WindowFunction,
+    };
+    let params = InterpolationParameters {
+        sinc_len: 256,
+        f_cutoff: 0.95,
+        interpolation: InterpolationType::Nearest,
+        oversampling_factor: 160,
+        window: WindowFunction::BlackmanHarris2,
+    };
+    let mut resampler = SincFixedIn::<f64>::new(
+        sample_rate as f64 / sample_rate0 as f64,
+        params,
+        data.len() / (channels as usize),
+        channels as _,
+    );
+    let mut waves_in = Vec::new();
+    if channels == 2 {
+        waves_in.push(
+            data.iter()
+                .step_by(2)
+                .map(|x| *x as f64)
+                .collect::<Vec<_>>(),
+        );
+        waves_in.push(
+            data.iter()
+                .skip(1)
+                .step_by(2)
+                .map(|x| *x as f64)
+                .collect::<Vec<_>>(),
+        );
+    } else {
+        waves_in.push(data.iter().map(|x| *x as f64).collect::<Vec<_>>());
+    }
+    if let Ok(x) = resampler.process(&waves_in) {
+        if x.is_empty() {
+            Vec::new()
+        } else if waves_in.len() == 2 {
+            waves_in[0]
+                .chunks(1)
+                .zip(waves_in[1].chunks(1))
+                .flat_map(|(a, b)| a.into_iter().chain(b))
+                .map(|x| *x as f32)
+                .collect()
+        } else {
+            waves_in[0].iter().map(|x| *x as f32).collect()
+        }
+    } else {
+        Vec::new()
+    }
+}
+
+#[cfg(feature = "use_dasp")]
 pub fn resample_channels(
     data: &[f32],
     sample_rate0: u32,
@@ -138,6 +198,24 @@ pub fn resample_channels(
             .take(n)
             .collect()
     }
+}
+
+#[cfg(feature = "use_samplerate")]
+pub fn resample_channels(
+    data: &[f32],
+    sample_rate0: u32,
+    sample_rate: u32,
+    channels: u16,
+) -> Vec<f32> {
+    use samplerate::{convert, ConverterType};
+    convert(
+        sample_rate0 as _,
+        sample_rate as _,
+        channels as _,
+        ConverterType::SincBestQuality,
+        data,
+    )
+    .unwrap_or_default()
 }
 
 pub fn test_nat_type() {

@@ -9,6 +9,10 @@ description = "A remote control software."
 [features]
 inline = []
 cli = []
+use_samplerate = ["samplerate"]
+use_rubato = ["rubato"]
+use_dasp = ["dasp"]
+default = ["use_dasp"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -29,7 +33,9 @@ parity-tokio-ipc = { git = "https://github.com/open-trade/parity-tokio-ipc" }
 flexi_logger = "0.16"
 runas = "0.2"
 magnum-opus = { git = "https://github.com/open-trade/magnum-opus" }
-dasp = { version = "0.11", features = ["signal", "interpolate-linear", "interpolate"] }
+dasp = { version = "0.11", features = ["signal", "interpolate-linear", "interpolate"], optional = true }
+rubato = { version = "0.8", optional = true }
+samplerate = { version = "0.2", optional = true }
 async-trait = "0.1"
 crc32fast = "1.2"
 uuid = { version = "0.8", features = ["v4"] }
