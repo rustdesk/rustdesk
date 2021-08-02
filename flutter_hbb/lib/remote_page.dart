@@ -28,7 +28,6 @@ class _RemotePageState extends State<RemotePage> {
   String _value = '';
   double _xOffset = 0;
   double _yOffset = 0;
-  double _xOffset0 = 0;
   double _yOffset0 = 0;
   double _scale = 1;
   bool _mouseTools = false;
@@ -258,24 +257,17 @@ class _RemotePageState extends State<RemotePage> {
               : null,
           body: FlutterEasyLoading(
             child: GestureDetector(
+                onLongPress: () {
+                  if (_drag || _scroll) return;
+                  FFI.tap(true);
+                },
                 onTap: () {
                   if (_drag || _scroll) return;
                   FFI.tap(_right);
                 },
-                onLongPressStart: (_) {
-                  if (_drag) {
-                    // case: to show password on windows
-                    FFI.sendMouse('down', 'left');
-                  }
-                },
-                onLongPressEnd: (_) {
-                  if (_drag) {
-                    FFI.sendMouse('up', 'left');
-                  }
-                },
                 onScaleStart: (details) {
                   _scale = 1;
-                  _xOffset = _xOffset0 = details.focalPoint.dx;
+                  _xOffset = details.focalPoint.dx;
                   _yOffset = _yOffset0 = details.focalPoint.dy;
                   if (_drag) {
                     FFI.sendMouse('down', 'left');
@@ -304,6 +296,11 @@ class _RemotePageState extends State<RemotePage> {
                 onScaleEnd: (details) {
                   if (_drag) {
                     FFI.sendMouse('up', 'left');
+                    setState(() {
+                      _drag = false;
+                      _scroll = false;
+                      _right = false;
+                    });
                   } else if (_scroll) {
                     var dy = (_yOffset - _yOffset0) / 10;
                     if (dy.abs() > 0.1) {
