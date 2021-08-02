@@ -360,12 +360,13 @@ class _RemotePageState extends State<RemotePage> {
               .shrinkWrap, //limits the touch area to the button area
           minWidth: 0, //wraps child's width
           height: 0,
-          child: FlatButton(
-              splashColor: MyTheme.accent,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(5.0),
+          child: TextButton(
+              style: TextButton.styleFrom(
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(5.0),
+                ),
+                primary: active == true ? MyTheme.accent80 : null,
               ),
-              color: active == true ? MyTheme.accent80 : null,
               child: icon != null
                   ? Icon(icon, size: 17, color: Colors.white)
                   : Text(translate(text),
@@ -596,16 +597,16 @@ void enterPasswordDialog(String id, BuildContext context) {
               ),
             ]),
             [
-              FlatButton(
-                textColor: MyTheme.accent,
+              TextButton(
+                style: flatButtonStyle,
                 onPressed: () {
                   Navigator.pop(context);
                   Navigator.pop(context);
                 },
                 child: Text(translate('Cancel')),
               ),
-              FlatButton(
-                textColor: MyTheme.accent,
+              TextButton(
+                style: flatButtonStyle,
                 onPressed: () {
                   var text = controller.text.trim();
                   if (text == '') return;
@@ -624,16 +625,16 @@ void wrongPasswordDialog(String id, BuildContext context) {
       context,
       (_) => Tuple3(Text(translate('Wrong Password')),
               Text(translate('Do you want to enter again?')), [
-            FlatButton(
-              textColor: MyTheme.accent,
+            TextButton(
+              style: flatButtonStyle,
               onPressed: () {
                 Navigator.pop(context);
                 Navigator.pop(context);
               },
               child: Text(translate('Cancel')),
             ),
-            FlatButton(
-              textColor: MyTheme.accent,
+            TextButton(
+              style: flatButtonStyle,
               onPressed: () {
                 enterPasswordDialog(id, context);
               },
@@ -781,8 +782,8 @@ void showActions(BuildContext context) {
       child: Row(
           children: ([
         Text(translate('OS Password')),
-        FlatButton(
-          textColor: MyTheme.accent,
+        TextButton(
+          style: flatButtonStyle,
           onPressed: () {
             showSetOSPassword(context);
             Navigator.pop(context);
@@ -850,15 +851,15 @@ void showSetOSPassword(BuildContext context) async {
               PasswordWidget(controller: controller),
             ]),
             [
-              FlatButton(
-                textColor: MyTheme.accent,
+              TextButton(
+                style: flatButtonStyle,
                 onPressed: () {
                   Navigator.pop(context);
                 },
                 child: Text(translate('Cancel')),
               ),
-              FlatButton(
-                textColor: MyTheme.accent,
+              TextButton(
+                style: flatButtonStyle,
                 onPressed: () {
                   var text = controller.text.trim();
                   savePassword(FFI.id, text);

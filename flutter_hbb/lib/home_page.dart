@@ -300,15 +300,15 @@ void showServer(BuildContext context) {
                   ),
                 ])),
             [
-              FlatButton(
-                textColor: MyTheme.accent,
+              TextButton(
+                style: flatButtonStyle,
                 onPressed: () {
                   Navigator.pop(context);
                 },
                 child: Text(translate('Cancel')),
               ),
-              FlatButton(
-                textColor: MyTheme.accent,
+              TextButton(
+                style: flatButtonStyle,
                 onPressed: () {
                   if (formKey.currentState.validate()) {
                     formKey.currentState.save();

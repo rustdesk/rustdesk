@@ -44,6 +44,7 @@ class FfiModel with ChangeNotifier {
   get pi => _pi;
 
   FfiModel() {
+    Translator.call = translate;
     clear();
     () async {
       await FFI.init();
@@ -193,7 +194,7 @@ class FfiModel with ChangeNotifier {
       initializeCursorAndCanvas();
     }
     if (displays.length > 0) {
-      showLoading(translate('Waiting for image...'), context);
+      showLoading(translate('Connected, waiting for image...'), context);
       _waitForImage = true;
     }
     notifyListeners();
@@ -727,4 +728,27 @@ void initializeCursorAndCanvas() async {
   FFI.cursorModel.updateDisplayOriginWithCursor(
       FFI.ffiModel.display.x, FFI.ffiModel.display.y, xCursor, yCursor);
   FFI.canvasModel.update(xCanvas, yCanvas, scale);
+}
+
+final bool isCn = Platform.localeName.endsWith('CN');
+
+final langs = <String, Map<String, String>>{
+  'cn': <String, String>{
+    'Remote ID': '远程ID',
+    'Paste': '粘贴',
+    'Are you sure to close the connection?': '是否确认关闭连接？',
+  },
+  'en': <String, String>{}
+};
+
+String translate(name) {
+  final tmp = isCn ? langs['cn'] : langs['en'];
+  final v = tmp[name];
+  if (v == null) {
+    var a = 'translate';
+    var b = '{"locale": "${Platform.localeName}", "text": "${name}"}';
+    return FFI.getByName(a, b);
+  } else {
+    return v;
+  }
 }
