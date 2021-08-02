@@ -21,7 +21,6 @@ class RgbaFrame extends Struct {
   Pointer<Uint8> data;
 }
 
-typedef F1 = void Function(Pointer<Utf8>);
 typedef F2 = Pointer<Utf8> Function(Pointer<Utf8>, Pointer<Utf8>);
 typedef F3 = void Function(Pointer<Utf8>, Pointer<Utf8>);
 typedef F4 = void Function(Pointer<RgbaFrame>);
@@ -475,7 +474,6 @@ class CursorModel with ChangeNotifier {
 class FFI {
   static String id = "";
   static String _dir = '';
-  static F1 _freeCString;
   static F2 _getByName;
   static F3 _setByName;
   static F4 _freeRgba;
@@ -606,14 +604,22 @@ class FFI {
   }
 
   static void setByName(String name, [String value = '']) {
-    _setByName(Utf8.toUtf8(name), Utf8.toUtf8(value));
+    var a = name.toNativeUtf8();
+    var b = value.toNativeUtf8();
+    _setByName(a, b);
+    calloc.free(a);
+    calloc.free(b);
   }
 
   static String getByName(String name, [String arg = '']) {
-    var p = _getByName(Utf8.toUtf8(name), Utf8.toUtf8(arg));
+    var a = name.toNativeUtf8();
+    var b = arg.toNativeUtf8();
+    var p = _getByName(a, b);
     assert(p != nullptr && p != null);
-    var res = Utf8.fromUtf8(p);
-    _freeCString(p);
+    var res = p.toDartString();
+    calloc.free(p);
+    calloc.free(a);
+    calloc.free(b);
     return res;
   }
 
@@ -625,8 +631,6 @@ class FFI {
     _setByName =
         dylib.lookupFunction<Void Function(Pointer<Utf8>, Pointer<Utf8>), F3>(
             'set_by_name');
-    _freeCString = dylib
-        .lookupFunction<Void Function(Pointer<Utf8>), F1>('rust_cstr_free');
     _freeRgba = dylib
         .lookupFunction<Void Function(Pointer<RgbaFrame>), F4>('free_rgba');
     _getRgba = dylib.lookupFunction<F5, F5>('get_rgba');
