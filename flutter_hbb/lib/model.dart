@@ -741,7 +741,10 @@ final langs = <String, Map<String, String>>{
   'en': <String, String>{}
 };
 
-String translate(name) {
+String translate(String name) {
+  if (name.startsWith('Failed') && name.contains(':')) {
+    return name.split(': ').map((x) => translate(x)).join(': ');
+  }
   final tmp = isCn ? langs['cn'] : langs['en'];
   final v = tmp[name];
   if (v == null) {

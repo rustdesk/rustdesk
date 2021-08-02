@@ -352,26 +352,24 @@ class _RemotePageState extends State<RemotePage> {
     }
     var wrap =
         (String text, void Function() onPressed, [bool active, IconData icon]) {
-      return ButtonTheme(
-          padding: EdgeInsets.symmetric(
-              vertical: icon != null ? 3 : 6,
-              horizontal: 6), //adds padding inside the button
-          materialTapTargetSize: MaterialTapTargetSize
-              .shrinkWrap, //limits the touch area to the button area
-          minWidth: 0, //wraps child's width
-          height: 0,
-          child: TextButton(
-              style: TextButton.styleFrom(
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(5.0),
-                ),
-                primary: active == true ? MyTheme.accent80 : null,
-              ),
-              child: icon != null
-                  ? Icon(icon, size: 17, color: Colors.white)
-                  : Text(translate(text),
-                      style: TextStyle(color: Colors.white, fontSize: 11)),
-              onPressed: onPressed));
+      return TextButton(
+          style: TextButton.styleFrom(
+            minimumSize: Size(0, 0),
+            padding: EdgeInsets.symmetric(
+                vertical: icon != null ? 3 : 6,
+                horizontal: 6), //adds padding inside the button
+            tapTargetSize: MaterialTapTargetSize
+                .shrinkWrap, //limits the touch area to the button area
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(5.0),
+            ),
+            backgroundColor: active == true ? MyTheme.accent80 : null,
+          ),
+          child: icon != null
+              ? Icon(icon, size: 17, color: Colors.white)
+              : Text(translate(text),
+                  style: TextStyle(color: Colors.white, fontSize: 11)),
+          onPressed: onPressed);
     };
     final mouse = <Widget>[
       wrap('Drag', () {

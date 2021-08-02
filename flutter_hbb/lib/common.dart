@@ -21,7 +21,6 @@ class MyTheme {
 }
 
 final ButtonStyle flatButtonStyle = TextButton.styleFrom(
-  primary: MyTheme.accent,
   minimumSize: Size(88, 36),
   padding: EdgeInsets.symmetric(horizontal: 16.0),
   shape: const RoundedRectangleBorder(
