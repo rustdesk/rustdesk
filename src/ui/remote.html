@@ -24,7 +24,9 @@
     <body>
         <div #video-wrapper>
             <video #handler>
-                <img #cursor src="in-memory:cursor" />
+                <div style="position: relative">
+                    <img #cursor src="in-memory:cursor" />
+                </div>
             </video>
         </div>
         <div #file-transfer-wrapper>
