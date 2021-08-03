@@ -129,7 +129,7 @@ impl Client {
                 ..Default::default()
             });
             socket.send(&msg_out).await?;
-            if let Some(Ok(bytes)) = socket.next_timeout(i * 3000).await {
+            if let Some(Ok(bytes)) = socket.next_timeout(i * 6000).await {
                 if let Ok(msg_in) = RendezvousMessage::parse_from_bytes(&bytes) {
                     match msg_in.union {
                         Some(rendezvous_message::Union::punch_hole_response(ph)) => {
