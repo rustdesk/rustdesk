@@ -104,7 +104,7 @@ fn main() {
             return;
         } else if args[0] == "--password" {
             if args.len() == 2 {
-                hbb_common::config::Config::set_password(&args[1]);
+                ipc::set_password(args[1].to_owned()).unwrap();
             }
             return;
         }
