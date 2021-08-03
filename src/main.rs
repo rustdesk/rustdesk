@@ -76,7 +76,10 @@ fn main() {
             #[cfg(windows)]
             {
                 hbb_common::allow_err!(platform::uninstall_me());
-                hbb_common::allow_err!(platform::install_me("desktopicon startmenu"));
+                hbb_common::allow_err!(platform::install_me(
+                    "desktopicon startmenu",
+                    "".to_owned()
+                ));
                 return;
             }
         } else if args[0] == "--remove" {
@@ -97,6 +100,11 @@ fn main() {
         } else if args[0] == "--import-config" {
             if args.len() == 2 {
                 hbb_common::config::Config::import(&args[1]);
+            }
+            return;
+        } else if args[0] == "--password" {
+            if args.len() == 2 {
+                hbb_common::config::Config::set_password(&args[1]);
             }
             return;
         }
