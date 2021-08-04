@@ -815,7 +815,7 @@ impl Connection {
                 self.disable_audio = q == BoolOption::Yes;
                 if let Some(s) = self.server.upgrade() {
                     s.write().unwrap().subscribe(
-                        NAME_CURSOR,
+                        super::audio_service::NAME,
                         self.inner.clone(),
                         self.audio_enabled(),
                     );
@@ -827,7 +827,7 @@ impl Connection {
                 self.disable_clipboard = q == BoolOption::Yes;
                 if let Some(s) = self.server.upgrade() {
                     s.write().unwrap().subscribe(
-                        NAME_CURSOR,
+                        super::clipboard_service::NAME,
                         self.inner.clone(),
                         self.clipboard_enabled() && self.keyboard,
                     );
