@@ -192,6 +192,13 @@ function handler.onMouse(evt)
             }
         } 
     }
+    if (!got_mouse_control) {
+        if (Math.abs(evt.x - cur_local_x) > 12 || Math.abs(evt.y - cur_local_y) > 12) {
+            got_mouse_control = true;
+        } else {
+            return;
+        }
+    }
     var mask = 0;
     var wheel_delta_x;
     var wheel_delta_y;
@@ -205,7 +212,10 @@ function handler.onMouse(evt)
         dragging = false;
         break;
       case Event.MOUSE_MOVE:
-        if (cursor_img.style#display != "none" && keyboard_enabled) cursor_img.style#display = "none";
+        if (cursor_img.style#display != "none" && keyboard_enabled) {
+            cursor_img.style#display = "none";
+            handler.style#cursor = '';
+        }
         break;
       case Event.MOUSE_WHEEL:
         // mouseWheelDistance = 8 * [currentUserDefs floatForKey:@"com.apple.scrollwheel.scaling"];
@@ -289,8 +299,8 @@ function handler.onMouse(evt)
         x = 0;
         y = 0;
     } else {
-        cur_x = x;
-        cur_y = y;
+        cur_local_x = cur_x = x;
+        cur_local_y = cur_y = y;
     }
     if (mask != 3) {
         resetWheel();
@@ -318,6 +328,8 @@ var cur_hoty = 0;
 var cur_img = null;
 var cur_x = 0;
 var cur_y = 0;
+var cur_local_x = 0;
+var cur_local_y = 0;
 var cursors = {};
 var image_binded;
 
@@ -333,7 +345,9 @@ handler.setCursorData = function(id, hotx, hoty, width, height, colors) {
         image_binded = true;
         cursors[id] = [img, hotx, hoty, width, height];
         this.bindImage("in-memory:cursor", img);
-        self.timer(1ms, function() { handler.style.cursor(cur_img, cur_hotx, cur_hoty); });
+        if (cursor_img.style#display == 'none') {
+            self.timer(1ms, function() { handler.style.cursor(cur_img, cur_hotx, cur_hoty); });
+        }
         cur_img = img;
     }
 }
@@ -350,13 +364,17 @@ handler.setCursorId = function(id) {
         };
         img = img[0];
         this.bindImage("in-memory:cursor", img);
-        self.timer(1ms, function() { handler.style.cursor(cur_img, cur_hotx, cur_hoty); });
+        if (cursor_img.style#display == 'none') {
+            self.timer(1ms, function() { handler.style.cursor(cur_img, cur_hotx, cur_hoty); });
+        }
         cur_img = img;
     }
 }
 
+var got_mouse_control = true;
 handler.setCursorPosition = function(x, y) {
     if (!image_binded) return;
+    got_mouse_control = false;
     cur_x = x - display_origin_x;
     cur_y = y - display_origin_y;
     var x = cur_x - cur_hotx;
@@ -366,9 +384,11 @@ handler.setCursorPosition = function(x, y) {
     cursor_img.style.set {
         left: x + "px",
         top: y + "px",
-        display: "block",
     };
-    handler.style.cursor(null);
+    if (cursor_img.style#display == 'none') {
+        handler.style#cursor = 'none';
+        cursor_img.style#display = "block";
+    }
 }
 
 function self.ready() {
