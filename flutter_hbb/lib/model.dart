@@ -49,6 +49,7 @@ class FfiModel with ChangeNotifier {
     () async {
       await FFI.init();
       _initialized = true;
+      print("FFI initialized");
       notifyListeners();
     }();
   }
@@ -628,6 +629,7 @@ class FFI {
     final dylib = Platform.isAndroid
         ? DynamicLibrary.open('librustdesk.so')
         : DynamicLibrary.process();
+    print('initializing FFI');
     _getByName = dylib.lookupFunction<F2, F2>('get_by_name');
     _setByName =
         dylib.lookupFunction<Void Function(Pointer<Utf8>, Pointer<Utf8>), F3>(
@@ -636,10 +638,22 @@ class FFI {
         .lookupFunction<Void Function(Pointer<RgbaFrame>), F4>('free_rgba');
     _getRgba = dylib.lookupFunction<F5, F5>('get_rgba');
     _dir = (await getApplicationDocumentsDirectory()).path;
-    DeviceInfoPlugin deviceInfo = DeviceInfoPlugin();
-    AndroidDeviceInfo androidInfo = await deviceInfo.androidInfo;
-    final name = '${androidInfo.brand}-${androidInfo.model}';
-    final id = androidInfo.id;
+    String id = 'NA';
+    String name = 'Flutter';
+    try {
+      DeviceInfoPlugin deviceInfo = DeviceInfoPlugin();
+      if (Platform.isAndroid) {
+        AndroidDeviceInfo androidInfo = await deviceInfo.androidInfo;
+        name = '${androidInfo.brand}-${androidInfo.model}';
+        id = androidInfo.id.hashCode.toString();
+      } else {
+        IosDeviceInfo iosInfo = await deviceInfo.iosInfo;
+        name = iosInfo.utsname.machine;
+        id = iosInfo.identifierForVendor.hashCode.toString();
+      }
+    } catch (e) {
+      print(e);
+    }
     setByName('info1', id);
     setByName('info2', name);
     setByName('init', _dir);
@@ -730,7 +744,9 @@ void initializeCursorAndCanvas() async {
   FFI.canvasModel.update(xCanvas, yCanvas, scale);
 }
 
-final bool isCn = Platform.localeName.endsWith('CN');
+final locale = Platform.localeName;
+final bool isCn =
+    locale.startsWith('zh') && (locale.endsWith('CN') || locale.endsWith('SG'));
 
 final langs = <String, Map<String, String>>{
   'cn': <String, String>{
