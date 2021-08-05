@@ -48,6 +48,7 @@ dev_dependencies:
   flutter_test:
     sdk: flutter
 
+# rerun: flutter pub run flutter_launcher_icons:main
 flutter_icons:
   android: "ic_launcher"
   ios: true
