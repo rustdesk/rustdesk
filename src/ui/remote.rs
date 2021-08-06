@@ -901,33 +901,6 @@ impl Handler {
         }
 
         if let Some(mut key_event) = self.get_key_event(down_or_up, &name, code) {
-            // Linux has different repeated key down handling from mac and windows
-            /* // below cause hang some time, not find why, so disable. so shift + repeat char not work for mac->linux, win->linux works fine, linux->linux not test yet
-            if self.peer_platform() == "Linux" {
-                if down_or_up == 1 {
-                    let mut is_repeat = false;
-                    if let Some(x) = self.read().unwrap().last_down_key.as_ref() {
-                        is_repeat = x.0 == name && x.1 == code && x.2 == extended;
-                    }
-                    if is_repeat {
-                        self.key_down_or_up(
-                            0,
-                            name.clone(),
-                            code,
-                            alt,
-                            ctrl,
-                            shift,
-                            command,
-                            extended,
-                        );
-                        log::debug!("Repeated key down");
-                    }
-                    self.write().unwrap().last_down_key = Some((name, code, extended));
-                } else {
-                    self.write().unwrap().last_down_key.take();
-                }
-            }
-            */
             if alt
                 && !crate::is_control_key(&key_event, &ControlKey::Alt)
                 && !crate::is_control_key(&key_event, &ControlKey::RAlt)
