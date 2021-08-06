@@ -257,9 +257,9 @@ class _HomePageState extends State<HomePage> {
 
 void showServer(BuildContext context) {
   final formKey = GlobalKey<FormState>();
-  final id0 = FFI.getByName('custom-rendezvous-server');
-  final relay0 = FFI.getByName('relay-server');
-  final key0 = FFI.getByName('key');
+  final id0 = FFI.getByName('option', 'custom-rendezvous-server');
+  final relay0 = FFI.getByName('option', 'relay-server');
+  final key0 = FFI.getByName('option', 'key');
   var id = '';
   var relay = '';
   var key = '';
@@ -316,9 +316,14 @@ void showServer(BuildContext context) {
                   if (formKey.currentState.validate()) {
                     formKey.currentState.save();
                     if (id != id0)
-                      FFI.setByName('custom-rendezvous-server', id);
-                    if (relay != relay0) FFI.setByName('relay-server', relay);
-                    if (key != key0) FFI.setByName('key', key);
+                      FFI.setByName('option',
+                          '{"name": "custom-rendezvous-server", "value": "${id}"}');
+                    if (relay != relay0)
+                      FFI.setByName('option',
+                          '{"name": "relay-server", "value": "${relay}"}');
+                    if (key != key0)
+                      FFI.setByName(
+                          'option', '{"name": "key", "value": "${key}"}');
                     Navigator.pop(context);
                   }
                 },

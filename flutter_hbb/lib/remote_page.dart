@@ -782,8 +782,8 @@ void showActions(BuildContext context) {
         TextButton(
           style: flatButtonStyle,
           onPressed: () {
-            showSetOSPassword(context);
             Navigator.pop(context);
+            showSetOSPassword(context, false);
           },
           child: Icon(Icons.edit),
         )
@@ -817,29 +817,20 @@ void showActions(BuildContext context) {
         }
       }();
     } else if (value == 'enter_os_password') {
-      () async {
-        var password = await getPassword(FFI.id);
-        if (password != "") {
-          var x = FFI.cursorModel.x;
-          var y = FFI.cursorModel.y;
-          FFI.moveMouse(x + 3, y + 3);
-          await Future.delayed(Duration(milliseconds: 50));
-          FFI.moveMouse(x, y);
-          await Future.delayed(Duration(milliseconds: 50));
-          FFI.tap(true);
-          await Future.delayed(Duration(milliseconds: 300));
-          FFI.setByName('input_string', password);
-          FFI.inputKey('VK_RETURN');
-        }
-      }();
+      var password = FFI.getByName('peer_option', "os-password");
+      if (password != "") {
+        FFI.setByName('input_os_password', password);
+      } else {
+        showSetOSPassword(context, true);
+      }
     }
   }();
 }
 
-void showSetOSPassword(BuildContext context) async {
+void showSetOSPassword(BuildContext context, bool login) {
   final controller = TextEditingController();
-  var password = await getPassword(FFI.id);
-  var autoLogin = await getAutoLogin(FFI.id);
+  var password = FFI.getByName('peer_option', "os-password");
+  var autoLogin = FFI.getByName('peer_option', "auto-login") != "";
   controller.text = password;
   showAlertDialog(
       context,
@@ -872,7 +863,14 @@ void showSetOSPassword(BuildContext context) async {
                 style: flatButtonStyle,
                 onPressed: () {
                   var text = controller.text.trim();
-                  savePassword(FFI.id, text);
+                  FFI.setByName('peer_option',
+                      '{"name": "os-password", "value": "${text}"}');
+                  FFI.setByName('peer_option',
+                      '{"name": "auto-login", "value": "${autoLogin ? 'Y' : ''}"}');
+                  print(text);
+                  if (text != "") {
+                    FFI.setByName('input_os_password', text);
+                  }
                   Navigator.pop(context);
                 },
                 child: Text(translate('OK')),
