@@ -49,7 +49,7 @@ class _HomePageState extends State<HomePage> {
                       position: RelativeRect.fromLTRB(3000, 70, 3000, 70),
                       items: [
                         PopupMenuItem<String>(
-                            child: Text(translate('ID/Relay Server')),
+                            child: Text(translate('ID Server')),
                             value: 'server'),
                         PopupMenuItem<String>(
                             child: Text(translate('About') + ' RustDesk'),
@@ -266,7 +266,7 @@ void showServer(BuildContext context) {
   showAlertDialog(
       context,
       (setState) => Tuple3(
-            Text(translate('ID/Relay Server')),
+            Text(translate('ID Server')),
             Form(
                 key: formKey,
                 child:
@@ -281,6 +281,7 @@ void showServer(BuildContext context) {
                       id = value.trim();
                     },
                   ),
+                  /*
                   TextFormField(
                     initialValue: relay0,
                     decoration: InputDecoration(
@@ -291,6 +292,7 @@ void showServer(BuildContext context) {
                       relay = value.trim();
                     },
                   ),
+                  */
                   TextFormField(
                     initialValue: key0,
                     decoration: InputDecoration(

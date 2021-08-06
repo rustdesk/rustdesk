@@ -490,6 +490,14 @@ class _RemotePageState extends State<RemotePage> {
         );
         FFI.ctrl = old;
       }),
+      wrap('Ctrl+V', () {
+        var old = FFI.ctrl;
+        FFI.ctrl = true;
+        FFI.inputKey(
+          'VK_V',
+        );
+        FFI.ctrl = old;
+      }),
       wrap('Ctrl+S', () {
         var old = FFI.ctrl;
         FFI.ctrl = true;
@@ -867,8 +875,7 @@ void showSetOSPassword(BuildContext context, bool login) {
                       '{"name": "os-password", "value": "${text}"}');
                   FFI.setByName('peer_option',
                       '{"name": "auto-login", "value": "${autoLogin ? 'Y' : ''}"}');
-                  print(text);
-                  if (text != "") {
+                  if (text != "" && login) {
                     FFI.setByName('input_os_password', text);
                   }
                   Navigator.pop(context);
