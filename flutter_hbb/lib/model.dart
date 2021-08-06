@@ -711,6 +711,12 @@ Future<Map<String, dynamic>> getPreference(String id) async {
   return m;
 }
 
+void removePreference(String id) async {
+  SharedPreferences prefs = await SharedPreferences.getInstance();
+  prefs.remove('peer' + id);
+  prefs.remove('peer' + id + '-password');
+}
+
 Future<String> getPassword(String id) async {
   SharedPreferences prefs = await SharedPreferences.getInstance();
   var p = prefs.getString('peer' + id + '-password');
@@ -721,6 +727,19 @@ Future<String> getPassword(String id) async {
 void savePassword(String id, String password) async {
   SharedPreferences prefs = await SharedPreferences.getInstance();
   prefs.setString('peer' + id + '-password', password);
+  prefs.setString('peer' + id + '-autologin', password);
+}
+
+Future<bool> getAutoLogin(String id) async {
+  SharedPreferences prefs = await SharedPreferences.getInstance();
+  var p = prefs.getString('peer' + id + '-autologin');
+  if (p == null) return false;
+  return p != "";
+}
+
+void saveAutoLogin(String id, bool a) async {
+  SharedPreferences prefs = await SharedPreferences.getInstance();
+  prefs.setString('peer' + id + '-autologin', a ? 'Y' : '');
 }
 
 void initializeCursorAndCanvas() async {

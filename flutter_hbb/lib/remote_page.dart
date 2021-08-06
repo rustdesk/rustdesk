@@ -233,6 +233,7 @@ class _RemotePageState extends State<RemotePage> {
                                 setState(() {
                                   _mouseTools = !_mouseTools;
                                   resetTool();
+                                  if (_mouseTools) _drag = true;
                                 });
                               },
                             )),
@@ -300,6 +301,7 @@ class _RemotePageState extends State<RemotePage> {
                       _drag = false;
                       _scroll = false;
                       _right = false;
+                      _mouseTools = false;
                     });
                   } else if (_scroll) {
                     var dy = (_yOffset - _yOffset0) / 10;
@@ -837,13 +839,26 @@ void showActions(BuildContext context) {
 void showSetOSPassword(BuildContext context) async {
   final controller = TextEditingController();
   var password = await getPassword(FFI.id);
+  var autoLogin = await getAutoLogin(FFI.id);
   controller.text = password;
   showAlertDialog(
       context,
       (setState) => Tuple3(
-            Text(translate('Password Required')),
+            Text(translate('OS Password')),
             Column(mainAxisSize: MainAxisSize.min, children: [
               PasswordWidget(controller: controller),
+              CheckboxListTile(
+                contentPadding: const EdgeInsets.all(0),
+                dense: true,
+                controlAffinity: ListTileControlAffinity.leading,
+                title: Text(
+                  translate('Auto Login'),
+                ),
+                value: autoLogin,
+                onChanged: (v) {
+                  setState(() => autoLogin = v);
+                },
+              ),
             ]),
             [
               TextButton(

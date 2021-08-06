@@ -236,6 +236,9 @@ class _HomePageState extends State<HomePage> {
                       );
                       if (value == 'remove') {
                         setState(() => FFI.setByName('remove', '${p.id}'));
+                        () async {
+                          removePreference(p.id);
+                        }();
                       }
                     }();
                   },
