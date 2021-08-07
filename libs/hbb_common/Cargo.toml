@@ -13,7 +13,7 @@ tokio-util = { version = "0.6", features = ["full"] }
 futures = "0.3"
 bytes = "1.0"
 log = "0.4"
-env_logger = "0.8"
+env_logger = "0.9"
 socket2 = { version = "0.3", features = ["reuseport"] }
 zstd = "0.9"
 quinn = {version = "0.6", optional = true }

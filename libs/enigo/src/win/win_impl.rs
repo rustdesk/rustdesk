@@ -176,13 +176,13 @@ impl KeyboardControllable for Enigo {
     }
 
     fn key_click(&mut self, key: Key) {
-        let scancode = self.key_to_scancode(key);
-        keybd_event(KEYEVENTF_SCANCODE, 0, scancode);
-        keybd_event(KEYEVENTF_KEYUP | KEYEVENTF_SCANCODE, 0, scancode);
+        let vk = self.key_to_keycode(key);
+        keybd_event(0, vk, 0);
+        keybd_event(KEYEVENTF_KEYUP, vk, 0);
     }
 
     fn key_down(&mut self, key: Key) -> crate::ResultType {
-        let res = keybd_event(KEYEVENTF_SCANCODE, 0, self.key_to_scancode(key));
+        let res = keybd_event(0, self.key_to_keycode(key), 0);
         if res == 0 {
             let err = get_error();
             if !err.is_empty() {
@@ -193,11 +193,7 @@ impl KeyboardControllable for Enigo {
     }
 
     fn key_up(&mut self, key: Key) {
-        keybd_event(
-            KEYEVENTF_KEYUP | KEYEVENTF_SCANCODE,
-            0,
-            self.key_to_scancode(key),
-        );
+        keybd_event(KEYEVENTF_KEYUP, self.key_to_keycode(key), 0);
     }
 
     fn get_key_state(&mut self, key: Key) -> bool {
@@ -345,13 +341,7 @@ impl Enigo {
             Key::Raw(raw_keycode) => raw_keycode,
             Key::Layout(c) => self.get_layoutdependent_keycode(c.to_string()),
             Key::Super | Key::Command | Key::Windows | Key::Meta => EVK_LWIN,
-            _ => 0,
         }
-    }
-
-    fn key_to_scancode(&self, key: Key) -> u16 {
-        let keycode = self.key_to_keycode(key);
-        unsafe { MapVirtualKeyW(keycode as u32, 0) as u16 }
     }
 
     fn get_layoutdependent_keycode(&self, string: String) -> u16 {

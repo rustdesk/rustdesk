@@ -305,14 +305,12 @@ fn handle_mouse_(evt: &MouseEvent, conn: i32) {
     let mut en = ENIGO.lock().unwrap();
     #[cfg(not(target_os = "macos"))]
     let mut to_release = Vec::new();
-    #[cfg(target_os = "macos")]
-    en.reset_flag();
-    if evt_type == 1 || evt_type == 2 {
+    if evt_type == 1 {
+        #[cfg(target_os = "macos")]
+        en.reset_flag();
         fix_modifiers(&evt.modifiers[..], &mut en, 0);
-    }
-    for ref ck in evt.modifiers.iter() {
-        if let Some(key) = KEY_MAP.get(&ck.value()) {
-            if evt_type == 1 || evt_type == 2 {
+        for ref ck in evt.modifiers.iter() {
+            if let Some(key) = KEY_MAP.get(&ck.value()) {
                 #[cfg(target_os = "macos")]
                 en.add_flag(key);
                 #[cfg(not(target_os = "macos"))]
@@ -511,30 +509,32 @@ fn handle_key_(evt: &KeyEvent) {
     let mut has_cap = false;
     #[cfg(windows)]
     let mut has_numlock = false;
-    let ck = if let Some(key_event::Union::control_key(ck)) = evt.union {
-        ck.value()
-    } else {
-        -1
-    };
-    fix_modifiers(&evt.modifiers[..], &mut en, ck);
-    for ref ck in evt.modifiers.iter() {
-        if let Some(key) = KEY_MAP.get(&ck.value()) {
-            #[cfg(target_os = "macos")]
-            en.add_flag(key);
-            #[cfg(not(target_os = "macos"))]
-            {
-                if key == &Key::CapsLock {
-                    has_cap = true;
-                } else if key == &Key::NumLock {
-                    #[cfg(windows)]
-                    {
-                        has_numlock = true;
-                    }
-                } else {
-                    if !get_modifier_state(key.clone(), &mut en) {
-                        en.key_down(key.clone()).ok();
-                        modifier_sleep();
-                        to_release.push(key);
+    if evt.down {
+        let ck = if let Some(key_event::Union::control_key(ck)) = evt.union {
+            ck.value()
+        } else {
+            -1
+        };
+        fix_modifiers(&evt.modifiers[..], &mut en, ck);
+        for ref ck in evt.modifiers.iter() {
+            if let Some(key) = KEY_MAP.get(&ck.value()) {
+                #[cfg(target_os = "macos")]
+                en.add_flag(key);
+                #[cfg(not(target_os = "macos"))]
+                {
+                    if key == &Key::CapsLock {
+                        has_cap = true;
+                    } else if key == &Key::NumLock {
+                        #[cfg(windows)]
+                        {
+                            has_numlock = true;
+                        }
+                    } else {
+                        if !get_modifier_state(key.clone(), &mut en) {
+                            en.key_down(key.clone()).ok();
+                            modifier_sleep();
+                            to_release.push(key);
+                        }
                     }
                 }
             }
