@@ -1,6 +1,8 @@
 // https://msdn.microsoft.com/en-us/library/windows/desktop/dd375731
 //
 // JP/KR mapping https://github.com/TigerVNC/tigervnc/blob/1a008c1380305648ab50f1d99e73439747e9d61d/vncviewer/win32.c#L267
+// altgr handle: https://github.com/TigerVNC/tigervnc/blob/dccb95f345f7a9c5aa785a19d1bfa3fdecd8f8e0/vncviewer/Viewport.cxx#L1066
+
 
 pub const EVK_RETURN: u16 = 0x0D;
 pub const EVK_TAB: u16 = 0x09;
