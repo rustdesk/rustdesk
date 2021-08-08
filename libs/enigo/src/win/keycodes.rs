@@ -1,4 +1,6 @@
 // https://msdn.microsoft.com/en-us/library/windows/desktop/dd375731
+//
+// JP/KR mapping https://github.com/TigerVNC/tigervnc/blob/1a008c1380305648ab50f1d99e73439747e9d61d/vncviewer/win32.c#L267
 
 pub const EVK_RETURN: u16 = 0x0D;
 pub const EVK_TAB: u16 = 0x09;
