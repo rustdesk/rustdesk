@@ -159,6 +159,7 @@ fn run_cursor(sp: MouseCursorService, state: &mut StateCursor) -> ResultType<()>
 lazy_static::lazy_static! {
     static ref ENIGO: Arc<Mutex<Enigo>> = Arc::new(Mutex::new(Enigo::new()));
     static ref KEYS_DOWN: Arc<Mutex<HashMap<i32, Instant>>> = Default::default();
+    static ref EXITING: Arc<Mutex<bool>> = Default::default();
 }
 
 // mac key input must be run in main thread, otherwise crash on >= osx 10.15
@@ -212,42 +213,66 @@ pub fn handle_mouse(evt: &MouseEvent, conn: i32) {
     handle_mouse_(evt, conn);
 }
 
-pub fn fix_key_down_timeout() {
+pub fn fix_key_down_timeout_loop() {
     std::thread::spawn(move || loop {
         std::thread::sleep(std::time::Duration::from_millis(300));
-        if KEYS_DOWN.lock().unwrap().is_empty() {
-            continue;
-        }
-        let cloned = (*KEYS_DOWN.lock().unwrap()).clone();
-        log::debug!("{} keys in key down timeout map", cloned.len());
-        for (key, value) in cloned.into_iter() {
-            if value.elapsed().as_millis() >= 3_000 {
-                KEYS_DOWN.lock().unwrap().remove(&key);
-                let key = if key < KEY_CHAR_START {
-                    if let Some(key) = KEY_MAP.get(&key) {
-                        Some(*key)
-                    } else {
-                        None
-                    }
+        fix_key_down_timeout(false);
+    });
+    // atexit is called before exit
+    unsafe { libc::atexit(fix_key_down_timeout_at_exit) };
+    unsafe {
+        libc::signal(libc::SIGINT, fix_key_down_timeout_at_signal as _);
+    }
+}
+
+pub extern "C" fn fix_key_down_timeout_at_exit() {
+    let mut exiting = EXITING.lock().unwrap();
+    if *exiting {
+        return;
+    }
+    *exiting = true;
+    fix_key_down_timeout(true);
+    log::info!("fix_key_down_timeout_at_exit");
+}
+
+extern "C" fn fix_key_down_timeout_at_signal(_: libc::c_int) {
+    fix_key_down_timeout_at_exit();
+    std::process::exit(0); // will call atexit on posix, but not on Windows
+}
+
+fn fix_key_down_timeout(force: bool) {
+    if KEYS_DOWN.lock().unwrap().is_empty() {
+        return;
+    }
+    let cloned = (*KEYS_DOWN.lock().unwrap()).clone();
+    log::debug!("{} keys in key down timeout map", cloned.len());
+    for (key, value) in cloned.into_iter() {
+        if force || value.elapsed().as_millis() >= 3_000 {
+            KEYS_DOWN.lock().unwrap().remove(&key);
+            let key = if key < KEY_CHAR_START {
+                if let Some(key) = KEY_MAP.get(&key) {
+                    Some(*key)
                 } else {
-                    Some(Key::Layout(((key - KEY_CHAR_START) as u8) as _))
-                };
-                if let Some(key) = key {
-                    let func = move || {
-                        let mut en = ENIGO.lock().unwrap();
-                        if en.get_key_state(key) {
-                            en.key_up(key);
-                            log::debug!("Fixed {:?} timeout", key);
-                        }
-                    };
-                    #[cfg(target_os = "macos")]
-                    QUEUE.exec_async(func);
-                    #[cfg(not(target_os = "macos"))]
-                    func();
+                    None
                 }
+            } else {
+                Some(Key::Layout(((key - KEY_CHAR_START) as u8) as _))
+            };
+            if let Some(key) = key {
+                let func = move || {
+                    let mut en = ENIGO.lock().unwrap();
+                    if en.get_key_state(key) {
+                        en.key_up(key);
+                        log::debug!("Fixed {:?} timeout", key);
+                    }
+                };
+                #[cfg(target_os = "macos")]
+                QUEUE.exec_async(func);
+                #[cfg(not(target_os = "macos"))]
+                func();
             }
         }
-    });
+    }
 }
 
 // e.g. current state of ctrl is down, but ctrl not in modifier, we should change ctrl to up, to make modifier state sync between remote and local
@@ -292,6 +317,10 @@ fn fix_modifiers(modifiers: &[ProtobufEnumOrUnknown<ControlKey>], en: &mut Enigo
 }
 
 fn handle_mouse_(evt: &MouseEvent, conn: i32) {
+    let exiting = EXITING.lock().unwrap();
+    if *exiting {
+        return;
+    }
     #[cfg(windows)]
     crate::platform::windows::try_change_desktop();
     let buttons = evt.mask >> 3;
@@ -496,6 +525,10 @@ pub fn handle_key(evt: &KeyEvent) {
 }
 
 fn handle_key_(evt: &KeyEvent) {
+    let exiting = EXITING.lock().unwrap();
+    if *exiting {
+        return;
+    }
     #[cfg(windows)]
     crate::platform::windows::try_change_desktop();
     let mut en = ENIGO.lock().unwrap();

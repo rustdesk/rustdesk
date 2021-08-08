@@ -916,6 +916,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "env_logger"
+version = "0.9.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0b2cf0344971ee6c64c31be0d530793fba457d322dfec2810c453d0ef228f9c3"
+dependencies = [
+ "atty",
+ "humantime",
+ "log",
+ "regex",
+ "termcolor",
+]
+
+[[package]]
 name = "err-derive"
 version = "0.2.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -978,9 +991,9 @@ dependencies = [
 
 [[package]]
 name = "flexi_logger"
-version = "0.16.3"
+version = "0.17.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "291b6ce7b3ed2dda82efa6aee4c6bdb55fd11bc88b06c55b01851e94b96e5322"
+checksum = "33ab94b6ac8eb69f1496a6993f26f785b5fd6d99b7416023eb2a6175c0b242b1"
 dependencies = [
  "atty",
  "chrono",
@@ -1377,7 +1390,7 @@ dependencies = [
  "confy",
  "directories-next",
  "dirs-next",
- "env_logger 0.8.4",
+ "env_logger 0.9.0",
  "filetime",
  "futures",
  "futures-util",

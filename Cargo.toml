@@ -30,7 +30,7 @@ sha2 = "0.9"
 repng = "0.2"
 libc = "0.2"
 parity-tokio-ipc = { git = "https://github.com/open-trade/parity-tokio-ipc" }
-flexi_logger = "0.16"
+flexi_logger = "0.17"
 runas = "0.2"
 magnum-opus = { git = "https://github.com/open-trade/magnum-opus" }
 dasp = { version = "0.11", features = ["signal", "interpolate-linear", "interpolate"], optional = true }

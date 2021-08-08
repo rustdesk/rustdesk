@@ -171,6 +171,7 @@ async fn handle(data: Data, stream: &mut Connection) {
         }
         Data::Close => {
             log::info!("Receive close message");
+            crate::server::input_service::fix_key_down_timeout_at_exit();
             std::process::exit(0);
         }
         Data::OnlineStatus(_) => {

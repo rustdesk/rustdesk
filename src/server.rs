@@ -272,7 +272,7 @@ pub async fn start_server(is_server: bool, _tray: bool) {
                 std::process::exit(-1);
             }
         });
-        input_service::fix_key_down_timeout();
+        input_service::fix_key_down_timeout_loop();
         crate::RendezvousMediator::start_all().await;
     } else {
         match crate::ipc::connect(1000, "").await {
