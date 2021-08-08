@@ -150,8 +150,7 @@ pub fn resample_channels(
         if x.is_empty() {
             Vec::new()
         } else if x.len() == 2 {
-            x[0]
-                .chunks(1)
+            x[0].chunks(1)
                 .zip(x[1].chunks(1))
                 .flat_map(|(a, b)| a.into_iter().chain(b))
                 .map(|x| *x as f32)
@@ -395,6 +394,10 @@ pub fn is_modifier(evt: &KeyEvent) -> bool {
             || v == ControlKey::Shift.value()
             || v == ControlKey::Control.value()
             || v == ControlKey::Meta.value()
+            || v == ControlKey::RAlt.value()
+            || v == ControlKey::RShift.value()
+            || v == ControlKey::RControl.value()
+            || v == ControlKey::RWin.value()
     } else {
         false
     }

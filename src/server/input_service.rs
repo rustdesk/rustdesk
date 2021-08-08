@@ -305,10 +305,10 @@ fn handle_mouse_(evt: &MouseEvent, conn: i32) {
     let mut en = ENIGO.lock().unwrap();
     #[cfg(not(target_os = "macos"))]
     let mut to_release = Vec::new();
+    fix_modifiers(&evt.modifiers[..], &mut en, 0);
     if evt_type == 1 {
         #[cfg(target_os = "macos")]
         en.reset_flag();
-        fix_modifiers(&evt.modifiers[..], &mut en, 0);
         for ref ck in evt.modifiers.iter() {
             if let Some(key) = KEY_MAP.get(&ck.value()) {
                 #[cfg(target_os = "macos")]
