@@ -93,7 +93,7 @@ class _RemotePageState extends State<RemotePage> {
     } else if (type == 'input-password') {
       enterPasswordDialog(id, context);
     } else {
-      var hasRetry = evt['hasRetry'];
+      var hasRetry = evt['hasRetry'] == 'true';
       showMsgBox(type, title, text, hasRetry);
     }
   }
