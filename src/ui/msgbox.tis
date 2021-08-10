@@ -1,4 +1,4 @@
-var type, title, text, getParams, remember, hasRetry, callback;
+var type, title, text, getParams, remember, retry, callback;
 
 function updateParams(params) {
     type = params.type;
@@ -7,16 +7,9 @@ function updateParams(params) {
     getParams = params.getParams;
     remember = params.remember;
     callback = params.callback;
-    hasRetry = type == "error" &&
-               title == "Connection Error" &&
-               text.toLowerCase().indexOf("offline") < 0 &&
-               text.toLowerCase().indexOf("exist") < 0 &&
-               text.toLowerCase().indexOf("handshake") < 0 &&
-               text.toLowerCase().indexOf("failed") < 0 &&
-               text.toLowerCase().indexOf("resolve") < 0 &&
-               text.toLowerCase().indexOf("manually") < 0;
-    if (hasRetry) {
-        self.timer(1s, function() {
+    retry = params.retry;
+    if (retry > 0) {
+        self.timer(retry * 1000, function() {
             view.close({ reconnect: true });
         });
     }

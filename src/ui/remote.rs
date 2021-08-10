@@ -1663,7 +1663,8 @@ fn make_fd(id: i32, entries: &Vec<FileEntry>, only_count: bool) -> Value {
 #[async_trait]
 impl Interface for Handler {
     fn msgbox(&self, msgtype: &str, title: &str, text: &str) {
-        self.call("msgbox", &make_args!(msgtype, title, text));
+        let retry = check_if_retry(msgtype, title, text);
+        self.call("msgbox_retry", &make_args!(msgtype, title, text, retry));
     }
 
     fn handle_login_error(&mut self, err: &str) -> bool {

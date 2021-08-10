@@ -1144,3 +1144,16 @@ lazy_static::lazy_static! {
         ("LOCK_SCREEN", Key::ControlKey(ControlKey::LockScreen)),
     ].iter().cloned().collect();
 }
+
+#[inline]
+pub fn check_if_retry(msgtype: &str, title: &str, text: &str) -> bool {
+    msgtype == "error"
+        && title == "Connection Error"
+        && !text.to_lowercase().contains("offline")
+        && !text.to_lowercase().contains("exist")
+        && !text.to_lowercase().contains("handshake")
+        && !text.to_lowercase().contains("failed")
+        && !text.to_lowercase().contains("resolve")
+        && !text.to_lowercase().contains("mismatch")
+        && !text.to_lowercase().contains("manually")
+}

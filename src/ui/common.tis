@@ -207,7 +207,7 @@ function getMsgboxParams() {
     return msgbox_params; 
 }
 
-function msgbox(type, title, text, callback, height, width) {
+function msgbox(type, title, text, callback, height, width, retry=0) {
     var has_msgbox = msgbox_params != null;
     if (!has_msgbox && !type) return;
     var remember = false;
@@ -217,7 +217,7 @@ function msgbox(type, title, text, callback, height, width) {
     msgbox_params =  {
         remember: remember, type: type, text: text, title: title,
         getParams: getMsgboxParams,
-        callback: callback
+        callback: callback, retry: retry,
     };
     if (has_msgbox) return;
     var dialog = {
@@ -251,10 +251,20 @@ function connecting() {
     handler.msgbox("connecting", "Connecting...", "Connection in progress. Please wait.");
 }
 
-handler.msgbox = function(type, title, text, callback=null, height=180, width=500) {
+handler.msgbox = function(type, title, text, callback=null, height=180, width=500, retry=0) {
     // directly call view.Dialog from native may crash, add timer here, seem safe
     // too short time, msgbox won't get focus, per my test, 150 is almost minimun
-    self.timer(150ms, function() { msgbox(type, title, text, callback, height, width); });
+    self.timer(150ms, function() { msgbox(type, title, text, callback, height, width, retry); });
+}
+
+var reconnectTimeout = 1;
+handler.msgbox_retry = function(type, title, text, hasRetry, callback=null, height=180, width=500) {
+    handler.msgbox(type, title, text, callback, height, width, hasRetry ? reconnectTimeout : 0);
+    if (hasRetry) {
+        reconnectTimeout *= 2;
+    } else {
+        reconnectTimeout = 1;
+    }
 }
 /******************** end of msgbox ****************************************/
 
