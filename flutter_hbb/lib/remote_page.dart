@@ -93,21 +93,13 @@ class _RemotePageState extends State<RemotePage> {
     } else if (type == 'input-password') {
       enterPasswordDialog(id, context);
     } else {
-      showMsgBox(type, title, text);
+      var hasRetry = evt['hasRetry'];
+      showMsgBox(type, title, text, hasRetry);
     }
   }
 
-  void showMsgBox(String type, String title, String text) {
+  void showMsgBox(String type, String title, String text, bool hasRetry) {
     msgbox(type, title, text, context);
-    final hasRetry = type == "error" &&
-        title == "Connection Error" &&
-        text.toLowerCase().indexOf("offline") < 0 &&
-        text.toLowerCase().indexOf("exist") < 0 &&
-        text.toLowerCase().indexOf("handshake") < 0 &&
-        text.toLowerCase().indexOf("failed") < 0 &&
-        text.toLowerCase().indexOf("resolve") < 0 &&
-        text.toLowerCase().indexOf("mismatch") < 0 &&
-        text.toLowerCase().indexOf("manually") < 0;
     if (hasRetry) {
       _timer?.cancel();
       _timer = Timer(Duration(seconds: _reconnects), () {
