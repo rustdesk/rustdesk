@@ -399,6 +399,8 @@ class _RemotePageState extends State<RemotePage> {
         });
       }, _right)
     ];
+    final pi = FFI.ffiModel.pi;
+    final isMac = pi.platform == "Mac OS";
     final modifiers = <Widget>[
       wrap('Ctrl', () {
         setState(() => FFI.ctrl = !FFI.ctrl);
@@ -409,7 +411,7 @@ class _RemotePageState extends State<RemotePage> {
       wrap('Shift', () {
         setState(() => FFI.shift = !FFI.shift);
       }, FFI.shift),
-      wrap('Cmd', () {
+      wrap(isMac ? 'Cmd' : 'Win', () {
         setState(() => FFI.command = !FFI.command);
       }, FFI.command),
     ];
@@ -482,29 +484,14 @@ class _RemotePageState extends State<RemotePage> {
       wrap('', () {
         FFI.inputKey('VK_RIGHT');
       }, false, Icons.keyboard_arrow_right),
-      wrap('Ctrl+C', () {
-        var old = FFI.ctrl;
-        FFI.ctrl = true;
-        FFI.inputKey(
-          'VK_C',
-        );
-        FFI.ctrl = old;
+      wrap(isMac ? 'Cmd+C' : 'Ctrl+C', () {
+        sendPrompt(isMac, 'VK_C');
       }),
-      wrap('Ctrl+V', () {
-        var old = FFI.ctrl;
-        FFI.ctrl = true;
-        FFI.inputKey(
-          'VK_V',
-        );
-        FFI.ctrl = old;
+      wrap(isMac ? 'Cmd+V' : 'Ctrl+V', () {
+        sendPrompt(isMac, 'VK_V');
       }),
-      wrap('Ctrl+S', () {
-        var old = FFI.ctrl;
-        FFI.ctrl = true;
-        FFI.inputKey(
-          'VK_S',
-        );
-        FFI.ctrl = old;
+      wrap(isMac ? 'Cmd+S' : 'Ctrl+S', () {
+        sendPrompt(isMac, 'VK_S');
       }),
     ];
     return Container(
@@ -884,4 +871,19 @@ void showSetOSPassword(BuildContext context, bool login) {
               ),
             ],
           ));
+}
+
+void sendPrompt(bool isMac, String key) {
+  final old = isMac ? FFI.command : FFI.ctrl;
+  if (isMac) {
+    FFI.command = true;
+  } else {
+    FFI.ctrl = true;
+  }
+  FFI.inputKey(key);
+  if (isMac) {
+    FFI.command = old;
+  } else {
+    FFI.ctrl = old;
+  }
 }
