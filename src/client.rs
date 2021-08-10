@@ -1134,6 +1134,8 @@ lazy_static::lazy_static! {
         ("VK_NUMPAD7", Key::ControlKey(ControlKey::Numpad7)),
         ("VK_NUMPAD8", Key::ControlKey(ControlKey::Numpad8)),
         ("VK_NUMPAD9", Key::ControlKey(ControlKey::Numpad9)),
+        ("Apps", Key::ControlKey(ControlKey::Apps)),
+        ("Meta", Key::ControlKey(ControlKey::Meta)),
         ("RAlt", Key::ControlKey(ControlKey::RAlt)),
         ("RWin", Key::ControlKey(ControlKey::RWin)),
         ("RControl", Key::ControlKey(ControlKey::RControl)),

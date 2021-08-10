@@ -303,7 +303,6 @@ impl Enigo {
             Key::Numpad9 => EVK_NUMPAD9,
             Key::Cancel => EVK_CANCEL,
             Key::Clear => EVK_CLEAR,
-            Key::Menu => EVK_MENU,
             Key::Pause => EVK_PAUSE,
             Key::Kana => EVK_KANA,
             Key::Hangul => EVK_HANGUL,

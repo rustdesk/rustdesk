@@ -431,6 +431,8 @@ impl Enigo {
             _ => 0,
         }
     }
+
+    #[inline]
     fn map_key_board(&self, ch: char) -> CGKeyCode {
         match ch {
             'a' => kVK_ANSI_A,

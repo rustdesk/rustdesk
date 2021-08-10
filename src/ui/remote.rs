@@ -890,6 +890,10 @@ impl Handler {
         }
 
         let mut name = name;
+        #[cfg(target_os = "linux")]
+        if code == 65383 { // VK_MENU
+            name = "Apps".to_owned();
+        }
 
         if extended {
             match name.as_ref() {

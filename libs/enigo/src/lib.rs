@@ -299,7 +299,7 @@ pub enum Key {
     /// meta key (also known as "windows", "super", and "command")
     Meta,
     /// option key on macOS (alt key on Linux and Windows)
-    Option,
+    Option, // deprecated, use Alt instead
     /// page down key
     PageDown,
     /// page up key
@@ -346,8 +346,6 @@ pub enum Key {
     Cancel,
     ///
     Clear,
-    ///
-    Menu, // deprecated, use alt instead
     ///
     Pause,
     ///
