@@ -19,7 +19,6 @@ use sha2::{Digest, Sha256};
 pub type Sender = mpsc::UnboundedSender<(Instant, Arc<Message>)>;
 
 lazy_static::lazy_static! {
-    static ref CLICK_TIME: Arc::<Mutex<i64>> = Default::default();
     static ref LOGIN_FAILURES: Arc::<Mutex<HashMap<String, (i32, i32, i32)>>> = Default::default();
 }
 
@@ -637,9 +636,6 @@ impl Connection {
                 Some(message::Union::mouse_event(me)) => {
                     if self.keyboard {
                         handle_mouse(&me, self.inner.id());
-                        if is_left_up(&me) {
-                            *CLICK_TIME.lock().unwrap() = crate::get_time();
-                        }
                     }
                 }
                 Some(message::Union::key_event(mut me)) => {
@@ -665,9 +661,6 @@ impl Connection {
                             }
                         } else {
                             handle_key(&me);
-                        }
-                        if is_enter(&me) {
-                            *CLICK_TIME.lock().unwrap() = crate::get_time();
                         }
                     }
                 }
@@ -945,18 +938,7 @@ async fn start_ipc(
                         return Err(err.into());
                     }
                     Ok(Some(data)) => {
-                        match data {
-                            ipc::Data::ClickTime(_)=> {
-                                unsafe {
-                                    let ct = *CLICK_TIME.lock().unwrap();
-                                    let data = ipc::Data::ClickTime(ct);
-                                    stream.send(&data).await?;
-                                }
-                            }
-                            _ => {
-                                tx_from_cm.send(data)?;
-                            }
-                        }
+                        tx_from_cm.send(data)?;
                     }
                     _ => {}
                 }

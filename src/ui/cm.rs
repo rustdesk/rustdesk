@@ -57,13 +57,6 @@ impl ConnectionManager {
         ICON.to_owned()
     }
 
-    fn check_click_time(&mut self, id: i32) {
-        let lock = self.read().unwrap();
-        if let Some(s) = lock.senders.get(&id) {
-            allow_err!(s.send(Data::ClickTime(crate::get_time())));
-        }
-    }
-
     #[inline]
     fn call(&self, func: &str, args: &[Value]) {
         let r = self.read().unwrap();
@@ -117,9 +110,6 @@ impl ConnectionManager {
         match data {
             Data::ChatMessage { text } => {
                 self.call("newMessage", &make_args!(id, text));
-            }
-            Data::ClickTime(ms) => {
-                self.call("resetClickCallback", &make_args!(ms as f64));
             }
             Data::FS(v) => match v {
                 ipc::FS::ReadDir {
@@ -318,7 +308,6 @@ impl sciter::EventHandler for ConnectionManager {
     }
 
     sciter::dispatch_script_call! {
-        fn check_click_time(i32);
         fn get_icon();
         fn close(i32);
         fn authorize(i32);

@@ -80,7 +80,6 @@ pub enum Data {
         enabled: bool,
     },
     SystemInfo(Option<String>),
-    ClickTime(i64),
     Authorize,
     Close,
     SAS,

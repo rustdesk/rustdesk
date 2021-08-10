@@ -3,8 +3,6 @@ view.windowFrame = is_osx ? #extended : #solid;
 var body;
 var connections = [];
 var show_chat = false;
-var click_callback;
-var click_callback_time = 0;
 
 class Body: Reactor.Component
 {
@@ -208,21 +206,8 @@ event click $(div.chaticon) {
     });
 }
 
-handler.resetClickCallback = function(ms) {
-    if (click_callback_time - ms < 120)
-        click_callback = null;
-}
-
 function checkClickTime(callback) {
-    click_callback_time = getTime();
-    click_callback = callback;
-    handler.check_click_time(body.cid);
-    self.timer(120ms, function() {
-        if (click_callback) {
-            click_callback();
-            click_callback = null;
-        }
-    });
+    callback();
 }
 
 function adaptSize() {
