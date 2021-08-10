@@ -360,6 +360,7 @@ impl UI {
     }
 
     fn save_size(&mut self, x: i32, y: i32, w: i32, h: i32) {
+        crate::server::input_service::fix_key_down_timeout_at_exit();
         Config::set_size(x, y, w, h);
     }
 

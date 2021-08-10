@@ -218,8 +218,6 @@ pub fn fix_key_down_timeout_loop() {
         std::thread::sleep(std::time::Duration::from_millis(300));
         fix_key_down_timeout(false);
     });
-    // atexit is called before exit
-    unsafe { libc::atexit(fix_key_down_timeout_at_exit) };
     unsafe {
         libc::signal(libc::SIGINT, fix_key_down_timeout_at_signal as _);
     }
