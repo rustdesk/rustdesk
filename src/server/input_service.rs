@@ -3,7 +3,11 @@ use super::*;
 use dispatch::Queue;
 use enigo::{Enigo, Key, KeyboardControllable, MouseButton, MouseControllable};
 use hbb_common::{config::COMPRESS_LEVEL, protobuf::ProtobufEnumOrUnknown};
-use std::{convert::TryFrom, time::Instant};
+use std::{
+    convert::TryFrom,
+    sync::atomic::{AtomicBool, Ordering},
+    time::Instant,
+};
 
 #[derive(Default)]
 struct StateCursor {
@@ -160,9 +164,9 @@ fn run_cursor(sp: MouseCursorService, state: &mut StateCursor) -> ResultType<()>
 lazy_static::lazy_static! {
     static ref ENIGO: Arc<Mutex<Enigo>> = Arc::new(Mutex::new(Enigo::new()));
     static ref KEYS_DOWN: Arc<Mutex<HashMap<i32, Instant>>> = Default::default();
-    static ref EXITING: Arc<Mutex<bool>> = Default::default();
     static ref LATEST_INPUT: Arc<Mutex<Input>> = Default::default();
 }
+static EXITING: AtomicBool = AtomicBool::new(false);
 
 // mac key input must be run in main thread, otherwise crash on >= osx 10.15
 #[cfg(target_os = "macos")]
@@ -220,24 +224,21 @@ pub fn fix_key_down_timeout_loop() {
         std::thread::sleep(std::time::Duration::from_millis(300));
         fix_key_down_timeout(false);
     });
-    unsafe {
-        libc::signal(libc::SIGINT, fix_key_down_timeout_at_signal as _);
+    if let Err(err) = ctrlc::set_handler(move || {
+        fix_key_down_timeout_at_exit();
+        std::process::exit(0); // will call atexit on posix, but not on Windows
+    }) {
+        log::error!("Failed to set Ctrl-C handler: {}", err);
     }
 }
 
-pub extern "C" fn fix_key_down_timeout_at_exit() {
-    let mut exiting = EXITING.lock().unwrap();
-    if *exiting {
+pub fn fix_key_down_timeout_at_exit() {
+    if EXITING.load(Ordering::SeqCst) {
         return;
     }
-    *exiting = true;
+    EXITING.store(true, Ordering::SeqCst);
     fix_key_down_timeout(true);
     log::info!("fix_key_down_timeout_at_exit");
-}
-
-extern "C" fn fix_key_down_timeout_at_signal(_: libc::c_int) {
-    fix_key_down_timeout_at_exit();
-    std::process::exit(0); // will call atexit on posix, but not on Windows
 }
 
 fn fix_key_down_timeout(force: bool) {
@@ -317,8 +318,7 @@ fn fix_modifiers(modifiers: &[ProtobufEnumOrUnknown<ControlKey>], en: &mut Enigo
 }
 
 fn handle_mouse_(evt: &MouseEvent, conn: i32) {
-    let exiting = EXITING.lock().unwrap();
-    if *exiting {
+    if EXITING.load(Ordering::SeqCst) {
         return;
     }
     #[cfg(windows)]
@@ -523,8 +523,7 @@ pub fn handle_key(evt: &KeyEvent) {
 }
 
 fn handle_key_(evt: &KeyEvent) {
-    let exiting = EXITING.lock().unwrap();
-    if *exiting {
+    if EXITING.load(Ordering::SeqCst) {
         return;
     }
     #[cfg(windows)]

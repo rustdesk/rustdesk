@@ -50,6 +50,7 @@ cpal = { git = "https://github.com/rustaudio/cpal" }
 machine-uid = "0.2"
 mac_address = "1.1"
 sciter-rs = { git = "https://github.com/open-trade/rust-sciter", branch = "dyn" }
+ctrlc = "3.2"
 
 [target.'cfg(target_os = "windows")'.dependencies]
 #systray = { git = "https://github.com/open-trade/systray-rs" }
@@ -68,7 +69,6 @@ core-graphics = "0.22"
 libpulse-simple-binding = "2.16"
 libpulse-binding = "2.16"
 rust-pulsectl = { git = "https://github.com/open-trade/pulsectl" }
-ctrlc = "3.1"
 
 [target.'cfg(not(any(target_os = "windows", target_os = "android", target_os = "ios")))'.dependencies]
 psutil = "3.2"
