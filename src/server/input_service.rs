@@ -36,7 +36,6 @@ struct Input {
     time: i64,
 }
 
-static mut LATEST_INPUT: Input = Input { conn: 0, time: 0 };
 const KEY_CHAR_START: i32 = 9999;
 
 #[derive(Clone, Default)]
@@ -104,9 +103,11 @@ fn run_pos(sp: GenericService, state: &mut StatePos) -> ResultType<()> {
                 y,
                 ..Default::default()
             });
-            let exclude = unsafe {
-                if crate::get_time() - LATEST_INPUT.time < 300 {
-                    LATEST_INPUT.conn
+            let exclude = {
+                let now = crate::get_time();
+                let lock = LATEST_INPUT.lock().unwrap();
+                if now - lock.time < 300 {
+                    lock.conn
                 } else {
                     0
                 }
@@ -160,6 +161,7 @@ lazy_static::lazy_static! {
     static ref ENIGO: Arc<Mutex<Enigo>> = Arc::new(Mutex::new(Enigo::new()));
     static ref KEYS_DOWN: Arc<Mutex<HashMap<i32, Instant>>> = Default::default();
     static ref EXITING: Arc<Mutex<bool>> = Default::default();
+    static ref LATEST_INPUT: Arc<Mutex<Input>> = Default::default();
 }
 
 // mac key input must be run in main thread, otherwise crash on >= osx 10.15
@@ -324,10 +326,8 @@ fn handle_mouse_(evt: &MouseEvent, conn: i32) {
     let buttons = evt.mask >> 3;
     let evt_type = evt.mask & 0x7;
     if evt_type == 0 {
-        unsafe {
-            let time = crate::get_time();
-            LATEST_INPUT = Input { time, conn };
-        }
+        let time = crate::get_time();
+        *LATEST_INPUT.lock().unwrap() = Input { time, conn };
     }
     let mut en = ENIGO.lock().unwrap();
     #[cfg(not(target_os = "macos"))]
