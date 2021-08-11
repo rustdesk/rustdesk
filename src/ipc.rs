@@ -467,3 +467,63 @@ pub async fn get_nat_type(ms_timeout: u64) -> i32 {
         .await
         .unwrap_or(Config::get_nat_type())
 }
+
+/*
+static mut SHARED_MEMORY: *mut i64 = std::ptr::null_mut();
+
+pub fn initialize_shared_memory(create: bool) {
+    let mut shmem_flink = "shared-memory".to_owned();
+    if cfg!(windows) {
+        let df = "C:\\ProgramData";
+        let df = if std::path::Path::new(df).exists() {
+            df.to_owned()
+        } else {
+            std::env::var("TEMP").unwrap_or("C:\\Windows\\TEMP".to_owned())
+        };
+        let df = format!("{}\\{}", df, *hbb_common::config::APP_NAME.read().unwrap());
+        std::fs::create_dir(&df).ok();
+        shmem_flink = format!("{}\\{}", df, shmem_flink);
+    } else {
+        shmem_flink = Config::ipc_path("").replace("ipc", "") + &shmem_flink;
+    }
+    use shared_memory::*;
+    let shmem = if create {
+        match ShmemConf::new()
+            .force_create_flink()
+            .size(16)
+            .flink(&shmem_flink)
+            .create()
+        {
+            Err(ShmemError::LinkExists) => ShmemConf::new().flink(&shmem_flink).open(),
+            Ok(m) => Ok(m),
+            Err(e) => Err(e),
+        }
+    } else {
+        ShmemConf::new().flink(&shmem_flink).open()
+    };
+    if create {
+        set_all_perm(&shmem_flink);
+    }
+    match shmem {
+        Ok(shmem) => unsafe {
+            SHARED_MEMORY = shmem.as_ptr() as *mut i64;
+            std::mem::forget(shmem);
+        },
+        Err(err) => {
+            log::error!(
+                "Unable to create or open shmem flink {} : {}",
+                shmem_flink,
+                err
+            );
+        }
+    }
+}
+
+fn set_all_perm(p: &str) {
+    #[cfg(not(windows))]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(p, std::fs::Permissions::from_mode(0o0777)).ok();
+    }
+}
+*/
