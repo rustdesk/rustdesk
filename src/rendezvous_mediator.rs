@@ -111,10 +111,14 @@ impl RendezvousMediator {
         loop {
             let mut update_latency = || {
                 last_register_resp = SystemTime::now();
+                fails = 0;
                 let mut latency = last_register_resp
                     .duration_since(last_register_sent)
                     .map(|d| d.as_micros() as i64)
                     .unwrap_or(0);
+                if latency < 0 || latency > 1_000_000 {
+                    return;
+                }
                 if ema_latency == 0 {
                     ema_latency = latency;
                 } else {
@@ -130,7 +134,6 @@ impl RendezvousMediator {
                     log::debug!("Latency of {}: {}ms", host, latency as f64 / 1000.);
                     old_latency = latency;
                 }
-                fails = 0;
             };
             select! {
                 Some(Ok((bytes, _))) = socket.next() => {
