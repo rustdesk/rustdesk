@@ -318,3 +318,8 @@ menu li.selected span {
 .link:active {
   opacity: 0.5;
 }
+
+menu li.line-through {
+  text-decoration-line: line-through;
+  color: grey;
+}
