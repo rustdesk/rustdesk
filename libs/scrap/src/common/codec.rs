@@ -66,7 +66,7 @@ macro_rules! call_vpx {
 macro_rules! call_vpx_ptr {
     ($x:expr) => {{
         let result = unsafe { $x }; // original expression
-        let result_int = unsafe { std::mem::transmute::<_, i64>(result) };
+        let result_int = unsafe { std::mem::transmute::<_, isize>(result) };
         if result_int == 0 {
             return Err(Error::BadPtr(format!(
                 "errcode={} {}:{}:{}:{}",
