@@ -78,7 +78,6 @@ fn main() {
                 hbb_common::allow_err!(platform::uninstall_me());
                 hbb_common::allow_err!(platform::install_me(
                     "desktopicon startmenu",
-                    "".to_owned()
                 ));
                 return;
             }
