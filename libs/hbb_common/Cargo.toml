@@ -8,7 +8,7 @@ edition = "2018"
 
 [dependencies]
 protobuf = { version = "3.0.0-pre", git = "https://github.com/stepancheg/rust-protobuf" }
-tokio = { version = "1.7", features = ["full"] }
+tokio = { version = "1.10", features = ["full"] }
 tokio-util = { version = "0.6", features = ["full"] }
 futures = "0.3"
 bytes = "1.0"
