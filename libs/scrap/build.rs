@@ -10,12 +10,8 @@ fn find_package(name: &str) -> Vec<PathBuf> {
     let mut target_arch = std::env::var("CARGO_CFG_TARGET_ARCH").unwrap();
     if target_arch == "x86_64" {
         target_arch = "x64".to_owned();
-    } else if target_arch == "i686" {
-        target_arch = "x86".to_owned();
     } else if target_arch == "aarch64" {
         target_arch = "arm64".to_owned();
-    } else {
-        target_arch = "arm".to_owned();
     }
     let mut target = if target_os == "macos" {
         "x64-osx".to_owned()
@@ -24,7 +20,7 @@ fn find_package(name: &str) -> Vec<PathBuf> {
     } else {
         format!("{}-{}", target_arch, target_os)
     };
-    if target_arch == "i686" {
+    if target_arch == "x86" {
         target = target.replace("x64", "x86");
     }
     println!("cargo:info={}", target);
