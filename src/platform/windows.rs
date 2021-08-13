@@ -398,6 +398,9 @@ extern "C" {
     fn drawOutline(out: *mut u8, in_: *const u8, width: i32, height: i32, out_size: i32);
     fn get_di_bits(out: *mut u8, dc: HDC, hbmColor: HBITMAP, width: i32, height: i32) -> i32;
     fn blank_screen(v: BOOL);
+}
+
+extern "system" {
     fn BlockInput(v: BOOL) -> BOOL;
 }
 
@@ -580,7 +583,7 @@ async fn send_close_async(postfix: &str) -> ResultType<()> {
 // https://www.cnblogs.com/doutu/p/4892726.html
 fn send_sas() {
     #[link(name = "sas")]
-    extern "C" {
+    extern "system" {
         pub fn SendSAS(AsUser: BOOL);
     }
     unsafe {
@@ -707,7 +710,7 @@ pub fn is_root() -> bool {
 }
 
 pub fn lock_screen() {
-    extern "C" {
+    extern "system" {
         pub fn LockWorkStation() -> BOOL;
     }
     unsafe {
