@@ -174,5 +174,6 @@ Color str2color(String str, [alpha = 0xFF]) {
   for (var i = 0; i < str.length; i += 1) {
     hash = str.codeUnitAt(i) + ((hash << 5) - hash);
   }
-  return Color((hash & 0xFFFFFF) | (alpha << 24));
+  hash = hash % 16777216;
+  return Color((hash & 0xFF7FFF) | (alpha << 24));
 }

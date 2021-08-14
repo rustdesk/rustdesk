@@ -746,6 +746,7 @@ final langs = <String, Map<String, String>>{
     'Remote ID': '远程ID',
     'Paste': '粘贴',
     'Are you sure to close the connection?': '是否确认关闭连接？',
+    'Download new version': '下载新版本',
   },
   'en': <String, String>{}
 };

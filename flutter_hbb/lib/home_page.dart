@@ -7,6 +7,7 @@ import 'dart:async';
 import 'common.dart';
 import 'model.dart';
 import 'remote_page.dart';
+import 'dart:io';
 
 class HomePage extends StatefulWidget {
   HomePage({Key key, this.title}) : super(key: key);
@@ -24,10 +25,12 @@ class _HomePageState extends State<HomePage> {
   @override
   void initState() {
     super.initState();
-    Timer(Duration(seconds: 5), () {
-      _updateUrl = FFI.getByName('software_update_url');
-      if (_updateUrl.isNotEmpty) setState(() {});
-    });
+    if (Platform.isAndroid) {
+      Timer(Duration(seconds: 5), () {
+        _updateUrl = FFI.getByName('software_update_url');
+        if (_updateUrl.isNotEmpty) setState(() {});
+      });
+    }
   }
 
   @override
@@ -87,7 +90,7 @@ class _HomePageState extends State<HomePage> {
                             width: double.infinity,
                             color: Colors.pinkAccent,
                             padding: EdgeInsets.symmetric(vertical: 12),
-                            child: Text('Download new version',
+                            child: Text(translate('Download new version'),
                                 style: TextStyle(
                                     color: Colors.white,
                                     fontWeight: FontWeight.bold)))),
@@ -248,7 +251,7 @@ class _HomePageState extends State<HomePage> {
                     leading: Container(
                         padding: const EdgeInsets.all(6),
                         child: getPlatformImage('${p.platform}'),
-                        color: str2color('${p.id}${p.platform}', 0x77)),
+                        color: str2color('${p.id}${p.platform}', 0x7f)),
                   )))));
     });
     return Wrap(children: cards);
