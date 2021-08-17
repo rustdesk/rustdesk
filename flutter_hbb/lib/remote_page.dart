@@ -156,6 +156,7 @@ class _RemotePageState extends State<RemotePage> {
   void openKeyboard() {
     // destroy first, so that our _value trick can work
     _value = initText;
+    resetMouse();
     setState(() => _showKeyboard = false);
     _timer?.cancel();
     _timer = Timer(Duration(milliseconds: 30), () {
@@ -169,6 +170,13 @@ class _RemotePageState extends State<RemotePage> {
         _focusNode.requestFocus();
       });
     });
+  }
+
+  void resetMouse() {
+    _drag = false;
+    _scroll = false;
+    _right = false;
+    _mouseTools = false;
   }
 
   @override
@@ -300,12 +308,7 @@ class _RemotePageState extends State<RemotePage> {
                 onScaleEnd: (details) {
                   if (_drag) {
                     FFI.sendMouse('up', 'left');
-                    setState(() {
-                      _drag = false;
-                      _scroll = false;
-                      _right = false;
-                      _mouseTools = false;
-                    });
+                    setState(resetMouse);
                   } else if (_scroll) {
                     var dy = (_yOffset - _yOffset0) / 10;
                     if (dy.abs() > 0.1) {
