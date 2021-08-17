@@ -29,6 +29,7 @@ final ButtonStyle flatButtonStyle = TextButton.styleFrom(
   ),
 );
 
+void Function() loadingCancelCallback = null;
 void showLoading(String text, BuildContext context) {
   if (_hasDialog && context != null) {
     Navigator.pop(context);
@@ -52,7 +53,10 @@ void showLoading(String text, BuildContext context) {
               child: TextButton(
                   style: flatButtonStyle,
                   onPressed: () {
-                    dismissLoading();
+                    // with out loadingCancelCallback, we can see unexpected input password
+                    // dialog shown in home, no clue why, so use this as workaround
+                    // why no such issue on android?
+                    if (loadingCancelCallback != null) loadingCancelCallback();
                     Navigator.pop(context);
                   },
                   child: Text(Translator.call('Cancel'),

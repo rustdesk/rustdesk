@@ -52,18 +52,20 @@ class _RemotePageState extends State<RemotePage> {
           Timer.periodic(Duration(milliseconds: 30), (timer) => interval());
     });
     Wakelock.enable();
+    loadingCancelCallback = () => _interval.cancel();
   }
 
   @override
   void dispose() {
     _focusNode.dispose();
-    super.dispose();
     FFI.close();
+    loadingCancelCallback = null;
     _interval.cancel();
     _timer?.cancel();
     dismissLoading();
     SystemChrome.setEnabledSystemUIOverlays(SystemUiOverlay.values);
     Wakelock.disable();
+    super.dispose();
   }
 
   void resetTool() {
