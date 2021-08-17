@@ -8,6 +8,7 @@ import 'package:tuple/tuple.dart';
 import 'package:wakelock/wakelock.dart';
 import 'common.dart';
 import 'model.dart';
+import 'dart:io';
 
 final initText = '\1' * 1024;
 
@@ -37,7 +38,7 @@ class _RemotePageState extends State<RemotePage> {
   var _more = true;
   var _fn = false;
   final FocusNode _focusNode = FocusNode();
-  var _showEdit = true;
+  var _showEdit = false;
   var _reconnects = 1;
 
   @override
@@ -172,6 +173,8 @@ class _RemotePageState extends State<RemotePage> {
   @override
   Widget build(BuildContext context) {
     final pi = Provider.of<FfiModel>(context).pi;
+    final hideKeyboard = Platform.isIOS && _showEdit;
+    final showActionButton = !_showBar || hideKeyboard;
     EasyLoading.instance.loadingStyle = EasyLoadingStyle.light;
     return WillPopScope(
       onWillPop: () async {
@@ -179,14 +182,21 @@ class _RemotePageState extends State<RemotePage> {
         return false;
       },
       child: Scaffold(
-          floatingActionButton: _showBar
+          floatingActionButton: !showActionButton
               ? null
               : FloatingActionButton(
-                  mini: true,
-                  child: Icon(Icons.expand_less),
+                  mini: !hideKeyboard,
+                  child: Icon(
+                      hideKeyboard ? Icons.expand_more : Icons.expand_less),
                   backgroundColor: MyTheme.accent50,
                   onPressed: () {
-                    setState(() => _showBar = !_showBar);
+                    setState(() {
+                      if (hideKeyboard) {
+                        _showEdit = !_showEdit;
+                      } else {
+                        _showBar = !_showBar;
+                      }
+                    });
                   }),
           bottomNavigationBar: _showBar && pi.displays != null
               ? BottomAppBar(
@@ -337,18 +347,19 @@ class _RemotePageState extends State<RemotePage> {
   }
 
   Widget getHelpTools() {
-    final keyboard = _bottom >= 100;
+    final keyboard = _showEdit;
     if (!_mouseTools && !keyboard) {
       return SizedBox();
     }
+    final size = MediaQuery.of(context).size;
     var wrap =
         (String text, void Function() onPressed, [bool active, IconData icon]) {
       return TextButton(
           style: TextButton.styleFrom(
             minimumSize: Size(0, 0),
             padding: EdgeInsets.symmetric(
-                vertical: icon != null ? 3 : 6,
-                horizontal: 6), //adds padding inside the button
+                vertical: 10,
+                horizontal: 9.75), //adds padding inside the button
             tapTargetSize: MaterialTapTargetSize
                 .shrinkWrap, //limits the touch area to the button area
             shape: RoundedRectangleBorder(
@@ -394,22 +405,22 @@ class _RemotePageState extends State<RemotePage> {
     final pi = FFI.ffiModel.pi;
     final isMac = pi.platform == "Mac OS";
     final modifiers = <Widget>[
-      wrap('Ctrl', () {
+      wrap('Ctrl ', () {
         setState(() => FFI.ctrl = !FFI.ctrl);
       }, FFI.ctrl),
-      wrap('Alt', () {
+      wrap(' Alt ', () {
         setState(() => FFI.alt = !FFI.alt);
       }, FFI.alt),
       wrap('Shift', () {
         setState(() => FFI.shift = !FFI.shift);
       }, FFI.shift),
-      wrap(isMac ? 'Cmd' : 'Win', () {
+      wrap(isMac ? ' Cmd ' : ' Win ', () {
         setState(() => FFI.command = !FFI.command);
       }, FFI.command),
     ];
     final keys = <Widget>[
       wrap(
-          'Fn',
+          ' Fn ',
           () => setState(
                 () {
                   _fn = !_fn;
@@ -420,7 +431,7 @@ class _RemotePageState extends State<RemotePage> {
               ),
           _fn),
       wrap(
-          '...',
+          ' ... ',
           () => setState(
                 () {
                   _more = !_more;
@@ -460,7 +471,7 @@ class _RemotePageState extends State<RemotePage> {
       wrap('PgUp', () {
         FFI.inputKey('VK_PRIOR');
       }),
-      wrap('PgDown', () {
+      wrap('PgDn', () {
         FFI.inputKey('VK_NEXT');
       }),
       SizedBox(width: 9999),
@@ -486,13 +497,14 @@ class _RemotePageState extends State<RemotePage> {
         sendPrompt(isMac, 'VK_S');
       }),
     ];
+    final space = size.width > 320 ? 4.0 : 2.0;
     return Container(
         color: Color(0xAA000000),
         padding: EdgeInsets.only(
-            top: keyboard ? 24 : 4, left: 8, right: 8, bottom: 8),
+            top: keyboard ? 24 : 4, left: 0, right: 0, bottom: 8),
         child: Wrap(
-          spacing: 4,
-          runSpacing: 4,
+          spacing: space,
+          runSpacing: space,
           children: <Widget>[SizedBox(width: 9999)] +
               (keyboard
                   ? modifiers + keys + (_fn ? fn : []) + (_more ? more : [])
