@@ -38,7 +38,7 @@ class _RemotePageState extends State<RemotePage> {
   var _more = true;
   var _fn = false;
   final FocusNode _focusNode = FocusNode();
-  var _showEdit = false;
+  var _showKeyboard = false;
   var _reconnects = 1;
 
   @override
@@ -78,6 +78,7 @@ class _RemotePageState extends State<RemotePage> {
       setState(() {
         _bottom = v;
         if (v < 100) {
+          _showKeyboard = false;
           SystemChrome.setEnabledSystemUIOverlays([]);
         }
       });
@@ -155,12 +156,12 @@ class _RemotePageState extends State<RemotePage> {
   void openKeyboard() {
     // destroy first, so that our _value trick can work
     _value = initText;
-    setState(() => _showEdit = false);
+    setState(() => _showKeyboard = false);
     _timer?.cancel();
     _timer = Timer(Duration(milliseconds: 30), () {
       // show now, and sleep a while to requestFocus to
       // make sure edit ready, so that keyboard wont show/hide/show/hide happen
-      setState(() => _showEdit = true);
+      setState(() => _showKeyboard = true);
       _timer?.cancel();
       _timer = Timer(Duration(milliseconds: 30), () {
         SystemChrome.setEnabledSystemUIOverlays(SystemUiOverlay.values);
@@ -173,7 +174,7 @@ class _RemotePageState extends State<RemotePage> {
   @override
   Widget build(BuildContext context) {
     final pi = Provider.of<FfiModel>(context).pi;
-    final hideKeyboard = Platform.isIOS && _showEdit;
+    final hideKeyboard = Platform.isIOS && _showKeyboard;
     final showActionButton = !_showBar || hideKeyboard;
     EasyLoading.instance.loadingStyle = EasyLoadingStyle.light;
     return WillPopScope(
@@ -192,7 +193,7 @@ class _RemotePageState extends State<RemotePage> {
                   onPressed: () {
                     setState(() {
                       if (hideKeyboard) {
-                        _showEdit = !_showEdit;
+                        _showKeyboard = !_showKeyboard;
                       } else {
                         _showBar = !_showBar;
                       }
@@ -222,7 +223,7 @@ class _RemotePageState extends State<RemotePage> {
                           color: Colors.white,
                           icon: Icon(Icons.tv),
                           onPressed: () {
-                            setState(() => _showEdit = false);
+                            setState(() => _showKeyboard = false);
                             showOptions(context);
                           },
                         ),
@@ -243,7 +244,7 @@ class _RemotePageState extends State<RemotePage> {
                           color: Colors.white,
                           icon: Icon(Icons.more_vert),
                           onPressed: () {
-                            setState(() => _showEdit = false);
+                            setState(() => _showKeyboard = false);
                             showActions(context);
                           },
                         ),
@@ -323,7 +324,7 @@ class _RemotePageState extends State<RemotePage> {
                       SizedBox(
                         width: 0,
                         height: 0,
-                        child: !_showEdit
+                        child: !_showKeyboard
                             ? Container()
                             : TextFormField(
                                 textInputAction: TextInputAction.newline,
@@ -347,7 +348,7 @@ class _RemotePageState extends State<RemotePage> {
   }
 
   Widget getHelpTools() {
-    final keyboard = _showEdit;
+    final keyboard = _showKeyboard;
     if (!_mouseTools && !keyboard) {
       return SizedBox();
     }
