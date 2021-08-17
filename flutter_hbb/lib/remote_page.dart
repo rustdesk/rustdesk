@@ -115,17 +115,49 @@ class _RemotePageState extends State<RemotePage> {
   }
 
   void handleInput(String newValue) {
-    if (_value[0] == '\1' && newValue[0] != '\1') {
-      // clipboard
-      _value = '';
+    var oldValue = _value;
+    _value = newValue;
+    if (Platform.isIOS) {
+      var i = newValue.length - 1;
+      for (; i >= 0 && newValue[i] != '\1'; --i) {}
+      var j = oldValue.length - 1;
+      for (; j >= 0 && oldValue[j] != '\1'; --j) {}
+      if (i < j) j = i;
+      newValue = newValue.substring(j + 1);
+      oldValue = oldValue.substring(j + 1);
+      var common = 0;
+      for (;
+          common < oldValue.length &&
+              common < newValue.length &&
+              newValue[common] == oldValue[common];
+          ++common);
+      for (i = 0; i < oldValue.length - common; ++i) {
+        FFI.inputKey('VK_BACK');
+      }
+      if (newValue.length > common) {
+        var s = newValue.substring(common);
+        if (s.length > 1) {
+          FFI.setByName('input_string', s);
+        } else {
+          inputChar(s);
+        }
+      }
+      return;
     }
-    if (newValue.length <= _value.length) {
+    if (oldValue.length > 0 &&
+        newValue.length > 0 &&
+        oldValue[0] == '\1' &&
+        newValue[0] != '\1') {
+      // clipboard
+      oldValue = '';
+    }
+    if (newValue.length <= oldValue.length) {
       final char = 'VK_BACK';
       FFI.inputKey(char);
     } else {
-      final content = newValue.substring(_value.length);
+      final content = newValue.substring(oldValue.length);
       if (content.length > 1) {
-        if (_value != '' &&
+        if (oldValue != '' &&
             content.length == 2 &&
             (content == '""' ||
                 content == '()' ||
@@ -143,14 +175,18 @@ class _RemotePageState extends State<RemotePage> {
         }
         FFI.setByName('input_string', content);
       } else {
-        var char = content;
-        if (char == '\n') {
-          char = 'VK_RETURN';
-        }
-        FFI.inputKey(char);
+        inputChar(content);
       }
     }
-    _value = newValue;
+  }
+
+  void inputChar(String char) {
+    if (char == '\n') {
+      char = 'VK_RETURN';
+    } else if (char == ' ') {
+      char = 'VK_SPACE';
+    }
+    FFI.inputKey(char);
   }
 
   void openKeyboard() {
