@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'dart:async';
 import 'package:flutter_easyloading/flutter_easyloading.dart';
 import 'package:tuple/tuple.dart';
+import 'dart:io';
 
 typedef F = String Function(String);
 
@@ -33,16 +34,36 @@ void showLoading(String text, BuildContext context) {
     Navigator.pop(context);
   }
   dismissLoading();
-  EasyLoading.show(status: text, maskType: EasyLoadingMaskType.black);
+  if (Platform.isAndroid) {
+    EasyLoading.show(status: text, maskType: EasyLoadingMaskType.black);
+    return;
+  }
+  EasyLoading.showWidget(
+      Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Center(child: CircularProgressIndicator()),
+          SizedBox(height: 20),
+          Center(
+              child:
+                  Text(Translator.call(text), style: TextStyle(fontSize: 15))),
+          SizedBox(height: 20),
+          Center(
+              child: TextButton(
+                  style: flatButtonStyle,
+                  onPressed: () {
+                    dismissLoading();
+                    Navigator.pop(context);
+                  },
+                  child: Text(Translator.call('Cancel'),
+                      style: TextStyle(color: MyTheme.accent))))
+        ],
+      ),
+      maskType: EasyLoadingMaskType.black);
 }
 
 void dismissLoading() {
   EasyLoading.dismiss();
-}
-
-void showSuccess(String text) {
-  dismissLoading();
-  EasyLoading.showSuccess(text, maskType: EasyLoadingMaskType.black);
 }
 
 bool _hasDialog = false;
