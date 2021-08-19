@@ -25,6 +25,7 @@ class App extends StatelessWidget {
                 child: ChangeNotifierProvider.value(
                     value: FFI.canvasModel,
                     child: MaterialApp(
+                      debugShowCheckedModeBanner: false,
                       title: 'RustDesk',
                       theme: ThemeData(
                         primarySwatch: Colors.blue,

@@ -357,29 +357,33 @@ class _RemotePageState extends State<RemotePage> {
                   }
                 },
                 child: Container(
-                    color: MyTheme.canvasColor,
-                    child: Stack(children: [
-                      ImagePaint(),
-                      CursorPaint(),
-                      getHelpTools(),
-                      SizedBox(
-                        width: 0,
-                        height: 0,
-                        child: !_showKeyboard
-                            ? Container()
-                            : TextFormField(
-                                textInputAction: TextInputAction.newline,
-                                autocorrect: false,
-                                enableSuggestions: false,
-                                focusNode: _focusNode,
-                                maxLines: null,
-                                initialValue:
-                                    _value, // trick way to make backspace work always
-                                keyboardType: TextInputType.multiline,
-                                onChanged: handleInput,
+                    color: Colors.black,
+                    child: SafeArea(
+                        child: Container(
+                            color: MyTheme.canvasColor,
+                            child: Stack(children: [
+                              ImagePaint(),
+                              CursorPaint(),
+                              getHelpTools(),
+                              SizedBox(
+                                width: 0,
+                                height: 0,
+                                child: !_showKeyboard
+                                    ? Container()
+                                    : TextFormField(
+                                        textInputAction:
+                                            TextInputAction.newline,
+                                        autocorrect: false,
+                                        enableSuggestions: false,
+                                        focusNode: _focusNode,
+                                        maxLines: null,
+                                        initialValue:
+                                            _value, // trick way to make backspace work always
+                                        keyboardType: TextInputType.multiline,
+                                        onChanged: handleInput,
+                                      ),
                               ),
-                      ),
-                    ]))),
+                            ]))))),
           )),
     );
   }
