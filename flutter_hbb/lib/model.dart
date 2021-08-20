@@ -566,6 +566,7 @@ class FFI {
   }
 
   static Uint8List getRgba() {
+    if (_getRgba == null) return null;
     _lastRgbaFrame = _getRgba();
     if (_lastRgbaFrame == null || _lastRgbaFrame == nullptr) return null;
     final ref = _lastRgbaFrame.ref;
@@ -606,6 +607,7 @@ class FFI {
   }
 
   static void setByName(String name, [String value = '']) {
+    if (_setByName == null) return;
     var a = name.toNativeUtf8();
     var b = value.toNativeUtf8();
     _setByName(a, b);
@@ -614,6 +616,7 @@ class FFI {
   }
 
   static String getByName(String name, [String arg = '']) {
+    if (_getByName == null) return '';
     var a = name.toNativeUtf8();
     var b = arg.toNativeUtf8();
     var p = _getByName(a, b);
@@ -630,17 +633,17 @@ class FFI {
         ? DynamicLibrary.open('librustdesk.so')
         : DynamicLibrary.process();
     print('initializing FFI');
-    _getByName = dylib.lookupFunction<F2, F2>('get_by_name');
-    _setByName =
-        dylib.lookupFunction<Void Function(Pointer<Utf8>, Pointer<Utf8>), F3>(
-            'set_by_name');
-    _freeRgba = dylib
-        .lookupFunction<Void Function(Pointer<RgbaFrame>), F4>('free_rgba');
-    _getRgba = dylib.lookupFunction<F5, F5>('get_rgba');
-    _dir = (await getApplicationDocumentsDirectory()).path;
-    String id = 'NA';
-    String name = 'Flutter';
     try {
+      _getByName = dylib.lookupFunction<F2, F2>('get_by_name');
+      _setByName =
+          dylib.lookupFunction<Void Function(Pointer<Utf8>, Pointer<Utf8>), F3>(
+              'set_by_name');
+      _freeRgba = dylib
+          .lookupFunction<Void Function(Pointer<RgbaFrame>), F4>('free_rgba');
+      _getRgba = dylib.lookupFunction<F5, F5>('get_rgba');
+      _dir = (await getApplicationDocumentsDirectory()).path;
+      String id = 'NA';
+      String name = 'Flutter';
       DeviceInfoPlugin deviceInfo = DeviceInfoPlugin();
       if (Platform.isAndroid) {
         AndroidDeviceInfo androidInfo = await deviceInfo.androidInfo;
@@ -651,12 +654,12 @@ class FFI {
         name = iosInfo.utsname.machine;
         id = iosInfo.identifierForVendor.hashCode.toString();
       }
+      setByName('info1', id);
+      setByName('info2', name);
+      setByName('init', _dir);
     } catch (e) {
       print(e);
     }
-    setByName('info1', id);
-    setByName('info2', name);
-    setByName('init', _dir);
   }
 }
 
