@@ -974,7 +974,7 @@ netsh advfirewall firewall delete rule name=\"{app_name} Service\"
 
 fn write_cmds(cmds: String, ext: &str) -> ResultType<std::path::PathBuf> {
     let mut tmp = std::env::temp_dir();
-    tmp.push(format!("{}_{}.{}", APP_NAME, crate::get_time(), ext));
+    tmp.push(format!("{}_{:?}.{}", APP_NAME, cmds.as_ptr(), ext));
     let mut cmds = cmds;
     if ext == "cmd" {
         cmds = format!("{}\ndel /f \"{}\"", cmds, tmp.to_str().unwrap_or(""));
