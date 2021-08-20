@@ -1,4 +1,4 @@
-pub use copypasta::{ClipboardContext, ClipboardProvider};
+pub use arboard::Clipboard as ClipboardContext;
 use hbb_common::{
     allow_err,
     compress::{compress as compress_func, decompress},
@@ -70,7 +70,7 @@ pub fn check_clipboard(
 ) -> Option<Message> {
     let side = if old.is_none() { "host" } else { "client" };
     let old = if let Some(old) = old { old } else { &CONTENT };
-    if let Ok(content) = ctx.get_contents() {
+    if let Ok(content) = ctx.get_text() {
         if content.len() < 2_000_000 && !content.is_empty() {
             let changed = content != *old.lock().unwrap();
             if changed {
@@ -95,7 +95,7 @@ pub fn update_clipboard(clipboard: Clipboard, old: Option<&Arc<Mutex<String>>>) 
                 let side = if old.is_none() { "host" } else { "client" };
                 let old = if let Some(old) = old { old } else { &CONTENT };
                 *old.lock().unwrap() = content.clone();
-                allow_err!(ctx.set_contents(content));
+                allow_err!(ctx.set_text(content));
                 log::debug!("{} updated on {}", CLIPBOARD_NAME, side);
             }
             Err(err) => {

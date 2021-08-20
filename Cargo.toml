@@ -39,7 +39,6 @@ samplerate = { version = "0.2", optional = true }
 async-trait = "0.1"
 crc32fast = "1.2"
 uuid = { version = "0.8", features = ["v4"] }
-copypasta = "0.7"
 clap = "2.33"
 rpassword = "5.0"
 
@@ -51,6 +50,7 @@ machine-uid = "0.2"
 mac_address = "1.1"
 sciter-rs = { git = "https://github.com/open-trade/rust-sciter", branch = "dyn" }
 ctrlc = "3.2"
+arboard = "2.0"
 
 [target.'cfg(target_os = "windows")'.dependencies]
 #systray = { git = "https://github.com/open-trade/systray-rs" }
