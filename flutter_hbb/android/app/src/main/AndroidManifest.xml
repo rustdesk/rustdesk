@@ -2,9 +2,7 @@
     package="com.carriez.flutter_hbb">
    <application
         android:label="RustDesk"
-        android:icon="@mipmap/ic_launcher"
-        android:extractNativeLibs="true"
-        tools:replace="android:extractNativeLibs">
+        android:icon="@mipmap/ic_launcher">
         <activity
             android:name=".MainActivity"
             android:launchMode="singleTop"
