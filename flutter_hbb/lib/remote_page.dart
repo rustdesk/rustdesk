@@ -40,6 +40,7 @@ class _RemotePageState extends State<RemotePage> {
   final FocusNode _focusNode = FocusNode();
   var _showKeyboard = false;
   var _reconnects = 1;
+  var _touchMode = false;
 
   @override
   void initState() {
@@ -53,6 +54,7 @@ class _RemotePageState extends State<RemotePage> {
     });
     Wakelock.enable();
     loadingCancelCallback = () => _interval.cancel();
+    _touchMode = FFI.getByName('peer_option', "touch-mode") != '';
   }
 
   @override
@@ -306,59 +308,65 @@ class _RemotePageState extends State<RemotePage> {
                 )
               : null,
           body: FlutterEasyLoading(
-            child: GestureDetector(
-                onLongPress: () {
-                  if (_drag || _scroll) return;
-                  FFI.tap(true);
-                },
-                onTap: () {
-                  if (_drag || _scroll) return;
-                  FFI.tap(_right);
-                },
-                onScaleStart: (details) {
-                  _scale = 1;
-                  _xOffset = details.focalPoint.dx;
-                  _yOffset = _yOffset0 = details.focalPoint.dy;
-                  if (_drag) {
-                    FFI.sendMouse('down', 'left');
-                  }
-                },
-                onScaleUpdate: (details) {
-                  var scale = details.scale;
-                  if (scale == 1) {
-                    if (!_scroll) {
-                      var x = details.focalPoint.dx;
-                      var y = details.focalPoint.dy;
-                      var dx = x - _xOffset;
-                      var dy = y - _yOffset;
-                      FFI.cursorModel.updatePan(dx, dy);
-                      _xOffset = x;
-                      _yOffset = y;
-                    } else {
-                      _xOffset = details.focalPoint.dx;
-                      _yOffset = details.focalPoint.dy;
-                    }
-                  } else if (!_drag && !_scroll) {
-                    FFI.canvasModel.updateScale(scale / _scale);
-                    _scale = scale;
-                  }
-                },
-                onScaleEnd: (details) {
-                  if (_drag) {
-                    FFI.sendMouse('up', 'left');
-                    setState(resetMouse);
-                  } else if (_scroll) {
-                    var dy = (_yOffset - _yOffset0) / 10;
-                    if (dy.abs() > 0.1) {
-                      if (dy > 0 && dy < 1) dy = 1;
-                      if (dy < 0 && dy > -1) dy = -1;
-                      FFI.scroll(dy);
-                    }
-                  }
-                },
-                child: Container(
-                    color: Colors.black,
-                    child: SafeArea(
+            child: Container(
+                color: Colors.black,
+                child: SafeArea(
+                    child: GestureDetector(
+                        onLongPress: () {
+                          if (_drag || _scroll) return;
+                          FFI.tap(true);
+                        },
+                        onTapUp: (details) {
+                          if (_drag || _scroll) return;
+                          if (_touchMode) {
+                            FFI.cursorModel.touch(details.localPosition.dx,
+                                details.localPosition.dy, _right);
+                          } else {
+                            FFI.tap(_right);
+                          }
+                        },
+                        onScaleStart: (details) {
+                          _scale = 1;
+                          _xOffset = details.focalPoint.dx;
+                          _yOffset = _yOffset0 = details.focalPoint.dy;
+                          if (_drag) {
+                            FFI.sendMouse('down', 'left');
+                          }
+                        },
+                        onScaleUpdate: (details) {
+                          var scale = details.scale;
+                          if (scale == 1) {
+                            if (!_scroll) {
+                              var x = details.focalPoint.dx;
+                              var y = details.focalPoint.dy;
+                              var dx = x - _xOffset;
+                              var dy = y - _yOffset;
+                              FFI.cursorModel
+                                  .updatePan(dx, dy, _touchMode, _drag);
+                              _xOffset = x;
+                              _yOffset = y;
+                            } else {
+                              _xOffset = details.focalPoint.dx;
+                              _yOffset = details.focalPoint.dy;
+                            }
+                          } else if (!_drag && !_scroll) {
+                            FFI.canvasModel.updateScale(scale / _scale);
+                            _scale = scale;
+                          }
+                        },
+                        onScaleEnd: (details) {
+                          if (_drag) {
+                            FFI.sendMouse('up', 'left');
+                            setState(resetMouse);
+                          } else if (_scroll) {
+                            var dy = (_yOffset - _yOffset0) / 10;
+                            if (dy.abs() > 0.1) {
+                              if (dy > 0 && dy < 1) dy = 1;
+                              if (dy < 0 && dy > -1) dy = -1;
+                              FFI.scroll(dy);
+                            }
+                          }
+                        },
                         child: Container(
                             color: MyTheme.canvasColor,
                             child: Stack(children: [
@@ -386,6 +394,92 @@ class _RemotePageState extends State<RemotePage> {
                             ]))))),
           )),
     );
+  }
+
+  void showActions(BuildContext context) {
+    final size = MediaQuery.of(context).size;
+    final x = 120.0;
+    final y = size.height;
+    final more = <PopupMenuItem<String>>[];
+    if (FFI.ffiModel.pi.version.isNotEmpty) {
+      more.add(PopupMenuItem<String>(
+          child: Text(translate('Refresh')), value: 'refresh'));
+    }
+    if (FFI.ffiModel.permissions['keyboard'] != false &&
+        FFI.ffiModel.permissions['clipboard'] != false) {
+      more.add(PopupMenuItem<String>(
+          child: Text(translate('Paste')), value: 'paste'));
+    }
+    more.add(PopupMenuItem<String>(
+        child: Row(
+            children: ([
+          Container(width: 100.0, child: Text(translate('OS Password'))),
+          TextButton(
+            style: flatButtonStyle,
+            onPressed: () {
+              Navigator.pop(context);
+              showSetOSPassword(context, false);
+            },
+            child: Icon(Icons.edit, color: MyTheme.accent),
+          )
+        ])),
+        value: 'enter_os_password'));
+    more.add(PopupMenuItem<String>(
+        child: Row(
+            children: ([
+          Container(width: 100.0, child: Text(translate('Touch mode'))),
+          Padding(padding: EdgeInsets.symmetric(horizontal: 16.0)),
+          Icon(
+              _touchMode
+                  ? Icons.check_box_outlined
+                  : Icons.check_box_outline_blank,
+              color: MyTheme.accent)
+        ])),
+        value: 'touch_mode'));
+    more.add(PopupMenuItem<String>(
+        child: Text(translate('Reset canvas')), value: 'reset_canvas'));
+    () async {
+      var value = await showMenu(
+        context: context,
+        position: RelativeRect.fromLTRB(x, y, x, y),
+        items: [
+              PopupMenuItem<String>(
+                  child: Text(translate('Insert') + ' Ctrl + Alt + Del'),
+                  value: 'cad'),
+              PopupMenuItem<String>(
+                  child: Text(translate('Insert Lock')), value: 'lock'),
+            ] +
+            more,
+        elevation: 8,
+      );
+      if (value == 'cad') {
+        FFI.setByName('ctrl_alt_del');
+      } else if (value == 'lock') {
+        FFI.setByName('lock_screen');
+      } else if (value == 'refresh') {
+        FFI.setByName('refresh');
+      } else if (value == 'paste') {
+        () async {
+          ClipboardData data = await Clipboard.getData(Clipboard.kTextPlain);
+          if (data.text != null) {
+            FFI.setByName('input_string', '${data.text}');
+          }
+        }();
+      } else if (value == 'enter_os_password') {
+        var password = FFI.getByName('peer_option', "os-password");
+        if (password != "") {
+          FFI.setByName('input_os_password', password);
+        } else {
+          showSetOSPassword(context, true);
+        }
+      } else if (value == 'touch_mode') {
+        _touchMode = !_touchMode;
+        final v = _touchMode ? 'Y' : '';
+        FFI.setByName('peer_option', '{"name": "touch-mode", "value": "${v}"}');
+      } else if (value == 'reset_canvas') {
+        FFI.cursorModel.reset();
+      }
+    }();
   }
 
   void close() {
@@ -804,72 +898,6 @@ void showOptions(BuildContext context) {
                 more),
         null);
   }, () async => true, true, 0);
-}
-
-void showActions(BuildContext context) {
-  final size = MediaQuery.of(context).size;
-  final x = 120.0;
-  final y = size.height;
-  final more = <PopupMenuItem<String>>[];
-  if (FFI.ffiModel.pi.version.isNotEmpty) {
-    more.add(PopupMenuItem<String>(
-        child: Text(translate('Refresh')), value: 'refresh'));
-  }
-  if (FFI.ffiModel.permissions['keyboard'] != false &&
-      FFI.ffiModel.permissions['clipboard'] != false) {
-    more.add(
-        PopupMenuItem<String>(child: Text(translate('Paste')), value: 'paste'));
-  }
-  more.add(PopupMenuItem<String>(
-      child: Row(
-          children: ([
-        Text(translate('OS Password')),
-        TextButton(
-          style: flatButtonStyle,
-          onPressed: () {
-            Navigator.pop(context);
-            showSetOSPassword(context, false);
-          },
-          child: Icon(Icons.edit),
-        )
-      ])),
-      value: 'enter_os_password'));
-  () async {
-    var value = await showMenu(
-      context: context,
-      position: RelativeRect.fromLTRB(x, y, x, y),
-      items: [
-            PopupMenuItem<String>(
-                child: Text(translate('Insert') + ' Ctrl + Alt + Del'),
-                value: 'cad'),
-            PopupMenuItem<String>(
-                child: Text(translate('Insert Lock')), value: 'lock'),
-          ] +
-          more,
-      elevation: 8,
-    );
-    if (value == 'cad') {
-      FFI.setByName('ctrl_alt_del');
-    } else if (value == 'lock') {
-      FFI.setByName('lock_screen');
-    } else if (value == 'refresh') {
-      FFI.setByName('refresh');
-    } else if (value == 'paste') {
-      () async {
-        ClipboardData data = await Clipboard.getData(Clipboard.kTextPlain);
-        if (data.text != null) {
-          FFI.setByName('input_string', '${data.text}');
-        }
-      }();
-    } else if (value == 'enter_os_password') {
-      var password = FFI.getByName('peer_option', "os-password");
-      if (password != "") {
-        FFI.setByName('input_os_password', password);
-      } else {
-        showSetOSPassword(context, true);
-      }
-    }
-  }();
 }
 
 void showSetOSPassword(BuildContext context, bool login) {

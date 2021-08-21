@@ -299,6 +299,7 @@ class CanvasModel with ChangeNotifier {
     _x = 0;
     _y = 0;
     _scale = 1.0;
+    notifyListeners();
   }
 }
 
@@ -341,8 +342,40 @@ class CursorModel with ChangeNotifier {
     return h - thresh;
   }
 
-  void updatePan(double dx, double dy) {
+  void touch(double x, double y, bool right) {
+    final scale = FFI.canvasModel.scale;
+    final xoffset = FFI.canvasModel.x;
+    final yoffset = FFI.canvasModel.y;
+    _x = (x - xoffset) / scale + _displayOriginX;
+    _y = (y - yoffset) / scale + _displayOriginY;
+    FFI.moveMouse(_x, _y);
+    FFI.tap(right);
+    notifyListeners();
+  }
+
+  void reset() {
+    _x = _displayOriginX;
+    _y = _displayOriginY;
+    FFI.moveMouse(_x, _y);
+    FFI.canvasModel.clear();
+    notifyListeners();
+  }
+
+  void updatePan(double dx, double dy, bool touchMode, bool drag) {
     if (FFI.imageModel.image == null) return;
+    if (touchMode) {
+      if (drag) {
+        final scale = FFI.canvasModel.scale;
+        _x += dx / scale;
+        _y += dy / scale;
+        FFI.moveMouse(_x, _y);
+        notifyListeners();
+      } else {
+        FFI.canvasModel.panX(dx);
+        FFI.canvasModel.panY(dy);
+      }
+      return;
+    }
     final scale = FFI.canvasModel.scale;
     dx /= scale;
     dy /= scale;
@@ -750,6 +783,8 @@ final langs = <String, Map<String, String>>{
     'Paste': '粘贴',
     'Are you sure to close the connection?': '是否确认关闭连接？',
     'Download new version': '下载新版本',
+    'Touch mode': '触屏模式',
+    'Reset canvas': '重置画布',
   },
   'en': <String, String>{}
 };
