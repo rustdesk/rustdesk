@@ -295,11 +295,11 @@ class CanvasModel with ChangeNotifier {
     notifyListeners();
   }
 
-  void clear() {
+  void clear([bool notify=false]) {
     _x = 0;
     _y = 0;
     _scale = 1.0;
-    notifyListeners();
+    if (notify) notifyListeners();
   }
 }
 
@@ -357,7 +357,7 @@ class CursorModel with ChangeNotifier {
     _x = _displayOriginX;
     _y = _displayOriginY;
     FFI.moveMouse(_x, _y);
-    FFI.canvasModel.clear();
+    FFI.canvasModel.clear(true);
     notifyListeners();
   }
 
