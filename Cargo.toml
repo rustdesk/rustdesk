@@ -43,7 +43,7 @@ clap = "2.33"
 rpassword = "5.0"
 
 [target.'cfg(not(any(target_os = "android")))'.dependencies]
-cpal = { git = "https://github.com/rustaudio/cpal" }
+cpal = { git = "https://github.com/open-trade/cpal" }
 
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
 machine-uid = "0.2"
