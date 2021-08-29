@@ -58,30 +58,23 @@ fn main() {
     if args.is_empty() {
         std::thread::spawn(move || start_server(false, false));
     } else {
-        if args[0] == "--uninstall" {
-            #[cfg(windows)]
-            {
+        #[cfg(windows)]
+        {
+            if args[0] == "--uninstall" {
                 if let Err(err) = platform::uninstall_me() {
                     log::error!("Failed to uninstall: {}", err);
                 }
                 return;
-            }
-        } else if args[0] == "--update" {
-            #[cfg(windows)]
-            {
+            } else if args[0] == "--update" {
                 hbb_common::allow_err!(platform::update_me());
                 return;
-            }
-        } else if args[0] == "--reinstall" {
-            #[cfg(windows)]
-            {
+            } else if args[0] == "--reinstall" {
                 hbb_common::allow_err!(platform::uninstall_me());
-                hbb_common::allow_err!(platform::install_me(
-                    "desktopicon startmenu",
-                ));
+                hbb_common::allow_err!(platform::install_me("desktopicon startmenu",));
                 return;
             }
-        } else if args[0] == "--remove" {
+        }
+        if args[0] == "--remove" {
             if args.len() == 2 {
                 // sleep a while so that process of removed exe exit
                 std::thread::sleep(std::time::Duration::from_secs(1));

@@ -517,7 +517,7 @@ dependencies = [
 [[package]]
 name = "cpal"
 version = "0.13.4"
-source = "git+https://github.com/rustaudio/cpal#959733011607148100032fca5fd18c48c98d5d92"
+source = "git+https://github.com/open-trade/cpal#6b0b769f3d8ea22abdc3a6ea0c74311bf0cfbac3"
 dependencies = [
  "alsa",
  "core-foundation-sys 0.8.2",
@@ -2852,7 +2852,7 @@ checksum = "08d43f7aa6b08d49f382cde6a7982047c3426db949b1424bc4b7ec9ae12c6ce2"
 
 [[package]]
 name = "rustdesk"
-version = "1.1.6"
+version = "1.1.8"
 dependencies = [
  "android_logger",
  "arboard",
