@@ -107,6 +107,7 @@ class _HomePageState extends State<HomePage> {
 
   void connect(String id) {
     if (id == '') return;
+    id = id.replaceAll(' ', '');
     () async {
       await Navigator.push<dynamic>(
         context,
