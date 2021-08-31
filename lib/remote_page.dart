@@ -38,7 +38,7 @@ class _RemotePageState extends State<RemotePage> {
   var _more = true;
   var _fn = false;
   final FocusNode _focusNode = FocusNode();
-  var _showKeyboard = false;
+  var _showEdit = false;
   var _reconnects = 1;
   var _touchMode = false;
 
@@ -75,6 +75,10 @@ class _RemotePageState extends State<RemotePage> {
     FFI.resetModifiers();
   }
 
+  bool isKeyboardShown() {
+    return _bottom >= 100;
+  }
+
   void interval() {
     var v = MediaQuery.of(context).viewInsets.bottom;
     if (v != _bottom) {
@@ -82,7 +86,6 @@ class _RemotePageState extends State<RemotePage> {
       setState(() {
         _bottom = v;
         if (v < 100) {
-          _showKeyboard = false;
           SystemChrome.setEnabledSystemUIOverlays([]);
         }
       });
@@ -197,12 +200,12 @@ class _RemotePageState extends State<RemotePage> {
     // destroy first, so that our _value trick can work
     _value = initText;
     resetMouse();
-    setState(() => _showKeyboard = false);
+    setState(() => _showEdit = false);
     _timer?.cancel();
     _timer = Timer(Duration(milliseconds: 30), () {
       // show now, and sleep a while to requestFocus to
       // make sure edit ready, so that keyboard wont show/hide/show/hide happen
-      setState(() => _showKeyboard = true);
+      setState(() => _showEdit = true);
       _timer?.cancel();
       _timer = Timer(Duration(milliseconds: 30), () {
         SystemChrome.setEnabledSystemUIOverlays(SystemUiOverlay.values);
@@ -222,7 +225,7 @@ class _RemotePageState extends State<RemotePage> {
   @override
   Widget build(BuildContext context) {
     final pi = Provider.of<FfiModel>(context).pi;
-    final hideKeyboard = Platform.isIOS && _showKeyboard;
+    final hideKeyboard = isKeyboardShown() && _showEdit;
     final showActionButton = !_showBar || hideKeyboard;
     EasyLoading.instance.loadingStyle = EasyLoadingStyle.light;
     return WillPopScope(
@@ -241,7 +244,7 @@ class _RemotePageState extends State<RemotePage> {
                   onPressed: () {
                     setState(() {
                       if (hideKeyboard) {
-                        _showKeyboard = !_showKeyboard;
+                        _showEdit = false;
                       } else {
                         _showBar = !_showBar;
                       }
@@ -271,7 +274,7 @@ class _RemotePageState extends State<RemotePage> {
                           color: Colors.white,
                           icon: Icon(Icons.tv),
                           onPressed: () {
-                            setState(() => _showKeyboard = false);
+                            setState(() => _showEdit = false);
                             showOptions(context);
                           },
                         ),
@@ -292,7 +295,7 @@ class _RemotePageState extends State<RemotePage> {
                           color: Colors.white,
                           icon: Icon(Icons.more_vert),
                           onPressed: () {
-                            setState(() => _showKeyboard = false);
+                            setState(() => _showEdit = false);
                             showActions(context);
                           },
                         ),
@@ -314,7 +317,13 @@ class _RemotePageState extends State<RemotePage> {
                     child: GestureDetector(
                         onLongPress: () {
                           if (_drag || _scroll) return;
+                          // make right click and real left long click both work
+                          // should add "long press = right click" option?
+                          FFI.sendMouse('down', 'left');
                           FFI.tap(true);
+                        },
+                        onLongPressUp: () {
+                          FFI.sendMouse('up', 'left');
                         },
                         onTapUp: (details) {
                           if (_drag || _scroll) return;
@@ -376,7 +385,7 @@ class _RemotePageState extends State<RemotePage> {
                               SizedBox(
                                 width: 0,
                                 height: 0,
-                                child: !_showKeyboard
+                                child: !_showEdit
                                     ? Container()
                                     : TextFormField(
                                         textInputAction:
@@ -487,7 +496,7 @@ class _RemotePageState extends State<RemotePage> {
   }
 
   Widget getHelpTools() {
-    final keyboard = _showKeyboard;
+    final keyboard = isKeyboardShown();
     if (!_mouseTools && !keyboard) {
       return SizedBox();
     }
