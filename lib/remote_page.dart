@@ -158,7 +158,9 @@ class _RemotePageState extends State<RemotePage> {
       // clipboard
       oldValue = '';
     }
-    if (newValue.length <= oldValue.length) {
+    if (newValue.length == oldValue.length) {
+      // ?
+    } else if (newValue.length < oldValue.length) {
       final char = 'VK_BACK';
       FFI.inputKey(char);
     } else {
