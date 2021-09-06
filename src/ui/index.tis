@@ -544,7 +544,7 @@ class FixWayland: Reactor.Component {
         return <div .trust-me>
             <div>Warning</div>
             <div>Login screen using Wayland is not supported</div>
-            <div #fix-wayland .link>Fix it</div>
+            <div #fix-wayland .link>Disable it</div>
         </div>;
     }
 
