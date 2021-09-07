@@ -104,6 +104,10 @@ fn run(sp: GenericService) -> ResultType<()> {
     let start = time::Instant::now();
     let mut last_sent = time::Instant::now();
     let mut last_check_displays = time::Instant::now();
+    #[cfg(windows)]
+    let mut try_gdi = true;
+    #[cfg(windows)]
+    log::info!("gdi: {}", c.is_gdi());
     while sp.ok() {
         if *SWITCH.lock().unwrap() {
             bail!("SWITCH");
@@ -138,12 +142,22 @@ fn run(sp: GenericService) -> ResultType<()> {
                     let ms = (time.as_secs() * 1000 + time.subsec_millis() as u64) as i64;
                     handle_one_frame(&sp, &frame, ms, &mut crc, &mut vpx)?;
                     last_sent = now;
+                    #[cfg(windows)]
+                    {
+                        try_gdi = false;
+                    }
                 }
                 Err(ref e) if e.kind() == WouldBlock => {
                     // https://github.com/NVIDIA/video-sdk-samples/tree/master/nvEncDXGIOutputDuplicationSample
                     wait = WAIT_BASE - now.elapsed().as_millis() as i32;
                     if wait < 0 {
                         wait = 0
+                    }
+                    #[cfg(windows)]
+                    if try_gdi && !c.is_gdi() {
+                        c.set_gdi();
+                        try_gdi = false;
+                        log::info!("No image, fall back to gdi");
                     }
                     continue;
                 }
