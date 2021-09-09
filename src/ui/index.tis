@@ -360,7 +360,8 @@ class App: Reactor.Component
                     {is_can_screen_recording ? "": <CanScreenRecording />}
                     {is_can_screen_recording && !handler.is_process_trusted(false) ? <TrustMe /> : ""}
                     {system_error ? <SystemError /> : ""}
-                    {!system_error && handler.is_login_wayland() ? <FixWayland /> : ""}
+                    {!system_error && handler.is_login_wayland() && !handler.current_is_wayland() ? <FixWayland /> : ""}
+                    {!system_error && handler.current_is_wayland() ? <ModifyDefaultLogin /> : ""}
                 </div>
                 <div .right-pane>
                     <div .right-content>
@@ -544,12 +545,29 @@ class FixWayland: Reactor.Component {
         return <div .trust-me>
             <div>Warning</div>
             <div>Login screen using Wayland is not supported</div>
-            <div #fix-wayland .link>Disable it</div>
+            <div #fix-wayland .link>Fix it</div>
         </div>;
     }
 
     event click $(#fix-wayland) {
         handler.fix_login_wayland();
+        app.update();
+    }
+}
+
+class ModifyDefaultLogin: Reactor.Component {
+    function render() {
+        return <div .trust-me>
+            <div>Warning</div>
+            <div>Current Wayland display server is not supported</div>
+            <div #modify-default-login .link>Fix it(re-login required)</div>
+        </div>;
+    }
+
+    event click $(#modify-default-login) {
+        if (var r = handler.modify_default_login()) {
+            handler.msgbox("custom-error", "Error", r);
+        }
         app.update();
     }
 }

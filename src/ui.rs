@@ -456,6 +456,9 @@ impl UI {
         #[cfg(target_os = "linux")]
         {
             let dtype = crate::platform::linux::get_display_server();
+            if "wayland" == dtype {
+                return "".to_owned();
+            }
             if dtype != "x11" {
                 return format!("Unsupported display server type {}, x11 expected!", dtype);
             }
@@ -473,6 +476,18 @@ impl UI {
     fn fix_login_wayland(&mut self) {
         #[cfg(target_os = "linux")]
         return crate::platform::linux::fix_login_wayland();
+    }
+    
+    fn current_is_wayland(&mut self) -> bool {
+        #[cfg(target_os = "linux")]
+        return crate::platform::linux::current_is_wayland();
+        #[cfg(not(target_os = "linux"))]
+        return false;
+    }
+
+    fn modify_default_login(&mut self) -> String {
+        #[cfg(target_os = "linux")]
+        return crate::platform::linux::modify_default_login();
     }
 
     fn get_software_update_url(&self) -> String {
@@ -561,6 +576,8 @@ impl sciter::EventHandler for UI {
         fn get_error();
         fn is_login_wayland();
         fn fix_login_wayland();
+        fn current_is_wayland();
+        fn modify_default_login();
         fn get_options();
         fn get_option(String);
         fn get_peer_option(String, String);
