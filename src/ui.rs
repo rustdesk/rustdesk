@@ -488,6 +488,8 @@ impl UI {
     fn modify_default_login(&mut self) -> String {
         #[cfg(target_os = "linux")]
         return crate::platform::linux::modify_default_login();
+        #[cfg(not(target_os = "linux"))]
+        return "".to_owned();
     }
 
     fn get_software_update_url(&self) -> String {
