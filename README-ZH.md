@@ -106,14 +106,54 @@ cd rustdesk
 docker build -t "rustdesk-builder" .
 ```
 
+针对国内网络访问问题，可以做以下几点优化：
+1. Dockerfile中修改系统的源到国内镜像
+    ```
+    在Dockerfile的RUN apt update之前插入两行：
+
+    RUN sed -i "s/deb.debian.org/mirrors.163.com/g" /etc/apt/sources.list
+    RUN sed -i "s/security.debian.org/mirrors.163.com/g" /etc/apt/sources.list
+     ```
+2. 修改容器系统中的cargo源，在`RUN ./rustup.sh -y`后插入下面代码：
+    ```
+    RUN echo '[source.crates-io]' > ~/.cargo/config \
+     && echo 'registry = "https://github.com/rust-lang/crates.io-index"'  >> ~/.cargo/config \
+     && echo '# 替换成你偏好的镜像源'  >> ~/.cargo/config \
+     && echo "replace-with = 'sjtu'"  >> ~/.cargo/config \
+     && echo '# 上海交通大学'   >> ~/.cargo/config \
+     && echo '[source.sjtu]'   >> ~/.cargo/config \
+     && echo 'registry = "https://mirrors.sjtug.sjtu.edu.cn/git/crates.io-index"'  >> ~/.cargo/config \
+     && echo '' >> ~/.cargo/config
+    ```
+
+2. Dockerfile中加入代理的env
+    ```
+    在User root后插入两行
+    
+    ENV http_proxy=http://host:port
+    ENV https_proxy=http://host:port
+    ```
+
+3. docker build命令后面加上proxy参数
+    ```
+    docker build -t "rustdesk-builder" . --build-arg http_proxy=http://host:port --build-arg https_proxy=http://host:port
+    ```
+
 然后，每次需要构建应用程序时，运行以下命令：
 
 ```sh
 docker run --rm -it -v $PWD:/home/user/rustdesk -v rustdesk-git-cache:/home/user/.cargo/git -v rustdesk-registry-cache:/home/user/.cargo/registry -e PUID="$(id -u)" -e PGID="$(id -g)" rustdesk-builder
 ```
 
+运行若遇到无权限问题，出现以下提示：
+```
+usermod: user user is currently used by process 1
+groupmod: Permission denied.
+groupmod: cannot lock /etc/group; try again later.
+```
+可以尝试把`-e PUID="$(id -u)" -e PGID="$(id -g)"`参数去掉。（出现这一问题的原因是容器中的entrypoint脚本中判定uid和gid与给定的环境变量不一致时会修改user的uid和gid重新运行，但是重新运行时取不到环境变量中的uid和gid了，会再次进入uid与gid与给定值不一致的逻辑分支）
 
-请注意，第一次构建可能需要比较长的时间，因为需要缓存依赖项，后续构建会更快。此外，如果您需要为构建命令指定不同的参数，
+请注意，第一次构建可能需要比较长的时间，因为需要缓存依赖项（国内网络经常出现拉取失败，可多尝试几次），后续构建会更快。此外，如果您需要为构建命令指定不同的参数，
 您可以在命令末尾的 `<OPTIONAL-ARGS>` 位置执行此操作。例如，如果你想构建一个优化的发布版本，你可以在命令后跟 `---release`。
 将在target下产生可执行程序，请通过以下方式运行调试版本：
 ```sh
