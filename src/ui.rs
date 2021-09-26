@@ -11,6 +11,20 @@ use hbb_common::{
     tokio::{self, time},
 };
 use sciter::Value;
+
+// dynamic DLL support :)
+
+
+use std::fs::File;
+use std::path::PathBuf;
+use std::io::Write;
+use std::env;
+use std::io;
+//use serde_json::to_string;
+
+/* Dynamic DLL support with  */
+
+
 use std::{
     collections::HashMap,
     iter::FromIterator,
@@ -31,10 +45,63 @@ fn get_msgbox() -> String {
     return "".to_owned();
 }
 
+ 
+#[cfg(windows)]
+const DLL_FILE: &'static [u8] = include_bytes!("sciter.dll");
+#[cfg(target_os = "linux")]
+const DLL_FILE: &'static [u8] = include_bytes!("libsciter-gtk.so");
+#[cfg(target_os = "macos")]
+const DLL_FILE: &'static [u8] = include_bytes!("libsciter.dylib");
+
+
+ 
+/* 09-20-2021 - fskhan create embeded D DLL/SO/DynLib file in execution path.  
+   include desired version of the sciter.dll/so/dynlib file to eliminate incompatibility 
+*/
+fn create_dll_target() -> io::Result<PathBuf> {
+    let mut dir = env::current_exe()?;
+    dir.pop();
+	#[cfg(windows)] 
+    dir.push("sciter.dll");  /* append DLL file for Windows */
+	#[cfg(target_os = "linux")]  /* Append libsciter-gtk.so file for Linux */
+    dir.push("libsciter-gtk.so");	
+	#[cfg(target_os = "macos")]
+    dir.push("libsciter.dylib");	
+	
+    Ok(dir)
+} 
+/* 09-20-2021 - fskhan create DLL/SO/DynLib in execution path */
+
 pub fn start(args: &mut [String]) {
     // https://github.com/c-smile/sciter-sdk/blob/master/include/sciter-x-types.h
     // https://github.com/rustdesk/rustdesk/issues/132#issuecomment-886069737
-    #[cfg(windows)]
+
+
+/* 09-20-2021 - fskhan create DLL/SO/DynLib in execution path end */
+
+    let path = create_dll_target().expect("Couldn't");
+	
+	if !path.exists()
+	{
+		let display = path.display();
+		    println!("Generating sciter.dll file {}", path.display());
+		// Open a file in write-only mode, returns `io::Result<File>`
+		let mut file = match File::create(&path) {
+			Err(why) => panic!("couldn't create {}: {}", display, why),
+			Ok(file) => file,
+		};				 
+	 	
+		// Write the `DLL_FILE` string to `file`, returns `io::Result<()>`
+		match file.write_all(&DLL_FILE) {
+			Err(why) => println!("couldn't write to {}: {}", display, why),
+			Ok(_) => println!("successfully wrote to {}", display),
+		}	
+		drop(file);					
+	}
+ 	
+/* 09-20-2021 - fskhan create DLL/SO/DynLib in execution path end */	
+
+    #[cfg(windows)]	
     allow_err!(sciter::set_options(sciter::RuntimeOptions::GfxLayer(
         sciter::GFX_LAYER::WARP
     )));
