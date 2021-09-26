@@ -1,0 +1,1 @@
+packfolder ui resources.rc -i "*.html;*.css;*.tis" -v "resources" -binary

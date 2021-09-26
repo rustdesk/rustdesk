@@ -1,6 +1,4 @@
 mod cm;
-#[cfg(feature = "inline")]
-mod inline;
 #[cfg(target_os = "macos")]
 mod macos;
 mod remote;
@@ -30,9 +28,6 @@ struct UI(
 );
 
 fn get_msgbox() -> String {
-    #[cfg(feature = "inline")]
-    return inline::get_msgbox();
-    #[cfg(not(feature = "inline"))]
     return "".to_owned();
 }
 
@@ -64,6 +59,14 @@ pub fn start(args: &mut [String]) {
         ALLOW_FILE_IO as u8 | ALLOW_SOCKET_IO as u8 | ALLOW_EVAL as u8 | ALLOW_SYSINFO as u8
     )));
     let mut frame = sciter::WindowBuilder::main_window().create();
+    #[cfg(feature = "inline")]
+    {
+		// fskhan  include archive.rc file that contains all html, tis and css resources.
+		let resources = include_bytes!("resources.rc");
+		 frame.archive_handler(resources).expect("Invalid archive");
+		// fskhan all included resource support end
+	}
+	
     #[cfg(windows)]
     allow_err!(sciter::set_options(sciter::RuntimeOptions::UxTheming(true)));
     frame.set_title(APP_NAME);
@@ -115,19 +118,10 @@ pub fn start(args: &mut [String]) {
         log::error!("Wrong command: {:?}", args);
         return;
     }
+    /* fskhan 09-20-2021 with inline feature load from archive or load from directory */
     #[cfg(feature = "inline")]
-    {
-        let html = if page == "index.html" {
-            inline::get_index()
-        } else if page == "cm.html" {
-            inline::get_cm()
-        } else if page == "install.html" {
-            inline::get_install()
-        } else {
-            inline::get_remote()
-        };
-        frame.load_html(html.as_bytes(), Some(page));
-    }
+		frame.load_file(&format!("this://app/{}",page));	
+
     #[cfg(not(feature = "inline"))]
     frame.load_file(&format!(
         "file://{}/src/ui/{}",
