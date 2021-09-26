@@ -1,0 +1,265 @@
+var type, title, text, getParams, remember, retry, callback;
+
+function updateParams(params) {
+    type = params.type;
+    title = params.title;
+    text = params.text;
+    getParams = params.getParams;
+    remember = params.remember;
+    callback = params.callback;
+    retry = params.retry;
+    if (retry > 0) {
+        self.timer(retry * 1000, function() {
+            view.close({ reconnect: true });
+        });
+    }
+}
+
+var params = view.parameters;
+updateParams(params);
+
+var svg_eye_cross = <svg viewBox="0 -21 511.96 511">
+<path d="m506.68 261.88c7.043-16.984 7.043-36.461 0-53.461-41.621-100.4-140.03-165.27-250.71-165.27-46.484 0-90.797 11.453-129.64 32.191l-68.605-68.609c-8.3438-8.3398-21.824-8.3398-30.168 0-8.3398 8.3398-8.3398 21.824 0 30.164l271.49 271.49 86.484 86.488 68.676 68.672c4.1797 4.1797 9.6406 6.2695 15.102 6.2695 5.4609 0 10.922-2.0898 15.082-6.25 8.3438-8.3398 8.3438-21.824 0-30.164l-62.145-62.145c36.633-27.883 66.094-65.109 84.438-109.38zm-293.91-100.1c12.648-7.5742 27.391-11.969 43.199-11.969 47.062 0 85.332 38.273 85.332 85.336 0 15.805-4.3945 30.547-11.969 43.199z"/>
+<path d="m255.97 320.48c-47.062 0-85.336-38.273-85.336-85.332 0-3.0938 0.59766-6.0195 0.91797-9.0039l-106.15-106.16c-25.344 24.707-46.059 54.465-60.117 88.43-7.043 16.98-7.043 36.457 0 53.461 41.598 100.39 140.01 165.27 250.69 165.27 34.496 0 67.797-6.3164 98.559-18.027l-89.559-89.559c-2.9844 0.32031-5.9062 0.91797-9 0.91797z"/>
+</svg>;
+
+class Password: Reactor.Component {
+    this var visible = false;
+
+    function render() {
+        return <div .password>
+            <input name="password" type={this.visible ? "text" : "password"} .outline-focus />
+            {this.visible ? svg_eye_cross : svg_eye}
+        </div>;
+    }
+
+    event click $(svg) {
+        var el = this.$(input);
+        var value = el.value;
+        var start = el.xcall(#selectionStart) || 0;
+        var end = el.xcall(#selectionEnd);
+        this.update({ visible: !this.visible });
+        self.timer(30ms, function() {
+            var el = this.$(input);
+            view.focus = el;
+            el.value = value;
+            el.xcall(#setSelection, start, end);
+        });
+    }
+}
+
+var body;
+
+class Body: Reactor.Component {
+    function this() {
+        body = this;
+    }
+
+    function getIcon(color) {
+        if (type == "input-password") {
+            return <svg viewBox="0 0 505 505"><circle cx="252.5" cy="252.5" r="252.5" fill={color}/><path d="M271.9 246.1c29.2 17.5 67.6 13.6 92.7-11.5 29.7-29.7 29.7-77.8 0-107.4s-77.8-29.7-107.4 0c-25.1 25.1-29 63.5-11.5 92.7L118.1 347.4l26.2 26.2 26.4 26.4 10.6-10.6-10.1-10.1 9.7-9.7 10.1 10.1 10.6-10.6-10.1-10 9.7-9.7 10.1 10.1 10.6-10.6-26.4-26.3 76.4-76.5z" fill="#fff"/><circle cx="337.4" cy="154.4" r="17.7" fill={color}/></svg>;
+        }
+        if (type == "connecting") {
+            return <svg viewBox="0 0 300 300"><g fill={color}><path d="m221.76 89.414h-143.51c-1.432 0-2.594 1.162-2.594 2.594v95.963c0 1.432 1.162 2.594 2.594 2.594h143.51c1.432 0 2.594-1.162 2.594-2.594v-95.964c0-1.431-1.162-2.593-2.594-2.593z"/><path d="m150 0c-82.839 0-150 67.161-150 150s67.156 150 150 150 150-67.163 150-150-67.164-150-150-150zm92.508 187.97c0 11.458-9.29 20.749-20.749 20.749h-47.144v11.588h23.801c4.298 0 7.781 3.483 7.781 7.781s-3.483 7.781-7.781 7.781h-96.826c-4.298 0-7.781-3.483-7.781-7.781s3.483-7.781 7.781-7.781h23.801v-11.588h-47.145c-11.458 0-20.749-9.29-20.749-20.749v-95.963c0-11.458 9.29-20.749 20.749-20.749h143.51c11.458 0 20.749 9.29 20.749 20.749v95.963z"/></g><path d="m169.62 154.35c-5.0276-5.0336-11.97-8.1508-19.624-8.1508-7.6551 0-14.597 3.1172-19.624 8.1508l-11.077-11.091c7.8656-7.8752 18.725-12.754 30.701-12.754s22.835 4.8788 30.701 12.754l-11.077 11.091zm-32.184 7.0728 12.56 12.576 12.56-12.576c-3.2147-3.2172-7.6555-5.208-12.56-5.208-4.9054 0-9.3457 1.9908-12.56 5.208zm12.56-39.731c14.403 0 27.464 5.8656 36.923 15.338l11.078-11.091c-12.298-12.314-29.276-19.94-48-19.94-18.724 0-35.703 7.626-48 19.94l11.077 11.091c9.4592-9.4728 22.52-15.338 36.923-15.338z" fill="#fff"/></svg>;
+        }
+        if (type == "success") {
+            return <svg viewBox="0 0 512 512"><circle cx="256" cy="256" r="256" fill={color} /><path fill="#fff" d="M235.472 392.08l-121.04-94.296 34.416-44.168 74.328 57.904 122.672-177.016 46.032 31.888z"/></svg>;
+        }
+        if (type.indexOf("error") >= 0 || type == "re-input-password") {
+            return <svg viewBox="0 0 512 512"><ellipse cx="256" cy="256" rx="256" ry="255.832" fill={color}/><g fill="#fff"><path d="M376.812 337.18l-39.592 39.593-201.998-201.999 39.592-39.592z"/><path d="M376.818 174.825L174.819 376.824l-39.592-39.592 201.999-201.999z"/></g></svg>;
+        }
+        return <span />;
+    }
+
+    function getInputPasswordContent() {
+        var ts = remember ? { checked: true } : {};
+        return <div .form>
+            <div>Please enter your password</div>
+            <Password />
+            <div><button|checkbox(remember) {ts}>Remember password</button></div>
+        </div>;
+    }
+
+    function getContent() {
+        if (type == "input-password") {
+            return this.getInputPasswordContent();
+        }
+        return text;
+    }
+
+    function getColor() {
+        if (type == "input-password") {
+            return "#AD448E";
+        }
+        if (type == "success") {
+            return "#32bea6";
+        }
+        if (type.indexOf("error") >= 0 || type == "re-input-password") {
+            return "#e04f5f";
+        }
+        return "#2C8CFF";
+    }
+
+    function hasSkip() {
+        return type.indexOf("skip") >= 0;
+    }
+
+    function render() {
+        var color = this.getColor();
+        var icon = this.getIcon(color);
+        var content = this.getContent();
+        var hasCancel = type.indexOf("error") < 0 && type != "success" && type.indexOf("nocancel") < 0;
+        var hasOk = type != "connecting" && type.indexOf("nook") < 0;
+        var hasClose = type.indexOf("hasclose") >= 0;
+        var show_progress = type == "connecting";
+        self.style.set { border: color + " solid 1px" };
+        var me = this;
+        self.timer(1ms, function() {
+            if (typeof content == "string")
+                me.$(#content).html = content;
+            else
+                me.$(#content).content(content);
+        });
+        return (
+        <div style="size: *">
+            <header style={"height: 2em; background: " + color}>
+                <caption role="window-caption">{title}</caption>
+            </header>
+            <div style="padding: 1em 2em; size: *;">
+                <div style="height: *; flow: horizontal">
+                    {icon && <div style="height: *; margin: * 0; padding-right: 2em;">{icon}</div>}
+                    <div style="size: *; margin: * 0;" #content />
+                </div>
+                <div style="text-align: right;">
+                    <span #error />
+                    {show_progress ? <progress style={"color:" + color} /> : ""}
+                    {hasCancel || hasRetry ? <button .button #cancel .outline>{hasRetry ? "OK" : "Cancel"}</button> : ""}
+                    {this.hasSkip() ? <button .button #skip .outline>Skip</button> : ""}
+                    {hasOk || hasRetry ? <button .button #submit>{hasRetry ? "Retry" : "OK"}</button> : ""}
+                    {hasClose ? <button .button #cancel .outline>Close</button> : ""}
+                </div>
+            </div>
+        </div>);
+    }
+
+    event click $(.custom-event) (_, me) {
+        if (callback) callback(me);
+    }
+}
+
+$(body).content(<Body />);
+
+function submit() {
+    if ($(button#submit)) {
+        $(button#submit).sendEvent("click");
+    }
+}
+
+function cancel() {
+    if ($(button#cancel)) {
+        $(button#cancel).sendEvent("click");
+    }
+}
+
+event click $(button#cancel) {
+    view.close();
+    if (callback) callback(null);
+}
+
+event click $(button#skip) {
+    var values = getValues();
+    values.skip = true;
+    view.close(values);
+    if (callback) callback(values);
+}
+
+function getValues() {
+    var values = { type: type };
+    for (var el in $$(.form input)) {
+        values[el.attributes["name"]] = el.value;
+    }
+    for (var el in $$(.form textarea)) {
+        values[el.attributes["name"]] = el.value;
+    }
+    for (var el in $$(.form button)) {
+        values[el.attributes["name"]] = el.value;
+    }
+    if (type == "input-password") {
+        values.password = (values.password || "").trim();
+        if (!values.password) {
+            return;
+        }
+    }
+    return values;
+}
+
+event click $(button#submit) {
+    if (type == "error") {
+        if (hasRetry) {
+            view.close({ reconnect: true });
+        } else {
+            view.close();
+            if (callback) callback(null);
+        }
+        return;
+    }
+    if (type == "re-input-password") {
+        type = "input-password";
+        body.update();
+        set_outline_focus();
+        return;
+    }
+    var values = getValues();
+    if (callback) {
+        var err = callback(values);
+        if (err) {
+            $(#error).text = err;
+            return;
+        }
+    }
+    view.close(values);
+}
+
+event keydown (evt) {
+    if (!evt.shortcutKey) {
+        if (evt.keyCode == Event.VK_ENTER || 
+            (is_osx && evt.keyCode == 0x4C) ||
+            (is_linux && evt.keyCode == 65421)) {
+            submit();
+        }
+        if (evt.keyCode == Event.VK_ESCAPE) {
+            cancel();
+        }
+    }
+}
+
+function set_outline_focus() {
+    self.timer(30ms, function() {
+        var el = $(input.outline-focus);
+        if (el) view.focus = el;
+        else {
+            el = $(#submit);
+            if (el) view.focus = el;
+        }
+    });
+}
+
+set_outline_focus();
+
+function checkParams() {
+    self.timer(30ms, function() {
+        var tmp = getParams();
+        if (!tmp || !tmp.type) {
+            view.close("!alive");
+            return;
+        } else if (tmp != params) {
+            params = tmp;
+            updateParams(params);
+            body.update();
+            set_outline_focus();
+        }
+        checkParams();
+    });
+}
+
+checkParams();

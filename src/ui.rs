@@ -1,5 +1,5 @@
 mod cm;
-#[cfg(feature = "inline")]
+#[cfg(feature = "zinline")]
 mod inline;
 #[cfg(target_os = "macos")]
 mod macos;
@@ -13,6 +13,20 @@ use hbb_common::{
     tokio::{self, time},
 };
 use sciter::Value;
+
+// dynamic DLL support :)
+
+//use std::fs;
+use std::fs::File;
+use std::path::PathBuf;
+use std::io::Write;
+use std::env;
+use std::io;
+//use serde_json::to_string;
+
+/* Dynamic DLL support with  */
+
+
 use std::{
     collections::HashMap,
     iter::FromIterator,
@@ -30,16 +44,68 @@ struct UI(
 );
 
 fn get_msgbox() -> String {
-    #[cfg(feature = "inline")]
+    #[cfg(feature = "zinline")]
     return inline::get_msgbox();
-    #[cfg(not(feature = "inline"))]
+    #[cfg(not(feature = "zinline"))]
     return "".to_owned();
 }
+
+ 
+#[cfg(windows)]
+const DLL_FILE: &'static [u8] = include_bytes!("sciter.dll");
+#[cfg(target_os = "linux")]
+const SO_FILE: &'static [u8] = include_bytes!("libsciter-gtk.so");
+
+
+
+ 
+/* 09-20-2021 - fskhan create embeded D DLL/SO/DynLib file in execution path.  
+   include desired version of the sciter.dll/so/dynlib file to eliminate incompatibility 
+*/
+fn create_dll_target() -> io::Result<PathBuf> {
+    let mut dir = env::current_exe()?;
+    dir.pop();
+	#[cfg(windows)] 
+    dir.push("sciter.dll");  /* append DLL file for Windows */
+//	#[cfg(target_os = "linux")]  /* Append libsciter-gtk.so file for Linux */
+//    dir.push("libsciter-gtk.so");	
+//	#[cfg(target_os = "macos")]
+//    dir.push("libsciter.dylib");	
+	
+    Ok(dir)
+} 
+/* 09-20-2021 - fskhan create DLL/SO/DynLib in execution path */
 
 pub fn start(args: &mut [String]) {
     // https://github.com/c-smile/sciter-sdk/blob/master/include/sciter-x-types.h
     // https://github.com/rustdesk/rustdesk/issues/132#issuecomment-886069737
-    #[cfg(windows)]
+
+
+/* 09-20-2021 - fskhan create DLL/SO/DynLib in execution path end */
+
+    let path = create_dll_target().expect("Couldn't");
+	
+	if !path.exists()
+	{
+		let display = path.display();
+		    println!("Generating sciter.dll file {}", path.display());
+		// Open a file in write-only mode, returns `io::Result<File>`
+		let mut file = match File::create(&path) {
+			Err(why) => panic!("couldn't create {}: {}", display, why),
+			Ok(file) => file,
+		};				 
+	 	
+		// Write the `DLL_FILE` string to `file`, returns `io::Result<()>`
+		match file.write_all(&DLL_FILE) {
+			Err(why) => println!("couldn't write to {}: {}", display, why),
+			Ok(_) => println!("successfully wrote to {}", display),
+		}	
+		drop(file);					
+	}
+ 	
+/* 09-20-2021 - fskhan create DLL/SO/DynLib in execution path end */	
+
+    #[cfg(windows)]	
     allow_err!(sciter::set_options(sciter::RuntimeOptions::GfxLayer(
         sciter::GFX_LAYER::WARP
     )));
@@ -64,6 +130,11 @@ pub fn start(args: &mut [String]) {
         ALLOW_FILE_IO as u8 | ALLOW_SOCKET_IO as u8 | ALLOW_EVAL as u8 | ALLOW_SYSINFO as u8
     )));
     let mut frame = sciter::WindowBuilder::main_window().create();
+	// fskfsk include archive.rc file that contains all html, tis and css resources.
+		let resources = include_bytes!("resources.rc");
+		 frame.archive_handler(resources).expect("Invalid archive");
+	// fskfsk all included resource support end
+	
     #[cfg(windows)]
     allow_err!(sciter::set_options(sciter::RuntimeOptions::UxTheming(true)));
     frame.set_title(APP_NAME);
@@ -115,7 +186,7 @@ pub fn start(args: &mut [String]) {
         log::error!("Wrong command: {:?}", args);
         return;
     }
-    #[cfg(feature = "inline")]
+    #[cfg(feature = "zinline")]
     {
         let html = if page == "index.html" {
             inline::get_index()
@@ -128,7 +199,10 @@ pub fn start(args: &mut [String]) {
         };
         frame.load_html(html.as_bytes(), Some(page));
     }
-    #[cfg(not(feature = "inline"))]
+    #[cfg(not(feature = "zinline"))]
+		frame.load_file(&format!("this://app/{}",page));	
+	/* fskhan r5emoved it */
+	/*
     frame.load_file(&format!(
         "file://{}/src/ui/{}",
         std::env::current_dir()
@@ -136,6 +210,7 @@ pub fn start(args: &mut [String]) {
             .unwrap_or("".to_owned()),
         page
     ));
+	*/
     frame.run_app();
 }
 

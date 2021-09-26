@@ -2,7 +2,7 @@
 name = "rustdesk"
 version = "1.1.8"
 authors = ["rustdesk <info@rustdesk.com>"]
-edition = "2018"
+edition = "2021"
 build= "build.rs"
 description = "A remote control software."
 
@@ -12,7 +12,7 @@ cli = []
 use_samplerate = ["samplerate"]
 use_rubato = ["rubato"]
 use_dasp = ["dasp"]
-default = ["use_dasp"]
+default = ["use_dasp","inline"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -54,9 +54,10 @@ arboard = "2.0"
 
 [target.'cfg(target_os = "windows")'.dependencies]
 #systray = { git = "https://github.com/open-trade/systray-rs" }
-winapi = { version = "0.3", features = ["winuser"] }
+winapi = { version = "0.3", features = ["wincon","winuser"] }
 winreg = "0.7"
 windows-service = { git = 'https://github.com/mullvad/windows-service-rs.git' }
+
 
 [target.'cfg(target_os = "macos")'.dependencies]
 objc = "0.2"
@@ -106,7 +107,8 @@ osx_minimum_system_version = "10.14"
 #!!! rembember call "strip target/release/rustdesk"
 # which reduce binary size a lot
 [profile.release]
-#lto = true
-#codegen-units = 1
+lto = true
+codegen-units = 1
 #panic = 'abort'
-#opt-level = 'z' # only have smaller size after strip
+#strip = true
+opt-level = 'z' # only have smaller size after strip

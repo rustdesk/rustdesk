@@ -1,0 +1,1 @@
+packfolder ui/res resources.rc -v "resources" -binary

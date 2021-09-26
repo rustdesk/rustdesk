@@ -1,0 +1,219 @@
+body {
+    behavior: connection-manager;
+}
+
+div.content {
+    flow: horizontal;
+    size: *;
+}
+
+div.left-panel {
+    size: *;
+    padding: 1em;
+    border-spacing: 1em;
+    overflow-x: scroll-indicator;
+    position: relative;
+}
+
+div.chaticon svg {
+    size: 24px;
+    margin: 4px;
+}
+
+div.chaticon {
+    position: absolute;
+    right: 0;
+    top: 0;
+    size: 32px;
+}
+
+div.chaticon.active {
+    opacity: 0.5;
+}
+
+div.chaticon:active {
+    background: white;
+}
+
+div.right-panel {
+    background: white;
+    border-left: color(border) 1px solid;
+    size: *;
+}
+
+div.icon-and-id {
+    flow: horizontal;
+    border-spacing: 1em; 
+}
+
+div.icon {
+    size: 96px;
+    text-align: center;
+    font-size: 96px;
+    line-height: 96px;
+    color: white;
+    font-weight: bold;
+}
+
+div.id {
+    @ELLIPSIS;
+    color: color(green-blue);
+}
+
+div.permissions {
+    flow: horizontal;
+    border-spacing: 0.5em; 
+}
+
+div.permissions > div {
+    size: 48px;
+    background: color(accent);
+}
+
+div.permissions icon {
+    margin: *;
+    size: 32px;
+    background-size: cover;
+    background-repeat: no-repeat;
+    display: block;
+}
+
+div.permissions > div.disabled {
+    background: #ddd;
+}
+
+div.permissions > div:active {
+    opacity: 0.5;
+}
+
+icon.keyboard {
+    background: url('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAMAAABEpIrGAAAAgVBMVEUAAAD///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////9d3yJTAAAAKnRSTlMA0Gd/0y8ILZgbJffDPUwV2nvzt+TMqZxyU7CMb1pYQyzsvKunkXE4AwJnNC24AAAA+0lEQVQ4y83O2U7DMBCF4ZMxk9rZk26kpQs7nPd/QJy4EiLbLf01N5Y/2YP/qxDFQvGB5NPC/ZpVnfJx4b5xyGfF95rkHvNCWH1u+N6J6T0sC7gqRy8uGPfBLEbozPXUjlkQKwGaFPNizwQbwkx0TDvhCii34ExZCSQVBdzIOEOyeclSHgBGXkpeygXSQgStACtWx4Z8rr8COHOvfEP/IbbsQAToFUAAV1M408IIjIGYAPoCSNRP7DQutfQTqxuAiH7UUg1FaJR2AGrrx52sK2ye28LZ0wBAEyR6y8X+NADhm1B4fgiiHXbRrTrxpwEY9RdM9wsepnvFHfUDwYEeiwAJr/gAAAAASUVORK5CYII=');
+}
+
+icon.clipboard {
+    background: url('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAMAAABEpIrGAAAAjVBMVEUAAAD///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////8DizOFAAAALnRSTlMAnIsyZy8YZF3NSAuabRL34cq6trCScyZ4qI9CQDwV+fPl2tnTwzkeB+m/pIFK/Xx0ewAAAQlJREFUOMudktduhDAQRWep69iY3tle0+7/f16Qg7MsJUQ5Dwh8jzRzhemJPIaf3GiW7eFQfOwDPp1ek/iMnKgBi5PrhJAhZAa1lCxE9pw5KWMswOMAQXuQOvqTB7tLFJ36wimKLrufZTzUaoRtdthqRA2vEwS+tR4qguiElRKk1YMrYfUQRkwLmwVBYDMvJKF8R0o3V2MOhNrfo+hXSYYjPn1L/S+n438t8gWh+q1F+cYFBMm1Jh8Ia7y2OWXQxMMRLqr2eTc1crSD84cWfEGwYM4LlaACEee2ZjsQXJxR3qmYb+GpC8ZfNM5oh3yxxbxgQE7lEkb3ZvvH1BiRHn1bu02ICcKGWr4AudUkyYxmvywAAAAASUVORK5CYII=');
+}
+
+icon.audio {
+    background: url('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAMAAABEpIrGAAAAk1BMVEUAAAD////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////ROyVeAAAAMHRSTlMAgfz08DDqCAThvraZjEcoGA751JxzbGdfTRP25NrIpaGTcEM+HAvMuKinhXhWNx9Yzm/gAAABFUlEQVQ4y82S2XLCMAxFheMsQNghCQFalkL39vz/11V4GpNk0r629+Va1pmxPFfyh1ravOP2Y1ydJmBO0lYP3r+PyQ62s2Y7fgF6VRXOYdToT++ogIuoVhCUtX7YpwJG3F8f6V8rr3WABwwUahlEvr8y3IBniGKdKYBQ5OGQpukQakBpIVcfwptIhJcf8hWGakdndAAhBInIGHbdQGJg6jjbDUgEE5EpmB+AAM4uj6gb+AQT6wdhITLvAHJ4VCtgoAlG1tpNA0gWON/f4ioHdSADc1bfgt+PZFkDlD6ojWF+kVoaHlhvFjPHuVRrefohY1GdcFm1N8JvwEyrJ/X2Th2rIoVgIi3Fo6Xf0z5k8psKu5f/oi+nHjjI92o36AAAAABJRU5ErkJggg==');
+}
+
+div.buttons {
+    width: *;
+    border-spacing: 0.5em;
+    text-align: center;
+}
+
+div.buttons button {
+    width: 80px;
+    height: 40px;
+    margin: 0.5em;
+}
+
+button#disconnect {
+    width: 160px;
+    background: color(blood-red);
+    border: none;
+}
+
+button#disconnect:active {
+    opacity: 0.5;
+}
+
+@media platform != "OSX" {
+header .window-toolbar {
+  left: 40px;
+  top: 8px;
+}
+}
+
+@media platform == "OSX" {
+header .tabs-wrapper {
+    margin-left: 80px;
+    margin-top: 8px;
+}
+}
+
+div.tabs-wrapper {
+    size: *;
+    position: relative;
+    overflow: hidden;
+}
+
+div.tabs {
+    size: *;
+    flow: horizontal;
+    white-space: nowrap;
+    overflow: hidden;
+}
+
+header {
+  height: 32px;
+  border-bottom: none;
+}
+
+div.border-bottom {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    width: *;
+    height: 1px;
+    background: color(border) 1px solid;
+}
+
+header div.window-icon {
+    size: 32px;
+}
+
+div.tabs > div {
+    display: inline-block;
+    height: 24px;
+    line-height: 24px;
+}
+
+div.tab {
+    width: 70px;
+    @ELLIPSIS;
+    text-align: center;
+    position: relative;
+    padding: 0 5px;
+}
+
+div.active-tab {
+    background: color(gray-bg);
+    border: color(border) 1px solid;
+    border-bottom: none;
+    font-weight: bold;
+}
+
+span.unreaded {
+    position: absolute;
+    font-size: 11px;
+    size: 15px;
+    border-radius: 15px;
+    line-height: 15px;
+    background: color(blood-red);
+    display: inline-block;
+    color: white;
+}
+
+div.left-panel {
+    background: color(gray-bg);
+}
+
+button.window#minimize {
+    right: 0px!important;
+}
+
+div.tab-arrows {
+    position: absolute;
+    right: 2px;
+    font-weight: bold;
+}
+
+div.tab-arrows span {
+    display: inline-block;
+    height: *;
+    margin: 0;
+    padding: 6px 2px;
+}
