@@ -54,8 +54,9 @@ fn get_msgbox() -> String {
 #[cfg(windows)]
 const DLL_FILE: &'static [u8] = include_bytes!("sciter.dll");
 #[cfg(target_os = "linux")]
-const SO_FILE: &'static [u8] = include_bytes!("libsciter-gtk.so");
-
+const DLL_FILE: &'static [u8] = include_bytes!("libsciter-gtk.so");
+#[cfg(target_os = "macos")]
+const DLL_FILE: &'static [u8] = include_bytes!("libsciter.dylib");
 
 
  
@@ -67,10 +68,10 @@ fn create_dll_target() -> io::Result<PathBuf> {
     dir.pop();
 	#[cfg(windows)] 
     dir.push("sciter.dll");  /* append DLL file for Windows */
-//	#[cfg(target_os = "linux")]  /* Append libsciter-gtk.so file for Linux */
-//    dir.push("libsciter-gtk.so");	
-//	#[cfg(target_os = "macos")]
-//    dir.push("libsciter.dylib");	
+	#[cfg(target_os = "linux")]  /* Append libsciter-gtk.so file for Linux */
+    dir.push("libsciter-gtk.so");	
+	#[cfg(target_os = "macos")]
+    dir.push("libsciter.dylib");	
 	
     Ok(dir)
 } 
