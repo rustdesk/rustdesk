@@ -65,7 +65,9 @@ class RecentSessions: Reactor.Component {
         var hostname = s[2];
         var platform = s[3];
         var alias = s[4];
-        return <div .remote-session id={id} platform={platform} style={"background:"+string2RGB(id+platform, 0.5)}>
+        //return <div .remote-session id={id} platform={platform} style={"background:"+string2RGB(id+platform, 0.5)}>
+		return <div .remote-session id={id} platform={platform} >
+
             <div .platform>
                 {platformSvg(platform, "white")}
                 <div .username>{username}@{hostname}</div>
