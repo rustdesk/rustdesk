@@ -13,7 +13,7 @@ Rede mit uns: [Discord](https://discord.gg/nDceKgxnkV) | [Reddit](https://www.re
 
 [![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/I2I04VU09)
 
-Das hier ist ein Programm was man nutzen kann, um einen Computer fernzusteuern, es wurde in Rust geschrieben. Es funktioniert ohne Konfiguration oder ähnliches, man kann es einfach direkt nutzen. Es ist eine gute Alternative zu Programmen wie TeamViewer und AnyDesk! Du hast volle Kontrolle über deine Daten und brauchst dir daher auch keine Sorgen um die Sicherheit dieser Daten zu machen. Du kannst unseren rendezvous/relay Server nutzen, [einen eigenen Server eröffnen](https://rustdesk.com/blog/id-relay-set/) oder [einen neuen eigenen Server programmieren](https://github.com/rustdesk/rustdesk-server-demo).
+Das hier ist ein Programm was man nutzen kann, um einen Computer fernzusteuern, es wurde in Rust geschrieben. Es funktioniert ohne Konfiguration oder ähnliches, man kann es einfach direkt nutzen. Du hast volle Kontrolle über deine Daten und brauchst dir daher auch keine Sorgen um die Sicherheit dieser Daten zu machen. Du kannst unseren rendezvous/relay Server nutzen, [einen eigenen Server eröffnen](https://rustdesk.com/blog/id-relay-set/) oder [einen neuen eigenen Server programmieren](https://github.com/rustdesk/rustdesk-server-demo).
 
 RustDesk heißt jegliche Mitarbeit willkommen. Schau dir [`CONTRIBUTING.md`](CONTRIBUTING.md) an, wenn du Hilfe brauchst für den Start.
 
@@ -148,4 +148,4 @@ RustDesk unterstützt "Wayland" nicht. Siehe [hier](https://docs.fedoraproject.o
 
 ![image](https://user-images.githubusercontent.com/71636191/113112857-3fbd5d80-923c-11eb-9836-768325faf906.png)
 
-![image](https://user-images.githubusercontent.com/71636191/113112990-65e2fd80-923c-11eb-840e-349b4d6e340d.png)
+![image](https://user-images.githubusercontent.com/71636191/135385039-38fdbd72-379a-422d-b97f-33df71fb1cec.png)

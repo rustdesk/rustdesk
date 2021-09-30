@@ -13,7 +13,7 @@ Porozmawiaj z nami na: [Discord](https://discord.gg/nDceKgxnkV) | [Reddit](https
 
 [![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/I2I04VU09)
 
-Kolejny program do zdalnego pulpitu, napisany w Rust. Działa od samego początku, nie wymaga konfiguracji. Świetna alternatywa dla TeamViewera i AnyDesk! Masz pełną kontrolę nad swoimi danymi, bez obaw o bezpieczeństwo. Możesz skorzystać z naszego darmowego serwera publicznego , [skonfigurować własny](https://rustdesk.com/blog/id-relay-set/), lub [napisać własny serwer rendezvous/relay server](https://github.com/rustdesk/rustdesk-server-demo). 
+Kolejny program do zdalnego pulpitu, napisany w Rust. Działa od samego początku, nie wymaga konfiguracji. Masz pełną kontrolę nad swoimi danymi, bez obaw o bezpieczeństwo. Możesz skorzystać z naszego darmowego serwera publicznego , [skonfigurować własny](https://rustdesk.com/blog/id-relay-set/), lub [napisać własny serwer rendezvous/relay server](https://github.com/rustdesk/rustdesk-server-demo). 
 
 RustDesk zaprasza do współpracy każdego.  Zobacz [`CONTRIBUTING.md`](CONTRIBUTING.md) pomoc w uruchomieniu programu.
 
@@ -149,4 +149,4 @@ RustDesk nie obsługuje Waylanda. Sprawdź [this](https://docs.fedoraproject.org
 
 ![image](https://user-images.githubusercontent.com/71636191/113112857-3fbd5d80-923c-11eb-9836-768325faf906.png)
 
-![image](https://user-images.githubusercontent.com/71636191/113112990-65e2fd80-923c-11eb-840e-349b4d6e340d.png)
+![image](https://user-images.githubusercontent.com/71636191/135385039-38fdbd72-379a-422d-b97f-33df71fb1cec.png)
