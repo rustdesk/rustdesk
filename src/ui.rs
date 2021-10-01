@@ -477,7 +477,7 @@ impl UI {
         #[cfg(target_os = "linux")]
         return crate::platform::linux::fix_login_wayland();
     }
-    
+
     fn current_is_wayland(&mut self) -> bool {
         #[cfg(target_os = "linux")]
         return crate::platform::linux::current_is_wayland();

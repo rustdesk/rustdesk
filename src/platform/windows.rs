@@ -145,7 +145,13 @@ pub fn get_cursor_data(hcursor: u64) -> ResultType<CursorData> {
         if do_outline {
             let mut outline = Vec::new();
             outline.resize(((width + 2) * (height + 2) * 4) as _, 0);
-            drawOutline(outline.as_mut_ptr(), cbits.as_ptr(), width, height, outline.len() as _);
+            drawOutline(
+                outline.as_mut_ptr(),
+                cbits.as_ptr(),
+                width,
+                height,
+                outline.len() as _,
+            );
             cbits = outline;
             width += 2;
             height += 2;
@@ -357,7 +363,7 @@ fn fix_cursor_mask(
             let mut alpha = 255;
             if mask_idx < bm_size {
                 if (mbits[mask_idx] << (x & 0x7)) & 0x80 == 0 {
-                   alpha =  0;
+                    alpha = 0;
                 }
             }
             let a = cbits[pix_idx + 2];
@@ -393,8 +399,14 @@ extern "C" {
     fn LaunchProcessWin(cmd: *const u16, session_id: DWORD, as_user: BOOL) -> HANDLE;
     fn selectInputDesktop() -> BOOL;
     fn inputDesktopSelected() -> BOOL;
-    fn handleMask(out: *mut u8, mask: *const u8, width: i32, height: i32, bmWidthBytes: i32, bmHeight: i32)
-        -> i32;
+    fn handleMask(
+        out: *mut u8,
+        mask: *const u8,
+        width: i32,
+        height: i32,
+        bmWidthBytes: i32,
+        bmHeight: i32,
+    ) -> i32;
     fn drawOutline(out: *mut u8, in_: *const u8, width: i32, height: i32, out_size: i32);
     fn get_di_bits(out: *mut u8, dc: HDC, hbmColor: HBITMAP, width: i32, height: i32) -> i32;
     fn blank_screen(v: BOOL);

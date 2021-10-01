@@ -99,7 +99,6 @@ fn run(sp: GenericService) -> ResultType<()> {
         *SWITCH.lock().unwrap() = false;
         sp.send(msg_out);
     }
-    
     let mut crc = (0, 0);
     let start = time::Instant::now();
     let mut last_sent = time::Instant::now();
