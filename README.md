@@ -64,7 +64,7 @@ sudo pacman -Syu --needed unzip git cmake gcc curl wget yasm nasm zip make pkg-c
 
 ### Install vcpkg
 ```sh
-git clone https://github.com/microsoft/vcpkg 
+git clone https://github.com/microsoft/vcpkg
 cd vcpkg
 git checkout 134505003bb46e20fbace51ccfb69243fbbc5f82
 cd ..
@@ -94,7 +94,7 @@ cd rustdesk
 mkdir -p target/debug
 wget https://raw.githubusercontent.com/c-smile/sciter-sdk/master/bin.lnx/x64/libsciter-gtk.so
 mv libsciter-gtk.so target/debug
-cargo run
+VCPKG_ROOT=$HOME/vcpkg cargo run
 ```
 
 ## How to build with Docker
