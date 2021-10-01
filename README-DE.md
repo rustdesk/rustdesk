@@ -20,52 +20,58 @@ RustDesk heißt jegliche Mitarbeit willkommen. Schau dir [`CONTRIBUTING.md`](CON
 [**PROGRAMM DOWNLOAD**](https://github.com/rustdesk/rustdesk/releases)
 
 ## Kostenlose öffentliche Server
+
 Hier sind die Server die du kostenlos nutzen kannst, es kann sein das sich diese Liste immer mal wieder ändert. Falls du nicht in der Nähe einer dieser Server bist, kann es sein, dass deine Verbindung langsam sein wird.
 
-| Standort  | Serverart     | Spezifikationen    | Kommentare                               |
-| --------- | ------------- | ------------------ | ---------------------------------------- |
-| Seoul     | AWS lightsail | 1 VCPU / 0.5GB RAM |                                          |
-| Singapore | Vultr         | 1 VCPU / 1GB RAM   |                                          |
-| Dallas    | Vultr         | 1 VCPU / 1GB RAM   |                                          |
+| Standort  | Serverart     | Spezifikationen    | Kommentare |
+| --------- | ------------- | ------------------ | ---------- |
+| Seoul     | AWS lightsail | 1 VCPU / 0.5GB RAM |            |
+| Singapore | Vultr         | 1 VCPU / 1GB RAM   |            |
+| Dallas    | Vultr         | 1 VCPU / 1GB RAM   |            |
 
 ## Abhängigkeiten
 
 Die Desktop Versionen nutzen [Sciter](https://sciter.com/) für die Oberfläche, bitte lade die dynamische Sciter Bibliothek selbst herunter.
 
-[Windows](https://raw.githubusercontent.com/c-smile/sciter-sdk/master/bin.win/x64/sciter.dll) | 
+[Windows](https://raw.githubusercontent.com/c-smile/sciter-sdk/master/bin.win/x64/sciter.dll) |
 [Linux](https://raw.githubusercontent.com/c-smile/sciter-sdk/master/bin.lnx/x64/libsciter-gtk.so) |
 [MacOS](https://raw.githubusercontent.com/c-smile/sciter-sdk/master/bin.osx/libsciter.dylib)
 
 ## Die groben Schritte zum Kompilieren
-* Bereite deine Rust Entwicklungsumgebung und C++ Entwicklungsumgebung vor
 
-* Installiere [vcpkg](https://github.com/microsoft/vcpkg) und füge die `VCPKG_ROOT` Systemumgebungsvariable hinzu
+- Bereite deine Rust Entwicklungsumgebung und C++ Entwicklungsumgebung vor
 
-   - Windows: `vcpkg install libvpx:x64-windows-static libyuv:x64-windows-static opus:x64-windows-static`
-   - Linux/MacOS: `vcpkg install libvpx libyuv opus`
+- Installiere [vcpkg](https://github.com/microsoft/vcpkg) und füge die `VCPKG_ROOT` Systemumgebungsvariable hinzu
 
-* Nutze `cargo run`
+  - Windows: `vcpkg install libvpx:x64-windows-static libyuv:x64-windows-static opus:x64-windows-static`
+  - Linux/MacOS: `vcpkg install libvpx libyuv opus`
+
+- Nutze `cargo run`
 
 ## Kompilieren auf Linux
 
 ### Ubuntu 18 (Debian 10)
+
 ```sh
 sudo apt install -y g++ gcc git curl wget nasm yasm libgtk-3-dev clang libxcb-randr0-dev libxdo-dev libxfixes-dev libxcb-shape0-dev libxcb-xfixes0-dev libasound2-dev libpulse-dev cmake
 ```
 
 ### Fedora 28 (CentOS 8)
+
 ```sh
 sudo yum -y install gcc-c++ git curl wget nasm yasm gcc gtk3-devel clang libxcb-devel libxdo-devel libXfixes-devel pulseaudio-libs-devel cmake alsa-lib-devel
 ```
 
 ### Arch (Manjaro)
+
 ```sh
 sudo pacman -Syu --needed unzip git cmake gcc curl wget yasm nasm zip make pkg-config clang gtk3 xdotool libxcb libxfixes alsa-lib pulseaudio
 ```
 
 ### vcpkg installieren
+
 ```sh
-git clone https://github.com/microsoft/vcpkg 
+git clone https://github.com/microsoft/vcpkg
 cd vcpkg
 git checkout 134505003bb46e20fbace51ccfb69243fbbc5f82
 cd ..
@@ -75,6 +81,7 @@ vcpkg/vcpkg install libvpx libyuv opus
 ```
 
 ### libvpx reparieren (Für Fedora)
+
 ```sh
 cd vcpkg/buildtrees/libvpx/src
 cd *
@@ -87,6 +94,7 @@ cd
 ```
 
 ### Kompilieren
+
 ```sh
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 source $HOME/.cargo/env
@@ -109,6 +117,7 @@ docker build -t "rustdesk-builder" .
 ```
 
 Jedes Mal, wenn du das Programm Kompilieren musst, nutze diesen Befehl:
+
 ```sh
 docker run --rm -it -v $PWD:/home/user/rustdesk -v rustdesk-git-cache:/home/user/.cargo/git -v rustdesk-registry-cache:/home/user/.cargo/registry -e PUID="$(id -u)" -e PGID="$(id -g)" rustdesk-builder
 ```
@@ -128,6 +137,7 @@ target/release/rustdesk
 Bitte gehe sicher, dass du diese Befehle vom Stammverzeichnis vom RustDesk Repository nutzt, sonst kann es passieren, dass das Programm die Ressourcen nicht finden kann. Bitte bedenke auch, dass Unterbefehle von Cargo, wie z.B. `install` oder `run` aktuell noch nicht unterstützt werden, da sie das Programm innerhalb des Containers starten oder installieren würden, anstatt auf deinem eigentlichen System.
 
 ### Ändere Wayland zu X11 (Xorg)
+
 RustDesk unterstützt "Wayland" nicht. Siehe [hier](https://docs.fedoraproject.org/en-US/quick-docs/configuring-xorg-as-default-gnome-session/) um Xorg als Standard GNOME Session zu nutzen.
 
 ## Dateistruktur
@@ -142,6 +152,7 @@ RustDesk unterstützt "Wayland" nicht. Siehe [hier](https://docs.fedoraproject.o
 - **[src/platform](https://github.com/rustdesk/rustdesk/tree/master/src/platform)**: Plattformspezifischer Code
 
 ## Screenshots
+
 ![image](https://user-images.githubusercontent.com/71636191/113112362-ae4deb80-923b-11eb-957d-ff88daad4f06.png)
 
 ![image](https://user-images.githubusercontent.com/71636191/113112619-f705a480-923b-11eb-911d-97e984ef52b6.png)

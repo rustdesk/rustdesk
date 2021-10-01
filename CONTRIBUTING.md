@@ -3,7 +3,6 @@
 RustDesk welcomes contribution from everyone. Here are the guidelines if you are
 thinking of helping us:
 
-
 ## Contributions
 
 Contributions to RustDesk or its dependencies should be made in the form of GitHub
@@ -23,7 +22,7 @@ efforts from contributors on the same issue.
   master you may be asked to rebase your changes.
 
 - Commits should be as small as possible, while ensuring that each commit is
-  correct independently (i.e., each commit should compile and pass tests). 
+  correct independently (i.e., each commit should compile and pass tests).
 
 - Commits should be accompanied by a Developer Certificate of Origin
   (http://developercertificate.org) sign-off, which indicates that you (and
@@ -40,10 +39,8 @@ For specific git instructions, see [GitHub workflow 101](https://github.com/serv
 
 ## Conduct
 
-We follow the [Rust Code of Conduct](https://www.rust-lang.org/policies/code-of-conduct). 
-
+We follow the [Rust Code of Conduct](https://www.rust-lang.org/policies/code-of-conduct).
 
 ## Communication
 
 RustDesk contributors frequent the [Discord](https://discord.gg/nDceKgxnkV).
-

@@ -13,56 +13,62 @@ Chat with us: [Discord](https://discord.gg/nDceKgxnkV) | [Reddit](https://www.re
 
 [![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/I2I04VU09)
 
-Yet another remote desktop software, written in Rust. Works out of the box, no configuration required. You have full control of your data, with no concerns about security. You can use our rendezvous/relay server, [set up your own](https://rustdesk.com/blog/id-relay-set/), or [write your own rendezvous/relay server](https://github.com/rustdesk/rustdesk-server-demo). 
+Yet another remote desktop software, written in Rust. Works out of the box, no configuration required. You have full control of your data, with no concerns about security. You can use our rendezvous/relay server, [set up your own](https://rustdesk.com/blog/id-relay-set/), or [write your own rendezvous/relay server](https://github.com/rustdesk/rustdesk-server-demo).
 
-RustDesk welcomes contribution from everyone.  See [`CONTRIBUTING.md`](CONTRIBUTING.md) for help getting started.
+RustDesk welcomes contribution from everyone. See [`CONTRIBUTING.md`](CONTRIBUTING.md) for help getting started.
 
 [**BINARY DOWNLOAD**](https://github.com/rustdesk/rustdesk/releases)
 
 ## Free Public Servers
+
 Below are the servers you are using for free, it may change along the time. If you are not close to one of these, your network may be slow.
-| Location  | Vendor        | Specification      |
+| Location | Vendor | Specification |
 | --------- | ------------- | ------------------ |
-| Seoul     | AWS lightsail | 1 VCPU / 0.5GB RAM |
-| Singapore | Vultr         | 1 VCPU / 1GB RAM   |
-| Dallas    | Vultr         | 1 VCPU / 1GB RAM   |                                          |
+| Seoul | AWS lightsail | 1 VCPU / 0.5GB RAM |
+| Singapore | Vultr | 1 VCPU / 1GB RAM |
+| Dallas | Vultr | 1 VCPU / 1GB RAM | |
 
 ## Dependencies
 
 Desktop versions use [sciter](https://sciter.com/) for GUI, please download sciter dynamic library yourself.
 
-[Windows](https://raw.githubusercontent.com/c-smile/sciter-sdk/master/bin.win/x64/sciter.dll) | 
+[Windows](https://raw.githubusercontent.com/c-smile/sciter-sdk/master/bin.win/x64/sciter.dll) |
 [Linux](https://raw.githubusercontent.com/c-smile/sciter-sdk/master/bin.lnx/x64/libsciter-gtk.so) |
 [MacOS](https://raw.githubusercontent.com/c-smile/sciter-sdk/master/bin.osx/libsciter.dylib)
 
 ## Raw steps to build
-* Prepare your Rust development env and C++ build env
 
-* Install [vcpkg](https://github.com/microsoft/vcpkg), and set `VCPKG_ROOT` env variable correctly
+- Prepare your Rust development env and C++ build env
 
-   - Windows: vcpkg install libvpx:x64-windows-static libyuv:x64-windows-static opus:x64-windows-static
-   - Linux/MacOS: vcpkg install libvpx libyuv opus
-   
-* run `cargo run`
+- Install [vcpkg](https://github.com/microsoft/vcpkg), and set `VCPKG_ROOT` env variable correctly
+
+  - Windows: vcpkg install libvpx:x64-windows-static libyuv:x64-windows-static opus:x64-windows-static
+  - Linux/MacOS: vcpkg install libvpx libyuv opus
+
+- run `cargo run`
 
 ## How to build on Linux
 
 ### Ubuntu 18 (Debian 10)
+
 ```sh
 sudo apt install -y g++ gcc git curl wget nasm yasm libgtk-3-dev clang libxcb-randr0-dev libxdo-dev libxfixes-dev libxcb-shape0-dev libxcb-xfixes0-dev libasound2-dev libpulse-dev cmake
 ```
 
 ### Fedora 28 (CentOS 8)
+
 ```sh
 sudo yum -y install gcc-c++ git curl wget nasm yasm gcc gtk3-devel clang libxcb-devel libxdo-devel libXfixes-devel pulseaudio-libs-devel cmake alsa-lib-devel
 ```
 
 ### Arch (Manjaro)
+
 ```sh
 sudo pacman -Syu --needed unzip git cmake gcc curl wget yasm nasm zip make pkg-config clang gtk3 xdotool libxcb libxfixes alsa-lib pulseaudio
 ```
 
 ### Install vcpkg
+
 ```sh
 git clone https://github.com/microsoft/vcpkg
 cd vcpkg
@@ -74,6 +80,7 @@ vcpkg/vcpkg install libvpx libyuv opus
 ```
 
 ### Fix libvpx (For Fedora)
+
 ```sh
 cd vcpkg/buildtrees/libvpx/src
 cd *
@@ -86,6 +93,7 @@ cd
 ```
 
 ### Build
+
 ```sh
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 source $HOME/.cargo/env
@@ -128,6 +136,7 @@ target/release/rustdesk
 Please ensure that you are running these commands from the root of the RustDesk repository, otherwise the application may be unable to find the required resources. Also note that other cargo subcommands such as `install` or `run` are not currently supported via this method as they would install or run the program inside the container instead of the host.
 
 ### Change Wayland to X11 (Xorg)
+
 RustDesk does not support Wayland. Check [this](https://docs.fedoraproject.org/en-US/quick-docs/configuring-xorg-as-default-gnome-session/) to configuring Xorg as the default GNOME session.
 
 ## File Structure
@@ -142,6 +151,7 @@ RustDesk does not support Wayland. Check [this](https://docs.fedoraproject.org/e
 - **[src/platform](https://github.com/rustdesk/rustdesk/tree/master/src/platform)**: platform specific code
 
 ## Snapshot
+
 ![image](https://user-images.githubusercontent.com/71636191/113112362-ae4deb80-923b-11eb-957d-ff88daad4f06.png)
 
 ![image](https://user-images.githubusercontent.com/71636191/113112619-f705a480-923b-11eb-911d-97e984ef52b6.png)
@@ -149,4 +159,3 @@ RustDesk does not support Wayland. Check [this](https://docs.fedoraproject.org/e
 ![image](https://user-images.githubusercontent.com/71636191/113112857-3fbd5d80-923c-11eb-9836-768325faf906.png)
 
 ![image](https://user-images.githubusercontent.com/71636191/135385039-38fdbd72-379a-422d-b97f-33df71fb1cec.png)
-
