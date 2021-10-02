@@ -134,7 +134,7 @@ target/release/rustdesk
 
 Por favor, asegurate de que estás ejecutando estos comandos desde la raíz del repositorio de RustDesk, de lo contrario la aplicación puede ser incapaz de encontrar los recursos necesarios. También hay que tener en cuenta que otros subcomandos de carga como `install` o `run` no estan actualmente soportados via este metodo y podrían requerir ser instalados dentro del contenedor y no en el host.
 
-### Cambia Wayland a X11 (Xorg)
+## Cambia Wayland a X11 (Xorg)
 
 RustDesk no soporta Wayland. Comprueba [aquí](https://docs.fedoraproject.org/en-US/quick-docs/configuring-xorg-as-default-gnome-session/) para configurar Xorg en la sesión por defecto de GNOME.
 
