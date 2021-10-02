@@ -105,6 +105,11 @@ mv libsciter-gtk.so target/debug
 cargo run
 ```
 
+### 把 Wayland 修改成 X11 (Xorg)
+
+RustDesk 暂时不支持 Wayland，不过正在积极开发中.
+请查看[this](https://docs.fedoraproject.org/en-US/quick-docs/configuring-xorg-as-default-gnome-session/)配置 X11.
+
 ## 使用 Docker 编译
 
 首先克隆存储库并构建 docker 容器：
@@ -185,11 +190,6 @@ target/release/rustdesk
 
 请确保您从 RustDesk 存储库的根目录运行这些命令，否则应用程序可能无法找到所需的资源。另请注意，此方法当前不支持其他`Cargo`子命令，
 例如 `install` 或 `run`，因为运行在容器里，而不是宿主机上。
-
-## 把 Wayland 修改成 X11 (Xorg)
-
-RustDesk 暂时不支持 Wayland，不过正在积极开发中.
-请查看[this](https://docs.fedoraproject.org/en-US/quick-docs/configuring-xorg-as-default-gnome-session/)配置 X11.
 
 ## 文件结构
 
