@@ -407,20 +407,31 @@ class FolderView : Reactor.Component {
     }
 
     event click $(.trash) () {
-      var row = this.getCurrentRow();
-      if (!row) return;
-      var path = row[0];
-      var type = row[1];
-      var new_history = [];
-      for (var i = 0; i < this.history.length; ++i) {
-        var h = this.history[i];
-        if ((h + this.sep()).indexOf(path + this.sep()) == -1) new_history.push(h);
+      var rows = this.getCurrentRows();
+      if (!rows || rows.length == 0) return;
+
+      var delete_dirs = new Array();
+
+      for (var i = 0; i < rows.length; ++i) {
+        var row = rows[i];
+
+        var path = row[0];
+        var type = row[1];
+
+        var new_history = [];
+        for (var j = 0; j < this.history.length; ++j) {
+          var h = this.history[j];
+          if ((h + this.sep()).indexOf(path + this.sep()) == -1) new_history.push(h);
+        }
+        this.history = new_history;
+        if (type == 1) {
+          delete_dirs.push(path);
+        } else {
+          confirmDelete(path, this.is_remote);
+        }
       }
-      this.history = new_history;
-      if (type == 1) {
-        file_transfer.job_table.addDelDir(path, this.is_remote);
-      } else {
-        confirmDelete(path, this.is_remote);
+      for (var i = 0; i < delete_dirs.length; ++i) {
+        file_transfer.job_table.addDelDir(delete_dirs[i], this.is_remote);
       }
     }
 
@@ -594,7 +605,7 @@ var deleting_single_file_jobs = {};
 var create_dir_jobs = {}
 
 function confirmDelete(path, is_remote) {
-  handler.msgbox("custom-skip", "Confirm Delete", "<div .form> \
+  handler.block_msgbox("custom-skip", "Confirm Delete", "<div .form> \
         <div>Are you sure you want to delete this file?</div> \
         <div.ellipsis style=\"font-weight: bold;\">" + path + "</div> \
     </div>", function(res=null) {
@@ -614,7 +625,7 @@ handler.confirmDeleteFiles = function(id, i, name) {
   if (i >= n) return;
   var file_path = job.path;
   if (name) file_path += handler.get_path_sep(job.is_remote) + name;
-  handler.msgbox("custom-skip", "Confirm Delete", "<div .form> \
+  handler.block_msgbox("custom-skip", "Confirm Delete", "<div .form> \
         <div>Deleting #" + (i + 1) + " of " + n + " files.</div> \
         <div>Are you sure you want to delete this file?</div> \
         <div.ellipsis style=\"font-weight: bold;\" .text>" + name + "</div> \
