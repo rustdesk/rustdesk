@@ -25,6 +25,12 @@ var svg_computer = <svg .computer viewBox="0 0 480 480">
 </g>
 </svg>;
 
+const TYPE_DIR = 1;
+const TYPE_DIR_LINK = 2;
+const TYPE_DIR_DRIVE = 3;
+const TYPE_FILE = 4;
+const TYPE_FILE_LINK = 5;
+
 function getSize(type, size) {
   if (!size) {
     if (type <= 3) return "";
@@ -374,7 +380,7 @@ class FolderView : Reactor.Component {
         path = this.joinPath(entry.name);
       }
       var tm = entry.time ? new Date(entry.time.toFloat() * 1000.).toLocaleString() : 0;
-      return <tr>
+      return <tr role="option">
         <td type={entry.type} filename={path}></td>
         <td>{entry.name}</td>
         <td value={entry.time || 0}>{tm || ""}</td>
@@ -463,10 +469,28 @@ class FolderView : Reactor.Component {
       return [this.joinPath(name), type];
     }
 
+    function getCurrentRows() {
+      var rows = this.table.getCurrentRows();
+      if (!rows || rows.length== 0) return;
+
+      var records = new Array();
+
+      for (var i = 0; i < rows.length; ++i) {
+        var name = rows[i][1].text;
+        if (!name || name == "..") continue;
+
+        var type = rows[i][0].attributes["type"];
+        records.push([this.joinPath(name), type]);
+      }
+      return records;
+    }
+
     event click $(.send) () {
-      var cur = this.getCurrentRow();
-      if (!cur) return;
-      file_transfer.job_table.send(cur[0], this.is_remote);
+      var rows = this.getCurrentRows();
+      if (!rows || rows.length == 0) return;
+      for (var i = 0; i < rows.length; ++i) {
+        file_transfer.job_table.send(rows[i][0], this.is_remote);
+      }
     }
 
     event change $(.select-dir) (_, el) {
