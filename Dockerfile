@@ -7,7 +7,7 @@ RUN git clone https://github.com/microsoft/vcpkg && cd vcpkg && git checkout 134
 RUN /vcpkg/bootstrap-vcpkg.sh -disableMetrics
 RUN /vcpkg/vcpkg --disable-metrics install libvpx libyuv opus
 
-RUN groupadd -r user && useradd -r -g user user --home /home/user && mkdir -p /home/user && chown user /home/user
+RUN groupadd -r user && useradd -r -g user user --home /home/user && mkdir -p /home/user && chown user /home/user && echo "user  ALL=(ALL) NOPASSWD:ALL" | sudo tee /etc/sudoers.d/user
 WORKDIR /home/user
 RUN wget https://raw.githubusercontent.com/c-smile/sciter-sdk/master/bin.lnx/x64/libsciter-gtk.so
 USER user
