@@ -1,3 +1,7 @@
+use std::sync::mpsc::Sender;
+
+use clipboard_master::{CallbackResult, ClipboardHandler, Master};
+
 use super::*;
 pub use crate::common::{
     check_clipboard, ClipboardContext, CLIPBOARD_INTERVAL as INTERVAL, CLIPBOARD_NAME as NAME,
@@ -27,10 +31,26 @@ impl super::service::Reset for State {
     }
 }
 
+struct ClipHandle {
+    tx: Sender<bool>,
+}
+
+impl ClipboardHandler for ClipHandle {
+    fn on_clipboard_change(&mut self) -> CallbackResult {
+        let _ = self.tx.send(true);
+        CallbackResult::Next
+    }
+}
+
 pub fn new() -> GenericService {
     let sp = GenericService::new(NAME, true);
-    sp.repeat::<State, _>(INTERVAL, run);
+    sp.listen::<State, _, _>(notify, run);
     sp
+}
+
+fn notify(tx: Sender<bool>) -> ResultType<()> {
+    Master::new(ClipHandle { tx }).run()?;
+    Ok(())
 }
 
 fn run(sp: GenericService, state: &mut State) -> ResultType<()> {
