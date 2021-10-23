@@ -1,5 +1,6 @@
 use super::*;
 use std::{
+    sync::{self, mpsc::Sender},
     thread::{self, JoinHandle},
     time,
 };
@@ -151,6 +152,39 @@ impl<T: Subscriber + From<ConnInner>> ServiceTmpl<T> {
                 s.send(msg.clone());
             }
         }
+    }
+
+    pub fn listen<S, N, F>(&self, notify: N, callback: F)
+    where
+        N: 'static + FnMut(Sender<bool>) -> ResultType<()> + Send,
+        F: 'static + FnMut(Self, &mut S) -> ResultType<()> + Send,
+        S: 'static + Default + Reset,
+    {
+        let mut notify = notify;
+        let mut callback = callback;
+        let sp = self.clone();
+        let (tx, rx) = sync::mpsc::channel();
+        thread::spawn(move || {
+            let _ = notify(tx);
+        });
+
+        let thread = thread::spawn(move || {
+            let mut state = S::default();
+            while let Ok(changed) = rx.recv() {
+                if changed && sp.active() {
+                    if sp.has_subscribes() {
+                        if let Err(err) = callback(sp.clone(), &mut state) {
+                            log::error!("Error of {} service: {}", sp.name(), err);
+                            #[cfg(windows)]
+                            crate::platform::windows::try_change_desktop();
+                        }
+                    } else {
+                        state.reset();
+                    }
+                }
+            }
+        });
+        self.0.write().unwrap().handle = Some(thread);
     }
 
     pub fn repeat<S, F>(&self, interval_ms: u64, callback: F)

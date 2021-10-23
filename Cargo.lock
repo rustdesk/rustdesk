@@ -353,6 +353,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "clipboard-master"
+version = "3.1.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1cd1cb2f0df685eb4a61c656faeb6ef391ad776943d3723afb12bdcbceff824d"
+dependencies = [
+ "objc",
+ "objc-foundation",
+ "objc_id",
+ "winapi 0.3.9",
+ "windows-win",
+ "x11-clipboard",
+]
+
+[[package]]
 name = "clipboard-win"
 version = "4.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2860,6 +2874,7 @@ dependencies = [
  "cc",
  "cfg-if 1.0.0",
  "clap",
+ "clipboard-master",
  "cocoa",
  "core-foundation 0.9.1",
  "core-graphics",
@@ -3772,6 +3787,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "windows-win"
+version = "2.4.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8d4243ec23afe4e9b4e668b3c0a0e973f1b8265f6a46223cfcbc16fd267480c0"
+dependencies = [
+ "winapi 0.3.9",
+]
+
+[[package]]
 name = "winreg"
 version = "0.6.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3815,6 +3839,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "85e60b0d1b5f99db2556934e21937020776a5d31520bf169e851ac44e6420214"
 
 [[package]]
+name = "x11-clipboard"
+version = "0.5.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b397ace6e980510de59a4fe3d4c758dffab231d6d747ce9fa1aba6b6035d5f32"
+dependencies = [
+ "xcb",
+]
+
+[[package]]
 name = "x11rb"
 version = "0.8.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3824,6 +3857,16 @@ dependencies = [
  "nix 0.20.0",
  "winapi 0.3.9",
  "winapi-wsapoll",
+]
+
+[[package]]
+name = "xcb"
+version = "0.9.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "62056f63138b39116f82a540c983cc11f1c90cd70b3d492a70c25eaa50bd22a6"
+dependencies = [
+ "libc",
+ "log",
 ]
 
 [[package]]
