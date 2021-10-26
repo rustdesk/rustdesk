@@ -8,19 +8,22 @@ use hbb_common::{anyhow, ResultType};
 use std::{
     sync,
     sync::mpsc::{Receiver, Sender},
-    thread,
+    thread::{self},
     time::Duration,
 };
 
 pub fn new() -> GenericService {
     let sp = GenericService::new(NAME, true);
 
+    // Listening service needs to run for a long time,
+    // otherwise it will cause part of the content to
+    // be missed during the closure of the clipboard
+    // (during the closure, the content copied by the
+    // remote machine will be missed, and the clipboard
+    // will not be synchronized immediately when it is
+    // opened again), and CONTENT will not be updated
     thread::spawn(|| {
-        let (tx, rx) = sync::mpsc::channel();
-        unsafe {
-            listen::RECEIVER = Some(rx);
-        }
-        let _ = listen::notify(tx);
+        let _ = listen::notify();
     });
 
     sp.run::<_>(listen::run);
@@ -30,44 +33,52 @@ pub fn new() -> GenericService {
 mod listen {
     use super::*;
 
-    pub(super) static mut RECEIVER: Option<Receiver<()>> = None;
+    static mut CHANNEL: Option<(Sender<()>, Receiver<()>)> = None;
     static mut CTX: Option<ClipboardContext> = None;
-    static WAIT: Duration = Duration::from_millis(1000);
+    static WAIT: Duration = Duration::from_millis(1500);
 
-    struct ClipHandle {
-        tx: Sender<()>,
-    }
+    struct ClipHandle;
 
     impl ClipboardHandler for ClipHandle {
         fn on_clipboard_change(&mut self) -> CallbackResult {
-            let _ = self.tx.send(());
+            if let Some((tx, _rx)) = unsafe { CHANNEL.as_ref() } {
+                let _ = tx.send(());
+            }
             CallbackResult::Next
         }
     }
 
-    pub fn notify(tx: Sender<()>) -> ResultType<()> {
-        Master::new(ClipHandle { tx }).run()?;
+    pub fn notify() -> ResultType<()> {
+        Master::new(ClipHandle).run()?;
         Ok(())
     }
 
     pub fn run(sp: GenericService) -> ResultType<()> {
-        if unsafe { CTX.as_ref() }.is_none() {
-            match ClipboardContext::new() {
-                Ok(ctx) => unsafe {
-                    CTX = Some(ctx);
-                },
-                Err(err) => {
-                    log::error!("Failed to start {}: {}", NAME, err);
-                    return Err(anyhow::Error::from(err));
-                }
-            };
+        unsafe {
+            if CHANNEL.is_none() {
+                CHANNEL = Some(sync::mpsc::channel());
+            }
+
+            if CTX.is_none() {
+                match ClipboardContext::new() {
+                    Ok(ctx) => {
+                        CTX = Some(ctx);
+                    }
+                    Err(err) => {
+                        log::error!("Failed to start {}: {}", NAME, err);
+                        return Err(anyhow::Error::from(err));
+                    }
+                };
+            }
         }
 
         while sp.ok() {
-            if let Ok(_) = unsafe { RECEIVER.as_ref() }.unwrap().recv_timeout(WAIT) {
-                if let Some(mut ctx) = unsafe { CTX.as_mut() } {
-                    if let Some(msg) = check_clipboard(&mut ctx, None) {
-                        sp.send(msg);
+            if let Some((_tx, rx)) = unsafe { CHANNEL.as_ref() } {
+                if let Ok(_) = rx.recv_timeout(WAIT) {
+                    if let Some(mut ctx) = unsafe { CTX.as_mut() } {
+                        if let Some(msg) = check_clipboard(&mut ctx, None) {
+                            sp.send(msg);
+                        }
                     }
                 }
             }
