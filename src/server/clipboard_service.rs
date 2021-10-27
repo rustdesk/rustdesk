@@ -6,26 +6,16 @@ pub use crate::common::{
 use clipboard_master::{CallbackResult, ClipboardHandler, Master};
 use hbb_common::{anyhow, ResultType};
 use std::{
-    sync,
-    sync::mpsc::{Receiver, Sender},
-    thread::{self},
+    io, sync,
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        mpsc::SyncSender,
+    },
     time::Duration,
 };
 
 pub fn new() -> GenericService {
     let sp = GenericService::new(NAME, true);
-
-    // Listening service needs to run for a long time,
-    // otherwise it will cause part of the content to
-    // be missed during the closure of the clipboard
-    // (during the closure, the content copied by the
-    // remote machine will be missed, and the clipboard
-    // will not be synchronized immediately when it is
-    // opened again), and CONTENT will not be updated
-    thread::spawn(|| {
-        let _ = listen::notify();
-    });
-
     sp.run::<_>(listen::run);
     sp
 }
@@ -33,53 +23,56 @@ pub fn new() -> GenericService {
 mod listen {
     use super::*;
 
-    static mut CHANNEL: Option<(Sender<()>, Receiver<()>)> = None;
-    static mut CTX: Option<ClipboardContext> = None;
+    static RUNNING: AtomicBool = AtomicBool::new(true);
     static WAIT: Duration = Duration::from_millis(1500);
 
-    struct ClipHandle;
+    struct ClipHandle {
+        tx: SyncSender<()>,
+    }
 
     impl ClipboardHandler for ClipHandle {
         fn on_clipboard_change(&mut self) -> CallbackResult {
-            if let Some((tx, _rx)) = unsafe { CHANNEL.as_ref() } {
-                let _ = tx.send(());
+            if !RUNNING.load(Ordering::SeqCst) {
+                return CallbackResult::Stop;
             }
+
+            let _ = self.tx.send(());
             CallbackResult::Next
         }
-    }
 
-    pub fn notify() -> ResultType<()> {
-        Master::new(ClipHandle).run()?;
-        Ok(())
-    }
-
-    pub fn run(sp: GenericService) -> ResultType<()> {
-        unsafe {
-            if CHANNEL.is_none() {
-                CHANNEL = Some(sync::mpsc::channel());
-            }
-
-            if CTX.is_none() {
-                match ClipboardContext::new() {
-                    Ok(ctx) => {
-                        CTX = Some(ctx);
-                    }
-                    Err(err) => {
-                        log::error!("Failed to start {}: {}", NAME, err);
-                        return Err(anyhow::Error::from(err));
-                    }
-                };
+        fn on_clipboard_error(&mut self, error: io::Error) -> CallbackResult {
+            if !RUNNING.load(Ordering::SeqCst) {
+                CallbackResult::Stop
+            } else {
+                CallbackResult::StopWithError(error)
             }
         }
+    }
+
+    #[tokio::main]
+    pub async fn run(sp: GenericService) -> ResultType<()> {
+        let mut ctx = match ClipboardContext::new() {
+            Ok(ctx) => ctx,
+            Err(err) => {
+                log::error!("Failed to start {}: {}", NAME, err);
+                return Err(anyhow::Error::from(err));
+            }
+        };
+
+        if !RUNNING.load(Ordering::SeqCst) {
+            RUNNING.store(true, Ordering::SeqCst);
+        }
+
+        let (tx, rx) = sync::mpsc::sync_channel(12);
+        let listener = tokio::spawn(async {
+            log::info!("Clipboard listener running!");
+            let _ = Master::new(ClipHandle { tx }).run();
+        });
 
         while sp.ok() {
-            if let Some((_tx, rx)) = unsafe { CHANNEL.as_ref() } {
-                if let Ok(_) = rx.recv_timeout(WAIT) {
-                    if let Some(mut ctx) = unsafe { CTX.as_mut() } {
-                        if let Some(msg) = check_clipboard(&mut ctx, None) {
-                            sp.send(msg);
-                        }
-                    }
+            if let Ok(_) = rx.recv_timeout(WAIT) {
+                if let Some(msg) = check_clipboard(&mut ctx, None) {
+                    sp.send(msg);
                 }
             }
 
@@ -93,7 +86,21 @@ mod listen {
             })?;
         }
 
+        {
+            RUNNING.store(false, Ordering::SeqCst);
+            trigger(&mut ctx);
+            let _ = listener.await;
+            log::info!("Clipboard listener stopped!");
+        }
+
         *CONTENT.lock().unwrap() = Default::default();
         Ok(())
+    }
+
+    fn trigger(ctx: &mut ClipboardContext) {
+        let _ = match ctx.get_text() {
+            Ok(text) => ctx.set_text(text),
+            Err(_) => ctx.set_text(Default::default()),
+        };
     }
 }
