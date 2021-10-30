@@ -86,12 +86,10 @@ mod listen {
             })?;
         }
 
-        {
-            RUNNING.store(false, Ordering::SeqCst);
-            trigger(&mut ctx);
-            let _ = listener.await;
-            log::info!("Clipboard listener stopped!");
-        }
+        RUNNING.store(false, Ordering::SeqCst);
+        trigger(&mut ctx);
+        let _ = listener.await;
+        log::info!("Clipboard listener stopped!");
 
         *CONTENT.lock().unwrap() = Default::default();
         Ok(())

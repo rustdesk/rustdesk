@@ -25,12 +25,6 @@ var svg_computer = <svg .computer viewBox="0 0 480 480">
 </g>
 </svg>;
 
-const TYPE_DIR = 1;
-const TYPE_DIR_LINK = 2;
-const TYPE_DIR_DRIVE = 3;
-const TYPE_FILE = 4;
-const TYPE_FILE_LINK = 5;
-
 function getSize(type, size) {
   if (!size) {
     if (type <= 3) return "";
