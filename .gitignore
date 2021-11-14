@@ -1,4 +1,5 @@
 /target
+.vscode
 .idea
 .DS_Store
 src/ui/inline.rs
