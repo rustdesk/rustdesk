@@ -333,7 +333,19 @@ impl UI {
                 }
             }
         }
+
+        *self.2.lock().unwrap() = m.clone();
         ipc::set_options(m).ok();
+    }
+
+    fn set_option(&self, key: String, value: String) {
+        let mut options = self.2.lock().unwrap();
+        if value.is_empty() {
+            options.remove(&key);
+        } else {
+            options.insert(key, value);
+        }
+        ipc::set_options(options.clone()).ok();
     }
 
     fn install_path(&mut self) -> String {
@@ -587,6 +599,7 @@ impl sciter::EventHandler for UI {
         fn test_if_valid_server(String);
         fn get_sound_inputs();
         fn set_options(Value);
+        fn set_option(String, String);
         fn get_software_update_url();
         fn get_new_version();
         fn get_version();

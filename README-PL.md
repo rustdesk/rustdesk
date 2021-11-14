@@ -105,6 +105,10 @@ mv libsciter-gtk.so target/debug
 cargo run
 ```
 
+### Zmień Wayland na X11 (Xorg)
+
+RustDesk nie obsługuje Waylanda. Sprawdź [this](https://docs.fedoraproject.org/en-US/quick-docs/configuring-xorg-as-default-gnome-session/) by skonfigurować Xorg jako domyślną sesję GNOME.
+
 ## Jak kompilować za pomocą Dockera
 
 Rozpocznij od sklonowania repozytorium i stworzenia kontenera docker:
@@ -134,10 +138,6 @@ target/release/rustdesk
 ```
 
 Upewnij się, że uruchamiasz te polecenia z katalogu głównego repozytorium RustDesk, w przeciwnym razie aplikacja może nie być w stanie znaleźć wymaganych zasobów. Należy również pamiętać, że inne podpolecenia ładowania, takie jak `install` lub `run` nie są obecnie obsługiwane za pomocą tej metody, ponieważ instalowałyby lub uruchamiały program wewnątrz kontenera zamiast na hoście.
-
-### Zmień Wayland na X11 (Xorg)
-
-RustDesk nie obsługuje Waylanda. Sprawdź [this](https://docs.fedoraproject.org/en-US/quick-docs/configuring-xorg-as-default-gnome-session/) by skonfigurować Xorg jako domyślną sesję GNOME.
 
 ## Struktura plików
 

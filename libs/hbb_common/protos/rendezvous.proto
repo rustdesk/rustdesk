@@ -48,6 +48,7 @@ message PunchHoleSent {
   string id = 2;
   string relay_server = 3;
   NatType nat_type = 4;
+  string version = 5;
 }
 
 message RegisterPk {
@@ -110,6 +111,7 @@ message RelayResponse {
     bytes pk = 5;
   }
   string refuse_reason = 6;
+  string version = 7;
 }
 
 message SoftwareUpdate { string url = 1; }
@@ -128,6 +130,7 @@ message LocalAddr {
   bytes local_addr = 2;
   string relay_server = 3;
   string id = 4;
+  string version = 5;
 }
 
 message RendezvousMessage {

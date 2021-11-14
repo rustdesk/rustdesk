@@ -285,6 +285,7 @@ impl RendezvousMediator {
         let mut msg_out = Message::new();
         let mut rr = RelayResponse {
             socket_addr,
+            version: crate::VERSION.to_owned(),
             ..Default::default()
         };
         if initiate {
@@ -321,6 +322,7 @@ impl RendezvousMediator {
             socket_addr: AddrMangle::encode(peer_addr),
             local_addr: AddrMangle::encode(local_addr),
             relay_server,
+            version: crate::VERSION.to_owned(),
             ..Default::default()
         });
         let bytes = msg_out.write_to_bytes()?;
@@ -359,6 +361,7 @@ impl RendezvousMediator {
             id: Config::get_id(),
             relay_server,
             nat_type: nat_type.into(),
+            version: crate::VERSION.to_owned(),
             ..Default::default()
         });
         let bytes = msg_out.write_to_bytes()?;

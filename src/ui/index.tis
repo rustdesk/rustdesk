@@ -40,9 +40,7 @@ class ConnectStatus: Reactor.Component {
     }
 
     event click $(.connect-status .link) () {
-        var options = handler.get_options();
-        options["stop-service"] = "";
-        handler.set_options(options);
+    	handler.set_option("stop-service", "");
     }
 }
 
@@ -138,7 +136,6 @@ function createNewConnect(id, type) {
 
 var myIdMenu;
 var audioInputMenu;
-var configOptions = {};
 class AudioInputs: Reactor.Component {
     function this() {
         audioInputMenu = this;
@@ -167,7 +164,7 @@ class AudioInputs: Reactor.Component {
     }
 
     function get_value() {
-        return configOptions["audio-input"] || this.get_default();
+        return handler.get_option("audio-input") || this.get_default();
     }
 
     function toggleMenuState() {
@@ -182,8 +179,7 @@ class AudioInputs: Reactor.Component {
         var v = me.id;
         if (v == this.get_value()) return;
         if (v == this.get_default()) v = "";
-        configOptions["audio-input"] = v;
-        handler.set_options(configOptions);
+        handler.set_option("audio-input", v);
         this.toggleMenuState();
     }
 }
@@ -223,7 +219,6 @@ class MyIdMenu: Reactor.Component {
 
     event click $(svg#menu) (_, me) {
         audioInputMenu.update({ show: true });
-        configOptions = handler.get_options();
         this.toggleMenuState();
         var menu = $(menu#config-options);
         me.popup(menu);
@@ -232,7 +227,7 @@ class MyIdMenu: Reactor.Component {
     function toggleMenuState() {
         for (var el in $$(menu#config-options>li)) {
             if (el.id && el.id.indexOf("enable-") == 0) {
-                var enabled = configOptions[el.id] != "N";
+                var enabled = handler.get_option(el.id) != "N";
                 el.attributes.toggleClass("selected", enabled);
                 el.attributes.toggleClass("line-through", !enabled);
             }
@@ -241,11 +236,10 @@ class MyIdMenu: Reactor.Component {
 
     event click $(menu#config-options>li) (_, me) {
         if (me.id && me.id.indexOf("enable-") == 0) {
-            configOptions[me.id] = configOptions[me.id] == "N" ? "" : "N";
-            handler.set_options(configOptions);
+            handler.set_option(me.id, handler.get_option(me.id) == "N" ? "" : "N");
         }
         if (me.id == "whitelist") {
-            var old_value = (configOptions["whitelist"] || "").split(",").join("\n");
+            var old_value = handler.get_option("whitelist").split(",").join("\n");
             handler.msgbox("custom-whitelist", "IP Whitelisting", "<div .form> \
             <textarea spellcheck=\"false\" name=\"text\" novalue=\"0.0.0.0\" style=\"overflow: scroll-indicator; height: 160px; font-size: 1.2em; padding: 0.5em;\">" + old_value + "</textarea>\
             </div> \
@@ -253,7 +247,7 @@ class MyIdMenu: Reactor.Component {
                 if (!res) return;
                 var value = (res.text || "").trim();
                 if (value) {
-                    var values = value.split(/[\s,;]+/g);
+                    var values = value.split(/[\s,;\n]+/g);
                     for (var ip in values) {
                         if (!ip.match(/^\d+\.\d+\.\d+\.\d+$/)) {
                             return "Invalid ip: " + ip;
@@ -262,11 +256,11 @@ class MyIdMenu: Reactor.Component {
                     value = values.join("\n");
                 }
                 if (value == old_value) return;
-                configOptions["whitelist"] = value.replace("\n", ",");
                 stdout.println("whitelist updated");
-                handler.set_options(configOptions);
+                handler.set_option("whitelist", value.replace("\n", ","));
             }, 300);
         } else if (me.id == "custom-server") {
+        	var configOptions = handler.get_options();
             var old_relay = configOptions["relay-server"] || "";
             var old_id = configOptions["custom-rendezvous-server"] || "";
             handler.msgbox("custom-server", "ID/Relay Server", "<div .form> \
@@ -293,8 +287,7 @@ class MyIdMenu: Reactor.Component {
         } else if (me.id == "forum") {
             handler.open_url("https:://forum.rustdesk.com");
         } else if (me.id == "stop-service") {
-            configOptions["stop-service"] = service_stopped ? "" : "Y";
-            handler.set_options(configOptions);
+            handler.set_option("stop-service", service_stopped ? "" : "Y");
         } else if (me.id == "about") {
             var name = handler.get_app_name();
             handler.msgbox("custom-nocancel-nook-hasclose", "About " + name, "<div style='line-height: 2em'> \

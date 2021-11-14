@@ -257,6 +257,10 @@ handler.msgbox = function(type, title, text, callback=null, height=180, width=50
     self.timer(150ms, function() { msgbox(type, title, text, callback, height, width, retry); });
 }
 
+handler.block_msgbox = function(type, title, text, callback=null, height=180, width=500, retry=0) {
+    msgbox(type, title, text, callback, height, width, retry);
+}
+
 var reconnectTimeout = 1;
 handler.msgbox_retry = function(type, title, text, hasRetry, callback=null, height=180, width=500) {
     handler.msgbox(type, title, text, callback, height, width, hasRetry ? reconnectTimeout : 0);

@@ -24,6 +24,11 @@ class Grid: Behavior {
     {
       return this.$(tbody>tr:current);
     }
+
+  function getCurrentRows() 
+  {
+    return this.$$(tbody>tr:checked);
+  }
   
   function getCurrentColumn()
   {

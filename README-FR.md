@@ -104,6 +104,10 @@ mv libsciter-gtk.so target/debug
 Exécution du cargo
 ```
 
+### Changer Wayland en X11 (Xorg)
+
+RustDesk ne supporte pas Wayland. Lisez [cela](https://docs.fedoraproject.org/en-US/quick-docs/configuring-xorg-as-default-gnome-session/) pour configurer Xorg comme la session GNOME par défaut.
+
 ## Comment construire avec Docker
 
 Commencez par cloner le dépôt et construire le conteneur Docker :
@@ -133,10 +137,6 @@ target/release/rustdesk
 ```
 
 Veuillez vous assurer que vous exécutez ces commandes à partir de la racine du référentiel RustDesk, sinon l'application ne pourra pas trouver les ressources requises. Notez également que les autres sous-commandes de cargo telles que `install` ou `run` ne sont pas actuellement supportées par cette méthode car elles installeraient ou exécuteraient le programme à l'intérieur du conteneur au lieu de l'hôte.
-
-### Changer Wayland en X11 (Xorg)
-
-RustDesk ne supporte pas Wayland. Lisez [cela](https://docs.fedoraproject.org/en-US/quick-docs/configuring-xorg-as-default-gnome-session/) pour configurer Xorg comme la session GNOME par défaut.
 
 ## Structure du projet
 
