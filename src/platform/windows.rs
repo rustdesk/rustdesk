@@ -546,7 +546,7 @@ async fn launch_server(session_id: DWORD, close_first: bool) -> ResultType<HANDL
     let wstr = wstr.as_ptr();
     let h = unsafe { LaunchProcessWin(wstr, session_id, FALSE) };
     if h.is_null() {
-        log::error!("Failed to luanch server: {}", get_error());
+        log::error!("Failed to launch server: {}", get_error());
     }
     Ok(h)
 }
@@ -605,7 +605,7 @@ fn send_sas() {
 }
 
 lazy_static::lazy_static! {
-    static ref SUPRESS: Arc<Mutex<Instant>> = Arc::new(Mutex::new(Instant::now()));
+    static ref SUPPRESS: Arc<Mutex<Instant>> = Arc::new(Mutex::new(Instant::now()));
 }
 
 pub fn desktop_changed() -> bool {
@@ -617,7 +617,7 @@ pub fn try_change_desktop() -> bool {
         if inputDesktopSelected() == FALSE {
             let res = selectInputDesktop() == TRUE;
             if !res {
-                let mut s = SUPRESS.lock().unwrap();
+                let mut s = SUPPRESS.lock().unwrap();
                 if s.elapsed() > std::time::Duration::from_secs(3) {
                     log::error!("Failed to switch desktop: {}", get_error());
                     *s = Instant::now();

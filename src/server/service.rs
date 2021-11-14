@@ -34,7 +34,7 @@ pub trait Reset {
 pub struct ServiceTmpl<T: Subscriber + From<ConnInner>>(Arc<RwLock<ServiceInner<T>>>);
 pub struct ServiceSwap<T: Subscriber + From<ConnInner>>(ServiceTmpl<T>);
 pub type GenericService = ServiceTmpl<ConnInner>;
-pub const HIBERATE_TIMEOUT: u64 = 30;
+pub const HIBERNATE_TIMEOUT: u64 = 30;
 pub const MAX_ERROR_TIMEOUT: u64 = 1_000;
 
 impl<T: Subscriber + From<ConnInner>> ServiceInner<T> {
@@ -191,7 +191,7 @@ impl<T: Subscriber + From<ConnInner>> ServiceTmpl<T> {
         let sp = self.clone();
         let mut callback = callback;
         let thread = thread::spawn(move || {
-            let mut error_timeout = HIBERATE_TIMEOUT;
+            let mut error_timeout = HIBERNATE_TIMEOUT;
             while sp.active() {
                 if sp.has_subscribes() {
                     log::debug!("Enter {} service inner loop", sp.name());
@@ -199,7 +199,7 @@ impl<T: Subscriber + From<ConnInner>> ServiceTmpl<T> {
                     if let Err(err) = callback(sp.clone()) {
                         log::error!("Error of {} service: {}", sp.name(), err);
                         if tm.elapsed() > time::Duration::from_millis(MAX_ERROR_TIMEOUT) {
-                            error_timeout = HIBERATE_TIMEOUT;
+                            error_timeout = HIBERNATE_TIMEOUT;
                         } else {
                             error_timeout *= 2;
                         }
@@ -213,7 +213,7 @@ impl<T: Subscriber + From<ConnInner>> ServiceTmpl<T> {
                         log::debug!("Exit {} service inner loop", sp.name());
                     }
                 }
-                thread::sleep(time::Duration::from_millis(HIBERATE_TIMEOUT));
+                thread::sleep(time::Duration::from_millis(HIBERNATE_TIMEOUT));
             }
         });
         self.0.write().unwrap().handle = Some(thread);
