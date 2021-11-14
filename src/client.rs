@@ -141,7 +141,7 @@ impl Client {
                                     punch_hole_response::Failure::OFFLINE => {
                                         bail!("Remote desktop is offline");
                                     }
-                                    punch_hole_response::Failure::LICENCE_MISMATCH => {
+                                    punch_hole_response::Failure::LICENSE_MISMATCH => {
                                         bail!("Key mismatch");
                                     }
                                     _ => {

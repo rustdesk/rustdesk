@@ -75,8 +75,8 @@ message PunchHoleResponse {
   enum Failure {
     ID_NOT_EXIST = 1;
     OFFLINE = 2;
-    LICENCE_MISMATCH = 3;
-    LICENCE_OVERUSE = 4;
+    LICENSE_MISMATCH = 3;
+    LICENSE_OVERUSE = 4;
   }
   Failure failure = 3;
   string relay_server = 4;

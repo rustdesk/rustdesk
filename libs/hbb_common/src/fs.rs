@@ -193,7 +193,7 @@ pub struct TransferJob {
     file: Option<File>,
     total_size: u64,
     finished_size: u64,
-    transfered: u64,
+    transferred: u64,
 }
 
 #[inline]
@@ -268,8 +268,8 @@ impl TransferJob {
     }
 
     #[inline]
-    pub fn transfered(&self) -> u64 {
-        self.transfered
+    pub fn transferred(&self) -> u64 {
+        self.transferred
     }
 
     #[inline]
@@ -332,7 +332,7 @@ impl TransferJob {
             self.file.as_mut().unwrap().write_all(&block.data).await?;
             self.finished_size += block.data.len() as u64;
         }
-        self.transfered += block.data.len() as u64;
+        self.transferred += block.data.len() as u64;
         Ok(())
     }
 
@@ -398,7 +398,7 @@ impl TransferJob {
                     compressed = true;
                 }
             }
-            self.transfered += buf.len() as u64;
+            self.transferred += buf.len() as u64;
         }
         Ok(Some(FileTransferBlock {
             id: self.id,

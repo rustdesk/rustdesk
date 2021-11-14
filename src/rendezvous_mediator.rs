@@ -34,7 +34,7 @@ pub struct RendezvousMediator {
     host: String,
     host_prefix: String,
     rendezvous_servers: Vec<String>,
-    last_id_pk_registery: String,
+    last_id_pk_registry: String,
 }
 
 impl RendezvousMediator {
@@ -90,7 +90,7 @@ impl RendezvousMediator {
             host: host.clone(),
             host_prefix,
             rendezvous_servers,
-            last_id_pk_registery: "".to_owned(),
+            last_id_pk_registry: "".to_owned(),
         };
         allow_err!(rz.dns_check());
         let mut socket = FramedSocket::new(Config::get_any_listen_addr()).await?;
@@ -377,7 +377,7 @@ impl RendezvousMediator {
             pk.clone()
         };
         let id = Config::get_id();
-        self.last_id_pk_registery = id.clone();
+        self.last_id_pk_registry = id.clone();
         msg_out.set_register_pk(RegisterPk {
             id,
             uuid,
@@ -389,7 +389,7 @@ impl RendezvousMediator {
     }
 
     async fn handle_uuid_mismatch(&mut self, socket: &mut FramedSocket) -> ResultType<()> {
-        if self.last_id_pk_registery != Config::get_id() {
+        if self.last_id_pk_registry != Config::get_id() {
             return Ok(());
         }
         {

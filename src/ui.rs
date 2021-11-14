@@ -621,7 +621,7 @@ pub fn check_zombie(childs: Childs) {
     }
 }
 
-// notice: avoiding create ipc connecton repeatly,
+// notice: avoiding create ipc connection repeatedly,
 // because windows named pipe has serious memory leak issue.
 #[tokio::main(flavor = "current_thread")]
 async fn check_connect_status_(
