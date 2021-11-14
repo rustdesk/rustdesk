@@ -694,8 +694,8 @@ impl Handler {
         let mut key_event = KeyEvent::new();
         if down_or_up == 2 {
             /* windows send both keyup/keydown and keychar, so here we avoid keychar
-               for <= 0xFF, best practise should only avoid those not on keyboard, but
-               for now, we have no way to test, so avoid <= 0xFF totaly
+               for <= 0xFF, best practice should only avoid those not on keyboard, but
+               for now, we have no way to test, so avoid <= 0xFF totally
             */
             if code <= 0xFF {
                 return None;
@@ -891,7 +891,8 @@ impl Handler {
 
         let mut name = name;
         #[cfg(target_os = "linux")]
-        if code == 65383 { // VK_MENU
+        if code == 65383 {
+            // VK_MENU
             name = "Apps".to_owned();
         }
 
@@ -1435,16 +1436,16 @@ impl Remote {
         if elapsed <= 0 {
             return;
         }
-        let transfered = job.transfered();
-        let last_transfered = {
+        let transferred = job.transferred();
+        let last_transferred = {
             if let Some(v) = last_update_jobs_status.1.get(&job.id()) {
                 v.to_owned()
             } else {
                 0
             }
         };
-        last_update_jobs_status.1.insert(job.id(), transfered);
-        let speed = (transfered - last_transfered) as f64 / (elapsed as f64 / 1000.);
+        last_update_jobs_status.1.insert(job.id(), transferred);
+        let speed = (transferred - last_transferred) as f64 / (elapsed as f64 / 1000.);
         let file_num = job.file_num() - 1;
         handler.call(
             "jobProgress",

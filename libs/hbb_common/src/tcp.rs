@@ -34,7 +34,7 @@ fn new_socket(addr: std::net::SocketAddr, reuse: bool) -> Result<TcpSocket, std:
     if reuse {
         // windows has no reuse_port, but it's reuse_address
         // almost equals to unix's reuse_port + reuse_address,
-        // though may introduce nondeterministic bahavior
+        // though may introduce nondeterministic behavior
         #[cfg(unix)]
         socket.set_reuseport(true)?;
         socket.set_reuseaddr(true)?;

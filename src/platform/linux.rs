@@ -417,7 +417,7 @@ pub fn fix_login_wayland() {
             "sed",
             "-i",
             "s/#WaylandEnable=false/WaylandEnable=false/g",
-            &file
+            &file,
         ])
         .output()
     {
@@ -435,20 +435,22 @@ pub fn fix_login_wayland() {
 
 pub fn current_is_wayland() -> bool {
     let dtype = get_display_server();
-    return "wayland" == dtype && unsafe{UNMODIFIED};
+    return "wayland" == dtype && unsafe { UNMODIFIED };
 }
 
 pub fn modify_default_login() -> String {
     let dsession = std::env::var("DESKTOP_SESSION").unwrap();
     let user_name = std::env::var("USERNAME").unwrap();
-    if let Ok(Some(x)) = run_cmds("ls /usr/share/* | grep ${DESKTOP_SESSION}-xorg.desktop".to_owned()) {
+    if let Ok(Some(x)) =
+        run_cmds("ls /usr/share/* | grep ${DESKTOP_SESSION}-xorg.desktop".to_owned())
+    {
         if x.trim_end().to_string() != "" {
             match std::process::Command::new("pkexec")
                 .args(vec![
                     "sed",
                     "-i",
                     &format!("s/={0}$/={0}-xorg/g", &dsession),
-                    &format!("/var/lib/AccountsService/users/{}", &user_name)
+                    &format!("/var/lib/AccountsService/users/{}", &user_name),
                 ])
                 .output()
             {
@@ -458,7 +460,9 @@ pub fn modify_default_login() -> String {
                         log::error!("modify_default_login failed: {}", x);
                         return "Fix failed! Please re-login with X server manually".to_owned();
                     } else {
-                        unsafe {UNMODIFIED = false;}
+                        unsafe {
+                            UNMODIFIED = false;
+                        }
                         return "".to_owned();
                     }
                 }
@@ -467,14 +471,16 @@ pub fn modify_default_login() -> String {
                     return "Fix failed! Please re-login with X server manually".to_owned();
                 }
             }
-        } else if let Ok(Some(z)) = run_cmds("ls /usr/share/* | grep ${DESKTOP_SESSION:0:-8}.desktop".to_owned()) {
+        } else if let Ok(Some(z)) =
+            run_cmds("ls /usr/share/* | grep ${DESKTOP_SESSION:0:-8}.desktop".to_owned())
+        {
             if z.trim_end().to_string() != "" {
                 match std::process::Command::new("pkexec")
                     .args(vec![
                         "sed",
                         "-i",
-                        &format!("s/={}$/={}/g", &dsession, &dsession[..dsession.len()-8]),
-                        &format!("/var/lib/AccountsService/users/{}", &user_name)
+                        &format!("s/={}$/={}/g", &dsession, &dsession[..dsession.len() - 8]),
+                        &format!("/var/lib/AccountsService/users/{}", &user_name),
                     ])
                     .output()
                 {
@@ -484,7 +490,9 @@ pub fn modify_default_login() -> String {
                             log::error!("modify_default_login failed: {}", x);
                             return "Fix failed! Please re-login with X server manually".to_owned();
                         } else {
-                            unsafe {UNMODIFIED = false;}
+                            unsafe {
+                                UNMODIFIED = false;
+                            }
                             return "".to_owned();
                         }
                     }

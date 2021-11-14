@@ -489,7 +489,7 @@ impl UI {
         #[cfg(target_os = "linux")]
         return crate::platform::linux::fix_login_wayland();
     }
-    
+
     fn current_is_wayland(&mut self) -> bool {
         #[cfg(target_os = "linux")]
         return crate::platform::linux::current_is_wayland();
@@ -634,7 +634,7 @@ pub fn check_zombie(childs: Childs) {
     }
 }
 
-// notice: avoiding create ipc connecton repeatly,
+// notice: avoiding create ipc connection repeatedly,
 // because windows named pipe has serious memory leak issue.
 #[tokio::main(flavor = "current_thread")]
 async fn check_connect_status_(
