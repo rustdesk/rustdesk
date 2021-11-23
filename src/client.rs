@@ -1086,7 +1086,6 @@ lazy_static::lazy_static! {
         ("VK_F10", Key::ControlKey(ControlKey::F10)),
         ("VK_F11", Key::ControlKey(ControlKey::F11)),
         ("VK_F12", Key::ControlKey(ControlKey::F12)),
-        ("VK_F12", Key::ControlKey(ControlKey::F12)),
         ("VK_ENTER", Key::ControlKey(ControlKey::Return)),
         ("VK_CANCEL", Key::ControlKey(ControlKey::Cancel)),
         ("VK_BACK", Key::ControlKey(ControlKey::Backspace)),
