@@ -147,7 +147,7 @@ pub async fn new_listener(postfix: &str) -> ResultType<Incoming> {
         }
         Err(err) => {
             log::error!(
-                "Faild to start ipc{} server at path {}: {}",
+                "Failed to start ipc{} server at path {}: {}",
                 postfix,
                 path,
                 err
@@ -374,7 +374,7 @@ pub fn set_password(v: String) -> ResultType<()> {
 
 pub fn get_id() -> String {
     if let Ok(Some(v)) = get_config("id") {
-        // update salt also, so that nexttime reinstallation not causing first-time auto-login failure
+        // update salt also, so that next time reinstallation not causing first-time auto-login failure
         if let Ok(Some(v2)) = get_config("salt") {
             Config::set_salt(&v2);
         }

@@ -48,6 +48,7 @@ message PunchHoleSent {
   string id = 2;
   string relay_server = 3;
   NatType nat_type = 4;
+  string version = 5;
 }
 
 message RegisterPk {
@@ -75,8 +76,8 @@ message PunchHoleResponse {
   enum Failure {
     ID_NOT_EXIST = 1;
     OFFLINE = 2;
-    LICENCE_MISMATCH = 3;
-    LICENCE_OVERUSE = 4;
+    LICENSE_MISMATCH = 3;
+    LICENSE_OVERUSE = 4;
   }
   Failure failure = 3;
   string relay_server = 4;
@@ -110,6 +111,7 @@ message RelayResponse {
     bytes pk = 5;
   }
   string refuse_reason = 6;
+  string version = 7;
 }
 
 message SoftwareUpdate { string url = 1; }
@@ -128,6 +130,7 @@ message LocalAddr {
   bytes local_addr = 2;
   string relay_server = 3;
   string id = 4;
+  string version = 5;
 }
 
 message RendezvousMessage {

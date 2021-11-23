@@ -13,14 +13,16 @@ Chattez avec nous : [Discord](https://discord.gg/nDceKgxnkV) | [Reddit](https://
 
 [![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/I2I04VU09)
 
-Encore un autre logiciel de bureau à distance, écrit en Rust. Fonctionne directement, aucune configuration n'est nécessaire. Une excellente alternative à TeamViewer et AnyDesk ! Vous avez le contrôle total de vos données, sans aucun souci de sécurité. Vous pouvez utiliser notre serveur de rendez-vous/relais, [configurer le vôtre](https://rustdesk.com/blog/id-relay-set/), ou [écrire votre propre serveur de rendez-vous/relais](https://github.com/rustdesk/rustdesk-server-demo). 
+Encore un autre logiciel de bureau à distance, écrit en Rust. Fonctionne directement, aucune configuration n'est nécessaire. Vous avez le contrôle total de vos données, sans aucun souci de sécurité. Vous pouvez utiliser notre serveur de rendez-vous/relais, [configurer le vôtre](https://rustdesk.com/blog/id-relay-set/), ou [écrire votre propre serveur de rendez-vous/relais](https://github.com/rustdesk/rustdesk-server-demo).
 
-RustDesk accueille les contributions de tout le monde.  Voir [`CONTRIBUTING.md`](CONTRIBUTING.md) pour plus d'informations.
+RustDesk accueille les contributions de tout le monde. Voir [`CONTRIBUTING.md`](CONTRIBUTING.md) pour plus d'informations.
 
 [**TÉLÉCHARGEMENT BINAIRE**](https://github.com/rustdesk/rustdesk/releases)
 
 ## Serveurs publics libres
+
 Ci-dessous se trouvent les serveurs que vous utilisez gratuitement, cela peut changer au fil du temps. Si vous n'êtes pas proche de l'un d'entre eux, votre réseau peut être lent.
+
 - Séoul, AWS lightsail, 1 VCPU/0.5G RAM
 - Singapour, Vultr, 1 VCPU/1G RAM
 - Dallas, Vultr, 1 VCPU/1G RAM
@@ -29,40 +31,45 @@ Ci-dessous se trouvent les serveurs que vous utilisez gratuitement, cela peut ch
 
 Les versions de bureau utilisent [sciter](https://sciter.com/) pour l'interface graphique, veuillez télécharger la bibliothèque dynamique sciter vous-même.
 
-[Windows](https://raw.githubusercontent.com/c-smile/sciter-sdk/master/bin.win/x64/sciter.dll) | 
+[Windows](https://raw.githubusercontent.com/c-smile/sciter-sdk/master/bin.win/x64/sciter.dll) |
 [Linux](https://raw.githubusercontent.com/c-smile/sciter-sdk/master/bin.lnx/x64/libsciter-gtk.so)
 [macOS](https://raw.githubusercontent.com/c-smile/sciter-sdk/master/bin.osx/libsciter.dylib)
 
 ## Étapes brutes de la compilation/build
-* Préparez votre environnement de développement Rust et votre environnement de compilation C++.
 
-* Installez [vcpkg](https://github.com/microsoft/vcpkg), et définissez correctement la variable d'environnement `VCPKG_ROOT`.
+- Préparez votre environnement de développement Rust et votre environnement de compilation C++.
 
-   - Windows : vcpkg install libvpx:x64-windows-static libyuv:x64-windows-static opus:x64-windows-static
-   - Linux/Osx : vcpkg install libvpx libyuv opus
-   
-* Exécuter `cargo run`
+- Installez [vcpkg](https://github.com/microsoft/vcpkg), et définissez correctement la variable d'environnement `VCPKG_ROOT`.
+
+  - Windows : vcpkg install libvpx:x64-windows-static libyuv:x64-windows-static opus:x64-windows-static
+  - Linux/Osx : vcpkg install libvpx libyuv opus
+
+- Exécuter `cargo run`
 
 ## Comment compiler/build sous Linux
 
 ### Ubuntu 18 (Debian 10)
+
 ```sh
 sudo apt install -y g++ gcc git curl wget nasm yasm libgtk-3-dev clang libxcb-randr0-dev libxdo-dev libxfixes-dev libxcb-shape0-dev libxcb-xfixes0-dev libasound2-dev libpulse-dev cmake
 ```
 
 ### Fedora 28 (CentOS 8)
+
 ```sh
 sudo yum -y install gcc-c++ git curl wget nasm yasm gcc gtk3-devel clang libxcb-devel libxdo-devel libXfixes-devel pulseaudio-libs-devel cmake alsa-lib-devel
 ```
 
 ### Arch (Manjaro)
+
 ```sh
 sudo pacman -Syu --needed unzip git cmake gcc curl wget yasm nasm zip make pkg-config clang gtk3 xdotool libxcb libxfixes alsa-lib pulseaudio
 ```
 
 ### Installer vcpkg
+
 ```sh
-git clone https://github.com/microsoft/vcpkg 
+git clone https://github.com/microsoft/vcpkg
 cd vcpkg
 git checkout 134505003bb46e20fbace51ccfb69243fbbc5f82
 cd ..
@@ -72,6 +79,7 @@ vcpkg/vcpkg install libvpx libyuv opus
 ```
 
 ### Corriger libvpx (Pour Fedora)
+
 ```sh
 cd vcpkg/buildtrees/libvpx/src
 cd *
@@ -84,6 +92,7 @@ cd
 ```
 
 ### Construire
+
 ```sh
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 source $HOME/.cargo/env
@@ -94,6 +103,10 @@ wget https://raw.githubusercontent.com/c-smile/sciter-sdk/master/bin.lnx/x64/lib
 mv libsciter-gtk.so target/debug
 Exécution du cargo
 ```
+
+### Changer Wayland en X11 (Xorg)
+
+RustDesk ne supporte pas Wayland. Lisez [cela](https://docs.fedoraproject.org/en-US/quick-docs/configuring-xorg-as-default-gnome-session/) pour configurer Xorg comme la session GNOME par défaut.
 
 ## Comment construire avec Docker
 
@@ -116,6 +129,7 @@ Notez que le premier build peut prendre plus de temps avant que les dépendances
 ```sh
 target/debug/rustdesk
 ```
+
 Ou, si vous exécutez un exécutable provenant d'une release :
 
 ```sh
@@ -123,9 +137,6 @@ target/release/rustdesk
 ```
 
 Veuillez vous assurer que vous exécutez ces commandes à partir de la racine du référentiel RustDesk, sinon l'application ne pourra pas trouver les ressources requises. Notez également que les autres sous-commandes de cargo telles que `install` ou `run` ne sont pas actuellement supportées par cette méthode car elles installeraient ou exécuteraient le programme à l'intérieur du conteneur au lieu de l'hôte.
-
-### Changer Wayland en X11 (Xorg)
-RustDesk ne supporte pas Wayland. Lisez [cela](https://docs.fedoraproject.org/en-US/quick-docs/configuring-xorg-as-default-gnome-session/) pour configurer Xorg comme la session GNOME par défaut.
 
 ## Structure du projet
 
@@ -139,10 +150,11 @@ RustDesk ne supporte pas Wayland. Lisez [cela](https://docs.fedoraproject.org/en
 - **[src/platform](https://github.com/rustdesk/rustdesk/tree/master/src/platform)** : code spécifique à la plateforme
 
 ## Images
+
 ![image](https://user-images.githubusercontent.com/71636191/113112362-ae4deb80-923b-11eb-957d-ff88daad4f06.png)
 
 ![image](https://user-images.githubusercontent.com/71636191/113112619-f705a480-923b-11eb-911d-97e984ef52b6.png)
 
 ![image](https://user-images.githubusercontent.com/71636191/113112857-3fbd5d80-923c-11eb-9836-768325faf906.png)
 
-![image](https://user-images.githubusercontent.com/71636191/113112990-65e2fd80-923c-11eb-840e-349b4d6e340d.png)
+![image](https://user-images.githubusercontent.com/71636191/135385039-38fdbd72-379a-422d-b97f-33df71fb1cec.png)

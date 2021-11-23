@@ -120,13 +120,13 @@ impl Connection {
             return;
         }
         if !conn.keyboard {
-            conn.send_permisssion(Permission::Keyboard, false).await;
+            conn.send_permission(Permission::Keyboard, false).await;
         }
         if !conn.clipboard {
-            conn.send_permisssion(Permission::Clipboard, false).await;
+            conn.send_permission(Permission::Clipboard, false).await;
         }
         if !conn.audio {
-            conn.send_permisssion(Permission::Audio, false).await;
+            conn.send_permission(Permission::Audio, false).await;
         }
         let mut test_delay_timer =
             time::interval_at(Instant::now() + TEST_DELAY_TIMEOUT, TEST_DELAY_TIMEOUT);
@@ -164,7 +164,7 @@ impl Connection {
                             log::info!("Change permission {} -> {}", name, enabled);
                             if &name == "keyboard" {
                                 conn.keyboard = enabled;
-                                conn.send_permisssion(Permission::Keyboard, enabled).await;
+                                conn.send_permission(Permission::Keyboard, enabled).await;
                                 if let Some(s) = conn.server.upgrade() {
                                     s.write().unwrap().subscribe(
                                         NAME_CURSOR,
@@ -172,7 +172,7 @@ impl Connection {
                                 }
                             } else if &name == "clipboard" {
                                 conn.clipboard = enabled;
-                                conn.send_permisssion(Permission::Clipboard, enabled).await;
+                                conn.send_permission(Permission::Clipboard, enabled).await;
                                 if let Some(s) = conn.server.upgrade() {
                                     s.write().unwrap().subscribe(
                                         super::clipboard_service::NAME,
@@ -180,7 +180,7 @@ impl Connection {
                                 }
                             } else if &name == "audio" {
                                 conn.audio = enabled;
-                                conn.send_permisssion(Permission::Audio, enabled).await;
+                                conn.send_permission(Permission::Audio, enabled).await;
                                 if let Some(s) = conn.server.upgrade() {
                                     s.write().unwrap().subscribe(
                                         super::audio_service::NAME,
@@ -331,7 +331,7 @@ impl Connection {
         }
     }
 
-    async fn send_permisssion(&mut self, permission: Permission, enabled: bool) {
+    async fn send_permission(&mut self, permission: Permission, enabled: bool) {
         let mut misc = Misc::new();
         misc.set_permission_info(PermissionInfo {
             permission: permission.into(),

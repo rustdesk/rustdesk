@@ -43,6 +43,36 @@ pub fn new() -> GenericService {
     sp
 }
 
+fn check_display_changed(
+    last_n: usize,
+    last_current: usize,
+    last_width: usize,
+    last_hegiht: usize,
+) -> bool {
+    let displays = match Display::all() {
+        Ok(d) => d,
+        _ => return false,
+    };
+
+    let n = displays.len();
+    if n != last_n {
+        return true;
+    };
+
+    for (i, d) in displays.iter().enumerate() {
+        if d.is_primary() {
+            if i != last_current {
+                return true;
+            };
+            if d.width() != last_width || d.height() != last_hegiht {
+                return true;
+            };
+        }
+    }
+
+    return false;
+}
+
 fn run(sp: GenericService) -> ResultType<()> {
     let fps = 30;
     let spf = time::Duration::from_secs_f32(1. / (fps as f32));
@@ -99,7 +129,6 @@ fn run(sp: GenericService) -> ResultType<()> {
         *SWITCH.lock().unwrap() = false;
         sp.send(msg_out);
     }
-    
     let mut crc = (0, 0);
     let start = time::Instant::now();
     let mut last_sent = time::Instant::now();
@@ -162,6 +191,12 @@ fn run(sp: GenericService) -> ResultType<()> {
                     continue;
                 }
                 Err(err) => {
+                    if check_display_changed(ndisplay, current, width, height) {
+                        log::info!("Displays changed");
+                        *SWITCH.lock().unwrap() = true;
+                        bail!("SWITCH");
+                    }
+
                     return Err(err.into());
                 }
             }

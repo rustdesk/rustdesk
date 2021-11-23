@@ -1,6 +1,6 @@
 pub use arboard::Clipboard as ClipboardContext;
 use hbb_common::{
-    allow_err,
+    allow_err, bail,
     compress::{compress as compress_func, decompress},
     config::{Config, COMPRESS_LEVEL, RENDEZVOUS_TIMEOUT},
     log,
@@ -240,6 +240,10 @@ async fn test_nat_type_() -> ResultType<bool> {
     let rendezvous_server = get_rendezvous_server(100).await;
     let server1 = rendezvous_server;
     let mut server2 = server1;
+    if server1.port() == 0 { // offline
+        // avoid overflow crash
+        bail!("Offline");
+    }
     server2.set_port(server1.port() - 1);
     let mut msg_out = RendezvousMessage::new();
     let serial = Config::get_serial();

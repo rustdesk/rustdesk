@@ -153,7 +153,10 @@ fn patch(path: PathBuf) -> PathBuf {
         {
             if _tmp == "/root" {
                 if let Ok(output) = std::process::Command::new("whoami").output() {
-                    let user = String::from_utf8_lossy(&output.stdout).to_string().trim().to_owned();
+                    let user = String::from_utf8_lossy(&output.stdout)
+                        .to_string()
+                        .trim()
+                        .to_owned();
                     if user != "root" {
                         return format!("/home/{}", user).into();
                     }

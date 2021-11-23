@@ -51,6 +51,7 @@ mac_address = "1.1"
 sciter-rs = { git = "https://github.com/open-trade/rust-sciter", branch = "dyn" }
 ctrlc = "3.2"
 arboard = "2.0"
+clipboard-master = "3"
 
 [target.'cfg(target_os = "windows")'.dependencies]
 #systray = { git = "https://github.com/open-trade/systray-rs" }

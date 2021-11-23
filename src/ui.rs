@@ -333,7 +333,19 @@ impl UI {
                 }
             }
         }
+
+        *self.2.lock().unwrap() = m.clone();
         ipc::set_options(m).ok();
+    }
+
+    fn set_option(&self, key: String, value: String) {
+        let mut options = self.2.lock().unwrap();
+        if value.is_empty() {
+            options.remove(&key);
+        } else {
+            options.insert(key, value);
+        }
+        ipc::set_options(options.clone()).ok();
     }
 
     fn install_path(&mut self) -> String {
@@ -477,7 +489,7 @@ impl UI {
         #[cfg(target_os = "linux")]
         return crate::platform::linux::fix_login_wayland();
     }
-    
+
     fn current_is_wayland(&mut self) -> bool {
         #[cfg(target_os = "linux")]
         return crate::platform::linux::current_is_wayland();
@@ -587,6 +599,7 @@ impl sciter::EventHandler for UI {
         fn test_if_valid_server(String);
         fn get_sound_inputs();
         fn set_options(Value);
+        fn set_option(String, String);
         fn get_software_update_url();
         fn get_new_version();
         fn get_version();
@@ -621,7 +634,7 @@ pub fn check_zombie(childs: Childs) {
     }
 }
 
-// notice: avoiding create ipc connecton repeatly,
+// notice: avoiding create ipc connection repeatedly,
 // because windows named pipe has serious memory leak issue.
 #[tokio::main(flavor = "current_thread")]
 async fn check_connect_status_(

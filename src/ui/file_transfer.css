@@ -30,6 +30,7 @@ table > thead {
 } 
 
 table > tbody {
+  behavior: select-multiple;
   overflow-y: scroll-indicator;
   size: *;
   background: white;
@@ -84,6 +85,15 @@ table.has_current tr:current /* current row */
 { 
   background-color: color(accent); 
 } 
+
+table.has_current tbody tr:checked
+{
+  background-color: color(accent);
+}
+
+table.has_current tbody tr:checked td {
+  color: highlighttext;
+}
 
 table td 
 { 

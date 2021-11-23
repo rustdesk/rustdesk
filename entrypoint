@@ -1,13 +1,5 @@
 #!/bin/sh
 
-if [ "$(id -u)" != "${PUID:-1000}" ] || [ "$(id -g)" != "${PGID:-1000}" ]; then
-  usermod -o -u "${PUID:-1000}" user
-  groupmod -o -g "${PGID:-1000}" user
-  chown -R user /home/user
-  sudo -u user /entrypoint $@
-  exit 0
-fi
-
 cd $HOME/rustdesk
 . $HOME/.cargo/env
 
