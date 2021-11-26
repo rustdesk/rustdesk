@@ -28,7 +28,7 @@
 | Singapore | Vultr | 1 VCPU / 1GB RAM |
 | Dallas | Vultr | 1 VCPU / 1GB RAM | |
 
-## Dependencies
+## ഡിപെൻഡൻസികൾ 
 
 ഡെസ്‌ക്‌ടോപ്പ് പതിപ്പുകൾ GUI-യ്‌ക്കായി [sciter](https://sciter.com/) ഉപയോഗിക്കുന്നു, ദയവായി സ്‌സൈറ്റർ ഡൈനാമിക് ലൈബ്രറി സ്വയം ഡൗൺലോഡ് ചെയ്യുക.
 
