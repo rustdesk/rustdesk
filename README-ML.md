@@ -22,7 +22,7 @@
 ## സൗജന്യ പൊതു സെർവറുകൾ
 
 നിങ്ങൾ സൗജന്യമായി ഉപയോഗിക്കുന്ന സെർവറുകൾ ചുവടെയുണ്ട്, അത് സമയത്തിനനുസരിച്ച് മാറിയേക്കാം. നിങ്ങൾ ഇവയിലൊന്നിനോട് അടുത്തല്ലെങ്കിൽ, നിങ്ങളുടെ നെറ്റ്‌വർക്ക് സ്ലോ ആയേക്കാം.
-| സ്ഥാനം | Vendor | Specification |
+| സ്ഥാനം | വെണ്ടർ | സ്പെസിഫിക്കേഷൻ |
 | --------- | ------------- | ------------------ |
 | Seoul | AWS lightsail | 1 VCPU / 0.5GB RAM |
 | Singapore | Vultr | 1 VCPU / 1GB RAM |
@@ -36,7 +36,7 @@
 [Linux](https://raw.githubusercontent.com/c-smile/sciter-sdk/master/bin.lnx/x64/libsciter-gtk.so) |
 [MacOS](https://raw.githubusercontent.com/c-smile/sciter-sdk/master/bin.osx/libsciter.dylib)
 
-## Raw steps to build
+## നിർമ്മിക്കാനുള്ള അസംസ്കൃത പടികൾ
 
 - നിങ്ങളുടെ Rust development envയും and C++ build envയും തയ്യാറാക്കുക
 
@@ -109,7 +109,7 @@ VCPKG_ROOT=$HOME/vcpkg cargo run
 
 RustDesk Wayland-നെ പിന്തുണയ്ക്കുന്നില്ല. സ്ഥിരസ്ഥിതി ഗ്നോം സെഷനായി Xorg കോൺഫിഗർ ചെയ്യുന്നതിന് [ഇത്](https://docs.fedoraproject.org/en-US/quick-docs/configuring-xorg-as-default-gnome-session/) പരിശോധിക്കുക.
 
-## How to build with Docker
+## ഡോക്കർ ഉപയോഗിച്ച് എങ്ങനെ നിർമ്മിക്കാം
 
  റെപ്പോസിറ്റോറി ക്ലോണുചെയ്‌ത് ഡോക്കർ കണ്ടെയ്‌നർ നിർമ്മിക്കുന്നതിലൂടെ ആരംഭിക്കുക:
 
