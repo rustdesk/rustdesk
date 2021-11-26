@@ -15,7 +15,7 @@
 
 റസ്റ്റിൽ എഴുതിയ മറ്റൊരു റിമോട്ട് ഡെസ്ക്ടോപ്പ് സോഫ്റ്റ്‌വെയർ. ബോക്‌സിന് പുറത്ത് പ്രവർത്തിക്കുന്നു, കോൺഫിഗറേഷൻ ആവശ്യമില്ല. സുരക്ഷയെക്കുറിച്ച് ആശങ്കകളൊന്നുമില്ലാതെ, നിങ്ങളുടെ ഡാറ്റയുടെ പൂർണ്ണ നിയന്ത്രണം നിങ്ങൾക്കുണ്ട്. നിങ്ങൾക്ക് ഞങ്ങളുടെ ഒത്തുചേരൽ/റിലേ സെർവർ ഉപയോഗിക്കാം, [സ്വന്തമായി സജ്ജീകരിക്കുക](https://rustdesk.com/blog/id-relay-set/), അല്ലെങ്കിൽ  [write your own rendezvous/relay server](https://github .com/rustdesk/rustdesk-server-demo).
 
-എല്ലാവരുടെയും സംഭാവനയെ RustDesk സ്വാഗതം ചെയ്യുന്നു. See [`CONTRIBUTING.md`](CONTRIBUTING.md) for help getting started.
+എല്ലാവരുടെയും സംഭാവനയെ RustDesk സ്വാഗതം ചെയ്യുന്നു. ആരംഭിക്കുന്നതിനുള്ള സഹായത്തിന് [`CONTRIBUTING.md`](CONTRIBUTING.md) കാണുക.
 
 [**BINARY DOWNLOAD**](https://github.com/rustdesk/rustdesk/releases)
 
@@ -38,9 +38,9 @@
 
 ## Raw steps to build
 
-- Prepare your Rust development env and C++ build env
+- നിങ്ങളുടെ Rust development envയും and C++ build envയും തയ്യാറാക്കുക
 
-- Install [vcpkg](https://github.com/microsoft/vcpkg), and set `VCPKG_ROOT` env variable correctly
+- [vcpkg](https://github.com/microsoft/vcpkg) ഇൻസ്റ്റാൾ ചെയ്ത് `VCPKG_ROOT` env വേരിയബിൾ ശരിയായി സജ്ജമാക്കുക
 
   - Windows: vcpkg install libvpx:x64-windows-static libyuv:x64-windows-static opus:x64-windows-static
   - Linux/MacOS: vcpkg install libvpx libyuv opus
