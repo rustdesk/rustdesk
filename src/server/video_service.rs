@@ -21,8 +21,16 @@
 use super::*;
 use scrap::{Capturer, Config, Display, EncodeFrame, Encoder, VideoCodecId, STRIDE_ALIGN};
 use std::{
+    collections::HashSet,
     io::ErrorKind::WouldBlock,
     time::{self, Instant},
+};
+use tokio::sync::{
+    mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender},
+    Mutex as tokioMutex,
+};
+use tokio::{
+    runtime::Runtime,
 };
 
 const WAIT_BASE: i32 = 17;
@@ -35,6 +43,76 @@ lazy_static::lazy_static! {
     static ref INTERNAL_LATENCIES: Arc<Mutex<HashMap<i32, i64>>> = Default::default();
     static ref TEST_LATENCIES: Arc<Mutex<HashMap<i32, i64>>> = Default::default();
     static ref IMAGE_QUALITIES: Arc<Mutex<HashMap<i32, i32>>> = Default::default();
+    static ref FRAME_FETCHED_NOTIFIER: (UnboundedSender<(i32, Option<Instant>)>, Arc<tokioMutex<UnboundedReceiver<(i32, Option<Instant>)>>>) = {
+        let (tx, rx) = unbounded_channel();
+        (tx, Arc::new(tokioMutex::new(rx)))
+    };
+}
+
+pub fn notify_video_frame_feched(conn_id: i32, frame_tm: Option<Instant>) {
+    FRAME_FETCHED_NOTIFIER.0.send((conn_id, frame_tm)).unwrap()
+}
+
+struct VideoFrameController {
+    is_produced: bool,
+    cur: Instant,
+    send_conn_ids: HashSet<i32>,
+    fetched_conn_ids: HashSet<i32>,
+    rt: Runtime,
+}
+
+impl VideoFrameController {
+    fn new() -> VideoFrameController {
+        Self {
+            is_produced: false,
+            cur: Instant::now(),
+            send_conn_ids: HashSet::new(),
+            fetched_conn_ids: HashSet::new(),
+            rt: Runtime::new().unwrap(),
+        }
+    }
+
+    fn reset(&mut self) {
+        self.is_produced = false;
+        self.send_conn_ids.clear();
+        self.fetched_conn_ids.clear();
+    }
+
+    fn set_send(&mut self, tm: Instant, conn_ids: HashSet<i32>) {
+        if !conn_ids.is_empty() {
+            self.is_produced = true;
+            self.cur = tm;
+            self.send_conn_ids = conn_ids;
+        }
+    }
+
+    fn blocking_wait_next(&mut self) -> bool {
+        if !self.is_produced {
+            return true;
+        }
+
+        match self.rt.block_on(async move {
+            FRAME_FETCHED_NOTIFIER.1.lock().await.recv().await
+        }) {
+            Some((id, instant)) => {
+                if let Some(tm) = instant {
+                    log::debug!("channel recv latency: {}", tm.elapsed().as_secs_f32());
+                    if tm == self.cur {
+                        self.fetched_conn_ids.insert(id);
+                    }
+                } else {
+                    self.fetched_conn_ids.insert(id);
+                }
+            }
+            _ => {
+                // this branch would nerver be reached
+            }
+        }
+
+        return self
+            .fetched_conn_ids
+            .is_superset(&self.send_conn_ids);
+    }
 }
 
 pub fn new() -> GenericService {
@@ -129,9 +207,11 @@ fn run(sp: GenericService) -> ResultType<()> {
         *SWITCH.lock().unwrap() = false;
         sp.send(msg_out);
     }
+
+    let mut frame_controller = VideoFrameController::new();
+
     let mut crc = (0, 0);
     let start = time::Instant::now();
-    let mut last_sent = time::Instant::now();
     let mut last_check_displays = time::Instant::now();
     #[cfg(windows)]
     let mut try_gdi = true;
@@ -164,43 +244,49 @@ fn run(sp: GenericService) -> ResultType<()> {
             }
         }
         *LAST_ACTIVE.lock().unwrap() = now;
-        if get_latency() < 1000 || last_sent.elapsed().as_millis() > 1000 {
-            match c.frame(wait as _) {
-                Ok(frame) => {
-                    let time = now - start;
-                    let ms = (time.as_secs() * 1000 + time.subsec_millis() as u64) as i64;
-                    handle_one_frame(&sp, &frame, ms, &mut crc, &mut vpx)?;
-                    last_sent = now;
-                    #[cfg(windows)]
-                    {
-                        try_gdi = false;
-                    }
-                }
-                Err(ref e) if e.kind() == WouldBlock => {
-                    // https://github.com/NVIDIA/video-sdk-samples/tree/master/nvEncDXGIOutputDuplicationSample
-                    wait = WAIT_BASE - now.elapsed().as_millis() as i32;
-                    if wait < 0 {
-                        wait = 0
-                    }
-                    #[cfg(windows)]
-                    if try_gdi && !c.is_gdi() {
-                        c.set_gdi();
-                        try_gdi = false;
-                        log::info!("No image, fall back to gdi");
-                    }
-                    continue;
-                }
-                Err(err) => {
-                    if check_display_changed(ndisplay, current, width, height) {
-                        log::info!("Displays changed");
-                        *SWITCH.lock().unwrap() = true;
-                        bail!("SWITCH");
-                    }
 
-                    return Err(err.into());
+        frame_controller.reset();
+
+        match c.frame(wait as _) {
+            Ok(frame) => {
+                let time = now - start;
+                let ms = (time.as_secs() * 1000 + time.subsec_millis() as u64) as i64;
+                let send_conn_ids = handle_one_frame(&sp, now, &frame, ms, &mut crc, &mut vpx)?;
+                frame_controller.set_send(now, send_conn_ids);
+                #[cfg(windows)]
+                {
+                    try_gdi = false;
                 }
             }
+            Err(ref e) if e.kind() == WouldBlock => {
+                // https://github.com/NVIDIA/video-sdk-samples/tree/master/nvEncDXGIOutputDuplicationSample
+                wait = WAIT_BASE - now.elapsed().as_millis() as i32;
+                if wait < 0 {
+                    wait = 0
+                }
+                #[cfg(windows)]
+                if try_gdi && !c.is_gdi() {
+                    c.set_gdi();
+                    try_gdi = false;
+                    log::info!("No image, fall back to gdi");
+                }
+                continue;
+            }
+            Err(err) => {
+                if check_display_changed(ndisplay, current, width, height) {
+                    log::info!("Displays changed");
+                    *SWITCH.lock().unwrap() = true;
+                    bail!("SWITCH");
+                }
+
+                return Err(err.into());
+            }
         }
+
+        while !frame_controller.blocking_wait_next() {
+            // just wait until all connection send the frame
+        }
+
         let elapsed = now.elapsed();
         // may need to enable frame(timeout)
         log::trace!("{:?} {:?}", time::Instant::now(), elapsed);
@@ -236,11 +322,12 @@ fn create_frame(frame: &EncodeFrame) -> VP9 {
 #[inline]
 fn handle_one_frame(
     sp: &GenericService,
+    now: Instant,
     frame: &[u8],
     ms: i64,
     crc: &mut (u32, u32),
     vpx: &mut Encoder,
-) -> ResultType<()> {
+) -> ResultType< HashSet<i32>> {
     sp.snapshot(|sps| {
         // so that new sub and old sub share the same encoder after switch
         if sps.has_subscribes() {
@@ -257,6 +344,8 @@ fn handle_one_frame(
     } else {
         crc.1 += 1;
     }
+
+    let mut send_conn_ids: HashSet<i32> = Default::default();
     if crc.1 <= 180 && crc.1 % 5 == 0 {
         let mut frames = Vec::new();
         for ref frame in vpx
@@ -268,12 +357,13 @@ fn handle_one_frame(
         for ref frame in vpx.flush().with_context(|| "Failed to flush")? {
             frames.push(create_frame(frame));
         }
+
         // to-do: flush periodically, e.g. 1 second
         if frames.len() > 0 {
-            sp.send(create_msg(frames));
+            send_conn_ids = sp.send_video_frame(now, create_msg(frames));
         }
     }
-    Ok(())
+    Ok(send_conn_ids)
 }
 
 fn get_display_num() -> usize {
