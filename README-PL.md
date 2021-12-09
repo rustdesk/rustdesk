@@ -5,7 +5,7 @@
   <a href="#jak-kompilować-za-pomocą-dockera">Docker</a> •
   <a href="#struktura-plików">Struktura</a> •
   <a href="#migawkisnapshoty">Snapshot</a><br>
-  [<a href="README.md">English</a>] | [<a href="README-ZH.md">中文</a>] | [<a href="README-DE.md">Deutsch</a>] | [<a href="README-ES.md">Española</a>] | [<a href="README-FR.md">Français</a>] | [<a href="README-JP.md">日本語</a>] | [<a href="README-RU.md">Русский</a>] | [<a href="README-PT.md">Português</a>]<br>
+  [<a href="README.md">English</a>] | [<a href="README-ZH.md">中文</a>] | [<a href="README-DE.md">Deutsch</a>] | [<a href="README-ES.md">Española</a>] | [<a href="README-FR.md">Français</a>] | <a href="README-NL.md">Nederlands</a> | [<a href="README-JP.md">日本語</a>] | [<a href="README-RU.md">Русский</a>] | [<a href="README-PT.md">Português</a>]<br>
   <b>Potrzebujemy twojej pomocy w tłumaczeniu README na twój ojczysty język</b>
 </p>
 
