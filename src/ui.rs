@@ -29,6 +29,8 @@ struct UI(
     Arc<Mutex<HashMap<String, String>>>,
 );
 
+struct UIHostHandler;
+
 fn get_msgbox() -> String {
     #[cfg(feature = "inline")]
     return inline::get_msgbox();
@@ -86,10 +88,12 @@ pub fn start(args: &mut [String]) {
         std::thread::spawn(move || check_zombie(cloned));
         crate::common::check_software_update();
         frame.event_handler(UI::new(childs));
+        frame.sciter_handler(UIHostHandler {});
         page = "index.html";
     } else if args[0] == "--install" {
         let childs: Childs = Default::default();
         frame.event_handler(UI::new(childs));
+        frame.sciter_handler(UIHostHandler {});
         page = "install.html";
     } else if args[0] == "--cm" {
         frame.register_behavior("connection-manager", move || {
@@ -609,6 +613,12 @@ impl sciter::EventHandler for UI {
         fn get_software_ext();
         fn open_url(String);
         fn create_shortcut(String);
+    }
+}
+
+impl sciter::host::HostHandler for UIHostHandler {
+    fn on_graphics_critical_failure(&mut self) {
+        log::error!("Critical rendering error: e.g. DirectX gfx driver error. Most probably bad gfx drivers.");
     }
 }
 
