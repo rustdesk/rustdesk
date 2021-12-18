@@ -78,7 +78,7 @@ psutil = "3.2"
 android_logger = "0.9"
 
 [workspace]
-members = ["libs/scrap", "libs/hbb_common", "libs/enigo"]
+members = ["libs/scrap", "libs/hbb_common", "libs/enigo", "libs/socket_cs"]
 
 [package.metadata.winres]
 LegalCopyright = "Copyright © 2020"

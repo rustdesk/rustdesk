@@ -7,6 +7,7 @@ use hbb_common::{
     config::{Config, CONNECT_TIMEOUT, RELAY_PORT},
     log,
     message_proto::*,
+    base_proto::*,
     protobuf::{Message as _, ProtobufEnum},
     rendezvous_proto::*,
     sleep,

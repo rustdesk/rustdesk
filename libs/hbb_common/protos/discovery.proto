@@ -1,0 +1,10 @@
+syntax = "proto3";
+package discovery;
+
+import "base_proto.proto";
+
+message Discovery {
+  base.PeerInfo peer = 1;
+  /// response port for current listening port(udp for now)
+  int32 port = 2;
+}

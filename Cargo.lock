@@ -3188,6 +3188,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "socket_cs"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "clap",
+ "hbb_common",
+]
+
+[[package]]
 name = "sodiumoxide"
 version = "0.2.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
