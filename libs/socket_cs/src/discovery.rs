@@ -1,8 +1,8 @@
 use super::udp::UdpRequest;
 use async_trait::async_trait;
 use hbb_common::{
-    base_proto::PeerInfo, discovery_proto::Discovery as DiscoveryProto, log,
-    protobuf::Message, tokio::net::UdpSocket, ResultType,
+    base_proto::PeerInfo, discovery_proto::Discovery as DiscoveryProto, log, protobuf::Message,
+    tokio::net::UdpSocket, ResultType,
 };
 use std::net::SocketAddr;
 
@@ -33,10 +33,7 @@ impl DiscoveryClient {
         log::info!("Broadcast mode set to ON");
 
         let send_data = make_send_data(CMD_DISCOVERY, &info)?;
-        Ok(Self {
-            socket,
-            send_data,
-        })
+        Ok(Self { socket, send_data })
     }
 
     pub async fn lan_discover(&self, peer_port: u16) -> ResultType<()> {
@@ -71,25 +68,18 @@ impl crate::Handler<UdpRequest> for HandlerDiscovery {
         );
 
         let addr = "0.0.0.0:0";
-        let socket = match UdpSocket::bind(addr).await {
-            Ok(s) => s,
-            Err(e) => {
-                log::error!("cannot bind socket? {}", e);
-                return Ok(());
-            }
-        };
+        let socket = UdpSocket::bind(addr).await?;
 
         let mut peer_addr = request.addr;
         peer_addr.set_port(discovery.port as u16);
-
-        // let peer_addr = SocketAddr::from(([255, 255, 255, 255], discovery.port as u16));
-        // socket.set_broadcast(true).unwrap();
         log::debug!("send self peer info to {}", peer_addr);
 
         let send_len = self.send_data.len();
         let mut cur_len = 0usize;
         while cur_len < send_len {
-            let len = socket.send_to(&self.send_data[cur_len..], peer_addr).await?;
+            let len = socket
+                .send_to(&self.send_data[cur_len..], peer_addr)
+                .await?;
             cur_len += len;
         }
         log::trace!("send self peer info to {} done", peer_addr);
