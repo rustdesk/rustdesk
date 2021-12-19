@@ -55,6 +55,8 @@ pub const RENDEZVOUS_SERVERS: &'static [&'static str] = &[
 pub const RENDEZVOUS_PORT: i32 = 21116;
 pub const RELAY_PORT: i32 = 21117;
 
+pub const SERVER_UDP_PORT: u16 = 21001; // udp
+
 #[derive(Debug, Default, Serialize, Deserialize, Clone)]
 pub struct Config {
     #[serde(default)]

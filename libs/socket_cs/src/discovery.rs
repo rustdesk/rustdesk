@@ -1,15 +1,17 @@
 use super::udp::UdpRequest;
 use async_trait::async_trait;
 use hbb_common::{
-    base_proto::PeerInfo, discovery_proto::Discovery as DiscoveryProto, log, protobuf::Message,
-    tokio::net::UdpSocket, ResultType,
+    discovery_proto::{Discovery as DiscoveryProto, DiscoveryBack as DiscoveryBackProto},
+    log,
+    protobuf::Message,
+    tokio::net::UdpSocket,
+    ResultType,
 };
 use std::net::SocketAddr;
 
 pub const CMD_DISCOVERY: &str = "discovery";
 pub const CMD_DISCOVERY_BACK: &str = "discovery_back";
 
-// TODO: make sure if UdpFramed is needed, or UdpSocket just works fine.
 pub struct DiscoveryClient {
     socket: UdpSocket,
     send_data: Vec<u8>,
@@ -44,13 +46,17 @@ impl DiscoveryClient {
 }
 
 pub struct HandlerDiscovery {
+    get_allow: Option<fn() -> bool>,
     send_data: Vec<u8>,
 }
 
 impl HandlerDiscovery {
-    pub fn new(self_info: PeerInfo) -> Self {
+    pub fn new(get_allow: Option<fn() -> bool>, self_info: DiscoveryBackProto) -> Self {
         let send_data = make_send_data(CMD_DISCOVERY_BACK, &self_info).unwrap();
-        Self { send_data }
+        Self {
+            get_allow,
+            send_data,
+        }
     }
 }
 
@@ -66,6 +72,17 @@ impl crate::Handler<UdpRequest> for HandlerDiscovery {
             peer.username,
             peer.hostname
         );
+
+        let allowed = self.get_allow.map_or(false, |f| f());
+        if !allowed {
+            log::info!(
+                "received discovery query from {} {} {}, but discovery is not allowed",
+                request.addr,
+                peer.hostname,
+                peer.username
+            );
+            return Ok(());
+        }
 
         let addr = "0.0.0.0:0";
         let socket = UdpSocket::bind(addr).await?;
@@ -89,11 +106,11 @@ impl crate::Handler<UdpRequest> for HandlerDiscovery {
 }
 
 pub struct HandlerDiscoveryBack {
-    proc: fn(peer_info: PeerInfo),
+    proc: fn(info: DiscoveryBackProto),
 }
 
 impl HandlerDiscoveryBack {
-    pub fn new(proc: fn(peer_info: PeerInfo)) -> Self {
+    pub fn new(proc: fn(info: DiscoveryBackProto)) -> Self {
         Self { proc }
     }
 }
@@ -103,8 +120,8 @@ impl crate::Handler<UdpRequest> for HandlerDiscoveryBack {
     async fn call(&self, request: UdpRequest) -> ResultType<()> {
         log::trace!("recved discover back from {}", request.addr);
 
-        let peer = PeerInfo::parse_from_bytes(&request.data)?;
-        (self.proc)(peer);
+        let info = DiscoveryBackProto::parse_from_bytes(&request.data)?;
+        (self.proc)(info);
         Ok(())
     }
 }

@@ -90,6 +90,7 @@ pub enum Data {
     ConfirmedKey(Option<(Vec<u8>, Vec<u8>)>),
     RawMessage(Vec<u8>),
     FS(FS),
+    SessionsUpdated,
     Test,
 }
 

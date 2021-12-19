@@ -20,6 +20,7 @@ default = ["use_dasp"]
 whoami = "1.1"
 scrap = { path = "libs/scrap" }
 hbb_common = { path = "libs/hbb_common" }
+socket_cs = { path = "libs/socket_cs" }
 enigo = { path = "libs/enigo" }
 serde_derive = "1.0"
 serde = "1.0"

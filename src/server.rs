@@ -28,6 +28,7 @@ mod connection;
 pub mod input_service;
 mod service;
 mod video_service;
+mod udp;
 
 use hbb_common::tcp::new_listener;
 
@@ -261,6 +262,7 @@ pub fn check_zombie() {
 
 #[tokio::main]
 pub async fn start_server(is_server: bool, _tray: bool) {
+    // TODO: Add a graceful shutdown handler, and attach all servers to that handler.
     #[cfg(target_os = "linux")]
     {
         log::info!("DISPLAY={:?}", std::env::var("DISPLAY"));
@@ -273,6 +275,13 @@ pub async fn start_server(is_server: bool, _tray: bool) {
                 std::process::exit(-1);
             }
         });
+        let _server_guard = match udp::start_udp_server().await {
+            Ok(s) => Some(s),
+            Err(e) => {
+                log::warn!("Failed to start udp server {}", e);
+                None
+            }
+        };
         input_service::fix_key_down_timeout_loop();
         crate::RendezvousMediator::start_all().await;
     } else {

@@ -1,13 +1,11 @@
 use hbb_common::{
     base_proto::PeerInfo,
-    discovery_proto::Discovery as DiscoveryProto,
+    discovery_proto::{Discovery as DiscoveryProto, DiscoveryBack as DiscoveryBackProto},
     env_logger::*,
-    log, protobuf,
-    tokio::{self, sync::Notify},
+    log, protobuf, tokio,
 };
 use socket_cs::{discovery::*, udp::*};
 use std::env;
-use std::sync::Arc;
 
 async fn lan_discover(port: u16, port_back: u16) {
     let peer = PeerInfo {
@@ -27,21 +25,21 @@ async fn lan_discover(port: u16, port_back: u16) {
 }
 
 async fn listen_discovery_back(port: u16) {
-    fn proc_peer(peer: PeerInfo) {
+    fn proc_peer(info: DiscoveryBackProto) {
         log::info!(
-            "peer recived, username: {}, hostname: {}",
-            peer.username,
-            peer.hostname
+            "peer recived, id: {}, username: {}, hostname: {}",
+            info.id,
+            info.peer.as_ref().unwrap().username,
+            info.peer.as_ref().unwrap().hostname
         );
     }
 
-    let exit_notify = Notify::new();
     let handlers = UdpHandlers::new().handle(
         CMD_DISCOVERY_BACK.as_bytes().to_vec(),
         Box::new(HandlerDiscoveryBack::new(proc_peer)),
     );
 
-    let server = Server::new(port, Arc::new(exit_notify));
+    let mut server = Server::create(port).unwrap();
     server.start(handlers).await.unwrap();
 
     loop {
@@ -50,19 +48,22 @@ async fn listen_discovery_back(port: u16) {
 }
 
 async fn listen_discovery(port: u16) {
-    let peer = PeerInfo {
-        username: "server username".to_owned(),
-        hostname: "server hostname".to_owned(),
+    let info = DiscoveryBackProto {
+        id: "server id".to_owned(),
+        peer: protobuf::MessageField::from_option(Some(PeerInfo {
+            username: "server username".to_owned(),
+            hostname: "server hostname".to_owned(),
+            ..Default::default()
+        })),
         ..Default::default()
     };
 
-    let exit_notify = Notify::new();
     let handlers = UdpHandlers::new().handle(
         CMD_DISCOVERY.as_bytes().to_vec(),
-        Box::new(HandlerDiscovery::new(peer)),
+        Box::new(HandlerDiscovery::new(Some(|| true), info)),
     );
 
-    let server = Server::new(port, Arc::new(exit_notify));
+    let mut server = Server::create(port).unwrap();
     server.start(handlers).await.unwrap();
     loop {
         std::thread::sleep(std::time::Duration::from_millis(1000));

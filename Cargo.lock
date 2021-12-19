@@ -2909,6 +2909,7 @@ dependencies = [
  "serde_derive",
  "serde_json 1.0.66",
  "sha2",
+ "socket_cs",
  "uuid",
  "whoami",
  "winapi 0.3.9",

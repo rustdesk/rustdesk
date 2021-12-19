@@ -1,7 +1,7 @@
 use async_trait::async_trait;
 use hbb_common::{
     log,
-    tokio::{self, sync::Notify},
+    tokio::{self, runtime::Runtime, sync::Notify, task::JoinHandle},
     udp::FramedSocket,
     ResultType,
 };
@@ -14,6 +14,8 @@ use std::sync::Arc;
 pub struct Server {
     port: u16,
     exit_notify: Arc<Notify>,
+    rt: Arc<Runtime>,
+    join_handler: Option<JoinHandle<()>>,
 }
 
 pub struct UdpRequest {
@@ -33,19 +35,27 @@ pub struct UdpHandlers {
 }
 
 impl Server {
-    pub fn new(port: u16, exit_notify: Arc<Notify>) -> Self {
-        Self { port, exit_notify }
+    pub fn create(port: u16) -> ResultType<Self> {
+        let rt = Arc::new(Runtime::new()?);
+        let exit_notify = Arc::new(Notify::new());
+        Ok(Self {
+            port,
+            exit_notify,
+            rt,
+            join_handler: None,
+        })
     }
 
     /// Start server with the handlers.
-    pub async fn start(&self, handlers: UdpHandlers) -> ResultType<()> {
+    pub async fn start(&mut self, handlers: UdpHandlers) -> ResultType<()> {
         let exit_notify = self.exit_notify.clone();
 
         let addr = SocketAddr::from(([0, 0, 0, 0], self.port));
         let mut server = FramedSocket::new(addr).await?;
         log::trace!("succeeded to bind {} for discovery server", addr);
 
-        tokio::spawn(async move {
+        let rt = self.rt.clone();
+        let join_handler = rt.clone().spawn(async move {
             let handlers = Arc::new(handlers.handlers);
             loop {
                 tokio::select! {
@@ -56,11 +66,12 @@ impl Server {
                     n = server.next() => {
                         log::info!("received message");
                         let handlers = handlers.clone();
+                        let rt = rt.clone();
                         match n {
                             Some(Ok((data, addr))) => {
                                 match data.iter().position(|x| x == &crate::CMD_TOKEN) {
                                     Some(p) => {
-                                        tokio::spawn(async move {
+                                        rt.spawn(async move {
                                             let cmd = data[0..p].to_vec();
                                             match handlers.get(&cmd) {
                                                 Some(h) => {
@@ -92,7 +103,26 @@ impl Server {
                 }
             }
         });
+
+        self.join_handler = Some(join_handler);
         Ok(())
+    }
+
+    pub async fn shutdonw(&mut self) {
+        self.exit_notify.notify_one();
+        if let Some(h) = self.join_handler.take() {
+            if let Err(e) = h.await {
+                log::error!("failed to join udp server, {}", e);
+            }
+        }
+    }
+}
+
+impl Drop for Server {
+    fn drop(&mut self) {
+        self.rt.clone().block_on(async {
+            self.shutdonw().await;
+        })
     }
 }
 
