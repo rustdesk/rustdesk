@@ -5,10 +5,7 @@ use hbb_common::{
     udp::FramedSocket,
     ResultType,
 };
-use std::collections::HashMap;
-use std::future::Future;
-use std::net::SocketAddr;
-use std::sync::Arc;
+use std::{collections::HashMap, future::Future, net::SocketAddr, sync::Arc};
 
 /// Simple udp server
 pub struct Server {

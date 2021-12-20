@@ -29,7 +29,7 @@ pub mod discovery {
     use super::get_peer_info;
     use crate::ipc;
     use hbb_common::{
-        config::{Config, PeerConfig, PeerInfoSerde, SERVER_UDP_PORT},
+        config::{PeerConfig, PeerInfoSerde, SERVER_UDP_PORT},
         discovery_proto::{Discovery as DiscoveryProto, DiscoveryBack as DiscoveryBackProto},
         log, protobuf, tokio, ResultType,
     };
@@ -44,6 +44,9 @@ pub mod discovery {
         }
     }
 
+    /// process sicovery bakc(response)
+    /// 1. update current peers.
+    /// 2. notify index window to udpate recent sessions.
     fn process_discovery_back(info: DiscoveryBackProto) {
         let mut config = PeerConfig::load(info.id.as_str());
 
@@ -70,6 +73,7 @@ pub mod discovery {
         });
     }
 
+    /// launch lan discover when user click "discover" button.
     pub fn launch_lan_discover() {
         std::thread::spawn(move || {
             if let Err(e) = lan_discover() {
@@ -95,6 +99,7 @@ pub mod discovery {
     pub(super) async fn handle_discovery(handlers: UdpHandlers) -> UdpHandlers {
         let info = get_discovery_back_info().await;
         handlers
+            // handle discover request
             .handle(
                 CMD_DISCOVERY.as_bytes().to_vec(),
                 Box::new(HandlerDiscovery::new(
@@ -103,6 +108,7 @@ pub mod discovery {
                     info,
                 )),
             )
+            // handle discover back(response)
             .handle(
                 CMD_DISCOVERY_BACK.as_bytes().to_vec(),
                 Box::new(HandlerDiscoveryBack::new(process_discovery_back)),
