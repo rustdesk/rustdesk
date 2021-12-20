@@ -28,7 +28,7 @@ mod connection;
 pub mod input_service;
 mod service;
 mod video_service;
-mod udp;
+pub mod udp;
 
 use hbb_common::tcp::new_listener;
 

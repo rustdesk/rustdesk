@@ -51,10 +51,15 @@ class RecentSessions: Reactor.Component {
         sessions = sessions.map(this.getSession);
         return <div style="width: *">
             <div .recent-sessions-title>RECENT SESSIONS</div>
+            <button .button #discover>DISCOVER</button>
             <div .recent-sessions-content key={sessions.length}>
                 {sessions}
             </div>
         </div>;
+    }
+
+    event click $(button#discover) {
+        handler.lan_discover();
     }
 
     function getSession(s) {

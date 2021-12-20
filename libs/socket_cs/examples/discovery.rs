@@ -14,6 +14,7 @@ async fn lan_discover(port: u16, port_back: u16) {
         ..Default::default()
     };
     let client = DiscoveryClient::create(DiscoveryProto {
+        id: "client id".to_owned(),
         peer: protobuf::MessageField::from_option(Some(peer)),
         port: port_back as i32,
         ..Default::default()

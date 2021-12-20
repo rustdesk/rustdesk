@@ -87,7 +87,7 @@ pub fn start(args: &mut [String]) {
         let cloned = childs.clone();
         std::thread::spawn(move || check_zombie(cloned));
         let cloned = childs.clone();
-        tokio::spawn(async move {start_ipc(cloned)});
+        std::thread::spawn(move || start_ipc(cloned));
         crate::common::check_software_update();
         frame.event_handler(UI::new(childs));
         frame.sciter_handler(UIHostHandler {});
@@ -567,6 +567,10 @@ impl UI {
     fn is_xfce(&self) -> bool {
         crate::platform::is_xfce()
     }
+
+    fn lan_discover(&self) {
+        crate::server::udp::discovery::launch_lan_discover();
+    }
 }
 
 impl sciter::EventHandler for UI {
@@ -615,6 +619,7 @@ impl sciter::EventHandler for UI {
         fn get_software_ext();
         fn open_url(String);
         fn create_shortcut(String);
+        fn lan_discover();
     }
 }
 

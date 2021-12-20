@@ -25,23 +25,20 @@ fn get_peer_info() -> PeerInfo {
     }
 }
 
-mod discovery {
+pub mod discovery {
     use super::get_peer_info;
     use crate::ipc;
     use hbb_common::{
-        base_proto::PeerInfo,
-        config::{PeerConfig, PeerInfoSerde},
+        config::{Config, PeerConfig, PeerInfoSerde, SERVER_UDP_PORT},
         discovery_proto::{Discovery as DiscoveryProto, DiscoveryBack as DiscoveryBackProto},
-        log, protobuf,
-        tokio::runtime::Runtime,
-        ResultType,
+        log, protobuf, tokio, ResultType,
     };
     use socket_cs::{discovery::*, udp::UdpHandlers};
 
-    fn get_discovery_back_info() -> DiscoveryBackProto {
+    async fn get_discovery_back_info() -> DiscoveryBackProto {
         let peer = get_peer_info();
         DiscoveryBackProto {
-            id: ipc::get_id(),
+            id: ipc::get_id_async().await,
             peer: protobuf::MessageField::from_option(Some(peer)),
             ..Default::default()
         }
@@ -59,35 +56,52 @@ mod discovery {
         config.info = serde;
         config.store(info.id.as_str());
 
-        let rt = match Runtime::new() {
-            Ok(r) => r,
-            Err(e) => {
-                log::error!("Failed to notify index window, {}", e);
-                return;
-            }
-        };
-
+        #[tokio::main(flavor = "current_thread")]
         async fn notify_index_window() -> ResultType<()> {
-            let ms_timeout = 1000;
+            let ms_timeout = 300;
             let mut c = ipc::connect(ms_timeout, "_index").await?;
             c.send(&ipc::Data::SessionsUpdated).await?;
             Ok(())
         }
-        rt.block_on(async move {
-            if let Err(e) = notify_index_window().await {
+        std::thread::spawn(move || {
+            if let Err(e) = notify_index_window() {
                 log::error!("Failed to notify index window, {}", e);
             }
         });
     }
 
-    // pub(crate) fn lan_discover();
+    pub fn launch_lan_discover() {
+        std::thread::spawn(move || {
+            if let Err(e) = lan_discover() {
+                log::error!("Failed to lauch lan discover, {}", e);
+            }
+        });
+    }
 
-    pub(super) fn handle_discovery(handlers: UdpHandlers) -> UdpHandlers {
-        let info = get_discovery_back_info();
+    #[tokio::main(flavor = "current_thread")]
+    pub async fn lan_discover() -> ResultType<()> {
+        let peer = get_peer_info();
+        let client = DiscoveryClient::create(DiscoveryProto {
+            id: ipc::get_id_async().await,
+            peer: protobuf::MessageField::from_option(Some(peer)),
+            port: SERVER_UDP_PORT as i32,
+            ..Default::default()
+        })
+        .await?;
+
+        client.lan_discover(SERVER_UDP_PORT).await
+    }
+
+    pub(super) async fn handle_discovery(handlers: UdpHandlers) -> UdpHandlers {
+        let info = get_discovery_back_info().await;
         handlers
             .handle(
                 CMD_DISCOVERY.as_bytes().to_vec(),
-                Box::new(HandlerDiscovery::new(Some(|| true), info)),
+                Box::new(HandlerDiscovery::new(
+                    // Some(|| Config::get_option("enable-be-discovered") == "Y".to_owned()),
+                    Some(|| true),
+                    info,
+                )),
             )
             .handle(
                 CMD_DISCOVERY_BACK.as_bytes().to_vec(),
@@ -97,7 +111,7 @@ mod discovery {
 }
 
 pub(super) async fn start_udp_server() -> ResultType<Server> {
-    let handlers = discovery::handle_discovery(UdpHandlers::new());
+    let handlers = discovery::handle_discovery(UdpHandlers::new()).await;
 
     let mut server = Server::create(SERVER_UDP_PORT)?;
     server.start(handlers).await?;

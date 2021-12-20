@@ -32,7 +32,7 @@ impl DiscoveryClient {
         log::trace!("succeeded to bind {} for discovery client", addr);
 
         socket.set_broadcast(true)?;
-        log::info!("Broadcast mode set to ON");
+        log::trace!("Broadcast mode set to ON");
 
         let send_data = make_send_data(CMD_DISCOVERY, &info)?;
         Ok(Self { socket, send_data })
@@ -47,6 +47,7 @@ impl DiscoveryClient {
 
 pub struct HandlerDiscovery {
     get_allow: Option<fn() -> bool>,
+    id: String,
     send_data: Vec<u8>,
 }
 
@@ -55,6 +56,7 @@ impl HandlerDiscovery {
         let send_data = make_send_data(CMD_DISCOVERY_BACK, &self_info).unwrap();
         Self {
             get_allow,
+            id: self_info.id,
             send_data,
         }
     }
@@ -63,11 +65,13 @@ impl HandlerDiscovery {
 #[async_trait]
 impl crate::Handler<UdpRequest> for HandlerDiscovery {
     async fn call(&self, request: UdpRequest) -> ResultType<()> {
-        log::trace!("received discover query from {}", request.addr);
-
         let discovery = DiscoveryProto::parse_from_bytes(&request.data)?;
+        if discovery.id == self.id {
+            return Ok(());
+        }
+
         let peer = discovery.peer.as_ref().take().unwrap();
-        log::debug!(
+        log::trace!(
             "received discovery query from {} {}",
             peer.username,
             peer.hostname
@@ -75,12 +79,12 @@ impl crate::Handler<UdpRequest> for HandlerDiscovery {
 
         let allowed = self.get_allow.map_or(false, |f| f());
         if !allowed {
-            log::info!(
-                "received discovery query from {} {} {}, but discovery is not allowed",
-                request.addr,
-                peer.hostname,
-                peer.username
-            );
+            // log::info!(
+            //     "received discovery query from {} {} {}, but discovery is not allowed",
+            //     request.addr,
+            //     peer.hostname,
+            //     peer.username
+            // );
             return Ok(());
         }
 
@@ -89,7 +93,7 @@ impl crate::Handler<UdpRequest> for HandlerDiscovery {
 
         let mut peer_addr = request.addr;
         peer_addr.set_port(discovery.port as u16);
-        log::debug!("send self peer info to {}", peer_addr);
+        log::trace!("send self peer info to {}", peer_addr);
 
         let send_len = self.send_data.len();
         let mut cur_len = 0usize;

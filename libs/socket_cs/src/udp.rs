@@ -64,7 +64,6 @@ impl Server {
                         break;
                     }
                     n = server.next() => {
-                        log::info!("received message");
                         let handlers = handlers.clone();
                         let rt = rt.clone();
                         match n {
@@ -76,24 +75,24 @@ impl Server {
                                             match handlers.get(&cmd) {
                                                 Some(h) => {
                                                     let request = UdpRequest {data: data[p+1..].to_vec(), addr};
-                                                    if let Err(e) = h.call(request).await {
-                                                        log::error!("handle {:?} failed, {}", cmd, e);
+                                                    if let Err(_e) = h.call(request).await {
+                                                        // log::error!("handle {:?} failed, {}", cmd, e);
                                                     }
                                                 }
                                                 None => {
-                                                    log::warn!("no handler for {:?}", &cmd);
+                                                    // log::warn!("no handler for {:?}", &cmd);
                                                 }
                                             }
                                         });
                                     }
                                     None => {
-                                        log::error!("failed to parse command token");
+                                        // log::error!("failed to parse command token");
                                     }
                                 }
 
                             }
-                            Some(Err(e)) => {
-                                log::error!("recv error: {}", e)
+                            Some(Err(_e)) => {
+                                // log::error!("recv error: {}", e)
                             }
                             None => {
                                 log::error!("should never reach here");
@@ -139,11 +138,12 @@ impl UdpHandlers {
     /// ```rust
     /// extern crate socket_cs;
     /// use socket_cs::{ResultType, udp::{UdpHandlers, UdpRequest}};
+    /// use async_trait::async_trait;
     ///
     /// struct SimpleHandler;
     ///
     /// #[async_trait]
-    /// impl crate::Handler<UdpRequest> for SimpleHandler {
+    /// impl socket_cs::Handler<UdpRequest> for SimpleHandler {
     ///     async fn call(&self, _: UdpRequest) -> ResultType<()> {
     ///         Ok(())
     ///     }
