@@ -254,7 +254,7 @@ impl Connection {
                     if latency > 1000 {
                         match &msg.union {
                             Some(message::Union::audio_frame(_)) => {
-                                log::info!("audio frame latency {}", instant.elapsed().as_secs_f32());
+                                // log::info!("audio frame latency {}", instant.elapsed().as_secs_f32());
                                 continue;
                             }
                             _ => {}

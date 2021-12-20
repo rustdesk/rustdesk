@@ -98,7 +98,7 @@ impl VideoFrameController {
                 {
                     Err(_) => {
                         // break if timeout
-                        log::error!("blocking wait frame receiving timeout {}", timeout_millis);
+                        // log::error!("blocking wait frame receiving timeout {}", timeout_millis);
                         break;
                     }
                     Ok(Some((id, instant))) => {
@@ -289,7 +289,8 @@ fn run(sp: GenericService) -> ResultType<()> {
             }
         }
 
-        frame_controller.blocking_wait_next(1000 * 5);
+        // i love 3, 6, 8
+        frame_controller.blocking_wait_next(3_000);
 
         let elapsed = now.elapsed();
         // may need to enable frame(timeout)
