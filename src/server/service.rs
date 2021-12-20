@@ -1,5 +1,6 @@
 use super::*;
 use std::{
+    collections::HashSet,
     thread::{self, JoinHandle},
     time,
 };
@@ -15,6 +16,7 @@ pub trait Service: Send + Sync {
 pub trait Subscriber: Default + Send + Sync + 'static {
     fn id(&self) -> i32;
     fn send(&mut self, msg: Arc<Message>);
+    fn send_video_frame(&mut self, tm: time::Instant, msg: Arc<Message>);
 }
 
 #[derive(Default)]
@@ -141,6 +143,20 @@ impl<T: Subscriber + From<ConnInner>> ServiceTmpl<T> {
         for s in lock.subscribes.values_mut() {
             s.send(msg.clone());
         }
+    }
+
+    pub fn send_video_frame(&self, tm: time::Instant, msg: Message) -> HashSet<i32> {
+        self.send_video_frame_shared(tm, Arc::new(msg))
+    }
+
+    pub fn send_video_frame_shared(&self, tm: time::Instant, msg: Arc<Message>) -> HashSet<i32> {
+        let mut conn_ids = HashSet::new();
+        let mut lock = self.0.write().unwrap();
+        for s in lock.subscribes.values_mut() {
+            s.send_video_frame(tm, msg.clone());
+            conn_ids.insert(s.id());
+        }
+        conn_ids
     }
 
     pub fn send_without(&self, msg: Message, sub: i32) {
