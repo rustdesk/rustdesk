@@ -274,8 +274,8 @@ impl Config {
         return "".into();
     }
 
+    #[allow(unreachable_code)]
     pub fn log_path() -> PathBuf {
-        #[allow(unreachable_code)]
         #[cfg(target_os = "macos")]
         {
             if let Some(path) = dirs_next::home_dir().as_mut() {
