@@ -146,7 +146,7 @@ impl Connection {
 
         loop {
             tokio::select! {
-                biased;
+                biased; // video has higher priority
 
                 Some(data) = rx_from_cm.recv() => {
                     match data {
