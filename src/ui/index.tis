@@ -708,10 +708,10 @@ function self.closing() {
 
 function self.ready() {
     var r = handler.get_size();
-    if (r[2] == 0) {
-        centerize(800, 600);
-    } else {
+    if (isReasonableSize(r) && r[2] > 0) {
         view.move(r[0], r[1], r[2], r[3]);
+    } else {
+        centerize(800, 600);
     }
     if (!handler.get_remote_id()) {
         view.focus = $(#remote_id);

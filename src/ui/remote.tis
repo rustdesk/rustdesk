@@ -396,7 +396,7 @@ function self.ready() {
     var h = 640;
     if (is_file_transfer || is_port_forward) {
         var r = handler.get_size();
-        if (r[0] > 0) {
+        if (isReasonableSize(r) && r[2] > 0) {
             view.move(r[0], r[1], r[2], r[3]);
         } else {
             centerize(w, h);
@@ -418,7 +418,7 @@ handler.adaptSize = function() {
     var (fx, fy, fw, fh) = view.screenBox(#frame, #rectw);
     if (is_osx) workarea_offset = sy;
     var r = handler.get_size();
-    if (r[2] > 0) {
+    if (isReasonableSize(r) && r[2] > 0) {
         if (r[2] >= fw && r[3] >= fh && !is_linux) {
             view.windowState = View.WINDOW_FULL_SCREEN;
             stdout.println("Initialize to full screen");

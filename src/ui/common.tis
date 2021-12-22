@@ -311,3 +311,10 @@ function Progress()
 
     this.value = "";
 }
+
+function isReasonableSize(r) {
+    var x = r[0];
+    var y = r[1];
+    return !(x < -3200 || x > 3200 || y < -3200 || y > 3200);
+}
+
