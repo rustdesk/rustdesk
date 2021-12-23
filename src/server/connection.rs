@@ -62,15 +62,18 @@ impl Subscriber for ConnInner {
 
     #[inline]
     fn send(&mut self, msg: Arc<Message>) {
-        self.tx.as_mut().map(|tx| {
-            allow_err!(tx.send((Instant::now(), msg)));
-        });
-    }
-
-    fn send_video_frame(&mut self, tm: std::time::Instant, msg: Arc<Message>) {
-        self.tx_video.as_mut().map(|tx| {
-            allow_err!(tx.send((tm.into(), msg)));
-        });
+        match &msg.union {
+            Some(message::Union::video_frame(_)) => {
+                self.tx_video.as_mut().map(|tx| {
+                    allow_err!(tx.send((Instant::now(), msg)));
+                });
+            }
+            _ => {
+                self.tx.as_mut().map(|tx| {
+                    allow_err!(tx.send((Instant::now(), msg)));
+                });
+            }
+        }
     }
 }
 

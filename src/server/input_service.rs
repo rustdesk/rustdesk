@@ -79,8 +79,6 @@ impl Subscriber for MouseCursorSub {
             self.inner.send(msg);
         }
     }
-
-    fn send_video_frame(&mut self, _: std::time::Instant, _: Arc<Message>) {}
 }
 
 pub const NAME_CURSOR: &'static str = "mouse_cursor";
