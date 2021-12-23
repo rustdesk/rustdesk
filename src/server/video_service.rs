@@ -220,7 +220,7 @@ fn run(sp: GenericService) -> ResultType<()> {
     let start = time::Instant::now();
     let mut last_check_displays = time::Instant::now();
     #[cfg(windows)]
-    let mut try_gdi = true;
+    let mut try_gdi = 1;
     #[cfg(windows)]
     log::info!("gdi: {}", c.is_gdi());
     while sp.ok() {
@@ -261,7 +261,7 @@ fn run(sp: GenericService) -> ResultType<()> {
                 frame_controller.set_send(now, send_conn_ids);
                 #[cfg(windows)]
                 {
-                    try_gdi = false;
+                    try_gdi = 0;
                 }
             }
             Err(ref e) if e.kind() == WouldBlock => {
@@ -271,10 +271,13 @@ fn run(sp: GenericService) -> ResultType<()> {
                     wait = 0
                 }
                 #[cfg(windows)]
-                if try_gdi && !c.is_gdi() {
-                    c.set_gdi();
-                    try_gdi = false;
-                    log::info!("No image, fall back to gdi");
+                if try_gdi > 0 && !c.is_gdi() {
+                    if try_gdi > 3 {
+                        c.set_gdi();
+                        try_gdi = 0;
+                        log::info!("No image, fall back to gdi");
+                    }
+                    try_gdi += 1;
                 }
                 continue;
             }

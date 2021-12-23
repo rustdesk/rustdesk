@@ -95,7 +95,10 @@ pub fn update_clipboard(clipboard: Clipboard, old: Option<&Arc<Mutex<String>>>) 
                 let side = if old.is_none() { "host" } else { "client" };
                 let old = if let Some(old) = old { old } else { &CONTENT };
                 *old.lock().unwrap() = content.clone();
-                allow_err!(ctx.set_text(content));
+                if !content.is_empty() {
+                    // empty content make ctx.set_text crash
+                    allow_err!(ctx.set_text(content));
+                }
                 log::debug!("{} updated on {}", CLIPBOARD_NAME, side);
             }
             Err(err) => {
@@ -240,7 +243,8 @@ async fn test_nat_type_() -> ResultType<bool> {
     let rendezvous_server = get_rendezvous_server(100).await;
     let server1 = rendezvous_server;
     let mut server2 = server1;
-    if server1.port() == 0 { // offline
+    if server1.port() == 0 {
+        // offline
         // avoid overflow crash
         bail!("Offline");
     }

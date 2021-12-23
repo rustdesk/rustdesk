@@ -3,32 +3,20 @@ pub mod gdi;
 pub use gdi::CapturerGDI;
 
 use winapi::{
-    shared::dxgi::{
-        CreateDXGIFactory1, IDXGIAdapter1, IDXGIFactory1, IDXGIResource, IDXGISurface,
-        IID_IDXGIFactory1, IID_IDXGISurface, DXGI_MAP_READ, DXGI_OUTPUT_DESC,
-        DXGI_RESOURCE_PRIORITY_MAXIMUM,
+    shared::{
+        dxgi::*,
+        dxgi1_2::*,
+        dxgitype::*,
+        minwindef::{DWORD, FALSE, TRUE, UINT},
+        ntdef::LONG,
+        windef::HMONITOR,
+        winerror::*,
+        // dxgiformat::{DXGI_FORMAT, DXGI_FORMAT_B8G8R8A8_UNORM, DXGI_FORMAT_420_OPAQUE},
     },
-    shared::dxgi1_2::IDXGIOutputDuplication,
-    // shared::dxgiformat::{DXGI_FORMAT, DXGI_FORMAT_B8G8R8A8_UNORM, DXGI_FORMAT_420_OPAQUE},
-    shared::dxgi1_2::{IDXGIOutput1, IID_IDXGIOutput1},
-    shared::dxgitype::DXGI_MODE_ROTATION,
-    shared::minwindef::{DWORD, FALSE, TRUE, UINT},
-    shared::ntdef::LONG,
-    shared::windef::HMONITOR,
-    shared::winerror::{
-        DXGI_ERROR_ACCESS_LOST, DXGI_ERROR_INVALID_CALL, DXGI_ERROR_NOT_CURRENTLY_AVAILABLE,
-        DXGI_ERROR_SESSION_DISCONNECTED, DXGI_ERROR_UNSUPPORTED, DXGI_ERROR_WAIT_TIMEOUT,
-        E_ACCESSDENIED, E_INVALIDARG, S_OK,
+    um::{
+        d3d11::*, d3dcommon::D3D_DRIVER_TYPE_UNKNOWN, unknwnbase::IUnknown, wingdi::*,
+        winnt::HRESULT, winuser::*,
     },
-    um::d3d11::{
-        D3D11CreateDevice, ID3D11Device, ID3D11DeviceContext, ID3D11Texture2D, IID_ID3D11Texture2D,
-        D3D11_CPU_ACCESS_READ, D3D11_SDK_VERSION, D3D11_USAGE_STAGING,
-    },
-    um::d3dcommon::D3D_DRIVER_TYPE_UNKNOWN,
-    um::unknwnbase::IUnknown,
-    um::wingdi::*,
-    um::winnt::HRESULT,
-    um::winuser::*,
 };
 
 pub struct ComPtr<T>(*mut T);
@@ -54,12 +42,11 @@ pub struct Capturer {
     duplication: ComPtr<IDXGIOutputDuplication>,
     fastlane: bool,
     surface: ComPtr<IDXGISurface>,
-    data: *const u8,
-    len: usize,
     width: usize,
     height: usize,
     use_yuv: bool,
     yuv: Vec<u8>,
+    rotated: Vec<u8>,
     gdi_capturer: Option<CapturerGDI>,
     gdi_buffer: Vec<u8>,
 }
@@ -158,10 +145,9 @@ impl Capturer {
             width: display.width() as usize,
             height: display.height() as usize,
             display,
-            data: ptr::null(),
-            len: 0,
             use_yuv,
             yuv: Vec::new(),
+            rotated: Vec::new(),
             gdi_capturer,
             gdi_buffer: Vec::new(),
         })
@@ -181,10 +167,9 @@ impl Capturer {
         self.gdi_capturer.take();
     }
 
-    unsafe fn load_frame(&mut self, timeout: UINT) -> io::Result<()> {
+    unsafe fn load_frame(&mut self, timeout: UINT) -> io::Result<(*const u8, i32)> {
         let mut frame = ptr::null_mut();
         let mut info = mem::MaybeUninit::uninit().assume_init();
-        self.data = ptr::null();
 
         wrap_hresult((*self.duplication.0).AcquireNextFrame(timeout, &mut info, &mut frame))?;
         let frame = ComPtr(frame);
@@ -200,9 +185,7 @@ impl Capturer {
             self.surface = ComPtr(self.ohgodwhat(frame.0)?);
             wrap_hresult((*self.surface.0).Map(&mut rect, DXGI_MAP_READ))?;
         }
-        self.data = rect.pBits;
-        self.len = self.height * rect.Pitch as usize;
-        Ok(())
+        Ok((rect.pBits, rect.Pitch))
     }
 
     // copy from GPU memory to system memory
@@ -257,8 +240,42 @@ impl Capturer {
                     }
                 } else {
                     self.unmap();
-                    self.load_frame(timeout)?;
-                    slice::from_raw_parts(self.data, self.len)
+                    let r = self.load_frame(timeout)?;
+                    let rotate = match self.display.rotation() {
+                        DXGI_MODE_ROTATION_IDENTITY | DXGI_MODE_ROTATION_UNSPECIFIED => 0,
+                        DXGI_MODE_ROTATION_ROTATE90 => 90,
+                        DXGI_MODE_ROTATION_ROTATE180 => 180,
+                        DXGI_MODE_ROTATION_ROTATE270 => 270,
+                        _ => {
+                            return Err(io::Error::new(
+                                io::ErrorKind::Other,
+                                "Unknown roration".to_string(),
+                            ));
+                        }
+                    };
+                    if rotate == 0 {
+                        slice::from_raw_parts(r.0, r.1 as usize * self.height)
+                    } else {
+                        self.rotated.resize(self.width * self.height * 4, 0);
+                        crate::common::ARGBRotate(
+                            r.0,
+                            r.1,
+                            self.rotated.as_mut_ptr(),
+                            4 * self.width as i32,
+                            if rotate == 180 {
+                                self.width
+                            } else {
+                                self.height
+                            } as _,
+                            if rotate != 180 {
+                                self.width
+                            } else {
+                                self.height
+                            } as _,
+                            rotate,
+                        );
+                        &self.rotated[..]
+                    }
                 }
             };
             Ok({
@@ -478,7 +495,10 @@ pub struct Display {
     gdi: bool,
 }
 
-// https://github.com/dchapyshev/aspia/blob/59233c5d01a4d03ed6de19b03ce77d61a6facf79/source/base/desktop/win/screen_capture_utils.cc
+// optimized for updated region
+// https://github.com/dchapyshev/aspia/blob/master/source/base/desktop/win/dxgi_output_duplicator.cc
+// rotation
+// https://github.com/bryal/dxgcap-rs/blob/master/src/lib.rs
 
 impl Display {
     pub fn width(&self) -> LONG {

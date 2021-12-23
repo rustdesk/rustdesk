@@ -9,8 +9,8 @@ extern "C" {
         src_stride_argb: c_int,
         dst_argb: *mut u8,
         dst_stride_argb: c_int,
-        width: c_int,
-        height: c_int,
+        src_width: c_int,
+        src_height: c_int,
         mode: c_int,
     ) -> c_int;
 
