@@ -753,6 +753,7 @@ impl Handler {
                     65300 => key_event.set_control_key(ControlKey::Scroll),
                     65421 => key_event.set_control_key(ControlKey::NumpadEnter), // numpad enter
                     65407 => key_event.set_control_key(ControlKey::NumLock),
+                    65515 => key_event.set_control_key(ControlKey::Meta),
                     65516 => key_event.set_control_key(ControlKey::RWin),
                     65513 => key_event.set_control_key(ControlKey::Alt),
                     65514 => key_event.set_control_key(ControlKey::RAlt),
