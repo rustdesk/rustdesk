@@ -209,7 +209,7 @@ class MyIdMenu: Reactor.Component {
                 <li #whitelist title="Only whitelisted IP can access me">IP Whitelisting</li>
                 <li #custom-server>ID/Relay Server</li>
                 <div .separator />
-                <li #stop-service class={service_stopped ? "line-through" : "selected"}><span>{svg_checkmark}</span>Enable service</li>
+                <li #stop-service class={service_stopped ? "line-through" : "selected"}><span>{svg_checkmark}</span>Enable Service</li>
                 <div .separator />
                 <li #forum>Forum</li>
                 <li #about>About {handler.get_app_name()}</li>
