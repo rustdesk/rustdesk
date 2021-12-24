@@ -10,7 +10,7 @@ use std::{
 use tokio::net::{lookup_host, TcpListener, TcpSocket, TcpStream, ToSocketAddrs};
 use tokio_util::codec::Framed;
 
-pub struct FramedStream(Framed<TcpStream, BytesCodec>, Option<(Key, u64, u64)>);
+pub struct FramedStream(Framed<TcpStream, BytesCodec>, Option<(Key, u64, u64)>, u64);
 
 impl Deref for FramedStream {
     type Target = Framed<TcpStream, BytesCodec>;
@@ -56,14 +56,18 @@ impl FramedStream {
                     new_socket(local_addr, true)?.connect(remote_addr),
                 )
                 .await??;
-                return Ok(Self(Framed::new(stream, BytesCodec::new()), None));
+                return Ok(Self(Framed::new(stream, BytesCodec::new()), None, 0));
             }
         }
         bail!("could not resolve to any address");
     }
 
+    pub fn set_send_timeout(&mut self, ms: u64) {
+        self.2 = ms;
+    }
+
     pub fn from(stream: TcpStream) -> Self {
-        Self(Framed::new(stream, BytesCodec::new()), None)
+        Self(Framed::new(stream, BytesCodec::new()), None, 0)
     }
 
     pub fn set_raw(&mut self) {
@@ -88,12 +92,17 @@ impl FramedStream {
             let nonce = Self::get_nonce(key.1);
             msg = secretbox::seal(&msg, &nonce, &key.0);
         }
-        self.0.send(bytes::Bytes::from(msg)).await?;
+        self.send_bytes(bytes::Bytes::from(msg)).await?;
         Ok(())
     }
 
+    #[inline]
     pub async fn send_bytes(&mut self, bytes: Bytes) -> ResultType<()> {
-        self.0.send(bytes).await?;
+        if self.2 > 0 {
+            super::timeout(self.2, self.0.send(bytes)).await??;
+        } else {
+            self.0.send(bytes).await?;
+        }
         Ok(())
     }
 
