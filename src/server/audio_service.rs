@@ -36,35 +36,31 @@ mod pa_impl {
     use super::*;
     #[tokio::main(flavor = "current_thread")]
     pub async fn run(sp: GenericService) -> ResultType<()> {
-        if let Ok(mut stream) = crate::ipc::connect(1000, "_pa").await {
-            let mut encoder =
-                Encoder::new(crate::platform::linux::PA_SAMPLE_RATE, Stereo, LowDelay)?;
-            allow_err!(
-                stream
-                    .send(&crate::ipc::Data::Config((
-                        "audio-input".to_owned(),
-                        Some(Config::get_option("audio-input"))
-                    )))
-                    .await
-            );
-            while sp.ok() {
-                sp.snapshot(|sps| {
-                    sps.send(create_format_msg(crate::platform::linux::PA_SAMPLE_RATE, 2));
-                    Ok(())
-                })?;
-                if let Some(data) = stream.next_timeout2(1000).await {
-                    match data? {
-                        Some(crate::ipc::Data::RawMessage(bytes)) => {
-                            let data = unsafe {
-                                std::slice::from_raw_parts::<f32>(
-                                    bytes.as_ptr() as _,
-                                    bytes.len() / 4,
-                                )
-                            };
-                            send_f32(data, &mut encoder, &sp);
-                        }
-                        _ => {}
+        hbb_common::sleep(0.1).await; // one moment to wait for _pa ipc
+        let mut stream = crate::ipc::connect(1000, "_pa").await?;
+        let mut encoder = Encoder::new(crate::platform::linux::PA_SAMPLE_RATE, Stereo, LowDelay)?;
+        allow_err!(
+            stream
+                .send(&crate::ipc::Data::Config((
+                    "audio-input".to_owned(),
+                    Some(Config::get_option("audio-input"))
+                )))
+                .await
+        );
+        while sp.ok() {
+            sp.snapshot(|sps| {
+                sps.send(create_format_msg(crate::platform::linux::PA_SAMPLE_RATE, 2));
+                Ok(())
+            })?;
+            if let Some(data) = stream.next_timeout2(1000).await {
+                match data? {
+                    Some(crate::ipc::Data::RawMessage(bytes)) => {
+                        let data = unsafe {
+                            std::slice::from_raw_parts::<f32>(bytes.as_ptr() as _, bytes.len() / 4)
+                        };
+                        send_f32(data, &mut encoder, &sp);
                     }
+                    _ => {}
                 }
             }
         }

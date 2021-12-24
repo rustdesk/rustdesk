@@ -405,12 +405,13 @@ async fn start_pa() {
                                 break;
                             }
                             let spec = pulse::sample::Spec {
-                                format: pulse::sample::Format::F32be,
+                                format: pulse::sample::Format::F32le,
                                 channels: 2,
                                 rate: crate::platform::linux::PA_SAMPLE_RATE,
                             };
                             log::info!("pa monitor: {:?}", device);
-                            if let Ok(s) = psimple::Simple::new(
+                            // systemctl --user status pulseaudio.service
+                            match psimple::Simple::new(
                                 None,                             // Use the default server
                                 APP_NAME,                         // Our application’s name
                                 pulse::stream::Direction::Record, // We want a record stream
@@ -420,7 +421,7 @@ async fn start_pa() {
                                 None,                             // Use default channel map
                                 None, // Use default buffering attributes
                             ) {
-                                loop {
+                                Ok(s) => loop {
                                     if let Some(Err(_)) = stream.next_timeout2(1).await {
                                         break;
                                     }
@@ -433,9 +434,10 @@ async fn start_pa() {
                                             allow_err!(stream.send(&Data::RawMessage(out)).await);
                                         }
                                     }
+                                },
+                                Err(err) => {
+                                    log::error!("Could not create simple pulse: {}", err);
                                 }
-                            } else {
-                                log::error!("Could not create simple pulse");
                             }
                         }
                         Err(err) => {
