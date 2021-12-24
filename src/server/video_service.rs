@@ -188,11 +188,7 @@ fn run(sp: GenericService) -> ResultType<()> {
         speed,
     };
     let mut vpx;
-    let mut n = ((width * height) as f64 / (1920 * 1080) as f64).round() as u32;
-    if n < 1 {
-        n = 1;
-    }
-    match Encoder::new(&cfg, n) {
+    match Encoder::new(&cfg, 0) {
         Ok(x) => vpx = x,
         Err(err) => bail!("Failed to create encoder: {}", err),
     }
