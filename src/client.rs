@@ -34,6 +34,8 @@ pub const SEC30: Duration = Duration::from_secs(30);
 
 pub struct Client;
 
+pub use super::lang::*;
+
 #[cfg(not(any(target_os = "android")))]
 lazy_static::lazy_static! {
 static ref AUDIO_HOST: Host = cpal::default_host();
@@ -547,7 +549,8 @@ impl AudioHandler {
         device: &Device,
     ) -> ResultType<()> {
         let err_fn = move |err| {
-            log::error!("an error occurred on stream: {}", err);
+            // too many errors, will improve later
+            log::trace!("an error occurred on stream: {}", err);
         };
         let audio_buffer = self.audio_buffer.clone();
         let stream = device.build_output_stream(
@@ -656,6 +659,12 @@ impl LoginConfigHandler {
     pub fn save_config(&mut self, config: PeerConfig) {
         config.store(&self.id);
         self.config = config;
+    }
+
+    pub fn set_option(&mut self, k: String, v: String) {
+        let mut config = self.load_config();
+        config.options.insert(k, v);
+        self.save_config(config);
     }
 
     pub fn save_view_style(&mut self, value: String) {

@@ -571,6 +571,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "cstr_core"
+version = "0.2.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "917ba9efe9e1e736671d5a03f006afc4e7e3f32503e2077e0bcaf519c0c8c1d3"
+dependencies = [
+ "cty",
+ "memchr",
+]
+
+[[package]]
 name = "ct-logs"
 version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -588,6 +598,12 @@ dependencies = [
  "nix 0.22.0",
  "winapi 0.3.9",
 ]
+
+[[package]]
+name = "cty"
+version = "0.2.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b365fabc795046672053e29c954733ec3b05e4be654ab130fe8f1f94d7051f35"
 
 [[package]]
 name = "darling"
@@ -2909,6 +2925,7 @@ dependencies = [
  "serde_derive",
  "serde_json 1.0.66",
  "sha2",
+ "sys-locale",
  "uuid",
  "whoami",
  "winapi 0.3.9",
@@ -3280,6 +3297,19 @@ dependencies = [
  "quote",
  "syn",
  "unicode-xid",
+]
+
+[[package]]
+name = "sys-locale"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "91f89ebb59fa30d4f65fafc2d68e94f6975256fd87e812dd99cb6e020c8563df"
+dependencies = [
+ "cc",
+ "cstr_core",
+ "libc",
+ "web-sys",
+ "winapi 0.3.9",
 ]
 
 [[package]]

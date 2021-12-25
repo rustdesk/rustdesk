@@ -562,6 +562,11 @@ impl UI {
         allow_err!(std::process::Command::new(p).arg(url).spawn());
     }
 
+    fn t(&self, name: String) -> String {
+        crate::client::translate(name)
+    }
+
+
     fn is_xfce(&self) -> bool {
         crate::platform::is_xfce()
     }
@@ -569,6 +574,7 @@ impl UI {
 
 impl sciter::EventHandler for UI {
     sciter::dispatch_script_call! {
+        fn t(String);
         fn is_xfce();
         fn get_id();
         fn get_password();

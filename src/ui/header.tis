@@ -31,6 +31,10 @@ if (is_linux) {
     }
 }
 
+function get_id() {
+    return handler.get_option('alias') || handler.get_id()
+}
+
 function stateChanged() {
     stdout.println('state changed from ' + cur_window_state + ' -> ' + view.windowState);
     cur_window_state = view.windowState;
@@ -58,7 +62,7 @@ var old_window_state = View.WINDOW_SHOWN;
 var input_blocked;
 
 class Header: Reactor.Component {
-    function this(params) {
+    function this() {
         header = this;
     }
 
@@ -67,18 +71,18 @@ class Header: Reactor.Component {
         var title_conn;
         if (this.secure_connection && this.direct_connection) {
             icon_conn = svg_secure;
-            title_conn = "Direct and secure connection";
+            title_conn = translate("Direct and encrypted connection");
         } else if (this.secure_connection && !this.direct_connection) {
             icon_conn = svg_secure_relay;
-            title_conn = "Relayed and secure connection";
+            title_conn = translate("Relayed and encrypted connection");
         } else if (!this.secure_connection && this.direct_connection) {
             icon_conn = svg_insecure;
-            title_conn = "Direct and insecure connection";
+            title_conn = translate("Direct and unencrypted connection");
         } else {
             icon_conn = svg_insecure_relay;
-            title_conn = "Relayed and insecure connection";
+            title_conn = translate("Relayed and unencrypted connection");
         }
-        var title = handler.get_id();
+        var title = get_id();
         if (pi.hostname) title += "(" + pi.username + "@" + pi.hostname + ")";
         if ((pi.displays || []).length == 0) {
             return <div .ellipsis style="size:*;text-align:center;margin:*;">{title}</div>;
@@ -89,14 +93,14 @@ class Header: Reactor.Component {
             </div>;
         });
         updateWindowToolbarPosition();
-        var style = "flow: horizontal;";
-        if (is_osx) style += "margin: *";
+        var style = "flow:horizontal;";
+        if (is_osx) style += "margin:*";
         self.timer(1ms, toggleMenuState);
         return <div style={style}>
             {is_osx || is_xfce ? "" : <span #fullscreen>{svg_fullscreen}</span>}
             <div #screens>
                 <span #secure title={title_conn}>{icon_conn}</span>
-                <div .remote-id>{handler.get_id()}</div>
+                <div .remote-id>{get_id()}</div>
                 <div style="flow:horizontal;border-spacing: 0.5em;">{screens}</div>
                 {this.renderGlobalScreens()}
             </div>
@@ -111,22 +115,22 @@ class Header: Reactor.Component {
     function renderDisplayPop() {
         return <popup>
             <menu.context #display-options>
-                <li #adjust-window style="display:none">Adjust Window</li> 
+                <li #adjust-window style="display:none">{translate('Adjust Window')}</li> 
                 <div #adjust-window .separator style="display:none"/>
-                <li #original type="view-style"><span>{svg_checkmark}</span>Original</li> 
-                <li #shrink type="view-style"><span>{svg_checkmark}</span>Shrink</li> 
-                <li #stretch type="view-style"><span>{svg_checkmark}</span>Stretch</li> 
+                <li #original type="view-style"><span>{svg_checkmark}</span>{translate('Original')}</li> 
+                <li #shrink type="view-style"><span>{svg_checkmark}</span>{translate('Shrink')}</li> 
+                <li #stretch type="view-style"><span>{svg_checkmark}</span>{translate('Stretch')}</li> 
                 <div .separator />
-                <li #best type="image-quality"><span>{svg_checkmark}</span>Good image quality</li> 
-                <li #balanced type="image-quality"><span>{svg_checkmark}</span>Balanced</li> 
-                <li #low type="image-quality"><span>{svg_checkmark}</span>Optimize reaction time</li> 
-                <li #custom type="image-quality"><span>{svg_checkmark}</span>Custom</li>
+                <li #best type="image-quality"><span>{svg_checkmark}</span>{translate('Good image quality')}</li> 
+                <li #balanced type="image-quality"><span>{svg_checkmark}</span>{translate('Balanced')}</li> 
+                <li #low type="image-quality"><span>{svg_checkmark}</span>{translate('Optimize reaction time')}</li> 
+                <li #custom type="image-quality"><span>{svg_checkmark}</span>{translate('Custom')}</li>
                 <div .separator />
-                <li #show-remote-cursor .toggle-option><span>{svg_checkmark}</span>Show remote cursor</li> 
-                {audio_enabled ? <li #disable-audio .toggle-option><span>{svg_checkmark}</span>Mute</li> : ""}
-                {keyboard_enabled && clipboard_enabled ? <li #disable-clipboard .toggle-option><span>{svg_checkmark}</span>Disable clipboard</li> : ""} 
-                {keyboard_enabled ? <li #lock-after-session-end .toggle-option><span>{svg_checkmark}</span>Lock after session end</li> : ""} 
-                {false && pi.platform == "Windows" ? <li #privacy-mode .toggle-option><span>{svg_checkmark}</span>Privacy mode</li> : ""}
+                <li #show-remote-cursor .toggle-option><span>{svg_checkmark}</span>{translate('Show remote cursor')}</li> 
+                {audio_enabled ? <li #disable-audio .toggle-option><span>{svg_checkmark}</span>{translate('Mute')}</li> : ""}
+                {keyboard_enabled && clipboard_enabled ? <li #disable-clipboard .toggle-option><span>{svg_checkmark}</span>{translate('Disable clipboard')}</li> : ""} 
+                {keyboard_enabled ? <li #lock-after-session-end .toggle-option><span>{svg_checkmark}</span>{translate('Lock after session end')}</li> : ""} 
+                {false && pi.platform == "Windows" ? <li #privacy-mode .toggle-option><span>{svg_checkmark}</span>{translate('Privacy mode')}</li> : ""}
             </menu>
         </popup>;
     }
@@ -134,23 +138,20 @@ class Header: Reactor.Component {
     function renderActionPop() {
         return <popup>
             <menu.context #action-options>
-                <li #transfer-file>Transfer File</li> 
-                <li #tunnel>TCP Tunneling</li>
+                <li #transfer-file>{translate('Transfer File')}</li> 
+                <li #tunnel>{translate('TCP Tunneling')}</li> 
                 <div .separator />
-                {keyboard_enabled && (pi.platform == "Linux" || pi.sas_enabled) ? <li #ctrl-alt-del>Insert Ctrl + Alt + Del</li> : ""}
-                <li #ctrl-space>Insert Ctrl + Space</li>
-                <li #alt-tab>Insert Alt + Tab</li>
-                {false && <li #super-x>Insert Win/Super + ...</li>}
+                {keyboard_enabled && (pi.platform == "Linux" || pi.sas_enabled) ? <li #ctrl-alt-del>{translate('Insert')} Ctrl + Alt + Del</li> : ""}
                 <div .separator />
-                {keyboard_enabled ? <li #lock-screen>Insert Lock</li> : ""}
+                {keyboard_enabled ? <li #lock-screen>{translate('Insert Lock')}</li> : ""}
                 {false && pi.platform == "Windows" ? <li #block-input>Block user input </li> : ""}
-                {handler.support_refresh() ? <li #refresh>Refresh</li> : ""}
+                {handler.support_refresh() ? <li #refresh>{translate('Refresh')}</li> : ""}
             </menu>
         </popup>;
     }
 
     function renderGlobalScreens() {
-        if (pi.displays.length < 2) return "";
+        if (pi.displays.length < 3) return "";
         var x0 = 9999999;
         var y0 = 9999999;
         var x = -9999999;
@@ -232,18 +233,6 @@ class Header: Reactor.Component {
     event click $(#ctrl-alt-del) {
         handler.ctrl_alt_del();
     }
-
-    event click $(#alt-tab) {
-        handler.alt_tab();
-    }
-
-    event click $(#ctrl-space) {
-        handler.ctrl_space();
-    }
-
-    event click $(#super-x) {
-        handler.super_x();
-    }
     
     event click $(#lock-screen) {
         handler.lock_screen();
@@ -289,8 +278,8 @@ function handle_custom_image_quality() {
     var bitrate0 = tmp[0] || 50;
     var quantizer0 = tmp.length > 1 ? tmp[1] : 100;
     handler.msgbox("custom", "Custom Image Quality", "<div .form> \
-          <div><input type=\"hslider\" style=\"width: 66%\" name=\"bitrate\" max=\"100\" min=\"10\" value=\"" + bitrate0 + "\"/ buddy=\"bitrate-buddy\"><b #bitrate-buddy>x</b>% bitrate</div> \
-          <div><input type=\"hslider\" style=\"width: 66%\" name=\"quantizer\" max=\"100\" min=\"0\" value=\"" + quantizer0 + "\"/ buddy=\"quantizer-buddy\"><b #quantizer-buddy>x</b>% quantizer</div> \
+          <div><input type=\"hslider\" style=\"width: 50%\" name=\"bitrate\" max=\"100\" min=\"10\" value=\"" + bitrate0 + "\"/ buddy=\"bitrate-buddy\"><b #bitrate-buddy>x</b>% bitrate</div> \
+          <div><input type=\"hslider\" style=\"width: 50%\" name=\"quantizer\" max=\"100\" min=\"0\" value=\"" + quantizer0 + "\"/ buddy=\"quantizer-buddy\"><b #quantizer-buddy>x</b>% quantizer</div> \
       </div>", function(res=null) {
         if (!res) return;
         if (!res.bitrate) return;

@@ -300,6 +300,10 @@ impl ConnectionManager {
     fn exit(&self) {
         std::process::exit(0);
     }
+
+    fn t(&self, name: String) -> String {
+        crate::client::translate(name)
+    }
 }
 
 impl sciter::EventHandler for ConnectionManager {
@@ -308,6 +312,7 @@ impl sciter::EventHandler for ConnectionManager {
     }
 
     sciter::dispatch_script_call! {
+        fn t(String);
         fn get_icon();
         fn close(i32);
         fn authorize(i32);

@@ -141,11 +141,11 @@ class JobTable: Reactor.Component {
   }
 
   function getStatus(job) {
-    if (!job.entries) return "Waiting";
+    if (!job.entries) return translate("Waiting");
     var i = job.file_num + 1;
     var n = job.num_entries || job.entries.length;
     if (i > n) i = n;
-    var res = i + ' / ' + n + " files";
+    var res = i + ' / ' + n + " " + translate("files");
     if (job.total_size > 0) {
       var s = getSize(0, job.finished_size);
       if (s) s += " / ";
@@ -155,7 +155,7 @@ class JobTable: Reactor.Component {
     var percent = job.total_size == 0 ? 100 : (100. * job.finished_size / job.total_size).toInteger(); // (100. * i / (n || 1)).toInteger();
     if (job.finished) percent = '100';
     if (percent) res += ", " + percent + "%";
-    if (job.finished) res = "Finished " + res;
+    if (job.finished) res = translate("Finished") + " " + res;
     if (job.speed) res += ", " + getSize(0, job.speed) + "/s";
     return res;
   }
@@ -250,7 +250,7 @@ class FolderView : Reactor.Component {
       return <div .title>
         {svg_computer}
         <div .platform>{platformSvg(handler.get_platform(this.is_remote), "white")}</div>
-        <div><span>{this.is_remote ? "Remote Computer" : "Local Computer"}</span></div>
+        <div><span>{translate(this.is_remote ? "Remote Computer" : "Local Computer")}</span></div>
       </div>
     }
 
@@ -273,7 +273,7 @@ class FolderView : Reactor.Component {
     function renderOpBar() {
       if (this.is_remote) {
         return <div .toolbar .remote>
-          <div .send .button>{svg_send}<span>Receive</span></div>
+          <div .send .button>{svg_send}<span>{translate('Receive')}</span></div>
           <div .spacer></div>
           <div .add-folder .button>{svg_add_folder}</div>
           <div .trash .button>{svg_trash}</div>
@@ -283,7 +283,7 @@ class FolderView : Reactor.Component {
         <div .add-folder .button>{svg_add_folder}</div>
         <div .trash .button>{svg_trash}</div>
         <div .spacer></div>
-        <div .send .button><span>Send</span>{svg_send}</div>
+        <div .send .button><span>{translate('Send')}</span>{svg_send}</div>
       </div>;
     }
 
@@ -308,14 +308,14 @@ class FolderView : Reactor.Component {
       var id = (this.is_remote ? "remote" : "local") + "-folder-view";
       return <table @{this.table} .folder-view .has_current id={id}>    
         <thead>    
-          <tr><th></th><th .sortable>Name</th><th .sortable>Modified</th><th .sortable>Size</th></tr>    
+          <tr><th></th><th .sortable>{translate('Name')}</th><th .sortable>{translate('Modified')}</th><th .sortable>{translate('Size')}</th></tr>    
         </thead>      
         <tbody> 
           {rows}
         </tbody>
         <popup>
           <menu.context id={id}>
-            <li #switch-hidden class={this.show_hidden ? "selected" : ""}><span>{svg_checkmark}</span>Show Hidden Files</li>
+            <li #switch-hidden class={this.show_hidden ? "selected" : ""}><span>{svg_checkmark}</span>{translate('Show Hidden Files')}</li>
           </menu>
         </popup>
       </table>;
@@ -431,8 +431,8 @@ class FolderView : Reactor.Component {
 
     event click $(.add-folder) () {
       var me = this;
-      handler.msgbox("custom", "Create Folder", "<div .form> \
-            <div>Please enter the folder name:</div> \
+      handler.msgbox("custom", translate("Create Folder"), "<div .form> \
+            <div>" + translate("Please enter the folder name") + ":</div> \
             <div><input|text(name) .outline-focus /></div> \
         </div>", function(res=null) {
           if (!res) return;
@@ -523,7 +523,7 @@ class FolderView : Reactor.Component {
 var file_transfer;
 
 class FileTransfer: Reactor.Component {
-    function this(params) {
+    function this() {
         file_transfer = this;
     }
 
@@ -600,7 +600,7 @@ var create_dir_jobs = {}
 
 function confirmDelete(path, is_remote) {
   handler.block_msgbox("custom-skip", "Confirm Delete", "<div .form> \
-        <div>Are you sure you want to delete this file?</div> \
+        <div>" + translate('Are you sure you want to delete this file?') + "</div> \
         <div.ellipsis style=\"font-weight: bold;\">" + path + "</div> \
     </div>", function(res=null) {
       if (res) {
@@ -620,10 +620,10 @@ handler.confirmDeleteFiles = function(id, i, name) {
   var file_path = job.path;
   if (name) file_path += handler.get_path_sep(job.is_remote) + name;
   handler.block_msgbox("custom-skip", "Confirm Delete", "<div .form> \
-        <div>Deleting #" + (i + 1) + " of " + n + " files.</div> \
-        <div>Are you sure you want to delete this file?</div> \
+        <div>" + translate('Deleting') + " #" + (i + 1) + " / " + n + " " + translate('files') + ".</div> \
+        <div>" + translate('Are you sure you want to delete this file?') + "</div> \
         <div.ellipsis style=\"font-weight: bold;\" .text>" + name + "</div> \
-        <div><button|checkbox(remember) {ts}>Do this for all conflicts</button></div> \
+        <div><button|checkbox(remember) {ts}>" + translate('Do this for all conflicts') + "</button></div> \
     </div>", function(res=null) {
       if (!res) {
         jt.updateJobStatus(id, i - 1, "cancel");

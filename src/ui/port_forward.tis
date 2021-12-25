@@ -21,17 +21,17 @@ class PortForward: Reactor.Component {
       });
       return <div #file-transfer><section>
         {pfs.length ? <div style="background: green; color: white; text-align: center; padding: 0.5em;">
-          <span style="font-size: 1.2em">Listening ...</span><br/>
-          <span style="font-size: 0.8em; color: #ddd">Don't close this window while you are using the tunnel</span>
+          <span style="font-size: 1.2em">{translate('Listening ...')}</span><br/>
+          <span style="font-size: 0.8em; color: #ddd">{translate('not_close_tcp_tip')}</span>
         </div> : ""}
         <table #port-forward>    
         <thead>    
           <tr>
-            <th>Local Port</th>
+            <th>{translate('Local Port')}</th>
             <th style="width: 1em" />
-            <th>Remote Host</th>
-            <th>Remote Port</th>
-            {args.length ? "" : <th style="width: 6em">Action</th>}
+            <th>{translate('Remote Host')}</th>
+            <th>{translate('Remote Port')}</th>
+            {args.length ? "" : <th style="width: 6em">{translate('Action')}</th>}
           </tr>    
         </thead>      
         <tbody key={pfs.length}> 
@@ -41,7 +41,7 @@ class PortForward: Reactor.Component {
                 <td .right-arrow style="text-align: center">{svg_arrow}</td>
                 <td><input|text #remote-host novalue="localhost" /></td>
                 <td><input|number #remote-port /></td>
-                <td style="margin:0;"><button .button #add>Add</button></td>
+                <td style="margin:0;"><button .button #add>{translate('Add')}</button></td>
             </tr>
             }
             {pfs}

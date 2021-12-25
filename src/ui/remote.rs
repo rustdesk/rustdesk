@@ -54,7 +54,6 @@ pub struct HandlerInner {
     sender: Option<mpsc::UnboundedSender<Data>>,
     thread: Option<std::thread::JoinHandle<()>>,
     close_state: HashMap<String, String>,
-    last_down_key: Option<(String, i32, bool)>,
 }
 
 #[derive(Clone, Default)]
@@ -64,7 +63,6 @@ pub struct Handler {
     id: String,
     args: Vec<String>,
     lc: Arc<RwLock<LoginConfigHandler>>,
-    super_on: bool,
 }
 
 impl Deref for Handler {
@@ -146,6 +144,8 @@ impl sciter::EventHandler for Handler {
         fn get_id();
         fn get_default_pi();
         fn get_option(String);
+        fn t(String);
+        fn set_option(String, String);
         fn save_close_state(String, String);
         fn is_file_transfer();
         fn is_port_forward();
@@ -155,9 +155,6 @@ impl sciter::EventHandler for Handler {
         fn send_mouse(i32, i32, i32, bool, bool, bool, bool);
         fn key_down_or_up(bool, String, i32, bool, bool, bool, bool, bool);
         fn ctrl_alt_del();
-        fn ctrl_space();
-        fn alt_tab();
-        fn super_x();
         fn transfer_file();
         fn tunnel();
         fn lock_screen();
@@ -286,6 +283,10 @@ impl Handler {
         self.lc.read().unwrap().remember
     }
 
+    fn t(&self, name: String) -> String {
+        crate::client::translate(name)
+    }
+
     fn is_xfce(&self) -> bool {
         crate::platform::is_xfce()
     }
@@ -406,6 +407,10 @@ impl Handler {
 
     fn get_option(&self, k: String) -> String {
         self.lc.read().unwrap().get_option(&k)
+    }
+
+    fn set_option(&self, k: String, v: String) {
+        self.lc.write().unwrap().set_option(k, v);
     }
 
     fn save_close_state(&self, k: String, v: String) {
@@ -534,7 +539,6 @@ impl Handler {
     fn reconnect(&mut self) {
         let cloned = self.clone();
         let mut lock = self.write().unwrap();
-        lock.last_down_key.take();
         lock.thread.take().map(|t| t.join());
         lock.thread = Some(std::thread::spawn(move || {
             io_loop(cloned);
@@ -667,7 +671,6 @@ impl Handler {
             let evt_type = mask & 0x7;
             if buttons == 1 && evt_type == 1 && ctrl && self.peer_platform() != "Mac OS" {
                 self.send_mouse((1 << 3 | 2) as _, x, y, alt, ctrl, shift, command);
-                return;
             }
         }
     }
@@ -820,20 +823,6 @@ impl Handler {
         }
     }
 
-    fn super_x(&mut self) {
-        self.super_on = true;
-    }
-
-    fn ctrl_space(&mut self) {
-        let key = "VK_SPACE".to_owned();
-        self.key_down_or_up(3, key, 0, false, true, false, false, false);
-    }
-
-    fn alt_tab(&mut self) {
-        let key = "VK_TAB".to_owned();
-        self.key_down_or_up(3, key, 0, true, false, false, false, false);
-    }
-
     fn lock_screen(&mut self) {
         let lock = "LOCK_SCREEN".to_owned();
         self.key_down_or_up(1, lock, 0, false, false, false, false, false);
@@ -866,6 +855,18 @@ impl Handler {
         command: bool,
         extended: bool,
     ) {
+
+        if self.peer_platform() == "Windows" {
+            if ctrl && alt && name == "VK_DELETE" {
+                self.ctrl_alt_del();
+                return;
+            }
+            if command && name == "VK_L" {
+                self.lock_screen();
+                return;
+            }
+        }
+
         // extended: e.g. ctrl key on right side, https://docs.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-keybd_event
         // not found api of osx and xdo
         log::debug!(
@@ -880,15 +881,6 @@ impl Handler {
             command,
             extended,
         );
-
-        let mut command = command;
-        if self.super_on {
-            command = true;
-        }
-
-        if down_or_up == 0 {
-            self.super_on = false;
-        }
 
         let mut name = name;
         #[cfg(target_os = "linux")]
