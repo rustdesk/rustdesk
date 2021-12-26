@@ -66,7 +66,6 @@ class SessionList: Reactor.Component {
                     <li #connect>{translate('Connect')}</li>
                     <li #transfer>{translate('Transfer File')}</li>
                     <li #tunnel>{translate('TCP Tunneling')}</li>
-                    {false && !handler.using_public_server() && <li #force-always-relay><span>{svg_checkmark}</span>{translate('Always connect via relay')}</li>}
                     <li #rdp>RDP<EditRdpPort /></li>
                     <li #rename>{translate('Rename')}</li>
                     <li #remove>{translate('Remove')}</li>
@@ -122,14 +121,8 @@ class SessionList: Reactor.Component {
             display: (platform == "Windows" && is_win) ? "block" : "none",
         };
         // https://sciter.com/forums/topic/replacecustomize-context-menu/
-        var menu = $(menu#remote-context);
+        var menu = this.$(menu#remote-context);
         menu.attributes["remote-id"] = id;
-        var el = $(li#force-always-relay);
-        if (el) {
-          var force = handler.get_peer_option(id, "force-always-relay");
-          el.attributes.toggleClass("selected", force == "Y");
-          el.attributes.toggleClass("line-through", force != "Y");
-        }
         me.popup(menu);
     }
 
