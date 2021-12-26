@@ -132,11 +132,30 @@ div.recent-sessions-content {
     flow: horizontal-flow;
 }
 
-div.recent-sessions-title {
+div#sessions-bar {
     color: color(light-text);
     padding-top: 0.5em;
     border-top: color(border) solid 1px;
     margin-bottom: 1em;
+    position: relative;
+    flow: horizontal;
+}
+
+div#sessions-bar span {
+    display: inline-block;
+    padding: 0.5em 1em;
+    cursor: pointer;
+}
+
+div#sessions-bar svg {
+    size: 14px;
+}
+
+div#sessions-bar span.active {
+    cursor: default;
+    border-radius: 3px;
+    background: white;
+    color: black;
 }
 
 div.remote-session {
@@ -148,7 +167,7 @@ div.remote-session {
     border: none;
 }
 
-div.remote-session:hover {
+div.remote-session:hover, div.remote-session-list:hover {
     outline: color(button) solid 2px -2px;
 }
 
@@ -176,6 +195,41 @@ div.remote-session .platform svg {
     background: none;
 }
 
+div.remote-session-list {
+    background: white;
+    width: 240px;
+    flow: horizontal;
+}
+
+div.remote-session-list .platform {
+    size: 42px;
+}
+
+div.remote-session-list .platform svg {
+    width: 30px;
+    height: 30px;
+    background: none;
+    padding: 6px;
+}
+
+div.remote-session-list .name {
+    size: *;
+    padding-left: 1em;
+}
+
+div.remote-session-list .name >div {
+    margin-top: *;
+    margin-bottom: *;
+    width: *;
+}
+
+div.remote-session-list .name .username {
+    margin-top: 3px;
+    font-size: 0.8em;
+    color: color(lighter-text);
+    overflow: hidden;
+}
+
 div.remote-session .text {
     background: white;
     position: absolute;
@@ -200,20 +254,22 @@ svg#menu {
     color: color(light-text);
 }
 
-svg#menu:active {
+.remote-session-list svg#menu {
+    margin-right: 0;
+}
+
+svg#menu:hover {
     color: black;
     border-radius: 1em;
     background: color(gray-bg);
 }
 
-svg#edit:active {
-    opacity: 0.5;
+svg#edit:hover {
+    color: black;
 }
 
 svg#edit {
     display: inline-block;
-    margin-top: 0.25em;
-    margin-bottom: 0;
 }
 
 div.install-me, div.trust-me {

@@ -397,7 +397,7 @@ function startChat() {
         height: h,
         client: true,
         parameters: { msgs: chat_msgs, callback: sendMsg, icon: icon },
-        caption: handler.get_id(),
+        caption: get_id(),
     };
     var html = handler.get_chatbox();
     if (html) params.html = html;

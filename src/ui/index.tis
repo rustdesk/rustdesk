@@ -54,77 +54,15 @@ class RecentSessions: Reactor.Component {
     function render() {
         var sessions = handler.get_recent_sessions();
         if (sessions.length == 0) return <span />;
-        sessions = sessions.map(this.getSession);
         return <div style="width: *">
-            <div .recent-sessions-title>{translate("Recent Sessions")}</div>
-            <div .recent-sessions-content key={sessions.length}>
-                {sessions}
+            <div #sessions-bar>
+            <div style="width:*">
+              {translate("Recent Sessions")}
             </div>
+            {!app.hidden && <SessionStyle />}
+            </div>
+            {!app.hidden && <SessionList style={sessionsStyle} sessions={sessions} />}
         </div>;
-    }
-
-    function getSession(s) {
-        var id = s[0];
-        var username = s[1];
-        var hostname = s[2];
-        var platform = s[3];
-        var alias = s[4];
-        return <div .remote-session id={id} platform={platform} style={"background:"+string2RGB(id+platform, 0.5)}>
-            <div .platform>
-                {platformSvg(platform, "white")}
-                <div .username>{username}@{hostname}</div>
-            </div>
-            <div .text>
-                <div #alias>{alias ? alias : formatId(id)}</div>
-                {svg_menu}
-            </div>
-        </div>;
-    }
-
-    event dblclick $(div.remote-session) (evt, me) {
-        createNewConnect(me.id, "connect");
-    }
-    
-    event click $(#menu) (_, me) {
-        var id = me.parent.parent.id;
-        var platform = me.parent.parent.attributes["platform"];
-        $(#rdp).style.set{
-            display: (platform == "Windows" && is_win) ? "block" : "none",
-        };
-        // https://sciter.com/forums/topic/replacecustomize-context-menu/
-        var menu = $(menu#remote-context);
-        menu.attributes["remote-id"] = id;
-        me.popup(menu);
-    }
-}
-
-event click $(menu#remote-context li) (evt, me) {
-    var action = me.id;
-    var id = me.parent.attributes["remote-id"];
-    if (action == "connect") {
-        createNewConnect(id, "connect");
-    } else if (action == "transfer") {
-        createNewConnect(id, "file-transfer");
-    } else if (action == "remove") {
-        handler.remove_peer(id);
-        app.recent_sessions.update();
-    } else if (action == "shortcut") {
-        handler.create_shortcut(id);
-    } else if (action == "rdp") {
-        createNewConnect(id, "rdp");
-    } else if (action == "tunnel") {
-        createNewConnect(id, "port-forward");
-    } else if (action == "rename") {
-        var old_name = handler.get_peer_option(id, "alias");
-        handler.msgbox("custom-rename", "Rename", "<div .form> \
-            <div><input name='name' style='width: *; height: 23px', value='" + old_name + "' /></div> \
-            </div> \
-            ", function(res=null) {
-                if (!res) return;
-                var name = (res.name || "").trim();
-                if (name != old_name) handler.set_peer_option(id, "alias", name);
-                self.select('#' + id).select('#alias').text = name || id;
-            });
     }
 }
 
@@ -320,17 +258,6 @@ class App: Reactor.Component
         var is_can_screen_recording = handler.is_can_screen_recording(false);
         return
             <div .app>
-              <popup>
-              <menu.context #remote-context>
-                <li #connect>{translate('Connect')}</li>    
-                <li #transfer>{translate('Transfer File')}</li>    
-                <li #tunnel>{translate('TCP Tunneling')}</li>    
-                <li #rdp>RDP</li>    
-                <li #rename>{translate('Rename')}</li>    
-                <li #remove>{translate('Remove')}</li>    
-                {is_win && <li #shortcut>{translate('Create Desktop Shortcut')}</li>} 
-              </menu>
-              </popup>
               <popup>
               <menu.context #edit-password-context>
                 <li #refresh-password>Refresh random password</li>

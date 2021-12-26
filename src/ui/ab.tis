@@ -1,0 +1,171 @@
+var svg_tile = <svg #session-tile viewBox="0 0 158.6 158.6"><path style="stroke-width:.309756" d="M5.4 157.7c-1-.3-2-1-3.2-2.1-2.8-2.8-2.6-1-2.5-32 0-26.7 0-27 .7-28.3a9.3 9.3 0 0 1 4-4.2c1.2-.6 2.3-.6 29-.7 27.5 0 27.6 0 29.1.6.8.4 2 1.2 2.7 2 2.4 2.5 2.3.7 2.2 31.6-.1 26.5-.1 27.6-.7 28.8a9.3 9.3 0 0 1-4.2 4c-1.4.6-1.6.6-28.5.7a235 235 0 0 1-28.6-.4zm91 0a8.5 8.5 0 0 1-5.7-5.4c-.2-.7-.3-8.3-.3-28.3V96.7l.7-1.6a8.9 8.9 0 0 1 4.6-4.3c1.2-.4 3.8-.5 28.9-.4 26.6.1 27.6.1 28.8.7 1.6.8 3.2 2.5 4 4.2.7 1.4.7 1.6.7 28.3.1 31 .3 29.2-2.5 32-2.8 2.7-1 2.6-31.4 2.6-21.4 0-26.8-.1-27.9-.5zM5.3 67a8.7 8.7 0 0 1-4-3C-.5 61.6-.5 62.3-.5 33.6-.4 3.2-.5 5 2.2 2.2 5-.6 3.2-.4 34.2-.3c26.7 0 27 0 28.3.7 1.7.8 3.4 2.4 4.2 4 .6 1.2.6 2.2.7 28.8 0 25.1 0 27.7-.4 29a9 9 0 0 1-4.3 4.5l-1.6.7H33.7c-20.2 0-27.7-.1-28.4-.4Zm89.8-.3a9 9 0 0 1-4.3-4.6c-.5-1.2-.5-3.8-.5-28.9.1-26.6.2-27.6.7-28.8a9.3 9.3 0 0 1 4.2-4c1.4-.7 1.6-.7 28.3-.7 31-.1 29.2-.3 32 2.5 2.8 2.8 2.6 1 2.5 32 0 26.7 0 26.9-.7 28.3a9.3 9.3 0 0 1-4 4.2c-1.2.5-2.2.6-29 .6l-27.7.1z" transform="translate(.4 .4)"/></svg>;
+var svg_list = <svg #session-list viewBox="0 0 246.8 185.8"><path style="stroke-width:.482473" d="M-69.2 102.7A16.5 16.5 0 0 1-67 70.4c7.3-1 15 4 17.3 11 1 3 1 8 0 10.8a16.7 16.7 0 0 1-19.5 10.5zm53-3.4a12.3 12.3 0 0 1-7-16.8c1.3-3 3.1-4.7 6-6 2.2-1 2.8-1 87.2-1 92.4 0 87-.2 90.6 2.6.9.7 2.2 2.4 3 3.7 1.2 2.2 1.4 3.1 1.4 6 0 4.8-2.3 8.6-6.8 11l-1.9 1-85.2.1c-71.9 0-85.5 0-87.3-.6zm-53.5-73c-4.7-1.5-8.6-5-10.6-9.1-1.8-4-1.8-9.8 0-13.7 1.6-3.3 4.4-6.2 7.8-8 2.2-1.2 3-1.3 7.1-1.3 4 0 5 .1 7.3 1.3a16.6 16.6 0 0 1 0 29.6c-2 1-3.4 1.4-6.5 1.5-2.2 0-4.5 0-5.1-.3zm52.3-4.8c-2.4-1.1-5.3-4-6.2-6.5-1-2.4-1-7.3.1-9.7.5-1.1 1.8-2.8 2.8-3.8 3.7-3.5-4-3.2 91-3.2h85.5l2.5 1.1a12 12 0 0 1 0 21.8l-2.5 1.2H70.2c-82.5 0-85.7 0-87.6-1zm-52.1-71.6a18 18 0 0 1-10-7.7 17 17 0 0 1-.7-15c2.3-5 5.8-7.9 11.4-9.3 9-2.3 18.3 4 19.8 13.4a16.4 16.4 0 0 1-15.2 19c-2.1.1-4.1 0-5.3-.4zm52.1-5.9c-1.3-.6-3-1.7-3.7-2.5-4.7-5-4.2-13.7 1-18 3.7-3.1-1.8-3 91.5-2.8l84.9.1 2 1a12 12 0 0 1 6.7 11c0 3-.2 3.9-1.4 6-.8 1.4-2.1 3-3 3.8-3.7 2.7 1.8 2.6-90.6 2.6h-85l-2.4-1.2z" transform="translate(81.7 82.6)"/></svg>;
+
+function getSessionsStyleOption(type) {
+    return (type || "recent") + "-sessions-style";
+}
+
+function getSessionsStyle(type) {
+    var v = handler.get_option(getSessionsStyleOption(type));
+    if (!v) v = type == "ab" ? "list" : "tile";
+    return v;
+}
+
+function stupidUpdate(me) {
+    /* hidden is workaround of stupid sciter bug */
+    me.hidden = true;
+    me.update();
+    self.timer(60ms, function() {
+        me.hidden = false;
+        me.update();
+    });
+}
+
+class SessionStyle: Reactor.Component {
+    this var type = ""; 
+
+    function this(params) {
+        this.type = (params || {}).type;
+    }
+
+    function render() {
+        var sessionsStyle = getSessionsStyle(this.type);
+        return <div #sessions-style>
+                <span class={sessionsStyle == "tile" ? "active" : "inactive"}>{svg_tile}</span>
+                <span class={sessionsStyle != "tile" ? "active" : "inactive"}>{svg_list}</span>
+            </div>;
+    }
+
+    event click $(span.inactive) {
+        var option = getSessionsStyleOption(this.type);
+        var sessionsStyle = getSessionsStyle(this.type);
+        handler.set_option(option, sessionsStyle == "tile" ? "list" : "tile");
+        stupidUpdate(app);
+    }
+}
+
+class SessionList: Reactor.Component {
+    this var sessions = [];
+    this var type = "";
+    this var style;
+    
+    function this(params) {
+        this.sessions = params.sessions;
+        this.type = params.type;
+        this.style = getSessionsStyle(params.type);
+    }
+
+    function render() {
+        var sessions = this.sessions;
+        if (sessions.length == 0) return <span />;
+        var me = this;
+        sessions = sessions.map(function(x) { return me.getSession(x); });
+        return <div .recent-sessions-content key={sessions.length}>
+            <popup>
+                <menu.context #remote-context>
+                    <li #connect>{translate('Connect')}</li>
+                    <li #transfer>{translate('Transfer File')}</li>
+                    <li #tunnel>{translate('TCP Tunneling')}</li>
+                    {false && !handler.using_public_server() && <li #force-always-relay><span>{svg_checkmark}</span>{translate('Always connect via relay')}</li>}
+                    <li #rdp>RDP<EditRdpPort /></li>
+                    <li #rename>{translate('Rename')}</li>
+                    <li #remove>{translate('Remove')}</li>
+                    {is_win && <li #shortcut>{translate('Create Desktop Shortcut')}</li>}
+                </menu>
+            </popup>
+            {sessions}
+        </div>;
+    }
+
+    function getSession(s) {
+        var id = s[0] || s.id || "";
+        var username = s[1] || s.username || "";
+        var hostname = s[2] || s.hostname || "";
+        var platform = s[3] || s.platform || "";
+        var alias = s[4] || s.alias || "";
+        if (this.style == "list") {
+            return <div .remote-session-link .remote-session-list id={id} platform={platform} title={alias ? "ID: " + id : ""}>
+                <div .platform style={"background:"+string2RGB(id+platform, 0.5)}>
+                    {platformSvg(platform, "white")}
+                </div>
+                <div .name>
+                    <div>
+                        <div #alias .ellipsis>{alias ? alias : formatId(id)}</div>
+                        <div .username .ellipsis>{username}@{hostname}</div>
+                    </div>
+                </div>
+                <div>
+                    {svg_menu}
+                </div>
+            </div>;
+        }
+        return <div .remote-session-link .remote-session id={id} platform={platform} title={alias ? "ID: " + id : ""} style={"background:"+string2RGB(id+platform, 0.5)}>
+            <div .platform>
+                {platformSvg(platform, "white")}
+                <div .username .ellipsis>{username}@{hostname}</div>
+            </div>
+            <div .text>
+                <div #alias .ellipsis>{alias ? alias : formatId(id)}</div>
+                {svg_menu}
+            </div>
+        </div>;
+    }
+
+    event dblclick $(div.remote-session-link) (evt, me) {
+        createNewConnect(me.id, "connect");
+    }
+    
+    event click $(#menu) (_, me) {
+        var id = me.parent.parent.id;
+        var platform = me.parent.parent.attributes["platform"];
+        $(#rdp).style.set{
+            display: (platform == "Windows" && is_win) ? "block" : "none",
+        };
+        // https://sciter.com/forums/topic/replacecustomize-context-menu/
+        var menu = $(menu#remote-context);
+        menu.attributes["remote-id"] = id;
+        var el = $(li#force-always-relay);
+        if (el) {
+          var force = handler.get_peer_option(id, "force-always-relay");
+          el.attributes.toggleClass("selected", force == "Y");
+          el.attributes.toggleClass("line-through", force != "Y");
+        }
+        me.popup(menu);
+    }
+
+    event click $(menu#remote-context li) (evt, me) {
+        var action = me.id;
+        var id = me.parent.attributes["remote-id"];
+        if (action == "connect") {
+            createNewConnect(id, "connect");
+        } else if (action == "transfer") {
+            createNewConnect(id, "file-transfer");
+        } else if (action == "remove") {
+            if (!this.type) {
+                handler.remove_peer(id);
+                app.update();
+            }
+        } else if (action == "shortcut") {
+            handler.create_shortcut(id);
+        } else if (action == "rdp") {
+            createNewConnect(id, "rdp");
+        } else if (action == "tunnel") {
+            createNewConnect(id, "port-forward");
+        } else if (action == "rename") {
+            var old_name = handler.get_peer_option(id, "alias");
+            handler.msgbox("custom-rename", "Rename", "<div .form> \
+                <div><input name='name' .outline-focus style='width: *; height: 23px', value='" + old_name + "' /></div> \
+                </div> \
+                ", function(res=null) {
+                    if (!res) return;
+                    var name = (res.name || "").trim();
+                    if (name != old_name) {
+                        handler.set_peer_option(id, "alias", name);
+                    }
+                    try {
+                        self.select('#' + id).select('#alias').text = name || id;
+                    } catch (e) {}
+                });
+        }
+    }
+}
