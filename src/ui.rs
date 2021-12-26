@@ -369,8 +369,8 @@ impl UI {
         #[cfg(windows)]
         {
             let installed_version = crate::platform::windows::get_installed_version();
-            let a = crate::common::get_version_number(crate::VERSION);
-            let b = crate::common::get_version_number(&installed_version);
+            let a = hbb_common::get_version_number(crate::VERSION);
+            let b = hbb_common::get_version_number(&installed_version);
             return a > b;
         }
     }

@@ -179,6 +179,14 @@ where
     Ok(io::BufReader::new(file).lines())
 }
 
+pub fn get_version_number(v: &str) -> i64 {
+    let mut n = 0;
+    for x in v.split(".") {
+        n = n * 1000 + x.parse::<i64>().unwrap_or(0);
+    }
+    n
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
