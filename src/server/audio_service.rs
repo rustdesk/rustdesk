@@ -38,6 +38,9 @@ mod pa_impl {
     pub async fn run(sp: GenericService) -> ResultType<()> {
         hbb_common::sleep(0.1).await; // one moment to wait for _pa ipc
         let mut stream = crate::ipc::connect(1000, "_pa").await?;
+        unsafe {
+            AUDIO_ZERO_COUNT = 0;
+        }
         let mut encoder = Encoder::new(crate::platform::linux::PA_SAMPLE_RATE, Stereo, LowDelay)?;
         allow_err!(
             stream
@@ -203,7 +206,10 @@ mod cpal_impl {
         } else {
             48000
         };
-        log::debug!("Audio sample rate : {}",sample_rate);
+        log::debug!("Audio sample rate : {}", sample_rate);
+        unsafe {
+            AUDIO_ZERO_COUNT = 0;
+        }
         let mut encoder = Encoder::new(
             sample_rate,
             if config.channels() > 1 { Stereo } else { Mono },
