@@ -416,6 +416,7 @@ async fn start_pa() {
                             };
                             log::info!("pa monitor: {:?}", device);
                             // systemctl --user status pulseaudio.service
+                            let mut buf: Vec<u8> = vec![0; 480 * 4];
                             match psimple::Simple::new(
                                 None,                             // Use the default server
                                 APP_NAME,                         // Our application’s name
@@ -430,14 +431,10 @@ async fn start_pa() {
                                     if let Some(Err(_)) = stream.next_timeout2(1).await {
                                         break;
                                     }
-                                    let mut out: Vec<u8> = Vec::with_capacity(480 * 4);
-                                    unsafe {
-                                        out.set_len(out.capacity());
-                                    }
-                                    if let Ok(_) = s.read(&mut out) {
-                                        if out.iter().filter(|x| **x != 0).next().is_some() {
-                                            allow_err!(stream.send(&Data::RawMessage(out)).await);
-                                        }
+                                    if let Ok(_) = s.read(&mut buf) {
+                                        allow_err!(
+                                            stream.send(&Data::RawMessage(buf.clone())).await
+                                        );
                                     }
                                 },
                                 Err(err) => {
