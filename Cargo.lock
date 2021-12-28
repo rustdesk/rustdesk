@@ -3040,6 +3040,7 @@ dependencies = [
  "android_logger",
  "arboard",
  "async-trait",
+ "base64",
  "cc",
  "cfg-if 1.0.0",
  "clap",

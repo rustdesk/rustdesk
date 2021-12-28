@@ -359,7 +359,6 @@ message PublicKey {
 
 message SignedId {
   bytes id = 1;
-  bytes pk = 2;
 }
 
 message AudioFormat {

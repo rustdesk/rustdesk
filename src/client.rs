@@ -297,28 +297,51 @@ impl Client {
     }
 
     async fn secure_connection(peer_id: &str, pk: Vec<u8>, conn: &mut Stream) -> ResultType<()> {
+        let mut pk = pk;
+        const RS_PK: &[u8; 32] = &[
+            177, 155, 15, 73, 116, 147, 172, 11, 55, 38, 92, 168, 30, 116, 213, 196, 12, 134, 130,
+            170, 181, 161, 192, 176, 132, 229, 139, 178, 17, 165, 150, 51,
+        ];
+        if !pk.is_empty() {
+            let tmp = sign::PublicKey(*RS_PK);
+            if let Ok(data) = sign::verify(&pk, &tmp) {
+                pk = data;
+            } else {
+                log::error!("Handshake failed: invalid public key from rendezvous server");
+                pk.clear();
+            }
+        }
         if pk.len() != sign::PUBLICKEYBYTES {
             // send an empty message out in case server is setting up secure and waiting for first message
             conn.send(&Message::new()).await?;
             return Ok(());
         }
-        let mut pk_ = [0u8; sign::PUBLICKEYBYTES];
-        pk_[..].copy_from_slice(&pk);
-        let pk = sign::PublicKey(pk_);
+        let mut tmp = [0u8; sign::PUBLICKEYBYTES];
+        tmp[..].copy_from_slice(&pk);
+        let sign_pk = sign::PublicKey(tmp);
         match timeout(CONNECT_TIMEOUT, conn.next()).await? {
             Some(res) => {
                 let bytes = res?;
                 if let Ok(msg_in) = Message::parse_from_bytes(&bytes) {
                     if let Some(message::Union::signed_id(si)) = msg_in.union {
-                        let their_pk_b = if si.pk.len() == box_::PUBLICKEYBYTES {
-                            let mut pk_ = [0u8; box_::PUBLICKEYBYTES];
-                            pk_[..].copy_from_slice(&si.pk);
-                            box_::PublicKey(pk_)
-                        } else {
-                            bail!("Handshake failed: invalid public box key length from peer");
-                        };
-                        if let Ok(id) = sign::verify(&si.id, &pk) {
-                            if id == peer_id.as_bytes() {
+                        if let Ok(data) = sign::verify(&si.id, &sign_pk) {
+                            let s = String::from_utf8_lossy(&data);
+                            let mut it = s.split("\0");
+                            let id = it.next().unwrap_or_default();
+                            let pk =
+                                base64::decode(it.next().unwrap_or_default()).unwrap_or_default();
+                            let their_pk_b = if pk.len() == box_::PUBLICKEYBYTES {
+                                let mut pk_ = [0u8; box_::PUBLICKEYBYTES];
+                                pk_[..].copy_from_slice(&pk);
+                                box_::PublicKey(pk_)
+                            } else {
+                                log::error!(
+                                    "Handshake failed: invalid public box key length from peer"
+                                );
+                                conn.send(&Message::new()).await?;
+                                return Ok(());
+                            };
+                            if id == peer_id {
                                 let (our_pk_b, out_sk_b) = box_::gen_keypair();
                                 let key = secretbox::gen_key();
                                 let nonce = box_::Nonce([0u8; box_::NONCEBYTES]);
@@ -332,7 +355,8 @@ impl Client {
                                 timeout(CONNECT_TIMEOUT, conn.send(&msg_out)).await??;
                                 conn.set_key(key);
                             } else {
-                                bail!("Handshake failed: sign failure");
+                                log::error!("Handshake failed: sign failure");
+                                conn.send(&Message::new()).await?;
                             }
                         } else {
                             // fall back to non-secure connection in case pk mismatch
@@ -342,10 +366,12 @@ impl Client {
                             timeout(CONNECT_TIMEOUT, conn.send(&msg_out)).await??;
                         }
                     } else {
-                        bail!("Handshake failed: invalid message type");
+                        log::error!("Handshake failed: invalid message type");
+                        conn.send(&Message::new()).await?;
                     }
                 } else {
-                    bail!("Handshake failed: invalid message format");
+                    log::error!("Handshake failed: invalid message format");
+                    conn.send(&Message::new()).await?;
                 }
             }
             None => {
