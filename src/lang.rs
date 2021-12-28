@@ -4,6 +4,7 @@ use std::ops::Deref;
 mod cn;
 mod en;
 mod fr;
+mod it;
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub fn translate(name: String) -> String {
@@ -25,6 +26,7 @@ pub fn translate_locale(name: String, locale: &str) -> String {
     let m = match lang.to_lowercase().as_str() {
         "fr" => fr::T.deref(),
         "cn" => cn::T.deref(),
+        "it" => it::T.deref(),
         _ => en::T.deref(),
     };
     if let Some(v) = m.get(&name as &str) {
