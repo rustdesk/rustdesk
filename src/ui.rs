@@ -145,7 +145,6 @@ pub fn start(args: &mut [String]) {
 
 #[cfg(windows)]
 fn start_tray() -> hbb_common::ResultType<()> {
-    /*
     let mut app = systray::Application::new()?;
     let icon = include_bytes!("./tray-icon.ico");
     app.set_icon_from_buffer(icon, 32, 32).unwrap();
@@ -184,7 +183,7 @@ fn start_tray() -> hbb_common::ResultType<()> {
         Ok::<_, systray::Error>(())
     })?;
     allow_err!(app.wait_for_message());
-    */
+
     Ok(())
 }
 

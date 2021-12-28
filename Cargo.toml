@@ -55,7 +55,7 @@ arboard = "2.0"
 clipboard-master = "3.1"
 
 [target.'cfg(target_os = "windows")'.dependencies]
-#systray = { git = "https://github.com/open-trade/systray-rs" }
+systray = { git = "https://github.com/liyue201/systray-rs" }
 winapi = { version = "0.3", features = ["winuser"] }
 winreg = "0.10"
 windows-service = "0.4"
