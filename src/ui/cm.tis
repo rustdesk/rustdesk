@@ -101,7 +101,9 @@ class Body: Reactor.Component
             connection.authorized = true;
             body.update();
             handler.authorize(cid);
-            view.windowState = View.WINDOW_MINIMIZED;
+            self.timer(30ms, function() {
+                view.windowState = View.WINDOW_MINIMIZED;
+            });
         });
     }
 
