@@ -11,7 +11,7 @@ use std::{
 };
 type Xdo = *const c_void;
 
-pub const PA_SAMPLE_RATE: u32 = 24000;
+pub const PA_SAMPLE_RATE: u32 = 48000;
 static mut UNMODIFIED: bool = true;
 
 thread_local! {

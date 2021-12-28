@@ -115,9 +115,6 @@ mod cpal_impl {
         encoder: &mut Encoder,
         sp: &GenericService,
     ) {
-        if data.iter().filter(|x| **x != 0.).next().is_none() {
-            return;
-        }
         let buffer;
         let data = if sample_rate0 != sample_rate {
             buffer = crate::common::resample_channels(data, sample_rate0, sample_rate, channels);
@@ -194,7 +191,6 @@ mod cpal_impl {
             log::error!("an error occurred on stream: {}", err);
         };
         // Sample rate must be one of 8000, 12000, 16000, 24000, or 48000.
-        // Note: somehow 48000 not work
         let sample_rate_0 = config.sample_rate().0;
         let sample_rate = if sample_rate_0 < 12000 {
             8000
@@ -202,9 +198,12 @@ mod cpal_impl {
             12000
         } else if sample_rate_0 < 24000 {
             16000
-        } else {
+        } else if sample_rate_0 < 48000 {
             24000
+        } else {
+            48000
         };
+        log::debug!("Audio sample rate : {}",sample_rate);
         let mut encoder = Encoder::new(
             sample_rate,
             if config.channels() > 1 { Stereo } else { Mono },
@@ -278,19 +277,39 @@ fn create_format_msg(sample_rate: u32, channels: u16) -> Message {
     msg
 }
 
+// use AUDIO_ZERO_COUNT for the Noise(Zero) Gate Attack Time
+// every audio data length is set to 480
+// MAX_AUDIO_ZERO_COUNT=800 is similar as Gate Attack Time 3~5s(Linux) || 6~8s(Windows)
+const MAX_AUDIO_ZERO_COUNT: u16 = 800;
+static mut AUDIO_ZERO_COUNT: u16 = 0;
+
 fn send_f32(data: &[f32], encoder: &mut Encoder, sp: &GenericService) {
     if data.iter().filter(|x| **x != 0.).next().is_some() {
-        match encoder.encode_vec_float(data, data.len() * 6) {
-            Ok(data) => {
-                let mut msg_out = Message::new();
-                msg_out.set_audio_frame(AudioFrame {
-                    data,
-                    ..Default::default()
-                });
-                sp.send(msg_out);
-            }
-            Err(_) => {}
+        unsafe {
+            AUDIO_ZERO_COUNT = 0;
         }
+    } else {
+        unsafe {
+            if AUDIO_ZERO_COUNT > MAX_AUDIO_ZERO_COUNT {
+                if AUDIO_ZERO_COUNT == MAX_AUDIO_ZERO_COUNT + 1 {
+                    log::debug!("Audio Zero Gate Attack");
+                    AUDIO_ZERO_COUNT += 1;
+                }
+                return;
+            }
+            AUDIO_ZERO_COUNT += 1;
+        }
+    }
+    match encoder.encode_vec_float(data, data.len() * 6) {
+        Ok(data) => {
+            let mut msg_out = Message::new();
+            msg_out.set_audio_frame(AudioFrame {
+                data,
+                ..Default::default()
+            });
+            sp.send(msg_out);
+        }
+        Err(_) => {}
     }
 }
 
