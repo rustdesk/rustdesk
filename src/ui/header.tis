@@ -277,7 +277,7 @@ function handle_custom_image_quality() {
     var tmp = handler.get_custom_image_quality();
     var bitrate0 = tmp[0] || 50;
     var quantizer0 = tmp.length > 1 ? tmp[1] : 100;
-    handler.msgbox("custom", "Custom Image Quality", "<div .form> \
+    msgbox("custom", "Custom Image Quality", "<div .form> \
           <div><input type=\"hslider\" style=\"width: 50%\" name=\"bitrate\" max=\"100\" min=\"10\" value=\"" + bitrate0 + "\"/ buddy=\"bitrate-buddy\"><b #bitrate-buddy>x</b>% bitrate</div> \
           <div><input type=\"hslider\" style=\"width: 50%\" name=\"quantizer\" max=\"100\" min=\"0\" value=\"" + quantizer0 + "\"/ buddy=\"quantizer-buddy\"><b #quantizer-buddy>x</b>% quantizer</div> \
       </div>", function(res=null) {

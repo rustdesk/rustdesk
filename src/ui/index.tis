@@ -71,7 +71,7 @@ function createNewConnect(id, type) {
     app.remote_id.value = formatId(id);
     if (!id) return;
     if (id == my_id) {
-        handler.msgbox("custom-error", "Error", "You cannot connect to your own computer");
+        msgbox("custom-error", "Error", "You cannot connect to your own computer");
         return;
     }
     handler.set_remote_id(id);
@@ -182,7 +182,7 @@ class MyIdMenu: Reactor.Component {
         }
         if (me.id == "whitelist") {
             var old_value = handler.get_option("whitelist").split(",").join("\n");
-            handler.msgbox("custom-whitelist", translate("IP Whitelisting"), "<div .form> \
+            msgbox("custom-whitelist", translate("IP Whitelisting"), "<div .form> \
             <div>" + translate("whitelist_sep") + "</div> \
             <textarea spellcheck=\"false\" name=\"text\" novalue=\"0.0.0.0\" style=\"overflow: scroll-indicator; width:*; height: 160px; font-size: 1.2em; padding: 0.5em;\">" + old_value + "</textarea>\
             </div> \
@@ -206,7 +206,7 @@ class MyIdMenu: Reactor.Component {
             var configOptions = handler.get_options();
             var old_relay = configOptions["relay-server"] || "";
             var old_id = configOptions["custom-rendezvous-server"] || "";
-            handler.msgbox("custom-server", "ID/Relay Server", "<div .form> \
+            msgbox("custom-server", "ID/Relay Server", "<div .form> \
             <div><span style='width: 100px; display:inline-block'>" + translate("ID Server") + ": </span><input .outline-focus style='width: 250px' name='id' value='" + old_id + "' /></div> \
             <div><span style='width: 100px; display:inline-block'>" + translate("Relay Server") + ": </span><input style='width: 250px' name='relay' value='" + old_relay + "' /></div> \
             </div> \
@@ -231,7 +231,7 @@ class MyIdMenu: Reactor.Component {
             handler.set_option("stop-service", service_stopped ? "" : "Y");
         } else if (me.id == "about") {
             var name = handler.get_app_name();
-            handler.msgbox("custom-nocancel-nook-hasclose", "About " + name, "<div style='line-height: 2em'> \
+            msgbox("custom-nocancel-nook-hasclose", "About " + name, "<div style='line-height: 2em'> \
                 <div>Version: " + handler.get_version() + " \
                 <div .link .custom-event url='http://rustdesk.com/privacy'>Privacy Statement</div> \
                 <div .link .custom-event url='http://rustdesk.com'>Website</div> \
@@ -412,7 +412,7 @@ class UpdateMe: Reactor.Component {
             handler.update_me(path);
         };
         var onerror = function(err) {
-            handler.msgbox("custom-error", "Download Error", "Failed to download"); 
+            msgbox("custom-error", "Download Error", "Failed to download"); 
         };
         var onprogress = function(loaded, total) {
             if (!total) total = 5 * 1024 * 1024;
@@ -494,7 +494,7 @@ class ModifyDefaultLogin: Reactor.Component {
 
     event click $(#modify-default-login) {
         if (var r = handler.modify_default_login()) {
-            handler.msgbox("custom-error", "Error", r);
+            msgbox("custom-error", "Error", r);
         }
         app.update();
     }
@@ -557,7 +557,7 @@ class Password: Reactor.Component {
 
     event click $(li#set-password) {
         var me = this;
-        handler.msgbox("custom-password", translate("Set Password"), "<div .form .set-password> \
+        msgbox("custom-password", translate("Set Password"), "<div .form .set-password> \
             <div><span>" + translate('Password') + ":</span><input|password(password) .outline-focus /></div> \
             <div><span>" + translate('Confirmation') + ":</span><input|password(confirmation) /></div> \
         </div> \

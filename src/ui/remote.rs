@@ -80,6 +80,9 @@ impl sciter::EventHandler for Handler {
 
     fn attached(&mut self, root: HELEMENT) {
         self.write().unwrap().element = Some(Element::from(root));
+        if self.is_port_forward() {
+            return;
+        }
     }
 
     fn detached(&mut self, _root: HELEMENT) {
@@ -855,7 +858,6 @@ impl Handler {
         command: bool,
         extended: bool,
     ) {
-
         if self.peer_platform() == "Windows" {
             if ctrl && alt && name == "VK_DELETE" {
                 self.ctrl_alt_del();

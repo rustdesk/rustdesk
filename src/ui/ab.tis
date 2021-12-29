@@ -146,7 +146,7 @@ class SessionList: Reactor.Component {
             createNewConnect(id, "port-forward");
         } else if (action == "rename") {
             var old_name = handler.get_peer_option(id, "alias");
-            handler.msgbox("custom-rename", "Rename", "<div .form> \
+            msgbox("custom-rename", "Rename", "<div .form> \
                 <div><input name='name' .outline-focus style='width: *; height: 23px', value='" + old_name + "' /></div> \
                 </div> \
                 ", function(res=null) {
