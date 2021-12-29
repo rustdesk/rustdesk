@@ -43,16 +43,18 @@ fn main() {
             }
         }
         use flexi_logger::*;
-        Logger::with_env_or_str("debug")
-            .log_to_file()
-            .format(opt_format)
-            .rotate(
-                Criterion::Age(Age::Day),
-                Naming::Timestamps,
-                Cleanup::KeepLogFiles(6),
-            )
-            .directory(path)
-            .start()
+        Logger::try_with_env_or_str("debug")
+            .map(|x| {
+                x.log_to_file(FileSpec::default().directory(path))
+                    .format(opt_format)
+                    .rotate(
+                        Criterion::Age(Age::Day),
+                        Naming::Timestamps,
+                        Cleanup::KeepLogFiles(6),
+                    )
+                    .start()
+                    .ok();
+            })
             .ok();
     }
     if args.is_empty() {
