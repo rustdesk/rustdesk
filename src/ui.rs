@@ -277,6 +277,10 @@ impl UI {
         }
     }
 
+    fn get_local_option(&self, key: String) -> String {
+        Config::get_option(&key)
+    }
+
     fn get_peer_option(&self, id: String, name: String) -> String {
         let c = PeerConfig::load(&id);
         c.options.get(&name).unwrap_or(&"".to_owned()).to_owned()
@@ -603,6 +607,7 @@ impl sciter::EventHandler for UI {
         fn modify_default_login();
         fn get_options();
         fn get_option(String);
+        fn get_local_option(String);
         fn get_peer_option(String, String);
         fn set_peer_option(String, String, String);
         fn test_if_valid_server(String);

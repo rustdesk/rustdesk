@@ -191,7 +191,8 @@ mod cpal_impl {
         let (device, config) = get_device()?;
         let sp = sp.clone();
         let err_fn = move |err| {
-            log::error!("an error occurred on stream: {}", err);
+            // too many UnknownErrno, will improve later
+            log::trace!("an error occurred on stream: {}", err);
         };
         // Sample rate must be one of 8000, 12000, 16000, 24000, or 48000.
         let sample_rate_0 = config.sample_rate().0;

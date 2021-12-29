@@ -6,7 +6,7 @@ function getSessionsStyleOption(type) {
 }
 
 function getSessionsStyle(type) {
-    var v = handler.get_option(getSessionsStyleOption(type));
+    var v = handler.get_local_option(getSessionsStyleOption(type));
     if (!v) v = type == "ab" ? "list" : "tile";
     return v;
 }

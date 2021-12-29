@@ -7,3 +7,4 @@ extractor
 __pycache__
 src/version.rs
 *dmg
+sciter.dll
