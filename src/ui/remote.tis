@@ -173,10 +173,14 @@ function handler.onMouse(evt)
                 wait_window_toolbar = true;
                 self.timer(300ms, function() {
                     if (!wait_window_toolbar) return;
+                    var extra = 0;
+                    // workaround for stupid Sciter, without this, click
+                    // event not triggered on top part of buttons on toolbar
+                    if (is_osx) extra = 10; 
                     if (view.windowState == View.WINDOW_FULL_SCREEN) {
                         $(header).style.set {
                           display: "block",
-                          padding: (2 * workarea_offset) + "px 0 0 0",
+                          padding: (2 * workarea_offset + extra) + "px 0 0 0",
                         };
                     }
                     wait_window_toolbar = false;
