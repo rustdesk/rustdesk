@@ -39,6 +39,28 @@ body {
     padding: 20px;
 }
 
+div#search-id {
+    padding: 0;
+    position: relative;
+}
+
+span.clear-input svg {
+    display: none;
+    position: absolute;
+    right: 6px;
+    top: 10px;
+    size: 1.4em;
+    color: color(border);
+}
+
+div#search-id:hover span.clear-input svg {
+    display: inline-block;
+}
+
+span.clear-input svg:hover {
+    color: black;
+}
+
 .your-desktop {
     border-spacing: 0.5em;
     border-left: color(accent) solid 2px;
