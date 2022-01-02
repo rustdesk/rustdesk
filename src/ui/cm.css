@@ -4,11 +4,11 @@ body {
 
 div.content {
     flow: horizontal;
-    size: *;
+    size: "*";
 }
 
 div.left-panel {
-    size: *;
+    size: "*";
     padding: 1em;
     border-spacing: 1em;
     overflow-x: scroll-indicator;
@@ -38,7 +38,7 @@ div.chaticon:active {
 div.right-panel {
     background: white;
     border-left: color(border) 1px solid;
-    size: *;
+    size: "*";
 }
 
 div.icon-and-id {
@@ -71,7 +71,7 @@ div.permissions > div {
 }
 
 div.permissions icon {
-    margin: *;
+    margin: "*";
     size: 32px;
     background-size: cover;
     background-repeat: no-repeat;
@@ -99,7 +99,7 @@ icon.audio {
 }
 
 div.buttons {
-    width: *;
+    width: "*";
     border-spacing: 0.5em;
     text-align: center;
 }
@@ -120,14 +120,14 @@ button#disconnect:active {
     opacity: 0.5;
 }
 
-@media platform != "OSX" {
+@media not_osx {
 header .window-toolbar {
   left: 40px;
   top: 8px;
 }
 }
 
-@media platform == "OSX" {
+@media is_osx {
 header .tabs-wrapper {
     margin-left: 80px;
     margin-top: 8px;
@@ -135,13 +135,13 @@ header .tabs-wrapper {
 }
 
 div.tabs-wrapper {
-    size: *;
+    size: "*";
     position: relative;
     overflow: hidden;
 }
 
 div.tabs {
-    size: *;
+    size: "*";
     flow: horizontal;
     white-space: nowrap;
     overflow: hidden;
@@ -156,7 +156,7 @@ div.border-bottom {
     position: absolute;
     bottom: 0;
     left: 0;
-    width: *;
+    width: "*";
     height: 1px;
     background: color(border) 1px solid;
 }
@@ -213,7 +213,7 @@ div.tab-arrows {
 
 div.tab-arrows span {
     display: inline-block;
-    height: *;
+    height: "*";
     margin: 0;
     padding: 6px 2px;
 }
