@@ -8,7 +8,7 @@ use crate::common::SOFTWARE_UPDATE_URL;
 use crate::ipc;
 use hbb_common::{
     allow_err,
-    config::{Config, PeerConfig, APP_NAME, ICON},
+    config::{Config, Fav, PeerConfig, APP_NAME, ICON},
     log, sleep,
     tokio::{self, time},
 };
@@ -411,22 +411,43 @@ impl UI {
         v
     }
 
+    #[inline]
+    fn get_peer_value(id: String, p: PeerConfig) -> Value {
+        let values = vec![
+            id,
+            p.info.username.clone(),
+            p.info.hostname.clone(),
+            p.info.platform.clone(),
+            p.options.get("alias").unwrap_or(&"".to_owned()).to_owned(),
+        ];
+        Value::from_iter(values)
+    }
+
+    fn get_peer(&self, id: String) -> Value {
+        let c = PeerConfig::load(&id);
+        Self::get_peer_value(id, c)
+    }
+
+    fn get_fav(&self) -> Value {
+        Value::from_iter(Fav::load().peers)
+    }
+
+    fn store_fav(&self, fav: Value) {
+        let mut tmp = vec![];
+        fav.values().for_each(|v| {
+            if let Some(v) = v.as_string() {
+                if !v.is_empty() {
+                    tmp.push(v);
+                }
+            }
+        });
+        Fav::store(tmp);
+    }
+
     fn get_recent_sessions(&mut self) -> Value {
         let peers: Vec<Value> = PeerConfig::peers()
-            .iter()
-            .map(|p| {
-                let values = vec![
-                    p.0.clone(),
-                    p.2.info.username.clone(),
-                    p.2.info.hostname.clone(),
-                    p.2.info.platform.clone(),
-                    p.2.options
-                        .get("alias")
-                        .unwrap_or(&"".to_owned())
-                        .to_owned(),
-                ];
-                Value::from_iter(values)
-            })
+            .drain(..)
+            .map(|p| Self::get_peer_value(p.0, p.2))
             .collect();
         Value::from_iter(peers)
     }
@@ -599,6 +620,9 @@ impl sciter::EventHandler for UI {
         fn remove_peer(String);
         fn get_connect_status();
         fn get_recent_sessions();
+        fn get_peer(String);
+        fn get_fav();
+        fn store_fav(Value);
         fn recent_sessions_updated();
         fn get_icon();
         fn get_msgbox();

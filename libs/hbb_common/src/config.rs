@@ -688,6 +688,32 @@ impl PeerConfig {
     }
 }
 
+#[derive(Debug, Default, Serialize, Deserialize, Clone)]
+pub struct Fav {
+    #[serde(default)]
+    pub peers: Vec<String>,
+}
+
+impl Fav {
+    pub fn load() -> Fav {
+        let _ = CONFIG.read().unwrap(); // for lock
+        match confy::load_path(&Config::file_("_fav")) {
+            Ok(fav) => fav,
+            Err(err) => {
+                log::error!("Failed to load fav: {}", err);
+                Default::default()
+            }
+        }
+    }
+
+    pub fn store(peers: Vec<String>) {
+        let f = Fav { peers };
+        if let Err(err) = confy::store_path(Config::file_("_fav"), f) {
+            log::error!("Failed to store fav: {}", err);
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
