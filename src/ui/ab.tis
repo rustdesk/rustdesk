@@ -13,34 +13,27 @@ function getSessionsStyle(type) {
     return v;
 }
 
-function stupidUpdate(me) {
-    /* hidden is workaround of stupid sciter bug */
-    me.hidden = true;
-    me.update();
-    self.timer(60ms, function() {
-        me.hidden = false;
-        me.update();
-    });
-}
+var searchPatterns = {};
 
 class SearchBar: Reactor.Component {
-    this var parent; 
-    this var value = ""; 
+    this var type = "";
 
     function this(params) {
-        this.parent = params.parent;
+        this.type = (params || {}).type || "";
     }
 
     function render() {
+        var value = searchPatterns[this.type] || "";
+        var me = this;
+        self.timer(1ms, function() { me.search_id.value = value; });
         return <div .search-id>
             <span .search-icon>{search_icon}</span>
             <input|text @{this.search_id} novalue={translate("Search ID")} />
-            {this.value && <span .clear-input>{clear_icon}</span>}
+            {value && <span .clear-input>{clear_icon}</span>}
         </div>;
     }
 
     event click $(span.clear-input) {
-        this.search_id.value = '';
         this.onChange('');
     }
 
@@ -49,9 +42,8 @@ class SearchBar: Reactor.Component {
     }
     
     function onChange(v) {
-        this.value = v;
-        this.update();
-        this.parent.filter(v);
+        searchPatterns[this.type] = v;
+        app.multipleSessions.update();
     }
 }
 
@@ -59,12 +51,12 @@ class SessionStyle: Reactor.Component {
     this var type = ""; 
 
     function this(params) {
-        this.type = (params || {}).type;
+        this.type = (params || {}).type || "";
     }
 
     function render() {
         var sessionsStyle = getSessionsStyle(this.type);
-        return <div .sessions-tab style="margin-left: 0.5em">
+        return <div .sessions-tab style="margin-left: 0.5em;">
                 <span class={sessionsStyle == "tile" ? "active" : "inactive"}>{svg_tile}</span>
                 <span class={sessionsStyle != "tile" ? "active" : "inactive"}>{svg_list}</span>
             </div>;
@@ -74,8 +66,7 @@ class SessionStyle: Reactor.Component {
         var option = getSessionsStyleOption(this.type);
         var sessionsStyle = getSessionsStyle(this.type);
         handler.set_option(option, sessionsStyle == "tile" ? "list" : "tile");
-        //stupidUpdate(app); // seems fixed in new sciter
-        app.update();
+        app.multipleSessions.update();
     }
 }
 
@@ -83,21 +74,15 @@ class SessionList: Reactor.Component {
     this var sessions = [];
     this var type = "";
     this var style;
-    this var filterPattern = "";
     
     function this(params) {
         this.sessions = params.sessions;
-        this.type = params.type;
-        this.style = getSessionsStyle(params.type);
-    }
-
-    function filter(v) {
-        this.filterPattern = v;
-        this.update();
+        this.type = params.type || "";
+        this.style = getSessionsStyle(this.type);
     }
 
     function getSessions() {
-        var p = this.filterPattern;
+        var p = searchPatterns[this.type];
         if (!p) return this.sessions;
         var tmp = [];
         this.sessions.map(function(s) {
@@ -109,7 +94,9 @@ class SessionList: Reactor.Component {
 
     function render() {
         var sessions = this.getSessions();
-        if (sessions.length == 0) return <span />;
+        if (sessions.length == 0) {
+            return <div style="margin: *"><div style="margin: *; font-size: 1.6em;">{translate("Empty")}</div></div>;
+        }
         var me = this;
         sessions = sessions.map(function(x) { return me.getSession(x); });
         return <div .recent-sessions-content key={sessions.length}>
@@ -124,6 +111,8 @@ class SessionList: Reactor.Component {
                     <li #remove>{translate('Remove')}</li>
                     {is_win && <li #shortcut>{translate('Create Desktop Shortcut')}</li>}
                     <li #forget-password>{translate('Unremember Password')}</li>
+                    {(!this.type || this.type == "fav") && <li #add-fav>{translate('Add to Favorites')}</li>}
+                    {(!this.type || this.type == "fav") && <li #remove-fav>{translate('Remove from Favorites')}</li>}
                 </menu>
             </popup>
             {sessions}
@@ -139,7 +128,7 @@ class SessionList: Reactor.Component {
         if (this.style == "list") {
             return <div .remote-session-link .remote-session-list id={id} platform={platform} title={alias ? "ID: " + id : ""}>
                 <div .platform style={"background:"+string2RGB(id+platform, 0.5)}>
-                    {platformSvg(platform, "white")}
+                    {platform && platformSvg(platform, "white")}
                 </div>
                 <div .name>
                     <div>
@@ -154,7 +143,7 @@ class SessionList: Reactor.Component {
         }
         return <div .remote-session-link .remote-session id={id} platform={platform} title={alias ? "ID: " + id : ""} style={"background:"+string2RGB(id+platform, 0.5)}>
             <div .platform>
-                {platformSvg(platform, "white")}
+                {platform && platformSvg(platform, "white")}
                 <div .username .ellipsis>{username}@{hostname}</div>
             </div>
             <div .text>
@@ -177,6 +166,15 @@ class SessionList: Reactor.Component {
         this.$(#forget-password).style.set{
             display: handler.peer_has_password(id) ? "block" : "none",
         };
+        if (!this.type || this.type == "fav") {
+            var in_fav = handler.get_fav().indexOf(id) >= 0;
+            this.$(#add-fav).style.set{
+                display: in_fav ? "none" : "block",
+            };
+            this.$(#remove-fav).style.set{
+                display: in_fav ? "block" : "none",
+            };
+        }
         // https://sciter.com/forums/topic/replacecustomize-context-menu/
         var menu = this.$(menu#remote-context);
         menu.attributes["remote-id"] = id;
@@ -201,6 +199,20 @@ class SessionList: Reactor.Component {
             handler.create_shortcut(id);
         } else if (action == "rdp") {
             createNewConnect(id, "rdp");
+        } else if (action == "add-fav") {
+            var favs = handler.get_fav();
+            if (favs.indexOf(id) < 0) {
+                favs = [id].concat(favs);
+                handler.store_fav(favs);
+            }
+            app.multipleSessions.update();
+            app.update();
+        } else if (action == "remove-fav") {
+            var favs = handler.get_fav();
+            var i = favs.indexOf(id);
+            favs.splice(i, 1);
+            handler.store_fav(favs);
+            app.multipleSessions.update();
         } else if (action == "tunnel") {
             createNewConnect(id, "port-forward");
         } else if (action == "rename") {
@@ -217,5 +229,53 @@ class SessionList: Reactor.Component {
                     app.update();
                 });
         }
+    }
+}
+
+function getSessionsType() {
+    return handler.get_local_option("show-sessions-type");
+}
+
+class Favorites: Reactor.Component {
+    function render() {
+        var sessions = handler.get_fav().map(function(f) {
+            return handler.get_peer(f);
+        });
+        return <SessionList @{list} sessions={sessions} type="fav" />;
+    }
+}
+
+class MultipleSessions: Reactor.Component {
+    function render() {
+        var type = getSessionsType();
+        return  <div style="size: *">
+                <div .sessions-bar>
+                    <div style="width:*" .sessions-tab #sessions-type>
+                        <span class={!type ? 'active' : 'inactive'}>{translate('Recent Sessions')}</span>
+                        <span #fav class={type == "fav" ? 'active' : 'inactive'}>{translate('Favorites')}</span>
+                    </div>
+                    {!this.hidden && <SearchBar type={type} />}
+                    {!this.hidden && <SessionStyle type={type} />}
+                </div>
+                {!this.hidden && 
+                ((type == "fav" && <Favorites @{this.list} />) ||
+                <SessionList @{this.list} sessions={handler.get_recent_sessions()} />)}
+            </div>;
+    }
+
+    function stupidUpdate() {
+        /* hidden is workaround of stupid sciter bug */
+        this.hidden = true;
+        this.update();
+        var me = this;
+        self.timer(60ms, function() {
+            me.hidden = false;
+            me.update();
+        });
+    }
+
+    event click $(div#sessions-type span.inactive) (_, el) {
+        handler.set_option('show-sessions-type', el.id || "");
+        this.stupidUpdate();
     }
 }
