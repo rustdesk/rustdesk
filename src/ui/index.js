@@ -4,7 +4,7 @@ stdout.println("current platform:", OS);
 // html min-width, min-height not working on mac, below works for all
 view.windowMinSize = (500, 300);
 
-var app;
+export var app;
 var tmp = handler.get_connect_status();
 var connect_status = tmp[0];
 var service_stopped = false;
@@ -71,7 +71,7 @@ class RecentSessions: Reactor.Component {
     }
 }
 
-function createNewConnect(id, type) {
+export function createNewConnect(id, type) {
     id = id.replace(/\s/g, "");
     app.remote_id.value = formatId(id);
     if (!id) return;
@@ -607,7 +607,7 @@ class ID: Reactor.Component {
 }
 
 var reg = /^\d+$/;
-function formatId(id) {
+export function formatId(id) {
     id = id.replace(/\s/g, "");
     if (reg.test(id) && id.length > 3) {
         var n = id.length;

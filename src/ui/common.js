@@ -217,7 +217,7 @@ function getMsgboxParams() {
 }
 
 // tmp workaround https://sciter.com/forums/topic/menu-not-be-hidden-when-open-dialog-on-linux/
-function msgbox(type, title, text, callback = null, height = 180, width = 500, retry = 0, contentStyle = "") {
+export function msgbox(type, title, text, callback = null, height = 180, width = 500, retry = 0, contentStyle = "") {
     if (is_linux) { // fix menu not hidden issue
         setTimeout(() => msgbox_(type, title, text, callback, height, width, retry, contentStyle), 1);
     } else {
@@ -286,45 +286,45 @@ handler.msgbox_retry = function (type, title, text, hasRetry) {
 }
 /******************** end of msgbox ****************************************/
 // TODO Progress 
-function Progress()
-{
-    var _val;
-    var pos = -0.25;
+// function Progress()
+// {
+//     var _val;
+//     var pos = -0.25;
 
-    function step() {
-        if( _val !== undefined ) { this.refresh(); return false; }
-        pos += 0.02;
-        if( pos > 1.25)
-            pos = -0.25;
-        this.refresh();
-        return true;
-    }
+//     function step() {
+//         if( _val !== undefined ) { this.refresh(); return false; }
+//         pos += 0.02;
+//         if( pos > 1.25)
+//             pos = -0.25;
+//         this.refresh();
+//         return true;
+//     }
 
-    function paintNoValue(gfx)
-    {
-        var (w,h) = this.box(#dimension,#inner);
-        var x = pos * w;
-        w = w * 0.25;
-        gfx.fillColor( this.style#color )
-             .pushLayer(#inner-box)
-             .rectangle(x,0,w,h)
-             .popLayer();
-        return true;
-    }
+//     function paintNoValue(gfx)
+//     {
+//         var (w,h) = this.box(#dimension,#inner);
+//         var x = pos * w;
+//         w = w * 0.25;
+//         gfx.fillColor( this.style#color )
+//              .pushLayer(#inner-box)
+//              .rectangle(x,0,w,h)
+//              .popLayer();
+//         return true;
+//     }
 
-    this[#value] = property(v) {
-        get return _val;
-        set {
-            _val = undefined;
-            pos = -0.25;
-            this.paintContent = paintNoValue;
-            this.animate(step);
-            this.refresh();
-        }
-    }
+//     this[#value] = property(v) {
+//         get return _val;
+//         set {
+//             _val = undefined;
+//             pos = -0.25;
+//             this.paintContent = paintNoValue;
+//             this.animate(step);
+//             this.refresh();
+//         }
+//     }
 
-    this.value = "";
-}
+//     this.value = "";
+// }
 
 const svg_eye_cross = (<svg viewBox="0 -21 511.96 511">
     <path d="m506.68 261.88c7.043-16.984 7.043-36.461 0-53.461-41.621-100.4-140.03-165.27-250.71-165.27-46.484 0-90.797 11.453-129.64 32.191l-68.605-68.609c-8.3438-8.3398-21.824-8.3398-30.168 0-8.3398 8.3398-8.3398 21.824 0 30.164l271.49 271.49 86.484 86.488 68.676 68.672c4.1797 4.1797 9.6406 6.2695 15.102 6.2695 5.4609 0 10.922-2.0898 15.082-6.25 8.3438-8.3398 8.3438-21.824 0-30.164l-62.145-62.145c36.633-27.883 66.094-65.109 84.438-109.38zm-293.91-100.1c12.648-7.5742 27.391-11.969 43.199-11.969 47.062 0 85.332 38.273 85.332 85.336 0 15.805-4.3945 30.547-11.969 43.199z" />
