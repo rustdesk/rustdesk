@@ -119,9 +119,11 @@ class SessionList: Reactor.Component {
                     <li #transfer>{translate('Transfer File')}</li>
                     <li #tunnel>{translate('TCP Tunneling')}</li>
                     <li #rdp>RDP<EditRdpPort /></li>
+                    <div .separator />
                     <li #rename>{translate('Rename')}</li>
                     <li #remove>{translate('Remove')}</li>
                     {is_win && <li #shortcut>{translate('Create Desktop Shortcut')}</li>}
+                    <li #forget-password>{translate('Unremember Password')}</li>
                 </menu>
             </popup>
             {sessions}
@@ -169,8 +171,11 @@ class SessionList: Reactor.Component {
     event click $(#menu) (_, me) {
         var id = me.parent.parent.id;
         var platform = me.parent.parent.attributes["platform"];
-        $(#rdp).style.set{
+        this.$(#rdp).style.set{
             display: (platform == "Windows" && is_win) ? "block" : "none",
+        };
+        this.$(#forget-password).style.set{
+            display: handler.peer_has_password(id) ? "block" : "none",
         };
         // https://sciter.com/forums/topic/replacecustomize-context-menu/
         var menu = this.$(menu#remote-context);
@@ -190,6 +195,8 @@ class SessionList: Reactor.Component {
                 handler.remove_peer(id);
                 app.update();
             }
+        } else if (action == "forget-password") {
+            handler.forget_password(id);
         } else if (action == "shortcut") {
             handler.create_shortcut(id);
         } else if (action == "rdp") {

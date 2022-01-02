@@ -186,5 +186,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Password missed", "密码没有填写"),
         ("Wrong credentials", "用户名或者密码错误"),
         ("Edit Tag", "修改标签"),
+        ("Unremember Password", "忘掉密码"),
     ].iter().cloned().collect();
     }

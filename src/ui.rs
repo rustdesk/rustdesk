@@ -281,6 +281,16 @@ impl UI {
         Config::get_option(&key)
     }
 
+    fn peer_has_password(&self, id: String) -> bool {
+        !PeerConfig::load(&id).password.is_empty()
+    }
+
+    fn forget_password(&self, id: String) {
+        let mut c = PeerConfig::load(&id);
+        c.password.clear();
+        c.store(&id);
+    }
+
     fn get_peer_option(&self, id: String, name: String) -> String {
         let c = PeerConfig::load(&id);
         c.options.get(&name).unwrap_or(&"".to_owned()).to_owned()
@@ -569,7 +579,6 @@ impl UI {
         crate::client::translate(name)
     }
 
-
     fn is_xfce(&self) -> bool {
         crate::platform::is_xfce()
     }
@@ -609,6 +618,8 @@ impl sciter::EventHandler for UI {
         fn get_option(String);
         fn get_local_option(String);
         fn get_peer_option(String, String);
+        fn peer_has_password(String);
+        fn forget_password(String);
         fn set_peer_option(String, String, String);
         fn test_if_valid_server(String);
         fn get_sound_inputs();
