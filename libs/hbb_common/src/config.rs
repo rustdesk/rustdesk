@@ -71,6 +71,16 @@ pub struct Config {
     keys_confirmed: HashMap<String, bool>,
 }
 
+#[derive(Debug, Default, Serialize, Deserialize, Clone)]
+pub struct Socks5Server {
+    #[serde(default)]
+    pub proxy: String,
+    #[serde(default)]
+    pub username: String,
+    #[serde(default)]
+    pub password: String,
+}
+
 // more variable configs
 #[derive(Debug, Default, Serialize, Deserialize, Clone)]
 pub struct Config2 {
@@ -84,6 +94,9 @@ pub struct Config2 {
     nat_type: i32,
     #[serde(default)]
     serial: i32,
+
+    #[serde(default)]
+    socks: Option<Socks5Server>,
 
     // the other scalar value must before this
     #[serde(default)]
@@ -618,6 +631,16 @@ impl Config {
 
     pub fn get_remote_id() -> String {
         CONFIG2.read().unwrap().remote_id.clone()
+    }
+
+    pub fn set_socks(socks: Option<Socks5Server>) {
+        let mut config = CONFIG2.write().unwrap();
+        config.socks = socks;
+        config.store();
+    }
+
+    pub fn get_socks() -> Option<Socks5Server> {
+        CONFIG2.read().unwrap().socks.clone()
     }
 }
 

@@ -17,16 +17,20 @@ pub use tokio;
 pub use tokio_util;
 pub mod tcp;
 pub mod udp;
+pub mod socket_client;
 pub use env_logger;
 pub use log;
 pub mod bytes_codec;
 #[cfg(feature = "quic")]
 pub mod quic;
 pub use anyhow::{self, bail};
+pub use futures_core;
+pub use futures_sink;
 pub use futures_util;
 pub mod config;
 pub mod fs;
 pub use sodiumoxide;
+pub use tokio_socks;
 
 #[cfg(feature = "quic")]
 pub type Stream = quic::Connection;

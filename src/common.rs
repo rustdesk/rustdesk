@@ -1,20 +1,29 @@
+use std::net::SocketAddr;
+
 pub use arboard::Clipboard as ClipboardContext;
 use hbb_common::{
-    allow_err, bail,
+    allow_err,
+    anyhow::bail,
+    bytes::{Bytes, BytesMut},
     compress::{compress as compress_func, decompress},
     config::{Config, COMPRESS_LEVEL, RENDEZVOUS_TIMEOUT},
+    futures_core::Stream,
+    futures_sink::Sink,
     log,
     message_proto::*,
     protobuf::Message as _,
     protobuf::ProtobufEnum,
     rendezvous_proto::*,
-    sleep,
-    tcp::FramedStream,
-    tokio, ResultType,
+    sleep, socket_client, tokio,
+    udp::FramedSocket,
+    ResultType,
 };
 #[cfg(any(target_os = "android", target_os = "ios", feature = "cli"))]
 use hbb_common::{config::RENDEZVOUS_PORT, futures::future::join_all};
-use std::sync::{Arc, Mutex};
+use std::{
+    future::Future,
+    sync::{Arc, Mutex},
+};
 
 pub const CLIPBOARD_NAME: &'static str = "clipboard";
 pub const CLIPBOARD_INTERVAL: u64 = 333;
@@ -259,13 +268,13 @@ async fn test_nat_type_() -> ResultType<bool> {
     let mut port2 = 0;
     let mut addr = Config::get_any_listen_addr();
     for i in 0..2 {
-        let mut socket = FramedStream::new(
+        let mut socket = socket_client::connect_tcp(
             if i == 0 { &server1 } else { &server2 },
             addr,
             RENDEZVOUS_TIMEOUT,
         )
         .await?;
-        addr = socket.get_ref().local_addr()?;
+        addr = socket.local_addr();
         socket.send(&msg_out).await?;
         if let Some(Ok(bytes)) = socket.next_timeout(3000).await {
             if let Ok(msg_in) = RendezvousMessage::parse_from_bytes(&bytes) {
@@ -302,12 +311,12 @@ async fn test_nat_type_() -> ResultType<bool> {
 }
 
 #[cfg(any(target_os = "android", target_os = "ios"))]
-pub async fn get_rendezvous_server(_ms_timeout: u64) -> std::net::SocketAddr {
+pub async fn get_rendezvous_server(_ms_timeout: u64) -> SocketAddr {
     Config::get_rendezvous_server()
 }
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
-pub async fn get_rendezvous_server(ms_timeout: u64) -> std::net::SocketAddr {
+pub async fn get_rendezvous_server(ms_timeout: u64) -> SocketAddr {
     crate::ipc::get_rendezvous_server(ms_timeout).await
 }
 
@@ -330,7 +339,7 @@ async fn test_rendezvous_server_() {
     for host in servers {
         futs.push(tokio::spawn(async move {
             let tm = std::time::Instant::now();
-            if FramedStream::new(
+            if socket_client::connect_tcp(
                 &crate::check_port(&host, RENDEZVOUS_PORT),
                 Config::get_any_listen_addr(),
                 RENDEZVOUS_TIMEOUT,
@@ -437,8 +446,37 @@ pub fn check_software_update() {
 #[tokio::main(flavor = "current_thread")]
 async fn _check_software_update() -> hbb_common::ResultType<()> {
     sleep(3.).await;
+
     let rendezvous_server = get_rendezvous_server(1_000).await;
-    let mut socket = hbb_common::udp::FramedSocket::new(Config::get_any_listen_addr()).await?;
+    let socks5_conf = socket_client::get_socks5_conf();
+    if socks5_conf.is_some() {
+        let conn_fn = |bind_addr: SocketAddr| async move {
+            socket_client::connect_udp_socks5(
+                rendezvous_server,
+                bind_addr,
+                &socks5_conf,
+                RENDEZVOUS_TIMEOUT,
+            )
+            .await
+        };
+        _inner_check_software_update(conn_fn, rendezvous_server).await
+    } else {
+        _inner_check_software_update(socket_client::connect_udp_socket, rendezvous_server).await
+    }
+}
+
+pub async fn _inner_check_software_update<'a, F, Fut, Frm>(
+    conn_fn: F,
+    rendezvous_server: SocketAddr,
+) -> ResultType<()>
+where
+    F: FnOnce(SocketAddr) -> Fut,
+    Fut: Future<Output = ResultType<(FramedSocket<Frm>, Option<SocketAddr>)>>,
+    Frm: Unpin + Stream<Item = ResultType<(BytesMut, SocketAddr)>> + Sink<(Bytes, SocketAddr)>,
+    <Frm as Sink<(Bytes, SocketAddr)>>::Error: Sync + Send + std::error::Error + 'static,
+{
+    sleep(3.).await;
+    let (mut socket, _) = conn_fn(Config::get_any_listen_addr()).await?;
     let mut msg_out = RendezvousMessage::new();
     msg_out.set_software_update(SoftwareUpdate {
         url: crate::VERSION.to_owned(),
