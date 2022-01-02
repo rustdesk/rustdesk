@@ -59,7 +59,7 @@ class RecentSessions: Reactor.Component {
                 <div style="width:*">
                     {translate("Recent Sessions")}
                 </div>
-                <SearchBar parent={this} />
+                {!app.hidden && <SearchBar parent={this} />}
                 {!app.hidden && <SessionStyle />}
             </div>
             {!app.hidden && <SessionList @{this.sessionList} style={sessionsStyle} sessions={sessions} />}

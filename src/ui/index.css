@@ -48,21 +48,17 @@ div.sessions-bar {
     flow: horizontal;
 }
 
-div.sessions-style {
-    margin-left: 0.5em;
-}
-
-div.sessions-style span {
+div.sessions-tab span {
     display: inline-block;
     padding: 6px 12px;
     cursor: pointer;
 }
 
-div.sessions-style svg {
+div.sessions-tab svg {
     size: 14px;
 }
 
-div.sessions-style span.active {
+div.sessions-tab span.active {
     cursor: default;
     border-radius: 3px;
     background: white;

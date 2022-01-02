@@ -64,7 +64,7 @@ class SessionStyle: Reactor.Component {
 
     function render() {
         var sessionsStyle = getSessionsStyle(this.type);
-        return <div .sessions-style>
+        return <div .sessions-tab style="margin-left: 0.5em">
                 <span class={sessionsStyle == "tile" ? "active" : "inactive"}>{svg_tile}</span>
                 <span class={sessionsStyle != "tile" ? "active" : "inactive"}>{svg_list}</span>
             </div>;
