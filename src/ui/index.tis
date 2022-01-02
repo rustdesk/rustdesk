@@ -55,14 +55,19 @@ class RecentSessions: Reactor.Component {
         var sessions = handler.get_recent_sessions();
         if (sessions.length == 0) return <span />;
         return <div style="width: *">
-            <div #sessions-bar>
-            <div style="width:*">
-              {translate("Recent Sessions")}
+            <div .sessions-bar>
+                <div style="width:*">
+                    {translate("Recent Sessions")}
+                </div>
+                <SearchBar parent={this} />
+                {!app.hidden && <SessionStyle />}
             </div>
-            {!app.hidden && <SessionStyle />}
-            </div>
-            {!app.hidden && <SessionList style={sessionsStyle} sessions={sessions} />}
+            {!app.hidden && <SessionList @{this.sessionList} style={sessionsStyle} sessions={sessions} />}
         </div>;
+    }
+
+    function filter(v) {
+        this.sessionList.filter(v);
     }
 }
 

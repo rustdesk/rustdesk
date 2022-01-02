@@ -32,23 +32,26 @@ class SearchBar: Reactor.Component {
     }
 
     function render() {
-        return <div #search-id><input|text @{this.search_id} novalue={translate("Search ID")} />
+        return <div .search-id>
+            <span .search-icon>{search_icon}</span>
+            <input|text @{this.search_id} novalue={translate("Search ID")} />
             {this.value && <span .clear-input>{clear_icon}</span>}
         </div>;
     }
 
-    event click $(span.clear-input svg) {
+    event click $(span.clear-input) {
         this.search_id.value = '';
-        this.onChange();
+        this.onChange('');
     }
 
     event change $(input) (_, el) {
-        this.value = el.value;
-        this.onChange();
+        this.onChange(el.value.trim());
     }
     
-    function onChange() {
-        this.parent.onChange();
+    function onChange(v) {
+        this.value = v;
+        this.update();
+        this.parent.filter(v);
     }
 }
 
@@ -61,7 +64,7 @@ class SessionStyle: Reactor.Component {
 
     function render() {
         var sessionsStyle = getSessionsStyle(this.type);
-        return <div #sessions-style>
+        return <div .sessions-style>
                 <span class={sessionsStyle == "tile" ? "active" : "inactive"}>{svg_tile}</span>
                 <span class={sessionsStyle != "tile" ? "active" : "inactive"}>{svg_list}</span>
             </div>;
@@ -71,7 +74,8 @@ class SessionStyle: Reactor.Component {
         var option = getSessionsStyleOption(this.type);
         var sessionsStyle = getSessionsStyle(this.type);
         handler.set_option(option, sessionsStyle == "tile" ? "list" : "tile");
-        stupidUpdate(app);
+        //stupidUpdate(app); // seems fixed in new sciter
+        app.update();
     }
 }
 
@@ -79,6 +83,7 @@ class SessionList: Reactor.Component {
     this var sessions = [];
     this var type = "";
     this var style;
+    this var filterPattern = "";
     
     function this(params) {
         this.sessions = params.sessions;
@@ -86,8 +91,24 @@ class SessionList: Reactor.Component {
         this.style = getSessionsStyle(params.type);
     }
 
+    function filter(v) {
+        this.filterPattern = v;
+        this.update();
+    }
+
+    function getSessions() {
+        var p = this.filterPattern;
+        if (!p) return this.sessions;
+        var tmp = [];
+        this.sessions.map(function(s) {
+            var name = s[4] || s.alias || s[0] || s.id || "";
+            if (name.indexOf(p) >= 0) tmp.push(s);
+        });
+        return tmp;
+    }
+
     function render() {
-        var sessions = this.sessions;
+        var sessions = this.getSessions();
         if (sessions.length == 0) return <span />;
         var me = this;
         sessions = sessions.map(function(x) { return me.getSession(x); });
