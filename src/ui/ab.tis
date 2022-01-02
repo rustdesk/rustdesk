@@ -207,9 +207,7 @@ class SessionList: Reactor.Component {
                     if (name != old_name) {
                         handler.set_peer_option(id, "alias", name);
                     }
-                    try {
-                        self.select('#' + id).select('#alias').text = name || id;
-                    } catch (e) {}
+                    app.update();
                 });
         }
     }
