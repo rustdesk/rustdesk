@@ -17,6 +17,7 @@ pub use tokio;
 pub use tokio_util;
 pub mod tcp;
 pub mod udp;
+pub mod socket_client;
 pub use env_logger;
 pub use log;
 pub mod bytes_codec;
@@ -27,6 +28,7 @@ pub use futures_util;
 pub mod config;
 pub mod fs;
 pub use sodiumoxide;
+pub use tokio_socks;
 
 #[cfg(feature = "quic")]
 pub type Stream = quic::Connection;
