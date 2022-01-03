@@ -1,12 +1,12 @@
-const view = Window.this;
+export const view = Window.this;
 export const handler = document.$("#handler") || view;
 
 try { view.windowIcon = document.url(handler.xcall("get_icon")); } catch (e) { }
 
-const OS = view.mediaVar("platform");
-const is_osx = OS == "OSX";
-const is_win = OS == "Windows";
-const is_linux = OS == "Linux";
+export const OS = view.mediaVar("platform");
+export const is_osx = OS == "OSX";
+export const is_win = OS == "Windows";
+export const is_linux = OS == "Linux";
 
 view.mediaVar("is_osx", is_osx);
 view.mediaVar("not_osx", !is_osx);
@@ -132,8 +132,8 @@ export const svg_chat = (<svg viewBox="0 0 511.07 511.07">
 </svg>);
 
 export function scrollToBottom(el) {
-    // TODO .box() 
-    let y = el.box(#height, #content) - el.box(#height, #client);
+    // TEST .box() 
+    let y = el.state.box("height", "content") - el.state.box("height", "client");
     el.scrollTo(0, y);
 }
 

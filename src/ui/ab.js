@@ -1,5 +1,5 @@
-import { handler, string2RGB, platformSvg, msgbox } from "./common.js";
-import { app, formatId, createNewConnect } from "./index.js";  // TODO check app obj
+import { handler, string2RGB, platformSvg, msgbox,translate } from "./common.js";
+import { app, formatId, createNewConnect,svg_menu } from "./index.js";  // TODO check app obj
 // TODO transform
 const svg_tile = <svg id="session-tile" viewBox="0 0 158.6 158.6"><path style="stroke-width:.309756" d="M5.4 157.7c-1-.3-2-1-3.2-2.1-2.8-2.8-2.6-1-2.5-32 0-26.7 0-27 .7-28.3a9.3 9.3 0 0 1 4-4.2c1.2-.6 2.3-.6 29-.7 27.5 0 27.6 0 29.1.6.8.4 2 1.2 2.7 2 2.4 2.5 2.3.7 2.2 31.6-.1 26.5-.1 27.6-.7 28.8a9.3 9.3 0 0 1-4.2 4c-1.4.6-1.6.6-28.5.7a235 235 0 0 1-28.6-.4zm91 0a8.5 8.5 0 0 1-5.7-5.4c-.2-.7-.3-8.3-.3-28.3V96.7l.7-1.6a8.9 8.9 0 0 1 4.6-4.3c1.2-.4 3.8-.5 28.9-.4 26.6.1 27.6.1 28.8.7 1.6.8 3.2 2.5 4 4.2.7 1.4.7 1.6.7 28.3.1 31 .3 29.2-2.5 32-2.8 2.7-1 2.6-31.4 2.6-21.4 0-26.8-.1-27.9-.5zM5.3 67a8.7 8.7 0 0 1-4-3C-.5 61.6-.5 62.3-.5 33.6-.4 3.2-.5 5 2.2 2.2 5-.6 3.2-.4 34.2-.3c26.7 0 27 0 28.3.7 1.7.8 3.4 2.4 4.2 4 .6 1.2.6 2.2.7 28.8 0 25.1 0 27.7-.4 29a9 9 0 0 1-4.3 4.5l-1.6.7H33.7c-20.2 0-27.7-.1-28.4-.4Zm89.8-.3a9 9 0 0 1-4.3-4.6c-.5-1.2-.5-3.8-.5-28.9.1-26.6.2-27.6.7-28.8a9.3 9.3 0 0 1 4.2-4c1.4-.7 1.6-.7 28.3-.7 31-.1 29.2-.3 32 2.5 2.8 2.8 2.6 1 2.5 32 0 26.7 0 26.9-.7 28.3a9.3 9.3 0 0 1-4 4.2c-1.2.5-2.2.6-29 .6l-27.7.1z" transform="translate(.4 .4)" /></svg>;
 const svg_list = <svg id="session-list" viewBox="0 0 246.8 185.8"><path style="stroke-width:.482473" d="M-69.2 102.7A16.5 16.5 0 0 1-67 70.4c7.3-1 15 4 17.3 11 1 3 1 8 0 10.8a16.7 16.7 0 0 1-19.5 10.5zm53-3.4a12.3 12.3 0 0 1-7-16.8c1.3-3 3.1-4.7 6-6 2.2-1 2.8-1 87.2-1 92.4 0 87-.2 90.6 2.6.9.7 2.2 2.4 3 3.7 1.2 2.2 1.4 3.1 1.4 6 0 4.8-2.3 8.6-6.8 11l-1.9 1-85.2.1c-71.9 0-85.5 0-87.3-.6zm-53.5-73c-4.7-1.5-8.6-5-10.6-9.1-1.8-4-1.8-9.8 0-13.7 1.6-3.3 4.4-6.2 7.8-8 2.2-1.2 3-1.3 7.1-1.3 4 0 5 .1 7.3 1.3a16.6 16.6 0 0 1 0 29.6c-2 1-3.4 1.4-6.5 1.5-2.2 0-4.5 0-5.1-.3zm52.3-4.8c-2.4-1.1-5.3-4-6.2-6.5-1-2.4-1-7.3.1-9.7.5-1.1 1.8-2.8 2.8-3.8 3.7-3.5-4-3.2 91-3.2h85.5l2.5 1.1a12 12 0 0 1 0 21.8l-2.5 1.2H70.2c-82.5 0-85.7 0-87.6-1zm-52.1-71.6a18 18 0 0 1-10-7.7 17 17 0 0 1-.7-15c2.3-5 5.8-7.9 11.4-9.3 9-2.3 18.3 4 19.8 13.4a16.4 16.4 0 0 1-15.2 19c-2.1.1-4.1 0-5.3-.4zm52.1-5.9c-1.3-.6-3-1.7-3.7-2.5-4.7-5-4.2-13.7 1-18 3.7-3.1-1.8-3 91.5-2.8l84.9.1 2 1a12 12 0 0 1 6.7 11c0 3-.2 3.9-1.4 6-.8 1.4-2.1 3-3 3.8-3.7 2.7 1.8 2.6-90.6 2.6h-85l-2.4-1.2z" transform="translate(81.7 82.6)" /></svg>;
@@ -11,7 +11,7 @@ function getSessionsStyleOption(type) {
 }
 
 export function getSessionsStyle(type) {
-    var v = handler.get_local_option(getSessionsStyleOption(type));
+    var v = handler.xcall("get_local_option",getSessionsStyleOption(type));
     if (!v) v = type == "ab" ? "list" : "tile";
     return v;
 }
@@ -27,11 +27,11 @@ export function getSessionsStyle(type) {
 //     });
 // }
 
-class SearchBar extends Element {
+export class SearchBar extends Element {
     parent;
     value = "";
 
-    constructor(props) {
+    this(props) {
         this.parent = props.parent;
     }
 
@@ -61,10 +61,10 @@ class SearchBar extends Element {
     }
 }
 
-class SessionStyle extends Element {
+export class SessionStyle extends Element {
     type = "";
 
-    constructor(props) {
+    this(props) {
         this.type = (props || {}).type;
     }
 
@@ -85,13 +85,13 @@ class SessionStyle extends Element {
     }
 }
 
-class SessionList extends Element {
+export class SessionList extends Element {
     sessions = [];
     type = "";
     style;
     filterPattern = "";
 
-    constructor(props) {
+    this(props) {
         this.sessions = props.sessions;
         this.type = props.type;
         this.style = getSessionsStyle(props.type);
@@ -115,7 +115,7 @@ class SessionList extends Element {
 
     render() {
         let sessions = this.getSessions();
-        if (sessions.length == 0) return <span />;
+        if (!sessions || sessions.length == 0) return <span />; // TODO  property 'length' of undefined
         sessions = sessions.map((x) => this.getSession(x));
         // TODO is_win
         return <div class="recent-sessions-content" key={sessions.length} >
@@ -206,7 +206,8 @@ class SessionList extends Element {
             let old_name = handler.xcall("get_peer_option", id, "alias");
             msgbox("custom-rename", "Rename", "<div class='form'> \
                 <div><input name='name' class='outline-focus' style='width: *; height: 23px', value='" + old_name + "' /></div> \
-                </div>",
+                </div> \
+                ",
                 function (res = null) {
                     if (!res) return;
                     let name = (res.name || "").trim();
