@@ -278,4 +278,13 @@ class MultipleSessions: Reactor.Component {
         handler.set_option('show-sessions-type', el.id || "");
         this.stupidUpdate();
     }
+
+    function onSize() {
+        var w = this.$(.sessions-bar).box(#width) - 220;
+        this.$(#sessions-type span).style.set{
+            "max-width": (w / 2) + "px",
+        };
+    }
 }
+
+view.on("size", function() { app.multipleSessions.onSize(); });

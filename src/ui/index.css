@@ -52,6 +52,9 @@ div.sessions-tab span {
     display: inline-block;
     padding: 6px 12px;
     cursor: pointer;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    overflow-x: hidden;
 }
 
 div.sessions-tab svg {
@@ -66,7 +69,7 @@ div.sessions-tab span.active {
 }
 
 div.search-id {
-    width: 160px;
+    width: 120px;
     padding: 0;
     position: relative;
     display: inline-block;
