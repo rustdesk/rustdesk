@@ -1,18 +1,20 @@
-if (is_osx) view.windowBlurbehind = #light;
-stdout.println("current platform:", OS);
+import { is_osx,view,OS,handler,translate,msgbox,is_win,svg_checkmark,svg_edit,isReasonableSize,centerize,svg_eye } from "./common";
+import { SearchBar,SessionStyle,SessionList } from "./ab.js";
+if (is_osx) view.blurBehind = "light";
+console.log("current platform:", OS);
 
 // html min-width, min-height not working on mac, below works for all
-view.windowMinSize = (500, 300);
+view.minSize = [500, 300]; // TODO　TEST
 
 export var app;
-var tmp = handler.get_connect_status();
+var tmp = handler.xcall("get_connect_status");
 var connect_status = tmp[0];
 var service_stopped = false;
 var software_update_url = "";
 var key_confirmed = tmp[1];
 var system_error = "";
 
-var svg_menu = <svg #menu viewBox="0 0 512 512">
+export const svg_menu = <svg id="menu" viewBox="0 0 512 512">
 	<circle cx="256" cy="256" r="64"/>
 	<circle cx="256" cy="448" r="64"/>
 	<circle cx="256" cy="64" r="64"/>
@@ -20,21 +22,20 @@ var svg_menu = <svg #menu viewBox="0 0 512 512">
 
 var my_id = "";
 function get_id() {
-  my_id = handler.get_id();
+  my_id = handler.xcall("get_id");
   return my_id;
 }
 
-class ConnectStatus: Reactor.Component {
-    function render() {
-        return
-            <div .connect-status>
+class ConnectStatus extends Element {
+    render() {
+        return(<div class="connect-status">
                 <span class={"connect-status-icon connect-status" + (service_stopped ? 0 : connect_status)} />
                 {this.getConnectStatusStr()}
-                {service_stopped ? <span .link #start-service>{translate('Start Service')}</span> : ""}
-            </div>;
+                {service_stopped ? <span class="link" id="start-service">{translate('Start Service')}</span> : ""}
+            </div>);
     }
 
-    function getConnectStatusStr() {
+    getConnectStatusStr() {
         if (service_stopped) {
             return translate("Service is not running");
         } else if (connect_status == -1) {
@@ -45,28 +46,30 @@ class ConnectStatus: Reactor.Component {
         return translate("Ready");
     }
 
-    event click $(#start-service) () {
-        handler.set_option("stop-service", "");
+    ["on click at #start-service"]() {
+        handler.xcall("set_option","stop-service", "");
     }
 }
 
-class RecentSessions: Reactor.Component {
-    function render() {
-        var sessions = handler.get_recent_sessions();
+// TODO** SearchBar SessionStyle sessionsStyle SessionList
+// TODO @{this.sessionList} {!app.hidden && <SessionList @{this.sessionList} style={sessionsStyle} sessions={sessions} />}
+class RecentSessions extends Element {
+    render() {
+        let sessions = handler.xcall("get_recent_sessions");
         if (sessions.length == 0) return <span />;
-        return <div style="width: *">
-            <div .sessions-bar>
+        return (<div style="width: *">
+            <div class="sessions-bar">
                 <div style="width:*">
                     {translate("Recent Sessions")}
                 </div>
                 <SearchBar parent={this} />
                 {!app.hidden && <SessionStyle />}
             </div>
-            {!app.hidden && <SessionList @{this.sessionList} style={sessionsStyle} sessions={sessions} />}
-        </div>;
+            {!app.hidden && <SessionList />} 
+        </div>);
     }
-
-    function filter(v) {
+    // TODO TEST
+    filter(v) {
         this.sessionList.filter(v);
     }
 }
@@ -79,8 +82,8 @@ export function createNewConnect(id, type) {
         msgbox("custom-error", "Error", "You cannot connect to your own computer");
         return;
     }
-    handler.set_remote_id(id);
-    handler.new_remote(id, type);
+    handler.xcall("set_remote_id",id);
+    handler.xcall("new_remote",id, type);
 }
 
 var direct_server;
@@ -103,121 +106,118 @@ class DirectServer: Reactor.Component {
 
 var myIdMenu;
 var audioInputMenu;
-class AudioInputs: Reactor.Component {
-    function this() {
+class AudioInputs extends Element {
+    this() {
         audioInputMenu = this;
     }
 
-    function render() {
+    render() {
+        // TODO this.show
         if (!this.show) return <li />;
-        var inputs = handler.get_sound_inputs();
+        let inputs = handler.xcall("get_sound_inputs");
         if (is_win) inputs = ["System Sound"].concat(inputs);
-        if (!inputs.length) return <li style="display:hidden" />;
+        if (!inputs.length) return null; // TODO TEST null element
         inputs = ["Mute"].concat(inputs);
-        var me = this;
-        self.timer(1ms, function() { me.toggleMenuState() });
-        return <li>{translate('Audio Input')}
-            <menu #audio-input key={inputs.length}>
-                {inputs.map(function(name) {
-                return <li id={name}><span>{svg_checkmark}</span>{translate(name)}</li>;
-                })}
+        setTimeout(()=>this.toggleMenuState(),1);
+        return (<li>{translate('Audio Input')}
+            <menu id="audio-input" key={inputs.length}>
+                {inputs.map((name)=><li id={name}><span>{svg_checkmark}</span>{translate(name)}</li>)}
             </menu>
-        </li>;
+        </li>);
     }
 
-    function get_default() {
+    get_default() {
         if (is_win) return "System Sound";
         return "";
     }
 
-    function get_value() {
-        return handler.get_option("audio-input") || this.get_default();
+    get_value() {
+        return handler.xcall("get_option","audio-input") || this.get_default();
     }
 
-    function toggleMenuState() {
-        var v = this.get_value();
-        for (var el in $$(menu#audio-input>li)) {
-            var selected = el.id == v;
-            el.attributes.toggleClass("selected", selected);
+    toggleMenuState() {
+        let v = this.get_value();
+        for (let el in this.$$("menu#audio-input>li")) {
+            let selected = el.id == v;
+            el.classList.toggle("selected", selected);
         }
     }
 
-    event click $(menu#audio-input>li) (_, me) {
-        var v = me.id;
+    ["on click at menu#audio-input>li"](_, me) {
+        let v = me.id;
         if (v == this.get_value()) return;
         if (v == this.get_default()) v = "";
-        handler.set_option("audio-input", v);
+        handler.xcall("set_option","audio-input", v);
         this.toggleMenuState();
     }
 }
 
-class MyIdMenu: Reactor.Component {
-    function this() {
+class MyIdMenu extends Element {
+    this() {
         myIdMenu = this;
     }
 
-    function render() {
-        return <div #myid>
+    render() {
+        return (<div id="myid">
             {this.renderPop()}
             ID{svg_menu}
-        </div>;
+        </div>);
     }
 
-    function renderPop() {
-        return <popup>
-            <menu.context #config-options>
-                <li #enable-keyboard><span>{svg_checkmark}</span>{translate('Enable Keyboard/Mouse')}</li>
-                <li #enable-clipboard><span>{svg_checkmark}</span>{translate('Enable Clipboard')}</li>
-                <li #enable-file-transfer><span>{svg_checkmark}</span>{translate('Enable File Transfer')}</li> 
-                <li #enable-tunnel><span>{svg_checkmark}</span>{translate('Enable TCP Tunneling')}</li>
+    renderPop() {
+        return (<popup>
+            <menu class="context" id="config-options">
+                <li id="enable-keyboard"><span>{svg_checkmark}</span>{translate('Enable Keyboard/Mouse')}</li>
+                <li id="enable-clipboard"><span>{svg_checkmark}</span>{translate('Enable Clipboard')}</li>
+                <li id="enable-file-transfer"><span>{svg_checkmark}</span>{translate('Enable File Transfer')}</li> 
+                <li id="enable-tunnel"><span>{svg_checkmark}</span>{translate('Enable TCP Tunneling')}</li>
                 <AudioInputs />
-                <div .separator />
-                <li #whitelist title={translate('whitelist_tip')}>{translate('IP Whitelisting')}</li>
-                <li #custom-server>{translate('ID/Relay Server')}</li>
-                <li #socks5-server>{translate('Socks5 Proxy')}</li>
-                <div .separator />
-                <li #stop-service class={service_stopped ? "line-through" : "selected"}><span>{svg_checkmark}</span>{translate("Enable Service")}</li>
-                <DirectServer />
-                <div .separator />
-                <li #about>{translate('About')} {" "} {handler.get_app_name()}</li>
+                <div class="separator" />
+                <li id="whitelist" title={translate('whitelist_tip')}>{translate('IP Whitelisting')}</li>
+                <li id="custom-server">{translate('ID/Relay Server')}</li>
+                <div class="separator" />
+                <li id="stop-service" class={service_stopped ? "line-through" : "selected"}><span>{svg_checkmark}</span>{translate("Enable Service")}</li>
+                <div class="separator" />
+                <li id="about">{translate('About')} {" "} {handler.xcall("get_app_name")}</li>
             </menu>
-        </popup>;
+        </popup>);
     }
 
-    event click $(svg#menu) (_, me) {
+    // TEST svg#menu  // .popup()
+    ["on click at svg#menu"](_, me) {
         audioInputMenu.update({ show: true });
         this.toggleMenuState();
-        if (direct_server) direct_server.update();
-        var menu = $(menu#config-options);
-        me.popup(menu);
+        let menu = this.$("menu#config-options");
+        me.popup(menu); 
     }
 
-    function toggleMenuState() {
-        for (var el in $$(menu#config-options>li)) {
+    toggleMenuState() {
+        for (let el in this.$$("menu#config-options>li")) {
             if (el.id && el.id.indexOf("enable-") == 0) {
-                var enabled = handler.get_option(el.id) != "N";
-                el.attributes.toggleClass("selected", enabled);
-                el.attributes.toggleClass("line-through", !enabled);
+                let enabled = handler.xcall("get_option",el.id) != "N";
+                el.classList.toggle("selected", enabled);
+                el.classList.toggle("line-through", !enabled);
             }
         }
     }
 
-    event click $(menu#config-options>li) (_, me) {
+    ["on click at menu#config-options>li"] (_, me) {
         if (me.id && me.id.indexOf("enable-") == 0) {
-            handler.set_option(me.id, handler.get_option(me.id) == "N" ? "" : "N");
+            handler.xcall("set_option",me.id, handler.xcall("get_option",me.id) == "N" ? "" : "N");
         }
         if (me.id == "whitelist") {
-            var old_value = handler.get_option("whitelist").split(",").join("\n");
-            msgbox("custom-whitelist", translate("IP Whitelisting"), "<div .form> \
+            let old_value = handler.xcall("get_option","whitelist").split(",").join("\n");
+            msgbox("custom-whitelist", translate("IP Whitelisting"), "<div class='form'> \
             <div>" + translate("whitelist_sep") + "</div> \
             <textarea spellcheck=\"false\" name=\"text\" novalue=\"0.0.0.0\" style=\"overflow: scroll-indicator; width:*; height: 160px; font-size: 1.2em; padding: 0.5em;\">" + old_value + "</textarea>\
             </div> \
-            ", function(res=null) {
+            ",
+            function(res=null) {
                 if (!res) return;
-                var value = (res.text || "").trim();
+                let value = (res.text || "").trim();
                 if (value) {
-                    var values = value.split(/[\s,;\n]+/g);
-                    for (var ip in values) {
+                    let values = value.split(/[\s,;\n]+/g);
+                    for (let ip in values) {
                         if (!ip.match(/^\d+\.\d+\.\d+\.\d+$/)) {
                             return translate("Invalid IP") + ": " + ip;
                         }
@@ -225,33 +225,34 @@ class MyIdMenu: Reactor.Component {
                     value = values.join("\n");
                 }
                 if (value == old_value) return;
-                stdout.println("whitelist updated");
-                handler.set_option("whitelist", value.replace("\n", ","));
+                console.log("whitelist updated");
+                handler.xcall("set_option","whitelist", value.replace("\n", ","));
             }, 300);
         } else if (me.id == "custom-server") {
-            var configOptions = handler.get_options();
-            var old_relay = configOptions["relay-server"] || "";
-            var old_id = configOptions["custom-rendezvous-server"] || "";
-            msgbox("custom-server", "ID/Relay Server", "<div .form> \
+            let configOptions = handler.xcall("get_options");
+            let old_relay = configOptions["relay-server"] || "";
+            let old_id = configOptions["custom-rendezvous-server"] || "";
+            msgbox("custom-server", "ID/Relay Server", "<div class='form'> \
             <div><span style='width: 100px; display:inline-block'>" + translate("ID Server") + ": </span><input .outline-focus style='width: 250px' name='id' value='" + old_id + "' /></div> \
             <div><span style='width: 100px; display:inline-block'>" + translate("Relay Server") + ": </span><input style='width: 250px' name='relay' value='" + old_relay + "' /></div> \
             </div> \
-            ", function(res=null) {
+            ", 
+            function(res=null) {
                 if (!res) return;
-                var id = (res.id || "").trim();
-                var relay = (res.relay || "").trim();
+                let id = (res.id || "").trim();
+                let relay = (res.relay || "").trim();
                 if (id == old_id && relay == old_relay) return;
                 if (id) {
-                    var err = handler.test_if_valid_server(id);
+                    let err = handler.xcall("test_if_valid_server",id);
                     if (err) return translate("ID Server") + ": " + err;
                 }
                 if (relay) {
-                    var err = handler.test_if_valid_server(relay);
+                    let err = handler.xcall("test_if_valid_server",relay);
                     if (err) return translate("Relay Server") + ": " + err;
                 }
                 configOptions["custom-rendezvous-server"] = id;
                 configOptions["relay-server"] = relay;
-                handler.set_options(configOptions);
+                handler.xcall("set_options",configOptions);
             }, 240);
         } else if (me.id == "socks5-server") {
             var socks5 = handler.get_socks() || {};
@@ -276,121 +277,137 @@ class MyIdMenu: Reactor.Component {
                 handler.set_socks(proxy, username, password);
             }, 240);
         } else if (me.id == "stop-service") {
-            handler.set_option("stop-service", service_stopped ? "" : "Y");
+            handler.xcall("set_option","stop-service", service_stopped ? "" : "Y");
         } else if (me.id == "about") {
-            var name = handler.get_app_name();
+            let name = handler.xcall("get_app_name");
             msgbox("custom-nocancel-nook-hasclose", "About " + name, "<div style='line-height: 2em'> \
-                <div>Version: " + handler.get_version() + " \
-                <div .link .custom-event url='http://rustdesk.com/privacy'>Privacy Statement</div> \
-                <div .link .custom-event url='http://rustdesk.com'>Website</div> \
+                <div>Version: " + handler.xcall("get_version") + " \
+                <div class='link custom-event' url='http://rustdesk.com/privacy'>Privacy Statement</div> \
+                <div class='link custom-event' url='http://rustdesk.com'>Website</div> \
                 <div style='background: #2c8cff; color: white; padding: 1em; margin-top: 1em;'>Copyright &copy; 2020 CarrieZ Studio \
                 <br /> Author: Carrie \
                 <p style='font-weight: bold'>Made with heart in this chaotic world!</p>\
                 </div>\
-            </div>", function(el) {
+            </div>", 
+            function(el) {
                 if (el && el.attributes) {
-                    handler.open_url(el.attributes['url']);
+                    handler.xcall("open_url",el.attributes['url']);
                 };
             }, 400);
         }
     }
 }
 
-class App: Reactor.Component
-{
-    function this() {
+class App extends Element{
+    this() {
         app = this;
     }
 
-    function render() {
-        var is_can_screen_recording = handler.is_can_screen_recording(false);
-        return
-            <div .app>
-                    <popup><menu.context #edit-password-context>
-                        <li #refresh-password>{translate('Refresh random password')}</li>
-                        <li #set-password>{translate('Set your own password')}</li>
-                    </menu></popup>
-                    <div .left-pane>
+    render() {
+        let is_can_screen_recording = handler.xcall("is_can_screen_recording",false);
+        // TODO ${} <ID @{this.remote_id} /> <RecentSessions @{this.recent_sessions} /> <ConnectStatus @{this.connect_status} />
+        return(<div class="app">
+              <popup>
+              <menu class="context" id="edit-password-context">
+                <li id="refresh-password">Refresh random password</li>
+                <li id="set-password">Set your own password</li>
+              </menu>
+              </popup>
+                <div class="left-pane">
                     <div>
-                        <div .title>{translate('Your Desktop')}</div>
-                        <div .lighter-text>{translate('desk_tip')}</div>
-                        <div .your-desktop>
+                        <div class="title">{translate('Your Desktop')}</div>
+                        <div class="lighter-text">{translate('desk_tip')}</div>
+                        <div class="your-desktop">
                             <MyIdMenu />
                             {key_confirmed ? <input type="text" readonly value={formatId(get_id())}/> : translate("Generating ...")}
                         </div>
-                        <div .your-desktop>
+                        <div class="your-desktop">
                             <div>{translate('Password')}</div>
                             <Password />
                         </div>
                     </div>
-                    {handler.is_installed() ? "": <InstallMe />}
-                    {handler.is_installed() && software_update_url ? <UpdateMe /> : ""}
-                    {handler.is_installed() && !software_update_url && handler.is_installed_lower_version() ? <UpgradeMe /> : ""}
+                    {handler.xcall("is_installed") ? "": <InstallMe />}
+                    {handler.xcall("is_installed") && software_update_url ? <UpdateMe /> : ""}
+                    {handler.xcall("is_installed") && !software_update_url && handler.xcall("is_installed_lower_version") ? <UpgradeMe /> : ""}
                     {is_can_screen_recording ? "": <CanScreenRecording />}
-                    {is_can_screen_recording && !handler.is_process_trusted(false) ? <TrustMe /> : ""}
+                    {is_can_screen_recording && !handler.xcall("is_process_trusted",false) ? <TrustMe /> : ""}
                     {system_error ? <SystemError /> : ""}
-                    {!system_error && handler.is_login_wayland() && !handler.current_is_wayland() ? <FixWayland /> : ""}
-                    {!system_error && handler.current_is_wayland() ? <ModifyDefaultLogin /> : ""}
+                    {!system_error && handler.xcall("is_login_wayland") && !handler.xcall("current_is_wayland") ? <FixWayland /> : ""}
+                    {!system_error && handler.xcall("current_is_wayland") ? <ModifyDefaultLogin /> : ""}
                 </div>
-                <div .right-pane>
-                    <div .right-content>
-                        <div .card-connect>
-                            <div .title>{translate('Control Remote Desktop')}</div>
-                            <ID @{this.remote_id} />
-                            <div .right-buttons>
-                                <button .button .outline #file-transfer>{translate('Transfer File')}</button>
-                                <button .button #connect>{translate('Connect')}</button>
+                <div class="right-pane">
+                    <div class="right-content">
+                        <div class="card-connect">
+                            <div class="title">{translate('Control Remote Desktop')}</div>
+                            <ID />
+                            <div class="right-buttons">
+                                <button class="button outline" id="file-transfer">{translate('Transfer File')}</button>
+                                <button class="button" id="connect">{translate('Connect')}</button>
                             </div>
                         </div>
-                        <MultipleSessions @{this.multipleSessions} />
+                        <RecentSessions  />
                     </div>
-                    <ConnectStatus @{this.connect_status} />
+                    <ConnectStatus />
                 </div>
-            </div>;
+            </div>);
     }
 
-    event click $(button#connect) {
+    ["on click at button#connect"](){
         this.newRemote("connect");
     }
 
-    event click $(button#file-transfer) {
+    ["on click at button#file-transfer"]() {
         this.newRemote("file-transfer");
     }
 
-    function newRemote(type) {
+    ["on keydown"](evt) {
+        if (!evt.shortcutKey) {
+            // TODO TEST Windows/Mac
+            if (evt.code == "KeyRETURN") {
+                var el = $("button#connect");
+                view.focus = el;
+                el.click();
+                // simulate button click effect, windows does not have this issue
+                el.classList.toggle("active", true);
+                el.timer(300, ()=> el.classList.toggle("active", false));
+            }
+        }
+    }
+
+    newRemote(type) {
         createNewConnect(this.remote_id.value, type);
     }
 }
 
-class InstallMe: Reactor.Component {
-    function render() {
-        return <div .install-me>
+class InstallMe extends Element {
+    render() {
+        return (<div class="install-me">
             <span />
             <div>{translate('install_tip')}</div>
-            <div style="text-align: center; margin-top: 1em;"><button #install-me .button>{translate('Install')}</button></div>
-        </div>;
+            <button id="install-me" class="button">{translate('Install')}</button>
+        </div>);
     }
 
-    event click $(#install-me) {
-        handler.goto_install();
+    ["on click at #install-me"]() {
+        handler.xcall("goto_install");
     }
 }
 
 const http = function() { 
-  
   function makeRequest(httpverb) {
     return function( params ) {
       params.type = httpverb;
+      // TODO request
       view.request(params);
     };
   }
-  
-  function download(from, to, args..) 
-  {
-      var rqp = { type:#get, url: from, toFile: to };
-      var fn = 0;
-      var on = 0;
-      for( var p in args )
+  function download(from, to, ...args) {
+      // TODO #get 
+      let rqp = { type:"get", url: from, toFile: to };
+      let fn = 0;
+      let on = 0;
+      // TODO p in / p of?
+      for( let p in args )
         if( p instanceof Function )
         {
           switch(++fn) {
@@ -405,245 +422,257 @@ const http = function() {
             case 2: rqp.headers = p; break;
           }
         }  
+        // TODO request
       view.request(rqp);
   }
   
   return {
-    get:  makeRequest(#get),
-    post: makeRequest(#post),
-    put:  makeRequest(#put),
-    del:  makeRequest(#delete),
+    get:  makeRequest("get"),
+    post: makeRequest("post"),
+    put:  makeRequest("put"),
+    del:  makeRequest("delete"),
     download: download
   };
 
 }();
 
-class UpgradeMe: Reactor.Component {
-    function render() {
-        var update_or_download = is_osx ? "download" : "update";
-        return <div .install-me>
+class UpgradeMe extends Element {
+    render() {
+        let update_or_download = is_osx ? "download" : "update";
+        return (<div class="install-me">
             <div>{translate('Status')}</div>
             <div>{translate('Your installation is lower version.')}</div>
-            <div #install-me .link style="padding-top: 1em">{translate('Click to upgrade')}</div>
-        </div>;
+            <div id="install-me" class="link" style="padding-top: 1em">{translate('Click to upgrade')}</div>
+        </div>);
     }
 
-    event click $(#install-me) {
-        handler.update_me("");
+    ["on click at #install-me"]() {
+        handler.xcall("update_me");
     }
 }
 
-class UpdateMe: Reactor.Component {
-    function render() {
-        var update_or_download = "download"; // !is_win ? "download" : "update";
-        return <div .install-me>
+class UpdateMe extends Element {
+    render() {
+        let update_or_download = "download"; // !is_win ? "download" : "update";
+        return (<div class="install-me">
             <div>{translate('Status')}</div>
-            <div>There is a newer version of {handler.get_app_name()} ({handler.get_new_version()}) available.</div>
-            <div #install-me .link style="padding-top: 1em">Click to {update_or_download}</div>
-            <div #download-percent style="display:hidden; padding-top: 1em;" />
-        </div>;
+            <div>There is a newer version of {handler.xcall("get_app_name")} ({handler.xcall("get_new_version")}) available.</div>
+            <div id="install-me" class="link" style="padding-top: 1em">Click to {update_or_download}</div>
+            <div id="download-percent" style="display:hidden; padding-top: 1em;" />
+        </div>);
     }
 
-    event click $(#install-me) {
-        handler.open_url("https://rustdesk.com");
+    ["on click at #install-me"]() {
+        handler.xcall("open_url","https://rustdesk.com");
         return;
+        // TODO return?
         if (!is_win) {
-            handler.open_url("https://rustdesk.com");
+            handler.xcall("open_url","https://rustdesk.com");
             return;
         }
-        var url = software_update_url + '.' + handler.get_software_ext();
-        var path = handler.get_software_store_path();
-        var onsuccess = function(md5) {
-            $(#download-percent).content(translate("Installing ..."));
-            handler.update_me(path);
+        let url = software_update_url + '.' + handler.xcall("get_software_ext");
+        let path = handler.xcall("get_software_store_path");
+        let onsuccess = function(md5) {
+            this.$("#download-percent").content(translate("Installing ..."));
+            handler.xcall("update_me",path);
         };
-        var onerror = function(err) {
+        let onerror = function(err) {
             msgbox("custom-error", "Download Error", "Failed to download"); 
         };
-        var onprogress = function(loaded, total) {
+        let onprogress = function(loaded, total) {
             if (!total) total = 5 * 1024 * 1024;
-            var el = $(#download-percent);
-            el.style.set{display: "block"};
+            let el = this.$("#download-percent");
+            el.style.setProperty("display","block");
             el.content("Downloading %" + (loaded * 100 / total));
         };
-        stdout.println("Downloading " + url + " to " + path);
+        console.log("Downloading " + url + " to " + path);
         http.download(
             url,
-            self.url(path),
+            document.url(path),
             onsuccess, onerror, onprogress);
     }
 }
 
-class SystemError: Reactor.Component {
-    function render() {
-        return <div .install-me>
+class SystemError extends Element {
+    render() {
+        return (<div class="install-me">
             <div>{system_error}</div>
-        </div>;
+        </div>);
     }
 }
 
-class TrustMe: Reactor.Component {
-    function render() {
-        return <div .trust-me>
+class TrustMe extends Element {
+    render() {
+        return (<div class="trust-me">
             <div>{translate('Configuration Permissions')}</div>
             <div>{translate('config_acc')}</div>
-            <div #trust-me .link>{translate('Configure')}</div>
-        </div>;
+            <div id="trust-me" class="link">{translate('Configure')}</div>
+        </div>);
     }
 
-    event click $(#trust-me) {
-        handler.is_process_trusted(true);
+    ["on click at #trust-me"] () {
+        handler.xcall("is_process_trusted",true);
         watch_trust();
     }
 }
 
-class CanScreenRecording: Reactor.Component {
-    function render() {
-        return <div .trust-me>
+class CanScreenRecording extends Element {
+    render() {
+        return (<div class="trust-me">
             <div>{translate('Configuration Permissions')}</div>
             <div>{translate('config_screen')}</div>
-            <div #screen-recording .link>{translate('Configure')}</div>
-        </div>;
+            <div id="screen-recording" class="link">{translate('Configure')}</div>
+        </div>);
     }
 
-    event click $(#screen-recording) {
-        handler.is_can_screen_recording(true);
+    ["on click at #screen-recording"]() {
+        handler.xcall("is_can_screen_recording",true);
         watch_trust();
     }
 }
 
-class FixWayland: Reactor.Component {
-    function render() {
-        return <div .trust-me>
+class FixWayland extends Element {
+    render() {
+        return (<div class="trust-me">
             <div>{translate('Warning')}</div>
             <div>{translate('Login screen using Wayland is not supported')}</div>
-            <div #fix-wayland .link>{translate('Fix it')}</div>
+            <div id="fix-wayland" class="link">{translate('Fix it')}</div>
             <div style="text-align: center">({translate('Reboot required')})</div>
-        </div>;
+        </div>);
     }
 
-    event click $(#fix-wayland) {
-        handler.fix_login_wayland();
-        app.update();
+    ["on click at #fix-wayland"] () {
+        handler.xcall("fix_login_wayland");
+        app.update(); //TODO app.update()
     }
 }
 
-class ModifyDefaultLogin: Reactor.Component {
-    function render() {
-        return <div .trust-me>
+class ModifyDefaultLogin extends Element {
+    render() {
+        return (<div class="trust-me">
             <div>{translate('Warning')}</div>
             <div>{translate('Current Wayland display server is not supported')}</div>
-            <div #modify-default-login .link>{translate('Fix it')}</div>
+            <div id="modify-default-login" class="link">{translate('Fix it')}</div>
             <div style="text-align: center">({translate('Reboot required')})</div>
-        </div>;
+        </div>);
     }
 
-    event click $(#modify-default-login) {
-        if (var r = handler.modify_default_login()) {
+    ["on click at #modify-default-login"]() {
+        // TEST change  tis old:
+        // if (var r = handler.modify_default_login()) {
+        //     msgbox("custom-error", "Error", r);
+        // }
+        let r = handler.xcall("modify_default_login");
+        if (r) {
             msgbox("custom-error", "Error", r);
         }
-        app.update();
+        app.update(); // TODO
     }
 }
 
 function watch_trust() {
     // not use TrustMe::update, because it is buggy
-    var trusted = handler.is_process_trusted(false);
-    var el = $(div.trust-me);
+    let trusted = handler.xcall("is_process_trusted",false);
+    let el = document.$("div.trust-me");
     if (el) {
-        el.style.set {
-            display: trusted ? "none" : "block",
-        };
+        el.style.setProperty("display", trusted ? "none" : "block");
     }
     // if (trusted) return;
-    self.timer(1s, watch_trust);
+    // TODO dont have exit?
+    setTimeout(() => {
+        watch_trust()
+    }, 1000);
 }
 
-class PasswordEyeArea : Reactor.Component {
+class PasswordEyeArea extends Element {
     render() {
-        return
-            <div .eye-area style="width: *">
-                <input|text @{this.input} readonly value="******" />
+        // TODO @{} <input type="text" @{this.input} readonly value="******" />
+        return (<div class="eye-area" style="width: *">
+                <input type="text" readonly value="******" />
                 {svg_eye}
-            </div>;
+            </div>);
     }
     
-    event mouseenter {
-        var me = this;
-        me.leaved = false;
-        me.timer(300ms, function() {
-            if (me.leaved) return;
-            me.input.value = handler.get_password();
-        });
+    // TEST
+    ["on mouseenter"]() {
+        this.leaved = false;
+        setTimeout(()=> {
+            if (this.leaved) return;
+            // TODO TEST input need $?
+            this.input.value = handler.xcall("get_password");
+        },300);
     }
 
-    event mouseleave {
+    // TEST
+    ["on mouseleave"]() {
         this.leaved = true;
         this.input.value = "******";
     }
 }
 
-class Password: Reactor.Component {
-    function render() {
-        return <div .password style="flow:horizontal">
+class Password extends Element {
+    render() {
+        return (<div class="password" style="flow:horizontal">
             <PasswordEyeArea />
             {svg_edit}
-        </div>;
+        </div>);
     }
 
-    event click $(svg#edit) (_, me) {
-        var menu = $(menu#edit-password-context);
+    // TEST popup
+    ["on click at svg#edit"](_,me) {
+        let menu = this.$("menu#edit-password-context");
         me.popup(menu);
     }
 
-    event click $(li#refresh-password) {
-        handler.update_password("");
-        this.update();
+    ["on click at li#refresh-password"] () {
+        handler.xcall("update_password");
+        this.update(); // TODO
     }
 
-    event click $(li#set-password) {
-        var me = this;
+    ["on click at li#set-password"] () {
+        // option .form .set-password ...
         msgbox("custom-password", translate("Set Password"), "<div .form .set-password> \
             <div><span>" + translate('Password') + ":</span><input|password(password) .outline-focus /></div> \
             <div><span>" + translate('Confirmation') + ":</span><input|password(confirmation) /></div> \
         </div> \
-        ", function(res=null) {
+        ", 
+        function(res=null) {
             if (!res) return;
-            var p0 = (res.password || "").trim();
-            var p1 = (res.confirmation || "").trim();
+            let p0 = (res.password || "").trim();
+            let p1 = (res.confirmation || "").trim();
             if (p0.length < 6) {
                 return translate("Too short, at least 6 characters.");
             }
             if (p0 != p1) {
                 return translate("The confirmation is not identical.");
             }
-            handler.update_password(p0);
-            me.update();
+            handler.xcall("update_password",p0);
+            this.update(); // TODO
         });
     }
 }
 
-class ID: Reactor.Component {
-    function render() {
-        return <input type="text" #remote_id .outline-focus novalue={translate("Enter Remote ID")} maxlength="15"
-        value={formatId(handler.get_remote_id())} />;
+class ID extends Element {
+    render() {
+        return <input type="text" id="remote_id" class="outline-focus" novalue={translate("Enter Remote ID")} maxlength="15" value={formatId(handler.xcall("get_remote_id"))} />;
     }
 
+    // TEST
     // https://github.com/c-smile/sciter-sdk/blob/master/doc/content/sciter/Event.htm
-    event change {
-        var fid = formatId(this.value);
-        var d = this.value.length - (this.old_value || "").length;
+    ["on change"]() {
+        let fid = formatId(this.value);
+        let d = this.value.length - (this.old_value || "").length;
         this.old_value = this.value;
-        var start = this.xcall(#selectionStart) || 0;
-        var end = this.xcall(#selectionEnd);
+        let start = this.xcall("selectionStart") || 0;
+        let end = this.xcall("selectionEnd");
         if (fid == this.value || d <= 0 || start != end) {
             return;
         }
         // fix Caret position
         this.value = fid;
-        var text_after_caret = this.old_value.substr(start);
-        var n = fid.length - formatId(text_after_caret).length;
-        this.xcall(#setSelection, n, n);
+        let text_after_caret = this.old_value.substr(start);
+        let n = fid.length - formatId(text_after_caret).length;
+        this.xcall("setSelection", n, n);
     }
 }
 
@@ -651,10 +680,10 @@ var reg = /^\d+$/;
 export function formatId(id) {
     id = id.replace(/\s/g, "");
     if (reg.test(id) && id.length > 3) {
-        var n = id.length;
-        var a = n % 3 || 3;
-        var new_id = id.substr(0, a);
-        for (var i = a; i < n; i += 3) {
+        let n = id.length;
+        let a = n % 3 || 3;
+        let new_id = id.substr(0, a);
+        for (let i = a; i < n; i += 3) {
             new_id += " " + id.substr(i, 3);
         }
         return new_id;
@@ -662,80 +691,59 @@ export function formatId(id) {
     return id;
 }
 
-event keydown (evt) {
-    if (!evt.shortcutKey) {
-        if (evt.keyCode == Event.VK_ENTER ||
-            (is_osx && evt.keyCode == 0x4C) ||
-            (is_linux && evt.keyCode == 65421)) {
-            var el = $(button#connect);
-            view.focus = el;
-            el.sendEvent("click");
-            // simulate button click effect, windows does not have this issue
-            el.attributes.toggleClass("active", true);
-            self.timer(0.3s, function() {
-                el.attributes.toggleClass("active", false);
-            });
-        }
-    }
-}
+document.body.content(<App />);
 
-$(body).content(<App />);
-
-function self.closing() {
-    // return false; // can prevent window close
-    var (x, y, w, h) = view.box(#rectw, #border, #screen);
-    handler.save_size(x, y, w, h);
-}
-
-function self.ready() {
-    var r = handler.get_size();
+document.on("ready",()=>{
+    let r = handler.xcall("get_size");
     if (isReasonableSize(r) && r[2] > 0) {
         view.move(r[0], r[1], r[2], r[3]);
     } else {
         centerize(800, 600);
     }
-    if (!handler.get_remote_id()) {
-        view.focus = $(#remote_id);
+    if (!handler.xcall("get_remote_id")) {
+        view.focus = $("#remote_id"); // TEST
     }
-}
+})
 
-function checkConnectStatus() {
-    self.timer(1s, function() {
-        var tmp = !!handler.get_option("stop-service");
+document.on("unloadequest",(evt)=>{
+    // evt.preventDefault() // can prevent window close
+    let [x, y, w, h] = view.box("rectw", "border", "desktop");
+    handler.xcall("save_size",x, y, w, h);
+})
+
+// check connect status
+setInterval(() => {
+    let tmp = !!handler.xcall("get_option","stop-service");
         if (tmp != service_stopped) {
             service_stopped = tmp;
-            app.connect_status.update();
-            myIdMenu.update();
+            app.connect_status.update(); // TDOD
+            myIdMenu.update(); // TDOD
         }
-        tmp = handler.get_connect_status();
+        tmp = handler.xcall("get_connect_status");
         if (tmp[0] != connect_status) {
             connect_status = tmp[0];
-            app.connect_status.update();
+            app.connect_status.update(); // TDOD
         }
         if (tmp[1] != key_confirmed) {
             key_confirmed = tmp[1];
-            app.update();
+            app.update(); // TDOD
         }
         if (tmp[2] && tmp[2] != my_id) {
-            stdout.println("id updated");
-            app.update();
+            console.log("id updated");
+            app.update(); // TDOD
         }
-        tmp = handler.get_error();
+        tmp = handler.xcall("get_error");
         if (system_error != tmp) {
             system_error = tmp;
-            app.update();
+            app.update(); // TDOD
         }
-        tmp = handler.get_software_update_url();
+        tmp = handler.xcall("get_software_update_url");
         if (tmp != software_update_url) {
             software_update_url = tmp;
-            app.update();
+            app.update(); // TDOD
         }
-        if (handler.recent_sessions_updated()) {
-            stdout.println("recent sessions updated");
-            app.update();
+        if (handler.xcall("recent_sessions_updated")) {
+            console.log("recent sessions updated");
+            app.recent_sessions.update(); // TDOD
         }
-        checkConnectStatus();
-    });
-}
-
-checkConnectStatus();
+}, 1000);
