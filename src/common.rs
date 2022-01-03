@@ -1,27 +1,20 @@
-use std::net::SocketAddr;
-
 pub use arboard::Clipboard as ClipboardContext;
 use hbb_common::{
     allow_err,
     anyhow::bail,
-    bytes::{Bytes, BytesMut},
     compress::{compress as compress_func, decompress},
-    config::{Config, COMPRESS_LEVEL, RENDEZVOUS_TIMEOUT},
-    futures_core::Stream,
-    futures_sink::Sink,
+    config::{Config, NetworkType, COMPRESS_LEVEL, RENDEZVOUS_TIMEOUT},
     log,
     message_proto::*,
     protobuf::Message as _,
     protobuf::ProtobufEnum,
     rendezvous_proto::*,
-    sleep, socket_client, tokio,
-    udp::FramedSocket,
-    ResultType,
+    sleep, socket_client, tokio, ResultType,
 };
 #[cfg(any(target_os = "android", target_os = "ios", feature = "cli"))]
 use hbb_common::{config::RENDEZVOUS_PORT, futures::future::join_all};
 use std::{
-    future::Future,
+    net::SocketAddr,
     sync::{Arc, Mutex},
 };
 
@@ -274,7 +267,9 @@ async fn test_nat_type_() -> ResultType<bool> {
             RENDEZVOUS_TIMEOUT,
         )
         .await?;
-        addr = socket.local_addr();
+        if Config::get_network_type() == NetworkType::Direct {
+            addr = socket.local_addr();
+        }
         socket.send(&msg_out).await?;
         if let Some(Ok(bytes)) = socket.next_timeout(3000).await {
             if let Ok(msg_in) = RendezvousMessage::parse_from_bytes(&bytes) {
@@ -448,35 +443,12 @@ async fn _check_software_update() -> hbb_common::ResultType<()> {
     sleep(3.).await;
 
     let rendezvous_server = get_rendezvous_server(1_000).await;
-    let socks5_conf = socket_client::get_socks5_conf();
-    if socks5_conf.is_some() {
-        let conn_fn = |bind_addr: SocketAddr| async move {
-            socket_client::connect_udp_socks5(
-                rendezvous_server,
-                bind_addr,
-                &socks5_conf,
-                RENDEZVOUS_TIMEOUT,
-            )
-            .await
-        };
-        _inner_check_software_update(conn_fn, rendezvous_server).await
-    } else {
-        _inner_check_software_update(socket_client::connect_udp_socket, rendezvous_server).await
-    }
-}
-
-pub async fn _inner_check_software_update<'a, F, Fut, Frm>(
-    conn_fn: F,
-    rendezvous_server: SocketAddr,
-) -> ResultType<()>
-where
-    F: FnOnce(SocketAddr) -> Fut,
-    Fut: Future<Output = ResultType<(FramedSocket<Frm>, Option<SocketAddr>)>>,
-    Frm: Unpin + Stream<Item = ResultType<(BytesMut, SocketAddr)>> + Sink<(Bytes, SocketAddr)>,
-    <Frm as Sink<(Bytes, SocketAddr)>>::Error: Sync + Send + std::error::Error + 'static,
-{
-    sleep(3.).await;
-    let (mut socket, _) = conn_fn(Config::get_any_listen_addr()).await?;
+    let (mut socket, _) = socket_client::connect_udp(
+        rendezvous_server,
+        Config::get_any_listen_addr(),
+        RENDEZVOUS_TIMEOUT,
+    )
+    .await?;
     let mut msg_out = RendezvousMessage::new();
     msg_out.set_software_update(SoftwareUpdate {
         url: crate::VERSION.to_owned(),

@@ -1553,7 +1553,6 @@ name = "hbb_common"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "async-trait",
  "bytes",
  "confy",
  "directories-next",
@@ -1561,13 +1560,10 @@ dependencies = [
  "env_logger 0.9.0",
  "filetime",
  "futures",
- "futures-core",
- "futures-sink",
  "futures-util",
  "lazy_static",
  "log",
  "mac_address",
- "pin-project",
  "protobuf",
  "protobuf-codegen-pure",
  "quinn",

@@ -24,8 +24,6 @@ pub mod bytes_codec;
 #[cfg(feature = "quic")]
 pub mod quic;
 pub use anyhow::{self, bail};
-pub use futures_core;
-pub use futures_sink;
 pub use futures_util;
 pub mod config;
 pub mod fs;

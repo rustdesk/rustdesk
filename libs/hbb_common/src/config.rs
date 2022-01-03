@@ -55,6 +55,12 @@ pub const RENDEZVOUS_SERVERS: &'static [&'static str] = &[
 pub const RENDEZVOUS_PORT: i32 = 21116;
 pub const RELAY_PORT: i32 = 21117;
 
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum NetworkType {
+    Direct,
+    ProxySocks,
+}
+
 #[derive(Debug, Default, Serialize, Deserialize, Clone)]
 pub struct Config {
     #[serde(default)]
@@ -641,6 +647,13 @@ impl Config {
 
     pub fn get_socks() -> Option<Socks5Server> {
         CONFIG2.read().unwrap().socks.clone()
+    }
+
+    pub fn get_network_type() -> NetworkType {
+        match &CONFIG2.read().unwrap().socks {
+            None => NetworkType::Direct,
+            Some(_) => NetworkType::ProxySocks,
+        }
     }
 }
 
