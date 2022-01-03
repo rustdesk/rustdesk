@@ -108,7 +108,7 @@ class SessionList: Reactor.Component {
                     <li #rdp>RDP<EditRdpPort /></li>
                     <div .separator />
                     <li #rename>{translate('Rename')}</li>
-                    <li #remove>{translate('Remove')}</li>
+                    {this.type != "fav" && <li #remove>{translate('Remove')}</li>}
                     {is_win && <li #shortcut>{translate('Create Desktop Shortcut')}</li>}
                     <li #forget-password>{translate('Unremember Password')}</li>
                     {(!this.type || this.type == "fav") && <li #add-fav>{translate('Add to Favorites')}</li>}
@@ -241,7 +241,7 @@ class Favorites: Reactor.Component {
         var sessions = handler.get_fav().map(function(f) {
             return handler.get_peer(f);
         });
-        return <SessionList @{list} sessions={sessions} type="fav" />;
+        return <SessionList sessions={sessions} type="fav" />;
     }
 }
 
@@ -258,8 +258,8 @@ class MultipleSessions: Reactor.Component {
                     {!this.hidden && <SessionStyle type={type} />}
                 </div>
                 {!this.hidden && 
-                ((type == "fav" && <Favorites @{this.list} />) ||
-                <SessionList @{this.list} sessions={handler.get_recent_sessions()} />)}
+                ((type == "fav" && <Favorites />) ||
+                <SessionList sessions={handler.get_recent_sessions()} />)}
             </div>;
     }
 
