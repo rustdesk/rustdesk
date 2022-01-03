@@ -13,11 +13,11 @@ use hbb_common::{
     message_proto::*,
     protobuf::Message as _,
     rendezvous_proto::*,
+    socket_client,
     sodiumoxide::crypto::{box_, secretbox, sign},
-    tcp::FramedStream,
     timeout,
     tokio::time::Duration,
-    AddrMangle, ResultType, Stream,
+    AddrMangle, ResultType, Stream, TargetAddr,
 };
 use magnum_opus::{Channels::*, Decoder as AudioDecoder};
 use scrap::{Decoder, Image, VideoCodecId};
@@ -106,11 +106,12 @@ impl Client {
         // to-do: remember the port for each peer, so that we can retry easier
         let any_addr = Config::get_any_listen_addr();
         let rendezvous_server = crate::get_rendezvous_server(1_000).await;
-        log::info!("rendezvous server: {}", rendezvous_server);
-        let mut socket = FramedStream::new(rendezvous_server, any_addr, RENDEZVOUS_TIMEOUT)
-            .await
-            .with_context(|| "Failed to connect to rendezvous server")?;
-        let my_addr = socket.get_ref().local_addr()?;
+        log::info!("rendezvous server: {}", rendezvous_server.to_string());
+
+        let mut socket =
+            socket_client::connect_tcp(rendezvous_server.to_owned(), any_addr, RENDEZVOUS_TIMEOUT)
+                .await?;
+        let my_addr = socket.local_addr();
         let mut pk = Vec::new();
         let mut relay_server = "".to_owned();
 
@@ -221,7 +222,7 @@ impl Client {
         peer_id: &str,
         pk: Vec<u8>,
         relay_server: &str,
-        rendezvous_server: SocketAddr,
+        rendezvous_server: TargetAddr<'static>,
         punch_time_used: u64,
         peer_nat_type: NatType,
         my_nat_type: i32,
@@ -262,7 +263,8 @@ impl Client {
         }
         log::info!("peer address: {}, timeout: {}", peer, connect_timeout);
         let start = std::time::Instant::now();
-        let mut conn = FramedStream::new(peer, local_addr, connect_timeout).await;
+        // NOTICE: Socks5 is be used event in intranet. Which may be not a good way.
+        let mut conn = socket_client::connect_tcp(peer, local_addr, connect_timeout).await;
         let direct = !conn.is_err();
         if conn.is_err() {
             if !relay_server.is_empty() {
@@ -384,7 +386,7 @@ impl Client {
     async fn request_relay(
         peer: &str,
         relay_server: String,
-        rendezvous_server: SocketAddr,
+        rendezvous_server: TargetAddr<'static>,
         secure: bool,
         conn_type: ConnType,
     ) -> ResultType<Stream> {
@@ -393,9 +395,14 @@ impl Client {
         let mut uuid = "".to_owned();
         for i in 1..=3 {
             // use different socket due to current hbbs implement requiring different nat address for each attempt
-            let mut socket = FramedStream::new(rendezvous_server, any_addr, RENDEZVOUS_TIMEOUT)
-                .await
-                .with_context(|| "Failed to connect to rendezvous server")?;
+            let mut socket = socket_client::connect_tcp(
+                rendezvous_server.to_owned(),
+                any_addr,
+                RENDEZVOUS_TIMEOUT,
+            )
+            .await
+            .with_context(|| "Failed to connect to rendezvous server")?;
+
             let mut msg_out = RendezvousMessage::new();
             uuid = Uuid::new_v4().to_string();
             log::info!(
@@ -438,7 +445,7 @@ impl Client {
         relay_server: String,
         conn_type: ConnType,
     ) -> ResultType<Stream> {
-        let mut conn = FramedStream::new(
+        let mut conn = socket_client::connect_tcp(
             crate::check_port(relay_server, RELAY_PORT),
             Config::get_any_listen_addr(),
             CONNECT_TIMEOUT,

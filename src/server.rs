@@ -1,5 +1,5 @@
 use crate::ipc::Data;
-pub use connection::*;
+use connection::{ConnInner, Connection};
 use hbb_common::{
     allow_err,
     anyhow::{anyhow, Context},
@@ -11,8 +11,8 @@ use hbb_common::{
     rendezvous_proto::*,
     sleep,
     sodiumoxide::crypto::{box_, secretbox, sign},
-    tcp::FramedStream,
     timeout, tokio, ResultType, Stream,
+    socket_client,
 };
 use service::{GenericService, Service, ServiceTmpl, Subscriber};
 use std::{
@@ -61,7 +61,7 @@ pub fn new() -> ServerPtr {
 }
 
 async fn accept_connection_(server: ServerPtr, socket: Stream, secure: bool) -> ResultType<()> {
-    let local_addr = socket.get_ref().local_addr()?;
+    let local_addr = socket.local_addr();
     drop(socket);
     // even we drop socket, below still may fail if not use reuse_addr,
     // there is TIME_WAIT before socket really released, so sometimes we
@@ -69,7 +69,8 @@ async fn accept_connection_(server: ServerPtr, socket: Stream, secure: bool) -> 
     let listener = new_listener(local_addr, true).await?;
     log::info!("Server listening on: {}", &listener.local_addr()?);
     if let Ok((stream, addr)) = timeout(CONNECT_TIMEOUT, listener.accept()).await? {
-        create_tcp_connection(server, Stream::from(stream), addr, secure).await?;
+        let stream_addr = stream.local_addr()?;
+        create_tcp_connection(server, Stream::from(stream, stream_addr), addr, secure).await?;
     }
     Ok(())
 }
@@ -183,8 +184,8 @@ async fn create_relay_connection_(
     peer_addr: SocketAddr,
     secure: bool,
 ) -> ResultType<()> {
-    let mut stream = FramedStream::new(
-        &crate::check_port(relay_server, RELAY_PORT),
+    let mut stream = socket_client::connect_tcp(
+        crate::check_port(relay_server, RELAY_PORT),
         Config::get_any_listen_addr(),
         CONNECT_TIMEOUT,
     )

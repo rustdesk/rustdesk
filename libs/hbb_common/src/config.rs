@@ -1,4 +1,4 @@
-use crate::log;
+use crate::{log, IntoTargetAddr, TargetAddr};
 use directories_next::ProjectDirs;
 use rand::Rng;
 use serde_derive::{Deserialize, Serialize};
@@ -55,6 +55,12 @@ pub const RENDEZVOUS_SERVERS: &'static [&'static str] = &[
 pub const RENDEZVOUS_PORT: i32 = 21116;
 pub const RELAY_PORT: i32 = 21117;
 
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum NetworkType {
+    Direct,
+    ProxySocks,
+}
+
 #[derive(Debug, Default, Serialize, Deserialize, Clone)]
 pub struct Config {
     #[serde(default)]
@@ -71,6 +77,16 @@ pub struct Config {
     keys_confirmed: HashMap<String, bool>,
 }
 
+#[derive(Debug, Default, Serialize, Deserialize, Clone)]
+pub struct Socks5Server {
+    #[serde(default)]
+    pub proxy: String,
+    #[serde(default)]
+    pub username: String,
+    #[serde(default)]
+    pub password: String,
+}
+
 // more variable configs
 #[derive(Debug, Default, Serialize, Deserialize, Clone)]
 pub struct Config2 {
@@ -84,6 +100,9 @@ pub struct Config2 {
     nat_type: i32,
     #[serde(default)]
     serial: i32,
+
+    #[serde(default)]
+    socks: Option<Socks5Server>,
 
     // the other scalar value must before this
     #[serde(default)]
@@ -330,7 +349,7 @@ impl Config {
         format!("{}:0", BIND_INTERFACE).parse().unwrap()
     }
 
-    pub fn get_rendezvous_server() -> SocketAddr {
+    pub fn get_rendezvous_server() -> TargetAddr<'static> {
         let mut rendezvous_server = Self::get_option("custom-rendezvous-server");
         if rendezvous_server.is_empty() {
             rendezvous_server = CONFIG2.write().unwrap().rendezvous_server.clone();
@@ -344,10 +363,18 @@ impl Config {
         if !rendezvous_server.contains(":") {
             rendezvous_server = format!("{}:{}", rendezvous_server, RENDEZVOUS_PORT);
         }
-        if let Ok(addr) = crate::to_socket_addr(&rendezvous_server) {
-            addr
+
+        if Self::get_network_type() == NetworkType::Direct {
+            if let Ok(addr) = crate::to_socket_addr(&rendezvous_server) {
+                TargetAddr::Ip(addr)
+            } else {
+                TargetAddr::Ip(Self::get_any_listen_addr())
+            }
         } else {
-            Self::get_any_listen_addr()
+            match rendezvous_server.into_target_addr() {
+                Ok(domain) => domain,
+                Err(_) => TargetAddr::Ip(Self::get_any_listen_addr()),
+            }
         }
     }
 
@@ -618,6 +645,23 @@ impl Config {
 
     pub fn get_remote_id() -> String {
         CONFIG2.read().unwrap().remote_id.clone()
+    }
+
+    pub fn set_socks(socks: Option<Socks5Server>) {
+        let mut config = CONFIG2.write().unwrap();
+        config.socks = socks;
+        config.store();
+    }
+
+    pub fn get_socks() -> Option<Socks5Server> {
+        CONFIG2.read().unwrap().socks.clone()
+    }
+
+    pub fn get_network_type() -> NetworkType {
+        match &CONFIG2.read().unwrap().socks {
+            None => NetworkType::Direct,
+            Some(_) => NetworkType::ProxySocks,
+        }
     }
 }
 

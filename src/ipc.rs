@@ -7,13 +7,13 @@ use hbb_common::{
     log, timeout, tokio,
     tokio::io::{AsyncRead, AsyncWrite},
     tokio_util::codec::Framed,
-    ResultType,
+    IntoTargetAddr, ResultType, TargetAddr,
 };
 use parity_tokio_ipc::{
     Connection as Conn, ConnectionClient as ConnClient, Endpoint, Incoming, SecurityAttributes,
 };
 use serde_derive::{Deserialize, Serialize};
-use std::{collections::HashMap, net::SocketAddr};
+use std::collections::HashMap;
 #[cfg(not(windows))]
 use std::{fs::File, io::prelude::*};
 
@@ -397,9 +397,9 @@ pub fn get_password() -> String {
     }
 }
 
-pub async fn get_rendezvous_server(ms_timeout: u64) -> SocketAddr {
+pub async fn get_rendezvous_server(ms_timeout: u64) -> TargetAddr<'static> {
     if let Ok(Some(v)) = get_config_async("rendezvous_server", ms_timeout).await {
-        if let Ok(v) = v.parse() {
+        if let Ok(v) = v.into_target_addr() {
             return v;
         }
     }

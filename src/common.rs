@@ -1,16 +1,15 @@
 pub use arboard::Clipboard as ClipboardContext;
 use hbb_common::{
-    allow_err, bail,
+    allow_err,
+    anyhow::bail,
     compress::{compress as compress_func, decompress},
-    config::{Config, COMPRESS_LEVEL, RENDEZVOUS_TIMEOUT},
+    config::{Config, NetworkType, COMPRESS_LEVEL, RENDEZVOUS_TIMEOUT},
     log,
     message_proto::*,
     protobuf::Message as _,
     protobuf::ProtobufEnum,
     rendezvous_proto::*,
-    sleep,
-    tcp::FramedStream,
-    tokio, ResultType,
+    sleep, socket_client, tokio, IntoTargetAddr, ResultType, TargetAddr,
 };
 #[cfg(any(target_os = "android", target_os = "ios", feature = "cli"))]
 use hbb_common::{config::RENDEZVOUS_PORT, futures::future::join_all};
@@ -241,8 +240,8 @@ async fn test_nat_type_() -> ResultType<bool> {
     log::info!("Testing nat ...");
     let start = std::time::Instant::now();
     let rendezvous_server = get_rendezvous_server(100).await;
-    let server1 = rendezvous_server;
-    let mut server2 = server1;
+    let server1 = rendezvous_server.to_owned();
+    let mut server2 = server1.to_owned();
     if server1.port() == 0 {
         // offline
         // avoid overflow crash
@@ -259,13 +258,19 @@ async fn test_nat_type_() -> ResultType<bool> {
     let mut port2 = 0;
     let mut addr = Config::get_any_listen_addr();
     for i in 0..2 {
-        let mut socket = FramedStream::new(
-            if i == 0 { &server1 } else { &server2 },
+        let mut socket = socket_client::connect_tcp(
+            if i == 0 {
+                server1.to_owned()
+            } else {
+                server2.to_owned()
+            },
             addr,
             RENDEZVOUS_TIMEOUT,
         )
         .await?;
-        addr = socket.get_ref().local_addr()?;
+        if Config::get_network_type() == NetworkType::Direct {
+            addr = socket.local_addr();
+        }
         socket.send(&msg_out).await?;
         if let Some(Ok(bytes)) = socket.next_timeout(3000).await {
             if let Ok(msg_in) = RendezvousMessage::parse_from_bytes(&bytes) {
@@ -302,12 +307,12 @@ async fn test_nat_type_() -> ResultType<bool> {
 }
 
 #[cfg(any(target_os = "android", target_os = "ios"))]
-pub async fn get_rendezvous_server(_ms_timeout: u64) -> std::net::SocketAddr {
+pub async fn get_rendezvous_server(_ms_timeout: u64) -> TargetAddr<'static> {
     Config::get_rendezvous_server()
 }
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
-pub async fn get_rendezvous_server(ms_timeout: u64) -> std::net::SocketAddr {
+pub async fn get_rendezvous_server(ms_timeout: u64) -> TargetAddr<'static> {
     crate::ipc::get_rendezvous_server(ms_timeout).await
 }
 
@@ -330,7 +335,7 @@ async fn test_rendezvous_server_() {
     for host in servers {
         futs.push(tokio::spawn(async move {
             let tm = std::time::Instant::now();
-            if FramedStream::new(
+            if socket_client::connect_tcp(
                 &crate::check_port(&host, RENDEZVOUS_PORT),
                 Config::get_any_listen_addr(),
                 RENDEZVOUS_TIMEOUT,
@@ -416,9 +421,16 @@ pub fn test_if_valid_server(host: String) -> String {
     if !host.contains(":") {
         host = format!("{}:{}", host, 0);
     }
-    match hbb_common::to_socket_addr(&host) {
-        Err(err) => err.to_string(),
-        Ok(_) => "".to_owned(),
+
+    match Config::get_network_type() {
+        NetworkType::Direct => match hbb_common::to_socket_addr(&host) {
+            Err(err) => err.to_string(),
+            Ok(_) => "".to_owned(),
+        },
+        NetworkType::ProxySocks => match &host.into_target_addr() {
+            Err(err) => err.to_string(),
+            Ok(_) => "".to_owned(),
+        },
     }
 }
 
@@ -437,14 +449,35 @@ pub fn check_software_update() {
 #[tokio::main(flavor = "current_thread")]
 async fn _check_software_update() -> hbb_common::ResultType<()> {
     sleep(3.).await;
+
     let rendezvous_server = get_rendezvous_server(1_000).await;
-    let mut socket = hbb_common::udp::FramedSocket::new(Config::get_any_listen_addr()).await?;
+    let (mut socket, target_addr) = socket_client::connect_udp(
+        rendezvous_server.to_owned(),
+        Config::get_any_listen_addr(),
+        RENDEZVOUS_TIMEOUT,
+    )
+    .await?;
+
+    let target_addr = match target_addr {
+        // if use proxy, a new target addr will be returned
+        Some(addr) => addr,
+        None => {
+            // no proxy is used, rendezvous_server must be a socket addr
+            match &rendezvous_server {
+                TargetAddr::Ip(addr) => *addr,
+                _ => unreachable!(),
+            }
+        }
+    };
+
     let mut msg_out = RendezvousMessage::new();
     msg_out.set_software_update(SoftwareUpdate {
         url: crate::VERSION.to_owned(),
         ..Default::default()
     });
-    socket.send(&msg_out, rendezvous_server).await?;
+
+    socket.send(&msg_out, target_addr).await?;
+
     use hbb_common::protobuf::Message;
     if let Some(Ok((bytes, _))) = socket.next_timeout(30_000).await {
         if let Ok(msg_in) = RendezvousMessage::parse_from_bytes(&bytes) {
