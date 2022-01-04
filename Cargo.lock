@@ -3667,7 +3667,7 @@ dependencies = [
 [[package]]
 name = "tokio-socks"
 version = "0.5.1"
-source = "git+https://github.com/fufesou/tokio-socks#121a780c7e6a31c3aac70e7234f5c62eecaf0629"
+source = "git+https://github.com/fufesou/tokio-socks#3dcd7083939d170db83f250709afe95a18ba0f00"
 dependencies = [
  "bytes",
  "either",

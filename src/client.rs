@@ -17,7 +17,7 @@ use hbb_common::{
     sodiumoxide::crypto::{box_, secretbox, sign},
     timeout,
     tokio::time::Duration,
-    AddrMangle, ResultType, Stream,
+    AddrMangle, ResultType, Stream, TargetAddr,
 };
 use magnum_opus::{Channels::*, Decoder as AudioDecoder};
 use scrap::{Decoder, Image, VideoCodecId};
@@ -106,10 +106,11 @@ impl Client {
         // to-do: remember the port for each peer, so that we can retry easier
         let any_addr = Config::get_any_listen_addr();
         let rendezvous_server = crate::get_rendezvous_server(1_000).await;
-        log::info!("rendezvous server: {}", rendezvous_server);
+        log::info!("rendezvous server: {}", rendezvous_server.to_string());
 
         let mut socket =
-            socket_client::connect_tcp(rendezvous_server, any_addr, RENDEZVOUS_TIMEOUT).await?;
+            socket_client::connect_tcp(rendezvous_server.to_owned(), any_addr, RENDEZVOUS_TIMEOUT)
+                .await?;
         let my_addr = socket.local_addr();
         let mut pk = Vec::new();
         let mut relay_server = "".to_owned();
@@ -221,7 +222,7 @@ impl Client {
         peer_id: &str,
         pk: Vec<u8>,
         relay_server: &str,
-        rendezvous_server: SocketAddr,
+        rendezvous_server: TargetAddr<'_>,
         punch_time_used: u64,
         peer_nat_type: NatType,
         my_nat_type: i32,
@@ -385,7 +386,7 @@ impl Client {
     async fn request_relay(
         peer: &str,
         relay_server: String,
-        rendezvous_server: SocketAddr,
+        rendezvous_server: TargetAddr<'_>,
         secure: bool,
         conn_type: ConnType,
     ) -> ResultType<Stream> {
@@ -394,10 +395,13 @@ impl Client {
         let mut uuid = "".to_owned();
         for i in 1..=3 {
             // use different socket due to current hbbs implement requiring different nat address for each attempt
-            let mut socket =
-                socket_client::connect_tcp(rendezvous_server, any_addr, RENDEZVOUS_TIMEOUT)
-                    .await
-                    .with_context(|| "Failed to connect to rendezvous server")?;
+            let mut socket = socket_client::connect_tcp(
+                rendezvous_server.to_owned(),
+                any_addr,
+                RENDEZVOUS_TIMEOUT,
+            )
+            .await
+            .with_context(|| "Failed to connect to rendezvous server")?;
 
             let mut msg_out = RendezvousMessage::new();
             uuid = Uuid::new_v4().to_string();

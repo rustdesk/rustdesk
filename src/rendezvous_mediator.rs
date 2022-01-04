@@ -2,7 +2,7 @@ use crate::server::{check_zombie, new as new_server, ServerPtr};
 use hbb_common::{
     allow_err,
     anyhow::bail,
-    config::{Config, RENDEZVOUS_PORT, RENDEZVOUS_TIMEOUT},
+    config::{Config, NetworkType, RENDEZVOUS_PORT, RENDEZVOUS_TIMEOUT},
     futures::future::join_all,
     log,
     protobuf::Message as _,
@@ -60,35 +60,6 @@ impl RendezvousMediator {
                     let servers = servers.clone();
                     futs.push(tokio::spawn(async move {
                         allow_err!(Self::start(server, host, servers).await);
-                        // let socks5_conf = socket_client::get_socks5_conf();
-                        // if socks5_conf.is_some() {
-                        //     let target = format!("{}:{}", host, RENDEZVOUS_PORT);
-                        //     let conn_fn = |bind_addr: SocketAddr| {
-                        //         let target = target.clone();
-                        //         let conf_ref = &socks5_conf;
-                        //         async move {
-                        //             socket_client::connect_udp_socks5(
-                        //                 target,
-                        //                 bind_addr,
-                        //                 conf_ref,
-                        //                 RENDEZVOUS_TIMEOUT,
-                        //             )
-                        //             .await
-                        //         }
-                        //     };
-                        //     allow_err!(Self::start(server, host, servers, conn_fn, true).await);
-                        // } else {
-                        //     allow_err!(
-                        //         Self::start(
-                        //             server,
-                        //             host,
-                        //             servers,
-                        //             socket_client::connect_udp_socket,
-                        //             false,
-                        //         )
-                        //         .await
-                        //     );
-                        // }
                     }));
                 }
                 join_all(futs).await;
@@ -121,18 +92,27 @@ impl RendezvousMediator {
             rendezvous_servers,
             last_id_pk_registry: "".to_owned(),
         };
-        let mut host_addr = rz.addr;
-        allow_err!(rz.dns_check(&mut host_addr));
 
         let bind_addr = Config::get_any_listen_addr();
         let target = format!("{}:{}", host, RENDEZVOUS_PORT);
-        let (mut socket, target_addr) =
-            socket_client::connect_udp(target, bind_addr, RENDEZVOUS_TIMEOUT).await?;
-        if let Some(addr) = target_addr {
-            rz.addr = addr;
-        } else {
-            rz.addr = host_addr;
-        }
+        let mut socket = match Config::get_network_type() {
+            NetworkType::Direct => {
+                allow_err!(rz.dns_check());
+                let (socket, _) =
+                    socket_client::connect_udp(target, bind_addr, RENDEZVOUS_TIMEOUT).await?;
+                socket
+            }
+            NetworkType::ProxySocks => {
+                let (socket, target_addr) =
+                    socket_client::connect_udp(target, bind_addr, RENDEZVOUS_TIMEOUT).await?;
+                match target_addr {
+                    Some(addr) => rz.addr = addr,
+                    None => unreachable!(),
+                };
+                socket
+            }
+        };
+
         const TIMER_OUT: Duration = Duration::from_secs(1);
         let mut timer = interval(TIMER_OUT);
         let mut last_timer = SystemTime::UNIX_EPOCH;
@@ -247,17 +227,17 @@ impl RendezvousMediator {
                         break;
                     }
                     if rz.addr.port() == 0 {
-                        // tcp is established to help connecting socks5
-                        allow_err!(rz.dns_check(&mut host_addr));
-                        if host_addr.port() == 0 {
-                            continue;
-                        } else {
-                            // have to do this for osx, to avoid "Can't assign requested address"
-                            // when socket created before OS network ready
-                            if let Some(s) = socket_client::reconnect_udp(bind_addr).await? {
-                                socket = s;
-                                rz.addr = host_addr;
-                            };
+                        if Config::get_network_type() == NetworkType::Direct {
+                            allow_err!(rz.dns_check());
+                            if rz.addr.port() == 0 {
+                                continue;
+                            } else {
+                                // have to do this for osx, to avoid "Can't assign requested address"
+                                // when socket created before OS network ready
+                                if let Some(s) = socket_client::reconnect_udp(bind_addr).await? {
+                                    socket = s;
+                                };
+                            }
                         }
                     }
                     let now = SystemTime::now();
@@ -277,13 +257,14 @@ impl RendezvousMediator {
                                 Config::update_latency(&host, -1);
                                 old_latency = 0;
                                 if now.duration_since(last_dns_check).map(|d| d.as_millis() as i64).unwrap_or(0) > DNS_INTERVAL {
-                                    if let Ok(_) = rz.dns_check(&mut host_addr) {
-                                        // in some case of network reconnect (dial IP network),
-                                        // old UDP socket not work any more after network recover
-                                        if let Some(s) = socket_client::reconnect_udp(bind_addr).await? {
-                                            socket = s;
-                                            rz.addr = host_addr;
-                                        };
+                                    if Config::get_network_type() == NetworkType::Direct {
+                                            if let Ok(_) = rz.dns_check() {
+                                            // in some case of network reconnect (dial IP network),
+                                            // old UDP socket not work any more after network recover
+                                            if let Some(s) = socket_client::reconnect_udp(bind_addr).await? {
+                                                socket = s;
+                                            };
+                                        }
                                     }
                                     last_dns_check = now;
                                 }
@@ -299,8 +280,8 @@ impl RendezvousMediator {
         Ok(())
     }
 
-    fn dns_check(&self, addr: &mut SocketAddr) -> ResultType<()> {
-        *addr = hbb_common::to_socket_addr(&crate::check_port(&self.host, RENDEZVOUS_PORT))?;
+    fn dns_check(&mut self) -> ResultType<()> {
+        self.addr = hbb_common::to_socket_addr(&crate::check_port(&self.host, RENDEZVOUS_PORT))?;
         log::debug!("Lookup dns of {}", self.host);
         Ok(())
     }

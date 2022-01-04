@@ -1,4 +1,4 @@
-use crate::log;
+use crate::{log, IntoTargetAddr, TargetAddr};
 use directories_next::ProjectDirs;
 use rand::Rng;
 use serde_derive::{Deserialize, Serialize};
@@ -349,7 +349,7 @@ impl Config {
         format!("{}:0", BIND_INTERFACE).parse().unwrap()
     }
 
-    pub fn get_rendezvous_server() -> SocketAddr {
+    pub fn get_rendezvous_server() -> TargetAddr<'static> {
         let mut rendezvous_server = Self::get_option("custom-rendezvous-server");
         if rendezvous_server.is_empty() {
             rendezvous_server = CONFIG2.write().unwrap().rendezvous_server.clone();
@@ -363,10 +363,18 @@ impl Config {
         if !rendezvous_server.contains(":") {
             rendezvous_server = format!("{}:{}", rendezvous_server, RENDEZVOUS_PORT);
         }
-        if let Ok(addr) = crate::to_socket_addr(&rendezvous_server) {
-            addr
+
+        if Self::get_network_type() == NetworkType::Direct {
+            if let Ok(addr) = crate::to_socket_addr(&rendezvous_server) {
+                TargetAddr::Ip(addr)
+            } else {
+                TargetAddr::Ip(Self::get_any_listen_addr())
+            }
         } else {
-            Self::get_any_listen_addr()
+            match rendezvous_server.into_target_addr() {
+                Ok(domain) => domain,
+                Err(_) => TargetAddr::Ip(Self::get_any_listen_addr()),
+            }
         }
     }
 
