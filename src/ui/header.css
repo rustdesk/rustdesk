@@ -46,8 +46,18 @@ header span:hover {
   background: #f7f7f7;
 }
 
+@media platform != "OSX" {
+header span:hover {
+  background: #d9d9d9;
+}
+}
+
 header #screen:hover {
   background: #d9d9d9;
+}
+
+header #secure:hover {
+  background: unset;
 }
 
 header span:active, header #screen:active {

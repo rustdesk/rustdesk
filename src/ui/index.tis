@@ -303,7 +303,7 @@ class InstallMe: Reactor.Component {
         return <div .install-me>
             <span />
             <div>{translate('install_tip')}</div>
-            <button #install-me .button>{translate('Install')}</button>
+            <div style="text-align: center; margin-top: 1em;"><button #install-me .button>{translate('Install')}</button></div>
         </div>;
     }
 
