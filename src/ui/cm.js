@@ -1,212 +1,205 @@
-view.windowFrame = is_osx ? #extended : #solid;
+import { handler,view,is_osx,string2RGB,adjustBorder,svg_chat,translate,ChatBox,getNowStr,setWindowButontsAndIcon,is_linux } from "./common.js";
+import {$,$$} from "@sciter";
+// TODO in sciterjs window-frame
+// view.windowFrame = is_osx ? #extended : #solid;
 
 var body;
 var connections = [];
 var show_chat = false;
 
-class Body: Reactor.Component
-{
-    this var cur = 0;
+class Body extends Element {
+    cur = 0;
 
-    function this() {
+    this() {
         body = this;
     }
 
-    function render() {
+    render() {
         if (connections.length == 0) return <div />;
-        var c = connections[this.cur];
+        let c = connections[this.cur];
         this.connection = c;
         this.cid = c.id;
-        var auth = c.authorized;
-        var me = this;
-        var callback = function(msg) {
-            me.sendMsg(msg);
+        let auth = c.authorized;
+        let callback = (msg)=> {
+            this.sendMsg(msg);
         };
-        self.timer(1ms, adaptSize);
-        var right_style = show_chat ? "" : "display: none";
-        return <div .content>
-            <div .left-panel>
-                <div .icon-and-id>
-                    <div .icon style={"background: " + string2RGB(c.name, 1)}>
+        setTimeout(adaptSize, 1);
+        let right_style = show_chat ? "" : "display: none";
+        return (<div class="content">
+            <div class="left-panel">
+                <div class="icon-and-id">
+                    <div class="icon" style={"background: " + string2RGB(c.name, 1)}>
                     {c.name[0].toUpperCase()}
                     </div>
                     <div>
-                        <div .id style="font-weight: bold; font-size: 1.2em;">{c.name}</div>
-                        <div .id>({c.peer_id})</div>
-                        <div style="margin-top: 1.2em">{translate('Connected')} {" "} <span #time>{getElaspsed(c.time)}</span></div>
+                        <div class="id" style="font-weight: bold; font-size: 1.2em;">{c.name}</div>
+                        <div class="id">({c.peer_id})</div>
+                        <div style="margin-top: 1.2em">{translate('Connected')} {" "} <span id="time">{getElaspsed(c.time)}</span></div>
                     </div>
                 </div>
                 <div />
                 {c.is_file_transfer || c.port_forward ? "" : <div>{translate('Permissions')}</div>}
-                {c.is_file_transfer || c.port_forward ? "" : <div .permissions>
-                    <div class={!c.keyboard ? "disabled" : ""} title={translate('Allow using keyboard and mouse')}><icon .keyboard /></div>
-                    <div class={!c.clipboard ? "disabled" : ""} title={translate('Allow using clipboard')}><icon .clipboard /></div>
-                    <div class={!c.audio ? "disabled" : ""} title={translate('Allow hearing sound')}><icon .audio /></div>
+                {c.is_file_transfer || c.port_forward ? "" : <div class="permissions">
+                    <div class={!c.keyboard ? "disabled" : ""} title={translate('Allow using keyboard and mouse')}><icon class="keyboard" /></div>
+                    <div class={!c.clipboard ? "disabled" : ""} title={translate('Allow using clipboard')}><icon class="clipboard" /></div>
+                    <div class={!c.audio ? "disabled" : ""} title={translate('Allow hearing sound')}><icon class="audio" /></div>
                 </div>}
                 {c.port_forward ? <div>Port Forwarding: {c.port_forward}</div> : ""}
                 <div style="size:*"/>
-                <div .buttons>
-                     {auth ? "" : <button .button tabindex="-1" #accept>{translate('Accept')}</button>}
-                     {auth ? "" : <button .button tabindex="-1" .outline #dismiss>{translate('Dismiss')}</button>}
-                     {auth ? <button .button tabindex="-1" #disconnect>{translate('Disconnect')}</button> : ""}
+                <div class="buttons">
+                     {auth ? "" : <button class="button" tabindex="-1" id="accept">{translate('Accept')}</button>}
+                     {auth ? "" : <button class="button" tabindex="-1" class="outline" id="dismiss">{translate('Dismiss')}</button>}
+                     {auth ? <button class="button" tabindex="-1" id="disconnect">{translate('Disconnect')}</button> : ""}
                 </div>
-                {c.is_file_transfer || c.port_forward ? "" : <div .chaticon>{svg_chat}</div>}
+                {c.is_file_transfer || c.port_forward ? "" : <div class="chaticon">{svg_chat}</div>}
             </div>
-            <div .right-panel style={right_style}>
+            <div class="right-panel" style={right_style}>
                 {c.is_file_transfer || c.port_forward ? "" : <ChatBox msgs={c.msgs} callback={callback} />}
             </div>
-        </div>;
+        </div>);
     }
 
-    function sendMsg(text) {
+    sendMsg(text) {
         if (!text) return;
-        var { cid, connection } = this;
+        let { cid, connection } = this;
         checkClickTime(function() {
             connection.msgs.push({ name: "me", text: text, time: getNowStr()});
-            handler.send_msg(cid, text);
-            body.update();
+            handler.xcall("send_msg",cid, text);
+            body.componentUpdate();
         });
     }
 
-    event click $(icon.keyboard) (e) {
-        var { cid, connection } = this;
+    ["on click at icon.keyboard"](e) {
+        let { cid, connection } = this;
         checkClickTime(function() {
             connection.keyboard = !connection.keyboard;
-            body.update();
-            handler.switch_permission(cid, "keyboard", connection.keyboard);
+            body.componentUpdate();
+            handler.xcall("switch_permission",cid, "keyboard", connection.keyboard);
         });
     }
 
-    event click $(icon.clipboard) {
-        var { cid, connection } = this;
+    ["on click at icon.clipboard"]() {
+        let { cid, connection } = this;
         checkClickTime(function() {
             connection.clipboard = !connection.clipboard;
-            body.update();
-            handler.switch_permission(cid, "clipboard", connection.clipboard);
+            body.componentUpdate();
+            handler.xcall("switch_permission",cid, "clipboard", connection.clipboard);
         });
     }
 
-    event click $(icon.audio) {
-        var { cid, connection } = this;
+    ["on click at icon.audio"]() {
+        let { cid, connection } = this;
         checkClickTime(function() {
             connection.audio = !connection.audio;
-            body.update();
-            handler.switch_permission(cid, "audio", connection.audio);
+            body.componentUpdate();
+            handler.xcall("switch_permission",cid, "audio", connection.audio);
         });
     }
 
-    event click $(button#accept) {
-        var { cid, connection } = this;
+    ["on click at button#accept"]() {
+        let { cid, connection } = this;
         checkClickTime(function() {
             connection.authorized = true;
-            body.update();
-            handler.authorize(cid);
-            self.timer(30ms, function() {
-                view.windowState = View.WINDOW_MINIMIZED;
-            });
+            body.componentUpdate();
+            handler.xcall("authorize",cid);
+            setTimeout(()=>view.state = Window.WINDOW_MINIMIZED,30);
         });
     }
 
-    event click $(button#dismiss) {
-        var cid = this.cid;
+    ["on click at button#dismiss"]() {
+        let cid = this.cid;
         checkClickTime(function() {
-            handler.close(cid);
+            handler.close(cid); // TEST
         });
     }
 
-    event click $(button#disconnect) {
-        var cid = this.cid;
+    ["on click at button#disconnect"]() {
+        let cid = this.cid;
         checkClickTime(function() {
-            handler.close(cid);
+            handler.close(cid); // TEST
+        });
+    }
+    ["on click at div.chaticon"]() {
+        checkClickTime(function() {
+            show_chat = !show_chat;
+            adaptSize();
         });
     }
 }
 
-$(body).content(<Body />);
+$("body").content(<Body />);
 
 var header;
 
-class Header: Reactor.Component
-{
-    function this() {
+class Header extends Element {
+    this() {
         header = this;
     }
 
-    function render() {
-        var me = this;
-        var conn = connections[body.cur];
-        if (conn && conn.unreaded > 0) {;
-            var el = me.select("#unreaded" + conn.id);
-            if (el) el.style.set {
-                display: "inline-block",
-            };
-            self.timer(300ms, function() {
+    render() {
+        let me = this;
+        let conn = connections[body.cur];
+        if (conn && conn.unreaded > 0) {
+            let el = this.select("#unreaded" + conn.id); // TODO select
+            if (el) el.style.setProperty("display","inline-block");
+            setTimeout(function() {
                 conn.unreaded = 0;
-                var el = me.select("#unreaded" + conn.id);
-                if (el) el.style.set {
-                    display: "none",
-                };
-            });
+                let el = this.select("#unreaded" + conn.id); // TODO
+                if (el) el.style.setProperty("display","none");
+            },300);
         }
-        var tabs = connections.map(function(c, i) { return me.renderTab(c, i) });
-        return <div .tabs-wrapper><div .tabs>
+        let tabs = connections.map((c, i)=> this.renderTab(c, i));
+        return (<div class="tabs-wrapper"><div class="tabs">
             {tabs}
             </div>
-            <div .tab-arrows>
-                <span .left-arrow>&lt;</span>
-                <span .right-arrow>&gt;</span>
+            <div class="tab-arrows">
+                <span class="left-arrow">&lt;</span>
+                <span class="right-arrow">&gt;</span>
             </div>
-        </div>;
+        </div>);
     }
 
-    function renderTab(c, i) {
-        var cur = body.cur;
-        return <div class={i == cur ? "active-tab tab" : "tab"}>
+    renderTab(c, i) {
+        let cur = body.cur;
+        return (<div class={i == cur ? "active-tab tab" : "tab"}>
             {c.name}
-            {c.unreaded > 0 ? <span .unreaded id={"unreaded" + c.id}>{c.unreaded}</span> : ""}
-        </div>;
+            {c.unreaded > 0 ? <span class="unreaded" id={"unreaded" + c.id}>{c.unreaded}</span> : ""}
+        </div>);
     }
 
-    function update_cur(idx) {
-        checkClickTime(function() {
+    update_cur(idx) {
+        checkClickTime(function(){
             body.cur = idx;
             update();
-            self.timer(1ms, adjustHeader);
+            setTimeout(adjustHeader,1);
         });
     }
 
-    event click $(div.tab) (_, me) {
-        var idx = me.index;
+    ["on click at div.tab"] (_, me) {
+        let idx = me.index;
         if (idx == body.cur) return;
         this.update_cur(idx);
     }
 
-    event click $(span.left-arrow) {
-        var cur = body.cur;
+    ["on click at span.left-arrow"]() {
+        let cur = body.cur;
         if (cur == 0) return;
         this.update_cur(cur - 1);
     }
 
-    event click $(span.right-arrow) {
-        var cur = body.cur;
+    ["on click at span.right-arrow"]() {
+        let cur = body.cur;
         if (cur == connections.length - 1) return;
         this.update_cur(cur + 1);
     }
 }
 
 if (is_osx) {
-    $(header).content(<Header />);
-    $(header).attributes["role"] = "window-caption";
+    $("header").content(<Header />);
+    $("header").attributes["role"] = "window-caption"; // TODO 
 } else {
-    $(div.window-toolbar).content(<Header />);
+    $("div.window-toolbar").content(<Header />);
     setWindowButontsAndIcon(true);
-}
-
-event click $(div.chaticon) {
-    checkClickTime(function() {
-        show_chat = !show_chat;
-        adaptSize();
-    });
 }
 
 function checkClickTime(callback) {
@@ -214,12 +207,10 @@ function checkClickTime(callback) {
 }
 
 function adaptSize() {
-    $(div.right-panel).style.set {
-        display: show_chat ? "block" : "none",
-    };
-    var el = $(div.chaticon);
-    if (el) el.attributes.toggleClass("active", show_chat);
-    var (x, y, w, h) = view.box(#rectw, #border, #screen);
+    $("div.right-panel").style.setProperty("display",show_chat ? "block" : "none");
+    let el = $("div.chaticon");
+    if (el) el.classList.toggle("active", show_chat);
+    let [x, y, w, h] = view.state.box("rectw", "border", "screen");
     if (show_chat && w < 600) {
         view.move(x - (600 - w), y, 600, h);
     } else if (!show_chat && w > 450) {
@@ -228,26 +219,26 @@ function adaptSize() {
 }
 
 function update() {
-    header.update();
-    body.update();
+    header.componentUpdate();
+    body.componentUpdate();
 }
 
 function bring_to_top(idx=-1) {
-    if (view.windowState == View.WINDOW_HIDDEN || view.windowState == View.WINDOW_MINIMIZED) {
+    if (view.state == Window.WINDOW_HIDDEN || view.state == Window.WINDOW_MINIMIZED) {
         if (is_linux) {
-            view.focus = self;
+            view.focus = $("body");
         } else {
-            view.windowState = View.WINDOW_SHOWN;
+            view.state = Window.WINDOW_SHOWN;
         }
         if (idx >= 0) body.cur = idx;
     } else {
-        view.windowTopmost = true;
-        view.windowTopmost = false;
+        view.isTopmost = true; // TEST
+        view.isTopmost = false; // TEST
     }
 }
 
 handler.addConnection = function(id, is_file_transfer, port_forward, peer_id, name, authorized, keyboard, clipboard, audio) {
-    var conn;
+    let conn;
     connections.map(function(c) {
         if (c.id == id) conn = c;
     });
@@ -267,22 +258,20 @@ handler.addConnection = function(id, is_file_transfer, port_forward, peer_id, na
     body.cur = connections.length - 1;
     bring_to_top();
     update();
-    self.timer(1ms, adjustHeader);
+    setTimeout(adjustHeader,1);
     if (authorized) {
-        self.timer(3s, function() {
-            view.windowState = View.WINDOW_MINIMIZED;
-        });
+        setTimeout(()=>view.state = Window.WINDOW_MINIMIZED,3000);
     }
 }
 
 handler.removeConnection = function(id) {
-    var i = -1;
+    let i = -1;
     connections.map(function(c, idx) {
         if (c.id == id) i = idx;
     });
     connections.splice(i, 1);
     if (connections.length == 0) {
-        handler.exit();
+        handler.xcall("exit");
     } else {
         if (body.cur >= i && body.cur > 0) body.cur -= 1;
         update();
@@ -290,11 +279,11 @@ handler.removeConnection = function(id) {
 }
 
 handler.newMessage = function(id, text) { 
-    var idx = -1;
+    let idx = -1;
     connections.map(function(c, i) {
         if (c.id == id) idx = i;
     });
-    var conn = connections[idx];
+    let conn = connections[idx];
     if (!conn) return;
     conn.msgs.push({name: conn.name, text: text, time: getNowStr()});
     bring_to_top(idx);
@@ -304,96 +293,89 @@ handler.newMessage = function(id, text) {
 }
 
 handler.awake = function() {
-    view.windowState = View.WINDOW_SHOWN;
-    view.focus = self;
+    view.state = Window.WINDOW_SHOWN;
+    view.focus = $("body");
 }
 
-view << event statechange {
+// TEST
+// view << event statechange {
+//     adjustBorder();
+// }
+view.on("statechange",()=>{
     adjustBorder();
-}
+})
 
-function self.ready() {
+document.on("ready",()=>{
     adjustBorder();
-    var (sw, sh) = view.screenBox(#workarea, #dimension);
-    var w = 300;
-    var h = 400;
+    let [sw, sh] = view.screenBox("workarea", "dimension");
+    let w = 300;
+    let h = 400;
     view.move(sw - w, 0, w, h);
-}
+})
+
+document.on("unloadequest",(evt)=>{
+    view.state = Window.WINDOW_HIDDEN;
+    console.log("cm unloadequest")
+    evt.preventDefault(); // prevent unloading TEST
+})
 
 function getElaspsed(time) {
-    var now = new Date();
-    var seconds = Date.diff(time, now, #seconds);
-    var hours = seconds / 3600;
-    var days = hours / 24;
-    hours = hours % 24;
-    var minutes = seconds % 3600 / 60;
-    seconds = seconds % 60;
-    var out = String.printf("%02d:%02d:%02d", hours, minutes, seconds);
-    if (days > 0) {
-        out = String.printf("%d day%s %s", days, days > 1 ? "s" : "", out);
-    }
+    // let now = new Date();
+    // let seconds = Date.diff(time, now, #seconds);
+    // let hours = seconds / 3600;
+    // let days = hours / 24;
+    // hours = hours % 24;
+    // let minutes = seconds % 3600 / 60;
+    // seconds = seconds % 60;
+    // let out = String.printf("%02d:%02d:%02d", hours, minutes, seconds);
+    // if (days > 0) {
+    //     out = String.printf("%d day%s %s", days, days > 1 ? "s" : "", out);
+    // }
+    let out = "TIME TODO" + new Date(); // TODO
     return out;
 }
 
-function updateTime() {
-    self.timer(1s, function() {
-        var el = $(#time);
-        if (el) {
-            var c = connections[body.cur];
-            if (c) {
-                el.text = getElaspsed(c.time);
-            }
+// updateTime
+setInterval(function() {
+    let el = $("#time");
+    if (el) {
+        let c = connections[body.cur];
+        if (c) {
+            el.text = getElaspsed(c.time);
         }
-        updateTime();
-    });
-}
-
-updateTime();
-
-function self.closing() {
-    view.windowState = View.WINDOW_HIDDEN;
-    return false;
-}
+    }
+},1000);
 
 
 function adjustHeader() {
-    var hw = $(header).box(#width);
-    var tabswrapper = $(div.tabs-wrapper);
-    var tabs = $(div.tabs);
-    var arrows = $(div.tab-arrows);
+    let hw = $("header").state.box("width");
+    let tabswrapper = $("div.tabs-wrapper");
+    let tabs = $("div.tabs");
+    let arrows = $("div.tab-arrows");
     if (!arrows) return;
-    var n = connections.length;
-    var wtab = 80;
-    var max = hw - 98;
-    var need_width = n * wtab + 2; // include border of active tab
+    let n = connections.length;
+    let wtab = 80;
+    let max = hw - 98;
+    let need_width = n * wtab + 2; // include border of active tab
     if (need_width < max) {
-        arrows.style.set {
-            display: "none",
-        };
-        tabs.style.set {
-            width: need_width,
-            margin-left: 0,
-        };
-        tabswrapper.style.set {
-            width: need_width,
-        };
+        arrows.style.setProperty("display","none");
+        tabs.style.setProperty("width",need_width);
+        tabs.style.setProperty("margin-left",0);
+        tabswrapper.style.setProperty("width",need_width);
     } else {
-        var margin = (body.cur + 1) * wtab - max + 30;
+        let margin = (body.cur + 1) * wtab - max + 30;
         if (margin < 0) margin = 0;
-        arrows.style.set {
-            display: "block",
-        };
-        tabs.style.set {
-            width: (max - 20 + margin) + 'px',
-            margin-left: -margin + 'px'
-        };
-        tabswrapper.style.set {
-            width: (max + 10) + 'px',
-        };
+        arrows.style.setProperty("display","block");
+        tabs.style.setProperty("width",(max - 20 + margin) + 'px');
+        tabs.style.setProperty("margin-left",-margin + 'px');
+        tabswrapper.style.setProperty("width",(max + 10) + 'px');
     }
 }
 
-view.on("size", adjustHeader);
+document.onsizechange = ()=>{
+    console.log("cm onsizechange");
+    adjustHeader();
+}
 
 // handler.addConnection(0, false, 0, "", "test1", true, false, false, false);
 // handler.addConnection(1, false, 0, "", "test2--------", true, false, false, false);

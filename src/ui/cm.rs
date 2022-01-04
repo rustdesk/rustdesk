@@ -91,13 +91,13 @@ impl ConnectionManager {
                 clipboard,
                 audio
             ),
-        );
+        ); // TODO
         self.write().unwrap().senders.insert(id, tx);
     }
 
     fn remove_connection(&self, id: i32) {
         self.write().unwrap().senders.remove(&id);
-        self.call("removeConnection", &make_args!(id));
+        self.call("removeConnection", &make_args!(id)); // TODO
     }
 
     async fn handle_data(
