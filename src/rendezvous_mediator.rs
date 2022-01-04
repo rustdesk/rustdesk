@@ -17,7 +17,10 @@ use hbb_common::{
 };
 use std::{
     net::SocketAddr,
-    sync::{Arc, Mutex},
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc, Mutex,
+    },
     time::SystemTime,
 };
 use uuid::Uuid;
@@ -27,6 +30,7 @@ type Message = RendezvousMessage;
 lazy_static::lazy_static! {
     pub static ref SOLVING_PK_MISMATCH: Arc<Mutex<String>> = Default::default();
 }
+static EXITED: AtomicBool = AtomicBool::new(false);
 
 #[derive(Clone)]
 pub struct RendezvousMediator {
@@ -55,40 +59,14 @@ impl RendezvousMediator {
                 }
                 let mut futs = Vec::new();
                 let servers = Config::get_rendezvous_servers();
+                EXITED.store(false, Ordering::SeqCst);
                 for host in servers.clone() {
                     let server = server.clone();
                     let servers = servers.clone();
                     futs.push(tokio::spawn(async move {
                         allow_err!(Self::start(server, host, servers).await);
-                        // let socks5_conf = socket_client::get_socks5_conf();
-                        // if socks5_conf.is_some() {
-                        //     let target = format!("{}:{}", host, RENDEZVOUS_PORT);
-                        //     let conn_fn = |bind_addr: SocketAddr| {
-                        //         let target = target.clone();
-                        //         let conf_ref = &socks5_conf;
-                        //         async move {
-                        //             socket_client::connect_udp_socks5(
-                        //                 target,
-                        //                 bind_addr,
-                        //                 conf_ref,
-                        //                 RENDEZVOUS_TIMEOUT,
-                        //             )
-                        //             .await
-                        //         }
-                        //     };
-                        //     allow_err!(Self::start(server, host, servers, conn_fn, true).await);
-                        // } else {
-                        //     allow_err!(
-                        //         Self::start(
-                        //             server,
-                        //             host,
-                        //             servers,
-                        //             socket_client::connect_udp_socket,
-                        //             false,
-                        //         )
-                        //         .await
-                        //     );
-                        // }
+                        // EXITED here is to ensure once one exits, the others also exit.
+                        EXITED.store(true, Ordering::SeqCst);
                     }));
                 }
                 join_all(futs).await;
@@ -244,6 +222,9 @@ impl RendezvousMediator {
                         break;
                     }
                     if !Config::get_option("stop-service").is_empty() {
+                        break;
+                    }
+                    if EXITED.load(Ordering::SeqCst) {
                         break;
                     }
                     if rz.addr.port() == 0 {
