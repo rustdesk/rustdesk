@@ -1,5 +1,5 @@
 use crate::{
-    config::{Config, NetworkType},
+    config::{Config, NetworkType, RENDEZVOUS_TIMEOUT},
     tcp::FramedStream,
     udp::FramedSocket,
     ResultType,
@@ -47,15 +47,35 @@ pub async fn connect_tcp<'t, T: IntoTargetAddr<'t>>(
     }
 }
 
-pub async fn connect_udp<'t, T1: IntoTargetAddr<'t>, T2: ToSocketAddrs>(
+fn native_to_socket_addr(host: &str) -> ResultType<SocketAddr> {
+    use std::net::ToSocketAddrs;
+    let addrs: Vec<SocketAddr> = host.to_socket_addrs()?.collect();
+    if addrs.is_empty() {
+        bail!("Failed to solve {}", host);
+    }
+    Ok(addrs[0])
+}
+
+pub async fn to_socket_addr(host: &str) -> ResultType<SocketAddr> {
+    Ok(
+        new_udp(host, Config::get_any_listen_addr(), RENDEZVOUS_TIMEOUT)
+            .await?
+            .1,
+    )
+}
+
+pub async fn new_udp<'t, T1: IntoTargetAddr<'t> + std::fmt::Display, T2: ToSocketAddrs>(
     target: T1,
     local: T2,
     ms_timeout: u64,
-) -> ResultType<(FramedSocket, Option<SocketAddr>)> {
+) -> ResultType<(FramedSocket, SocketAddr)> {
     match Config::get_socks() {
-        None => Ok((FramedSocket::new(local).await?, None)),
+        None => Ok((
+            FramedSocket::new(local).await?,
+            native_to_socket_addr(&target.to_string())?,
+        )),
         Some(conf) => {
-            let (socket, addr) = FramedSocket::connect(
+            let (socket, addr) = FramedSocket::new_proxy(
                 conf.proxy.as_str(),
                 target,
                 local,
@@ -64,12 +84,12 @@ pub async fn connect_udp<'t, T1: IntoTargetAddr<'t>, T2: ToSocketAddrs>(
                 ms_timeout,
             )
             .await?;
-            Ok((socket, Some(addr)))
+            Ok((socket, addr))
         }
     }
 }
 
-pub async fn reconnect_udp<T: ToSocketAddrs>(local: T) -> ResultType<Option<FramedSocket>> {
+pub async fn rebind<T: ToSocketAddrs>(local: T) -> ResultType<Option<FramedSocket>> {
     match Config::get_network_type() {
         NetworkType::Direct => Ok(Some(FramedSocket::new(local).await?)),
         _ => Ok(None),

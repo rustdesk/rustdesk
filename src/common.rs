@@ -415,12 +415,13 @@ pub fn is_modifier(evt: &KeyEvent) -> bool {
     }
 }
 
-pub fn test_if_valid_server(host: String) -> String {
+#[tokio::main(flavor = "current_thread")]
+pub async fn test_if_valid_server(host: String) -> String {
     let mut host = host;
     if !host.contains(":") {
         host = format!("{}:{}", host, 0);
     }
-    match hbb_common::to_socket_addr(&host) {
+    match hbb_common::to_socket_addr(&host).await {
         Err(err) => err.to_string(),
         Ok(_) => "".to_owned(),
     }
@@ -443,7 +444,7 @@ async fn _check_software_update() -> hbb_common::ResultType<()> {
     sleep(3.).await;
 
     let rendezvous_server = get_rendezvous_server(1_000).await;
-    let (mut socket, _) = socket_client::connect_udp(
+    let (mut socket, _) = socket_client::new_udp(
         rendezvous_server,
         Config::get_any_listen_addr(),
         RENDEZVOUS_TIMEOUT,

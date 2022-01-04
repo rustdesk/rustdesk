@@ -99,18 +99,13 @@ impl RendezvousMediator {
             rendezvous_servers,
             last_id_pk_registry: "".to_owned(),
         };
-        let mut host_addr = rz.addr;
-        allow_err!(rz.dns_check(&mut host_addr));
-
-        let bind_addr = Config::get_any_listen_addr();
-        let target = format!("{}:{}", host, RENDEZVOUS_PORT);
-        let (mut socket, target_addr) =
-            socket_client::connect_udp(target, bind_addr, RENDEZVOUS_TIMEOUT).await?;
-        if let Some(addr) = target_addr {
-            rz.addr = addr;
-        } else {
-            rz.addr = host_addr;
-        }
+        let (mut socket, target_addr) = socket_client::new_udp(
+            crate::check_port(&host, RENDEZVOUS_PORT),
+            Config::get_any_listen_addr(),
+            RENDEZVOUS_TIMEOUT,
+        )
+        .await?;
+        rz.addr = target_addr;
         const TIMER_OUT: Duration = Duration::from_secs(1);
         let mut timer = interval(TIMER_OUT);
         let mut last_timer = SystemTime::UNIX_EPOCH;
@@ -228,16 +223,14 @@ impl RendezvousMediator {
                         break;
                     }
                     if rz.addr.port() == 0 {
-                        // tcp is established to help connecting socks5
-                        allow_err!(rz.dns_check(&mut host_addr));
-                        if host_addr.port() == 0 {
+                        allow_err!(rz.dns_check().await);
+                        if rz.addr.port() == 0 {
                             continue;
                         } else {
                             // have to do this for osx, to avoid "Can't assign requested address"
                             // when socket created before OS network ready
-                            if let Some(s) = socket_client::reconnect_udp(bind_addr).await? {
+                            if let Some(s) = socket_client::rebind(Config::get_any_listen_addr()).await? {
                                 socket = s;
-                                rz.addr = host_addr;
                             };
                         }
                     }
@@ -258,12 +251,11 @@ impl RendezvousMediator {
                                 Config::update_latency(&host, -1);
                                 old_latency = 0;
                                 if now.duration_since(last_dns_check).map(|d| d.as_millis() as i64).unwrap_or(0) > DNS_INTERVAL {
-                                    if let Ok(_) = rz.dns_check(&mut host_addr) {
+                                    if let Ok(_) = rz.dns_check().await {
                                         // in some case of network reconnect (dial IP network),
                                         // old UDP socket not work any more after network recover
-                                        if let Some(s) = socket_client::reconnect_udp(bind_addr).await? {
+                                        if let Some(s) = socket_client::rebind(Config::get_any_listen_addr()).await? {
                                             socket = s;
-                                            rz.addr = host_addr;
                                         };
                                     }
                                     last_dns_check = now;
@@ -280,8 +272,9 @@ impl RendezvousMediator {
         Ok(())
     }
 
-    fn dns_check(&self, addr: &mut SocketAddr) -> ResultType<()> {
-        *addr = hbb_common::to_socket_addr(&crate::check_port(&self.host, RENDEZVOUS_PORT))?;
+    async fn dns_check(&mut self) -> ResultType<()> {
+        self.addr =
+            hbb_common::to_socket_addr(&crate::check_port(&self.host, RENDEZVOUS_PORT)).await?;
         log::debug!("Lookup dns of {}", self.host);
         Ok(())
     }
@@ -317,7 +310,7 @@ impl RendezvousMediator {
         );
 
         let mut socket = socket_client::connect_tcp(
-            format!("{}:{}", self.host, RENDEZVOUS_PORT),
+            self.addr,
             Config::get_any_listen_addr(),
             RENDEZVOUS_TIMEOUT,
         )
@@ -345,7 +338,7 @@ impl RendezvousMediator {
         let peer_addr = AddrMangle::decode(&fla.socket_addr);
         log::debug!("Handle intranet from {:?}", peer_addr);
         let mut socket = socket_client::connect_tcp(
-            format!("{}:{}", self.host, RENDEZVOUS_PORT),
+            self.addr,
             Config::get_any_listen_addr(),
             RENDEZVOUS_TIMEOUT,
         )
@@ -389,7 +382,7 @@ impl RendezvousMediator {
         log::debug!("Punch hole to {:?}", peer_addr);
         let mut socket = {
             let socket = socket_client::connect_tcp(
-                format!("{}:{}", self.host, RENDEZVOUS_PORT),
+                self.addr,
                 Config::get_any_listen_addr(),
                 RENDEZVOUS_TIMEOUT,
             )

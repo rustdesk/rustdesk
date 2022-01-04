@@ -202,7 +202,7 @@ async fn handle(data: Data, stream: &mut Connection) {
                 } else if name == "salt" {
                     value = Some(Config::get_salt());
                 } else if name == "rendezvous_server" {
-                    value = Some(Config::get_rendezvous_server().to_string());
+                    value = Some(Config::get_rendezvous_server().await.to_string());
                 } else {
                     value = None;
                 }
@@ -403,7 +403,7 @@ pub async fn get_rendezvous_server(ms_timeout: u64) -> SocketAddr {
             return v;
         }
     }
-    return Config::get_rendezvous_server();
+    return Config::get_rendezvous_server().await;
 }
 
 async fn get_options_(ms_timeout: u64) -> ResultType<HashMap<String, String>> {

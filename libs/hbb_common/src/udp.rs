@@ -49,7 +49,7 @@ impl FramedSocket {
         bail!("could not resolve to any address");
     }
 
-    pub async fn connect<'a, 't, P: ToProxyAddrs, T1: IntoTargetAddr<'t>, T2: ToSocketAddrs>(
+    pub async fn new_proxy<'a, 't, P: ToProxyAddrs, T1: IntoTargetAddr<'t>, T2: ToSocketAddrs>(
         proxy: P,
         target: T1,
         local: T2,

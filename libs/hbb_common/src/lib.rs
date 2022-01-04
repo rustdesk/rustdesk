@@ -9,15 +9,15 @@ pub use protobuf;
 use std::{
     fs::File,
     io::{self, BufRead},
-    net::{Ipv4Addr, SocketAddr, SocketAddrV4, ToSocketAddrs},
+    net::{Ipv4Addr, SocketAddr, SocketAddrV4},
     path::Path,
     time::{self, SystemTime, UNIX_EPOCH},
 };
 pub use tokio;
 pub use tokio_util;
+pub mod socket_client;
 pub mod tcp;
 pub mod udp;
-pub mod socket_client;
 pub use env_logger;
 pub use log;
 pub mod bytes_codec;
@@ -27,6 +27,7 @@ pub use anyhow::{self, bail};
 pub use futures_util;
 pub mod config;
 pub mod fs;
+pub use socket_client::to_socket_addr;
 pub use sodiumoxide;
 pub use tokio_socks;
 
@@ -147,14 +148,6 @@ pub fn get_version_from_url(url: &str) -> String {
         }
     }
     "".to_owned()
-}
-
-pub fn to_socket_addr(host: &str) -> ResultType<SocketAddr> {
-    let addrs: Vec<SocketAddr> = host.to_socket_addrs()?.collect();
-    if addrs.is_empty() {
-        bail!("Failed to solve {}", host);
-    }
-    Ok(addrs[0])
 }
 
 pub fn gen_version() {
