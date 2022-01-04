@@ -147,7 +147,7 @@ export class ChatBox extends Element {
     msgs = [];
     callback;
 
-    constructor(props) {
+    this(props) {
         if (props) {
             this.msgs = props.msgs || [];
             this.callback = props.callback;
