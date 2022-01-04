@@ -51,8 +51,6 @@ class ConnectStatus extends Element {
     }
 }
 
-// TODO** SearchBar SessionStyle sessionsStyle SessionList
-// TODO @{this.sessionList} {!app.hidden && <SessionList @{this.sessionList} style={sessionsStyle} sessions={sessions} />}
 class RecentSessions extends Element {
     sessionList;
     componentDidMount(){
@@ -72,7 +70,7 @@ class RecentSessions extends Element {
             {!app.hidden && <SessionList id="SessionList" sessions={sessions} />} 
         </div>);
     }
-    // TODO TEST
+
     filter(v) {
         this.sessionList.filter(v);
     }
@@ -277,7 +275,6 @@ class App extends Element{
 
     render() {
         let is_can_screen_recording = handler.xcall("is_can_screen_recording",false);
-        // TODO ${} <ID @{this.remote_id} /> <RecentSessions @{this.recent_sessions} /> <ConnectStatus @{this.connect_status} />
         return(<div class="app">
               <popup>
               <menu class="context" id="edit-password-context">
@@ -558,7 +555,6 @@ function watch_trust() {
 
 class PasswordEyeArea extends Element {
     render() {
-        // TODO @{} <input type="text" @{this.input} readonly value="******" />
         return (<div class="eye-area" style="width: *">
                 <input type="text" readonly value="******" />
                 {svg_eye}

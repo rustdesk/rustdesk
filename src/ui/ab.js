@@ -36,7 +36,6 @@ export class SearchBar extends Element {
     }
 
     render() {
-        // TODO @{this.search_id}  TIS:<input|text @{this.search_id} novalue={translate("Search ID")} />
         return (<div class="search-id" >
             <span class=".search-icon">{search_icon}</span>
             <input type="text" novalue={translate("Search ID")} />
@@ -45,11 +44,10 @@ export class SearchBar extends Element {
     }
 
     ["on click at span.clear-input"](_) {
-        this.search_id.value = '';
+        this.$("input").value = '';
         this.onChange('');
     }
 
-    // TODO TEST params
     ["on change at input"](_, el) {
         this.onChange(el.value.trim());
     }
@@ -115,7 +113,7 @@ export class SessionList extends Element {
 
     render() {
         let sessions = this.getSessions();
-        if (!sessions || sessions.length == 0) return <span />; // TODO  property 'length' of undefined
+        if (sessions.length == 0) return <span />;
         sessions = sessions.map((x) => this.getSession(x));
         // TODO is_win  
         // TODO <li id="rdp">RDP<EditRdpPort /></li>
@@ -184,7 +182,7 @@ export class SessionList extends Element {
         menu.setAttribute("remote-id",id);
         me.popup(menu);
     }
-    // TODO li 
+    
     ["on click at menu#remote-context li"](evt, me) {
         let action = me.id;
         let id = me.parentElement.getAttribute("remote-id");

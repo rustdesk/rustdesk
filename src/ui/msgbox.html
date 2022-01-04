@@ -1,7 +1,7 @@
 <html window-frame="extended">
     <head>
+        <link rel="stylesheet" href="common.css">
         <style>
-            @import url(common.css);
             html {
                 background-color: white;
             }
@@ -18,7 +18,7 @@
             }
             caption {
                 @ELLIPSIS;
-                size: *;
+                size: "*";
                 text-align: center;
                 color: white;
                 padding-top: 0.33em;
@@ -48,7 +48,7 @@
                 line-height: 2em;
             }
             div.set-password div.password {
-                width: *;
+                width: "*";
             }
             div.set-password input {
                 font-size: 1em;
@@ -60,10 +60,11 @@
                 @ELLIPSIS;
             }
         </style>
-        <script type="text/tiscript">
+        <script type="module" src="msgbox.js"></script>
+        <!-- <script type="text/tiscript">
             include "common.tis";
             include "msgbox.tis";
-        </script>
+        </script> -->
     </head>
     <body></body>
 </html>
