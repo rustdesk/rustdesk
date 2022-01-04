@@ -222,7 +222,7 @@ impl Client {
         peer_id: &str,
         pk: Vec<u8>,
         relay_server: &str,
-        rendezvous_server: TargetAddr<'static>,
+        rendezvous_server: TargetAddr<'_>,
         punch_time_used: u64,
         peer_nat_type: NatType,
         my_nat_type: i32,
@@ -386,7 +386,7 @@ impl Client {
     async fn request_relay(
         peer: &str,
         relay_server: String,
-        rendezvous_server: TargetAddr<'static>,
+        rendezvous_server: TargetAddr<'_>,
         secure: bool,
         conn_type: ConnType,
     ) -> ResultType<Stream> {
