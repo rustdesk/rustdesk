@@ -30,7 +30,7 @@ type Message = RendezvousMessage;
 lazy_static::lazy_static! {
     pub static ref SOLVING_PK_MISMATCH: Arc<Mutex<String>> = Default::default();
 }
-static EXITED: AtomicBool = AtomicBool::new(false);
+static SHOULD_EXIT: AtomicBool = AtomicBool::new(false);
 
 #[derive(Clone)]
 pub struct RendezvousMediator {
@@ -59,14 +59,14 @@ impl RendezvousMediator {
                 }
                 let mut futs = Vec::new();
                 let servers = Config::get_rendezvous_servers();
-                EXITED.store(false, Ordering::SeqCst);
+                SHOULD_EXIT.store(false, Ordering::SeqCst);
                 for host in servers.clone() {
                     let server = server.clone();
                     let servers = servers.clone();
                     futs.push(tokio::spawn(async move {
                         allow_err!(Self::start(server, host, servers).await);
-                        // EXITED here is to ensure once one exits, the others also exit.
-                        EXITED.store(true, Ordering::SeqCst);
+                        // SHOULD_EXIT here is to ensure once one exits, the others also exit.
+                        SHOULD_EXIT.store(true, Ordering::SeqCst);
                     }));
                 }
                 join_all(futs).await;
@@ -224,7 +224,7 @@ impl RendezvousMediator {
                     if !Config::get_option("stop-service").is_empty() {
                         break;
                     }
-                    if EXITED.load(Ordering::SeqCst) {
+                    if SHOULD_EXIT.load(Ordering::SeqCst) {
                         break;
                     }
                     if rz.addr.port() == 0 {
