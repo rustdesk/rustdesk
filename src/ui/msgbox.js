@@ -1,5 +1,7 @@
+import {$,$$} from "@sciter"; //TEST $$ import
+const view = Window.this;
 var type, title, text, getParams, remember, retry, callback, contentStyle;
-var my_translate;
+var my_translate; // TEST 
 
 function updateParams(params) {
     type = params.type;
@@ -11,18 +13,17 @@ function updateParams(params) {
     my_translate = params.translate;
     retry = params.retry;
     contentStyle = params.contentStyle;
+    console.log("params",type,title,text,getParams,remember,callback,my_translate,retry,contentStyle)
     try { text = translate_text(text); } catch (e) {}
     if (retry > 0) {
-        self.timer(retry * 1000, function() {
-            view.close({ reconnect: true });
-        });
+        setTimeout(()=>view.close({ reconnect: true }),retry * 1000);// TEST
     }
 }
 
 function translate_text(text) {
     if (text.indexOf('Failed') == 0 && text.indexOf(': ') > 0) {
-        var fds = text.split(': ');
-        for (var i = 0; i < fds.length; ++i) {
+        let fds = text.split(': ');
+        for (let i = 0; i < fds.length; ++i) {
             fds[i] = my_translate(fds[i]);
         }
         text = fds.join(': ');
@@ -30,17 +31,17 @@ function translate_text(text) {
     return text;
 }
 
-var params = view.parameters;
+var params = view.parameters; // TEST
 updateParams(params);
 
 var body;
 
-class Body: Reactor.Component {
-    function this() {
+class Body extends Element {
+    this() {
         body = this;
     }
 
-    function getIcon(color) {
+    getIcon(color) {
         if (type == "input-password") {
             return <svg viewBox="0 0 505 505"><circle cx="252.5" cy="252.5" r="252.5" fill={color}/><path d="M271.9 246.1c29.2 17.5 67.6 13.6 92.7-11.5 29.7-29.7 29.7-77.8 0-107.4s-77.8-29.7-107.4 0c-25.1 25.1-29 63.5-11.5 92.7L118.1 347.4l26.2 26.2 26.4 26.4 10.6-10.6-10.1-10.1 9.7-9.7 10.1 10.1 10.6-10.6-10.1-10 9.7-9.7 10.1 10.1 10.6-10.6-26.4-26.3 76.4-76.5z" fill="#fff"/><circle cx="337.4" cy="154.4" r="17.7" fill={color}/></svg>;
         }
@@ -56,23 +57,25 @@ class Body: Reactor.Component {
         return <span />;
     }
 
-    function getInputPasswordContent() {
+    getInputPasswordContent() {
         var ts = remember ? { checked: true } : {};
-        return <div .form>
+        // TODO <button type="checkbox" ... 
+        // <div><button|checkbox(remember) {ts}>{my_translate('Remember password')}</button></div>
+        return <div class="form">
             <div>{my_translate('Please enter your password')}</div>
             <PasswordComponent />
-            <div><button|checkbox(remember) {ts}>{my_translate('Remember password')}</button></div>
+            <div><button type="checkbox">{my_translate('Remember password')}</button></div>
         </div>;
     }
 
-    function getContent() {
+    getContent() {
         if (type == "input-password") {
             return this.getInputPasswordContent();
         }
         return text;
     }
 
-    function getColor() {
+    getColor() {
         if (type == "input-password") {
             return "#AD448E";
         }
@@ -85,26 +88,25 @@ class Body: Reactor.Component {
         return "#2C8CFF";
     }
 
-    function hasSkip() {
+    hasSkip() {
         return type.indexOf("skip") >= 0;
     }
 
-    function render() {
-        var color = this.getColor();
-        var icon = this.getIcon(color);
-        var content = this.getContent();
-        var hasCancel = type.indexOf("error") < 0 && type != "success" && type.indexOf("nocancel") < 0;
-        var hasOk = type != "connecting" && type.indexOf("nook") < 0;
-        var hasClose = type.indexOf("hasclose") >= 0;
-        var show_progress = type == "connecting";
-        self.style.set { border: color + " solid 1px" };
-        var me = this;
-        self.timer(1ms, function() {
+    render() {
+        let color = this.getColor();
+        let icon = this.getIcon(color);
+        let content = this.getContent();
+        let hasCancel = type.indexOf("error") < 0 && type != "success" && type.indexOf("nocancel") < 0;
+        let hasOk = type != "connecting" && type.indexOf("nook") < 0;
+        let hasClose = type.indexOf("hasclose") >= 0;
+        let show_progress = type == "connecting";
+        this.style.setProperty("border",(color + " solid 1px"));
+        setTimeout(()=>{
             if (typeof content == "string")
-                me.$(#content).html = my_translate(content);
+                this.$("#content").html = my_translate(content);
             else
-                me.$(#content).content(content);
-        });
+                this.$("#content").content(content);
+        },1);
         return (
         <div style="size: *">
             <header style={"height: 2em; background: " + color}>
@@ -113,72 +115,110 @@ class Body: Reactor.Component {
             <div style="padding: 1em 2em; size: *;">
                 <div style="height: *; flow: horizontal">
                     {icon && <div style="height: *; margin: * 0; padding-right: 2em;">{icon}</div>}
-                    <div style={contentStyle || "size: *; margin: * 0;"} #content />
+                    <div id="content" style={contentStyle || "size: *; margin: * 0;"} />
                 </div>
                 <div style="text-align: right;">
-                    <span style="display:inline-block; max-width: 260px; font-size:12px;" #error />
-                    <progress #progress style={"color:" + color + "; display: " + (show_progress ? "inline-block" : "none")} />
-                    {hasCancel || hasRetry ? <button .button #cancel .outline>{my_translate(hasRetry ? "OK" : "Cancel")}</button> : ""}
-                    {this.hasSkip() ? <button .button #skip .outline>{my_translate('Skip')}</button> : ""}
-                    {hasOk || hasRetry ? <button .button #submit>{my_translate(hasRetry ? "Retry" : "OK")}</button> : ""}
-                    {hasClose ? <button .button #cancel .outline>{my_translate('Close')}</button> : ""}
+                    <span id="error" style="display:inline-block; max-width: 260px; font-size:12px;" />
+                    <progress id="progress" style={"color:" + color + "; display: " + (show_progress ? "inline-block" : "none")} />
+                    {hasCancel || retry ? <button id="cancel" class="button outline">{my_translate(retry ? "OK" : "Cancel")}</button> : ""}
+                    {this.hasSkip() ? <button id="skip" class="button outline">{my_translate('Skip')}</button> : ""}
+                    {hasOk || retry ? <button id="submit" class="button" >{my_translate(retry ? "Retry" : "OK")}</button> : ""}
+                    {hasClose ? <button id="cancel" class="button outline">{my_translate('Close')}</button> : ""}
                 </div>
             </div>
         </div>);
     }
 
-    event click $(.custom-event) (_, me) {
+    // TEST
+    ["on click at .custom-event"](_, me) {
         if (callback) callback(me);
     }
-}
 
-$(body).content(<Body />);
+    ["on click at button#cancel"]() {
+        view.close();
+        if (callback) callback(null);
+    }
+    
+    ["on click at button#skip"]() {
+        let values = getValues();
+        values.skip = true;
+        view.close(values);
+        if (callback) callback(values);
+    }
+
+    ["on click at button#submit"](){
+        if (type == "error") {
+            if (retry) {
+                view.close({ reconnect: true });
+            } else {
+                view.close();
+                if (callback) callback(null);
+            }
+            return;
+        }
+        if (type == "re-input-password") {
+            type = "input-password";
+            body.update();
+            set_outline_focus();
+            return;
+        }
+        var values = getValues();
+        if (callback) {
+            var err = callback(values, show_progress);
+            if (err && !err.trim()) {
+                return;
+            }
+            if (err) {
+                show_progress(false, err);
+                return;
+            }
+        }
+        view.close(values);
+    }
+    ["on keydown"] (evt) { // TEST
+        if (!evt.shortcutKey) {
+            // TODO TEST Windows/Mac
+            if (evt.code == "KeyRETURN") {
+                submit();
+            }
+            if (evt.code == "KeyESCAPE") {
+                cancel();
+            }
+        }
+    }
+}
 
 function show_progress(show=1, err="") {
     if (show == -1) {
         view.close()
         return;
     }
-    $(#progress).style.set {
-        display: show ? "inline-block" : "none"
-    };
-    $(#error).text = err;
+    $("#progress").style.setProperty("display",show ? "inline-block" : "none");
+    $("#error").text = err;
 }
 
 function submit() {
-    if ($(button#submit)) {
-        $(button#submit).sendEvent("click");
+    if ($("button#submit")) {
+        $("button#submit").click(); // TEST
     }
 }
 
 function cancel() {
-    if ($(button#cancel)) {
-        $(button#cancel).sendEvent("click");
+    if ($("button#cancel")) {
+        $("button#cancel").click();
     }
-}
-
-event click $(button#cancel) {
-    view.close();
-    if (callback) callback(null);
-}
-
-event click $(button#skip) {
-    var values = getValues();
-    values.skip = true;
-    view.close(values);
-    if (callback) callback(values);
 }
 
 function getValues() {
-    var values = { type: type };
-    for (var el in $$(.form input)) {
-        values[el.attributes["name"]] = el.value;
+    let values = { type: type };
+    for (let el of $$(".form input")) {
+        values[el.getAttribute("name")] = el.value;
     }
-    for (var el in $$(.form textarea)) {
-        values[el.attributes["name"]] = el.value;
+    for (let el of $$(".form textarea")) {
+        values[el.getAttribute("name")] = el.value;
     }
-    for (var el in $$(.form button)) {
-        values[el.attributes["name"]] = el.value;
+    for (let el of $$(".form button")) {
+        values[el.getAttribute("name")] = el.value;
     }
     if (type == "input-password") {
         values.password = (values.password || "").trim();
@@ -189,76 +229,31 @@ function getValues() {
     return values;
 }
 
-event click $(button#submit) {
-    if (type == "error") {
-        if (hasRetry) {
-            view.close({ reconnect: true });
-        } else {
-            view.close();
-            if (callback) callback(null);
-        }
-        return;
-    }
-    if (type == "re-input-password") {
-        type = "input-password";
-        body.update();
-        set_outline_focus();
-        return;
-    }
-    var values = getValues();
-    if (callback) {
-        var err = callback(values, show_progress);
-        if (err && !err.trim()) {
-            return;
-        }
-        if (err) {
-            show_progress(false, err);
-            return;
-        }
-    }
-    view.close(values);
-}
-
-event keydown (evt) {
-    if (!evt.shortcutKey) {
-        if (evt.keyCode == Event.VK_ENTER || 
-            (is_osx && evt.keyCode == 0x4C) ||
-            (is_linux && evt.keyCode == 65421)) {
-            submit();
-        }
-        if (evt.keyCode == Event.VK_ESCAPE) {
-            cancel();
-        }
-    }
-}
-
 function set_outline_focus() {
-    self.timer(30ms, function() {
-        var el = $(.outline-focus);
+    setTimeout(function() {
+        let el = $(".outline-focus");
         if (el) view.focus = el;
         else {
-            el = $(#submit);
+            el = $("#submit");
             if (el) view.focus = el;
         }
-    });
+    },30);
 }
 
 set_outline_focus();
 
-function checkParams() {
-    self.timer(30ms, function() {
-        var tmp = getParams();
-        if (!tmp || !tmp.type) {
-            view.close("!alive");
-            return;
-        } else if (tmp != params) {
-            params = tmp;
-            updateParams(params);
-            body.update();
-            set_outline_focus();
-        }
-        checkParams();
-    });
-}
+// checkParams
+setInterval(function() {
+    let tmp = getParams();
+    if (!tmp || !tmp.type) {
+        view.close("!alive");
+        return;
+    } else if (tmp != params) {
+        params = tmp;
+        updateParams(params);
+        body.update();
+        set_outline_focus();
+    }
+},30);
 
-checkParams();
+$("body").content(<Body />);
