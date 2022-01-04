@@ -4,9 +4,9 @@ if (is_osx) view.blurBehind = "light";
 console.log("current platform:", OS);
 
 // html min-width, min-height not working on mac, below works for all
-view.minSize = [500, 300]; // TODO　TEST
+view.minSize = [500, 300]; // TODO not work on ubuntu
 
-export var app;
+export var app; // 注意判空
 var tmp = handler.xcall("get_connect_status");
 var connect_status = tmp[0];
 var service_stopped = false;
@@ -54,6 +54,10 @@ class ConnectStatus extends Element {
 // TODO** SearchBar SessionStyle sessionsStyle SessionList
 // TODO @{this.sessionList} {!app.hidden && <SessionList @{this.sessionList} style={sessionsStyle} sessions={sessions} />}
 class RecentSessions extends Element {
+    sessionList;
+    componentDidMount(){
+        this.sessionList = this.$("#SessionList")
+    }
     render() {
         let sessions = handler.xcall("get_recent_sessions");
         if (sessions.length == 0) return <span />;
@@ -62,10 +66,10 @@ class RecentSessions extends Element {
                 <div style="width:*">
                     {translate("Recent Sessions")}
                 </div>
-                <SearchBar parent={this} />
+                {!app.hidden && <SearchBar parent={this} />}
                 {!app.hidden && <SessionStyle />}
             </div>
-            {!app.hidden && <SessionList />} 
+            {!app.hidden && <SessionList id="SessionList" sessions={sessions} />} 
         </div>);
     }
     // TODO TEST
@@ -137,7 +141,7 @@ class AudioInputs extends Element {
 
     toggleMenuState() {
         let v = this.get_value();
-        for (let el in this.$$("menu#audio-input>li")) {
+        for (let el of this.$$("menu#audio-input>li")) {
             let selected = el.id == v;
             el.classList.toggle("selected", selected);
         }
@@ -185,7 +189,7 @@ class MyIdMenu extends Element {
 
     // TEST svg#menu  // .popup()
     ["on click at svg#menu"](_, me) {
-        audioInputMenu.update({ show: true });
+        audioInputMenu.componentUpdate({ show: true });
         this.toggleMenuState();
         let menu = this.$("menu#config-options");
         me.popup(menu); 
@@ -299,8 +303,17 @@ class MyIdMenu extends Element {
 }
 
 class App extends Element{
+    remote_id;
+    recent_sessions;
+    connect_status;
     this() {
         app = this;
+    }
+
+    componentDidMount(){
+        this.remote_id = this.$("#ID");
+        this.recent_sessions = this.$("#RecentSessions");
+        this.connect_status = this.$("#ConnectStatus");
     }
 
     render() {
@@ -339,15 +352,15 @@ class App extends Element{
                     <div class="right-content">
                         <div class="card-connect">
                             <div class="title">{translate('Control Remote Desktop')}</div>
-                            <ID />
+                            <ID id="ID" />
                             <div class="right-buttons">
                                 <button class="button outline" id="file-transfer">{translate('Transfer File')}</button>
                                 <button class="button" id="connect">{translate('Connect')}</button>
                             </div>
                         </div>
-                        <RecentSessions  />
+                        <RecentSessions id="RecentSessions" />
                     </div>
-                    <ConnectStatus />
+                    <ConnectStatus id="ConnectStatus" />
                 </div>
             </div>);
     }
@@ -543,7 +556,7 @@ class FixWayland extends Element {
 
     ["on click at #fix-wayland"] () {
         handler.xcall("fix_login_wayland");
-        app.update(); //TODO app.update()
+        app.componentUpdate();
     }
 }
 
@@ -566,7 +579,7 @@ class ModifyDefaultLogin extends Element {
         if (r) {
             msgbox("custom-error", "Error", r);
         }
-        app.update(); // TODO
+        app.componentUpdate();
     }
 }
 
@@ -593,20 +606,17 @@ class PasswordEyeArea extends Element {
             </div>);
     }
     
-    // TEST
     ["on mouseenter"]() {
         this.leaved = false;
         setTimeout(()=> {
             if (this.leaved) return;
-            // TODO TEST input need $?
-            this.input.value = handler.xcall("get_password");
+            this.$("input").value = handler.xcall("get_password");
         },300);
     }
 
-    // TEST
     ["on mouseleave"]() {
         this.leaved = true;
-        this.input.value = "******";
+        this.$("input").value = "******";
     }
 }
 
@@ -618,7 +628,7 @@ class Password extends Element {
         </div>);
     }
 
-    // TEST popup
+    // TODO expecting element to popup
     ["on click at svg#edit"](_,me) {
         let menu = this.$("menu#edit-password-context");
         me.popup(menu);
@@ -626,7 +636,7 @@ class Password extends Element {
 
     ["on click at li#refresh-password"] () {
         handler.xcall("update_password");
-        this.update(); // TODO
+        this.componentUpdate();
     }
 
     ["on click at li#set-password"] () {
@@ -647,7 +657,7 @@ class Password extends Element {
                 return translate("The confirmation is not identical.");
             }
             handler.xcall("update_password",p0);
-            this.update(); // TODO
+            this.componentUpdate();
         });
     }
 }
@@ -716,34 +726,34 @@ setInterval(() => {
     let tmp = !!handler.xcall("get_option","stop-service");
         if (tmp != service_stopped) {
             service_stopped = tmp;
-            app.connect_status.update(); // TDOD
-            myIdMenu.update(); // TDOD
+            app.connect_status.componentUpdate();
+            myIdMenu.componentUpdate();
         }
         tmp = handler.xcall("get_connect_status");
         if (tmp[0] != connect_status) {
             connect_status = tmp[0];
-            app.connect_status.update(); // TDOD
+            app.connect_status.componentUpdate();
         }
         if (tmp[1] != key_confirmed) {
             key_confirmed = tmp[1];
-            app.update(); // TDOD
+            app.componentUpdate();
         }
         if (tmp[2] && tmp[2] != my_id) {
             console.log("id updated");
-            app.update(); // TDOD
+            app.componentUpdate();
         }
         tmp = handler.xcall("get_error");
         if (system_error != tmp) {
             system_error = tmp;
-            app.update(); // TDOD
+            app.componentUpdate();
         }
         tmp = handler.xcall("get_software_update_url");
         if (tmp != software_update_url) {
             software_update_url = tmp;
-            app.update(); // TDOD
+            app.componentUpdate();
         }
         if (handler.xcall("recent_sessions_updated")) {
             console.log("recent sessions updated");
-            app.recent_sessions.update(); // TDOD
+            app.recent_sessions.componentUpdate();
         }
 }, 1000);

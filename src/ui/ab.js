@@ -1,4 +1,4 @@
-import { handler, string2RGB, platformSvg, msgbox,translate } from "./common.js";
+import { handler, string2RGB, platformSvg, msgbox,translate,is_win,OS } from "./common.js";
 import { app, formatId, createNewConnect,svg_menu } from "./index.js";  // TODO check app obj
 // TODO transform
 const svg_tile = <svg id="session-tile" viewBox="0 0 158.6 158.6"><path style="stroke-width:.309756" d="M5.4 157.7c-1-.3-2-1-3.2-2.1-2.8-2.8-2.6-1-2.5-32 0-26.7 0-27 .7-28.3a9.3 9.3 0 0 1 4-4.2c1.2-.6 2.3-.6 29-.7 27.5 0 27.6 0 29.1.6.8.4 2 1.2 2.7 2 2.4 2.5 2.3.7 2.2 31.6-.1 26.5-.1 27.6-.7 28.8a9.3 9.3 0 0 1-4.2 4c-1.4.6-1.6.6-28.5.7a235 235 0 0 1-28.6-.4zm91 0a8.5 8.5 0 0 1-5.7-5.4c-.2-.7-.3-8.3-.3-28.3V96.7l.7-1.6a8.9 8.9 0 0 1 4.6-4.3c1.2-.4 3.8-.5 28.9-.4 26.6.1 27.6.1 28.8.7 1.6.8 3.2 2.5 4 4.2.7 1.4.7 1.6.7 28.3.1 31 .3 29.2-2.5 32-2.8 2.7-1 2.6-31.4 2.6-21.4 0-26.8-.1-27.9-.5zM5.3 67a8.7 8.7 0 0 1-4-3C-.5 61.6-.5 62.3-.5 33.6-.4 3.2-.5 5 2.2 2.2 5-.6 3.2-.4 34.2-.3c26.7 0 27 0 28.3.7 1.7.8 3.4 2.4 4.2 4 .6 1.2.6 2.2.7 28.8 0 25.1 0 27.7-.4 29a9 9 0 0 1-4.3 4.5l-1.6.7H33.7c-20.2 0-27.7-.1-28.4-.4Zm89.8-.3a9 9 0 0 1-4.3-4.6c-.5-1.2-.5-3.8-.5-28.9.1-26.6.2-27.6.7-28.8a9.3 9.3 0 0 1 4.2-4c1.4-.7 1.6-.7 28.3-.7 31-.1 29.2-.3 32 2.5 2.8 2.8 2.6 1 2.5 32 0 26.7 0 26.9-.7 28.3a9.3 9.3 0 0 1-4 4.2c-1.2.5-2.2.6-29 .6l-27.7.1z" transform="translate(.4 .4)" /></svg>;
@@ -20,10 +20,10 @@ export function getSessionsStyle(type) {
 // function stupidUpdate(me) {
 //     /* hidden is workaround of stupid sciter bug */
 //     me.hidden = true;
-//     me.update();
+//     me.componentUpdate();
 //     self.timer(60ms, function() {
 //         me.hidden = false;
-//         me.update();
+//         me.componentUpdate();
 //     });
 // }
 
@@ -56,7 +56,7 @@ export class SearchBar extends Element {
 
     onChange(v) {
         this.value = v;
-        this.update(); // TODO update()
+        this.componentUpdate();
         this.parent.filter(v);
     }
 }
@@ -81,7 +81,7 @@ export class SessionStyle extends Element {
         let sessionsStyle = getSessionsStyle(this.type);
         handler.xcall("set_option", option, sessionsStyle == "tile" ? "list" : "tile");
         //stupidUpdate(app); // seems fixed in new sciter
-        app.update();
+        app.componentUpdate();
     }
 }
 
@@ -99,7 +99,7 @@ export class SessionList extends Element {
 
     filter(v) {
         this.filterPattern = v;
-        this.update(); // TODO update
+        this.componentUpdate();
     }
 
     getSessions() {
@@ -117,14 +117,15 @@ export class SessionList extends Element {
         let sessions = this.getSessions();
         if (!sessions || sessions.length == 0) return <span />; // TODO  property 'length' of undefined
         sessions = sessions.map((x) => this.getSession(x));
-        // TODO is_win
+        // TODO is_win  
+        // TODO <li id="rdp">RDP<EditRdpPort /></li>
         return <div class="recent-sessions-content" key={sessions.length} >
             <popup>
                 <menu class="context" id="remote-context">
                     <li id="connect">{translate('Connect')}</li>
                     <li id="transfer">{translate('Transfer File')}</li>
                     <li id="tunnel">{translate('TCP Tunneling')}</li>
-                    <li id="rdp">RDP<EditRdpPort /></li>
+                    
                     <li id="rename">{translate('Rename')}</li>
                     <li id="remove">{translate('Remove')}</li>
                     {is_win && <li id="shortcut">{translate('Create Desktop Shortcut')}</li>}
@@ -168,25 +169,26 @@ export class SessionList extends Element {
         </div >);
     }
 
-    // TEST dbclick
-    ["on dbclick at div.remote-session-link"](evt, me) {
+    ["on doubleclick at div.remote-session-link"](evt, me) {
         createNewConnect(me.id, "connect");
     }
 
-    // TODO #menu
     ["on click at #menu"](_, me) {
-        let id = me.parent.parent.id;
-        let platform = me.parent.parent.attributes["platform"]; // TODO attributes["platform"]
-        this.$("#rdp").style.setProperty("display", (platform == "Windows" && is_win) ? "block" : "none");
+        let id = me.parentElement.parentElement.id;
+        let platform = me.parentElement.parentElement.getAttribute("platform");
+        console.log("menu id,platform:",id,platform);
+        // TODO rdp
+        // this.$("#rdp").style.setProperty("display", (platform == "Windows" && is_win) ? "block" : "none"); 
         // https://sciter.com/forums/topic/replacecustomize-context-menu/
         let menu = this.$("menu#remote-context");
-        menu.attributes["remote-id"] = id; // // TODO attributes["remote-id"]
+        menu.setAttribute("remote-id",id);
         me.popup(menu);
     }
     // TODO li 
     ["on click at menu#remote-context li"](evt, me) {
         let action = me.id;
-        let id = me.parent.attributes["remote-id"];
+        let id = me.parentElement.getAttribute("remote-id");
+        console.log("click li",id);
         if (action == "connect") {
             createNewConnect(id, "connect");
         } else if (action == "transfer") {
@@ -194,7 +196,7 @@ export class SessionList extends Element {
         } else if (action == "remove") {
             if (!this.type) {
                 handler.xcall("remove_peer", id);
-                app.update(); // TODO app.update()
+                app.componentUpdate(); 
             }
         } else if (action == "forget-password") {
             handler.forget_password(id);
