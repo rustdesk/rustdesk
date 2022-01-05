@@ -1,74 +1,76 @@
-var pi = handler.get_default_pi(); // peer information
+import { handler,view,is_file_transfer,setWindowButontsAndIcon,translate,msgbox,adjustBorder,is_osx,is_xfce,svg_chat,svg_checkmark, is_linux } from "./common.js";
+import {$,$$} from "@sciter";
+import { adaptDisplay,is_port_forward } from "./remote.js";
+var pi = handler.xcall("get_default_pi"); // peer information
+
 var chat_msgs = [];
 
-var svg_fullscreen = <svg viewBox="0 0 357 357">
+const svg_fullscreen = (<svg viewBox="0 0 357 357">
     <path d="M51,229.5H0V357h127.5v-51H51V229.5z M0,127.5h51V51h76.5V0H0V127.5z M306,306h-76.5v51H357V229.5h-51V306z M229.5,0v51    H306v76.5h51V0H229.5z"/>
-</svg>;
-var svg_action = <svg viewBox="-91 0 512 512"><path d="M315 211H191L298 22a15 15 0 00-13-22H105c-6 0-12 4-14 10L1 281a15 15 0 0014 20h127L61 491a15 15 0 0025 16l240-271a15 15 0 00-11-25z"/></svg>;
-var svg_display = <svg viewBox="0 0 640 512">
+</svg>);
+const svg_action = (<svg viewBox="-91 0 512 512"><path d="M315 211H191L298 22a15 15 0 00-13-22H105c-6 0-12 4-14 10L1 281a15 15 0 0014 20h127L61 491a15 15 0 0025 16l240-271a15 15 0 00-11-25z"/></svg>);
+const svg_display = (<svg viewBox="0 0 640 512">
     <path d="M592 0H48A48 48 0 0 0 0 48v320a48 48 0 0 0 48 48h240v32H112a16 16 0 0 0-16 16v32a16 16 0 0 0 16 16h416a16 16 0 0 0 16-16v-32a16 16 0 0 0-16-16H352v-32h240a48 48 0 0 0 48-48V48a48 48 0 0 0-48-48zm-16 352H64V64h512z"/>
-</svg>;
-var svg_secure = <svg viewBox="0 0 347.97 347.97">
+</svg>);
+const svg_secure = (<svg viewBox="0 0 347.97 347.97">
 <path fill="#3F7D46" d="m317.31 54.367c-59.376 0-104.86-16.964-143.33-54.367-38.461 37.403-83.947 54.367-143.32 54.367 0 97.405-20.155 236.94 143.32 293.6 163.48-56.666 143.33-196.2 143.33-293.6zm-155.2 171.41-47.749-47.756 21.379-21.378 26.37 26.376 50.121-50.122 21.378 21.378-71.499 71.502z"/>
-</svg>;
-var svg_insecure = <svg viewBox="0 0 347.97 347.97"><path d="M317.469 61.615c-59.442 0-104.976-16.082-143.489-51.539-38.504 35.457-84.04 51.539-143.479 51.539 0 92.337-20.177 224.612 143.479 278.324 163.661-53.717 143.489-185.992 143.489-278.324z" fill="none" stroke="red" stroke-width="14.827"/><g fill="red"><path d="M238.802 115.023l-111.573 114.68-8.6-8.367L230.2 106.656z"/><path d="M125.559 108.093l114.68 111.572-8.368 8.601-114.68-111.572z"/></g></svg>;
-var svg_insecure_relay = <svg viewBox="0 0 347.97 347.97"><path d="M317.469 61.615c-59.442 0-104.976-16.082-143.489-51.539-38.504 35.457-84.04 51.539-143.479 51.539 0 92.337-20.177 224.612 143.479 278.324 163.661-53.717 143.489-185.992 143.489-278.324z" fill="none" stroke="red" stroke-width="14.827"/><g fill="red"><path d="M231.442 247.498l-7.754-10.205c-17.268 12.441-38.391 17.705-59.478 14.822-21.087-2.883-39.613-13.569-52.166-30.088-25.916-34.101-17.997-82.738 17.65-108.42 32.871-23.685 78.02-19.704 105.172 7.802l-32.052 7.987 3.082 12.369 48.722-12.142-11.712-46.998-12.822 3.196 4.496 18.039c-31.933-24.008-78.103-25.342-112.642-.458-31.361 22.596-44.3 60.436-35.754 94.723 2.77 11.115 7.801 21.862 15.192 31.588 30.19 39.727 88.538 47.705 130.066 17.785z"/></g></svg>;
-var svg_secure_relay = <svg viewBox="0 0 347.97 347.97"><path d="M317.469 61.615c-59.442 0-104.976-16.082-143.489-51.539-38.504 35.457-84.04 51.539-143.479 51.539 0 92.337-20.177 224.612 143.479 278.324 163.661-53.717 143.489-185.992 143.489-278.324z" fill="#3f7d46" stroke="#3f7d46" stroke-width="14.827"/><g fill="red"><path d="M231.442 247.498l-7.754-10.205c-17.268 12.441-38.391 17.705-59.478 14.822-21.087-2.883-39.613-13.569-52.166-30.088-25.916-34.101-17.997-82.738 17.65-108.42 32.871-23.685 78.02-19.704 105.172 7.802l-32.052 7.987 3.082 12.369 48.722-12.142-11.712-46.998-12.822 3.196 4.496 18.039c-31.933-24.008-78.103-25.342-112.642-.458-31.361 22.596-44.3 60.436-35.754 94.723 2.77 11.115 7.801 21.862 15.192 31.588 30.19 39.727 88.538 47.705 130.066 17.785z" fill="#fff"/></g></svg>;
+</svg>);
+const svg_insecure = (<svg viewBox="0 0 347.97 347.97"><path d="M317.469 61.615c-59.442 0-104.976-16.082-143.489-51.539-38.504 35.457-84.04 51.539-143.479 51.539 0 92.337-20.177 224.612 143.479 278.324 163.661-53.717 143.489-185.992 143.489-278.324z" fill="none" stroke="red" stroke-width="14.827"/><g fill="red"><path d="M238.802 115.023l-111.573 114.68-8.6-8.367L230.2 106.656z"/><path d="M125.559 108.093l114.68 111.572-8.368 8.601-114.68-111.572z"/></g></svg>);
+const svg_insecure_relay = (<svg viewBox="0 0 347.97 347.97"><path d="M317.469 61.615c-59.442 0-104.976-16.082-143.489-51.539-38.504 35.457-84.04 51.539-143.479 51.539 0 92.337-20.177 224.612 143.479 278.324 163.661-53.717 143.489-185.992 143.489-278.324z" fill="none" stroke="red" stroke-width="14.827"/><g fill="red"><path d="M231.442 247.498l-7.754-10.205c-17.268 12.441-38.391 17.705-59.478 14.822-21.087-2.883-39.613-13.569-52.166-30.088-25.916-34.101-17.997-82.738 17.65-108.42 32.871-23.685 78.02-19.704 105.172 7.802l-32.052 7.987 3.082 12.369 48.722-12.142-11.712-46.998-12.822 3.196 4.496 18.039c-31.933-24.008-78.103-25.342-112.642-.458-31.361 22.596-44.3 60.436-35.754 94.723 2.77 11.115 7.801 21.862 15.192 31.588 30.19 39.727 88.538 47.705 130.066 17.785z"/></g></svg>);
+const svg_secure_relay = (<svg viewBox="0 0 347.97 347.97"><path d="M317.469 61.615c-59.442 0-104.976-16.082-143.489-51.539-38.504 35.457-84.04 51.539-143.479 51.539 0 92.337-20.177 224.612 143.479 278.324 163.661-53.717 143.489-185.992 143.489-278.324z" fill="#3f7d46" stroke="#3f7d46" stroke-width="14.827"/><g fill="red"><path d="M231.442 247.498l-7.754-10.205c-17.268 12.441-38.391 17.705-59.478 14.822-21.087-2.883-39.613-13.569-52.166-30.088-25.916-34.101-17.997-82.738 17.65-108.42 32.871-23.685 78.02-19.704 105.172 7.802l-32.052 7.987 3.082 12.369 48.722-12.142-11.712-46.998-12.822 3.196 4.496 18.039c-31.933-24.008-78.103-25.342-112.642-.458-31.361 22.596-44.3 60.436-35.754 94.723 2.77 11.115 7.801 21.862 15.192 31.588 30.19 39.727 88.538 47.705 130.066 17.785z" fill="#fff"/></g></svg>);
 
-var cur_window_state = view.windowState;
-function check_state_change() {
-    if (view.windowState != cur_window_state) {
-        stateChanged();
-    }
-    self.timer(30ms, check_state_change);
-}
+var cur_window_state = view.state;
+
 
 if (is_linux) {
-    check_state_change();
+    // check_state_change;
+    setInterval(() => {
+        if (view.state != cur_window_state) {
+            stateChanged();
+        }    
+    }, 30);
 } else {
-    view << event statechange {
+    view.on("statechange",()=>{
         stateChanged();
-    }
+    })
 }
 
 function get_id() {
-    return handler.get_option('alias') || handler.get_id()
+    return handler.xcall("get_option","alias") || handler.xcall("get_id")
 }
 
 function stateChanged() {
-    stdout.println('state changed from ' + cur_window_state + ' -> ' + view.windowState);
-    cur_window_state = view.windowState;
+    console.log('state changed from ' + cur_window_state + ' -> ' + view.state);
+    cur_window_state = view.state;
     adjustBorder();
     adaptDisplay();
-    if (cur_window_state != View.WINDOW_MINIMIZED) {
+    if (cur_window_state != Window.WINDOW_MINIMIZED) {
         view.focus = handler; // to make focus away from restore/maximize button, so that enter key work
     }
-    var fs = view.windowState == View.WINDOW_FULL_SCREEN;
-    var el = $(#fullscreen);
-    if (el) el.attributes.toggleClass("active", fs);
-    el = $(#maximize);
+    let fs = view.state == Window.WINDOW_FULL_SCREEN;
+    let el = $("#fullscreen");
+    if (el) el.classList.toggle("active", fs);
+    el = $("#maximize");
     if (el) {
-        el.state.disabled = fs;
+        el.state.disabled = fs; // TODO TEST
     }
     if (fs) {
-        $(header).style.set {
-            display: "none",
-        };
+        $("header").style.setProperty("display","none");
     }
 }
 
-var header;
-var old_window_state = View.WINDOW_SHOWN;
+export var header;
+var old_window_state = Window.WINDOW_SHOWN;
 var input_blocked;
 
-class Header: Reactor.Component {
-    function this() {
+class Header extends Element {
+    this() {
         header = this;
     }
 
-    function render() {
-        var icon_conn;
-        var title_conn;
+    render() {
+        let icon_conn;
+        let title_conn;
         if (this.secure_connection && this.direct_connection) {
             icon_conn = svg_secure;
             title_conn = translate("Direct and encrypted connection");
@@ -82,95 +84,96 @@ class Header: Reactor.Component {
             icon_conn = svg_insecure_relay;
             title_conn = translate("Relayed and unencrypted connection");
         }
-        var title = get_id();
+        let title = get_id();
         if (pi.hostname) title += "(" + pi.username + "@" + pi.hostname + ")";
         if ((pi.displays || []).length == 0) {
-            return <div .ellipsis style="size:*;text-align:center;margin:*;">{title}</div>;
+            return (<div class="ellipsis" style="size:*;text-align:center;margin:*;">{title}</div>);
         }
-        var screens = pi.displays.map(function(d, i) {
-            return <div #screen class={pi.current_display == i ? "current" : ""}>
+        let screens = pi.displays.map(function(d, i) {
+            return <div id="screen" class={pi.current_display == i ? "current" : ""}>
                 {i+1}
             </div>;
         });
         updateWindowToolbarPosition();
-        var style = "flow:horizontal;";
+        let style = "flow:horizontal;";
         if (is_osx) style += "margin:*";
-        self.timer(1ms, toggleMenuState);
-        return <div style={style}>
-            {is_osx || is_xfce ? "" : <span #fullscreen>{svg_fullscreen}</span>}
-            <div #screens>
-                <span #secure title={title_conn}>{icon_conn}</span>
-                <div .remote-id>{get_id()}</div>
+        setTimeout(toggleMenuState,1);
+        
+        return (<div style={style}>
+            {is_osx || is_xfce ? "" : <span id="fullscreen">{svg_fullscreen}</span>}
+            <div id="screens">
+                <span id="secure" title={title_conn}>{icon_conn}</span>
+                <div class="remote-id">{get_id()}</div>
                 <div style="flow:horizontal;border-spacing: 0.5em;">{screens}</div>
                 {this.renderGlobalScreens()}
             </div>
-            <span #chat>{svg_chat}</span>
-            <span #action>{svg_action}</span>
-            <span #display>{svg_display}</span>
+            <span id="chat">{svg_chat}</span>
+            <span id="action">{svg_action}</span>
+            <span id="display">{svg_display}</span>
             {this.renderDisplayPop()}
             {this.renderActionPop()}
-        </div>;
-    }
+        </div>);
+    }    
 
-    function renderDisplayPop() {
-        return <popup>
-            <menu.context #display-options>
-                <li #adjust-window style="display:none">{translate('Adjust Window')}</li> 
-                <div #adjust-window .separator style="display:none"/>
-                <li #original type="view-style"><span>{svg_checkmark}</span>{translate('Original')}</li> 
-                <li #shrink type="view-style"><span>{svg_checkmark}</span>{translate('Shrink')}</li> 
-                <li #stretch type="view-style"><span>{svg_checkmark}</span>{translate('Stretch')}</li> 
-                <div .separator />
-                <li #best type="image-quality"><span>{svg_checkmark}</span>{translate('Good image quality')}</li> 
-                <li #balanced type="image-quality"><span>{svg_checkmark}</span>{translate('Balanced')}</li> 
-                <li #low type="image-quality"><span>{svg_checkmark}</span>{translate('Optimize reaction time')}</li> 
-                <li #custom type="image-quality"><span>{svg_checkmark}</span>{translate('Custom')}</li>
-                <div .separator />
-                <li #show-remote-cursor .toggle-option><span>{svg_checkmark}</span>{translate('Show remote cursor')}</li> 
-                {audio_enabled ? <li #disable-audio .toggle-option><span>{svg_checkmark}</span>{translate('Mute')}</li> : ""}
-                {keyboard_enabled && clipboard_enabled ? <li #disable-clipboard .toggle-option><span>{svg_checkmark}</span>{translate('Disable clipboard')}</li> : ""} 
-                {keyboard_enabled ? <li #lock-after-session-end .toggle-option><span>{svg_checkmark}</span>{translate('Lock after session end')}</li> : ""} 
-                {false && pi.platform == "Windows" ? <li #privacy-mode .toggle-option><span>{svg_checkmark}</span>{translate('Privacy mode')}</li> : ""}
+    renderDisplayPop() {
+        return (<popup>
+            <menu class="context" id="display-options">
+                <li id="adjust-window" style="display:none">{translate('Adjust Window')}</li> 
+                <div id="adjust-window" class="separator" style="display:none"/>
+                <li id="original" type="view-style"><span>{svg_checkmark}</span>{translate('Original')}</li> 
+                <li id="shrink" type="view-style"><span>{svg_checkmark}</span>{translate('Shrink')}</li> 
+                <li id="stretch" type="view-style"><span>{svg_checkmark}</span>{translate('Stretch')}</li> 
+                <div class="separator" />
+                <li id="best" type="image-quality"><span>{svg_checkmark}</span>{translate('Good image quality')}</li> 
+                <li id="balanced" type="image-quality"><span>{svg_checkmark}</span>{translate('Balanced')}</li> 
+                <li id="low" type="image-quality"><span>{svg_checkmark}</span>{translate('Optimize reaction time')}</li> 
+                <li id="custom" type="image-quality"><span>{svg_checkmark}</span>{translate('Custom')}</li>
+                <div class="separator" />
+                <li id="show-remote-cursor" class="toggle-option"><span>{svg_checkmark}</span>{translate('Show remote cursor')}</li> 
+                {audio_enabled ? <li id="disable-audio" class="toggle-option"><span>{svg_checkmark}</span>{translate('Mute')}</li> : ""}
+                {keyboard_enabled && clipboard_enabled ? <li id="disable-clipboard" class="toggle-option"><span>{svg_checkmark}</span>{translate('Disable clipboard')}</li> : ""} 
+                {keyboard_enabled ? <li id="lock-after-session-end" class="toggle-option"><span>{svg_checkmark}</span>{translate('Lock after session end')}</li> : ""} 
+                {false && pi.platform == "Windows" ? <li id="privacy-mode" class="toggle-option"><span>{svg_checkmark}</span>{translate('Privacy mode')}</li> : ""}
             </menu>
-        </popup>;
+        </popup>);
     }
 
-    function renderActionPop() {
-        return <popup>
-            <menu.context #action-options>
-                <li #transfer-file>{translate('Transfer File')}</li> 
-                <li #tunnel>{translate('TCP Tunneling')}</li> 
-                <div .separator />
-                {keyboard_enabled && (pi.platform == "Linux" || pi.sas_enabled) ? <li #ctrl-alt-del>{translate('Insert')} Ctrl + Alt + Del</li> : ""}
-                <div .separator />
-                {keyboard_enabled ? <li #lock-screen>{translate('Insert Lock')}</li> : ""}
-                {false && pi.platform == "Windows" ? <li #block-input>Block user input </li> : ""}
-                {handler.support_refresh() ? <li #refresh>{translate('Refresh')}</li> : ""}
+    renderActionPop() {
+        return (<popup>
+            <menu class="context" id="action-options">
+                <li id="transfer-file">{translate('Transfer File')}</li> 
+                <li id="tunnel">{translate('TCP Tunneling')}</li> 
+                <div class="separator" />
+                {keyboard_enabled && (pi.platform == "Linux" || pi.sas_enabled) ? <li id="ctrl-alt-del">{translate('Insert')} Ctrl + Alt + Del</li> : ""}
+                <div class="separator" />
+                {keyboard_enabled ? <li id="lock-screen">{translate('Insert Lock')}</li> : ""}
+                {false && pi.platform == "Windows" ? <li id="block-input">Block user input </li> : ""}
+                {handler.support_refresh() ? <li id="refresh">{translate('Refresh')}</li> : ""}
             </menu>
-        </popup>;
+        </popup>);
     }
 
-    function renderGlobalScreens() {
+    renderGlobalScreens() {
         if (pi.displays.length < 3) return "";
-        var x0 = 9999999;
-        var y0 = 9999999;
-        var x = -9999999;
-        var y = -9999999;
+        let x0 = 9999999;
+        let y0 = 9999999;
+        let x = -9999999;
+        let y = -9999999;
         pi.displays.map(function(d, i) {
             if (d.x < x0) x0 = d.x;
             if (d.y < y0) y0 = d.y;
-            var dx = d.x + d.width;
+            let dx = d.x + d.width;
             if (dx > x) x = dx;
-            var dy = d.y + d.height;
+            let dy = d.y + d.height;
             if (dy > y) y = dy;
         });
-        var w = x - x0;
-        var h = y - y0;
-        var scale = 16. / h;
-        var screens = pi.displays.map(function(d, i) {
-            var min_wh = d.width > d.height ? d.height : d.width;
-            var fs = min_wh * 0.9 * scale;
-            var style = "width:" + (d.width * scale) + "px;" +
+        let w = x - x0;
+        let h = y - y0;
+        let scale = 16. / h;
+        let screens = pi.displays.map(function(d, i) {
+            let min_wh = d.width > d.height ? d.height : d.width;
+            let fs = min_wh * 0.9 * scale;
+            let style = "width:" + (d.width * scale) + "px;" +
                         "height:" + (d.height * scale) + "px;" +
                         "left:" + ((d.x - x0) * scale) + "px;" +
                         "top:" + ((d.y - y0) * scale) + "px;" +
@@ -181,91 +184,91 @@ class Header: Reactor.Component {
             return <div style={style} class={pi.current_display == i ? "current" : ""}>{i+1}</div>;
         });
 
-        var style = "width:" + (w * scale) + "px; height:" + (h * scale) + "px;";
-        return <div #global-screens style={style}>
+        let style = "width:" + (w * scale) + "px; height:" + (h * scale) + "px;";
+        return <div id="global-screens" style={style}>
             {screens}
         </div>;
     }
 
-    event click $(#fullscreen) (_, el) {
-        if (view.windowState == View.WINDOW_FULL_SCREEN) {
-            if (old_window_state == View.WINDOW_MAXIMIZED) {
-                view.windowState = View.WINDOW_SHOWN;
+    ["on click at #fullscreen"](_, el) {
+        if (view.state == Window.WINDOW_FULL_SCREEN) {
+            if (old_window_state == Window.WINDOW_MAXIMIZED) {
+                view.state = Window.WINDOW_SHOWN;
             }
-            view.windowState = old_window_state;
+            view.state = old_window_state;
         } else {
-            old_window_state = view.windowState;
-            if (view.windowState == View.WINDOW_MAXIMIZED) {
-                view.windowState = View.WINDOW_SHOWN;
+            old_window_state = view.state;
+            if (view.state == Window.WINDOW_MAXIMIZED) {
+                view.state = Window.WINDOW_SHOWN;
             }
-            view.windowState = View.WINDOW_FULL_SCREEN;
-            if (is_linux) { self.timer(150ms, function() { view.windowState = View.WINDOW_FULL_SCREEN; }); }
+            view.state = Window.WINDOW_FULL_SCREEN;
+            if (is_linux) { setTimeout(()=>view.state = Window.WINDOW_FULL_SCREEN,150); }
         }
     }
     
-    event click $(#chat) {
+    ["on click at #chat"]() {
         startChat();
     }
     
-    event click $(#action) (_, me) {
-        var menu = $(menu#action-options);
+    ["on click at #action"](_, me) {
+        let menu = $("menu#action-options");
         me.popup(menu);
     }
 
-    event click $(#display) (_, me) {
-        var menu = $(menu#display-options);
+    ["on click at #display"](_, me) {
+        let menu = $("menu#display-options");
         me.popup(menu);
     }
 
-    event click $(#screen) (_, me) {
+    ["on click at #screen"](_, me) {
         if (pi.current_display == me.index) return;
-        handler.switch_display(me.index);
+        handler.xcall("switch_display",me.index);
     }
 
-    event click $(#transfer-file) {
-        handler.transfer_file();
+    ["on click at #transfer-file"]() {
+        handler.xcall("transfer_file");
     }
 
-    event click $(#tunnel) {
-        handler.tunnel();
+    ["on click at #tunnel"] () {
+        handler.xcall("tunnel");
     }
 
-    event click $(#ctrl-alt-del) {
-        handler.ctrl_alt_del();
+    ["on click at #ctrl-alt-del"]() {
+        handler.xcall("ctrl_alt_del");
     }
     
-    event click $(#lock-screen) {
-        handler.lock_screen();
+    ["on click at #lock-screen"]() {
+        handler.xcall("lock_screen");
     }
     
-    event click $(#refresh) {
-        handler.refresh_video();
+    ["on click at #refresh"] () {
+        handler.xcall("refresh_video");
     }
 
-    event click $(#block-input) {
+    ["on click at #block-input"] (_,me) {
         if (!input_blocked) {
-            handler.toggle_option("block-input");
+            handler.xcall("toggle_option","block-input");
             input_blocked = true;
-            $(#block-input).text = "Unblock user input";
+            me.text = "Unblock user input"; // TEST 
         } else {
-            handler.toggle_option("unblock-input");
+            handler.xcall("toggle_option","unblock-input");
             input_blocked = false;
-            $(#block-input).text = "Block user input";
+            me.text = "Block user input";
         }
     }
 
-    event click $(menu#display-options>li) (_, me) {
+    ["on click at menu#display-options>li"] (_, me) {
         if (me.id == "custom") {
             handle_custom_image_quality();
         } else if (me.attributes.hasClass("toggle-option")) {
             handler.toggle_option(me.id);
             toggleMenuState();
         } else if (!me.attributes.hasClass("selected")) {
-            var type =  me.attributes["type"];
+            let type =  me.attributes["type"];
             if (type == "image-quality") {
-                handler.save_image_quality(me.id);
+                handler.xcall("save_image_quality",me.id);
             } else if (type == "view-style") {
-                handler.save_view_style(me.id);
+                handler.xcall("save_view_style",me.id);
                 adaptDisplay();
             }
             toggleMenuState();
@@ -274,96 +277,90 @@ class Header: Reactor.Component {
 }
 
 function handle_custom_image_quality() {
-    var tmp = handler.get_custom_image_quality();
-    var bitrate0 = tmp[0] || 50;
-    var quantizer0 = tmp.length > 1 ? tmp[1] : 100;
+    let tmp = handler.xcall("get_custom_image_quality");
+    let bitrate0 = tmp[0] || 50;
+    let quantizer0 = tmp.length > 1 ? tmp[1] : 100;
     msgbox("custom", "Custom Image Quality", "<div .form> \
           <div><input type=\"hslider\" style=\"width: 50%\" name=\"bitrate\" max=\"100\" min=\"10\" value=\"" + bitrate0 + "\"/ buddy=\"bitrate-buddy\"><b #bitrate-buddy>x</b>% bitrate</div> \
           <div><input type=\"hslider\" style=\"width: 50%\" name=\"quantizer\" max=\"100\" min=\"0\" value=\"" + quantizer0 + "\"/ buddy=\"quantizer-buddy\"><b #quantizer-buddy>x</b>% quantizer</div> \
       </div>", function(res=null) {
         if (!res) return;
         if (!res.bitrate) return;
-        handler.save_custom_image_quality(res.bitrate, res.quantizer);
+        handler.xcall("save_custom_image_quality",res.bitrate, res.quantizer);
         toggleMenuState();
       });
 }
 
 function toggleMenuState() {
-    var values = [];
-    var q = handler.get_image_quality();
+    let values = [];
+    let q = handler.xcall("get_image_quality");
     if (!q) q = "balanced";
     values.push(q);
-    var s = handler.get_view_style();
+    let s = handler.xcall("get_view_style");
     if (!s) s = "original";
     values.push(s);
-    for (var el in $$(menu#display-options>li)) {
-        el.attributes.toggleClass("selected", values.indexOf(el.id) >= 0);
+    for (let el in $$("menu#display-options>li")) {
+        el.classList.toggle("selected", values.indexOf(el.id) >= 0);
     }
-    for (var id in ["show-remote-cursor", "disable-audio", "disable-clipboard", "lock-after-session-end", "privacy-mode"]) {
-        var el = self.select('#' + id);
+    for (let id in ["show-remote-cursor", "disable-audio", "disable-clipboard", "lock-after-session-end", "privacy-mode"]) {
+        let el = $('#' + id); // TEST
         if (el) {
-            el.attributes.toggleClass("selected", handler.get_toggle_option(id));
+            el.classList.toggle("selected", handler.xcall("get_toggle_option",id));
         }
     }
 }
 
 if (is_osx) {
-    $(header).content(<Header />);
-    $(header).attributes["role"] = "window-caption";
+    $("header").content(<Header />);
+    $("header").attributes["role"] = "window-caption"; // TODO 
 } else {
     if (is_file_transfer || is_port_forward) {
-        $(caption).content(<Header />);
+        $("caption").content(<Header />);
     } else {
-        $(div.window-toolbar).content(<Header />);
+        $("div.window-toolbar").content(<Header />);
     }
     setWindowButontsAndIcon();
 }
 
 if (!(is_file_transfer || is_port_forward)) {
-    $(header).style.set {
-        height: "32px",
-    };
+    $("header").style.setProperty("height","32px");
     if (!is_osx) {
-        $(div.window-icon).style.set {
-            size: "32px",
-        };
+        $("div.window-icon").style.setProperty("size","32px");
     }
 }
 
 handler.updatePi = function(v) {
     pi = v;
-    header.update();
+    header.componentUpdate();
     if (is_port_forward) {
-        view.windowState = View.WINDOW_MINIMIZED;
+        view.state = Window.WINDOW_MINIMIZED;
     }
 }
 
 handler.switchDisplay = function(i) {
     pi.current_display = i;
-    header.update();
+    header.componentUpdate();
 }
 
 function updateWindowToolbarPosition() {
     if (is_osx) return;
-    self.timer(1ms, function() {
-        var el = $(div.window-toolbar);
-        var w1 = el.box(#width, #border);
-        var w2 = $(header).box(#width, #border);
-        var x = (w2 - w1) / 2;
-        el.style.set {
-            left: x + "px",
-            display: "block",
-        };
-    });
+    setTimeout(function() {
+        let el = $("div.window-toolbar");
+        let w1 = el.state.box("width", "border"); // TEST
+        let w2 = $("header").state.box("width", "border");
+        let x = (w2 - w1) / 2;
+        el.style.setProperty("left",x + "px");
+        el.style.setProperty("display","block")
+    },1);
 }
 
-view.on("size", function() {
+view.onsizechange = function() {
     // ensure size is done, so add timer
-    self.timer(1ms, function() {
+    setTimeout(function() {
         updateWindowToolbarPosition();
         adaptDisplay();
-    });
-});
+    },1);
+};
 
 handler.newMessage = function(text) {
     chat_msgs.push({text: text, name: pi.username || "", time: getNowStr()});
@@ -372,25 +369,25 @@ handler.newMessage = function(text) {
 
 function sendMsg(text) {
     chat_msgs.push({text: text, name: "me", time: getNowStr()});
-    handler.send_chat(text);
+    handler.xcall("send_chat",text);
     if (chatbox) chatbox.refresh();
 }
 
 var chatbox;
 function startChat() {
     if (chatbox) {
-        chatbox.windowState = View.WINDOW_SHOWN;
-        chatbox.refresh();
+        chatbox.state = Window.WINDOW_SHOWN; // TODO TEST el.state
+        chatbox.refresh(); // TODO el.refresh
         return;
     }
-    var icon = handler.get_icon();
-    var (sx, sy, sw, sh) = view.screenBox(#workarea, #rectw);
-    var w = 300;
-    var h = 400;
-    var x = (sx + sw - w) / 2;
-    var y = sy + 80;
-    var params = {
-        type: View.FRAME_WINDOW,
+    let icon = handler.xcall("get_icon");
+    let [sx, sy, sw, sh] = view.screenBox("workarea", "rectw"); // TEST
+    let w = 300;
+    let h = 400;
+    let x = (sx + sw - w) / 2;
+    let y = sy + 80;
+    let params = {
+        type: Window.FRAME_WINDOW,
         x: x,
         y: y,
         width: w,
@@ -399,14 +396,15 @@ function startChat() {
         parameters: { msgs: chat_msgs, callback: sendMsg, icon: icon },
         caption: get_id(),
     };
-    var html = handler.get_chatbox();
+    let html = handler.xcall("get_chatbox");
     if (html) params.html = html;
-    else params.url = self.url("chatbox.html");
-    chatbox = view.window(params);
+    else params.url = document.url("chatbox.html");
+    chatbox = view.window(params); // TEST
 }
 
 handler.setConnectionType = function(secured, direct) {
-    header.update({
+    // TEST
+    header.componentUpdate({
        secure_connection: secured,
        direct_connection: direct, 
     });

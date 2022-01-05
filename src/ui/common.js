@@ -1,3 +1,4 @@
+
 export const view = Window.this;
 export const handler = document.$("#handler") || view;
 
@@ -10,8 +11,8 @@ export const is_linux = OS == "Linux";
 
 view.mediaVar("is_osx", is_osx);
 view.mediaVar("not_osx", !is_osx);
-var is_file_transfer;
-var is_xfce = false;
+export var is_file_transfer;
+export var is_xfce = false;
 try { is_xfce = handler.xcall("is_xfce"); } catch (e) { }
 
 
@@ -266,7 +267,7 @@ function msgbox_(type, title, text, callback, height, width, retry, contentStyle
     }
 }
 
-function connecting() {
+export function connecting() {
     handler.msgbox("connecting", "Connecting...", "Connection in progress. Please wait.");
 }
 
