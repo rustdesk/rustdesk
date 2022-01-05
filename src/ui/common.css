@@ -4,6 +4,7 @@ html {
     var(gray-bg): #eee;
     var(bg): white;
     var(border): #ccc;
+    var(hover-border): #999;
     var(text): #222;
     var(placeholder): #aaa;
     var(lighter-text): #888;
@@ -50,6 +51,10 @@ button.button:active, button.active {
     background: color(accent);
     color: color(bg);
     border-color: color(accent);
+}
+
+button.button:hover, button.outline:hover {
+  border-color: color(hover-border);
 }
 
 input[type=text], input[type=password], input[type=number] {

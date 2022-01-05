@@ -103,8 +103,33 @@ impl Drop for OboePlayer {
 
 impl Client {
     pub async fn start(peer: &str, conn_type: ConnType) -> ResultType<(Stream, bool)> {
+        match Self::_start(peer, conn_type).await {
+            Err(err) => {
+                let err_str = err.to_string();
+                if err_str.starts_with("Failed") {
+                    bail!(err_str + ": Please try later");
+                } else {
+                    return Err(err);
+                }
+            }
+            Ok(x) => Ok(x),
+        }
+    }
+
+    async fn _start(peer: &str, conn_type: ConnType) -> ResultType<(Stream, bool)> {
         // to-do: remember the port for each peer, so that we can retry easier
         let any_addr = Config::get_any_listen_addr();
+        if crate::is_ip(peer) {
+            return Ok((
+                socket_client::connect_tcp(
+                    crate::check_port(peer, RELAY_PORT + 1),
+                    any_addr,
+                    RENDEZVOUS_TIMEOUT,
+                )
+                .await?,
+                true,
+            ));
+        }
         let rendezvous_server = crate::get_rendezvous_server(1_000).await;
         log::info!("rendezvous server: {}", rendezvous_server);
 

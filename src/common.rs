@@ -342,7 +342,7 @@ async fn test_rendezvous_server_() {
         futs.push(tokio::spawn(async move {
             let tm = std::time::Instant::now();
             if socket_client::connect_tcp(
-                &crate::check_port(&host, RENDEZVOUS_PORT),
+                crate::check_port(&host, RENDEZVOUS_PORT),
                 Config::get_any_listen_addr(),
                 RENDEZVOUS_TIMEOUT,
             )
@@ -461,3 +461,10 @@ async fn _check_software_update() -> hbb_common::ResultType<()> {
     }
     Ok(())
 }
+
+pub fn is_ip(id: &str) -> bool {
+    hbb_common::regex::Regex::new(r"^\d+\.\d+\.\d+\.\d+$")
+        .unwrap()
+        .is_match(id)
+}
+

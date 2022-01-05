@@ -589,7 +589,7 @@ impl Connection {
                 }
                 _ => {}
             }
-            if lr.username != Config::get_id() {
+            if !crate::is_ip(&lr.username) && lr.username != Config::get_id() {
                 self.send_login_error("Offline").await;
             } else if lr.password.is_empty() {
                 self.try_start_cm(lr.my_id, lr.my_name, false).await;

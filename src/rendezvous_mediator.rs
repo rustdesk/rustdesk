@@ -31,6 +31,7 @@ lazy_static::lazy_static! {
     static ref SOLVING_PK_MISMATCH: Arc<Mutex<String>> = Default::default();
 }
 static SHOULD_EXIT: AtomicBool = AtomicBool::new(false);
+const REG_INTERVAL: i64 = 12_000;
 
 #[derive(Clone)]
 pub struct RendezvousMediator {
@@ -54,6 +55,10 @@ impl RendezvousMediator {
             crate::common::test_nat_type();
             nat_tested = true;
         }
+        let server_cloned = server.clone();
+        tokio::spawn(async move {
+            allow_err!(direct_server(server_cloned).await);
+        });
         loop {
             Config::reset_online();
             if Config::get_option("stop-service").is_empty() {
@@ -111,7 +116,6 @@ impl RendezvousMediator {
         const TIMER_OUT: Duration = Duration::from_secs(1);
         let mut timer = interval(TIMER_OUT);
         let mut last_timer = SystemTime::UNIX_EPOCH;
-        const REG_INTERVAL: i64 = 12_000;
         const REG_TIMEOUT: i64 = 3_000;
         const MAX_FAILS1: i64 = 3;
         const MAX_FAILS2: i64 = 6;
@@ -246,7 +250,7 @@ impl RendezvousMediator {
                                     // old UDP socket not work any more after network recover
                                     if let Some(s) = socket_client::rebind_udp(any_addr).await? {
                                         socket = s;
-                                    };
+                                    }
                                     last_dns_check = now;
                                 }
                             } else if fails > MAX_FAILS1 {
@@ -455,5 +459,45 @@ impl RendezvousMediator {
         });
         socket.send(&msg_out, self.addr.to_owned()).await?;
         Ok(())
+    }
+}
+
+async fn direct_server(server: ServerPtr) -> ResultType<()> {
+    let port = RENDEZVOUS_PORT + 2;
+    let addr = format!("0.0.0.0:{}", port);
+    let mut listener = None;
+    loop {
+        if !Config::get_option("direct-server").is_empty() && listener.is_none() {
+            listener = Some(hbb_common::tcp::new_listener(&addr, false).await?);
+            log::info!(
+                "Direct server listening on: {}",
+                &listener.as_ref().unwrap().local_addr()?
+            );
+        }
+        if let Some(l) = listener.as_mut() {
+            if let Ok(Ok((stream, addr))) = hbb_common::timeout(1000, l.accept()).await {
+                if Config::get_option("direct-server").is_empty() {
+                    continue;
+                }
+                log::info!("direct access from {}", addr);
+                let local_addr = stream.local_addr()?;
+                let server = server.clone();
+                tokio::spawn(async move {
+                    allow_err!(
+                        crate::server::create_tcp_connection(
+                            server,
+                            hbb_common::Stream::from(stream, local_addr),
+                            addr,
+                            false,
+                        )
+                        .await
+                    );
+                });
+            } else {
+                sleep(0.1).await;
+            }
+        } else {
+            sleep(1.).await;
+        }
     }
 }

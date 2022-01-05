@@ -218,6 +218,8 @@ async fn handle(data: Data, stream: &mut Connection) {
                     value = Some(Config::get_salt());
                 } else if name == "rendezvous_server" {
                     value = Some(Config::get_rendezvous_server());
+                } else if name == "rendezvous_servers" {
+                    value = Some(Config::get_rendezvous_servers().join(","));
                 } else {
                     value = None;
                 }
@@ -225,6 +227,7 @@ async fn handle(data: Data, stream: &mut Connection) {
             }
             Some(value) => {
                 if name == "id" {
+                    Config::set_key_confirmed(false);
                     Config::set_id(&value);
                 } else if name == "password" {
                     Config::set_password(&value);

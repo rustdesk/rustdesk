@@ -1568,6 +1568,7 @@ dependencies = [
  "protobuf-codegen-pure",
  "quinn",
  "rand 0.8.4",
+ "regex",
  "serde 1.0.133",
  "serde_derive",
  "serde_json 1.0.74",

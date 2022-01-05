@@ -62,6 +62,24 @@ function createNewConnect(id, type) {
     handler.new_remote(id, type);
 }
 
+var direct_server;
+class DirectServer: Reactor.Component {
+    function this() {
+        direct_server = this;
+    }
+
+    function render() {
+        var text = translate("Enable Direct IP Access");
+        var cls = handler.get_option("direct-server") == "Y" ? "selected" : "line-through";
+        return <li class={cls}><span>{svg_checkmark}</span>{text}</li>;
+    }
+    
+    function onClick() {
+        handler.set_option("direct-server", handler.get_option("direct-server") == "Y" ? "" : "Y");
+        this.update();
+    }
+}
+
 var myIdMenu;
 var audioInputMenu;
 class AudioInputs: Reactor.Component {
@@ -138,6 +156,7 @@ class MyIdMenu: Reactor.Component {
                 <li #socks5-server>{translate('Socks5 Proxy')}</li>
                 <div .separator />
                 <li #stop-service class={service_stopped ? "line-through" : "selected"}><span>{svg_checkmark}</span>{translate("Enable Service")}</li>
+                <DirectServer />
                 <div .separator />
                 <li #about>{translate('About')} {" "} {handler.get_app_name()}</li>
             </menu>
@@ -147,6 +166,7 @@ class MyIdMenu: Reactor.Component {
     event click $(svg#menu) (_, me) {
         audioInputMenu.update({ show: true });
         this.toggleMenuState();
+        if (direct_server) direct_server.update();
         var menu = $(menu#config-options);
         me.popup(menu);
     }
