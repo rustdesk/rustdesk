@@ -668,7 +668,7 @@ function checkConnectStatus() {
         }
         if (handler.recent_sessions_updated()) {
             stdout.println("recent sessions updated");
-            app.multipleSessions.update();
+            app.update();
         }
         checkConnectStatus();
     });

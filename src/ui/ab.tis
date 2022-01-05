@@ -287,4 +287,4 @@ class MultipleSessions: Reactor.Component {
     }
 }
 
-view.on("size", function() { app.multipleSessions.onSize(); });
+view.on("size", function() { if (app.multipleSessions) app.multipleSessions.onSize(); });
