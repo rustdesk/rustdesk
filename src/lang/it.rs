@@ -187,6 +187,7 @@ lazy_static::lazy_static! {
             ("Wrong credentials", "Credenziali errate"),
             ("Edit Tag", "Modifica tag"),
             ("Invalid folder name", "Nome della cartella non valido"),
+            ("Hostname", "Nome host"),
         ].iter().cloned().collect();
         }
     

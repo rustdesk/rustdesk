@@ -192,6 +192,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Remove from Favorites", "从收藏中删除"),
         ("Empty", "空空如也"),
         ("Invalid folder name", "无效文件夹名称"),
-        ("Socks5 Proxy", "Socks5 代理")
+        ("Socks5 Proxy", "Socks5 代理"),
+        ("Hostname", "主机名"),
     ].iter().cloned().collect();
     }
