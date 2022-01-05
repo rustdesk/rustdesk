@@ -8,7 +8,7 @@ use crate::common::SOFTWARE_UPDATE_URL;
 use crate::ipc;
 use hbb_common::{
     allow_err,
-    config::{Config, Fav, PeerConfig, APP_NAME, ICON},
+    config::{self, Config, Fav, PeerConfig, APP_NAME, ICON},
     log, sleep,
     tokio::{self, time},
 };
@@ -372,6 +372,29 @@ impl UI {
         return "".to_owned();
     }
 
+    fn get_socks(&self) -> Value {
+        let s = ipc::get_socks();
+        match s {
+            None => Value::null(),
+            Some(s) => {
+                let mut v = Value::array(0);
+                v.push(s.proxy);
+                v.push(s.username);
+                v.push(s.password);
+                v
+            }
+        }
+    }
+
+    fn set_socks(&self, proxy: String, username: String, password: String) {
+        ipc::set_socks(config::Socks5Server {
+            proxy,
+            username,
+            password,
+        })
+        .ok();
+    }
+
     fn is_installed(&mut self) -> bool {
         crate::platform::is_installed()
     }
@@ -628,6 +651,8 @@ impl sciter::EventHandler for UI {
         fn get_msgbox();
         fn install_me(String);
         fn is_installed();
+        fn set_socks(String, String, String);
+        fn get_socks();
         fn is_installed_lower_version();
         fn install_path();
         fn goto_install();

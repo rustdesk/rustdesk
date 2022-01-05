@@ -28,7 +28,7 @@ use uuid::Uuid;
 type Message = RendezvousMessage;
 
 lazy_static::lazy_static! {
-    pub static ref SOLVING_PK_MISMATCH: Arc<Mutex<String>> = Default::default();
+    static ref SOLVING_PK_MISMATCH: Arc<Mutex<String>> = Default::default();
 }
 static SHOULD_EXIT: AtomicBool = AtomicBool::new(false);
 
@@ -42,6 +42,10 @@ pub struct RendezvousMediator {
 }
 
 impl RendezvousMediator {
+    pub fn restart() {
+        SHOULD_EXIT.store(true, Ordering::SeqCst);
+    }
+
     pub async fn start_all() {
         let mut nat_tested = false;
         check_zombie();

@@ -3,7 +3,7 @@ use hbb_common::{
     allow_err,
     anyhow::bail,
     compress::{compress as compress_func, decompress},
-    config::{Config, NetworkType, COMPRESS_LEVEL, RENDEZVOUS_TIMEOUT},
+    config::{Config, COMPRESS_LEVEL, RENDEZVOUS_TIMEOUT},
     log,
     message_proto::*,
     protobuf::Message as _,
@@ -238,8 +238,9 @@ pub fn test_nat_type() {
 #[tokio::main(flavor = "current_thread")]
 async fn test_nat_type_() -> ResultType<bool> {
     log::info!("Testing nat ...");
+    let is_direct = crate::ipc::get_socks_async(1_000).await.is_none(); // sync socks BTW
     let start = std::time::Instant::now();
-    let rendezvous_server = get_rendezvous_server(100).await;
+    let rendezvous_server = get_rendezvous_server(1_000).await;
     let server1 = rendezvous_server;
     let tmp: Vec<&str> = server1.split(":").collect();
     if tmp.len() != 2 {
@@ -272,7 +273,7 @@ async fn test_nat_type_() -> ResultType<bool> {
             RENDEZVOUS_TIMEOUT,
         )
         .await?;
-        if Config::get_network_type() == NetworkType::Direct {
+        if is_direct {
             // to-do: should set NatType::UNKNOWN for proxy
             addr = socket.local_addr();
         }

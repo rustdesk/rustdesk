@@ -360,8 +360,9 @@ class PasswordComponent: Reactor.Component {
         var start = el.xcall(#selectionStart) || 0;
         var end = el.xcall(#selectionEnd);
         this.update({ visible: !this.visible });
+        var me = this;
         self.timer(30ms, function() {
-            var el = this.$(input);
+            var el = me.$(input);
             view.focus = el;
             el.value = value;
             el.xcall(#setSelection, start, end);

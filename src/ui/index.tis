@@ -135,6 +135,7 @@ class MyIdMenu: Reactor.Component {
                 <div .separator />
                 <li #whitelist title={translate('whitelist_tip')}>{translate('IP Whitelisting')}</li>
                 <li #custom-server>{translate('ID/Relay Server')}</li>
+                <li #socks5-server>{translate('Socks5 Proxy')}</li>
                 <div .separator />
                 <li #stop-service class={service_stopped ? "line-through" : "selected"}><span>{svg_checkmark}</span>{translate("Enable Service")}</li>
                 <div .separator />
@@ -210,6 +211,28 @@ class MyIdMenu: Reactor.Component {
                 configOptions["custom-rendezvous-server"] = id;
                 configOptions["relay-server"] = relay;
                 handler.set_options(configOptions);
+            }, 240);
+        } else if (me.id == "socks5-server") {
+            var socks5 = handler.get_socks() || {};
+            var old_proxy = socks5[0] || "";
+            var old_username = socks5[1] || "";
+            var old_password = socks5[2] || "";
+            msgbox("custom-server", "Socks5 Proxy", <div .form .set-password> 
+            <div><span>{translate("Hostname")}</span><input .outline-focus style='width: *' name='proxy' value={old_proxy} /></div>
+            <div><span>{translate("Username")}</span><input style='width: *' name='username' value={old_username} /></div>
+            <div><span>{translate("Password")}</span><PasswordComponent value={old_password} /></div>
+            </div>
+            , function(res=null) {
+                if (!res) return;
+                var proxy = (res.proxy || "").trim();
+                var username = (res.username || "").trim();
+                var password = (res.password || "").trim();
+                if (proxy == old_proxy && username == old_username && password == old_password) return;
+                if (proxy) {
+                    var err = handler.test_if_valid_server(proxy);
+                    if (err) return translate("Server") + ": " + err;
+                }
+                handler.set_socks(proxy, username, password);
             }, 240);
         } else if (me.id == "stop-service") {
             handler.set_option("stop-service", service_stopped ? "" : "Y");
