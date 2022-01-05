@@ -109,7 +109,8 @@ impl Client {
         log::info!("rendezvous server: {}", rendezvous_server);
 
         let mut socket =
-            socket_client::connect_tcp(rendezvous_server, any_addr, RENDEZVOUS_TIMEOUT).await?;
+            socket_client::connect_tcp(&*rendezvous_server, any_addr, RENDEZVOUS_TIMEOUT)
+                .await?;
         let my_addr = socket.local_addr();
         let mut pk = Vec::new();
         let mut relay_server = "".to_owned();
@@ -205,7 +206,7 @@ impl Client {
             peer,
             pk,
             &relay_server,
-            rendezvous_server,
+            &rendezvous_server,
             time_used,
             peer_nat_type,
             my_nat_type,
@@ -221,7 +222,7 @@ impl Client {
         peer_id: &str,
         pk: Vec<u8>,
         relay_server: &str,
-        rendezvous_server: SocketAddr,
+        rendezvous_server: &str,
         punch_time_used: u64,
         peer_nat_type: NatType,
         my_nat_type: i32,
@@ -385,7 +386,7 @@ impl Client {
     async fn request_relay(
         peer: &str,
         relay_server: String,
-        rendezvous_server: SocketAddr,
+        rendezvous_server: &str,
         secure: bool,
         conn_type: ConnType,
     ) -> ResultType<Stream> {

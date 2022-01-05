@@ -13,7 +13,7 @@ use hbb_common::{
         time::{interval, Duration},
     },
     udp::FramedSocket,
-    AddrMangle, ResultType,
+    AddrMangle, IntoTargetAddr, ResultType, TargetAddr,
 };
 use std::{
     net::SocketAddr,
@@ -32,13 +32,24 @@ lazy_static::lazy_static! {
 }
 static SHOULD_EXIT: AtomicBool = AtomicBool::new(false);
 
-#[derive(Clone)]
 pub struct RendezvousMediator {
-    addr: SocketAddr,
+    addr: TargetAddr<'static>,
     host: String,
     host_prefix: String,
     rendezvous_servers: Vec<String>,
     last_id_pk_registry: String,
+}
+
+impl Clone for RendezvousMediator {
+    fn clone(&self) -> Self {
+        Self {
+            addr: self.addr.to_owned(),
+            host: self.host.clone(),
+            host_prefix: self.host_prefix.clone(),
+            rendezvous_servers: self.rendezvous_servers.clone(),
+            last_id_pk_registry: self.last_id_pk_registry.clone(),
+        }
+    }
 }
 
 impl RendezvousMediator {
@@ -93,19 +104,17 @@ impl RendezvousMediator {
             })
             .unwrap_or(host.to_owned());
         let mut rz = Self {
-            addr: Config::get_any_listen_addr(),
+            addr: Config::get_any_listen_addr().into_target_addr()?,
             host: host.clone(),
             host_prefix,
             rendezvous_servers,
             last_id_pk_registry: "".to_owned(),
         };
-        let (mut socket, target_addr) = socket_client::new_udp(
-            crate::check_port(&host, RENDEZVOUS_PORT),
-            Config::get_any_listen_addr(),
-            RENDEZVOUS_TIMEOUT,
-        )
-        .await?;
-        rz.addr = target_addr;
+
+        rz.addr = socket_client::get_target_addr(&crate::check_port(&host, RENDEZVOUS_PORT))?;
+        let any_addr = Config::get_any_listen_addr();
+        let mut socket = socket_client::new_udp(any_addr, RENDEZVOUS_TIMEOUT).await?;
+
         const TIMER_OUT: Duration = Duration::from_secs(1);
         let mut timer = interval(TIMER_OUT);
         let mut last_timer = SystemTime::UNIX_EPOCH;
@@ -222,18 +231,6 @@ impl RendezvousMediator {
                     if SHOULD_EXIT.load(Ordering::SeqCst) {
                         break;
                     }
-                    if rz.addr.port() == 0 {
-                        allow_err!(rz.dns_check().await);
-                        if rz.addr.port() == 0 {
-                            continue;
-                        } else {
-                            // have to do this for osx, to avoid "Can't assign requested address"
-                            // when socket created before OS network ready
-                            if let Some(s) = socket_client::rebind(Config::get_any_listen_addr()).await? {
-                                socket = s;
-                            };
-                        }
-                    }
                     let now = SystemTime::now();
                     if now.duration_since(last_timer).map(|d| d < TIMER_OUT).unwrap_or(false) {
                         // a workaround of tokio timer bug
@@ -251,13 +248,12 @@ impl RendezvousMediator {
                                 Config::update_latency(&host, -1);
                                 old_latency = 0;
                                 if now.duration_since(last_dns_check).map(|d| d.as_millis() as i64).unwrap_or(0) > DNS_INTERVAL {
-                                    if let Ok(_) = rz.dns_check().await {
-                                        // in some case of network reconnect (dial IP network),
-                                        // old UDP socket not work any more after network recover
-                                        if let Some(s) = socket_client::rebind(Config::get_any_listen_addr()).await? {
-                                            socket = s;
-                                        };
-                                    }
+                                    rz.addr = socket_client::get_target_addr(&crate::check_port(&host, RENDEZVOUS_PORT))?;
+                                    // in some case of network reconnect (dial IP network),
+                                    // old UDP socket not work any more after network recover
+                                    if let Some(s) = socket_client::rebind_udp(any_addr).await? {
+                                        socket = s;
+                                    };
                                     last_dns_check = now;
                                 }
                             } else if fails > MAX_FAILS1 {
@@ -269,13 +265,6 @@ impl RendezvousMediator {
                 }
             }
         }
-        Ok(())
-    }
-
-    async fn dns_check(&mut self) -> ResultType<()> {
-        self.addr =
-            hbb_common::to_socket_addr(&crate::check_port(&self.host, RENDEZVOUS_PORT)).await?;
-        log::debug!("Lookup dns of {}", self.host);
         Ok(())
     }
 
@@ -310,7 +299,7 @@ impl RendezvousMediator {
         );
 
         let mut socket = socket_client::connect_tcp(
-            self.addr,
+            self.addr.to_owned(),
             Config::get_any_listen_addr(),
             RENDEZVOUS_TIMEOUT,
         )
@@ -338,7 +327,7 @@ impl RendezvousMediator {
         let peer_addr = AddrMangle::decode(&fla.socket_addr);
         log::debug!("Handle intranet from {:?}", peer_addr);
         let mut socket = socket_client::connect_tcp(
-            self.addr,
+            self.addr.to_owned(),
             Config::get_any_listen_addr(),
             RENDEZVOUS_TIMEOUT,
         )
@@ -382,7 +371,7 @@ impl RendezvousMediator {
         log::debug!("Punch hole to {:?}", peer_addr);
         let mut socket = {
             let socket = socket_client::connect_tcp(
-                self.addr,
+                self.addr.to_owned(),
                 Config::get_any_listen_addr(),
                 RENDEZVOUS_TIMEOUT,
             )
@@ -425,7 +414,7 @@ impl RendezvousMediator {
             pk,
             ..Default::default()
         });
-        socket.send(&msg_out, self.addr).await?;
+        socket.send(&msg_out, self.addr.to_owned()).await?;
         Ok(())
     }
 
@@ -471,7 +460,7 @@ impl RendezvousMediator {
             serial,
             ..Default::default()
         });
-        socket.send(&msg_out, self.addr).await?;
+        socket.send(&msg_out, self.addr.to_owned()).await?;
         Ok(())
     }
 }

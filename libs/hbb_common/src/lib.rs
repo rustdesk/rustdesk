@@ -27,9 +27,10 @@ pub use anyhow::{self, bail};
 pub use futures_util;
 pub mod config;
 pub mod fs;
-pub use socket_client::to_socket_addr;
 pub use sodiumoxide;
 pub use tokio_socks;
+pub use tokio_socks::IntoTargetAddr;
+pub use tokio_socks::TargetAddr;
 
 #[cfg(feature = "quic")]
 pub type Stream = quic::Connection;

@@ -13,7 +13,7 @@ use parity_tokio_ipc::{
     Connection as Conn, ConnectionClient as ConnClient, Endpoint, Incoming, SecurityAttributes,
 };
 use serde_derive::{Deserialize, Serialize};
-use std::{collections::HashMap, net::SocketAddr};
+use std::collections::HashMap;
 #[cfg(not(windows))]
 use std::{fs::File, io::prelude::*};
 
@@ -202,7 +202,7 @@ async fn handle(data: Data, stream: &mut Connection) {
                 } else if name == "salt" {
                     value = Some(Config::get_salt());
                 } else if name == "rendezvous_server" {
-                    value = Some(Config::get_rendezvous_server().await.to_string());
+                    value = Some(Config::get_rendezvous_server());
                 } else {
                     value = None;
                 }
@@ -397,13 +397,12 @@ pub fn get_password() -> String {
     }
 }
 
-pub async fn get_rendezvous_server(ms_timeout: u64) -> SocketAddr {
+pub async fn get_rendezvous_server(ms_timeout: u64) -> String {
     if let Ok(Some(v)) = get_config_async("rendezvous_server", ms_timeout).await {
-        if let Ok(v) = v.parse() {
-            return v;
-        }
+        v
+    } else {
+        Config::get_rendezvous_server()
     }
-    return Config::get_rendezvous_server().await;
 }
 
 async fn get_options_(ms_timeout: u64) -> ResultType<HashMap<String, String>> {

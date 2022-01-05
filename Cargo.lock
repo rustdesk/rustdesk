@@ -389,9 +389,9 @@ dependencies = [
 
 [[package]]
 name = "clipboard-win"
-version = "4.2.2"
+version = "4.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3db8340083d28acb43451166543b98c838299b7e0863621be53a338adceea0ed"
+checksum = "1951fb8aa063a2ee18b4b4d217e4aa2ec9cc4f2430482983f607fa10cd36d7aa"
 dependencies = [
  "error-code",
  "str-buf",
@@ -586,9 +586,9 @@ dependencies = [
 
 [[package]]
 name = "cstr_core"
-version = "0.2.4"
+version = "0.2.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "917ba9efe9e1e736671d5a03f006afc4e7e3f32503e2077e0bcaf519c0c8c1d3"
+checksum = "644828c273c063ab0d39486ba42a5d1f3a499d35529c759e763a9c6cb8a0fb08"
 dependencies = [
  "cty",
  "memchr",
@@ -1238,9 +1238,9 @@ dependencies = [
 
 [[package]]
 name = "generic-array"
-version = "0.14.4"
+version = "0.14.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "501466ecc8a30d1d3b7fc9229b122b2ce8ed6e9d9223f1138d4babb253e51817"
+checksum = "fd48d33ec7f05fbfa152300fdad764757cbded343c1aa1cff2fbaf4134851803"
 dependencies = [
  "typenum",
  "version_check",
@@ -3667,7 +3667,7 @@ dependencies = [
 [[package]]
 name = "tokio-socks"
 version = "0.5.1"
-source = "git+https://github.com/fufesou/tokio-socks#121a780c7e6a31c3aac70e7234f5c62eecaf0629"
+source = "git+https://github.com/fufesou/tokio-socks#83e9e9202b85b887999375e4d86e437e33d0535c"
 dependencies = [
  "bytes",
  "either",

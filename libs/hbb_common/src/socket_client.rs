@@ -1,5 +1,5 @@
 use crate::{
-    config::{Config, NetworkType, RENDEZVOUS_TIMEOUT},
+    config::{Config, NetworkType},
     tcp::FramedStream,
     udp::FramedSocket,
     ResultType,
@@ -7,15 +7,43 @@ use crate::{
 use anyhow::{bail, Context};
 use std::net::SocketAddr;
 use tokio::net::ToSocketAddrs;
-use tokio_socks::IntoTargetAddr;
+use tokio_socks::{IntoTargetAddr, TargetAddr};
 
-// fn get_socks5_conf() -> Option<Socks5Server> {
-//     // Config::set_socks(Some(Socks5Server {
-//     //     proxy: "139.186.136.143:1080".to_owned(),
-//     //     ..Default::default()
-//     // }));
-//     Config::get_socks()
-// }
+fn to_socket_addr(host: &str) -> ResultType<SocketAddr> {
+    use std::net::ToSocketAddrs;
+    let addrs: Vec<SocketAddr> = host.to_socket_addrs()?.collect();
+    if addrs.is_empty() {
+        bail!("Failed to solve {}", host);
+    }
+    Ok(addrs[0])
+}
+
+pub fn get_target_addr(host: &str) -> ResultType<TargetAddr<'static>> {
+    let addr = match Config::get_network_type() {
+        NetworkType::Direct => to_socket_addr(&host)?.into_target_addr()?,
+        NetworkType::ProxySocks => host.into_target_addr()?,
+    }
+    .to_owned();
+    Ok(addr)
+}
+
+pub fn test_if_valid_server(host: &str) -> String {
+    let mut host = host.to_owned();
+    if !host.contains(":") {
+        host = format!("{}:{}", host, 0);
+    }
+
+    match Config::get_network_type() {
+        NetworkType::Direct => match to_socket_addr(&host) {
+            Err(err) => err.to_string(),
+            Ok(_) => "".to_owned(),
+        },
+        NetworkType::ProxySocks => match &host.into_target_addr() {
+            Err(err) => err.to_string(),
+            Ok(_) => "".to_owned(),
+        },
+    }
+}
 
 pub async fn connect_tcp<'t, T: IntoTargetAddr<'t>>(
     target: T,
@@ -47,49 +75,24 @@ pub async fn connect_tcp<'t, T: IntoTargetAddr<'t>>(
     }
 }
 
-fn native_to_socket_addr(host: &str) -> ResultType<SocketAddr> {
-    use std::net::ToSocketAddrs;
-    let addrs: Vec<SocketAddr> = host.to_socket_addrs()?.collect();
-    if addrs.is_empty() {
-        bail!("Failed to solve {}", host);
-    }
-    Ok(addrs[0])
-}
-
-pub async fn to_socket_addr(host: &str) -> ResultType<SocketAddr> {
-    Ok(
-        new_udp(host, Config::get_any_listen_addr(), RENDEZVOUS_TIMEOUT)
-            .await?
-            .1,
-    )
-}
-
-pub async fn new_udp<'t, T1: IntoTargetAddr<'t> + std::fmt::Display, T2: ToSocketAddrs>(
-    target: T1,
-    local: T2,
-    ms_timeout: u64,
-) -> ResultType<(FramedSocket, SocketAddr)> {
+pub async fn new_udp<T: ToSocketAddrs>(local: T, ms_timeout: u64) -> ResultType<FramedSocket> {
     match Config::get_socks() {
-        None => Ok((
-            FramedSocket::new(local).await?,
-            native_to_socket_addr(&target.to_string())?,
-        )),
+        None => Ok(FramedSocket::new(local).await?),
         Some(conf) => {
-            let (socket, addr) = FramedSocket::new_proxy(
+            let socket = FramedSocket::new_proxy(
                 conf.proxy.as_str(),
-                target,
                 local,
                 conf.username.as_str(),
                 conf.password.as_str(),
                 ms_timeout,
             )
             .await?;
-            Ok((socket, addr))
+            Ok(socket)
         }
     }
 }
 
-pub async fn rebind<T: ToSocketAddrs>(local: T) -> ResultType<Option<FramedSocket>> {
+pub async fn rebind_udp<T: ToSocketAddrs>(local: T) -> ResultType<Option<FramedSocket>> {
     match Config::get_network_type() {
         NetworkType::Direct => Ok(Some(FramedSocket::new(local).await?)),
         _ => Ok(None),

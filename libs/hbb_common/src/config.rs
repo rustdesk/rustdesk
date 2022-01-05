@@ -6,14 +6,13 @@ use sodiumoxide::crypto::sign;
 use std::{
     collections::HashMap,
     fs,
-    net::SocketAddr,
+    net::{IpAddr, Ipv4Addr, SocketAddr},
     path::{Path, PathBuf},
     sync::{Arc, Mutex, RwLock},
     time::SystemTime,
 };
 
 pub const APP_NAME: &str = "RustDesk";
-pub const BIND_INTERFACE: &str = "0.0.0.0";
 pub const RENDEZVOUS_TIMEOUT: u64 = 12_000;
 pub const CONNECT_TIMEOUT: u64 = 18_000;
 pub const COMPRESS_LEVEL: i32 = 3;
@@ -346,10 +345,10 @@ impl Config {
 
     #[inline]
     pub fn get_any_listen_addr() -> SocketAddr {
-        format!("{}:0", BIND_INTERFACE).parse().unwrap()
+        SocketAddr::new(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)), 0)
     }
 
-    pub async fn get_rendezvous_server() -> SocketAddr {
+    pub fn get_rendezvous_server() -> String {
         let mut rendezvous_server = Self::get_option("custom-rendezvous-server");
         if rendezvous_server.is_empty() {
             rendezvous_server = CONFIG2.write().unwrap().rendezvous_server.clone();
@@ -363,11 +362,7 @@ impl Config {
         if !rendezvous_server.contains(":") {
             rendezvous_server = format!("{}:{}", rendezvous_server, RENDEZVOUS_PORT);
         }
-        if let Ok(addr) = crate::to_socket_addr(&rendezvous_server).await {
-            addr
-        } else {
-            Self::get_any_listen_addr()
-        }
+        rendezvous_server
     }
 
     pub fn get_rendezvous_servers() -> Vec<String> {

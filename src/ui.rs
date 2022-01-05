@@ -315,7 +315,7 @@ impl UI {
     }
 
     fn test_if_valid_server(&self, host: String) -> String {
-        crate::common::test_if_valid_server(host)
+        hbb_common::socket_client::test_if_valid_server(&host)
     }
 
     fn get_sound_inputs(&self) -> Value {

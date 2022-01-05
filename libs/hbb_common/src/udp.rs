@@ -49,75 +49,79 @@ impl FramedSocket {
         bail!("could not resolve to any address");
     }
 
-    pub async fn new_proxy<'a, 't, P: ToProxyAddrs, T1: IntoTargetAddr<'t>, T2: ToSocketAddrs>(
+    pub async fn new_proxy<'a, 't, P: ToProxyAddrs, T: ToSocketAddrs>(
         proxy: P,
-        target: T1,
-        local: T2,
+        local: T,
         username: &'a str,
         password: &'a str,
         ms_timeout: u64,
-    ) -> ResultType<(Self, SocketAddr)> {
+    ) -> ResultType<Self> {
         let framed = if username.trim().is_empty() {
-            super::timeout(
-                ms_timeout,
-                Socks5UdpFramed::connect(proxy, target, Some(local)),
-            )
-            .await??
+            super::timeout(ms_timeout, Socks5UdpFramed::connect(proxy, Some(local))).await??
         } else {
             super::timeout(
                 ms_timeout,
-                Socks5UdpFramed::connect_with_password(
-                    proxy,
-                    target,
-                    Some(local),
-                    username,
-                    password,
-                ),
+                Socks5UdpFramed::connect_with_password(proxy, Some(local), username, password),
             )
             .await??
-        };
-        let addr = if let TargetAddr::Ip(c) = framed.target_addr() {
-            c
-        } else {
-            unreachable!()
         };
         log::trace!(
             "Socks5 udp connected, local addr: {}, target addr: {}",
             framed.local_addr().unwrap(),
-            &addr
+            framed.socks_addr()
         );
-        Ok((Self::ProxySocks(framed), addr))
+        Ok(Self::ProxySocks(framed))
     }
 
     #[inline]
-    pub async fn send(&mut self, msg: &impl Message, addr: SocketAddr) -> ResultType<()> {
-        let send_data = (Bytes::from(msg.write_to_bytes().unwrap()), addr);
+    pub async fn send(
+        &mut self,
+        msg: &impl Message,
+        addr: impl IntoTargetAddr<'_>,
+    ) -> ResultType<()> {
+        let addr = addr.into_target_addr()?.to_owned();
+        let send_data = Bytes::from(msg.write_to_bytes().unwrap());
         let _ = match self {
-            Self::Direct(f) => f.send(send_data).await?,
-            Self::ProxySocks(f) => f.send(send_data).await?,
+            Self::Direct(f) => match addr {
+                TargetAddr::Ip(addr) => f.send((send_data, addr)).await?,
+                _ => unreachable!(),
+            },
+            Self::ProxySocks(f) => f.send((send_data, addr)).await?,
         };
         Ok(())
     }
 
+    // https://stackoverflow.com/a/68733302/1926020
     #[inline]
-    pub async fn send_raw(&mut self, msg: &'static [u8], addr: SocketAddr) -> ResultType<()> {
+    pub async fn send_raw(
+        &mut self,
+        msg: &'static [u8],
+        addr: impl IntoTargetAddr<'static>,
+    ) -> ResultType<()> {
+        let addr = addr.into_target_addr()?.to_owned();
+
         let _ = match self {
-            Self::Direct(f) => f.send((Bytes::from(msg), addr)).await?,
+            Self::Direct(f) => match addr {
+                TargetAddr::Ip(addr) => f.send((Bytes::from(msg), addr)).await?,
+                _ => unreachable!(),
+            },
             Self::ProxySocks(f) => f.send((Bytes::from(msg), addr)).await?,
         };
         Ok(())
     }
 
     #[inline]
-    pub async fn next(&mut self) -> Option<ResultType<(BytesMut, SocketAddr)>> {
+    pub async fn next(&mut self) -> Option<ResultType<(BytesMut, TargetAddr<'static>)>> {
         match self {
             Self::Direct(f) => match f.next().await {
-                Some(Ok((data, addr))) => Some(Ok((data, addr))),
+                Some(Ok((data, addr))) => {
+                    Some(Ok((data, addr.into_target_addr().unwrap().to_owned())))
+                }
                 Some(Err(e)) => Some(Err(anyhow!(e))),
                 None => None,
             },
             Self::ProxySocks(f) => match f.next().await {
-                Some(Ok((data, addr))) => Some(Ok((data.data, addr))),
+                Some(Ok((data, _))) => Some(Ok((data.data, data.dst_addr))),
                 Some(Err(e)) => Some(Err(anyhow!(e))),
                 None => None,
             },
@@ -125,7 +129,10 @@ impl FramedSocket {
     }
 
     #[inline]
-    pub async fn next_timeout(&mut self, ms: u64) -> Option<ResultType<(BytesMut, SocketAddr)>> {
+    pub async fn next_timeout(
+        &mut self,
+        ms: u64,
+    ) -> Option<ResultType<(BytesMut, TargetAddr<'static>)>> {
         if let Ok(res) =
             tokio::time::timeout(std::time::Duration::from_millis(ms), self.next()).await
         {
