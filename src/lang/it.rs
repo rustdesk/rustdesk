@@ -186,6 +186,7 @@ lazy_static::lazy_static! {
             ("Password missed", "Password dimenticata"),
             ("Wrong credentials", "Credenziali errate"),
             ("Edit Tag", "Modifica tag"),
+            ("Invalid folder name", "Nome della cartella non valido"),
         ].iter().cloned().collect();
         }
     

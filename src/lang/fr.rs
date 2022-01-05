@@ -186,5 +186,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Password missed", "Mot de passe manqué"),
         ("Wrong credentials", "Identifiant ou mot de passe erroné"),
         ("Edit Tag", "Modifier la balise"),
+        ("Invalid folder name", "Nom de dossier invalide"),
     ].iter().cloned().collect();
     }

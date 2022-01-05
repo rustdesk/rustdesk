@@ -440,7 +440,7 @@ class FolderView : Reactor.Component {
           var name = res.name.trim();
           if (!name) return;
           if (name.indexOf(me.sep()) >= 0) {
-            msgbox("custom-error", "Create Folder", "Invalid folder name");
+            handler.msgbox("custom-error", "Create Folder", "Invalid folder name");
             return;
           }
           var path = me.joinPath(name);
@@ -576,16 +576,16 @@ handler.jobDone = function(id, file_num = -1) {
 handler.jobError = function(id, err, file_num = -1) {
   var job = deleting_single_file_jobs[id];
   if (job) {
-    msgbox("custom-error", "Delete File", err);
+    handler.msgbox("custom-error", "Delete File", err);
     return;
   }
   job = create_dir_jobs[id];
   if (job) {
-    msgbox("custom-error", "Create Folder", err);
+    handler.msgbox("custom-error", "Create Folder", err);
     return;
   }
   if (file_num < 0) {
-    msgbox("custom-error", "Failed", err);
+    handler.msgbox("custom-error", "Failed", err);
   }
   file_transfer.job_table.updateJobStatus(id, file_num, err);
 }
@@ -619,7 +619,7 @@ handler.confirmDeleteFiles = function(id, i, name) {
   if (i >= n) return;
   var file_path = job.path;
   if (name) file_path += handler.get_path_sep(job.is_remote) + name;
-  msgbox("custom-skip", "Confirm Delete", "<div .form> \
+  handler.msgbox("custom-skip", "Confirm Delete", "<div .form> \
         <div>" + translate('Deleting') + " #" + (i + 1) + " / " + n + " " + translate('files') + ".</div> \
         <div>" + translate('Are you sure you want to delete this file?') + "</div> \
         <div.ellipsis style=\"font-weight: bold;\" .text>" + name + "</div> \

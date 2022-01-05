@@ -191,5 +191,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Add to Favorites", "加入到收藏"),
         ("Remove from Favorites", "从收藏中删除"),
         ("Empty", "空空如也"),
+        ("Invalid folder name", "无效文件夹名称"),
     ].iter().cloned().collect();
     }
