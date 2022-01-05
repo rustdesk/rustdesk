@@ -261,8 +261,8 @@ function msgbox_(type, title, text, callback, height, width, retry, contentStyle
     } else if (res == "!alive") {
         // do nothing
     } else if (res.type == "input-password") {
-        if (!is_port_forward) msgbox("connecting", "Connecting...", "Logging in...");
         handler.login(res.password, res.remember);
+        if (!is_port_forward) msgbox("connecting", "Connecting...", "Logging in...");
     } else if (res.reconnect) {
         if (!is_port_forward) connecting();
         handler.reconnect();

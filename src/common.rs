@@ -273,6 +273,7 @@ async fn test_nat_type_() -> ResultType<bool> {
         )
         .await?;
         if Config::get_network_type() == NetworkType::Direct {
+            // to-do: should set NatType::UNKNOWN for proxy
             addr = socket.local_addr();
         }
         socket.send(&msg_out).await?;

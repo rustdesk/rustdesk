@@ -4,7 +4,7 @@ use crate::{
     udp::FramedSocket,
     ResultType,
 };
-use anyhow::{bail, Context};
+use anyhow::Context;
 use std::net::SocketAddr;
 use tokio::net::ToSocketAddrs;
 use tokio_socks::{IntoTargetAddr, TargetAddr};
