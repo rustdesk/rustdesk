@@ -249,7 +249,7 @@ async fn test_nat_type_() -> ResultType<bool> {
     if port == 0 {
         bail!("Invalid server address: {}", server1);
     }
-    let server2 = format!("{}:{}", tmp[0], port);
+    let server2 = format!("{}:{}", tmp[0], port - 1);
     let mut msg_out = RendezvousMessage::new();
     let serial = Config::get_serial();
     msg_out.set_test_nat_request(TestNatRequest {

@@ -4,7 +4,7 @@ use crate::{
     udp::FramedSocket,
     ResultType,
 };
-use anyhow::{bail, Context};
+use anyhow::bail;
 use std::net::SocketAddr;
 use tokio::net::ToSocketAddrs;
 use tokio_socks::{IntoTargetAddr, TargetAddr};
@@ -69,9 +69,7 @@ pub async fn connect_tcp<'t, T: IntoTargetAddr<'t>>(
             bail!("Invalid target addr");
         };
 
-        FramedStream::new(addrs[0], local, ms_timeout)
-            .await
-            .with_context(|| "Failed to connect to rendezvous server")
+        Ok(FramedStream::new(addrs[0], local, ms_timeout).await?)
     }
 }
 
