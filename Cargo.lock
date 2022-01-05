@@ -3340,9 +3340,9 @@ dependencies = [
 
 [[package]]
 name = "signature"
-version = "1.4.0"
+version = "1.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "02658e48d89f2bec991f9a78e69cfa4c316f8d6a6c4ec12fae1aeb263d486788"
+checksum = "f054c6c1a6e95179d6f23ed974060dcefb2d9388bb7256900badad682c499de4"
 
 [[package]]
 name = "siphasher"
@@ -3667,7 +3667,7 @@ dependencies = [
 [[package]]
 name = "tokio-socks"
 version = "0.5.1"
-source = "git+https://github.com/fufesou/tokio-socks#83e9e9202b85b887999375e4d86e437e33d0535c"
+source = "git+https://github.com/fufesou/tokio-socks#63e27388e4d569316945c1c24353010d86f342a6"
 dependencies = [
  "bytes",
  "either",

@@ -32,24 +32,13 @@ lazy_static::lazy_static! {
 }
 static SHOULD_EXIT: AtomicBool = AtomicBool::new(false);
 
+#[derive(Clone)]
 pub struct RendezvousMediator {
     addr: TargetAddr<'static>,
     host: String,
     host_prefix: String,
     rendezvous_servers: Vec<String>,
     last_id_pk_registry: String,
-}
-
-impl Clone for RendezvousMediator {
-    fn clone(&self) -> Self {
-        Self {
-            addr: self.addr.to_owned(),
-            host: self.host.clone(),
-            host_prefix: self.host_prefix.clone(),
-            rendezvous_servers: self.rendezvous_servers.clone(),
-            last_id_pk_registry: self.last_id_pk_registry.clone(),
-        }
-    }
 }
 
 impl RendezvousMediator {
