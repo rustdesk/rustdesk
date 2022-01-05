@@ -576,12 +576,12 @@ handler.jobDone = function(id, file_num = -1) {
 handler.jobError = function(id, err, file_num = -1) {
   var job = deleting_single_file_jobs[id];
   if (job) {
-    handler.msgbox("custom-error", "Delete File", err);
+    msgbox("custom-error", "Delete File", err);
     return;
   }
   job = create_dir_jobs[id];
   if (job) {
-    handler.msgbox("custom-error", "Create Folder", err);
+    msgbox("custom-error", "Create Folder", err);
     return;
   }
   if (file_num < 0) {
@@ -619,7 +619,7 @@ handler.confirmDeleteFiles = function(id, i, name) {
   if (i >= n) return;
   var file_path = job.path;
   if (name) file_path += handler.get_path_sep(job.is_remote) + name;
-  handler.msgbox("custom-skip", "Confirm Delete", "<div .form> \
+  msgbox("custom-skip", "Confirm Delete", "<div .form> \
         <div>" + translate('Deleting') + " #" + (i + 1) + " / " + n + " " + translate('files') + ".</div> \
         <div>" + translate('Are you sure you want to delete this file?') + "</div> \
         <div.ellipsis style=\"font-weight: bold;\" .text>" + name + "</div> \
