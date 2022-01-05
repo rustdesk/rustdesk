@@ -66,8 +66,8 @@ impl FramedSocket {
             .await??
         };
         log::trace!(
-            "Socks5 udp connected, local addr: {}, target addr: {}",
-            framed.local_addr().unwrap(),
+            "Socks5 udp connected, local addr: {:?}, target addr: {}",
+            framed.local_addr(),
             framed.socks_addr()
         );
         Ok(Self::ProxySocks(framed))
@@ -80,7 +80,7 @@ impl FramedSocket {
         addr: impl IntoTargetAddr<'_>,
     ) -> ResultType<()> {
         let addr = addr.into_target_addr()?.to_owned();
-        let send_data = Bytes::from(msg.write_to_bytes().unwrap());
+        let send_data = Bytes::from(msg.write_to_bytes()?);
         let _ = match self {
             Self::Direct(f) => match addr {
                 TargetAddr::Ip(addr) => f.send((send_data, addr)).await?,
@@ -115,7 +115,7 @@ impl FramedSocket {
         match self {
             Self::Direct(f) => match f.next().await {
                 Some(Ok((data, addr))) => {
-                    Some(Ok((data, addr.into_target_addr().unwrap().to_owned())))
+                    Some(Ok((data, addr.into_target_addr().ok()?.to_owned())))
                 }
                 Some(Err(e)) => Some(Err(anyhow!(e))),
                 None => None,

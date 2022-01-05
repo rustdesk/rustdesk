@@ -258,6 +258,8 @@ async fn test_nat_type_() -> ResultType<bool> {
     });
     let mut port1 = 0;
     let mut port2 = 0;
+    let server1 = socket_client::get_target_addr(&server1)?;
+    let server2 = socket_client::get_target_addr(&server2)?;
     let mut addr = Config::get_any_listen_addr();
     for i in 0..2 {
         let mut socket = socket_client::connect_tcp(
@@ -434,7 +436,7 @@ pub fn check_software_update() {
 async fn _check_software_update() -> hbb_common::ResultType<()> {
     sleep(3.).await;
 
-    let rendezvous_server = get_rendezvous_server(1_000).await;
+    let rendezvous_server = socket_client::get_target_addr(&get_rendezvous_server(1_000).await)?;
     let mut socket =
         socket_client::new_udp(Config::get_any_listen_addr(), RENDEZVOUS_TIMEOUT).await?;
 
