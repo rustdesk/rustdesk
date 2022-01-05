@@ -1,5 +1,5 @@
 import { handler,view,is_osx,string2RGB,adjustBorder,svg_chat,translate,ChatBox,getNowStr,setWindowButontsAndIcon,is_linux } from "./common.js";
-import {$,$$} from "@sciter";
+import {$} from "@sciter";
 // TODO in sciterjs window-frame
 // view.windowFrame = is_osx ? #extended : #solid;
 
