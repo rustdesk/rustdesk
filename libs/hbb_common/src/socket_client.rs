@@ -4,18 +4,14 @@ use crate::{
     udp::FramedSocket,
     ResultType,
 };
-use anyhow::bail;
+use anyhow::{bail, Context};
 use std::net::SocketAddr;
 use tokio::net::ToSocketAddrs;
 use tokio_socks::{IntoTargetAddr, TargetAddr};
 
 fn to_socket_addr(host: &str) -> ResultType<SocketAddr> {
     use std::net::ToSocketAddrs;
-    let addrs: Vec<SocketAddr> = host.to_socket_addrs()?.collect();
-    if addrs.is_empty() {
-        bail!("Failed to solve {}", host);
-    }
-    Ok(addrs[0])
+    host.to_socket_addrs()?.next().context("Failed to solve")
 }
 
 pub fn get_target_addr(host: &str) -> ResultType<TargetAddr<'static>> {
@@ -63,13 +59,10 @@ pub async fn connect_tcp<'t, T: IntoTargetAddr<'t>>(
         )
         .await
     } else {
-        let addrs: Vec<SocketAddr> =
-            std::net::ToSocketAddrs::to_socket_addrs(&target_addr)?.collect();
-        if addrs.is_empty() {
-            bail!("Invalid target addr");
-        };
-
-        Ok(FramedStream::new(addrs[0], local, ms_timeout).await?)
+        let addr = std::net::ToSocketAddrs::to_socket_addrs(&target_addr)?
+            .next()
+            .context("Invalid target addr")?;
+        Ok(FramedStream::new(addr, local, ms_timeout).await?)
     }
 }
 
