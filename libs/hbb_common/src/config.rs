@@ -76,7 +76,7 @@ pub struct Config {
     keys_confirmed: HashMap<String, bool>,
 }
 
-#[derive(Debug, Default, Serialize, Deserialize, Clone)]
+#[derive(Debug, Default, PartialEq, Serialize, Deserialize, Clone)]
 pub struct Socks5Server {
     #[serde(default)]
     pub proxy: String,
@@ -502,6 +502,9 @@ impl Config {
 
     pub fn set_key_pair(pair: (Vec<u8>, Vec<u8>)) {
         let mut config = CONFIG.write().unwrap();
+        if config.key_pair == pair {
+            return;
+        }
         config.key_pair = pair;
         config.store();
     }
@@ -534,6 +537,9 @@ impl Config {
 
     pub fn set_options(v: HashMap<String, String>) {
         let mut config = CONFIG2.write().unwrap();
+        if config.options == v {
+            return;
+        }
         config.options = v;
         config.store();
     }
@@ -636,6 +642,9 @@ impl Config {
 
     pub fn set_socks(socks: Option<Socks5Server>) {
         let mut config = CONFIG2.write().unwrap();
+        if config.socks == socks {
+            return;
+        }
         config.socks = socks;
         config.store();
     }
