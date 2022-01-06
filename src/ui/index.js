@@ -1,8 +1,10 @@
 import { is_osx,view,OS,handler,translate,msgbox,is_win,svg_checkmark,svg_edit,isReasonableSize,centerize,svg_eye } from "./common";
 import { SearchBar,SessionStyle,SessionList } from "./ab.js";
+import {$} from "@sciter"; //TEST $$ import
+
 if (is_osx) view.blurBehind = "light";
 console.log("current platform:", OS);
-
+console.log("wayland",handler.xcall("is_login_wayland"));
 // html min-width, min-height not working on mac, below works for all
 view.minSize = [500, 300]; // TODO not work on ubuntu
 
@@ -118,7 +120,7 @@ class AudioInputs extends Element {
         if (!this.show) return <li />;
         let inputs = handler.xcall("get_sound_inputs");
         if (is_win) inputs = ["System Sound"].concat(inputs);
-        if (!inputs.length) return null; // TODO TEST null element
+        if (!inputs.length) return <div/>;
         inputs = ["Mute"].concat(inputs);
         setTimeout(()=>this.toggleMenuState(),1);
         return (<li>{translate('Audio Input')}
@@ -187,6 +189,7 @@ class MyIdMenu extends Element {
 
     // TEST svg#menu  // .popup()
     ["on click at svg#menu"](_, me) {
+        console.log("open menu")
         audioInputMenu.componentUpdate({ show: true });
         this.toggleMenuState();
         let menu = this.$("menu#config-options");
@@ -194,9 +197,10 @@ class MyIdMenu extends Element {
     }
 
     toggleMenuState() {
-        for (let el in this.$$("menu#config-options>li")) {
+        for (let el of this.$$("menu#config-options>li")) {
             if (el.id && el.id.indexOf("enable-") == 0) {
                 let enabled = handler.xcall("get_option",el.id) != "N";
+                console.log(el.id,enabled)
                 el.classList.toggle("selected", enabled);
                 el.classList.toggle("line-through", !enabled);
             }
@@ -624,9 +628,10 @@ class Password extends Element {
         </div>);
     }
 
-    // TODO expecting element to popup
+    // TODO expecting element to popup 这里组件无法触发
     ["on click at svg#edit"](_,me) {
         let menu = this.$("menu#edit-password-context");
+        console.log("修改密码",me)
         me.popup(menu);
     }
 

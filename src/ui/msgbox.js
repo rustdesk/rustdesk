@@ -13,7 +13,7 @@ function updateParams(params) {
     my_translate = params.translate;
     retry = params.retry;
     contentStyle = params.contentStyle;
-    console.log("params",type,title,text,getParams,remember,callback,my_translate,retry,contentStyle)
+
     try { text = translate_text(text); } catch (e) {}
     if (retry > 0) {
         setTimeout(()=>view.close({ reconnect: true }),retry * 1000);// TEST
@@ -101,12 +101,8 @@ class Body extends Element {
         let hasClose = type.indexOf("hasclose") >= 0;
         let show_progress = type == "connecting";
         this.style.setProperty("border",(color + " solid 1px"));
-        setTimeout(()=>{
-            if (typeof content == "string")
-                this.$("#content").html = my_translate(content);
-            else
-                this.$("#content").content(content);
-        },1);
+        console.log(content)
+        setTimeout(()=>this.$("#content").content(my_translate(content)),1);
         return (
         <div style="size: *">
             <header style={"height: 2em; background: " + color}>
@@ -158,7 +154,7 @@ class Body extends Element {
         }
         if (type == "re-input-password") {
             type = "input-password";
-            body.update();
+            body.componentUpdate();
             set_outline_focus();
             return;
         }
@@ -251,9 +247,9 @@ setInterval(function() {
     } else if (tmp != params) {
         params = tmp;
         updateParams(params);
-        body.update();
+        body.componentUpdate();
         set_outline_focus();
     }
 },30);
 
-$("body").content(<Body />);
+document.body.content(<Body />);

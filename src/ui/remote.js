@@ -1,22 +1,23 @@
 import { $ } from "@sciter";
-import { handler,view,is_file_transfer,isReasonableSize,msgbox,is_osx, is_linux, centerize, connecting } from "./common.js";
+import { handler,view,isReasonableSize,msgbox,is_osx, is_linux, centerize, connecting } from "./common.js";
 import { initializeFileTransfer, save_file_transfer_close_state } from "./file_transfer.js";
 import { initializePortForward } from "./port_forward.js";
 import { header } from "./header.js";
 
+const body = document.body;
 var cursor_img = $("img#cursor");
 var last_key_time = 0;
-is_file_transfer = handler.xcall("is_file_transfer");
-export var is_port_forward = handler.xcall("is_port_forward");
 var display_width = 0;
 var display_height = 0;
 var display_origin_x = 0;
 var display_origin_y = 0;
 var display_scale = 1;
-var keyboard_enabled = true; // server side
-var clipboard_enabled = true; // server side
-var audio_enabled = true; // server side
-var scroll_body = $(body);
+export var keyboard_enabled = true; // server side
+export var clipboard_enabled = true; // server side
+export var audio_enabled = true; // server side
+
+handler.is_port_forward = handler.xcall("is_port_forward");
+handler.is_file_transfer = handler.xcall("is_file_transfer");
 
 handler.setDisplay = function(x, y, w, h) {
     display_width = w;
@@ -41,9 +42,8 @@ export function adaptDisplay() {
             el = $("li#adjust-window");
             el.style.setProperty("display","block");
             el.on("click",function() {
-                // TODO old:view.state == Window.WINDOW_SHOWN; 
                 view.state = Window.WINDOW_SHOWN;
-                let [x, y] = view.state.box("position", "border", "screen");
+                let [x, y] = body.state.box("position", "border", "screen"); // TEST
                 // extra for border
                 let extra = 2;
                 view.move(x, y, w + extra, h + hh + extra);
@@ -51,8 +51,8 @@ export function adaptDisplay() {
         }
     }
     if (style != "original") {
-        let bw = $("body").state.box("width", "border");
-        let bh = $("body").state.box("height", "border");
+        let bw = body.state.box("width", "border");
+        let bh = body.state.box("height", "border");
         if (view.state == Window.WINDOW_FULL_SCREEN) {
             bw = sw;
             bh = sh;
@@ -401,7 +401,7 @@ handler.setCursorPosition = function(x, y) {
 document.on("ready",()=> {
     let w = 960;
     let h = 640;
-    if (is_file_transfer || is_port_forward) {
+    if (handler.is_file_transfer || handler.is_port_forward) {
         let r = handler.xcall("get_size");
         if (isReasonableSize(r) && r[2] > 0) {
             view.move(r[0], r[1], r[2], r[3]);
@@ -411,9 +411,9 @@ document.on("ready",()=> {
     } else {
         centerize(w, h);
     }
-    if (!is_port_forward) connecting();
-    if (is_file_transfer) initializeFileTransfer();
-    if (is_port_forward) initializePortForward();
+    if (!handler.is_port_forward) connecting();
+    if (handler.is_file_transfer) initializeFileTransfer();
+    if (handler.is_port_forward) initializePortForward();
 })
 
 var workarea_offset = 0;
@@ -449,9 +449,10 @@ handler.adaptSize = function() {
 }
 
 document.on("unloadequest",()=> {
-    let [x, y, w, h] = view.state.box("rectw", "border", "screen");
-    if (is_file_transfer) save_file_transfer_close_state();
-    if (is_file_transfer || is_port_forward || size_adapted) handler.xcall("save_size",x, y, w, h);
+    let [x, y, w, h] = body.state.box("rectw", "border", "screen");
+    console.log("remote.js unloadequest",x, y, w, h)
+    if (handler.is_file_transfer) save_file_transfer_close_state();
+    if (handler.is_file_transfer || handler.is_port_forward || size_adapted) handler.xcall("save_size",x, y, w, h);
 })
 
 handler.setPermission = function(name, enabled) {
@@ -464,5 +465,6 @@ handler.setPermission = function(name, enabled) {
 // TODO
 handler.closeSuccess = function() {
     // handler.msgbox("success", "Successful", "Ready to go.");
+    console.log("remote.js handler.closeSuccess");
     handler.msgbox("", "", "");
 }

@@ -11,7 +11,8 @@ export const is_linux = OS == "Linux";
 
 view.mediaVar("is_osx", is_osx);
 view.mediaVar("not_osx", !is_osx);
-export var is_file_transfer;
+handler.is_port_forward = false;
+handler.is_file_transfer = false;
 export var is_xfce = false;
 try { is_xfce = handler.xcall("is_xfce"); } catch (e) { }
 
@@ -219,6 +220,7 @@ function getMsgboxParams() {
 
 // tmp workaround https://sciter.com/forums/topic/menu-not-be-hidden-when-open-dialog-on-linux/
 export function msgbox(type, title, text, callback = null, height = 180, width = 500, retry = 0, contentStyle = "") {
+    console.log("msgbox text:",text);
     if (is_linux) { // fix menu not hidden issue
         setTimeout(() => msgbox_(type, title, text, callback, height, width, retry, contentStyle), 1);
     } else {
@@ -255,14 +257,15 @@ function msgbox_(type, title, text, callback, height, width, retry, contentStyle
     if (type.indexOf("custom") >= 0) {
         //
     } else if (!res) {
-        if (!is_port_forward) view.close();
+        if (!handler.is_port_forward) view.close();
     } else if (res == "!alive") {
         // do nothing
     } else if (res.type == "input-password") {
+        if (!handler.is_port_forward) msgbox("connecting", "Connecting...", "Logging in...");
         handler.login(res.password, res.remember);
         if (!is_port_forward) msgbox("connecting", "Connecting...", "Logging in...");
     } else if (res.reconnect) {
-        if (!is_port_forward) connecting();
+        if (!handler.is_port_forward) connecting();
         handler.reconnect();
     }
 }

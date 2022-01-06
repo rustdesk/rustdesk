@@ -1,4 +1,4 @@
-import { translate } from "./common.js";
+import {  translate } from "./common.js";
 
 class PortForward extends Element {
     render() {
