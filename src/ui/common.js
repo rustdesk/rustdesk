@@ -220,7 +220,6 @@ function getMsgboxParams() {
 
 // tmp workaround https://sciter.com/forums/topic/menu-not-be-hidden-when-open-dialog-on-linux/
 export function msgbox(type, title, text, callback = null, height = 180, width = 500, retry = 0, contentStyle = "") {
-    console.log("msgbox text:",text);
     if (is_linux) { // fix menu not hidden issue
         setTimeout(() => msgbox_(type, title, text, callback, height, width, retry, contentStyle), 1);
     } else {

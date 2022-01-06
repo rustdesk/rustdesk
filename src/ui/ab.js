@@ -16,30 +16,22 @@ export function getSessionsStyle(type) {
     return v;
 }
 
-// Fixed
-// function stupidUpdate(me) {
-//     /* hidden is workaround of stupid sciter bug */
-//     me.hidden = true;
-//     me.componentUpdate();
-//     self.timer(60ms, function() {
-//         me.hidden = false;
-//         me.componentUpdate();
-//     });
-// }
+var searchPatterns = {};
 
 export class SearchBar extends Element {
-    parent;
-    value = "";
 
     this(props) {
-        this.parent = props.parent;
+        this.type = (props || {}).type || "";
     }
 
     render() {
+
+        let value = searchPatterns[this.type] || "";
+        setTimeout(() => { this.$("input").value = value; }, 1);
         return (<div class="search-id" >
-            <span class=".search-icon">{search_icon}</span>
+            <span class="search-icon">{search_icon}</span>
             <input type="text" novalue={translate("Search ID")} />
-            {this.value && <span class="clear-input">{clear_icon}</span>}
+            {value && <span class="clear-input">{clear_icon}</span>}
         </div>);
     }
 
@@ -53,9 +45,8 @@ export class SearchBar extends Element {
     }
 
     onChange(v) {
-        this.value = v;
-        this.componentUpdate();
-        this.parent.filter(v);
+        searchPatterns[this.type] = v;
+        app.multipleSessions.update();
     }
 }
 
@@ -63,12 +54,12 @@ export class SessionStyle extends Element {
     type = "";
 
     this(props) {
-        this.type = (props || {}).type;
+        this.type = (props || {}).type || "";
     }
 
     render() {
         let sessionsStyle = getSessionsStyle(this.type);
-        return (<div class="sessions-style" >
+        return (<div class="sessions-tab" style="margin-left: 0.5em;">
             <span class={sessionsStyle == "tile" ? "active" : "inactive"}>{svg_tile}</span>
             <span class={sessionsStyle != "tile" ? "active" : "inactive"}>{svg_list}</span>
         </div>);
@@ -78,7 +69,6 @@ export class SessionStyle extends Element {
         let option = getSessionsStyleOption(this.type);
         let sessionsStyle = getSessionsStyle(this.type);
         handler.xcall("set_option", option, sessionsStyle == "tile" ? "list" : "tile");
-        //stupidUpdate(app); // seems fixed in new sciter
         app.componentUpdate();
     }
 }
@@ -87,7 +77,7 @@ export class SessionList extends Element {
     sessions = [];
     type = "";
     style;
-    filterPattern = "";
+
 
     this(props) {
         this.sessions = props.sessions;
@@ -95,16 +85,11 @@ export class SessionList extends Element {
         this.style = getSessionsStyle(props.type);
     }
 
-    filter(v) {
-        this.filterPattern = v;
-        this.componentUpdate();
-    }
-
     getSessions() {
-        let p = this.filterPattern;
+        let p = searchPatterns[this.type];
         if (!p) return this.sessions;
         let tmp = [];
-        this.sessions.map(function (s) {
+        this.sessions.map( (s) => {
             let name = s[4] || s.alias || s[0] || s.id || "";
             if (name.indexOf(p) >= 0) tmp.push(s);
         });
@@ -113,20 +98,22 @@ export class SessionList extends Element {
 
     render() {
         let sessions = this.getSessions();
-        if (sessions.length == 0) return <span />;
+        if (sessions.length == 0) return <div style="margin: *; font-size: 1.6em;">{translate("Empty")}</div>;
         sessions = sessions.map((x) => this.getSession(x));
-        // TODO is_win  
-        // TODO <li id="rdp">RDP<EditRdpPort /></li>
         return <div class="recent-sessions-content" key={sessions.length} >
             <popup>
                 <menu class="context" id="remote-context">
                     <li id="connect">{translate('Connect')}</li>
                     <li id="transfer">{translate('Transfer File')}</li>
                     <li id="tunnel">{translate('TCP Tunneling')}</li>
-                    
+                    <li id="rdp">RDP</li>
+                    <div class="separator" />
                     <li id="rename">{translate('Rename')}</li>
-                    <li id="remove">{translate('Remove')}</li>
-                    {is_win && <li id="shortcut">{translate('Create Desktop Shortcut')}</li>}
+                    {this.type != "fav" && <li id="remove">{translate('Remove')}</li>}
+                    {is_win && <li di="shortcut">{translate('Create Desktop Shortcut')}</li>}
+                    <li id="forget-password">{translate('Unremember Password')}</li>
+                    {(!this.type || this.type == "fav") && <li id="add-fav">{translate('Add to Favorites')}</li>}
+                    {(!this.type || this.type == "fav") && <li id="remove-fav">{translate('Remove from Favorites')}</li>}
                 </menu>
             </popup>
             {sessions}
@@ -142,7 +129,7 @@ export class SessionList extends Element {
         if (this.style == "list") {
             return (<div class="remote-session-link remote-session-list" id={id} platform={platform} title={alias ? "ID: " + id : ""} >
                 <div class="platform" style={"background:" + string2RGB(id + platform, 0.5)}>
-                    {platformSvg(platform, "white")}
+                    {platform && platformSvg(platform, "white")}
                 </div>
                 <div class="name">
                     <div>
@@ -157,7 +144,7 @@ export class SessionList extends Element {
         }
         return (<div class="remote-session-link remote-session" id={id} platform={platform} title={alias ? "ID: " + id : ""} style={"background:" + string2RGB(id + platform, 0.5)} >
             <div class="platform">
-                {platformSvg(platform, "white")}
+                {platform && platformSvg(platform, "white")}
                 <div class="username ellipsis">{username}@{hostname}</div>
             </div>
             <div class="text">
@@ -174,9 +161,23 @@ export class SessionList extends Element {
     ["on click at #menu"](_, me) {
         let id = me.parentElement.parentElement.id;
         let platform = me.parentElement.parentElement.getAttribute("platform");
-        console.log("menu id,platform:",id,platform);
-        // TODO rdp
-        // this.$("#rdp").style.setProperty("display", (platform == "Windows" && is_win) ? "block" : "none"); 
+        this.$("#rdp").style.setProperty(
+            "display", (platform == "Windows" && is_win) ? "block" : "none",
+        );
+        this.$("#forget-password").style.setProperty(
+            "display", handler.xcall("peer_has_password", id) ? "block" : "none",
+        );
+        if (!this.type || this.type == "fav") {
+            let in_fav = handler.xcall("get_fav").indexOf(id) >= 0;
+            let el = this.$("add-fav");
+            if (el) el.style.setProperty(
+                "display", in_fav ? "none" : "block",
+            );
+            el = this.$("remove-fav");
+            if (el) el.style.setProperty(
+                "display", in_fav ? "block" : "none",
+            );
+        }
         // https://sciter.com/forums/topic/replacecustomize-context-menu/
         let menu = this.$("menu#remote-context");
         menu.setAttribute("remote-id",id);
@@ -186,8 +187,6 @@ export class SessionList extends Element {
     ["on click at menu#remote-context li"](evt, me) {
         let action = me.id;
         let id = me.parentElement.getAttribute("remote-id");
-        if(!id) return
-        console.log("click li",id);
         if (action == "connect") {
             createNewConnect(id, "connect");
         } else if (action == "transfer") {
@@ -238,58 +237,47 @@ export class SessionList extends Element {
 }
 
 function getSessionsType() {
-    return handler.get_local_option("show-sessions-type");
+    return handler.xcall("get_local_option", "show-sessions-type");
 }
 
-class Favorites: Reactor.Component {
-    function render() {
-        var sessions = handler.get_fav().map(function(f) {
-            return handler.get_peer(f);
+class Favorites extends Element {
+    render() {
+        var sessions = handler.xcall("get_fav").map(function(f) {
+            return handler.xcall("get_peer", f);
         });
         return <SessionList sessions={sessions} type="fav" />;
     }
 }
 
-class MultipleSessions: Reactor.Component {
-    function render() {
+export class MultipleSessions extends Element {
+    render() {
         var type = getSessionsType();
         return  <div style="size: *">
-                <div .sessions-bar>
-                    <div style="width:*" .sessions-tab #sessions-type>
+                <div class="sessions-bar">
+                    <div style="width:*" class="sessions-tab" id="sessions-type">
                         <span class={!type ? 'active' : 'inactive'}>{translate('Recent Sessions')}</span>
-                        <span #fav class={type == "fav" ? 'active' : 'inactive'}>{translate('Favorites')}</span>
+                        <span id="fav" class={type == "fav" ? 'active' : 'inactive'}>{translate('Favorites')}</span>
                     </div>
                     {!this.hidden && <SearchBar type={type} />}
                     {!this.hidden && <SessionStyle type={type} />}
                 </div>
                 {!this.hidden && 
                 ((type == "fav" && <Favorites />) ||
-                <SessionList sessions={handler.get_recent_sessions()} />)}
+                <SessionList sessions={handler.xcall("get_recent_sessions")} />)}
             </div>;
     }
 
-    function stupidUpdate() {
-        /* hidden is workaround of stupid sciter bug */
-        this.hidden = true;
-        this.update();
-        var me = this;
-        self.timer(60ms, function() {
-            me.hidden = false;
-            me.update();
-        });
+    ["on click at div#sessions-type span.inactive"] (_, el) {
+        handler.xcall("set_option", 'show-sessions-type', el.id || "");
+        this.componentUpdate();
     }
 
-    event click $(div#sessions-type span.inactive) (_, el) {
-        handler.set_option('show-sessions-type', el.id || "");
-        this.stupidUpdate();
-    }
-
-    function onSize() {
-        var w = this.$(.sessions-bar).box(#width) - 220;
-        this.$(#sessions-type span).style.set{
-            "max-width": (w / 2) + "px",
-        };
+    onSize() {
+        let w = this.$(".sessions-bar").state.box("width") - 220;
+        this.$("#sessions-type span").style.setProperty(
+            "max-width", (w / 2) + "px",
+        );
     }
 }
 
-view.on("size", function() { if (app && app.multipleSessions) app.multipleSessions.onSize(); });
+document.onsizechange = () => { if (app && app.multipleSessions) app.multipleSessions.onSize(); }

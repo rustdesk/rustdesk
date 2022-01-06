@@ -1,5 +1,5 @@
-import { is_osx,view,OS,handler,translate,msgbox,is_win,svg_checkmark,svg_edit,isReasonableSize,centerize,svg_eye } from "./common";
-import { SearchBar,SessionStyle,SessionList } from "./ab.js";
+import { is_osx,view,OS,handler,translate,msgbox,is_win,svg_checkmark,svg_edit,isReasonableSize,centerize,svg_eye, PasswordComponent } from "./common";
+import { SearchBar,SessionStyle,SessionList, MultipleSessions } from "./ab.js";
 import {$} from "@sciter"; //TEST $$ import
 
 if (is_osx) view.blurBehind = "light";
@@ -53,31 +53,6 @@ class ConnectStatus extends Element {
     }
 }
 
-class RecentSessions extends Element {
-    sessionList;
-    componentDidMount(){
-        this.sessionList = this.$("#SessionList")
-    }
-    render() {
-        let sessions = handler.xcall("get_recent_sessions");
-        if (sessions.length == 0) return <span />;
-        return (<div style="width: *">
-            <div class="sessions-bar">
-                <div style="width:*">
-                    {translate("Recent Sessions")}
-                </div>
-                {!app.hidden && <SearchBar parent={this} />}
-                {!app.hidden && <SessionStyle />}
-            </div>
-            {!app.hidden && <SessionList id="SessionList" sessions={sessions} />} 
-        </div>);
-    }
-
-    filter(v) {
-        this.sessionList.filter(v);
-    }
-}
-
 export function createNewConnect(id, type) {
     id = id.replace(/\s/g, "");
     app.remote_id.value = formatId(id);
@@ -91,20 +66,20 @@ export function createNewConnect(id, type) {
 }
 
 var direct_server;
-class DirectServer: Reactor.Component {
-    function this() {
+class DirectServer extends Element {
+    this() {
         direct_server = this;
     }
 
-    function render() {
+    render() {
         var text = translate("Enable Direct IP Access");
-        var cls = handler.get_option("direct-server") == "Y" ? "selected" : "line-through";
+        var cls = handler.xcall("get_option", "direct-server") == "Y" ? "selected" : "line-through";
         return <li class={cls}><span>{svg_checkmark}</span>{text}</li>;
     }
     
-    function onClick() {
-        handler.set_option("direct-server", handler.get_option("direct-server") == "Y" ? "" : "Y");
-        this.update();
+    onClick() {
+        handler.xcall("set_option", "direct-server", handler.xcall("get_option", "direct-server") == "Y" ? "" : "Y");
+        this.componentUpdate();
     }
 }
 
@@ -179,17 +154,19 @@ class MyIdMenu extends Element {
                 <div class="separator" />
                 <li id="whitelist" title={translate('whitelist_tip')}>{translate('IP Whitelisting')}</li>
                 <li id="custom-server">{translate('ID/Relay Server')}</li>
+                <li id="socks5-server">{translate('Socks5 Proxy')}</li>
                 <div class="separator" />
                 <li id="stop-service" class={service_stopped ? "line-through" : "selected"}><span>{svg_checkmark}</span>{translate("Enable Service")}</li>
+                <DirectServer />
                 <div class="separator" />
                 <li id="about">{translate('About')} {" "} {handler.xcall("get_app_name")}</li>
             </menu>
         </popup>);
     }
 
-    // TEST svg#menu  // .popup()
+
     ["on click at svg#menu"](_, me) {
-        console.log("open menu")
+
         audioInputMenu.componentUpdate({ show: true });
         this.toggleMenuState();
         let menu = this.$("menu#config-options");
@@ -261,12 +238,12 @@ class MyIdMenu extends Element {
                 handler.xcall("set_options",configOptions);
             }, 240);
         } else if (me.id == "socks5-server") {
-            var socks5 = handler.get_socks() || {};
+            var socks5 = handler.xcall("get_socks") || {};
             var old_proxy = socks5[0] || "";
             var old_username = socks5[1] || "";
             var old_password = socks5[2] || "";
-            msgbox("custom-server", "Socks5 Proxy", <div .form .set-password> 
-            <div><span>{translate("Hostname")}</span><input .outline-focus style='width: *' name='proxy' value={old_proxy} /></div>
+            msgbox("custom-server", "Socks5 Proxy", <div class="form set-password"> 
+            <div><span>{translate("Hostname")}</span><input class="outline-focus" style='width: *' name='proxy' value={old_proxy} /></div>
             <div><span>{translate("Username")}</span><input style='width: *' name='username' value={old_username} /></div>
             <div><span>{translate("Password")}</span><PasswordComponent value={old_password} /></div>
             </div>
@@ -277,10 +254,10 @@ class MyIdMenu extends Element {
                 var password = (res.password || "").trim();
                 if (proxy == old_proxy && username == old_username && password == old_password) return;
                 if (proxy) {
-                    var err = handler.test_if_valid_server(proxy);
+                    var err = handler.xcall("test_if_valid_server", proxy);
                     if (err) return translate("Server") + ": " + err;
                 }
-                handler.set_socks(proxy, username, password);
+                handler.xcall("set_socks", proxy, username, password);
             }, 240);
         } else if (me.id == "stop-service") {
             handler.xcall("set_option","stop-service", service_stopped ? "" : "Y");
@@ -314,7 +291,7 @@ class App extends Element{
 
     componentDidMount(){
         this.remote_id = this.$("#ID");
-        this.recent_sessions = this.$("#RecentSessions");
+        this.multipleSessions = this.$("#multipleSessions");
         this.connect_status = this.$("#ConnectStatus");
     }
 
@@ -323,8 +300,8 @@ class App extends Element{
         return(<div class="app">
               <popup>
               <menu class="context" id="edit-password-context">
-                <li id="refresh-password">Refresh random password</li>
-                <li id="set-password">Set your own password</li>
+                <li id="refresh-password">{translate('Refresh random password')}</li>
+                <li id="set-password">{translate('Set your own password')}</li>
               </menu>
               </popup>
                 <div class="left-pane">
@@ -359,7 +336,7 @@ class App extends Element{
                                 <button class="button" id="connect">{translate('Connect')}</button>
                             </div>
                         </div>
-                        <RecentSessions id="RecentSessions" />
+                        <MultipleSessions id="multipleSessions" />
                     </div>
                     <ConnectStatus id="ConnectStatus" />
                 </div>
@@ -398,7 +375,7 @@ class InstallMe extends Element {
         return (<div class="install-me">
             <span />
             <div>{translate('install_tip')}</div>
-            <button id="install-me" class="button">{translate('Install')}</button>
+            <div style="text-align: center; margin-top: 1em;"><button id="install-me" class="button">{translate('Install')}</button></div>
         </div>);
     }
 
@@ -479,7 +456,6 @@ class UpdateMe extends Element {
     ["on click at #install-me"]() {
         handler.xcall("open_url","https://rustdesk.com");
         return;
-        // TODO return?
         if (!is_win) {
             handler.xcall("open_url","https://rustdesk.com");
             return;
@@ -572,10 +548,6 @@ class ModifyDefaultLogin extends Element {
     }
 
     ["on click at #modify-default-login"]() {
-        // TEST change  tis old:
-        // if (var r = handler.modify_default_login()) {
-        //     msgbox("custom-error", "Error", r);
-        // }
         let r = handler.xcall("modify_default_login");
         if (r) {
             msgbox("custom-error", "Error", r);
@@ -587,7 +559,7 @@ class ModifyDefaultLogin extends Element {
 function watch_trust() {
     // not use TrustMe::update, because it is buggy
     let trusted = handler.xcall("is_process_trusted",false);
-    let el = document.$("div.trust-me");
+    let el = $("div.trust-me");
     if (el) {
         el.style.setProperty("display", trusted ? "none" : "block");
     }
@@ -628,10 +600,8 @@ class Password extends Element {
         </div>);
     }
 
-    // TODO expecting element to popup 这里组件无法触发
     ["on click at svg#edit"](_,me) {
-        let menu = this.$("menu#edit-password-context");
-        console.log("修改密码",me)
+        let menu = $("menu#edit-password-context");
         me.popup(menu);
     }
 
@@ -755,6 +725,6 @@ setInterval(() => {
         }
         if (handler.xcall("recent_sessions_updated")) {
             console.log("recent sessions updated");
-            app.recent_sessions.componentUpdate();
+            app.componentUpdate();
         }
 }, 1000);

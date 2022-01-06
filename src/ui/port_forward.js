@@ -1,4 +1,5 @@
-import {  translate } from "./common.js";
+import {  translate, handler } from "./common.js";
+import { svg_arrow, svg_cancel } from "./file_transfer.js";
 
 class PortForward extends Element {
     render() {
@@ -73,8 +74,8 @@ class PortForward extends Element {
 
 export function initializePortForward() 
 {
-    $("#file-transfer-wrapper").content(<PortForward />);
-    $("#video-wrapper").style.setProperty("visibility","hidden");
-    $("#video-wrapper").style.setProperty("position","absolute")
-    $("#file-transfer-wrapper").style.setProperty("display","block");
+    document.$("#file-transfer-wrapper").content(<PortForward />);
+    document.$("#video-wrapper").style.setProperty("visibility","hidden");
+    document.$("#video-wrapper").style.setProperty("position","absolute")
+    document.$("#file-transfer-wrapper").style.setProperty("display","block");
 }

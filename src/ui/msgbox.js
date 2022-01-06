@@ -1,8 +1,8 @@
+import { PasswordComponent } from "./common";
 import {$,$$} from "@sciter"; //TEST $$ import
 const view = Window.this;
 var type, title, text, getParams, remember, retry, callback, contentStyle;
 var my_translate; // TEST 
-
 function updateParams(params) {
     type = params.type;
     title = params.title;
@@ -59,7 +59,6 @@ class Body extends Element {
 
     getInputPasswordContent() {
         var ts = remember ? { checked: true } : {};
-        // TODO <button type="checkbox" ... 
         // <div><button|checkbox(remember) {ts}>{my_translate('Remember password')}</button></div>
         return <div class="form">
             <div>{my_translate('Please enter your password')}</div>
@@ -100,8 +99,7 @@ class Body extends Element {
         let hasOk = type != "connecting" && type.indexOf("nook") < 0;
         let hasClose = type.indexOf("hasclose") >= 0;
         let show_progress = type == "connecting";
-        this.style.setProperty("border",(color + " solid 1px"));
-        console.log(content)
+        document.body.style.setProperty("border",(color + " solid 1px"));
         setTimeout(()=>this.$("#content").content(my_translate(content)),1);
         return (
         <div style="size: *">
