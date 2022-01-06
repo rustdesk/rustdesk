@@ -1,6 +1,6 @@
-import { handler,view,is_file_transfer,setWindowButontsAndIcon,translate,msgbox,adjustBorder,is_osx,is_xfce,svg_chat,svg_checkmark, is_linux } from "./common.js";
+import { handler,view,setWindowButontsAndIcon,translate,msgbox,adjustBorder,is_osx,is_xfce,svg_chat,svg_checkmark, is_linux } from "./common.js";
 import {$,$$} from "@sciter";
-import { adaptDisplay,is_port_forward } from "./remote.js";
+import { adaptDisplay, audio_enabled, clipboard_enabled, keyboard_enabled } from "./remote.js";
 var pi = handler.xcall("get_default_pi"); // peer information
 
 var chat_msgs = [];
@@ -148,7 +148,7 @@ class Header extends Element {
                 <div class="separator" />
                 {keyboard_enabled ? <li id="lock-screen">{translate('Insert Lock')}</li> : ""}
                 {false && pi.platform == "Windows" ? <li id="block-input">Block user input </li> : ""}
-                {handler.support_refresh() ? <li id="refresh">{translate('Refresh')}</li> : ""}
+                {handler.xcall("support_refresh") ? <li id="refresh">{translate('Refresh')}</li> : ""}
             </menu>
         </popup>);
     }
@@ -299,10 +299,10 @@ function toggleMenuState() {
     let s = handler.xcall("get_view_style");
     if (!s) s = "original";
     values.push(s);
-    for (let el in $$("menu#display-options>li")) {
+    for (let el of $$("menu#display-options>li")) {
         el.classList.toggle("selected", values.indexOf(el.id) >= 0);
     }
-    for (let id in ["show-remote-cursor", "disable-audio", "disable-clipboard", "lock-after-session-end", "privacy-mode"]) {
+    for (let id of ["show-remote-cursor", "disable-audio", "disable-clipboard", "lock-after-session-end", "privacy-mode"]) {
         let el = $('#' + id); // TEST
         if (el) {
             el.classList.toggle("selected", handler.xcall("get_toggle_option",id));
@@ -314,7 +314,7 @@ if (is_osx) {
     $("header").content(<Header />);
     $("header").attributes["role"] = "window-caption"; // TODO 
 } else {
-    if (is_file_transfer || is_port_forward) {
+    if (handler.is_file_transfer || handler.is_port_forward) {
         $("caption").content(<Header />);
     } else {
         $("div.window-toolbar").content(<Header />);
@@ -322,7 +322,7 @@ if (is_osx) {
     setWindowButontsAndIcon();
 }
 
-if (!(is_file_transfer || is_port_forward)) {
+if (!(handler.is_file_transfer || handler.is_port_forward)) {
     $("header").style.setProperty("height","32px");
     if (!is_osx) {
         $("div.window-icon").style.setProperty("size","32px");
@@ -332,7 +332,7 @@ if (!(is_file_transfer || is_port_forward)) {
 handler.updatePi = function(v) {
     pi = v;
     header.componentUpdate();
-    if (is_port_forward) {
+    if (handler.is_port_forward) {
         view.state = Window.WINDOW_MINIMIZED;
     }
 }

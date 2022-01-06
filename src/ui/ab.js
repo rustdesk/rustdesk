@@ -186,6 +186,7 @@ export class SessionList extends Element {
     ["on click at menu#remote-context li"](evt, me) {
         let action = me.id;
         let id = me.parentElement.getAttribute("remote-id");
+        if(!id) return
         console.log("click li",id);
         if (action == "connect") {
             createNewConnect(id, "connect");
