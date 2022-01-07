@@ -585,7 +585,7 @@ impl AudioHandler {
                         );
                         audio_buffer.lock().unwrap().extend(buffer);
                     } else {
-                        audio_buffer.lock().unwrap().extend(buffer.iter().cloned());
+                        audio_buffer.lock().unwrap().extend(buffer[0..n].iter().cloned());
                     }
                 }
                 #[cfg(any(target_os = "android"))]
