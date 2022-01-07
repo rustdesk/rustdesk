@@ -172,6 +172,7 @@ message KeyEvent {
     uint32 chr = 4;
     uint32 unicode = 5;
     string seq = 6;
+    uint32 keysym = 7;
   }
   repeated ControlKey modifiers = 8;
 }

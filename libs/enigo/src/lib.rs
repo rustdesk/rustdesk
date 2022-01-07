@@ -418,6 +418,8 @@ pub enum Key {
     Layout(char),
     /// raw keycode eg 0x38
     Raw(u16),
+    /// VNC keysym
+    KeySym(u32),
 }
 
 /// Representing an interface and a set of keyboard functions every

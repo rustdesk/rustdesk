@@ -181,6 +181,9 @@ impl MouseControllable for Enigo {
     }
 }
 fn keysequence<'a>(key: Key) -> Cow<'a, str> {
+    if let Key::KeySym(sym) = key {
+        return Cow::Owned("");
+    }
     if let Key::Layout(c) = key {
         return Cow::Owned(format!("U{:X}", c as u32));
     }
