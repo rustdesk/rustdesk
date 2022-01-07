@@ -340,6 +340,7 @@ impl Enigo {
             Key::Raw(raw_keycode) => raw_keycode,
             Key::Layout(c) => self.get_layoutdependent_keycode(c.to_string()),
             Key::Super | Key::Command | Key::Windows | Key::Meta => EVK_LWIN,
+            Key::KeySym(sym) => 0,
         }
     }
 

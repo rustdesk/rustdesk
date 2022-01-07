@@ -134,8 +134,7 @@ impl Client {
         log::info!("rendezvous server: {}", rendezvous_server);
 
         let mut socket =
-            socket_client::connect_tcp(&*rendezvous_server, any_addr, RENDEZVOUS_TIMEOUT)
-                .await?;
+            socket_client::connect_tcp(&*rendezvous_server, any_addr, RENDEZVOUS_TIMEOUT).await?;
         let my_addr = socket.local_addr();
         let mut pk = Vec::new();
         let mut relay_server = "".to_owned();
@@ -682,6 +681,7 @@ pub struct LoginConfigHandler {
     pub port_forward: (String, i32),
     pub support_press: bool,
     pub support_refresh: bool,
+    pub internation_keyboard: bool,
 }
 
 impl Deref for LoginConfigHandler {
@@ -938,6 +938,7 @@ impl LoginConfigHandler {
         if !pi.version.is_empty() {
             self.support_press = true;
             self.support_refresh = true;
+            self.internation_keyboard = crate::get_version_number(&pi.version) > 1001008;
         }
         let serde = PeerInfoSerde {
             username,

@@ -54,6 +54,7 @@ sciter-rs = { git = "https://github.com/open-trade/rust-sciter", branch = "dyn" 
 ctrlc = "3.2"
 arboard = "2.0"
 clipboard-master = "3.1"
+tigervnc = { git = "https://github.com/open-trade/tigervnc" }
 
 [target.'cfg(target_os = "windows")'.dependencies]
 systray = { git = "https://github.com/liyue201/systray-rs" }
