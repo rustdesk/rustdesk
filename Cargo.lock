@@ -3091,6 +3091,7 @@ dependencies = [
  "sha2",
  "sys-locale",
  "systray",
+ "tigervnc",
  "uuid",
  "whoami",
  "winapi 0.3.9",
@@ -3601,6 +3602,15 @@ dependencies = [
  "jpeg-decoder",
  "miniz_oxide 0.4.4",
  "weezl",
+]
+
+[[package]]
+name = "tigervnc"
+version = "1.0.0"
+source = "git+https://github.com/open-trade/tigervnc#2007dbb0f47ac72069a529182ce73c954ab70d38"
+dependencies = [
+ "cc",
+ "cfg-if 1.0.0",
 ]
 
 [[package]]
