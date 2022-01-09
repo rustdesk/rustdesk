@@ -580,11 +580,9 @@ fn handle_key_(evt: &KeyEvent) {
         }
     }
     #[cfg(not(target_os = "macos"))]
-    if crate::common::valid_for_capslock(evt) {
-        if has_cap != en.get_key_state(Key::CapsLock) {
-            en.key_down(Key::CapsLock).ok();
-            en.key_up(Key::CapsLock);
-        }
+    if has_cap != en.get_key_state(Key::CapsLock) {
+        en.key_down(Key::CapsLock).ok();
+        en.key_up(Key::CapsLock);
     }
     #[cfg(windows)]
     if crate::common::valid_for_numlock(evt) {

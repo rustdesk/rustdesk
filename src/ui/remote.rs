@@ -1031,17 +1031,11 @@ impl Handler {
         {
             key_event.modifiers.push(ControlKey::Meta.into());
         }
-        /*
-        if crate::is_control_key(&key_event, &ControlKey::CapsLock) {
-            return;
-        } else if get_key_state(enigo::Key::CapsLock) && common::valid_for_capslock(&key_event) {
+        if get_key_state(enigo::Key::CapsLock) {
             key_event.modifiers.push(ControlKey::CapsLock.into());
         }
-        */
         if self.peer_platform() != "Mac OS" {
-            if crate::is_control_key(&key_event, &ControlKey::NumLock) {
-                return;
-            } else if get_key_state(enigo::Key::NumLock) && common::valid_for_numlock(&key_event) {
+            if get_key_state(enigo::Key::NumLock) && common::valid_for_numlock(&key_event) {
                 key_event.modifiers.push(ControlKey::NumLock.into());
             }
         }

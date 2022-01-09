@@ -40,15 +40,6 @@ pub fn valid_for_numlock(evt: &KeyEvent) -> bool {
     }
 }
 
-#[inline]
-pub fn valid_for_capslock(evt: &KeyEvent) -> bool {
-    if let Some(key_event::Union::chr(ch)) = evt.union {
-        ch >= 'a' as u32 && ch <= 'z' as u32
-    } else {
-        false
-    }
-}
-
 pub fn create_clipboard_msg(content: String) -> Message {
     let bytes = content.into_bytes();
     let compressed = compress_func(&bytes, COMPRESS_LEVEL);
@@ -467,4 +458,3 @@ pub fn is_ip(id: &str) -> bool {
         .unwrap()
         .is_match(id)
 }
-
