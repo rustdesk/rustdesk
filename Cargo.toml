@@ -54,8 +54,6 @@ sciter-rs = { git = "https://github.com/open-trade/rust-sciter", branch = "dyn" 
 ctrlc = "3.2"
 arboard = "2.0"
 clipboard-master = "3.1"
-#tigervnc = { path = "../tigervnc" }
-#tigervnc = { git = "https://github.com/open-trade/tigervnc" }
 #rdev = { path = "../rdev" }
 rdev = { git = "https://github.com/open-trade/rdev" }
 

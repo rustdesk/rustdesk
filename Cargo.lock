@@ -1045,6 +1045,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "fastrand"
+version = "1.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "779d043b6a0b90cc4c0ed7ee380a6504394cee7efd7db050e3774eee387324b2"
+dependencies = [
+ "instant",
+]
+
+[[package]]
 name = "filetime"
 version = "0.2.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1070,9 +1079,9 @@ dependencies = [
 
 [[package]]
 name = "flexi_logger"
-version = "0.22.1"
+version = "0.22.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a2917b8937f4d36d9df8b15a51428b6a1b2726ec57402b0c94b4dfc393a409e5"
+checksum = "0b51b4517f4422bfa0515dafcc10b4cc4cd3953d69a19608fd74afb3b19e227c"
 dependencies = [
  "ansi_term",
  "atty",
@@ -2949,7 +2958,7 @@ dependencies = [
 [[package]]
 name = "rdev"
 version = "0.5.0"
-source = "git+https://github.com/open-trade/rdev#faeef84bf2edfa457e9e32c0c96b63f44e494fff"
+source = "git+https://github.com/open-trade/rdev#f0ffc49b502c884956a47b8a1830fc5f55bf9faf"
 dependencies = [
  "cocoa 0.22.0",
  "core-foundation 0.7.0",
@@ -3604,13 +3613,13 @@ dependencies = [
 
 [[package]]
 name = "tempfile"
-version = "3.2.0"
+version = "3.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dac1c663cfc93810f88aed9b8941d48cabf856a1b111c29a40439018d870eb22"
+checksum = "5cdb1ef4eaeeaddc8fbd371e5017057064af0911902ef36b39801f67cc6d79e4"
 dependencies = [
  "cfg-if 1.0.0",
+ "fastrand",
  "libc",
- "rand 0.8.4",
  "redox_syscall",
  "remove_dir_all",
  "winapi 0.3.9",

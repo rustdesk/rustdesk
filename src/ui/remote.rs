@@ -280,7 +280,7 @@ impl Handler {
                     Key::Space => Some(ControlKey::Space),
                     Key::Tab => Some(ControlKey::Tab),
                     Key::UpArrow => Some(ControlKey::UpArrow),
-                    Key::Delete | Key::KpDelete => {
+                    Key::Delete => {
                         if is_win && ctrl && alt {
                             me.ctrl_alt_del();
                             return;
@@ -305,6 +305,21 @@ impl Handler {
                     Key::Sleep => Some(ControlKey::Sleep),
                     Key::Separator => Some(ControlKey::Separator),
                     Key::KpReturn => Some(ControlKey::NumpadEnter),
+                    Key::Kp0 => Some(ControlKey::Numpad0),
+                    Key::Kp1 => Some(ControlKey::Numpad1),
+                    Key::Kp2 => Some(ControlKey::Numpad2),
+                    Key::Kp3 => Some(ControlKey::Numpad3),
+                    Key::Kp4 => Some(ControlKey::Numpad4),
+                    Key::Kp5 => Some(ControlKey::Numpad5),
+                    Key::Kp6 => Some(ControlKey::Numpad6),
+                    Key::Kp7 => Some(ControlKey::Numpad7),
+                    Key::Kp8 => Some(ControlKey::Numpad8),
+                    Key::Kp9 => Some(ControlKey::Numpad9),
+                    Key::KpDivide => Some(ControlKey::Divide),
+                    Key::KpMultiply => Some(ControlKey::Subtract),
+                    Key::KpDecimal => Some(ControlKey::Decimal),
+                    Key::KpMinus => Some(ControlKey::Subtract),
+                    Key::KpPlus => Some(ControlKey::Add),
                     Key::CapsLock | Key::NumLock | Key::ScrollLock => {
                         return;
                     }
@@ -1022,6 +1037,7 @@ impl Handler {
         } else if get_key_state(enigo::Key::CapsLock) && common::valid_for_capslock(&key_event) {
             key_event.modifiers.push(ControlKey::CapsLock.into());
         }
+        */
         if self.peer_platform() != "Mac OS" {
             if crate::is_control_key(&key_event, &ControlKey::NumLock) {
                 return;
@@ -1029,7 +1045,6 @@ impl Handler {
                 key_event.modifiers.push(ControlKey::NumLock.into());
             }
         }
-        */
         if down_or_up == 1 {
             key_event.down = true;
         } else if down_or_up == 3 {
