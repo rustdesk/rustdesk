@@ -2958,7 +2958,7 @@ dependencies = [
 [[package]]
 name = "rdev"
 version = "0.5.0"
-source = "git+https://github.com/open-trade/rdev#bc1d62c9966a56eecc5de61b1dee43dfc80ec141"
+source = "git+https://github.com/open-trade/rdev#2a3205a13102907da2442a369f8b704601eecc9d"
 dependencies = [
  "cocoa 0.22.0",
  "core-foundation 0.7.0",
