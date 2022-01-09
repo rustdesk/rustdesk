@@ -585,7 +585,10 @@ impl AudioHandler {
                         );
                         audio_buffer.lock().unwrap().extend(buffer);
                     } else {
-                        audio_buffer.lock().unwrap().extend(buffer[0..n].iter().cloned());
+                        audio_buffer
+                            .lock()
+                            .unwrap()
+                            .extend(buffer[0..n].iter().cloned());
                     }
                 }
                 #[cfg(any(target_os = "android"))]
@@ -681,7 +684,7 @@ pub struct LoginConfigHandler {
     pub port_forward: (String, i32),
     pub support_press: bool,
     pub support_refresh: bool,
-    pub internation_keyboard: bool,
+    pub version: i64,
 }
 
 impl Deref for LoginConfigHandler {
@@ -938,7 +941,7 @@ impl LoginConfigHandler {
         if !pi.version.is_empty() {
             self.support_press = true;
             self.support_refresh = true;
-            self.internation_keyboard = crate::get_version_number(&pi.version) > 1001008;
+            self.version = crate::get_version_number(&pi.version);
         }
         let serde = PeerInfoSerde {
             username,

@@ -233,6 +233,8 @@ impl Handler {
         let mut me = self.clone();
         let peer = self.peer_platform();
         let is_win = peer == "Windows";
+        let version = self.lc.read().unwrap().version;
+        const OFFSET_CASE: u8 = 'a' as u8 - 'A' as u8;
         std::thread::spawn(move || {
             // This will block.
             std::env::set_var("KEYBOARD_ONLY", "y"); // pass to rdev
@@ -329,7 +331,7 @@ impl Handler {
                 if let Some(k) = control_key {
                     key_event.set_control_key(k);
                 } else {
-                    let chr = match evt.name {
+                    let mut chr = match evt.name {
                         Some(ref s) => s.chars().next().unwrap_or('\0'),
                         _ => '\0',
                     };
@@ -337,6 +339,10 @@ impl Handler {
                         if chr == 'l' && is_win && command {
                             me.lock_screen();
                             return;
+                        }
+                        // <= 1.1.8, caps modifier only for 'a' -> 'z', so here adjust it
+                        if version <= 1001008 && chr >= 'A' && chr <= 'Z' {
+                            chr = (chr as u8 + OFFSET_CASE) as _;
                         }
                         key_event.set_chr(chr as _);
                     } else {
