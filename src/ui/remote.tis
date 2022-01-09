@@ -1,5 +1,4 @@
 var cursor_img = $(img#cursor);
-var last_key_time = 0;
 is_file_transfer = handler.is_file_transfer();
 var is_port_forward = handler.is_port_forward();
 var display_width = 0;
@@ -72,44 +71,12 @@ function adaptDisplay() {
 // https://sciter.com/docs/content/sciter/Event.htm
 
 var entered = false;
-
-var keymap = {};
-for (var (k, v) in Event) {
-    k = k + ""
-    if (k[0] == "V" && k[1] == "K") {
-        keymap[v] = k;
+if (!is_file_transfer && !is_port_forward) {
+    self.onKey = function(evt) {
+        if (!entered) return false;
+        // so that arrow key not move scrollbar
+        return true; 
     }
-}
-
-// VK_ENTER = VK_RETURN
-// somehow, handler.onKey and view.onKey not working
-function self.onKey(evt) {
-    last_key_time = getTime();
-    if (is_file_transfer || is_port_forward) return false;
-    if (!entered) return false;
-    if (!keyboard_enabled) return false;
-    switch (evt.type) {
-        case Event.KEY_DOWN:
-            handler.key_down_or_up(1, keymap[evt.keyCode] || "", evt.keyCode, evt.altKey,
-                evt.ctrlKey, evt.shiftKey, evt.commandKey, evt.extendedKey);
-            if (is_osx && evt.commandKey) {
-                handler.key_down_or_up(0, keymap[evt.keyCode] || "", evt.keyCode, evt.altKey,
-                    evt.ctrlKey, evt.shiftKey, evt.commandKey, evt.extendedKey);
-            }
-            break;
-        case Event.KEY_UP:
-            handler.key_down_or_up(0, keymap[evt.keyCode] || "", evt.keyCode, evt.altKey,
-                evt.ctrlKey, evt.shiftKey, evt.commandKey, evt.extendedKey);
-            break;
-        case Event.KEY_CHAR:
-            // the keypress event is fired when the element receives character value. Event.keyCode is a UNICODE code point of the character
-            handler.key_down_or_up(2, "", evt.keyCode, evt.altKey,
-                evt.ctrlKey, evt.shiftKey, evt.commandKey, evt.extendedKey);
-            break;
-        default:
-            return false;
-    }
-    return true;
 }
 
 var wait_window_toolbar = false;
@@ -284,10 +251,12 @@ function handler.onMouse(evt)
       case Event.MOUSE_ENTER:
         entered = true;
         stdout.println("enter");
+        handler.enter();
         return keyboard_enabled;
       case Event.MOUSE_LEAVE:
         entered = false;
         stdout.println("leave");
+        handler.leave();
         return keyboard_enabled;
       default:
         return false;

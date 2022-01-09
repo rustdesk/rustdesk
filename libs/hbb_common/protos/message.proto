@@ -83,6 +83,7 @@ message MouseEvent {
 }
 
 enum ControlKey {
+  Unknown = 0;
   Alt = 1;
   Backspace = 2;
   CapsLock = 3;

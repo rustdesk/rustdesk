@@ -48,6 +48,10 @@ fn get_key_state(key: enigo::Key) -> bool {
     ENIGO.lock().unwrap().get_key_state(key)
 }
 
+static mut IS_IN: bool = false;
+static mut KEYBOARD_HOOKED: bool = false;
+static mut KEYBOARD_ENABLED: bool = true;
+
 #[derive(Default)]
 pub struct HandlerInner {
     element: Option<Element>,
@@ -153,7 +157,8 @@ impl sciter::EventHandler for Handler {
         fn login(String, bool);
         fn new_rdp();
         fn send_mouse(i32, i32, i32, bool, bool, bool, bool);
-        fn key_down_or_up(bool, String, i32, bool, bool, bool, bool, bool);
+        fn enter();
+        fn leave();
         fn ctrl_alt_del();
         fn transfer_file();
         fn tunnel();
@@ -212,6 +217,130 @@ impl Handler {
             .unwrap()
             .initialize(id, me.is_file_transfer(), me.is_port_forward());
         me
+    }
+
+    fn start_keyboard_hook(&self) {
+        if self.is_port_forward() || self.is_file_transfer() {
+            return;
+        }
+        if unsafe { KEYBOARD_HOOKED } {
+            return;
+        }
+        unsafe {
+            KEYBOARD_HOOKED = true;
+        }
+        log::info!("keyboard hooked");
+        let mut me = self.clone();
+        let peer = self.peer_platform();
+        let is_win = peer == "Windows";
+        std::thread::spawn(move || {
+            // This will block.
+            std::env::set_var("KEYBOARD_ONLY", "y"); // pass to rdev
+            use rdev::{EventType::*, *};
+            let func = move |evt: Event| {
+                if unsafe { !IS_IN || !KEYBOARD_ENABLED } {
+                    return;
+                }
+                let (key, down) = match evt.event_type {
+                    KeyPress(k) => (k, 1),
+                    KeyRelease(k) => (k, 0),
+                    _ => return,
+                };
+                let alt = get_key_state(enigo::Key::Alt);
+                let ctrl = get_key_state(enigo::Key::Control);
+                let shift = get_key_state(enigo::Key::Shift);
+                let command = get_key_state(enigo::Key::Meta);
+                let control_key = match key {
+                    Key::Alt => Some(ControlKey::Alt),
+                    Key::AltGr => Some(ControlKey::RAlt),
+                    Key::Backspace => Some(ControlKey::Backspace),
+                    Key::ControlLeft => Some(ControlKey::Control),
+                    Key::ControlRight => Some(ControlKey::RControl),
+                    Key::DownArrow => Some(ControlKey::DownArrow),
+                    Key::Escape => Some(ControlKey::Escape),
+                    Key::F1 => Some(ControlKey::F1),
+                    Key::F10 => Some(ControlKey::F10),
+                    Key::F11 => Some(ControlKey::F11),
+                    Key::F12 => Some(ControlKey::F12),
+                    Key::F2 => Some(ControlKey::F2),
+                    Key::F3 => Some(ControlKey::F3),
+                    Key::F4 => Some(ControlKey::F4),
+                    Key::F5 => Some(ControlKey::F5),
+                    Key::F6 => Some(ControlKey::F6),
+                    Key::F7 => Some(ControlKey::F7),
+                    Key::F8 => Some(ControlKey::F8),
+                    Key::F9 => Some(ControlKey::F9),
+                    Key::LeftArrow => Some(ControlKey::LeftArrow),
+                    Key::MetaLeft => Some(ControlKey::Meta),
+                    Key::MetaRight => Some(ControlKey::RWin),
+                    Key::Return => Some(ControlKey::Return),
+                    Key::RightArrow => Some(ControlKey::RightArrow),
+                    Key::ShiftLeft => Some(ControlKey::Shift),
+                    Key::ShiftRight => Some(ControlKey::RShift),
+                    Key::Space => Some(ControlKey::Space),
+                    Key::Tab => Some(ControlKey::Tab),
+                    Key::UpArrow => Some(ControlKey::UpArrow),
+                    Key::Delete | Key::KpDelete => {
+                        if is_win && ctrl && alt {
+                            me.ctrl_alt_del();
+                            return;
+                        }
+                        Some(ControlKey::Delete)
+                    }
+                    Key::Apps => Some(ControlKey::Apps),
+                    Key::Cancel => Some(ControlKey::Cancel),
+                    Key::Clear => Some(ControlKey::Clear),
+                    Key::Kana => Some(ControlKey::Kana),
+                    Key::Hangul => Some(ControlKey::Hangul),
+                    Key::Junja => Some(ControlKey::Junja),
+                    Key::Final => Some(ControlKey::Final),
+                    Key::Hanja => Some(ControlKey::Hanja),
+                    Key::Hanji => Some(ControlKey::Hanja),
+                    Key::Convert => Some(ControlKey::Convert),
+                    Key::Print => Some(ControlKey::Print),
+                    Key::Select => Some(ControlKey::Select),
+                    Key::Execute => Some(ControlKey::Execute),
+                    Key::Snapshot => Some(ControlKey::Snapshot),
+                    Key::Help => Some(ControlKey::Help),
+                    Key::Sleep => Some(ControlKey::Sleep),
+                    Key::Separator => Some(ControlKey::Separator),
+                    Key::KpReturn => Some(ControlKey::NumpadEnter),
+                    Key::CapsLock | Key::NumLock | Key::ScrollLock => {
+                        return;
+                    }
+                    _ => None,
+                };
+                let mut key_event = KeyEvent::new();
+                if let Some(k) = control_key {
+                    key_event.set_control_key(k);
+                } else {
+                    let chr = match evt.name {
+                        Some(ref s) => {
+                            if s.len() == 1 {
+                                s.chars().next().unwrap()
+                            } else {
+                                '\0'
+                            }
+                        }
+                        _ => '\0',
+                    };
+                    if chr != '\0' {
+                        if chr == 'l' && is_win && command {
+                            me.lock_screen();
+                            return;
+                        }
+                        key_event.set_chr(chr as _);
+                    } else {
+                        log::error!("Unknown key {:?}", evt);
+                        return;
+                    }
+                }
+                me.key_down_or_up(down, key_event, alt, ctrl, shift, command);
+            };
+            if let Err(error) = rdev::listen(func) {
+                log::error!("rdev: {:?}", error);
+            }
+        });
     }
 
     fn get_view_style(&mut self) -> String {
@@ -632,6 +761,18 @@ impl Handler {
         self.send(Data::NewRDP);
     }
 
+    fn enter(&mut self) {
+        unsafe {
+            IS_IN = true;
+        }
+    }
+
+    fn leave(&mut self) {
+        unsafe {
+            IS_IN = false;
+        }
+    }
+
     fn send_mouse(
         &mut self,
         mask: i32,
@@ -814,18 +955,20 @@ impl Handler {
 
     fn ctrl_alt_del(&mut self) {
         if self.peer_platform() == "Windows" {
-            let del = "CTRL_ALT_DEL".to_owned();
-            self.key_down_or_up(1, del, 0, false, false, false, false, false);
+            let mut key_event = KeyEvent::new();
+            key_event.set_control_key(ControlKey::CtrlAltDel);
+            self.key_down_or_up(1, key_event, false, false, false, false);
         } else {
-            let del = "VK_DELETE".to_owned();
-            self.key_down_or_up(1, del.clone(), 0, true, true, false, false, false);
-            self.key_down_or_up(0, del, 0, true, true, false, false, false);
+            let mut key_event = KeyEvent::new();
+            key_event.set_control_key(ControlKey::Delete);
+            self.key_down_or_up(3, key_event, true, true, false, false);
         }
     }
 
     fn lock_screen(&mut self) {
-        let lock = "LOCK_SCREEN".to_owned();
-        self.key_down_or_up(1, lock, 0, false, false, false, false, false);
+        let mut key_event = KeyEvent::new();
+        key_event.set_control_key(ControlKey::LockScreen);
+        self.key_down_or_up(1, key_event, false, false, false, false);
     }
 
     fn transfer_file(&mut self) {
@@ -847,106 +990,61 @@ impl Handler {
     fn key_down_or_up(
         &mut self,
         down_or_up: i32,
-        name: String,
-        code: i32,
+        evt: KeyEvent,
         alt: bool,
         ctrl: bool,
         shift: bool,
         command: bool,
-        extended: bool,
     ) {
-        if self.peer_platform() == "Windows" {
-            if ctrl && alt && name == "VK_DELETE" {
-                self.ctrl_alt_del();
+        let mut key_event = evt;
+
+        if alt
+            && !crate::is_control_key(&key_event, &ControlKey::Alt)
+            && !crate::is_control_key(&key_event, &ControlKey::RAlt)
+        {
+            key_event.modifiers.push(ControlKey::Alt.into());
+        }
+        if shift
+            && !crate::is_control_key(&key_event, &ControlKey::Shift)
+            && !crate::is_control_key(&key_event, &ControlKey::RShift)
+        {
+            key_event.modifiers.push(ControlKey::Shift.into());
+        }
+        if ctrl
+            && !crate::is_control_key(&key_event, &ControlKey::Control)
+            && !crate::is_control_key(&key_event, &ControlKey::RControl)
+        {
+            key_event.modifiers.push(ControlKey::Control.into());
+        }
+        if command
+            && !crate::is_control_key(&key_event, &ControlKey::Meta)
+            && !crate::is_control_key(&key_event, &ControlKey::RWin)
+        {
+            key_event.modifiers.push(ControlKey::Meta.into());
+        }
+        /*
+        if crate::is_control_key(&key_event, &ControlKey::CapsLock) {
+            return;
+        } else if get_key_state(enigo::Key::CapsLock) && common::valid_for_capslock(&key_event) {
+            key_event.modifiers.push(ControlKey::CapsLock.into());
+        }
+        if self.peer_platform() != "Mac OS" {
+            if crate::is_control_key(&key_event, &ControlKey::NumLock) {
                 return;
-            }
-            if command && name == "VK_L" {
-                self.lock_screen();
-                return;
+            } else if get_key_state(enigo::Key::NumLock) && common::valid_for_numlock(&key_event) {
+                key_event.modifiers.push(ControlKey::NumLock.into());
             }
         }
-
-        // extended: e.g. ctrl key on right side, https://docs.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-keybd_event
-        // not found api of osx and xdo
-        log::debug!(
-            "{:?} {} {} {} {} {} {} {} {}",
-            std::time::SystemTime::now(),
-            down_or_up,
-            name,
-            code,
-            alt,
-            ctrl,
-            shift,
-            command,
-            extended,
-        );
-
-        let mut name = name;
-        #[cfg(target_os = "linux")]
-        if code == 65383 {
-            // VK_MENU
-            name = "Apps".to_owned();
+        */
+        if down_or_up == 1 {
+            key_event.down = true;
+        } else if down_or_up == 3 {
+            key_event.press = true;
         }
-
-        if extended {
-            match name.as_ref() {
-                "VK_CONTROL" => name = "RControl".to_owned(),
-                "VK_MENU" => name = "RAlt".to_owned(),
-                "VK_SHIFT" => name = "RShift".to_owned(),
-                _ => {}
-            }
-        }
-
-        if let Some(mut key_event) = self.get_key_event(down_or_up, &name, code) {
-            if alt
-                && !crate::is_control_key(&key_event, &ControlKey::Alt)
-                && !crate::is_control_key(&key_event, &ControlKey::RAlt)
-            {
-                key_event.modifiers.push(ControlKey::Alt.into());
-            }
-            if shift
-                && !crate::is_control_key(&key_event, &ControlKey::Shift)
-                && !crate::is_control_key(&key_event, &ControlKey::RShift)
-            {
-                key_event.modifiers.push(ControlKey::Shift.into());
-            }
-            if ctrl
-                && !crate::is_control_key(&key_event, &ControlKey::Control)
-                && !crate::is_control_key(&key_event, &ControlKey::RControl)
-            {
-                key_event.modifiers.push(ControlKey::Control.into());
-            }
-            if command
-                && !crate::is_control_key(&key_event, &ControlKey::Meta)
-                && !crate::is_control_key(&key_event, &ControlKey::RWin)
-            {
-                key_event.modifiers.push(ControlKey::Meta.into());
-            }
-            if crate::is_control_key(&key_event, &ControlKey::CapsLock) {
-                return;
-            } else if get_key_state(enigo::Key::CapsLock) && common::valid_for_capslock(&key_event)
-            {
-                key_event.modifiers.push(ControlKey::CapsLock.into());
-            }
-            if self.peer_platform() != "Mac OS" {
-                if crate::is_control_key(&key_event, &ControlKey::NumLock) {
-                    return;
-                } else if get_key_state(enigo::Key::NumLock)
-                    && common::valid_for_numlock(&key_event)
-                {
-                    key_event.modifiers.push(ControlKey::NumLock.into());
-                }
-            }
-            if down_or_up == 1 {
-                key_event.down = true;
-            } else if down_or_up == 3 {
-                key_event.press = true;
-            }
-            let mut msg_out = Message::new();
-            msg_out.set_key_event(key_event);
-            log::debug!("{:?}", msg_out);
-            self.send(Data::Message(msg_out));
-        }
+        let mut msg_out = Message::new();
+        msg_out.set_key_event(key_event);
+        log::debug!("{:?}", msg_out);
+        self.send(Data::Message(msg_out));
     }
 
     #[inline]
@@ -1123,6 +1221,9 @@ impl Remote {
         };
         match Client::start(&self.handler.id, conn_type).await {
             Ok((mut peer, direct)) => {
+                unsafe {
+                    KEYBOARD_ENABLED = true;
+                }
                 self.handler
                     .call("setConnectionType", &make_args!(peer.is_secured(), direct));
                 loop {
@@ -1181,6 +1282,9 @@ impl Remote {
         }
         if let Some(stop) = stop_clipboard {
             stop.send(()).ok();
+        }
+        unsafe {
+            KEYBOARD_ENABLED = false;
         }
     }
 
@@ -1577,6 +1681,9 @@ impl Remote {
                         log::info!("Change permission {:?} -> {}", p.permission, p.enabled);
                         match p.permission.enum_value_or_default() {
                             Permission::Keyboard => {
+                                unsafe {
+                                    KEYBOARD_ENABLED = p.enabled;
+                                }
                                 self.handler
                                     .call("setPermission", &make_args!("keyboard", p.enabled));
                             }
@@ -1729,6 +1836,7 @@ impl Interface for Handler {
                 crate::platform::windows::add_recent_document(&path);
             }
         }
+        self.start_keyboard_hook();
     }
 
     async fn handle_hash(&mut self, hash: Hash, peer: &mut Stream) {
