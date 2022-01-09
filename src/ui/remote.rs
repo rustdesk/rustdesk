@@ -300,7 +300,7 @@ impl Handler {
                     Key::Print => Some(ControlKey::Print),
                     Key::Select => Some(ControlKey::Select),
                     Key::Execute => Some(ControlKey::Execute),
-                    Key::Snapshot => Some(ControlKey::Snapshot),
+                    Key::PrintScreen => Some(ControlKey::Snapshot),
                     Key::Help => Some(ControlKey::Help),
                     Key::Sleep => Some(ControlKey::Sleep),
                     Key::Separator => Some(ControlKey::Separator),
