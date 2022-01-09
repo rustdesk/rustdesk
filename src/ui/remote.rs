@@ -315,13 +315,7 @@ impl Handler {
                     key_event.set_control_key(k);
                 } else {
                     let chr = match evt.name {
-                        Some(ref s) => {
-                            if s.len() == 1 {
-                                s.chars().next().unwrap()
-                            } else {
-                                '\0'
-                            }
-                        }
+                        Some(ref s) => s.chars().next().unwrap_or('\0'),
                         _ => '\0',
                     };
                     if chr != '\0' {
