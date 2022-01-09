@@ -426,7 +426,6 @@ impl Enigo {
 
             Key::Raw(raw_keycode) => raw_keycode,
             Key::Layout(c) => self.map_key_board(c),
-            Key::KeySym(sym) => 0 as _,
 
             Key::Super | Key::Command | Key::Windows | Key::Meta => kVK_Command,
             _ => 0,

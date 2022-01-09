@@ -40,8 +40,7 @@ struct Input {
     time: i64,
 }
 
-const KEY_CHAR_START: u64 = 0xFFFF;
-const KEY_SYM_START: u64 = 0xFFFFFFFF;
+const KEY_CHAR_START: i32 = 9999;
 
 #[derive(Clone, Default)]
 pub struct MouseCursorSub {
@@ -164,7 +163,7 @@ fn run_cursor(sp: MouseCursorService, state: &mut StateCursor) -> ResultType<()>
 
 lazy_static::lazy_static! {
     static ref ENIGO: Arc<Mutex<Enigo>> = Arc::new(Mutex::new(Enigo::new()));
-    static ref KEYS_DOWN: Arc<Mutex<HashMap<u64, Instant>>> = Default::default();
+    static ref KEYS_DOWN: Arc<Mutex<HashMap<i32, Instant>>> = Default::default();
     static ref LATEST_INPUT: Arc<Mutex<Input>> = Default::default();
 }
 static EXITING: AtomicBool = AtomicBool::new(false);
@@ -257,15 +256,13 @@ fn fix_key_down_timeout(force: bool) {
         if force || value.elapsed().as_millis() >= 3_000 {
             KEYS_DOWN.lock().unwrap().remove(&key);
             let key = if key < KEY_CHAR_START {
-                if let Some(key) = KEY_MAP.get(&(key as _)) {
+                if let Some(key) = KEY_MAP.get(&key) {
                     Some(*key)
                 } else {
                     None
                 }
-            } else if key < KEY_SYM_START {
-                Some(Key::Layout(((key - KEY_CHAR_START) as u8) as _))
             } else {
-                Some(Key::KeySym((key - KEY_SYM_START) as u32))
+                Some(Key::Layout(((key - KEY_CHAR_START) as u8) as _))
             };
             if let Some(key) = key {
                 let func = move || {
@@ -355,10 +352,7 @@ fn handle_mouse_(evt: &MouseEvent, conn: i32) {
                         modifier_sleep();
                         to_release.push(key);
                     } else {
-                        KEYS_DOWN
-                            .lock()
-                            .unwrap()
-                            .insert(ck.value() as _, Instant::now());
+                        KEYS_DOWN.lock().unwrap().insert(ck.value(), Instant::now());
                     }
                 }
             }
@@ -578,10 +572,7 @@ fn handle_key_(evt: &KeyEvent) {
                             modifier_sleep();
                             to_release.push(key);
                         } else {
-                            KEYS_DOWN
-                                .lock()
-                                .unwrap()
-                                .insert(ck.value() as _, Instant::now());
+                            KEYS_DOWN.lock().unwrap().insert(ck.value(), Instant::now());
                         }
                     }
                 }
@@ -615,13 +606,10 @@ fn handle_key_(evt: &KeyEvent) {
                 }
                 if evt.down {
                     allow_err!(en.key_down(key.clone()));
-                    KEYS_DOWN
-                        .lock()
-                        .unwrap()
-                        .insert(ck.value() as _, Instant::now());
+                    KEYS_DOWN.lock().unwrap().insert(ck.value(), Instant::now());
                 } else {
                     en.key_up(key.clone());
-                    KEYS_DOWN.lock().unwrap().remove(&(ck.value() as _));
+                    KEYS_DOWN.lock().unwrap().remove(&ck.value());
                 }
             } else if ck.value() == ControlKey::CtrlAltDel.value() {
                 // have to spawn new thread because send_sas is tokio_main, the caller can not be tokio_main.
@@ -639,28 +627,13 @@ fn handle_key_(evt: &KeyEvent) {
                 KEYS_DOWN
                     .lock()
                     .unwrap()
-                    .insert(chr as u64 + KEY_CHAR_START, Instant::now());
+                    .insert(chr as i32 + KEY_CHAR_START, Instant::now());
             } else {
                 en.key_up(Key::Layout(chr as u8 as _));
                 KEYS_DOWN
                     .lock()
                     .unwrap()
-                    .remove(&(chr as u64 + KEY_CHAR_START));
-            }
-        }
-        Some(key_event::Union::keysym(sym)) => {
-            if evt.down {
-                allow_err!(en.key_down(Key::KeySym(sym)));
-                KEYS_DOWN
-                    .lock()
-                    .unwrap()
-                    .insert(sym as u64 + KEY_SYM_START, Instant::now());
-            } else {
-                en.key_up(Key::KeySym(sym));
-                KEYS_DOWN
-                    .lock()
-                    .unwrap()
-                    .remove(&(sym as u64 + KEY_SYM_START));
+                    .remove(&(chr as i32 + KEY_CHAR_START));
             }
         }
         Some(key_event::Union::unicode(chr)) => {
