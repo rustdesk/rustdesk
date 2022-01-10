@@ -12,8 +12,8 @@ use hbb_common::{
     rendezvous_proto::*,
     sleep,
     sodiumoxide::crypto::{box_, secretbox, sign},
-    tcp::FramedStream,
     timeout, tokio, ResultType, Stream,
+    socket_client,
 };
 use service::{GenericService, Service, ServiceTmpl, Subscriber};
 use std::{
@@ -63,7 +63,7 @@ pub fn new() -> ServerPtr {
 }
 
 async fn accept_connection_(server: ServerPtr, socket: Stream, secure: bool) -> ResultType<()> {
-    let local_addr = socket.get_ref().local_addr()?;
+    let local_addr = socket.local_addr();
     drop(socket);
     // even we drop socket, below still may fail if not use reuse_addr,
     // there is TIME_WAIT before socket really released, so sometimes we
@@ -71,12 +71,13 @@ async fn accept_connection_(server: ServerPtr, socket: Stream, secure: bool) -> 
     let listener = new_listener(local_addr, true).await?;
     log::info!("Server listening on: {}", &listener.local_addr()?);
     if let Ok((stream, addr)) = timeout(CONNECT_TIMEOUT, listener.accept()).await? {
-        create_tcp_connection_(server, Stream::from(stream), addr, secure).await?;
+        let stream_addr = stream.local_addr()?;
+        create_tcp_connection(server, Stream::from(stream, stream_addr), addr, secure).await?;
     }
     Ok(())
 }
 
-async fn create_tcp_connection_(
+pub async fn create_tcp_connection(
     server: ServerPtr,
     stream: Stream,
     addr: SocketAddr,
@@ -94,11 +95,13 @@ async fn create_tcp_connection_(
         sk_[..].copy_from_slice(&sk);
         let sk = sign::SecretKey(sk_);
         let mut msg_out = Message::new();
-        let signed_id = sign::sign(Config::get_id().as_bytes(), &sk);
         let (our_pk_b, our_sk_b) = box_::gen_keypair();
+        let signed_id = sign::sign(
+            format!("{}\0{}", Config::get_id(), base64::encode(our_pk_b.0)).as_bytes(),
+            &sk,
+        );
         msg_out.set_signed_id(SignedId {
             id: signed_id,
-            pk: our_pk_b.0.into(),
             ..Default::default()
         });
         timeout(CONNECT_TIMEOUT, stream.send(&msg_out)).await??;
@@ -124,8 +127,8 @@ async fn create_tcp_connection_(
                             key[..].copy_from_slice(&symmetric_key);
                             stream.set_key(secretbox::Key(key));
                         } else if pk.asymmetric_value.is_empty() {
-                            // force a trial to update_pk to rendezvous server
                             Config::set_key_confirmed(false);
+                            log::info!("Force to update pk");
                         } else {
                             bail!("Handshake failed: invalid public sign key length from peer");
                         }
@@ -183,8 +186,8 @@ async fn create_relay_connection_(
     peer_addr: SocketAddr,
     secure: bool,
 ) -> ResultType<()> {
-    let mut stream = FramedStream::new(
-        &crate::check_port(relay_server, RELAY_PORT),
+    let mut stream = socket_client::connect_tcp(
+        crate::check_port(relay_server, RELAY_PORT),
         Config::get_any_listen_addr(),
         CONNECT_TIMEOUT,
     )
@@ -195,7 +198,7 @@ async fn create_relay_connection_(
         ..Default::default()
     });
     stream.send(&msg_out).await?;
-    create_tcp_connection_(server, stream, peer_addr, secure).await?;
+    create_tcp_connection(server, stream, peer_addr, secure).await?;
     Ok(())
 }
 

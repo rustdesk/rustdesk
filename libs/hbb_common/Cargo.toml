@@ -7,16 +7,16 @@ edition = "2018"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-protobuf = { version = "3.0.0-pre", git = "https://github.com/stepancheg/rust-protobuf" }
-tokio = { version = "1.10", features = ["full"] }
+protobuf = "3.0.0-alpha.2"
+tokio = { version = "1.15", features = ["full"] }
 tokio-util = { version = "0.6", features = ["full"] }
 futures = "0.3"
-bytes = "1.0"
+bytes = "1.1"
 log = "0.4"
 env_logger = "0.9"
 socket2 = { version = "0.3", features = ["reuseport"] }
 zstd = "0.9"
-quinn = {version = "0.6", optional = true }
+quinn = {version = "0.8", optional = true }
 anyhow = "1.0"
 futures-util = "0.3"
 directories-next = "2.0"
@@ -28,6 +28,8 @@ confy = { git = "https://github.com/open-trade/confy" }
 dirs-next = "2.0"
 filetime = "0.2"
 sodiumoxide = "0.2"
+regex = "1.4"
+tokio-socks = { git = "https://github.com/fufesou/tokio-socks" }
 
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
 mac_address = "1.1"
@@ -36,7 +38,7 @@ mac_address = "1.1"
 quic = ["quinn"]
 
 [build-dependencies]
-protobuf-codegen-pure = { version = "3.0.0-pre", git = "https://github.com/stepancheg/rust-protobuf" }
+protobuf-codegen-pure = "3.0.0-alpha.2"
 
 [target.'cfg(target_os = "windows")'.dependencies]
 winapi = { version = "0.3", features = ["winuser"] }

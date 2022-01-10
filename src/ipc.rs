@@ -13,7 +13,7 @@ use parity_tokio_ipc::{
     Connection as Conn, ConnectionClient as ConnClient, Endpoint, Incoming, SecurityAttributes,
 };
 use serde_derive::{Deserialize, Serialize};
-use std::{collections::HashMap, net::SocketAddr};
+use std::collections::HashMap;
 #[cfg(not(windows))]
 use std::{fs::File, io::prelude::*};
 
@@ -89,6 +89,7 @@ pub enum Data {
     NatType(Option<i32>),
     ConfirmedKey(Option<(Vec<u8>, Vec<u8>)>),
     RawMessage(Vec<u8>),
+    Socks(Option<config::Socks5Server>),
     FS(FS),
     SessionsUpdated,
     Test,
@@ -193,6 +194,20 @@ async fn handle(data: Data, stream: &mut Connection) {
             };
             allow_err!(stream.send(&Data::ConfirmedKey(out)).await);
         }
+        Data::Socks(s) => match s {
+            None => {
+                allow_err!(stream.send(&Data::Socks(Config::get_socks())).await);
+            }
+            Some(data) => {
+                if data.proxy.is_empty() {
+                    Config::set_socks(None);
+                } else {
+                    Config::set_socks(Some(data));
+                }
+                crate::rendezvous_mediator::RendezvousMediator::restart();
+                log::info!("socks updated");
+            }
+        },
         Data::Config((name, value)) => match value {
             None => {
                 let value;
@@ -203,7 +218,9 @@ async fn handle(data: Data, stream: &mut Connection) {
                 } else if name == "salt" {
                     value = Some(Config::get_salt());
                 } else if name == "rendezvous_server" {
-                    value = Some(Config::get_rendezvous_server().to_string());
+                    value = Some(Config::get_rendezvous_server());
+                } else if name == "rendezvous_servers" {
+                    value = Some(Config::get_rendezvous_servers().join(","));
                 } else {
                     value = None;
                 }
@@ -211,6 +228,7 @@ async fn handle(data: Data, stream: &mut Connection) {
             }
             Some(value) => {
                 if name == "id" {
+                    Config::set_key_confirmed(false);
                     Config::set_id(&value);
                 } else if name == "password" {
                     Config::set_password(&value);
@@ -414,13 +432,12 @@ pub fn get_password() -> String {
     }
 }
 
-pub async fn get_rendezvous_server(ms_timeout: u64) -> SocketAddr {
+pub async fn get_rendezvous_server(ms_timeout: u64) -> String {
     if let Ok(Some(v)) = get_config_async("rendezvous_server", ms_timeout).await {
-        if let Ok(v) = v.parse() {
-            return v;
-        }
+        v
+    } else {
+        Config::get_rendezvous_server()
     }
-    return Config::get_rendezvous_server();
 }
 
 async fn get_options_(ms_timeout: u64) -> ResultType<HashMap<String, String>> {
@@ -483,6 +500,41 @@ pub async fn get_nat_type(ms_timeout: u64) -> i32 {
     get_nat_type_(ms_timeout)
         .await
         .unwrap_or(Config::get_nat_type())
+}
+
+#[inline]
+async fn get_socks_(ms_timeout: u64) -> ResultType<Option<config::Socks5Server>> {
+    let mut c = connect(ms_timeout, "").await?;
+    c.send(&Data::Socks(None)).await?;
+    if let Some(Data::Socks(value)) = c.next_timeout(ms_timeout).await? {
+        Config::set_socks(value.clone());
+        Ok(value)
+    } else {
+        Ok(Config::get_socks())
+    }
+}
+
+pub async fn get_socks_async(ms_timeout: u64) -> Option<config::Socks5Server> {
+    get_socks_(ms_timeout).await.unwrap_or(Config::get_socks())
+}
+
+#[tokio::main(flavor = "current_thread")]
+pub async fn get_socks() -> Option<config::Socks5Server> {
+    get_socks_async(1_000).await
+}
+
+#[tokio::main(flavor = "current_thread")]
+pub async fn set_socks(value: config::Socks5Server) -> ResultType<()> {
+    Config::set_socks(if value.proxy.is_empty() {
+        None
+    } else {
+        Some(value.clone())
+    });
+    connect(1_000, "")
+        .await?
+        .send(&Data::Socks(Some(value)))
+        .await?;
+    Ok(())
 }
 
 /*

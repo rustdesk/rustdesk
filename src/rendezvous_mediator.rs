@@ -1,23 +1,26 @@
 use crate::server::{check_zombie, new as new_server, ServerPtr};
 use hbb_common::{
     allow_err,
+    anyhow::bail,
     config::{Config, RENDEZVOUS_PORT, RENDEZVOUS_TIMEOUT},
     futures::future::join_all,
     log,
     protobuf::Message as _,
     rendezvous_proto::*,
-    sleep,
-    tcp::FramedStream,
+    sleep, socket_client,
     tokio::{
         self, select,
         time::{interval, Duration},
     },
     udp::FramedSocket,
-    AddrMangle, ResultType,
+    AddrMangle, IntoTargetAddr, ResultType, TargetAddr,
 };
 use std::{
     net::SocketAddr,
-    sync::{Arc, Mutex},
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc, Mutex,
+    },
     time::SystemTime,
 };
 use uuid::Uuid;
@@ -25,12 +28,14 @@ use uuid::Uuid;
 type Message = RendezvousMessage;
 
 lazy_static::lazy_static! {
-    pub static ref SOLVING_PK_MISMATCH: Arc<Mutex<String>> = Default::default();
+    static ref SOLVING_PK_MISMATCH: Arc<Mutex<String>> = Default::default();
 }
+static SHOULD_EXIT: AtomicBool = AtomicBool::new(false);
+const REG_INTERVAL: i64 = 12_000;
 
 #[derive(Clone)]
 pub struct RendezvousMediator {
-    addr: SocketAddr,
+    addr: TargetAddr<'static>,
     host: String,
     host_prefix: String,
     rendezvous_servers: Vec<String>,
@@ -38,6 +43,10 @@ pub struct RendezvousMediator {
 }
 
 impl RendezvousMediator {
+    pub fn restart() {
+        SHOULD_EXIT.store(true, Ordering::SeqCst);
+    }
+
     pub async fn start_all() {
         let mut nat_tested = false;
         check_zombie();
@@ -46,6 +55,10 @@ impl RendezvousMediator {
             crate::common::test_nat_type();
             nat_tested = true;
         }
+        let server_cloned = server.clone();
+        tokio::spawn(async move {
+            allow_err!(direct_server(server_cloned).await);
+        });
         loop {
             Config::reset_online();
             if Config::get_option("stop-service").is_empty() {
@@ -55,11 +68,14 @@ impl RendezvousMediator {
                 }
                 let mut futs = Vec::new();
                 let servers = Config::get_rendezvous_servers();
+                SHOULD_EXIT.store(false, Ordering::SeqCst);
                 for host in servers.clone() {
                     let server = server.clone();
                     let servers = servers.clone();
                     futs.push(tokio::spawn(async move {
                         allow_err!(Self::start(server, host, servers).await);
+                        // SHOULD_EXIT here is to ensure once one exits, the others also exit.
+                        SHOULD_EXIT.store(true, Ordering::SeqCst);
                     }));
                 }
                 join_all(futs).await;
@@ -86,18 +102,20 @@ impl RendezvousMediator {
             })
             .unwrap_or(host.to_owned());
         let mut rz = Self {
-            addr: Config::get_any_listen_addr(),
+            addr: Config::get_any_listen_addr().into_target_addr()?,
             host: host.clone(),
             host_prefix,
             rendezvous_servers,
             last_id_pk_registry: "".to_owned(),
         };
-        allow_err!(rz.dns_check());
-        let mut socket = FramedSocket::new(Config::get_any_listen_addr()).await?;
+
+        rz.addr = socket_client::get_target_addr(&crate::check_port(&host, RENDEZVOUS_PORT))?;
+        let any_addr = Config::get_any_listen_addr();
+        let mut socket = socket_client::new_udp(any_addr, RENDEZVOUS_TIMEOUT).await?;
+
         const TIMER_OUT: Duration = Duration::from_secs(1);
         let mut timer = interval(TIMER_OUT);
         let mut last_timer = SystemTime::UNIX_EPOCH;
-        const REG_INTERVAL: i64 = 12_000;
         const REG_TIMEOUT: i64 = 3_000;
         const MAX_FAILS1: i64 = 3;
         const MAX_FAILS2: i64 = 6;
@@ -136,60 +154,68 @@ impl RendezvousMediator {
                 }
             };
             select! {
-                Some(Ok((bytes, _))) = socket.next() => {
-                    if let Ok(msg_in) = Message::parse_from_bytes(&bytes) {
-                        match msg_in.union {
-                            Some(rendezvous_message::Union::register_peer_response(rpr)) => {
-                                update_latency();
-                                if rpr.request_pk {
-                                    log::info!("request_pk received from {}", host);
-                                    allow_err!(rz.register_pk(&mut socket).await);
-                                    continue;
-                                }
-                            }
-                            Some(rendezvous_message::Union::register_pk_response(rpr)) => {
-                                update_latency();
-                                match rpr.result.enum_value_or_default() {
-                                    register_pk_response::Result::OK => {
-                                        Config::set_key_confirmed(true);
-                                        Config::set_host_key_confirmed(&rz.host_prefix, true);
-                                        *SOLVING_PK_MISMATCH.lock().unwrap() = "".to_owned();
+                n = socket.next() => {
+                    match n {
+                        Some(Ok((bytes, _))) => {
+                            if let Ok(msg_in) = Message::parse_from_bytes(&bytes) {
+                                match msg_in.union {
+                                    Some(rendezvous_message::Union::register_peer_response(rpr)) => {
+                                        update_latency();
+                                        if rpr.request_pk {
+                                            log::info!("request_pk received from {}", host);
+                                            allow_err!(rz.register_pk(&mut socket).await);
+                                            continue;
+                                        }
                                     }
-                                    register_pk_response::Result::UUID_MISMATCH => {
-                                        allow_err!(rz.handle_uuid_mismatch(&mut socket).await);
+                                    Some(rendezvous_message::Union::register_pk_response(rpr)) => {
+                                        update_latency();
+                                        match rpr.result.enum_value_or_default() {
+                                            register_pk_response::Result::OK => {
+                                                Config::set_key_confirmed(true);
+                                                Config::set_host_key_confirmed(&rz.host_prefix, true);
+                                                *SOLVING_PK_MISMATCH.lock().unwrap() = "".to_owned();
+                                            }
+                                            register_pk_response::Result::UUID_MISMATCH => {
+                                                allow_err!(rz.handle_uuid_mismatch(&mut socket).await);
+                                            }
+                                            _ => {}
+                                        }
+                                    }
+                                    Some(rendezvous_message::Union::punch_hole(ph)) => {
+                                        let rz = rz.clone();
+                                        let server = server.clone();
+                                        tokio::spawn(async move {
+                                            allow_err!(rz.handle_punch_hole(ph, server).await);
+                                        });
+                                    }
+                                    Some(rendezvous_message::Union::request_relay(rr)) => {
+                                        let rz = rz.clone();
+                                        let server = server.clone();
+                                        tokio::spawn(async move {
+                                            allow_err!(rz.handle_request_relay(rr, server).await);
+                                        });
+                                    }
+                                    Some(rendezvous_message::Union::fetch_local_addr(fla)) => {
+                                        let rz = rz.clone();
+                                        let server = server.clone();
+                                        tokio::spawn(async move {
+                                            allow_err!(rz.handle_intranet(fla, server).await);
+                                        });
+                                    }
+                                    Some(rendezvous_message::Union::configure_update(cu)) => {
+                                        Config::set_option("rendezvous-servers".to_owned(), cu.rendezvous_servers.join(","));
+                                        Config::set_serial(cu.serial);
                                     }
                                     _ => {}
                                 }
+                            } else {
+                                log::debug!("Non-protobuf message bytes received: {:?}", bytes);
                             }
-                            Some(rendezvous_message::Union::punch_hole(ph)) => {
-                                let rz = rz.clone();
-                                let server = server.clone();
-                                tokio::spawn(async move {
-                                    allow_err!(rz.handle_punch_hole(ph, server).await);
-                                });
-                            }
-                            Some(rendezvous_message::Union::request_relay(rr)) => {
-                                let rz = rz.clone();
-                                let server = server.clone();
-                                tokio::spawn(async move {
-                                    allow_err!(rz.handle_request_relay(rr, server).await);
-                                });
-                            }
-                            Some(rendezvous_message::Union::fetch_local_addr(fla)) => {
-                                let rz = rz.clone();
-                                let server = server.clone();
-                                tokio::spawn(async move {
-                                    allow_err!(rz.handle_intranet(fla, server).await);
-                                });
-                            }
-                            Some(rendezvous_message::Union::configure_update(cu)) => {
-                                Config::set_option("rendezvous-servers".to_owned(), cu.rendezvous_servers.join(","));
-                                Config::set_serial(cu.serial);
-                            }
-                            _ => {}
-                        }
-                    } else {
-                        log::debug!("Non-protobuf message bytes received: {:?}", bytes);
+                        },
+                        Some(Err(e)) => bail!("Failed to receive next {}", e),  // maybe socks5 tcp disconnected
+                        None => {
+                            // unreachable!()
+                        },
                     }
                 },
                 _ = timer.tick() => {
@@ -199,15 +225,8 @@ impl RendezvousMediator {
                     if !Config::get_option("stop-service").is_empty() {
                         break;
                     }
-                    if rz.addr.port() == 0 {
-                        allow_err!(rz.dns_check());
-                        if rz.addr.port() == 0 {
-                            continue;
-                        } else {
-                            // have to do this for osx, to avoid "Can't assign requested address"
-                            // when socket created before OS network ready
-                            socket = FramedSocket::new(Config::get_any_listen_addr()).await?;
-                        }
+                    if SHOULD_EXIT.load(Ordering::SeqCst) {
+                        break;
                     }
                     let now = SystemTime::now();
                     if now.duration_since(last_timer).map(|d| d < TIMER_OUT).unwrap_or(false) {
@@ -226,10 +245,11 @@ impl RendezvousMediator {
                                 Config::update_latency(&host, -1);
                                 old_latency = 0;
                                 if now.duration_since(last_dns_check).map(|d| d.as_millis() as i64).unwrap_or(0) > DNS_INTERVAL {
-                                    if let Ok(_) = rz.dns_check() {
-                                        // in some case of network reconnect (dial IP network),
-                                        // old UDP socket not work any more after network recover
-                                        socket = FramedSocket::new(Config::get_any_listen_addr()).await?;
+                                    rz.addr = socket_client::get_target_addr(&crate::check_port(&host, RENDEZVOUS_PORT))?;
+                                    // in some case of network reconnect (dial IP network),
+                                    // old UDP socket not work any more after network recover
+                                    if let Some(s) = socket_client::rebind_udp(any_addr).await? {
+                                        socket = s;
                                     }
                                     last_dns_check = now;
                                 }
@@ -242,12 +262,6 @@ impl RendezvousMediator {
                 }
             }
         }
-        Ok(())
-    }
-
-    fn dns_check(&mut self) -> ResultType<()> {
-        self.addr = hbb_common::to_socket_addr(&crate::check_port(&self.host, RENDEZVOUS_PORT))?;
-        log::debug!("Lookup dns of {}", self.host);
         Ok(())
     }
 
@@ -280,8 +294,14 @@ impl RendezvousMediator {
             uuid,
             secure,
         );
-        let mut socket =
-            FramedStream::new(self.addr, Config::get_any_listen_addr(), RENDEZVOUS_TIMEOUT).await?;
+
+        let mut socket = socket_client::connect_tcp(
+            self.addr.to_owned(),
+            Config::get_any_listen_addr(),
+            RENDEZVOUS_TIMEOUT,
+        )
+        .await?;
+
         let mut msg_out = Message::new();
         let mut rr = RelayResponse {
             socket_addr,
@@ -303,15 +323,15 @@ impl RendezvousMediator {
     async fn handle_intranet(&self, fla: FetchLocalAddr, server: ServerPtr) -> ResultType<()> {
         let peer_addr = AddrMangle::decode(&fla.socket_addr);
         log::debug!("Handle intranet from {:?}", peer_addr);
-        let (mut socket, port) = {
-            let socket =
-                FramedStream::new(self.addr, Config::get_any_listen_addr(), RENDEZVOUS_TIMEOUT)
-                    .await?;
-            let port = socket.get_ref().local_addr()?.port();
-            (socket, port)
-        };
-        let local_addr = socket.get_ref().local_addr()?;
-        let local_addr: SocketAddr = format!("{}:{}", local_addr.ip(), port).parse()?;
+        let mut socket = socket_client::connect_tcp(
+            self.addr.to_owned(),
+            Config::get_any_listen_addr(),
+            RENDEZVOUS_TIMEOUT,
+        )
+        .await?;
+        let local_addr = socket.local_addr();
+        let local_addr: SocketAddr =
+            format!("{}:{}", local_addr.ip(), local_addr.port()).parse()?;
         let mut msg_out = Message::new();
         let mut relay_server = Config::get_option("relay-server");
         if relay_server.is_empty() {
@@ -347,10 +367,14 @@ impl RendezvousMediator {
         let peer_addr = AddrMangle::decode(&ph.socket_addr);
         log::debug!("Punch hole to {:?}", peer_addr);
         let mut socket = {
-            let socket =
-                FramedStream::new(self.addr, Config::get_any_listen_addr(), RENDEZVOUS_TIMEOUT)
-                    .await?;
-            allow_err!(FramedStream::new(peer_addr, socket.get_ref().local_addr()?, 300).await);
+            let socket = socket_client::connect_tcp(
+                self.addr.to_owned(),
+                Config::get_any_listen_addr(),
+                RENDEZVOUS_TIMEOUT,
+            )
+            .await?;
+            let local_addr = socket.local_addr();
+            allow_err!(socket_client::connect_tcp(peer_addr, local_addr, 300).await);
             socket
         };
         let mut msg_out = Message::new();
@@ -387,7 +411,7 @@ impl RendezvousMediator {
             pk,
             ..Default::default()
         });
-        socket.send(&msg_out, self.addr).await?;
+        socket.send(&msg_out, self.addr.to_owned()).await?;
         Ok(())
     }
 
@@ -433,7 +457,47 @@ impl RendezvousMediator {
             serial,
             ..Default::default()
         });
-        socket.send(&msg_out, self.addr).await?;
+        socket.send(&msg_out, self.addr.to_owned()).await?;
         Ok(())
+    }
+}
+
+async fn direct_server(server: ServerPtr) -> ResultType<()> {
+    let port = RENDEZVOUS_PORT + 2;
+    let addr = format!("0.0.0.0:{}", port);
+    let mut listener = None;
+    loop {
+        if !Config::get_option("direct-server").is_empty() && listener.is_none() {
+            listener = Some(hbb_common::tcp::new_listener(&addr, false).await?);
+            log::info!(
+                "Direct server listening on: {}",
+                &listener.as_ref().unwrap().local_addr()?
+            );
+        }
+        if let Some(l) = listener.as_mut() {
+            if let Ok(Ok((stream, addr))) = hbb_common::timeout(1000, l.accept()).await {
+                if Config::get_option("direct-server").is_empty() {
+                    continue;
+                }
+                log::info!("direct access from {}", addr);
+                let local_addr = stream.local_addr()?;
+                let server = server.clone();
+                tokio::spawn(async move {
+                    allow_err!(
+                        crate::server::create_tcp_connection(
+                            server,
+                            hbb_common::Stream::from(stream, local_addr),
+                            addr,
+                            false,
+                        )
+                        .await
+                    );
+                });
+            } else {
+                sleep(0.1).await;
+            }
+        } else {
+            sleep(1.).await;
+        }
     }
 }

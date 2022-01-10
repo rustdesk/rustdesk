@@ -33,22 +33,22 @@ class Body: Reactor.Component
                     <div>
                         <div .id style="font-weight: bold; font-size: 1.2em;">{c.name}</div>
                         <div .id>({c.peer_id})</div>
-                        <div style="margin-top: 1.2em">Connected <span #time>{getElaspsed(c.time)}</span></div>
+                        <div style="margin-top: 1.2em">{translate('Connected')} {" "} <span #time>{getElaspsed(c.time)}</span></div>
                     </div>
                 </div>
                 <div />
-                {c.is_file_transfer || c.port_forward ? "" : <div>Permissions</div>}
+                {c.is_file_transfer || c.port_forward ? "" : <div>{translate('Permissions')}</div>}
                 {c.is_file_transfer || c.port_forward ? "" : <div .permissions>
-                    <div class={!c.keyboard ? "disabled" : ""} title="Allow using keyboard and mouse"><icon .keyboard /></div>
-                    <div class={!c.clipboard ? "disabled" : ""} title="Allow using clipboard"><icon .clipboard /></div>
-                    <div class={!c.audio ? "disabled" : ""} title="Allow hearing sound"><icon .audio /></div>
+                    <div class={!c.keyboard ? "disabled" : ""} title={translate('Allow using keyboard and mouse')}><icon .keyboard /></div>
+                    <div class={!c.clipboard ? "disabled" : ""} title={translate('Allow using clipboard')}><icon .clipboard /></div>
+                    <div class={!c.audio ? "disabled" : ""} title={translate('Allow hearing sound')}><icon .audio /></div>
                 </div>}
                 {c.port_forward ? <div>Port Forwarding: {c.port_forward}</div> : ""}
                 <div style="size:*"/>
                 <div .buttons>
-                     {auth ? "" : <button .button tabindex="-1" #accept>Accept</button>}
-                     {auth ? "" : <button .button tabindex="-1" .outline #dismiss>Dismiss</button>}
-                     {auth ? <button .button tabindex="-1" #disconnect>Disconnect</button> : ""}
+                     {auth ? "" : <button .button tabindex="-1" #accept>{translate('Accept')}</button>}
+                     {auth ? "" : <button .button tabindex="-1" .outline #dismiss>{translate('Dismiss')}</button>}
+                     {auth ? <button .button tabindex="-1" #disconnect>{translate('Disconnect')}</button> : ""}
                 </div>
                 {c.is_file_transfer || c.port_forward ? "" : <div .chaticon>{svg_chat}</div>}
             </div>
@@ -101,6 +101,9 @@ class Body: Reactor.Component
             connection.authorized = true;
             body.update();
             handler.authorize(cid);
+            self.timer(30ms, function() {
+                view.windowState = View.WINDOW_MINIMIZED;
+            });
         });
     }
 

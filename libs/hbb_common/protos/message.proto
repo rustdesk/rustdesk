@@ -66,6 +66,7 @@ message MouseEvent {
 }
 
 enum ControlKey {
+  Unknown = 0;
   Alt = 1;
   Backspace = 2;
   CapsLock = 3;
@@ -342,7 +343,6 @@ message PublicKey {
 
 message SignedId {
   bytes id = 1;
-  bytes pk = 2;
 }
 
 message AudioFormat {

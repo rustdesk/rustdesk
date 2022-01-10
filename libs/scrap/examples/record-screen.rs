@@ -43,7 +43,6 @@ struct Args {
     flag_time: Option<u64>,
     flag_fps: u64,
     flag_bv: u32,
-    flag_ba: u32,
 }
 
 #[derive(Debug, serde::Deserialize)]

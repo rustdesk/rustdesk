@@ -1,4 +1,5 @@
-var type, title, text, getParams, remember, retry, callback;
+var type, title, text, getParams, remember, retry, callback, contentStyle;
+var my_translate;
 
 function updateParams(params) {
     type = params.type;
@@ -7,7 +8,10 @@ function updateParams(params) {
     getParams = params.getParams;
     remember = params.remember;
     callback = params.callback;
+    my_translate = params.translate;
     retry = params.retry;
+    contentStyle = params.contentStyle;
+    try { text = translate_text(text); } catch (e) {}
     if (retry > 0) {
         self.timer(retry * 1000, function() {
             view.close({ reconnect: true });
@@ -15,38 +19,19 @@ function updateParams(params) {
     }
 }
 
+function translate_text(text) {
+    if (text.indexOf('Failed') == 0 && text.indexOf(': ') > 0) {
+        var fds = text.split(': ');
+        for (var i = 0; i < fds.length; ++i) {
+            fds[i] = my_translate(fds[i]);
+        }
+        text = fds.join(': ');
+    }
+    return text;
+}
+
 var params = view.parameters;
 updateParams(params);
-
-var svg_eye_cross = <svg viewBox="0 -21 511.96 511">
-<path d="m506.68 261.88c7.043-16.984 7.043-36.461 0-53.461-41.621-100.4-140.03-165.27-250.71-165.27-46.484 0-90.797 11.453-129.64 32.191l-68.605-68.609c-8.3438-8.3398-21.824-8.3398-30.168 0-8.3398 8.3398-8.3398 21.824 0 30.164l271.49 271.49 86.484 86.488 68.676 68.672c4.1797 4.1797 9.6406 6.2695 15.102 6.2695 5.4609 0 10.922-2.0898 15.082-6.25 8.3438-8.3398 8.3438-21.824 0-30.164l-62.145-62.145c36.633-27.883 66.094-65.109 84.438-109.38zm-293.91-100.1c12.648-7.5742 27.391-11.969 43.199-11.969 47.062 0 85.332 38.273 85.332 85.336 0 15.805-4.3945 30.547-11.969 43.199z"/>
-<path d="m255.97 320.48c-47.062 0-85.336-38.273-85.336-85.332 0-3.0938 0.59766-6.0195 0.91797-9.0039l-106.15-106.16c-25.344 24.707-46.059 54.465-60.117 88.43-7.043 16.98-7.043 36.457 0 53.461 41.598 100.39 140.01 165.27 250.69 165.27 34.496 0 67.797-6.3164 98.559-18.027l-89.559-89.559c-2.9844 0.32031-5.9062 0.91797-9 0.91797z"/>
-</svg>;
-
-class Password: Reactor.Component {
-    this var visible = false;
-
-    function render() {
-        return <div .password>
-            <input name="password" type={this.visible ? "text" : "password"} .outline-focus />
-            {this.visible ? svg_eye_cross : svg_eye}
-        </div>;
-    }
-
-    event click $(svg) {
-        var el = this.$(input);
-        var value = el.value;
-        var start = el.xcall(#selectionStart) || 0;
-        var end = el.xcall(#selectionEnd);
-        this.update({ visible: !this.visible });
-        self.timer(30ms, function() {
-            var el = this.$(input);
-            view.focus = el;
-            el.value = value;
-            el.xcall(#setSelection, start, end);
-        });
-    }
-}
 
 var body;
 
@@ -74,9 +59,9 @@ class Body: Reactor.Component {
     function getInputPasswordContent() {
         var ts = remember ? { checked: true } : {};
         return <div .form>
-            <div>Please enter your password</div>
-            <Password />
-            <div><button|checkbox(remember) {ts}>Remember password</button></div>
+            <div>{my_translate('Please enter your password')}</div>
+            <PasswordComponent />
+            <div><button|checkbox(remember) {ts}>{my_translate('Remember password')}</button></div>
         </div>;
     }
 
@@ -116,27 +101,27 @@ class Body: Reactor.Component {
         var me = this;
         self.timer(1ms, function() {
             if (typeof content == "string")
-                me.$(#content).html = content;
+                me.$(#content).html = my_translate(content);
             else
                 me.$(#content).content(content);
         });
         return (
         <div style="size: *">
             <header style={"height: 2em; background: " + color}>
-                <caption role="window-caption">{title}</caption>
+                <caption role="window-caption">{my_translate(title)}</caption>
             </header>
             <div style="padding: 1em 2em; size: *;">
                 <div style="height: *; flow: horizontal">
                     {icon && <div style="height: *; margin: * 0; padding-right: 2em;">{icon}</div>}
-                    <div style="size: *; margin: * 0;" #content />
+                    <div style={contentStyle || "size: *; margin: * 0;"} #content />
                 </div>
                 <div style="text-align: right;">
-                    <span #error />
-                    {show_progress ? <progress style={"color:" + color} /> : ""}
-                    {hasCancel || hasRetry ? <button .button #cancel .outline>{hasRetry ? "OK" : "Cancel"}</button> : ""}
-                    {this.hasSkip() ? <button .button #skip .outline>Skip</button> : ""}
-                    {hasOk || hasRetry ? <button .button #submit>{hasRetry ? "Retry" : "OK"}</button> : ""}
-                    {hasClose ? <button .button #cancel .outline>Close</button> : ""}
+                    <span style="display:inline-block; max-width: 260px; font-size:12px;" #error />
+                    <progress #progress style={"color:" + color + "; display: " + (show_progress ? "inline-block" : "none")} />
+                    {hasCancel || hasRetry ? <button .button #cancel .outline>{my_translate(hasRetry ? "OK" : "Cancel")}</button> : ""}
+                    {this.hasSkip() ? <button .button #skip .outline>{my_translate('Skip')}</button> : ""}
+                    {hasOk || hasRetry ? <button .button #submit>{my_translate(hasRetry ? "Retry" : "OK")}</button> : ""}
+                    {hasClose ? <button .button #cancel .outline>{my_translate('Close')}</button> : ""}
                 </div>
             </div>
         </div>);
@@ -148,6 +133,17 @@ class Body: Reactor.Component {
 }
 
 $(body).content(<Body />);
+
+function show_progress(show=1, err="") {
+    if (show == -1) {
+        view.close()
+        return;
+    }
+    $(#progress).style.set {
+        display: show ? "inline-block" : "none"
+    };
+    $(#error).text = err;
+}
 
 function submit() {
     if ($(button#submit)) {
@@ -211,9 +207,12 @@ event click $(button#submit) {
     }
     var values = getValues();
     if (callback) {
-        var err = callback(values);
+        var err = callback(values, show_progress);
+        if (err && !err.trim()) {
+            return;
+        }
         if (err) {
-            $(#error).text = err;
+            show_progress(false, err);
             return;
         }
     }
@@ -235,7 +234,7 @@ event keydown (evt) {
 
 function set_outline_focus() {
     self.timer(30ms, function() {
-        var el = $(input.outline-focus);
+        var el = $(.outline-focus);
         if (el) view.focus = el;
         else {
             el = $(#submit);

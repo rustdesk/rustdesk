@@ -97,8 +97,12 @@ mod listen {
 
     fn trigger(ctx: &mut ClipboardContext) {
         let _ = match ctx.get_text() {
-            Ok(text) => ctx.set_text(text),
-            Err(_) => ctx.set_text(Default::default()),
+            Ok(text) => {
+                if !text.is_empty() {
+                    ctx.set_text(text).ok();
+                }
+            }
+            Err(_) => {}
         };
     }
 }

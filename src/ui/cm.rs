@@ -300,6 +300,10 @@ impl ConnectionManager {
     fn exit(&self) {
         std::process::exit(0);
     }
+
+    fn t(&self, name: String) -> String {
+        crate::client::translate(name)
+    }
 }
 
 impl sciter::EventHandler for ConnectionManager {
@@ -308,6 +312,7 @@ impl sciter::EventHandler for ConnectionManager {
     }
 
     sciter::dispatch_script_call! {
+        fn t(String);
         fn get_icon();
         fn close(i32);
         fn authorize(i32);
@@ -405,12 +410,14 @@ async fn start_pa() {
                                 break;
                             }
                             let spec = pulse::sample::Spec {
-                                format: pulse::sample::Format::F32be,
+                                format: pulse::sample::Format::F32le,
                                 channels: 2,
                                 rate: crate::platform::linux::PA_SAMPLE_RATE,
                             };
                             log::info!("pa monitor: {:?}", device);
-                            if let Ok(s) = psimple::Simple::new(
+                            // systemctl --user status pulseaudio.service
+                            let mut buf: Vec<u8> = vec![0; 480 * 4];
+                            match psimple::Simple::new(
                                 None,                             // Use the default server
                                 APP_NAME,                         // Our application’s name
                                 pulse::stream::Direction::Record, // We want a record stream
@@ -420,22 +427,19 @@ async fn start_pa() {
                                 None,                             // Use default channel map
                                 None, // Use default buffering attributes
                             ) {
-                                loop {
+                                Ok(s) => loop {
                                     if let Some(Err(_)) = stream.next_timeout2(1).await {
                                         break;
                                     }
-                                    let mut out: Vec<u8> = Vec::with_capacity(480 * 4);
-                                    unsafe {
-                                        out.set_len(out.capacity());
+                                    if let Ok(_) = s.read(&mut buf) {
+                                        allow_err!(
+                                            stream.send(&Data::RawMessage(buf.clone())).await
+                                        );
                                     }
-                                    if let Ok(_) = s.read(&mut out) {
-                                        if out.iter().filter(|x| **x != 0).next().is_some() {
-                                            allow_err!(stream.send(&Data::RawMessage(out)).await);
-                                        }
-                                    }
+                                },
+                                Err(err) => {
+                                    log::error!("Could not create simple pulse: {}", err);
                                 }
-                            } else {
-                                log::error!("Could not create simple pulse");
                             }
                         }
                         Err(err) => {

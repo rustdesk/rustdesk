@@ -1,3 +1,12 @@
+var last_key_time = 0;
+var keymap = {};    
+for (var (k, v) in Event) {    
+    k = k + ""    
+    if (k[0] == "V" && k[1] == "K") {       
+        keymap[v] = k;        
+    }    
+}
+
 class Grid: Behavior {
   const TABLE_HEADER_CLICK = 0x81;  
   const TABLE_ROW_CLICK = 0x82; 
@@ -144,7 +153,7 @@ class Grid: Behavior {
   
   function onKey(evt)
     {
-        
+      last_key_time = getTime();
       if (evt.type != Event.KEY_DOWN)
           return false; 
       

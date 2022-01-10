@@ -108,7 +108,7 @@ impl VideoFrameController {
                         fetched_conn_ids.insert(id);
 
                         // break if all connections have received current frame
-                        if fetched_conn_ids.is_superset(&send_conn_ids) {
+                        if fetched_conn_ids.len() >= send_conn_ids.len() {
                             break;
                         }
                     }
@@ -188,11 +188,7 @@ fn run(sp: GenericService) -> ResultType<()> {
         speed,
     };
     let mut vpx;
-    let mut n = ((width * height) as f64 / (1920 * 1080) as f64).round() as u32;
-    if n < 1 {
-        n = 1;
-    }
-    match Encoder::new(&cfg, n) {
+    match Encoder::new(&cfg, 0) {
         Ok(x) => vpx = x,
         Err(err) => bail!("Failed to create encoder: {}", err),
     }
@@ -220,7 +216,7 @@ fn run(sp: GenericService) -> ResultType<()> {
     let start = time::Instant::now();
     let mut last_check_displays = time::Instant::now();
     #[cfg(windows)]
-    let mut try_gdi = true;
+    let mut try_gdi = 1;
     #[cfg(windows)]
     log::info!("gdi: {}", c.is_gdi());
     while sp.ok() {
@@ -257,11 +253,11 @@ fn run(sp: GenericService) -> ResultType<()> {
             Ok(frame) => {
                 let time = now - start;
                 let ms = (time.as_secs() * 1000 + time.subsec_millis() as u64) as i64;
-                let send_conn_ids = handle_one_frame(&sp, now, &frame, ms, &mut crc, &mut vpx)?;
+                let send_conn_ids = handle_one_frame(&sp, &frame, ms, &mut crc, &mut vpx)?;
                 frame_controller.set_send(now, send_conn_ids);
                 #[cfg(windows)]
                 {
-                    try_gdi = false;
+                    try_gdi = 0;
                 }
             }
             Err(ref e) if e.kind() == WouldBlock => {
@@ -271,10 +267,13 @@ fn run(sp: GenericService) -> ResultType<()> {
                     wait = 0
                 }
                 #[cfg(windows)]
-                if try_gdi && !c.is_gdi() {
-                    c.set_gdi();
-                    try_gdi = false;
-                    log::info!("No image, fall back to gdi");
+                if try_gdi > 0 && !c.is_gdi() {
+                    if try_gdi > 3 {
+                        c.set_gdi();
+                        try_gdi = 0;
+                        log::info!("No image, fall back to gdi");
+                    }
+                    try_gdi += 1;
                 }
                 continue;
             }
@@ -327,7 +326,6 @@ fn create_frame(frame: &EncodeFrame) -> VP9 {
 #[inline]
 fn handle_one_frame(
     sp: &GenericService,
-    now: Instant,
     frame: &[u8],
     ms: i64,
     crc: &mut (u32, u32),
@@ -365,7 +363,7 @@ fn handle_one_frame(
 
         // to-do: flush periodically, e.g. 1 second
         if frames.len() > 0 {
-            send_conn_ids = sp.send_video_frame(now, create_msg(frames));
+            send_conn_ids = sp.send_video_frame(create_msg(frames));
         }
     }
     Ok(send_conn_ids)

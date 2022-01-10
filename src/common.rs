@@ -1,6 +1,7 @@
 pub use arboard::Clipboard as ClipboardContext;
 use hbb_common::{
-    allow_err, bail,
+    allow_err,
+    anyhow::bail,
     compress::{compress as compress_func, decompress},
     config::{Config, COMPRESS_LEVEL, RENDEZVOUS_TIMEOUT},
     log,
@@ -8,9 +9,7 @@ use hbb_common::{
     protobuf::Message as _,
     protobuf::ProtobufEnum,
     rendezvous_proto::*,
-    sleep,
-    tcp::FramedStream,
-    tokio, ResultType,
+    sleep, socket_client, tokio, ResultType,
 };
 #[cfg(any(target_os = "android", target_os = "ios", feature = "cli"))]
 use hbb_common::{config::RENDEZVOUS_PORT, futures::future::join_all};
@@ -36,15 +35,6 @@ pub fn valid_for_numlock(evt: &KeyEvent) -> bool {
         let v = ck.value();
         (v >= ControlKey::Numpad0.value() && v <= ControlKey::Numpad9.value())
             || v == ControlKey::Decimal.value()
-    } else {
-        false
-    }
-}
-
-#[inline]
-pub fn valid_for_capslock(evt: &KeyEvent) -> bool {
-    if let Some(key_event::Union::chr(ch)) = evt.union {
-        ch >= 'a' as u32 && ch <= 'z' as u32
     } else {
         false
     }
@@ -95,7 +85,10 @@ pub fn update_clipboard(clipboard: Clipboard, old: Option<&Arc<Mutex<String>>>) 
                 let side = if old.is_none() { "host" } else { "client" };
                 let old = if let Some(old) = old { old } else { &CONTENT };
                 *old.lock().unwrap() = content.clone();
-                allow_err!(ctx.set_text(content));
+                if !content.is_empty() {
+                    // empty content make ctx.set_text crash
+                    allow_err!(ctx.set_text(content));
+                }
                 log::debug!("{} updated on {}", CLIPBOARD_NAME, side);
             }
             Err(err) => {
@@ -236,15 +229,19 @@ pub fn test_nat_type() {
 #[tokio::main(flavor = "current_thread")]
 async fn test_nat_type_() -> ResultType<bool> {
     log::info!("Testing nat ...");
+    let is_direct = crate::ipc::get_socks_async(1_000).await.is_none(); // sync socks BTW
     let start = std::time::Instant::now();
-    let rendezvous_server = get_rendezvous_server(100).await;
+    let rendezvous_server = get_rendezvous_server(1_000).await;
     let server1 = rendezvous_server;
-    let mut server2 = server1;
-    if server1.port() == 0 { // offline
-        // avoid overflow crash
-        bail!("Offline");
+    let tmp: Vec<&str> = server1.split(":").collect();
+    if tmp.len() != 2 {
+        bail!("Invalid server address: {}", server1);
     }
-    server2.set_port(server1.port() - 1);
+    let port: u16 = tmp[1].parse()?;
+    if port == 0 {
+        bail!("Invalid server address: {}", server1);
+    }
+    let server2 = format!("{}:{}", tmp[0], port - 1);
     let mut msg_out = RendezvousMessage::new();
     let serial = Config::get_serial();
     msg_out.set_test_nat_request(TestNatRequest {
@@ -253,15 +250,24 @@ async fn test_nat_type_() -> ResultType<bool> {
     });
     let mut port1 = 0;
     let mut port2 = 0;
+    let server1 = socket_client::get_target_addr(&server1)?;
+    let server2 = socket_client::get_target_addr(&server2)?;
     let mut addr = Config::get_any_listen_addr();
     for i in 0..2 {
-        let mut socket = FramedStream::new(
-            if i == 0 { &server1 } else { &server2 },
+        let mut socket = socket_client::connect_tcp(
+            if i == 0 {
+                server1.clone()
+            } else {
+                server2.clone()
+            },
             addr,
             RENDEZVOUS_TIMEOUT,
         )
         .await?;
-        addr = socket.get_ref().local_addr()?;
+        if is_direct {
+            // to-do: should set NatType::UNKNOWN for proxy
+            addr = socket.local_addr();
+        }
         socket.send(&msg_out).await?;
         if let Some(Ok(bytes)) = socket.next_timeout(3000).await {
             if let Ok(msg_in) = RendezvousMessage::parse_from_bytes(&bytes) {
@@ -298,12 +304,12 @@ async fn test_nat_type_() -> ResultType<bool> {
 }
 
 #[cfg(any(target_os = "android", target_os = "ios"))]
-pub async fn get_rendezvous_server(_ms_timeout: u64) -> std::net::SocketAddr {
+pub async fn get_rendezvous_server(_ms_timeout: u64) -> String {
     Config::get_rendezvous_server()
 }
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
-pub async fn get_rendezvous_server(ms_timeout: u64) -> std::net::SocketAddr {
+pub async fn get_rendezvous_server(ms_timeout: u64) -> String {
     crate::ipc::get_rendezvous_server(ms_timeout).await
 }
 
@@ -326,8 +332,8 @@ async fn test_rendezvous_server_() {
     for host in servers {
         futs.push(tokio::spawn(async move {
             let tm = std::time::Instant::now();
-            if FramedStream::new(
-                &crate::check_port(&host, RENDEZVOUS_PORT),
+            if socket_client::connect_tcp(
+                crate::check_port(&host, RENDEZVOUS_PORT),
                 Config::get_any_listen_addr(),
                 RENDEZVOUS_TIMEOUT,
             )
@@ -407,17 +413,6 @@ pub fn is_modifier(evt: &KeyEvent) -> bool {
     }
 }
 
-pub fn test_if_valid_server(host: String) -> String {
-    let mut host = host;
-    if !host.contains(":") {
-        host = format!("{}:{}", host, 0);
-    }
-    match hbb_common::to_socket_addr(&host) {
-        Err(err) => err.to_string(),
-        Ok(_) => "".to_owned(),
-    }
-}
-
 pub fn get_version_number(v: &str) -> i64 {
     let mut n = 0;
     for x in v.split(".") {
@@ -433,8 +428,11 @@ pub fn check_software_update() {
 #[tokio::main(flavor = "current_thread")]
 async fn _check_software_update() -> hbb_common::ResultType<()> {
     sleep(3.).await;
-    let rendezvous_server = get_rendezvous_server(1_000).await;
-    let mut socket = hbb_common::udp::FramedSocket::new(Config::get_any_listen_addr()).await?;
+
+    let rendezvous_server = socket_client::get_target_addr(&get_rendezvous_server(1_000).await)?;
+    let mut socket =
+        socket_client::new_udp(Config::get_any_listen_addr(), RENDEZVOUS_TIMEOUT).await?;
+
     let mut msg_out = RendezvousMessage::new();
     msg_out.set_software_update(SoftwareUpdate {
         url: crate::VERSION.to_owned(),
@@ -453,4 +451,10 @@ async fn _check_software_update() -> hbb_common::ResultType<()> {
         }
     }
     Ok(())
+}
+
+pub fn is_ip(id: &str) -> bool {
+    hbb_common::regex::Regex::new(r"^\d+\.\d+\.\d+\.\d+$")
+        .unwrap()
+        .is_match(id)
 }

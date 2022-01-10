@@ -11,7 +11,7 @@ use std::{
 };
 type Xdo = *const c_void;
 
-pub const PA_SAMPLE_RATE: u32 = 24000;
+pub const PA_SAMPLE_RATE: u32 = 48000;
 static mut UNMODIFIED: bool = true;
 
 thread_local! {
@@ -644,7 +644,7 @@ fn get_env_tries(name: &str, uid: &str, n: usize) -> String {
 }
 
 fn get_env(name: &str, uid: &str) -> String {
-    let cmd = format!("ps -u {} -o pid= | xargs -I__ cat /proc/__/environ 2>/dev/null | tr '\\0' '\\n' | grep -m1 '^{}=' | sed 's/{}=//g'", uid, name, name);
+    let cmd = format!("ps -u {} -o pid= | xargs -I__ cat /proc/__/environ 2>/dev/null | tr '\\0' '\\n' | grep '^{}=' | tail -1 | sed 's/{}=//g'", uid, name, name);
     log::debug!("Run: {}", &cmd);
     if let Ok(Some(x)) = run_cmds(cmd) {
         x.trim_end().to_string()

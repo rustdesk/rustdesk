@@ -8,7 +8,7 @@ use crate::common::SOFTWARE_UPDATE_URL;
 use crate::ipc;
 use hbb_common::{
     allow_err,
-    config::{Config, PeerConfig, APP_NAME, ICON},
+    config::{self, Config, Fav, PeerConfig, APP_NAME, ICON},
     log, sleep,
     tokio::{self, time},
 };
@@ -147,7 +147,6 @@ pub fn start(args: &mut [String]) {
 
 #[cfg(windows)]
 fn start_tray() -> hbb_common::ResultType<()> {
-    /*
     let mut app = systray::Application::new()?;
     let icon = include_bytes!("./tray-icon.ico");
     app.set_icon_from_buffer(icon, 32, 32).unwrap();
@@ -186,7 +185,7 @@ fn start_tray() -> hbb_common::ResultType<()> {
         Ok::<_, systray::Error>(())
     })?;
     allow_err!(app.wait_for_message());
-    */
+
     Ok(())
 }
 
@@ -280,6 +279,20 @@ impl UI {
         }
     }
 
+    fn get_local_option(&self, key: String) -> String {
+        Config::get_option(&key)
+    }
+
+    fn peer_has_password(&self, id: String) -> bool {
+        !PeerConfig::load(&id).password.is_empty()
+    }
+
+    fn forget_password(&self, id: String) {
+        let mut c = PeerConfig::load(&id);
+        c.password.clear();
+        c.store(&id);
+    }
+
     fn get_peer_option(&self, id: String, name: String) -> String {
         let c = PeerConfig::load(&id);
         c.options.get(&name).unwrap_or(&"".to_owned()).to_owned()
@@ -304,7 +317,7 @@ impl UI {
     }
 
     fn test_if_valid_server(&self, host: String) -> String {
-        crate::common::test_if_valid_server(host)
+        hbb_common::socket_client::test_if_valid_server(&host)
     }
 
     fn get_sound_inputs(&self) -> Value {
@@ -361,6 +374,29 @@ impl UI {
         return "".to_owned();
     }
 
+    fn get_socks(&self) -> Value {
+        let s = ipc::get_socks();
+        match s {
+            None => Value::null(),
+            Some(s) => {
+                let mut v = Value::array(0);
+                v.push(s.proxy);
+                v.push(s.username);
+                v.push(s.password);
+                v
+            }
+        }
+    }
+
+    fn set_socks(&self, proxy: String, username: String, password: String) {
+        ipc::set_socks(config::Socks5Server {
+            proxy,
+            username,
+            password,
+        })
+        .ok();
+    }
+
     fn is_installed(&mut self) -> bool {
         crate::platform::is_installed()
     }
@@ -371,8 +407,8 @@ impl UI {
         #[cfg(windows)]
         {
             let installed_version = crate::platform::windows::get_installed_version();
-            let a = crate::common::get_version_number(crate::VERSION);
-            let b = crate::common::get_version_number(&installed_version);
+            let a = hbb_common::get_version_number(crate::VERSION);
+            let b = hbb_common::get_version_number(&installed_version);
             return a > b;
         }
     }
@@ -400,22 +436,43 @@ impl UI {
         v
     }
 
+    #[inline]
+    fn get_peer_value(id: String, p: PeerConfig) -> Value {
+        let values = vec![
+            id,
+            p.info.username.clone(),
+            p.info.hostname.clone(),
+            p.info.platform.clone(),
+            p.options.get("alias").unwrap_or(&"".to_owned()).to_owned(),
+        ];
+        Value::from_iter(values)
+    }
+
+    fn get_peer(&self, id: String) -> Value {
+        let c = PeerConfig::load(&id);
+        Self::get_peer_value(id, c)
+    }
+
+    fn get_fav(&self) -> Value {
+        Value::from_iter(Fav::load().peers)
+    }
+
+    fn store_fav(&self, fav: Value) {
+        let mut tmp = vec![];
+        fav.values().for_each(|v| {
+            if let Some(v) = v.as_string() {
+                if !v.is_empty() {
+                    tmp.push(v);
+                }
+            }
+        });
+        Fav::store(tmp);
+    }
+
     fn get_recent_sessions(&mut self) -> Value {
         let peers: Vec<Value> = PeerConfig::peers()
-            .iter()
-            .map(|p| {
-                let values = vec![
-                    p.0.clone(),
-                    p.2.info.username.clone(),
-                    p.2.info.hostname.clone(),
-                    p.2.info.platform.clone(),
-                    p.2.options
-                        .get("alias")
-                        .unwrap_or(&"".to_owned())
-                        .to_owned(),
-                ];
-                Value::from_iter(values)
-            })
+            .drain(..)
+            .map(|p| Self::get_peer_value(p.0, p.2))
             .collect();
         Value::from_iter(peers)
     }
@@ -564,6 +621,10 @@ impl UI {
         allow_err!(std::process::Command::new(p).arg(url).spawn());
     }
 
+    fn t(&self, name: String) -> String {
+        crate::client::translate(name)
+    }
+
     fn is_xfce(&self) -> bool {
         crate::platform::is_xfce()
     }
@@ -575,6 +636,7 @@ impl UI {
 
 impl sciter::EventHandler for UI {
     sciter::dispatch_script_call! {
+        fn t(String);
         fn is_xfce();
         fn get_id();
         fn get_password();
@@ -587,11 +649,16 @@ impl sciter::EventHandler for UI {
         fn remove_peer(String);
         fn get_connect_status();
         fn get_recent_sessions();
+        fn get_peer(String);
+        fn get_fav();
+        fn store_fav(Value);
         fn recent_sessions_updated();
         fn get_icon();
         fn get_msgbox();
         fn install_me(String);
         fn is_installed();
+        fn set_socks(String, String, String);
+        fn get_socks();
         fn is_installed_lower_version();
         fn install_path();
         fn goto_install();
@@ -604,7 +671,10 @@ impl sciter::EventHandler for UI {
         fn modify_default_login();
         fn get_options();
         fn get_option(String);
+        fn get_local_option(String);
         fn get_peer_option(String, String);
+        fn peer_has_password(String);
+        fn forget_password(String);
         fn set_peer_option(String, String, String);
         fn test_if_valid_server(String);
         fn get_sound_inputs();

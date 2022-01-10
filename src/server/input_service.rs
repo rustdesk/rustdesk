@@ -79,8 +79,6 @@ impl Subscriber for MouseCursorSub {
             self.inner.send(msg);
         }
     }
-
-    fn send_video_frame(&mut self, _: std::time::Instant, _: Arc<Message>) {}
 }
 
 pub const NAME_CURSOR: &'static str = "mouse_cursor";
@@ -197,15 +195,20 @@ fn modifier_sleep() {
     std::thread::sleep(std::time::Duration::from_nanos(1));
 }
 
-#[cfg(not(target_os = "macos"))]
 #[inline]
 fn get_modifier_state(key: Key, en: &mut Enigo) -> bool {
+    // on Linux, if RightAlt is down, RightAlt status is false, Alt status is true
+    // but on Windows, both are true
     let x = en.get_key_state(key.clone());
     match key {
         Key::Shift => x || en.get_key_state(Key::RightShift),
         Key::Control => x || en.get_key_state(Key::RightControl),
         Key::Alt => x || en.get_key_state(Key::RightAlt),
         Key::Meta => x || en.get_key_state(Key::RWin),
+        Key::RightShift => x || en.get_key_state(Key::Shift),
+        Key::RightControl => x || en.get_key_state(Key::Control),
+        Key::RightAlt => x || en.get_key_state(Key::Alt),
+        Key::RWin => x || en.get_key_state(Key::Meta),
         _ => x,
     }
 }
@@ -264,7 +267,7 @@ fn fix_key_down_timeout(force: bool) {
             if let Some(key) = key {
                 let func = move || {
                     let mut en = ENIGO.lock().unwrap();
-                    if en.get_key_state(key) {
+                    if get_modifier_state(key, &mut en) {
                         en.key_up(key);
                         log::debug!("Fixed {:?} timeout", key);
                     }
@@ -286,7 +289,7 @@ fn fix_modifier(
     key1: Key,
     en: &mut Enigo,
 ) {
-    if en.get_key_state(key1) && !modifiers.contains(&ProtobufEnumOrUnknown::new(key0)) {
+    if get_modifier_state(key1, en) && !modifiers.contains(&ProtobufEnumOrUnknown::new(key0)) {
         en.key_up(key1);
         log::debug!("Fixed {:?}", key1);
     }
@@ -577,11 +580,9 @@ fn handle_key_(evt: &KeyEvent) {
         }
     }
     #[cfg(not(target_os = "macos"))]
-    if crate::common::valid_for_capslock(evt) {
-        if has_cap != en.get_key_state(Key::CapsLock) {
-            en.key_down(Key::CapsLock).ok();
-            en.key_up(Key::CapsLock);
-        }
+    if has_cap != en.get_key_state(Key::CapsLock) {
+        en.key_down(Key::CapsLock).ok();
+        en.key_up(Key::CapsLock);
     }
     #[cfg(windows)]
     if crate::common::valid_for_numlock(evt) {

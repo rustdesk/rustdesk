@@ -27,3 +27,4 @@ use common::*;
 pub mod cli;
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 mod port_forward;
+mod lang;

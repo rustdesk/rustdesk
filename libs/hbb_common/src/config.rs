@@ -6,14 +6,13 @@ use sodiumoxide::crypto::sign;
 use std::{
     collections::HashMap,
     fs,
-    net::SocketAddr,
+    net::{IpAddr, Ipv4Addr, SocketAddr},
     path::{Path, PathBuf},
     sync::{Arc, Mutex, RwLock},
     time::SystemTime,
 };
 
 pub const APP_NAME: &str = "RustDesk";
-pub const BIND_INTERFACE: &str = "0.0.0.0";
 pub const RENDEZVOUS_TIMEOUT: u64 = 12_000;
 pub const CONNECT_TIMEOUT: u64 = 18_000;
 pub const COMPRESS_LEVEL: i32 = 3;
@@ -55,7 +54,11 @@ pub const RENDEZVOUS_SERVERS: &'static [&'static str] = &[
 pub const RENDEZVOUS_PORT: i32 = 21116;
 pub const RELAY_PORT: i32 = 21117;
 
-pub const SERVER_UDP_PORT: u16 = 21001; // udp
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum NetworkType {
+    Direct,
+    ProxySocks,
+}
 
 #[derive(Debug, Default, Serialize, Deserialize, Clone)]
 pub struct Config {
@@ -73,6 +76,16 @@ pub struct Config {
     keys_confirmed: HashMap<String, bool>,
 }
 
+#[derive(Debug, Default, PartialEq, Serialize, Deserialize, Clone)]
+pub struct Socks5Server {
+    #[serde(default)]
+    pub proxy: String,
+    #[serde(default)]
+    pub username: String,
+    #[serde(default)]
+    pub password: String,
+}
+
 // more variable configs
 #[derive(Debug, Default, Serialize, Deserialize, Clone)]
 pub struct Config2 {
@@ -86,6 +99,9 @@ pub struct Config2 {
     nat_type: i32,
     #[serde(default)]
     serial: i32,
+
+    #[serde(default)]
+    socks: Option<Socks5Server>,
 
     // the other scalar value must before this
     #[serde(default)]
@@ -276,8 +292,8 @@ impl Config {
         return "".into();
     }
 
+    #[allow(unreachable_code)]
     pub fn log_path() -> PathBuf {
-        #[allow(unreachable_code)]
         #[cfg(target_os = "macos")]
         {
             if let Some(path) = dirs_next::home_dir().as_mut() {
@@ -329,10 +345,10 @@ impl Config {
 
     #[inline]
     pub fn get_any_listen_addr() -> SocketAddr {
-        format!("{}:0", BIND_INTERFACE).parse().unwrap()
+        SocketAddr::new(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)), 0)
     }
 
-    pub fn get_rendezvous_server() -> SocketAddr {
+    pub fn get_rendezvous_server() -> String {
         let mut rendezvous_server = Self::get_option("custom-rendezvous-server");
         if rendezvous_server.is_empty() {
             rendezvous_server = CONFIG2.write().unwrap().rendezvous_server.clone();
@@ -346,11 +362,7 @@ impl Config {
         if !rendezvous_server.contains(":") {
             rendezvous_server = format!("{}:{}", rendezvous_server, RENDEZVOUS_PORT);
         }
-        if let Ok(addr) = crate::to_socket_addr(&rendezvous_server) {
-            addr
-        } else {
-            Self::get_any_listen_addr()
-        }
+        rendezvous_server
     }
 
     pub fn get_rendezvous_servers() -> Vec<String> {
@@ -490,6 +502,9 @@ impl Config {
 
     pub fn set_key_pair(pair: (Vec<u8>, Vec<u8>)) {
         let mut config = CONFIG.write().unwrap();
+        if config.key_pair == pair {
+            return;
+        }
         config.key_pair = pair;
         config.store();
     }
@@ -522,6 +537,9 @@ impl Config {
 
     pub fn set_options(v: HashMap<String, String>) {
         let mut config = CONFIG2.write().unwrap();
+        if config.options == v {
+            return;
+        }
         config.options = v;
         config.store();
     }
@@ -621,6 +639,26 @@ impl Config {
     pub fn get_remote_id() -> String {
         CONFIG2.read().unwrap().remote_id.clone()
     }
+
+    pub fn set_socks(socks: Option<Socks5Server>) {
+        let mut config = CONFIG2.write().unwrap();
+        if config.socks == socks {
+            return;
+        }
+        config.socks = socks;
+        config.store();
+    }
+
+    pub fn get_socks() -> Option<Socks5Server> {
+        CONFIG2.read().unwrap().socks.clone()
+    }
+
+    pub fn get_network_type() -> NetworkType {
+        match &CONFIG2.read().unwrap().socks {
+            None => NetworkType::Direct,
+            Some(_) => NetworkType::ProxySocks,
+        }
+    }
 }
 
 const PEERS: &str = "peers";
@@ -687,6 +725,32 @@ impl PeerConfig {
             }
         }
         Default::default()
+    }
+}
+
+#[derive(Debug, Default, Serialize, Deserialize, Clone)]
+pub struct Fav {
+    #[serde(default)]
+    pub peers: Vec<String>,
+}
+
+impl Fav {
+    pub fn load() -> Fav {
+        let _ = CONFIG.read().unwrap(); // for lock
+        match confy::load_path(&Config::file_("_fav")) {
+            Ok(fav) => fav,
+            Err(err) => {
+                log::error!("Failed to load fav: {}", err);
+                Default::default()
+            }
+        }
+    }
+
+    pub fn store(peers: Vec<String>) {
+        let f = Fav { peers };
+        if let Err(err) = confy::store_path(Config::file_("_fav"), f) {
+            log::error!("Failed to store fav: {}", err);
+        }
     }
 }
 

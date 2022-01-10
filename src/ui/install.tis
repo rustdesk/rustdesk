@@ -5,17 +5,17 @@ function self.ready() {
 class Install: Reactor.Component {
     function render() {
         return <div .content>
-            <div style="font-size: 2em;">Installation</div>
-            <div style="margin: 2em 0;">Installation Path: <input|text disabled value={view.install_path()} /></div>
-            <div><button|checkbox #startmenu checked>Create start menu shortcuts</button></div>
-            <div><button|checkbox #desktopicon checked>Create desktop icon</button></div>
-            <div #aggrement .link style="margin-top: 2em;">End-user license agreement</div>
-            <div>By starting the installation, you accept the license agreement.</div>
+            <div style="font-size: 2em;">{translate('Installation')}</div>
+            <div style="margin: 2em 0;">{translate('Installation Path')} {": "}<input|text disabled value={view.install_path()} /></div>
+            <div><button|checkbox #startmenu checked>{translate('Create start menu shortcuts')}</button></div>
+            <div><button|checkbox #desktopicon checked>{translate('Create desktop icon')}</button></div>
+            <div #aggrement .link style="margin-top: 2em;">{translate('End-user license agreement')}</div>
+            <div>{translate('agreement_tip')}</div>
             <div style="height: 1px; background: gray; margin-top: 1em" />
             <div style="text-align: right;">
                 <progress style={"color:" + color} style="display: none" /> 
-                <button .button id="cancel" .outline style="margin-right: 2em;">Cancel</button>
-                <button .button id="submit">Accept and Install</button>
+                <button .button id="cancel" .outline style="margin-right: 2em;">{translate('Cancel')}</button>
+                <button .button id="submit">{translate('Accept and Install')}</button>
             </div>
         </div>;
     }

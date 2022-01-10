@@ -1,24 +1,17 @@
 use crate::{bail, ResultType};
-use bytes::BytesMut;
+use anyhow::anyhow;
+use bytes::{Bytes, BytesMut};
 use futures::{SinkExt, StreamExt};
 use protobuf::Message;
 use socket2::{Domain, Socket, Type};
-use std::{
-    io::Error,
-    net::SocketAddr,
-    ops::{Deref, DerefMut},
-};
-use tokio::{net::ToSocketAddrs, net::UdpSocket};
+use std::net::SocketAddr;
+use tokio::net::{ToSocketAddrs, UdpSocket};
+use tokio_socks::{udp::Socks5UdpFramed, IntoTargetAddr, TargetAddr, ToProxyAddrs};
 use tokio_util::{codec::BytesCodec, udp::UdpFramed};
 
-pub struct FramedSocket(UdpFramed<BytesCodec>);
-
-impl Deref for FramedSocket {
-    type Target = UdpFramed<BytesCodec>;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
+pub enum FramedSocket {
+    Direct(UdpFramed<BytesCodec>),
+    ProxySocks(Socks5UdpFramed),
 }
 
 fn new_socket(addr: SocketAddr, reuse: bool) -> Result<Socket, std::io::Error> {
@@ -38,52 +31,110 @@ fn new_socket(addr: SocketAddr, reuse: bool) -> Result<Socket, std::io::Error> {
     Ok(socket)
 }
 
-impl DerefMut for FramedSocket {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.0
-    }
-}
-
 impl FramedSocket {
     pub async fn new<T: ToSocketAddrs>(addr: T) -> ResultType<Self> {
         let socket = UdpSocket::bind(addr).await?;
-        Ok(Self(UdpFramed::new(socket, BytesCodec::new())))
+        Ok(Self::Direct(UdpFramed::new(socket, BytesCodec::new())))
     }
 
     #[allow(clippy::never_loop)]
     pub async fn new_reuse<T: std::net::ToSocketAddrs>(addr: T) -> ResultType<Self> {
         for addr in addr.to_socket_addrs()? {
-            return Ok(Self(UdpFramed::new(
-                UdpSocket::from_std(new_socket(addr, true)?.into_udp_socket())?,
+            let socket = new_socket(addr, true)?.into_udp_socket();
+            return Ok(Self::Direct(UdpFramed::new(
+                UdpSocket::from_std(socket)?,
                 BytesCodec::new(),
             )));
         }
         bail!("could not resolve to any address");
     }
 
+    pub async fn new_proxy<'a, 't, P: ToProxyAddrs, T: ToSocketAddrs>(
+        proxy: P,
+        local: T,
+        username: &'a str,
+        password: &'a str,
+        ms_timeout: u64,
+    ) -> ResultType<Self> {
+        let framed = if username.trim().is_empty() {
+            super::timeout(ms_timeout, Socks5UdpFramed::connect(proxy, Some(local))).await??
+        } else {
+            super::timeout(
+                ms_timeout,
+                Socks5UdpFramed::connect_with_password(proxy, Some(local), username, password),
+            )
+            .await??
+        };
+        log::trace!(
+            "Socks5 udp connected, local addr: {:?}, target addr: {}",
+            framed.local_addr(),
+            framed.socks_addr()
+        );
+        Ok(Self::ProxySocks(framed))
+    }
+
     #[inline]
-    pub async fn send(&mut self, msg: &impl Message, addr: SocketAddr) -> ResultType<()> {
-        self.0
-            .send((bytes::Bytes::from(msg.write_to_bytes().unwrap()), addr))
-            .await?;
+    pub async fn send(
+        &mut self,
+        msg: &impl Message,
+        addr: impl IntoTargetAddr<'_>,
+    ) -> ResultType<()> {
+        let addr = addr.into_target_addr()?.to_owned();
+        let send_data = Bytes::from(msg.write_to_bytes()?);
+        let _ = match self {
+            Self::Direct(f) => match addr {
+                TargetAddr::Ip(addr) => f.send((send_data, addr)).await?,
+                _ => unreachable!(),
+            },
+            Self::ProxySocks(f) => f.send((send_data, addr)).await?,
+        };
+        Ok(())
+    }
+
+    // https://stackoverflow.com/a/68733302/1926020
+    #[inline]
+    pub async fn send_raw(
+        &mut self,
+        msg: &'static [u8],
+        addr: impl IntoTargetAddr<'static>,
+    ) -> ResultType<()> {
+        let addr = addr.into_target_addr()?.to_owned();
+
+        let _ = match self {
+            Self::Direct(f) => match addr {
+                TargetAddr::Ip(addr) => f.send((Bytes::from(msg), addr)).await?,
+                _ => unreachable!(),
+            },
+            Self::ProxySocks(f) => f.send((Bytes::from(msg), addr)).await?,
+        };
         Ok(())
     }
 
     #[inline]
-    pub async fn send_raw(&mut self, msg: &'static [u8], addr: SocketAddr) -> ResultType<()> {
-        self.0.send((bytes::Bytes::from(msg), addr)).await?;
-        Ok(())
+    pub async fn next(&mut self) -> Option<ResultType<(BytesMut, TargetAddr<'static>)>> {
+        match self {
+            Self::Direct(f) => match f.next().await {
+                Some(Ok((data, addr))) => {
+                    Some(Ok((data, addr.into_target_addr().ok()?.to_owned())))
+                }
+                Some(Err(e)) => Some(Err(anyhow!(e))),
+                None => None,
+            },
+            Self::ProxySocks(f) => match f.next().await {
+                Some(Ok((data, _))) => Some(Ok((data.data, data.dst_addr))),
+                Some(Err(e)) => Some(Err(anyhow!(e))),
+                None => None,
+            },
+        }
     }
 
     #[inline]
-    pub async fn next(&mut self) -> Option<Result<(BytesMut, SocketAddr), Error>> {
-        self.0.next().await
-    }
-
-    #[inline]
-    pub async fn next_timeout(&mut self, ms: u64) -> Option<Result<(BytesMut, SocketAddr), Error>> {
+    pub async fn next_timeout(
+        &mut self,
+        ms: u64,
+    ) -> Option<ResultType<(BytesMut, TargetAddr<'static>)>> {
         if let Ok(res) =
-            tokio::time::timeout(std::time::Duration::from_millis(ms), self.0.next()).await
+            tokio::time::timeout(std::time::Duration::from_millis(ms), self.next()).await
         {
             res
         } else {

@@ -4,6 +4,7 @@ html {
     var(gray-bg): #eee;
     var(bg): white;
     var(border): #ccc;
+    var(hover-border): #999;
     var(text): #222;
     var(placeholder): #aaa;
     var(lighter-text): #888;
@@ -50,6 +51,10 @@ button.button:active, button.active {
     background: color(accent);
     color: color(bg);
     border-color: color(accent);
+}
+
+button.button:hover, button.outline:hover {
+  border-color: color(hover-border);
 }
 
 input[type=text], input[type=password], input[type=number] {
@@ -156,9 +161,7 @@ header caption {
     top: 0;
     padding: 0 10px;
     width: 22px;
-    height: *;
     position: absolute;
-    margin: 0;
     color: black;
     border: none;
     background: none;
@@ -321,5 +324,5 @@ menu li.selected span {
 
 menu li.line-through {
   text-decoration-line: line-through;
-  color: grey;
+  color: red;
 }

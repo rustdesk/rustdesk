@@ -18,112 +18,39 @@ var svg_menu = <svg #menu viewBox="0 0 512 512">
 	<circle cx="256" cy="64" r="64"/>
 </svg>;
 
+var my_id = "";
+function get_id() {
+  my_id = handler.get_id();
+  return my_id;
+}
+
 class ConnectStatus: Reactor.Component {
     function render() {
         return
             <div .connect-status>
                 <span class={"connect-status-icon connect-status" + (service_stopped ? 0 : connect_status)} />
                 {this.getConnectStatusStr()}
-                {service_stopped ? <span class="link">Start Service</span> : ""}
+                {service_stopped ? <span .link #start-service>{translate('Start Service')}</span> : ""}
             </div>;
     }
 
     function getConnectStatusStr() {
         if (service_stopped) {
-            return "Service is not running";
+            return translate("Service is not running");
         } else if (connect_status == -1) {
-            return "Not ready. Please check your connection";
+            return translate('not_ready_status');
         } else if (connect_status == 0) {
-            return "Connecting to the RustDesk network...";
+            return translate('connecting_status');
         }
-        return "Ready";
+        return translate("Ready");
     }
 
     event click $(.connect-status .link) () {
     	handler.set_option("stop-service", "");
     }
-}
 
-class RecentSessions: Reactor.Component {
-    function render() {
-        var sessions = handler.get_recent_sessions();
-        if (sessions.length == 0) return <span />;
-        sessions = sessions.map(this.getSession);
-        return <div style="width: *">
-            <div .recent-sessions-title>RECENT SESSIONS</div>
-            { false && <button .button #discover>DISCOVER</button>}
-            <div .recent-sessions-content key={sessions.length}>
-                {sessions}
-            </div>
-        </div>;
-    }
-
-    event click $(button#discover) {
-        handler.lan_discover();
-    }
-
-    function getSession(s) {
-        var id = s[0];
-        var username = s[1];
-        var hostname = s[2];
-        var platform = s[3];
-        var alias = s[4];
-        return <div .remote-session id={id} platform={platform} style={"background:"+string2RGB(id+platform, 0.5)}>
-            <div .platform>
-                {platformSvg(platform, "white")}
-                <div .username>{username}@{hostname}</div>
-            </div>
-            <div .text>
-                <div #alias>{alias ? alias : formatId(id)}</div>
-                {svg_menu}
-            </div>
-        </div>;
-    }
-
-    event dblclick $(div.remote-session) (evt, me) {
-        createNewConnect(me.id, "connect");
-    }
-    
-    event click $(#menu) (_, me) {
-        var id = me.parent.parent.id;
-        var platform = me.parent.parent.attributes["platform"];
-        $(#rdp).style.set{
-            display: (platform == "Windows" && is_win) ? "block" : "none",
-        };
-        // https://sciter.com/forums/topic/replacecustomize-context-menu/
-        var menu = $(menu#remote-context);
-        menu.attributes["remote-id"] = id;
-        me.popup(menu);
-    }
-}
-
-event click $(menu#remote-context li) (evt, me) {
-    var action = me.id;
-    var id = me.parent.attributes["remote-id"];
-    if (action == "connect") {
-        createNewConnect(id, "connect");
-    } else if (action == "transfer") {
-        createNewConnect(id, "file-transfer");
-    } else if (action == "remove") {
-        handler.remove_peer(id);
-        app.recent_sessions.update();
-    } else if (action == "shortcut") {
-        handler.create_shortcut(id);
-    } else if (action == "rdp") {
-        createNewConnect(id, "rdp");
-    } else if (action == "tunnel") {
-        createNewConnect(id, "port-forward");
-    } else if (action == "rename") {
-        var old_name = handler.get_peer_option(id, "alias");
-        handler.msgbox("custom-rename", "Rename", "<div .form> \
-            <div><input name='name' style='width: *; height: 23px', value='" + old_name + "' /></div> \
-            </div> \
-            ", function(res=null) {
-                if (!res) return;
-                var name = (res.name || "").trim();
-                if (name != old_name) handler.set_peer_option(id, "alias", name);
-                self.select('#' + id).select('#alias').text = name || id;
-            });
+    event click $(#start-service) () {
+        handler.set_option("stop-service", "");
     }
 }
 
@@ -131,12 +58,30 @@ function createNewConnect(id, type) {
     id = id.replace(/\s/g, "");
     app.remote_id.value = formatId(id);
     if (!id) return;
-    if (id == handler.get_id()) {
-        handler.msgbox("custom-error", "Error", "You cannot connect to your own computer");
+    if (id == my_id) {
+        msgbox("custom-error", "Error", "You cannot connect to your own computer");
         return;
     }
     handler.set_remote_id(id);
     handler.new_remote(id, type);
+}
+
+var direct_server;
+class DirectServer: Reactor.Component {
+    function this() {
+        direct_server = this;
+    }
+
+    function render() {
+        var text = translate("Enable Direct IP Access");
+        var cls = handler.get_option("direct-server") == "Y" ? "selected" : "line-through";
+        return <li class={cls}><span>{svg_checkmark}</span>{text}</li>;
+    }
+    
+    function onClick() {
+        handler.set_option("direct-server", handler.get_option("direct-server") == "Y" ? "" : "Y");
+        this.update();
+    }
 }
 
 var myIdMenu;
@@ -154,10 +99,10 @@ class AudioInputs: Reactor.Component {
         inputs = ["Mute"].concat(inputs);
         var me = this;
         self.timer(1ms, function() { me.toggleMenuState() });
-        return <li>Audio Input
+        return <li>{translate('Audio Input')}
             <menu #audio-input key={inputs.length}>
                 {inputs.map(function(name) {
-                return <li id={name}><span>{svg_checkmark}</span>{name}</li>;
+                return <li id={name}><span>{svg_checkmark}</span>{translate(name)}</li>;
                 })}
             </menu>
         </li>;
@@ -195,7 +140,6 @@ class MyIdMenu: Reactor.Component {
     }
 
     function render() {
-        var me = this;
         return <div #myid>
             {this.renderPop()}
             ID{svg_menu}
@@ -205,19 +149,20 @@ class MyIdMenu: Reactor.Component {
     function renderPop() {
         return <popup>
             <menu.context #config-options>
-                <li #enable-keyboard><span>{svg_checkmark}</span>Enable Keyboard/Mouse</li>
-                <li #enable-clipboard><span>{svg_checkmark}</span>Enable Clipboard</li>
-                <li #enable-file-transfer><span>{svg_checkmark}</span>Enable File Transfer</li> 
-                <li #enable-tunnel><span>{svg_checkmark}</span>Enable TCP Tunneling</li>
+                <li #enable-keyboard><span>{svg_checkmark}</span>{translate('Enable Keyboard/Mouse')}</li>
+                <li #enable-clipboard><span>{svg_checkmark}</span>{translate('Enable Clipboard')}</li>
+                <li #enable-file-transfer><span>{svg_checkmark}</span>{translate('Enable File Transfer')}</li> 
+                <li #enable-tunnel><span>{svg_checkmark}</span>{translate('Enable TCP Tunneling')}</li>
                 <AudioInputs />
                 <div .separator />
-                <li #whitelist title="Only whitelisted IP can access me">IP Whitelisting</li>
-                <li #custom-server>ID/Relay Server</li>
+                <li #whitelist title={translate('whitelist_tip')}>{translate('IP Whitelisting')}</li>
+                <li #custom-server>{translate('ID/Relay Server')}</li>
+                <li #socks5-server>{translate('Socks5 Proxy')}</li>
                 <div .separator />
-                <li #stop-service class={service_stopped ? "line-through" : "selected"}><span>{svg_checkmark}</span>Enable service</li>
+                <li #stop-service class={service_stopped ? "line-through" : "selected"}><span>{svg_checkmark}</span>{translate("Enable Service")}</li>
+                <DirectServer />
                 <div .separator />
-                <li #forum>Forum</li>
-                <li #about>About {handler.get_app_name()}</li>
+                <li #about>{translate('About')} {" "} {handler.get_app_name()}</li>
             </menu>
         </popup>;
     }
@@ -225,6 +170,7 @@ class MyIdMenu: Reactor.Component {
     event click $(svg#menu) (_, me) {
         audioInputMenu.update({ show: true });
         this.toggleMenuState();
+        if (direct_server) direct_server.update();
         var menu = $(menu#config-options);
         me.popup(menu);
     }
@@ -245,8 +191,9 @@ class MyIdMenu: Reactor.Component {
         }
         if (me.id == "whitelist") {
             var old_value = handler.get_option("whitelist").split(",").join("\n");
-            handler.msgbox("custom-whitelist", "IP Whitelisting", "<div .form> \
-            <textarea spellcheck=\"false\" name=\"text\" novalue=\"0.0.0.0\" style=\"overflow: scroll-indicator; height: 160px; font-size: 1.2em; padding: 0.5em;\">" + old_value + "</textarea>\
+            msgbox("custom-whitelist", translate("IP Whitelisting"), "<div .form> \
+            <div>" + translate("whitelist_sep") + "</div> \
+            <textarea spellcheck=\"false\" name=\"text\" novalue=\"0.0.0.0\" style=\"overflow: scroll-indicator; width:*; height: 160px; font-size: 1.2em; padding: 0.5em;\">" + old_value + "</textarea>\
             </div> \
             ", function(res=null) {
                 if (!res) return;
@@ -255,7 +202,7 @@ class MyIdMenu: Reactor.Component {
                     var values = value.split(/[\s,;\n]+/g);
                     for (var ip in values) {
                         if (!ip.match(/^\d+\.\d+\.\d+\.\d+$/)) {
-                            return "Invalid ip: " + ip;
+                            return translate("Invalid IP") + ": " + ip;
                         }
                     }
                     value = values.join("\n");
@@ -265,12 +212,12 @@ class MyIdMenu: Reactor.Component {
                 handler.set_option("whitelist", value.replace("\n", ","));
             }, 300);
         } else if (me.id == "custom-server") {
-        	var configOptions = handler.get_options();
+            var configOptions = handler.get_options();
             var old_relay = configOptions["relay-server"] || "";
             var old_id = configOptions["custom-rendezvous-server"] || "";
-            handler.msgbox("custom-server", "ID/Relay Server", "<div .form> \
-            <div><span style='width: 100px; display:inline-block'>ID Server: </span><input style='width: 250px' name='id' value='" + old_id + "' /></div> \
-            <div><span style='width: 100px; display:inline-block'>Relay Server: </span><input style='width: 250px' name='relay' value='" + old_relay + "' /></div> \
+            msgbox("custom-server", "ID/Relay Server", "<div .form> \
+            <div><span style='width: 100px; display:inline-block'>" + translate("ID Server") + ": </span><input .outline-focus style='width: 250px' name='id' value='" + old_id + "' /></div> \
+            <div><span style='width: 100px; display:inline-block'>" + translate("Relay Server") + ": </span><input style='width: 250px' name='relay' value='" + old_relay + "' /></div> \
             </div> \
             ", function(res=null) {
                 if (!res) return;
@@ -279,26 +226,46 @@ class MyIdMenu: Reactor.Component {
                 if (id == old_id && relay == old_relay) return;
                 if (id) {
                     var err = handler.test_if_valid_server(id);
-                    if (err) return "ID Server: " + err;
+                    if (err) return translate("ID Server") + ": " + err;
                 }
                 if (relay) {
                     var err = handler.test_if_valid_server(relay);
-                    if (err) return "Relay Server: " + err;
+                    if (err) return translate("Relay Server") + ": " + err;
                 }
                 configOptions["custom-rendezvous-server"] = id;
                 configOptions["relay-server"] = relay;
                 handler.set_options(configOptions);
-            });
-        } else if (me.id == "forum") {
-            handler.open_url("https:://forum.rustdesk.com");
+            }, 240);
+        } else if (me.id == "socks5-server") {
+            var socks5 = handler.get_socks() || {};
+            var old_proxy = socks5[0] || "";
+            var old_username = socks5[1] || "";
+            var old_password = socks5[2] || "";
+            msgbox("custom-server", "Socks5 Proxy", <div .form .set-password> 
+            <div><span>{translate("Hostname")}</span><input .outline-focus style='width: *' name='proxy' value={old_proxy} /></div>
+            <div><span>{translate("Username")}</span><input style='width: *' name='username' value={old_username} /></div>
+            <div><span>{translate("Password")}</span><PasswordComponent value={old_password} /></div>
+            </div>
+            , function(res=null) {
+                if (!res) return;
+                var proxy = (res.proxy || "").trim();
+                var username = (res.username || "").trim();
+                var password = (res.password || "").trim();
+                if (proxy == old_proxy && username == old_username && password == old_password) return;
+                if (proxy) {
+                    var err = handler.test_if_valid_server(proxy);
+                    if (err) return translate("Server") + ": " + err;
+                }
+                handler.set_socks(proxy, username, password);
+            }, 240);
         } else if (me.id == "stop-service") {
             handler.set_option("stop-service", service_stopped ? "" : "Y");
         } else if (me.id == "about") {
             var name = handler.get_app_name();
-            handler.msgbox("custom-nocancel-nook-hasclose", "About " + name, "<div style='line-height: 2em'> \
+            msgbox("custom-nocancel-nook-hasclose", "About " + name, "<div style='line-height: 2em'> \
                 <div>Version: " + handler.get_version() + " \
                 <div .link .custom-event url='http://rustdesk.com/privacy'>Privacy Statement</div> \
-                <div .link .custom-event url='http://forum.rustdesk.com'>Forum</div> \
+                <div .link .custom-event url='http://rustdesk.com'>Website</div> \
                 <div style='background: #2c8cff; color: white; padding: 1em; margin-top: 1em;'>Copyright &copy; 2020 CarrieZ Studio \
                 <br /> Author: Carrie \
                 <p style='font-weight: bold'>Made with heart in this chaotic world!</p>\
@@ -322,37 +289,24 @@ class App: Reactor.Component
         var is_can_screen_recording = handler.is_can_screen_recording(false);
         return
             <div .app>
-              <popup>
-              <menu.context #remote-context>
-                <li #connect>Connect</li>
-                <li #transfer>Transfer File</li>
-                <li #tunnel>TCP Tunneling</li>
-                <li #rdp>RDP</li>
-                <li #rename>Rename</li>
-                <li #remove>Remove</li>
-                {is_win && <li #shortcut>Create Desktop Shortcut</li>}
-              </menu>
-              </popup>
-              <popup>
-              <menu.context #edit-password-context>
-                <li #refresh-password>Refresh random password</li>
-                <li #set-password>Set your own password</li>
-              </menu>
-              </popup>
-                <div .left-pane>
+                    <popup><menu.context #edit-password-context>
+                        <li #refresh-password>{translate('Refresh random password')}</li>
+                        <li #set-password>{translate('Set your own password')}</li>
+                    </menu></popup>
+                    <div .left-pane>
                     <div>
-                        <div .title>Your Desktop</div>
-                        <div .lighter-text>Your desktop can be accessed with this ID and password.</div>
+                        <div .title>{translate('Your Desktop')}</div>
+                        <div .lighter-text>{translate('desk_tip')}</div>
                         <div .your-desktop>
-                        <MyIdMenu />
-                          {key_confirmed ? <input type="text" readonly value={formatId(handler.get_id())}/> : "Generating ..."}
+                            <MyIdMenu />
+                            {key_confirmed ? <input type="text" readonly value={formatId(get_id())}/> : translate("Generating ...")}
                         </div>
                         <div .your-desktop>
-                            <div>Password</div>
+                            <div>{translate('Password')}</div>
                             <Password />
                         </div>
                     </div>
-                    {handler.is_installed() ? "": <InstalllMe />}
+                    {handler.is_installed() ? "": <InstallMe />}
                     {handler.is_installed() && software_update_url ? <UpdateMe /> : ""}
                     {handler.is_installed() && !software_update_url && handler.is_installed_lower_version() ? <UpgradeMe /> : ""}
                     {is_can_screen_recording ? "": <CanScreenRecording />}
@@ -364,14 +318,14 @@ class App: Reactor.Component
                 <div .right-pane>
                     <div .right-content>
                         <div .card-connect>
-                            <div .title>Control Remote Desktop</div>
+                            <div .title>{translate('Control Remote Desktop')}</div>
                             <ID @{this.remote_id} />
                             <div .right-buttons>
-                                <button .button .outline #file-transfer>Transfer File</button>
-                                <button .button #connect>Connect</button>
+                                <button .button .outline #file-transfer>{translate('Transfer File')}</button>
+                                <button .button #connect>{translate('Connect')}</button>
                             </div>
                         </div>
-                        <RecentSessions @{this.recent_sessions} />
+                        <MultipleSessions @{this.multipleSessions} />
                     </div>
                     <ConnectStatus @{this.connect_status} />
                 </div>
@@ -391,11 +345,12 @@ class App: Reactor.Component
     }
 }
 
-class InstalllMe: Reactor.Component {
+class InstallMe: Reactor.Component {
     function render() {
         return <div .install-me>
-            <div>Install RustDesk</div>
-            <div #install-me .link>Install RustDesk on this computer ...</div>
+            <span />
+            <div>{translate('install_tip')}</div>
+            <div style="text-align: center; margin-top: 1em;"><button #install-me .button>{translate('Install')}</button></div>
         </div>;
     }
 
@@ -450,9 +405,9 @@ class UpgradeMe: Reactor.Component {
     function render() {
         var update_or_download = is_osx ? "download" : "update";
         return <div .install-me>
-            <div>{handler.get_app_name()} Status</div>
-            <div>An update is available for RustDesk.</div>
-            <div #install-me .link style="padding-top: 1em">Click to upgrade</div>
+            <div>{translate('Status')}</div>
+            <div>{translate('Your installation is lower version.')}</div>
+            <div #install-me .link style="padding-top: 1em">{translate('Click to upgrade')}</div>
         </div>;
     }
 
@@ -463,9 +418,9 @@ class UpgradeMe: Reactor.Component {
 
 class UpdateMe: Reactor.Component {
     function render() {
-        var update_or_download = is_osx ? "download" : "update";
+        var update_or_download = "download"; // !is_win ? "download" : "update";
         return <div .install-me>
-            <div>{handler.get_app_name()} Status</div>
+            <div>{translate('Status')}</div>
             <div>There is a newer version of {handler.get_app_name()} ({handler.get_new_version()}) available.</div>
             <div #install-me .link style="padding-top: 1em">Click to {update_or_download}</div>
             <div #download-percent style="display:hidden; padding-top: 1em;" />
@@ -473,18 +428,20 @@ class UpdateMe: Reactor.Component {
     }
 
     event click $(#install-me) {
-        if (is_osx) {
+        handler.open_url("https://rustdesk.com");
+        return;
+        if (!is_win) {
             handler.open_url("https://rustdesk.com");
             return;
         }
         var url = software_update_url + '.' + handler.get_software_ext();
         var path = handler.get_software_store_path();
         var onsuccess = function(md5) {
-            $(#download-percent).content("Installing ...");
+            $(#download-percent).content(translate("Installing ..."));
             handler.update_me(path);
         };
         var onerror = function(err) {
-            handler.msgbox("custom-error", "Download Error", "Failed to download"); 
+            msgbox("custom-error", "Download Error", "Failed to download"); 
         };
         var onprogress = function(loaded, total) {
             if (!total) total = 5 * 1024 * 1024;
@@ -511,9 +468,9 @@ class SystemError: Reactor.Component {
 class TrustMe: Reactor.Component {
     function render() {
         return <div .trust-me>
-            <div>Configuration Permissions</div>
-            <div>In order to control your Desktop remotely, you need to grant RustDesk "Accessibility" permissions</div>
-            <div #trust-me .link>Configure</div>
+            <div>{translate('Configuration Permissions')}</div>
+            <div>{translate('config_acc')}</div>
+            <div #trust-me .link>{translate('Configure')}</div>
         </div>;
     }
 
@@ -526,9 +483,9 @@ class TrustMe: Reactor.Component {
 class CanScreenRecording: Reactor.Component {
     function render() {
         return <div .trust-me>
-            <div>Configuration Permissions</div>
-            <div>In order to access your Desktop remotely, you need to grant RustDesk "Screen Recording" permissions</div>
-            <div #screen-recording .link>Configure</div>
+            <div>{translate('Configuration Permissions')}</div>
+            <div>{translate('config_screen')}</div>
+            <div #screen-recording .link>{translate('Configure')}</div>
         </div>;
     }
 
@@ -541,9 +498,10 @@ class CanScreenRecording: Reactor.Component {
 class FixWayland: Reactor.Component {
     function render() {
         return <div .trust-me>
-            <div>Warning</div>
-            <div>Login screen using Wayland is not supported</div>
-            <div #fix-wayland .link>Fix it</div>
+            <div>{translate('Warning')}</div>
+            <div>{translate('Login screen using Wayland is not supported')}</div>
+            <div #fix-wayland .link>{translate('Fix it')}</div>
+            <div style="text-align: center">({translate('Reboot required')})</div>
         </div>;
     }
 
@@ -556,15 +514,16 @@ class FixWayland: Reactor.Component {
 class ModifyDefaultLogin: Reactor.Component {
     function render() {
         return <div .trust-me>
-            <div>Warning</div>
-            <div>Current Wayland display server is not supported</div>
-            <div #modify-default-login .link>Fix it(re-login required)</div>
+            <div>{translate('Warning')}</div>
+            <div>{translate('Current Wayland display server is not supported')}</div>
+            <div #modify-default-login .link>{translate('Fix it')}</div>
+            <div style="text-align: center">({translate('Reboot required')})</div>
         </div>;
     }
 
     event click $(#modify-default-login) {
         if (var r = handler.modify_default_login()) {
-            handler.msgbox("custom-error", "Error", r);
+            msgbox("custom-error", "Error", r);
         }
         app.update();
     }
@@ -627,19 +586,19 @@ class Password: Reactor.Component {
 
     event click $(li#set-password) {
         var me = this;
-        handler.msgbox("custom-password", "Set Password", "<div .form .set-password> \
-            <div><span>Password:</span><input|password(password) /></div> \
-            <div><span>Confirmation:</span><input|password(confirmation) /></div> \
+        msgbox("custom-password", translate("Set Password"), "<div .form .set-password> \
+            <div><span>" + translate('Password') + ":</span><input|password(password) .outline-focus /></div> \
+            <div><span>" + translate('Confirmation') + ":</span><input|password(confirmation) /></div> \
         </div> \
         ", function(res=null) {
             if (!res) return;
             var p0 = (res.password || "").trim();
             var p1 = (res.confirmation || "").trim();
             if (p0.length < 6) {
-                return "Too short, at least 6 characters.";
+                return translate("Too short, at least 6 characters.");
             }
             if (p0 != p1) {
-                return "The confirmation is not identical.";
+                return translate("The confirmation is not identical.");
             }
             handler.update_password(p0);
             me.update();
@@ -649,7 +608,7 @@ class Password: Reactor.Component {
 
 class ID: Reactor.Component {
     function render() {
-        return <input type="text" #remote_id .outline-focus novalue="Enter Remote ID" maxlength="13"
+        return <input type="text" #remote_id .outline-focus novalue={translate("Enter Remote ID")} maxlength="15"
         value={formatId(handler.get_remote_id())} />;
     }
 
@@ -713,10 +672,10 @@ function self.closing() {
 
 function self.ready() {
     var r = handler.get_size();
-    if (r[2] == 0) {
-        centerize(800, 600);
-    } else {
+    if (isReasonableSize(r) && r[2] > 0) {
         view.move(r[0], r[1], r[2], r[3]);
+    } else {
+        centerize(800, 600);
     }
     if (!handler.get_remote_id()) {
         view.focus = $(#remote_id);
@@ -740,6 +699,10 @@ function checkConnectStatus() {
             key_confirmed = tmp[1];
             app.update();
         }
+        if (tmp[2] && tmp[2] != my_id) {
+            stdout.println("id updated");
+            app.update();
+        }
         tmp = handler.get_error();
         if (system_error != tmp) {
             system_error = tmp;
@@ -752,7 +715,7 @@ function checkConnectStatus() {
         }
         if (handler.recent_sessions_updated()) {
             stdout.println("recent sessions updated");
-            app.recent_sessions.update();
+            app.update();
         }
         checkConnectStatus();
     });
