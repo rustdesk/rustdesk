@@ -86,8 +86,6 @@ pub fn start(args: &mut [String]) {
         let childs: Childs = Default::default();
         let cloned = childs.clone();
         std::thread::spawn(move || check_zombie(cloned));
-        let cloned = childs.clone();
-        std::thread::spawn(move || start_ipc(cloned));
         crate::common::check_software_update();
         frame.event_handler(UI::new(childs));
         frame.sciter_handler(UIHostHandler {});
@@ -628,10 +626,6 @@ impl UI {
     fn is_xfce(&self) -> bool {
         crate::platform::is_xfce()
     }
-
-    fn lan_discover(&self) {
-        crate::server::udp::discovery::launch_lan_discover();
-    }
 }
 
 impl sciter::EventHandler for UI {
@@ -689,7 +683,6 @@ impl sciter::EventHandler for UI {
         fn get_software_ext();
         fn open_url(String);
         fn create_shortcut(String);
-        fn lan_discover();
     }
 }
 
@@ -719,55 +712,6 @@ pub fn check_zombie(childs: Childs) {
         drop(lock);
         std::thread::sleep(std::time::Duration::from_millis(100));
     }
-}
-
-// TODO: Duplicated code.
-// Need more generic and better shutdown handler
-#[tokio::main(flavor = "current_thread")]
-async fn start_ipc(childs: Childs) {
-    match ipc::new_listener("_index").await {
-        Ok(mut incoming) => {
-            while let Some(result) = incoming.next().await {
-                match result {
-                    Ok(stream) => {
-                        let mut stream = ipc::Connection::new(stream);
-                        let childs = childs.clone();
-                        tokio::spawn(async move {
-                            loop {
-                                tokio::select! {
-                                    res = stream.next() => {
-                                        match res {
-                                            Err(err) => {
-                                                log::info!("cm ipc connection closed: {}", err);
-                                                break;
-                                            }
-                                            Ok(Some(data)) => {
-                                                match data {
-                                                    ipc::Data::SessionsUpdated => {
-                                                        childs.lock().unwrap().0 = true;
-                                                    }
-                                                    _ => {
-                                                    }
-                                                }
-                                            }
-                                            _ => {}
-                                        }
-                                    }
-                                }
-                            }
-                        });
-                    }
-                    Err(err) => {
-                        log::error!("Couldn't get index client: {:?}", err);
-                    }
-                }
-            }
-        }
-        Err(err) => {
-            log::error!("Failed to start index ipc server: {}", err);
-        }
-    }
-    std::process::exit(-1);
 }
 
 // notice: avoiding create ipc connection repeatedly,

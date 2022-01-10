@@ -91,7 +91,6 @@ pub enum Data {
     RawMessage(Vec<u8>),
     Socks(Option<config::Socks5Server>),
     FS(FS),
-    SessionsUpdated,
     Test,
 }
 
@@ -395,22 +394,6 @@ pub fn get_id() -> String {
     if let Ok(Some(v)) = get_config("id") {
         // update salt also, so that next time reinstallation not causing first-time auto-login failure
         if let Ok(Some(v2)) = get_config("salt") {
-            Config::set_salt(&v2);
-        }
-        if v != Config::get_id() {
-            Config::set_key_confirmed(false);
-            Config::set_id(&v);
-        }
-        v
-    } else {
-        Config::get_id()
-    }
-}
-
-pub async fn get_id_async() -> String {
-    if let Ok(Some(v)) = get_config_async("id", 1_000).await {
-        // update salt also, so that next time reinstallation not causing first-time auto-login failure
-        if let Ok(Some(v2)) = get_config_async("salt", 1_000).await {
             Config::set_salt(&v2);
         }
         if v != Config::get_id() {

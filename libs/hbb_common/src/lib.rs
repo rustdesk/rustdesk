@@ -1,8 +1,4 @@
 pub mod compress;
-#[path = "./protos/base_proto.rs"]
-pub mod base_proto;
-#[path = "./protos/discovery.rs"]
-pub mod discovery_proto;
 #[path = "./protos/message.rs"]
 pub mod message_proto;
 #[path = "./protos/rendezvous.rs"]

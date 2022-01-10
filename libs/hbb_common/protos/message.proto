@@ -1,8 +1,6 @@
 syntax = "proto3";
 package hbb;
 
-import "base_proto.proto";
-
 message VP9 {
   bytes data = 1;
   bool key = 2;
@@ -25,6 +23,15 @@ message VideoFrame {
     RGB rgb = 7;
     YUV yuv = 8;
   }
+}
+
+message DisplayInfo {
+  sint32 x = 1;
+  sint32 y = 2;
+  int32 width = 3;
+  int32 height = 4;
+  string name = 5;
+  bool online = 6;
 }
 
 message PortForward {
@@ -51,10 +58,20 @@ message LoginRequest {
 
 message ChatMessage { string text = 1; }
 
+message PeerInfo {
+  string username = 1;
+  string hostname = 2;
+  string platform = 3;
+  repeated DisplayInfo displays = 4;
+  int32 current_display = 5;
+  bool sas_enabled = 6;
+  string version = 7;
+}
+
 message LoginResponse {
   oneof union {
     string error = 1;
-    base.PeerInfo peer_info = 2;
+    PeerInfo peer_info = 2;
   }
 }
 

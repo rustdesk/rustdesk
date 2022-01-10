@@ -10,7 +10,6 @@ use hbb_common::{
     bail,
     config::{Config, PeerConfig, PeerInfoSerde, CONNECT_TIMEOUT, RELAY_PORT, RENDEZVOUS_TIMEOUT},
     log,
-    base_proto::*,
     message_proto::*,
     protobuf::Message as _,
     rendezvous_proto::*,

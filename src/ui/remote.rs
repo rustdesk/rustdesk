@@ -7,7 +7,6 @@ use hbb_common::{
     allow_err,
     config::{self, Config, PeerConfig},
     fs, log,
-    base_proto::*,
     message_proto::*,
     protobuf::Message as _,
     rendezvous_proto::ConnType,
