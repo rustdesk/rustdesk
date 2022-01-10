@@ -3169,6 +3169,7 @@ dependencies = [
  "serde_derive",
  "serde_json 1.0.74",
  "sha2",
+ "socket_cs",
  "sys-locale",
  "systray",
  "uuid",
@@ -3455,11 +3456,12 @@ dependencies = [
 ]
 
 [[package]]
-name = "socket2"
-version = "0.4.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5dc90fe6c7be1a323296982db1836d1ea9e47b6839496dde9a541bc496df3516"
+name = "socket_cs"
+version = "0.1.0"
 dependencies = [
+ "async-trait",
+ "clap",
+ "hbb_common",
  "libc",
  "winapi 0.3.9",
 ]

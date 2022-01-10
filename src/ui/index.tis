@@ -45,6 +45,10 @@ class ConnectStatus: Reactor.Component {
         return translate("Ready");
     }
 
+    event click $(.connect-status .link) () {
+    	handler.set_option("stop-service", "");
+    }
+
     event click $(#start-service) () {
         handler.set_option("stop-service", "");
     }
