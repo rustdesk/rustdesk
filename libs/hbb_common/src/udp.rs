@@ -3,8 +3,8 @@ use anyhow::anyhow;
 use bytes::{Bytes, BytesMut};
 use futures::{SinkExt, StreamExt};
 use protobuf::Message;
-use socket2::{Domain, Socket, Type};
-use std::net::SocketAddr;
+use socket2::{Domain, Protocol, Socket, Type};
+use std::net::{SocketAddr, SocketAddrV4};
 use tokio::net::{ToSocketAddrs, UdpSocket};
 use tokio_socks::{udp::Socks5UdpFramed, IntoTargetAddr, TargetAddr, ToProxyAddrs};
 use tokio_util::{codec::BytesCodec, udp::UdpFramed};
@@ -141,4 +141,19 @@ impl FramedSocket {
             None
         }
     }
+}
+
+// const DEFAULT_MULTICAST: &str = "239.255.42.98";
+
+pub fn bind_multicast(addr: &SocketAddrV4, multi_addr: &SocketAddrV4) -> ResultType<FramedSocket> {
+    assert!(multi_addr.ip().is_multicast(), "Must be multcast address");
+    let socket = Socket::new(Domain::ipv4(), Type::dgram(), Some(Protocol::udp()))?;
+    socket.set_reuse_address(true)?;
+    socket.bind(&socket2::SockAddr::from(*addr))?;
+    socket.set_multicast_loop_v4(true)?;
+    socket.join_multicast_v4(multi_addr.ip(), addr.ip())?;
+    Ok(FramedSocket::Direct(UdpFramed::new(
+        UdpSocket::from_std(socket.into_udp_socket())?,
+        BytesCodec::new(),
+    )))
 }
