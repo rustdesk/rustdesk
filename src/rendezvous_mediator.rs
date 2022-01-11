@@ -505,16 +505,17 @@ async fn direct_server(server: ServerPtr) -> ResultType<()> {
     }
 }
 
-pub fn create_multicast_socket() -> ResultType<FramedSocket> {
+pub fn create_multicast_socket() -> ResultType<(FramedSocket, SocketAddr)> {
     let port = (RENDEZVOUS_PORT + 3) as u16;
-    udp::bind_multicast(
-        &SocketAddrV4::new([0, 0, 0, 0].into(), port),
-        &SocketAddrV4::new([239, 255, 42, 98].into(), port),
-    )
+    let maddr = SocketAddrV4::new([239, 255, 42, 98].into(), port);
+    Ok((
+        udp::bind_multicast(&SocketAddrV4::new([0, 0, 0, 0].into(), port), &maddr)?,
+        SocketAddr::V4(maddr),
+    ))
 }
 
 async fn lan_discovery() -> ResultType<()> {
-    let mut socket = create_multicast_socket()?;
+    let (mut socket, maddr) = create_multicast_socket()?;
     loop {
         select! {
             Some(Ok((bytes, _))) = socket.next() => {
@@ -523,17 +524,22 @@ async fn lan_discovery() -> ResultType<()> {
                         Some(rendezvous_message::Union::peer_discovery(p)) => {
                             if p.cmd == "ping" {
                                 let mut msg_out = Message::new();
+                                let mac = if let Ok(Some(mac)) = mac_address::get_mac_address() {
+                                    mac.to_string()
+                                } else {
+                                    "".to_owned()
+                                };
                                 let peer = PeerDiscovery {
-                                    cmd: "pong".to_owned,
-                                    mac: hbb_common::mac_address::get_mac_address()?,
+                                    cmd: "pong".to_owned(),
+                                    mac,
                                     id: Config::get_id(),
                                     hostname: whoami::hostname(),
                                     username: crate::platform::get_active_username(),
                                     platform: whoami::platform().to_string(),
-                                    ...Default::default(),
+                                    ..Default::default()
                                 };
                                 msg_out.set_peer_discovery(peer);
-                                socket.send(&msg_out).await?;
+                                socket.send(&msg_out, maddr).await?;
                             }
                         }
                         _ => {}
@@ -542,5 +548,4 @@ async fn lan_discovery() -> ResultType<()> {
             }
         }
     }
-    Ok(())
 }
