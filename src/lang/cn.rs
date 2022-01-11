@@ -194,5 +194,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Invalid folder name", "无效文件夹名称"),
         ("Socks5 Proxy", "Socks5 代理"),
         ("Hostname", "主机名"),
+        ("Discovered", "已发现"),
     ].iter().cloned().collect();
     }

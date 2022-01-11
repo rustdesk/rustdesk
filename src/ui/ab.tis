@@ -95,7 +95,7 @@ class SessionList: Reactor.Component {
     function render() {
         var sessions = this.getSessions();
         if (sessions.length == 0) {
-            return <div style="margin: *; font-size: 1.6em;">{translate("Empty")}</div>;
+            return <div style="margin: *; font-size: 1.6em; text-align: center;">{translate("Empty")}</div>;
         }
         var me = this;
         sessions = sessions.map(function(x) { return me.getSession(x); });
@@ -108,7 +108,7 @@ class SessionList: Reactor.Component {
                     <li #rdp>RDP<EditRdpPort /></li>
                     <div .separator />
                     <li #rename>{translate('Rename')}</li>
-                    {this.type != "fav" && <li #remove>{translate('Remove')}</li>}
+                    {this.type != "fav" && this.type != "lan" && <li #remove>{translate('Remove')}</li>}
                     {is_win && <li #shortcut>{translate('Create Desktop Shortcut')}</li>}
                     <li #forget-password>{translate('Unremember Password')}</li>
                     {(!this.type || this.type == "fav") && <li #add-fav>{translate('Add to Favorites')}</li>}
@@ -253,12 +253,14 @@ class MultipleSessions: Reactor.Component {
                     <div style="width:*" .sessions-tab #sessions-type>
                         <span class={!type ? 'active' : 'inactive'}>{translate('Recent Sessions')}</span>
                         <span #fav class={type == "fav" ? 'active' : 'inactive'}>{translate('Favorites')}</span>
+                        <span #lan class={type == "lan" ? 'active' : 'inactive'}>{translate('Discovered')}</span>
                     </div>
                     {!this.hidden && <SearchBar type={type} />}
                     {!this.hidden && <SessionStyle type={type} />}
                 </div>
                 {!this.hidden && 
                 ((type == "fav" && <Favorites />) ||
+                (type == "lan" && <LanPeers />) ||
                 <SessionList sessions={handler.get_recent_sessions()} />)}
             </div>;
     }
@@ -275,6 +277,9 @@ class MultipleSessions: Reactor.Component {
     }
 
     event click $(div#sessions-type span.inactive) (_, el) {
+        if (el.id == "lan") {
+            discover();
+        }
         handler.set_option('show-sessions-type', el.id || "");
         this.stupidUpdate();
     }
@@ -284,6 +289,37 @@ class MultipleSessions: Reactor.Component {
         this.$(#sessions-type span).style.set{
             "max-width": (w / 2) + "px",
         };
+    }
+}
+
+function discover() {
+    handler.discover();
+    var tries = 15;
+    function update() {
+        self.timer(300ms, function() {
+            tries -= 1;
+            if (tries == 0) return;
+            update();
+            var p = (app || {}).multipleSessions;
+            if (p) {
+                p.update();
+            }
+        });
+    }
+    update();
+}
+
+if (getSessionsType() == "lan") {
+    discover();
+}
+
+class LanPeers: Reactor.Component {
+    function render() {
+        var sessions = [];
+        try {
+            sessions = JSON.parse(handler.get_lan_peers());
+        } catch (_) {}
+        return <SessionList sessions={sessions} type="lan" />;
     }
 }
 

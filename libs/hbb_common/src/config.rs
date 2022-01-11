@@ -754,6 +754,40 @@ impl Fav {
     }
 }
 
+#[derive(Debug, Default, Serialize, Deserialize, Clone)]
+pub struct LanPeers {
+    #[serde(default)]
+    pub peers: String,
+}
+
+impl LanPeers {
+    pub fn load() -> LanPeers {
+        let _ = CONFIG.read().unwrap(); // for lock
+        match confy::load_path(&Config::file_("_lan_peers")) {
+            Ok(peers) => peers,
+            Err(err) => {
+                log::error!("Failed to load lan peers: {}", err);
+                Default::default()
+            }
+        }
+    }
+
+    pub fn store(peers: String) {
+        let f = LanPeers { peers };
+        if let Err(err) = confy::store_path(Config::file_("_lan_peers"), f) {
+            log::error!("Failed to store lan peers: {}", err);
+        }
+    }
+
+    pub fn modify_time() -> crate::ResultType<u64> {
+        let p = Config::file_("_lan_peers");
+        Ok(fs::metadata(p)?
+            .modified()?
+            .duration_since(SystemTime::UNIX_EPOCH)?
+            .as_millis() as _)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
