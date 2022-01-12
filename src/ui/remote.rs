@@ -323,6 +323,12 @@ impl Handler {
                     Key::CapsLock | Key::NumLock | Key::ScrollLock => {
                         return;
                     }
+                    Key::Home => Some(ControlKey::Home),
+                    Key::End => Some(ControlKey::End),
+                    Key::Insert => Some(ControlKey::Insert),
+                    Key::PageUp => Some(ControlKey::PageUp),
+                    Key::PageDown => Some(ControlKey::PageDown),
+                    Key::Pause => Some(ControlKey::Pause),
                     _ => None,
                 };
                 let mut key_event = KeyEvent::new();
