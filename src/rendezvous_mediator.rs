@@ -542,10 +542,11 @@ async fn lan_discovery() -> ResultType<()> {
                                 socket.send(&msg_out, addr).await?;
                             }
                         }
-                        _ => {}
+                        _ => {} // avoid select! all branches disabled panic
                     }
                 }
             }
+            else => {}
         }
     }
 }
