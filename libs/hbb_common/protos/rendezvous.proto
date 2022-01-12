@@ -133,6 +133,16 @@ message LocalAddr {
   string version = 5;
 }
 
+message PeerDiscovery {
+  string cmd = 1;
+  string mac = 2;
+  string id = 3;
+  string username = 4;
+  string hostname = 5;
+  string platform = 6;
+  string misc = 7;
+}
+
 message RendezvousMessage {
   oneof union {
     RegisterPeer register_peer = 6;
@@ -151,5 +161,6 @@ message RendezvousMessage {
     RelayResponse relay_response = 19;
     TestNatRequest test_nat_request = 20;
     TestNatResponse test_nat_response = 21;
+    PeerDiscovery peer_discovery = 22;
   }
 }

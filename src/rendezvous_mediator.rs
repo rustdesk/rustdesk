@@ -12,11 +12,11 @@ use hbb_common::{
         self, select,
         time::{interval, Duration},
     },
-    udp::FramedSocket,
+    udp::{self, FramedSocket},
     AddrMangle, IntoTargetAddr, ResultType, TargetAddr,
 };
 use std::{
-    net::SocketAddr,
+    net::{SocketAddr, SocketAddrV4},
     sync::{
         atomic::{AtomicBool, Ordering},
         Arc, Mutex,
@@ -58,6 +58,9 @@ impl RendezvousMediator {
         let server_cloned = server.clone();
         tokio::spawn(async move {
             allow_err!(direct_server(server_cloned).await);
+        });
+        tokio::spawn(async move {
+            allow_err!(lan_discovery().await);
         });
         loop {
             Config::reset_online();
@@ -498,6 +501,51 @@ async fn direct_server(server: ServerPtr) -> ResultType<()> {
             }
         } else {
             sleep(1.).await;
+        }
+    }
+}
+
+pub fn create_multicast_socket() -> ResultType<(FramedSocket, SocketAddr)> {
+    let port = (RENDEZVOUS_PORT + 3) as u16;
+    let maddr = SocketAddrV4::new([239, 255, 42, 98].into(), port);
+    Ok((
+        udp::bind_multicast(&SocketAddrV4::new([0, 0, 0, 0].into(), port), &maddr)?,
+        SocketAddr::V4(maddr),
+    ))
+}
+
+async fn lan_discovery() -> ResultType<()> {
+    let (mut socket, maddr) = create_multicast_socket()?;
+    loop {
+        select! {
+            Some(Ok((bytes, _))) = socket.next() => {
+                if let Ok(msg_in) = Message::parse_from_bytes(&bytes) {
+                    match msg_in.union {
+                        Some(rendezvous_message::Union::peer_discovery(p)) => {
+                            if p.cmd == "ping" {
+                                let mut msg_out = Message::new();
+                                let mac = if let Ok(Some(mac)) = mac_address::get_mac_address() {
+                                    mac.to_string()
+                                } else {
+                                    "".to_owned()
+                                };
+                                let peer = PeerDiscovery {
+                                    cmd: "pong".to_owned(),
+                                    mac,
+                                    id: Config::get_id(),
+                                    hostname: whoami::hostname(),
+                                    username: crate::platform::get_active_username(),
+                                    platform: whoami::platform().to_string(),
+                                    ..Default::default()
+                                };
+                                msg_out.set_peer_discovery(peer);
+                                socket.send(&msg_out, maddr).await?;
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+            }
         }
     }
 }

@@ -32,6 +32,7 @@ pub use sodiumoxide;
 pub use tokio_socks;
 pub use tokio_socks::IntoTargetAddr;
 pub use tokio_socks::TargetAddr;
+pub use mac_address;
 
 #[cfg(feature = "quic")]
 pub type Stream = quic::Connection;
