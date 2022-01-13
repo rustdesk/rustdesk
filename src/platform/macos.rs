@@ -100,30 +100,16 @@ pub fn is_can_screen_recording(prompt: bool) -> bool {
 
 pub fn is_installed_daemon(prompt: bool) -> bool {
     if !prompt {
-        let output = std::process::Command::new("launchctl")
-            .args(vec!["list", "|", "grep", "com.carriez.rustdesk.daemon"])
-            .stdout(std::process::Stdio::piped())
-            .output()
-            .unwrap();
-        if output.stdout.len() <= 0{
+
+        if !std::path::Path::new("/Library/LaunchDaemons/com.carriez.rustdesk.daemon.plist").exists(){
             return false;
         }
 
-        let output = std::process::Command::new("launchctl")
-            .args(vec!["list", "|", "grep", "com.carriez.rustdesk.agent.root"])
-            .stdout(std::process::Stdio::piped())
-            .output()
-            .unwrap();
-        if output.stdout.len() <= 0{
+        if !std::path::Path::new("/Library/LaunchAgents/com.carriez.rustdesk.agent.root.plist").exists(){
             return false;
         }
 
-        let output = std::process::Command::new("launchctl")
-            .args(vec!["list", "|", "grep", "com.carriez.rustdesk.agent.user"])
-            .stdout(std::process::Stdio::piped())
-            .output()
-            .unwrap();
-        if output.stdout.len() <= 0{
+        if !std::path::Path::new("/Library/LaunchAgents/com.carriez.rustdesk.agent.user.plist").exists(){
             return false;
         }
 
