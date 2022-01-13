@@ -11,6 +11,7 @@ use std::{
     sync::{Arc, Mutex, RwLock},
     time::SystemTime,
 };
+use std::borrow::Borrow;
 
 pub const APP_NAME: &str = "RustDesk";
 pub const RENDEZVOUS_TIMEOUT: u64 = 12_000;
@@ -162,28 +163,28 @@ pub struct PeerInfoSerde {
 fn patch(path: PathBuf) -> PathBuf {
     if let Some(_tmp) = path.to_str() {
         #[cfg(windows)]
-        return _tmp
+            return _tmp
             .replace(
                 "system32\\config\\systemprofile",
                 "ServiceProfiles\\LocalService",
             )
             .into();
         #[cfg(target_os = "macos")]
-        return _tmp.replace("Application Support", "Preferences").into();
+            return _tmp.replace("Application Support", "Preferences").into();
         #[cfg(target_os = "linux")]
-        {
-            if _tmp == "/root" {
-                if let Ok(output) = std::process::Command::new("whoami").output() {
-                    let user = String::from_utf8_lossy(&output.stdout)
-                        .to_string()
-                        .trim()
-                        .to_owned();
-                    if user != "root" {
-                        return format!("/home/{}", user).into();
+            {
+                if _tmp == "/root" {
+                    if let Ok(output) = std::process::Command::new("whoami").output() {
+                        let user = String::from_utf8_lossy(&output.stdout)
+                            .to_string()
+                            .trim()
+                            .to_owned();
+                        if user != "root" {
+                            return format!("/home/{}", user).into();
+                        }
                     }
                 }
             }
-        }
     }
     path
 }
@@ -275,7 +276,7 @@ impl Config {
 
     pub fn get_home() -> PathBuf {
         #[cfg(any(target_os = "android", target_os = "ios"))]
-        return Self::path("");
+            return Self::path("");
         if let Some(path) = dirs_next::home_dir() {
             patch(path)
         } else if let Ok(path) = std::env::current_dir() {
@@ -287,15 +288,15 @@ impl Config {
 
     pub fn path<P: AsRef<Path>>(p: P) -> PathBuf {
         #[cfg(any(target_os = "android", target_os = "ios"))]
-        {
-            let mut path: PathBuf = APP_DIR.read().unwrap().clone().into();
-            path.push(p);
-            return path;
-        }
+            {
+                let mut path: PathBuf = APP_DIR.read().unwrap().clone().into();
+                path.push(p);
+                return path;
+            }
         #[cfg(not(target_os = "macos"))]
-        let org = "";
+            let org = "";
         #[cfg(target_os = "macos")]
-        let org = ORG;
+            let org = ORG;
         // /var/root for root
         if let Some(project) = ProjectDirs::from("", org, APP_NAME) {
             let mut path = patch(project.config_dir().to_path_buf());
@@ -308,19 +309,19 @@ impl Config {
     #[allow(unreachable_code)]
     pub fn log_path() -> PathBuf {
         #[cfg(target_os = "macos")]
-        {
-            if let Some(path) = dirs_next::home_dir().as_mut() {
-                path.push(format!("Library/Logs/{}", APP_NAME));
-                return path.clone();
+            {
+                if let Some(path) = dirs_next::home_dir().as_mut() {
+                    path.push(format!("Library/Logs/{}", APP_NAME));
+                    return path.clone();
+                }
             }
-        }
         #[cfg(target_os = "linux")]
-        {
-            let mut path = Self::get_home();
-            path.push(format!(".local/share/logs/{}", APP_NAME));
-            std::fs::create_dir_all(&path).ok();
-            return path;
-        }
+            {
+                let mut path = Self::get_home();
+                path.push(format!(".local/share/logs/{}", APP_NAME));
+                std::fs::create_dir_all(&path).ok();
+                return path;
+            }
         if let Some(path) = Self::path("").parent() {
             let mut path: PathBuf = path.into();
             path.push("log");
@@ -331,21 +332,21 @@ impl Config {
 
     pub fn ipc_path(postfix: &str) -> String {
         #[cfg(windows)]
-        {
-            // \\ServerName\pipe\PipeName
-            // where ServerName is either the name of a remote computer or a period, to specify the local computer.
-            // https://docs.microsoft.com/en-us/windows/win32/ipc/pipe-names
-            format!("\\\\.\\pipe\\{}\\query{}", APP_NAME, postfix)
-        }
+            {
+                // \\ServerName\pipe\PipeName
+                // where ServerName is either the name of a remote computer or a period, to specify the local computer.
+                // https://docs.microsoft.com/en-us/windows/win32/ipc/pipe-names
+                format!("\\\\.\\pipe\\{}\\query{}", APP_NAME, postfix)
+            }
         #[cfg(not(windows))]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            let mut path: PathBuf = format!("/tmp/{}", APP_NAME).into();
-            fs::create_dir(&path).ok();
-            fs::set_permissions(&path, fs::Permissions::from_mode(0o0777)).ok();
-            path.push(format!("ipc{}", postfix));
-            path.to_str().unwrap_or("").to_owned()
-        }
+            {
+                use std::os::unix::fs::PermissionsExt;
+                let mut path: PathBuf = format!("/tmp/{}", APP_NAME).into();
+                fs::create_dir(&path).ok();
+                fs::set_permissions(&path, fs::Permissions::from_mode(0o0777)).ok();
+                path.push(format!("ipc{}", postfix));
+                path.to_str().unwrap_or("").to_owned()
+            }
     }
 
     pub fn icon_path() -> PathBuf {
@@ -459,7 +460,7 @@ impl Config {
 
     fn get_auto_id() -> Option<String> {
         #[cfg(any(target_os = "android", target_os = "ios"))]
-        return None;
+            return None;
         let mut id = 0u32;
         #[cfg(not(any(target_os = "android", target_os = "ios")))]
         if let Ok(Some(ma)) = mac_address::get_mac_address() {
@@ -673,91 +674,43 @@ impl Config {
         }
     }
 
-    pub fn sync_config_to_user<P: AsRef<Path>>(target_username: String, to_dir: P) -> bool {
-        let config1_root_file_path = Config::file_("");
-        let config1_filename = config1_root_file_path.file_name();
+    pub fn copy_and_reload_config_dir<P: AsRef<Path>>(
+        target_username: String,
+        from: P,
+    ) -> Result<bool, fs_extra::error::Error> {
+        let to = Self::path("");
+        let to_parent = to.parent().unwrap();
 
-        let config2_root_file_path = Config::file_("2");
-        let config2_filename = config2_root_file_path.file_name();
+        let mut options = fs_extra::dir::CopyOptions::new();
+        options.overwrite = true;
+        options.copy_inside = true;
 
-        let config1_to_file_path = to_dir
-            .as_ref()
-            .join(PathBuf::from(&config1_filename.unwrap()));
-        let config2_to_file_path = to_dir
-            .as_ref()
-            .join(PathBuf::from(&config2_filename.unwrap()));
+        let mut f = from.as_ref();
 
-        log::info!(
-            "config1_root_path:{}",
-            &config1_root_file_path.as_path().to_str().unwrap()
-        );
-        log::info!(
-            "config2_root_path:{}",
-            &config2_root_file_path.as_path().to_str().unwrap()
-        );
-        log::info!(
-            "config1_to_path:{}",
-            &config1_to_file_path.as_path().to_str().unwrap()
-        );
-        log::info!(
-            "config2_to_path:{}",
-            &config2_to_file_path.as_path().to_str().unwrap()
-        );
+        return match fs_extra::dir::copy(f, to_parent, &options) {
+            Ok(count) => {
+                if count > 0 {
+                    log::info!("{}",target_username);
+                    log::info!("{}",f.to_str().unwrap().to_string());
+                    log::info!("{}",to.to_str().unwrap().to_string());
 
-        match std::fs::copy(&config1_root_file_path, &config1_to_file_path) {
-            Err(e) => log::error!(
-                "copy config {} to user failed: {}",
-                config1_filename.unwrap().to_str().unwrap(),
-                e
-            ),
-            _ => {}
-        }
+                    std::process::Command::new("chown")
+                        .arg("-R")
+                        .arg(target_username)
+                        .arg(to.to_str().unwrap().to_string())
+                        .spawn();
 
-        match std::fs::copy(&config2_root_file_path, &config2_to_file_path) {
-            Err(e) => log::error!(
-                "copy config {} to user failed: {}",
-                config2_filename.unwrap().to_str().unwrap(),
-                e
-            ),
-            _ => {}
-        }
-
-        let success = std::process::Command::new("chown")
-            .arg(&target_username.to_string())
-            .arg(&config1_to_file_path.to_str().unwrap().to_string())
-            .arg(&config2_to_file_path.to_str().unwrap().to_string())
-            .spawn()
-            .is_ok();
-
-        if success {
-            CONFIG.write().unwrap().reload();
-            CONFIG2.write().unwrap().reload();
-        }
-
-        return success;
-    }
-
-    pub fn sync_config_to_root<P: AsRef<Path>>(from_file_path: P) -> bool {
-        if let Some(filename) = from_file_path.as_ref().file_name() {
-            let to = Config::path(filename);
-            return match std::fs::copy(from_file_path, &to) {
-                Ok(count) => {
-                    if count > 0 {
-                        return std::process::Command::new("chown")
-                            .arg("root")
-                            .arg(&to.to_str().unwrap().to_string())
-                            .spawn()
-                            .is_ok();
-                    }
-                    false
+                    CONFIG.write().unwrap().reload();
+                    CONFIG2.write().unwrap().reload();
                 }
-                Err(e) => {
-                    log::error!("sync_config_to_root failed: {}", e);
-                    false
-                }
-            };
-        }
-        false
+
+                Ok(count > 0)
+            }
+            Err(e) => {
+                log::error!("config copy failed: {}", e);
+                Err(e)
+            }
+        };
     }
 }
 

@@ -1,20 +1,10 @@
-use hbb_common::log::info;
-use hbb_common::{
-    allow_err, bail, bytes,
-    bytes_codec::BytesCodec,
-    config::{self, Config},
-    futures::StreamExt as _,
-    futures_util::sink::SinkExt,
-    log, timeout, tokio,
-    tokio::io::{AsyncRead, AsyncWrite},
-    tokio_util::codec::Framed,
-    ResultType,
-};
+use hbb_common::{allow_err, bail, bytes, bytes_codec::BytesCodec, config::{self, Config}, futures::StreamExt as _, futures_util::sink::SinkExt, log, timeout, tokio, tokio::io::{AsyncRead, AsyncWrite}, tokio_util::codec::Framed, ResultType};
 use parity_tokio_ipc::{
     Connection as Conn, ConnectionClient as ConnClient, Endpoint, Incoming, SecurityAttributes,
 };
 use serde_derive::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::path::PathBuf;
 #[cfg(not(windows))]
 use std::{fs::File, io::prelude::*};
 
@@ -93,22 +83,17 @@ pub enum Data {
     Socks(Option<config::Socks5Server>),
     FS(FS),
     Test,
-    SyncConfigToRootReq {
-        from: String,
+    ConfigCopyReq {
+        target_username: String,
+        dir_path: String,
     },
-    SyncConfigToRootResp(bool),
-    SyncConfigToUserReq {
-        username: String,
-        to: String,
-    },
-    SyncConfigToUserResp(bool),
+    ConfigCopyResp(Option<bool>),
 }
 
 #[tokio::main(flavor = "current_thread")]
 pub async fn start(postfix: &str) -> ResultType<()> {
     let mut incoming = new_listener(postfix).await?;
     loop {
-        log::info!("begin loop");
         if let Some(result) = incoming.next().await {
             match result {
                 Ok(stream) => {
@@ -116,16 +101,13 @@ pub async fn start(postfix: &str) -> ResultType<()> {
                     let postfix = postfix.to_owned();
                     tokio::spawn(async move {
                         loop {
-                            log::info!("begin loop");
                             match stream.next().await {
                                 Err(err) => {
                                     log::trace!("ipc{} connection closed: {}", postfix, err);
                                     break;
                                 }
                                 Ok(Some(data)) => {
-                                    log::info!("begin handle");
                                     handle(data, &mut stream).await;
-                                    log::info!("end handle");
                                 }
                                 _ => {}
                             }
@@ -143,7 +125,7 @@ pub async fn start(postfix: &str) -> ResultType<()> {
 pub async fn new_listener(postfix: &str) -> ResultType<Incoming> {
     let path = Config::ipc_path(postfix);
     #[cfg(not(windows))]
-    check_pid(postfix).await;
+        check_pid(postfix).await;
     let mut endpoint = Endpoint::new(path.clone());
     match SecurityAttributes::allow_everyone_create() {
         Ok(attr) => endpoint.set_security_attributes(attr),
@@ -153,11 +135,11 @@ pub async fn new_listener(postfix: &str) -> ResultType<Incoming> {
         Ok(incoming) => {
             log::info!("Started ipc{} server at path: {}", postfix, &path);
             #[cfg(not(windows))]
-            {
-                use std::os::unix::fs::PermissionsExt;
-                std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o0777)).ok();
-                write_pid(postfix);
-            }
+                {
+                    use std::os::unix::fs::PermissionsExt;
+                    std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o0777)).ok();
+                    write_pid(postfix);
+                }
             Ok(incoming)
         }
         Err(err) => {
@@ -266,27 +248,22 @@ async fn handle(data: Data, stream: &mut Connection) {
             let t = Config::get_nat_type();
             allow_err!(stream.send(&Data::NatType(Some(t))).await);
         }
-        Data::SyncConfigToRootReq { from } => {
-            info!("begin SyncConfigToRootReq, {}", from);
-            allow_err!(
-                stream
-                    .send(&Data::SyncConfigToRootResp(Config::sync_config_to_root(
-                        from
-                    )))
-                    .await
-            );
-            info!("begin SyncConfigToRootReq end");
-        }
-        Data::SyncConfigToUserReq { username, to } => {
-            info!("begin SyncConfigToUserReq,{},{}", username, to);
-            allow_err!(
-                stream
-                    .send(&Data::SyncConfigToUserResp(Config::sync_config_to_user(
-                        username, to
-                    )))
-                    .await
-            );
-            info!("begin SyncConfigToUserReq end");
+        Data::ConfigCopyReq { target_username, dir_path } => {
+            let from = PathBuf::from(dir_path);
+            if !from.exists() {
+                allow_err!(stream.send(&Data::ConfigCopyResp(None)).await);
+                return;
+            }
+
+            match Config::copy_and_reload_config_dir(target_username, from) {
+                Ok(result) => {
+                    allow_err!(stream.send(&Data::ConfigCopyResp(Some(result))).await);
+                }
+                Err(e) => {
+                    log::error!("copy_and_reload_config_dir failed: {:?}",e);
+                    allow_err!(stream.send(&Data::ConfigCopyResp(Some(false))).await);
+                }
+            }
         }
         _ => {}
     }
@@ -348,8 +325,8 @@ pub struct ConnectionTmpl<T> {
 pub type Connection = ConnectionTmpl<Conn>;
 
 impl<T> ConnectionTmpl<T>
-where
-    T: AsyncRead + AsyncWrite + std::marker::Unpin,
+    where
+        T: AsyncRead + AsyncWrite + std::marker::Unpin,
 {
     pub fn new(conn: T) -> Self {
         Self {
