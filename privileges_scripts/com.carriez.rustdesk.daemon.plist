@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+    <dict>
+        <key>Label</key>
+        <string>com.carriez.rustdesk.daemon</string>
+        <key>Disabled</key>
+        <true/>
+        <key>KeepAlive</key>
+        <true/>
+        <key>Label</key>
+        <string>com.youqu.todesk.service</string>
+        <key>ProgramArguments</key>
+        <array>
+        	<string>/Applications/RustDesk.app/Contents/MacOS/rustdesk</string>
+        	<string>--daemon</string>
+        </array>
+        <key>RunAtLoad</key>
+        <true/>
+        <key>WorkingDirectory</key>
+        <string>/Applications/RustDesk.app/Contents/MacOS/</string>
+    </dict>
+</plist>

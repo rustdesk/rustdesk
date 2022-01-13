@@ -19,6 +19,7 @@ use core_graphics::{
 use hbb_common::{allow_err, bail, log};
 use objc::{class, msg_send, sel, sel_impl};
 use scrap::{libc::c_void, quartz::ffi::*};
+use std::io::Read;
 
 static mut LATEST_SEED: i32 = 0;
 
@@ -96,6 +97,57 @@ pub fn is_can_screen_recording(prompt: bool) -> bool {
         }
     }
     can_record_screen
+}
+
+pub fn is_installed_daemon(prompt: bool) -> bool {
+    if !prompt {
+        let output = std::process::Command::new("launchctl")
+            .args(vec!["list", "|", "grep", "com.carriez.rustdesk.daemon"])
+            .stdout(std::process::Stdio::piped())
+            .output()
+            .unwrap();
+        if output.stdout.len() <= 0{
+            return false;
+        }
+
+        let output = std::process::Command::new("launchctl")
+            .args(vec!["list", "|", "grep", "com.carriez.rustdesk.agent.root"])
+            .stdout(std::process::Stdio::piped())
+            .output()
+            .unwrap();
+        if output.stdout.len() <= 0{
+            return false;
+        }
+
+        let output = std::process::Command::new("launchctl")
+            .args(vec!["list", "|", "grep", "com.carriez.rustdesk.agent.user"])
+            .stdout(std::process::Stdio::piped())
+            .output()
+            .unwrap();
+        if output.stdout.len() <= 0{
+            return false;
+        }
+
+        return true;
+    }
+
+    if !std::process::Command::new("osascript")
+        .arg("./privileges_scripts/install.scpt")
+        .status()
+        .unwrap()
+        .success() {
+        return false;
+    }
+
+    if !std::process::Command::new("osascript")
+        .arg("./privileges_scripts/launch_service.scpt")
+        .status()
+        .unwrap()
+        .success() {
+        return false;
+    }
+
+    return true;
 }
 
 pub fn get_cursor_pos() -> Option<(i32, i32)> {
@@ -334,8 +386,8 @@ pub fn is_installed() -> bool {
     true
 }
 
-pub fn start_daemon(){
-    log::info!("{}",crate::username());
+pub fn start_daemon() {
+    log::info!("{}", crate::username());
     if let Err(err) = crate::ipc::start("_daemon") {
         log::error!("Failed to start ipc_daemon: {}", err);
         std::process::exit(-1);
