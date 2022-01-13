@@ -15,6 +15,7 @@ use hbb_common::{
     tokio_util::codec::{BytesCodec, Framed},
 };
 use sha2::{Digest, Sha256};
+use std::sync::mpsc::{sync_channel, Receiver, SyncSender};
 
 pub type Sender = mpsc::UnboundedSender<(Instant, Arc<Message>)>;
 
@@ -83,6 +84,14 @@ const H1: Duration = Duration::from_secs(3600);
 const MILLI1: Duration = Duration::from_millis(1);
 const SEND_TIMEOUT_VIDEO: u64 = 12_000;
 const SEND_TIMEOUT_OTHER: u64 = SEND_TIMEOUT_VIDEO * 10;
+
+type SyncFunc = Box<dyn Send + FnMut()>;
+
+enum BlankChannelMsg {
+    On,
+    Off,
+    Exit,
+}
 
 impl Connection {
     pub async fn start(
@@ -156,6 +165,12 @@ impl Connection {
                 SEND_TIMEOUT_VIDEO
             },
         );
+
+        let (input_sender, input_receiver) = sync_channel(1);
+
+        let (blank_sender, blank_receiver) = sync_channel(1);
+        let _ = std::thread::spawn(move || Self::handle_input(input_receiver));
+        let blank_handler = std::thread::spawn(move || Self::handle_blank(blank_receiver));
 
         loop {
             tokio::select! {
@@ -232,7 +247,7 @@ impl Connection {
                             Ok(bytes) => {
                                 last_recv_time = Instant::now();
                                 if let Ok(msg_in) = Message::parse_from_bytes(&bytes) {
-                                    if !conn.on_message(msg_in).await {
+                                    if !conn.on_message(msg_in, input_sender.clone(), blank_sender.clone()).await {
                                         break;
                                     }
                                 }
@@ -297,11 +312,57 @@ impl Connection {
             }
         }
 
+        blank_sender.send(BlankChannelMsg::Exit).unwrap();
+        if let Err(e) = blank_handler.join() {
+            log::error!("Failed to join blank thread, {:?}", e);
+        };
+
+        crate::platform::block_input(false);
+        crate::platform::toggle_blank_screen(false);
+
         video_service::notify_video_frame_feched(id, None);
         super::video_service::update_test_latency(id, 0);
         super::video_service::update_image_quality(id, None);
         if let Err(err) = conn.try_port_forward_loop(&mut rx_from_cm).await {
             conn.on_close(&err.to_string(), false);
+        }
+    }
+
+    // TODO:
+    // 1. Send "Block Input" and "Privacy Mode" when connection established.
+    // 2. Ctrl + Alt + Del will break "Block Input"
+    fn handle_input(receiver: Receiver<SyncFunc>) {
+        loop {
+            match receiver.recv() {
+                Ok(mut f) => {
+                    f();
+                }
+                _ => break,
+            }
+        }
+    }
+
+    fn handle_blank(receiver: Receiver<BlankChannelMsg>) {
+        let mut last_privacy = false;
+        loop {
+            match receiver.recv_timeout(std::time::Duration::from_millis(500)) {
+                Ok(v) => match v {
+                    BlankChannelMsg::On => {
+                        crate::platform::toggle_blank_screen(true);
+                        last_privacy = true;
+                    }
+                    BlankChannelMsg::Off => {
+                        crate::platform::toggle_blank_screen(false);
+                        last_privacy = false;
+                    }
+                    _ => break,
+                },
+                _ => {
+                    if last_privacy {
+                        crate::platform::toggle_blank_screen(true);
+                    }
+                }
+            }
         }
     }
 
@@ -536,10 +597,15 @@ impl Connection {
         self.send(msg_out).await;
     }
 
-    async fn on_message(&mut self, msg: Message) -> bool {
+    async fn on_message(
+        &mut self,
+        msg: Message,
+        input_sender: SyncSender<SyncFunc>,
+        blank_sender: SyncSender<BlankChannelMsg>,
+    ) -> bool {
         if let Some(message::Union::login_request(lr)) = msg.union {
             if let Some(o) = lr.option.as_ref() {
-                self.update_option(o);
+                self.update_option(o, input_sender, blank_sender);
             }
             if self.authorized {
                 return true;
@@ -654,7 +720,8 @@ impl Connection {
             match msg.union {
                 Some(message::Union::mouse_event(me)) => {
                     if self.keyboard {
-                        handle_mouse(&me, self.inner.id());
+                        let conn_id = self.inner.id();
+                        input_sender.send(Box::new(move || handle_mouse(&me, conn_id))).unwrap();
                     }
                 }
                 Some(message::Union::key_event(mut me)) => {
@@ -669,17 +736,19 @@ impl Connection {
                         };
                         if is_press {
                             if let Some(key_event::Union::unicode(_)) = me.union {
-                                handle_key(&me);
+                                input_sender.send(Box::new(move || handle_key(&me))).unwrap();
                             } else if let Some(key_event::Union::seq(_)) = me.union {
-                                handle_key(&me);
+                                input_sender.send(Box::new(move || handle_key(&me))).unwrap();
                             } else {
-                                me.down = true;
-                                handle_key(&me);
-                                me.down = false;
-                                handle_key(&me);
+                                input_sender.send(Box::new(move || {
+                                    me.down = true;
+                                    handle_key(&me);
+                                    me.down = false;
+                                    handle_key(&me);
+                                })).unwrap();
                             }
                         } else {
-                            handle_key(&me);
+                            input_sender.send(Box::new(move || handle_key(&me))).unwrap();
                         }
                     }
                 }
@@ -782,7 +851,7 @@ impl Connection {
                         self.send_to_cm(ipc::Data::ChatMessage { text: c.text });
                     }
                     Some(misc::Union::option(o)) => {
-                        self.update_option(&o);
+                        self.update_option(&o, input_sender, blank_sender);
                     }
                     Some(misc::Union::refresh_video(r)) => {
                         if r {
@@ -797,7 +866,12 @@ impl Connection {
         true
     }
 
-    fn update_option(&mut self, o: &OptionMessage) {
+    fn update_option(
+        &mut self,
+        o: &OptionMessage,
+        input_sender: SyncSender<SyncFunc>,
+        blank_sender: SyncSender<BlankChannelMsg>,
+    ) {
         log::info!("Option update: {:?}", o);
         if let Ok(q) = o.image_quality.enum_value() {
             self.image_quality = q.value();
@@ -857,15 +931,23 @@ impl Connection {
         if let Ok(q) = o.privacy_mode.enum_value() {
             if q != BoolOption::NotSet {
                 self.privacy_mode = q == BoolOption::Yes;
-                if self.privacy_mode && self.keyboard {
-                    crate::platform::toggle_privacy_mode(true);
+                if self.keyboard {
+                    if self.privacy_mode {
+                        input_sender.send(Box::new(move||{crate::platform::block_input(true)})).unwrap();
+                        blank_sender.send(BlankChannelMsg::On).unwrap();
+                    } else {
+                        input_sender.send(Box::new(move||{crate::platform::block_input(false)})).unwrap();
+                        blank_sender.send(BlankChannelMsg::Off).unwrap();
+                    }
                 }
             }
         }
         if self.keyboard {
             if let Ok(q) = o.block_input.enum_value() {
                 if q != BoolOption::NotSet {
-                    crate::platform::block_input(q == BoolOption::Yes);
+                    input_sender.send(Box::new(move || {
+                        crate::platform::block_input(q == BoolOption::Yes)
+                    })).unwrap();
                 }
             }
         }
@@ -879,9 +961,6 @@ impl Connection {
         if lock && self.lock_after_session_end && self.keyboard {
             crate::platform::lock_screen();
             super::video_service::switch_to_primary();
-        }
-        if self.privacy_mode {
-            crate::platform::toggle_privacy_mode(false);
         }
         self.port_forward_socket.take();
     }
