@@ -328,7 +328,7 @@ fn handle_one_frame(
     sp: &GenericService,
     frame: &[u8],
     ms: i64,
-    crc: &mut (u32, u32),
+    _crc: &mut (u32, u32),
     vpx: &mut Encoder,
 ) -> ResultType<HashSet<i32>> {
     sp.snapshot(|sps| {
@@ -338,6 +338,12 @@ fn handle_one_frame(
         }
         Ok(())
     })?;
+
+    /*
+    // crc runs faster on my i7-4790, around 0.5ms for 720p picture,
+    // but it is super slow on my Linux (in virtualbox) on the same machine, 720ms consumed.
+    // crc do save band width for static scenario (especially for gdi),
+    // Disable it since its uncertainty, who know what will happen on the other machines.
     let mut hasher = crc32fast::Hasher::new();
     hasher.update(frame);
     let checksum = hasher.finalize();
@@ -347,9 +353,12 @@ fn handle_one_frame(
     } else {
         crc.1 += 1;
     }
+    let encode = crc.1 <= 180 && crc.1 % 5 == 0;
+    */
+    let encode = true;
 
     let mut send_conn_ids: HashSet<i32> = Default::default();
-    if crc.1 <= 180 && crc.1 % 5 == 0 {
+    if encode {
         let mut frames = Vec::new();
         for ref frame in vpx
             .encode(ms, frame, STRIDE_ALIGN)
