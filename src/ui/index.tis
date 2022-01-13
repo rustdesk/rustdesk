@@ -307,7 +307,7 @@ class App: Reactor.Component
                     {handler.is_installed() && !software_update_url && handler.is_installed_lower_version() ? <UpgradeMe /> : ""}
                     {is_can_screen_recording ? "": <CanScreenRecording />}
                     {is_can_screen_recording && !handler.is_process_trusted(false) ? <TrustMe /> : ""}
-                    {is_can_screen_recording && handler.is_process_trusted(false) && handler.is_installed_daemon(false) ? <InstallDaemon /> : ""}
+                    {is_can_screen_recording && handler.is_process_trusted(false) && !handler.is_installed_daemon(false) ? <InstallDaemon /> : ""}
                     {system_error ? <SystemError /> : ""}
                     {!system_error && handler.is_login_wayland() && !handler.current_is_wayland() ? <FixWayland /> : ""}
                     {!system_error && handler.current_is_wayland() ? <ModifyDefaultLogin /> : ""}

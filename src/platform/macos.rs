@@ -19,7 +19,6 @@ use core_graphics::{
 use hbb_common::{allow_err, bail, log};
 use objc::{class, msg_send, sel, sel_impl};
 use scrap::{libc::c_void, quartz::ffi::*};
-use std::io::Read;
 
 static mut LATEST_SEED: i32 = 0;
 
@@ -133,14 +132,6 @@ pub fn is_installed_daemon(prompt: bool) -> bool {
 
     if !std::process::Command::new("osascript")
         .arg("./privileges_scripts/install.scpt")
-        .status()
-        .unwrap()
-        .success() {
-        return false;
-    }
-
-    if !std::process::Command::new("osascript")
-        .arg("./privileges_scripts/launch_service.scpt")
         .status()
         .unwrap()
         .success() {
