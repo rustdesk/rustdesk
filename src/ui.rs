@@ -364,7 +364,8 @@ impl UI {
         }
         ipc::set_options(options.clone()).ok();
 
-        if cfg!(target_os = "macos") && &key == "stop-service" {
+        #[cfg(target_os = "macos")]
+        if &key == "stop-service" {
             crate::platform::macos::launch_or_stop_daemon(value != "Y");
         }
     }

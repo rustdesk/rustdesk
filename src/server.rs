@@ -13,6 +13,7 @@ use hbb_common::{
     sodiumoxide::crypto::{box_, secretbox, sign},
     timeout, tokio, ResultType, Stream,
 };
+#[cfg(target_os = "macos")]
 use notify::{watcher, RecursiveMode, Watcher};
 use parity_tokio_ipc::ConnectionClient;
 use service::{GenericService, Service, ServiceTmpl, Subscriber};
