@@ -1,4 +1,4 @@
-use crate::ipc::{ConnectionTmpl, Data};
+use crate::ipc::Data;
 use connection::{ConnInner, Connection};
 use hbb_common::{
     allow_err,
@@ -9,23 +9,17 @@ use hbb_common::{
     message_proto::*,
     protobuf::{Message as _, ProtobufEnum},
     rendezvous_proto::*,
-    sleep, socket_client,
+    sleep,
     sodiumoxide::crypto::{box_, secretbox, sign},
     timeout, tokio, ResultType, Stream,
+    socket_client,
 };
 use service::{GenericService, Service, ServiceTmpl, Subscriber};
-use std::sync::mpsc::RecvError;
-use std::time::Duration;
 use std::{
     collections::HashMap,
     net::SocketAddr,
     sync::{Arc, Mutex, RwLock, Weak},
 };
-
-use hbb_common::log::info;
-#[cfg(target_os = "macos")]
-use notify::{watcher, RecursiveMode, Watcher};
-use parity_tokio_ipc::ConnectionClient;
 
 mod audio_service;
 mod clipboard_service;
@@ -172,7 +166,7 @@ pub async fn create_relay_connection(
     secure: bool,
 ) {
     if let Err(err) =
-    create_relay_connection_(server, relay_server, uuid.clone(), peer_addr, secure).await
+        create_relay_connection_(server, relay_server, uuid.clone(), peer_addr, secure).await
     {
         log::error!(
             "Failed to create relay connection for {} with uuid {}: {}",
@@ -195,7 +189,7 @@ async fn create_relay_connection_(
         Config::get_any_listen_addr(),
         CONNECT_TIMEOUT,
     )
-        .await?;
+    .await?;
     let mut msg_out = RendezvousMessage::new();
     msg_out.set_request_relay(RequestRelay {
         uuid,
@@ -270,13 +264,10 @@ pub fn check_zombie() {
 #[tokio::main]
 pub async fn start_server(is_server: bool, _tray: bool) {
     #[cfg(target_os = "linux")]
-        {
-            log::info!("DISPLAY={:?}", std::env::var("DISPLAY"));
-            log::info!("XAUTHORITY={:?}", std::env::var("XAUTHORITY"));
-        }
-
-    sync_and_watch_config_dir().await;
-
+    {
+        log::info!("DISPLAY={:?}", std::env::var("DISPLAY"));
+        log::info!("XAUTHORITY={:?}", std::env::var("XAUTHORITY"));
+    }
     if is_server {
         std::thread::spawn(move || {
             if let Err(err) = crate::ipc::start("") {
@@ -307,7 +298,7 @@ pub async fn start_server(is_server: bool, _tray: bool) {
                     } else {
                         allow_err!(conn.send(&Data::ConfirmedKey(None)).await);
                         if let Ok(Some(Data::ConfirmedKey(Some(pair)))) =
-                        conn.next_timeout(1000).await
+                            conn.next_timeout(1000).await
                         {
                             Config::set_key_pair(pair);
                             Config::set_key_confirmed(true);
@@ -325,73 +316,4 @@ pub async fn start_server(is_server: bool, _tray: bool) {
             }
         }
     }
-}
-
-async fn sync_and_watch_config_dir() -> ResultType<()> {
-    let mut conn = crate::ipc::connect(1000, "_daemon").await?;
-
-    sync_config_dir(&mut conn, "/var/root/Library/Preferences/com.carriez.RustDesk/".to_string()).await?;
-
-    tokio::spawn(async move {
-        log::info!(
-            "watching config dir: {}",
-            Config::path("").to_str().unwrap().to_string()
-        );
-
-        let (tx, rx) = std::sync::mpsc::channel();
-        let mut watcher = watcher(tx, Duration::from_secs(1)).unwrap();
-        watcher
-            .watch(Config::path("").as_path(), RecursiveMode::Recursive)
-            .unwrap();
-
-        loop {
-            let ev = rx.recv();
-            match ev {
-                Ok(event) => match event {
-                    notify::DebouncedEvent::Write(path) => {
-                        log::info!(
-                            "config file changed, call ipc_daemon to sync: {}",
-                            path.to_str().unwrap().to_string()
-                        );
-                        sync_config_dir(&mut conn, Config::path("").to_str().unwrap().to_string()).await;
-                    }
-                    x => {
-                        log::info!("another {:?}", x)
-                    }
-                },
-                Err(e) => println!("watch error: {:?}", e),
-            }
-        }
-    });
-
-    Ok(())
-}
-
-async fn sync_config_dir(conn: &mut ConnectionTmpl<ConnectionClient>, path: String) -> ResultType<()> {
-    allow_err!(
-        conn.send(&Data::ConfigCopyReq {
-            target_username: crate::username(),
-            dir_path: path
-        })
-        .await
-    );
-    if let Ok(Some(data)) = conn.next_timeout(1000).await {
-        match data {
-            Data::ConfigCopyResp(result) => match result {
-                Some(success) => {
-                    if success {
-                        log::info!("copy and reload config dir success");
-                    } else {
-                        log::info!("copy config dir failed. may be first running");
-                    }
-                }
-                None => {}
-            },
-            x => {
-                log::info!("receive another {:?}",x)
-            }
-        };
-    };
-
-    Ok(())
 }

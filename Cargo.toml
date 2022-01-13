@@ -69,7 +69,6 @@ cocoa = "0.24"
 dispatch = "0.2"
 core-foundation = "0.9"
 core-graphics = "0.22"
-notify = "4.0.17"
 
 [target.'cfg(target_os = "linux")'.dependencies]
 libpulse-simple-binding = "2.24"

@@ -10,7 +10,7 @@ fn main() {
     common::test_rendezvous_server();
     common::test_nat_type();
     #[cfg(target_os = "android")]
-        crate::common::check_software_update();
+    crate::common::check_software_update();
     mobile::Session::start("");
 }
 
@@ -29,53 +29,53 @@ fn main() {
         return;
     }
     #[cfg(not(feature = "inline"))]
-        {
-            use hbb_common::env_logger::*;
-            init_from_env(Env::default().filter_or(DEFAULT_FILTER_ENV, "info"));
-        }
+    {
+        use hbb_common::env_logger::*;
+        init_from_env(Env::default().filter_or(DEFAULT_FILTER_ENV, "info"));
+    }
     #[cfg(feature = "inline")]
-        {
-            let mut path = hbb_common::config::Config::log_path();
-            if args.len() > 0 && args[0].starts_with("--") {
-                let name = args[0].replace("--", "");
-                if !name.is_empty() {
-                    path.push(name);
-                }
+    {
+        let mut path = hbb_common::config::Config::log_path();
+        if args.len() > 0 && args[0].starts_with("--") {
+            let name = args[0].replace("--", "");
+            if !name.is_empty() {
+                path.push(name);
             }
-            use flexi_logger::*;
-            Logger::try_with_env_or_str("debug")
-                .map(|x| {
-                    x.log_to_file(FileSpec::default().directory(path))
-                        .format(opt_format)
-                        .rotate(
-                            Criterion::Age(Age::Day),
-                            Naming::Timestamps,
-                            Cleanup::KeepLogFiles(6),
-                        )
-                        .start()
-                        .ok();
-                })
-                .ok();
         }
+        use flexi_logger::*;
+        Logger::try_with_env_or_str("debug")
+            .map(|x| {
+                x.log_to_file(FileSpec::default().directory(path))
+                    .format(opt_format)
+                    .rotate(
+                        Criterion::Age(Age::Day),
+                        Naming::Timestamps,
+                        Cleanup::KeepLogFiles(6),
+                    )
+                    .start()
+                    .ok();
+            })
+            .ok();
+    }
     if args.is_empty() {
         std::thread::spawn(move || start_server(false, false));
     } else {
         #[cfg(windows)]
-            {
-                if args[0] == "--uninstall" {
-                    if let Err(err) = platform::uninstall_me() {
-                        log::error!("Failed to uninstall: {}", err);
-                    }
-                    return;
-                } else if args[0] == "--update" {
-                    hbb_common::allow_err!(platform::update_me());
-                    return;
-                } else if args[0] == "--reinstall" {
-                    hbb_common::allow_err!(platform::uninstall_me());
-                    hbb_common::allow_err!(platform::install_me("desktopicon startmenu",));
-                    return;
+        {
+            if args[0] == "--uninstall" {
+                if let Err(err) = platform::uninstall_me() {
+                    log::error!("Failed to uninstall: {}", err);
                 }
+                return;
+            } else if args[0] == "--update" {
+                hbb_common::allow_err!(platform::update_me());
+                return;
+            } else if args[0] == "--reinstall" {
+                hbb_common::allow_err!(platform::uninstall_me());
+                hbb_common::allow_err!(platform::install_me("desktopicon startmenu",));
+                return;
             }
+        }
         if args[0] == "--remove" {
             if args.len() == 2 {
                 // sleep a while so that process of removed exe exit
@@ -100,10 +100,6 @@ fn main() {
             if args.len() == 2 {
                 ipc::set_password(args[1].to_owned()).unwrap();
             }
-            return;
-        } else if cfg!(target_os = "macos") && args[0] == "--daemon" {
-            log::info!("start --daemon");
-            crate::platform::start_daemon();
             return;
         }
     }
