@@ -335,6 +335,7 @@ pub fn is_installed() -> bool {
 }
 
 pub fn start_daemon(){
+    log::info!("{}",crate::username());
     if let Err(err) = crate::ipc::start("_daemon") {
         log::error!("Failed to start ipc_daemon: {}", err);
         std::process::exit(-1);
