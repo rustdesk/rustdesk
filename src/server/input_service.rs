@@ -357,7 +357,7 @@ fn handle_mouse_(evt: &MouseEvent, conn: i32) {
                         modifier_sleep();
                         to_release.push(key);
                     } else {
-                        KEYS_DOWN.lock().unwrap().insert(ck.value(), Instant::now());
+                        KEYS_DOWN.lock().unwrap().insert(ck.value() as _, Instant::now());
                     }
                 }
             }
@@ -577,7 +577,7 @@ fn handle_key_(evt: &KeyEvent) {
                             modifier_sleep();
                             to_release.push(key);
                         } else {
-                            KEYS_DOWN.lock().unwrap().insert(ck.value(), Instant::now());
+                            KEYS_DOWN.lock().unwrap().insert(ck.value() as _, Instant::now());
                         }
                     }
                 }
