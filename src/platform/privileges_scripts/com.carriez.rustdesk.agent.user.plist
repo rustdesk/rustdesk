@@ -2,13 +2,11 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
     <dict>
-        <key>Disable<key>
-        <false />
         <key>Label</key>
-        <string>com.carriez.rustdesk.agent.root</string>
+        <string>com.carriez.rustdesk.agent.user</string>
         <key>LimitLoadToSessionType</key>
         <array>
-            <string>LoginWindow</string>
+            <string>Aqua</string>
         </array>
         <key>KeepAlive</key>
         <dict>

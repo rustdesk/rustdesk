@@ -4,12 +4,8 @@
     <dict>
         <key>Label</key>
         <string>com.carriez.rustdesk.daemon</string>
-        <key>Disabled</key>
-        <true/>
         <key>KeepAlive</key>
         <true/>
-        <key>Label</key>
-        <string>com.youqu.todesk.service</string>
         <key>ProgramArguments</key>
         <array>
         	<string>/Applications/RustDesk.app/Contents/MacOS/rustdesk</string>

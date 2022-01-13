@@ -360,22 +360,12 @@ impl UI {
         if value.is_empty() {
             options.remove(&key);
         } else {
-            options.insert(key, value);
+            options.insert(key.clone(), value.clone());
         }
         ipc::set_options(options.clone()).ok();
 
-        #[cfg(macos)]
-        if key == "stop-service" {
-            let mut service_script = "./privileges_scripts/stop_service.scpt";
-            if value == "Y" {
-                command = "./privileges_scripts/launch_service.scpt";
-            }
-
-            std::process::Command::new("osascript")
-                .arg(service_script)
-                .status()
-                .unwrap()
-                .success();
+        if cfg!(target_os = "macos") && &key == "stop-service" {
+            crate::platform::macos::launch_or_stop_daemon(value != "Y");
         }
     }
 
