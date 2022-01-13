@@ -188,5 +188,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Edit Tag", "Modifier la balise"),
         ("Invalid folder name", "Nom de dossier invalide"),
         ("Hostname", "nom d'hôte"),
+        ("Discovered", "Découvert"),
     ].iter().cloned().collect();
     }

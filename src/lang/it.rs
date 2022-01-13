@@ -188,6 +188,7 @@ lazy_static::lazy_static! {
             ("Edit Tag", "Modifica tag"),
             ("Invalid folder name", "Nome della cartella non valido"),
             ("Hostname", "Nome host"),
+            ("Discovered", "Scoperto"),
         ].iter().cloned().collect();
         }
     

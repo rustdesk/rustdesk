@@ -609,6 +609,16 @@ impl UI {
         crate::platform::windows::create_shortcut(&_id).ok();
     }
 
+    fn discover(&self) {
+        std::thread::spawn(move || {
+            allow_err!(crate::rendezvous_mediator::discover());
+        });
+    }
+
+    fn get_lan_peers(&self) -> String {
+        config::LanPeers::load().peers
+    }
+
     fn open_url(&self, url: String) {
         #[cfg(windows)]
         let p = "explorer";
@@ -683,6 +693,8 @@ impl sciter::EventHandler for UI {
         fn get_software_ext();
         fn open_url(String);
         fn create_shortcut(String);
+        fn discover();
+        fn get_lan_peers();
     }
 }
 

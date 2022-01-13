@@ -350,7 +350,10 @@ impl Enigo {
             // NOTE VkKeyScanW uses the current keyboard layout
             // to specify a layout use VkKeyScanExW and GetKeyboardLayout
             // or load one with LoadKeyboardLayoutW
-            let keycode_and_shiftstate = unsafe { VkKeyScanW(chr as _) };
+            let current_window_thread_id =
+                unsafe { GetWindowThreadProcessId(GetForegroundWindow(), std::ptr::null_mut()) };
+            let layout = unsafe { GetKeyboardLayout(current_window_thread_id) };
+            let keycode_and_shiftstate = unsafe { VkKeyScanExW(chr as _, layout) };
             keycode_and_shiftstate as _
         } else {
             0

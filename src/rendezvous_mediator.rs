@@ -2,7 +2,7 @@ use crate::server::{check_zombie, new as new_server, ServerPtr};
 use hbb_common::{
     allow_err,
     anyhow::bail,
-    config::{Config, RENDEZVOUS_PORT, RENDEZVOUS_TIMEOUT},
+    config::{self, Config, RENDEZVOUS_PORT, RENDEZVOUS_TIMEOUT},
     futures::future::join_all,
     log,
     protobuf::Message as _,
@@ -21,7 +21,7 @@ use std::{
         atomic::{AtomicBool, Ordering},
         Arc, Mutex,
     },
-    time::SystemTime,
+    time::{Instant, SystemTime},
 };
 use uuid::Uuid;
 
@@ -505,33 +505,33 @@ async fn direct_server(server: ServerPtr) -> ResultType<()> {
     }
 }
 
-pub fn create_multicast_socket() -> ResultType<(FramedSocket, SocketAddr)> {
+pub fn get_multicast_addr() -> SocketAddrV4 {
     let port = (RENDEZVOUS_PORT + 3) as u16;
-    let maddr = SocketAddrV4::new([239, 255, 42, 98].into(), port);
-    Ok((
-        udp::bind_multicast(&SocketAddrV4::new([0, 0, 0, 0].into(), port), &maddr)?,
-        SocketAddr::V4(maddr),
-    ))
+    SocketAddrV4::new([239, 255, 42, 98].into(), port)
+}
+
+pub fn get_mac() -> String {
+    if let Ok(Some(mac)) = mac_address::get_mac_address() {
+        mac.to_string()
+    } else {
+        "".to_owned()
+    }
 }
 
 async fn lan_discovery() -> ResultType<()> {
-    let (mut socket, maddr) = create_multicast_socket()?;
+    let mut socket = udp::bind_multicast(Some(get_multicast_addr()))?;
+    log::info!("lan discovery listener started");
     loop {
         select! {
-            Some(Ok((bytes, _))) = socket.next() => {
+            Some(Ok((bytes, addr))) = socket.next() => {
                 if let Ok(msg_in) = Message::parse_from_bytes(&bytes) {
                     match msg_in.union {
                         Some(rendezvous_message::Union::peer_discovery(p)) => {
                             if p.cmd == "ping" {
                                 let mut msg_out = Message::new();
-                                let mac = if let Ok(Some(mac)) = mac_address::get_mac_address() {
-                                    mac.to_string()
-                                } else {
-                                    "".to_owned()
-                                };
                                 let peer = PeerDiscovery {
                                     cmd: "pong".to_owned(),
-                                    mac,
+                                    mac: get_mac(),
                                     id: Config::get_id(),
                                     hostname: whoami::hostname(),
                                     username: crate::platform::get_active_username(),
@@ -539,13 +539,68 @@ async fn lan_discovery() -> ResultType<()> {
                                     ..Default::default()
                                 };
                                 msg_out.set_peer_discovery(peer);
-                                socket.send(&msg_out, maddr).await?;
+                                socket.send(&msg_out, addr).await?;
                             }
                         }
                         _ => {}
                     }
                 }
             }
+            else => {} // avoid select! all branches disabled panic
         }
     }
+}
+
+#[tokio::main(flavor = "current_thread")]
+pub async fn discover() -> ResultType<()> {
+    let mut socket = udp::bind_multicast(None)?;
+    let mut msg_out = Message::new();
+    let peer = PeerDiscovery {
+        cmd: "ping".to_owned(),
+        ..Default::default()
+    };
+    msg_out.set_peer_discovery(peer);
+    let maddr = SocketAddr::V4(get_multicast_addr());
+    socket.send(&msg_out, maddr).await?;
+    log::debug!("discover ping sent");
+    const TIMER_OUT: Duration = Duration::from_millis(100);
+    let mut timer = interval(TIMER_OUT);
+    let mut last_recv_time = Instant::now();
+    let mut last_write_time = Instant::now();
+    let mut last_write_n = 0;
+    // to-do: load saved peers, and update incrementally (then we can see offline)
+    let mut peers = Vec::new();
+    let mac = get_mac();
+    loop {
+        select! {
+            Some(Ok((bytes, _))) = socket.next() => {
+                if let Ok(msg_in) = Message::parse_from_bytes(&bytes) {
+                    match msg_in.union {
+                        Some(rendezvous_message::Union::peer_discovery(p)) => {
+                            last_recv_time = Instant::now();
+                            if p.cmd == "pong" {
+                                if p.mac != mac {
+                                    peers.push((p.id, p.username, p.hostname, p.platform));
+                                }
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+            },
+            _ = timer.tick() => {
+                if last_write_time.elapsed().as_millis() > 300 && last_write_n != peers.len() {
+                    config::LanPeers::store(serde_json::to_string(&peers)?);
+                    last_write_time = Instant::now();
+                    last_write_n = peers.len();
+                }
+                if last_recv_time.elapsed().as_millis() > 3_000 {
+                    break;
+                }
+            }
+        }
+    }
+    log::debug!("discover ping done");
+    config::LanPeers::store(serde_json::to_string(&peers)?);
+    Ok(())
 }
