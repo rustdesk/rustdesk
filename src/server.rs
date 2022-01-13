@@ -273,6 +273,7 @@ pub async fn start_server(is_server: bool, _tray: bool) {
         log::info!("XAUTHORITY={:?}", std::env::var("XAUTHORITY"));
     }
 
+    #[cfg(target_os = "macos")]
     sync_and_watch_config_dir().await;
 
     if is_server {
