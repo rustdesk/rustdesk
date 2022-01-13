@@ -92,6 +92,15 @@ pub enum Data {
     Socks(Option<config::Socks5Server>),
     FS(FS),
     Test,
+    SyncConfigToRootReq {
+        from: String,
+    },
+    SyncConfigToRootResp(bool),
+    SyncConfigToUserReq {
+        username: String,
+        to: String,
+    },
+    SyncConfigToUserResp(bool),
 }
 
 #[tokio::main(flavor = "current_thread")]
@@ -251,6 +260,24 @@ async fn handle(data: Data, stream: &mut Connection) {
         Data::NatType(_) => {
             let t = Config::get_nat_type();
             allow_err!(stream.send(&Data::NatType(Some(t))).await);
+        }
+        Data::SyncConfigToRootReq { from } => {
+            allow_err!(
+                stream
+                    .send(&Data::SyncConfigToRootResp(Config::sync_config_to_root(
+                        from
+                    )))
+                    .await
+            );
+        }
+        Data::SyncConfigToUserReq { username, to } => {
+            allow_err!(
+                stream
+                    .send(&Data::SyncConfigToUserResp(Config::sync_config_to_user(
+                        username, to
+                    )))
+                    .await
+            );
         }
         _ => {}
     }

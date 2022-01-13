@@ -1,4 +1,4 @@
-use crate::ipc::Data;
+use crate::ipc::{ConnectionTmpl, Data};
 use connection::{ConnInner, Connection};
 use hbb_common::{
     allow_err,
@@ -9,12 +9,15 @@ use hbb_common::{
     message_proto::*,
     protobuf::{Message as _, ProtobufEnum},
     rendezvous_proto::*,
-    sleep,
+    sleep, socket_client,
     sodiumoxide::crypto::{box_, secretbox, sign},
     timeout, tokio, ResultType, Stream,
-    socket_client,
 };
+use notify::{watcher, RecursiveMode, Watcher};
+use parity_tokio_ipc::ConnectionClient;
 use service::{GenericService, Service, ServiceTmpl, Subscriber};
+use std::path::PathBuf;
+use std::time::Duration;
 use std::{
     collections::HashMap,
     net::SocketAddr,
@@ -268,6 +271,9 @@ pub async fn start_server(is_server: bool, _tray: bool) {
         log::info!("DISPLAY={:?}", std::env::var("DISPLAY"));
         log::info!("XAUTHORITY={:?}", std::env::var("XAUTHORITY"));
     }
+
+    sync_and_watch_config_dir().await;
+
     if is_server {
         std::thread::spawn(move || {
             if let Err(err) = crate::ipc::start("") {
@@ -316,4 +322,106 @@ pub async fn start_server(is_server: bool, _tray: bool) {
             }
         }
     }
+}
+
+async fn sync_and_watch_config_dir() {
+    if crate::username() == "root" {
+        return;
+    }
+
+    match crate::ipc::connect(1000, "_daemon").await {
+        Ok(mut conn) => {
+            match sync_config_to_user(&mut conn).await {
+                Err(e) => log::error!("sync config to user failed:{}", e),
+                _ => {}
+            }
+
+            tokio::spawn(async move {
+                log::info!(
+                    "watching config dir: {}",
+                    Config::path("").to_str().unwrap().to_string()
+                );
+
+                let (tx, rx) = std::sync::mpsc::channel();
+                let mut watcher = watcher(tx, Duration::from_secs(2)).unwrap();
+                watcher
+                    .watch(Config::path("").as_path(), RecursiveMode::Recursive)
+                    .unwrap();
+
+                loop {
+                    let ev = rx.recv();
+                    match ev {
+                        Ok(event) => match event {
+                            notify::DebouncedEvent::Write(path) => {
+                                log::info!(
+                                    "config file changed, call ipc_daemon to sync: {}",
+                                    path.to_str().unwrap().to_string()
+                                );
+
+                                match sync_config_to_root(&mut conn, path).await {
+                                    Err(e) => log::error!("sync config to root failed: {}", e),
+                                    _ => {}
+                                }
+                            }
+                            x => {
+                                log::debug!("another {:?}", x)
+                            }
+                        },
+                        Err(e) => println!("watch error: {:?}", e),
+                    }
+                }
+            });
+        }
+        Err(_) => {
+            log::info!("connect ipc_daemon failed, skip config sync");
+            return;
+        }
+    }
+}
+
+async fn sync_config_to_user(conn: &mut ConnectionTmpl<ConnectionClient>) -> ResultType<()> {
+    allow_err!(
+        conn.send(&Data::SyncConfigToUserReq {
+            username: crate::username(),
+            to: Config::path("").to_str().unwrap().to_string(),
+        })
+        .await
+    );
+
+    if let Some(data) = conn.next_timeout(2000).await? {
+        match data {
+            Data::SyncConfigToUserResp(success) => {
+                log::info!("copy and reload config dir success: {:?}", success);
+            }
+            _ => {}
+        };
+    };
+
+    Ok(())
+}
+
+async fn sync_config_to_root(
+    conn: &mut ConnectionTmpl<ConnectionClient>,
+    from: PathBuf,
+) -> ResultType<()> {
+    allow_err!(
+        conn.send(&Data::SyncConfigToRootReq {
+            from: from.to_str().unwrap().to_string()
+        })
+        .await
+    );
+
+    // todo: this code will block outer loop, resolve it later.
+    // if let Some(data) = conn.next_timeout(2000).await? {
+    //     match data {
+    //         Data::SyncConfigToRootResp(success) => {
+    //             log::info!("copy config to root dir success: {:?}", success);
+    //         }
+    //         x => {
+    //             log::info!("receive another {:?}", x)
+    //         }
+    //     };
+    // };
+
+    Ok(())
 }

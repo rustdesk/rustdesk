@@ -101,6 +101,10 @@ fn main() {
                 ipc::set_password(args[1].to_owned()).unwrap();
             }
             return;
+        } else if cfg!(target_os = "macos") && args[0] == "--daemon" {
+            log::info!("start --daemon");
+            crate::platform::start_daemon();
+            return;
         }
     }
     ui::start(&mut args[..]);
