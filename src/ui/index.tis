@@ -543,7 +543,7 @@ class ModifyDefaultLogin: Reactor.Component {
 
 function watch_trust() {
     // not use TrustMe::update, because it is buggy
-    var trusted = handler.is_process_trusted(false);
+    var trusted = handler.is_process_trusted(false) && handler.is_installed_daemon(false);
     var el = $(div.trust-me);
     if (el) {
         el.style.set {
