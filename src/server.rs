@@ -1,4 +1,6 @@
-use crate::ipc::{ConnectionTmpl, Data};
+#[cfg(target_os = "macos")]
+use crate::ipc::ConnectionTmpl;
+use crate::ipc::Data;
 use connection::{ConnInner, Connection};
 use hbb_common::{
     allow_err,
@@ -15,6 +17,7 @@ use hbb_common::{
 };
 #[cfg(target_os = "macos")]
 use notify::{watcher, RecursiveMode, Watcher};
+#[cfg(target_os = "macos")]
 use parity_tokio_ipc::ConnectionClient;
 use service::{GenericService, Service, ServiceTmpl, Subscriber};
 use std::{
@@ -261,7 +264,7 @@ pub fn check_zombie() {
             }
         }
         drop(lock);
-        std::thread::sleep(std::time::Duration::from_millis(100));
+        std::thread::sleep(Duration::from_millis(100));
     });
 }
 
@@ -416,7 +419,7 @@ async fn sync_config_to_user(conn: &mut ConnectionTmpl<ConnectionClient>) -> Res
 #[cfg(target_os = "macos")]
 async fn sync_config_to_root(
     conn: &mut ConnectionTmpl<ConnectionClient>,
-    from: PathBuf,
+    from: std::path::PathBuf,
 ) -> ResultType<()> {
     allow_err!(
         conn.send(&Data::SyncConfigToRootReq {
