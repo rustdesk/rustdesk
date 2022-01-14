@@ -12,8 +12,8 @@ on run {daemon_file, root_agent_file, user_agent_file}
 
     set sh6 to "launchctl load -w /Library/LaunchAgents/com.carriez.rustdesk.agent.user.plist;"
 
-	set sh to sh1 & sh2 & sh3 & sh4 & sh5 &sh6
+	set sh to sh1 & sh2 & sh3 & sh4 & sh5
 
-	log (sh)
 	do shell script sh with prompt "RustDesk 需要安装服务" with administrator privileges
+	do shell script sh6
 end run
