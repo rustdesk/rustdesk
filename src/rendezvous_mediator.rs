@@ -59,9 +59,11 @@ impl RendezvousMediator {
         tokio::spawn(async move {
             allow_err!(direct_server(server_cloned).await);
         });
-        std::thread::spawn(move || {
-            allow_err!(lan_discovery());
-        });
+        if crate::platform::is_installed() {
+            std::thread::spawn(move || {
+                allow_err!(lan_discovery());
+            });
+        }
         loop {
             Config::reset_online();
             if Config::get_option("stop-service").is_empty() {
@@ -519,7 +521,7 @@ pub fn get_mac() -> String {
 }
 
 fn lan_discovery() -> ResultType<()> {
-    let addr = SocketAddr::from(([0, 0, 0, 0], 3000));
+    let addr = SocketAddr::from(([0, 0, 0, 0], get_broadcast_port()));
     let socket = std::net::UdpSocket::bind(addr)?;
     socket.set_read_timeout(Some(std::time::Duration::from_millis(1000)))?;
     log::info!("lan discovery listener started");
@@ -561,7 +563,7 @@ pub fn discover() -> ResultType<()> {
         ..Default::default()
     };
     msg_out.set_peer_discovery(peer);
-    let maddr = SocketAddr::from(([255, 255, 255, 255], 3000));
+    let maddr = SocketAddr::from(([255, 255, 255, 255], get_broadcast_port()));
     socket.send_to(&msg_out.write_to_bytes()?, maddr)?;
     log::info!("discover ping sent");
     let mut last_recv_time = Instant::now();
