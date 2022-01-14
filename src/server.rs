@@ -17,12 +17,12 @@ use hbb_common::{
 use notify::{watcher, RecursiveMode, Watcher};
 use parity_tokio_ipc::ConnectionClient;
 use service::{GenericService, Service, ServiceTmpl, Subscriber};
-use std::path::PathBuf;
-use std::time::Duration;
 use std::{
     collections::HashMap,
     net::SocketAddr,
+    path::PathBuf,
     sync::{Arc, Mutex, RwLock, Weak},
+    time::Duration,
 };
 
 mod audio_service;
