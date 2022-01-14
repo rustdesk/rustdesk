@@ -360,9 +360,14 @@ impl UI {
         if value.is_empty() {
             options.remove(&key);
         } else {
-            options.insert(key, value);
+            options.insert(key.clone(), value.clone());
         }
         ipc::set_options(options.clone()).ok();
+
+        #[cfg(target_os = "macos")]
+        if &key == "stop-service" {
+            crate::platform::macos::launch_or_stop_daemon(value != "Y");
+        }
     }
 
     fn install_path(&mut self) -> String {
@@ -525,6 +530,13 @@ impl UI {
         return true;
     }
 
+    fn is_installed_daemon(&mut self, _prompt: bool) -> bool {
+        #[cfg(target_os = "macos")]
+        return crate::platform::macos::is_installed_daemon(_prompt);
+        #[cfg(not(target_os = "macos"))]
+        return true;
+    }
+
     fn get_error(&mut self) -> String {
         #[cfg(target_os = "linux")]
         {
@@ -668,6 +680,7 @@ impl sciter::EventHandler for UI {
         fn goto_install();
         fn is_process_trusted(bool);
         fn is_can_screen_recording(bool);
+        fn is_installed_daemon(bool);
         fn get_error();
         fn is_login_wayland();
         fn fix_login_wayland();

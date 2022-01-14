@@ -190,6 +190,11 @@ impl Config2 {
         Config::load_::<Config2>("2")
     }
 
+    fn reload(&mut self) {
+        let new_config = Config2::load();
+        *self = new_config;
+    }
+
     fn store(&self) {
         Config::store_(self, "2");
     }
@@ -212,6 +217,11 @@ impl Config {
             log::debug!("{:?}", cfg);
         }
         cfg
+    }
+
+    fn reload(&mut self) {
+        let new_config = Config::load();
+        *self = new_config;
     }
 
     fn store_<T: serde::Serialize>(config: &T, suffix: &str) {
@@ -272,7 +282,7 @@ impl Config {
         }
     }
 
-    fn path<P: AsRef<Path>>(p: P) -> PathBuf {
+    pub fn path<P: AsRef<Path>>(p: P) -> PathBuf {
         #[cfg(any(target_os = "android", target_os = "ios"))]
         {
             let mut path: PathBuf = APP_DIR.read().unwrap().clone().into();
@@ -658,6 +668,93 @@ impl Config {
             None => NetworkType::Direct,
             Some(_) => NetworkType::ProxySocks,
         }
+    }
+
+    pub fn sync_config_to_user<P: AsRef<Path>>(target_username: String, to_dir: P) -> bool {
+        let config1_root_file_path = Config::file_("");
+        let config1_filename = config1_root_file_path.file_name();
+
+        let config2_root_file_path = Config::file_("2");
+        let config2_filename = config2_root_file_path.file_name();
+
+        let config1_to_file_path = to_dir
+            .as_ref()
+            .join(PathBuf::from(&config1_filename.unwrap()));
+        let config2_to_file_path = to_dir
+            .as_ref()
+            .join(PathBuf::from(&config2_filename.unwrap()));
+
+        log::info!(
+            "config1_root_path:{}",
+            &config1_root_file_path.as_path().to_str().unwrap()
+        );
+        log::info!(
+            "config2_root_path:{}",
+            &config2_root_file_path.as_path().to_str().unwrap()
+        );
+        log::info!(
+            "config1_to_path:{}",
+            &config1_to_file_path.as_path().to_str().unwrap()
+        );
+        log::info!(
+            "config2_to_path:{}",
+            &config2_to_file_path.as_path().to_str().unwrap()
+        );
+
+        match std::fs::copy(&config1_root_file_path, &config1_to_file_path) {
+            Err(e) => log::error!(
+                "copy config {} to user failed: {}",
+                config1_filename.unwrap().to_str().unwrap(),
+                e
+            ),
+            _ => {}
+        }
+
+        match std::fs::copy(&config2_root_file_path, &config2_to_file_path) {
+            Err(e) => log::error!(
+                "copy config {} to user failed: {}",
+                config2_filename.unwrap().to_str().unwrap(),
+                e
+            ),
+            _ => {}
+        }
+
+        let success = std::process::Command::new("chown")
+            .arg(&target_username.to_string())
+            .arg(&config1_to_file_path.to_str().unwrap().to_string())
+            .arg(&config2_to_file_path.to_str().unwrap().to_string())
+            .spawn()
+            .is_ok();
+
+        if success {
+            CONFIG.write().unwrap().reload();
+            CONFIG2.write().unwrap().reload();
+        }
+
+        return success;
+    }
+
+    pub fn sync_config_to_root<P: AsRef<Path>>(from_file_path: P) -> bool {
+        if let Some(filename) = from_file_path.as_ref().file_name() {
+            let to = Config::path(filename);
+            return match std::fs::copy(from_file_path, &to) {
+                Ok(count) => {
+                    if count > 0 {
+                        return std::process::Command::new("chown")
+                            .arg("root")
+                            .arg(&to.to_str().unwrap().to_string())
+                            .spawn()
+                            .is_ok();
+                    }
+                    false
+                }
+                Err(e) => {
+                    log::error!("sync_config_to_root failed: {}", e);
+                    false
+                }
+            };
+        }
+        false
     }
 }
 

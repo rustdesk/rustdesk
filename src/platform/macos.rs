@@ -17,9 +17,12 @@ use core_graphics::{
     window::{kCGWindowName, kCGWindowOwnerPID},
 };
 use hbb_common::{allow_err, bail, log};
+use include_dir::{include_dir, Dir};
 use objc::{class, msg_send, sel, sel_impl};
 use scrap::{libc::c_void, quartz::ffi::*};
 
+static PRIVILEGES_SCRIPTS_DIR: Dir =
+    include_dir!("$CARGO_MANIFEST_DIR/src/platform/privileges_scripts");
 static mut LATEST_SEED: i32 = 0;
 
 extern "C" {
@@ -96,6 +99,79 @@ pub fn is_can_screen_recording(prompt: bool) -> bool {
         }
     }
     can_record_screen
+}
+
+pub fn is_installed_daemon(prompt: bool) -> bool {
+    if !prompt {
+        if !std::path::Path::new("/Library/LaunchDaemons/com.carriez.rustdesk.daemon.plist")
+            .exists()
+        {
+            return false;
+        }
+
+        if !std::path::Path::new("/Library/LaunchAgents/com.carriez.rustdesk.agent.root.plist")
+            .exists()
+        {
+            return false;
+        }
+
+        if !std::path::Path::new("/Library/LaunchAgents/com.carriez.rustdesk.agent.user.plist")
+            .exists()
+        {
+            return false;
+        }
+
+        return true;
+    }
+
+    let install_script = PRIVILEGES_SCRIPTS_DIR.get_file("install.scpt").unwrap();
+    let install_script_body = install_script.contents_utf8().unwrap();
+
+    let daemon_plist = PRIVILEGES_SCRIPTS_DIR
+        .get_file("com.carriez.rustdesk.daemon.plist")
+        .unwrap();
+    let daemon_plist_body = daemon_plist.contents_utf8().unwrap();
+
+    let root_agent_plist = PRIVILEGES_SCRIPTS_DIR
+        .get_file("com.carriez.rustdesk.agent.root.plist")
+        .unwrap();
+    let root_agent_plist_body = root_agent_plist.contents_utf8().unwrap();
+
+    let user_agent_plist = PRIVILEGES_SCRIPTS_DIR
+        .get_file("com.carriez.rustdesk.agent.user.plist")
+        .unwrap();
+    let user_agent_plist_body = user_agent_plist.contents_utf8().unwrap();
+
+    match std::process::Command::new("osascript")
+        .arg("-e")
+        .arg(install_script_body)
+        .arg(daemon_plist_body)
+        .arg(root_agent_plist_body)
+        .arg(user_agent_plist_body)
+        .spawn()
+    {
+        Ok(mut proc) => proc.wait().is_ok(),
+        Err(e) => {
+            log::error!("run osascript failed: {}", e);
+            false
+        },
+    }
+}
+
+pub fn launch_or_stop_daemon(launch: bool) {
+    let mut script_filename = "launch_service.scpt";
+    if !launch {
+        script_filename = "stop_service.scpt";
+    }
+
+    let script_file = PRIVILEGES_SCRIPTS_DIR.get_file(script_filename).unwrap();
+    let script_body = script_file.contents_utf8().unwrap();
+
+    std::process::Command::new("osascript")
+        .arg("-e")
+        .arg(script_body)
+        .spawn()
+        .ok();
 }
 
 pub fn get_cursor_pos() -> Option<(i32, i32)> {
@@ -332,4 +408,12 @@ pub fn block_input(_v: bool) {
 
 pub fn is_installed() -> bool {
     true
+}
+
+pub fn start_daemon() {
+    log::info!("{}", crate::username());
+    if let Err(err) = crate::ipc::start("_daemon") {
+        log::error!("Failed to start ipc_daemon: {}", err);
+        std::process::exit(-1);
+    }
 }
