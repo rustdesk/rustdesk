@@ -145,25 +145,19 @@ impl FramedSocket {
 
 // const DEFAULT_MULTICAST: &str = "239.255.42.98";
 
-pub fn bind_multicast(maddr: Option<SocketAddrV4>) -> ResultType<FramedSocket> {
-    // todo: https://github.com/bltavares/multicast-socket
-    // 0.0.0.0 bind to default interface, if there are two interfaces, there will be problem.
+pub fn bind_multicast(
+    maddr: Option<SocketAddrV4>,
+    interface: Ipv4Addr,
+) -> ResultType<FramedSocket> {
     let socket = Socket::new(Domain::ipv4(), Type::dgram(), Some(Protocol::udp()))?;
     socket.set_reuse_address(true)?;
-    // somehow without this, timer.tick() under tokio::select! does not work
-    socket.set_read_timeout(Some(std::time::Duration::from_millis(100)))?;
     if let Some(maddr) = maddr {
         assert!(maddr.ip().is_multicast(), "Must be multcast address");
-        let addr = SocketAddrV4::new(Ipv4Addr::new(0, 0, 0, 0).into(), maddr.port());
-        socket.join_multicast_v4(maddr.ip(), addr.ip())?;
+        let addr = SocketAddrV4::new(interface, maddr.port());
         socket.set_multicast_loop_v4(true)?;
         socket.bind(&socket2::SockAddr::from(addr))?;
     } else {
-        socket.set_multicast_if_v4(&Ipv4Addr::new(0, 0, 0, 0))?;
-        socket.bind(&socket2::SockAddr::from(SocketAddr::new(
-            Ipv4Addr::new(0, 0, 0, 0).into(),
-            0,
-        )))?;
+        socket.bind(&socket2::SockAddr::from(SocketAddrV4::new(interface, 0)))?;
     }
     Ok(FramedSocket::Direct(UdpFramed::new(
         UdpSocket::from_std(socket.into_udp_socket())?,

@@ -43,6 +43,7 @@ uuid = { version = "0.8", features = ["v4"] }
 clap = "2.34"
 rpassword = "5.0"
 base64 = "0.13"
+pnet = "0.27"
 
 [target.'cfg(not(any(target_os = "android")))'.dependencies]
 cpal = { git = "https://github.com/open-trade/cpal" }
