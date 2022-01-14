@@ -12,11 +12,11 @@ use hbb_common::{
         self, select,
         time::{interval, Duration},
     },
-    udp::{self, FramedSocket},
+    udp::FramedSocket,
     AddrMangle, IntoTargetAddr, ResultType, TargetAddr,
 };
 use std::{
-    net::{SocketAddr, SocketAddrV4},
+    net::SocketAddr,
     sync::{
         atomic::{AtomicBool, Ordering},
         Arc, Mutex,
@@ -59,8 +59,8 @@ impl RendezvousMediator {
         tokio::spawn(async move {
             allow_err!(direct_server(server_cloned).await);
         });
-        tokio::spawn(async move {
-            allow_err!(lan_discovery().await);
+        std::thread::spawn(move || {
+            allow_err!(lan_discovery());
         });
         loop {
             Config::reset_online();
@@ -505,9 +505,9 @@ async fn direct_server(server: ServerPtr) -> ResultType<()> {
     }
 }
 
-pub fn get_multicast_addr() -> SocketAddrV4 {
-    let port = (RENDEZVOUS_PORT + 3) as u16;
-    SocketAddrV4::new([239, 255, 42, 98].into(), port)
+#[inline]
+pub fn get_broadcast_port() -> u16 {
+    (RENDEZVOUS_PORT + 3) as _
 }
 
 pub fn get_mac() -> String {
@@ -518,82 +518,51 @@ pub fn get_mac() -> String {
     }
 }
 
-async fn lan_discovery() -> ResultType<()> {
-    let mut jobs = Vec::new();
-    for iface in pnet::datalink::interfaces() {
-        for i in 0..iface.ips.len() {
-            let x = iface.ips[i];
-            if let pnet::ipnetwork::IpNetwork::V4(v) = x {
-                if v.prefix() >= 16 {
-                    jobs.push(tokio::spawn(async move {
-                        allow_err!(lan_discovery_interface(v.ip()).await);
-                    }));
-                }
-            }
-        }
-    }
-    join_all(jobs).await;
-    Ok(())
-}
-
-async fn lan_discovery_interface(interface: std::net::Ipv4Addr) -> ResultType<()> {
-    let mut socket = udp::bind_multicast(Some(get_multicast_addr()), interface)?;
-    log::info!("lan discovery listener started on {:?}", interface);
+fn lan_discovery() -> ResultType<()> {
+    let addr = SocketAddr::from(([0, 0, 0, 0], 3000));
+    let socket = std::net::UdpSocket::bind(addr)?;
+    socket.set_read_timeout(Some(std::time::Duration::from_millis(1000)))?;
+    log::info!("lan discovery listener started");
     loop {
-        select! {
-            Some(Ok((bytes, addr))) = socket.next_timeout(1000) => {
-                if let Ok(msg_in) = Message::parse_from_bytes(&bytes) {
-                    match msg_in.union {
-                        Some(rendezvous_message::Union::peer_discovery(p)) => {
-                            if p.cmd == "ping" {
-                                let mut msg_out = Message::new();
-                                let peer = PeerDiscovery {
-                                    cmd: "pong".to_owned(),
-                                    mac: get_mac(),
-                                    id: Config::get_id(),
-                                    hostname: whoami::hostname(),
-                                    username: crate::platform::get_active_username(),
-                                    platform: whoami::platform().to_string(),
-                                    ..Default::default()
-                                };
-                                msg_out.set_peer_discovery(peer);
-                                socket.send(&msg_out, addr).await?;
-                            }
+        let mut buf = [0; 2048];
+        if let Ok((len, addr)) = socket.recv_from(&mut buf) {
+            if let Ok(msg_in) = Message::parse_from_bytes(&buf[0..len]) {
+                match msg_in.union {
+                    Some(rendezvous_message::Union::peer_discovery(p)) => {
+                        if p.cmd == "ping" {
+                            let mut msg_out = Message::new();
+                            let peer = PeerDiscovery {
+                                cmd: "pong".to_owned(),
+                                mac: get_mac(),
+                                id: Config::get_id(),
+                                hostname: whoami::hostname(),
+                                username: crate::platform::get_active_username(),
+                                platform: whoami::platform().to_string(),
+                                ..Default::default()
+                            };
+                            msg_out.set_peer_discovery(peer);
+                            socket.send_to(&msg_out.write_to_bytes()?, addr).ok();
                         }
-                        _ => {}
                     }
+                    _ => {}
                 }
             }
-            else => {} // avoid select! all branches disabled panic
         }
     }
 }
 
-#[tokio::main(flavor = "current_thread")]
-pub async fn discover() -> ResultType<()> {
-    let maddr = SocketAddr::V4(get_multicast_addr());
-    let mut sockets = Vec::new();
-    for iface in pnet::datalink::interfaces() {
-        iface.ips.iter().for_each(|x| {
-            if let pnet::ipnetwork::IpNetwork::V4(v) = x {
-                if v.prefix() >= 16 {
-                    if let Ok(s) = udp::bind_multicast(None, v.ip()) {
-                        sockets.push(s);
-                    }
-                }
-            }
-        });
-    }
+pub fn discover() -> ResultType<()> {
+    let addr = SocketAddr::from(([0, 0, 0, 0], 0));
+    let socket = std::net::UdpSocket::bind(addr)?;
+    socket.set_broadcast(true)?;
     let mut msg_out = Message::new();
     let peer = PeerDiscovery {
         cmd: "ping".to_owned(),
         ..Default::default()
     };
     msg_out.set_peer_discovery(peer);
-    for i in 0..sockets.len() {
-        let socket = &mut sockets[i];
-        socket.send(&msg_out, maddr).await?;
-    }
+    let maddr = SocketAddr::from(([255, 255, 255, 255], 3000));
+    socket.send_to(&msg_out.write_to_bytes()?, maddr)?;
     log::info!("discover ping sent");
     let mut last_recv_time = Instant::now();
     let mut last_write_time = Instant::now();
@@ -601,22 +570,21 @@ pub async fn discover() -> ResultType<()> {
     // to-do: load saved peers, and update incrementally (then we can see offline)
     let mut peers = Vec::new();
     let mac = get_mac();
+    socket.set_read_timeout(Some(std::time::Duration::from_millis(10)))?;
     loop {
-        for i in 0..sockets.len() {
-            let socket = &mut sockets[i];
-            if let Some(Ok((bytes, _))) = socket.next_timeout(10).await {
-                if let Ok(msg_in) = Message::parse_from_bytes(&bytes) {
-                    match msg_in.union {
-                        Some(rendezvous_message::Union::peer_discovery(p)) => {
-                            last_recv_time = Instant::now();
-                            if p.cmd == "pong" {
-                                if p.mac != mac {
-                                    peers.push((p.id, p.username, p.hostname, p.platform));
-                                }
+        let mut buf = [0; 2048];
+        if let Ok((len, _)) = socket.recv_from(&mut buf) {
+            if let Ok(msg_in) = Message::parse_from_bytes(&buf[0..len]) {
+                match msg_in.union {
+                    Some(rendezvous_message::Union::peer_discovery(p)) => {
+                        last_recv_time = Instant::now();
+                        if p.cmd == "pong" {
+                            if p.mac != mac {
+                                peers.push((p.id, p.username, p.hostname, p.platform));
                             }
                         }
-                        _ => {}
                     }
+                    _ => {}
                 }
             }
         }
