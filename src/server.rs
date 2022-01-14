@@ -23,7 +23,6 @@ use service::{GenericService, Service, ServiceTmpl, Subscriber};
 use std::{
     collections::HashMap,
     net::SocketAddr,
-    path::PathBuf,
     sync::{Arc, Mutex, RwLock, Weak},
     time::Duration,
 };

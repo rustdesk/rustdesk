@@ -4,7 +4,7 @@ use hbb_common::{
     anyhow::bail,
     compress::{compress as compress_func, decompress},
     config::{Config, COMPRESS_LEVEL, RENDEZVOUS_TIMEOUT},
-    log,
+    get_version_number, log,
     message_proto::*,
     protobuf::Message as _,
     protobuf::ProtobufEnum,
@@ -411,14 +411,6 @@ pub fn is_modifier(evt: &KeyEvent) -> bool {
     } else {
         false
     }
-}
-
-pub fn get_version_number(v: &str) -> i64 {
-    let mut n = 0;
-    for x in v.split(".") {
-        n = n * 1000 + x.parse::<i64>().unwrap_or(0);
-    }
-    n
 }
 
 pub fn check_software_update() {

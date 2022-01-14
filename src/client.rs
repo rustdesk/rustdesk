@@ -941,7 +941,7 @@ impl LoginConfigHandler {
         if !pi.version.is_empty() {
             self.support_press = true;
             self.support_refresh = true;
-            self.version = crate::get_version_number(&pi.version);
+            self.version = hbb_common::get_version_number(&pi.version);
         }
         let serde = PeerInfoSerde {
             username,

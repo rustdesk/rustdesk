@@ -361,3 +361,21 @@ div#myid svg#menu {
     position: absolute;
     right: -1em;
 }
+
+div.remote-session svg#menu {
+    position: absolute;
+    right: 0;
+    top: 0;
+}
+
+.install-me .button {
+    height: 2em;
+    line-height: 2em;
+    text-align: center;
+    font-weight: bold;
+    font-size: 1.6em;
+    margin-top: 1em;
+    border-color: white;
+    border: 1px;
+    background: none;
+}

@@ -2,7 +2,7 @@ use crate::server::{check_zombie, new as new_server, ServerPtr};
 use hbb_common::{
     allow_err,
     anyhow::bail,
-    config::{self, Config, RENDEZVOUS_PORT, RENDEZVOUS_TIMEOUT},
+    config::{self, Config, REG_INTERVAL, RENDEZVOUS_PORT, RENDEZVOUS_TIMEOUT},
     futures::future::join_all,
     log,
     protobuf::Message as _,
@@ -31,7 +31,6 @@ lazy_static::lazy_static! {
     static ref SOLVING_PK_MISMATCH: Arc<Mutex<String>> = Default::default();
 }
 static SHOULD_EXIT: AtomicBool = AtomicBool::new(false);
-const REG_INTERVAL: i64 = 12_000;
 
 #[derive(Clone)]
 pub struct RendezvousMediator {

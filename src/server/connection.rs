@@ -904,10 +904,12 @@ async fn start_ipc(
     mut rx_to_cm: mpsc::UnboundedReceiver<ipc::Data>,
     tx_from_cm: mpsc::UnboundedSender<ipc::Data>,
 ) -> ResultType<()> {
-    if crate::platform::is_prelogin() {
-        return Ok(());
+    loop {
+        if !crate::platform::is_prelogin() {
+            break;
+        }
+        sleep(1.).await;
     }
-
     let mut stream = None;
     if let Ok(s) = crate::ipc::connect(1000, "_cm").await {
         stream = Some(s);

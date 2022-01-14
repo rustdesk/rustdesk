@@ -233,7 +233,7 @@ class Header: Reactor.Component {
     event click $(#ctrl-alt-del) {
         handler.ctrl_alt_del();
     }
-    
+
     event click $(#lock-screen) {
         handler.lock_screen();
     }
