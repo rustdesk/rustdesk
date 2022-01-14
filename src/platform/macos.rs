@@ -154,7 +154,7 @@ pub fn is_installed_daemon(prompt: bool) -> bool {
         Err(e) => {
             log::error!("run osascript failed: {}", e);
             false
-        },
+        }
     }
 }
 

@@ -195,5 +195,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Socks5 Proxy", "Socks5 代理"),
         ("Hostname", "主机名"),
         ("Discovered", "已发现"),
+        ("install_daemon","为了能够提供更好的\n远程桌面访问功能，RustDesk\n需要\"安装系统服务\"。")
     ].iter().cloned().collect();
     }

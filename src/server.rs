@@ -23,6 +23,7 @@ use service::{GenericService, Service, ServiceTmpl, Subscriber};
 use std::{
     collections::HashMap,
     net::SocketAddr,
+    path::PathBuf,
     sync::{Arc, Mutex, RwLock, Weak},
     time::Duration,
 };
@@ -276,7 +277,16 @@ pub async fn start_server(is_server: bool, _tray: bool) {
     }
 
     #[cfg(target_os = "macos")]
-    sync_and_watch_config_dir().await;
+    {
+        loop {
+            if crate::platform::macos::is_installed_daemon(false) {
+                break;
+            }
+
+            sleep(1.0).await;
+        }
+        sync_and_watch_config_dir().await;
+    }
 
     if is_server {
         std::thread::spawn(move || {

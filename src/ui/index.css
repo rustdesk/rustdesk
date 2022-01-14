@@ -342,6 +342,7 @@ div.trust-me > div:nth-child(1) {
 }
 
 div.trust-me > div:nth-child(2) {
+    text-align: center;
     font-size: 0.9em;
     margin-bottom: 1em;
 }
