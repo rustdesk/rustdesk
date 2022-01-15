@@ -1020,11 +1020,9 @@ pub fn toggle_blank_screen(v: bool) {
     }
 }
 
-pub fn block_input(v: bool) {
+pub fn block_input(v: bool) -> bool {
     let v = if v { TRUE } else { FALSE };
-    unsafe {
-        BlockInput(v);
-    }
+    unsafe { BlockInput(v) == TRUE }
 }
 
 pub fn add_recent_document(path: &str) {

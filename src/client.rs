@@ -826,7 +826,7 @@ impl LoginConfigHandler {
             msg.lock_after_session_end = BoolOption::Yes.into();
             n += 1;
         }
-        if self.get_toggle_option("privacy_mode") {
+        if self.get_toggle_option("privacy-mode") {
             msg.privacy_mode = BoolOption::Yes.into();
             n += 1;
         }

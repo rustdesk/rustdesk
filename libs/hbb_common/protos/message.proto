@@ -158,7 +158,7 @@ enum ControlKey {
   Divide = 70;
   Equals = 71;
   NumpadEnter = 72;
-  RShift= 73;
+  RShift = 73;
   RControl = 74;
   RAlt = 75;
   CtrlAltDel = 100;
@@ -173,8 +173,7 @@ message KeyEvent {
     uint32 chr = 4;
     uint32 unicode = 5;
     string seq = 6;
-  }
-  repeated ControlKey modifiers = 8;
+  } repeated ControlKey modifiers = 8;
 }
 
 message CursorData {
@@ -348,6 +347,11 @@ message OptionMessage {
   BoolOption disable_clipboard = 8;
 }
 
+message OptionResponse {
+  OptionMessage opt = 1;
+  string error = 2;
+}
+
 message TestDelay {
   int64 time = 1;
   bool from_client = 2;
@@ -358,9 +362,7 @@ message PublicKey {
   bytes symmetric_value = 2;
 }
 
-message SignedId {
-  bytes id = 1;
-}
+message SignedId { bytes id = 1; }
 
 message AudioFormat {
   uint32 sample_rate = 1;
@@ -378,6 +380,7 @@ message Misc {
     AudioFormat audio_format = 8;
     string close_reason = 9;
     bool refresh_video = 10;
+    OptionResponse option_response = 11;
   }
 }
 

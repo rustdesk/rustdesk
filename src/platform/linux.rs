@@ -600,12 +600,13 @@ pub fn lock_screen() {
     });
 }
 
-pub fn toggle_privacy_mode(_v: bool) {
+pub fn toggle_blank_screen(_v: bool) {
     // https://unix.stackexchange.com/questions/17170/disable-keyboard-mouse-input-on-unix-under-x
 }
 
-pub fn block_input(_v: bool) {
+pub fn block_input(_v: bool) -> bool {
     //
+    true
 }
 
 pub fn is_installed() -> bool {

@@ -145,7 +145,7 @@ class Header: Reactor.Component {
                 {keyboard_enabled && (pi.platform == "Linux" || pi.sas_enabled) ? <li #ctrl-alt-del>{translate('Insert')} Ctrl + Alt + Del</li> : ""}
                 <div .separator />
                 {keyboard_enabled ? <li #lock-screen>{translate('Insert Lock')}</li> : ""}
-                {pi.platform == "Windows" ? <li #block-input>Block user input </li> : ""}
+                {false && pi.platform == "Windows" ? <li #block-input>Block user input </li> : ""}
                 {handler.support_refresh() ? <li #refresh>{translate('Refresh')}</li> : ""}
             </menu>
         </popup>;

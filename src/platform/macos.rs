@@ -398,12 +398,13 @@ pub fn start_os_service() {
     }
 }
 
-pub fn toggle_privacy_mode(_v: bool) {
+pub fn toggle_blank_screen(_v: bool) {
     // https://unix.stackexchange.com/questions/17115/disable-keyboard-mouse-temporarily
 }
 
-pub fn block_input(_v: bool) {
+pub fn block_input(_v: bool) -> bool {
     //
+    true
 }
 
 pub fn is_installed() -> bool {
