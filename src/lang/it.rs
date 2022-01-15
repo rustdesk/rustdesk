@@ -79,6 +79,8 @@ lazy_static::lazy_static! {
             ("Finished", "Terminato"),
             ("Custom Image Quality", "Qualità immagine personalizzata"),
             ("Privacy mode", "Modalità privacy"),
+            ("Block user input", "Blocca l'input dell'utente"),
+            ("Unblock user input", "Sbloccare l'input dell'utente"),
             ("Adjust Window", "Adatta la finestra"),
             ("Original", "Originale"),
             ("Shrink", "Restringi"),

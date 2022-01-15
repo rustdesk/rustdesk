@@ -173,7 +173,8 @@ message KeyEvent {
     uint32 chr = 4;
     uint32 unicode = 5;
     string seq = 6;
-  } repeated ControlKey modifiers = 8;
+  };
+  repeated ControlKey modifiers = 8;
 }
 
 message CursorData {

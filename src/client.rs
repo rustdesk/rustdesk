@@ -788,7 +788,9 @@ impl LoginConfigHandler {
             self.config.store(&self.id);
             return None;
         }
-        self.save_config(config);
+        if !name.contains("block-input") {
+            self.save_config(config);
+        }
         let mut misc = Misc::new();
         misc.set_option(option);
         let mut msg_out = Message::new();

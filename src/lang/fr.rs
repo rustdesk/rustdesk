@@ -79,6 +79,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Finished", "Terminé"),
         ("Custom Image Quality", "Définir la qualité d'image"),
         ("Privacy mode", "Mode privé"),
+        ("Block user input", "Bloquer la saisie de l'utilisateur"),
+        ("Unblock user input", "Débloquer l'entrée de l'utilisateur"),
         ("Adjust Window", "Ajuster la fenêtre"),
         ("Original", "Ratio d'origine"),
         ("Shrink", "Rétréci"),
