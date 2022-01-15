@@ -403,7 +403,6 @@ pub fn toggle_blank_screen(_v: bool) {
 }
 
 pub fn block_input(_v: bool) -> bool {
-    //
     true
 }
 

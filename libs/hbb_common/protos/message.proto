@@ -109,7 +109,7 @@ enum ControlKey {
   /// meta key (also known as "windows"; "super"; and "command")
   Meta = 23;
   /// option key on macOS (alt key on Linux and Windows)
-  Option = 24;
+  Option = 24; // deprecated, use Alt instead
   PageDown = 25;
   PageUp = 26;
   Return = 27;
@@ -173,7 +173,7 @@ message KeyEvent {
     uint32 chr = 4;
     uint32 unicode = 5;
     string seq = 6;
-  };
+  }
   repeated ControlKey modifiers = 8;
 }
 
@@ -194,12 +194,12 @@ message CursorPosition {
 message Hash {
   string salt = 1;
   string challenge = 2;
-};
+}
 
 message Clipboard {
   bool compress = 1;
   bytes content = 2;
-};
+}
 
 enum FileType {
   Dir = 1;

@@ -314,7 +314,7 @@ impl Connection {
             }
         }
 
-        conn.tx_input.send(MessageInput::Exit).unwrap();
+        conn.tx_input.send(MessageInput::Exit).ok();
         if let Err(e) = handler_input.join() {
             log::error!("Failed to join input thread, {:?}", e);
         } else {
@@ -347,36 +347,36 @@ impl Connection {
                     MessageInput::BlockOn => {
                         if crate::platform::block_input(true) {
                             block_input_mode = true;
-                            tx_input_res.send(true).unwrap();
+                            tx_input_res.send(true).ok();
                         } else {
-                            tx_input_res.send(false).unwrap();
+                            tx_input_res.send(false).ok();
                         }
                     }
                     MessageInput::BlockOff => {
                         if crate::platform::block_input(false) {
                             block_input_mode = false;
-                            tx_input_res.send(true).unwrap();
+                            tx_input_res.send(true).ok();
                         } else {
-                            tx_input_res.send(false).unwrap();
+                            tx_input_res.send(false).ok();
                         }
                     }
                     MessageInput::PrivacyOn => {
                         if crate::platform::block_input(true) {
                             block_input_mode = true;
-                            tx_input_res.send(true).unwrap();
+                            tx_input_res.send(true).ok();
                         } else {
-                            tx_input_res.send(false).unwrap();
+                            tx_input_res.send(false).ok();
                         }
-                        tx_blank.send(MessageInput::PrivacyOn).unwrap();
+                        tx_blank.send(MessageInput::PrivacyOn).ok();
                     }
                     MessageInput::PrivacyOff => {
                         if crate::platform::block_input(false) {
                             block_input_mode = false;
-                            tx_input_res.send(true).unwrap();
+                            tx_input_res.send(true).ok();
                         } else {
-                            tx_input_res.send(false).unwrap();
+                            tx_input_res.send(false).ok();
                         }
-                        tx_blank.send(MessageInput::PrivacyOff).unwrap();
+                        tx_blank.send(MessageInput::PrivacyOff).ok();
                     }
                     MessageInput::Exit => break,
                 },
@@ -388,7 +388,7 @@ impl Connection {
             }
         }
 
-        tx_blank.send(MessageInput::Exit).unwrap();
+        tx_blank.send(MessageInput::Exit).ok();
         if let Err(_) = handler_blank.join() {
             log::error!("Failed to join blank thread handler");
         } else {
@@ -786,7 +786,7 @@ impl Connection {
                             .send(MessageInput::InputFunc(Box::new(move || {
                                 handle_mouse(&me, conn_id)
                             })))
-                            .unwrap();
+                            .ok();
                     }
                 }
                 Some(message::Union::key_event(mut me)) => {
@@ -805,13 +805,13 @@ impl Connection {
                                     .send(MessageInput::InputFunc(Box::new(move || {
                                         handle_key(&me)
                                     })))
-                                    .unwrap();
+                                    .ok();
                             } else if let Some(key_event::Union::seq(_)) = me.union {
                                 self.tx_input
                                     .send(MessageInput::InputFunc(Box::new(move || {
                                         handle_key(&me)
                                     })))
-                                    .unwrap();
+                                    .ok();
                             } else {
                                 self.tx_input
                                     .send(MessageInput::InputFunc(Box::new(move || {
@@ -820,12 +820,12 @@ impl Connection {
                                         me.down = false;
                                         handle_key(&me);
                                     })))
-                                    .unwrap();
+                                    .ok();
                             }
                         } else {
                             self.tx_input
                                 .send(MessageInput::InputFunc(Box::new(move || handle_key(&me))))
-                                .unwrap();
+                                .ok();
                         }
                     }
                 }
@@ -1005,7 +1005,7 @@ impl Connection {
                 match q {
                     BoolOption::Yes => {
                         self.privacy_mode = true;
-                        self.tx_input.send(MessageInput::PrivacyOn).unwrap();
+                        self.tx_input.send(MessageInput::PrivacyOn).ok();
                         if self.rx_input_res.recv().unwrap() {
                             log::info!("Privacy mode on");
                         } else {
@@ -1016,7 +1016,7 @@ impl Connection {
                     }
                     BoolOption::No => {
                         self.privacy_mode = false;
-                        self.tx_input.send(MessageInput::PrivacyOff).unwrap();
+                        self.tx_input.send(MessageInput::PrivacyOff).ok();
                         if self.rx_input_res.recv().unwrap() {
                             log::info!("Privacy mode off");
                         } else {
@@ -1031,7 +1031,7 @@ impl Connection {
             if let Ok(q) = o.block_input.enum_value() {
                 match q {
                     BoolOption::Yes => {
-                        self.tx_input.send(MessageInput::BlockOn).unwrap();
+                        self.tx_input.send(MessageInput::BlockOn).ok();
                         if self.rx_input_res.recv().unwrap() {
                             log::info!("Block input mode on");
                         } else {
@@ -1041,7 +1041,7 @@ impl Connection {
                         }
                     }
                     BoolOption::No => {
-                        self.tx_input.send(MessageInput::BlockOff).unwrap();
+                        self.tx_input.send(MessageInput::BlockOff).ok();
                         if self.rx_input_res.recv().unwrap() {
                             log::info!("Block input mode off");
                         } else {
