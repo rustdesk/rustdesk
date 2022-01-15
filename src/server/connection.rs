@@ -29,7 +29,8 @@ pub struct ConnInner {
 }
 
 enum MessageInput {
-    InputFunc(Box<dyn Send + FnMut()>),
+    Mouse((MouseEvent, i32)),
+    Key((KeyEvent, bool)),
     BlockOn,
     BlockOff,
     PrivacyOn,
@@ -340,8 +341,18 @@ impl Connection {
         loop {
             match receiver.recv_timeout(std::time::Duration::from_millis(500)) {
                 Ok(v) => match v {
-                    MessageInput::InputFunc(mut f) => {
-                        f();
+                    MessageInput::Mouse((msg, id)) => {
+                        handle_mouse(&msg, id);
+                    }
+                    MessageInput::Key((mut msg, press)) => {
+                        if press {
+                            msg.down = true;
+                        }
+                        handle_key(&msg);
+                        if press {
+                            msg.down = false;
+                            handle_key(&msg);
+                        }
                     }
                     MessageInput::BlockOn => {
                         if crate::platform::block_input(true) {
@@ -653,6 +664,16 @@ impl Connection {
         s.send((Instant::now(), Arc::new(msg_out))).ok();
     }
 
+    #[inline]
+    fn input_mouse(&self, msg: MouseEvent, conn_id: i32) {
+        self.tx_input.send(MessageInput::Mouse((msg, conn_id))).ok();
+    }
+
+    #[inline]
+    fn input_key(&self, msg: KeyEvent, press: bool) {
+        self.tx_input.send(MessageInput::Key((msg, press))).ok();
+    }
+
     async fn on_message(&mut self, msg: Message) -> bool {
         if let Some(message::Union::login_request(lr)) = msg.union {
             if let Some(o) = lr.option.as_ref() {
@@ -771,15 +792,10 @@ impl Connection {
             match msg.union {
                 Some(message::Union::mouse_event(me)) => {
                     if self.keyboard {
-                        let conn_id = self.inner.id();
-                        self.tx_input
-                            .send(MessageInput::InputFunc(Box::new(move || {
-                                handle_mouse(&me, conn_id)
-                            })))
-                            .ok();
+                        self.input_mouse(me, self.inner.id());
                     }
                 }
-                Some(message::Union::key_event(mut me)) => {
+                Some(message::Union::key_event(me)) => {
                     if self.keyboard {
                         // handle all down as press
                         // fix unexpected repeating key on remote linux, seems also fix abnormal alt/shift, which
@@ -790,32 +806,17 @@ impl Connection {
                             me.press
                         };
                         if is_press {
-                            if let Some(key_event::Union::unicode(_)) = me.union {
-                                self.tx_input
-                                    .send(MessageInput::InputFunc(Box::new(move || {
-                                        handle_key(&me)
-                                    })))
-                                    .ok();
-                            } else if let Some(key_event::Union::seq(_)) = me.union {
-                                self.tx_input
-                                    .send(MessageInput::InputFunc(Box::new(move || {
-                                        handle_key(&me)
-                                    })))
-                                    .ok();
-                            } else {
-                                self.tx_input
-                                    .send(MessageInput::InputFunc(Box::new(move || {
-                                        me.down = true;
-                                        handle_key(&me);
-                                        me.down = false;
-                                        handle_key(&me);
-                                    })))
-                                    .ok();
+                            match me.union {
+                                Some(key_event::Union::unicode(_))
+                                | Some(key_event::Union::seq(_)) => {
+                                    self.input_key(me, false);
+                                }
+                                _ => {
+                                    self.input_key(me, true);
+                                }
                             }
                         } else {
-                            self.tx_input
-                                .send(MessageInput::InputFunc(Box::new(move || handle_key(&me))))
-                                .ok();
+                            self.input_key(me, false);
                         }
                     }
                 }
