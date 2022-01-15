@@ -298,16 +298,16 @@ fn get_pid_file(postfix: &str) -> String {
 
 #[cfg(not(windows))]
 async fn check_pid(postfix: &str) {
+    use hbb_common::sysinfo::ProcessExt;
     let pid_file = get_pid_file(postfix);
     if let Ok(mut file) = File::open(&pid_file) {
         let mut content = String::new();
         file.read_to_string(&mut content).ok();
         let pid = content.parse::<i32>().unwrap_or(0);
         if pid > 0 {
-            if let Ok(p) = psutil::process::Process::new(pid as _) {
-                if let Ok(current) = psutil::process::Process::current() {
-                    if current.name().unwrap_or("".to_owned()) == p.name().unwrap_or("".to_owned())
-                    {
+            if let Some(p) = hbb_common::get_process(pid) {
+                if let Some(current) = hbb_common::get_current_process() {
+                    if current.name() == p.name() {
                         // double check with connect
                         if connect(1000, postfix).await.is_ok() {
                             return;

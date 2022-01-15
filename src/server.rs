@@ -275,18 +275,6 @@ pub async fn start_server(is_server: bool, _tray: bool) {
         log::info!("XAUTHORITY={:?}", std::env::var("XAUTHORITY"));
     }
 
-    #[cfg(target_os = "macos")]
-    {
-        loop {
-            if crate::platform::macos::is_installed_daemon(false) {
-                break;
-            }
-
-            sleep(1.0).await;
-        }
-        sync_and_watch_config_dir().await;
-    }
-
     if is_server {
         std::thread::spawn(move || {
             if let Err(err) = crate::ipc::start("") {
@@ -295,6 +283,8 @@ pub async fn start_server(is_server: bool, _tray: bool) {
             }
         });
         input_service::fix_key_down_timeout_loop();
+        #[cfg(target_os = "macos")]
+        tokio::spawn(async { sync_and_watch_config_dir().await });
         crate::RendezvousMediator::start_all().await;
     } else {
         match crate::ipc::connect(1000, "").await {
