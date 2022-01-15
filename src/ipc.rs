@@ -298,15 +298,17 @@ fn get_pid_file(postfix: &str) -> String {
 
 #[cfg(not(windows))]
 async fn check_pid(postfix: &str) {
-    use hbb_common::sysinfo::ProcessExt;
     let pid_file = get_pid_file(postfix);
     if let Ok(mut file) = File::open(&pid_file) {
         let mut content = String::new();
         file.read_to_string(&mut content).ok();
         let pid = content.parse::<i32>().unwrap_or(0);
         if pid > 0 {
-            if let Some(p) = hbb_common::get_process(pid) {
-                if let Some(current) = hbb_common::get_current_process() {
+            use sysinfo::{ProcessExt, System, SystemExt};
+            let mut sys = System::new();
+            sys.refresh_processes();
+            if let Some(p) = sys.process(pid) {
+                if let Some(current) = sys.process(std::process::id() as _) {
                     if current.name() == p.name() {
                         // double check with connect
                         if connect(1000, postfix).await.is_ok() {

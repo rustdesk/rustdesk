@@ -27,13 +27,13 @@ pub use anyhow::{self, bail};
 pub use futures_util;
 pub mod config;
 pub mod fs;
-pub use mac_address;
+pub use rand;
 pub use regex;
 pub use sodiumoxide;
-pub use sysinfo;
 pub use tokio_socks;
 pub use tokio_socks::IntoTargetAddr;
 pub use tokio_socks::TargetAddr;
+pub use mac_address;
 
 #[cfg(feature = "quic")]
 pub type Stream = quic::Connection;
@@ -184,17 +184,6 @@ pub fn get_version_number(v: &str) -> i64 {
         n = n * 1000 + x.parse::<i64>().unwrap_or(0);
     }
     n
-}
-
-pub fn get_process(pid: i32) -> Option<sysinfo::Process> {
-    use sysinfo::{System, SystemExt};
-    let mut sys = System::new();
-    sys.refresh_processes();
-    sys.process(pid).cloned()
-}
-
-pub fn get_current_process() -> Option<sysinfo::Process> {
-    get_process(std::process::id() as _)
 }
 
 #[cfg(test)]
