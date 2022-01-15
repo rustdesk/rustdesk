@@ -1727,6 +1727,9 @@ impl Remote {
                         self.handler.msgbox("error", "Connection Error", &c);
                         return false;
                     }
+                    Some(misc::Union::option_response(resp)) => {
+                        self.handler.msgbox("warn", "Option Error", &resp.error);
+                    }
                     _ => {}
                 },
                 Some(message::Union::test_delay(t)) => {

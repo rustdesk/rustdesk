@@ -1013,19 +1013,16 @@ fn run_cmds(cmds: String, show: bool) -> ResultType<()> {
     Ok(())
 }
 
-pub fn toggle_privacy_mode(v: bool) {
+pub fn toggle_blank_screen(v: bool) {
     let v = if v { TRUE } else { FALSE };
     unsafe {
         blank_screen(v);
-        BlockInput(v);
     }
 }
 
-pub fn block_input(v: bool) {
+pub fn block_input(v: bool) -> bool {
     let v = if v { TRUE } else { FALSE };
-    unsafe {
-        BlockInput(v);
-    }
+    unsafe { BlockInput(v) == TRUE }
 }
 
 pub fn add_recent_document(path: &str) {
