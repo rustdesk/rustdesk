@@ -345,7 +345,7 @@ div.trust-me > div:nth-child(2) {
     margin-bottom: 1em;
 }
 
-div#install-me.link,
+div.install-me > div:nth-child(3),
 div.trust-me > div:nth-child(3) {
     text-align: center;
     font-size: 1.5em;
@@ -372,7 +372,7 @@ div.remote-session svg#menu {
     line-height: 2em;
     text-align: center;
     font-weight: bold;
-    font-size: 1.6em;
+    font-size: 1em;
     margin-top: 1em;
     border-color: white;
     border: 1px;
