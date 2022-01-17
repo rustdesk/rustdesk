@@ -131,7 +131,7 @@ pub fn is_installed_daemon(prompt: bool) -> bool {
         .arg(&get_active_username())
         .spawn()
     {
-        Ok(mut proc) => {
+        Ok(_) => {
             std::process::exit(0);
         }
         Err(e) => {
@@ -157,6 +157,7 @@ pub fn launch(load: bool) {
     std::process::Command::new("osascript")
         .arg("-e")
         .arg(script_body)
+        .arg(&get_active_username())
         .spawn()
         .ok();
 }
