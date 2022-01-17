@@ -52,9 +52,7 @@ div.sessions-tab span {
     display: inline-block;
     padding: 6px 12px;
     cursor: pointer;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    overflow-x: hidden;
+    @ELLIPSIS;
 }
 
 div.sessions-tab svg {
@@ -230,7 +228,6 @@ div.remote-session .platform .username{
     bottom: 38px;
     font-size: 0.8em;
     width: 220px;
-    overflow: hidden;
     text-align: center;
 }
 
@@ -272,7 +269,6 @@ div.remote-session-list .name .username {
     margin-top: 3px;
     font-size: 0.8em;
     color: color(lighter-text);
-    overflow: hidden;
 }
 
 div.remote-session .text {

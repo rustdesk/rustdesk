@@ -1,3 +1,7 @@
+header div {
+  word-wrap: normal;
+}
+
 header #screens {
   background: white;
   border: #A9A9A9 1px solid;

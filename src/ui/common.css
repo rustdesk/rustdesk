@@ -93,14 +93,13 @@ input.outline-focus:focus {
 }
 
 @mixin ELLIPSIS {
-    overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+    overflow-x: hidden;
 }
 
 .ellipsis {
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  @ELLIPSIS;
 }
 
 div.password svg {
