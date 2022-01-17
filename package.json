@@ -9,5 +9,8 @@
   "devDependencies": {
     "typescript": "^4.4.4",
     "vite": "^2.7.2"
+  },
+  "dependencies": {
+    "ts-proto": "^1.101.0"
   }
 }
