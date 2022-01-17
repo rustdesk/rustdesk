@@ -202,6 +202,7 @@ message Clipboard {
 }
 
 enum FileType {
+  UnknownFileType = 0;
   Dir = 1;
   DirLink = 2;
   DirDrive = 3;
@@ -313,13 +314,14 @@ message SwitchDisplay {
   int32 height = 5;
 }
 
-enum Permission {
-  Keyboard = 1;
-  Clipboard = 2;
-  Audio = 3;
-}
-
 message PermissionInfo {
+  enum Permission {
+    Unknown = 0;
+    Keyboard = 1;
+    Clipboard = 2;
+    Audio = 3;
+  }
+
   Permission permission = 1;
   bool enabled = 2;
 }
@@ -331,13 +333,12 @@ enum ImageQuality {
   Best = 4;
 }
 
-enum BoolOption {
-  NotSet = 0;
-  No = 1;
-  Yes = 2;
-}
-
 message OptionMessage {
+  enum BoolOption {
+    NotSet = 0;
+    No = 1;
+    Yes = 2;
+  }
   ImageQuality image_quality = 1;
   BoolOption lock_after_session_end = 2;
   BoolOption show_remote_cursor = 3;

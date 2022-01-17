@@ -7,7 +7,7 @@ use hbb_common::{
     allow_err,
     config::{self, Config, PeerConfig},
     fs, log,
-    message_proto::*,
+    message_proto::{permission_info::Permission, *},
     protobuf::Message as _,
     rendezvous_proto::ConnType,
     sleep,
@@ -1705,6 +1705,7 @@ impl Remote {
                                 self.handler
                                     .call("setPermission", &make_args!("audio", p.enabled));
                             }
+                            _ => {}
                         }
                     }
                     Some(misc::Union::switch_display(s)) => {

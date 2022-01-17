@@ -4,6 +4,7 @@ use hbb_common::{
     config::Config,
     fs,
     futures::{SinkExt, StreamExt},
+    message_proto::{option_message::BoolOption, permission_info::Permission},
     sleep, timeout,
     tokio::{
         net::TcpStream,
