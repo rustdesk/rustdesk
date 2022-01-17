@@ -109,6 +109,8 @@ lazy_static::lazy_static! {
             ("OS Password", "Password del sistema operativo"),
             ("install_tip", "A causa del Controllo Account Utente, RustDesk potrebbe non funzionare correttamente come desktop remoto. Per evitare questo problema, fai click sul tasto qui sotto per installare RustDesk a livello di sistema."),
             ("Click to upgrade", "Fai click per aggiornare"),
+            ("Click to download", "Cliquez per scaricare"),
+            ("Click to update", "Fare clic per aggiornare"),
             ("Configuration Permissions", "Permessi di configurazione"),
             ("Configure", "Configura"),
             ("config_acc", "Per controllare il tuo desktop dall'esterno, devi fornire a RustDesk il permesso \"Accessibilità\"."),

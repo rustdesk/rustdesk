@@ -102,13 +102,6 @@ fn main() {
             }
             return;
         }
-
-        #[cfg(target_os = "macos")]
-        if args[0] == "--daemon" {
-            log::info!("start --daemon");
-            crate::platform::start_daemon();
-            return;
-        }
     }
     ui::start(&mut args[..]);
 }

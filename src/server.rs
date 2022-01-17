@@ -333,7 +333,7 @@ async fn sync_and_watch_config_dir() {
         return;
     }
 
-    match crate::ipc::connect(1000, "_daemon").await {
+    match crate::ipc::connect(1000, "_service").await {
         Ok(mut conn) => {
             match sync_config_to_user(&mut conn).await {
                 Err(e) => log::error!("sync config to user failed:{}", e),
@@ -358,7 +358,7 @@ async fn sync_and_watch_config_dir() {
                         Ok(event) => match event {
                             notify::DebouncedEvent::Write(path) => {
                                 log::info!(
-                                    "config file changed, call ipc_daemon to sync: {}",
+                                    "config file changed, call ipc_service to sync: {}",
                                     path.to_str().unwrap().to_string()
                                 );
 
@@ -377,7 +377,7 @@ async fn sync_and_watch_config_dir() {
             });
         }
         Err(_) => {
-            log::info!("connect ipc_daemon failed, skip config sync");
+            log::info!("connect ipc_service failed, skip config sync");
             return;
         }
     }

@@ -109,6 +109,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("OS Password", "Mot de passe du système d'exploitation"),
         ("install_tip", "Vous utilisez une version désinstallée. En raison des restrictions UAC, en tant que terminal contrôlé, dans certains cas, il ne sera pas en mesure de contrôler la souris et le clavier ou d'enregistrer l'écran. Veuillez cliquer sur le bouton ci-dessous pour installer RustDesk au système pour éviter la question ci-dessus."),
         ("Click to upgrade", "Cliquez pour mettre à niveau"),
+        ("Click to download", "Cliquez pour télécharger"),
+        ("Click to update", "Cliquez pour mettre à jour"),
         ("Configuration Permissions", "Autorisations de configuration"),
         ("Configure", "Configurer"),
         ("config_acc", "Afin de pouvoir contrôler votre bureau à distance, veuillez donner l'autorisation\"accessibilité\" à RustDesk."),

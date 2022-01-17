@@ -16,7 +16,7 @@ use core_graphics::{
     display::{kCGNullWindowID, kCGWindowListOptionOnScreenOnly, CGWindowListCopyWindowInfo},
     window::{kCGWindowName, kCGWindowOwnerPID},
 };
-use hbb_common::{allow_err, bail, log};
+use hbb_common::{bail, log};
 use include_dir::{include_dir, Dir};
 use objc::{class, msg_send, sel, sel_impl};
 use scrap::{libc::c_void, quartz::ffi::*};
@@ -102,55 +102,38 @@ pub fn is_can_screen_recording(prompt: bool) -> bool {
 }
 
 pub fn is_installed_daemon(prompt: bool) -> bool {
+    let daemon = format!("{}_service.plist", crate::get_full_name());
+    let agent = format!("{}_server.plist", crate::get_full_name());
     if !prompt {
-        if !std::path::Path::new("/Library/LaunchDaemons/com.carriez.rustdesk.daemon.plist")
-            .exists()
-        {
+        if !std::path::Path::new(&format!("/Library/LaunchDaemons/{}", daemon)).exists() {
             return false;
         }
-
-        if !std::path::Path::new("/Library/LaunchAgents/com.carriez.rustdesk.agent.root.plist")
-            .exists()
-        {
+        if !std::path::Path::new(&format!("/Library/LaunchAgents/{}", agent)).exists() {
             return false;
         }
-
-        if !std::path::Path::new("/Library/LaunchAgents/com.carriez.rustdesk.agent.user.plist")
-            .exists()
-        {
-            return false;
-        }
-
         return true;
     }
 
     let install_script = PRIVILEGES_SCRIPTS_DIR.get_file("install.scpt").unwrap();
     let install_script_body = install_script.contents_utf8().unwrap();
 
-    let daemon_plist = PRIVILEGES_SCRIPTS_DIR
-        .get_file("com.carriez.rustdesk.daemon.plist")
-        .unwrap();
+    let daemon_plist = PRIVILEGES_SCRIPTS_DIR.get_file(&daemon).unwrap();
     let daemon_plist_body = daemon_plist.contents_utf8().unwrap();
 
-    let root_agent_plist = PRIVILEGES_SCRIPTS_DIR
-        .get_file("com.carriez.rustdesk.agent.root.plist")
-        .unwrap();
-    let root_agent_plist_body = root_agent_plist.contents_utf8().unwrap();
-
-    let user_agent_plist = PRIVILEGES_SCRIPTS_DIR
-        .get_file("com.carriez.rustdesk.agent.user.plist")
-        .unwrap();
-    let user_agent_plist_body = user_agent_plist.contents_utf8().unwrap();
+    let agent_plist = PRIVILEGES_SCRIPTS_DIR.get_file(&agent).unwrap();
+    let agent_plist_body = agent_plist.contents_utf8().unwrap();
 
     match std::process::Command::new("osascript")
         .arg("-e")
         .arg(install_script_body)
         .arg(daemon_plist_body)
-        .arg(root_agent_plist_body)
-        .arg(user_agent_plist_body)
+        .arg(agent_plist_body)
+        .arg(&get_active_username())
         .spawn()
     {
-        Ok(mut proc) => proc.wait().is_ok(),
+        Ok(mut proc) => {
+            std::process::exit(0);
+        }
         Err(e) => {
             log::error!("run osascript failed: {}", e);
             false
@@ -158,10 +141,14 @@ pub fn is_installed_daemon(prompt: bool) -> bool {
     }
 }
 
-pub fn launch_or_stop_daemon(launch: bool) {
-    let mut script_filename = "launch_service.scpt";
-    if !launch {
-        script_filename = "stop_service.scpt";
+pub fn launch(load: bool) {
+    // to-do: do together with win/linux about refactory start/stop service
+    if !is_installed() || !is_installed_daemon(false) {
+        return;
+    }
+    let mut script_filename = "load.scpt";
+    if !load {
+        script_filename = "unload.scpt";
     }
 
     let script_file = PRIVILEGES_SCRIPTS_DIR.get_file(script_filename).unwrap();
@@ -363,39 +350,66 @@ pub fn lock_screen() {
 }
 
 pub fn start_os_service() {
-    let mut server: Option<std::process::Child> = None;
-    let mut uid = "".to_owned();
-    loop {
-        let tmp = get_active_userid();
-        let mut start_new = false;
-        if tmp != uid && !tmp.is_empty() {
-            uid = tmp;
-            log::info!("active uid: {}", uid);
-            if let Some(ps) = server.as_mut() {
-                allow_err!(ps.kill());
-            }
-        }
-        if let Some(ps) = server.as_mut() {
-            match ps.try_wait() {
-                Ok(Some(_)) => {
-                    server = None;
-                    start_new = true;
-                }
-                _ => {}
-            }
-        } else {
-            start_new = true;
-        }
-        if start_new {
-            match crate::run_me(vec!["--server"]) {
-                Ok(ps) => server = Some(ps),
-                Err(err) => {
-                    log::error!("Failed to start server: {}", err);
-                }
-            }
-        }
-        std::thread::sleep(std::time::Duration::from_millis(super::SERVICE_INTERVAL));
+    log::info!("{}", crate::username());
+    if let Err(err) = crate::ipc::start("_service") {
+        log::error!("Failed to start ipc_service: {}", err);
     }
+
+    /* // somehow, below works fine if user logged in, but mouse/keyboard not work under prelogin.
+       // one solution to run --server as agent in prelogin,
+       // and run --server under --service via run_as_user if not in prelogin
+       // so that no multiple --server if multiple logged-in users
+        use std::sync::{
+            atomic::{AtomicBool, Ordering},
+            Arc,
+        };
+        let running = Arc::new(AtomicBool::new(true));
+        let r = running.clone();
+        let mut uid = "".to_owned();
+        let mut server: Option<std::process::Child> = None;
+        if let Err(err) = ctrlc::set_handler(move || {
+            r.store(false, Ordering::SeqCst);
+        }) {
+            println!("Failed to set Ctrl-C handler: {}", err);
+        }
+        while running.load(Ordering::SeqCst) {
+            let tmp = get_active_userid();
+            let mut start_new = false;
+            if tmp != uid && !tmp.is_empty() {
+                uid = tmp;
+                log::info!("active uid: {}", uid);
+                if let Some(ps) = server.as_mut() {
+                    hbb_common::allow_err!(ps.kill());
+                }
+            }
+            if let Some(ps) = server.as_mut() {
+                match ps.try_wait() {
+                    Ok(Some(_)) => {
+                        server = None;
+                        start_new = true;
+                    }
+                    _ => {}
+                }
+            } else {
+                start_new = true;
+            }
+            if start_new {
+                match run_as_user("--server") {
+                    Ok(Some(ps)) => server = Some(ps),
+                    Err(err) => {
+                        log::error!("Failed to start server: {}", err);
+                    }
+                    _ => { /*no hapen*/ }
+                }
+            }
+            std::thread::sleep(std::time::Duration::from_millis(super::SERVICE_INTERVAL));
+        }
+
+        if let Some(ps) = server.take().as_mut() {
+            hbb_common::allow_err!(ps.kill());
+        }
+        log::info!("Exit");
+    */
 }
 
 pub fn toggle_blank_screen(_v: bool) {
@@ -407,13 +421,11 @@ pub fn block_input(_v: bool) -> bool {
 }
 
 pub fn is_installed() -> bool {
-    true
-}
-
-pub fn start_daemon() {
-    log::info!("{}", crate::username());
-    if let Err(err) = crate::ipc::start("_daemon") {
-        log::error!("Failed to start ipc_daemon: {}", err);
-        std::process::exit(-1);
+    if let Ok(p) = std::env::current_exe() {
+        return p.to_str().unwrap_or_default().contains(&format!(
+            "/Applications/{}.app",
+            hbb_common::config::APP_NAME
+        ));
     }
+    false
 }

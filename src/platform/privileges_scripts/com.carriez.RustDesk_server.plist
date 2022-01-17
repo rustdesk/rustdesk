@@ -3,10 +3,11 @@
 <plist version="1.0">
     <dict>
         <key>Label</key>
-        <string>com.carriez.rustdesk.agent.root</string>
+        <string>com.carriez.RustDesk_server</string>
         <key>LimitLoadToSessionType</key>
         <array>
-            <string>LoginWindow</string>
+          <string>LoginWindow</string>
+          <string>Aqua</string>
         </array>
         <key>KeepAlive</key>
         <dict>

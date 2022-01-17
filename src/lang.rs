@@ -23,7 +23,8 @@ pub fn translate_locale(name: String, locale: &str) -> String {
             .unwrap_or_default()
             .to_owned();
     }
-    let m = match lang.to_lowercase().as_str() {
+    let lang = lang.to_lowercase();
+    let m = match lang.as_str() {
         "fr" => fr::T.deref(),
         "cn" => cn::T.deref(),
         "it" => it::T.deref(),
@@ -32,6 +33,11 @@ pub fn translate_locale(name: String, locale: &str) -> String {
     if let Some(v) = m.get(&name as &str) {
         v.to_string()
     } else {
+        if lang != "en" {
+            if let Some(v) = en::T.get(&name as &str) {
+                return v.to_string();
+            }
+        }
         name
     }
 }

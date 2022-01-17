@@ -324,9 +324,11 @@ div.install-me, div.trust-me {
     background: linear-gradient(left,#e242bc,#f4727c);
 }
 
+div.trust-me > div:nth-child(1),
 div.install-me > div:nth-child(1) {
     font-size: 1.2em;
     font-weight: bold;
+    text-align: center;
     margin-bottom: 0.5em;
 }
 
@@ -334,19 +336,16 @@ div.install-me > div:nth-child(2) {
     line-height: 1.4em;
 }
 
-div.trust-me > div:nth-child(1) {
-    font-size: 1.2em;
-    text-align: center;
-    font-weight: bold;
-    margin-bottom: 0.5em;
+#install-me.link {
+    margin-top: 0.5em;
 }
 
 div.trust-me > div:nth-child(2) {
-    text-align: center;
     font-size: 0.9em;
     margin-bottom: 1em;
 }
 
+div#install-me.link,
 div.trust-me > div:nth-child(3) {
     text-align: center;
     font-size: 1.5em;

@@ -445,6 +445,15 @@ async fn _check_software_update() -> hbb_common::ResultType<()> {
     Ok(())
 }
 
+#[cfg(target_os = "macos")]
+pub fn get_full_name() -> String {
+    format!(
+        "{}.{}",
+        hbb_common::config::ORG,
+        hbb_common::config::APP_NAME,
+    )
+}
+
 pub fn is_ip(id: &str) -> bool {
     hbb_common::regex::Regex::new(r"^\d+\.\d+\.\d+\.\d+$")
         .unwrap()

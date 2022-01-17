@@ -25,6 +25,11 @@ body {
     color: color(text);
 }
 
+div {
+    word-wrap: break-word;
+    // word-break: break-all; // this will break english word
+}
+
 button.button {
     height: 2em;
     border-radius: 0.5em;
@@ -257,8 +262,6 @@ div.msgbox div.right-side div {
 
 div.msgbox div.text {
     margin-top: 0.5em;
-    word-wrap: break-word;
-    word-break: break-all;
 }
 
 @media platform != "OSX" {

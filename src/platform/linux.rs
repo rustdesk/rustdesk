@@ -240,7 +240,7 @@ pub fn start_os_service() {
     if let Some(ps) = server.take().as_mut() {
         allow_err!(ps.kill());
     }
-    println!("Exit");
+    log::info!("Exit");
 }
 
 fn get_active_userid() -> String {

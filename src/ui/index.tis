@@ -302,12 +302,12 @@ class App: Reactor.Component
                             <Password />
                         </div>
                     </div>
-                    {handler.is_installed() ? "": <InstallMe />}
-                    {handler.is_installed() && software_update_url ? <UpdateMe /> : ""}
-                    {handler.is_installed() && !software_update_url && handler.is_installed_lower_version() ? <UpgradeMe /> : ""}
+                    {!is_win || handler.is_installed() ? "": <InstallMe />}
+                    {software_update_url ? <UpdateMe /> : ""}
+                    {is_win && handler.is_installed() && !software_update_url && handler.is_installed_lower_version() ? <UpgradeMe /> : ""}
                     {is_can_screen_recording ? "": <CanScreenRecording />}
                     {is_can_screen_recording && !handler.is_process_trusted(false) ? <TrustMe /> : ""}
-                    {is_can_screen_recording && handler.is_process_trusted(false) && !handler.is_installed_daemon(false) ? <InstallDaemon /> : ""}
+                    {is_can_screen_recording && handler.is_process_trusted(false) && handler.is_installed() && !handler.is_installed_daemon(false) ? <InstallDaemon /> : ""}
                     {system_error ? <SystemError /> : ""}
                     {!system_error && handler.is_login_wayland() && !handler.current_is_wayland() ? <FixWayland /> : ""}
                     {!system_error && handler.current_is_wayland() ? <ModifyDefaultLogin /> : ""}
@@ -347,7 +347,7 @@ class InstallMe: Reactor.Component {
         return <div .install-me>
             <span />
             <div>{translate('install_tip')}</div>
-            <div style="text-align: center; margin-top: 1em;"><button #install-me .button>{translate('Install')}</button></div>
+            <div><button #install-me .button>{translate('Install')}</button></div>
         </div>;
     }
 
@@ -404,7 +404,7 @@ class UpgradeMe: Reactor.Component {
         return <div .install-me>
             <div>{translate('Status')}</div>
             <div>{translate('Your installation is lower version.')}</div>
-            <div #install-me .link style="padding-top: 1em">{translate('Click to upgrade')}</div>
+            <div #install-me.link>{translate('Click to upgrade')}</div>
         </div>;
     }
 
@@ -419,7 +419,7 @@ class UpdateMe: Reactor.Component {
         return <div .install-me>
             <div>{translate('Status')}</div>
             <div>There is a newer version of {handler.get_app_name()} ({handler.get_new_version()}) available.</div>
-            <div #install-me .link style="padding-top: 1em">Click to {update_or_download}</div>
+            <div #install-me.link>{translate('Click to ' + update_or_download)}</div>
             <div #download-percent style="display:hidden; padding-top: 1em;" />
         </div>;
     }
@@ -494,16 +494,15 @@ class CanScreenRecording: Reactor.Component {
 
 class InstallDaemon: Reactor.Component {
     function render() {
-        return <div .trust-me>
-            <div>{translate('Configuration Permissions')}</div>
-            <div>{translate('install_daemon')}</div>
-            <div #install-daemon .link>{translate('Configure')}</div>
+        return <div .install-me>
+            <span />
+            <div>{translate('install_daemon_tip')}</div>
+            <div #install-me.link>{translate('Install')}</div>
         </div>;
     }
 
-    event click $(#install-daemon) {
+    event click $(#install-me) {
         handler.is_installed_daemon(true);
-        watch_trust();
     }
 }
 
@@ -543,14 +542,17 @@ class ModifyDefaultLogin: Reactor.Component {
 
 function watch_trust() {
     // not use TrustMe::update, because it is buggy
-    var trusted = handler.is_process_trusted(false) && handler.is_installed_daemon(false);
+    var trusted = handler.is_process_trusted(false);
     var el = $(div.trust-me);
     if (el) {
         el.style.set {
             display: trusted ? "none" : "block",
         };
     }
-    // if (trusted) return;
+    if (trusted) {
+        app.update();
+        return;
+    }
     self.timer(1s, watch_trust);
 }
 

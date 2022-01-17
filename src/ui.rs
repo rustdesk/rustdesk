@@ -366,7 +366,7 @@ impl UI {
 
         #[cfg(target_os = "macos")]
         if &key == "stop-service" {
-            crate::platform::macos::launch_or_stop_daemon(value != "Y");
+            crate::platform::macos::launch(value != "Y");
         }
     }
 

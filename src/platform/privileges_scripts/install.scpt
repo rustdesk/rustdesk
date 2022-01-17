@@ -1,19 +1,19 @@
-on run {daemon_file, root_agent_file, user_agent_file}
+on run {daemon_file, agent_file, user}
 
-	set sh1 to "echo " & quoted form of daemon_file & " > /Library/LaunchDaemons/com.carriez.rustdesk.daemon.plist && chown root:wheel /Library/LaunchDaemons/com.carriez.rustdesk.daemon.plist;"
+	set sh1 to "echo " & quoted form of daemon_file & " > /Library/LaunchDaemons/com.carriez.RustDesk_service.plist && chown root:wheel /Library/LaunchDaemons/com.carriez.RustDesk_service.plist;"
 
-	set sh2 to "echo " & quoted form of root_agent_file & " > /Library/LaunchAgents/com.carriez.rustdesk.agent.root.plist && chown root:wheel /Library/LaunchAgents/com.carriez.rustdesk.agent.root.plist;"
+	set sh2 to "echo " & quoted form of agent_file & " > /Library/LaunchAgents/com.carriez.RustDesk_server.plist && chown root:wheel /Library/LaunchAgents/com.carriez.RustDesk_server.plist;"
 
-	set sh3 to "echo " & quoted form of user_agent_file & " > /Library/LaunchAgents/com.carriez.rustdesk.agent.user.plist && chown root:wheel /Library/LaunchAgents/com.carriez.rustdesk.agent.user.plist;"
+  set sh3 to "cp -rf /Users/" & user & "/Library/Preferences/com.carriez.RustDesk/RustDesk.toml /var/root/Library/Preferences/com.carriez.RustDesk/;"
 
-    set sh4 to "launchctl load -w /Library/LaunchDaemons/com.carriez.rustdesk.daemon.plist;"
+  set sh4 to "cp -rf /Users/" & user & "/Library/Preferences/com.carriez.RustDesk/RustDesk2.toml /var/root/Library/Preferences/com.carriez.RustDesk/;"
 
-    set sh5 to "launchctl load -w /Library/LaunchAgents/com.carriez.rustdesk.agent.root.plist;"
-
-    set sh6 to "launchctl load -w /Library/LaunchAgents/com.carriez.rustdesk.agent.user.plist;"
+  set sh5 to "launchctl unload -w /Library/LaunchAgents/com.carriez.RustDesk_server.plist; launchctl load -w /Library/LaunchDaemons/com.carriez.RustDesk_service.plist;"
+  
+  set sh6 to "pkill -f rustdesk; launchctl unload -w /Library/LaunchAgents/com.carriez.RustDesk_server.plist; launchctl load -w /Library/LaunchAgents/com.carriez.RustDesk_server.plist; open /Applications/RustDesk.app"
 
 	set sh to sh1 & sh2 & sh3 & sh4 & sh5
 
-	do shell script sh with prompt "RustDesk want to install services" with administrator privileges
+	do shell script sh with prompt "RustDesk want to install daemon and agent" with administrator privileges
 	do shell script sh6
 end run
