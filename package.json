@@ -2,8 +2,8 @@
   "name": "web_hbb",
   "version": "1.0.0",
   "scripts": {
-    "dev": "cp node_modules/ogv/dist/* dist/ && vite",
-    "build": "tsc && vite build",
+    "dev": "cp -rf node_modules/ogv/dist/* ogvjs/ && vite",
+    "build": "cp node_modules/ogv/dist/* dist/ogvjs/ && tsc && vite build",
     "preview": "vite preview"
   },
   "devDependencies": {
