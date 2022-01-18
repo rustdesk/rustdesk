@@ -1,5 +1,6 @@
 import * as message from "./message.js";
 import * as rendezvous from "./rendezvous.js";
+import * as sha256 from "fast-sha256";
 
 type Keys = "message" | "open" | "close" | "error";
 
@@ -75,5 +76,11 @@ export default class Websock {
     if (e.data instanceof window.ArrayBuffer) {
       let bytes = new Uint8Array(e.data);
     }
+  }
+
+  hash(datas: [Uint8Array]): Uint8Array {
+    const hasher = new sha256.Hash();
+    datas.forEach((data) => hasher.update(data));
+    return hasher.digest();
   }
 }
