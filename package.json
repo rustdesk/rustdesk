@@ -2,7 +2,7 @@
   "name": "web_hbb",
   "version": "1.0.0",
   "scripts": {
-    "dev": "vite",
+    "dev": "cp node_modules/ogv/dist/* dist/ && vite",
     "build": "tsc && vite build",
     "preview": "vite preview"
   },
@@ -11,6 +11,8 @@
     "vite": "^2.7.2"
   },
   "dependencies": {
+    "libsodium": "^0.7.9",
+    "ogv": "^1.8.6",
     "ts-proto": "^1.101.0"
   }
 }

@@ -1,4 +1,8 @@
-import './style.css'
+import './style.css';
+import { loadVp9, loadOpus } from "./codec";
+
+loadVp9();
+loadOpus();
 
 const app = document.querySelector<HTMLDivElement>('#app')!
 
