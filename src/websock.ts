@@ -18,7 +18,7 @@ export default class Websock {
 
   // Event Handlers
   off(evt: Keys) {
-    this._eventHandlers[evt] = () => {};
+    this._eventHandlers[evt] = () => { };
   }
 
   on(evt: Keys, handler: Function) {
@@ -27,10 +27,10 @@ export default class Websock {
 
   constructor(uri: string, protocols: string) {
     this._eventHandlers = {
-      message: (_: string) => {},
-      open: () => {},
-      close: () => {},
-      error: () => {},
+      message: (_: any) => { },
+      open: () => { },
+      close: () => { },
+      error: () => { },
     };
 
     this._websocket = new WebSocket(uri, protocols);
@@ -68,7 +68,7 @@ export default class Websock {
         this._websocket.close();
       }
 
-      this._websocket.onmessage = () => {};
+      this._websocket.onmessage = () => { };
     }
   }
 
@@ -76,6 +76,7 @@ export default class Websock {
     if (e.data instanceof window.ArrayBuffer) {
       let bytes = new Uint8Array(e.data);
     }
+    this._eventHandlers.message(e.data);
   }
 
   hash(datas: [Uint8Array]): Uint8Array {
