@@ -1,9 +1,5 @@
 import './style.css';
-import { loadVp9, loadOpus } from "./codec";
-import './websock';
-
-loadVp9();
-loadOpus();
+import "./client";
 
 const app = document.querySelector<HTMLDivElement>('#app')!
 

@@ -9,6 +9,7 @@ export default class Websock {
   _eventHandlers: { [key in Keys]: Function };
   _buf: Uint8Array[];
   _status: any;
+  _latency: number;
 
   constructor(uri: string) {
     this._eventHandlers = {
@@ -22,6 +23,11 @@ export default class Websock {
     this._websocket = new WebSocket(uri);
     this._websocket.onmessage = this._recv_message.bind(this);
     this._websocket.binaryType = "arraybuffer";
+    this._latency = new Date().getTime();
+  }
+
+  latency(): number {
+    return this._latency;
   }
 
   sendMessage(data: any) {
@@ -63,6 +69,7 @@ export default class Websock {
         }
       }, timeout);
       this._websocket.onopen = () => {
+        this._latency = new Date().getTime() - this._latency;
         this._status = "open";
         console.debug(">> WebSock.onopen");
         if (this._websocket?.protocol) {
@@ -72,28 +79,26 @@ export default class Websock {
         }
 
         this._eventHandlers.open();
-        console.debug("<< WebSock.onopen");
+        console.info("WebSock.onopen");
         resolve(this);
       };
       this._websocket.onclose = (e) => {
         this._status = e;
-        console.debug(">> WebSock.onclose");
+        console.error("WebSock.onclose: " + e);
         this._eventHandlers.close(e);
-        console.debug("<< WebSock.onclose");
         reject(e);
       };
       this._websocket.onerror = (e) => {
         this._status = e;
-        console.debug(">> WebSock.onerror: " + e);
+        console.error("WebSock.onerror: " + e);
         this._eventHandlers.error(e);
-        console.debug("<< WebSock.onerror: " + e);
         reject(e);
       };
     });
   }
 
   async next(timeout = 12000): Promise<Uint8Array> {
-    let func = (
+    const func = (
       resolve: (value: Uint8Array) => void,
       reject: (reason: any) => void,
       tm0: number
@@ -102,7 +107,7 @@ export default class Websock {
         resolve(this._buf[0]);
         this._buf.splice(0, 1);
       } else {
-        if (this._status != 'open') {
+        if (this._status != "open") {
           reject(this._status);
           return;
         }
@@ -134,7 +139,7 @@ export default class Websock {
 
   _recv_message(e: any) {
     if (e.data instanceof window.ArrayBuffer) {
-      let bytes = new Uint8Array(e.data);
+      const bytes = new Uint8Array(e.data);
       this._buf.push(bytes);
     }
     this._eventHandlers.message(e.data);
@@ -146,13 +151,3 @@ export default class Websock {
     return hasher.digest();
   }
 }
-
-let ws = new Websock("ws://207.148.17.15:21118");
-await ws.open();
-console.log("ws connected");
-// let punchHole = rendezvous.PunchHoleRequest.fromJSON({ id: '' });
-// ws.send_rendezvous(rendezvous.RendezvousMessage.fromJSON({ punchHole }));
-let testNatRequest = rendezvous.TestNatRequest.fromJSON({ serial: 0 });
-ws.sendRendezvous({ testNatRequest });
-let msg = ws.parseRendezvous(await ws.next());
-console.log(msg);
