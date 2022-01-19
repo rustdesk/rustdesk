@@ -116,7 +116,7 @@ class Body: Reactor.Component {
                     <div style={contentStyle || "size: *; margin: * 0;"} #content />
                 </div>
                 <div style="text-align: right;">
-                    <span style="display:inline-block; max-width: 260px; font-size:12px;" #error />
+                    <span style="display:inline-block; max-width: 250px; font-size:12px;" #error />
                     <progress #progress style={"color:" + color + "; display: " + (show_progress ? "inline-block" : "none")} />
                     {hasCancel || hasRetry ? <button .button #cancel .outline>{my_translate(hasRetry ? "OK" : "Cancel")}</button> : ""}
                     {this.hasSkip() ? <button .button #skip .outline>{my_translate('Skip')}</button> : ""}
