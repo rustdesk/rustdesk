@@ -84,3 +84,15 @@ export default class Websock {
     return hasher.digest();
   }
 }
+
+/*
+let ws = new Websock('ws://207.148.17.15:21118');
+await ws.open();
+console.log("ws connected");
+// let punchHole = rendezvous.PunchHoleRequest.fromJSON({ id: '' });
+// ws.send_rendezvous(rendezvous.RendezvousMessage.fromJSON({ punchHole }));
+let testNatRequest = rendezvous.TestNatRequest.fromJSON({ serial: 0 });
+ws.send_rendezvous(rendezvous.RendezvousMessage.fromJSON({ testNatRequest }));
+let msg = await ws.next();
+console.log(msg);
+*/
