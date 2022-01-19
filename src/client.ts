@@ -96,5 +96,5 @@ async function testDelay() {
   console.log(ws.latency());
 }
 
-await testDelay();
-await new Client().connect("124931507");
+testDelay();
+new Client().connect("124931507");
