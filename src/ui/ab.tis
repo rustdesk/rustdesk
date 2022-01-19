@@ -178,6 +178,18 @@ class SessionList: Reactor.Component {
         // https://sciter.com/forums/topic/replacecustomize-context-menu/
         var menu = this.$(menu#remote-context);
         menu.attributes["remote-id"] = id;
+        var conn = this.$(menu #connect);
+        if (conn) {
+          var alias = me.parent.parent.$(#alias);
+          if (alias) {
+            alias = alias.text.replace(' ', '');
+            if (alias != id) {
+              conn.text = translate('Connect') + ' ' + id;
+            } else {
+              conn.text = translate('Connect');
+            }
+          }
+        }
         me.popup(menu);
     }
 
