@@ -18,7 +18,7 @@ use tokio_socks::{tcp::Socks5Stream, IntoTargetAddr, ToProxyAddrs};
 use tokio_util::codec::Framed;
 
 pub trait TcpStreamTrait: AsyncRead + AsyncWrite + Unpin {}
-pub struct DynTcpStream(Box<dyn TcpStreamTrait + Send>);
+pub struct DynTcpStream(Box<dyn TcpStreamTrait + Send + Sync>);
 
 pub struct FramedStream(
     Framed<DynTcpStream, BytesCodec>,
@@ -42,7 +42,7 @@ impl DerefMut for FramedStream {
 }
 
 impl Deref for DynTcpStream {
-    type Target = Box<dyn TcpStreamTrait + Send>;
+    type Target = Box<dyn TcpStreamTrait + Send + Sync>;
 
     fn deref(&self) -> &Self::Target {
         &self.0
@@ -149,7 +149,7 @@ impl FramedStream {
         self.3 = ms;
     }
 
-    pub fn from(stream: impl TcpStreamTrait + Send + 'static, addr: SocketAddr) -> Self {
+    pub fn from(stream: impl TcpStreamTrait + Send + Sync + 'static, addr: SocketAddr) -> Self {
         Self(
             Framed::new(DynTcpStream(Box::new(stream)), BytesCodec::new()),
             addr,
