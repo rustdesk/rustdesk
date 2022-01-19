@@ -1,3 +1,2 @@
-import "./style.css";
-import "./client";
+import "./globals";
 import "./ui";

@@ -3,14 +3,12 @@ import * as message from "./message.js";
 import * as rendezvous from "./rendezvous.js";
 import { loadVp9, loadOpus } from "./codec";
 
-const URI = "ws://207.148.17.15";
-const PORT = 21118;
+const PORT = 21116;
+const HOST = "rs-sg.rustdesk.com";
 const licenceKey = "";
+const SCHEMA = "ws://";
 
-loadVp9();
-loadOpus();
-
-export default class Client {
+export default class Connection {
   _msgs: any[];
   _ws: Websock | undefined;
   _interval: any;
@@ -18,7 +16,7 @@ export default class Client {
 
   constructor() {
     this._msgs = [];
-    this._id = '';
+    this._id = "";
     this._interval = setInterval(() => {
       while (this._msgs.length) {
         this._ws?.sendMessage(this._msgs[0]);
@@ -32,8 +30,8 @@ export default class Client {
     this._ws?.close();
   }
 
-  async connect(id: string) {
-    const ws = new Websock(URI + ":" + PORT);
+  async start(id: string) {
+    const ws = new Websock(getDefaultUri());
     this._ws = ws;
     this._id = id;
     await ws.open();
@@ -65,17 +63,15 @@ export default class Client {
   async connectRelay(rr: rendezvous.RelayResponse) {
     const pk = rr.pk;
     let uri = rr.relayServer;
-    if (uri.indexOf(':') > 0) {
-      const tmp = uri.split(':');
-      const port = parseInt(tmp[1]);
-      uri = tmp[0] + ':' + (port + 2);
+    if (uri) {
+      uri = getrUriFromRs(uri);
     } else {
-      uri += ':' + (PORT + 1);
+      uri = getDefaultUri(true);
     }
     const uuid = rr.uuid;
-    const ws = new Websock('ws://' + uri);
+    const ws = new Websock(uri);
     await ws.open();
-    console.log('Connected to relay server')
+    console.log("Connected to relay server");
     this._ws = ws;
     const requestRelay = rendezvous.RequestRelay.fromJSON({
       licenceKey,
@@ -91,10 +87,23 @@ export default class Client {
 }
 
 async function testDelay() {
-  const ws = new Websock(URI + ":" + PORT);
+  const ws = new Websock(getDefaultUri(false));
   await ws.open();
   console.log(ws.latency());
 }
 
-testDelay();
-new Client().connect("124931507");
+function getDefaultUri(isRelay: Boolean = false): string {
+  const host = localStorage.getItem("host");
+  return SCHEMA + (host || HOST) + ":" + (PORT + (isRelay ? 3 : 2));
+}
+
+function getrUriFromRs(uri: string): string {
+  if (uri.indexOf(":") > 0) {
+    const tmp = uri.split(":");
+    const port = parseInt(tmp[1]);
+    uri = tmp[0] + ":" + (port + 2);
+  } else {
+    uri += ":" + (PORT + 3);
+  }
+  return uri;
+}
