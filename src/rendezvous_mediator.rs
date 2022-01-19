@@ -315,7 +315,6 @@ impl RendezvousMediator {
         if initiate {
             rr.uuid = uuid.clone();
             rr.relay_server = relay_server.clone();
-            rr.uuid = uuid.clone();
             rr.set_id(Config::get_id());
         }
         msg_out.set_relay_response(rr);
