@@ -2,8 +2,8 @@
   "name": "web_hbb",
   "version": "1.0.0",
   "scripts": {
-    "dev": "cp -rf node_modules/ogv/dist/* ogvjs/ && vite",
-    "build": "cp node_modules/ogv/dist/* dist/ogvjs/ && tsc && vite build",
+    "dev": "curl -O https://raw.githubusercontent.com/rgov/js-theora-decoder/main/yuv-canvas-1.2.6.js; vite",
+    "build": "tsc && vite build",
     "preview": "vite preview"
   },
   "devDependencies": {

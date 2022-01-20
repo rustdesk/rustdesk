@@ -1,6 +1,6 @@
 /* eslint-disable */
-import { util, configure, Writer, Reader } from "protobufjs/minimal";
-import * as Long from "long";
+import Long from "long";
+import _m0 from "protobufjs/minimal";
 
 export const protobufPackage = "hbb";
 
@@ -357,7 +357,10 @@ function createBaseRegisterPeer(): RegisterPeer {
 }
 
 export const RegisterPeer = {
-  encode(message: RegisterPeer, writer: Writer = Writer.create()): Writer {
+  encode(
+    message: RegisterPeer,
+    writer: _m0.Writer = _m0.Writer.create()
+  ): _m0.Writer {
     if (message.id !== "") {
       writer.uint32(10).string(message.id);
     }
@@ -367,8 +370,8 @@ export const RegisterPeer = {
     return writer;
   },
 
-  decode(input: Reader | Uint8Array, length?: number): RegisterPeer {
-    const reader = input instanceof Reader ? input : new Reader(input);
+  decode(input: _m0.Reader | Uint8Array, length?: number): RegisterPeer {
+    const reader = input instanceof _m0.Reader ? input : new _m0.Reader(input);
     let end = length === undefined ? reader.len : reader.pos + length;
     const message = createBaseRegisterPeer();
     while (reader.pos < end) {
@@ -419,16 +422,19 @@ function createBaseRegisterPeerResponse(): RegisterPeerResponse {
 export const RegisterPeerResponse = {
   encode(
     message: RegisterPeerResponse,
-    writer: Writer = Writer.create()
-  ): Writer {
+    writer: _m0.Writer = _m0.Writer.create()
+  ): _m0.Writer {
     if (message.requestPk === true) {
       writer.uint32(16).bool(message.requestPk);
     }
     return writer;
   },
 
-  decode(input: Reader | Uint8Array, length?: number): RegisterPeerResponse {
-    const reader = input instanceof Reader ? input : new Reader(input);
+  decode(
+    input: _m0.Reader | Uint8Array,
+    length?: number
+  ): RegisterPeerResponse {
+    const reader = input instanceof _m0.Reader ? input : new _m0.Reader(input);
     let end = length === undefined ? reader.len : reader.pos + length;
     const message = createBaseRegisterPeerResponse();
     while (reader.pos < end) {
@@ -471,7 +477,10 @@ function createBasePunchHoleRequest(): PunchHoleRequest {
 }
 
 export const PunchHoleRequest = {
-  encode(message: PunchHoleRequest, writer: Writer = Writer.create()): Writer {
+  encode(
+    message: PunchHoleRequest,
+    writer: _m0.Writer = _m0.Writer.create()
+  ): _m0.Writer {
     if (message.id !== "") {
       writer.uint32(10).string(message.id);
     }
@@ -487,8 +496,8 @@ export const PunchHoleRequest = {
     return writer;
   },
 
-  decode(input: Reader | Uint8Array, length?: number): PunchHoleRequest {
-    const reader = input instanceof Reader ? input : new Reader(input);
+  decode(input: _m0.Reader | Uint8Array, length?: number): PunchHoleRequest {
+    const reader = input instanceof _m0.Reader ? input : new _m0.Reader(input);
     let end = length === undefined ? reader.len : reader.pos + length;
     const message = createBasePunchHoleRequest();
     while (reader.pos < end) {
@@ -551,7 +560,10 @@ function createBasePunchHole(): PunchHole {
 }
 
 export const PunchHole = {
-  encode(message: PunchHole, writer: Writer = Writer.create()): Writer {
+  encode(
+    message: PunchHole,
+    writer: _m0.Writer = _m0.Writer.create()
+  ): _m0.Writer {
     if (message.socketAddr.length !== 0) {
       writer.uint32(10).bytes(message.socketAddr);
     }
@@ -564,8 +576,8 @@ export const PunchHole = {
     return writer;
   },
 
-  decode(input: Reader | Uint8Array, length?: number): PunchHole {
-    const reader = input instanceof Reader ? input : new Reader(input);
+  decode(input: _m0.Reader | Uint8Array, length?: number): PunchHole {
+    const reader = input instanceof _m0.Reader ? input : new _m0.Reader(input);
     let end = length === undefined ? reader.len : reader.pos + length;
     const message = createBasePunchHole();
     while (reader.pos < end) {
@@ -627,15 +639,18 @@ function createBaseTestNatRequest(): TestNatRequest {
 }
 
 export const TestNatRequest = {
-  encode(message: TestNatRequest, writer: Writer = Writer.create()): Writer {
+  encode(
+    message: TestNatRequest,
+    writer: _m0.Writer = _m0.Writer.create()
+  ): _m0.Writer {
     if (message.serial !== 0) {
       writer.uint32(8).int32(message.serial);
     }
     return writer;
   },
 
-  decode(input: Reader | Uint8Array, length?: number): TestNatRequest {
-    const reader = input instanceof Reader ? input : new Reader(input);
+  decode(input: _m0.Reader | Uint8Array, length?: number): TestNatRequest {
+    const reader = input instanceof _m0.Reader ? input : new _m0.Reader(input);
     let end = length === undefined ? reader.len : reader.pos + length;
     const message = createBaseTestNatRequest();
     while (reader.pos < end) {
@@ -678,7 +693,10 @@ function createBaseTestNatResponse(): TestNatResponse {
 }
 
 export const TestNatResponse = {
-  encode(message: TestNatResponse, writer: Writer = Writer.create()): Writer {
+  encode(
+    message: TestNatResponse,
+    writer: _m0.Writer = _m0.Writer.create()
+  ): _m0.Writer {
     if (message.port !== 0) {
       writer.uint32(8).int32(message.port);
     }
@@ -688,8 +706,8 @@ export const TestNatResponse = {
     return writer;
   },
 
-  decode(input: Reader | Uint8Array, length?: number): TestNatResponse {
-    const reader = input instanceof Reader ? input : new Reader(input);
+  decode(input: _m0.Reader | Uint8Array, length?: number): TestNatResponse {
+    const reader = input instanceof _m0.Reader ? input : new _m0.Reader(input);
     let end = length === undefined ? reader.len : reader.pos + length;
     const message = createBaseTestNatResponse();
     while (reader.pos < end) {
@@ -748,7 +766,10 @@ function createBasePunchHoleSent(): PunchHoleSent {
 }
 
 export const PunchHoleSent = {
-  encode(message: PunchHoleSent, writer: Writer = Writer.create()): Writer {
+  encode(
+    message: PunchHoleSent,
+    writer: _m0.Writer = _m0.Writer.create()
+  ): _m0.Writer {
     if (message.socketAddr.length !== 0) {
       writer.uint32(10).bytes(message.socketAddr);
     }
@@ -767,8 +788,8 @@ export const PunchHoleSent = {
     return writer;
   },
 
-  decode(input: Reader | Uint8Array, length?: number): PunchHoleSent {
-    const reader = input instanceof Reader ? input : new Reader(input);
+  decode(input: _m0.Reader | Uint8Array, length?: number): PunchHoleSent {
+    const reader = input instanceof _m0.Reader ? input : new _m0.Reader(input);
     let end = length === undefined ? reader.len : reader.pos + length;
     const message = createBasePunchHoleSent();
     while (reader.pos < end) {
@@ -842,7 +863,10 @@ function createBaseRegisterPk(): RegisterPk {
 }
 
 export const RegisterPk = {
-  encode(message: RegisterPk, writer: Writer = Writer.create()): Writer {
+  encode(
+    message: RegisterPk,
+    writer: _m0.Writer = _m0.Writer.create()
+  ): _m0.Writer {
     if (message.id !== "") {
       writer.uint32(10).string(message.id);
     }
@@ -858,8 +882,8 @@ export const RegisterPk = {
     return writer;
   },
 
-  decode(input: Reader | Uint8Array, length?: number): RegisterPk {
-    const reader = input instanceof Reader ? input : new Reader(input);
+  decode(input: _m0.Reader | Uint8Array, length?: number): RegisterPk {
+    const reader = input instanceof _m0.Reader ? input : new _m0.Reader(input);
     let end = length === undefined ? reader.len : reader.pos + length;
     const message = createBaseRegisterPk();
     while (reader.pos < end) {
@@ -930,16 +954,16 @@ function createBaseRegisterPkResponse(): RegisterPkResponse {
 export const RegisterPkResponse = {
   encode(
     message: RegisterPkResponse,
-    writer: Writer = Writer.create()
-  ): Writer {
+    writer: _m0.Writer = _m0.Writer.create()
+  ): _m0.Writer {
     if (message.result !== 0) {
       writer.uint32(8).int32(message.result);
     }
     return writer;
   },
 
-  decode(input: Reader | Uint8Array, length?: number): RegisterPkResponse {
-    const reader = input instanceof Reader ? input : new Reader(input);
+  decode(input: _m0.Reader | Uint8Array, length?: number): RegisterPkResponse {
+    const reader = input instanceof _m0.Reader ? input : new _m0.Reader(input);
     let end = length === undefined ? reader.len : reader.pos + length;
     const message = createBaseRegisterPkResponse();
     while (reader.pos < end) {
@@ -993,7 +1017,10 @@ function createBasePunchHoleResponse(): PunchHoleResponse {
 }
 
 export const PunchHoleResponse = {
-  encode(message: PunchHoleResponse, writer: Writer = Writer.create()): Writer {
+  encode(
+    message: PunchHoleResponse,
+    writer: _m0.Writer = _m0.Writer.create()
+  ): _m0.Writer {
     if (message.socketAddr.length !== 0) {
       writer.uint32(10).bytes(message.socketAddr);
     }
@@ -1018,8 +1045,8 @@ export const PunchHoleResponse = {
     return writer;
   },
 
-  decode(input: Reader | Uint8Array, length?: number): PunchHoleResponse {
-    const reader = input instanceof Reader ? input : new Reader(input);
+  decode(input: _m0.Reader | Uint8Array, length?: number): PunchHoleResponse {
+    const reader = input instanceof _m0.Reader ? input : new _m0.Reader(input);
     let end = length === undefined ? reader.len : reader.pos + length;
     const message = createBasePunchHoleResponse();
     while (reader.pos < end) {
@@ -1119,7 +1146,10 @@ function createBaseConfigUpdate(): ConfigUpdate {
 }
 
 export const ConfigUpdate = {
-  encode(message: ConfigUpdate, writer: Writer = Writer.create()): Writer {
+  encode(
+    message: ConfigUpdate,
+    writer: _m0.Writer = _m0.Writer.create()
+  ): _m0.Writer {
     if (message.serial !== 0) {
       writer.uint32(8).int32(message.serial);
     }
@@ -1129,8 +1159,8 @@ export const ConfigUpdate = {
     return writer;
   },
 
-  decode(input: Reader | Uint8Array, length?: number): ConfigUpdate {
-    const reader = input instanceof Reader ? input : new Reader(input);
+  decode(input: _m0.Reader | Uint8Array, length?: number): ConfigUpdate {
+    const reader = input instanceof _m0.Reader ? input : new _m0.Reader(input);
     let end = length === undefined ? reader.len : reader.pos + length;
     const message = createBaseConfigUpdate();
     while (reader.pos < end) {
@@ -1193,7 +1223,10 @@ function createBaseRequestRelay(): RequestRelay {
 }
 
 export const RequestRelay = {
-  encode(message: RequestRelay, writer: Writer = Writer.create()): Writer {
+  encode(
+    message: RequestRelay,
+    writer: _m0.Writer = _m0.Writer.create()
+  ): _m0.Writer {
     if (message.id !== "") {
       writer.uint32(10).string(message.id);
     }
@@ -1218,8 +1251,8 @@ export const RequestRelay = {
     return writer;
   },
 
-  decode(input: Reader | Uint8Array, length?: number): RequestRelay {
-    const reader = input instanceof Reader ? input : new Reader(input);
+  decode(input: _m0.Reader | Uint8Array, length?: number): RequestRelay {
+    const reader = input instanceof _m0.Reader ? input : new _m0.Reader(input);
     let end = length === undefined ? reader.len : reader.pos + length;
     const message = createBaseRequestRelay();
     while (reader.pos < end) {
@@ -1313,7 +1346,10 @@ function createBaseRelayResponse(): RelayResponse {
 }
 
 export const RelayResponse = {
-  encode(message: RelayResponse, writer: Writer = Writer.create()): Writer {
+  encode(
+    message: RelayResponse,
+    writer: _m0.Writer = _m0.Writer.create()
+  ): _m0.Writer {
     if (message.socketAddr.length !== 0) {
       writer.uint32(10).bytes(message.socketAddr);
     }
@@ -1338,8 +1374,8 @@ export const RelayResponse = {
     return writer;
   },
 
-  decode(input: Reader | Uint8Array, length?: number): RelayResponse {
-    const reader = input instanceof Reader ? input : new Reader(input);
+  decode(input: _m0.Reader | Uint8Array, length?: number): RelayResponse {
+    const reader = input instanceof _m0.Reader ? input : new _m0.Reader(input);
     let end = length === undefined ? reader.len : reader.pos + length;
     const message = createBaseRelayResponse();
     while (reader.pos < end) {
@@ -1429,15 +1465,18 @@ function createBaseSoftwareUpdate(): SoftwareUpdate {
 }
 
 export const SoftwareUpdate = {
-  encode(message: SoftwareUpdate, writer: Writer = Writer.create()): Writer {
+  encode(
+    message: SoftwareUpdate,
+    writer: _m0.Writer = _m0.Writer.create()
+  ): _m0.Writer {
     if (message.url !== "") {
       writer.uint32(10).string(message.url);
     }
     return writer;
   },
 
-  decode(input: Reader | Uint8Array, length?: number): SoftwareUpdate {
-    const reader = input instanceof Reader ? input : new Reader(input);
+  decode(input: _m0.Reader | Uint8Array, length?: number): SoftwareUpdate {
+    const reader = input instanceof _m0.Reader ? input : new _m0.Reader(input);
     let end = length === undefined ? reader.len : reader.pos + length;
     const message = createBaseSoftwareUpdate();
     while (reader.pos < end) {
@@ -1480,7 +1519,10 @@ function createBaseFetchLocalAddr(): FetchLocalAddr {
 }
 
 export const FetchLocalAddr = {
-  encode(message: FetchLocalAddr, writer: Writer = Writer.create()): Writer {
+  encode(
+    message: FetchLocalAddr,
+    writer: _m0.Writer = _m0.Writer.create()
+  ): _m0.Writer {
     if (message.socketAddr.length !== 0) {
       writer.uint32(10).bytes(message.socketAddr);
     }
@@ -1490,8 +1532,8 @@ export const FetchLocalAddr = {
     return writer;
   },
 
-  decode(input: Reader | Uint8Array, length?: number): FetchLocalAddr {
-    const reader = input instanceof Reader ? input : new Reader(input);
+  decode(input: _m0.Reader | Uint8Array, length?: number): FetchLocalAddr {
+    const reader = input instanceof _m0.Reader ? input : new _m0.Reader(input);
     let end = length === undefined ? reader.len : reader.pos + length;
     const message = createBaseFetchLocalAddr();
     while (reader.pos < end) {
@@ -1552,7 +1594,10 @@ function createBaseLocalAddr(): LocalAddr {
 }
 
 export const LocalAddr = {
-  encode(message: LocalAddr, writer: Writer = Writer.create()): Writer {
+  encode(
+    message: LocalAddr,
+    writer: _m0.Writer = _m0.Writer.create()
+  ): _m0.Writer {
     if (message.socketAddr.length !== 0) {
       writer.uint32(10).bytes(message.socketAddr);
     }
@@ -1571,8 +1616,8 @@ export const LocalAddr = {
     return writer;
   },
 
-  decode(input: Reader | Uint8Array, length?: number): LocalAddr {
-    const reader = input instanceof Reader ? input : new Reader(input);
+  decode(input: _m0.Reader | Uint8Array, length?: number): LocalAddr {
+    const reader = input instanceof _m0.Reader ? input : new _m0.Reader(input);
     let end = length === undefined ? reader.len : reader.pos + length;
     const message = createBaseLocalAddr();
     while (reader.pos < end) {
@@ -1658,7 +1703,10 @@ function createBasePeerDiscovery(): PeerDiscovery {
 }
 
 export const PeerDiscovery = {
-  encode(message: PeerDiscovery, writer: Writer = Writer.create()): Writer {
+  encode(
+    message: PeerDiscovery,
+    writer: _m0.Writer = _m0.Writer.create()
+  ): _m0.Writer {
     if (message.cmd !== "") {
       writer.uint32(10).string(message.cmd);
     }
@@ -1683,8 +1731,8 @@ export const PeerDiscovery = {
     return writer;
   },
 
-  decode(input: Reader | Uint8Array, length?: number): PeerDiscovery {
-    const reader = input instanceof Reader ? input : new Reader(input);
+  decode(input: _m0.Reader | Uint8Array, length?: number): PeerDiscovery {
+    const reader = input instanceof _m0.Reader ? input : new _m0.Reader(input);
     let end = length === undefined ? reader.len : reader.pos + length;
     const message = createBasePeerDiscovery();
     while (reader.pos < end) {
@@ -1781,7 +1829,10 @@ function createBaseRendezvousMessage(): RendezvousMessage {
 }
 
 export const RendezvousMessage = {
-  encode(message: RendezvousMessage, writer: Writer = Writer.create()): Writer {
+  encode(
+    message: RendezvousMessage,
+    writer: _m0.Writer = _m0.Writer.create()
+  ): _m0.Writer {
     if (message.registerPeer !== undefined) {
       RegisterPeer.encode(
         message.registerPeer,
@@ -1878,8 +1929,8 @@ export const RendezvousMessage = {
     return writer;
   },
 
-  decode(input: Reader | Uint8Array, length?: number): RendezvousMessage {
-    const reader = input instanceof Reader ? input : new Reader(input);
+  decode(input: _m0.Reader | Uint8Array, length?: number): RendezvousMessage {
+    const reader = input instanceof _m0.Reader ? input : new _m0.Reader(input);
     let end = length === undefined ? reader.len : reader.pos + length;
     const message = createBaseRendezvousMessage();
     while (reader.pos < end) {
@@ -2240,11 +2291,9 @@ export type Exact<P, I extends P> = P extends Builtin
         never
       >;
 
-// If you get a compile-error about 'Constructor<Long> and ... have no overlap',
-// add '--ts_proto_opt=esModuleInterop=true' as a flag when calling 'protoc'.
-if (util.Long !== Long) {
-  util.Long = Long as any;
-  configure();
+if (_m0.util.Long !== Long) {
+  _m0.util.Long = Long as any;
+  _m0.configure();
 }
 
 function isSet(value: any): boolean {

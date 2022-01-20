@@ -1,6 +1,6 @@
 /* eslint-disable */
-import { util, configure, Writer, Reader } from "protobufjs/minimal";
-import * as Long from "long";
+import Long from "long";
+import _m0 from "protobufjs/minimal";
 
 export const protobufPackage = "hbb";
 
@@ -983,7 +983,7 @@ function createBaseVP9(): VP9 {
 }
 
 export const VP9 = {
-  encode(message: VP9, writer: Writer = Writer.create()): Writer {
+  encode(message: VP9, writer: _m0.Writer = _m0.Writer.create()): _m0.Writer {
     if (message.data.length !== 0) {
       writer.uint32(10).bytes(message.data);
     }
@@ -996,8 +996,8 @@ export const VP9 = {
     return writer;
   },
 
-  decode(input: Reader | Uint8Array, length?: number): VP9 {
-    const reader = input instanceof Reader ? input : new Reader(input);
+  decode(input: _m0.Reader | Uint8Array, length?: number): VP9 {
+    const reader = input instanceof _m0.Reader ? input : new _m0.Reader(input);
     let end = length === undefined ? reader.len : reader.pos + length;
     const message = createBaseVP9();
     while (reader.pos < end) {
@@ -1055,15 +1055,15 @@ function createBaseVP9s(): VP9s {
 }
 
 export const VP9s = {
-  encode(message: VP9s, writer: Writer = Writer.create()): Writer {
+  encode(message: VP9s, writer: _m0.Writer = _m0.Writer.create()): _m0.Writer {
     for (const v of message.frames) {
       VP9.encode(v!, writer.uint32(10).fork()).ldelim();
     }
     return writer;
   },
 
-  decode(input: Reader | Uint8Array, length?: number): VP9s {
-    const reader = input instanceof Reader ? input : new Reader(input);
+  decode(input: _m0.Reader | Uint8Array, length?: number): VP9s {
+    const reader = input instanceof _m0.Reader ? input : new _m0.Reader(input);
     let end = length === undefined ? reader.len : reader.pos + length;
     const message = createBaseVP9s();
     while (reader.pos < end) {
@@ -1110,15 +1110,15 @@ function createBaseRGB(): RGB {
 }
 
 export const RGB = {
-  encode(message: RGB, writer: Writer = Writer.create()): Writer {
+  encode(message: RGB, writer: _m0.Writer = _m0.Writer.create()): _m0.Writer {
     if (message.compress === true) {
       writer.uint32(8).bool(message.compress);
     }
     return writer;
   },
 
-  decode(input: Reader | Uint8Array, length?: number): RGB {
-    const reader = input instanceof Reader ? input : new Reader(input);
+  decode(input: _m0.Reader | Uint8Array, length?: number): RGB {
+    const reader = input instanceof _m0.Reader ? input : new _m0.Reader(input);
     let end = length === undefined ? reader.len : reader.pos + length;
     const message = createBaseRGB();
     while (reader.pos < end) {
@@ -1159,7 +1159,7 @@ function createBaseYUV(): YUV {
 }
 
 export const YUV = {
-  encode(message: YUV, writer: Writer = Writer.create()): Writer {
+  encode(message: YUV, writer: _m0.Writer = _m0.Writer.create()): _m0.Writer {
     if (message.compress === true) {
       writer.uint32(8).bool(message.compress);
     }
@@ -1169,8 +1169,8 @@ export const YUV = {
     return writer;
   },
 
-  decode(input: Reader | Uint8Array, length?: number): YUV {
-    const reader = input instanceof Reader ? input : new Reader(input);
+  decode(input: _m0.Reader | Uint8Array, length?: number): YUV {
+    const reader = input instanceof _m0.Reader ? input : new _m0.Reader(input);
     let end = length === undefined ? reader.len : reader.pos + length;
     const message = createBaseYUV();
     while (reader.pos < end) {
@@ -1217,7 +1217,10 @@ function createBaseVideoFrame(): VideoFrame {
 }
 
 export const VideoFrame = {
-  encode(message: VideoFrame, writer: Writer = Writer.create()): Writer {
+  encode(
+    message: VideoFrame,
+    writer: _m0.Writer = _m0.Writer.create()
+  ): _m0.Writer {
     if (message.vp9s !== undefined) {
       VP9s.encode(message.vp9s, writer.uint32(50).fork()).ldelim();
     }
@@ -1230,8 +1233,8 @@ export const VideoFrame = {
     return writer;
   },
 
-  decode(input: Reader | Uint8Array, length?: number): VideoFrame {
-    const reader = input instanceof Reader ? input : new Reader(input);
+  decode(input: _m0.Reader | Uint8Array, length?: number): VideoFrame {
+    const reader = input instanceof _m0.Reader ? input : new _m0.Reader(input);
     let end = length === undefined ? reader.len : reader.pos + length;
     const message = createBaseVideoFrame();
     while (reader.pos < end) {
@@ -1298,7 +1301,10 @@ function createBaseDisplayInfo(): DisplayInfo {
 }
 
 export const DisplayInfo = {
-  encode(message: DisplayInfo, writer: Writer = Writer.create()): Writer {
+  encode(
+    message: DisplayInfo,
+    writer: _m0.Writer = _m0.Writer.create()
+  ): _m0.Writer {
     if (message.x !== 0) {
       writer.uint32(8).sint32(message.x);
     }
@@ -1320,8 +1326,8 @@ export const DisplayInfo = {
     return writer;
   },
 
-  decode(input: Reader | Uint8Array, length?: number): DisplayInfo {
-    const reader = input instanceof Reader ? input : new Reader(input);
+  decode(input: _m0.Reader | Uint8Array, length?: number): DisplayInfo {
+    const reader = input instanceof _m0.Reader ? input : new _m0.Reader(input);
     let end = length === undefined ? reader.len : reader.pos + length;
     const message = createBaseDisplayInfo();
     while (reader.pos < end) {
@@ -1394,7 +1400,10 @@ function createBasePortForward(): PortForward {
 }
 
 export const PortForward = {
-  encode(message: PortForward, writer: Writer = Writer.create()): Writer {
+  encode(
+    message: PortForward,
+    writer: _m0.Writer = _m0.Writer.create()
+  ): _m0.Writer {
     if (message.host !== "") {
       writer.uint32(10).string(message.host);
     }
@@ -1404,8 +1413,8 @@ export const PortForward = {
     return writer;
   },
 
-  decode(input: Reader | Uint8Array, length?: number): PortForward {
-    const reader = input instanceof Reader ? input : new Reader(input);
+  decode(input: _m0.Reader | Uint8Array, length?: number): PortForward {
+    const reader = input instanceof _m0.Reader ? input : new _m0.Reader(input);
     let end = length === undefined ? reader.len : reader.pos + length;
     const message = createBasePortForward();
     while (reader.pos < end) {
@@ -1454,7 +1463,10 @@ function createBaseFileTransfer(): FileTransfer {
 }
 
 export const FileTransfer = {
-  encode(message: FileTransfer, writer: Writer = Writer.create()): Writer {
+  encode(
+    message: FileTransfer,
+    writer: _m0.Writer = _m0.Writer.create()
+  ): _m0.Writer {
     if (message.dir !== "") {
       writer.uint32(10).string(message.dir);
     }
@@ -1464,8 +1476,8 @@ export const FileTransfer = {
     return writer;
   },
 
-  decode(input: Reader | Uint8Array, length?: number): FileTransfer {
-    const reader = input instanceof Reader ? input : new Reader(input);
+  decode(input: _m0.Reader | Uint8Array, length?: number): FileTransfer {
+    const reader = input instanceof _m0.Reader ? input : new _m0.Reader(input);
     let end = length === undefined ? reader.len : reader.pos + length;
     const message = createBaseFileTransfer();
     while (reader.pos < end) {
@@ -1522,7 +1534,10 @@ function createBaseLoginRequest(): LoginRequest {
 }
 
 export const LoginRequest = {
-  encode(message: LoginRequest, writer: Writer = Writer.create()): Writer {
+  encode(
+    message: LoginRequest,
+    writer: _m0.Writer = _m0.Writer.create()
+  ): _m0.Writer {
     if (message.username !== "") {
       writer.uint32(10).string(message.username);
     }
@@ -1553,8 +1568,8 @@ export const LoginRequest = {
     return writer;
   },
 
-  decode(input: Reader | Uint8Array, length?: number): LoginRequest {
-    const reader = input instanceof Reader ? input : new Reader(input);
+  decode(input: _m0.Reader | Uint8Array, length?: number): LoginRequest {
+    const reader = input instanceof _m0.Reader ? input : new _m0.Reader(input);
     let end = length === undefined ? reader.len : reader.pos + length;
     const message = createBaseLoginRequest();
     while (reader.pos < end) {
@@ -1662,15 +1677,18 @@ function createBaseChatMessage(): ChatMessage {
 }
 
 export const ChatMessage = {
-  encode(message: ChatMessage, writer: Writer = Writer.create()): Writer {
+  encode(
+    message: ChatMessage,
+    writer: _m0.Writer = _m0.Writer.create()
+  ): _m0.Writer {
     if (message.text !== "") {
       writer.uint32(10).string(message.text);
     }
     return writer;
   },
 
-  decode(input: Reader | Uint8Array, length?: number): ChatMessage {
-    const reader = input instanceof Reader ? input : new Reader(input);
+  decode(input: _m0.Reader | Uint8Array, length?: number): ChatMessage {
+    const reader = input instanceof _m0.Reader ? input : new _m0.Reader(input);
     let end = length === undefined ? reader.len : reader.pos + length;
     const message = createBaseChatMessage();
     while (reader.pos < end) {
@@ -1721,7 +1739,10 @@ function createBasePeerInfo(): PeerInfo {
 }
 
 export const PeerInfo = {
-  encode(message: PeerInfo, writer: Writer = Writer.create()): Writer {
+  encode(
+    message: PeerInfo,
+    writer: _m0.Writer = _m0.Writer.create()
+  ): _m0.Writer {
     if (message.username !== "") {
       writer.uint32(10).string(message.username);
     }
@@ -1746,8 +1767,8 @@ export const PeerInfo = {
     return writer;
   },
 
-  decode(input: Reader | Uint8Array, length?: number): PeerInfo {
-    const reader = input instanceof Reader ? input : new Reader(input);
+  decode(input: _m0.Reader | Uint8Array, length?: number): PeerInfo {
+    const reader = input instanceof _m0.Reader ? input : new _m0.Reader(input);
     let end = length === undefined ? reader.len : reader.pos + length;
     const message = createBasePeerInfo();
     while (reader.pos < end) {
@@ -1836,7 +1857,10 @@ function createBaseLoginResponse(): LoginResponse {
 }
 
 export const LoginResponse = {
-  encode(message: LoginResponse, writer: Writer = Writer.create()): Writer {
+  encode(
+    message: LoginResponse,
+    writer: _m0.Writer = _m0.Writer.create()
+  ): _m0.Writer {
     if (message.error !== undefined) {
       writer.uint32(10).string(message.error);
     }
@@ -1846,8 +1870,8 @@ export const LoginResponse = {
     return writer;
   },
 
-  decode(input: Reader | Uint8Array, length?: number): LoginResponse {
-    const reader = input instanceof Reader ? input : new Reader(input);
+  decode(input: _m0.Reader | Uint8Array, length?: number): LoginResponse {
+    const reader = input instanceof _m0.Reader ? input : new _m0.Reader(input);
     let end = length === undefined ? reader.len : reader.pos + length;
     const message = createBaseLoginResponse();
     while (reader.pos < end) {
@@ -1904,7 +1928,10 @@ function createBaseMouseEvent(): MouseEvent {
 }
 
 export const MouseEvent = {
-  encode(message: MouseEvent, writer: Writer = Writer.create()): Writer {
+  encode(
+    message: MouseEvent,
+    writer: _m0.Writer = _m0.Writer.create()
+  ): _m0.Writer {
     if (message.mask !== 0) {
       writer.uint32(8).int32(message.mask);
     }
@@ -1922,8 +1949,8 @@ export const MouseEvent = {
     return writer;
   },
 
-  decode(input: Reader | Uint8Array, length?: number): MouseEvent {
-    const reader = input instanceof Reader ? input : new Reader(input);
+  decode(input: _m0.Reader | Uint8Array, length?: number): MouseEvent {
+    const reader = input instanceof _m0.Reader ? input : new _m0.Reader(input);
     let end = length === undefined ? reader.len : reader.pos + length;
     const message = createBaseMouseEvent();
     while (reader.pos < end) {
@@ -2005,7 +2032,10 @@ function createBaseKeyEvent(): KeyEvent {
 }
 
 export const KeyEvent = {
-  encode(message: KeyEvent, writer: Writer = Writer.create()): Writer {
+  encode(
+    message: KeyEvent,
+    writer: _m0.Writer = _m0.Writer.create()
+  ): _m0.Writer {
     if (message.down === true) {
       writer.uint32(8).bool(message.down);
     }
@@ -2032,8 +2062,8 @@ export const KeyEvent = {
     return writer;
   },
 
-  decode(input: Reader | Uint8Array, length?: number): KeyEvent {
-    const reader = input instanceof Reader ? input : new Reader(input);
+  decode(input: _m0.Reader | Uint8Array, length?: number): KeyEvent {
+    const reader = input instanceof _m0.Reader ? input : new _m0.Reader(input);
     let end = length === undefined ? reader.len : reader.pos + length;
     const message = createBaseKeyEvent();
     while (reader.pos < end) {
@@ -2137,7 +2167,10 @@ function createBaseCursorData(): CursorData {
 }
 
 export const CursorData = {
-  encode(message: CursorData, writer: Writer = Writer.create()): Writer {
+  encode(
+    message: CursorData,
+    writer: _m0.Writer = _m0.Writer.create()
+  ): _m0.Writer {
     if (message.id !== 0) {
       writer.uint32(8).uint64(message.id);
     }
@@ -2159,8 +2192,8 @@ export const CursorData = {
     return writer;
   },
 
-  decode(input: Reader | Uint8Array, length?: number): CursorData {
-    const reader = input instanceof Reader ? input : new Reader(input);
+  decode(input: _m0.Reader | Uint8Array, length?: number): CursorData {
+    const reader = input instanceof _m0.Reader ? input : new _m0.Reader(input);
     let end = length === undefined ? reader.len : reader.pos + length;
     const message = createBaseCursorData();
     while (reader.pos < end) {
@@ -2238,7 +2271,10 @@ function createBaseCursorPosition(): CursorPosition {
 }
 
 export const CursorPosition = {
-  encode(message: CursorPosition, writer: Writer = Writer.create()): Writer {
+  encode(
+    message: CursorPosition,
+    writer: _m0.Writer = _m0.Writer.create()
+  ): _m0.Writer {
     if (message.x !== 0) {
       writer.uint32(8).sint32(message.x);
     }
@@ -2248,8 +2284,8 @@ export const CursorPosition = {
     return writer;
   },
 
-  decode(input: Reader | Uint8Array, length?: number): CursorPosition {
-    const reader = input instanceof Reader ? input : new Reader(input);
+  decode(input: _m0.Reader | Uint8Array, length?: number): CursorPosition {
+    const reader = input instanceof _m0.Reader ? input : new _m0.Reader(input);
     let end = length === undefined ? reader.len : reader.pos + length;
     const message = createBaseCursorPosition();
     while (reader.pos < end) {
@@ -2298,7 +2334,7 @@ function createBaseHash(): Hash {
 }
 
 export const Hash = {
-  encode(message: Hash, writer: Writer = Writer.create()): Writer {
+  encode(message: Hash, writer: _m0.Writer = _m0.Writer.create()): _m0.Writer {
     if (message.salt !== "") {
       writer.uint32(10).string(message.salt);
     }
@@ -2308,8 +2344,8 @@ export const Hash = {
     return writer;
   },
 
-  decode(input: Reader | Uint8Array, length?: number): Hash {
-    const reader = input instanceof Reader ? input : new Reader(input);
+  decode(input: _m0.Reader | Uint8Array, length?: number): Hash {
+    const reader = input instanceof _m0.Reader ? input : new _m0.Reader(input);
     let end = length === undefined ? reader.len : reader.pos + length;
     const message = createBaseHash();
     while (reader.pos < end) {
@@ -2356,7 +2392,10 @@ function createBaseClipboard(): Clipboard {
 }
 
 export const Clipboard = {
-  encode(message: Clipboard, writer: Writer = Writer.create()): Writer {
+  encode(
+    message: Clipboard,
+    writer: _m0.Writer = _m0.Writer.create()
+  ): _m0.Writer {
     if (message.compress === true) {
       writer.uint32(8).bool(message.compress);
     }
@@ -2366,8 +2405,8 @@ export const Clipboard = {
     return writer;
   },
 
-  decode(input: Reader | Uint8Array, length?: number): Clipboard {
-    const reader = input instanceof Reader ? input : new Reader(input);
+  decode(input: _m0.Reader | Uint8Array, length?: number): Clipboard {
+    const reader = input instanceof _m0.Reader ? input : new _m0.Reader(input);
     let end = length === undefined ? reader.len : reader.pos + length;
     const message = createBaseClipboard();
     while (reader.pos < end) {
@@ -2421,7 +2460,10 @@ function createBaseFileEntry(): FileEntry {
 }
 
 export const FileEntry = {
-  encode(message: FileEntry, writer: Writer = Writer.create()): Writer {
+  encode(
+    message: FileEntry,
+    writer: _m0.Writer = _m0.Writer.create()
+  ): _m0.Writer {
     if (message.entryType !== 0) {
       writer.uint32(8).int32(message.entryType);
     }
@@ -2440,8 +2482,8 @@ export const FileEntry = {
     return writer;
   },
 
-  decode(input: Reader | Uint8Array, length?: number): FileEntry {
-    const reader = input instanceof Reader ? input : new Reader(input);
+  decode(input: _m0.Reader | Uint8Array, length?: number): FileEntry {
+    const reader = input instanceof _m0.Reader ? input : new _m0.Reader(input);
     let end = length === undefined ? reader.len : reader.pos + length;
     const message = createBaseFileEntry();
     while (reader.pos < end) {
@@ -2514,7 +2556,10 @@ function createBaseFileDirectory(): FileDirectory {
 }
 
 export const FileDirectory = {
-  encode(message: FileDirectory, writer: Writer = Writer.create()): Writer {
+  encode(
+    message: FileDirectory,
+    writer: _m0.Writer = _m0.Writer.create()
+  ): _m0.Writer {
     if (message.id !== 0) {
       writer.uint32(8).int32(message.id);
     }
@@ -2527,8 +2572,8 @@ export const FileDirectory = {
     return writer;
   },
 
-  decode(input: Reader | Uint8Array, length?: number): FileDirectory {
-    const reader = input instanceof Reader ? input : new Reader(input);
+  decode(input: _m0.Reader | Uint8Array, length?: number): FileDirectory {
+    const reader = input instanceof _m0.Reader ? input : new _m0.Reader(input);
     let end = length === undefined ? reader.len : reader.pos + length;
     const message = createBaseFileDirectory();
     while (reader.pos < end) {
@@ -2592,7 +2637,10 @@ function createBaseReadDir(): ReadDir {
 }
 
 export const ReadDir = {
-  encode(message: ReadDir, writer: Writer = Writer.create()): Writer {
+  encode(
+    message: ReadDir,
+    writer: _m0.Writer = _m0.Writer.create()
+  ): _m0.Writer {
     if (message.path !== "") {
       writer.uint32(10).string(message.path);
     }
@@ -2602,8 +2650,8 @@ export const ReadDir = {
     return writer;
   },
 
-  decode(input: Reader | Uint8Array, length?: number): ReadDir {
-    const reader = input instanceof Reader ? input : new Reader(input);
+  decode(input: _m0.Reader | Uint8Array, length?: number): ReadDir {
+    const reader = input instanceof _m0.Reader ? input : new _m0.Reader(input);
     let end = length === undefined ? reader.len : reader.pos + length;
     const message = createBaseReadDir();
     while (reader.pos < end) {
@@ -2653,7 +2701,10 @@ function createBaseReadAllFiles(): ReadAllFiles {
 }
 
 export const ReadAllFiles = {
-  encode(message: ReadAllFiles, writer: Writer = Writer.create()): Writer {
+  encode(
+    message: ReadAllFiles,
+    writer: _m0.Writer = _m0.Writer.create()
+  ): _m0.Writer {
     if (message.id !== 0) {
       writer.uint32(8).int32(message.id);
     }
@@ -2666,8 +2717,8 @@ export const ReadAllFiles = {
     return writer;
   },
 
-  decode(input: Reader | Uint8Array, length?: number): ReadAllFiles {
-    const reader = input instanceof Reader ? input : new Reader(input);
+  decode(input: _m0.Reader | Uint8Array, length?: number): ReadAllFiles {
+    const reader = input instanceof _m0.Reader ? input : new _m0.Reader(input);
     let end = length === undefined ? reader.len : reader.pos + length;
     const message = createBaseReadAllFiles();
     while (reader.pos < end) {
@@ -2734,7 +2785,10 @@ function createBaseFileAction(): FileAction {
 }
 
 export const FileAction = {
-  encode(message: FileAction, writer: Writer = Writer.create()): Writer {
+  encode(
+    message: FileAction,
+    writer: _m0.Writer = _m0.Writer.create()
+  ): _m0.Writer {
     if (message.readDir !== undefined) {
       ReadDir.encode(message.readDir, writer.uint32(10).fork()).ldelim();
     }
@@ -2777,8 +2831,8 @@ export const FileAction = {
     return writer;
   },
 
-  decode(input: Reader | Uint8Array, length?: number): FileAction {
-    const reader = input instanceof Reader ? input : new Reader(input);
+  decode(input: _m0.Reader | Uint8Array, length?: number): FileAction {
+    const reader = input instanceof _m0.Reader ? input : new _m0.Reader(input);
     let end = length === undefined ? reader.len : reader.pos + length;
     const message = createBaseFileAction();
     while (reader.pos < end) {
@@ -2935,16 +2989,16 @@ function createBaseFileTransferCancel(): FileTransferCancel {
 export const FileTransferCancel = {
   encode(
     message: FileTransferCancel,
-    writer: Writer = Writer.create()
-  ): Writer {
+    writer: _m0.Writer = _m0.Writer.create()
+  ): _m0.Writer {
     if (message.id !== 0) {
       writer.uint32(8).int32(message.id);
     }
     return writer;
   },
 
-  decode(input: Reader | Uint8Array, length?: number): FileTransferCancel {
-    const reader = input instanceof Reader ? input : new Reader(input);
+  decode(input: _m0.Reader | Uint8Array, length?: number): FileTransferCancel {
+    const reader = input instanceof _m0.Reader ? input : new _m0.Reader(input);
     let end = length === undefined ? reader.len : reader.pos + length;
     const message = createBaseFileTransferCancel();
     while (reader.pos < end) {
@@ -2992,7 +3046,10 @@ function createBaseFileResponse(): FileResponse {
 }
 
 export const FileResponse = {
-  encode(message: FileResponse, writer: Writer = Writer.create()): Writer {
+  encode(
+    message: FileResponse,
+    writer: _m0.Writer = _m0.Writer.create()
+  ): _m0.Writer {
     if (message.dir !== undefined) {
       FileDirectory.encode(message.dir, writer.uint32(10).fork()).ldelim();
     }
@@ -3014,8 +3071,8 @@ export const FileResponse = {
     return writer;
   },
 
-  decode(input: Reader | Uint8Array, length?: number): FileResponse {
-    const reader = input instanceof Reader ? input : new Reader(input);
+  decode(input: _m0.Reader | Uint8Array, length?: number): FileResponse {
+    const reader = input instanceof _m0.Reader ? input : new _m0.Reader(input);
     let end = length === undefined ? reader.len : reader.pos + length;
     const message = createBaseFileResponse();
     while (reader.pos < end) {
@@ -3104,7 +3161,10 @@ function createBaseFileTransferBlock(): FileTransferBlock {
 }
 
 export const FileTransferBlock = {
-  encode(message: FileTransferBlock, writer: Writer = Writer.create()): Writer {
+  encode(
+    message: FileTransferBlock,
+    writer: _m0.Writer = _m0.Writer.create()
+  ): _m0.Writer {
     if (message.id !== 0) {
       writer.uint32(8).int32(message.id);
     }
@@ -3120,8 +3180,8 @@ export const FileTransferBlock = {
     return writer;
   },
 
-  decode(input: Reader | Uint8Array, length?: number): FileTransferBlock {
-    const reader = input instanceof Reader ? input : new Reader(input);
+  decode(input: _m0.Reader | Uint8Array, length?: number): FileTransferBlock {
+    const reader = input instanceof _m0.Reader ? input : new _m0.Reader(input);
     let end = length === undefined ? reader.len : reader.pos + length;
     const message = createBaseFileTransferBlock();
     while (reader.pos < end) {
@@ -3188,7 +3248,10 @@ function createBaseFileTransferError(): FileTransferError {
 }
 
 export const FileTransferError = {
-  encode(message: FileTransferError, writer: Writer = Writer.create()): Writer {
+  encode(
+    message: FileTransferError,
+    writer: _m0.Writer = _m0.Writer.create()
+  ): _m0.Writer {
     if (message.id !== 0) {
       writer.uint32(8).int32(message.id);
     }
@@ -3201,8 +3264,8 @@ export const FileTransferError = {
     return writer;
   },
 
-  decode(input: Reader | Uint8Array, length?: number): FileTransferError {
-    const reader = input instanceof Reader ? input : new Reader(input);
+  decode(input: _m0.Reader | Uint8Array, length?: number): FileTransferError {
+    const reader = input instanceof _m0.Reader ? input : new _m0.Reader(input);
     let end = length === undefined ? reader.len : reader.pos + length;
     const message = createBaseFileTransferError();
     while (reader.pos < end) {
@@ -3260,8 +3323,8 @@ function createBaseFileTransferSendRequest(): FileTransferSendRequest {
 export const FileTransferSendRequest = {
   encode(
     message: FileTransferSendRequest,
-    writer: Writer = Writer.create()
-  ): Writer {
+    writer: _m0.Writer = _m0.Writer.create()
+  ): _m0.Writer {
     if (message.id !== 0) {
       writer.uint32(8).int32(message.id);
     }
@@ -3274,8 +3337,11 @@ export const FileTransferSendRequest = {
     return writer;
   },
 
-  decode(input: Reader | Uint8Array, length?: number): FileTransferSendRequest {
-    const reader = input instanceof Reader ? input : new Reader(input);
+  decode(
+    input: _m0.Reader | Uint8Array,
+    length?: number
+  ): FileTransferSendRequest {
+    const reader = input instanceof _m0.Reader ? input : new _m0.Reader(input);
     let end = length === undefined ? reader.len : reader.pos + length;
     const message = createBaseFileTransferSendRequest();
     while (reader.pos < end) {
@@ -3333,7 +3399,10 @@ function createBaseFileTransferDone(): FileTransferDone {
 }
 
 export const FileTransferDone = {
-  encode(message: FileTransferDone, writer: Writer = Writer.create()): Writer {
+  encode(
+    message: FileTransferDone,
+    writer: _m0.Writer = _m0.Writer.create()
+  ): _m0.Writer {
     if (message.id !== 0) {
       writer.uint32(8).int32(message.id);
     }
@@ -3343,8 +3412,8 @@ export const FileTransferDone = {
     return writer;
   },
 
-  decode(input: Reader | Uint8Array, length?: number): FileTransferDone {
-    const reader = input instanceof Reader ? input : new Reader(input);
+  decode(input: _m0.Reader | Uint8Array, length?: number): FileTransferDone {
+    const reader = input instanceof _m0.Reader ? input : new _m0.Reader(input);
     let end = length === undefined ? reader.len : reader.pos + length;
     const message = createBaseFileTransferDone();
     while (reader.pos < end) {
@@ -3396,8 +3465,8 @@ function createBaseFileTransferReceiveRequest(): FileTransferReceiveRequest {
 export const FileTransferReceiveRequest = {
   encode(
     message: FileTransferReceiveRequest,
-    writer: Writer = Writer.create()
-  ): Writer {
+    writer: _m0.Writer = _m0.Writer.create()
+  ): _m0.Writer {
     if (message.id !== 0) {
       writer.uint32(8).int32(message.id);
     }
@@ -3411,10 +3480,10 @@ export const FileTransferReceiveRequest = {
   },
 
   decode(
-    input: Reader | Uint8Array,
+    input: _m0.Reader | Uint8Array,
     length?: number
   ): FileTransferReceiveRequest {
-    const reader = input instanceof Reader ? input : new Reader(input);
+    const reader = input instanceof _m0.Reader ? input : new _m0.Reader(input);
     let end = length === undefined ? reader.len : reader.pos + length;
     const message = createBaseFileTransferReceiveRequest();
     while (reader.pos < end) {
@@ -3477,7 +3546,10 @@ function createBaseFileRemoveDir(): FileRemoveDir {
 }
 
 export const FileRemoveDir = {
-  encode(message: FileRemoveDir, writer: Writer = Writer.create()): Writer {
+  encode(
+    message: FileRemoveDir,
+    writer: _m0.Writer = _m0.Writer.create()
+  ): _m0.Writer {
     if (message.id !== 0) {
       writer.uint32(8).int32(message.id);
     }
@@ -3490,8 +3562,8 @@ export const FileRemoveDir = {
     return writer;
   },
 
-  decode(input: Reader | Uint8Array, length?: number): FileRemoveDir {
-    const reader = input instanceof Reader ? input : new Reader(input);
+  decode(input: _m0.Reader | Uint8Array, length?: number): FileRemoveDir {
+    const reader = input instanceof _m0.Reader ? input : new _m0.Reader(input);
     let end = length === undefined ? reader.len : reader.pos + length;
     const message = createBaseFileRemoveDir();
     while (reader.pos < end) {
@@ -3546,7 +3618,10 @@ function createBaseFileRemoveFile(): FileRemoveFile {
 }
 
 export const FileRemoveFile = {
-  encode(message: FileRemoveFile, writer: Writer = Writer.create()): Writer {
+  encode(
+    message: FileRemoveFile,
+    writer: _m0.Writer = _m0.Writer.create()
+  ): _m0.Writer {
     if (message.id !== 0) {
       writer.uint32(8).int32(message.id);
     }
@@ -3559,8 +3634,8 @@ export const FileRemoveFile = {
     return writer;
   },
 
-  decode(input: Reader | Uint8Array, length?: number): FileRemoveFile {
-    const reader = input instanceof Reader ? input : new Reader(input);
+  decode(input: _m0.Reader | Uint8Array, length?: number): FileRemoveFile {
+    const reader = input instanceof _m0.Reader ? input : new _m0.Reader(input);
     let end = length === undefined ? reader.len : reader.pos + length;
     const message = createBaseFileRemoveFile();
     while (reader.pos < end) {
@@ -3616,7 +3691,10 @@ function createBaseFileDirCreate(): FileDirCreate {
 }
 
 export const FileDirCreate = {
-  encode(message: FileDirCreate, writer: Writer = Writer.create()): Writer {
+  encode(
+    message: FileDirCreate,
+    writer: _m0.Writer = _m0.Writer.create()
+  ): _m0.Writer {
     if (message.id !== 0) {
       writer.uint32(8).int32(message.id);
     }
@@ -3626,8 +3704,8 @@ export const FileDirCreate = {
     return writer;
   },
 
-  decode(input: Reader | Uint8Array, length?: number): FileDirCreate {
-    const reader = input instanceof Reader ? input : new Reader(input);
+  decode(input: _m0.Reader | Uint8Array, length?: number): FileDirCreate {
+    const reader = input instanceof _m0.Reader ? input : new _m0.Reader(input);
     let end = length === undefined ? reader.len : reader.pos + length;
     const message = createBaseFileDirCreate();
     while (reader.pos < end) {
@@ -3676,7 +3754,10 @@ function createBaseSwitchDisplay(): SwitchDisplay {
 }
 
 export const SwitchDisplay = {
-  encode(message: SwitchDisplay, writer: Writer = Writer.create()): Writer {
+  encode(
+    message: SwitchDisplay,
+    writer: _m0.Writer = _m0.Writer.create()
+  ): _m0.Writer {
     if (message.display !== 0) {
       writer.uint32(8).int32(message.display);
     }
@@ -3695,8 +3776,8 @@ export const SwitchDisplay = {
     return writer;
   },
 
-  decode(input: Reader | Uint8Array, length?: number): SwitchDisplay {
-    const reader = input instanceof Reader ? input : new Reader(input);
+  decode(input: _m0.Reader | Uint8Array, length?: number): SwitchDisplay {
+    const reader = input instanceof _m0.Reader ? input : new _m0.Reader(input);
     let end = length === undefined ? reader.len : reader.pos + length;
     const message = createBaseSwitchDisplay();
     while (reader.pos < end) {
@@ -3764,7 +3845,10 @@ function createBasePermissionInfo(): PermissionInfo {
 }
 
 export const PermissionInfo = {
-  encode(message: PermissionInfo, writer: Writer = Writer.create()): Writer {
+  encode(
+    message: PermissionInfo,
+    writer: _m0.Writer = _m0.Writer.create()
+  ): _m0.Writer {
     if (message.permission !== 0) {
       writer.uint32(8).int32(message.permission);
     }
@@ -3774,8 +3858,8 @@ export const PermissionInfo = {
     return writer;
   },
 
-  decode(input: Reader | Uint8Array, length?: number): PermissionInfo {
-    const reader = input instanceof Reader ? input : new Reader(input);
+  decode(input: _m0.Reader | Uint8Array, length?: number): PermissionInfo {
+    const reader = input instanceof _m0.Reader ? input : new _m0.Reader(input);
     let end = length === undefined ? reader.len : reader.pos + length;
     const message = createBasePermissionInfo();
     while (reader.pos < end) {
@@ -3836,7 +3920,10 @@ function createBaseOptionMessage(): OptionMessage {
 }
 
 export const OptionMessage = {
-  encode(message: OptionMessage, writer: Writer = Writer.create()): Writer {
+  encode(
+    message: OptionMessage,
+    writer: _m0.Writer = _m0.Writer.create()
+  ): _m0.Writer {
     if (message.imageQuality !== 0) {
       writer.uint32(8).int32(message.imageQuality);
     }
@@ -3864,8 +3951,8 @@ export const OptionMessage = {
     return writer;
   },
 
-  decode(input: Reader | Uint8Array, length?: number): OptionMessage {
-    const reader = input instanceof Reader ? input : new Reader(input);
+  decode(input: _m0.Reader | Uint8Array, length?: number): OptionMessage {
+    const reader = input instanceof _m0.Reader ? input : new _m0.Reader(input);
     let end = length === undefined ? reader.len : reader.pos + length;
     const message = createBaseOptionMessage();
     while (reader.pos < end) {
@@ -3980,7 +4067,10 @@ function createBaseOptionResponse(): OptionResponse {
 }
 
 export const OptionResponse = {
-  encode(message: OptionResponse, writer: Writer = Writer.create()): Writer {
+  encode(
+    message: OptionResponse,
+    writer: _m0.Writer = _m0.Writer.create()
+  ): _m0.Writer {
     if (message.opt !== undefined) {
       OptionMessage.encode(message.opt, writer.uint32(10).fork()).ldelim();
     }
@@ -3990,8 +4080,8 @@ export const OptionResponse = {
     return writer;
   },
 
-  decode(input: Reader | Uint8Array, length?: number): OptionResponse {
-    const reader = input instanceof Reader ? input : new Reader(input);
+  decode(input: _m0.Reader | Uint8Array, length?: number): OptionResponse {
+    const reader = input instanceof _m0.Reader ? input : new _m0.Reader(input);
     let end = length === undefined ? reader.len : reader.pos + length;
     const message = createBaseOptionResponse();
     while (reader.pos < end) {
@@ -4044,7 +4134,10 @@ function createBaseTestDelay(): TestDelay {
 }
 
 export const TestDelay = {
-  encode(message: TestDelay, writer: Writer = Writer.create()): Writer {
+  encode(
+    message: TestDelay,
+    writer: _m0.Writer = _m0.Writer.create()
+  ): _m0.Writer {
     if (message.time !== 0) {
       writer.uint32(8).int64(message.time);
     }
@@ -4054,8 +4147,8 @@ export const TestDelay = {
     return writer;
   },
 
-  decode(input: Reader | Uint8Array, length?: number): TestDelay {
-    const reader = input instanceof Reader ? input : new Reader(input);
+  decode(input: _m0.Reader | Uint8Array, length?: number): TestDelay {
+    const reader = input instanceof _m0.Reader ? input : new _m0.Reader(input);
     let end = length === undefined ? reader.len : reader.pos + length;
     const message = createBaseTestDelay();
     while (reader.pos < end) {
@@ -4107,7 +4200,10 @@ function createBasePublicKey(): PublicKey {
 }
 
 export const PublicKey = {
-  encode(message: PublicKey, writer: Writer = Writer.create()): Writer {
+  encode(
+    message: PublicKey,
+    writer: _m0.Writer = _m0.Writer.create()
+  ): _m0.Writer {
     if (message.asymmetricValue.length !== 0) {
       writer.uint32(10).bytes(message.asymmetricValue);
     }
@@ -4117,8 +4213,8 @@ export const PublicKey = {
     return writer;
   },
 
-  decode(input: Reader | Uint8Array, length?: number): PublicKey {
-    const reader = input instanceof Reader ? input : new Reader(input);
+  decode(input: _m0.Reader | Uint8Array, length?: number): PublicKey {
+    const reader = input instanceof _m0.Reader ? input : new _m0.Reader(input);
     let end = length === undefined ? reader.len : reader.pos + length;
     const message = createBasePublicKey();
     while (reader.pos < end) {
@@ -4181,15 +4277,18 @@ function createBaseSignedId(): SignedId {
 }
 
 export const SignedId = {
-  encode(message: SignedId, writer: Writer = Writer.create()): Writer {
+  encode(
+    message: SignedId,
+    writer: _m0.Writer = _m0.Writer.create()
+  ): _m0.Writer {
     if (message.id.length !== 0) {
       writer.uint32(10).bytes(message.id);
     }
     return writer;
   },
 
-  decode(input: Reader | Uint8Array, length?: number): SignedId {
-    const reader = input instanceof Reader ? input : new Reader(input);
+  decode(input: _m0.Reader | Uint8Array, length?: number): SignedId {
+    const reader = input instanceof _m0.Reader ? input : new _m0.Reader(input);
     let end = length === undefined ? reader.len : reader.pos + length;
     const message = createBaseSignedId();
     while (reader.pos < end) {
@@ -4233,7 +4332,10 @@ function createBaseAudioFormat(): AudioFormat {
 }
 
 export const AudioFormat = {
-  encode(message: AudioFormat, writer: Writer = Writer.create()): Writer {
+  encode(
+    message: AudioFormat,
+    writer: _m0.Writer = _m0.Writer.create()
+  ): _m0.Writer {
     if (message.sampleRate !== 0) {
       writer.uint32(8).uint32(message.sampleRate);
     }
@@ -4243,8 +4345,8 @@ export const AudioFormat = {
     return writer;
   },
 
-  decode(input: Reader | Uint8Array, length?: number): AudioFormat {
-    const reader = input instanceof Reader ? input : new Reader(input);
+  decode(input: _m0.Reader | Uint8Array, length?: number): AudioFormat {
+    const reader = input instanceof _m0.Reader ? input : new _m0.Reader(input);
     let end = length === undefined ? reader.len : reader.pos + length;
     const message = createBaseAudioFormat();
     while (reader.pos < end) {
@@ -4295,15 +4397,18 @@ function createBaseAudioFrame(): AudioFrame {
 }
 
 export const AudioFrame = {
-  encode(message: AudioFrame, writer: Writer = Writer.create()): Writer {
+  encode(
+    message: AudioFrame,
+    writer: _m0.Writer = _m0.Writer.create()
+  ): _m0.Writer {
     if (message.data.length !== 0) {
       writer.uint32(10).bytes(message.data);
     }
     return writer;
   },
 
-  decode(input: Reader | Uint8Array, length?: number): AudioFrame {
-    const reader = input instanceof Reader ? input : new Reader(input);
+  decode(input: _m0.Reader | Uint8Array, length?: number): AudioFrame {
+    const reader = input instanceof _m0.Reader ? input : new _m0.Reader(input);
     let end = length === undefined ? reader.len : reader.pos + length;
     const message = createBaseAudioFrame();
     while (reader.pos < end) {
@@ -4360,7 +4465,7 @@ function createBaseMisc(): Misc {
 }
 
 export const Misc = {
-  encode(message: Misc, writer: Writer = Writer.create()): Writer {
+  encode(message: Misc, writer: _m0.Writer = _m0.Writer.create()): _m0.Writer {
     if (message.chatMessage !== undefined) {
       ChatMessage.encode(
         message.chatMessage,
@@ -4403,8 +4508,8 @@ export const Misc = {
     return writer;
   },
 
-  decode(input: Reader | Uint8Array, length?: number): Misc {
-    const reader = input instanceof Reader ? input : new Reader(input);
+  decode(input: _m0.Reader | Uint8Array, length?: number): Misc {
+    const reader = input instanceof _m0.Reader ? input : new _m0.Reader(input);
     let end = length === undefined ? reader.len : reader.pos + length;
     const message = createBaseMisc();
     while (reader.pos < end) {
@@ -4565,7 +4670,10 @@ function createBaseMessage(): Message {
 }
 
 export const Message = {
-  encode(message: Message, writer: Writer = Writer.create()): Writer {
+  encode(
+    message: Message,
+    writer: _m0.Writer = _m0.Writer.create()
+  ): _m0.Writer {
     if (message.signedId !== undefined) {
       SignedId.encode(message.signedId, writer.uint32(26).fork()).ldelim();
     }
@@ -4632,8 +4740,8 @@ export const Message = {
     return writer;
   },
 
-  decode(input: Reader | Uint8Array, length?: number): Message {
-    const reader = input instanceof Reader ? input : new Reader(input);
+  decode(input: _m0.Reader | Uint8Array, length?: number): Message {
+    const reader = input instanceof _m0.Reader ? input : new _m0.Reader(input);
     let end = length === undefined ? reader.len : reader.pos + length;
     const message = createBaseMessage();
     while (reader.pos < end) {
@@ -4957,11 +5065,9 @@ function longToNumber(long: Long): number {
   return long.toNumber();
 }
 
-// If you get a compile-error about 'Constructor<Long> and ... have no overlap',
-// add '--ts_proto_opt=esModuleInterop=true' as a flag when calling 'protoc'.
-if (util.Long !== Long) {
-  util.Long = Long as any;
-  configure();
+if (_m0.util.Long !== Long) {
+  _m0.util.Long = Long as any;
+  _m0.configure();
 }
 
 function isSet(value: any): boolean {

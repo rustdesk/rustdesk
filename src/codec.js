@@ -19,13 +19,14 @@
   OGVDecoderVideoAV1SIMDMTW: 'ogv-decoder-video-av1-simd-mt-wasm.js',
 */
 
-export function loadVp9() {
+export function loadVp9(callback) {
   window.OGVLoader.loadClass(
     "OGVDecoderVideoVP9W",
     (videoCodecClass) => {
+      window.videoCodecClass = videoCodecClass;
       videoCodecClass().then((decoder) => {
         decoder.init(() => {
-          onVp9Ready(decoder)
+          callback(decoder);
         })
       })
     },
@@ -33,30 +34,16 @@ export function loadVp9() {
   );
 }
 
-export function loadOpus() {
+export function loadOpus(callback) {
   window.OGVLoader.loadClass(
     "OGVDecoderAudioOpusW",
     (audioCodecClass) => {
       audioCodecClass().then((decoder) => {
         decoder.init(() => {
-          onOpusReady(decoder)
+          callback(decoder);
         })
       })
     },
     { worker: true }
   );
-}
-
-async function onVp9Ready(decoder) {
-  console.log("Vp9 decoder ready");
-
-  /*
-  decoder.processFrame(buffer, () => {
-    player.drawFrame(decoder.frameBuffer)
-  })
-  */
-}
-
-async function onOpusReady(decoder) {
-  console.log("Opus decoder ready");
 }

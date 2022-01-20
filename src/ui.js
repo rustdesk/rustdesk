@@ -21,7 +21,10 @@ if (app) {
     <div id="text" style="line-height: 2em"></div>
     <button id="cancel" onclick="cancel();">Cancel</button>
   </div>
+  <canvas id="player"></canvas>
 `;
+
+  let player;
 
   document.body.onload = () => {
     const host = document.querySelector('#host');
@@ -30,6 +33,7 @@ if (app) {
     id.value = localStorage.getItem('id');
     const key = document.querySelector('#key');
     key.value = localStorage.getItem('key');
+    player = YUVCanvas.attach(document.getElementById("player"))
   };
 
   window.connect = () => {
@@ -42,6 +46,9 @@ if (app) {
     const func = async () => {
       const conn = globals.newConn();
       conn.setMsgbox(msgbox);
+      conn.setDraw((f) => {
+        player.drawFrame(f);
+      });
       document.querySelector('div#status').style.display = 'block';
       document.querySelector('div#connect').style.display = 'none';
       document.querySelector('div#text').innerHTML = 'Connecting ...';
