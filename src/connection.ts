@@ -20,6 +20,7 @@ export default class Connection {
   _hash: message.Hash | undefined;
   _msgbox: MsgboxCallback | undefined;
   _peerInfo: message.PeerInfo | undefined;
+  _firstFrame: Boolean | undefined; 
 
   constructor() {
     this._msgs = [];
@@ -179,6 +180,8 @@ export default class Connection {
           this._peerInfo = r.peerInfo;
           this.msgbox('success', 'Successful', 'Connected, waiting for image...');
         }
+      } else if (msg?.videoFrame) {
+        this.handleVideoFrame();
       }
     }
   }
@@ -221,6 +224,13 @@ export default class Connection {
       password,
     });
     await this._ws?.sendMessage({ loginRequest });
+  }
+
+  handleVideoFrame() {
+    if (!this._firstFrame) {
+      this.msgbox('', '', '');
+      this._firstFrame = true;
+    }
   }
 }
 
