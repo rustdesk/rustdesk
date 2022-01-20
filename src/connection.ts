@@ -2,6 +2,7 @@ import Websock from "./websock";
 import * as message from "./message.js";
 import * as rendezvous from "./rendezvous.js";
 import { loadVp9, loadOpus } from "./codec";
+import * as globals from "./globals";
 
 const PORT = 21116;
 const HOST = "rs-sg.rustdesk.com";
@@ -16,7 +17,7 @@ export default class Connection {
 
   constructor() {
     this._msgs = [];
-    this._id = "";
+    this._id = '';
     this._interval = setInterval(() => {
       while (this._msgs.length) {
         this._ws?.sendMessage(this._msgs[0]);
@@ -82,7 +83,10 @@ export default class Connection {
   }
 
   async secure(pk: Uint8Array | undefined) {
-    //
+    if (pk) {
+      const RS_PK = 'OeVuKk5nlHiXp+APNn0Y3pC1Iwpwn44JGqrQCsWqmBw=';
+      let pk_id = await globals.verify(pk, RS_PK);
+    }
   }
 }
 
@@ -105,5 +109,5 @@ function getrUriFromRs(uri: string): string {
   } else {
     uri += ":" + (PORT + 3);
   }
-  return uri;
+  return SCHEMA + uri;
 }

@@ -1,7 +1,8 @@
 import "./style.css";
 import "./connection";
+import { startConn } from "./globals";
 
-const app = document.querySelector("#app");
+const app = document.querySelector('#app');
 
 if (app) {
   app.innerHTML = `
@@ -36,6 +37,7 @@ if (app) {
     localStorage.setItem('key', key.value);
     document.querySelector('div#connect').style.display = 'none';
     document.querySelector('div#password').style.display = 'block';
+    startConn(id);
   }
 
   window.cancel = () => {
