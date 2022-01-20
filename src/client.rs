@@ -324,13 +324,9 @@ impl Client {
 
     async fn secure_connection(peer_id: &str, pk: Vec<u8>, conn: &mut Stream) -> ResultType<()> {
         let mut pk = pk;
-        const RS_PK: &[u8; 32] = &[
-            177, 155, 15, 73, 116, 147, 172, 11, 55, 38, 92, 168, 30, 116, 213, 196, 12, 134, 130,
-            170, 181, 161, 192, 176, 132, 229, 139, 178, 17, 165, 150, 51,
-        ];
-        if !pk.is_empty() {
-            let tmp = sign::PublicKey(*RS_PK);
-            if let Ok(data) = sign::verify(&pk, &tmp) {
+        let rs_pk = get_rs_pk("OeVuKk5nlHiXp+APNn0Y3pC1Iwpwn44JGqrQCsWqmBw=");
+        if !pk.is_empty() && rs_pk.is_some() {
+            if let Ok(data) = sign::verify(&pk, &rs_pk.unwrap()) {
                 pk = data;
             } else {
                 log::error!("Handshake failed: invalid public key from rendezvous server");
@@ -1225,4 +1221,16 @@ pub fn check_if_retry(msgtype: &str, title: &str, text: &str) -> bool {
         && !text.to_lowercase().contains("resolve")
         && !text.to_lowercase().contains("mismatch")
         && !text.to_lowercase().contains("manually")
+}
+
+#[inline]
+fn get_rs_pk(str_base64: &str) -> Option<sign::PublicKey> {
+    if let Ok(pk) = base64::decode(str_base64) {
+        if pk.len() == sign::PUBLICKEYBYTES {
+            let mut tmp = [0u8; sign::PUBLICKEYBYTES];
+            tmp[..].copy_from_slice(&pk);
+            return Some(sign::PublicKey(tmp));
+        }
+    }
+    None
 }
