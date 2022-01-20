@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:tuple/tuple.dart';
 import 'package:package_info/package_info.dart';
@@ -21,6 +22,7 @@ class HomePage extends StatefulWidget {
 class _HomePageState extends State<HomePage> {
   final _idController = TextEditingController();
   var _updateUrl = '';
+  static const toAndroidChannel = MethodChannel("mChannel");
 
   @override
   void initState() {
@@ -96,8 +98,23 @@ class _HomePageState extends State<HomePage> {
                                     fontWeight: FontWeight.bold)))),
                 getSearchBarUI(),
                 getPeers(),
+                ElevatedButton(onPressed:_toAndroidGetPer, child: Text("获取权限事件")),
+                ElevatedButton(onPressed:_toAndroidStartSer, child: Text("开启录屏服务")),
+                ElevatedButton(onPressed:_toAndroidStopSer, child: Text("停止录屏服务"))
               ]),
         ));
+  }
+  Future<Null> _toAndroidGetPer() async{
+    bool res = await toAndroidChannel.invokeMethod("getPer");
+    debugPrint("_toAndroidGetPer:$res");
+  }
+  Future<Null> _toAndroidStartSer() async{
+    bool res = await toAndroidChannel.invokeMethod("startSer");
+    debugPrint("_toAndroidStartSer:$res");
+  }
+  Future<Null> _toAndroidStopSer() async{
+    bool res = await toAndroidChannel.invokeMethod("stopSer");
+    debugPrint("_toAndroidStopSer:$res");
   }
 
   void onConnect() {
