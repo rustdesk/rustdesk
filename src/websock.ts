@@ -1,6 +1,6 @@
 import * as message from "./message.js";
 import * as rendezvous from "./rendezvous.js";
-import * as sha256 from "fast-sha256";
+import * as globals from "./globals";
 
 type Keys = "message" | "open" | "close" | "error";
 
@@ -10,7 +10,7 @@ export default class Websock {
   _buf: Uint8Array[];
   _status: any;
   _latency: number;
-  _secretKey: any;
+  _secretKey: [Uint8Array, number, number] | undefined;
 
   constructor(uri: string) {
     this._eventHandlers = {
@@ -31,14 +31,18 @@ export default class Websock {
     return this._latency;
   }
 
-  setSecretKey(key: any) {
-    this._secretKey = key;
+  setSecretKey(key: Uint8Array) {
+    this._secretKey = [key, 0, 0];
   }
 
-  sendMessage(data: any) {
-    this._websocket.send(
-      message.Message.encode(message.Message.fromPartial(data)).finish()
-    );
+  sendMessage(json: any) {
+    let data = message.Message.encode(message.Message.fromPartial(json)).finish();
+    let k = this._secretKey;
+    if (k) {
+      k[1] += 1;
+      data = globals.encrypt(data, k[1], k[0]);
+    }
+    this._websocket.send(data);
   }
 
   sendRendezvous(data: any) {
@@ -144,15 +148,14 @@ export default class Websock {
 
   _recv_message(e: any) {
     if (e.data instanceof window.ArrayBuffer) {
-      const bytes = new Uint8Array(e.data);
+      let bytes = new Uint8Array(e.data);
+      const k = this._secretKey;
+      if (k) {
+        k[2] += 1;
+        bytes = globals.decrypt(bytes, k[2], k[0]);
+      }
       this._buf.push(bytes);
     }
     this._eventHandlers.message(e.data);
-  }
-
-  hash(datas: [Uint8Array]): Uint8Array {
-    const hasher = new sha256.Hash();
-    datas.forEach((data) => hasher.update(data));
-    return hasher.digest();
   }
 }

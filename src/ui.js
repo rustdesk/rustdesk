@@ -1,6 +1,6 @@
 import "./style.css";
 import "./connection";
-import { startConn } from "./globals";
+import * as globals from "./globals";
 
 const app = document.querySelector('#app');
 
@@ -15,6 +15,10 @@ if (app) {
   <div id="password" style="display: none;">
     <input type="password" id="password" />
     <button id="confirm" id="confirm()">Confirm</button>
+    <button id="cancel" onclick="cancel();">Cancel</button>
+  </div>
+  <div id="status" style="display: none;">
+    <div id="text" style="line-height: 2em"></div>
     <button id="cancel" onclick="cancel();">Cancel</button>
   </div>
 `;
@@ -35,14 +39,39 @@ if (app) {
     localStorage.setItem('id', id.value);
     const key = document.querySelector('#key');
     localStorage.setItem('key', key.value);
-    document.querySelector('div#connect').style.display = 'none';
-    document.querySelector('div#password').style.display = 'block';
-    startConn(id);
+    const func = async () => {
+      const conn = globals.newConn();
+      conn.setMsgbox(msgbox);
+      document.querySelector('div#status').style.display = 'block';
+      document.querySelector('div#connect').style.display = 'none';
+      document.querySelector('div#text').innerHTML = 'Connecting ...';
+      try {
+        await conn.start(id.value);
+      } catch (e) {
+        msgbox('error', 'Error', e);
+      }
+    };
+    func();
+  }
+  
+  function msgbox(type, title, text) {
+    if (!globals.getConn()) return;
+    if (type == 'input-password') {
+      document.querySelector('div#status').style.display = 'none';
+      document.querySelector('div#password').style.display = 'block';
+    } else if (!type) {
+      document.querySelector('div#status').style.display = 'none';
+    } else {
+      document.querySelector('div#status').style.display = 'block';
+      document.querySelector('div#text').innerHTML = '<div style="color: red; font-weight: bold;">' + text + '</div>';
+    }
   }
 
   window.cancel = () => {
+    globals.close();
     document.querySelector('div#connect').style.display = 'block';
     document.querySelector('div#password').style.display = 'none';
+    document.querySelector('div#status').style.display = 'none';
   }
 
   window.confirm = () => {

@@ -2,6 +2,7 @@ import Websock from './websock';
 import * as message from './message.js';
 import * as rendezvous from './rendezvous.js';
 import { loadVp9, loadOpus } from './codec';
+import * as sha256 from "fast-sha256";
 import * as globals from './globals';
 
 const PORT = 21116;
@@ -9,11 +10,15 @@ const HOST = 'rs-sg.rustdesk.com';
 const licenceKey = '';
 const SCHEMA = 'ws://';
 
+type MsgboxCallback = (type: string, title: string, text: string) => void;
+
 export default class Connection {
   _msgs: any[];
   _ws: Websock | undefined;
   _interval: any;
   _id: string;
+  _hash: message.Hash | undefined;
+  _msgbox: MsgboxCallback | undefined;
 
   constructor() {
     this._msgs = [];
@@ -31,11 +36,18 @@ export default class Connection {
     this._ws?.close();
   }
 
+  setMsgbox(callback: MsgboxCallback) {
+    this._msgbox = callback;
+  }
+
   async start(id: string) {
-    const ws = new Websock(getDefaultUri());
+    const uri = getDefaultUri();
+    const ws = new Websock(uri);
     this._ws = ws;
     this._id = id;
+    console.log(new Date() + ': Conntecting to rendezvoous server: ' + uri);
     await ws.open();
+    console.log(new Date() + ': Connected to rendezvoous server');
     const connType = rendezvous.ConnType.DEFAULT_CONN;
     const natType = rendezvous.NatType.SYMMETRIC;
     const punchHoleRequest = rendezvous.PunchHoleRequest.fromPartial({
@@ -46,15 +58,27 @@ export default class Connection {
     });
     ws.sendRendezvous({ punchHoleRequest });
     const msg = ws.parseRendezvous(await ws.next());
+    ws.close();
+    console.log(new Date() + ': Got relay response');
     const phr = msg.punchHoleResponse;
     const rr = msg.relayResponse;
     if (phr) {
       if (phr.failure != rendezvous.PunchHoleResponse_Failure.UNKNOWN) {
         switch (phr?.failure) {
           case rendezvous.PunchHoleResponse_Failure.ID_NOT_EXIST:
+            this.msgbox('error', 'Error', 'ID does not exist');
             break;
+          case rendezvous.PunchHoleResponse_Failure.OFFLINE:
+            this.msgbox('error', 'Error', 'Remote desktop is offline');
+            break;
+          case rendezvous.PunchHoleResponse_Failure.LICENSE_MISMATCH:
+            this.msgbox('error', 'Error', 'Key mismatch');
+            break;
+          default:
+            if (phr?.otherFailure) {
+              this.msgbox('error', 'Error', phr?.otherFailure);
+            }
         }
-        ws.close();
       }
     } else if (rr) {
       await this.connectRelay(rr);
@@ -70,9 +94,10 @@ export default class Connection {
       uri = getDefaultUri(true);
     }
     const uuid = rr.uuid;
+    console.log(new Date() + ': Connecting to relay server: ' + uri);
     const ws = new Websock(uri);
     await ws.open();
-    console.log('Connected to relay server');
+    console.log(new Date() + ': Connected to relay server');
     this._ws = ws;
     const requestRelay = rendezvous.RequestRelay.fromPartial({
       licenceKey,
@@ -80,6 +105,7 @@ export default class Connection {
     });
     ws.sendRendezvous({ requestRelay });
     await this.secure(pk);
+    await this.msgLoop();
   }
 
   async secure(pk: Uint8Array | undefined) {
@@ -140,6 +166,25 @@ export default class Connection {
     await this._ws?.sendMessage({ publicKey });
     this._ws?.setSecretKey(secretKey)
   }
+
+  async msgLoop() {
+    while (true) {
+      const msg = this._ws?.parseMessage(await this._ws?.next());
+      if (msg?.hash) {
+        this._hash = msg?.hash;
+        this.msgbox("input-password", "Password Required", "");
+      } else if (msg?.testDelay) {
+        const testDelay = msg?.testDelay;
+        if (!testDelay.fromClient) {
+          await this._ws?.sendMessage({ testDelay });
+        }
+      }
+    }
+  }
+
+  msgbox(type_: string, title: string, text: string) {
+    this._msgbox?.(type_, title, text);
+  }
 }
 
 async function testDelay() {
@@ -162,4 +207,10 @@ function getrUriFromRs(uri: string): string {
     uri += ':' + (PORT + 3);
   }
   return SCHEMA + uri;
+}
+
+function hash(datas: [string]): Uint8Array {
+  const hasher = new sha256.Hash();
+  datas.forEach((data) => hasher.update(new TextEncoder().encode(data)));
+  return hasher.digest();
 }

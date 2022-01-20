@@ -8,13 +8,19 @@ export function setConn(conn) {
 }
 
 export function getConn() {
-  return windows.currentConnection;
+  return window.currentConnection;
 }
 
-export async function startConn(id) {
+export function close() {
+  getConn()?.close();
+  setConn(undefined);
+}
+
+export function newConn() {
+  window.currentConnection?.close();
   const conn = new Connection();
   setConn(conn);
-  await conn.start('124931507');
+  return conn;
 }
 
 let sodium;
@@ -49,12 +55,22 @@ export function seal(unsigned, theirPk, ourSk) {
   return sodium.crypto_box_easy(unsigned, nonce, theirPk, ourSk);
 }
 
+function makeOnce(value) {
+  var byteArray = Array(24).fill(0);
+
+  for (var index = 0; index < byteArray.length && value > 0; index++) {
+    var byte = value & 0xff;
+    byteArray[index] = byte;
+    value = (value - byte) / 256;
+  }
+
+  return Uint8Array.from(byteArray);
+};
+
 export function encrypt(unsigned, nonce, key) {
-  return sodium.crypto_secretbox_easy(unsigned, nonce, key);
+  return sodium.crypto_secretbox_easy(unsigned, makeOnce(nonce), key);
 }
 
 export function decrypt(signed, nonce, key) {
-  return sodium.crypto_secretbox_open_easy(signed, nonce, key);
+  return sodium.crypto_secretbox_open_easy(signed, makeOnce(nonce), key);
 }
-
-window.startConn = startConn;
