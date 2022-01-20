@@ -59,8 +59,7 @@ message RegisterPk {
 
 message RegisterPkResponse {
   enum Result {
-    UNKNOWN = 0;
-    OK = 1;
+    OK = 0;
     UUID_MISMATCH = 2;
     ID_EXISTS = 3;
     TOO_FREQUENT = 4;
@@ -75,8 +74,7 @@ message PunchHoleResponse {
   bytes socket_addr = 1;
   bytes pk = 2;
   enum Failure {
-    UNKNOWN = 0;
-    ID_NOT_EXIST = 1;
+    ID_NOT_EXIST = 0;
     OFFLINE = 2;
     LICENSE_MISMATCH = 3;
     LICENSE_OVERUSE = 4;

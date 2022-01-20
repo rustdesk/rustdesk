@@ -202,8 +202,7 @@ message Clipboard {
 }
 
 enum FileType {
-  UnknownFileType = 0;
-  Dir = 1;
+  Dir = 0;
   DirLink = 2;
   DirDrive = 3;
   File = 4;
@@ -316,8 +315,7 @@ message SwitchDisplay {
 
 message PermissionInfo {
   enum Permission {
-    Unknown = 0;
-    Keyboard = 1;
+    Keyboard = 0;
     Clipboard = 2;
     Audio = 3;
   }
