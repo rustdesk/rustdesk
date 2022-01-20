@@ -24,7 +24,7 @@ export function loadVp9(callback) {
     "OGVDecoderVideoVP9W",
     (videoCodecClass) => {
       window.videoCodecClass = videoCodecClass;
-      videoCodecClass().then((decoder) => {
+      videoCodecClass({ videoFormat: {} }).then((decoder) => {
         decoder.init(() => {
           callback(decoder);
         })
@@ -38,7 +38,7 @@ export function loadOpus(callback) {
   window.OGVLoader.loadClass(
     "OGVDecoderAudioOpusW",
     (audioCodecClass) => {
-      audioCodecClass().then((decoder) => {
+      audioCodecClass({ audioFormat: {} }).then((decoder) => {
         decoder.init(() => {
           callback(decoder);
         })

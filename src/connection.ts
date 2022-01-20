@@ -226,6 +226,8 @@ export default class Connection {
   close() {
     clearInterval(this._interval);
     this._ws?.close();
+    this._videoDecoder?.close();
+    this._audioDecoder?.close();
   }
 
   setMsgbox(callback: MsgboxCallback) {
@@ -266,11 +268,10 @@ export default class Connection {
     }
     if (vf.vp9s) {
       let dec = this._videoDecoder;
+      // dec.sync();
       vf.vp9s.frames.forEach((f) => {
-        dec.processFrame(f.data.buffer, (ok: any) => {
-          console.log(ok);
-          if (dec.frameBuffer) {
-            console.log(dec.frameBuffer);
+        dec.processFrame(f.data.slice(0).buffer, (ok: any) => {
+          if (ok && dec.frameBuffer) {
             this.draw(dec.frameBuffer);
           }
         });

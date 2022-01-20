@@ -21,7 +21,10 @@ if (app) {
     <div id="text" style="line-height: 2em"></div>
     <button id="cancel" onclick="cancel();">Cancel</button>
   </div>
-  <canvas id="player"></canvas>
+  <div id="canvas" style="display: none;">
+    <button id="cancel" onclick="cancel();">Cancel</button>
+    <canvas id="player"></canvas>
+  </div>
 `;
 
   let player;
@@ -33,7 +36,7 @@ if (app) {
     id.value = localStorage.getItem('id');
     const key = document.querySelector('#key');
     key.value = localStorage.getItem('key');
-    player = YUVCanvas.attach(document.getElementById("player"))
+    player = YUVCanvas.attach(document.getElementById('player'))
   };
 
   window.connect = () => {
@@ -67,11 +70,15 @@ if (app) {
       document.querySelector('div#status').style.display = 'none';
       document.querySelector('div#password').style.display = 'block';
     } else if (!type) {
+      document.querySelector('div#canvas').style.display = 'block';
+      document.querySelector('div#password').style.display = 'none';
       document.querySelector('div#status').style.display = 'none';
     } else if (type == 'error') {
       document.querySelector('div#status').style.display = 'block';
+      document.querySelector('div#canvas').style.display = 'none';
       document.querySelector('div#text').innerHTML = '<div style="color: red; font-weight: bold;">' + text + '</div>';
     } else {
+      document.querySelector('div#password').style.display = 'none';
       document.querySelector('div#status').style.display = 'block';
       document.querySelector('div#text').innerHTML = '<div style="font-weight: bold;">' + text + '</div>';
     }
@@ -82,6 +89,7 @@ if (app) {
     document.querySelector('div#connect').style.display = 'block';
     document.querySelector('div#password').style.display = 'none';
     document.querySelector('div#status').style.display = 'none';
+    document.querySelector('div#canvas').style.display = 'none';
   }
 
   window.confirm = () => {
