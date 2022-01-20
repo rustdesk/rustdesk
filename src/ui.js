@@ -14,7 +14,7 @@ if (app) {
   </table></div>
   <div id="password" style="display: none;">
     <input type="password" id="password" />
-    <button id="confirm" id="confirm()">Confirm</button>
+    <button id="confirm" onclick="confirm()">Confirm</button>
     <button id="cancel" onclick="cancel();">Cancel</button>
   </div>
   <div id="status" style="display: none;">
@@ -53,7 +53,7 @@ if (app) {
     };
     func();
   }
-  
+
   function msgbox(type, title, text) {
     if (!globals.getConn()) return;
     if (type == 'input-password') {
@@ -61,9 +61,12 @@ if (app) {
       document.querySelector('div#password').style.display = 'block';
     } else if (!type) {
       document.querySelector('div#status').style.display = 'none';
-    } else {
+    } else if (type == 'error') {
       document.querySelector('div#status').style.display = 'block';
       document.querySelector('div#text').innerHTML = '<div style="color: red; font-weight: bold;">' + text + '</div>';
+    } else {
+      document.querySelector('div#status').style.display = 'block';
+      document.querySelector('div#text').innerHTML = '<div style="font-weight: bold;">' + text + '</div>';
     }
   }
 
@@ -75,7 +78,10 @@ if (app) {
   }
 
   window.confirm = () => {
-    //
+    const password = document.querySelector('input#password').value;
+    if (password) {
+      document.querySelector('div#password').style.display = 'none';
+      globals.getConn().login(password);
+    }
   }
-
 }

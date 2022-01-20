@@ -19,6 +19,7 @@ export default class Connection {
   _id: string;
   _hash: message.Hash | undefined;
   _msgbox: MsgboxCallback | undefined;
+  _peerInfo: message.PeerInfo | undefined;
 
   constructor() {
     this._msgs = [];
@@ -29,15 +30,6 @@ export default class Connection {
         this._msgs.splice(0, 1);
       }
     }, 1);
-  }
-
-  close() {
-    clearInterval(this._interval);
-    this._ws?.close();
-  }
-
-  setMsgbox(callback: MsgboxCallback) {
-    this._msgbox = callback;
   }
 
   async start(id: string) {
@@ -172,18 +164,63 @@ export default class Connection {
       const msg = this._ws?.parseMessage(await this._ws?.next());
       if (msg?.hash) {
         this._hash = msg?.hash;
+        await this.handleHash();
         this.msgbox("input-password", "Password Required", "");
       } else if (msg?.testDelay) {
         const testDelay = msg?.testDelay;
         if (!testDelay.fromClient) {
           await this._ws?.sendMessage({ testDelay });
         }
+      } else if (msg?.loginResponse) {
+        const r = msg?.loginResponse;
+        if (r.error) {
+          this.msgbox('error', 'Error', r.error);
+        } else if (r.peerInfo) {
+          this._peerInfo = r.peerInfo;
+          this.msgbox('success', 'Successful', 'Connected, waiting for image...');
+        }
       }
     }
   }
 
+  async handleHash() {
+    await this._sendLoginMessage();
+  }
+
   msgbox(type_: string, title: string, text: string) {
     this._msgbox?.(type_, title, text);
+  }
+
+  close() {
+    clearInterval(this._interval);
+    this._ws?.close();
+  }
+
+  setMsgbox(callback: MsgboxCallback) {
+    this._msgbox = callback;
+  }
+
+  async login(password: string) {
+    this.msgbox('connecting', 'Connecting...', 'Logging in...');
+    let salt = this._hash?.salt;
+    if (salt) {
+      let p = hash([password, salt]);
+      let challenge = this._hash?.challenge;
+      if (challenge) {
+        p = hash([p, challenge]);
+        await this._sendLoginMessage(p);
+      }
+    }
+  }
+
+  async _sendLoginMessage(password: Uint8Array | undefined = undefined) {
+    const loginRequest = message.LoginRequest.fromPartial({
+      username: this._id!,
+      myId: 'web', // to-do
+      myName: 'web', // to-do
+      password,
+    });
+    await this._ws?.sendMessage({ loginRequest });
   }
 }
 
@@ -209,8 +246,13 @@ function getrUriFromRs(uri: string): string {
   return SCHEMA + uri;
 }
 
-function hash(datas: [string]): Uint8Array {
+function hash(datas: (string | Uint8Array)[]): Uint8Array {
   const hasher = new sha256.Hash();
-  datas.forEach((data) => hasher.update(new TextEncoder().encode(data)));
+  datas.forEach((data) => {
+    if (typeof data == 'string') {
+      data = new TextEncoder().encode(data);
+    }
+    return hasher.update(data);
+  });
   return hasher.digest();
 }
