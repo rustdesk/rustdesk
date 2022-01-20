@@ -496,8 +496,7 @@ export function controlKeyToJSON(object: ControlKey): string {
 }
 
 export enum FileType {
-  UnknownFileType = 0,
-  Dir = 1,
+  Dir = 0,
   DirLink = 2,
   DirDrive = 3,
   File = 4,
@@ -508,9 +507,6 @@ export enum FileType {
 export function fileTypeFromJSON(object: any): FileType {
   switch (object) {
     case 0:
-    case "UnknownFileType":
-      return FileType.UnknownFileType;
-    case 1:
     case "Dir":
       return FileType.Dir;
     case 2:
@@ -534,8 +530,6 @@ export function fileTypeFromJSON(object: any): FileType {
 
 export function fileTypeToJSON(object: FileType): string {
   switch (object) {
-    case FileType.UnknownFileType:
-      return "UnknownFileType";
     case FileType.Dir:
       return "Dir";
     case FileType.DirLink:
@@ -819,8 +813,7 @@ export interface PermissionInfo {
 }
 
 export enum PermissionInfo_Permission {
-  Unknown = 0,
-  Keyboard = 1,
+  Keyboard = 0,
   Clipboard = 2,
   Audio = 3,
   UNRECOGNIZED = -1,
@@ -831,9 +824,6 @@ export function permissionInfo_PermissionFromJSON(
 ): PermissionInfo_Permission {
   switch (object) {
     case 0:
-    case "Unknown":
-      return PermissionInfo_Permission.Unknown;
-    case 1:
     case "Keyboard":
       return PermissionInfo_Permission.Keyboard;
     case 2:
@@ -853,8 +843,6 @@ export function permissionInfo_PermissionToJSON(
   object: PermissionInfo_Permission
 ): string {
   switch (object) {
-    case PermissionInfo_Permission.Unknown:
-      return "Unknown";
     case PermissionInfo_Permission.Keyboard:
       return "Keyboard";
     case PermissionInfo_Permission.Clipboard:

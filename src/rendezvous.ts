@@ -139,8 +139,7 @@ export interface RegisterPkResponse {
 }
 
 export enum RegisterPkResponse_Result {
-  UNKNOWN = 0,
-  OK = 1,
+  OK = 0,
   UUID_MISMATCH = 2,
   ID_EXISTS = 3,
   TOO_FREQUENT = 4,
@@ -155,9 +154,6 @@ export function registerPkResponse_ResultFromJSON(
 ): RegisterPkResponse_Result {
   switch (object) {
     case 0:
-    case "UNKNOWN":
-      return RegisterPkResponse_Result.UNKNOWN;
-    case 1:
     case "OK":
       return RegisterPkResponse_Result.OK;
     case 2:
@@ -189,8 +185,6 @@ export function registerPkResponse_ResultToJSON(
   object: RegisterPkResponse_Result
 ): string {
   switch (object) {
-    case RegisterPkResponse_Result.UNKNOWN:
-      return "UNKNOWN";
     case RegisterPkResponse_Result.OK:
       return "OK";
     case RegisterPkResponse_Result.UUID_MISMATCH:
@@ -221,8 +215,7 @@ export interface PunchHoleResponse {
 }
 
 export enum PunchHoleResponse_Failure {
-  UNKNOWN = 0,
-  ID_NOT_EXIST = 1,
+  ID_NOT_EXIST = 0,
   OFFLINE = 2,
   LICENSE_MISMATCH = 3,
   LICENSE_OVERUSE = 4,
@@ -234,9 +227,6 @@ export function punchHoleResponse_FailureFromJSON(
 ): PunchHoleResponse_Failure {
   switch (object) {
     case 0:
-    case "UNKNOWN":
-      return PunchHoleResponse_Failure.UNKNOWN;
-    case 1:
     case "ID_NOT_EXIST":
       return PunchHoleResponse_Failure.ID_NOT_EXIST;
     case 2:
@@ -259,8 +249,6 @@ export function punchHoleResponse_FailureToJSON(
   object: PunchHoleResponse_Failure
 ): string {
   switch (object) {
-    case PunchHoleResponse_Failure.UNKNOWN:
-      return "UNKNOWN";
     case PunchHoleResponse_Failure.ID_NOT_EXIST:
       return "ID_NOT_EXIST";
     case PunchHoleResponse_Failure.OFFLINE:
