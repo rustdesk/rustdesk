@@ -11,7 +11,7 @@ const licenceKey = "";
 const SCHEMA = "ws://";
 
 type MsgboxCallback = (type: string, title: string, text: string) => void;
-type DrawCallback = (Uint8Array) => void;
+type DrawCallback = (data: Uint8Array) => void;
 
 export default class Connection {
   _msgs: any[];
