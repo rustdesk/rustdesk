@@ -10,6 +10,7 @@ export default class Websock {
   _buf: Uint8Array[];
   _status: any;
   _latency: number;
+  _secretKey: any;
 
   constructor(uri: string) {
     this._eventHandlers = {
@@ -30,16 +31,20 @@ export default class Websock {
     return this._latency;
   }
 
+  setSecretKey(key: any) {
+    this._secretKey = key;
+  }
+
   sendMessage(data: any) {
     this._websocket.send(
-      message.Message.encode(message.Message.fromJSON(data)).finish()
+      message.Message.encode(message.Message.fromPartial(data)).finish()
     );
   }
 
   sendRendezvous(data: any) {
     this._websocket.send(
       rendezvous.RendezvousMessage.encode(
-        rendezvous.RendezvousMessage.fromJSON(data)
+        rendezvous.RendezvousMessage.fromPartial(data)
       ).finish()
     );
   }
