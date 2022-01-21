@@ -1705,7 +1705,6 @@ impl Remote {
                                 self.handler
                                     .call("setPermission", &make_args!("audio", p.enabled));
                             }
-                            _ => {}
                         }
                     }
                     Some(misc::Union::switch_display(s)) => {

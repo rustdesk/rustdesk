@@ -82,10 +82,8 @@ class Grid: Behavior {
       {
         if (prev === col) return; // already here, nothing to do.
         prev.state.current = false; // drop state flag
-        prev.state.current = false; // drop state flag
       }
       col.state.current = true; // set state flag
-      row.state.checked = true; 
       col.scrollToView();
       this.onHeaderClick(col);
     }
