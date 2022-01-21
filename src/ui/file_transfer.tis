@@ -180,6 +180,8 @@ class JobTable: Reactor.Component {
         if (!err) {
           handler.remove_dir(job.id, job.path, job.is_remote);
           refreshDir(job.is_remote);
+          if (is_remote) file_transfer.remote_folder_view.table.resetCurrent();
+          else file_transfer.local_folder_view.table.resetCurrent();
         }
       } else if (!job.no_confirm) {
         handler.confirm_delete_files(id, job.file_num + 1);
@@ -337,6 +339,7 @@ class FolderView : Reactor.Component {
         if (type > 3) return;
         var name = row[1].text;
         var path = name == ".." ? getParentPath(me.is_remote, me.fd.path) : me.joinPath(name);
+        me.table.resetCurrent();
         me.goto(path, true);
       }
       this.get_updated();
@@ -605,6 +608,8 @@ function confirmDelete(path, is_remote) {
     </div>", function(res=null) {
       if (res) {
         handler.remove_file(jobIdCounter, path, 0, is_remote);
+        if (is_remote) file_transfer.remote_folder_view.table.resetCurrent();
+        else file_transfer.local_folder_view.table.resetCurrent();
         deleting_single_file_jobs[jobIdCounter] = { is_remote: is_remote, path: path };
         jobIdCounter += 1;
       }

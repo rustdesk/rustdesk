@@ -1759,7 +1759,8 @@ fn make_fd(id: i32, entries: &Vec<FileEntry>, only_count: bool) -> Value {
         }
         let mut e = Value::map();
         e.set_item("name", entry.name.to_owned());
-        e.set_item("type", entry.entry_type.value());
+        let tmp = entry.entry_type.value();
+        e.set_item("type", if tmp == 0 { 1 } else { tmp });
         e.set_item("time", entry.modified_time as f64);
         e.set_item("size", entry.size as f64);
         a.push(e);

@@ -43,6 +43,15 @@ class Grid: Behavior {
   {
     return this.$(thead>:current); // return current cell in header row
   }
+
+  function resetCurrent() {
+      var prev = this.getCurrentRow();
+      if (prev)
+      {
+        prev.state.current = false; // drop state flag
+        prev.state.checked = false; // drop state flag
+      }
+  }
   
   function setCurrentRow(row, reason = #by_code, doubleClick = false)
     {
@@ -53,8 +62,10 @@ class Grid: Behavior {
       {
         if (prev === row && !doubleClick) return; // already here, nothing to do.
         prev.state.current = false; // drop state flag
+        prev.state.checked = false; // drop state flag
       }
       row.state.current = true; 
+      row.state.checked = true; 
       row.scrollToView();
      
       if (doubleClick)
@@ -71,8 +82,10 @@ class Grid: Behavior {
       {
         if (prev === col) return; // already here, nothing to do.
         prev.state.current = false; // drop state flag
+        prev.state.current = false; // drop state flag
       }
       col.state.current = true; // set state flag
+      row.state.checked = true; 
       col.scrollToView();
       this.onHeaderClick(col);
     }
