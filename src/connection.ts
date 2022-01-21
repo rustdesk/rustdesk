@@ -69,7 +69,7 @@ export default class Connection {
     const phr = msg.punchHoleResponse;
     const rr = msg.relayResponse;
     if (phr) {
-      if (phr.failure != rendezvous.PunchHoleResponse_Failure.UNKNOWN) {
+      if (phr.failure != rendezvous.PunchHoleResponse_Failure.UNRECOGNIZED) {
         switch (phr?.failure) {
           case rendezvous.PunchHoleResponse_Failure.ID_NOT_EXIST:
             this.msgbox("error", "Error", "ID does not exist");
