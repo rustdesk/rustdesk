@@ -1,12 +1,14 @@
 package com.carriez.flutter_hbb
 
 import android.app.Activity
+import android.app.AlertDialog
 import android.content.Context
 import android.content.Intent
 import android.media.projection.MediaProjectionManager
 import android.os.Build
 import android.os.Bundle
 import android.os.PersistableBundle
+import android.provider.Settings
 import android.util.Log
 import androidx.annotation.RequiresApi
 import io.flutter.embedding.android.FlutterActivity
@@ -48,6 +50,10 @@ class MainActivity : FlutterActivity() {
                 }
                 "stopSer" -> {
                     mStopService()
+                    result.success(true)
+                }
+                "checkInput" ->{
+                    checkInput()
                     result.success(true)
                 }
                 else -> {}
@@ -94,6 +100,25 @@ class MainActivity : FlutterActivity() {
         } else {
             startService(serviceIntent)
         }
+    }
+
+    private fun checkInput() {
+        AlertDialog.Builder(this)
+            .setCancelable(false)
+            .setTitle("检查Input服务")
+            .setMessage("请开启相关服务")
+            .setPositiveButton("Yes") { dialog, which ->
+                val intent = Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)
+                if (intent.resolveActivity(packageManager) != null) startActivityForResult(
+                    intent,
+                    11
+                ) else AlertDialog.Builder(this)
+                    .setTitle("错误")
+                    .setMessage("无法启动服务")
+                    .show()
+            }
+            .setNegativeButton("No") { dialog, which -> }
+            .show()
     }
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {

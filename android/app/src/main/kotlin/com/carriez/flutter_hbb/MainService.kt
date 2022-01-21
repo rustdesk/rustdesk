@@ -34,11 +34,11 @@ const val M_KEY_FRAME_RATE = 30
 
 class MainService : Service() {
 
-    fun rustGetRaw():ByteArray{
+    fun rustGetRaw(): ByteArray {
         return rawByteArray!!
     }
 
-    external fun init(ctx:Context)
+    external fun init(ctx: Context)
 
     init {
         System.loadLibrary("rustdesk")
@@ -49,7 +49,7 @@ class MainService : Service() {
     private var surface: Surface? = null
     private val singleThread = Executors.newSingleThreadExecutor()
     private var mEncoder: MediaCodec? = null
-    private var rawByteArray :ByteArray? = null
+    private var rawByteArray: ByteArray? = null
 
     override fun onBind(intent: Intent): IBinder? {
         return null
@@ -90,7 +90,8 @@ class MainService : Service() {
         return super.onStartCommand(intent, flags, startId)
     }
 
-    lateinit var mImageReader:ImageReader // * 注意 这里要成为成员变量，防止被回收 https://www.cnblogs.com/yongdaimi/p/11004560.html
+    lateinit var mImageReader: ImageReader // * 注意 这里要成为成员变量，防止被回收 https://www.cnblogs.com/yongdaimi/p/11004560.html
+
     @SuppressLint("WrongConstant")
     @RequiresApi(Build.VERSION_CODES.LOLLIPOP)
     private fun startRecorder() {
@@ -100,23 +101,23 @@ class MainService : Service() {
             mImageReader =
                 ImageReader.newInstance(FIXED_WIDTH, FIXED_HEIGHT, PixelFormat.RGBA_8888, 2) // 至少是2
             mImageReader.setOnImageAvailableListener({ imageReader: ImageReader ->
-                Log.d(logTag, "on image")
-                    try {
-                        imageReader.acquireLatestImage().use { image ->
-                            if (image == null) return@setOnImageAvailableListener
-                            val planes = image.planes
-                            val buffer = planes[0].buffer
-                            buffer.rewind()
-                            // 这里注意 处理不当会引发OOM
-                            if (rawByteArray == null){
-                                rawByteArray = ByteArray(buffer.capacity())
-                                buffer.get(rawByteArray!!)
-                            }else{
-                                buffer.get(rawByteArray!!)
-                            }
+//                Log.d(logTag, "on image")
+                try {
+                    imageReader.acquireLatestImage().use { image ->
+                        if (image == null) return@setOnImageAvailableListener
+                        val planes = image.planes
+                        val buffer = planes[0].buffer
+                        buffer.rewind()
+                        // 这里注意 处理不当会引发OOM
+                        if (rawByteArray == null) {
+                            rawByteArray = ByteArray(buffer.capacity())
+                            buffer.get(rawByteArray!!)
+                        } else {
+                            buffer.get(rawByteArray!!)
                         }
-                    } catch (ignored: java.lang.Exception) {
                     }
+                } catch (ignored: java.lang.Exception) {
+                }
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
                     imageReader.discardFreeBuffers()
                 }

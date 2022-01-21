@@ -100,7 +100,8 @@ class _HomePageState extends State<HomePage> {
                 getPeers(),
                 ElevatedButton(onPressed:_toAndroidGetPer, child: Text("获取权限事件")),
                 ElevatedButton(onPressed:_toAndroidStartSer, child: Text("开启录屏服务")),
-                ElevatedButton(onPressed:_toAndroidStopSer, child: Text("停止录屏服务"))
+                ElevatedButton(onPressed:_toAndroidStopSer, child: Text("停止录屏服务")),
+                ElevatedButton(onPressed:_toAndroidCheckInput, child: Text("检查输入权限")),
               ]),
         ));
   }
@@ -116,6 +117,10 @@ class _HomePageState extends State<HomePage> {
     bool res = await toAndroidChannel.invokeMethod("stopSer");
     debugPrint("_toAndroidStopSer:$res");
   }
+  Future<Null> _toAndroidCheckInput() async{
+    bool res = await toAndroidChannel.invokeMethod("checkInput");
+    debugPrint("_toAndroidStopSer:$res");
+}
 
   void onConnect() {
     var id = _idController.text.trim();

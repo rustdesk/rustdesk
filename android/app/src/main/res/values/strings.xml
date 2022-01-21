@@ -1,0 +1,4 @@
+<resources>
+    <string name="app_name">RustDesk</string>
+    <string name="accessibility_service_description">测试服务 输入服务</string>
+</resources>
