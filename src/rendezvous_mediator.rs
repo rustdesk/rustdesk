@@ -482,6 +482,7 @@ async fn direct_server(server: ServerPtr) -> ResultType<()> {
                 if Config::get_option("direct-server").is_empty() {
                     continue;
                 }
+                stream.set_nodelay(true).ok();
                 log::info!("direct access from {}", addr);
                 let local_addr = stream.local_addr()?;
                 let server = server.clone();
