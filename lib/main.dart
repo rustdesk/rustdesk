@@ -16,25 +16,25 @@ class App extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final analytics = FirebaseAnalytics();
-    return ChangeNotifierProvider.value(
-        value: FFI.ffiModel,
-        child: ChangeNotifierProvider.value(
-            value: FFI.imageModel,
-            child: ChangeNotifierProvider.value(
-                value: FFI.cursorModel,
-                child: ChangeNotifierProvider.value(
-                    value: FFI.canvasModel,
-                    child: MaterialApp(
-                      debugShowCheckedModeBanner: false,
-                      title: 'RustDesk',
-                      theme: ThemeData(
-                        primarySwatch: Colors.blue,
-                        visualDensity: VisualDensity.adaptivePlatformDensity,
-                      ),
-                      home: HomePage(title: 'RustDesk'),
-                      navigatorObservers: [
-                        FirebaseAnalyticsObserver(analytics: analytics),
-                      ],
-                    )))));
+    return MultiProvider(
+      providers: [
+        ChangeNotifierProvider.value(value: FFI.ffiModel),
+        ChangeNotifierProvider.value(value: FFI.imageModel),
+        ChangeNotifierProvider.value(value: FFI.cursorModel),
+        ChangeNotifierProvider.value(value: FFI.canvasModel),
+      ],
+      child: MaterialApp(
+        debugShowCheckedModeBanner: false,
+        title: 'RustDesk',
+        theme: ThemeData(
+          primarySwatch: Colors.blue,
+          visualDensity: VisualDensity.adaptivePlatformDensity,
+        ),
+        home: HomePage(title: 'RustDesk'),
+        navigatorObservers: [
+          FirebaseAnalyticsObserver(analytics: analytics),
+        ],
+      ),
+    );
   }
 }
