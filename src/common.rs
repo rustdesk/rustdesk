@@ -230,6 +230,10 @@ pub fn test_nat_type() {
 async fn test_nat_type_() -> ResultType<bool> {
     log::info!("Testing nat ...");
     let is_direct = crate::ipc::get_socks_async(1_000).await.is_none(); // sync socks BTW
+    if !is_direct {
+        Config::set_nat_type(NatType::SYMMETRIC as _);
+        return Ok(true);
+    }
     let start = std::time::Instant::now();
     let rendezvous_server = get_rendezvous_server(1_000).await;
     let server1 = rendezvous_server;
@@ -264,10 +268,7 @@ async fn test_nat_type_() -> ResultType<bool> {
             RENDEZVOUS_TIMEOUT,
         )
         .await?;
-        if is_direct {
-            // to-do: should set NatType::UNKNOWN for proxy
-            addr = socket.local_addr();
-        }
+        addr = socket.local_addr();
         socket.send(&msg_out).await?;
         if let Some(Ok(bytes)) = socket.next_timeout(3000).await {
             if let Ok(msg_in) = RendezvousMessage::parse_from_bytes(&bytes) {

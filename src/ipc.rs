@@ -212,6 +212,7 @@ async fn handle(data: Data, stream: &mut Connection) {
                 } else {
                     Config::set_socks(Some(data));
                 }
+                crate::common::test_nat_type();
                 crate::rendezvous_mediator::RendezvousMediator::restart();
                 log::info!("socks updated");
             }
