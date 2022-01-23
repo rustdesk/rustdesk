@@ -75,6 +75,7 @@ async fn accept_connection_(server: ServerPtr, socket: Stream, secure: bool) -> 
     let listener = new_listener(local_addr, true).await?;
     log::info!("Server listening on: {}", &listener.local_addr()?);
     if let Ok((stream, addr)) = timeout(CONNECT_TIMEOUT, listener.accept()).await? {
+        stream.set_nodelay(true).ok();
         let stream_addr = stream.local_addr()?;
         create_tcp_connection(server, Stream::from(stream, stream_addr), addr, secure).await?;
     }

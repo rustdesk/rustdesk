@@ -85,6 +85,7 @@ impl FramedStream {
                     new_socket(local_addr, true)?.connect(remote_addr),
                 )
                 .await??;
+                stream.set_nodelay(true).ok();
                 let addr = stream.local_addr()?;
                 return Ok(Self(
                     Framed::new(DynTcpStream(Box::new(stream)), BytesCodec::new()),
@@ -114,6 +115,7 @@ impl FramedStream {
             if let Some(proxy) = proxy.to_proxy_addrs().next().await {
                 let stream =
                     super::timeout(ms_timeout, new_socket(local, true)?.connect(proxy?)).await??;
+                stream.set_nodelay(true).ok();
                 let stream = if username.trim().is_empty() {
                     super::timeout(
                         ms_timeout,
