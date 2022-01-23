@@ -97,6 +97,15 @@ MediaProjectionManager -> MediaProjection
 
 <hr>
 
+### 3.获取音频输入
+https://developer.android.google.cn/guide/topics/media/playback-capture?hl=zh-cn
+
+目前谷歌只开放了Android10系统同步音频内录功能
+10之前录音的时候会截取原本系统的音频输出
+即 开启内录时候无法在手机上正常使用耳机扬声器输出
+
+<hr>
+
 ### 其他
 - Kotlin 与 compose 版本设置问题
     - https://stackoverflow.com/questions/67600344/jetpack-compose-on-kotlin-1-5-0

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_hbb/server_page.dart';
 import 'package:provider/provider.dart';
 import 'package:firebase_analytics/firebase_analytics.dart';
 import 'package:firebase_analytics/observer.dart';
@@ -31,6 +32,9 @@ class App extends StatelessWidget {
           visualDensity: VisualDensity.adaptivePlatformDensity,
         ),
         home: HomePage(title: 'RustDesk'),
+        routes: {
+          "server_page":(context) => ServerPage(),
+        },
         navigatorObservers: [
           FirebaseAnalyticsObserver(analytics: analytics),
         ],

@@ -22,7 +22,6 @@ class HomePage extends StatefulWidget {
 class _HomePageState extends State<HomePage> {
   final _idController = TextEditingController();
   var _updateUrl = '';
-  static const toAndroidChannel = MethodChannel("mChannel");
 
   @override
   void initState() {
@@ -55,15 +54,21 @@ class _HomePageState extends State<HomePage> {
                       items: [
                         PopupMenuItem<String>(
                             child: Text(translate('ID Server')),
+                            value: 'id_server'),
+                        PopupMenuItem<String>(
+                            child: Text(translate('Share My Screen')),
                             value: 'server'),
+                        // TODO only android
                         PopupMenuItem<String>(
                             child: Text(translate('About') + ' RustDesk'),
                             value: 'about'),
                       ],
                       elevation: 8,
                     );
-                    if (value == 'server') {
+                    if (value == 'id_server') {
                       showServer(context);
+                    } else if (value == 'server') {
+                      Navigator.pushNamed(context, "server_page");
                     } else if (value == 'about') {
                       showAbout(context);
                     }
@@ -98,29 +103,9 @@ class _HomePageState extends State<HomePage> {
                                     fontWeight: FontWeight.bold)))),
                 getSearchBarUI(),
                 getPeers(),
-                ElevatedButton(onPressed:_toAndroidGetPer, child: Text("获取权限事件")),
-                ElevatedButton(onPressed:_toAndroidStartSer, child: Text("开启录屏服务")),
-                ElevatedButton(onPressed:_toAndroidStopSer, child: Text("停止录屏服务")),
-                ElevatedButton(onPressed:_toAndroidCheckInput, child: Text("检查输入权限")),
               ]),
         ));
   }
-  Future<Null> _toAndroidGetPer() async{
-    bool res = await toAndroidChannel.invokeMethod("getPer");
-    debugPrint("_toAndroidGetPer:$res");
-  }
-  Future<Null> _toAndroidStartSer() async{
-    bool res = await toAndroidChannel.invokeMethod("startSer");
-    debugPrint("_toAndroidStartSer:$res");
-  }
-  Future<Null> _toAndroidStopSer() async{
-    bool res = await toAndroidChannel.invokeMethod("stopSer");
-    debugPrint("_toAndroidStopSer:$res");
-  }
-  Future<Null> _toAndroidCheckInput() async{
-    bool res = await toAndroidChannel.invokeMethod("checkInput");
-    debugPrint("_toAndroidStopSer:$res");
-}
 
   void onConnect() {
     var id = _idController.text.trim();
