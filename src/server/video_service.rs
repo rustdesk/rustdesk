@@ -188,7 +188,7 @@ fn run(sp: GenericService) -> ResultType<()> {
         speed,
     };
     let mut vpx;
-    match Encoder::new(&cfg, 0) {
+    match Encoder::new(&cfg, (num_cpus::get() / 2) as _) {
         Ok(x) => vpx = x,
         Err(err) => bail!("Failed to create encoder: {}", err),
     }

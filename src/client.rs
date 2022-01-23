@@ -638,7 +638,7 @@ pub struct VideoHandler {
 impl VideoHandler {
     pub fn new() -> Self {
         VideoHandler {
-            decoder: Decoder::new(VideoCodecId::VP9, 0).unwrap(),
+            decoder: Decoder::new(VideoCodecId::VP9, (num_cpus::get() / 2) as _).unwrap(),
             rgb: Default::default(),
         }
     }

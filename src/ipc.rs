@@ -307,8 +307,8 @@ async fn check_pid(postfix: &str) {
             use sysinfo::{ProcessExt, System, SystemExt};
             let mut sys = System::new();
             sys.refresh_processes();
-            if let Some(p) = sys.process(pid) {
-                if let Some(current) = sys.process(std::process::id() as _) {
+            if let Some(p) = sys.process(pid.into()) {
+                if let Some(current) = sys.process((std::process::id() as i32).into()) {
                     if current.name() == p.name() {
                         // double check with connect
                         if connect(1000, postfix).await.is_ok() {
