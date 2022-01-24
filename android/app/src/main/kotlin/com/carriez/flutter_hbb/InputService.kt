@@ -11,9 +11,7 @@ import androidx.annotation.RequiresApi
 import kotlin.concurrent.thread
 
 class InputService : AccessibilityService() {
-//    companion object {
-//        var inputService:InputService? = null
-//    }
+
     private val logTag = "input service"
     private var leftIsDown = false
     private var mPath = Path()
@@ -22,14 +20,14 @@ class InputService : AccessibilityService() {
     private var mouseY = 0
 
     @RequiresApi(Build.VERSION_CODES.N)
-    fun mouseInput(mask: Int, _x: Int, _y: Int) {
+    fun rustMouseInput(mask: Int, _x: Int, _y: Int) {
         Log.w(logTag, "got mouse input:x:$_x ,y:$_y ,mask:$mask ")
 
         // TODO 临时倍数
         // TODO 按键抬起按下时候 x y 都是0
         if ( !(mask == 9 || mask == 10) ) {
-            mouseX = _x * 2
-            mouseY = _y * 2
+            mouseX = _x * SCALE
+            mouseY = _y * SCALE
         }
 
         // left button down ,was up

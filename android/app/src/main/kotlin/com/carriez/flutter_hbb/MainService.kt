@@ -12,8 +12,10 @@ import android.media.projection.MediaProjection
 import android.media.projection.MediaProjectionManager
 import android.os.Build
 import android.os.IBinder
+import android.util.DisplayMetrics
 import android.util.Log
 import android.view.Surface
+import android.view.WindowManager
 import android.widget.Toast
 import androidx.annotation.RequiresApi
 import androidx.core.app.NotificationCompat
@@ -26,9 +28,9 @@ const val START_SERVICE = "start_service"
 const val STOP_SERVICE = "stop_service"
 const val MIME_TYPE = MediaFormat.MIMETYPE_VIDEO_VP9
 
-// 获取手机尺寸 建立连接时发送尺寸和基础信息
-const val FIXED_WIDTH = 500 // 编码器有上限
-const val FIXED_HEIGHT = 1000
+var FIXED_WIDTH = 0 // 编码器有上限
+var FIXED_HEIGHT = 0
+var SCALE = 1  // RealScreenWidth = screenWidth * scale
 const val M_KEY_BIT_RATE = 1024_000
 const val M_KEY_FRAME_RATE = 30
 

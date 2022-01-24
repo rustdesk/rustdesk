@@ -2,36 +2,34 @@ package com.carriez.flutter_hbb
 
 import android.app.Activity
 import android.app.AlertDialog
-import android.content.Context
 import android.content.Intent
 import android.media.projection.MediaProjectionManager
 import android.os.Build
-import android.os.Bundle
-import android.os.PersistableBundle
 import android.provider.Settings
+import android.util.DisplayMetrics
 import android.util.Log
 import androidx.annotation.RequiresApi
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
-import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
-import java.nio.ByteBuffer
-import kotlin.concurrent.thread
 
+const val MAX_SIZE = 1400
 
 class MainActivity : FlutterActivity() {
     private val channelTag = "mChannel"
+    private val logTag = "mMainActivity"
     private var mediaProjectionResultIntent: Intent? = null
     private val requestCode = 1
-    private val buf = ByteBuffer.allocate(16)
 
     init {
         System.loadLibrary("rustdesk")
     }
 
+    external fun rustSetInfo(username: String, hostname: String, width: Int, height: Int)
+
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine) // 必要 否则无法正确初始化flutter
-
+        updateMachineInfo()
         MethodChannel(
             flutterEngine.dartExecutor.binaryMessenger,
             channelTag
@@ -52,7 +50,7 @@ class MainActivity : FlutterActivity() {
                     mStopService()
                     result.success(true)
                 }
-                "checkInput" ->{
+                "checkInput" -> {
                     checkInput()
                     result.success(true)
                 }
@@ -126,6 +124,42 @@ class MainActivity : FlutterActivity() {
         if (resultCode == Activity.RESULT_OK && data != null) {
             Log.d(channelTag, "got mediaProjectionResultIntent ok")
             mediaProjectionResultIntent = data
+        }
+    }
+
+    private fun updateMachineInfo() {
+        // 屏幕尺寸 控制最长边不超过1400 超过则减半直到1400 并储存缩放比例 实际发送给手机端的尺寸为缩小后的尺寸
+        // input控制时再通过缩放比例恢复原始尺寸进行path入参
+        val dm = DisplayMetrics()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            display?.getRealMetrics(dm)
+        } else {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN_MR1) {
+                @Suppress("DEPRECATION")
+                windowManager.defaultDisplay.getRealMetrics(dm)
+            } else {
+                @Suppress("DEPRECATION")
+                windowManager.defaultDisplay.getMetrics(dm)
+            }
+        }
+        var w = dm.widthPixels
+        var h = dm.heightPixels
+        var scale = 1
+        if (w != 0 && h != 0) {
+            if (w > MAX_SIZE || h > MAX_SIZE) {
+                scale = 2
+                w /= scale
+                h /= scale
+            }
+            Log.d(logTag, "Real size - width:$w,height:$h")
+
+            FIXED_WIDTH = 540
+            FIXED_HEIGHT = 1140
+            SCALE = scale
+            // TODO  username hostname
+            rustSetInfo("csf", "Android", FIXED_WIDTH, FIXED_HEIGHT)
+        } else {
+            Log.e(logTag, "Got Screen Size Fail!")
         }
     }
 }

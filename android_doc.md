@@ -139,6 +139,8 @@ pub unsafe extern "system" fn Java_com_carriez_flutter_1hbb_MainActivity_init(
 ```
 - 注意，原项目包名flutter_hbb 带有下划线，通过安卓的编译提示获得的命名方式为如上。
 
+- 使用jni的时候会出现无输出崩溃的情况
+
 - 将安卓的对象实例（Context）在init的过程中传入rust端，  
 context通过env.new_global_ref()变成全局引用
 env.get_java_vm()获取到jvm
@@ -158,3 +160,14 @@ Kotlin 中的 ByteArray 类 会在JVM中编译成为java的byte[]
 byte[]通过jni传递到rust端时
 通过jni.rs的方法
 env.convert_byte_array()即可转化为Vec<u8>
+
+- 关于 sig
+  - (I)V ： 输入为Int 输出为Void
+  - (I)Ljava/nio/ByteBuffer ： 输入为Int 输出为ByteBuffer  对应jni JByteBuffer 且env 有对应解析方法
+  - ()[B : 输入为空 输出为byte[](java) == ByteArray(kotlin) == jbytearray(jni env 中有对应解析方法到Vec\<u8\>)
+  - 使用JValue枚举定义java变量
+
+# BIG TODO
+音频
+连续输入
+服务关闭操作

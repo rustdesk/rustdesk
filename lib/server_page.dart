@@ -180,7 +180,7 @@ class PermissionRow extends StatelessWidget {
           TextSpan(
               text: isOk ? "已开启" : "未开启",
               style: TextStyle(
-                  fontSize: 16.0, color: isOk ? Colors.green : Colors.red)),
+                  fontSize: 16.0, color: isOk ? Colors.green : Colors.grey)),
         ])),
         TextButton(
             onPressed: onPressed,
@@ -202,7 +202,7 @@ Widget cardTitle(String text) {
           fontFamily: 'WorkSans',
           fontWeight: FontWeight.bold,
           fontSize: 25,
-          color: Color(0xFF00B6F0),
+          color: MyTheme.accent80,
         ),
       ));
 }
