@@ -16,6 +16,7 @@ extern "system" {
 /// The main struct for handling the event emitting
 #[derive(Default)]
 pub struct Enigo;
+static mut LAYOUT: HKL = std::ptr::null_mut();
 
 fn mouse_event(flags: u32, data: u32, dx: i32, dy: i32) -> DWORD {
     let mut input = INPUT {
@@ -35,6 +36,18 @@ fn mouse_event(flags: u32, data: u32, dx: i32, dy: i32) -> DWORD {
 }
 
 fn keybd_event(flags: u32, vk: u16, scan: u16) -> DWORD {
+    let mut scan = scan;
+    unsafe {
+        // https://github.com/rustdesk/rustdesk/issues/366
+        if scan == 0 {
+            if LAYOUT.is_null() {
+                let current_window_thread_id =
+                    GetWindowThreadProcessId(GetForegroundWindow(), std::ptr::null_mut());
+                LAYOUT = GetKeyboardLayout(current_window_thread_id);
+            }
+            scan = MapVirtualKeyExW(vk as _, 0, LAYOUT) as _;
+        }
+    }
     let mut input = INPUT {
         type_: INPUT_KEYBOARD,
         u: unsafe {
@@ -253,6 +266,9 @@ impl Enigo {
     }
 
     fn key_to_keycode(&self, key: Key) -> u16 {
+        unsafe {
+            LAYOUT = std::ptr::null_mut();
+        }
         // do not use the codes from crate winapi they're
         // wrongly typed with i32 instead of i16 use the
         // ones provided by win/keycodes.rs that are prefixed
@@ -347,13 +363,13 @@ impl Enigo {
         // get the first char from the string ignore the rest
         // ensure its not a multybyte char
         if let Some(chr) = string.chars().nth(0) {
-            // NOTE VkKeyScanW uses the current keyboard layout
-            // to specify a layout use VkKeyScanExW and GetKeyboardLayout
+            // NOTE VkKeyScanW uses the current keyboard LAYOUT
+            // to specify a LAYOUT use VkKeyScanExW and GetKeyboardLayout
             // or load one with LoadKeyboardLayoutW
             let current_window_thread_id =
                 unsafe { GetWindowThreadProcessId(GetForegroundWindow(), std::ptr::null_mut()) };
-            let layout = unsafe { GetKeyboardLayout(current_window_thread_id) };
-            let keycode_and_shiftstate = unsafe { VkKeyScanExW(chr as _, layout) };
+            unsafe { LAYOUT = GetKeyboardLayout(current_window_thread_id) };
+            let keycode_and_shiftstate = unsafe { VkKeyScanExW(chr as _, LAYOUT) };
             keycode_and_shiftstate as _
         } else {
             0
