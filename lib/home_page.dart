@@ -126,7 +126,7 @@ class _HomePageState extends State<HomePage> {
     if (!FFI.ffiModel.initialized) {
       return Container();
     }
-    return Padding(
+    var w = Padding(
       padding: const EdgeInsets.fromLTRB(16.0, 8.0, 16.0, 0.0),
       child: Container(
         height: 84,
@@ -195,6 +195,9 @@ class _HomePageState extends State<HomePage> {
         ),
       ),
     );
+    if (!isWeb) return w;
+    return Center(
+        child: Container(constraints: BoxConstraints(maxWidth: 600), child: w));
   }
 
   @override
