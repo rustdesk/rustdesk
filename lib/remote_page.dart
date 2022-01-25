@@ -7,8 +7,7 @@ import 'dart:async';
 import 'package:tuple/tuple.dart';
 import 'package:wakelock/wakelock.dart';
 import 'common.dart';
-import 'model.dart';
-import 'dart:io';
+import 'model.dart' if (dart.library.html) 'web_model.dart';
 
 final initText = '\1' * 1024;
 
@@ -124,7 +123,7 @@ class _RemotePageState extends State<RemotePage> {
   void handleInput(String newValue) {
     var oldValue = _value;
     _value = newValue;
-    if (Platform.isIOS) {
+    if (isIOS) {
       var i = newValue.length - 1;
       for (; i >= 0 && newValue[i] != '\1'; --i) {}
       var j = oldValue.length - 1;

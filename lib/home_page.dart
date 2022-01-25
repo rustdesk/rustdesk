@@ -5,9 +5,8 @@ import 'package:package_info/package_info.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'dart:async';
 import 'common.dart';
-import 'model.dart';
+import 'model.dart' if (dart.library.html) 'web_model.dart';
 import 'remote_page.dart';
-import 'dart:io';
 
 class HomePage extends StatefulWidget {
   HomePage({Key key, this.title}) : super(key: key);
@@ -25,7 +24,7 @@ class _HomePageState extends State<HomePage> {
   @override
   void initState() {
     super.initState();
-    if (Platform.isAndroid) {
+    if (isAndroid) {
       Timer(Duration(seconds: 5), () {
         _updateUrl = FFI.getByName('software_update_url');
         if (_updateUrl.isNotEmpty) setState(() {});

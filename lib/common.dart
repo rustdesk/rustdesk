@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'dart:async';
 import 'package:flutter_easyloading/flutter_easyloading.dart';
 import 'package:tuple/tuple.dart';
-import 'dart:io';
 
 typedef F = String Function(String);
 
@@ -29,13 +28,13 @@ final ButtonStyle flatButtonStyle = TextButton.styleFrom(
   ),
 );
 
-void Function() loadingCancelCallback = null;
+void Function() loadingCancelCallback;
 void showLoading(String text, BuildContext context) {
   if (_hasDialog && context != null) {
     Navigator.pop(context);
   }
   dismissLoading();
-  if (Platform.isAndroid) {
+  if (isAndroid) {
     EasyLoading.show(status: text, maskType: EasyLoadingMaskType.black);
     return;
   }
@@ -202,3 +201,7 @@ Color str2color(String str, [alpha = 0xFF]) {
   hash = hash % 16777216;
   return Color((hash & 0xFF7FFF) | (alpha << 24));
 }
+
+bool isAndroid;
+bool isIOS;
+bool isWeb;
