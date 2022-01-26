@@ -695,7 +695,7 @@ void initializeCursorAndCanvas() async {
 }
 
 String translate(String name) {
-  if (name.startsWith('Failed') && name.contains(':')) {
+  if (name.startsWith('Failed to') && name.contains(': ')) {
     return name.split(': ').map((x) => translate(x)).join(': ');
   }
   var a = 'translate';
