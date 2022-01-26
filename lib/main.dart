@@ -3,7 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:firebase_analytics/firebase_analytics.dart';
 import 'package:firebase_analytics/observer.dart';
 import 'package:firebase_core/firebase_core.dart';
-import 'model.dart' if (dart.library.html) 'web_model.dart';
+import 'model.dart';
 import 'home_page.dart';
 
 Future<Null> main() async {

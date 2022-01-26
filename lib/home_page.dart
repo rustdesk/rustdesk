@@ -5,7 +5,7 @@ import 'package:package_info/package_info.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'dart:async';
 import 'common.dart';
-import 'model.dart' if (dart.library.html) 'web_model.dart';
+import 'model.dart';
 import 'remote_page.dart';
 
 class HomePage extends StatefulWidget {
@@ -325,13 +325,13 @@ void showServer(BuildContext context) {
                     formKey.currentState.save();
                     if (id != id0)
                       FFI.setByName('option',
-                          '{"name": "custom-rendezvous-server", "value": "${id}"}');
+                          '{"name": "custom-rendezvous-server", "value": "$id"}');
                     if (relay != relay0)
                       FFI.setByName('option',
-                          '{"name": "relay-server", "value": "${relay}"}');
+                          '{"name": "relay-server", "value": "$relay"}');
                     if (key != key0)
                       FFI.setByName(
-                          'option', '{"name": "key", "value": "${key}"}');
+                          'option', '{"name": "key", "value": "$key"}');
                     Navigator.pop(context);
                   }
                 },

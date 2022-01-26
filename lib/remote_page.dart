@@ -7,7 +7,7 @@ import 'dart:async';
 import 'package:tuple/tuple.dart';
 import 'package:wakelock/wakelock.dart';
 import 'common.dart';
-import 'model.dart' if (dart.library.html) 'web_model.dart';
+import 'model.dart';
 
 final initText = '\1' * 1024;
 
@@ -485,7 +485,7 @@ class _RemotePageState extends State<RemotePage> {
       } else if (value == 'touch_mode') {
         _touchMode = !_touchMode;
         final v = _touchMode ? 'Y' : '';
-        FFI.setByName('peer_option', '{"name": "touch-mode", "value": "${v}"}');
+        FFI.setByName('peer_option', '{"name": "touch-mode", "value": "$v"}');
       } else if (value == 'reset_canvas') {
         FFI.cursorModel.reset();
       }
@@ -947,7 +947,7 @@ void showSetOSPassword(BuildContext context, bool login) {
                 onPressed: () {
                   var text = controller.text.trim();
                   FFI.setByName('peer_option',
-                      '{"name": "os-password", "value": "${text}"}');
+                      '{"name": "os-password", "value": "$text"}');
                   FFI.setByName('peer_option',
                       '{"name": "auto-login", "value": "${autoLogin ? 'Y' : ''}"}');
                   if (text != "" && login) {

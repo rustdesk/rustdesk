@@ -1,11 +1,6 @@
-import 'package:ffi/ffi.dart';
 import 'package:flutter/services.dart';
-import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:device_info/device_info.dart';
-import 'dart:io';
 import 'dart:math';
-import 'dart:ffi';
 import 'dart:convert';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
@@ -13,17 +8,7 @@ import 'package:flutter/material.dart';
 import 'package:tuple/tuple.dart';
 import 'dart:async';
 import 'common.dart';
-
-class RgbaFrame extends Struct {
-  @Uint32()
-  int len;
-  Pointer<Uint8> data;
-}
-
-typedef F2 = Pointer<Utf8> Function(Pointer<Utf8>, Pointer<Utf8>);
-typedef F3 = void Function(Pointer<Utf8>, Pointer<Utf8>);
-typedef F4 = void Function(Pointer<RgbaFrame>);
-typedef F5 = Pointer<RgbaFrame> Function();
+import 'native_model.dart' if (dart.library.html) 'web_model.dart';
 
 class FfiModel with ChangeNotifier {
   PeerInfo _pi;
@@ -43,13 +28,10 @@ class FfiModel with ChangeNotifier {
   get pi => _pi;
 
   FfiModel() {
-    isIOS = Platform.isIOS;
-    isAndroid = Platform.isAndroid;
-    isWeb = false;
     Translator.call = translate;
     clear();
     () async {
-      await FFI.init();
+      await PlatformFFI.init();
       _initialized = true;
       print("FFI initialized");
       notifyListeners();
@@ -136,7 +118,7 @@ class FfiModel with ChangeNotifier {
     }
     if (pos != null) FFI.cursorModel.updateCursorPosition(pos);
     if (!_decoding) {
-      var rgba = FFI.getRgba();
+      var rgba = PlatformFFI.getRgba();
       if (rgba != null) {
         if (_waitForImage) {
           _waitForImage = false;
@@ -147,7 +129,7 @@ class FfiModel with ChangeNotifier {
         ui.decodeImageFromPixels(
             rgba, _display.width, _display.height, ui.PixelFormat.bgra8888,
             (image) {
-          FFI.clearRgbaFrame();
+          PlatformFFI.clearRgbaFrame();
           _decoding = false;
           if (FFI.id != pid) return;
           try {
@@ -510,12 +492,6 @@ class CursorModel with ChangeNotifier {
 
 class FFI {
   static String id = "";
-  static String _dir = '';
-  static F2 _getByName;
-  static F3 _setByName;
-  static F4 _freeRgba;
-  static F5 _getRgba;
-  static Pointer<RgbaFrame> _lastRgbaFrame;
   static var shift = false;
   static var ctrl = false;
   static var alt = false;
@@ -595,19 +571,6 @@ class FFI {
     FFI.id = id;
   }
 
-  static void clearRgbaFrame() {
-    if (_lastRgbaFrame != null && _lastRgbaFrame != nullptr)
-      _freeRgba(_lastRgbaFrame);
-  }
-
-  static Uint8List getRgba() {
-    if (_getRgba == null) return null;
-    _lastRgbaFrame = _getRgba();
-    if (_lastRgbaFrame == null || _lastRgbaFrame == nullptr) return null;
-    final ref = _lastRgbaFrame.ref;
-    return Uint8List.sublistView(ref.data.asTypedList(ref.len));
-  }
-
   static Map<String, dynamic> popEvent() {
     var s = getByName('event');
     if (s == '') return null;
@@ -641,60 +604,12 @@ class FFI {
     resetModifiers();
   }
 
-  static void setByName(String name, [String value = '']) {
-    if (_setByName == null) return;
-    var a = name.toNativeUtf8();
-    var b = value.toNativeUtf8();
-    _setByName(a, b);
-    calloc.free(a);
-    calloc.free(b);
-  }
-
   static String getByName(String name, [String arg = '']) {
-    if (_getByName == null) return '';
-    var a = name.toNativeUtf8();
-    var b = arg.toNativeUtf8();
-    var p = _getByName(a, b);
-    assert(p != nullptr && p != null);
-    var res = p.toDartString();
-    calloc.free(p);
-    calloc.free(a);
-    calloc.free(b);
-    return res;
+    return PlatformFFI.getByName(name, arg);
   }
 
-  static Future<Null> init() async {
-    final dylib = Platform.isAndroid
-        ? DynamicLibrary.open('librustdesk.so')
-        : DynamicLibrary.process();
-    print('initializing FFI');
-    try {
-      _getByName = dylib.lookupFunction<F2, F2>('get_by_name');
-      _setByName =
-          dylib.lookupFunction<Void Function(Pointer<Utf8>, Pointer<Utf8>), F3>(
-              'set_by_name');
-      _freeRgba = dylib
-          .lookupFunction<Void Function(Pointer<RgbaFrame>), F4>('free_rgba');
-      _getRgba = dylib.lookupFunction<F5, F5>('get_rgba');
-      _dir = (await getApplicationDocumentsDirectory()).path;
-      String id = 'NA';
-      String name = 'Flutter';
-      DeviceInfoPlugin deviceInfo = DeviceInfoPlugin();
-      if (Platform.isAndroid) {
-        AndroidDeviceInfo androidInfo = await deviceInfo.androidInfo;
-        name = '${androidInfo.brand}-${androidInfo.model}';
-        id = androidInfo.id.hashCode.toString();
-      } else {
-        IosDeviceInfo iosInfo = await deviceInfo.iosInfo;
-        name = iosInfo.utsname.machine;
-        id = iosInfo.identifierForVendor.hashCode.toString();
-      }
-      setByName('info1', id);
-      setByName('info2', name);
-      setByName('init', _dir);
-    } catch (e) {
-      print(e);
-    }
+  static void setByName(String name, [String value = '']) {
+    PlatformFFI.setByName(name, value);
   }
 }
 
@@ -775,10 +690,6 @@ void initializeCursorAndCanvas() async {
   FFI.canvasModel.update(xCanvas, yCanvas, scale);
 }
 
-final locale = Platform.localeName;
-final bool isCn =
-    locale.startsWith('zh') && (locale.endsWith('CN') || locale.endsWith('SG'));
-
 final langs = <String, Map<String, String>>{
   'cn': <String, String>{
     'Remote ID': '远程ID',
@@ -791,6 +702,9 @@ final langs = <String, Map<String, String>>{
   'en': <String, String>{}
 };
 
+final bool isCn = localeName.startsWith('zh') &&
+    (localeName.endsWith('CN') || localeName.endsWith('SG'));
+
 String translate(String name) {
   if (name.startsWith('Failed') && name.contains(':')) {
     return name.split(': ').map((x) => translate(x)).join(': ');
@@ -799,7 +713,7 @@ String translate(String name) {
   final v = tmp[name];
   if (v == null) {
     var a = 'translate';
-    var b = '{"locale": "${Platform.localeName}", "text": "$name"}';
+    var b = '{"locale": "$localeName", "text": "$name"}';
     return FFI.getByName(a, b);
   } else {
     return v;
