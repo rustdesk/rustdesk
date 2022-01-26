@@ -31,7 +31,7 @@ if (app) {
 
   document.body.onload = () => {
     const host = document.querySelector('#host');
-    host.value = localStorage.getItem('host');
+    host.value = localStorage.getItem('custom-rendezvous-server');
     const id = document.querySelector('#id');
     id.value = localStorage.getItem('id');
     const key = document.querySelector('#key');
@@ -41,7 +41,7 @@ if (app) {
 
   window.connect = () => {
     const host = document.querySelector('#host');
-    localStorage.setItem('host', host.value);
+    localStorage.setItem('custom-rendezvous-server', host.value);
     const id = document.querySelector('#id');
     localStorage.setItem('id', id.value);
     const key = document.querySelector('#key');

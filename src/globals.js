@@ -13,16 +13,16 @@ window.getRgba = () => currentFrame;
 window.getLanguage = () => navigator.language;
 
 export function msgbox(type, title, text) {
-  text = text.toLowerCase();
-  var hasRetry = msgtype == "error"
+  const text2 = text.toLowerCase();
+  var hasRetry = type == "error"
     && title == "Connection Error"
-    && !text.indexOf("offline") >= 0
-    && !text.indexOf("exist") >= 0
-    && !text.indexOf("handshake") >= 0
-    && !text.indexOf("failed") >= 0
-    && !text.indexOf("resolve") >= 0
-    && !text.indexOf("mismatch") >= 0
-    && !text.indexOf("manually") >= 0;
+    && text2.indexOf("offline") < 0
+    && text2.indexOf("exist") < 0
+    && text2.indexOf("handshake") < 0
+    && text2.indexOf("failed") < 0
+    && text2.indexOf("resolve") < 0
+    && text2.indexOf("mismatch") < 0
+    && text2.indexOf("manually") < 0;
   events.push({ name: 'msgbox', type, title, text, hasRetry });
 }
 
@@ -41,6 +41,15 @@ export function setConn(conn) {
 
 export function getConn() {
   return window.curConn;
+}
+
+export async function startConn(id) {
+  try {
+    await curConn.start(id);
+  } catch (e) {
+    console.log(e);
+    msgbox('error', 'Error', String(e));
+  }
 }
 
 export function close() {
@@ -128,11 +137,11 @@ export function decompress(compressedArray) {
 window.setByName = (name, value) => {
   try {
     value = JSON.parse(value);
-  } catch (e) {}
+  } catch (e) { }
   switch (name) {
     case 'connect':
       newConn();
-      curConn.start(value);
+      startConn(value);
       break;
     case 'login':
       curConn.login(value.password, value.remember || false);
@@ -214,10 +223,10 @@ window.setByName = (name, value) => {
 window.getByName = (name, arg) => {
   try {
     arg = JSON.parse(arg);
-  } catch (e) {}
+  } catch (e) { }
   switch (name) {
     case 'peers':
-      return localStorage.getItem('peers');
+      return localStorage.getItem('peers') || '[]';
       break;
     case 'remote_id':
       return localStorage.getItem('remote-id') || '';
@@ -247,7 +256,10 @@ window.getByName = (name, arg) => {
     case 'peer_option':
       return curConn.getOption(arg);
       break;
+    case 'test_if_valid_server':
+      break;
   }
+  return '';
 }
 
 window.init = () => {

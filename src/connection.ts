@@ -6,8 +6,8 @@ import * as sha256 from "fast-sha256";
 import * as globals from "./globals";
 
 const PORT = 21116;
-const HOST = 'rs-sg.rustdesk.com';
-const SCHEMA = 'ws://';
+const HOST = "rs-sg.rustdesk.com";
+const SCHEMA = "ws://";
 
 type MsgboxCallback = (type: string, title: string, text: string) => void;
 type DrawCallback = (data: Uint8Array) => void;
@@ -36,7 +36,8 @@ export default class Connection {
 
   async start(id: string) {
     try {
-      this._options = JSON.parse((localStorage.getItem('peers') || '{}'))[id] || {};
+      this._options =
+        JSON.parse(localStorage.getItem("peers") || "{}")[id] || {};
     } catch (e) {
       this._options = {};
     }
@@ -66,7 +67,7 @@ export default class Connection {
     const natType = rendezvous.NatType.SYMMETRIC;
     const punchHoleRequest = rendezvous.PunchHoleRequest.fromPartial({
       id,
-      licenceKey: localStorage.getItem('key') || undefined,
+      licenceKey: localStorage.getItem("key") || undefined,
       connType,
       natType,
     });
@@ -114,7 +115,7 @@ export default class Connection {
     console.log(new Date() + ": Connected to relay server");
     this._ws = ws;
     const requestRelay = rendezvous.RequestRelay.fromPartial({
-      licenceKey: localStorage.getItem('key') || undefined,
+      licenceKey: localStorage.getItem("key") || undefined,
       uuid,
     });
     ws.sendRendezvous({ requestRelay });
@@ -351,7 +352,7 @@ export default class Connection {
   }
 
   getRemember(): any {
-    return this._options['remember'];
+    return this._options["remember"];
   }
 
   getOption(name: string): any {

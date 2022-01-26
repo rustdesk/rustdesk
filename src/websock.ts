@@ -11,6 +11,7 @@ export default class Websock {
   _status: any;
   _latency: number;
   _secretKey: [Uint8Array, number, number] | undefined;
+  _uri: string;
 
   constructor(uri: string) {
     this._eventHandlers = {
@@ -19,6 +20,7 @@ export default class Websock {
       close: () => {},
       error: () => {},
     };
+    this._uri = uri;
     this._status = "";
     this._buf = [];
     this._websocket = new WebSocket(uri);
@@ -36,7 +38,9 @@ export default class Websock {
   }
 
   sendMessage(json: any) {
-    let data = message.Message.encode(message.Message.fromPartial(json)).finish();
+    let data = message.Message.encode(
+      message.Message.fromPartial(json)
+    ).finish();
     let k = this._secretKey;
     if (k) {
       k[1] += 1;
@@ -98,6 +102,10 @@ export default class Websock {
         reject(e);
       };
       this._websocket.onerror = (e) => {
+        if (!this._status) {
+          reject('Failed to connect to ' + this._uri);
+          return;
+        }
         this._status = e;
         console.error("WebSock.onerror: " + e);
         this._eventHandlers.error(e);
