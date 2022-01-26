@@ -19,16 +19,22 @@ export default class Connection {
   _interval: any;
   _id: string;
   _hash: message.Hash | undefined;
-  _msgbox: MsgboxCallback | undefined;
-  _draw: DrawCallback | undefined;
+  _msgbox: MsgboxCallback;
+  _draw: DrawCallback;
   _peerInfo: message.PeerInfo | undefined;
   _firstFrame: Boolean | undefined;
   _videoDecoder: any;
   _audioDecoder: any;
+  _password: string | undefined;
 
   constructor() {
+    this._msgbox = globals.msgbox;
+    this._draw = globals.draw;
     this._msgs = [];
     this._id = "";
+  }
+
+  async start(id: string) {
     this._interval = setInterval(() => {
       while (this._msgs.length) {
         this._ws?.sendMessage(this._msgs[0]);
@@ -44,9 +50,6 @@ export default class Connection {
       this._audioDecoder = decoder;
       console.log("opus loaded");
     });
-  }
-
-  async start(id: string) {
     const uri = getDefaultUri();
     const ws = new Websock(uri);
     this._ws = ws;
@@ -69,7 +72,7 @@ export default class Connection {
     const phr = msg.punchHoleResponse;
     const rr = msg.relayResponse;
     if (phr) {
-      if (phr.failure != rendezvous.PunchHoleResponse_Failure.UNKNOWN) {
+      if (phr.failure != rendezvous.PunchHoleResponse_Failure.UNRECOGNIZED) {
         switch (phr?.failure) {
           case rendezvous.PunchHoleResponse_Failure.ID_NOT_EXIST:
             this.msgbox("error", "Error", "ID does not exist");
@@ -110,7 +113,8 @@ export default class Connection {
       uuid,
     });
     ws.sendRendezvous({ requestRelay });
-    await this.secure(pk);
+    const secure = (await this.secure(pk)) || false;
+    globals.pushEvent("connection_ready", { secure, direct: false });
     await this.msgLoop();
   }
 
@@ -179,6 +183,7 @@ export default class Connection {
     });
     await this._ws?.sendMessage({ publicKey });
     this._ws?.setSecretKey(secretKey);
+    return true;
   }
 
   async msgLoop() {
@@ -186,7 +191,7 @@ export default class Connection {
       const msg = this._ws?.parseMessage(await this._ws?.next());
       if (msg?.hash) {
         this._hash = msg?.hash;
-        await this.handleHash();
+        await this.login(this._password);
         this.msgbox("input-password", "Password Required", "");
       } else if (msg?.testDelay) {
         const testDelay = msg?.testDelay;
@@ -198,21 +203,28 @@ export default class Connection {
         if (r.error) {
           this.msgbox("error", "Error", r.error);
         } else if (r.peerInfo) {
-          this._peerInfo = r.peerInfo;
-          this.msgbox(
-            "success",
-            "Successful",
-            "Connected, waiting for image..."
-          );
+          this.handlePeerInfo(r.peerInfo);
         }
       } else if (msg?.videoFrame) {
         this.handleVideoFrame(msg?.videoFrame!);
+      } else if (msg?.clipboard) {
+        const cb = msg?.clipboard;
+        if (cb.compress) cb.content = globals.decompress(cb.content);
+        globals.pushEvent("clipboard", cb);
+      } else if (msg?.cursorData) {
+        const cd = msg?.cursorData;
+        cd.colors = globals.decompress(cd.colors);
+        globals.pushEvent("cursor_data", cd);
+      } else if (msg?.cursorId) {
+        globals.pushEvent("cursor_id", { id: msg?.cursorId });
+      } else if (msg?.cursorPosition) {
+        globals.pushEvent("cursor_position", msg?.cursorPosition);
+      } else if (msg?.misc) {
+        this.handleMisc(msg?.misc);
+      } else if (msg?.audioFrame) {
+        //
       }
     }
-  }
-
-  async handleHash() {
-    await this._sendLoginMessage();
   }
 
   msgbox(type_: string, title: string, text: string) {
@@ -224,10 +236,18 @@ export default class Connection {
   }
 
   close() {
+    this._msgs = [];
     clearInterval(this._interval);
     this._ws?.close();
     this._videoDecoder?.close();
     this._audioDecoder?.close();
+  }
+
+  async refresh() {
+    const misc = message.Misc.fromPartial({
+      refreshVideo: true,
+    });
+    await this._ws?.sendMessage({ misc });
   }
 
   setMsgbox(callback: MsgboxCallback) {
@@ -238,17 +258,25 @@ export default class Connection {
     this._draw = callback;
   }
 
-  async login(password: string) {
+  async login(password: string | undefined, _remember: Boolean = false) {
+    this._password = password;
     this.msgbox("connecting", "Connecting...", "Logging in...");
-    let salt = this._hash?.salt;
-    if (salt) {
+    const salt = this._hash?.salt;
+    if (salt && password) {
       let p = hash([password, salt]);
-      let challenge = this._hash?.challenge;
+      const challenge = this._hash?.challenge;
       if (challenge) {
         p = hash([p, challenge]);
         await this._sendLoginMessage(p);
       }
+    } else {
+      await this._sendLoginMessage();
     }
+  }
+
+  async reconnect() {
+    this.close();
+    await this.start(this._id);
   }
 
   async _sendLoginMessage(password: Uint8Array | undefined = undefined) {
@@ -267,7 +295,7 @@ export default class Connection {
       this._firstFrame = true;
     }
     if (vf.vp9s) {
-      let dec = this._videoDecoder;
+      const dec = this._videoDecoder;
       // dec.sync();
       vf.vp9s.frames.forEach((f) => {
         dec.processFrame(f.data.slice(0).buffer, (ok: any) => {
@@ -276,6 +304,44 @@ export default class Connection {
           }
         });
       });
+    }
+  }
+
+  handlePeerInfo(pi: message.PeerInfo) {
+    this._peerInfo = pi;
+    if (pi.displays.length == 0) {
+      this.msgbox("error", "Remote Error", "No Display");
+      return;
+    }
+    this.msgbox("success", "Successful", "Connected, waiting for image...");
+    globals.pushEvent("peer_info", pi);
+  }
+
+  handleMisc(misc: message.Misc) {
+    if (misc.audioFormat) {
+      //
+    } else if (misc.permissionInfo) {
+      const p = misc.permissionInfo;
+      console.info("Change permission " + p.permission + " -> " + p.enabled);
+      let name;
+      switch (p.permission) {
+        case message.PermissionInfo_Permission.Keyboard:
+          name = "keyboard";
+          break;
+        case message.PermissionInfo_Permission.Clipboard:
+          name = "clipboard";
+          break;
+        case message.PermissionInfo_Permission.Audio:
+          name = "audio";
+          break;
+        default:
+          return;
+      }
+      globals.pushEvent("permission", { [name]: p.enabled });
+    } else if (misc.switchDisplay) {
+      globals.pushEvent("switch_display", misc.switchDisplay);
+    } else if (misc.closeReason) {
+      this.msgbox("error", "Connection Error", misc.closeReason);
     }
   }
 }

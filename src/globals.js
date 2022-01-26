@@ -1,7 +1,39 @@
 import Connection from "./connection";
 import _sodium from "libsodium-wrappers";
+import { ZSTDecoder } from 'zstddec';
+
+const decompressor = new ZSTDDecoder();
+await decompressor.init();
+
+var currentFrame = undefined;
+var events = [];
 
 window.currentConnection = undefined;
+window.getRgba = () => currentFrame;
+window.getLanguage = () => navigator.language;
+
+export function msgbox(type, title, text) {
+  text = text.toLowerCase();
+  var hasRetry = msgtype == "error"
+    && title == "Connection Error"
+    && !text.indexOf("offline") >= 0
+    && !text.indexOf("exist") >= 0
+    && !text.indexOf("handshake") >= 0
+    && !text.indexOf("failed") >= 0
+    && !text.indexOf("resolve") >= 0
+    && !text.indexOf("mismatch") >= 0
+    && !text.indexOf("manually") >= 0;
+  events.push({ name: 'msgbox', type, title, text, hasRetry });
+}
+
+export function pushEvent(name, payload) {
+  payload.name = name;
+  events.push(payload);
+}
+
+export function draw(frame) {
+  currentFrame = frame;
+}
 
 export function setConn(conn) {
   window.currentConnection = conn;
@@ -14,6 +46,7 @@ export function getConn() {
 export function close() {
   getConn()?.close();
   setConn(undefined);
+  currentFrame = undefined;
 }
 
 export function newConn() {
@@ -73,4 +106,58 @@ export function encrypt(unsigned, nonce, key) {
 
 export function decrypt(signed, nonce, key) {
   return sodium.crypto_secretbox_open_easy(signed, makeOnce(nonce), key);
+}
+
+export function decompress(compressedArray) {
+  const MAX = 1024 * 1024 * 64;
+  const MIN = 1024 * 1024;
+  let n = 30 * data.length;
+  if (n > MAX) {
+    n = MAX;
+  }
+  if (n < MIN) {
+    n = MIN;
+  }
+  try {
+    return decompressor.decode(compressedArray, n);
+  } catch (e) {
+    console.error('decompress failed: ' + e);
+  }
+}
+
+window.setByName = (name, value) => {
+  switch (name) {
+    case 'connect': 
+      newConn();
+      break;
+    case 'login':
+      currentConnection.login(value.password, value.remember);
+      break;
+    case 'close':
+      close();
+      break;
+    case 'refresh':
+      currentConnection.refresh();
+      break;
+    case 'reconnect':
+      currentConnection.reconnect();
+      break;
+    default:
+      break;
+  }
+}
+
+window.getByName = (name, value) => {
+  switch (name) {
+    case 'peers':
+      return localStorage.getItem('peers');
+      break;
+    case 'event':
+      if (events.length) {
+        const e = events[0];
+        events.splice(0, 1);
+        return e;
+      }
+      break;
+  }
 }
