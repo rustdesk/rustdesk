@@ -1,14 +1,14 @@
 import Connection from "./connection";
 import _sodium from "libsodium-wrappers";
-import { ZSTDecoder } from 'zstddec';
+import * as zstd from 'zstddec';
+import { CursorData } from "./message";
 
-const decompressor = new ZSTDDecoder();
-await decompressor.init();
+const decompressor = new zstd.ZSTDDecoder();
 
 var currentFrame = undefined;
 var events = [];
 
-window.currentConnection = undefined;
+window.curConn = undefined;
 window.getRgba = () => currentFrame;
 window.getLanguage = () => navigator.language;
 
@@ -36,11 +36,11 @@ export function draw(frame) {
 }
 
 export function setConn(conn) {
-  window.currentConnection = conn;
+  window.curConn = conn;
 }
 
 export function getConn() {
-  return window.currentConnection;
+  return window.curConn;
 }
 
 export function close() {
@@ -50,7 +50,7 @@ export function close() {
 }
 
 export function newConn() {
-  window.currentConnection?.close();
+  window.curConn?.close();
   const conn = new Connection();
   setConn(conn);
   return conn;
@@ -126,38 +126,130 @@ export function decompress(compressedArray) {
 }
 
 window.setByName = (name, value) => {
+  try {
+    value = JSON.parse(value);
+  } catch (e) {}
   switch (name) {
-    case 'connect': 
+    case 'connect':
       newConn();
+      curConn.start(value);
       break;
     case 'login':
-      currentConnection.login(value.password, value.remember);
+      curConn.login(value.password, value.remember || false);
       break;
     case 'close':
       close();
       break;
     case 'refresh':
-      currentConnection.refresh();
+      curConn.refresh();
       break;
     case 'reconnect':
-      currentConnection.reconnect();
+      curConn.reconnect();
+      break;
+    case 'toggle_option':
+      curConn.toggleOption(value);
+      break;
+    case 'image_quality':
+      curConn.setImageQuality(value);
+      break;
+    case 'lock_screen':
+      curConn.lockScreen();
+      break;
+    case 'ctrl_alt_del':
+      curConn.ctrlAltDe();
+      break;
+    case 'switch_display':
+      curConn.switchDisplay(value);
+      break;
+    case 'remove':
+      const peers = JSON.parse(localStorage.getItem('peers') || '{}');
+      delete peers[value];
+      localStorage.setItem('peers', JSON.stringify(peers));
+      break;
+    case 'input_key':
+      curConn.inputKey(value.name, value.alt || false, value.ctrl || false, value.shift || false, value.command || false);
+      break;
+    case 'input_string':
+      curConn.inputString(value);
+      break;
+    case 'send_mouse':
+      let mask = 0;
+      switch (value.type) {
+        case 'down':
+          mask = 1;
+          break;
+        case 'up':
+          mask = 2;
+          break;
+        case 'wheel':
+          mask = 3;
+          break;
+      }
+      switch (value.buttons) {
+        case 'left':
+          mask |= 1 << 3;
+          break;
+        case 'right':
+          mask |= 2 << 3;
+          break;
+        case 'wheel':
+          mask |= 4 << 3;
+      }
+      curConn.inputMouse(mask, value.x || 0, value.y || 0, value.alt || false, value.ctrl || false, value.shift || false, value.command || false);
+      break;
+    case 'option':
+      localStorage.setItem(value.name, value.value);
+      break;
+    case 'peer_option':
+      curConn.setPeerOption(value.name, value.value);
+      break;
+    case 'input_os_password':
+      curConn.inputOsPassword(value, true);
       break;
     default:
       break;
   }
 }
 
-window.getByName = (name, value) => {
+window.getByName = (name, arg) => {
+  try {
+    arg = JSON.parse(arg);
+  } catch (e) {}
   switch (name) {
     case 'peers':
       return localStorage.getItem('peers');
+      break;
+    case 'remote_id':
+      return localStorage.getItem('remote-id') || '';
+      break;
+    case 'remember':
+      return curConn.getRemember();
       break;
     case 'event':
       if (events.length) {
         const e = events[0];
         events.splice(0, 1);
-        return e;
+        return JSON.stringify(e);
       }
       break;
+    case 'toggle_option':
+      return curConn.getOption(arg);
+      break;
+    case 'option':
+      return localStorage.getItem(arg);
+      break;
+    case 'image_quality':
+      return curConn.getImageQuality();
+      break;
+    case 'translate':
+      return arg.text;
+      break;
+    case 'peer_option':
+      return curConn.getOption(arg);
+      break;
   }
+}
+
+window.init = () => {
+  decompressor.init();
 }

@@ -6,9 +6,8 @@ import * as sha256 from "fast-sha256";
 import * as globals from "./globals";
 
 const PORT = 21116;
-const HOST = "rs-sg.rustdesk.com";
-const licenceKey = "";
-const SCHEMA = "ws://";
+const HOST = 'rs-sg.rustdesk.com';
+const SCHEMA = 'ws://';
 
 type MsgboxCallback = (type: string, title: string, text: string) => void;
 type DrawCallback = (data: Uint8Array) => void;
@@ -26,6 +25,7 @@ export default class Connection {
   _videoDecoder: any;
   _audioDecoder: any;
   _password: string | undefined;
+  _options: any;
 
   constructor() {
     this._msgbox = globals.msgbox;
@@ -35,6 +35,11 @@ export default class Connection {
   }
 
   async start(id: string) {
+    try {
+      this._options = JSON.parse((localStorage.getItem('peers') || '{}'))[id] || {};
+    } catch (e) {
+      this._options = {};
+    }
     this._interval = setInterval(() => {
       while (this._msgs.length) {
         this._ws?.sendMessage(this._msgs[0]);
@@ -61,7 +66,7 @@ export default class Connection {
     const natType = rendezvous.NatType.SYMMETRIC;
     const punchHoleRequest = rendezvous.PunchHoleRequest.fromPartial({
       id,
-      licenceKey,
+      licenceKey: localStorage.getItem('key') || undefined,
       connType,
       natType,
     });
@@ -109,7 +114,7 @@ export default class Connection {
     console.log(new Date() + ": Connected to relay server");
     this._ws = ws;
     const requestRelay = rendezvous.RequestRelay.fromPartial({
-      licenceKey,
+      licenceKey: localStorage.getItem('key') || undefined,
       uuid,
     });
     ws.sendRendezvous({ requestRelay });
@@ -209,11 +214,11 @@ export default class Connection {
         this.handleVideoFrame(msg?.videoFrame!);
       } else if (msg?.clipboard) {
         const cb = msg?.clipboard;
-        if (cb.compress) cb.content = globals.decompress(cb.content);
+        if (cb.compress) cb.content = globals.decompress(cb.content)!;
         globals.pushEvent("clipboard", cb);
       } else if (msg?.cursorData) {
         const cd = msg?.cursorData;
-        cd.colors = globals.decompress(cd.colors);
+        cd.colors = globals.decompress(cd.colors)!;
         globals.pushEvent("cursor_data", cd);
       } else if (msg?.cursorId) {
         globals.pushEvent("cursor_id", { id: msg?.cursorId });
@@ -344,6 +349,14 @@ export default class Connection {
       this.msgbox("error", "Connection Error", misc.closeReason);
     }
   }
+
+  getRemember(): any {
+    return this._options['remember'];
+  }
+
+  getOption(name: string): any {
+    return this._options[name];
+  }
 }
 
 // @ts-ignore
@@ -354,7 +367,7 @@ async function testDelay() {
 }
 
 function getDefaultUri(isRelay: Boolean = false): string {
-  const host = localStorage.getItem("host");
+  const host = localStorage.getItem("custom-rendezvous-server");
   return SCHEMA + (host || HOST) + ":" + (PORT + (isRelay ? 3 : 2));
 }
 
