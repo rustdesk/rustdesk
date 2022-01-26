@@ -78,7 +78,8 @@ class _RemotePageState extends State<RemotePage> {
     return _bottom >= 100;
   }
 
-  void interval() {
+  // crash on web before widgit initiated.
+  void intervalUnsafe() {
     var v = MediaQuery.of(context).viewInsets.bottom;
     if (v != _bottom) {
       resetTool();
@@ -90,6 +91,12 @@ class _RemotePageState extends State<RemotePage> {
       });
     }
     FFI.ffiModel.update(widget.id, context, handleMsgbox);
+  }
+
+  void interval() {
+    try {
+      intervalUnsafe();
+    } catch (e) {}
   }
 
   void handleMsgbox(Map<String, dynamic> evt, String id) {

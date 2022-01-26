@@ -202,6 +202,6 @@ Color str2color(String str, [alpha = 0xFF]) {
   return Color((hash & 0xFF7FFF) | (alpha << 24));
 }
 
-bool isAndroid;
-bool isIOS;
-bool isWeb;
+bool isAndroid = false;
+bool isIOS = false;
+bool isWeb = false;

@@ -611,6 +611,10 @@ class FFI {
   static void setByName(String name, [String value = '']) {
     PlatformFFI.setByName(name, value);
   }
+
+  static Future<String> getVersion() async {
+    return await PlatformFFI.getVersion();
+  }
 }
 
 class Peer {
@@ -690,32 +694,11 @@ void initializeCursorAndCanvas() async {
   FFI.canvasModel.update(xCanvas, yCanvas, scale);
 }
 
-final langs = <String, Map<String, String>>{
-  'cn': <String, String>{
-    'Remote ID': '远程ID',
-    'Paste': '粘贴',
-    'Are you sure to close the connection?': '是否确认关闭连接？',
-    'Download new version': '下载新版本',
-    'Touch mode': '触屏模式',
-    'Reset canvas': '重置画布',
-  },
-  'en': <String, String>{}
-};
-
-final bool isCn = localeName.startsWith('zh') &&
-    (localeName.endsWith('CN') || localeName.endsWith('SG'));
-
 String translate(String name) {
   if (name.startsWith('Failed') && name.contains(':')) {
     return name.split(': ').map((x) => translate(x)).join(': ');
   }
-  final tmp = isCn ? langs['cn'] : langs['en'];
-  final v = tmp[name];
-  if (v == null) {
-    var a = 'translate';
-    var b = '{"locale": "$localeName", "text": "$name"}';
-    return FFI.getByName(a, b);
-  } else {
-    return v;
-  }
+  var a = 'translate';
+  var b = '{"locale": "$localeName", "text": "$name"}';
+  return FFI.getByName(a, b);
 }

@@ -4,7 +4,8 @@ import 'dart:ffi';
 import 'package:ffi/ffi.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:device_info/device_info.dart';
-import "common.dart";
+import 'package:package_info/package_info.dart';
+import 'common.dart';
 
 class RgbaFrame extends Struct {
   @Uint32()
@@ -36,6 +37,11 @@ class PlatformFFI {
     if (_lastRgbaFrame == null || _lastRgbaFrame == nullptr) return null;
     final ref = _lastRgbaFrame.ref;
     return Uint8List.sublistView(ref.data.asTypedList(ref.len));
+  }
+
+  static Future<String> getVersion() async {
+    PackageInfo packageInfo = await PackageInfo.fromPlatform();
+    return packageInfo.version;
   }
 
   static String getByName(String name, [String arg = '']) {

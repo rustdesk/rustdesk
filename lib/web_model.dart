@@ -10,6 +10,10 @@ class PlatformFFI {
     // return Uint8List.sublistView(ref.data.asTypedList(ref.len));
   }
 
+  static Future<String> getVersion() async {
+    return '';
+  }
+
   static String getByName(String name, [String arg = '']) {
     return js.context.callMethod('getByName', [name, arg]);
   }
@@ -20,6 +24,7 @@ class PlatformFFI {
 
   static Future<Null> init() async {
     isWeb = true;
+    js.context.callMethod('init');
   }
 }
 

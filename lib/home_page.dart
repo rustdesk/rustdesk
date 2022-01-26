@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:tuple/tuple.dart';
-import 'package:package_info/package_info.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'dart:async';
 import 'common.dart';
@@ -342,13 +341,13 @@ void showServer(BuildContext context) {
 }
 
 Future<Null> showAbout(BuildContext context) async {
-  PackageInfo packageInfo = await PackageInfo.fromPlatform();
+  var version = await FFI.getVersion();
   showAlertDialog(
       context,
       (setState) => Tuple3(
           null,
           Wrap(direction: Axis.vertical, spacing: 12, children: [
-            Text('Version: ${packageInfo.version}'),
+            Text('Version: $version'),
             InkWell(
                 onTap: () async {
                   const url = 'https://rustdesk.com/';
