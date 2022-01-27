@@ -24,7 +24,6 @@
 #include <stdio.h>
 
 #define ZOF_TAB     65536
-#define ZOF_RGB     3
 
 static int      T1[ZOF_TAB], T2[ZOF_TAB], T3[ZOF_TAB], T4[ZOF_TAB];
 static int      initialized;
@@ -46,19 +45,16 @@ static int foo;
 static int frame;
 
 void
-AVX_YUV_to_RGB(unsigned char *dst, unsigned short *src, int width, int height) {
+AVX_YUV_to_RGBA(unsigned char *dst, unsigned char *y, unsigned char* u, unsigned char* v, int width, int height) {
     int             r, g, b;
-    unsigned short  *y, *u, *v, *uline, *vline;
+    unsigned char   *uline, *vline;
     int             w, h;
 
     if (initialized == 0) {
         initialized = !0;
         build_tables();
     }
-    // Setup pointers to the Y, U, V planes
-    y = src;
-    u = src + (width * height);
-    v = u + (width * height) / 4;   // Each chroma does 4 pixels in 4:2:0
+    int half_width = width / 2;
     // Loop the image, taking into account sub-sample for the chroma channels
     for (h = 0; h < height; h++) {
         uline = u;
@@ -67,18 +63,18 @@ AVX_YUV_to_RGB(unsigned char *dst, unsigned short *src, int width, int height) {
             r = *y + T1[*vline];
             g = *y + T2[*vline] + T3[*uline];
             b = *y + T4[*uline];
-            dst[0] = clamp(r);     // 16-bit to 8-bit, chuck precision
-            dst[1] = clamp(g);
-            dst[2] = clamp(b);
-            dst += ZOF_RGB;
+            *dst++ = clamp(r);     // 16-bit to 8-bit, chuck precision
+            *dst++ = clamp(g);
+            *dst++ = clamp(b);
+            *dst++ = 255;
             if (w & 0x01) {
                 uline++;
                 vline++;
             }
         }
         if (h & 0x01) {
-            u += width / 2;
-            v += width / 2;
+            u += half_width;
+            v += half_width;
         }
     }
 }

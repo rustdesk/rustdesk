@@ -41,7 +41,7 @@ export function pushEvent(name, payload) {
 }
 
 export function draw(frame) {
-  currentFrame = I420ToABGR(frame);
+  currentFrame = I420ToARGB(frame);
 }
 
 export function setConn(conn) {
@@ -282,7 +282,7 @@ window.init = async () => {
 
 let yPtr, yPtrLen, uPtr, uPtrLen, vPtr, vPtrLen, outPtr, outPtrLen;
 // let testSpeed = [0, 0];
-export function I420ToABGR(yb) {
+export function I420ToARGB(yb) {
   if (!wasmExports) return;
   // testSpeed[0] += 1;
   const tm0 = new Date().getTime();
@@ -318,8 +318,8 @@ export function I420ToABGR(yb) {
     outPtr = malloc(n);
   }
   // const res = wasmExports.I420ToARGB(yPtr, yb.y.stride, uPtr, yb.u.stride, vPtr, yb.v.stride, outPtr, w * 4, w, h);
-  // const res = wasmExports.AVX_YUV_to_RGB(outPtr, yPtr, uPtr, vPtr, w, h);
-  const res = wasmExports.yuv420_rgb24_std(w, h, yPtr, uPtr, vPtr, yb.y.stride, yb.v.stride, outPtr, w * 4, 0);
+  const res = wasmExports.AVX_YUV_to_RGBA(outPtr, yPtr, uPtr, vPtr, w, h);
+  // const res = wasmExports.yuv420_rgb24_std(w, h, yPtr, uPtr, vPtr, yb.y.stride, yb.v.stride, outPtr, w * 4, 0);
   const out = HEAPU8.slice(outPtr, outPtr + n);
   /*
   testSpeed[1] += new Date().getTime() - tm0;
