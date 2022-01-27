@@ -2,7 +2,7 @@
   "name": "web_hbb",
   "version": "1.0.0",
   "scripts": {
-    "dev": "curl -O https://raw.githubusercontent.com/rgov/js-theora-decoder/main/yuv-canvas-1.2.6.js && vite",
+    "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview"
   },

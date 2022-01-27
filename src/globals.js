@@ -2,8 +2,10 @@ import Connection from "./connection";
 import _sodium from "libsodium-wrappers";
 import * as zstd from 'zstddec';
 import { CursorData } from "./message";
+import { loadOpus, loadVp9 } from "./codec";
 
-const decompressor = new zstd.ZSTDDecoder();
+var decompressor;
+var wasmDsp;
 
 var currentFrame = undefined;
 var events = [];
@@ -122,7 +124,7 @@ export function decrypt(signed, nonce, key) {
   return sodium.crypto_secretbox_open_easy(signed, makeOnce(nonce), key);
 }
 
-export function decompress(compressedArray) {
+export async function decompress(compressedArray) {
   const MAX = 1024 * 1024 * 64;
   const MIN = 1024 * 1024;
   let n = 30 * compressedArray.length;
@@ -133,6 +135,9 @@ export function decompress(compressedArray) {
     n = MIN;
   }
   try {
+    if (!decompressor) {
+      await initZstd();
+    }
     return decompressor.decode(compressedArray, n);
   } catch (e) {
     console.error('decompress failed: ' + e);
@@ -267,6 +272,24 @@ window.getByName = (name, arg) => {
   return '';
 }
 
-window.init = () => {
-  decompressor.init();
+window.init = async () => {
+  await initZstd();
+}
+
+function I420ToARGB(yuvbuffer) {
+  //
+}
+
+async function initZstd() {
+  loadOpus(() => { });
+  loadVp9(() => { });
+  fetch('./LibYUV.wasm').then(res => res.arrayBuffer()).then((buffer) => {
+    LibYUV['wasmBinary'] = buffer;
+    window.wasmDsp = wasmDsp = LibYUV({ wasmBinary: LibYUV.wasmBinary });
+    console.log('libyuv ready');
+  });
+  const tmp = new zstd.ZSTDDecoder();
+  await tmp.init();
+  console.log('zstd ready');
+  decompressor = tmp;
 }

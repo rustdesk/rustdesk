@@ -215,11 +215,11 @@ export default class Connection {
         this.handleVideoFrame(msg?.videoFrame!);
       } else if (msg?.clipboard) {
         const cb = msg?.clipboard;
-        if (cb.compress) cb.content = globals.decompress(cb.content)!;
+        if (cb.compress) cb.content = await globals.decompress(cb.content)!;
         globals.pushEvent("clipboard", cb);
       } else if (msg?.cursorData) {
         const cd = msg?.cursorData;
-        cd.colors = globals.decompress(cd.colors)!;
+        cd.colors = await globals.decompress(cd.colors)!;
         globals.pushEvent("cursor_data", cd);
       } else if (msg?.cursorId) {
         globals.pushEvent("cursor_id", { id: msg?.cursorId });
