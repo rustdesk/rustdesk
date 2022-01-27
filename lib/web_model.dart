@@ -7,7 +7,9 @@ class PlatformFFI {
 
   static Uint8List getRgba() {
     var data = js.context.callMethod('getRgba');
-    if (data) return Uint8List.sublistView(data);
+    if (data != null) {
+      return Uint8List.sublistView(data);
+    }
     return null;
   }
 
