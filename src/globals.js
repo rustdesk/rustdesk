@@ -5,7 +5,7 @@ import { CursorData } from "./message";
 import { loadOpus, loadVp9 } from "./codec";
 
 var decompressor;
-var wasmDsp;
+var wasmExports;
 
 var currentFrame = undefined;
 var events = [];
@@ -280,34 +280,65 @@ window.init = async () => {
   await initZstd();
 }
 
-function I420ToABGR(yb) {
-  if (!wasmDsp) return null;
-  const yPtr = wasmDsp._malloc(yb.y.bytes.length);
-  wasmDsp.HEAPU8.set(yb.y.bytes, yPtr);
-  const uPtr = wasmDsp._malloc(yb.u.bytes.length);
-  wasmDsp.HEAPU8.set(yb.u.bytes, uPtr);
-  const vPtr = wasmDsp._malloc(yb.v.bytes.length);
-  wasmDsp.HEAPU8.set(yb.v.bytes, vPtr);
-  const oSize = yb.format.width * yb.format.height * 4;
-  const outPtr = wasmDsp._malloc(oSize);
-  const res = wasmDsp._I420ToABGR(yPtr, yb.y.stride, uPtr, yb.u.stride, vPtr, yb.v.stride, outPtr, yb.format.width * 4,
-    yb.format.width, yb.format.height);
-  const out = wasmDsp.HEAPU8.slice(outPtr, outPtr + oSize);
-  wasmDsp._free(yPtr);
-  wasmDsp._free(uPtr);
-  wasmDsp._free(vPtr);
-  wasmDsp._free(outPtr);
+let yPtr, yPtrLen, uPtr, uPtrLen, vPtr, vPtrLen, outPtr, outPtrLen;
+// let testSpeed = [0, 0];
+export function I420ToABGR(yb) {
+  if (!wasmExports) return;
+  // testSpeed[0] += 1;
+  const tm0 = new Date().getTime();
+  const { malloc, free, memory } = wasmExports;
+  const HEAPU8 = new Uint8Array(memory.buffer);
+  let n = yb.y.bytes.length;
+  if (yPtrLen != n) {
+    if (yPtr) free(yPtr);
+    yPtrLen = n;
+    yPtr = malloc(n);
+  }
+  HEAPU8.set(yb.y.bytes, yPtr);
+  n = yb.u.bytes.length;
+  if (uPtrLen != n) {
+    if (uPtr) free(uPtr);
+    uPtrLen = n;
+    uPtr = malloc(n);
+  }
+  HEAPU8.set(yb.u.bytes, uPtr);
+  n = yb.v.bytes.length;
+  if (vPtrLen != n) {
+    if (vPtr) free(vPtr);
+    vPtrLen = n;
+    vPtr = malloc(n);
+  }
+  HEAPU8.set(yb.v.bytes, vPtr);
+  const w = yb.format.width;
+  const h = yb.format.height;
+  n = w * h * 4;
+  if (outPtrLen != n) {
+    if (outPtr) free(outPtr);
+    outPtrLen = n;
+    outPtr = malloc(n);
+  }
+  // const res = wasmExports.I420ToARGB(yPtr, yb.y.stride, uPtr, yb.u.stride, vPtr, yb.v.stride, outPtr, w * 4, w, h);
+  // const res = wasmExports.AVX_YUV_to_RGB(outPtr, yPtr, uPtr, vPtr, w, h);
+  const res = wasmExports.yuv420_rgb24_std(w, h, yPtr, uPtr, vPtr, yb.y.stride, yb.v.stride, outPtr, w * 4, 0);
+  const out = HEAPU8.slice(outPtr, outPtr + n);
+  /*
+  testSpeed[1] += new Date().getTime() - tm0;
+  if (testSpeed[0] > 30) {
+    console.log(testSpeed[1] / testSpeed[0]);
+    testSpeed = [0, 0];
+  }
+  */
   return out;
 }
 
 async function initZstd() {
   loadOpus(() => { });
   loadVp9(() => { });
-  fetch('./LibYUV.wasm').then(res => res.arrayBuffer()).then((buffer) => {
-    LibYUV['wasmBinary'] = buffer;
-    window.wasmDsp = wasmDsp = LibYUV({ wasmBinary: LibYUV.wasmBinary });
-    console.log('libyuv ready');
-  });
+  const response = await fetch('yuv.wasm');
+  const file = await response.arrayBuffer();
+  const wasm = await WebAssembly.instantiate(file);
+  wasmExports = wasm.instance.exports;
+  console.log('yuv ready');
   const tmp = new zstd.ZSTDDecoder();
   await tmp.init();
   console.log('zstd ready');
