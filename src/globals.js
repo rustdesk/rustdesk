@@ -11,7 +11,11 @@ var currentFrame = undefined;
 var events = [];
 
 window.curConn = undefined;
-window.getRgba = () => currentFrame;
+window.getRgba = () => {
+  const tmp = currentFrame;
+  currentFrame = undefined;
+  return tmp || null;
+}
 window.getLanguage = () => navigator.language;
 
 export function msgbox(type, title, text) {
@@ -37,7 +41,7 @@ export function pushEvent(name, payload) {
 }
 
 export function draw(frame) {
-  currentFrame = frame;
+  currentFrame = I420ToABGR(frame);
 }
 
 export function setConn(conn) {
@@ -276,8 +280,24 @@ window.init = async () => {
   await initZstd();
 }
 
-function I420ToARGB(yuvbuffer) {
-  //
+function I420ToABGR(yb) {
+  if (!wasmDsp) return null;
+  const yPtr = wasmDsp._malloc(yb.y.bytes.length);
+  wasmDsp.HEAPU8.set(yb.y.bytes, yPtr);
+  const uPtr = wasmDsp._malloc(yb.u.bytes.length);
+  wasmDsp.HEAPU8.set(yb.u.bytes, uPtr);
+  const vPtr = wasmDsp._malloc(yb.v.bytes.length);
+  wasmDsp.HEAPU8.set(yb.v.bytes, vPtr);
+  const oSize = yb.format.width * yb.format.height * 4;
+  const outPtr = wasmDsp._malloc(oSize);
+  const res = wasmDsp._I420ToABGR(yPtr, yb.y.stride, uPtr, yb.u.stride, vPtr, yb.v.stride, outPtr, yb.format.width * 4,
+    yb.format.width, yb.format.height);
+  const out = wasmDsp.HEAPU8.slice(outPtr, outPtr + oSize);
+  wasmDsp._free(yPtr);
+  wasmDsp._free(uPtr);
+  wasmDsp._free(vPtr);
+  wasmDsp._free(outPtr);
+  return out;
 }
 
 async function initZstd() {

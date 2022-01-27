@@ -143,14 +143,14 @@ export default class Connection {
     }
     if (!pk) {
       // send an empty message out in case server is setting up secure and waiting for first message
-      await this._ws?.sendMessage({});
+      this._ws?.sendMessage({});
       return;
     }
     const msg = this._ws?.parseMessage(await this._ws?.next());
     let signedId: any = msg?.signedId;
     if (!signedId) {
       console.error("Handshake failed: invalid message type");
-      await this._ws?.sendMessage({});
+      this._ws?.sendMessage({});
       return;
     }
     try {
@@ -160,7 +160,7 @@ export default class Connection {
       // fall back to non-secure connection in case pk mismatch
       console.error("pk mismatch, fall back to non-secure");
       const publicKey = message.PublicKey.fromPartial({});
-      await this._ws?.sendMessage({ publicKey });
+      this._ws?.sendMessage({ publicKey });
       return;
     }
     signedId = new TextDecoder().decode(signedId!);
@@ -169,7 +169,7 @@ export default class Connection {
     let theirPk = tmp[1];
     if (id != this._id!) {
       console.error("Handshake failed: sign failure");
-      await this._ws?.sendMessage({});
+      this._ws?.sendMessage({});
       return;
     }
     theirPk = globals.decodeBase64(theirPk);
@@ -177,7 +177,7 @@ export default class Connection {
       console.error(
         "Handshake failed: invalid public box key length from peer"
       );
-      await this._ws?.sendMessage({});
+      this._ws?.sendMessage({});
       return;
     }
     const [mySk, asymmetricValue] = globals.genBoxKeyPair();
@@ -187,7 +187,7 @@ export default class Connection {
       asymmetricValue,
       symmetricValue,
     });
-    await this._ws?.sendMessage({ publicKey });
+    this._ws?.sendMessage({ publicKey });
     this._ws?.setSecretKey(secretKey);
     return true;
   }
@@ -198,11 +198,11 @@ export default class Connection {
       if (msg?.hash) {
         this._hash = msg?.hash;
         if (!this._password) this.msgbox("input-password", "Password Required", "");
-        await this.login(this._password);
+        this.login(this._password);
       } else if (msg?.testDelay) {
         const testDelay = msg?.testDelay;
         if (!testDelay.fromClient) {
-          await this._ws?.sendMessage({ testDelay });
+          this._ws?.sendMessage({ testDelay });
         }
       } else if (msg?.loginResponse) {
         const r = msg?.loginResponse;
@@ -237,7 +237,7 @@ export default class Connection {
     this._msgbox?.(type_, title, text);
   }
 
-  draw(frame: Uint8Array) {
+  draw(frame: any) {
     this._draw?.(frame);
   }
 
@@ -249,11 +249,11 @@ export default class Connection {
     this._audioDecoder?.close();
   }
 
-  async refresh() {
+  refresh() {
     const misc = message.Misc.fromPartial({
       refreshVideo: true,
     });
-    await this._ws?.sendMessage({ misc });
+    this._ws?.sendMessage({ misc });
   }
 
   setMsgbox(callback: MsgboxCallback) {
@@ -264,7 +264,7 @@ export default class Connection {
     this._draw = callback;
   }
 
-  async login(password: string | undefined, _remember: Boolean = false) {
+  login(password: string | undefined, _remember: Boolean = false) {
     this._password = password;
     if (password) {
       const salt = this._hash?.salt;
@@ -272,9 +272,9 @@ export default class Connection {
       const challenge = this._hash?.challenge;
       p = hash([p, challenge!]);
       this.msgbox("connecting", "Connecting...", "Logging in...");
-      await this._sendLoginMessage(p);
+      this._sendLoginMessage(p);
     } else {
-      await this._sendLoginMessage();
+      this._sendLoginMessage();
     }
   }
 
@@ -283,14 +283,14 @@ export default class Connection {
     await this.start(this._id);
   }
 
-  async _sendLoginMessage(password: Uint8Array | undefined = undefined) {
+  _sendLoginMessage(password: Uint8Array | undefined = undefined) {
     const loginRequest = message.LoginRequest.fromPartial({
       username: this._id!,
       myId: "web", // to-do
       myName: "web", // to-do
       password,
     });
-    await this._ws?.sendMessage({ loginRequest });
+    this._ws?.sendMessage({ loginRequest });
   }
 
   handleVideoFrame(vf: message.VideoFrame) {
