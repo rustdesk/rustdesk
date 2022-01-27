@@ -13,6 +13,8 @@ window.getRgba = () => currentFrame;
 window.getLanguage = () => navigator.language;
 
 export function msgbox(type, title, text) {
+  if (!events) return;
+  if (!type) return;
   const text2 = text.toLowerCase();
   var hasRetry = type == "error"
     && title == "Connection Error"
@@ -27,6 +29,7 @@ export function msgbox(type, title, text) {
 }
 
 export function pushEvent(name, payload) {
+  if (!events) return;
   payload.name = name;
   events.push(payload);
 }
@@ -56,10 +59,12 @@ export function close() {
   getConn()?.close();
   setConn(undefined);
   currentFrame = undefined;
+  events = undefined;
 }
 
 export function newConn() {
   window.curConn?.close();
+  events = [];
   const conn = new Connection();
   setConn(conn);
   return conn;
@@ -120,7 +125,7 @@ export function decrypt(signed, nonce, key) {
 export function decompress(compressedArray) {
   const MAX = 1024 * 1024 * 64;
   const MIN = 1024 * 1024;
-  let n = 30 * data.length;
+  let n = 30 * compressedArray.length;
   if (n > MAX) {
     n = MAX;
   }
@@ -141,7 +146,7 @@ window.setByName = (name, value) => {
   switch (name) {
     case 'connect':
       newConn();
-      startConn(value);
+      startConn(String(value));
       break;
     case 'login':
       curConn.login(value.password, value.remember || false);
@@ -235,7 +240,7 @@ window.getByName = (name, arg) => {
       return curConn.getRemember();
       break;
     case 'event':
-      if (events.length) {
+      if (events && events.length) {
         const e = events[0];
         events.splice(0, 1);
         return JSON.stringify(e);

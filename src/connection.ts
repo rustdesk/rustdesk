@@ -60,7 +60,7 @@ export default class Connection {
     const ws = new Websock(uri);
     this._ws = ws;
     this._id = id;
-    console.log(new Date() + ": Conntecting to rendezvoous server: " + uri);
+    console.log(new Date() + ": Conntecting to rendezvoous server: " + uri + ", for " + id);
     await ws.open();
     console.log(new Date() + ": Connected to rendezvoous server");
     const connType = rendezvous.ConnType.DEFAULT_CONN;
@@ -197,8 +197,8 @@ export default class Connection {
       const msg = this._ws?.parseMessage(await this._ws?.next());
       if (msg?.hash) {
         this._hash = msg?.hash;
+        if (!this._password) this.msgbox("input-password", "Password Required", "");
         await this.login(this._password);
-        this.msgbox("input-password", "Password Required", "");
       } else if (msg?.testDelay) {
         const testDelay = msg?.testDelay;
         if (!testDelay.fromClient) {
@@ -266,15 +266,13 @@ export default class Connection {
 
   async login(password: string | undefined, _remember: Boolean = false) {
     this._password = password;
-    this.msgbox("connecting", "Connecting...", "Logging in...");
-    const salt = this._hash?.salt;
-    if (salt && password) {
-      let p = hash([password, salt]);
+    if (password) {
+      const salt = this._hash?.salt;
+      let p = hash([password, salt!]);
       const challenge = this._hash?.challenge;
-      if (challenge) {
-        p = hash([p, challenge]);
-        await this._sendLoginMessage(p);
-      }
+      p = hash([p, challenge!]);
+      this.msgbox("connecting", "Connecting...", "Logging in...");
+      await this._sendLoginMessage(p);
     } else {
       await this._sendLoginMessage();
     }

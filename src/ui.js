@@ -28,6 +28,7 @@ if (app) {
 `;
 
   let player;
+  window.init();
 
   document.body.onload = () => {
     const host = document.querySelector('#host');
@@ -55,11 +56,7 @@ if (app) {
       document.querySelector('div#status').style.display = 'block';
       document.querySelector('div#connect').style.display = 'none';
       document.querySelector('div#text').innerHTML = 'Connecting ...';
-      try {
-        await conn.start(id.value);
-      } catch (e) {
-        msgbox('error', 'Error', e);
-      }
+      await conn.start(id.value);
     };
     func();
   }

@@ -96,10 +96,12 @@ export default class Websock {
         resolve(this);
       };
       this._websocket.onclose = (e) => {
+        if (this._status == 'open') {
+          reject(e);
+        }
         this._status = e;
         console.error("WebSock.onclose: " + e);
         this._eventHandlers.close(e);
-        reject(e);
       };
       this._websocket.onerror = (e) => {
         if (!this._status) {
@@ -141,6 +143,7 @@ export default class Websock {
   }
 
   close() {
+    this._status = '';
     if (this._websocket) {
       if (
         this._websocket.readyState === WebSocket.OPEN ||
