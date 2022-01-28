@@ -25,7 +25,7 @@ class SearchBar: Reactor.Component {
     function render() {
         var value = searchPatterns[this.type] || "";
         var me = this;
-        self.timer(1ms, function() { me.search_id.value = value; });
+        self.timer(1ms, function() { (me.search_id || {}).value = value; });
         return <div .search-id style="margin-left: 12px">
             <span .search-icon>{search_icon}</span>
             <input|text @{this.search_id} novalue={translate("Search ID")} />
@@ -285,6 +285,7 @@ class MultipleSessions: Reactor.Component {
         self.timer(60ms, function() {
             me.hidden = false;
             me.update();
+	    self.timer(30ms, function() { me.onSize(); });
         });
     }
 
@@ -300,16 +301,17 @@ class MultipleSessions: Reactor.Component {
         var w = this.$(.sessions-bar .sessions-tab).box(#width);
         var len = translate('Recent Sessions').length;
         var totalChars = 0;
+        var nEle = 0;
+        var padding = 12;
         for (var el in this.$$(#sessions-type span)) {
+            nEle += 1;
 	    var n = el.text.length;
-	    if (n < 3) n = 3;
+	    if (n > 6) padding = 8;
             totalChars += n;
         }
         for (var el in this.$$(#sessions-type span)) {
 	    var n = el.text.length;
-	    if (n < 3) n = 3;
-            var padding = n > 8 ? 8 : 12;
-            var maxWidth = w * n / totalChars - 2 * padding;
+            var maxWidth = (w - nEle * 2 * padding) * n / totalChars;
             if (maxWidth < 0) maxWidth = 36;
             el.style.set{
                 "max-width": maxWidth + "px",
