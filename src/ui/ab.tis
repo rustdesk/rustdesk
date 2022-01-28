@@ -301,10 +301,13 @@ class MultipleSessions: Reactor.Component {
         var len = translate('Recent Sessions').length;
         var totalChars = 0;
         for (var el in this.$$(#sessions-type span)) {
-           totalChars += el.text.length;
+	    var n = el.text.length;
+	    if (n < 3) n = 3;
+            totalChars += n;
         }
         for (var el in this.$$(#sessions-type span)) {
 	    var n = el.text.length;
+	    if (n < 3) n = 3;
             var padding = n > 8 ? 8 : 12;
             var maxWidth = w * n / totalChars - 2 * padding;
             if (maxWidth < 0) maxWidth = 36;
