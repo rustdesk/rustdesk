@@ -20,7 +20,7 @@ window.getLanguage = () => navigator.language;
 
 export function msgbox(type, title, text) {
   if (!events) return;
-  if (!type) return;
+  if (!type || (type == 'error' && !text)) return;
   const text2 = text.toLowerCase();
   var hasRetry = type == "error"
     && title == "Connection Error"
@@ -34,10 +34,28 @@ export function msgbox(type, title, text) {
   events.push({ name: 'msgbox', type, title, text, hasRetry });
 }
 
+function jsonfyForDart(payload) {
+  var tmp = {};
+  for (const [key, value] of Object.entries(payload)) {
+    if (!key) continue;
+    var newName = '';
+    for (var i = 0; i < key.length; ++i) {
+      var ch = key[i];
+      if (ch.toUpperCase() == ch) {
+        newName += '_' + ch.toLowerCase();
+      } else {
+        newName += ch;
+      }
+    }
+    tmp[newName] = value instanceof Uint8Array ? '[' + value.toString() + ']' : JSON.stringify(value);
+  }
+  return tmp;
+}
+
 export function pushEvent(name, payload) {
   if (!events) return;
   payload.name = name;
-  events.push(payload);
+  events.push(jsonfyForDart(payload));
 }
 
 export function draw(frame) {
