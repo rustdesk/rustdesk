@@ -302,20 +302,17 @@ class MultipleSessions: Reactor.Component {
         var len = translate('Recent Sessions').length;
         var totalChars = 0;
         var nEle = 0;
-        var padding = 12;
         for (var el in this.$$(#sessions-type span)) {
             nEle += 1;
 	    var n = el.text.length;
-	    if (n > 6) padding = 8;
             totalChars += n;
         }
         for (var el in this.$$(#sessions-type span)) {
 	    var n = el.text.length;
-            var maxWidth = (w - nEle * 2 * padding) * n / totalChars;
+            var maxWidth = (w - nEle * 2 * 8) * n / totalChars;
             if (maxWidth < 0) maxWidth = 36;
             el.style.set{
                 "max-width": maxWidth + "px",
-                "padding": '6px ' + padding + 'px',
             };
         }
     }
