@@ -32,6 +32,7 @@ void Function() loadingCancelCallback;
 void showLoading(String text, BuildContext context) {
   if (_hasDialog && context != null) {
     Navigator.pop(context);
+    _hasDialog = false;
   }
   dismissLoading();
   if (isAndroid) {
@@ -122,6 +123,7 @@ void msgbox(String type, String title, String text, BuildContext context,
   dismissLoading();
   if (_hasDialog) {
     Navigator.pop(context);
+    _hasDialog = false;
   }
   final buttons = [
     Expanded(child: Container()),

@@ -6,11 +6,7 @@ class PlatformFFI {
   static void clearRgbaFrame() {}
 
   static Uint8List getRgba() {
-    var data = js.context.callMethod('getRgba');
-    if (data != null) {
-      return Uint8List.sublistView(data);
-    }
-    return null;
+    return js.context.callMethod('getRgba');
   }
 
   static Future<String> getVersion() async {
