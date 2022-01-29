@@ -828,6 +828,14 @@ impl LoginConfigHandler {
             msg.privacy_mode = BoolOption::Yes.into();
             n += 1;
         }
+        if self.get_toggle_option("disable-audio") {
+            msg.disable_audio = BoolOption::Yes.into();
+            n += 1;
+        }
+        if self.get_toggle_option("disable-clipboard") {
+            msg.disable_clipboard = BoolOption::Yes.into();
+            n += 1;
+        }
         if n > 0 {
             Some(msg)
         } else {
