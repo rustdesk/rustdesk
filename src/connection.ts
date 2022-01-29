@@ -60,7 +60,9 @@ export default class Connection {
     const ws = new Websock(uri);
     this._ws = ws;
     this._id = id;
-    console.log(new Date() + ": Conntecting to rendezvoous server: " + uri + ", for " + id);
+    console.log(
+      new Date() + ": Conntecting to rendezvoous server: " + uri + ", for " + id
+    );
     await ws.open();
     console.log(new Date() + ": Connected to rendezvoous server");
     const connType = rendezvous.ConnType.DEFAULT_CONN;
@@ -197,7 +199,8 @@ export default class Connection {
       const msg = this._ws?.parseMessage(await this._ws?.next());
       if (msg?.hash) {
         this._hash = msg?.hash;
-        if (!this._password) this.msgbox("input-password", "Password Required", "");
+        if (!this._password)
+          this.msgbox("input-password", "Password Required", "");
         this.login(this._password);
       } else if (msg?.testDelay) {
         const testDelay = msg?.testDelay;
@@ -289,8 +292,41 @@ export default class Connection {
       myId: "web", // to-do
       myName: "web", // to-do
       password,
+      option: this.getOptionMessage(),
     });
     this._ws?.sendMessage({ loginRequest });
+  }
+
+  getOptionMessage(): message.OptionMessage | undefined {
+    let n = 0;
+    const msg = message.OptionMessage.fromPartial({});
+    const q = this.getImageQualityEnum(this._options["image-quality"], true);
+    const yes = message.OptionMessage_BoolOption.Yes;
+    if (q != undefined) {
+      msg.imageQuality = q;
+      n += 1;
+    }
+    if (this._options["show-remote-cursor"]) {
+      msg.showRemoteCursor = yes;
+      n += 1;
+    }
+    if (this._options["lock-after-session-end"]) {
+      msg.lockAfterSessionEnd = yes;
+      n += 1;
+    }
+    if (this._options["privacy-mode"]) {
+      msg.privacyMode = yes;
+      n += 1;
+    }
+    if (this._options["disable-audio"]) {
+      msg.disableAudio = yes;
+      n += 1;
+    }
+    if (this._options["disable-clipboard"]) {
+      msg.disableClipboard = yes;
+      n += 1;
+    }
+    return n > 0 ? msg : undefined;
   }
 
   handleVideoFrame(vf: message.VideoFrame) {
@@ -361,7 +397,8 @@ export default class Connection {
     this._options[name] = value;
   }
 
-  inputKey() { // name: string, x: number, y: number, alt: Boolean, ctrl: Boolean, shift: Boolean, command: Boolean) {
+  inputKey() {
+    // name: string, x: number, y: number, alt: Boolean, ctrl: Boolean, shift: Boolean, command: Boolean) {
   }
 
   inputString(seq: string) {
@@ -369,7 +406,15 @@ export default class Connection {
     this._ws?.sendMessage({ keyEvent });
   }
 
-  inputMouse(mask: number, x: number, y: number, alt: Boolean, ctrl: Boolean, shift: Boolean, command: Boolean) {
+  inputMouse(
+    mask: number,
+    x: number,
+    y: number,
+    alt: Boolean,
+    ctrl: Boolean,
+    shift: Boolean,
+    command: Boolean
+  ) {
     const mouseEvent = message.MouseEvent.fromPartial({ mask, x, y });
     if (alt) mouseEvent.modifiers.push(message.ControlKey.Alt);
     if (ctrl) mouseEvent.modifiers.push(message.ControlKey.Control);
@@ -381,44 +426,49 @@ export default class Connection {
   toggleOption(name: string) {
     const v = !this._options[name];
     const option = message.OptionMessage.fromPartial({});
-    const v2 = v ? message.OptionMessage_BoolOption.Yes : message.OptionMessage_BoolOption.No;
+    const v2 = v
+      ? message.OptionMessage_BoolOption.Yes
+      : message.OptionMessage_BoolOption.No;
     switch (name) {
-      case 'show-remote-cursor':
+      case "show-remote-cursor":
         option.showRemoteCursor = v2;
         break;
-      case 'disable-audio':
+      case "disable-audio":
         option.disableAudio = v2;
         break;
-      case 'disable-clipboard':
+      case "disable-clipboard":
         option.disableClipboard = v2;
         break;
-      case 'lock-after-session-end':
+      case "lock-after-session-end":
         option.lockAfterSessionEnd = v2;
         break;
-      case 'privacy-mode':
+      case "privacy-mode":
         option.privacyMode = v2;
         break;
-      case 'block-input':
+      case "block-input":
         option.blockInput = message.OptionMessage_BoolOption.Yes;
         break;
-      case 'unblock-input':
+      case "unblock-input":
         option.blockInput = message.OptionMessage_BoolOption.No;
         break;
       default:
         return;
     }
-    if (name.indexOf('block-input') < 0) this.setOption(name, v);
+    if (name.indexOf("block-input") < 0) this.setOption(name, v);
     const misc = message.Misc.fromPartial({ option });
     this._ws?.sendMessage({ misc });
   }
 
-  getImageQualityEnum(value: string, ignoreDefault: Boolean): message.ImageQuality | undefined {
+  getImageQualityEnum(
+    value: string,
+    ignoreDefault: Boolean
+  ): message.ImageQuality | undefined {
     switch (value) {
-      case 'low':
+      case "low":
         return message.ImageQuality.Low;
-      case 'best':
+      case "best":
         return message.ImageQuality.Best;
-      case 'balanced':
+      case "balanced":
         return ignoreDefault ? undefined : message.ImageQuality.Balanced;
       default:
         return undefined;
@@ -426,6 +476,7 @@ export default class Connection {
   }
 
   setImageQuality(value: string) {
+    this.setOption("image-quality", value);
     const imageQuality = this.getImageQualityEnum(value, false);
     if (imageQuality == undefined) return;
     const option = message.OptionMessage.fromPartial({ imageQuality });
