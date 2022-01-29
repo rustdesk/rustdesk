@@ -1,10 +1,9 @@
 import Connection from "./connection";
 import _sodium from "libsodium-wrappers";
-import * as zstd from 'zstddec';
 import { CursorData } from "./message";
 import { loadOpus, loadVp9 } from "./codec";
-
-var decompressor;
+import { checkIfRetry } from "./gen_js_from_hbb";
+import { initZstd, translate } from "./common";
 
 var currentFrame = undefined;
 var events = [];
@@ -21,15 +20,7 @@ export function msgbox(type, title, text) {
   if (!events) return;
   if (!type || (type == 'error' && !text)) return;
   const text2 = text.toLowerCase();
-  var hasRetry = type == "error"
-    && title == "Connection Error"
-    && text2.indexOf("offline") < 0
-    && text2.indexOf("exist") < 0
-    && text2.indexOf("handshake") < 0
-    && text2.indexOf("failed") < 0
-    && text2.indexOf("resolve") < 0
-    && text2.indexOf("mismatch") < 0
-    && text2.indexOf("manually") < 0;
+  var hasRetry = checkIfRetry(type, title, text);
   events.push({ name: 'msgbox', type, title, text, hasRetry });
 }
 
@@ -37,16 +28,7 @@ function jsonfyForDart(payload) {
   var tmp = {};
   for (const [key, value] of Object.entries(payload)) {
     if (!key) continue;
-    var newName = '';
-    for (var i = 0; i < key.length; ++i) {
-      var ch = key[i];
-      if (ch.toUpperCase() == ch) {
-        newName += '_' + ch.toLowerCase();
-      } else {
-        newName += ch;
-      }
-    }
-    tmp[newName] = value instanceof Uint8Array ? '[' + value.toString() + ']' : JSON.stringify(value);
+    tmp[key] = value instanceof Uint8Array ? '[' + value.toString() + ']' : JSON.stringify(value);
   }
   return tmp;
 }
@@ -153,26 +135,6 @@ export function decrypt(signed, nonce, key) {
   return sodium.crypto_secretbox_open_easy(signed, makeOnce(nonce), key);
 }
 
-export async function decompress(compressedArray) {
-  const MAX = 1024 * 1024 * 64;
-  const MIN = 1024 * 1024;
-  let n = 30 * compressedArray.length;
-  if (n > MAX) {
-    n = MAX;
-  }
-  if (n < MIN) {
-    n = MIN;
-  }
-  try {
-    if (!decompressor) {
-      await initZstd();
-    }
-    return decompressor.decode(compressedArray, n);
-  } catch (e) {
-    console.error('decompress failed: ' + e);
-  }
-}
-
 window.setByName = (name, value) => {
   try {
     value = JSON.parse(value);
@@ -204,7 +166,7 @@ window.setByName = (name, value) => {
       curConn.lockScreen();
       break;
     case 'ctrl_alt_del':
-      curConn.ctrlAltDe();
+      curConn.ctrlAltDel();
       break;
     case 'switch_display':
       curConn.switchDisplay(value);
@@ -252,7 +214,7 @@ window.setByName = (name, value) => {
       curConn.setOption(value.name, value.value);
       break;
     case 'input_os_password':
-      curConn.inputOsPassword(value, true);
+      curConn.inputOsPassword(value);
       break;
     default:
       break;
@@ -266,13 +228,10 @@ window.getByName = (name, arg) => {
   switch (name) {
     case 'peers':
       return localStorage.getItem('peers') || '[]';
-      break;
     case 'remote_id':
       return localStorage.getItem('remote-id') || '';
-      break;
     case 'remember':
       return curConn.getRemember();
-      break;
     case 'event':
       if (events && events.length) {
         const e = events[0];
@@ -282,19 +241,14 @@ window.getByName = (name, arg) => {
       break;
     case 'toggle_option':
       return curConn.getOption(arg);
-      break;
     case 'option':
       return localStorage.getItem(arg);
-      break;
     case 'image_quality':
       return curConn.getImageQuality();
-      break;
     case 'translate':
-      return arg.text;
-      break;
+      return translate(arg.locale, arg.text);
     case 'peer_option':
       return curConn.getOption(arg);
-      break;
     case 'test_if_valid_server':
       break;
   }
@@ -302,14 +256,7 @@ window.getByName = (name, arg) => {
 }
 
 window.init = async () => {
-  await initZstd();
-}
-
-async function initZstd() {
   loadOpus(() => { });
   loadVp9(() => { });
-  const tmp = new zstd.ZSTDDecoder();
-  await tmp.init();
-  console.log('zstd ready');
-  decompressor = tmp;
+  await initZstd();
 }

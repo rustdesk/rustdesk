@@ -4,6 +4,7 @@ import * as rendezvous from "./rendezvous.js";
 import { loadVp9, loadOpus } from "./codec";
 import * as sha256 from "fast-sha256";
 import * as globals from "./globals";
+import { decompress, mapKey, sleep } from "./common";
 
 const PORT = 21116;
 const HOST = "rs-sg.rustdesk.com";
@@ -65,20 +66,20 @@ export default class Connection {
     );
     await ws.open();
     console.log(new Date() + ": Connected to rendezvoous server");
-    const connType = rendezvous.ConnType.DEFAULT_CONN;
-    const natType = rendezvous.NatType.SYMMETRIC;
-    const punchHoleRequest = rendezvous.PunchHoleRequest.fromPartial({
+    const conn_type = rendezvous.ConnType.DEFAULT_CONN;
+    const nat_type = rendezvous.NatType.SYMMETRIC;
+    const punch_hole_request = rendezvous.PunchHoleRequest.fromPartial({
       id,
-      licenceKey: localStorage.getItem("key") || undefined,
-      connType,
-      natType,
+      licence_key: localStorage.getItem("key") || undefined,
+      conn_type,
+      nat_type,
     });
-    ws.sendRendezvous({ punchHoleRequest });
+    ws.sendRendezvous({ punch_hole_request });
     const msg = ws.parseRendezvous(await ws.next());
     ws.close();
     console.log(new Date() + ": Got relay response");
-    const phr = msg.punchHoleResponse;
-    const rr = msg.relayResponse;
+    const phr = msg.punch_hole_response;
+    const rr = msg.relay_response;
     if (phr) {
       if (phr.failure != rendezvous.PunchHoleResponse_Failure.UNRECOGNIZED) {
         switch (phr?.failure) {
@@ -92,8 +93,8 @@ export default class Connection {
             this.msgbox("error", "Error", "Key mismatch");
             break;
           default:
-            if (phr?.otherFailure) {
-              this.msgbox("error", "Error", phr?.otherFailure);
+            if (phr?.other_failure) {
+              this.msgbox("error", "Error", phr?.other_failure);
             }
         }
       }
@@ -104,7 +105,7 @@ export default class Connection {
 
   async connectRelay(rr: rendezvous.RelayResponse) {
     const pk = rr.pk;
-    let uri = rr.relayServer;
+    let uri = rr.relay_server;
     if (uri) {
       uri = getrUriFromRs(uri);
     } else {
@@ -116,11 +117,11 @@ export default class Connection {
     await ws.open();
     console.log(new Date() + ": Connected to relay server");
     this._ws = ws;
-    const requestRelay = rendezvous.RequestRelay.fromPartial({
-      licenceKey: localStorage.getItem("key") || undefined,
+    const request_relay = rendezvous.RequestRelay.fromPartial({
+      licence_key: localStorage.getItem("key") || undefined,
       uuid,
     });
-    ws.sendRendezvous({ requestRelay });
+    ws.sendRendezvous({ request_relay });
     const secure = (await this.secure(pk)) || false;
     globals.pushEvent("connection_ready", { secure, direct: false });
     await this.msgLoop();
@@ -149,7 +150,7 @@ export default class Connection {
       return;
     }
     const msg = this._ws?.parseMessage(await this._ws?.next());
-    let signedId: any = msg?.signedId;
+    let signedId: any = msg?.signed_id;
     if (!signedId) {
       console.error("Handshake failed: invalid message type");
       this._ws?.sendMessage({});
@@ -161,8 +162,8 @@ export default class Connection {
       console.error(e);
       // fall back to non-secure connection in case pk mismatch
       console.error("pk mismatch, fall back to non-secure");
-      const publicKey = message.PublicKey.fromPartial({});
-      this._ws?.sendMessage({ publicKey });
+      const public_key = message.PublicKey.fromPartial({});
+      this._ws?.sendMessage({ public_key });
       return;
     }
     signedId = new TextDecoder().decode(signedId!);
@@ -182,15 +183,16 @@ export default class Connection {
       this._ws?.sendMessage({});
       return;
     }
-    const [mySk, asymmetricValue] = globals.genBoxKeyPair();
-    const secretKey = globals.genSecretKey();
-    const symmetricValue = globals.seal(secretKey, theirPk, mySk);
-    const publicKey = message.PublicKey.fromPartial({
-      asymmetricValue,
-      symmetricValue,
+    const [mySk, asymmetric_value] = globals.genBoxKeyPair();
+    const secret_key = globals.genSecretKey();
+    const symmetric_value = globals.seal(secret_key, theirPk, mySk);
+    const public_key = message.PublicKey.fromPartial({
+      asymmetric_value,
+      symmetric_value,
     });
-    this._ws?.sendMessage({ publicKey });
-    this._ws?.setSecretKey(secretKey);
+    this._ws?.sendMessage({ public_key });
+    this._ws?.setSecretKey(secret_key);
+    console.log("secured");
     return true;
   }
 
@@ -202,35 +204,41 @@ export default class Connection {
         if (!this._password)
           this.msgbox("input-password", "Password Required", "");
         this.login(this._password);
-      } else if (msg?.testDelay) {
-        const testDelay = msg?.testDelay;
-        if (!testDelay.fromClient) {
-          this._ws?.sendMessage({ testDelay });
+      } else if (msg?.test_delay) {
+        const test_delay = msg?.test_delay;
+        if (!test_delay.from_client) {
+          this._ws?.sendMessage({ test_delay });
         }
-      } else if (msg?.loginResponse) {
-        const r = msg?.loginResponse;
+      } else if (msg?.login_response) {
+        const r = msg?.login_response;
         if (r.error) {
           this.msgbox("error", "Error", r.error);
-        } else if (r.peerInfo) {
-          this.handlePeerInfo(r.peerInfo);
+        } else if (r.peer_info) {
+          this.handlePeerInfo(r.peer_info);
         }
-      } else if (msg?.videoFrame) {
-        this.handleVideoFrame(msg?.videoFrame!);
+      } else if (msg?.video_frame) {
+        this.handleVideoFrame(msg?.video_frame!);
       } else if (msg?.clipboard) {
         const cb = msg?.clipboard;
-        if (cb.compress) cb.content = await globals.decompress(cb.content)!;
+        if (cb.compress) {
+          const c = await decompress(cb.content);
+          if (!c) continue;
+          cb.content = c;
+        }
         globals.pushEvent("clipboard", cb);
-      } else if (msg?.cursorData) {
-        const cd = msg?.cursorData;
-        cd.colors = await globals.decompress(cd.colors)!;
+      } else if (msg?.cursor_data) {
+        const cd = msg?.cursor_data;
+        const c = await decompress(cd.colors);
+        if (!c) continue;
+        cd.colors = c;
         globals.pushEvent("cursor_data", cd);
-      } else if (msg?.cursorId) {
-        globals.pushEvent("cursor_id", { id: msg?.cursorId });
-      } else if (msg?.cursorPosition) {
-        globals.pushEvent("cursor_position", msg?.cursorPosition);
+      } else if (msg?.cursor_id) {
+        globals.pushEvent("cursor_id", { id: msg?.cursor_id });
+      } else if (msg?.cursor_position) {
+        globals.pushEvent("cursor_position", msg?.cursor_position);
       } else if (msg?.misc) {
         this.handleMisc(msg?.misc);
-      } else if (msg?.audioFrame) {
+      } else if (msg?.audio_frame) {
         //
       }
     }
@@ -254,7 +262,7 @@ export default class Connection {
 
   refresh() {
     const misc = message.Misc.fromPartial({
-      refreshVideo: true,
+      refresh_video: true,
     });
     this._ws?.sendMessage({ misc });
   }
@@ -287,14 +295,14 @@ export default class Connection {
   }
 
   _sendLoginMessage(password: Uint8Array | undefined = undefined) {
-    const loginRequest = message.LoginRequest.fromPartial({
+    const login_request = message.LoginRequest.fromPartial({
       username: this._id!,
-      myId: "web", // to-do
-      myName: "web", // to-do
+      my_id: "web", // to-do
+      my_name: "web", // to-do
       password,
       option: this.getOptionMessage(),
     });
-    this._ws?.sendMessage({ loginRequest });
+    this._ws?.sendMessage({ login_request });
   }
 
   getOptionMessage(): message.OptionMessage | undefined {
@@ -303,27 +311,27 @@ export default class Connection {
     const q = this.getImageQualityEnum(this._options["image-quality"], true);
     const yes = message.OptionMessage_BoolOption.Yes;
     if (q != undefined) {
-      msg.imageQuality = q;
+      msg.image_quality = q;
       n += 1;
     }
     if (this._options["show-remote-cursor"]) {
-      msg.showRemoteCursor = yes;
+      msg.show_remote_cursor = yes;
       n += 1;
     }
     if (this._options["lock-after-session-end"]) {
-      msg.lockAfterSessionEnd = yes;
+      msg.lock_after_session_end = yes;
       n += 1;
     }
     if (this._options["privacy-mode"]) {
-      msg.privacyMode = yes;
+      msg.privacy_mode = yes;
       n += 1;
     }
     if (this._options["disable-audio"]) {
-      msg.disableAudio = yes;
+      msg.disable_audio = yes;
       n += 1;
     }
     if (this._options["disable-clipboard"]) {
-      msg.disableClipboard = yes;
+      msg.disable_clipboard = yes;
       n += 1;
     }
     return n > 0 ? msg : undefined;
@@ -358,10 +366,10 @@ export default class Connection {
   }
 
   handleMisc(misc: message.Misc) {
-    if (misc.audioFormat) {
+    if (misc.audio_format) {
       //
-    } else if (misc.permissionInfo) {
-      const p = misc.permissionInfo;
+    } else if (misc.permission_info) {
+      const p = misc.permission_info;
       console.info("Change permission " + p.permission + " -> " + p.enabled);
       let name;
       switch (p.permission) {
@@ -378,10 +386,10 @@ export default class Connection {
           return;
       }
       globals.pushEvent("permission", { [name]: p.enabled });
-    } else if (misc.switchDisplay) {
-      globals.pushEvent("switch_display", misc.switchDisplay);
-    } else if (misc.closeReason) {
-      this.msgbox("error", "Connection Error", misc.closeReason);
+    } else if (misc.switch_display) {
+      globals.pushEvent("switch_display", misc.switch_display);
+    } else if (misc.close_reason) {
+      this.msgbox("error", "Connection Error", misc.close_reason);
     }
   }
 
@@ -397,30 +405,87 @@ export default class Connection {
     this._options[name] = value;
   }
 
-  inputKey() {
-    // name: string, x: number, y: number, alt: Boolean, ctrl: Boolean, shift: Boolean, command: Boolean) {
-  }
-
-  inputString(seq: string) {
-    const keyEvent = message.KeyEvent.fromPartial({ seq });
-    this._ws?.sendMessage({ keyEvent });
-  }
-
-  inputMouse(
-    mask: number,
-    x: number,
-    y: number,
+  inputKey(
+    name: string,
     alt: Boolean,
     ctrl: Boolean,
     shift: Boolean,
     command: Boolean
   ) {
-    const mouseEvent = message.MouseEvent.fromPartial({ mask, x, y });
-    if (alt) mouseEvent.modifiers.push(message.ControlKey.Alt);
-    if (ctrl) mouseEvent.modifiers.push(message.ControlKey.Control);
-    if (shift) mouseEvent.modifiers.push(message.ControlKey.Shift);
-    if (command) mouseEvent.modifiers.push(message.ControlKey.Meta);
-    this._ws?.sendMessage({ mouseEvent });
+    const key_event = mapKey(name);
+    if (!key_event) return;
+    key_event.press = true;
+    key_event.modifiers = this.getMod(alt, ctrl, shift, command);
+    this._ws?.sendMessage({ key_event });
+  }
+
+  ctrlAltDel() {
+    const key_event = message.KeyEvent.fromPartial({ down: true });
+    if (this._peerInfo?.platform == "Windows") {
+      key_event.control_key = message.ControlKey.CtrlAltDel;
+    } else {
+      key_event.control_key = message.ControlKey.Delete;
+      key_event.modifiers = this.getMod(true, true, false, false);
+    }
+    this._ws?.sendMessage({ key_event });
+  }
+
+  inputString(seq: string) {
+    const key_event = message.KeyEvent.fromPartial({ seq });
+    this._ws?.sendMessage({ key_event });
+  }
+
+  switchDisplay(display: number) {
+    const switch_display = message.SwitchDisplay.fromPartial({ display });
+    const misc = message.Misc.fromPartial({ switch_display });
+    this._ws?.sendMessage({ misc });
+  }
+
+  async inputOsPassword(seq: string) {
+    this.inputMouse();
+    await sleep(50);
+    this.inputMouse(0, 3, 3);
+    await sleep(50);
+    this.inputMouse(1 | (1 << 3));
+    this.inputMouse(2 | (1 << 3));
+    await sleep(1200);
+    const key_event = message.KeyEvent.fromPartial({ press: true, seq });
+    this._ws?.sendMessage({ key_event });
+  }
+
+  lockScreen() {
+    const key_event = message.KeyEvent.fromPartial({
+      down: true,
+      control_key: message.ControlKey.LockScreen,
+    });
+    this._ws?.sendMessage({ key_event });
+  }
+
+  getMod(alt: Boolean, ctrl: Boolean, shift: Boolean, command: Boolean) {
+    const mod: message.ControlKey[] = [];
+    if (alt) mod.push(message.ControlKey.Alt);
+    if (ctrl) mod.push(message.ControlKey.Control);
+    if (shift) mod.push(message.ControlKey.Shift);
+    if (command) mod.push(message.ControlKey.Meta);
+    return mod;
+  }
+
+  inputMouse(
+    mask: number = 0,
+    x: number = 0,
+    y: number = 0,
+    alt: Boolean = false,
+    ctrl: Boolean = false,
+    shift: Boolean = false,
+    command: Boolean = false
+  ) {
+    const mouse_event = message.MouseEvent.fromPartial({
+      mask,
+      x,
+      y,
+      modifiers: this.getMod(alt, ctrl, shift, command),
+    });
+    this._ws?.sendMessage({ mouse_event });
   }
 
   toggleOption(name: string) {
@@ -431,25 +496,25 @@ export default class Connection {
       : message.OptionMessage_BoolOption.No;
     switch (name) {
       case "show-remote-cursor":
-        option.showRemoteCursor = v2;
+        option.show_remote_cursor = v2;
         break;
       case "disable-audio":
-        option.disableAudio = v2;
+        option.disable_audio = v2;
         break;
       case "disable-clipboard":
-        option.disableClipboard = v2;
+        option.disable_clipboard = v2;
         break;
       case "lock-after-session-end":
-        option.lockAfterSessionEnd = v2;
+        option.lock_after_session_end = v2;
         break;
       case "privacy-mode":
-        option.privacyMode = v2;
+        option.privacy_mode = v2;
         break;
       case "block-input":
-        option.blockInput = message.OptionMessage_BoolOption.Yes;
+        option.block_input = message.OptionMessage_BoolOption.Yes;
         break;
       case "unblock-input":
-        option.blockInput = message.OptionMessage_BoolOption.No;
+        option.block_input = message.OptionMessage_BoolOption.No;
         break;
       default:
         return;
@@ -477,9 +542,9 @@ export default class Connection {
 
   setImageQuality(value: string) {
     this.setOption("image-quality", value);
-    const imageQuality = this.getImageQualityEnum(value, false);
-    if (imageQuality == undefined) return;
-    const option = message.OptionMessage.fromPartial({ imageQuality });
+    const image_quality = this.getImageQualityEnum(value, false);
+    if (image_quality == undefined) return;
+    const option = message.OptionMessage.fromPartial({ image_quality });
     const misc = message.Misc.fromPartial({ option });
     this._ws?.sendMessage({ misc });
   }

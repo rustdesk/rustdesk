@@ -92,20 +92,20 @@ export interface RegisterPeer {
 }
 
 export interface RegisterPeerResponse {
-  requestPk: boolean;
+  request_pk: boolean;
 }
 
 export interface PunchHoleRequest {
   id: string;
-  natType: NatType;
-  licenceKey: string;
-  connType: ConnType;
+  nat_type: NatType;
+  licence_key: string;
+  conn_type: ConnType;
 }
 
 export interface PunchHole {
-  socketAddr: Uint8Array;
-  relayServer: string;
-  natType: NatType;
+  socket_addr: Uint8Array;
+  relay_server: string;
+  nat_type: NatType;
 }
 
 export interface TestNatRequest {
@@ -120,10 +120,10 @@ export interface TestNatResponse {
 }
 
 export interface PunchHoleSent {
-  socketAddr: Uint8Array;
+  socket_addr: Uint8Array;
   id: string;
-  relayServer: string;
-  natType: NatType;
+  relay_server: string;
+  nat_type: NatType;
   version: string;
 }
 
@@ -131,7 +131,7 @@ export interface RegisterPk {
   id: string;
   uuid: Uint8Array;
   pk: Uint8Array;
-  oldId: string;
+  old_id: string;
 }
 
 export interface RegisterPkResponse {
@@ -205,13 +205,13 @@ export function registerPkResponse_ResultToJSON(
 }
 
 export interface PunchHoleResponse {
-  socketAddr: Uint8Array;
+  socket_addr: Uint8Array;
   pk: Uint8Array;
   failure: PunchHoleResponse_Failure;
-  relayServer: string;
-  natType: NatType | undefined;
-  isLocal: boolean | undefined;
-  otherFailure: string;
+  relay_server: string;
+  nat_type: NatType | undefined;
+  is_local: boolean | undefined;
+  other_failure: string;
 }
 
 export enum PunchHoleResponse_Failure {
@@ -264,26 +264,26 @@ export function punchHoleResponse_FailureToJSON(
 
 export interface ConfigUpdate {
   serial: number;
-  rendezvousServers: string[];
+  rendezvous_servers: string[];
 }
 
 export interface RequestRelay {
   id: string;
   uuid: string;
-  socketAddr: Uint8Array;
-  relayServer: string;
+  socket_addr: Uint8Array;
+  relay_server: string;
   secure: boolean;
-  licenceKey: string;
-  connType: ConnType;
+  licence_key: string;
+  conn_type: ConnType;
 }
 
 export interface RelayResponse {
-  socketAddr: Uint8Array;
+  socket_addr: Uint8Array;
   uuid: string;
-  relayServer: string;
+  relay_server: string;
   id: string | undefined;
   pk: Uint8Array | undefined;
-  refuseReason: string;
+  refuse_reason: string;
   version: string;
 }
 
@@ -298,14 +298,14 @@ export interface SoftwareUpdate {
  * so we request local address to connect.
  */
 export interface FetchLocalAddr {
-  socketAddr: Uint8Array;
-  relayServer: string;
+  socket_addr: Uint8Array;
+  relay_server: string;
 }
 
 export interface LocalAddr {
-  socketAddr: Uint8Array;
-  localAddr: Uint8Array;
-  relayServer: string;
+  socket_addr: Uint8Array;
+  local_addr: Uint8Array;
+  relay_server: string;
   id: string;
   version: string;
 }
@@ -321,23 +321,23 @@ export interface PeerDiscovery {
 }
 
 export interface RendezvousMessage {
-  registerPeer: RegisterPeer | undefined;
-  registerPeerResponse: RegisterPeerResponse | undefined;
-  punchHoleRequest: PunchHoleRequest | undefined;
-  punchHole: PunchHole | undefined;
-  punchHoleSent: PunchHoleSent | undefined;
-  punchHoleResponse: PunchHoleResponse | undefined;
-  fetchLocalAddr: FetchLocalAddr | undefined;
-  localAddr: LocalAddr | undefined;
-  configureUpdate: ConfigUpdate | undefined;
-  registerPk: RegisterPk | undefined;
-  registerPkResponse: RegisterPkResponse | undefined;
-  softwareUpdate: SoftwareUpdate | undefined;
-  requestRelay: RequestRelay | undefined;
-  relayResponse: RelayResponse | undefined;
-  testNatRequest: TestNatRequest | undefined;
-  testNatResponse: TestNatResponse | undefined;
-  peerDiscovery: PeerDiscovery | undefined;
+  register_peer: RegisterPeer | undefined;
+  register_peer_response: RegisterPeerResponse | undefined;
+  punch_hole_request: PunchHoleRequest | undefined;
+  punch_hole: PunchHole | undefined;
+  punch_hole_sent: PunchHoleSent | undefined;
+  punch_hole_response: PunchHoleResponse | undefined;
+  fetch_local_addr: FetchLocalAddr | undefined;
+  local_addr: LocalAddr | undefined;
+  configure_update: ConfigUpdate | undefined;
+  register_pk: RegisterPk | undefined;
+  register_pk_response: RegisterPkResponse | undefined;
+  software_update: SoftwareUpdate | undefined;
+  request_relay: RequestRelay | undefined;
+  relay_response: RelayResponse | undefined;
+  test_nat_request: TestNatRequest | undefined;
+  test_nat_response: TestNatResponse | undefined;
+  peer_discovery: PeerDiscovery | undefined;
 }
 
 function createBaseRegisterPeer(): RegisterPeer {
@@ -404,7 +404,7 @@ export const RegisterPeer = {
 };
 
 function createBaseRegisterPeerResponse(): RegisterPeerResponse {
-  return { requestPk: false };
+  return { request_pk: false };
 }
 
 export const RegisterPeerResponse = {
@@ -412,8 +412,8 @@ export const RegisterPeerResponse = {
     message: RegisterPeerResponse,
     writer: _m0.Writer = _m0.Writer.create()
   ): _m0.Writer {
-    if (message.requestPk === true) {
-      writer.uint32(16).bool(message.requestPk);
+    if (message.request_pk === true) {
+      writer.uint32(16).bool(message.request_pk);
     }
     return writer;
   },
@@ -429,7 +429,7 @@ export const RegisterPeerResponse = {
       const tag = reader.uint32();
       switch (tag >>> 3) {
         case 2:
-          message.requestPk = reader.bool();
+          message.request_pk = reader.bool();
           break;
         default:
           reader.skipType(tag & 7);
@@ -441,13 +441,13 @@ export const RegisterPeerResponse = {
 
   fromJSON(object: any): RegisterPeerResponse {
     return {
-      requestPk: isSet(object.requestPk) ? Boolean(object.requestPk) : false,
+      request_pk: isSet(object.request_pk) ? Boolean(object.request_pk) : false,
     };
   },
 
   toJSON(message: RegisterPeerResponse): unknown {
     const obj: any = {};
-    message.requestPk !== undefined && (obj.requestPk = message.requestPk);
+    message.request_pk !== undefined && (obj.request_pk = message.request_pk);
     return obj;
   },
 
@@ -455,13 +455,13 @@ export const RegisterPeerResponse = {
     object: I
   ): RegisterPeerResponse {
     const message = createBaseRegisterPeerResponse();
-    message.requestPk = object.requestPk ?? false;
+    message.request_pk = object.request_pk ?? false;
     return message;
   },
 };
 
 function createBasePunchHoleRequest(): PunchHoleRequest {
-  return { id: "", natType: 0, licenceKey: "", connType: 0 };
+  return { id: "", nat_type: 0, licence_key: "", conn_type: 0 };
 }
 
 export const PunchHoleRequest = {
@@ -472,14 +472,14 @@ export const PunchHoleRequest = {
     if (message.id !== "") {
       writer.uint32(10).string(message.id);
     }
-    if (message.natType !== 0) {
-      writer.uint32(16).int32(message.natType);
+    if (message.nat_type !== 0) {
+      writer.uint32(16).int32(message.nat_type);
     }
-    if (message.licenceKey !== "") {
-      writer.uint32(26).string(message.licenceKey);
+    if (message.licence_key !== "") {
+      writer.uint32(26).string(message.licence_key);
     }
-    if (message.connType !== 0) {
-      writer.uint32(32).int32(message.connType);
+    if (message.conn_type !== 0) {
+      writer.uint32(32).int32(message.conn_type);
     }
     return writer;
   },
@@ -495,13 +495,13 @@ export const PunchHoleRequest = {
           message.id = reader.string();
           break;
         case 2:
-          message.natType = reader.int32() as any;
+          message.nat_type = reader.int32() as any;
           break;
         case 3:
-          message.licenceKey = reader.string();
+          message.licence_key = reader.string();
           break;
         case 4:
-          message.connType = reader.int32() as any;
+          message.conn_type = reader.int32() as any;
           break;
         default:
           reader.skipType(tag & 7);
@@ -514,20 +514,23 @@ export const PunchHoleRequest = {
   fromJSON(object: any): PunchHoleRequest {
     return {
       id: isSet(object.id) ? String(object.id) : "",
-      natType: isSet(object.natType) ? natTypeFromJSON(object.natType) : 0,
-      licenceKey: isSet(object.licenceKey) ? String(object.licenceKey) : "",
-      connType: isSet(object.connType) ? connTypeFromJSON(object.connType) : 0,
+      nat_type: isSet(object.nat_type) ? natTypeFromJSON(object.nat_type) : 0,
+      licence_key: isSet(object.licence_key) ? String(object.licence_key) : "",
+      conn_type: isSet(object.conn_type)
+        ? connTypeFromJSON(object.conn_type)
+        : 0,
     };
   },
 
   toJSON(message: PunchHoleRequest): unknown {
     const obj: any = {};
     message.id !== undefined && (obj.id = message.id);
-    message.natType !== undefined &&
-      (obj.natType = natTypeToJSON(message.natType));
-    message.licenceKey !== undefined && (obj.licenceKey = message.licenceKey);
-    message.connType !== undefined &&
-      (obj.connType = connTypeToJSON(message.connType));
+    message.nat_type !== undefined &&
+      (obj.nat_type = natTypeToJSON(message.nat_type));
+    message.licence_key !== undefined &&
+      (obj.licence_key = message.licence_key);
+    message.conn_type !== undefined &&
+      (obj.conn_type = connTypeToJSON(message.conn_type));
     return obj;
   },
 
@@ -536,15 +539,15 @@ export const PunchHoleRequest = {
   ): PunchHoleRequest {
     const message = createBasePunchHoleRequest();
     message.id = object.id ?? "";
-    message.natType = object.natType ?? 0;
-    message.licenceKey = object.licenceKey ?? "";
-    message.connType = object.connType ?? 0;
+    message.nat_type = object.nat_type ?? 0;
+    message.licence_key = object.licence_key ?? "";
+    message.conn_type = object.conn_type ?? 0;
     return message;
   },
 };
 
 function createBasePunchHole(): PunchHole {
-  return { socketAddr: new Uint8Array(), relayServer: "", natType: 0 };
+  return { socket_addr: new Uint8Array(), relay_server: "", nat_type: 0 };
 }
 
 export const PunchHole = {
@@ -552,14 +555,14 @@ export const PunchHole = {
     message: PunchHole,
     writer: _m0.Writer = _m0.Writer.create()
   ): _m0.Writer {
-    if (message.socketAddr.length !== 0) {
-      writer.uint32(10).bytes(message.socketAddr);
+    if (message.socket_addr.length !== 0) {
+      writer.uint32(10).bytes(message.socket_addr);
     }
-    if (message.relayServer !== "") {
-      writer.uint32(18).string(message.relayServer);
+    if (message.relay_server !== "") {
+      writer.uint32(18).string(message.relay_server);
     }
-    if (message.natType !== 0) {
-      writer.uint32(24).int32(message.natType);
+    if (message.nat_type !== 0) {
+      writer.uint32(24).int32(message.nat_type);
     }
     return writer;
   },
@@ -572,13 +575,13 @@ export const PunchHole = {
       const tag = reader.uint32();
       switch (tag >>> 3) {
         case 1:
-          message.socketAddr = reader.bytes();
+          message.socket_addr = reader.bytes();
           break;
         case 2:
-          message.relayServer = reader.string();
+          message.relay_server = reader.string();
           break;
         case 3:
-          message.natType = reader.int32() as any;
+          message.nat_type = reader.int32() as any;
           break;
         default:
           reader.skipType(tag & 7);
@@ -590,24 +593,28 @@ export const PunchHole = {
 
   fromJSON(object: any): PunchHole {
     return {
-      socketAddr: isSet(object.socketAddr)
-        ? bytesFromBase64(object.socketAddr)
+      socket_addr: isSet(object.socket_addr)
+        ? bytesFromBase64(object.socket_addr)
         : new Uint8Array(),
-      relayServer: isSet(object.relayServer) ? String(object.relayServer) : "",
-      natType: isSet(object.natType) ? natTypeFromJSON(object.natType) : 0,
+      relay_server: isSet(object.relay_server)
+        ? String(object.relay_server)
+        : "",
+      nat_type: isSet(object.nat_type) ? natTypeFromJSON(object.nat_type) : 0,
     };
   },
 
   toJSON(message: PunchHole): unknown {
     const obj: any = {};
-    message.socketAddr !== undefined &&
-      (obj.socketAddr = base64FromBytes(
-        message.socketAddr !== undefined ? message.socketAddr : new Uint8Array()
+    message.socket_addr !== undefined &&
+      (obj.socket_addr = base64FromBytes(
+        message.socket_addr !== undefined
+          ? message.socket_addr
+          : new Uint8Array()
       ));
-    message.relayServer !== undefined &&
-      (obj.relayServer = message.relayServer);
-    message.natType !== undefined &&
-      (obj.natType = natTypeToJSON(message.natType));
+    message.relay_server !== undefined &&
+      (obj.relay_server = message.relay_server);
+    message.nat_type !== undefined &&
+      (obj.nat_type = natTypeToJSON(message.nat_type));
     return obj;
   },
 
@@ -615,9 +622,9 @@ export const PunchHole = {
     object: I
   ): PunchHole {
     const message = createBasePunchHole();
-    message.socketAddr = object.socketAddr ?? new Uint8Array();
-    message.relayServer = object.relayServer ?? "";
-    message.natType = object.natType ?? 0;
+    message.socket_addr = object.socket_addr ?? new Uint8Array();
+    message.relay_server = object.relay_server ?? "";
+    message.nat_type = object.nat_type ?? 0;
     return message;
   },
 };
@@ -745,10 +752,10 @@ export const TestNatResponse = {
 
 function createBasePunchHoleSent(): PunchHoleSent {
   return {
-    socketAddr: new Uint8Array(),
+    socket_addr: new Uint8Array(),
     id: "",
-    relayServer: "",
-    natType: 0,
+    relay_server: "",
+    nat_type: 0,
     version: "",
   };
 }
@@ -758,17 +765,17 @@ export const PunchHoleSent = {
     message: PunchHoleSent,
     writer: _m0.Writer = _m0.Writer.create()
   ): _m0.Writer {
-    if (message.socketAddr.length !== 0) {
-      writer.uint32(10).bytes(message.socketAddr);
+    if (message.socket_addr.length !== 0) {
+      writer.uint32(10).bytes(message.socket_addr);
     }
     if (message.id !== "") {
       writer.uint32(18).string(message.id);
     }
-    if (message.relayServer !== "") {
-      writer.uint32(26).string(message.relayServer);
+    if (message.relay_server !== "") {
+      writer.uint32(26).string(message.relay_server);
     }
-    if (message.natType !== 0) {
-      writer.uint32(32).int32(message.natType);
+    if (message.nat_type !== 0) {
+      writer.uint32(32).int32(message.nat_type);
     }
     if (message.version !== "") {
       writer.uint32(42).string(message.version);
@@ -784,16 +791,16 @@ export const PunchHoleSent = {
       const tag = reader.uint32();
       switch (tag >>> 3) {
         case 1:
-          message.socketAddr = reader.bytes();
+          message.socket_addr = reader.bytes();
           break;
         case 2:
           message.id = reader.string();
           break;
         case 3:
-          message.relayServer = reader.string();
+          message.relay_server = reader.string();
           break;
         case 4:
-          message.natType = reader.int32() as any;
+          message.nat_type = reader.int32() as any;
           break;
         case 5:
           message.version = reader.string();
@@ -808,27 +815,31 @@ export const PunchHoleSent = {
 
   fromJSON(object: any): PunchHoleSent {
     return {
-      socketAddr: isSet(object.socketAddr)
-        ? bytesFromBase64(object.socketAddr)
+      socket_addr: isSet(object.socket_addr)
+        ? bytesFromBase64(object.socket_addr)
         : new Uint8Array(),
       id: isSet(object.id) ? String(object.id) : "",
-      relayServer: isSet(object.relayServer) ? String(object.relayServer) : "",
-      natType: isSet(object.natType) ? natTypeFromJSON(object.natType) : 0,
+      relay_server: isSet(object.relay_server)
+        ? String(object.relay_server)
+        : "",
+      nat_type: isSet(object.nat_type) ? natTypeFromJSON(object.nat_type) : 0,
       version: isSet(object.version) ? String(object.version) : "",
     };
   },
 
   toJSON(message: PunchHoleSent): unknown {
     const obj: any = {};
-    message.socketAddr !== undefined &&
-      (obj.socketAddr = base64FromBytes(
-        message.socketAddr !== undefined ? message.socketAddr : new Uint8Array()
+    message.socket_addr !== undefined &&
+      (obj.socket_addr = base64FromBytes(
+        message.socket_addr !== undefined
+          ? message.socket_addr
+          : new Uint8Array()
       ));
     message.id !== undefined && (obj.id = message.id);
-    message.relayServer !== undefined &&
-      (obj.relayServer = message.relayServer);
-    message.natType !== undefined &&
-      (obj.natType = natTypeToJSON(message.natType));
+    message.relay_server !== undefined &&
+      (obj.relay_server = message.relay_server);
+    message.nat_type !== undefined &&
+      (obj.nat_type = natTypeToJSON(message.nat_type));
     message.version !== undefined && (obj.version = message.version);
     return obj;
   },
@@ -837,17 +848,17 @@ export const PunchHoleSent = {
     object: I
   ): PunchHoleSent {
     const message = createBasePunchHoleSent();
-    message.socketAddr = object.socketAddr ?? new Uint8Array();
+    message.socket_addr = object.socket_addr ?? new Uint8Array();
     message.id = object.id ?? "";
-    message.relayServer = object.relayServer ?? "";
-    message.natType = object.natType ?? 0;
+    message.relay_server = object.relay_server ?? "";
+    message.nat_type = object.nat_type ?? 0;
     message.version = object.version ?? "";
     return message;
   },
 };
 
 function createBaseRegisterPk(): RegisterPk {
-  return { id: "", uuid: new Uint8Array(), pk: new Uint8Array(), oldId: "" };
+  return { id: "", uuid: new Uint8Array(), pk: new Uint8Array(), old_id: "" };
 }
 
 export const RegisterPk = {
@@ -864,8 +875,8 @@ export const RegisterPk = {
     if (message.pk.length !== 0) {
       writer.uint32(26).bytes(message.pk);
     }
-    if (message.oldId !== "") {
-      writer.uint32(34).string(message.oldId);
+    if (message.old_id !== "") {
+      writer.uint32(34).string(message.old_id);
     }
     return writer;
   },
@@ -887,7 +898,7 @@ export const RegisterPk = {
           message.pk = reader.bytes();
           break;
         case 4:
-          message.oldId = reader.string();
+          message.old_id = reader.string();
           break;
         default:
           reader.skipType(tag & 7);
@@ -904,7 +915,7 @@ export const RegisterPk = {
         ? bytesFromBase64(object.uuid)
         : new Uint8Array(),
       pk: isSet(object.pk) ? bytesFromBase64(object.pk) : new Uint8Array(),
-      oldId: isSet(object.oldId) ? String(object.oldId) : "",
+      old_id: isSet(object.old_id) ? String(object.old_id) : "",
     };
   },
 
@@ -919,7 +930,7 @@ export const RegisterPk = {
       (obj.pk = base64FromBytes(
         message.pk !== undefined ? message.pk : new Uint8Array()
       ));
-    message.oldId !== undefined && (obj.oldId = message.oldId);
+    message.old_id !== undefined && (obj.old_id = message.old_id);
     return obj;
   },
 
@@ -930,7 +941,7 @@ export const RegisterPk = {
     message.id = object.id ?? "";
     message.uuid = object.uuid ?? new Uint8Array();
     message.pk = object.pk ?? new Uint8Array();
-    message.oldId = object.oldId ?? "";
+    message.old_id = object.old_id ?? "";
     return message;
   },
 };
@@ -994,13 +1005,13 @@ export const RegisterPkResponse = {
 
 function createBasePunchHoleResponse(): PunchHoleResponse {
   return {
-    socketAddr: new Uint8Array(),
+    socket_addr: new Uint8Array(),
     pk: new Uint8Array(),
     failure: 0,
-    relayServer: "",
-    natType: undefined,
-    isLocal: undefined,
-    otherFailure: "",
+    relay_server: "",
+    nat_type: undefined,
+    is_local: undefined,
+    other_failure: "",
   };
 }
 
@@ -1009,8 +1020,8 @@ export const PunchHoleResponse = {
     message: PunchHoleResponse,
     writer: _m0.Writer = _m0.Writer.create()
   ): _m0.Writer {
-    if (message.socketAddr.length !== 0) {
-      writer.uint32(10).bytes(message.socketAddr);
+    if (message.socket_addr.length !== 0) {
+      writer.uint32(10).bytes(message.socket_addr);
     }
     if (message.pk.length !== 0) {
       writer.uint32(18).bytes(message.pk);
@@ -1018,17 +1029,17 @@ export const PunchHoleResponse = {
     if (message.failure !== 0) {
       writer.uint32(24).int32(message.failure);
     }
-    if (message.relayServer !== "") {
-      writer.uint32(34).string(message.relayServer);
+    if (message.relay_server !== "") {
+      writer.uint32(34).string(message.relay_server);
     }
-    if (message.natType !== undefined) {
-      writer.uint32(40).int32(message.natType);
+    if (message.nat_type !== undefined) {
+      writer.uint32(40).int32(message.nat_type);
     }
-    if (message.isLocal !== undefined) {
-      writer.uint32(48).bool(message.isLocal);
+    if (message.is_local !== undefined) {
+      writer.uint32(48).bool(message.is_local);
     }
-    if (message.otherFailure !== "") {
-      writer.uint32(58).string(message.otherFailure);
+    if (message.other_failure !== "") {
+      writer.uint32(58).string(message.other_failure);
     }
     return writer;
   },
@@ -1041,7 +1052,7 @@ export const PunchHoleResponse = {
       const tag = reader.uint32();
       switch (tag >>> 3) {
         case 1:
-          message.socketAddr = reader.bytes();
+          message.socket_addr = reader.bytes();
           break;
         case 2:
           message.pk = reader.bytes();
@@ -1050,16 +1061,16 @@ export const PunchHoleResponse = {
           message.failure = reader.int32() as any;
           break;
         case 4:
-          message.relayServer = reader.string();
+          message.relay_server = reader.string();
           break;
         case 5:
-          message.natType = reader.int32() as any;
+          message.nat_type = reader.int32() as any;
           break;
         case 6:
-          message.isLocal = reader.bool();
+          message.is_local = reader.bool();
           break;
         case 7:
-          message.otherFailure = reader.string();
+          message.other_failure = reader.string();
           break;
         default:
           reader.skipType(tag & 7);
@@ -1071,29 +1082,33 @@ export const PunchHoleResponse = {
 
   fromJSON(object: any): PunchHoleResponse {
     return {
-      socketAddr: isSet(object.socketAddr)
-        ? bytesFromBase64(object.socketAddr)
+      socket_addr: isSet(object.socket_addr)
+        ? bytesFromBase64(object.socket_addr)
         : new Uint8Array(),
       pk: isSet(object.pk) ? bytesFromBase64(object.pk) : new Uint8Array(),
       failure: isSet(object.failure)
         ? punchHoleResponse_FailureFromJSON(object.failure)
         : 0,
-      relayServer: isSet(object.relayServer) ? String(object.relayServer) : "",
-      natType: isSet(object.natType)
-        ? natTypeFromJSON(object.natType)
+      relay_server: isSet(object.relay_server)
+        ? String(object.relay_server)
+        : "",
+      nat_type: isSet(object.nat_type)
+        ? natTypeFromJSON(object.nat_type)
         : undefined,
-      isLocal: isSet(object.isLocal) ? Boolean(object.isLocal) : undefined,
-      otherFailure: isSet(object.otherFailure)
-        ? String(object.otherFailure)
+      is_local: isSet(object.is_local) ? Boolean(object.is_local) : undefined,
+      other_failure: isSet(object.other_failure)
+        ? String(object.other_failure)
         : "",
     };
   },
 
   toJSON(message: PunchHoleResponse): unknown {
     const obj: any = {};
-    message.socketAddr !== undefined &&
-      (obj.socketAddr = base64FromBytes(
-        message.socketAddr !== undefined ? message.socketAddr : new Uint8Array()
+    message.socket_addr !== undefined &&
+      (obj.socket_addr = base64FromBytes(
+        message.socket_addr !== undefined
+          ? message.socket_addr
+          : new Uint8Array()
       ));
     message.pk !== undefined &&
       (obj.pk = base64FromBytes(
@@ -1101,16 +1116,16 @@ export const PunchHoleResponse = {
       ));
     message.failure !== undefined &&
       (obj.failure = punchHoleResponse_FailureToJSON(message.failure));
-    message.relayServer !== undefined &&
-      (obj.relayServer = message.relayServer);
-    message.natType !== undefined &&
-      (obj.natType =
-        message.natType !== undefined
-          ? natTypeToJSON(message.natType)
+    message.relay_server !== undefined &&
+      (obj.relay_server = message.relay_server);
+    message.nat_type !== undefined &&
+      (obj.nat_type =
+        message.nat_type !== undefined
+          ? natTypeToJSON(message.nat_type)
           : undefined);
-    message.isLocal !== undefined && (obj.isLocal = message.isLocal);
-    message.otherFailure !== undefined &&
-      (obj.otherFailure = message.otherFailure);
+    message.is_local !== undefined && (obj.is_local = message.is_local);
+    message.other_failure !== undefined &&
+      (obj.other_failure = message.other_failure);
     return obj;
   },
 
@@ -1118,19 +1133,19 @@ export const PunchHoleResponse = {
     object: I
   ): PunchHoleResponse {
     const message = createBasePunchHoleResponse();
-    message.socketAddr = object.socketAddr ?? new Uint8Array();
+    message.socket_addr = object.socket_addr ?? new Uint8Array();
     message.pk = object.pk ?? new Uint8Array();
     message.failure = object.failure ?? 0;
-    message.relayServer = object.relayServer ?? "";
-    message.natType = object.natType ?? undefined;
-    message.isLocal = object.isLocal ?? undefined;
-    message.otherFailure = object.otherFailure ?? "";
+    message.relay_server = object.relay_server ?? "";
+    message.nat_type = object.nat_type ?? undefined;
+    message.is_local = object.is_local ?? undefined;
+    message.other_failure = object.other_failure ?? "";
     return message;
   },
 };
 
 function createBaseConfigUpdate(): ConfigUpdate {
-  return { serial: 0, rendezvousServers: [] };
+  return { serial: 0, rendezvous_servers: [] };
 }
 
 export const ConfigUpdate = {
@@ -1141,7 +1156,7 @@ export const ConfigUpdate = {
     if (message.serial !== 0) {
       writer.uint32(8).int32(message.serial);
     }
-    for (const v of message.rendezvousServers) {
+    for (const v of message.rendezvous_servers) {
       writer.uint32(18).string(v!);
     }
     return writer;
@@ -1158,7 +1173,7 @@ export const ConfigUpdate = {
           message.serial = reader.int32();
           break;
         case 2:
-          message.rendezvousServers.push(reader.string());
+          message.rendezvous_servers.push(reader.string());
           break;
         default:
           reader.skipType(tag & 7);
@@ -1171,8 +1186,8 @@ export const ConfigUpdate = {
   fromJSON(object: any): ConfigUpdate {
     return {
       serial: isSet(object.serial) ? Number(object.serial) : 0,
-      rendezvousServers: Array.isArray(object?.rendezvousServers)
-        ? object.rendezvousServers.map((e: any) => String(e))
+      rendezvous_servers: Array.isArray(object?.rendezvous_servers)
+        ? object.rendezvous_servers.map((e: any) => String(e))
         : [],
     };
   },
@@ -1180,10 +1195,10 @@ export const ConfigUpdate = {
   toJSON(message: ConfigUpdate): unknown {
     const obj: any = {};
     message.serial !== undefined && (obj.serial = Math.round(message.serial));
-    if (message.rendezvousServers) {
-      obj.rendezvousServers = message.rendezvousServers.map((e) => e);
+    if (message.rendezvous_servers) {
+      obj.rendezvous_servers = message.rendezvous_servers.map((e) => e);
     } else {
-      obj.rendezvousServers = [];
+      obj.rendezvous_servers = [];
     }
     return obj;
   },
@@ -1193,7 +1208,7 @@ export const ConfigUpdate = {
   ): ConfigUpdate {
     const message = createBaseConfigUpdate();
     message.serial = object.serial ?? 0;
-    message.rendezvousServers = object.rendezvousServers?.map((e) => e) || [];
+    message.rendezvous_servers = object.rendezvous_servers?.map((e) => e) || [];
     return message;
   },
 };
@@ -1202,11 +1217,11 @@ function createBaseRequestRelay(): RequestRelay {
   return {
     id: "",
     uuid: "",
-    socketAddr: new Uint8Array(),
-    relayServer: "",
+    socket_addr: new Uint8Array(),
+    relay_server: "",
     secure: false,
-    licenceKey: "",
-    connType: 0,
+    licence_key: "",
+    conn_type: 0,
   };
 }
 
@@ -1221,20 +1236,20 @@ export const RequestRelay = {
     if (message.uuid !== "") {
       writer.uint32(18).string(message.uuid);
     }
-    if (message.socketAddr.length !== 0) {
-      writer.uint32(26).bytes(message.socketAddr);
+    if (message.socket_addr.length !== 0) {
+      writer.uint32(26).bytes(message.socket_addr);
     }
-    if (message.relayServer !== "") {
-      writer.uint32(34).string(message.relayServer);
+    if (message.relay_server !== "") {
+      writer.uint32(34).string(message.relay_server);
     }
     if (message.secure === true) {
       writer.uint32(40).bool(message.secure);
     }
-    if (message.licenceKey !== "") {
-      writer.uint32(50).string(message.licenceKey);
+    if (message.licence_key !== "") {
+      writer.uint32(50).string(message.licence_key);
     }
-    if (message.connType !== 0) {
-      writer.uint32(56).int32(message.connType);
+    if (message.conn_type !== 0) {
+      writer.uint32(56).int32(message.conn_type);
     }
     return writer;
   },
@@ -1253,19 +1268,19 @@ export const RequestRelay = {
           message.uuid = reader.string();
           break;
         case 3:
-          message.socketAddr = reader.bytes();
+          message.socket_addr = reader.bytes();
           break;
         case 4:
-          message.relayServer = reader.string();
+          message.relay_server = reader.string();
           break;
         case 5:
           message.secure = reader.bool();
           break;
         case 6:
-          message.licenceKey = reader.string();
+          message.licence_key = reader.string();
           break;
         case 7:
-          message.connType = reader.int32() as any;
+          message.conn_type = reader.int32() as any;
           break;
         default:
           reader.skipType(tag & 7);
@@ -1279,13 +1294,17 @@ export const RequestRelay = {
     return {
       id: isSet(object.id) ? String(object.id) : "",
       uuid: isSet(object.uuid) ? String(object.uuid) : "",
-      socketAddr: isSet(object.socketAddr)
-        ? bytesFromBase64(object.socketAddr)
+      socket_addr: isSet(object.socket_addr)
+        ? bytesFromBase64(object.socket_addr)
         : new Uint8Array(),
-      relayServer: isSet(object.relayServer) ? String(object.relayServer) : "",
+      relay_server: isSet(object.relay_server)
+        ? String(object.relay_server)
+        : "",
       secure: isSet(object.secure) ? Boolean(object.secure) : false,
-      licenceKey: isSet(object.licenceKey) ? String(object.licenceKey) : "",
-      connType: isSet(object.connType) ? connTypeFromJSON(object.connType) : 0,
+      licence_key: isSet(object.licence_key) ? String(object.licence_key) : "",
+      conn_type: isSet(object.conn_type)
+        ? connTypeFromJSON(object.conn_type)
+        : 0,
     };
   },
 
@@ -1293,16 +1312,19 @@ export const RequestRelay = {
     const obj: any = {};
     message.id !== undefined && (obj.id = message.id);
     message.uuid !== undefined && (obj.uuid = message.uuid);
-    message.socketAddr !== undefined &&
-      (obj.socketAddr = base64FromBytes(
-        message.socketAddr !== undefined ? message.socketAddr : new Uint8Array()
+    message.socket_addr !== undefined &&
+      (obj.socket_addr = base64FromBytes(
+        message.socket_addr !== undefined
+          ? message.socket_addr
+          : new Uint8Array()
       ));
-    message.relayServer !== undefined &&
-      (obj.relayServer = message.relayServer);
+    message.relay_server !== undefined &&
+      (obj.relay_server = message.relay_server);
     message.secure !== undefined && (obj.secure = message.secure);
-    message.licenceKey !== undefined && (obj.licenceKey = message.licenceKey);
-    message.connType !== undefined &&
-      (obj.connType = connTypeToJSON(message.connType));
+    message.licence_key !== undefined &&
+      (obj.licence_key = message.licence_key);
+    message.conn_type !== undefined &&
+      (obj.conn_type = connTypeToJSON(message.conn_type));
     return obj;
   },
 
@@ -1312,23 +1334,23 @@ export const RequestRelay = {
     const message = createBaseRequestRelay();
     message.id = object.id ?? "";
     message.uuid = object.uuid ?? "";
-    message.socketAddr = object.socketAddr ?? new Uint8Array();
-    message.relayServer = object.relayServer ?? "";
+    message.socket_addr = object.socket_addr ?? new Uint8Array();
+    message.relay_server = object.relay_server ?? "";
     message.secure = object.secure ?? false;
-    message.licenceKey = object.licenceKey ?? "";
-    message.connType = object.connType ?? 0;
+    message.licence_key = object.licence_key ?? "";
+    message.conn_type = object.conn_type ?? 0;
     return message;
   },
 };
 
 function createBaseRelayResponse(): RelayResponse {
   return {
-    socketAddr: new Uint8Array(),
+    socket_addr: new Uint8Array(),
     uuid: "",
-    relayServer: "",
+    relay_server: "",
     id: undefined,
     pk: undefined,
-    refuseReason: "",
+    refuse_reason: "",
     version: "",
   };
 }
@@ -1338,14 +1360,14 @@ export const RelayResponse = {
     message: RelayResponse,
     writer: _m0.Writer = _m0.Writer.create()
   ): _m0.Writer {
-    if (message.socketAddr.length !== 0) {
-      writer.uint32(10).bytes(message.socketAddr);
+    if (message.socket_addr.length !== 0) {
+      writer.uint32(10).bytes(message.socket_addr);
     }
     if (message.uuid !== "") {
       writer.uint32(18).string(message.uuid);
     }
-    if (message.relayServer !== "") {
-      writer.uint32(26).string(message.relayServer);
+    if (message.relay_server !== "") {
+      writer.uint32(26).string(message.relay_server);
     }
     if (message.id !== undefined) {
       writer.uint32(34).string(message.id);
@@ -1353,8 +1375,8 @@ export const RelayResponse = {
     if (message.pk !== undefined) {
       writer.uint32(42).bytes(message.pk);
     }
-    if (message.refuseReason !== "") {
-      writer.uint32(50).string(message.refuseReason);
+    if (message.refuse_reason !== "") {
+      writer.uint32(50).string(message.refuse_reason);
     }
     if (message.version !== "") {
       writer.uint32(58).string(message.version);
@@ -1370,13 +1392,13 @@ export const RelayResponse = {
       const tag = reader.uint32();
       switch (tag >>> 3) {
         case 1:
-          message.socketAddr = reader.bytes();
+          message.socket_addr = reader.bytes();
           break;
         case 2:
           message.uuid = reader.string();
           break;
         case 3:
-          message.relayServer = reader.string();
+          message.relay_server = reader.string();
           break;
         case 4:
           message.id = reader.string();
@@ -1385,7 +1407,7 @@ export const RelayResponse = {
           message.pk = reader.bytes();
           break;
         case 6:
-          message.refuseReason = reader.string();
+          message.refuse_reason = reader.string();
           break;
         case 7:
           message.version = reader.string();
@@ -1400,15 +1422,17 @@ export const RelayResponse = {
 
   fromJSON(object: any): RelayResponse {
     return {
-      socketAddr: isSet(object.socketAddr)
-        ? bytesFromBase64(object.socketAddr)
+      socket_addr: isSet(object.socket_addr)
+        ? bytesFromBase64(object.socket_addr)
         : new Uint8Array(),
       uuid: isSet(object.uuid) ? String(object.uuid) : "",
-      relayServer: isSet(object.relayServer) ? String(object.relayServer) : "",
+      relay_server: isSet(object.relay_server)
+        ? String(object.relay_server)
+        : "",
       id: isSet(object.id) ? String(object.id) : undefined,
       pk: isSet(object.pk) ? bytesFromBase64(object.pk) : undefined,
-      refuseReason: isSet(object.refuseReason)
-        ? String(object.refuseReason)
+      refuse_reason: isSet(object.refuse_reason)
+        ? String(object.refuse_reason)
         : "",
       version: isSet(object.version) ? String(object.version) : "",
     };
@@ -1416,19 +1440,21 @@ export const RelayResponse = {
 
   toJSON(message: RelayResponse): unknown {
     const obj: any = {};
-    message.socketAddr !== undefined &&
-      (obj.socketAddr = base64FromBytes(
-        message.socketAddr !== undefined ? message.socketAddr : new Uint8Array()
+    message.socket_addr !== undefined &&
+      (obj.socket_addr = base64FromBytes(
+        message.socket_addr !== undefined
+          ? message.socket_addr
+          : new Uint8Array()
       ));
     message.uuid !== undefined && (obj.uuid = message.uuid);
-    message.relayServer !== undefined &&
-      (obj.relayServer = message.relayServer);
+    message.relay_server !== undefined &&
+      (obj.relay_server = message.relay_server);
     message.id !== undefined && (obj.id = message.id);
     message.pk !== undefined &&
       (obj.pk =
         message.pk !== undefined ? base64FromBytes(message.pk) : undefined);
-    message.refuseReason !== undefined &&
-      (obj.refuseReason = message.refuseReason);
+    message.refuse_reason !== undefined &&
+      (obj.refuse_reason = message.refuse_reason);
     message.version !== undefined && (obj.version = message.version);
     return obj;
   },
@@ -1437,12 +1463,12 @@ export const RelayResponse = {
     object: I
   ): RelayResponse {
     const message = createBaseRelayResponse();
-    message.socketAddr = object.socketAddr ?? new Uint8Array();
+    message.socket_addr = object.socket_addr ?? new Uint8Array();
     message.uuid = object.uuid ?? "";
-    message.relayServer = object.relayServer ?? "";
+    message.relay_server = object.relay_server ?? "";
     message.id = object.id ?? undefined;
     message.pk = object.pk ?? undefined;
-    message.refuseReason = object.refuseReason ?? "";
+    message.refuse_reason = object.refuse_reason ?? "";
     message.version = object.version ?? "";
     return message;
   },
@@ -1503,7 +1529,7 @@ export const SoftwareUpdate = {
 };
 
 function createBaseFetchLocalAddr(): FetchLocalAddr {
-  return { socketAddr: new Uint8Array(), relayServer: "" };
+  return { socket_addr: new Uint8Array(), relay_server: "" };
 }
 
 export const FetchLocalAddr = {
@@ -1511,11 +1537,11 @@ export const FetchLocalAddr = {
     message: FetchLocalAddr,
     writer: _m0.Writer = _m0.Writer.create()
   ): _m0.Writer {
-    if (message.socketAddr.length !== 0) {
-      writer.uint32(10).bytes(message.socketAddr);
+    if (message.socket_addr.length !== 0) {
+      writer.uint32(10).bytes(message.socket_addr);
     }
-    if (message.relayServer !== "") {
-      writer.uint32(18).string(message.relayServer);
+    if (message.relay_server !== "") {
+      writer.uint32(18).string(message.relay_server);
     }
     return writer;
   },
@@ -1528,10 +1554,10 @@ export const FetchLocalAddr = {
       const tag = reader.uint32();
       switch (tag >>> 3) {
         case 1:
-          message.socketAddr = reader.bytes();
+          message.socket_addr = reader.bytes();
           break;
         case 2:
-          message.relayServer = reader.string();
+          message.relay_server = reader.string();
           break;
         default:
           reader.skipType(tag & 7);
@@ -1543,21 +1569,25 @@ export const FetchLocalAddr = {
 
   fromJSON(object: any): FetchLocalAddr {
     return {
-      socketAddr: isSet(object.socketAddr)
-        ? bytesFromBase64(object.socketAddr)
+      socket_addr: isSet(object.socket_addr)
+        ? bytesFromBase64(object.socket_addr)
         : new Uint8Array(),
-      relayServer: isSet(object.relayServer) ? String(object.relayServer) : "",
+      relay_server: isSet(object.relay_server)
+        ? String(object.relay_server)
+        : "",
     };
   },
 
   toJSON(message: FetchLocalAddr): unknown {
     const obj: any = {};
-    message.socketAddr !== undefined &&
-      (obj.socketAddr = base64FromBytes(
-        message.socketAddr !== undefined ? message.socketAddr : new Uint8Array()
+    message.socket_addr !== undefined &&
+      (obj.socket_addr = base64FromBytes(
+        message.socket_addr !== undefined
+          ? message.socket_addr
+          : new Uint8Array()
       ));
-    message.relayServer !== undefined &&
-      (obj.relayServer = message.relayServer);
+    message.relay_server !== undefined &&
+      (obj.relay_server = message.relay_server);
     return obj;
   },
 
@@ -1565,17 +1595,17 @@ export const FetchLocalAddr = {
     object: I
   ): FetchLocalAddr {
     const message = createBaseFetchLocalAddr();
-    message.socketAddr = object.socketAddr ?? new Uint8Array();
-    message.relayServer = object.relayServer ?? "";
+    message.socket_addr = object.socket_addr ?? new Uint8Array();
+    message.relay_server = object.relay_server ?? "";
     return message;
   },
 };
 
 function createBaseLocalAddr(): LocalAddr {
   return {
-    socketAddr: new Uint8Array(),
-    localAddr: new Uint8Array(),
-    relayServer: "",
+    socket_addr: new Uint8Array(),
+    local_addr: new Uint8Array(),
+    relay_server: "",
     id: "",
     version: "",
   };
@@ -1586,14 +1616,14 @@ export const LocalAddr = {
     message: LocalAddr,
     writer: _m0.Writer = _m0.Writer.create()
   ): _m0.Writer {
-    if (message.socketAddr.length !== 0) {
-      writer.uint32(10).bytes(message.socketAddr);
+    if (message.socket_addr.length !== 0) {
+      writer.uint32(10).bytes(message.socket_addr);
     }
-    if (message.localAddr.length !== 0) {
-      writer.uint32(18).bytes(message.localAddr);
+    if (message.local_addr.length !== 0) {
+      writer.uint32(18).bytes(message.local_addr);
     }
-    if (message.relayServer !== "") {
-      writer.uint32(26).string(message.relayServer);
+    if (message.relay_server !== "") {
+      writer.uint32(26).string(message.relay_server);
     }
     if (message.id !== "") {
       writer.uint32(34).string(message.id);
@@ -1612,13 +1642,13 @@ export const LocalAddr = {
       const tag = reader.uint32();
       switch (tag >>> 3) {
         case 1:
-          message.socketAddr = reader.bytes();
+          message.socket_addr = reader.bytes();
           break;
         case 2:
-          message.localAddr = reader.bytes();
+          message.local_addr = reader.bytes();
           break;
         case 3:
-          message.relayServer = reader.string();
+          message.relay_server = reader.string();
           break;
         case 4:
           message.id = reader.string();
@@ -1636,13 +1666,15 @@ export const LocalAddr = {
 
   fromJSON(object: any): LocalAddr {
     return {
-      socketAddr: isSet(object.socketAddr)
-        ? bytesFromBase64(object.socketAddr)
+      socket_addr: isSet(object.socket_addr)
+        ? bytesFromBase64(object.socket_addr)
         : new Uint8Array(),
-      localAddr: isSet(object.localAddr)
-        ? bytesFromBase64(object.localAddr)
+      local_addr: isSet(object.local_addr)
+        ? bytesFromBase64(object.local_addr)
         : new Uint8Array(),
-      relayServer: isSet(object.relayServer) ? String(object.relayServer) : "",
+      relay_server: isSet(object.relay_server)
+        ? String(object.relay_server)
+        : "",
       id: isSet(object.id) ? String(object.id) : "",
       version: isSet(object.version) ? String(object.version) : "",
     };
@@ -1650,16 +1682,18 @@ export const LocalAddr = {
 
   toJSON(message: LocalAddr): unknown {
     const obj: any = {};
-    message.socketAddr !== undefined &&
-      (obj.socketAddr = base64FromBytes(
-        message.socketAddr !== undefined ? message.socketAddr : new Uint8Array()
+    message.socket_addr !== undefined &&
+      (obj.socket_addr = base64FromBytes(
+        message.socket_addr !== undefined
+          ? message.socket_addr
+          : new Uint8Array()
       ));
-    message.localAddr !== undefined &&
-      (obj.localAddr = base64FromBytes(
-        message.localAddr !== undefined ? message.localAddr : new Uint8Array()
+    message.local_addr !== undefined &&
+      (obj.local_addr = base64FromBytes(
+        message.local_addr !== undefined ? message.local_addr : new Uint8Array()
       ));
-    message.relayServer !== undefined &&
-      (obj.relayServer = message.relayServer);
+    message.relay_server !== undefined &&
+      (obj.relay_server = message.relay_server);
     message.id !== undefined && (obj.id = message.id);
     message.version !== undefined && (obj.version = message.version);
     return obj;
@@ -1669,9 +1703,9 @@ export const LocalAddr = {
     object: I
   ): LocalAddr {
     const message = createBaseLocalAddr();
-    message.socketAddr = object.socketAddr ?? new Uint8Array();
-    message.localAddr = object.localAddr ?? new Uint8Array();
-    message.relayServer = object.relayServer ?? "";
+    message.socket_addr = object.socket_addr ?? new Uint8Array();
+    message.local_addr = object.local_addr ?? new Uint8Array();
+    message.relay_server = object.relay_server ?? "";
     message.id = object.id ?? "";
     message.version = object.version ?? "";
     return message;
@@ -1796,23 +1830,23 @@ export const PeerDiscovery = {
 
 function createBaseRendezvousMessage(): RendezvousMessage {
   return {
-    registerPeer: undefined,
-    registerPeerResponse: undefined,
-    punchHoleRequest: undefined,
-    punchHole: undefined,
-    punchHoleSent: undefined,
-    punchHoleResponse: undefined,
-    fetchLocalAddr: undefined,
-    localAddr: undefined,
-    configureUpdate: undefined,
-    registerPk: undefined,
-    registerPkResponse: undefined,
-    softwareUpdate: undefined,
-    requestRelay: undefined,
-    relayResponse: undefined,
-    testNatRequest: undefined,
-    testNatResponse: undefined,
-    peerDiscovery: undefined,
+    register_peer: undefined,
+    register_peer_response: undefined,
+    punch_hole_request: undefined,
+    punch_hole: undefined,
+    punch_hole_sent: undefined,
+    punch_hole_response: undefined,
+    fetch_local_addr: undefined,
+    local_addr: undefined,
+    configure_update: undefined,
+    register_pk: undefined,
+    register_pk_response: undefined,
+    software_update: undefined,
+    request_relay: undefined,
+    relay_response: undefined,
+    test_nat_request: undefined,
+    test_nat_response: undefined,
+    peer_discovery: undefined,
   };
 }
 
@@ -1821,96 +1855,99 @@ export const RendezvousMessage = {
     message: RendezvousMessage,
     writer: _m0.Writer = _m0.Writer.create()
   ): _m0.Writer {
-    if (message.registerPeer !== undefined) {
+    if (message.register_peer !== undefined) {
       RegisterPeer.encode(
-        message.registerPeer,
+        message.register_peer,
         writer.uint32(50).fork()
       ).ldelim();
     }
-    if (message.registerPeerResponse !== undefined) {
+    if (message.register_peer_response !== undefined) {
       RegisterPeerResponse.encode(
-        message.registerPeerResponse,
+        message.register_peer_response,
         writer.uint32(58).fork()
       ).ldelim();
     }
-    if (message.punchHoleRequest !== undefined) {
+    if (message.punch_hole_request !== undefined) {
       PunchHoleRequest.encode(
-        message.punchHoleRequest,
+        message.punch_hole_request,
         writer.uint32(66).fork()
       ).ldelim();
     }
-    if (message.punchHole !== undefined) {
-      PunchHole.encode(message.punchHole, writer.uint32(74).fork()).ldelim();
+    if (message.punch_hole !== undefined) {
+      PunchHole.encode(message.punch_hole, writer.uint32(74).fork()).ldelim();
     }
-    if (message.punchHoleSent !== undefined) {
+    if (message.punch_hole_sent !== undefined) {
       PunchHoleSent.encode(
-        message.punchHoleSent,
+        message.punch_hole_sent,
         writer.uint32(82).fork()
       ).ldelim();
     }
-    if (message.punchHoleResponse !== undefined) {
+    if (message.punch_hole_response !== undefined) {
       PunchHoleResponse.encode(
-        message.punchHoleResponse,
+        message.punch_hole_response,
         writer.uint32(90).fork()
       ).ldelim();
     }
-    if (message.fetchLocalAddr !== undefined) {
+    if (message.fetch_local_addr !== undefined) {
       FetchLocalAddr.encode(
-        message.fetchLocalAddr,
+        message.fetch_local_addr,
         writer.uint32(98).fork()
       ).ldelim();
     }
-    if (message.localAddr !== undefined) {
-      LocalAddr.encode(message.localAddr, writer.uint32(106).fork()).ldelim();
+    if (message.local_addr !== undefined) {
+      LocalAddr.encode(message.local_addr, writer.uint32(106).fork()).ldelim();
     }
-    if (message.configureUpdate !== undefined) {
+    if (message.configure_update !== undefined) {
       ConfigUpdate.encode(
-        message.configureUpdate,
+        message.configure_update,
         writer.uint32(114).fork()
       ).ldelim();
     }
-    if (message.registerPk !== undefined) {
-      RegisterPk.encode(message.registerPk, writer.uint32(122).fork()).ldelim();
+    if (message.register_pk !== undefined) {
+      RegisterPk.encode(
+        message.register_pk,
+        writer.uint32(122).fork()
+      ).ldelim();
     }
-    if (message.registerPkResponse !== undefined) {
+    if (message.register_pk_response !== undefined) {
       RegisterPkResponse.encode(
-        message.registerPkResponse,
+        message.register_pk_response,
         writer.uint32(130).fork()
       ).ldelim();
     }
-    if (message.softwareUpdate !== undefined) {
+    if (message.software_update !== undefined) {
       SoftwareUpdate.encode(
-        message.softwareUpdate,
+        message.software_update,
         writer.uint32(138).fork()
       ).ldelim();
     }
-    if (message.requestRelay !== undefined) {
+    if (message.request_relay !== undefined) {
       RequestRelay.encode(
-        message.requestRelay,
+        message.request_relay,
         writer.uint32(146).fork()
       ).ldelim();
     }
-    if (message.relayResponse !== undefined) {
+    if (message.relay_response !== undefined) {
       RelayResponse.encode(
-        message.relayResponse,
+        message.relay_response,
         writer.uint32(154).fork()
       ).ldelim();
     }
-    if (message.testNatRequest !== undefined) {
+    if (message.test_nat_request !== undefined) {
       TestNatRequest.encode(
-        message.testNatRequest,
+        message.test_nat_request,
         writer.uint32(162).fork()
       ).ldelim();
     }
-    if (message.testNatResponse !== undefined) {
+    if (message.test_nat_response !== undefined) {
       TestNatResponse.encode(
-        message.testNatResponse,
+        message.test_nat_response,
         writer.uint32(170).fork()
       ).ldelim();
     }
-    if (message.peerDiscovery !== undefined) {
+    if (message.peer_discovery !== undefined) {
       PeerDiscovery.encode(
-        message.peerDiscovery,
+        message.peer_discovery,
         writer.uint32(178).fork()
       ).ldelim();
     }
@@ -1925,82 +1962,91 @@ export const RendezvousMessage = {
       const tag = reader.uint32();
       switch (tag >>> 3) {
         case 6:
-          message.registerPeer = RegisterPeer.decode(reader, reader.uint32());
+          message.register_peer = RegisterPeer.decode(reader, reader.uint32());
           break;
         case 7:
-          message.registerPeerResponse = RegisterPeerResponse.decode(
+          message.register_peer_response = RegisterPeerResponse.decode(
             reader,
             reader.uint32()
           );
           break;
         case 8:
-          message.punchHoleRequest = PunchHoleRequest.decode(
+          message.punch_hole_request = PunchHoleRequest.decode(
             reader,
             reader.uint32()
           );
           break;
         case 9:
-          message.punchHole = PunchHole.decode(reader, reader.uint32());
+          message.punch_hole = PunchHole.decode(reader, reader.uint32());
           break;
         case 10:
-          message.punchHoleSent = PunchHoleSent.decode(reader, reader.uint32());
+          message.punch_hole_sent = PunchHoleSent.decode(
+            reader,
+            reader.uint32()
+          );
           break;
         case 11:
-          message.punchHoleResponse = PunchHoleResponse.decode(
+          message.punch_hole_response = PunchHoleResponse.decode(
             reader,
             reader.uint32()
           );
           break;
         case 12:
-          message.fetchLocalAddr = FetchLocalAddr.decode(
+          message.fetch_local_addr = FetchLocalAddr.decode(
             reader,
             reader.uint32()
           );
           break;
         case 13:
-          message.localAddr = LocalAddr.decode(reader, reader.uint32());
+          message.local_addr = LocalAddr.decode(reader, reader.uint32());
           break;
         case 14:
-          message.configureUpdate = ConfigUpdate.decode(
+          message.configure_update = ConfigUpdate.decode(
             reader,
             reader.uint32()
           );
           break;
         case 15:
-          message.registerPk = RegisterPk.decode(reader, reader.uint32());
+          message.register_pk = RegisterPk.decode(reader, reader.uint32());
           break;
         case 16:
-          message.registerPkResponse = RegisterPkResponse.decode(
+          message.register_pk_response = RegisterPkResponse.decode(
             reader,
             reader.uint32()
           );
           break;
         case 17:
-          message.softwareUpdate = SoftwareUpdate.decode(
+          message.software_update = SoftwareUpdate.decode(
             reader,
             reader.uint32()
           );
           break;
         case 18:
-          message.requestRelay = RequestRelay.decode(reader, reader.uint32());
+          message.request_relay = RequestRelay.decode(reader, reader.uint32());
           break;
         case 19:
-          message.relayResponse = RelayResponse.decode(reader, reader.uint32());
+          message.relay_response = RelayResponse.decode(
+            reader,
+            reader.uint32()
+          );
           break;
         case 20:
-          message.testNatRequest = TestNatRequest.decode(
+          message.test_nat_request = TestNatRequest.decode(
             reader,
             reader.uint32()
           );
           break;
         case 21:
-          message.testNatResponse = TestNatResponse.decode(
+          message.test_nat_response = TestNatResponse.decode(
             reader,
             reader.uint32()
           );
           break;
         case 22:
-          message.peerDiscovery = PeerDiscovery.decode(reader, reader.uint32());
+          message.peer_discovery = PeerDiscovery.decode(
+            reader,
+            reader.uint32()
+          );
           break;
         default:
           reader.skipType(tag & 7);
@@ -2012,129 +2058,129 @@ export const RendezvousMessage = {
 
   fromJSON(object: any): RendezvousMessage {
     return {
-      registerPeer: isSet(object.registerPeer)
-        ? RegisterPeer.fromJSON(object.registerPeer)
+      register_peer: isSet(object.register_peer)
+        ? RegisterPeer.fromJSON(object.register_peer)
         : undefined,
-      registerPeerResponse: isSet(object.registerPeerResponse)
-        ? RegisterPeerResponse.fromJSON(object.registerPeerResponse)
+      register_peer_response: isSet(object.register_peer_response)
+        ? RegisterPeerResponse.fromJSON(object.register_peer_response)
         : undefined,
-      punchHoleRequest: isSet(object.punchHoleRequest)
-        ? PunchHoleRequest.fromJSON(object.punchHoleRequest)
+      punch_hole_request: isSet(object.punch_hole_request)
+        ? PunchHoleRequest.fromJSON(object.punch_hole_request)
         : undefined,
-      punchHole: isSet(object.punchHole)
-        ? PunchHole.fromJSON(object.punchHole)
+      punch_hole: isSet(object.punch_hole)
+        ? PunchHole.fromJSON(object.punch_hole)
         : undefined,
-      punchHoleSent: isSet(object.punchHoleSent)
-        ? PunchHoleSent.fromJSON(object.punchHoleSent)
+      punch_hole_sent: isSet(object.punch_hole_sent)
+        ? PunchHoleSent.fromJSON(object.punch_hole_sent)
         : undefined,
-      punchHoleResponse: isSet(object.punchHoleResponse)
-        ? PunchHoleResponse.fromJSON(object.punchHoleResponse)
+      punch_hole_response: isSet(object.punch_hole_response)
+        ? PunchHoleResponse.fromJSON(object.punch_hole_response)
         : undefined,
-      fetchLocalAddr: isSet(object.fetchLocalAddr)
-        ? FetchLocalAddr.fromJSON(object.fetchLocalAddr)
+      fetch_local_addr: isSet(object.fetch_local_addr)
+        ? FetchLocalAddr.fromJSON(object.fetch_local_addr)
         : undefined,
-      localAddr: isSet(object.localAddr)
-        ? LocalAddr.fromJSON(object.localAddr)
+      local_addr: isSet(object.local_addr)
+        ? LocalAddr.fromJSON(object.local_addr)
         : undefined,
-      configureUpdate: isSet(object.configureUpdate)
-        ? ConfigUpdate.fromJSON(object.configureUpdate)
+      configure_update: isSet(object.configure_update)
+        ? ConfigUpdate.fromJSON(object.configure_update)
         : undefined,
-      registerPk: isSet(object.registerPk)
-        ? RegisterPk.fromJSON(object.registerPk)
+      register_pk: isSet(object.register_pk)
+        ? RegisterPk.fromJSON(object.register_pk)
         : undefined,
-      registerPkResponse: isSet(object.registerPkResponse)
-        ? RegisterPkResponse.fromJSON(object.registerPkResponse)
+      register_pk_response: isSet(object.register_pk_response)
+        ? RegisterPkResponse.fromJSON(object.register_pk_response)
         : undefined,
-      softwareUpdate: isSet(object.softwareUpdate)
-        ? SoftwareUpdate.fromJSON(object.softwareUpdate)
+      software_update: isSet(object.software_update)
+        ? SoftwareUpdate.fromJSON(object.software_update)
         : undefined,
-      requestRelay: isSet(object.requestRelay)
-        ? RequestRelay.fromJSON(object.requestRelay)
+      request_relay: isSet(object.request_relay)
+        ? RequestRelay.fromJSON(object.request_relay)
         : undefined,
-      relayResponse: isSet(object.relayResponse)
-        ? RelayResponse.fromJSON(object.relayResponse)
+      relay_response: isSet(object.relay_response)
+        ? RelayResponse.fromJSON(object.relay_response)
         : undefined,
-      testNatRequest: isSet(object.testNatRequest)
-        ? TestNatRequest.fromJSON(object.testNatRequest)
+      test_nat_request: isSet(object.test_nat_request)
+        ? TestNatRequest.fromJSON(object.test_nat_request)
         : undefined,
-      testNatResponse: isSet(object.testNatResponse)
-        ? TestNatResponse.fromJSON(object.testNatResponse)
+      test_nat_response: isSet(object.test_nat_response)
+        ? TestNatResponse.fromJSON(object.test_nat_response)
         : undefined,
-      peerDiscovery: isSet(object.peerDiscovery)
-        ? PeerDiscovery.fromJSON(object.peerDiscovery)
+      peer_discovery: isSet(object.peer_discovery)
+        ? PeerDiscovery.fromJSON(object.peer_discovery)
         : undefined,
     };
   },
 
   toJSON(message: RendezvousMessage): unknown {
     const obj: any = {};
-    message.registerPeer !== undefined &&
-      (obj.registerPeer = message.registerPeer
-        ? RegisterPeer.toJSON(message.registerPeer)
+    message.register_peer !== undefined &&
+      (obj.register_peer = message.register_peer
+        ? RegisterPeer.toJSON(message.register_peer)
         : undefined);
-    message.registerPeerResponse !== undefined &&
-      (obj.registerPeerResponse = message.registerPeerResponse
-        ? RegisterPeerResponse.toJSON(message.registerPeerResponse)
+    message.register_peer_response !== undefined &&
+      (obj.register_peer_response = message.register_peer_response
+        ? RegisterPeerResponse.toJSON(message.register_peer_response)
         : undefined);
-    message.punchHoleRequest !== undefined &&
-      (obj.punchHoleRequest = message.punchHoleRequest
-        ? PunchHoleRequest.toJSON(message.punchHoleRequest)
+    message.punch_hole_request !== undefined &&
+      (obj.punch_hole_request = message.punch_hole_request
+        ? PunchHoleRequest.toJSON(message.punch_hole_request)
         : undefined);
-    message.punchHole !== undefined &&
-      (obj.punchHole = message.punchHole
-        ? PunchHole.toJSON(message.punchHole)
+    message.punch_hole !== undefined &&
+      (obj.punch_hole = message.punch_hole
+        ? PunchHole.toJSON(message.punch_hole)
         : undefined);
-    message.punchHoleSent !== undefined &&
-      (obj.punchHoleSent = message.punchHoleSent
-        ? PunchHoleSent.toJSON(message.punchHoleSent)
+    message.punch_hole_sent !== undefined &&
+      (obj.punch_hole_sent = message.punch_hole_sent
+        ? PunchHoleSent.toJSON(message.punch_hole_sent)
         : undefined);
-    message.punchHoleResponse !== undefined &&
-      (obj.punchHoleResponse = message.punchHoleResponse
-        ? PunchHoleResponse.toJSON(message.punchHoleResponse)
+    message.punch_hole_response !== undefined &&
+      (obj.punch_hole_response = message.punch_hole_response
+        ? PunchHoleResponse.toJSON(message.punch_hole_response)
         : undefined);
-    message.fetchLocalAddr !== undefined &&
-      (obj.fetchLocalAddr = message.fetchLocalAddr
-        ? FetchLocalAddr.toJSON(message.fetchLocalAddr)
+    message.fetch_local_addr !== undefined &&
+      (obj.fetch_local_addr = message.fetch_local_addr
+        ? FetchLocalAddr.toJSON(message.fetch_local_addr)
         : undefined);
-    message.localAddr !== undefined &&
-      (obj.localAddr = message.localAddr
-        ? LocalAddr.toJSON(message.localAddr)
+    message.local_addr !== undefined &&
+      (obj.local_addr = message.local_addr
+        ? LocalAddr.toJSON(message.local_addr)
         : undefined);
-    message.configureUpdate !== undefined &&
-      (obj.configureUpdate = message.configureUpdate
-        ? ConfigUpdate.toJSON(message.configureUpdate)
+    message.configure_update !== undefined &&
+      (obj.configure_update = message.configure_update
+        ? ConfigUpdate.toJSON(message.configure_update)
         : undefined);
-    message.registerPk !== undefined &&
-      (obj.registerPk = message.registerPk
-        ? RegisterPk.toJSON(message.registerPk)
+    message.register_pk !== undefined &&
+      (obj.register_pk = message.register_pk
+        ? RegisterPk.toJSON(message.register_pk)
         : undefined);
-    message.registerPkResponse !== undefined &&
-      (obj.registerPkResponse = message.registerPkResponse
-        ? RegisterPkResponse.toJSON(message.registerPkResponse)
+    message.register_pk_response !== undefined &&
+      (obj.register_pk_response = message.register_pk_response
+        ? RegisterPkResponse.toJSON(message.register_pk_response)
         : undefined);
-    message.softwareUpdate !== undefined &&
-      (obj.softwareUpdate = message.softwareUpdate
-        ? SoftwareUpdate.toJSON(message.softwareUpdate)
+    message.software_update !== undefined &&
+      (obj.software_update = message.software_update
+        ? SoftwareUpdate.toJSON(message.software_update)
         : undefined);
-    message.requestRelay !== undefined &&
-      (obj.requestRelay = message.requestRelay
-        ? RequestRelay.toJSON(message.requestRelay)
+    message.request_relay !== undefined &&
+      (obj.request_relay = message.request_relay
+        ? RequestRelay.toJSON(message.request_relay)
         : undefined);
-    message.relayResponse !== undefined &&
-      (obj.relayResponse = message.relayResponse
-        ? RelayResponse.toJSON(message.relayResponse)
+    message.relay_response !== undefined &&
+      (obj.relay_response = message.relay_response
+        ? RelayResponse.toJSON(message.relay_response)
         : undefined);
-    message.testNatRequest !== undefined &&
-      (obj.testNatRequest = message.testNatRequest
-        ? TestNatRequest.toJSON(message.testNatRequest)
+    message.test_nat_request !== undefined &&
+      (obj.test_nat_request = message.test_nat_request
+        ? TestNatRequest.toJSON(message.test_nat_request)
         : undefined);
-    message.testNatResponse !== undefined &&
-      (obj.testNatResponse = message.testNatResponse
-        ? TestNatResponse.toJSON(message.testNatResponse)
+    message.test_nat_response !== undefined &&
+      (obj.test_nat_response = message.test_nat_response
+        ? TestNatResponse.toJSON(message.test_nat_response)
         : undefined);
-    message.peerDiscovery !== undefined &&
-      (obj.peerDiscovery = message.peerDiscovery
-        ? PeerDiscovery.toJSON(message.peerDiscovery)
+    message.peer_discovery !== undefined &&
+      (obj.peer_discovery = message.peer_discovery
+        ? PeerDiscovery.toJSON(message.peer_discovery)
         : undefined);
     return obj;
   },
@@ -2143,76 +2189,78 @@ export const RendezvousMessage = {
     object: I
   ): RendezvousMessage {
     const message = createBaseRendezvousMessage();
-    message.registerPeer =
-      object.registerPeer !== undefined && object.registerPeer !== null
-        ? RegisterPeer.fromPartial(object.registerPeer)
+    message.register_peer =
+      object.register_peer !== undefined && object.register_peer !== null
+        ? RegisterPeer.fromPartial(object.register_peer)
         : undefined;
-    message.registerPeerResponse =
-      object.registerPeerResponse !== undefined &&
-      object.registerPeerResponse !== null
-        ? RegisterPeerResponse.fromPartial(object.registerPeerResponse)
+    message.register_peer_response =
+      object.register_peer_response !== undefined &&
+      object.register_peer_response !== null
+        ? RegisterPeerResponse.fromPartial(object.register_peer_response)
         : undefined;
-    message.punchHoleRequest =
-      object.punchHoleRequest !== undefined && object.punchHoleRequest !== null
-        ? PunchHoleRequest.fromPartial(object.punchHoleRequest)
+    message.punch_hole_request =
+      object.punch_hole_request !== undefined &&
+      object.punch_hole_request !== null
+        ? PunchHoleRequest.fromPartial(object.punch_hole_request)
         : undefined;
-    message.punchHole =
-      object.punchHole !== undefined && object.punchHole !== null
-        ? PunchHole.fromPartial(object.punchHole)
+    message.punch_hole =
+      object.punch_hole !== undefined && object.punch_hole !== null
+        ? PunchHole.fromPartial(object.punch_hole)
         : undefined;
-    message.punchHoleSent =
-      object.punchHoleSent !== undefined && object.punchHoleSent !== null
-        ? PunchHoleSent.fromPartial(object.punchHoleSent)
+    message.punch_hole_sent =
+      object.punch_hole_sent !== undefined && object.punch_hole_sent !== null
+        ? PunchHoleSent.fromPartial(object.punch_hole_sent)
         : undefined;
-    message.punchHoleResponse =
-      object.punchHoleResponse !== undefined &&
-      object.punchHoleResponse !== null
-        ? PunchHoleResponse.fromPartial(object.punchHoleResponse)
+    message.punch_hole_response =
+      object.punch_hole_response !== undefined &&
+      object.punch_hole_response !== null
+        ? PunchHoleResponse.fromPartial(object.punch_hole_response)
         : undefined;
-    message.fetchLocalAddr =
-      object.fetchLocalAddr !== undefined && object.fetchLocalAddr !== null
-        ? FetchLocalAddr.fromPartial(object.fetchLocalAddr)
+    message.fetch_local_addr =
+      object.fetch_local_addr !== undefined && object.fetch_local_addr !== null
+        ? FetchLocalAddr.fromPartial(object.fetch_local_addr)
         : undefined;
-    message.localAddr =
-      object.localAddr !== undefined && object.localAddr !== null
-        ? LocalAddr.fromPartial(object.localAddr)
+    message.local_addr =
+      object.local_addr !== undefined && object.local_addr !== null
+        ? LocalAddr.fromPartial(object.local_addr)
         : undefined;
-    message.configureUpdate =
-      object.configureUpdate !== undefined && object.configureUpdate !== null
-        ? ConfigUpdate.fromPartial(object.configureUpdate)
+    message.configure_update =
+      object.configure_update !== undefined && object.configure_update !== null
+        ? ConfigUpdate.fromPartial(object.configure_update)
         : undefined;
-    message.registerPk =
-      object.registerPk !== undefined && object.registerPk !== null
-        ? RegisterPk.fromPartial(object.registerPk)
+    message.register_pk =
+      object.register_pk !== undefined && object.register_pk !== null
+        ? RegisterPk.fromPartial(object.register_pk)
         : undefined;
-    message.registerPkResponse =
-      object.registerPkResponse !== undefined &&
-      object.registerPkResponse !== null
-        ? RegisterPkResponse.fromPartial(object.registerPkResponse)
+    message.register_pk_response =
+      object.register_pk_response !== undefined &&
+      object.register_pk_response !== null
+        ? RegisterPkResponse.fromPartial(object.register_pk_response)
         : undefined;
-    message.softwareUpdate =
-      object.softwareUpdate !== undefined && object.softwareUpdate !== null
-        ? SoftwareUpdate.fromPartial(object.softwareUpdate)
+    message.software_update =
+      object.software_update !== undefined && object.software_update !== null
+        ? SoftwareUpdate.fromPartial(object.software_update)
         : undefined;
-    message.requestRelay =
-      object.requestRelay !== undefined && object.requestRelay !== null
-        ? RequestRelay.fromPartial(object.requestRelay)
+    message.request_relay =
+      object.request_relay !== undefined && object.request_relay !== null
+        ? RequestRelay.fromPartial(object.request_relay)
         : undefined;
-    message.relayResponse =
-      object.relayResponse !== undefined && object.relayResponse !== null
-        ? RelayResponse.fromPartial(object.relayResponse)
+    message.relay_response =
+      object.relay_response !== undefined && object.relay_response !== null
+        ? RelayResponse.fromPartial(object.relay_response)
         : undefined;
-    message.testNatRequest =
-      object.testNatRequest !== undefined && object.testNatRequest !== null
-        ? TestNatRequest.fromPartial(object.testNatRequest)
+    message.test_nat_request =
+      object.test_nat_request !== undefined && object.test_nat_request !== null
+        ? TestNatRequest.fromPartial(object.test_nat_request)
         : undefined;
-    message.testNatResponse =
-      object.testNatResponse !== undefined && object.testNatResponse !== null
-        ? TestNatResponse.fromPartial(object.testNatResponse)
+    message.test_nat_response =
+      object.test_nat_response !== undefined &&
+      object.test_nat_response !== null
+        ? TestNatResponse.fromPartial(object.test_nat_response)
         : undefined;
-    message.peerDiscovery =
-      object.peerDiscovery !== undefined && object.peerDiscovery !== null
-        ? PeerDiscovery.fromPartial(object.peerDiscovery)
+    message.peer_discovery =
+      object.peer_discovery !== undefined && object.peer_discovery !== null
+        ? PeerDiscovery.fromPartial(object.peer_discovery)
         : undefined;
     return message;
   },

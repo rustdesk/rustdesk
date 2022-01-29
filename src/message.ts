@@ -631,17 +631,17 @@ export interface PortForward {
 
 export interface FileTransfer {
   dir: string;
-  showHidden: boolean;
+  show_hidden: boolean;
 }
 
 export interface LoginRequest {
   username: string;
   password: Uint8Array;
-  myId: string;
-  myName: string;
+  my_id: string;
+  my_name: string;
   option: OptionMessage | undefined;
-  fileTransfer: FileTransfer | undefined;
-  portForward: PortForward | undefined;
+  file_transfer: FileTransfer | undefined;
+  port_forward: PortForward | undefined;
 }
 
 export interface ChatMessage {
@@ -653,14 +653,14 @@ export interface PeerInfo {
   hostname: string;
   platform: string;
   displays: DisplayInfo[];
-  currentDisplay: number;
-  sasEnabled: boolean;
+  current_display: number;
+  sas_enabled: boolean;
   version: string;
 }
 
 export interface LoginResponse {
   error: string | undefined;
-  peerInfo: PeerInfo | undefined;
+  peer_info: PeerInfo | undefined;
 }
 
 export interface MouseEvent {
@@ -673,7 +673,7 @@ export interface MouseEvent {
 export interface KeyEvent {
   down: boolean;
   press: boolean;
-  controlKey: ControlKey | undefined;
+  control_key: ControlKey | undefined;
   chr: number | undefined;
   unicode: number | undefined;
   seq: string | undefined;
@@ -705,11 +705,11 @@ export interface Clipboard {
 }
 
 export interface FileEntry {
-  entryType: FileType;
+  entry_type: FileType;
   name: string;
-  isHidden: boolean;
+  is_hidden: boolean;
   size: number;
-  modifiedTime: number;
+  modified_time: number;
 }
 
 export interface FileDirectory {
@@ -720,23 +720,23 @@ export interface FileDirectory {
 
 export interface ReadDir {
   path: string;
-  includeHidden: boolean;
+  include_hidden: boolean;
 }
 
 export interface ReadAllFiles {
   id: number;
   path: string;
-  includeHidden: boolean;
+  include_hidden: boolean;
 }
 
 export interface FileAction {
-  readDir: ReadDir | undefined;
+  read_dir: ReadDir | undefined;
   send: FileTransferSendRequest | undefined;
   receive: FileTransferReceiveRequest | undefined;
   create: FileDirCreate | undefined;
-  removeDir: FileRemoveDir | undefined;
-  removeFile: FileRemoveFile | undefined;
-  allFiles: ReadAllFiles | undefined;
+  remove_dir: FileRemoveDir | undefined;
+  remove_file: FileRemoveFile | undefined;
+  all_files: ReadAllFiles | undefined;
   cancel: FileTransferCancel | undefined;
 }
 
@@ -753,7 +753,7 @@ export interface FileResponse {
 
 export interface FileTransferBlock {
   id: number;
-  fileNum: number;
+  file_num: number;
   data: Uint8Array;
   compressed: boolean;
 }
@@ -761,18 +761,18 @@ export interface FileTransferBlock {
 export interface FileTransferError {
   id: number;
   error: string;
-  fileNum: number;
+  file_num: number;
 }
 
 export interface FileTransferSendRequest {
   id: number;
   path: string;
-  includeHidden: boolean;
+  include_hidden: boolean;
 }
 
 export interface FileTransferDone {
   id: number;
-  fileNum: number;
+  file_num: number;
 }
 
 export interface FileTransferReceiveRequest {
@@ -791,7 +791,7 @@ export interface FileRemoveDir {
 export interface FileRemoveFile {
   id: number;
   path: string;
-  fileNum: number;
+  file_num: number;
 }
 
 export interface FileDirCreate {
@@ -855,14 +855,14 @@ export function permissionInfo_PermissionToJSON(
 }
 
 export interface OptionMessage {
-  imageQuality: ImageQuality;
-  lockAfterSessionEnd: OptionMessage_BoolOption;
-  showRemoteCursor: OptionMessage_BoolOption;
-  privacyMode: OptionMessage_BoolOption;
-  blockInput: OptionMessage_BoolOption;
-  customImageQuality: number;
-  disableAudio: OptionMessage_BoolOption;
-  disableClipboard: OptionMessage_BoolOption;
+  image_quality: ImageQuality;
+  lock_after_session_end: OptionMessage_BoolOption;
+  show_remote_cursor: OptionMessage_BoolOption;
+  privacy_mode: OptionMessage_BoolOption;
+  block_input: OptionMessage_BoolOption;
+  custom_image_quality: number;
+  disable_audio: OptionMessage_BoolOption;
+  disable_clipboard: OptionMessage_BoolOption;
 }
 
 export enum OptionMessage_BoolOption {
@@ -914,12 +914,12 @@ export interface OptionResponse {
 
 export interface TestDelay {
   time: number;
-  fromClient: boolean;
+  from_client: boolean;
 }
 
 export interface PublicKey {
-  asymmetricValue: Uint8Array;
-  symmetricValue: Uint8Array;
+  asymmetric_value: Uint8Array;
+  symmetric_value: Uint8Array;
 }
 
 export interface SignedId {
@@ -927,7 +927,7 @@ export interface SignedId {
 }
 
 export interface AudioFormat {
-  sampleRate: number;
+  sample_rate: number;
   channels: number;
 }
 
@@ -936,33 +936,33 @@ export interface AudioFrame {
 }
 
 export interface Misc {
-  chatMessage: ChatMessage | undefined;
-  switchDisplay: SwitchDisplay | undefined;
-  permissionInfo: PermissionInfo | undefined;
+  chat_message: ChatMessage | undefined;
+  switch_display: SwitchDisplay | undefined;
+  permission_info: PermissionInfo | undefined;
   option: OptionMessage | undefined;
-  audioFormat: AudioFormat | undefined;
-  closeReason: string | undefined;
-  refreshVideo: boolean | undefined;
-  optionResponse: OptionResponse | undefined;
+  audio_format: AudioFormat | undefined;
+  close_reason: string | undefined;
+  refresh_video: boolean | undefined;
+  option_response: OptionResponse | undefined;
 }
 
 export interface Message {
-  signedId: SignedId | undefined;
-  publicKey: PublicKey | undefined;
-  testDelay: TestDelay | undefined;
-  videoFrame: VideoFrame | undefined;
-  loginRequest: LoginRequest | undefined;
-  loginResponse: LoginResponse | undefined;
+  signed_id: SignedId | undefined;
+  public_key: PublicKey | undefined;
+  test_delay: TestDelay | undefined;
+  video_frame: VideoFrame | undefined;
+  login_request: LoginRequest | undefined;
+  login_response: LoginResponse | undefined;
   hash: Hash | undefined;
-  mouseEvent: MouseEvent | undefined;
-  audioFrame: AudioFrame | undefined;
-  cursorData: CursorData | undefined;
-  cursorPosition: CursorPosition | undefined;
-  cursorId: number | undefined;
-  keyEvent: KeyEvent | undefined;
+  mouse_event: MouseEvent | undefined;
+  audio_frame: AudioFrame | undefined;
+  cursor_data: CursorData | undefined;
+  cursor_position: CursorPosition | undefined;
+  cursor_id: number | undefined;
+  key_event: KeyEvent | undefined;
   clipboard: Clipboard | undefined;
-  fileAction: FileAction | undefined;
-  fileResponse: FileResponse | undefined;
+  file_action: FileAction | undefined;
+  file_response: FileResponse | undefined;
   misc: Misc | undefined;
 }
 
@@ -1447,7 +1447,7 @@ export const PortForward = {
 };
 
 function createBaseFileTransfer(): FileTransfer {
-  return { dir: "", showHidden: false };
+  return { dir: "", show_hidden: false };
 }
 
 export const FileTransfer = {
@@ -1458,8 +1458,8 @@ export const FileTransfer = {
     if (message.dir !== "") {
       writer.uint32(10).string(message.dir);
     }
-    if (message.showHidden === true) {
-      writer.uint32(16).bool(message.showHidden);
+    if (message.show_hidden === true) {
+      writer.uint32(16).bool(message.show_hidden);
     }
     return writer;
   },
@@ -1475,7 +1475,7 @@ export const FileTransfer = {
           message.dir = reader.string();
           break;
         case 2:
-          message.showHidden = reader.bool();
+          message.show_hidden = reader.bool();
           break;
         default:
           reader.skipType(tag & 7);
@@ -1488,14 +1488,17 @@ export const FileTransfer = {
   fromJSON(object: any): FileTransfer {
     return {
       dir: isSet(object.dir) ? String(object.dir) : "",
-      showHidden: isSet(object.showHidden) ? Boolean(object.showHidden) : false,
+      show_hidden: isSet(object.show_hidden)
+        ? Boolean(object.show_hidden)
+        : false,
     };
   },
 
   toJSON(message: FileTransfer): unknown {
     const obj: any = {};
     message.dir !== undefined && (obj.dir = message.dir);
-    message.showHidden !== undefined && (obj.showHidden = message.showHidden);
+    message.show_hidden !== undefined &&
+      (obj.show_hidden = message.show_hidden);
     return obj;
   },
 
@@ -1504,7 +1507,7 @@ export const FileTransfer = {
   ): FileTransfer {
     const message = createBaseFileTransfer();
     message.dir = object.dir ?? "";
-    message.showHidden = object.showHidden ?? false;
+    message.show_hidden = object.show_hidden ?? false;
     return message;
   },
 };
@@ -1513,11 +1516,11 @@ function createBaseLoginRequest(): LoginRequest {
   return {
     username: "",
     password: new Uint8Array(),
-    myId: "",
-    myName: "",
+    my_id: "",
+    my_name: "",
     option: undefined,
-    fileTransfer: undefined,
-    portForward: undefined,
+    file_transfer: undefined,
+    port_forward: undefined,
   };
 }
 
@@ -1532,24 +1535,24 @@ export const LoginRequest = {
     if (message.password.length !== 0) {
       writer.uint32(18).bytes(message.password);
     }
-    if (message.myId !== "") {
-      writer.uint32(34).string(message.myId);
+    if (message.my_id !== "") {
+      writer.uint32(34).string(message.my_id);
     }
-    if (message.myName !== "") {
-      writer.uint32(42).string(message.myName);
+    if (message.my_name !== "") {
+      writer.uint32(42).string(message.my_name);
     }
     if (message.option !== undefined) {
       OptionMessage.encode(message.option, writer.uint32(50).fork()).ldelim();
     }
-    if (message.fileTransfer !== undefined) {
+    if (message.file_transfer !== undefined) {
       FileTransfer.encode(
-        message.fileTransfer,
+        message.file_transfer,
         writer.uint32(58).fork()
       ).ldelim();
     }
-    if (message.portForward !== undefined) {
+    if (message.port_forward !== undefined) {
       PortForward.encode(
-        message.portForward,
+        message.port_forward,
         writer.uint32(66).fork()
       ).ldelim();
     }
@@ -1570,19 +1573,19 @@ export const LoginRequest = {
           message.password = reader.bytes();
           break;
         case 4:
-          message.myId = reader.string();
+          message.my_id = reader.string();
           break;
         case 5:
-          message.myName = reader.string();
+          message.my_name = reader.string();
           break;
         case 6:
           message.option = OptionMessage.decode(reader, reader.uint32());
           break;
         case 7:
-          message.fileTransfer = FileTransfer.decode(reader, reader.uint32());
+          message.file_transfer = FileTransfer.decode(reader, reader.uint32());
           break;
         case 8:
-          message.portForward = PortForward.decode(reader, reader.uint32());
+          message.port_forward = PortForward.decode(reader, reader.uint32());
           break;
         default:
           reader.skipType(tag & 7);
@@ -1598,16 +1601,16 @@ export const LoginRequest = {
       password: isSet(object.password)
         ? bytesFromBase64(object.password)
         : new Uint8Array(),
-      myId: isSet(object.myId) ? String(object.myId) : "",
-      myName: isSet(object.myName) ? String(object.myName) : "",
+      my_id: isSet(object.my_id) ? String(object.my_id) : "",
+      my_name: isSet(object.my_name) ? String(object.my_name) : "",
       option: isSet(object.option)
         ? OptionMessage.fromJSON(object.option)
         : undefined,
-      fileTransfer: isSet(object.fileTransfer)
-        ? FileTransfer.fromJSON(object.fileTransfer)
+      file_transfer: isSet(object.file_transfer)
+        ? FileTransfer.fromJSON(object.file_transfer)
         : undefined,
-      portForward: isSet(object.portForward)
-        ? PortForward.fromJSON(object.portForward)
+      port_forward: isSet(object.port_forward)
+        ? PortForward.fromJSON(object.port_forward)
         : undefined,
     };
   },
@@ -1619,19 +1622,19 @@ export const LoginRequest = {
       (obj.password = base64FromBytes(
         message.password !== undefined ? message.password : new Uint8Array()
       ));
-    message.myId !== undefined && (obj.myId = message.myId);
-    message.myName !== undefined && (obj.myName = message.myName);
+    message.my_id !== undefined && (obj.my_id = message.my_id);
+    message.my_name !== undefined && (obj.my_name = message.my_name);
     message.option !== undefined &&
       (obj.option = message.option
         ? OptionMessage.toJSON(message.option)
         : undefined);
-    message.fileTransfer !== undefined &&
-      (obj.fileTransfer = message.fileTransfer
-        ? FileTransfer.toJSON(message.fileTransfer)
+    message.file_transfer !== undefined &&
+      (obj.file_transfer = message.file_transfer
+        ? FileTransfer.toJSON(message.file_transfer)
         : undefined);
-    message.portForward !== undefined &&
-      (obj.portForward = message.portForward
-        ? PortForward.toJSON(message.portForward)
+    message.port_forward !== undefined &&
+      (obj.port_forward = message.port_forward
+        ? PortForward.toJSON(message.port_forward)
         : undefined);
     return obj;
   },
@@ -1642,19 +1645,19 @@ export const LoginRequest = {
     const message = createBaseLoginRequest();
     message.username = object.username ?? "";
     message.password = object.password ?? new Uint8Array();
-    message.myId = object.myId ?? "";
-    message.myName = object.myName ?? "";
+    message.my_id = object.my_id ?? "";
+    message.my_name = object.my_name ?? "";
     message.option =
       object.option !== undefined && object.option !== null
         ? OptionMessage.fromPartial(object.option)
         : undefined;
-    message.fileTransfer =
-      object.fileTransfer !== undefined && object.fileTransfer !== null
-        ? FileTransfer.fromPartial(object.fileTransfer)
+    message.file_transfer =
+      object.file_transfer !== undefined && object.file_transfer !== null
+        ? FileTransfer.fromPartial(object.file_transfer)
         : undefined;
-    message.portForward =
-      object.portForward !== undefined && object.portForward !== null
-        ? PortForward.fromPartial(object.portForward)
+    message.port_forward =
+      object.port_forward !== undefined && object.port_forward !== null
+        ? PortForward.fromPartial(object.port_forward)
         : undefined;
     return message;
   },
@@ -1720,8 +1723,8 @@ function createBasePeerInfo(): PeerInfo {
     hostname: "",
     platform: "",
     displays: [],
-    currentDisplay: 0,
-    sasEnabled: false,
+    current_display: 0,
+    sas_enabled: false,
     version: "",
   };
 }
@@ -1743,11 +1746,11 @@ export const PeerInfo = {
     for (const v of message.displays) {
       DisplayInfo.encode(v!, writer.uint32(34).fork()).ldelim();
     }
-    if (message.currentDisplay !== 0) {
-      writer.uint32(40).int32(message.currentDisplay);
+    if (message.current_display !== 0) {
+      writer.uint32(40).int32(message.current_display);
     }
-    if (message.sasEnabled === true) {
-      writer.uint32(48).bool(message.sasEnabled);
+    if (message.sas_enabled === true) {
+      writer.uint32(48).bool(message.sas_enabled);
     }
     if (message.version !== "") {
       writer.uint32(58).string(message.version);
@@ -1775,10 +1778,10 @@ export const PeerInfo = {
           message.displays.push(DisplayInfo.decode(reader, reader.uint32()));
           break;
         case 5:
-          message.currentDisplay = reader.int32();
+          message.current_display = reader.int32();
           break;
         case 6:
-          message.sasEnabled = reader.bool();
+          message.sas_enabled = reader.bool();
           break;
         case 7:
           message.version = reader.string();
@@ -1799,10 +1802,12 @@ export const PeerInfo = {
       displays: Array.isArray(object?.displays)
         ? object.displays.map((e: any) => DisplayInfo.fromJSON(e))
         : [],
-      currentDisplay: isSet(object.currentDisplay)
-        ? Number(object.currentDisplay)
+      current_display: isSet(object.current_display)
+        ? Number(object.current_display)
         : 0,
-      sasEnabled: isSet(object.sasEnabled) ? Boolean(object.sasEnabled) : false,
+      sas_enabled: isSet(object.sas_enabled)
+        ? Boolean(object.sas_enabled)
+        : false,
       version: isSet(object.version) ? String(object.version) : "",
     };
   },
@@ -1819,9 +1824,10 @@ export const PeerInfo = {
     } else {
       obj.displays = [];
     }
-    message.currentDisplay !== undefined &&
-      (obj.currentDisplay = Math.round(message.currentDisplay));
-    message.sasEnabled !== undefined && (obj.sasEnabled = message.sasEnabled);
+    message.current_display !== undefined &&
+      (obj.current_display = Math.round(message.current_display));
+    message.sas_enabled !== undefined &&
+      (obj.sas_enabled = message.sas_enabled);
     message.version !== undefined && (obj.version = message.version);
     return obj;
   },
@@ -1833,15 +1839,15 @@ export const PeerInfo = {
     message.platform = object.platform ?? "";
     message.displays =
       object.displays?.map((e) => DisplayInfo.fromPartial(e)) || [];
-    message.currentDisplay = object.currentDisplay ?? 0;
-    message.sasEnabled = object.sasEnabled ?? false;
+    message.current_display = object.current_display ?? 0;
+    message.sas_enabled = object.sas_enabled ?? false;
     message.version = object.version ?? "";
     return message;
   },
 };
 
 function createBaseLoginResponse(): LoginResponse {
-  return { error: undefined, peerInfo: undefined };
+  return { error: undefined, peer_info: undefined };
 }
 
 export const LoginResponse = {
@@ -1852,8 +1858,8 @@ export const LoginResponse = {
     if (message.error !== undefined) {
       writer.uint32(10).string(message.error);
     }
-    if (message.peerInfo !== undefined) {
-      PeerInfo.encode(message.peerInfo, writer.uint32(18).fork()).ldelim();
+    if (message.peer_info !== undefined) {
+      PeerInfo.encode(message.peer_info, writer.uint32(18).fork()).ldelim();
     }
     return writer;
   },
@@ -1869,7 +1875,7 @@ export const LoginResponse = {
           message.error = reader.string();
           break;
         case 2:
-          message.peerInfo = PeerInfo.decode(reader, reader.uint32());
+          message.peer_info = PeerInfo.decode(reader, reader.uint32());
           break;
         default:
           reader.skipType(tag & 7);
@@ -1882,8 +1888,8 @@ export const LoginResponse = {
   fromJSON(object: any): LoginResponse {
     return {
       error: isSet(object.error) ? String(object.error) : undefined,
-      peerInfo: isSet(object.peerInfo)
-        ? PeerInfo.fromJSON(object.peerInfo)
+      peer_info: isSet(object.peer_info)
+        ? PeerInfo.fromJSON(object.peer_info)
         : undefined,
     };
   },
@@ -1891,9 +1897,9 @@ export const LoginResponse = {
   toJSON(message: LoginResponse): unknown {
     const obj: any = {};
     message.error !== undefined && (obj.error = message.error);
-    message.peerInfo !== undefined &&
-      (obj.peerInfo = message.peerInfo
-        ? PeerInfo.toJSON(message.peerInfo)
+    message.peer_info !== undefined &&
+      (obj.peer_info = message.peer_info
+        ? PeerInfo.toJSON(message.peer_info)
         : undefined);
     return obj;
   },
@@ -1903,9 +1909,9 @@ export const LoginResponse = {
   ): LoginResponse {
     const message = createBaseLoginResponse();
     message.error = object.error ?? undefined;
-    message.peerInfo =
-      object.peerInfo !== undefined && object.peerInfo !== null
-        ? PeerInfo.fromPartial(object.peerInfo)
+    message.peer_info =
+      object.peer_info !== undefined && object.peer_info !== null
+        ? PeerInfo.fromPartial(object.peer_info)
         : undefined;
     return message;
   },
@@ -2011,7 +2017,7 @@ function createBaseKeyEvent(): KeyEvent {
   return {
     down: false,
     press: false,
-    controlKey: undefined,
+    control_key: undefined,
     chr: undefined,
     unicode: undefined,
     seq: undefined,
@@ -2030,8 +2036,8 @@ export const KeyEvent = {
     if (message.press === true) {
       writer.uint32(16).bool(message.press);
     }
-    if (message.controlKey !== undefined) {
-      writer.uint32(24).int32(message.controlKey);
+    if (message.control_key !== undefined) {
+      writer.uint32(24).int32(message.control_key);
     }
     if (message.chr !== undefined) {
       writer.uint32(32).uint32(message.chr);
@@ -2064,7 +2070,7 @@ export const KeyEvent = {
           message.press = reader.bool();
           break;
         case 3:
-          message.controlKey = reader.int32() as any;
+          message.control_key = reader.int32() as any;
           break;
         case 4:
           message.chr = reader.uint32();
@@ -2097,8 +2103,8 @@ export const KeyEvent = {
     return {
       down: isSet(object.down) ? Boolean(object.down) : false,
       press: isSet(object.press) ? Boolean(object.press) : false,
-      controlKey: isSet(object.controlKey)
-        ? controlKeyFromJSON(object.controlKey)
+      control_key: isSet(object.control_key)
+        ? controlKeyFromJSON(object.control_key)
         : undefined,
       chr: isSet(object.chr) ? Number(object.chr) : undefined,
       unicode: isSet(object.unicode) ? Number(object.unicode) : undefined,
@@ -2113,10 +2119,10 @@ export const KeyEvent = {
     const obj: any = {};
     message.down !== undefined && (obj.down = message.down);
     message.press !== undefined && (obj.press = message.press);
-    message.controlKey !== undefined &&
-      (obj.controlKey =
-        message.controlKey !== undefined
-          ? controlKeyToJSON(message.controlKey)
+    message.control_key !== undefined &&
+      (obj.control_key =
+        message.control_key !== undefined
+          ? controlKeyToJSON(message.control_key)
           : undefined);
     message.chr !== undefined && (obj.chr = Math.round(message.chr));
     message.unicode !== undefined &&
@@ -2134,7 +2140,7 @@ export const KeyEvent = {
     const message = createBaseKeyEvent();
     message.down = object.down ?? false;
     message.press = object.press ?? false;
-    message.controlKey = object.controlKey ?? undefined;
+    message.control_key = object.control_key ?? undefined;
     message.chr = object.chr ?? undefined;
     message.unicode = object.unicode ?? undefined;
     message.seq = object.seq ?? undefined;
@@ -2444,7 +2450,13 @@ export const Clipboard = {
 };
 
 function createBaseFileEntry(): FileEntry {
-  return { entryType: 0, name: "", isHidden: false, size: 0, modifiedTime: 0 };
+  return {
+    entry_type: 0,
+    name: "",
+    is_hidden: false,
+    size: 0,
+    modified_time: 0,
+  };
 }
 
 export const FileEntry = {
@@ -2452,20 +2464,20 @@ export const FileEntry = {
     message: FileEntry,
     writer: _m0.Writer = _m0.Writer.create()
   ): _m0.Writer {
-    if (message.entryType !== 0) {
-      writer.uint32(8).int32(message.entryType);
+    if (message.entry_type !== 0) {
+      writer.uint32(8).int32(message.entry_type);
     }
     if (message.name !== "") {
       writer.uint32(18).string(message.name);
     }
-    if (message.isHidden === true) {
-      writer.uint32(24).bool(message.isHidden);
+    if (message.is_hidden === true) {
+      writer.uint32(24).bool(message.is_hidden);
     }
     if (message.size !== 0) {
       writer.uint32(32).uint64(message.size);
     }
-    if (message.modifiedTime !== 0) {
-      writer.uint32(40).uint64(message.modifiedTime);
+    if (message.modified_time !== 0) {
+      writer.uint32(40).uint64(message.modified_time);
     }
     return writer;
   },
@@ -2478,19 +2490,19 @@ export const FileEntry = {
       const tag = reader.uint32();
       switch (tag >>> 3) {
         case 1:
-          message.entryType = reader.int32() as any;
+          message.entry_type = reader.int32() as any;
           break;
         case 2:
           message.name = reader.string();
           break;
         case 3:
-          message.isHidden = reader.bool();
+          message.is_hidden = reader.bool();
           break;
         case 4:
           message.size = longToNumber(reader.uint64() as Long);
           break;
         case 5:
-          message.modifiedTime = longToNumber(reader.uint64() as Long);
+          message.modified_time = longToNumber(reader.uint64() as Long);
           break;
         default:
           reader.skipType(tag & 7);
@@ -2502,27 +2514,27 @@ export const FileEntry = {
 
   fromJSON(object: any): FileEntry {
     return {
-      entryType: isSet(object.entryType)
-        ? fileTypeFromJSON(object.entryType)
+      entry_type: isSet(object.entry_type)
+        ? fileTypeFromJSON(object.entry_type)
         : 0,
       name: isSet(object.name) ? String(object.name) : "",
-      isHidden: isSet(object.isHidden) ? Boolean(object.isHidden) : false,
+      is_hidden: isSet(object.is_hidden) ? Boolean(object.is_hidden) : false,
       size: isSet(object.size) ? Number(object.size) : 0,
-      modifiedTime: isSet(object.modifiedTime)
-        ? Number(object.modifiedTime)
+      modified_time: isSet(object.modified_time)
+        ? Number(object.modified_time)
         : 0,
     };
   },
 
   toJSON(message: FileEntry): unknown {
     const obj: any = {};
-    message.entryType !== undefined &&
-      (obj.entryType = fileTypeToJSON(message.entryType));
+    message.entry_type !== undefined &&
+      (obj.entry_type = fileTypeToJSON(message.entry_type));
     message.name !== undefined && (obj.name = message.name);
-    message.isHidden !== undefined && (obj.isHidden = message.isHidden);
+    message.is_hidden !== undefined && (obj.is_hidden = message.is_hidden);
     message.size !== undefined && (obj.size = Math.round(message.size));
-    message.modifiedTime !== undefined &&
-      (obj.modifiedTime = Math.round(message.modifiedTime));
+    message.modified_time !== undefined &&
+      (obj.modified_time = Math.round(message.modified_time));
     return obj;
   },
 
@@ -2530,11 +2542,11 @@ export const FileEntry = {
     object: I
   ): FileEntry {
     const message = createBaseFileEntry();
-    message.entryType = object.entryType ?? 0;
+    message.entry_type = object.entry_type ?? 0;
     message.name = object.name ?? "";
-    message.isHidden = object.isHidden ?? false;
+    message.is_hidden = object.is_hidden ?? false;
     message.size = object.size ?? 0;
-    message.modifiedTime = object.modifiedTime ?? 0;
+    message.modified_time = object.modified_time ?? 0;
     return message;
   },
 };
@@ -2621,7 +2633,7 @@ export const FileDirectory = {
 };
 
 function createBaseReadDir(): ReadDir {
-  return { path: "", includeHidden: false };
+  return { path: "", include_hidden: false };
 }
 
 export const ReadDir = {
@@ -2632,8 +2644,8 @@ export const ReadDir = {
     if (message.path !== "") {
       writer.uint32(10).string(message.path);
     }
-    if (message.includeHidden === true) {
-      writer.uint32(16).bool(message.includeHidden);
+    if (message.include_hidden === true) {
+      writer.uint32(16).bool(message.include_hidden);
     }
     return writer;
   },
@@ -2649,7 +2661,7 @@ export const ReadDir = {
           message.path = reader.string();
           break;
         case 2:
-          message.includeHidden = reader.bool();
+          message.include_hidden = reader.bool();
           break;
         default:
           reader.skipType(tag & 7);
@@ -2662,8 +2674,8 @@ export const ReadDir = {
   fromJSON(object: any): ReadDir {
     return {
       path: isSet(object.path) ? String(object.path) : "",
-      includeHidden: isSet(object.includeHidden)
-        ? Boolean(object.includeHidden)
+      include_hidden: isSet(object.include_hidden)
+        ? Boolean(object.include_hidden)
         : false,
     };
   },
@@ -2671,21 +2683,21 @@ export const ReadDir = {
   toJSON(message: ReadDir): unknown {
     const obj: any = {};
     message.path !== undefined && (obj.path = message.path);
-    message.includeHidden !== undefined &&
-      (obj.includeHidden = message.includeHidden);
+    message.include_hidden !== undefined &&
+      (obj.include_hidden = message.include_hidden);
     return obj;
   },
 
   fromPartial<I extends Exact<DeepPartial<ReadDir>, I>>(object: I): ReadDir {
     const message = createBaseReadDir();
     message.path = object.path ?? "";
-    message.includeHidden = object.includeHidden ?? false;
+    message.include_hidden = object.include_hidden ?? false;
     return message;
   },
 };
 
 function createBaseReadAllFiles(): ReadAllFiles {
-  return { id: 0, path: "", includeHidden: false };
+  return { id: 0, path: "", include_hidden: false };
 }
 
 export const ReadAllFiles = {
@@ -2699,8 +2711,8 @@ export const ReadAllFiles = {
     if (message.path !== "") {
       writer.uint32(18).string(message.path);
     }
-    if (message.includeHidden === true) {
-      writer.uint32(24).bool(message.includeHidden);
+    if (message.include_hidden === true) {
+      writer.uint32(24).bool(message.include_hidden);
     }
     return writer;
   },
@@ -2719,7 +2731,7 @@ export const ReadAllFiles = {
           message.path = reader.string();
           break;
         case 3:
-          message.includeHidden = reader.bool();
+          message.include_hidden = reader.bool();
           break;
         default:
           reader.skipType(tag & 7);
@@ -2733,8 +2745,8 @@ export const ReadAllFiles = {
     return {
       id: isSet(object.id) ? Number(object.id) : 0,
       path: isSet(object.path) ? String(object.path) : "",
-      includeHidden: isSet(object.includeHidden)
-        ? Boolean(object.includeHidden)
+      include_hidden: isSet(object.include_hidden)
+        ? Boolean(object.include_hidden)
         : false,
     };
   },
@@ -2743,8 +2755,8 @@ export const ReadAllFiles = {
     const obj: any = {};
     message.id !== undefined && (obj.id = Math.round(message.id));
     message.path !== undefined && (obj.path = message.path);
-    message.includeHidden !== undefined &&
-      (obj.includeHidden = message.includeHidden);
+    message.include_hidden !== undefined &&
+      (obj.include_hidden = message.include_hidden);
     return obj;
   },
 
@@ -2754,20 +2766,20 @@ export const ReadAllFiles = {
     const message = createBaseReadAllFiles();
     message.id = object.id ?? 0;
     message.path = object.path ?? "";
-    message.includeHidden = object.includeHidden ?? false;
+    message.include_hidden = object.include_hidden ?? false;
     return message;
   },
 };
 
 function createBaseFileAction(): FileAction {
   return {
-    readDir: undefined,
+    read_dir: undefined,
     send: undefined,
     receive: undefined,
     create: undefined,
-    removeDir: undefined,
-    removeFile: undefined,
-    allFiles: undefined,
+    remove_dir: undefined,
+    remove_file: undefined,
+    all_files: undefined,
     cancel: undefined,
   };
 }
@@ -2777,8 +2789,8 @@ export const FileAction = {
     message: FileAction,
     writer: _m0.Writer = _m0.Writer.create()
   ): _m0.Writer {
-    if (message.readDir !== undefined) {
-      ReadDir.encode(message.readDir, writer.uint32(10).fork()).ldelim();
+    if (message.read_dir !== undefined) {
+      ReadDir.encode(message.read_dir, writer.uint32(10).fork()).ldelim();
     }
     if (message.send !== undefined) {
       FileTransferSendRequest.encode(
@@ -2795,20 +2807,20 @@ export const FileAction = {
     if (message.create !== undefined) {
       FileDirCreate.encode(message.create, writer.uint32(34).fork()).ldelim();
     }
-    if (message.removeDir !== undefined) {
+    if (message.remove_dir !== undefined) {
       FileRemoveDir.encode(
-        message.removeDir,
+        message.remove_dir,
         writer.uint32(42).fork()
       ).ldelim();
     }
-    if (message.removeFile !== undefined) {
+    if (message.remove_file !== undefined) {
       FileRemoveFile.encode(
-        message.removeFile,
+        message.remove_file,
         writer.uint32(50).fork()
       ).ldelim();
     }
-    if (message.allFiles !== undefined) {
-      ReadAllFiles.encode(message.allFiles, writer.uint32(58).fork()).ldelim();
+    if (message.all_files !== undefined) {
+      ReadAllFiles.encode(message.all_files, writer.uint32(58).fork()).ldelim();
     }
     if (message.cancel !== undefined) {
       FileTransferCancel.encode(
@@ -2827,7 +2839,7 @@ export const FileAction = {
       const tag = reader.uint32();
       switch (tag >>> 3) {
         case 1:
-          message.readDir = ReadDir.decode(reader, reader.uint32());
+          message.read_dir = ReadDir.decode(reader, reader.uint32());
           break;
         case 2:
           message.send = FileTransferSendRequest.decode(
@@ -2845,13 +2857,13 @@ export const FileAction = {
           message.create = FileDirCreate.decode(reader, reader.uint32());
           break;
         case 5:
-          message.removeDir = FileRemoveDir.decode(reader, reader.uint32());
+          message.remove_dir = FileRemoveDir.decode(reader, reader.uint32());
           break;
         case 6:
-          message.removeFile = FileRemoveFile.decode(reader, reader.uint32());
+          message.remove_file = FileRemoveFile.decode(reader, reader.uint32());
           break;
         case 7:
-          message.allFiles = ReadAllFiles.decode(reader, reader.uint32());
+          message.all_files = ReadAllFiles.decode(reader, reader.uint32());
           break;
         case 8:
           message.cancel = FileTransferCancel.decode(reader, reader.uint32());
@@ -2866,8 +2878,8 @@ export const FileAction = {
 
   fromJSON(object: any): FileAction {
     return {
-      readDir: isSet(object.readDir)
-        ? ReadDir.fromJSON(object.readDir)
+      read_dir: isSet(object.read_dir)
+        ? ReadDir.fromJSON(object.read_dir)
         : undefined,
       send: isSet(object.send)
         ? FileTransferSendRequest.fromJSON(object.send)
@@ -2878,14 +2890,14 @@ export const FileAction = {
       create: isSet(object.create)
         ? FileDirCreate.fromJSON(object.create)
         : undefined,
-      removeDir: isSet(object.removeDir)
-        ? FileRemoveDir.fromJSON(object.removeDir)
+      remove_dir: isSet(object.remove_dir)
+        ? FileRemoveDir.fromJSON(object.remove_dir)
         : undefined,
-      removeFile: isSet(object.removeFile)
-        ? FileRemoveFile.fromJSON(object.removeFile)
+      remove_file: isSet(object.remove_file)
+        ? FileRemoveFile.fromJSON(object.remove_file)
         : undefined,
-      allFiles: isSet(object.allFiles)
-        ? ReadAllFiles.fromJSON(object.allFiles)
+      all_files: isSet(object.all_files)
+        ? ReadAllFiles.fromJSON(object.all_files)
         : undefined,
       cancel: isSet(object.cancel)
         ? FileTransferCancel.fromJSON(object.cancel)
@@ -2895,9 +2907,9 @@ export const FileAction = {
 
   toJSON(message: FileAction): unknown {
     const obj: any = {};
-    message.readDir !== undefined &&
-      (obj.readDir = message.readDir
-        ? ReadDir.toJSON(message.readDir)
+    message.read_dir !== undefined &&
+      (obj.read_dir = message.read_dir
+        ? ReadDir.toJSON(message.read_dir)
         : undefined);
     message.send !== undefined &&
       (obj.send = message.send
@@ -2911,17 +2923,17 @@ export const FileAction = {
       (obj.create = message.create
         ? FileDirCreate.toJSON(message.create)
         : undefined);
-    message.removeDir !== undefined &&
-      (obj.removeDir = message.removeDir
-        ? FileRemoveDir.toJSON(message.removeDir)
+    message.remove_dir !== undefined &&
+      (obj.remove_dir = message.remove_dir
+        ? FileRemoveDir.toJSON(message.remove_dir)
         : undefined);
-    message.removeFile !== undefined &&
-      (obj.removeFile = message.removeFile
-        ? FileRemoveFile.toJSON(message.removeFile)
+    message.remove_file !== undefined &&
+      (obj.remove_file = message.remove_file
+        ? FileRemoveFile.toJSON(message.remove_file)
         : undefined);
-    message.allFiles !== undefined &&
-      (obj.allFiles = message.allFiles
-        ? ReadAllFiles.toJSON(message.allFiles)
+    message.all_files !== undefined &&
+      (obj.all_files = message.all_files
+        ? ReadAllFiles.toJSON(message.all_files)
         : undefined);
     message.cancel !== undefined &&
       (obj.cancel = message.cancel
@@ -2934,9 +2946,9 @@ export const FileAction = {
     object: I
   ): FileAction {
     const message = createBaseFileAction();
-    message.readDir =
-      object.readDir !== undefined && object.readDir !== null
-        ? ReadDir.fromPartial(object.readDir)
+    message.read_dir =
+      object.read_dir !== undefined && object.read_dir !== null
+        ? ReadDir.fromPartial(object.read_dir)
         : undefined;
     message.send =
       object.send !== undefined && object.send !== null
@@ -2950,17 +2962,17 @@ export const FileAction = {
       object.create !== undefined && object.create !== null
         ? FileDirCreate.fromPartial(object.create)
         : undefined;
-    message.removeDir =
-      object.removeDir !== undefined && object.removeDir !== null
-        ? FileRemoveDir.fromPartial(object.removeDir)
+    message.remove_dir =
+      object.remove_dir !== undefined && object.remove_dir !== null
+        ? FileRemoveDir.fromPartial(object.remove_dir)
         : undefined;
-    message.removeFile =
-      object.removeFile !== undefined && object.removeFile !== null
-        ? FileRemoveFile.fromPartial(object.removeFile)
+    message.remove_file =
+      object.remove_file !== undefined && object.remove_file !== null
+        ? FileRemoveFile.fromPartial(object.remove_file)
         : undefined;
-    message.allFiles =
-      object.allFiles !== undefined && object.allFiles !== null
-        ? ReadAllFiles.fromPartial(object.allFiles)
+    message.all_files =
+      object.all_files !== undefined && object.all_files !== null
+        ? ReadAllFiles.fromPartial(object.all_files)
         : undefined;
     message.cancel =
       object.cancel !== undefined && object.cancel !== null
@@ -3145,7 +3157,7 @@ export const FileResponse = {
 };
 
 function createBaseFileTransferBlock(): FileTransferBlock {
-  return { id: 0, fileNum: 0, data: new Uint8Array(), compressed: false };
+  return { id: 0, file_num: 0, data: new Uint8Array(), compressed: false };
 }
 
 export const FileTransferBlock = {
@@ -3156,8 +3168,8 @@ export const FileTransferBlock = {
     if (message.id !== 0) {
       writer.uint32(8).int32(message.id);
     }
-    if (message.fileNum !== 0) {
-      writer.uint32(16).sint32(message.fileNum);
+    if (message.file_num !== 0) {
+      writer.uint32(16).sint32(message.file_num);
     }
     if (message.data.length !== 0) {
       writer.uint32(26).bytes(message.data);
@@ -3179,7 +3191,7 @@ export const FileTransferBlock = {
           message.id = reader.int32();
           break;
         case 2:
-          message.fileNum = reader.sint32();
+          message.file_num = reader.sint32();
           break;
         case 3:
           message.data = reader.bytes();
@@ -3198,7 +3210,7 @@ export const FileTransferBlock = {
   fromJSON(object: any): FileTransferBlock {
     return {
       id: isSet(object.id) ? Number(object.id) : 0,
-      fileNum: isSet(object.fileNum) ? Number(object.fileNum) : 0,
+      file_num: isSet(object.file_num) ? Number(object.file_num) : 0,
       data: isSet(object.data)
         ? bytesFromBase64(object.data)
         : new Uint8Array(),
@@ -3209,8 +3221,8 @@ export const FileTransferBlock = {
   toJSON(message: FileTransferBlock): unknown {
     const obj: any = {};
     message.id !== undefined && (obj.id = Math.round(message.id));
-    message.fileNum !== undefined &&
-      (obj.fileNum = Math.round(message.fileNum));
+    message.file_num !== undefined &&
+      (obj.file_num = Math.round(message.file_num));
     message.data !== undefined &&
       (obj.data = base64FromBytes(
         message.data !== undefined ? message.data : new Uint8Array()
@@ -3224,7 +3236,7 @@ export const FileTransferBlock = {
   ): FileTransferBlock {
     const message = createBaseFileTransferBlock();
     message.id = object.id ?? 0;
-    message.fileNum = object.fileNum ?? 0;
+    message.file_num = object.file_num ?? 0;
     message.data = object.data ?? new Uint8Array();
     message.compressed = object.compressed ?? false;
     return message;
@@ -3232,7 +3244,7 @@ export const FileTransferBlock = {
 };
 
 function createBaseFileTransferError(): FileTransferError {
-  return { id: 0, error: "", fileNum: 0 };
+  return { id: 0, error: "", file_num: 0 };
 }
 
 export const FileTransferError = {
@@ -3246,8 +3258,8 @@ export const FileTransferError = {
     if (message.error !== "") {
       writer.uint32(18).string(message.error);
     }
-    if (message.fileNum !== 0) {
-      writer.uint32(24).sint32(message.fileNum);
+    if (message.file_num !== 0) {
+      writer.uint32(24).sint32(message.file_num);
     }
     return writer;
   },
@@ -3266,7 +3278,7 @@ export const FileTransferError = {
           message.error = reader.string();
           break;
         case 3:
-          message.fileNum = reader.sint32();
+          message.file_num = reader.sint32();
           break;
         default:
           reader.skipType(tag & 7);
@@ -3280,7 +3292,7 @@ export const FileTransferError = {
     return {
       id: isSet(object.id) ? Number(object.id) : 0,
       error: isSet(object.error) ? String(object.error) : "",
-      fileNum: isSet(object.fileNum) ? Number(object.fileNum) : 0,
+      file_num: isSet(object.file_num) ? Number(object.file_num) : 0,
     };
   },
 
@@ -3288,8 +3300,8 @@ export const FileTransferError = {
     const obj: any = {};
     message.id !== undefined && (obj.id = Math.round(message.id));
     message.error !== undefined && (obj.error = message.error);
-    message.fileNum !== undefined &&
-      (obj.fileNum = Math.round(message.fileNum));
+    message.file_num !== undefined &&
+      (obj.file_num = Math.round(message.file_num));
     return obj;
   },
 
@@ -3299,13 +3311,13 @@ export const FileTransferError = {
     const message = createBaseFileTransferError();
     message.id = object.id ?? 0;
     message.error = object.error ?? "";
-    message.fileNum = object.fileNum ?? 0;
+    message.file_num = object.file_num ?? 0;
     return message;
   },
 };
 
 function createBaseFileTransferSendRequest(): FileTransferSendRequest {
-  return { id: 0, path: "", includeHidden: false };
+  return { id: 0, path: "", include_hidden: false };
 }
 
 export const FileTransferSendRequest = {
@@ -3319,8 +3331,8 @@ export const FileTransferSendRequest = {
     if (message.path !== "") {
       writer.uint32(18).string(message.path);
     }
-    if (message.includeHidden === true) {
-      writer.uint32(24).bool(message.includeHidden);
+    if (message.include_hidden === true) {
+      writer.uint32(24).bool(message.include_hidden);
     }
     return writer;
   },
@@ -3342,7 +3354,7 @@ export const FileTransferSendRequest = {
           message.path = reader.string();
           break;
         case 3:
-          message.includeHidden = reader.bool();
+          message.include_hidden = reader.bool();
           break;
         default:
           reader.skipType(tag & 7);
@@ -3356,8 +3368,8 @@ export const FileTransferSendRequest = {
     return {
       id: isSet(object.id) ? Number(object.id) : 0,
       path: isSet(object.path) ? String(object.path) : "",
-      includeHidden: isSet(object.includeHidden)
-        ? Boolean(object.includeHidden)
+      include_hidden: isSet(object.include_hidden)
+        ? Boolean(object.include_hidden)
         : false,
     };
   },
@@ -3366,8 +3378,8 @@ export const FileTransferSendRequest = {
     const obj: any = {};
     message.id !== undefined && (obj.id = Math.round(message.id));
     message.path !== undefined && (obj.path = message.path);
-    message.includeHidden !== undefined &&
-      (obj.includeHidden = message.includeHidden);
+    message.include_hidden !== undefined &&
+      (obj.include_hidden = message.include_hidden);
     return obj;
   },
 
@@ -3377,13 +3389,13 @@ export const FileTransferSendRequest = {
     const message = createBaseFileTransferSendRequest();
     message.id = object.id ?? 0;
     message.path = object.path ?? "";
-    message.includeHidden = object.includeHidden ?? false;
+    message.include_hidden = object.include_hidden ?? false;
     return message;
   },
 };
 
 function createBaseFileTransferDone(): FileTransferDone {
-  return { id: 0, fileNum: 0 };
+  return { id: 0, file_num: 0 };
 }
 
 export const FileTransferDone = {
@@ -3394,8 +3406,8 @@ export const FileTransferDone = {
     if (message.id !== 0) {
       writer.uint32(8).int32(message.id);
     }
-    if (message.fileNum !== 0) {
-      writer.uint32(16).sint32(message.fileNum);
+    if (message.file_num !== 0) {
+      writer.uint32(16).sint32(message.file_num);
     }
     return writer;
   },
@@ -3411,7 +3423,7 @@ export const FileTransferDone = {
           message.id = reader.int32();
           break;
         case 2:
-          message.fileNum = reader.sint32();
+          message.file_num = reader.sint32();
           break;
         default:
           reader.skipType(tag & 7);
@@ -3424,15 +3436,15 @@ export const FileTransferDone = {
   fromJSON(object: any): FileTransferDone {
     return {
       id: isSet(object.id) ? Number(object.id) : 0,
-      fileNum: isSet(object.fileNum) ? Number(object.fileNum) : 0,
+      file_num: isSet(object.file_num) ? Number(object.file_num) : 0,
     };
   },
 
   toJSON(message: FileTransferDone): unknown {
     const obj: any = {};
     message.id !== undefined && (obj.id = Math.round(message.id));
-    message.fileNum !== undefined &&
-      (obj.fileNum = Math.round(message.fileNum));
+    message.file_num !== undefined &&
+      (obj.file_num = Math.round(message.file_num));
     return obj;
   },
 
@@ -3441,7 +3453,7 @@ export const FileTransferDone = {
   ): FileTransferDone {
     const message = createBaseFileTransferDone();
     message.id = object.id ?? 0;
-    message.fileNum = object.fileNum ?? 0;
+    message.file_num = object.file_num ?? 0;
     return message;
   },
 };
@@ -3602,7 +3614,7 @@ export const FileRemoveDir = {
 };
 
 function createBaseFileRemoveFile(): FileRemoveFile {
-  return { id: 0, path: "", fileNum: 0 };
+  return { id: 0, path: "", file_num: 0 };
 }
 
 export const FileRemoveFile = {
@@ -3616,8 +3628,8 @@ export const FileRemoveFile = {
     if (message.path !== "") {
       writer.uint32(18).string(message.path);
     }
-    if (message.fileNum !== 0) {
-      writer.uint32(24).sint32(message.fileNum);
+    if (message.file_num !== 0) {
+      writer.uint32(24).sint32(message.file_num);
     }
     return writer;
   },
@@ -3636,7 +3648,7 @@ export const FileRemoveFile = {
           message.path = reader.string();
           break;
         case 3:
-          message.fileNum = reader.sint32();
+          message.file_num = reader.sint32();
           break;
         default:
           reader.skipType(tag & 7);
@@ -3650,7 +3662,7 @@ export const FileRemoveFile = {
     return {
       id: isSet(object.id) ? Number(object.id) : 0,
       path: isSet(object.path) ? String(object.path) : "",
-      fileNum: isSet(object.fileNum) ? Number(object.fileNum) : 0,
+      file_num: isSet(object.file_num) ? Number(object.file_num) : 0,
     };
   },
 
@@ -3658,8 +3670,8 @@ export const FileRemoveFile = {
     const obj: any = {};
     message.id !== undefined && (obj.id = Math.round(message.id));
     message.path !== undefined && (obj.path = message.path);
-    message.fileNum !== undefined &&
-      (obj.fileNum = Math.round(message.fileNum));
+    message.file_num !== undefined &&
+      (obj.file_num = Math.round(message.file_num));
     return obj;
   },
 
@@ -3669,7 +3681,7 @@ export const FileRemoveFile = {
     const message = createBaseFileRemoveFile();
     message.id = object.id ?? 0;
     message.path = object.path ?? "";
-    message.fileNum = object.fileNum ?? 0;
+    message.file_num = object.file_num ?? 0;
     return message;
   },
 };
@@ -3896,14 +3908,14 @@ export const PermissionInfo = {
 
 function createBaseOptionMessage(): OptionMessage {
   return {
-    imageQuality: 0,
-    lockAfterSessionEnd: 0,
-    showRemoteCursor: 0,
-    privacyMode: 0,
-    blockInput: 0,
-    customImageQuality: 0,
-    disableAudio: 0,
-    disableClipboard: 0,
+    image_quality: 0,
+    lock_after_session_end: 0,
+    show_remote_cursor: 0,
+    privacy_mode: 0,
+    block_input: 0,
+    custom_image_quality: 0,
+    disable_audio: 0,
+    disable_clipboard: 0,
   };
 }
 
@@ -3912,29 +3924,29 @@ export const OptionMessage = {
     message: OptionMessage,
     writer: _m0.Writer = _m0.Writer.create()
   ): _m0.Writer {
-    if (message.imageQuality !== 0) {
-      writer.uint32(8).int32(message.imageQuality);
+    if (message.image_quality !== 0) {
+      writer.uint32(8).int32(message.image_quality);
     }
-    if (message.lockAfterSessionEnd !== 0) {
-      writer.uint32(16).int32(message.lockAfterSessionEnd);
+    if (message.lock_after_session_end !== 0) {
+      writer.uint32(16).int32(message.lock_after_session_end);
     }
-    if (message.showRemoteCursor !== 0) {
-      writer.uint32(24).int32(message.showRemoteCursor);
+    if (message.show_remote_cursor !== 0) {
+      writer.uint32(24).int32(message.show_remote_cursor);
     }
-    if (message.privacyMode !== 0) {
-      writer.uint32(32).int32(message.privacyMode);
+    if (message.privacy_mode !== 0) {
+      writer.uint32(32).int32(message.privacy_mode);
     }
-    if (message.blockInput !== 0) {
-      writer.uint32(40).int32(message.blockInput);
+    if (message.block_input !== 0) {
+      writer.uint32(40).int32(message.block_input);
     }
-    if (message.customImageQuality !== 0) {
-      writer.uint32(48).int32(message.customImageQuality);
+    if (message.custom_image_quality !== 0) {
+      writer.uint32(48).int32(message.custom_image_quality);
     }
-    if (message.disableAudio !== 0) {
-      writer.uint32(56).int32(message.disableAudio);
+    if (message.disable_audio !== 0) {
+      writer.uint32(56).int32(message.disable_audio);
     }
-    if (message.disableClipboard !== 0) {
-      writer.uint32(64).int32(message.disableClipboard);
+    if (message.disable_clipboard !== 0) {
+      writer.uint32(64).int32(message.disable_clipboard);
     }
     return writer;
   },
@@ -3947,28 +3959,28 @@ export const OptionMessage = {
       const tag = reader.uint32();
       switch (tag >>> 3) {
         case 1:
-          message.imageQuality = reader.int32() as any;
+          message.image_quality = reader.int32() as any;
           break;
         case 2:
-          message.lockAfterSessionEnd = reader.int32() as any;
+          message.lock_after_session_end = reader.int32() as any;
           break;
         case 3:
-          message.showRemoteCursor = reader.int32() as any;
+          message.show_remote_cursor = reader.int32() as any;
           break;
         case 4:
-          message.privacyMode = reader.int32() as any;
+          message.privacy_mode = reader.int32() as any;
           break;
         case 5:
-          message.blockInput = reader.int32() as any;
+          message.block_input = reader.int32() as any;
           break;
         case 6:
-          message.customImageQuality = reader.int32();
+          message.custom_image_quality = reader.int32();
           break;
         case 7:
-          message.disableAudio = reader.int32() as any;
+          message.disable_audio = reader.int32() as any;
           break;
         case 8:
-          message.disableClipboard = reader.int32() as any;
+          message.disable_clipboard = reader.int32() as any;
           break;
         default:
           reader.skipType(tag & 7);
@@ -3980,56 +3992,58 @@ export const OptionMessage = {
 
   fromJSON(object: any): OptionMessage {
     return {
-      imageQuality: isSet(object.imageQuality)
-        ? imageQualityFromJSON(object.imageQuality)
+      image_quality: isSet(object.image_quality)
+        ? imageQualityFromJSON(object.image_quality)
         : 0,
-      lockAfterSessionEnd: isSet(object.lockAfterSessionEnd)
-        ? optionMessage_BoolOptionFromJSON(object.lockAfterSessionEnd)
+      lock_after_session_end: isSet(object.lock_after_session_end)
+        ? optionMessage_BoolOptionFromJSON(object.lock_after_session_end)
         : 0,
-      showRemoteCursor: isSet(object.showRemoteCursor)
-        ? optionMessage_BoolOptionFromJSON(object.showRemoteCursor)
+      show_remote_cursor: isSet(object.show_remote_cursor)
+        ? optionMessage_BoolOptionFromJSON(object.show_remote_cursor)
         : 0,
-      privacyMode: isSet(object.privacyMode)
-        ? optionMessage_BoolOptionFromJSON(object.privacyMode)
+      privacy_mode: isSet(object.privacy_mode)
+        ? optionMessage_BoolOptionFromJSON(object.privacy_mode)
         : 0,
-      blockInput: isSet(object.blockInput)
-        ? optionMessage_BoolOptionFromJSON(object.blockInput)
+      block_input: isSet(object.block_input)
+        ? optionMessage_BoolOptionFromJSON(object.block_input)
         : 0,
-      customImageQuality: isSet(object.customImageQuality)
-        ? Number(object.customImageQuality)
+      custom_image_quality: isSet(object.custom_image_quality)
+        ? Number(object.custom_image_quality)
         : 0,
-      disableAudio: isSet(object.disableAudio)
-        ? optionMessage_BoolOptionFromJSON(object.disableAudio)
+      disable_audio: isSet(object.disable_audio)
+        ? optionMessage_BoolOptionFromJSON(object.disable_audio)
         : 0,
-      disableClipboard: isSet(object.disableClipboard)
-        ? optionMessage_BoolOptionFromJSON(object.disableClipboard)
+      disable_clipboard: isSet(object.disable_clipboard)
+        ? optionMessage_BoolOptionFromJSON(object.disable_clipboard)
         : 0,
     };
   },
 
   toJSON(message: OptionMessage): unknown {
     const obj: any = {};
-    message.imageQuality !== undefined &&
-      (obj.imageQuality = imageQualityToJSON(message.imageQuality));
-    message.lockAfterSessionEnd !== undefined &&
-      (obj.lockAfterSessionEnd = optionMessage_BoolOptionToJSON(
-        message.lockAfterSessionEnd
+    message.image_quality !== undefined &&
+      (obj.image_quality = imageQualityToJSON(message.image_quality));
+    message.lock_after_session_end !== undefined &&
+      (obj.lock_after_session_end = optionMessage_BoolOptionToJSON(
+        message.lock_after_session_end
       ));
-    message.showRemoteCursor !== undefined &&
-      (obj.showRemoteCursor = optionMessage_BoolOptionToJSON(
-        message.showRemoteCursor
+    message.show_remote_cursor !== undefined &&
+      (obj.show_remote_cursor = optionMessage_BoolOptionToJSON(
+        message.show_remote_cursor
       ));
-    message.privacyMode !== undefined &&
-      (obj.privacyMode = optionMessage_BoolOptionToJSON(message.privacyMode));
-    message.blockInput !== undefined &&
-      (obj.blockInput = optionMessage_BoolOptionToJSON(message.blockInput));
-    message.customImageQuality !== undefined &&
-      (obj.customImageQuality = Math.round(message.customImageQuality));
-    message.disableAudio !== undefined &&
-      (obj.disableAudio = optionMessage_BoolOptionToJSON(message.disableAudio));
-    message.disableClipboard !== undefined &&
-      (obj.disableClipboard = optionMessage_BoolOptionToJSON(
-        message.disableClipboard
+    message.privacy_mode !== undefined &&
+      (obj.privacy_mode = optionMessage_BoolOptionToJSON(message.privacy_mode));
+    message.block_input !== undefined &&
+      (obj.block_input = optionMessage_BoolOptionToJSON(message.block_input));
+    message.custom_image_quality !== undefined &&
+      (obj.custom_image_quality = Math.round(message.custom_image_quality));
+    message.disable_audio !== undefined &&
+      (obj.disable_audio = optionMessage_BoolOptionToJSON(
+        message.disable_audio
+      ));
+    message.disable_clipboard !== undefined &&
+      (obj.disable_clipboard = optionMessage_BoolOptionToJSON(
+        message.disable_clipboard
       ));
     return obj;
   },
@@ -4038,14 +4052,14 @@ export const OptionMessage = {
     object: I
   ): OptionMessage {
     const message = createBaseOptionMessage();
-    message.imageQuality = object.imageQuality ?? 0;
-    message.lockAfterSessionEnd = object.lockAfterSessionEnd ?? 0;
-    message.showRemoteCursor = object.showRemoteCursor ?? 0;
-    message.privacyMode = object.privacyMode ?? 0;
-    message.blockInput = object.blockInput ?? 0;
-    message.customImageQuality = object.customImageQuality ?? 0;
-    message.disableAudio = object.disableAudio ?? 0;
-    message.disableClipboard = object.disableClipboard ?? 0;
+    message.image_quality = object.image_quality ?? 0;
+    message.lock_after_session_end = object.lock_after_session_end ?? 0;
+    message.show_remote_cursor = object.show_remote_cursor ?? 0;
+    message.privacy_mode = object.privacy_mode ?? 0;
+    message.block_input = object.block_input ?? 0;
+    message.custom_image_quality = object.custom_image_quality ?? 0;
+    message.disable_audio = object.disable_audio ?? 0;
+    message.disable_clipboard = object.disable_clipboard ?? 0;
     return message;
   },
 };
@@ -4118,7 +4132,7 @@ export const OptionResponse = {
 };
 
 function createBaseTestDelay(): TestDelay {
-  return { time: 0, fromClient: false };
+  return { time: 0, from_client: false };
 }
 
 export const TestDelay = {
@@ -4129,8 +4143,8 @@ export const TestDelay = {
     if (message.time !== 0) {
       writer.uint32(8).int64(message.time);
     }
-    if (message.fromClient === true) {
-      writer.uint32(16).bool(message.fromClient);
+    if (message.from_client === true) {
+      writer.uint32(16).bool(message.from_client);
     }
     return writer;
   },
@@ -4146,7 +4160,7 @@ export const TestDelay = {
           message.time = longToNumber(reader.int64() as Long);
           break;
         case 2:
-          message.fromClient = reader.bool();
+          message.from_client = reader.bool();
           break;
         default:
           reader.skipType(tag & 7);
@@ -4159,14 +4173,17 @@ export const TestDelay = {
   fromJSON(object: any): TestDelay {
     return {
       time: isSet(object.time) ? Number(object.time) : 0,
-      fromClient: isSet(object.fromClient) ? Boolean(object.fromClient) : false,
+      from_client: isSet(object.from_client)
+        ? Boolean(object.from_client)
+        : false,
     };
   },
 
   toJSON(message: TestDelay): unknown {
     const obj: any = {};
     message.time !== undefined && (obj.time = Math.round(message.time));
-    message.fromClient !== undefined && (obj.fromClient = message.fromClient);
+    message.from_client !== undefined &&
+      (obj.from_client = message.from_client);
     return obj;
   },
 
@@ -4175,15 +4192,15 @@ export const TestDelay = {
   ): TestDelay {
     const message = createBaseTestDelay();
     message.time = object.time ?? 0;
-    message.fromClient = object.fromClient ?? false;
+    message.from_client = object.from_client ?? false;
     return message;
   },
 };
 
 function createBasePublicKey(): PublicKey {
   return {
-    asymmetricValue: new Uint8Array(),
-    symmetricValue: new Uint8Array(),
+    asymmetric_value: new Uint8Array(),
+    symmetric_value: new Uint8Array(),
   };
 }
 
@@ -4192,11 +4209,11 @@ export const PublicKey = {
     message: PublicKey,
     writer: _m0.Writer = _m0.Writer.create()
   ): _m0.Writer {
-    if (message.asymmetricValue.length !== 0) {
-      writer.uint32(10).bytes(message.asymmetricValue);
+    if (message.asymmetric_value.length !== 0) {
+      writer.uint32(10).bytes(message.asymmetric_value);
     }
-    if (message.symmetricValue.length !== 0) {
-      writer.uint32(18).bytes(message.symmetricValue);
+    if (message.symmetric_value.length !== 0) {
+      writer.uint32(18).bytes(message.symmetric_value);
     }
     return writer;
   },
@@ -4209,10 +4226,10 @@ export const PublicKey = {
       const tag = reader.uint32();
       switch (tag >>> 3) {
         case 1:
-          message.asymmetricValue = reader.bytes();
+          message.asymmetric_value = reader.bytes();
           break;
         case 2:
-          message.symmetricValue = reader.bytes();
+          message.symmetric_value = reader.bytes();
           break;
         default:
           reader.skipType(tag & 7);
@@ -4224,27 +4241,27 @@ export const PublicKey = {
 
   fromJSON(object: any): PublicKey {
     return {
-      asymmetricValue: isSet(object.asymmetricValue)
-        ? bytesFromBase64(object.asymmetricValue)
+      asymmetric_value: isSet(object.asymmetric_value)
+        ? bytesFromBase64(object.asymmetric_value)
         : new Uint8Array(),
-      symmetricValue: isSet(object.symmetricValue)
-        ? bytesFromBase64(object.symmetricValue)
+      symmetric_value: isSet(object.symmetric_value)
+        ? bytesFromBase64(object.symmetric_value)
         : new Uint8Array(),
     };
   },
 
   toJSON(message: PublicKey): unknown {
     const obj: any = {};
-    message.asymmetricValue !== undefined &&
-      (obj.asymmetricValue = base64FromBytes(
-        message.asymmetricValue !== undefined
-          ? message.asymmetricValue
+    message.asymmetric_value !== undefined &&
+      (obj.asymmetric_value = base64FromBytes(
+        message.asymmetric_value !== undefined
+          ? message.asymmetric_value
           : new Uint8Array()
       ));
-    message.symmetricValue !== undefined &&
-      (obj.symmetricValue = base64FromBytes(
-        message.symmetricValue !== undefined
-          ? message.symmetricValue
+    message.symmetric_value !== undefined &&
+      (obj.symmetric_value = base64FromBytes(
+        message.symmetric_value !== undefined
+          ? message.symmetric_value
           : new Uint8Array()
       ));
     return obj;
@@ -4254,8 +4271,8 @@ export const PublicKey = {
     object: I
   ): PublicKey {
     const message = createBasePublicKey();
-    message.asymmetricValue = object.asymmetricValue ?? new Uint8Array();
-    message.symmetricValue = object.symmetricValue ?? new Uint8Array();
+    message.asymmetric_value = object.asymmetric_value ?? new Uint8Array();
+    message.symmetric_value = object.symmetric_value ?? new Uint8Array();
     return message;
   },
 };
@@ -4316,7 +4333,7 @@ export const SignedId = {
 };
 
 function createBaseAudioFormat(): AudioFormat {
-  return { sampleRate: 0, channels: 0 };
+  return { sample_rate: 0, channels: 0 };
 }
 
 export const AudioFormat = {
@@ -4324,8 +4341,8 @@ export const AudioFormat = {
     message: AudioFormat,
     writer: _m0.Writer = _m0.Writer.create()
   ): _m0.Writer {
-    if (message.sampleRate !== 0) {
-      writer.uint32(8).uint32(message.sampleRate);
+    if (message.sample_rate !== 0) {
+      writer.uint32(8).uint32(message.sample_rate);
     }
     if (message.channels !== 0) {
       writer.uint32(16).uint32(message.channels);
@@ -4341,7 +4358,7 @@ export const AudioFormat = {
       const tag = reader.uint32();
       switch (tag >>> 3) {
         case 1:
-          message.sampleRate = reader.uint32();
+          message.sample_rate = reader.uint32();
           break;
         case 2:
           message.channels = reader.uint32();
@@ -4356,15 +4373,15 @@ export const AudioFormat = {
 
   fromJSON(object: any): AudioFormat {
     return {
-      sampleRate: isSet(object.sampleRate) ? Number(object.sampleRate) : 0,
+      sample_rate: isSet(object.sample_rate) ? Number(object.sample_rate) : 0,
       channels: isSet(object.channels) ? Number(object.channels) : 0,
     };
   },
 
   toJSON(message: AudioFormat): unknown {
     const obj: any = {};
-    message.sampleRate !== undefined &&
-      (obj.sampleRate = Math.round(message.sampleRate));
+    message.sample_rate !== undefined &&
+      (obj.sample_rate = Math.round(message.sample_rate));
     message.channels !== undefined &&
       (obj.channels = Math.round(message.channels));
     return obj;
@@ -4374,7 +4391,7 @@ export const AudioFormat = {
     object: I
   ): AudioFormat {
     const message = createBaseAudioFormat();
-    message.sampleRate = object.sampleRate ?? 0;
+    message.sample_rate = object.sample_rate ?? 0;
     message.channels = object.channels ?? 0;
     return message;
   },
@@ -4441,55 +4458,55 @@ export const AudioFrame = {
 
 function createBaseMisc(): Misc {
   return {
-    chatMessage: undefined,
-    switchDisplay: undefined,
-    permissionInfo: undefined,
+    chat_message: undefined,
+    switch_display: undefined,
+    permission_info: undefined,
     option: undefined,
-    audioFormat: undefined,
-    closeReason: undefined,
-    refreshVideo: undefined,
-    optionResponse: undefined,
+    audio_format: undefined,
+    close_reason: undefined,
+    refresh_video: undefined,
+    option_response: undefined,
   };
 }
 
 export const Misc = {
   encode(message: Misc, writer: _m0.Writer = _m0.Writer.create()): _m0.Writer {
-    if (message.chatMessage !== undefined) {
+    if (message.chat_message !== undefined) {
       ChatMessage.encode(
-        message.chatMessage,
+        message.chat_message,
         writer.uint32(34).fork()
       ).ldelim();
     }
-    if (message.switchDisplay !== undefined) {
+    if (message.switch_display !== undefined) {
       SwitchDisplay.encode(
-        message.switchDisplay,
+        message.switch_display,
         writer.uint32(42).fork()
       ).ldelim();
     }
-    if (message.permissionInfo !== undefined) {
+    if (message.permission_info !== undefined) {
       PermissionInfo.encode(
-        message.permissionInfo,
+        message.permission_info,
         writer.uint32(50).fork()
       ).ldelim();
     }
     if (message.option !== undefined) {
       OptionMessage.encode(message.option, writer.uint32(58).fork()).ldelim();
     }
-    if (message.audioFormat !== undefined) {
+    if (message.audio_format !== undefined) {
       AudioFormat.encode(
-        message.audioFormat,
+        message.audio_format,
         writer.uint32(66).fork()
       ).ldelim();
     }
-    if (message.closeReason !== undefined) {
-      writer.uint32(74).string(message.closeReason);
+    if (message.close_reason !== undefined) {
+      writer.uint32(74).string(message.close_reason);
     }
-    if (message.refreshVideo !== undefined) {
-      writer.uint32(80).bool(message.refreshVideo);
+    if (message.refresh_video !== undefined) {
+      writer.uint32(80).bool(message.refresh_video);
     }
-    if (message.optionResponse !== undefined) {
+    if (message.option_response !== undefined) {
       OptionResponse.encode(
-        message.optionResponse,
+        message.option_response,
         writer.uint32(90).fork()
       ).ldelim();
     }
@@ -4504,13 +4521,16 @@ export const Misc = {
       const tag = reader.uint32();
       switch (tag >>> 3) {
         case 4:
-          message.chatMessage = ChatMessage.decode(reader, reader.uint32());
+          message.chat_message = ChatMessage.decode(reader, reader.uint32());
           break;
         case 5:
-          message.switchDisplay = SwitchDisplay.decode(reader, reader.uint32());
+          message.switch_display = SwitchDisplay.decode(
+            reader,
+            reader.uint32()
+          );
           break;
         case 6:
-          message.permissionInfo = PermissionInfo.decode(
+          message.permission_info = PermissionInfo.decode(
             reader,
             reader.uint32()
           );
@@ -4519,16 +4539,16 @@ export const Misc = {
           message.option = OptionMessage.decode(reader, reader.uint32());
           break;
         case 8:
-          message.audioFormat = AudioFormat.decode(reader, reader.uint32());
+          message.audio_format = AudioFormat.decode(reader, reader.uint32());
           break;
         case 9:
-          message.closeReason = reader.string();
+          message.close_reason = reader.string();
           break;
         case 10:
-          message.refreshVideo = reader.bool();
+          message.refresh_video = reader.bool();
           break;
         case 11:
-          message.optionResponse = OptionResponse.decode(
+          message.option_response = OptionResponse.decode(
             reader,
             reader.uint32()
           );
@@ -4543,93 +4563,93 @@ export const Misc = {
 
   fromJSON(object: any): Misc {
     return {
-      chatMessage: isSet(object.chatMessage)
-        ? ChatMessage.fromJSON(object.chatMessage)
+      chat_message: isSet(object.chat_message)
+        ? ChatMessage.fromJSON(object.chat_message)
         : undefined,
-      switchDisplay: isSet(object.switchDisplay)
-        ? SwitchDisplay.fromJSON(object.switchDisplay)
+      switch_display: isSet(object.switch_display)
+        ? SwitchDisplay.fromJSON(object.switch_display)
         : undefined,
-      permissionInfo: isSet(object.permissionInfo)
-        ? PermissionInfo.fromJSON(object.permissionInfo)
+      permission_info: isSet(object.permission_info)
+        ? PermissionInfo.fromJSON(object.permission_info)
         : undefined,
       option: isSet(object.option)
         ? OptionMessage.fromJSON(object.option)
         : undefined,
-      audioFormat: isSet(object.audioFormat)
-        ? AudioFormat.fromJSON(object.audioFormat)
+      audio_format: isSet(object.audio_format)
+        ? AudioFormat.fromJSON(object.audio_format)
         : undefined,
-      closeReason: isSet(object.closeReason)
-        ? String(object.closeReason)
+      close_reason: isSet(object.close_reason)
+        ? String(object.close_reason)
         : undefined,
-      refreshVideo: isSet(object.refreshVideo)
-        ? Boolean(object.refreshVideo)
+      refresh_video: isSet(object.refresh_video)
+        ? Boolean(object.refresh_video)
         : undefined,
-      optionResponse: isSet(object.optionResponse)
-        ? OptionResponse.fromJSON(object.optionResponse)
+      option_response: isSet(object.option_response)
+        ? OptionResponse.fromJSON(object.option_response)
         : undefined,
     };
   },
 
   toJSON(message: Misc): unknown {
     const obj: any = {};
-    message.chatMessage !== undefined &&
-      (obj.chatMessage = message.chatMessage
-        ? ChatMessage.toJSON(message.chatMessage)
+    message.chat_message !== undefined &&
+      (obj.chat_message = message.chat_message
+        ? ChatMessage.toJSON(message.chat_message)
         : undefined);
-    message.switchDisplay !== undefined &&
-      (obj.switchDisplay = message.switchDisplay
-        ? SwitchDisplay.toJSON(message.switchDisplay)
+    message.switch_display !== undefined &&
+      (obj.switch_display = message.switch_display
+        ? SwitchDisplay.toJSON(message.switch_display)
         : undefined);
-    message.permissionInfo !== undefined &&
-      (obj.permissionInfo = message.permissionInfo
-        ? PermissionInfo.toJSON(message.permissionInfo)
+    message.permission_info !== undefined &&
+      (obj.permission_info = message.permission_info
+        ? PermissionInfo.toJSON(message.permission_info)
         : undefined);
     message.option !== undefined &&
       (obj.option = message.option
         ? OptionMessage.toJSON(message.option)
         : undefined);
-    message.audioFormat !== undefined &&
-      (obj.audioFormat = message.audioFormat
-        ? AudioFormat.toJSON(message.audioFormat)
+    message.audio_format !== undefined &&
+      (obj.audio_format = message.audio_format
+        ? AudioFormat.toJSON(message.audio_format)
         : undefined);
-    message.closeReason !== undefined &&
-      (obj.closeReason = message.closeReason);
-    message.refreshVideo !== undefined &&
-      (obj.refreshVideo = message.refreshVideo);
-    message.optionResponse !== undefined &&
-      (obj.optionResponse = message.optionResponse
-        ? OptionResponse.toJSON(message.optionResponse)
+    message.close_reason !== undefined &&
+      (obj.close_reason = message.close_reason);
+    message.refresh_video !== undefined &&
+      (obj.refresh_video = message.refresh_video);
+    message.option_response !== undefined &&
+      (obj.option_response = message.option_response
+        ? OptionResponse.toJSON(message.option_response)
         : undefined);
     return obj;
   },
 
   fromPartial<I extends Exact<DeepPartial<Misc>, I>>(object: I): Misc {
     const message = createBaseMisc();
-    message.chatMessage =
-      object.chatMessage !== undefined && object.chatMessage !== null
-        ? ChatMessage.fromPartial(object.chatMessage)
+    message.chat_message =
+      object.chat_message !== undefined && object.chat_message !== null
+        ? ChatMessage.fromPartial(object.chat_message)
         : undefined;
-    message.switchDisplay =
-      object.switchDisplay !== undefined && object.switchDisplay !== null
-        ? SwitchDisplay.fromPartial(object.switchDisplay)
+    message.switch_display =
+      object.switch_display !== undefined && object.switch_display !== null
+        ? SwitchDisplay.fromPartial(object.switch_display)
         : undefined;
-    message.permissionInfo =
-      object.permissionInfo !== undefined && object.permissionInfo !== null
-        ? PermissionInfo.fromPartial(object.permissionInfo)
+    message.permission_info =
+      object.permission_info !== undefined && object.permission_info !== null
+        ? PermissionInfo.fromPartial(object.permission_info)
         : undefined;
     message.option =
       object.option !== undefined && object.option !== null
         ? OptionMessage.fromPartial(object.option)
         : undefined;
-    message.audioFormat =
-      object.audioFormat !== undefined && object.audioFormat !== null
-        ? AudioFormat.fromPartial(object.audioFormat)
+    message.audio_format =
+      object.audio_format !== undefined && object.audio_format !== null
+        ? AudioFormat.fromPartial(object.audio_format)
         : undefined;
-    message.closeReason = object.closeReason ?? undefined;
-    message.refreshVideo = object.refreshVideo ?? undefined;
-    message.optionResponse =
-      object.optionResponse !== undefined && object.optionResponse !== null
-        ? OptionResponse.fromPartial(object.optionResponse)
+    message.close_reason = object.close_reason ?? undefined;
+    message.refresh_video = object.refresh_video ?? undefined;
+    message.option_response =
+      object.option_response !== undefined && object.option_response !== null
+        ? OptionResponse.fromPartial(object.option_response)
         : undefined;
     return message;
   },
@@ -4637,22 +4657,22 @@ export const Misc = {
 
 function createBaseMessage(): Message {
   return {
-    signedId: undefined,
-    publicKey: undefined,
-    testDelay: undefined,
-    videoFrame: undefined,
-    loginRequest: undefined,
-    loginResponse: undefined,
+    signed_id: undefined,
+    public_key: undefined,
+    test_delay: undefined,
+    video_frame: undefined,
+    login_request: undefined,
+    login_response: undefined,
     hash: undefined,
-    mouseEvent: undefined,
-    audioFrame: undefined,
-    cursorData: undefined,
-    cursorPosition: undefined,
-    cursorId: undefined,
-    keyEvent: undefined,
+    mouse_event: undefined,
+    audio_frame: undefined,
+    cursor_data: undefined,
+    cursor_position: undefined,
+    cursor_id: undefined,
+    key_event: undefined,
     clipboard: undefined,
-    fileAction: undefined,
-    fileResponse: undefined,
+    file_action: undefined,
+    file_response: undefined,
     misc: undefined,
   };
 }
@@ -4662,63 +4682,66 @@ export const Message = {
     message: Message,
     writer: _m0.Writer = _m0.Writer.create()
   ): _m0.Writer {
-    if (message.signedId !== undefined) {
-      SignedId.encode(message.signedId, writer.uint32(26).fork()).ldelim();
+    if (message.signed_id !== undefined) {
+      SignedId.encode(message.signed_id, writer.uint32(26).fork()).ldelim();
     }
-    if (message.publicKey !== undefined) {
-      PublicKey.encode(message.publicKey, writer.uint32(34).fork()).ldelim();
+    if (message.public_key !== undefined) {
+      PublicKey.encode(message.public_key, writer.uint32(34).fork()).ldelim();
     }
-    if (message.testDelay !== undefined) {
-      TestDelay.encode(message.testDelay, writer.uint32(42).fork()).ldelim();
+    if (message.test_delay !== undefined) {
+      TestDelay.encode(message.test_delay, writer.uint32(42).fork()).ldelim();
     }
-    if (message.videoFrame !== undefined) {
-      VideoFrame.encode(message.videoFrame, writer.uint32(50).fork()).ldelim();
+    if (message.video_frame !== undefined) {
+      VideoFrame.encode(message.video_frame, writer.uint32(50).fork()).ldelim();
     }
-    if (message.loginRequest !== undefined) {
+    if (message.login_request !== undefined) {
       LoginRequest.encode(
-        message.loginRequest,
+        message.login_request,
         writer.uint32(58).fork()
       ).ldelim();
     }
-    if (message.loginResponse !== undefined) {
+    if (message.login_response !== undefined) {
       LoginResponse.encode(
-        message.loginResponse,
+        message.login_response,
         writer.uint32(66).fork()
       ).ldelim();
     }
     if (message.hash !== undefined) {
       Hash.encode(message.hash, writer.uint32(74).fork()).ldelim();
     }
-    if (message.mouseEvent !== undefined) {
-      MouseEvent.encode(message.mouseEvent, writer.uint32(82).fork()).ldelim();
+    if (message.mouse_event !== undefined) {
+      MouseEvent.encode(message.mouse_event, writer.uint32(82).fork()).ldelim();
     }
-    if (message.audioFrame !== undefined) {
-      AudioFrame.encode(message.audioFrame, writer.uint32(90).fork()).ldelim();
+    if (message.audio_frame !== undefined) {
+      AudioFrame.encode(message.audio_frame, writer.uint32(90).fork()).ldelim();
     }
-    if (message.cursorData !== undefined) {
-      CursorData.encode(message.cursorData, writer.uint32(98).fork()).ldelim();
+    if (message.cursor_data !== undefined) {
+      CursorData.encode(message.cursor_data, writer.uint32(98).fork()).ldelim();
     }
-    if (message.cursorPosition !== undefined) {
+    if (message.cursor_position !== undefined) {
       CursorPosition.encode(
-        message.cursorPosition,
+        message.cursor_position,
         writer.uint32(106).fork()
       ).ldelim();
     }
-    if (message.cursorId !== undefined) {
-      writer.uint32(112).uint64(message.cursorId);
+    if (message.cursor_id !== undefined) {
+      writer.uint32(112).uint64(message.cursor_id);
     }
-    if (message.keyEvent !== undefined) {
-      KeyEvent.encode(message.keyEvent, writer.uint32(122).fork()).ldelim();
+    if (message.key_event !== undefined) {
+      KeyEvent.encode(message.key_event, writer.uint32(122).fork()).ldelim();
     }
     if (message.clipboard !== undefined) {
       Clipboard.encode(message.clipboard, writer.uint32(130).fork()).ldelim();
     }
-    if (message.fileAction !== undefined) {
-      FileAction.encode(message.fileAction, writer.uint32(138).fork()).ldelim();
+    if (message.file_action !== undefined) {
+      FileAction.encode(
+        message.file_action,
+        writer.uint32(138).fork()
+      ).ldelim();
     }
-    if (message.fileResponse !== undefined) {
+    if (message.file_response !== undefined) {
       FileResponse.encode(
-        message.fileResponse,
+        message.file_response,
         writer.uint32(146).fork()
       ).ldelim();
     }
@@ -4736,55 +4759,58 @@ export const Message = {
       const tag = reader.uint32();
       switch (tag >>> 3) {
         case 3:
-          message.signedId = SignedId.decode(reader, reader.uint32());
+          message.signed_id = SignedId.decode(reader, reader.uint32());
           break;
         case 4:
-          message.publicKey = PublicKey.decode(reader, reader.uint32());
+          message.public_key = PublicKey.decode(reader, reader.uint32());
           break;
         case 5:
-          message.testDelay = TestDelay.decode(reader, reader.uint32());
+          message.test_delay = TestDelay.decode(reader, reader.uint32());
           break;
         case 6:
-          message.videoFrame = VideoFrame.decode(reader, reader.uint32());
+          message.video_frame = VideoFrame.decode(reader, reader.uint32());
           break;
         case 7:
-          message.loginRequest = LoginRequest.decode(reader, reader.uint32());
+          message.login_request = LoginRequest.decode(reader, reader.uint32());
           break;
         case 8:
-          message.loginResponse = LoginResponse.decode(reader, reader.uint32());
+          message.login_response = LoginResponse.decode(
+            reader,
+            reader.uint32()
+          );
           break;
         case 9:
           message.hash = Hash.decode(reader, reader.uint32());
           break;
         case 10:
-          message.mouseEvent = MouseEvent.decode(reader, reader.uint32());
+          message.mouse_event = MouseEvent.decode(reader, reader.uint32());
           break;
         case 11:
-          message.audioFrame = AudioFrame.decode(reader, reader.uint32());
+          message.audio_frame = AudioFrame.decode(reader, reader.uint32());
           break;
         case 12:
-          message.cursorData = CursorData.decode(reader, reader.uint32());
+          message.cursor_data = CursorData.decode(reader, reader.uint32());
           break;
         case 13:
-          message.cursorPosition = CursorPosition.decode(
+          message.cursor_position = CursorPosition.decode(
             reader,
             reader.uint32()
           );
           break;
         case 14:
-          message.cursorId = longToNumber(reader.uint64() as Long);
+          message.cursor_id = longToNumber(reader.uint64() as Long);
           break;
         case 15:
-          message.keyEvent = KeyEvent.decode(reader, reader.uint32());
+          message.key_event = KeyEvent.decode(reader, reader.uint32());
           break;
         case 16:
           message.clipboard = Clipboard.decode(reader, reader.uint32());
           break;
         case 17:
-          message.fileAction = FileAction.decode(reader, reader.uint32());
+          message.file_action = FileAction.decode(reader, reader.uint32());
           break;
         case 18:
-          message.fileResponse = FileResponse.decode(reader, reader.uint32());
+          message.file_response = FileResponse.decode(reader, reader.uint32());
           break;
         case 19:
           message.misc = Misc.decode(reader, reader.uint32());
@@ -4799,49 +4825,49 @@ export const Message = {
 
   fromJSON(object: any): Message {
     return {
-      signedId: isSet(object.signedId)
-        ? SignedId.fromJSON(object.signedId)
+      signed_id: isSet(object.signed_id)
+        ? SignedId.fromJSON(object.signed_id)
         : undefined,
-      publicKey: isSet(object.publicKey)
-        ? PublicKey.fromJSON(object.publicKey)
+      public_key: isSet(object.public_key)
+        ? PublicKey.fromJSON(object.public_key)
         : undefined,
-      testDelay: isSet(object.testDelay)
-        ? TestDelay.fromJSON(object.testDelay)
+      test_delay: isSet(object.test_delay)
+        ? TestDelay.fromJSON(object.test_delay)
         : undefined,
-      videoFrame: isSet(object.videoFrame)
-        ? VideoFrame.fromJSON(object.videoFrame)
+      video_frame: isSet(object.video_frame)
+        ? VideoFrame.fromJSON(object.video_frame)
         : undefined,
-      loginRequest: isSet(object.loginRequest)
-        ? LoginRequest.fromJSON(object.loginRequest)
+      login_request: isSet(object.login_request)
+        ? LoginRequest.fromJSON(object.login_request)
         : undefined,
-      loginResponse: isSet(object.loginResponse)
-        ? LoginResponse.fromJSON(object.loginResponse)
+      login_response: isSet(object.login_response)
+        ? LoginResponse.fromJSON(object.login_response)
         : undefined,
       hash: isSet(object.hash) ? Hash.fromJSON(object.hash) : undefined,
-      mouseEvent: isSet(object.mouseEvent)
-        ? MouseEvent.fromJSON(object.mouseEvent)
+      mouse_event: isSet(object.mouse_event)
+        ? MouseEvent.fromJSON(object.mouse_event)
         : undefined,
-      audioFrame: isSet(object.audioFrame)
-        ? AudioFrame.fromJSON(object.audioFrame)
+      audio_frame: isSet(object.audio_frame)
+        ? AudioFrame.fromJSON(object.audio_frame)
         : undefined,
-      cursorData: isSet(object.cursorData)
-        ? CursorData.fromJSON(object.cursorData)
+      cursor_data: isSet(object.cursor_data)
+        ? CursorData.fromJSON(object.cursor_data)
         : undefined,
-      cursorPosition: isSet(object.cursorPosition)
-        ? CursorPosition.fromJSON(object.cursorPosition)
+      cursor_position: isSet(object.cursor_position)
+        ? CursorPosition.fromJSON(object.cursor_position)
         : undefined,
-      cursorId: isSet(object.cursorId) ? Number(object.cursorId) : undefined,
-      keyEvent: isSet(object.keyEvent)
-        ? KeyEvent.fromJSON(object.keyEvent)
+      cursor_id: isSet(object.cursor_id) ? Number(object.cursor_id) : undefined,
+      key_event: isSet(object.key_event)
+        ? KeyEvent.fromJSON(object.key_event)
         : undefined,
       clipboard: isSet(object.clipboard)
         ? Clipboard.fromJSON(object.clipboard)
         : undefined,
-      fileAction: isSet(object.fileAction)
-        ? FileAction.fromJSON(object.fileAction)
+      file_action: isSet(object.file_action)
+        ? FileAction.fromJSON(object.file_action)
         : undefined,
-      fileResponse: isSet(object.fileResponse)
-        ? FileResponse.fromJSON(object.fileResponse)
+      file_response: isSet(object.file_response)
+        ? FileResponse.fromJSON(object.file_response)
         : undefined,
       misc: isSet(object.misc) ? Misc.fromJSON(object.misc) : undefined,
     };
@@ -4849,65 +4875,65 @@ export const Message = {
 
   toJSON(message: Message): unknown {
     const obj: any = {};
-    message.signedId !== undefined &&
-      (obj.signedId = message.signedId
-        ? SignedId.toJSON(message.signedId)
+    message.signed_id !== undefined &&
+      (obj.signed_id = message.signed_id
+        ? SignedId.toJSON(message.signed_id)
         : undefined);
-    message.publicKey !== undefined &&
-      (obj.publicKey = message.publicKey
-        ? PublicKey.toJSON(message.publicKey)
+    message.public_key !== undefined &&
+      (obj.public_key = message.public_key
+        ? PublicKey.toJSON(message.public_key)
         : undefined);
-    message.testDelay !== undefined &&
-      (obj.testDelay = message.testDelay
-        ? TestDelay.toJSON(message.testDelay)
+    message.test_delay !== undefined &&
+      (obj.test_delay = message.test_delay
+        ? TestDelay.toJSON(message.test_delay)
         : undefined);
-    message.videoFrame !== undefined &&
-      (obj.videoFrame = message.videoFrame
-        ? VideoFrame.toJSON(message.videoFrame)
+    message.video_frame !== undefined &&
+      (obj.video_frame = message.video_frame
+        ? VideoFrame.toJSON(message.video_frame)
         : undefined);
-    message.loginRequest !== undefined &&
-      (obj.loginRequest = message.loginRequest
-        ? LoginRequest.toJSON(message.loginRequest)
+    message.login_request !== undefined &&
+      (obj.login_request = message.login_request
+        ? LoginRequest.toJSON(message.login_request)
         : undefined);
-    message.loginResponse !== undefined &&
-      (obj.loginResponse = message.loginResponse
-        ? LoginResponse.toJSON(message.loginResponse)
+    message.login_response !== undefined &&
+      (obj.login_response = message.login_response
+        ? LoginResponse.toJSON(message.login_response)
         : undefined);
     message.hash !== undefined &&
       (obj.hash = message.hash ? Hash.toJSON(message.hash) : undefined);
-    message.mouseEvent !== undefined &&
-      (obj.mouseEvent = message.mouseEvent
-        ? MouseEvent.toJSON(message.mouseEvent)
+    message.mouse_event !== undefined &&
+      (obj.mouse_event = message.mouse_event
+        ? MouseEvent.toJSON(message.mouse_event)
         : undefined);
-    message.audioFrame !== undefined &&
-      (obj.audioFrame = message.audioFrame
-        ? AudioFrame.toJSON(message.audioFrame)
+    message.audio_frame !== undefined &&
+      (obj.audio_frame = message.audio_frame
+        ? AudioFrame.toJSON(message.audio_frame)
         : undefined);
-    message.cursorData !== undefined &&
-      (obj.cursorData = message.cursorData
-        ? CursorData.toJSON(message.cursorData)
+    message.cursor_data !== undefined &&
+      (obj.cursor_data = message.cursor_data
+        ? CursorData.toJSON(message.cursor_data)
         : undefined);
-    message.cursorPosition !== undefined &&
-      (obj.cursorPosition = message.cursorPosition
-        ? CursorPosition.toJSON(message.cursorPosition)
+    message.cursor_position !== undefined &&
+      (obj.cursor_position = message.cursor_position
+        ? CursorPosition.toJSON(message.cursor_position)
         : undefined);
-    message.cursorId !== undefined &&
-      (obj.cursorId = Math.round(message.cursorId));
-    message.keyEvent !== undefined &&
-      (obj.keyEvent = message.keyEvent
-        ? KeyEvent.toJSON(message.keyEvent)
+    message.cursor_id !== undefined &&
+      (obj.cursor_id = Math.round(message.cursor_id));
+    message.key_event !== undefined &&
+      (obj.key_event = message.key_event
+        ? KeyEvent.toJSON(message.key_event)
         : undefined);
     message.clipboard !== undefined &&
       (obj.clipboard = message.clipboard
         ? Clipboard.toJSON(message.clipboard)
         : undefined);
-    message.fileAction !== undefined &&
-      (obj.fileAction = message.fileAction
-        ? FileAction.toJSON(message.fileAction)
+    message.file_action !== undefined &&
+      (obj.file_action = message.file_action
+        ? FileAction.toJSON(message.file_action)
         : undefined);
-    message.fileResponse !== undefined &&
-      (obj.fileResponse = message.fileResponse
-        ? FileResponse.toJSON(message.fileResponse)
+    message.file_response !== undefined &&
+      (obj.file_response = message.file_response
+        ? FileResponse.toJSON(message.file_response)
         : undefined);
     message.misc !== undefined &&
       (obj.misc = message.misc ? Misc.toJSON(message.misc) : undefined);
@@ -4916,66 +4942,66 @@ export const Message = {
 
   fromPartial<I extends Exact<DeepPartial<Message>, I>>(object: I): Message {
     const message = createBaseMessage();
-    message.signedId =
-      object.signedId !== undefined && object.signedId !== null
-        ? SignedId.fromPartial(object.signedId)
+    message.signed_id =
+      object.signed_id !== undefined && object.signed_id !== null
+        ? SignedId.fromPartial(object.signed_id)
         : undefined;
-    message.publicKey =
-      object.publicKey !== undefined && object.publicKey !== null
-        ? PublicKey.fromPartial(object.publicKey)
+    message.public_key =
+      object.public_key !== undefined && object.public_key !== null
+        ? PublicKey.fromPartial(object.public_key)
         : undefined;
-    message.testDelay =
-      object.testDelay !== undefined && object.testDelay !== null
-        ? TestDelay.fromPartial(object.testDelay)
+    message.test_delay =
+      object.test_delay !== undefined && object.test_delay !== null
+        ? TestDelay.fromPartial(object.test_delay)
         : undefined;
-    message.videoFrame =
-      object.videoFrame !== undefined && object.videoFrame !== null
-        ? VideoFrame.fromPartial(object.videoFrame)
+    message.video_frame =
+      object.video_frame !== undefined && object.video_frame !== null
+        ? VideoFrame.fromPartial(object.video_frame)
         : undefined;
-    message.loginRequest =
-      object.loginRequest !== undefined && object.loginRequest !== null
-        ? LoginRequest.fromPartial(object.loginRequest)
+    message.login_request =
+      object.login_request !== undefined && object.login_request !== null
+        ? LoginRequest.fromPartial(object.login_request)
         : undefined;
-    message.loginResponse =
-      object.loginResponse !== undefined && object.loginResponse !== null
-        ? LoginResponse.fromPartial(object.loginResponse)
+    message.login_response =
+      object.login_response !== undefined && object.login_response !== null
+        ? LoginResponse.fromPartial(object.login_response)
         : undefined;
     message.hash =
       object.hash !== undefined && object.hash !== null
         ? Hash.fromPartial(object.hash)
         : undefined;
-    message.mouseEvent =
-      object.mouseEvent !== undefined && object.mouseEvent !== null
-        ? MouseEvent.fromPartial(object.mouseEvent)
+    message.mouse_event =
+      object.mouse_event !== undefined && object.mouse_event !== null
+        ? MouseEvent.fromPartial(object.mouse_event)
         : undefined;
-    message.audioFrame =
-      object.audioFrame !== undefined && object.audioFrame !== null
-        ? AudioFrame.fromPartial(object.audioFrame)
+    message.audio_frame =
+      object.audio_frame !== undefined && object.audio_frame !== null
+        ? AudioFrame.fromPartial(object.audio_frame)
         : undefined;
-    message.cursorData =
-      object.cursorData !== undefined && object.cursorData !== null
-        ? CursorData.fromPartial(object.cursorData)
+    message.cursor_data =
+      object.cursor_data !== undefined && object.cursor_data !== null
+        ? CursorData.fromPartial(object.cursor_data)
         : undefined;
-    message.cursorPosition =
-      object.cursorPosition !== undefined && object.cursorPosition !== null
-        ? CursorPosition.fromPartial(object.cursorPosition)
+    message.cursor_position =
+      object.cursor_position !== undefined && object.cursor_position !== null
+        ? CursorPosition.fromPartial(object.cursor_position)
         : undefined;
-    message.cursorId = object.cursorId ?? undefined;
-    message.keyEvent =
-      object.keyEvent !== undefined && object.keyEvent !== null
-        ? KeyEvent.fromPartial(object.keyEvent)
+    message.cursor_id = object.cursor_id ?? undefined;
+    message.key_event =
+      object.key_event !== undefined && object.key_event !== null
+        ? KeyEvent.fromPartial(object.key_event)
         : undefined;
     message.clipboard =
       object.clipboard !== undefined && object.clipboard !== null
         ? Clipboard.fromPartial(object.clipboard)
         : undefined;
-    message.fileAction =
-      object.fileAction !== undefined && object.fileAction !== null
-        ? FileAction.fromPartial(object.fileAction)
+    message.file_action =
+      object.file_action !== undefined && object.file_action !== null
+        ? FileAction.fromPartial(object.file_action)
         : undefined;
-    message.fileResponse =
-      object.fileResponse !== undefined && object.fileResponse !== null
-        ? FileResponse.fromPartial(object.fileResponse)
+    message.file_response =
+      object.file_response !== undefined && object.file_response !== null
+        ? FileResponse.fromPartial(object.file_response)
         : undefined;
     message.misc =
       object.misc !== undefined && object.misc !== null

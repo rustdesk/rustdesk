@@ -37,7 +37,7 @@ export default class Websock {
     this._secretKey = [key, 0, 0];
   }
 
-  sendMessage(json: any) {
+  sendMessage(json: message.DeepPartial<message.Message>) {
     let data = message.Message.encode(
       message.Message.fromPartial(json)
     ).finish();
@@ -49,7 +49,7 @@ export default class Websock {
     this._websocket.send(data);
   }
 
-  sendRendezvous(data: any) {
+  sendRendezvous(data: rendezvous.DeepPartial<rendezvous.RendezvousMessage>) {
     this._websocket.send(
       rendezvous.RendezvousMessage.encode(
         rendezvous.RendezvousMessage.fromPartial(data)
@@ -96,7 +96,7 @@ export default class Websock {
         resolve(this);
       };
       this._websocket.onclose = (e) => {
-        if (this._status == 'open') {
+        if (this._status == "open") {
           reject(e);
         }
         this._status = e;
@@ -105,7 +105,7 @@ export default class Websock {
       };
       this._websocket.onerror = (e) => {
         if (!this._status) {
-          reject('Failed to connect to ' + this._uri);
+          reject("Failed to connect to " + this._uri);
           return;
         }
         this._status = e;
@@ -143,7 +143,7 @@ export default class Websock {
   }
 
   close() {
-    this._status = '';
+    this._status = "";
     if (this._websocket) {
       if (
         this._websocket.readyState === WebSocket.OPEN ||
