@@ -5,7 +5,6 @@ import { CursorData } from "./message";
 import { loadOpus, loadVp9 } from "./codec";
 
 var decompressor;
-var wasmExports;
 
 var currentFrame = undefined;
 var events = [];
@@ -59,8 +58,14 @@ export function pushEvent(name, payload) {
   events.push(payload);
 }
 
+const yuvWorker = new Worker("./yuv.js");
+
+yuvWorker.onmessage = (e) => {
+  currentFrame = e.data;
+}
+
 export function draw(frame) {
-  currentFrame = I420ToARGB(frame);
+  yuvWorker.postMessage(frame);
 }
 
 export function setConn(conn) {
@@ -73,6 +78,8 @@ export function getConn() {
 
 export async function startConn(id) {
   try {
+    currentFrame = undefined;
+    events = [];
     await curConn.start(id);
   } catch (e) {
     console.log(e);
@@ -89,7 +96,6 @@ export function close() {
 
 export function newConn() {
   window.curConn?.close();
-  events = [];
   const conn = new Connection();
   setConn(conn);
   return conn;
@@ -299,66 +305,9 @@ window.init = async () => {
   await initZstd();
 }
 
-let yPtr, yPtrLen, uPtr, uPtrLen, vPtr, vPtrLen, outPtr, outPtrLen;
-// let testSpeed = [0, 0];
-export function I420ToARGB(yb) {
-  if (!wasmExports) return;
-  // testSpeed[0] += 1;
-  const tm0 = new Date().getTime();
-  const { malloc, free, memory } = wasmExports;
-  const HEAPU8 = new Uint8Array(memory.buffer);
-  let n = yb.y.bytes.length;
-  if (yPtrLen != n) {
-    if (yPtr) free(yPtr);
-    yPtrLen = n;
-    yPtr = malloc(n);
-  }
-  HEAPU8.set(yb.y.bytes, yPtr);
-  n = yb.u.bytes.length;
-  if (uPtrLen != n) {
-    if (uPtr) free(uPtr);
-    uPtrLen = n;
-    uPtr = malloc(n);
-  }
-  HEAPU8.set(yb.u.bytes, uPtr);
-  n = yb.v.bytes.length;
-  if (vPtrLen != n) {
-    if (vPtr) free(vPtr);
-    vPtrLen = n;
-    vPtr = malloc(n);
-  }
-  HEAPU8.set(yb.v.bytes, vPtr);
-  const w = yb.format.displayWidth;
-  const h = yb.format.displayHeight;
-  n = w * h * 4;
-  if (outPtrLen != n) {
-    if (outPtr) free(outPtr);
-    outPtrLen = n;
-    outPtr = malloc(n);
-    HEAPU8.fill(255, outPtr, outPtr + n);
-  }
-  // const res = wasmExports.I420ToARGB(yPtr, yb.y.stride, uPtr, yb.u.stride, vPtr, yb.v.stride, outPtr, w * 4, w, h);
-  // const res = wasmExports.AVX_YUV_to_ARGB(outPtr, yPtr, yb.y.stride, uPtr, yb.u.stride, vPtr, yb.v.stride, w, h);
-  const res = wasmExports.yuv420_rgb24_std(w, h, yPtr, uPtr, vPtr, yb.y.stride, yb.v.stride, outPtr, w * 4, 1);
-  const out = HEAPU8.slice(outPtr, outPtr + n);
-  /*
-  testSpeed[1] += new Date().getTime() - tm0;
-  if (testSpeed[0] > 30) {
-    console.log(testSpeed[1] / testSpeed[0]);
-    testSpeed = [0, 0];
-  }
-  */
-  return out;
-}
-
 async function initZstd() {
   loadOpus(() => { });
   loadVp9(() => { });
-  const response = await fetch('yuv.wasm');
-  const file = await response.arrayBuffer();
-  const wasm = await WebAssembly.instantiate(file);
-  wasmExports = wasm.instance.exports;
-  console.log('yuv ready');
   const tmp = new zstd.ZSTDDecoder();
   await tmp.init();
   console.log('zstd ready');
