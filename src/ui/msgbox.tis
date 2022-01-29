@@ -130,107 +130,107 @@ class Body: Reactor.Component {
     event click $(.custom-event) (_, me) {
         if (callback) callback(me);
     }
+    
+    function submit() {
+        if ($(button#submit)) {
+            $(button#submit).sendEvent("click");
+        }
+    }
+    
+    function cancel() {
+        if ($(button#cancel)) {
+            $(button#cancel).sendEvent("click");
+        }
+    }
+ 
+    event click $(button#cancel) {
+        view.close();
+        if (callback) callback(null);
+    }
+    
+    event click $(button#skip) {
+        var values = this.getValues();
+        values.skip = true;
+        view.close(values);
+        if (callback) callback(values);
+    }
+    
+    event click $(button#submit) {
+        if (type == "error") {
+            if (hasRetry) {
+                view.close({ reconnect: true });
+            } else {
+                view.close();
+                if (callback) callback(null);
+            }
+            return;
+        }
+        if (type == "re-input-password") {
+            type = "input-password";
+            body.update();
+            set_outline_focus();
+            return;
+        }
+        var values = this.getValues();
+        if (callback) {
+            var err = callback(values, this.show_progress);
+            if (err && !err.trim()) {
+                return;
+            }
+            if (err) {
+                this.show_progress(false, err);
+                return;
+            }
+        }
+        view.close(values);
+    }
+    
+    event keydown (evt) {
+        if (!evt.shortcutKey) {
+            if (evt.keyCode == Event.VK_ENTER || 
+                (is_osx && evt.keyCode == 0x4C) ||
+                (is_linux && evt.keyCode == 65421)) {
+                this.submit();
+            }
+            if (evt.keyCode == Event.VK_ESCAPE) {
+                this.cancel();
+            }
+        }
+    }
+    
+    function show_progress(show=1, err="") {
+        if (show == -1) {
+            view.close()
+            return;
+        }
+        $(#progress).style.set {
+            display: show ? "inline-block" : "none"
+        };
+        $(#error).text = err;
+    }
+    
+    function getValues() {
+        var values = { type: type };
+        for (var el in $$(.form input)) {
+            values[el.attributes["name"]] = el.value;
+        }
+        for (var el in $$(.form textarea)) {
+            values[el.attributes["name"]] = el.value;
+        }
+        for (var el in $$(.form button)) {
+            values[el.attributes["name"]] = el.value;
+        }
+        if (type == "input-password") {
+            values.password = (values.password || "").trim();
+            if (!values.password) {
+                return;
+            }
+        }
+        return values;
+    }
 }
 
 $(body).content(<Body />);
-
-function show_progress(show=1, err="") {
-    if (show == -1) {
-        view.close()
-        return;
-    }
-    $(#progress).style.set {
-        display: show ? "inline-block" : "none"
-    };
-    $(#error).text = err;
-}
-
-function submit() {
-    if ($(button#submit)) {
-        $(button#submit).sendEvent("click");
-    }
-}
-
-function cancel() {
-    if ($(button#cancel)) {
-        $(button#cancel).sendEvent("click");
-    }
-}
-
-event click $(button#cancel) {
-    view.close();
-    if (callback) callback(null);
-}
-
-event click $(button#skip) {
-    var values = getValues();
-    values.skip = true;
-    view.close(values);
-    if (callback) callback(values);
-}
-
-function getValues() {
-    var values = { type: type };
-    for (var el in $$(.form input)) {
-        values[el.attributes["name"]] = el.value;
-    }
-    for (var el in $$(.form textarea)) {
-        values[el.attributes["name"]] = el.value;
-    }
-    for (var el in $$(.form button)) {
-        values[el.attributes["name"]] = el.value;
-    }
-    if (type == "input-password") {
-        values.password = (values.password || "").trim();
-        if (!values.password) {
-            return;
-        }
-    }
-    return values;
-}
-
-event click $(button#submit) {
-    if (type == "error") {
-        if (hasRetry) {
-            view.close({ reconnect: true });
-        } else {
-            view.close();
-            if (callback) callback(null);
-        }
-        return;
-    }
-    if (type == "re-input-password") {
-        type = "input-password";
-        body.update();
-        set_outline_focus();
-        return;
-    }
-    var values = getValues();
-    if (callback) {
-        var err = callback(values, show_progress);
-        if (err && !err.trim()) {
-            return;
-        }
-        if (err) {
-            show_progress(false, err);
-            return;
-        }
-    }
-    view.close(values);
-}
-
-event keydown (evt) {
-    if (!evt.shortcutKey) {
-        if (evt.keyCode == Event.VK_ENTER || 
-            (is_osx && evt.keyCode == 0x4C) ||
-            (is_linux && evt.keyCode == 65421)) {
-            submit();
-        }
-        if (evt.keyCode == Event.VK_ESCAPE) {
-            cancel();
-        }
-    }
-}
 
 function set_outline_focus() {
     self.timer(30ms, function() {
