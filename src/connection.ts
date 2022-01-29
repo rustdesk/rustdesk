@@ -357,6 +357,82 @@ export default class Connection {
   getOption(name: string): any {
     return this._options[name];
   }
+
+  setOption(name: string, value: any) {
+    this._options[name] = value;
+  }
+
+  inputKey() { // name: string, x: number, y: number, alt: Boolean, ctrl: Boolean, shift: Boolean, command: Boolean) {
+  }
+
+  inputString(seq: string) {
+    const keyEvent = message.KeyEvent.fromPartial({ seq });
+    this._ws?.sendMessage({ keyEvent });
+  }
+
+  inputMouse(mask: number, x: number, y: number, alt: Boolean, ctrl: Boolean, shift: Boolean, command: Boolean) {
+    const mouseEvent = message.MouseEvent.fromPartial({ mask, x, y });
+    if (alt) mouseEvent.modifiers.push(message.ControlKey.Alt);
+    if (ctrl) mouseEvent.modifiers.push(message.ControlKey.Control);
+    if (shift) mouseEvent.modifiers.push(message.ControlKey.Shift);
+    if (command) mouseEvent.modifiers.push(message.ControlKey.Meta);
+    this._ws?.sendMessage({ mouseEvent });
+  }
+
+  toggleOption(name: string) {
+    const v = !this._options[name];
+    const option = message.OptionMessage.fromPartial({});
+    const v2 = v ? message.OptionMessage_BoolOption.Yes : message.OptionMessage_BoolOption.No;
+    switch (name) {
+      case 'show-remote-cursor':
+        option.showRemoteCursor = v2;
+        break;
+      case 'disable-audio':
+        option.disableAudio = v2;
+        break;
+      case 'disable-clipboard':
+        option.disableClipboard = v2;
+        break;
+      case 'lock-after-session-end':
+        option.lockAfterSessionEnd = v2;
+        break;
+      case 'privacy-mode':
+        option.privacyMode = v2;
+        break;
+      case 'block-input':
+        option.blockInput = message.OptionMessage_BoolOption.Yes;
+        break;
+      case 'unblock-input':
+        option.blockInput = message.OptionMessage_BoolOption.No;
+        break;
+      default:
+        return;
+    }
+    if (name.indexOf('block-input') < 0) this.setOption(name, v);
+    const misc = message.Misc.fromPartial({ option });
+    this._ws?.sendMessage({ misc });
+  }
+
+  getImageQualityEnum(value: string, ignoreDefault: Boolean): message.ImageQuality | undefined {
+    switch (value) {
+      case 'low':
+        return message.ImageQuality.Low;
+      case 'best':
+        return message.ImageQuality.Best;
+      case 'balanced':
+        return ignoreDefault ? undefined : message.ImageQuality.Balanced;
+      default:
+        return undefined;
+    }
+  }
+
+  setImageQuality(value: string) {
+    const imageQuality = this.getImageQualityEnum(value, false);
+    if (imageQuality == undefined) return;
+    const option = message.OptionMessage.fromPartial({ imageQuality });
+    const misc = message.Misc.fromPartial({ option });
+    this._ws?.sendMessage({ misc });
+  }
 }
 
 // @ts-ignore

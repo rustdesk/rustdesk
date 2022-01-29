@@ -54,8 +54,9 @@ function jsonfyForDart(payload) {
 
 export function pushEvent(name, payload) {
   if (!events) return;
+  payload = jsonfyForDart(payload);
   payload.name = name;
-  events.push(jsonfyForDart(payload));
+  events.push(payload);
 }
 
 export function draw(frame) {
@@ -242,7 +243,7 @@ window.setByName = (name, value) => {
       localStorage.setItem(value.name, value.value);
       break;
     case 'peer_option':
-      curConn.setPeerOption(value.name, value.value);
+      curConn.setOption(value.name, value.value);
       break;
     case 'input_os_password':
       curConn.inputOsPassword(value, true);
