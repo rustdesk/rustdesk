@@ -199,6 +199,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Socks5 Proxy", "Socks5 代理"),
         ("Hostname", "主机名"),
         ("Discovered", "已发现"),
-        ("install_daemon_tip","为了开机启动，请安装系统服务。")
+        ("install_daemon_tip", "为了开机启动，请安装系统服务。"),
     ].iter().cloned().collect();
     }
