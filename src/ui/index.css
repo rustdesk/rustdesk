@@ -50,7 +50,7 @@ div.sessions-bar {
 
 div.sessions-tab span {
     display: inline-block;
-    padding: 6px 12px;
+    padding: 6px 8px;
     cursor: pointer;
     @ELLIPSIS;
 }

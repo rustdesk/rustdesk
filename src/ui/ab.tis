@@ -25,8 +25,8 @@ class SearchBar: Reactor.Component {
     function render() {
         var value = searchPatterns[this.type] || "";
         var me = this;
-        self.timer(1ms, function() { me.search_id.value = value; });
-        return <div .search-id>
+        self.timer(1ms, function() { (me.search_id || {}).value = value; });
+        return <div .search-id style="margin-left: 12px">
             <span .search-icon>{search_icon}</span>
             <input|text @{this.search_id} novalue={translate("Search ID")} />
             {value && <span .clear-input>{clear_icon}</span>}
@@ -285,6 +285,7 @@ class MultipleSessions: Reactor.Component {
         self.timer(60ms, function() {
             me.hidden = false;
             me.update();
+	    self.timer(30ms, function() { me.onSize(); });
         });
     }
 
@@ -297,10 +298,23 @@ class MultipleSessions: Reactor.Component {
     }
 
     function onSize() {
-        var w = this.$(.sessions-bar).box(#width) - 220;
-        this.$(#sessions-type span).style.set{
-            "max-width": (w / (handler.is_installed() ? 2 : 3)) + "px",
-        };
+        var w = this.$(.sessions-bar .sessions-tab).box(#width);
+        var len = translate('Recent Sessions').length;
+        var totalChars = 0;
+        var nEle = 0;
+        for (var el in this.$$(#sessions-type span)) {
+            nEle += 1;
+	    var n = el.text.length;
+            totalChars += n;
+        }
+        for (var el in this.$$(#sessions-type span)) {
+	    var n = el.text.length;
+            var maxWidth = (w - nEle * 2 * 8) * n / totalChars;
+            if (maxWidth < 0) maxWidth = 36;
+            el.style.set{
+                "max-width": maxWidth + "px",
+            };
+        }
     }
 }
 
