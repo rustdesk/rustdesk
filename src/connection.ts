@@ -239,7 +239,6 @@ export default class Connection {
 
   draw(frame: any) {
     this._draw?.(frame);
-    // globals.I420ToARGB(frame);
   }
 
   close() {

@@ -328,17 +328,18 @@ export function I420ToARGB(yb) {
     vPtr = malloc(n);
   }
   HEAPU8.set(yb.v.bytes, vPtr);
-  const w = yb.format.width;
-  const h = yb.format.height;
+  const w = yb.format.displayWidth;
+  const h = yb.format.displayHeight;
   n = w * h * 4;
   if (outPtrLen != n) {
     if (outPtr) free(outPtr);
     outPtrLen = n;
     outPtr = malloc(n);
+    HEAPU8.fill(255, outPtr, outPtr + n);
   }
   // const res = wasmExports.I420ToARGB(yPtr, yb.y.stride, uPtr, yb.u.stride, vPtr, yb.v.stride, outPtr, w * 4, w, h);
-  const res = wasmExports.AVX_YUV_to_RGBA(outPtr, yPtr, uPtr, vPtr, w, h);
-  // const res = wasmExports.yuv420_rgb24_std(w, h, yPtr, uPtr, vPtr, yb.y.stride, yb.v.stride, outPtr, w * 4, 0);
+  // const res = wasmExports.AVX_YUV_to_ARGB(outPtr, yPtr, yb.y.stride, uPtr, yb.u.stride, vPtr, yb.v.stride, w, h);
+  const res = wasmExports.yuv420_rgb24_std(w, h, yPtr, uPtr, vPtr, yb.y.stride, yb.v.stride, outPtr, w * 4, 1);
   const out = HEAPU8.slice(outPtr, outPtr + n);
   /*
   testSpeed[1] += new Date().getTime() - tm0;

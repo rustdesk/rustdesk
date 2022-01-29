@@ -45,7 +45,7 @@ static int foo;
 static int frame;
 
 void
-AVX_YUV_to_RGBA(unsigned char *dst, unsigned char *y, unsigned char* u, unsigned char* v, int width, int height) {
+AVX_YUV_to_ARGB(unsigned char *dst, unsigned char *y, int ystride, unsigned char* u, int ustride, unsigned char* v, int vstride, int width, int height) {
     int             r, g, b;
     unsigned char   *uline, *vline;
     int             w, h;
@@ -54,27 +54,27 @@ AVX_YUV_to_RGBA(unsigned char *dst, unsigned char *y, unsigned char* u, unsigned
         initialized = !0;
         build_tables();
     }
-    int half_width = width / 2;
     // Loop the image, taking into account sub-sample for the chroma channels
     for (h = 0; h < height; h++) {
         uline = u;
         vline = v;
-        for (w = 0; w < width; w++, y++) {
+        for (w = 0; w < width; w++) {
             r = *y + T1[*vline];
             g = *y + T2[*vline] + T3[*uline];
             b = *y + T4[*uline];
-            *dst++ = clamp(r);     // 16-bit to 8-bit, chuck precision
+            *dst++ = clamp(b);     // 16-bit to 8-bit, chuck precision
             *dst++ = clamp(g);
-            *dst++ = clamp(b);
-            *dst++ = 255;
+            *dst++ = clamp(r);
+            ++dst;
             if (w & 0x01) {
                 uline++;
                 vline++;
             }
         }
+        y += ystride;
         if (h & 0x01) {
-            u += half_width;
-            v += half_width;
+            u += ustride;
+            v += vstride;
         }
     }
 }
