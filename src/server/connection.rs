@@ -60,8 +60,8 @@ pub struct Connection {
     show_remote_cursor: bool, // by peer
     privacy_mode: bool,
     ip: String,
-    disable_clipboard: bool,            // by peer
-    disable_audio: bool,                // by peer
+    disable_clipboard: bool,                  // by peer
+    disable_audio: bool,                      // by peer
     tx_input: std_mpsc::Sender<MessageInput>, // handle input messages
 }
 
