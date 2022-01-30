@@ -14,7 +14,7 @@ use hbb_common::{
     tokio_util::codec::{BytesCodec, Framed},
 };
 use sha2::{Digest, Sha256};
-use std::sync::mpsc::{sync_channel, Receiver, SyncSender};
+use std::sync::mpsc as std_mpsc;
 
 pub type Sender = mpsc::UnboundedSender<(Instant, Arc<Message>)>;
 
@@ -62,7 +62,7 @@ pub struct Connection {
     ip: String,
     disable_clipboard: bool,            // by peer
     disable_audio: bool,                // by peer
-    tx_input: SyncSender<MessageInput>, // handle input messages
+    tx_input: std_mpsc::Sender<MessageInput>, // handle input messages
 }
 
 impl Subscriber for ConnInner {
@@ -111,7 +111,7 @@ impl Connection {
         let (tx_to_cm, rx_to_cm) = mpsc::unbounded_channel::<ipc::Data>();
         let (tx, mut rx) = mpsc::unbounded_channel::<(Instant, Arc<Message>)>();
         let (tx_video, mut rx_video) = mpsc::unbounded_channel::<(Instant, Arc<Message>)>();
-        let (tx_input, rx_input) = sync_channel(1);
+        let (tx_input, rx_input) = std_mpsc::channel();
 
         let tx_cloned = tx.clone();
         let mut conn = Self {
@@ -333,9 +333,9 @@ impl Connection {
         crate::platform::toggle_blank_screen(false);
     }
 
-    fn handle_input(receiver: Receiver<MessageInput>, tx: Sender) {
+    fn handle_input(receiver: std_mpsc::Receiver<MessageInput>, tx: Sender) {
         let mut block_input_mode = false;
-        let (tx_blank, rx_blank) = sync_channel(1);
+        let (tx_blank, rx_blank) = std_mpsc::channel();
 
         let handler_blank = std::thread::spawn(|| Self::handle_blank(rx_blank));
 
@@ -399,7 +399,7 @@ impl Connection {
         }
     }
 
-    fn handle_blank(receiver: Receiver<MessageInput>) {
+    fn handle_blank(receiver: std_mpsc::Receiver<MessageInput>) {
         let mut last_privacy = false;
         loop {
             match receiver.recv_timeout(std::time::Duration::from_millis(500)) {
