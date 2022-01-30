@@ -229,14 +229,18 @@ window.setByName = (name, value) => {
 }
 
 window.getByName = (name, arg) => {
-  try {
-    arg = JSON.parse(arg);
-  } catch (e) { }
+  let v = _getByName(name, arg);
+  if (typeof v == 'string' || v instanceof String) return v;
+  if (v == undefined || v == null) return '';
+  return JSON.stringify(v);
+}
+
+function _getByName(name, arg) {
   switch (name) {
     case 'peers':
       return localStorage.getItem('peers') || '[]';
     case 'remote_id':
-      return localStorage.getItem('remote-id') || '';
+      return localStorage.getItem('remote-id');
     case 'remember':
       return curConn.getRemember();
     case 'event':
@@ -247,7 +251,7 @@ window.getByName = (name, arg) => {
       }
       break;
     case 'toggle_option':
-      return curConn.getOption(arg);
+      return curConn.getOption(arg) || false;
     case 'option':
       return localStorage.getItem(arg);
     case 'image_quality':

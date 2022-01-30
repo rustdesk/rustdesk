@@ -424,8 +424,8 @@ export default class Connection {
     }
   }
 
-  getRemember(): any {
-    return this._options["remember"];
+  getRemember(): Boolean {
+    return this._options["remember"] || false;
   }
 
   setRemember(v: Boolean) {
@@ -566,9 +566,9 @@ export default class Connection {
     const misc = message.Misc.fromPartial({ option });
     this._ws?.sendMessage({ misc });
   }
-
+  
   getImageQuality() {
-    return this.getOption("image-quality");
+    return this.getOption('image-quality');
   }
 
   getImageQualityEnum(
