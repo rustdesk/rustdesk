@@ -235,10 +235,22 @@ window.getByName = (name, arg) => {
   return JSON.stringify(v);
 }
 
+function getPeersForDart() {
+  const peers = [];
+  for (const [key, value] of Object.entries(getPeers())) {
+    if (!key) continue;
+    const tm = value['tm'];
+    const info = values['info'];
+    if (!tm || !info) continue;
+    peers.push([tm, id, info]);
+  }
+  return peers.sort().reverse().map(x => x.slice(1));
+}
+
 function _getByName(name, arg) {
   switch (name) {
     case 'peers':
-      return localStorage.getItem('peers') || '[]';
+      return getPeersForDart();
     case 'remote_id':
       return localStorage.getItem('remote-id');
     case 'remember':
@@ -257,6 +269,7 @@ function _getByName(name, arg) {
     case 'image_quality':
       return curConn.getImageQuality();
     case 'translate':
+      const arg = JSON.parse(arg);
       return translate(arg.locale, arg.text);
     case 'peer_option':
       return curConn.getOption(arg);

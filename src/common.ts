@@ -33,7 +33,7 @@ export async function decompress(compressedArray: Uint8Array) {
 }
 
 export function translate(locale: string, text: string): string {
-  const lang = locale.substr(locale.length - 2).toLowerCase();
+  const lang = locale.substring(locale.length - 2).toLowerCase();
   let en = LANGS.en as any;
   let dict = (LANGS as any)[lang];
   if (!dict) dict = en;

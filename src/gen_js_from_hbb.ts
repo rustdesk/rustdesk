@@ -199,6 +199,12 @@ export const LANGS = {
     "Hostname": "主机名",
     "Discovered": "已发现",
     "install_daemon_tip": "为了开机启动，请安装系统服务。",
+    "Remote ID": "远程ID",
+    "Paste": "粘贴",
+    "Are you sure to close the connection?": "是否确认关闭连接？",
+    "Download new version": "下载新版本",
+    "Touch mode": "触屏模式",
+    "Reset canvas": "重置画布",
   },
   it: {
     "Status": "Stato",
@@ -393,6 +399,12 @@ export const LANGS = {
     "Invalid folder name": "Nome della cartella non valido",
     "Hostname": "Nome host",
     "Discovered": "Scoperto",
+    "Remote ID": "ID remoto",
+    "Paste": "Impasto",
+    "Are you sure to close the connection?": "Sei sicuro di chiudere la connessione?",
+    "Download new version": "Scarica nuova versione",
+    "Touch mode": "Modalità tocco",
+    "Reset canvas": "Ripristina tela",
   },
   en: {
     "desk_tip": "Your desktop can be accessed with this ID and password.",
@@ -605,6 +617,12 @@ export const LANGS = {
     "Invalid folder name": "Nom de dossier invalide",
     "Hostname": "nom d'hôte",
     "Discovered": "Découvert",
+    "Remote ID": "ID à distance",
+    "Paste": "Pâte",
+    "Are you sure to close the connection?": "Êtes-vous sûr de fermer la connexion?",
+    "Download new version": "Télécharger la nouvelle version",
+    "Touch mode": "Mode tactile",
+    "Reset canvas": "Réinitialiser le canevas",
   },
 }
 

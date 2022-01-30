@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "scripts": {
     "dev": "vite",
-    "build": "tsc && vite build",
+    "build": "./gen_js_from_hbb.py > src/gen_js_from_hbb.ts && ./ts_proto.py && tsc && vite build",
     "preview": "vite preview"
   },
   "devDependencies": {
