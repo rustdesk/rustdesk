@@ -269,7 +269,7 @@ function _getByName(name, arg) {
     case 'image_quality':
       return curConn.getImageQuality();
     case 'translate':
-      const arg = JSON.parse(arg);
+      arg = JSON.parse(arg);
       return translate(arg.locale, arg.text);
     case 'peer_option':
       return curConn.getOption(arg);
