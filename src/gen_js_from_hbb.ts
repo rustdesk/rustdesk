@@ -741,3 +741,5 @@ export const KEY_MAP: any = {
   "LOCK_SCREEN": "LockScreen",
 
 }
+export const version = "1.1.9"
+

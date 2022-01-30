@@ -2,7 +2,7 @@ import Connection from "./connection";
 import _sodium from "libsodium-wrappers";
 import { CursorData } from "./message";
 import { loadOpus, loadVp9 } from "./codec";
-import { checkIfRetry } from "./gen_js_from_hbb";
+import { checkIfRetry, version } from "./gen_js_from_hbb";
 import { initZstd, translate } from "./common";
 
 var currentFrame = undefined;
@@ -62,6 +62,7 @@ export async function startConn(id) {
   try {
     currentFrame = undefined;
     events = [];
+    setByName('remote_id', id);
     await curConn.start(id);
   } catch (e) {
     console.log(e);
@@ -136,16 +137,18 @@ export function decrypt(signed, nonce, key) {
 }
 
 window.setByName = (name, value) => {
-  try {
-    value = JSON.parse(value);
-  } catch (e) { }
   switch (name) {
+    case 'remote_id':
+      localStorage.setItem('remote-id', value);
+      break;
     case 'connect':
       newConn();
-      startConn(String(value));
+      startConn(value);
       break;
     case 'login':
-      curConn.login(value.password, value.remember || false);
+      value = JSON.parse(value);
+      curConn.setRemember(value.remember == 'true');
+      curConn.login(value.password);
       break;
     case 'close':
       close();
@@ -172,11 +175,12 @@ window.setByName = (name, value) => {
       curConn.switchDisplay(value);
       break;
     case 'remove':
-      const peers = JSON.parse(localStorage.getItem('peers') || '{}');
+      const peers = getPeers();
       delete peers[value];
       localStorage.setItem('peers', JSON.stringify(peers));
       break;
     case 'input_key':
+      value = JSON.parse(value);
       curConn.inputKey(value.name, value.alt || false, value.ctrl || false, value.shift || false, value.command || false);
       break;
     case 'input_string':
@@ -184,6 +188,7 @@ window.setByName = (name, value) => {
       break;
     case 'send_mouse':
       let mask = 0;
+      value = JSON.parse(value);
       switch (value.type) {
         case 'down':
           mask = 1;
@@ -205,12 +210,14 @@ window.setByName = (name, value) => {
         case 'wheel':
           mask |= 4 << 3;
       }
-      curConn.inputMouse(mask, value.x || 0, value.y || 0, value.alt || false, value.ctrl || false, value.shift || false, value.command || false);
+      curConn.inputMouse(mask, parseInt(value.x || '0'), parseInt(value.y || '0'), value.alt || false, value.ctrl || false, value.shift || false, value.command || false);
       break;
     case 'option':
+      value = JSON.parse(value);
       localStorage.setItem(value.name, value.value);
       break;
     case 'peer_option':
+      value = JSON.parse(value);
       curConn.setOption(value.name, value.value);
       break;
     case 'input_os_password':
@@ -251,6 +258,8 @@ window.getByName = (name, arg) => {
       return curConn.getOption(arg);
     case 'test_if_valid_server':
       break;
+    case 'version':
+      return version;
   }
   return '';
 }
@@ -259,4 +268,12 @@ window.init = async () => {
   loadOpus(() => { });
   loadVp9(() => { });
   await initZstd();
+}
+
+export function getPeers() {
+  try {
+    return JSON.parse(localStorage.getItem('peers')) || {};
+  } catch (e) {
+    return {};
+  }
 }

@@ -25,7 +25,7 @@ export default class Connection {
   _firstFrame: Boolean | undefined;
   _videoDecoder: any;
   _audioDecoder: any;
-  _password: string | undefined;
+  _password: Uint8Array | undefined;
   _options: any;
 
   constructor() {
@@ -36,11 +36,18 @@ export default class Connection {
   }
 
   async start(id: string) {
-    try {
-      this._options =
-        JSON.parse(localStorage.getItem("peers") || "{}")[id] || {};
-    } catch (e) {
-      this._options = {};
+    if (!this._options) {
+      this._options = globals.getPeers()[id] || {};
+    }
+    if (!this._password) {
+      const p = this.getOption("password");
+      if (p) {
+        try {
+          this._password = Uint8Array.from(JSON.parse("[" + p + "]"));
+        } catch (e) {
+          console.error(e);
+        }
+      }
     }
     this._interval = setInterval(() => {
       while (this._msgs.length) {
@@ -203,9 +210,10 @@ export default class Connection {
         this._hash = msg?.hash;
         if (!this._password)
           this.msgbox("input-password", "Password Required", "");
-        this.login(this._password);
+        this.login();
       } else if (msg?.test_delay) {
         const test_delay = msg?.test_delay;
+        console.log(test_delay);
         if (!test_delay.from_client) {
           this._ws?.sendMessage({ test_delay });
         }
@@ -261,9 +269,7 @@ export default class Connection {
   }
 
   refresh() {
-    const misc = message.Misc.fromPartial({
-      refresh_video: true,
-    });
+    const misc = message.Misc.fromPartial({ refresh_video: true });
     this._ws?.sendMessage({ misc });
   }
 
@@ -275,17 +281,22 @@ export default class Connection {
     this._draw = callback;
   }
 
-  login(password: string | undefined, _remember: Boolean = false) {
-    this._password = password;
+  login(password: string | undefined = undefined) {
     if (password) {
       const salt = this._hash?.salt;
       let p = hash([password, salt!]);
+      this._password = p;
       const challenge = this._hash?.challenge;
       p = hash([p, challenge!]);
       this.msgbox("connecting", "Connecting...", "Logging in...");
       this._sendLoginMessage(p);
     } else {
-      this._sendLoginMessage();
+      let p = this._password;
+      if (p) {
+        const challenge = this._hash?.challenge;
+        p = hash([p, challenge!]);
+      }
+      this._sendLoginMessage(p);
     }
   }
 
@@ -363,6 +374,32 @@ export default class Connection {
     }
     this.msgbox("success", "Successful", "Connected, waiting for image...");
     globals.pushEvent("peer_info", pi);
+    const p = this.shouldAutoLogin();
+    if (p) this.inputOsPassword(p);
+    const username = this.getOption("info")?.username;
+    if (username && !pi.username) pi.username = username;
+    this.setOption("info", pi);
+    if (this.getRemember()) {
+      if (this._password?.length) {
+        const p = this._password.toString();
+        if (p != this.getOption("password")) {
+          this.setOption("password", p);
+          console.log("remember password of " + this._id);
+        }
+      }
+    } else {
+      this.setOption("password", undefined);
+    }
+  }
+
+  shouldAutoLogin(): string {
+    const l = this.getOption("lock-after-session-end");
+    const a = !!this.getOption("auto-login");
+    const p = this.getOption("os-password");
+    if (p && l && a) {
+      return p;
+    }
+    return "";
   }
 
   handleMisc(misc: message.Misc) {
@@ -397,12 +434,24 @@ export default class Connection {
     return this._options["remember"];
   }
 
+  setRemember(v: Boolean) {
+    this.setOption("remember", v);
+  }
+
   getOption(name: string): any {
     return this._options[name];
   }
 
   setOption(name: string, value: any) {
-    this._options[name] = value;
+    if (value == undefined) {
+      delete this._options[name];
+    } else {
+      this._options[name] = value;
+    }
+    this._options["tm"] = new Date().getTime();
+    const peers = globals.getPeers();
+    peers[this._id] = this._options;
+    localStorage.setItem("peers", JSON.stringify(peers));
   }
 
   inputKey(

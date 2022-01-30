@@ -78,7 +78,7 @@ export default class Websock {
     return new Promise((resolve, reject) => {
       setTimeout(() => {
         if (this._status != "open") {
-          reject(this._status || "timeout");
+          reject(this._status || "Timeout");
         }
       }, timeout);
       this._websocket.onopen = () => {
@@ -131,7 +131,7 @@ export default class Websock {
           return;
         }
         if (new Date().getTime() > tm0 + timeout) {
-          reject("timeout");
+          reject("Timeout");
         } else {
           setTimeout(() => func(resolve, reject, tm0), 1);
         }
