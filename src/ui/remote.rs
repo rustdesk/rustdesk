@@ -1161,10 +1161,17 @@ async fn io_loop(handler: Handler) {
         }
         return;
     }
+    let (video_sender, audio_sender) = start_video_audio_threads(|data: &[u8]| {
+        VIDEO
+            .lock()
+            .unwrap()
+            .as_mut()
+            .map(|v| v.render_frame(data).ok());
+    });
     let mut remote = Remote {
         handler,
-        video_handler: VideoHandler::new(),
-        audio_handler: Default::default(),
+        video_sender,
+        audio_sender,
         receiver,
         sender,
         old_clipboard: Default::default(),
@@ -1204,8 +1211,8 @@ impl RemoveJob {
 
 struct Remote {
     handler: Handler,
-    audio_handler: AudioHandler,
-    video_handler: VideoHandler,
+    video_sender: MediaSender,
+    audio_sender: MediaSender,
     receiver: mpsc::UnboundedReceiver<Data>,
     sender: mpsc::UnboundedSender<Data>,
     old_clipboard: Arc<Mutex<String>>,
@@ -1590,15 +1597,7 @@ impl Remote {
                         self.handler.call("closeSuccess", &make_args!());
                         self.handler.call("adaptSize", &make_args!());
                     }
-                    if let Some(video_frame::Union::vp9s(vp9s)) = &vf.union {
-                        if let Ok(true) = self.video_handler.handle_vp9s(vp9s) {
-                            VIDEO
-                                .lock()
-                                .unwrap()
-                                .as_mut()
-                                .map(|v| v.render_frame(&self.video_handler.rgb).ok());
-                        }
-                    }
+                    self.video_sender.send(MediaData::VideoFrame(vf)).ok();
                 }
                 Some(message::Union::hash(hash)) => {
                     self.handler.handle_hash(hash, peer).await;
@@ -1681,7 +1680,7 @@ impl Remote {
                 },
                 Some(message::Union::misc(misc)) => match misc.union {
                     Some(misc::Union::audio_format(f)) => {
-                        self.audio_handler.handle_format(f);
+                        self.audio_sender.send(MediaData::AudioFormat(f)).ok();
                     }
                     Some(misc::Union::chat_message(c)) => {
                         self.handler.call("newMessage", &make_args!(c.text));
@@ -1709,7 +1708,7 @@ impl Remote {
                     }
                     Some(misc::Union::switch_display(s)) => {
                         self.handler.call("switchDisplay", &make_args!(s.display));
-                        self.video_handler.reset();
+                        self.video_sender.send(MediaData::Reset).ok();
                         if s.width > 0 && s.height > 0 {
                             VIDEO.lock().unwrap().as_mut().map(|v| {
                                 v.stop_streaming().ok();
@@ -1736,8 +1735,9 @@ impl Remote {
                     self.handler.handle_test_delay(t, peer).await;
                 }
                 Some(message::Union::audio_frame(frame)) => {
-                    self.audio_handler
-                        .handle_frame(frame, !self.handler.lc.read().unwrap().disable_audio);
+                    if !self.handler.lc.read().unwrap().disable_audio {
+                        self.audio_sender.send(MediaData::AudioFrame(frame)).ok();
+                    }
                 }
                 _ => {}
             }

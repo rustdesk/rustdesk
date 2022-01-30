@@ -26,7 +26,7 @@ use std::{
     collections::HashMap,
     net::SocketAddr,
     ops::Deref,
-    sync::{Arc, Mutex, RwLock},
+    sync::{mpsc, Arc, Mutex, RwLock},
 };
 use uuid::Uuid;
 
@@ -539,10 +539,7 @@ impl AudioHandler {
         }
     }
 
-    pub fn handle_frame(&mut self, frame: AudioFrame, play: bool) {
-        if !play {
-            return;
-        }
+    pub fn handle_frame(&mut self, frame: AudioFrame) {
         #[cfg(not(any(target_os = "android")))]
         if self.audio_stream.is_none() {
             return;
@@ -1004,6 +1001,68 @@ impl LoginConfigHandler {
         msg_out.set_login_request(lr);
         msg_out
     }
+}
+
+pub enum MediaData {
+    VideoFrame(VideoFrame),
+    AudioFrame(AudioFrame),
+    AudioFormat(AudioFormat),
+    Reset,
+}
+
+pub type MediaSender = mpsc::Sender<MediaData>;
+
+pub fn start_video_audio_threads<F>(video_callback: F) -> (MediaSender, MediaSender)
+where
+    F: 'static + FnMut(&[u8]) + Send,
+{
+    let (video_sender, video_receiver) = mpsc::channel::<MediaData>();
+    let (audio_sender, audio_receiver) = mpsc::channel::<MediaData>();
+    let mut video_callback = video_callback;
+
+    std::thread::spawn(move || {
+        let mut video_handler = VideoHandler::new();
+        loop {
+            if let Ok(data) = video_receiver.recv() {
+                match data {
+                    MediaData::VideoFrame(vf) => {
+                        if let Some(video_frame::Union::vp9s(vp9s)) = &vf.union {
+                            if let Ok(true) = video_handler.handle_vp9s(vp9s) {
+                                video_callback(&video_handler.rgb);
+                            }
+                        }
+                    }
+                    MediaData::Reset => {
+                        video_handler.reset();
+                    }
+                    _ => {}
+                }
+            } else {
+                break;
+            }
+        }
+        log::info!("Video decoder loop exits");
+    });
+    std::thread::spawn(move || {
+        let mut audio_handler = AudioHandler::default();
+        loop {
+            if let Ok(data) = audio_receiver.recv() {
+                match data {
+                    MediaData::AudioFrame(af) => {
+                        audio_handler.handle_frame(af);
+                    }
+                    MediaData::AudioFormat(f) => {
+                        audio_handler.handle_format(f);
+                    }
+                    _ => {}
+                }
+            } else {
+                break;
+            }
+        }
+        log::info!("Audio decoder loop exits");
+    });
+    return (video_sender, audio_sender);
 }
 
 pub async fn handle_test_delay(t: TestDelay, peer: &mut Stream) {
