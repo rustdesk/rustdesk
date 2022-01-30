@@ -55,15 +55,8 @@ export default class Connection {
         this._msgs.splice(0, 1);
       }
     }, 1);
-    loadVp9((decoder: any) => {
-      this._videoDecoder = decoder;
-      console.log("vp9 loaded");
-      console.log(decoder);
-    });
-    loadOpus((decoder: any) => {
-      this._audioDecoder = decoder;
-      console.log("opus loaded");
-    });
+    this.loadVideoDecoder();
+    this.loadAudioDecoder();
     const uri = getDefaultUri();
     const ws = new Websock(uri);
     this._ws = ws;
@@ -319,7 +312,7 @@ export default class Connection {
   getOptionMessage(): message.OptionMessage | undefined {
     let n = 0;
     const msg = message.OptionMessage.fromPartial({});
-    const q = this.getImageQualityEnum(this._options["image-quality"], true);
+    const q = this.getImageQualityEnum(this.getImageQuality(), true);
     const yes = message.OptionMessage_BoolOption.Yes;
     if (q != undefined) {
       msg.image_quality = q;
@@ -424,6 +417,7 @@ export default class Connection {
       }
       globals.pushEvent("permission", { [name]: p.enabled });
     } else if (misc.switch_display) {
+      this.loadVideoDecoder();
       globals.pushEvent("switch_display", misc.switch_display);
     } else if (misc.close_reason) {
       this.msgbox("error", "Connection Error", misc.close_reason);
@@ -573,6 +567,10 @@ export default class Connection {
     this._ws?.sendMessage({ misc });
   }
 
+  getImageQuality() {
+    return this.getOption("image-quality");
+  }
+
   getImageQualityEnum(
     value: string,
     ignoreDefault: Boolean
@@ -596,6 +594,23 @@ export default class Connection {
     const option = message.OptionMessage.fromPartial({ image_quality });
     const misc = message.Misc.fromPartial({ option });
     this._ws?.sendMessage({ misc });
+  }
+
+  loadVideoDecoder() {
+    this._videoDecoder?.close();
+    loadVp9((decoder: any) => {
+      this._videoDecoder = decoder;
+      console.log("vp9 loaded");
+      console.log(decoder);
+    });
+  }
+
+  loadAudioDecoder() {
+    this._audioDecoder?.close();
+    loadOpus((decoder: any) => {
+      this._audioDecoder = decoder;
+      console.log("opus loaded");
+    });
   }
 }
 
