@@ -193,5 +193,11 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Invalid folder name", "Nom de dossier invalide"),
         ("Hostname", "nom d'hôte"),
         ("Discovered", "Découvert"),
+        ("Remote ID", "ID à distance"),
+        ("Paste", "Pâte"),
+        ("Are you sure to close the connection?", "Êtes-vous sûr de fermer la connexion?"),
+        ("Download new version", "Télécharger la nouvelle version"),
+        ("Touch mode", "Mode tactile"),
+        ("Reset canvas", "Réinitialiser le canevas"),
     ].iter().cloned().collect();
-    }
+}

@@ -200,5 +200,11 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Hostname", "主机名"),
         ("Discovered", "已发现"),
         ("install_daemon_tip", "为了开机启动，请安装系统服务。"),
+        ("Remote ID", "远程ID"),
+        ("Paste", "粘贴"),
+        ("Are you sure to close the connection?", "是否确认关闭连接？"),
+        ("Download new version", "下载新版本"),
+        ("Touch mode", "触屏模式"),
+        ("Reset canvas", "重置画布"),
     ].iter().cloned().collect();
-    }
+}
