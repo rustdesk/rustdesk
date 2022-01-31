@@ -165,7 +165,6 @@ impl sciter::EventHandler for Handler {
         fn tunnel();
         fn lock_screen();
         fn reconnect();
-        fn get_msgbox();
         fn get_chatbox();
         fn get_icon();
         fn get_home_dir();
@@ -560,10 +559,6 @@ impl Handler {
 
     fn save_close_state(&self, k: String, v: String) {
         self.write().unwrap().close_state.insert(k, v);
-    }
-
-    fn get_msgbox(&mut self) -> String {
-        super::get_msgbox()
     }
 
     fn get_chatbox(&mut self) -> String {

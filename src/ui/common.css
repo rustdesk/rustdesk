@@ -214,24 +214,24 @@ header caption {
 }
 }
 
-div.msgbox {
+div.chatbox {
   size: *;
 }
 
-div.msgbox div.send svg {
+div.chatbox div.send svg {
   size: 16px;
 }
 
-div.msgbox div.send span:active {
+div.chatbox div.send span:active {
   opacity: 0.5;
 }
 
-div.msgbox div.send span {
+div.chatbox div.send span {
   display: inline-block;
   padding: 6px;
 }
 
-div.msgbox .msgs {
+div.chatbox .msgs {
   border: none;
   size: *;
   border-bottom: color(border) 1px solid;
@@ -241,25 +241,25 @@ div.msgbox .msgs {
   padding: 1em;
 }
 
-div.msgbox div.send {
+div.chatbox div.send {
   flow: horizontal;
   height: 30px;
   padding: 5px;
 }
 
-div.msgbox div.send input {
+div.chatbox div.send input {
   height: 20px !important;
 }
 
-div.msgbox div.name {
+div.chatbox div.name {
   color: color(dark-green);
 }
 
-div.msgbox div.right-side div {
+div.chatbox div.right-side div {
   text-align: right;
 }
 
-div.msgbox div.text {
+div.chatbox div.text {
     margin-top: 0.5em;
 }
 
@@ -326,5 +326,64 @@ menu li.selected span {
 
 menu li.line-through {
   text-decoration-line: line-through;
+  color: red;
+}
+
+div#msgbox .msgbox-icon svg {
+  size: 80px;
+  background: white;
+
+}
+div#msgbox .form {
+  border-spacing: 0.5em;
+}
+
+div#msgbox .caption {
+  @ELLIPSIS;
+  height: 2em;
+  line-height: 2em;
+  text-align: center;
+  color: white; 
+  font-weight: bold;
+}
+
+div#msgbox .form .text {
+  @ELLIPSIS;
+}
+
+div#msgbox button.button {
+  margin-left: 1.6em;
+}
+
+div#msgbox div.password {
+  position: relative;
+}
+
+div#msgbox div.password svg {
+  position: absolute;
+  right: 0.25em;
+  top: 0.25em;
+  padding: 0.5em;
+  color: color(text);
+}
+
+div#msgbox div.set-password > div {
+  flow: horizontal;
+}
+
+div#msgbox div.set-password > div > span {
+  width: 30%;
+  line-height: 2em;
+}
+
+div#msgbox div.set-password div.password {
+  width: *;
+}
+
+div#msgbox div.set-password input {
+  font-size: 1em;
+}
+
+div#msgbox #error {
   color: red;
 }

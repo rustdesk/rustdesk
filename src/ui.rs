@@ -31,13 +31,6 @@ struct UI(
 
 struct UIHostHandler;
 
-fn get_msgbox() -> String {
-    #[cfg(feature = "inline")]
-    return inline::get_msgbox();
-    #[cfg(not(feature = "inline"))]
-    return "".to_owned();
-}
-
 pub fn start(args: &mut [String]) {
     // https://github.com/c-smile/sciter-sdk/blob/master/include/sciter-x-types.h
     // https://github.com/rustdesk/rustdesk/issues/132#issuecomment-886069737
@@ -225,10 +218,6 @@ impl UI {
 
     fn set_remote_id(&mut self, id: String) {
         Config::set_remote_id(&id);
-    }
-
-    fn get_msgbox(&mut self) -> String {
-        get_msgbox()
     }
 
     fn goto_install(&mut self) {
@@ -670,7 +659,6 @@ impl sciter::EventHandler for UI {
         fn store_fav(Value);
         fn recent_sessions_updated();
         fn get_icon();
-        fn get_msgbox();
         fn install_me(String);
         fn is_installed();
         fn set_socks(String, String, String);

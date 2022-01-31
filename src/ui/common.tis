@@ -174,7 +174,7 @@ class ChatBox: Reactor.Component {
       self.timer(1ms, function() {
           scrollToBottom(me.msgs);
       });
-      return <div .msgbox>
+      return <div .chatbox>
         <htmlarea spellcheck="false" readonly .msgs @{this.msgs} >
             {msgs}
         </htmlarea>
@@ -211,80 +211,69 @@ class ChatBox: Reactor.Component {
 
 /******************** start of msgbox ****************************************/
 var remember_password = false;
-var msgbox_params;
-function getMsgboxParams() {
-    return msgbox_params; 
-}
-
-// tmp workaround https://sciter.com/forums/topic/menu-not-be-hidden-when-open-dialog-on-linux/
-function msgbox(type, title, text, callback=null, height=180, width=500, retry=0, contentStyle="") {
-    if (is_linux) { // fix menu not hidden issue
-      self.timer(1ms, 
-        function() {
-          msgbox_(type, title, text, callback, height, width, retry, contentStyle);
-        });
-    } else {
-        msgbox_(type, title, text, callback, height, width, retry, contentStyle);
+function bring_to_top(idx=-1) {    
+    if (view.windowState == View.WINDOW_HIDDEN || view.windowState == View.WINDOW_MINIMIZED) {    
+        if (is_linux) {    
+            view.focus = self;    
+        } else {    
+            view.windowState = View.WINDOW_SHOWN;    
+        }    
+        if (idx >= 0) body.cur = idx;    
+    } else {    
+        view.windowTopmost = true;    
+        view.windowTopmost = false;    
+    }                                                                                                           
+}      
+function msgbox(type, title, content, callback=null, height=180, width=500, hasRetry=false, contentStyle="") {
+    if (!type) {
+        closeMsgbox();
+        return;
     }
-}
-
-function msgbox_(type, title, text, callback, height, width, retry, contentStyle) {
-    var has_msgbox = msgbox_params != null;
-    if (!has_msgbox && !type) return;
     var remember = false;
-    try {
-        remember = handler.get_remember();
-    } catch(e) {}
-    msgbox_params =  {
-        remember: remember, type: type, text: text, title: title,
-        getParams: getMsgboxParams,
-        callback: callback, translate: translate,
-        retry: retry, contentStyle: contentStyle,
-    };
-    if (has_msgbox) return;
-    var dialog = {
-        client: true,
-        parameters: msgbox_params,
-        width: width + (is_xfce ? 50 : 0),
-        height: height + (is_xfce ? 50 : 0),
-    };
-    var html = handler.get_msgbox();
-    if (html) dialog.html = html;
-    else dialog.url = self.url("msgbox.html");
-    var res = view.dialog(dialog);
-    msgbox_params = null;
-    stdout.printf("msgbox return, type: %s, res: %s\n", type, res);
-    if (type.indexOf("custom") >= 0) {
-        //
-    } else if (!res) {
-        if (!is_port_forward) view.close();
-    } else if (res == "!alive") {
-        // do nothing
-    } else if (res.type == "input-password") {
-        handler.login(res.password, res.remember);
-        if (!is_port_forward) msgbox("connecting", "Connecting...", "Logging in...");
-    } else if (res.reconnect) {
-        if (!is_port_forward) connecting();
-        handler.reconnect();
+    try { remember = handler.get_remember(); } catch(e) {}
+    width += is_xfce ? 50 : 0;
+    height += is_xfce ? 50 : 0;
+
+    if (type == "input-password") {
+        callback = function (res) {
+            if (!res) {
+                view.close();
+                return;
+            }
+            handler.login(res.password, res.remember); 
+            if (!is_port_forward) msgbox("connecting", "Connecting...", "Logging in...");
+        };
+    } else if (type.indexOf("custom") < 0 && !is_port_forward && !callback) {
+        callback = function() { view.close(); }
     }
+    $(#msgbox).content(<MsgboxComponent width={width} height={height} type={type} title={title} content={content} remember={remember} callback={callback} contentStyle={contentStyle} hasRetry={hasRetry} />);
 }
 
 function connecting() {
     handler.msgbox("connecting", "Connecting...", "Connection in progress. Please wait.");
 }
 
-handler.msgbox = function(type, title, text, retry=0) {
-    self.timer(30ms, function() { msgbox(type, title, text, null, 180, 500, retry); });
+handler.msgbox = function(type, title, text, hasRetry=false) {
+    msgbox(type, title, text, null, 180, 500, hasRetry);
 }
 
-var reconnectTimeout = 1;
+var reconnectTimeout = 1000;
+var activeTimer = function() {};
 handler.msgbox_retry = function(type, title, text, hasRetry) {
-    handler.msgbox(type, title, text, hasRetry ? reconnectTimeout : 0);
+    handler.msgbox(type, title, text, hasRetry);
     if (hasRetry) {
+        self.timer(0, activeTimer);
+        activeTimer = self.timer(reconnectTimeout, retryConnect);
         reconnectTimeout *= 2;
     } else {
-        reconnectTimeout = 1;
+        reconnectTimeout = 1000;
     }
+}
+
+function retryConnect(cancelTimer=false) {
+    if (!is_port_forward) connecting();
+    handler.reconnect();
+    if (cancelTimer) self.timer(0, activeTimer);
 }
 /******************** end of msgbox ****************************************/
 

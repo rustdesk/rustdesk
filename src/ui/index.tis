@@ -326,6 +326,7 @@ class App: Reactor.Component
                     </div>
                     <ConnectStatus @{this.connect_status} />
                 </div>
+                <div #msgbox />
             </div>;
     }
 
@@ -660,6 +661,9 @@ function formatId(id) {
 }
 
 event keydown (evt) {
+    if (view.focus && view.focus.id != 'remote_id') {
+        return;
+    }
     if (!evt.shortcutKey) {
         if (evt.keyCode == Event.VK_ENTER ||
             (is_osx && evt.keyCode == 0x4C) ||
