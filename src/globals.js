@@ -43,7 +43,7 @@ export function pushEvent(name, payload) {
 let yuvWorker;
 
 export function draw(frame) {
-  if (yuvvWorker) yuvWorker.postMessage(frame);
+  if (yuvWorker) yuvWorker.postMessage(frame);
 }
 
 export function setConn(conn) {
