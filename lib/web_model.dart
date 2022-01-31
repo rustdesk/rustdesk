@@ -10,7 +10,7 @@ class PlatformFFI {
   }
 
   static Future<String> getVersion() async {
-    return '';
+    return getByName('version');
   }
 
   static String getByName(String name, [String arg = '']) {
@@ -23,6 +23,7 @@ class PlatformFFI {
 
   static Future<Null> init() async {
     isWeb = true;
+    isDesktop = !js.context.callMethod('isMobile');
     js.context.callMethod('init');
   }
 }

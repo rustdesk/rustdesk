@@ -176,7 +176,6 @@ class FfiModel with ChangeNotifier {
     }
     if (_pi.currentDisplay < _pi.displays.length) {
       _display = _pi.displays[_pi.currentDisplay];
-      initializeCursorAndCanvas();
     }
     if (displays.length > 0) {
       showLoading(translate('Connected, waiting for image...'), context);
@@ -197,6 +196,7 @@ class ImageModel with ChangeNotifier {
       final xscale = size.width / image.width;
       final yscale = size.height / image.height;
       FFI.canvasModel.scale = max(xscale, yscale);
+      initializeCursorAndCanvas();
     }
     _image = image;
     if (image != null) notifyListeners();
@@ -328,6 +328,7 @@ class CursorModel with ChangeNotifier {
 
   void touch(double x, double y, bool right) {
     final scale = FFI.canvasModel.scale;
+    print(scale);
     final xoffset = FFI.canvasModel.x;
     final yoffset = FFI.canvasModel.y;
     _x = (x - xoffset) / scale + _displayOriginX;

@@ -18,6 +18,8 @@ class MyTheme {
   static const Color accent80 = Color(0xAA0071FF);
   static const Color canvasColor = Color(0xFF212121);
   static const Color border = Color(0xFFCCCCCC);
+  static const Color idColor = Color(0xFF00B6F0);
+  static const Color darkGray = Color(0xFFB9BABC);
 }
 
 final ButtonStyle flatButtonStyle = TextButton.styleFrom(
@@ -212,3 +214,4 @@ Color str2color(String str, [alpha = 0xFF]) {
 bool isAndroid = false;
 bool isIOS = false;
 bool isWeb = false;
+bool isDesktop = false;

@@ -19,6 +19,7 @@ class HomePage extends StatefulWidget {
 class _HomePageState extends State<HomePage> {
   final _idController = TextEditingController();
   var _updateUrl = '';
+  var _menuPos = null;
 
   @override
   void initState() {
@@ -41,30 +42,38 @@ class _HomePageState extends State<HomePage> {
         appBar: AppBar(
           centerTitle: true,
           actions: [
-            IconButton(
-                icon: Icon(Icons.more_vert),
-                onPressed: () {
-                  () async {
-                    var value = await showMenu(
-                      context: context,
-                      position: RelativeRect.fromLTRB(3000, 70, 3000, 70),
-                      items: [
-                        PopupMenuItem<String>(
-                            child: Text(translate('ID Server')),
-                            value: 'server'),
-                        PopupMenuItem<String>(
-                            child: Text(translate('About') + ' RustDesk'),
-                            value: 'about'),
-                      ],
-                      elevation: 8,
-                    );
-                    if (value == 'server') {
-                      showServer(context);
-                    } else if (value == 'about') {
-                      showAbout(context);
-                    }
-                  }();
-                })
+            Ink(
+                child: InkWell(
+                    child: Padding(
+                        padding: const EdgeInsets.all(12),
+                        child: Icon(Icons.more_vert)),
+                    onTapDown: (e) {
+                      var x = e.globalPosition.dx;
+                      var y = e.globalPosition.dy;
+                      this._menuPos = RelativeRect.fromLTRB(x, y, x, y);
+                    },
+                    onTap: () {
+                      () async {
+                        var value = await showMenu(
+                          context: context,
+                          position: this._menuPos,
+                          items: [
+                            PopupMenuItem<String>(
+                                child: Text(translate('ID Server')),
+                                value: 'server'),
+                            PopupMenuItem<String>(
+                                child: Text(translate('About') + ' RustDesk'),
+                                value: 'about'),
+                          ],
+                          elevation: 8,
+                        );
+                        if (value == 'server') {
+                          showServer(context);
+                        } else if (value == 'about') {
+                          showAbout(context);
+                        }
+                      }();
+                    }))
           ],
           title: Text(widget.title),
         ),
@@ -93,6 +102,7 @@ class _HomePageState extends State<HomePage> {
                                     color: Colors.white,
                                     fontWeight: FontWeight.bold)))),
                 getSearchBarUI(),
+                Container(height: 12),
                 getPeers(),
               ]),
         ));
@@ -131,7 +141,7 @@ class _HomePageState extends State<HomePage> {
         height: 84,
         child: Padding(
           padding: const EdgeInsets.only(top: 8, bottom: 8),
-          child: Container(
+          child: Ink(
             decoration: BoxDecoration(
               color: MyTheme.white,
               borderRadius: const BorderRadius.only(
@@ -155,7 +165,7 @@ class _HomePageState extends State<HomePage> {
                         fontFamily: 'WorkSans',
                         fontWeight: FontWeight.bold,
                         fontSize: 30,
-                        color: Color(0xFF00B6F0),
+                        color: MyTheme.idColor,
                       ),
                       decoration: InputDecoration(
                         labelText: translate('Remote ID'),
@@ -164,13 +174,13 @@ class _HomePageState extends State<HomePage> {
                         helperStyle: TextStyle(
                           fontWeight: FontWeight.bold,
                           fontSize: 16,
-                          color: Color(0xFFB9BABC),
+                          color: MyTheme.darkGray,
                         ),
                         labelStyle: TextStyle(
                           fontWeight: FontWeight.w600,
                           fontSize: 16,
                           letterSpacing: 0.2,
-                          color: Color(0xFFB9BABC),
+                          color: MyTheme.darkGray,
                         ),
                       ),
                       autofocus: _idController.text.isEmpty,
@@ -183,7 +193,7 @@ class _HomePageState extends State<HomePage> {
                   height: 60,
                   child: IconButton(
                     icon: Icon(Icons.arrow_forward,
-                        color: Color(0xFFB9BABC), size: 45),
+                        color: MyTheme.darkGray, size: 45),
                     onPressed: onConnect,
                     autofocus: _idController.text.isNotEmpty,
                   ),
@@ -194,7 +204,6 @@ class _HomePageState extends State<HomePage> {
         ),
       ),
     );
-    if (!isWeb) return w;
     return Center(
         child: Container(constraints: BoxConstraints(maxWidth: 600), child: w));
   }
@@ -217,46 +226,75 @@ class _HomePageState extends State<HomePage> {
     if (!FFI.ffiModel.initialized) {
       return Container();
     }
+    final size = MediaQuery.of(context).size;
+    final space = 8.0;
+    var width = size.width - 2 * space;
+    final minWidth = 320.0;
+    if (size.width > minWidth + 2 * space) {
+      final n = (size.width / (minWidth + 2 * space)).floor();
+      width = size.width / n - 2 * space;
+    }
     final cards = <Widget>[];
     var peers = FFI.peers();
     peers.forEach((p) {
-      cards.add(Padding(
-          padding: EdgeInsets.symmetric(horizontal: 12),
+      cards.add(Container(
+          width: width,
           child: Card(
               child: GestureDetector(
-                  onTap: () => connect('${p.id}'),
+                  onTap: () => {
+                        if (!isDesktop) {connect('${p.id}')}
+                      },
+                  onDoubleTap: () => {
+                        if (isDesktop) {connect('${p.id}')}
+                      },
                   onLongPressStart: (details) {
                     var x = details.globalPosition.dx;
                     var y = details.globalPosition.dy;
-                    () async {
-                      var value = await showMenu(
-                        context: context,
-                        position: RelativeRect.fromLTRB(x, y, x, y),
-                        items: [
-                          PopupMenuItem<String>(
-                              child: Text(translate('Remove')),
-                              value: 'remove'),
-                        ],
-                        elevation: 8,
-                      );
-                      if (value == 'remove') {
-                        setState(() => FFI.setByName('remove', '${p.id}'));
-                        () async {
-                          removePreference(p.id);
-                        }();
-                      }
-                    }();
+                    this._menuPos = RelativeRect.fromLTRB(x, y, x, y);
+                    this.showPeerMenu(context, p.id);
                   },
                   child: ListTile(
+                    contentPadding: const EdgeInsets.only(left: 12),
                     subtitle: Text('${p.username}@${p.hostname}'),
                     title: Text('${p.id}'),
                     leading: Container(
                         padding: const EdgeInsets.all(6),
                         child: getPlatformImage('${p.platform}'),
                         color: str2color('${p.id}${p.platform}', 0x7f)),
+                    trailing: InkWell(
+                        child: Padding(
+                            padding: const EdgeInsets.all(12),
+                            child: Icon(Icons.more_vert)),
+                        onTapDown: (e) {
+                          var x = e.globalPosition.dx;
+                          var y = e.globalPosition.dy;
+                          this._menuPos = RelativeRect.fromLTRB(x, y, x, y);
+                        },
+                        onDoubleTap: () {},
+                        onTap: () {
+                          showPeerMenu(context, p.id);
+                        }),
                   )))));
     });
-    return Wrap(children: cards);
+    return Wrap(children: cards, spacing: space, runSpacing: space);
+  }
+
+  void showPeerMenu(BuildContext context, String id) async {
+    var value = await showMenu(
+      context: context,
+      position: this._menuPos,
+      items: [
+        PopupMenuItem<String>(
+            child: Text(translate('Remove')), value: 'remove'),
+      ],
+      elevation: 8,
+    );
+    if (value == 'remove') {
+      setState(() => FFI.setByName('remove', '$id'));
+      () async {
+        removePreference(id);
+      }();
+    }
   }
 }
 
