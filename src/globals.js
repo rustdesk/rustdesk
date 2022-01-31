@@ -40,14 +40,10 @@ export function pushEvent(name, payload) {
   events.push(payload);
 }
 
-const yuvWorker = new Worker("./yuv.js");
-
-yuvWorker.onmessage = (e) => {
-  currentFrame = e.data;
-}
+let yuvWorker;
 
 export function draw(frame) {
-  yuvWorker.postMessage(frame);
+  if (yuvvWorker) yuvWorker.postMessage(frame);
 }
 
 export function setConn(conn) {
@@ -240,7 +236,7 @@ function getPeersForDart() {
   for (const [key, value] of Object.entries(getPeers())) {
     if (!key) continue;
     const tm = value['tm'];
-    const info = values['info'];
+    const info = value['info'];
     if (!tm || !info) continue;
     peers.push([tm, id, info]);
   }
@@ -282,6 +278,10 @@ function _getByName(name, arg) {
 }
 
 window.init = async () => {
+  yuvWorker = new Worker("./yuv.js");
+  yuvWorker.onmessage = (e) => {
+    currentFrame = e.data;
+  }
   loadOpus(() => { });
   loadVp9(() => { });
   await initZstd();

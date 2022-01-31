@@ -97,13 +97,14 @@ export default class Websock {
       };
       this._websocket.onclose = (e) => {
         if (this._status == "open") {
-          reject(e);
+          // e.code 1000 means that the connection was closed normally.
+          reject('Reset by the peer');
         }
         this._status = e;
         console.error("WebSock.onclose: " + e);
         this._eventHandlers.close(e);
       };
-      this._websocket.onerror = (e) => {
+      this._websocket.onerror = (e: any) => {
         if (!this._status) {
           reject("Failed to connect to " + this._uri);
           return;
@@ -111,7 +112,7 @@ export default class Websock {
         this._status = e;
         console.error("WebSock.onerror: " + e);
         this._eventHandlers.error(e);
-        reject(e);
+        reject(e['data']);
       };
     });
   }
