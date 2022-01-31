@@ -50,7 +50,8 @@ fn get_key_state(key: enigo::Key) -> bool {
 
 static mut IS_IN: bool = false;
 static mut KEYBOARD_HOOKED: bool = false;
-static mut KEYBOARD_ENABLED: bool = true;
+static mut SERVER_KEYBOARD_ENABLED: bool = true;
+static mut SERVER_CLIPBOARD_ENABLED: bool = true;
 
 #[derive(Default)]
 pub struct HandlerInner {
@@ -238,7 +239,7 @@ impl Handler {
             std::env::set_var("KEYBOARD_ONLY", "y"); // pass to rdev
             use rdev::{EventType::*, *};
             let func = move |evt: Event| {
-                if unsafe { !IS_IN || !KEYBOARD_ENABLED } {
+                if unsafe { !IS_IN || !SERVER_KEYBOARD_ENABLED } {
                     return;
                 }
                 let (key, down) = match evt.event_type {
@@ -1180,8 +1181,6 @@ async fn io_loop(handler: Handler) {
         remove_jobs: Default::default(),
         timer: time::interval(SEC30),
         last_update_jobs_status: (Instant::now(), Default::default()),
-        clipboard: Arc::new(RwLock::new(true)),
-        keyboard: Arc::new(RwLock::new(true)),
         first_frame: false,
     };
     remote.io_loop().await;
@@ -1221,8 +1220,6 @@ struct Remote {
     remove_jobs: HashMap<i32, RemoveJob>,
     timer: Interval,
     last_update_jobs_status: (Instant, HashMap<i32, u64>),
-    clipboard: Arc<RwLock<bool>>,
-    keyboard: Arc<RwLock<bool>>,
     first_frame: bool,
 }
 
@@ -1238,7 +1235,8 @@ impl Remote {
         match Client::start(&self.handler.id, conn_type).await {
             Ok((mut peer, direct)) => {
                 unsafe {
-                    KEYBOARD_ENABLED = true;
+                    SERVER_KEYBOARD_ENABLED = true;
+                    SERVER_CLIPBOARD_ENABLED = true;
                 }
                 self.handler
                     .call("setConnectionType", &make_args!(peer.is_secured(), direct));
@@ -1300,7 +1298,8 @@ impl Remote {
             stop.send(()).ok();
         }
         unsafe {
-            KEYBOARD_ENABLED = false;
+            SERVER_KEYBOARD_ENABLED = false;
+            SERVER_CLIPBOARD_ENABLED = false;
         }
     }
 
@@ -1339,8 +1338,6 @@ impl Remote {
         let (tx, rx) = std::sync::mpsc::channel();
         let old_clipboard = self.old_clipboard.clone();
         let tx_protobuf = self.sender.clone();
-        let clipboard = self.clipboard.clone();
-        let keyboard = self.keyboard.clone();
         let lc = self.handler.lc.clone();
         match ClipboardContext::new() {
             Ok(mut ctx) => {
@@ -1355,8 +1352,8 @@ impl Remote {
                         }
                         _ => {}
                     }
-                    if !*clipboard.read().unwrap()
-                        || !*keyboard.read().unwrap()
+                    if !unsafe { SERVER_CLIPBOARD_ENABLED }
+                        || !unsafe { SERVER_KEYBOARD_ENABLED }
                         || lc.read().unwrap().disable_clipboard
                     {
                         continue;
@@ -1612,8 +1609,8 @@ impl Remote {
                         self.handler.handle_peer_info(pi);
                         if !(self.handler.is_file_transfer()
                             || self.handler.is_port_forward()
-                            || !*self.clipboard.read().unwrap()
-                            || !*self.keyboard.read().unwrap()
+                            || !unsafe { SERVER_CLIPBOARD_ENABLED }
+                            || !unsafe {  SERVER_KEYBOARD_ENABLED }
                             || self.handler.lc.read().unwrap().disable_clipboard)
                         {
                             let txt = self.old_clipboard.lock().unwrap().clone();
@@ -1689,14 +1686,12 @@ impl Remote {
                         log::info!("Change permission {:?} -> {}", p.permission, p.enabled);
                         match p.permission.enum_value_or_default() {
                             Permission::Keyboard => {
-                                unsafe {
-                                    KEYBOARD_ENABLED = p.enabled;
-                                }
+                                unsafe { SERVER_KEYBOARD_ENABLED = p.enabled; }
                                 self.handler
                                     .call("setPermission", &make_args!("keyboard", p.enabled));
                             }
                             Permission::Clipboard => {
-                                *self.clipboard.write().unwrap() = p.enabled;
+                                unsafe { SERVER_CLIPBOARD_ENABLED = p.enabled; }
                                 self.handler
                                     .call("setPermission", &make_args!("clipboard", p.enabled));
                             }
