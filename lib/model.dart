@@ -16,6 +16,7 @@ class FfiModel with ChangeNotifier {
   var _decoding = false;
   bool _waitForImage;
   bool _initialized = false;
+  var _inputBlocked = false;
   final _permissions = Map<String, bool>();
   bool _secure;
   bool _direct;
@@ -26,6 +27,11 @@ class FfiModel with ChangeNotifier {
   get secure => _secure;
   get direct => _direct;
   get pi => _pi;
+  get inputBlocked => _inputBlocked;
+
+  set inputBlocked(v) {
+    _inputBlocked = v;
+  }
 
   FfiModel() {
     Translator.call = translate;
@@ -54,6 +60,7 @@ class FfiModel with ChangeNotifier {
     _waitForImage = false;
     _secure = null;
     _direct = null;
+    _inputBlocked = false;
     clearPermissions();
   }
 
@@ -79,6 +86,7 @@ class FfiModel with ChangeNotifier {
   }
 
   void clearPermissions() {
+    _inputBlocked = false;
     _permissions.clear();
   }
 
