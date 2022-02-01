@@ -211,19 +211,6 @@ class ChatBox: Reactor.Component {
 
 /******************** start of msgbox ****************************************/
 var remember_password = false;
-function bring_to_top(idx=-1) {    
-    if (view.windowState == View.WINDOW_HIDDEN || view.windowState == View.WINDOW_MINIMIZED) {    
-        if (is_linux) {    
-            view.focus = self;    
-        } else {    
-            view.windowState = View.WINDOW_SHOWN;    
-        }    
-        if (idx >= 0) body.cur = idx;    
-    } else {    
-        view.windowTopmost = true;    
-        view.windowTopmost = false;    
-    }                                                                                                           
-}      
 function msgbox(type, title, content, callback=null, height=180, width=500, hasRetry=false, contentStyle="") {
     if (!type) {
         closeMsgbox();
