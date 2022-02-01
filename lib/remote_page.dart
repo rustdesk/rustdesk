@@ -258,174 +258,187 @@ class _RemotePageState extends State<RemotePage> {
                       }
                     });
                   }),
-          bottomNavigationBar: _showBar && pi.displays != null
-              ? BottomAppBar(
-                  elevation: 10,
-                  color: MyTheme.accent,
-                  child: Row(
-                    mainAxisSize: MainAxisSize.max,
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: <Widget>[
-                      Row(
-                          children: <Widget>[
-                                IconButton(
-                                  color: Colors.white,
-                                  icon: Icon(Icons.clear),
-                                  onPressed: () {
-                                    close();
-                                  },
-                                )
-                              ] +
-                              (isDesktop
-                                  ? []
-                                  : [
-                                      IconButton(
-                                          color: Colors.white,
-                                          icon: Icon(Icons.keyboard),
-                                          onPressed: openKeyboard)
-                                    ]) +
-                              <Widget>[
-                                IconButton(
-                                  color: Colors.white,
-                                  icon: Icon(Icons.tv),
-                                  onPressed: () {
-                                    setState(() => _showEdit = false);
-                                    showOptions(context);
-                                  },
-                                )
-                              ] +
-                              (isDesktop
-                                  ? []
-                                  : [
-                                      Container(
-                                          color: _mouseTools
-                                              ? Colors.blue[500]
-                                              : null,
-                                          child: IconButton(
-                                            color: Colors.white,
-                                            icon: Icon(Icons.mouse),
-                                            onPressed: () {
-                                              setState(() {
-                                                _mouseTools = !_mouseTools;
-                                                resetTool();
-                                                if (_mouseTools) _drag = true;
-                                              });
-                                            },
-                                          ))
-                                    ]) +
-                              <Widget>[
-                                IconButton(
-                                  color: Colors.white,
-                                  icon: Icon(Icons.more_vert),
-                                  onPressed: () {
-                                    setState(() => _showEdit = false);
-                                    showActions(context);
-                                  },
-                                ),
-                              ]),
-                      IconButton(
-                          color: Colors.white,
-                          icon: Icon(Icons.expand_more),
-                          onPressed: () {
-                            setState(() => _showBar = !_showBar);
-                          }),
-                    ],
-                  ),
-                )
-              : null,
+          bottomNavigationBar:
+              _showBar && pi.displays != null ? getBottomAppBar() : null,
           body: FlutterEasyLoading(
             child: Container(
                 color: Colors.black,
-                child: SafeArea(
-                    child: GestureDetector(
-                        onLongPress: () {
-                          if (_drag || _scroll) return;
-                          // make right click and real left long click both work
-                          // should add "long press = right click" option?
-                          FFI.sendMouse('down', 'left');
-                          FFI.tap(true);
-                        },
-                        onLongPressUp: () {
-                          FFI.sendMouse('up', 'left');
-                        },
-                        onTapUp: (details) {
-                          if (_drag || _scroll) return;
-                          if (_touchMode) {
-                            FFI.cursorModel.touch(details.localPosition.dx,
-                                details.localPosition.dy, _right);
-                          } else {
-                            FFI.tap(_right);
-                          }
-                        },
-                        onScaleStart: (details) {
-                          _scale = 1;
-                          _xOffset = details.focalPoint.dx;
-                          _yOffset = _yOffset0 = details.focalPoint.dy;
-                          if (_drag) {
-                            FFI.sendMouse('down', 'left');
-                          }
-                        },
-                        onScaleUpdate: (details) {
-                          var scale = details.scale;
-                          if (scale == 1) {
-                            if (!_scroll) {
-                              var x = details.focalPoint.dx;
-                              var y = details.focalPoint.dy;
-                              var dx = x - _xOffset;
-                              var dy = y - _yOffset;
-                              FFI.cursorModel
-                                  .updatePan(dx, dy, _touchMode, _drag);
-                              _xOffset = x;
-                              _yOffset = y;
-                            } else {
-                              _xOffset = details.focalPoint.dx;
-                              _yOffset = details.focalPoint.dy;
-                            }
-                          } else if (!_drag && !_scroll) {
-                            FFI.canvasModel.updateScale(scale / _scale);
-                            _scale = scale;
-                          }
-                        },
-                        onScaleEnd: (details) {
-                          if (_drag) {
-                            FFI.sendMouse('up', 'left');
-                            setState(resetMouse);
-                          } else if (_scroll) {
-                            var dy = (_yOffset - _yOffset0) / 10;
-                            if (dy.abs() > 0.1) {
-                              if (dy > 0 && dy < 1) dy = 1;
-                              if (dy < 0 && dy > -1) dy = -1;
-                              FFI.scroll(dy);
-                            }
-                          }
-                        },
-                        child: Container(
-                            color: MyTheme.canvasColor,
-                            child: Stack(children: [
-                              ImagePaint(),
-                              CursorPaint(),
-                              getHelpTools(),
-                              SizedBox(
-                                width: 0,
-                                height: 0,
-                                child: !_showEdit
-                                    ? Container()
-                                    : TextFormField(
-                                        textInputAction:
-                                            TextInputAction.newline,
-                                        autocorrect: false,
-                                        enableSuggestions: false,
-                                        focusNode: _focusNode,
-                                        maxLines: null,
-                                        initialValue:
-                                            _value, // trick way to make backspace work always
-                                        keyboardType: TextInputType.multiline,
-                                        onChanged: handleInput,
-                                      ),
-                              ),
-                            ]))))),
+                child: isDesktop
+                    ? getBodyForDesktop()
+                    : SafeArea(child: getBodyForMobile())),
           )),
     );
+  }
+
+  Widget getBottomAppBar() {
+    return BottomAppBar(
+      elevation: 10,
+      color: MyTheme.accent,
+      child: Row(
+        mainAxisSize: MainAxisSize.max,
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: <Widget>[
+          Row(
+              children: <Widget>[
+                    IconButton(
+                      color: Colors.white,
+                      icon: Icon(Icons.clear),
+                      onPressed: () {
+                        close();
+                      },
+                    )
+                  ] +
+                  (isDesktop
+                      ? []
+                      : [
+                          IconButton(
+                              color: Colors.white,
+                              icon: Icon(Icons.keyboard),
+                              onPressed: openKeyboard)
+                        ]) +
+                  <Widget>[
+                    IconButton(
+                      color: Colors.white,
+                      icon: Icon(Icons.tv),
+                      onPressed: () {
+                        setState(() => _showEdit = false);
+                        showOptions(context);
+                      },
+                    )
+                  ] +
+                  (isDesktop
+                      ? []
+                      : [
+                          Container(
+                              color: _mouseTools ? Colors.blue[500] : null,
+                              child: IconButton(
+                                color: Colors.white,
+                                icon: Icon(Icons.mouse),
+                                onPressed: () {
+                                  setState(() {
+                                    _mouseTools = !_mouseTools;
+                                    resetTool();
+                                    if (_mouseTools) _drag = true;
+                                  });
+                                },
+                              ))
+                        ]) +
+                  <Widget>[
+                    IconButton(
+                      color: Colors.white,
+                      icon: Icon(Icons.more_vert),
+                      onPressed: () {
+                        setState(() => _showEdit = false);
+                        showActions(context);
+                      },
+                    ),
+                  ]),
+          IconButton(
+              color: Colors.white,
+              icon: Icon(Icons.expand_more),
+              onPressed: () {
+                setState(() => _showBar = !_showBar);
+              }),
+        ],
+      ),
+    );
+  }
+
+  Widget getBodyForMobile() {
+    return GestureDetector(
+        onLongPress: () {
+          if (_drag || _scroll) return;
+          // make right click and real left long click both work
+          // should add "long press = right click" option?
+          FFI.sendMouse('down', 'left');
+          FFI.tap(true);
+        },
+        onLongPressUp: () {
+          FFI.sendMouse('up', 'left');
+        },
+        onTapUp: (details) {
+          if (_drag || _scroll) return;
+          if (_touchMode) {
+            FFI.cursorModel.touch(
+                details.localPosition.dx, details.localPosition.dy, _right);
+          } else {
+            FFI.tap(_right);
+          }
+        },
+        onScaleStart: (details) {
+          _scale = 1;
+          _xOffset = details.focalPoint.dx;
+          _yOffset = _yOffset0 = details.focalPoint.dy;
+          if (_drag) {
+            FFI.sendMouse('down', 'left');
+          }
+        },
+        onScaleUpdate: (details) {
+          var scale = details.scale;
+          if (scale == 1) {
+            if (!_scroll) {
+              var x = details.focalPoint.dx;
+              var y = details.focalPoint.dy;
+              var dx = x - _xOffset;
+              var dy = y - _yOffset;
+              FFI.cursorModel.updatePan(dx, dy, _touchMode, _drag);
+              _xOffset = x;
+              _yOffset = y;
+            } else {
+              _xOffset = details.focalPoint.dx;
+              _yOffset = details.focalPoint.dy;
+            }
+          } else if (!_drag && !_scroll) {
+            FFI.canvasModel.updateScale(scale / _scale);
+            _scale = scale;
+          }
+        },
+        onScaleEnd: (details) {
+          if (_drag) {
+            FFI.sendMouse('up', 'left');
+            setState(resetMouse);
+          } else if (_scroll) {
+            var dy = (_yOffset - _yOffset0) / 10;
+            if (dy.abs() > 0.1) {
+              if (dy > 0 && dy < 1) dy = 1;
+              if (dy < 0 && dy > -1) dy = -1;
+              FFI.scroll(dy);
+            }
+          }
+        },
+        child: Container(
+            color: MyTheme.canvasColor,
+            child: Stack(children: [
+              ImagePaint(),
+              CursorPaint(),
+              getHelpTools(),
+              SizedBox(
+                width: 0,
+                height: 0,
+                child: !_showEdit
+                    ? Container()
+                    : TextFormField(
+                        textInputAction: TextInputAction.newline,
+                        autocorrect: false,
+                        enableSuggestions: false,
+                        focusNode: _focusNode,
+                        maxLines: null,
+                        initialValue:
+                            _value, // trick way to make backspace work always
+                        keyboardType: TextInputType.multiline,
+                        onChanged: handleInput,
+                      ),
+              ),
+            ])));
+  }
+
+  Widget getBodyForDesktop() {
+    return GestureDetector(
+        onTapDown: (details) => {},
+        onTapUp: (details) => {},
+        child: Container(
+            color: MyTheme.canvasColor,
+            child: Stack(children: [ImagePaint(), CursorPaint()])));
   }
 
   void showActions(BuildContext context) {
