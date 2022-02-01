@@ -59,7 +59,6 @@ function stateChanged() {
 
 var header;
 var old_window_state = View.WINDOW_SHOWN;
-var input_blocked;
 
 class Header: Reactor.Component {
     function this() {
