@@ -304,12 +304,10 @@ class MultipleSessions: Reactor.Component {
         var nEle = 0;
         for (var el in this.$$(#sessions-type span)) {
             nEle += 1;
-	    var n = el.text.length;
-            totalChars += n;
+            totalChars += el.text.length;
         }
         for (var el in this.$$(#sessions-type span)) {
-	    var n = el.text.length;
-            var maxWidth = (w - nEle * 2 * 8) * n / totalChars;
+            var maxWidth = (w - nEle * 2 * 8) * el.text.length / totalChars;
             if (maxWidth < 0) maxWidth = 36;
             el.style.set{
                 "max-width": maxWidth + "px",

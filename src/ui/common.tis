@@ -234,14 +234,14 @@ function msgbox(type, title, content, callback=null, height=180, width=500, hasR
     width += is_xfce ? 50 : 0;
     height += is_xfce ? 50 : 0;
 
-    if (type == "input-password") {
+    if (type.indexOf("input-password") >= 0) {
         callback = function (res) {
             if (!res) {
                 view.close();
                 return;
             }
             handler.login(res.password, res.remember); 
-            if (!is_port_forward) msgbox("connecting", "Connecting...", "Logging in...");
+            if (!is_port_forward) handler.msgbox("connecting", "Connecting...", "Logging in...");
         };
     } else if (type.indexOf("custom") < 0 && !is_port_forward && !callback) {
         callback = function() { view.close(); }
@@ -254,16 +254,16 @@ function connecting() {
 }
 
 handler.msgbox = function(type, title, text, hasRetry=false) {
-    msgbox(type, title, text, null, 180, 500, hasRetry);
+    // crash somehow (when input wrong password), even with small time, for example, 1ms
+    self.timer(30ms, function() { msgbox(type, title, text, null, 180, 500, hasRetry); });
 }
 
 var reconnectTimeout = 1000;
-var activeTimer = function() {};
 handler.msgbox_retry = function(type, title, text, hasRetry) {
     handler.msgbox(type, title, text, hasRetry);
     if (hasRetry) {
-        self.timer(0, activeTimer);
-        activeTimer = self.timer(reconnectTimeout, retryConnect);
+        self.timer(0, retryConnect);
+        self.timer(reconnectTimeout, retryConnect);
         reconnectTimeout *= 2;
     } else {
         reconnectTimeout = 1000;
@@ -271,9 +271,9 @@ handler.msgbox_retry = function(type, title, text, hasRetry) {
 }
 
 function retryConnect(cancelTimer=false) {
+    if (cancelTimer) self.timer(0, retryConnect);
     if (!is_port_forward) connecting();
     handler.reconnect();
-    if (cancelTimer) self.timer(0, activeTimer);
 }
 /******************** end of msgbox ****************************************/
 

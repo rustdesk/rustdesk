@@ -9,7 +9,9 @@ function translate_text(text) {
     return text;
 }
 
+var msgboxTimerFunc = function() {}
 function closeMsgbox() {
+    self.timer(0, msgboxTimerFunc);
     $(#msgbox).content(<span />);
 }
 
@@ -86,12 +88,14 @@ class MsgboxComponent: Reactor.Component {
         var hasClose = this.type.indexOf("hasclose") >= 0;
         var show_progress = this.type == "connecting";
         var me = this;
-        self.timer(1ms, function() {
+        self.timer(0, msgboxTimerFunc);
+        msgboxTimerFunc = function() {
             if (typeof content == "string")
                 me.$(#content).html = translate(content);
             else
                 me.$(#content).content(content);
-        });
+        };
+        self.timer(3ms, msgboxTimerFunc);
         return (<div><div style="position: absolute; size:*; background:black; opacity:0.5;" />
         <div style="size: *; position: absolute;">
             <div style={"border: " + color + " solid 1px; background: white; margin: *; width:" + (this.width) + "px; height:" + (this.height) + "px"}>
@@ -152,7 +156,7 @@ class MsgboxComponent: Reactor.Component {
         }
         if (this.type == "re-input-password") {
             this.type = "input-password";
-            body.update();
+            this.update();
             return;
         }
         var values = this.getValues();
@@ -221,7 +225,6 @@ class MsgboxComponent: Reactor.Component {
                 el = me.$(#submit);
                 if (el) {
                     view.focus = el;
-                    stdout.println(el);
                 }
             }
         });
