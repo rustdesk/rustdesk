@@ -5,6 +5,8 @@ import android.accessibilityservice.GestureDescription
 import android.content.Context
 import android.graphics.Path
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import android.util.Log
 import android.view.accessibility.AccessibilityEvent
 import androidx.annotation.RequiresApi
@@ -12,6 +14,12 @@ import kotlin.concurrent.thread
 
 class InputService : AccessibilityService() {
 
+    companion object{
+        var ctx:InputService? = null
+        fun isOpen():Boolean{
+            return ctx!=null
+        }
+    }
     private val logTag = "input service"
     private var leftIsDown = false
     private var mPath = Path()
@@ -21,28 +29,26 @@ class InputService : AccessibilityService() {
 
     @RequiresApi(Build.VERSION_CODES.N)
     fun rustMouseInput(mask: Int, _x: Int, _y: Int) {
-        Log.w(logTag, "got mouse input:x:$_x ,y:$_y ,mask:$mask ")
 
-        // TODO 临时倍数
         // TODO 按键抬起按下时候 x y 都是0
-        if ( !(mask == 9 || mask == 10) ) {
-            mouseX = _x * SCALE
-            mouseY = _y * SCALE
+        if (!(mask == 9 || mask == 10)) {
+            mouseX = _x * INFO.scale
+            mouseY = _y * INFO.scale
         }
 
         // left button down ,was up
-        if (mask == 9){
+        if (mask == 9) {
             leftIsDown = true
-            startGesture(mouseX,mouseY)
+            startGesture(mouseX, mouseY)
         }
 
         // left down ,was down
-        if (mask == 9){
-            continueGesture(mouseX,mouseY)
+        if (mask == 9) {
+            continueGesture(mouseX, mouseY)
         }
 
         // left up ,was down
-        if (mask == 10){
+        if (mask == 10) {
             leftIsDown = false
             endGesture(mouseX, mouseY)
         }
@@ -57,6 +63,7 @@ class InputService : AccessibilityService() {
     private fun continueGesture(x: Int, y: Int) {
         mPath.lineTo(x.toFloat(), y.toFloat())
     }
+
     @RequiresApi(Build.VERSION_CODES.N)
     private fun endGesture(x: Int, y: Int) {
         mPath.lineTo(x.toFloat(), y.toFloat())
@@ -81,19 +88,20 @@ class InputService : AccessibilityService() {
         }, null)
     }
 
-    external fun init(ctx: Context)
+    private external fun init(ctx: Context)
 
     init {
         System.loadLibrary("rustdesk")
     }
 
-    private val LOG_TAG = "INPUT_LOG"
     @RequiresApi(Build.VERSION_CODES.O)
     override fun onServiceConnected() {
         super.onServiceConnected()
-        Log.d(LOG_TAG,"onServiceConnected!")
+        ctx = this
+        Log.d(logTag, "onServiceConnected!")
         init(this)
     }
+
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
 //        TODO("Not yet implemented")
     }

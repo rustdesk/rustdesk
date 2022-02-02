@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'dart:async';
 import 'package:flutter_easyloading/flutter_easyloading.dart';
+import 'package:flutter_hbb/server_page.dart';
 import 'package:tuple/tuple.dart';
 import 'dart:io';
+import 'main.dart';
 
 typedef F = String Function(String);
 
@@ -12,6 +14,7 @@ class Translator {
 
 class MyTheme {
   MyTheme._();
+
   static const Color grayBg = Color(0xFFEEEEEE);
   static const Color white = Color(0xFFFFFFFF);
   static const Color accent = Color(0xFF0071FF);
@@ -30,6 +33,7 @@ final ButtonStyle flatButtonStyle = TextButton.styleFrom(
 );
 
 void Function() loadingCancelCallback = null;
+
 void showLoading(String text, BuildContext context) {
   if (_hasDialog && context != null) {
     Navigator.pop(context);
@@ -71,6 +75,7 @@ void dismissLoading() {
 }
 
 bool _hasDialog = false;
+
 typedef BuildAlertDailog = Tuple3<Widget, Widget, List<Widget>> Function(
     void Function(void Function()));
 
@@ -107,9 +112,10 @@ void msgbox(String type, String title, String text, BuildContext context,
     [bool hasCancel]) {
   var wrap = (String text, void Function() onPressed) => ButtonTheme(
       padding: EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-      materialTapTargetSize: MaterialTapTargetSize
-          .shrinkWrap, //limits the touch area to the button area
-      minWidth: 0, //wraps child's width
+      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+      //limits the touch area to the button area
+      minWidth: 0,
+      //wraps child's width
       height: 0,
       child: TextButton(
           style: flatButtonStyle,
@@ -165,12 +171,14 @@ class PasswordWidget extends StatefulWidget {
 
 class _PasswordWidgetState extends State<PasswordWidget> {
   bool _passwordVisible = false;
+
   @override
   Widget build(BuildContext context) {
     return TextField(
       autofocus: true,
       controller: widget.controller,
-      obscureText: !_passwordVisible, //This will obscure text dynamically
+      obscureText: !_passwordVisible,
+      //This will obscure text dynamically
       keyboardType: TextInputType.visiblePassword,
       decoration: InputDecoration(
         labelText: Translator.call('Password'),
@@ -201,4 +209,47 @@ Color str2color(String str, [alpha = 0xFF]) {
   }
   hash = hash % 16777216;
   return Color((hash & 0xFF7FFF) | (alpha << 24));
+}
+
+toAndroidChannelInit() {
+  toAndroidChannel.setMethodCallHandler((call) async {
+    debugPrint("flutter got android msg");
+
+    try {
+      switch (call.method) {
+        case "try_start_without_auth":
+          {
+            var peerID = call.arguments["peerID"] as String;
+            var name = call.arguments["name"] as String;
+            ServerPage.serverModel.setPeer(false, name: name, id: peerID);
+            showLoginReqAlert(nowCtx, peerID, name);
+            debugPrint("from jvm:try_start_without_auth done");
+            break;
+          }
+        case "start_capture":
+          {
+            var peerID = call.arguments["peerID"] as String;
+            var name = call.arguments["name"] as String;
+            ServerPage.serverModel.setPeer(true, name: name, id: peerID);
+            break;
+          }
+        case "stop_capture":
+          {
+            ServerPage.serverModel.setPeer(false);
+            break;
+          }
+        case "on_permission_changed":
+          {
+            var name = call.arguments["name"] as String;
+            var value = call.arguments["value"] as String == "true";
+            debugPrint("from jvm:on_permission_changed,$name:$value");
+            ServerPage.serverModel.changeStatue(name, value);
+            break;
+          }
+      }
+    } catch (e) {
+      debugPrint("MethodCallHandler err:$e");
+    }
+    return null;
+  });
 }

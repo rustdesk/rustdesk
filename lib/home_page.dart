@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:tuple/tuple.dart';
 import 'package:package_info/package_info.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'dart:async';
 import 'common.dart';
+import 'main.dart';
 import 'model.dart';
 import 'remote_page.dart';
 import 'dart:io';
@@ -26,6 +26,7 @@ class _HomePageState extends State<HomePage> {
   @override
   void initState() {
     super.initState();
+    nowCtx = context;
     if (Platform.isAndroid) {
       Timer(Duration(seconds: 5), () {
         _updateUrl = FFI.getByName('software_update_url');
@@ -55,10 +56,11 @@ class _HomePageState extends State<HomePage> {
                         PopupMenuItem<String>(
                             child: Text(translate('ID Server')),
                             value: 'id_server'),
-                        PopupMenuItem<String>(
-                            child: Text(translate('Share My Screen')),
-                            value: 'server'),
-                        // TODO only android
+                        Platform.isAndroid
+                            ? PopupMenuItem<String>(
+                                child: Text(translate('Share My Screen')),
+                                value: 'server')
+                            : null,
                         PopupMenuItem<String>(
                             child: Text(translate('About') + ' RustDesk'),
                             value: 'about'),

@@ -37,10 +37,15 @@ class FfiModel with ChangeNotifier {
   bool _direct;
 
   get permissions => _permissions;
+
   get initialized => _initialized;
+
   get display => _display;
+
   get secure => _secure;
+
   get direct => _direct;
+
   get pi => _pi;
 
   FfiModel() {
@@ -245,7 +250,9 @@ class CanvasModel with ChangeNotifier {
   }
 
   double get x => _x;
+
   double get y => _y;
+
   double get scale => _scale;
 
   void update(double x, double y, double scale) {
@@ -295,7 +302,7 @@ class CanvasModel with ChangeNotifier {
     notifyListeners();
   }
 
-  void clear([bool notify=false]) {
+  void clear([bool notify = false]) {
     _x = 0;
     _y = 0;
     _scale = 1.0;
@@ -314,10 +321,15 @@ class CursorModel with ChangeNotifier {
   double _displayOriginY = 0;
 
   ui.Image get image => _image;
+
   double get x => _x - _displayOriginX;
+
   double get y => _y - _displayOriginY;
+
   Offset get offset => Offset(_x, _y);
+
   double get hotx => _hotx;
+
   double get hoty => _hoty;
 
   // remote physical display coordinate
@@ -503,6 +515,61 @@ class CursorModel with ChangeNotifier {
     _x = -10000;
     _image = null;
     _images.clear();
+  }
+}
+
+class ServerModel with ChangeNotifier {
+  bool _mediaOk;
+  bool _inputOk;
+
+  bool _peerEnabled;
+  String _peerName;
+  String _peerID;
+
+  bool get mediaOk => _mediaOk;
+
+  bool get inputOk => _inputOk;
+
+  bool get peerEnabled => _peerEnabled;
+
+  String get peerName => _peerName;
+
+  String get peerID => _peerID;
+
+  ServerModel() {
+    _mediaOk = false;
+    _inputOk = false;
+    _peerEnabled = false;
+    _peerName = "";
+    _peerID = "";
+  }
+
+  changeStatue(String name, bool value) {
+    switch (name) {
+      case "media":
+        _mediaOk = value;
+        break;
+      case "input":
+        _inputOk = value;
+        break;
+      default:
+        return;
+    }
+    notifyListeners();
+  }
+
+  setPeer(bool enabled, {String name = "", String id = ""}) {
+    _peerEnabled = enabled;
+    if (name != "") _peerName = name;
+    if (id != "") _peerID = id;
+    notifyListeners();
+  }
+
+  clearPeer() {
+    _peerEnabled = false;
+    _peerName = "";
+    _peerID = "";
+    notifyListeners();
   }
 }
 
