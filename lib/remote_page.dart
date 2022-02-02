@@ -242,6 +242,7 @@ class _RemotePageState extends State<RemotePage> {
         return false;
       },
       child: Scaffold(
+          // resizeToAvoidBottomInset: true,
           floatingActionButton: !showActionButton
               ? null
               : FloatingActionButton(
@@ -264,8 +265,8 @@ class _RemotePageState extends State<RemotePage> {
             child: Container(
                 color: Colors.black,
                 child: isDesktop
-                    ? getBodyForDesktop()
-                    : SafeArea(child: getBodyForMobile())),
+                    ? getBodyForDesktopWithListener()
+                    : SafeArea(child: getBodyForMobileWithGuesture())),
           )),
     );
   }
@@ -344,7 +345,7 @@ class _RemotePageState extends State<RemotePage> {
     );
   }
 
-  Widget getBodyForMobile() {
+  Widget getBodyForMobileWithGuesture() {
     return GestureDetector(
         onLongPress: () {
           if (_drag || _scroll) return;
@@ -406,36 +407,47 @@ class _RemotePageState extends State<RemotePage> {
             }
           }
         },
-        child: Container(
-            color: MyTheme.canvasColor,
-            child: Stack(children: [
-              ImagePaint(),
-              CursorPaint(),
-              getHelpTools(),
-              SizedBox(
-                width: 0,
-                height: 0,
-                child: !_showEdit
-                    ? Container()
-                    : TextFormField(
-                        textInputAction: TextInputAction.newline,
-                        autocorrect: false,
-                        enableSuggestions: false,
-                        focusNode: _focusNode,
-                        maxLines: null,
-                        initialValue:
-                            _value, // trick way to make backspace work always
-                        keyboardType: TextInputType.multiline,
-                        onChanged: handleInput,
-                      ),
-              ),
-            ])));
+        child: getBodyForMobile());
   }
 
-  Widget getBodyForDesktop() {
-    return GestureDetector(
-        onTapDown: (details) => {},
-        onTapUp: (details) => {},
+  Widget getBodyForMobile() {
+    return Container(
+        color: MyTheme.canvasColor,
+        child: Stack(children: [
+          ImagePaint(),
+          CursorPaint(),
+          getHelpTools(),
+          SizedBox(
+            width: 0,
+            height: 0,
+            child: !_showEdit
+                ? Container()
+                : TextFormField(
+                    textInputAction: TextInputAction.newline,
+                    autocorrect: false,
+                    enableSuggestions: false,
+                    focusNode: _focusNode,
+                    maxLines: null,
+                    initialValue:
+                        _value, // trick way to make backspace work always
+                    keyboardType: TextInputType.multiline,
+                    onChanged: handleInput,
+                  ),
+          ),
+        ]));
+  }
+
+  Widget getBodyForDesktopWithListener() {
+    print(FFI.ffiModel.display.width);
+    return MouseRegion(
+        onEnter: (event) {
+          print('enter');
+          FFI.listenToMouse(true);
+        },
+        onExit: (event) {
+          print('exit');
+          FFI.listenToMouse(false);
+        },
         child: Container(
             color: MyTheme.canvasColor,
             child: Stack(children: [ImagePaint(), CursorPaint()])));
@@ -932,6 +944,7 @@ void showOptions(BuildContext context) {
         viewStyle = value;
         FFI.setByName(
             'peer_option', '{"name": "view-style", "value": "$value"}');
+        FFI.canvasModel.updateViewStyle();
       });
     };
     return Tuple3(

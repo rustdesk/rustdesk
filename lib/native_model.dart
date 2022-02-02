@@ -101,6 +101,10 @@ class PlatformFFI {
       print(e);
     }
   }
+
+  static void startDesktopWebListener(
+      Function(Map<String, dynamic>) handleMouse) {}
+  static void stopDesktopWebListener() {}
 }
 
 final localeName = Platform.localeName;

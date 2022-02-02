@@ -200,10 +200,14 @@ class ImageModel with ChangeNotifier {
 
   void update(ui.Image image) {
     if (_image == null && image != null) {
-      final size = MediaQueryData.fromWindow(ui.window).size;
-      final xscale = size.width / image.width;
-      final yscale = size.height / image.height;
-      FFI.canvasModel.scale = max(xscale, yscale);
+      if (isDesktop) {
+        FFI.canvasModel.updateViewStyle();
+      } else {
+        final size = MediaQueryData.fromWindow(ui.window).size;
+        final xscale = size.width / image.width;
+        final yscale = size.height / image.height;
+        FFI.canvasModel.scale = max(xscale, yscale);
+      }
       initializeCursorAndCanvas();
     }
     _image = image;
@@ -240,6 +244,29 @@ class CanvasModel with ChangeNotifier {
   double get y => _y;
   double get scale => _scale;
 
+  void updateViewStyle() {
+    final s = FFI.getByName('peer_option', 'view-style');
+    final size = MediaQueryData.fromWindow(ui.window).size;
+    final s1 = size.width / FFI.ffiModel.display.width;
+    final s2 = size.height / FFI.ffiModel.display.height;
+    if (s == 'shrink') {
+      final s = s1 < s2 ? s1 : s2;
+      if (s < 1) {
+        _scale = s;
+      }
+    } else if (s == 'stretch') {
+      final s = s1 > s2 ? s1 : s2;
+      if (s > 1) {
+        _scale = s;
+      }
+    } else {
+      _scale = 1;
+    }
+    _x = (size.width - FFI.ffiModel.display.width * _scale) / 2;
+    _y = (size.height - FFI.ffiModel.display.height * _scale) / 2;
+    notifyListeners();
+  }
+
   void update(double x, double y, double scale) {
     _x = x;
     _y = y;
@@ -258,8 +285,12 @@ class CanvasModel with ChangeNotifier {
   }
 
   void resetOffset() {
-    _x = 0;
-    _y = 0;
+    if (isDesktop) {
+      updateViewStyle();
+    } else {
+      _x = 0;
+      _y = 0;
+    }
     notifyListeners();
   }
 
@@ -623,6 +654,18 @@ class FFI {
 
   static Future<String> getVersion() async {
     return await PlatformFFI.getVersion();
+  }
+
+  static handleMouse(Map<String, dynamic> evt) {
+    //
+  }
+
+  static listenToMouse(bool yesOrNo) {
+    if (yesOrNo) {
+      PlatformFFI.startDesktopWebListener(handleMouse);
+    } else {
+      PlatformFFI.stopDesktopWebListener();
+    }
   }
 }
 
