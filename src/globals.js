@@ -181,7 +181,7 @@ window.setByName = (name, value) => {
       break;
     case 'input_key':
       value = JSON.parse(value);
-      curConn.inputKey(value.name, value.alt || false, value.ctrl || false, value.shift || false, value.command || false);
+      curConn.inputKey(value.name, value.down || false, value.press || false, value.alt || false, value.ctrl || false, value.shift || false, value.command || false);
       break;
     case 'input_string':
       curConn.inputString(value);

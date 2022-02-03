@@ -450,6 +450,8 @@ export default class Connection {
 
   inputKey(
     name: string,
+    down: boolean,
+    press: boolean,
     alt: Boolean,
     ctrl: Boolean,
     shift: Boolean,
@@ -457,7 +459,20 @@ export default class Connection {
   ) {
     const key_event = mapKey(name);
     if (!key_event) return;
-    key_event.press = true;
+    if (alt && name == 'VK_MENU') {
+      alt = false;
+    }
+    if (ctrl && name == 'VK_CONTROL') {
+      ctrl = false;
+    }
+    if (shift && name == 'VK_SHIFT') {
+      shift = false;
+    }
+    if (command && name == 'Meta') {
+      command = false;
+    }
+    key_event.down = down;
+    key_event.press = press;
     key_event.modifiers = this.getMod(alt, ctrl, shift, command);
     this._ws?.sendMessage({ key_event });
   }
