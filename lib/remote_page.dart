@@ -438,7 +438,6 @@ class _RemotePageState extends State<RemotePage> {
   }
 
   Widget getBodyForDesktopWithListener() {
-    print(FFI.ffiModel.display.width);
     return MouseRegion(
         onEnter: (event) {
           print('enter');

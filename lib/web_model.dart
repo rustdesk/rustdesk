@@ -4,7 +4,8 @@ import 'common.dart';
 import 'dart:html';
 import 'dart:async';
 
-final List<StreamSubscription<MouseEvent>> mouselisteners = [];
+final List<StreamSubscription<MouseEvent>> mouseListeners = [];
+int lastMouseDownButtons = 0;
 
 class PlatformFFI {
   static void clearRgbaFrame() {}
@@ -26,7 +27,6 @@ class PlatformFFI {
   }
 
   static Future<Null> init() async {
-    window.document.onContextMenu.listen((evt) => evt.preventDefault());
     isWeb = true;
     isDesktop = !js.context.callMethod('isMobile');
     js.context.callMethod('init');
@@ -35,37 +35,55 @@ class PlatformFFI {
   // MouseRegion onHover not work for mouse move when right button down
   static void startDesktopWebListener(
       Function(Map<String, dynamic>) handleMouse) {
+    lastMouseDownButtons = 0;
     // document.body.getElementsByTagName('flt-glass-pane')[0].style.cursor = 'none';
-    mouselisteners.add(window.document.onMouseMove
+    mouseListeners.add(window.document.onMouseMove
         .listen((evt) => handleMouse(getEvent(evt))));
-    mouselisteners.add(window.document.onMouseDown
+    mouseListeners.add(window.document.onMouseDown
         .listen((evt) => handleMouse(getEvent(evt))));
-    mouselisteners.add(
+    mouseListeners.add(
         window.document.onMouseUp.listen((evt) => handleMouse(getEvent(evt))));
-    mouselisteners.add(window.document.onMouseWheel.listen((evt) => {}));
+    mouseListeners.add(window.document.onMouseWheel.listen((evt) {
+      var dx = evt.deltaX;
+      var dy = evt.deltaY;
+      if (dx > 0)
+        dx = -1;
+      else if (dx < 0) dx = 1;
+      if (dy > 0)
+        dy = -1;
+      else if (dy < 0) dy = 1;
+      setByName('send_mouse', '{"type": "wheel", "x": "$dx", "y": "$dy"}');
+    }));
+    mouseListeners.add(
+        window.document.onContextMenu.listen((evt) => evt.preventDefault()));
   }
 
   static void stopDesktopWebListener() {
-    mouselisteners.forEach((l) {
+    mouseListeners.forEach((l) {
       l.cancel();
     });
-    mouselisteners.clear();
+    mouseListeners.clear();
   }
 }
 
 Map<String, dynamic> getEvent(MouseEvent evt) {
   // https://github.com/novnc/noVNC/blob/679b45fa3b453c7cf32f4b4455f4814818ecf161/core/rfb.js
   // https://developer.mozilla.org/zh-CN/docs/Web/API/Element/mousedown_event
-  final out = {};
+  final Map<String, dynamic> out = {};
   out['type'] = evt.type;
   out['x'] = evt.client.x;
   out['y'] = evt.client.y;
   out['ctrl'] = evt.ctrlKey;
   out['shift'] = evt.shiftKey;
   out['alt'] = evt.altKey;
-  out['meta'] = evt.metaKey;
+  out['command'] = evt.metaKey;
   out['buttons'] = evt
       .buttons; // left button: 1, right button: 2, middle button: 4, 1 | 2 = 3 (left + right)
+  if (evt.buttons != 0) {
+    lastMouseDownButtons = evt.buttons;
+  } else {
+    out['buttons'] = lastMouseDownButtons;
+  }
   return out;
 }
 

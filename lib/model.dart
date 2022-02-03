@@ -367,7 +367,6 @@ class CursorModel with ChangeNotifier {
 
   void touch(double x, double y, bool right) {
     final scale = FFI.canvasModel.scale;
-    print(scale);
     final xoffset = FFI.canvasModel.x;
     final yoffset = FFI.canvasModel.y;
     _x = (x - xoffset) / scale + _displayOriginX;
@@ -633,8 +632,10 @@ class FFI {
   }
 
   static void close() {
-    savePreference(id, cursorModel.x, cursorModel.y, canvasModel.x,
-        canvasModel.y, canvasModel.scale, ffiModel.pi.currentDisplay);
+    if (FFI.imageModel.image != null && !isDesktop) {
+      savePreference(id, cursorModel.x, cursorModel.y, canvasModel.x,
+          canvasModel.y, canvasModel.scale, ffiModel.pi.currentDisplay);
+    }
     id = "";
     setByName('close', '');
     imageModel.update(null);
@@ -657,7 +658,54 @@ class FFI {
   }
 
   static handleMouse(Map<String, dynamic> evt) {
-    //
+    var type = '';
+    switch (evt['type']) {
+      case 'mousedown':
+        type = 'down';
+        break;
+      case 'mouseup':
+        type = 'up';
+        break;
+      case 'mousemove':
+        break;
+      default:
+        return;
+    }
+    evt['type'] = type;
+    var x = evt['x'];
+    var y = evt['y'];
+    final d = FFI.ffiModel.display;
+    x -= FFI.canvasModel.x;
+    y -= FFI.canvasModel.y;
+    if (x < 0 || x > d.width || y < 0 || y > d.height) {
+      return;
+    }
+    x += d.x;
+    y += d.y;
+    if (type != '') {
+      x = 0;
+      y = 0;
+    }
+    evt['x'] = '$x';
+    evt['y'] = '$y';
+    var buttons = '';
+    switch (evt['buttons']) {
+      case 1:
+        buttons = 'left';
+        break;
+      case 2:
+        buttons = 'right';
+        break;
+      case 4:
+        buttons = 'wheel';
+        break;
+    }
+    evt['buttons'] = buttons;
+    if (evt['ctrl'] != true) evt.remove('ctrl');
+    if (evt['shift'] != true) evt.remove('shift');
+    if (evt['alt'] != true) evt.remove('alt');
+    if (evt['command'] != true) evt.remove('command');
+    setByName('send_mouse', json.encode(evt));
   }
 
   static listenToMouse(bool yesOrNo) {
@@ -713,6 +761,7 @@ void savePreference(String id, double xCursor, double yCursor, double xCanvas,
 }
 
 Future<Map<String, dynamic>> getPreference(String id) async {
+  if (!isDesktop) return null;
   SharedPreferences prefs = await SharedPreferences.getInstance();
   var p = prefs.getString('peer' + id);
   if (p == null) return null;
