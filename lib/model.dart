@@ -581,7 +581,8 @@ class FFI {
 
   static void inputKey(String name) {
     if (!ffiModel.keyboard()) return;
-    setByName('input_key', json.encode(modify({'name': name})));
+    setByName(
+        'input_key', json.encode(modify({'name': name, 'press': 'true'})));
   }
 
   static void moveMouse(double x, double y) {
