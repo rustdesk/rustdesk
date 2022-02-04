@@ -19,14 +19,17 @@
   OGVDecoderVideoAV1MTW: 'ogv-decoder-video-av1-mt-wasm.js',
   OGVDecoderVideoAV1SIMDMTW: 'ogv-decoder-video-av1-simd-mt-wasm.js',
 */
+import { simd } from "wasm-feature-detect";
 
-export function loadVp9(callback) {
+export async function loadVp9(callback) {
   // Multithreading is used only if `options.threading` is true. 
   // This requires browser support for the new `SharedArrayBuffer` and `Atomics` APIs, 
   // currently available in Firefox and Chrome with experimental flags enabled.
   // 所有主流浏览器均默认于2018年1月5日禁用SharedArrayBuffer
+  const isSIMD = await simd();
+  console.log('isSIMD: ' + isSIMD);
   window.OGVLoader.loadClass(
-    "OGVDecoderVideoVP9SIMDW",
+    isSIMD ? "OGVDecoderVideoVP9SIMDW" : "OGVDecoderVideoVP9W",
     (videoCodecClass) => {
       window.videoCodecClass = videoCodecClass;
       videoCodecClass({ videoFormat: {} }).then((decoder) => {

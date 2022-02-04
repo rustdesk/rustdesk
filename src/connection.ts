@@ -487,16 +487,16 @@ export default class Connection {
   ) {
     const key_event = mapKey(name, globals.isDesktop());
     if (!key_event) return;
-    if (alt && name == "VK_MENU") {
+    if (alt && (name == "Alt" || name == 'RAlt')) {
       alt = false;
     }
-    if (ctrl && name == "VK_CONTROL") {
+    if (ctrl && (name == "Control" || name == 'RControl')) {
       ctrl = false;
     }
-    if (shift && name == "VK_SHIFT") {
+    if (shift && (name == "Shift" || name == 'RShift')) {
       shift = false;
     }
-    if (command && name == "Meta") {
+    if (command && (name == "Meta" || name == 'RWin')) {
       command = false;
     }
     key_event.down = down;

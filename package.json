@@ -15,6 +15,7 @@
     "libsodium": "^0.7.9",
     "libsodium-wrappers": "^0.7.9",
     "ts-proto": "^1.101.0",
+    "wasm-feature-detect": "^1.2.11",
     "zstddec": "^0.0.2"
   }
 }

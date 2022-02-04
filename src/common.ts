@@ -46,7 +46,7 @@ const zCode = "z".charCodeAt(0);
 const aCode = "a".charCodeAt(0);
 
 export function mapKey(name: string, isDesktop: Boolean) {
-  const tmp = KEY_MAP[name];
+  const tmp = KEY_MAP[name] || name;
   if (tmp.length == 1) {
     const chr = tmp.charCodeAt(0);
     if (!isDesktop && (chr > zCode || chr < aCode))

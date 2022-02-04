@@ -20,7 +20,7 @@ window.isMobile = () => {
 }
 
 export function isDesktop() {
-  return !isMobile;
+  return !isMobile();
 }
 
 export function msgbox(type, title, text) {
@@ -184,7 +184,7 @@ window.setByName = (name, value) => {
       break;
     case 'input_key':
       value = JSON.parse(value);
-      curConn.inputKey(value.name, value.down || false, value.press || false, value.alt || false, value.ctrl || false, value.shift || false, value.command || false);
+      curConn.inputKey(value.name, value.down == 'true', value.press == 'true', value.alt == 'true', value.ctrl == 'true', value.shift == 'true', value.command == 'true');
       break;
     case 'input_string':
       curConn.inputString(value);
@@ -213,7 +213,7 @@ window.setByName = (name, value) => {
         case 'wheel':
           mask |= 4 << 3;
       }
-      curConn.inputMouse(mask, parseInt(value.x || '0'), parseInt(value.y || '0'), value.alt || false, value.ctrl || false, value.shift || false, value.command || false);
+      curConn.inputMouse(mask, parseInt(value.x || '0'), parseInt(value.y || '0'), value.alt == 'true', value.ctrl == 'true', value.shift == 'true', value.command == 'true');
       break;
     case 'option':
       value = JSON.parse(value);
