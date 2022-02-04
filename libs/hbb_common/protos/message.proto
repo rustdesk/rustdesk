@@ -54,6 +54,7 @@ message LoginRequest {
     FileTransfer file_transfer = 7;
     PortForward port_forward = 8;
   }
+  bool video_ack_required = 9;
 }
 
 message ChatMessage { string text = 1; }

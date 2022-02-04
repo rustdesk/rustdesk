@@ -684,6 +684,7 @@ impl Connection {
             if let Some(o) = lr.option.as_ref() {
                 self.update_option(o).await;
             }
+            self.video_ack_required = lr.video_ack_required;
             if self.authorized {
                 return true;
             }
@@ -932,9 +933,6 @@ impl Connection {
                         }
                     }
                     Some(misc::Union::video_received(_)) => {
-                        if !self.video_ack_required {
-                            self.video_ack_required = true;
-                        }
                         video_service::notify_video_frame_feched(self.inner.id, Some(Instant::now().into()));
                     }
                     _ => {}
