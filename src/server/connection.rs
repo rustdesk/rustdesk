@@ -63,6 +63,7 @@ pub struct Connection {
     disable_clipboard: bool,                  // by peer
     disable_audio: bool,                      // by peer
     tx_input: std_mpsc::Sender<MessageInput>, // handle input messages
+    video_ack_required: bool,
 }
 
 impl Subscriber for ConnInner {
@@ -142,6 +143,7 @@ impl Connection {
             disable_audio: false,
             disable_clipboard: false,
             tx_input,
+            video_ack_required: false,
         };
         tokio::spawn(async move {
             if let Err(err) = start_ipc(rx_to_cm, tx_from_cm).await {
@@ -271,7 +273,9 @@ impl Connection {
                     }
                 },
                 Some((instant, value)) = rx_video.recv() => {
-                    video_service::notify_video_frame_feched(id, Some(instant.into()));
+                    if !conn.video_ack_required {
+                        video_service::notify_video_frame_feched(id, Some(instant.into()));
+                    }
                     if let Err(err) = conn.stream.send(&value as &Message).await {
                         conn.on_close(&err.to_string(), false);
                         break;
@@ -926,6 +930,12 @@ impl Connection {
                         if r {
                             super::video_service::refresh();
                         }
+                    }
+                    Some(misc::Union::video_received(_)) => {
+                        if !self.video_ack_required {
+                            self.video_ack_required = true;
+                        }
+                        video_service::notify_video_frame_feched(self.inner.id, Some(Instant::now().into()));
                     }
                     _ => {}
                 },

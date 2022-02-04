@@ -381,6 +381,7 @@ message Misc {
     string close_reason = 9;
     bool refresh_video = 10;
     OptionResponse option_response = 11;
+    bool video_received = 12;
   }
 }
 
