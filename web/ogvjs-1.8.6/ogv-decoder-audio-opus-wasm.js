@@ -1,0 +1,39 @@
+
+var OGVDecoderAudioOpusW = (() => {
+  var _scriptDir = typeof document !== 'undefined' && document.currentScript ? document.currentScript.src : undefined;
+  if (typeof __filename !== 'undefined') _scriptDir = _scriptDir || __filename;
+  return (
+function(OGVDecoderAudioOpusW) {
+  OGVDecoderAudioOpusW = OGVDecoderAudioOpusW || {};
+
+
+var a;a||(a=typeof OGVDecoderAudioOpusW !== 'undefined' ? OGVDecoderAudioOpusW : {});var g=Object.assign,h,m;a.ready=new Promise(function(b,c){h=b;m=c});var n=a,p=g({},a),q="object"===typeof window,r="function"===typeof importScripts,t="",u,v,w,fs,x,y;
+if("object"===typeof process&&"object"===typeof process.versions&&"string"===typeof process.versions.node)t=r?require("path").dirname(t)+"/":__dirname+"/",y=function(){x||(fs=require("fs"),x=require("path"))},u=function(b,c){y();b=x.normalize(b);return fs.readFileSync(b,c?null:"utf8")},w=function(b){b=u(b,!0);b.buffer||(b=new Uint8Array(b));return b},v=function(b,c,e){y();b=x.normalize(b);fs.readFile(b,function(d,f){d?e(d):c(f.buffer)})},1<process.argv.length&&process.argv[1].replace(/\\/g,"/"),process.argv.slice(2),
+process.on("unhandledRejection",function(b){throw b;}),a.inspect=function(){return"[Emscripten Module object]"};else if(q||r)r?t=self.location.href:"undefined"!==typeof document&&document.currentScript&&(t=document.currentScript.src),_scriptDir&&(t=_scriptDir),0!==t.indexOf("blob:")?t=t.substr(0,t.replace(/[?#].*/,"").lastIndexOf("/")+1):t="",u=function(b){var c=new XMLHttpRequest;c.open("GET",b,!1);c.send(null);return c.responseText},r&&(w=function(b){var c=new XMLHttpRequest;c.open("GET",b,!1);
+c.responseType="arraybuffer";c.send(null);return new Uint8Array(c.response)}),v=function(b,c,e){var d=new XMLHttpRequest;d.open("GET",b,!0);d.responseType="arraybuffer";d.onload=function(){200==d.status||0==d.status&&d.response?c(d.response):e()};d.onerror=e;d.send(null)};a.print||console.log.bind(console);var z=a.printErr||console.warn.bind(console);g(a,p);p=null;var A;a.wasmBinary&&(A=a.wasmBinary);var noExitRuntime=a.noExitRuntime||!0;"object"!==typeof WebAssembly&&B("no native wasm support detected");
+var C,D=!1,E,F;function G(){var b=C.buffer;E=b;a.HEAP8=new Int8Array(b);a.HEAP16=new Int16Array(b);a.HEAP32=new Int32Array(b);a.HEAPU8=F=new Uint8Array(b);a.HEAPU16=new Uint16Array(b);a.HEAPU32=new Uint32Array(b);a.HEAPF32=new Float32Array(b);a.HEAPF64=new Float64Array(b)}var H,I=[],J=[],K=[];function aa(){var b=a.preRun.shift();I.unshift(b)}var L=0,M=null,N=null;a.preloadedImages={};a.preloadedAudios={};
+function B(b){if(a.onAbort)a.onAbort(b);b="Aborted("+b+")";z(b);D=!0;b=new WebAssembly.RuntimeError(b+". Build with -s ASSERTIONS=1 for more info.");m(b);throw b;}function O(){return P.startsWith("data:application/octet-stream;base64,")}var P;P="ogv-decoder-audio-opus-wasm.wasm";if(!O()){var Q=P;P=a.locateFile?a.locateFile(Q,t):t+Q}function R(){var b=P;try{if(b==P&&A)return new Uint8Array(A);if(w)return w(b);throw"both async and sync fetching of the wasm failed";}catch(c){B(c)}}
+function ba(){if(!A&&(q||r)){if("function"===typeof fetch&&!P.startsWith("file://"))return fetch(P,{credentials:"same-origin"}).then(function(b){if(!b.ok)throw"failed to load wasm binary file at '"+P+"'";return b.arrayBuffer()}).catch(function(){return R()});if(v)return new Promise(function(b,c){v(P,function(e){b(new Uint8Array(e))},c)})}return Promise.resolve().then(function(){return R()})}
+function S(b){for(;0<b.length;){var c=b.shift();if("function"==typeof c)c(a);else{var e=c.s;"number"===typeof e?void 0===c.o?ca(e)():ca(e)(c.o):e(void 0===c.o?null:c.o)}}}var T=[];function ca(b){var c=T[b];c||(b>=T.length&&(T.length=b+1),T[b]=c=H.get(b));return c}
+var da={a:function(b,c,e){F.copyWithin(b,c,c+e)},b:function(b){var c=F.length;b>>>=0;if(2147483648<b)return!1;for(var e=1;4>=e;e*=2){var d=c*(1+.2/e);d=Math.min(d,b+100663296);d=Math.max(b,d);0<d%65536&&(d+=65536-d%65536);a:{try{C.grow(Math.min(2147483648,d)-E.byteLength+65535>>>16);G();var f=1;break a}catch(k){}f=void 0}if(f)return!0}return!1},c:function(b,c,e){var d=C.buffer,f=new Uint32Array(d,b,c),k=[];if(0!==b)for(b=0;b<c;b++){var l=f[b];d.slice?(l=d.slice(l,l+4*e),l=new Float32Array(l)):(l=
+new Float32Array(d,l,e),l=new Float32Array(l));k.push(l)}a.audioBuffer=k},d:function(b,c){a.audioFormat={channels:b,rate:c};a.loadedMetadata=!0}};
+(function(){function b(f){a.asm=f.exports;C=a.asm.e;G();H=a.asm.m;J.unshift(a.asm.f);L--;a.monitorRunDependencies&&a.monitorRunDependencies(L);0==L&&(null!==M&&(clearInterval(M),M=null),N&&(f=N,N=null,f()))}function c(f){b(f.instance)}function e(f){return ba().then(function(k){return WebAssembly.instantiate(k,d)}).then(function(k){return k}).then(f,function(k){z("failed to asynchronously prepare wasm: "+k);B(k)})}var d={a:da};L++;a.monitorRunDependencies&&a.monitorRunDependencies(L);if(a.instantiateWasm)try{return a.instantiateWasm(d,
+b)}catch(f){return z("Module.instantiateWasm callback failed with error: "+f),!1}(function(){return A||"function"!==typeof WebAssembly.instantiateStreaming||O()||P.startsWith("file://")||"function"!==typeof fetch?e(c):fetch(P,{credentials:"same-origin"}).then(function(f){return WebAssembly.instantiateStreaming(f,d).then(c,function(k){z("wasm streaming compile failed: "+k);z("falling back to ArrayBuffer instantiation");return e(c)})})})().catch(m);return{}})();
+a.___wasm_call_ctors=function(){return(a.___wasm_call_ctors=a.asm.f).apply(null,arguments)};a._ogv_audio_decoder_init=function(){return(a._ogv_audio_decoder_init=a.asm.g).apply(null,arguments)};a._ogv_audio_decoder_process_header=function(){return(a._ogv_audio_decoder_process_header=a.asm.h).apply(null,arguments)};a._ogv_audio_decoder_process_audio=function(){return(a._ogv_audio_decoder_process_audio=a.asm.i).apply(null,arguments)};a._malloc=function(){return(a._malloc=a.asm.j).apply(null,arguments)};
+a._free=function(){return(a._free=a.asm.k).apply(null,arguments)};a._ogv_audio_decoder_destroy=function(){return(a._ogv_audio_decoder_destroy=a.asm.l).apply(null,arguments)};var U;N=function ea(){U||V();U||(N=ea)};
+function V(){function b(){if(!U&&(U=!0,a.calledRun=!0,!D)){S(J);h(a);if(a.onRuntimeInitialized)a.onRuntimeInitialized();if(a.postRun)for("function"==typeof a.postRun&&(a.postRun=[a.postRun]);a.postRun.length;){var c=a.postRun.shift();K.unshift(c)}S(K)}}if(!(0<L)){if(a.preRun)for("function"==typeof a.preRun&&(a.preRun=[a.preRun]);a.preRun.length;)aa();S(I);0<L||(a.setStatus?(a.setStatus("Running..."),setTimeout(function(){setTimeout(function(){a.setStatus("")},1);b()},1)):b())}}a.run=V;
+if(a.preInit)for("function"==typeof a.preInit&&(a.preInit=[a.preInit]);0<a.preInit.length;)a.preInit.pop()();V();var W,X;function fa(b){if(W&&X>=b)return W;W&&a._free(W);X=b;return W=a._malloc(X)}var Y;"undefined"===typeof performance||"undefined"===typeof performance.now?Y=Date.now:Y=performance.now.bind(performance);function Z(b){var c=Y();b=b();a.cpuTime+=Y()-c;return b}a.loadedMetadata=!!n.audioFormat;a.audioFormat=n.audioFormat||null;a.audioBuffer=null;a.cpuTime=0;
+Object.defineProperty(a,"processing",{get:function(){return!1}});a.init=function(b){Z(function(){a._ogv_audio_decoder_init()});b()};a.processHeader=function(b,c){var e=Z(function(){var d=b.byteLength,f=fa(d);(new Uint8Array(C.buffer,f,d)).set(new Uint8Array(b));return a._ogv_audio_decoder_process_header(f,d)});c(e)};a.processAudio=function(b,c){var e=Z(function(){var d=b.byteLength,f=fa(d);(new Uint8Array(C.buffer,f,d)).set(new Uint8Array(b));return a._ogv_audio_decoder_process_audio(f,d)});c(e)};
+a.close=function(){};
+
+
+  return OGVDecoderAudioOpusW.ready
+}
+);
+})();
+if (typeof exports === 'object' && typeof module === 'object')
+  module.exports = OGVDecoderAudioOpusW;
+else if (typeof define === 'function' && define['amd'])
+  define([], function() { return OGVDecoderAudioOpusW; });
+else if (typeof exports === 'object')
+  exports["OGVDecoderAudioOpusW"] = OGVDecoderAudioOpusW;

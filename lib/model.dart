@@ -702,10 +702,6 @@ class FFI {
         break;
     }
     evt['buttons'] = buttons;
-    if (evt['ctrl'] != true) evt.remove('ctrl');
-    if (evt['shift'] != true) evt.remove('shift');
-    if (evt['alt'] != true) evt.remove('alt');
-    if (evt['command'] != true) evt.remove('command');
     setByName('send_mouse', json.encode(evt));
   }
 

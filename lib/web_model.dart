@@ -1,11 +1,16 @@
 import 'dart:typed_data';
 import 'dart:js' as js;
+import 'package:flutter/cupertino.dart';
+import 'dart:convert';
+
 import 'common.dart';
 import 'dart:html';
 import 'dart:async';
 
 final List<StreamSubscription<MouseEvent>> mouseListeners = [];
+final List<StreamSubscription<KeyboardEvent>> keyListeners = [];
 int lastMouseDownButtons = 0;
+bool mouseIn = false;
 
 class PlatformFFI {
   static void clearRgbaFrame() {}
@@ -35,8 +40,13 @@ class PlatformFFI {
   // MouseRegion onHover not work for mouse move when right button down
   static void startDesktopWebListener(
       Function(Map<String, dynamic>) handleMouse) {
+    mouseIn = true;
     lastMouseDownButtons = 0;
     // document.body.getElementsByTagName('flt-glass-pane')[0].style.cursor = 'none';
+    mouseListeners
+        .add(window.document.onMouseEnter.listen((evt) => mouseIn = true));
+    mouseListeners
+        .add(window.document.onMouseLeave.listen((evt) => mouseIn = false));
     mouseListeners.add(window.document.onMouseMove
         .listen((evt) => handleMouse(getEvent(evt))));
     mouseListeners.add(window.document.onMouseDown
@@ -56,13 +66,22 @@ class PlatformFFI {
     }));
     mouseListeners.add(
         window.document.onContextMenu.listen((evt) => evt.preventDefault()));
+    keyListeners
+        .add(window.document.onKeyDown.listen((evt) => handleKey(evt, true)));
+    keyListeners
+        .add(window.document.onKeyUp.listen((evt) => handleKey(evt, false)));
   }
 
   static void stopDesktopWebListener() {
+    mouseIn = true;
     mouseListeners.forEach((l) {
       l.cancel();
     });
     mouseListeners.clear();
+    keyListeners.forEach((l) {
+      l.cancel();
+    });
+    keyListeners.clear();
   }
 }
 
@@ -73,10 +92,10 @@ Map<String, dynamic> getEvent(MouseEvent evt) {
   out['type'] = evt.type;
   out['x'] = evt.client.x;
   out['y'] = evt.client.y;
-  out['ctrl'] = evt.ctrlKey;
-  out['shift'] = evt.shiftKey;
-  out['alt'] = evt.altKey;
-  out['command'] = evt.metaKey;
+  if (evt.altKey) out['alt'] = 'true';
+  if (evt.shiftKey) out['shift'] = 'true';
+  if (evt.ctrlKey) out['ctrl'] = 'true';
+  if (evt.metaKey) out['command'] = 'true';
   out['buttons'] = evt
       .buttons; // left button: 1, right button: 2, middle button: 4, 1 | 2 = 3 (left + right)
   if (evt.buttons != 0) {
@@ -87,4 +106,56 @@ Map<String, dynamic> getEvent(MouseEvent evt) {
   return out;
 }
 
+void handleKey(KeyboardEvent evt, bool down) {
+  if (!mouseIn) return;
+  evt.stopPropagation();
+  evt.preventDefault();
+  evt.stopImmediatePropagation();
+  print('${evt.code} ${evt.key} ${evt.location}');
+  final out = {};
+  var name = ctrlKeyMap[evt.code];
+  if (name == null) {
+    if (evt.code == evt.key) {
+      name = evt.code;
+    } else {
+      name = evt.key;
+      if (name.toLowerCase() != name.toUpperCase() &&
+          name == name.toUpperCase()) {
+        if (!evt.shiftKey) out['shift'] = 'true';
+      }
+    }
+  }
+  out['name'] = name;
+  if (evt.altKey) out['alt'] = 'true';
+  if (evt.shiftKey) out['shift'] = 'true';
+  if (evt.ctrlKey) out['ctrl'] = 'true';
+  if (evt.metaKey) out['command'] = 'true';
+  if (down) out['down'] = 'true';
+  PlatformFFI.setByName('input_key', json.encode(out));
+}
+
 final localeName = window.navigator.language;
+
+final ctrlKeyMap = {
+  'AltLeft': 'Alt',
+  'AltRight': 'RAlt',
+  'ShiftLeft': 'Shift',
+  'ShiftRight': 'RShift',
+  'ControlLeft': 'Control',
+  'ControlRight': 'RControl',
+  'MetaLeft': 'Meta',
+  'MetaRight': 'RWin',
+  'ContextMenu': 'Apps',
+  'ArrowUp': 'UpArrow',
+  'ArrowDown': 'DownArrow',
+  'ArrowLeft': 'LeftArrow',
+  'ArrowRight': 'RightArrow',
+  'NumpadDecimal': 'Decimal',
+  'NumpadDivide': 'Divide',
+  'NumpadMultiply': 'Multiply',
+  'NumpadSubtract': 'Subtract',
+  'NumpadAdd': 'Add',
+  'NumpadEnter': 'NumpadEnter',
+  'Enter': 'Return',
+  'Space': 'Space',
+};
