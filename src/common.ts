@@ -45,12 +45,11 @@ export function translate(locale: string, text: string): string {
 const zCode = "z".charCodeAt(0);
 const aCode = "a".charCodeAt(0);
 
-export function mapKey(name: string) {
+export function mapKey(name: string, isDesktop: Boolean) {
   const tmp = KEY_MAP[name];
-  if (!tmp) return undefined;
   if (tmp.length == 1) {
     const chr = tmp.charCodeAt(0);
-    if (chr > zCode || chr < aCode)
+    if (!isDesktop && (chr > zCode || chr < aCode))
       return KeyEvent.fromPartial({ unicode: chr });
     else return KeyEvent.fromPartial({ chr });
   }

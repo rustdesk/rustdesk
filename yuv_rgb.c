@@ -7,6 +7,9 @@
 //
 #include <wasm_simd128.h>
 
+typedef __i64x2 __m128i;
+#define _mm_load_si128 wasm_v128_load
+
 #include <stdio.h>
 
 

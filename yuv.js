@@ -11,7 +11,6 @@ var yPtr, yPtrLen, uPtr, uPtrLen, vPtr, vPtrLen, outPtr, outPtrLen;
 let testSpeed = [0, 0];
 function I420ToARGB(yb) {
   if (!wasmExports) return;
-  testSpeed[0] += 1;
   var tm0 = new Date().getTime();
   var { malloc, free, memory } = wasmExports;
   var HEAPU8 = new Uint8Array(memory.buffer);
@@ -50,8 +49,9 @@ function I420ToARGB(yb) {
   var res = wasmExports.yuv420_rgb24_std(w, h, yPtr, uPtr, vPtr, yb.y.stride, yb.v.stride, outPtr, w * 4, 1);
   var out = HEAPU8.slice(outPtr, outPtr + n);
   testSpeed[1] += new Date().getTime() - tm0;
+  testSpeed[0] += 1;
   if (testSpeed[0] > 30) {
-    console.log(testSpeed[1] / testSpeed[0]);
+    console.log('yuv: ' + parseInt('' + testSpeed[1] / testSpeed[0]));
     testSpeed = [0, 0];
   }
   return out;

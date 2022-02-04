@@ -51,6 +51,7 @@ if (app) {
       const conn = globals.newConn();
       conn.setMsgbox(msgbox);
       conn.setDraw((f) => {
+        globals.draw(f);
         player.drawFrame(f);
       });
       document.querySelector('div#status').style.display = 'block';

@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import re 
 import os
 import glob
 from tabnanny import check
@@ -30,6 +31,7 @@ def main():
          check_if_retry[1] = False
          continue
       if check_if_retry[1]:
+         ln = removeComment(ln)
          check_if_retry[0] += ln + '\n'
       if 'KEY_MAP' in ln:
          KEY_MAP[1] = True
@@ -38,6 +40,7 @@ def main():
          KEY_MAP[1] = False
          continue
       if KEY_MAP[1] and ln.startswith('('):
+         ln = removeComment(ln)
          toks = ln.split('", Key::')
          assert(len(toks) == 2)
          a = toks[0][2:]
@@ -56,5 +59,7 @@ def main():
          print('export const ' + ln)
       
 
+def removeComment(ln):
+   return re.sub('\s+\/\/.*$', '', ln)
 
 main()

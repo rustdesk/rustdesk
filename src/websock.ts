@@ -7,13 +7,19 @@ type Keys = "message" | "open" | "close" | "error";
 export default class Websock {
   _websocket: WebSocket;
   _eventHandlers: { [key in Keys]: Function };
-  _buf: Uint8Array[];
+  _buf: (rendezvous.RendezvousMessage | message.Message)[];
   _status: any;
   _latency: number;
   _secretKey: [Uint8Array, number, number] | undefined;
   _uri: string;
+  _isRendezvous: boolean;
+  _videoCallback: ((v: message.VideoFrame) => void) | undefined;
 
-  constructor(uri: string) {
+  constructor(
+    uri: string,
+    isRendezvous: boolean = true,
+    fn: ((v: message.VideoFrame) => void) | undefined = undefined
+  ) {
     this._eventHandlers = {
       message: (_: any) => {},
       open: () => {},
@@ -27,6 +33,8 @@ export default class Websock {
     this._websocket.onmessage = this._recv_message.bind(this);
     this._websocket.binaryType = "arraybuffer";
     this._latency = new Date().getTime();
+    this._isRendezvous = isRendezvous;
+    this._videoCallback = fn;
   }
 
   latency(): number {
@@ -98,7 +106,7 @@ export default class Websock {
       this._websocket.onclose = (e) => {
         if (this._status == "open") {
           // e.code 1000 means that the connection was closed normally.
-          reject('Reset by the peer');
+          reject("Reset by the peer");
         }
         this._status = e;
         console.error("WebSock.onclose: " + e);
@@ -112,14 +120,16 @@ export default class Websock {
         this._status = e;
         console.error("WebSock.onerror: " + e);
         this._eventHandlers.error(e);
-        reject(e['data']);
+        reject(e["data"]);
       };
     });
   }
 
-  async next(timeout = 12000): Promise<Uint8Array> {
+  async next(
+    timeout = 12000
+  ): Promise<rendezvous.RendezvousMessage | message.Message> {
     const func = (
-      resolve: (value: Uint8Array) => void,
+      resolve: (value: rendezvous.RendezvousMessage | message.Message) => void,
       reject: (reason: any) => void,
       tm0: number
     ) => {
@@ -166,7 +176,16 @@ export default class Websock {
         k[2] += 1;
         bytes = globals.decrypt(bytes, k[2], k[0]);
       }
-      this._buf.push(bytes);
+      if (this._isRendezvous) {
+        this._buf.push(this.parseRendezvous(bytes));
+      } else {
+        const m = this.parseMessage(bytes);
+        if (this._videoCallback && m.video_frame) {
+          this._videoCallback(m.video_frame);
+        } else {
+          this._buf.push(m);
+        }
+      }
     }
     this._eventHandlers.message(e.data);
   }

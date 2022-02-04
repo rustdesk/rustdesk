@@ -642,6 +642,7 @@ export interface LoginRequest {
   option: OptionMessage | undefined;
   file_transfer: FileTransfer | undefined;
   port_forward: PortForward | undefined;
+  video_ack_required: boolean;
 }
 
 export interface ChatMessage {
@@ -944,6 +945,7 @@ export interface Misc {
   close_reason: string | undefined;
   refresh_video: boolean | undefined;
   option_response: OptionResponse | undefined;
+  video_received: boolean | undefined;
 }
 
 export interface Message {
@@ -1521,6 +1523,7 @@ function createBaseLoginRequest(): LoginRequest {
     option: undefined,
     file_transfer: undefined,
     port_forward: undefined,
+    video_ack_required: false,
   };
 }
 
@@ -1556,6 +1559,9 @@ export const LoginRequest = {
         writer.uint32(66).fork()
       ).ldelim();
     }
+    if (message.video_ack_required === true) {
+      writer.uint32(72).bool(message.video_ack_required);
+    }
     return writer;
   },
 
@@ -1587,6 +1593,9 @@ export const LoginRequest = {
         case 8:
           message.port_forward = PortForward.decode(reader, reader.uint32());
           break;
+        case 9:
+          message.video_ack_required = reader.bool();
+          break;
         default:
           reader.skipType(tag & 7);
           break;
@@ -1612,6 +1621,9 @@ export const LoginRequest = {
       port_forward: isSet(object.port_forward)
         ? PortForward.fromJSON(object.port_forward)
         : undefined,
+      video_ack_required: isSet(object.video_ack_required)
+        ? Boolean(object.video_ack_required)
+        : false,
     };
   },
 
@@ -1636,6 +1648,8 @@ export const LoginRequest = {
       (obj.port_forward = message.port_forward
         ? PortForward.toJSON(message.port_forward)
         : undefined);
+    message.video_ack_required !== undefined &&
+      (obj.video_ack_required = message.video_ack_required);
     return obj;
   },
 
@@ -1659,6 +1673,7 @@ export const LoginRequest = {
       object.port_forward !== undefined && object.port_forward !== null
         ? PortForward.fromPartial(object.port_forward)
         : undefined;
+    message.video_ack_required = object.video_ack_required ?? false;
     return message;
   },
 };
@@ -4466,6 +4481,7 @@ function createBaseMisc(): Misc {
     close_reason: undefined,
     refresh_video: undefined,
     option_response: undefined,
+    video_received: undefined,
   };
 }
 
@@ -4510,6 +4526,9 @@ export const Misc = {
         writer.uint32(90).fork()
       ).ldelim();
     }
+    if (message.video_received !== undefined) {
+      writer.uint32(96).bool(message.video_received);
+    }
     return writer;
   },
 
@@ -4553,6 +4572,9 @@ export const Misc = {
             reader.uint32()
           );
           break;
+        case 12:
+          message.video_received = reader.bool();
+          break;
         default:
           reader.skipType(tag & 7);
           break;
@@ -4587,6 +4609,9 @@ export const Misc = {
       option_response: isSet(object.option_response)
         ? OptionResponse.fromJSON(object.option_response)
         : undefined,
+      video_received: isSet(object.video_received)
+        ? Boolean(object.video_received)
+        : undefined,
     };
   },
 
@@ -4620,6 +4645,8 @@ export const Misc = {
       (obj.option_response = message.option_response
         ? OptionResponse.toJSON(message.option_response)
         : undefined);
+    message.video_received !== undefined &&
+      (obj.video_received = message.video_received);
     return obj;
   },
 
@@ -4651,6 +4678,7 @@ export const Misc = {
       object.option_response !== undefined && object.option_response !== null
         ? OptionResponse.fromPartial(object.option_response)
         : undefined;
+    message.video_received = object.video_received ?? undefined;
     return message;
   },
 };

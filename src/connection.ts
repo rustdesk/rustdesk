@@ -27,12 +27,14 @@ export default class Connection {
   _audioDecoder: any;
   _password: Uint8Array | undefined;
   _options: any;
+  _videoTestSpeed: number[];
 
   constructor() {
     this._msgbox = globals.msgbox;
     this._draw = globals.draw;
     this._msgs = [];
     this._id = "";
+    this._videoTestSpeed = [0, 0];
   }
 
   async start(id: string) {
@@ -58,7 +60,7 @@ export default class Connection {
     this.loadVideoDecoder();
     this.loadAudioDecoder();
     const uri = getDefaultUri();
-    const ws = new Websock(uri);
+    const ws = new Websock(uri, true);
     this._ws = ws;
     this._id = id;
     console.log(
@@ -75,7 +77,7 @@ export default class Connection {
       nat_type,
     });
     ws.sendRendezvous({ punch_hole_request });
-    const msg = ws.parseRendezvous(await ws.next());
+    const msg = (await ws.next()) as rendezvous.RendezvousMessage;
     ws.close();
     console.log(new Date() + ": Got relay response");
     const phr = msg.punch_hole_response;
@@ -113,7 +115,7 @@ export default class Connection {
     }
     const uuid = rr.uuid;
     console.log(new Date() + ": Connecting to relay server: " + uri);
-    const ws = new Websock(uri);
+    const ws = new Websock(uri, false, this.handleVideoFrame.bind(this));
     await ws.open();
     console.log(new Date() + ": Connected to relay server");
     this._ws = ws;
@@ -149,7 +151,7 @@ export default class Connection {
       this._ws?.sendMessage({});
       return;
     }
-    const msg = this._ws?.parseMessage(await this._ws?.next());
+    const msg = (await this._ws?.next()) as message.Message;
     let signedId: any = msg?.signed_id;
     if (!signedId) {
       console.error("Handshake failed: invalid message type");
@@ -198,7 +200,7 @@ export default class Connection {
 
   async msgLoop() {
     while (true) {
-      const msg = this._ws?.parseMessage(await this._ws?.next());
+      const msg = (await this._ws?.next()) as message.Message;
       if (msg?.hash) {
         this._hash = msg?.hash;
         if (!this._password)
@@ -251,6 +253,7 @@ export default class Connection {
 
   draw(frame: any) {
     this._draw?.(frame);
+    globals.draw(frame);
   }
 
   close() {
@@ -305,6 +308,7 @@ export default class Connection {
       my_name: "web", // to-do
       password,
       option: this.getOptionMessage(),
+      video_ack_required: true,
     });
     this._ws?.sendMessage({ login_request });
   }
@@ -341,6 +345,11 @@ export default class Connection {
     return n > 0 ? msg : undefined;
   }
 
+  sendVideoReceived() {
+    const misc = message.Misc.fromPartial({ video_received: true });
+    this._ws?.sendMessage({ misc });
+  }
+
   handleVideoFrame(vf: message.VideoFrame) {
     if (!this._firstFrame) {
       this.msgbox("", "", "");
@@ -348,11 +357,28 @@ export default class Connection {
     }
     if (vf.vp9s) {
       const dec = this._videoDecoder;
-      // dec.sync();
+      var tm = new Date().getTime();
+      var i = 0;
+      const n = vf.vp9s?.frames.length;
       vf.vp9s.frames.forEach((f) => {
         dec.processFrame(f.data.slice(0).buffer, (ok: any) => {
-          if (ok && dec.frameBuffer) {
+          i++;
+          if (i == n) this.sendVideoReceived();
+          if (ok && dec.frameBuffer && n == i) {
             this.draw(dec.frameBuffer);
+            const now = new Date().getTime();
+            var elapsed = now - tm;
+            this._videoTestSpeed[1] += elapsed;
+            this._videoTestSpeed[0] += 1;
+            if (this._videoTestSpeed[0] >= 30) {
+              console.log(
+                "video decoder: " +
+                  parseInt(
+                    "" + this._videoTestSpeed[1] / this._videoTestSpeed[0]
+                  )
+              );
+              this._videoTestSpeed = [0, 0];
+            }
           }
         });
       });
@@ -398,6 +424,8 @@ export default class Connection {
   handleMisc(misc: message.Misc) {
     if (misc.audio_format) {
       //
+    } else if (misc.chat_message) {
+      globals.pushEvent("chat", misc.chat_message.text);
     } else if (misc.permission_info) {
       const p = misc.permission_info;
       console.info("Change permission " + p.permission + " -> " + p.enabled);
@@ -457,18 +485,18 @@ export default class Connection {
     shift: Boolean,
     command: Boolean
   ) {
-    const key_event = mapKey(name);
+    const key_event = mapKey(name, globals.isDesktop());
     if (!key_event) return;
-    if (alt && name == 'VK_MENU') {
+    if (alt && name == "VK_MENU") {
       alt = false;
     }
-    if (ctrl && name == 'VK_CONTROL') {
+    if (ctrl && name == "VK_CONTROL") {
       ctrl = false;
     }
-    if (shift && name == 'VK_SHIFT') {
+    if (shift && name == "VK_SHIFT") {
       shift = false;
     }
-    if (command && name == 'Meta') {
+    if (command && name == "Meta") {
       command = false;
     }
     key_event.down = down;
@@ -581,9 +609,9 @@ export default class Connection {
     const misc = message.Misc.fromPartial({ option });
     this._ws?.sendMessage({ misc });
   }
-  
+
   getImageQuality() {
-    return this.getOption('image-quality');
+    return this.getOption("image-quality");
   }
 
   getImageQualityEnum(
@@ -631,7 +659,7 @@ export default class Connection {
 
 // @ts-ignore
 async function testDelay() {
-  const ws = new Websock(getDefaultUri(false));
+  const ws = new Websock(getDefaultUri(false), true);
   await ws.open();
   console.log(ws.latency());
 }

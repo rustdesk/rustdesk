@@ -1,4 +1,5 @@
 // example: https://github.com/rgov/js-theora-decoder/blob/main/index.html
+// https://github.com/brion/ogv.js/releases, yarn add has no simd
 // dev: copy decoder files from node/ogv/dist/* to project dir
 // dist: .... to dist
 /*
@@ -20,8 +21,12 @@
 */
 
 export function loadVp9(callback) {
+  // Multithreading is used only if `options.threading` is true. 
+  // This requires browser support for the new `SharedArrayBuffer` and `Atomics` APIs, 
+  // currently available in Firefox and Chrome with experimental flags enabled.
+  // 所有主流浏览器均默认于2018年1月5日禁用SharedArrayBuffer
   window.OGVLoader.loadClass(
-    "OGVDecoderVideoVP9W",
+    "OGVDecoderVideoVP9SIMDW",
     (videoCodecClass) => {
       window.videoCodecClass = videoCodecClass;
       videoCodecClass({ videoFormat: {} }).then((decoder) => {
@@ -30,7 +35,7 @@ export function loadVp9(callback) {
         })
       })
     },
-    { worker: true }
+    { worker: true, threading: true }
   );
 }
 
