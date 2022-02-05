@@ -7,7 +7,8 @@ import * as globals from "./globals";
 import { decompress, mapKey, sleep } from "./common";
 
 const PORT = 21116;
-const HOST = "rs-sg.rustdesk.com";
+const HOSTS = ['rs-sg.rustdesk.com', 'rs-cn.rustdesk.com', 'rs-us.rustdesk.com'];
+let HOST = localStorage.getItem('rendezvous-server') || HOSTS[0];
 const SCHEMA = "ws://";
 
 type MsgboxCallback = (type: string, title: string, text: string) => void;
@@ -107,7 +108,7 @@ export default class Connection {
     const pk = rr.pk;
     let uri = rr.relay_server;
     if (uri) {
-      uri = getrUriFromRs(uri);
+      uri = getrUriFromRs(uri, true);
     } else {
       uri = getDefaultUri(true);
     }
@@ -644,30 +645,36 @@ export default class Connection {
       console.log(decoder);
     });
   }
-
-  loadAudioDecoder(channels: number, sample_rate: number) {
-  }
 }
 
-// @ts-ignore
-async function testDelay() {
-  const ws = new Websock(getDefaultUri(false), true);
-  await ws.open();
-  console.log(ws.latency());
+function testDelay() {
+  var nearest = '';
+  HOSTS.forEach((host) => {
+    const now = new Date().getTime();
+    new Websock(getrUriFromRs(host), true).open().then(() => {
+      console.log('latency of ' + host + ': ' + (new Date().getTime() - now));
+      if (!nearest) {
+        HOST = host;
+        localStorage.setItem('rendezvous-server', host);
+      }
+    });
+  });
 }
+
+testDelay();
 
 function getDefaultUri(isRelay: Boolean = false): string {
   const host = localStorage.getItem("custom-rendezvous-server");
   return SCHEMA + (host || HOST) + ":" + (PORT + (isRelay ? 3 : 2));
 }
 
-function getrUriFromRs(uri: string): string {
+function getrUriFromRs(uri: string, isRelay: Boolean = false): string {
   if (uri.indexOf(":") > 0) {
     const tmp = uri.split(":");
     const port = parseInt(tmp[1]);
-    uri = tmp[0] + ":" + (port + 2);
+    uri = tmp[0] + ":" + (port + (isRelay ? 3 : 2));
   } else {
-    uri += ":" + (PORT + 3);
+    uri += ":" + (PORT + (isRelay ? 3 : 2));
   }
   return SCHEMA + uri;
 }
