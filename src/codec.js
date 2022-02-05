@@ -42,11 +42,11 @@ export async function loadVp9(callback) {
   );
 }
 
-export function loadOpus(callback) {
+export function loadOpus(callback, channels, rate) {
   window.OGVLoader.loadClass(
     "OGVDecoderAudioOpusW",
     (audioCodecClass) => {
-      audioCodecClass({ audioFormat: {} }).then((decoder) => {
+      audioCodecClass({ audioFormat: { channels, rate } }).then((decoder) => {
         decoder.init(() => {
           callback(decoder);
         })

@@ -25,6 +25,7 @@ export default class Connection {
   _firstFrame: Boolean | undefined;
   _videoDecoder: any;
   _audioDecoder: any;
+  _audioPlayer: any;
   _password: Uint8Array | undefined;
   _options: any;
   _videoTestSpeed: number[];
@@ -58,7 +59,6 @@ export default class Connection {
       }
     }, 1);
     this.loadVideoDecoder();
-    this.loadAudioDecoder();
     const uri = getDefaultUri();
     const ws = new Websock(uri, true);
     this._ws = ws;
@@ -242,7 +242,13 @@ export default class Connection {
       } else if (msg?.misc) {
         this.handleMisc(msg?.misc);
       } else if (msg?.audio_frame) {
-        //
+        const dec = this._audioDecoder;
+        dec.processAudio(msg?.audio_frame.data.slice(0).buffer, (res: any) => {
+          // ogv.js bug here, audioBuffer always empty
+          // and ogv.js vpx version is very old (2015), to-do: discard ogv
+          // let samples = dec.audioBuffer;
+          // console.log(res, dec);
+        });
       }
     }
   }
@@ -261,7 +267,6 @@ export default class Connection {
     clearInterval(this._interval);
     this._ws?.close();
     this._videoDecoder?.close();
-    this._audioDecoder?.close();
   }
 
   refresh() {
@@ -423,7 +428,9 @@ export default class Connection {
 
   handleMisc(misc: message.Misc) {
     if (misc.audio_format) {
-      //
+      this._audioDecoder?.destroy();
+      // this._audioPlayer = globals.newAudioPlayer(misc.audio_format.channels, misc.audio_format.sample_rate);
+      this.loadAudioDecoder(misc.audio_format.channels, misc.audio_format.sample_rate);
     } else if (misc.chat_message) {
       globals.pushEvent("chat", misc.chat_message.text);
     } else if (misc.permission_info) {
@@ -648,12 +655,12 @@ export default class Connection {
     });
   }
 
-  loadAudioDecoder() {
+  loadAudioDecoder(channels: number, sample_rate: number) {
     this._audioDecoder?.close();
     loadOpus((decoder: any) => {
       this._audioDecoder = decoder;
       console.log("opus loaded");
-    });
+    }, channels, sample_rate);
   }
 }
 

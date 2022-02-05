@@ -249,6 +249,11 @@ path-parse@^1.0.7:
   resolved "https://registry.yarnpkg.com/path-parse/-/path-parse-1.0.7.tgz#fbc114b60ca42b30d9daf5858e4bd68bbedb6735"
   integrity sha512-LDJzPVEEEPR+y48z93A0Ed0yXb8pAByGWo/k5YYdYgpY2/2EsOsksJrq7lOHxryrVOn1ejG6oAp8ahvOIQD8sw==
 
+pcm-player@^0.0.11:
+  version "0.0.11"
+  resolved "https://registry.yarnpkg.com/pcm-player/-/pcm-player-0.0.11.tgz#1dd0e37d8e1238c10b153079939b1fc88958a9ff"
+  integrity sha512-+FmX62jiqZa7wDCqSRQ1g3DuU6JNgpymgOLCWhmiE/Lj/M+rOUNqgNwVQX509LdA9dtBtVD3EQQUSp9JqU6upw==
+
 picocolors@^1.0.0:
   version "1.0.0"
   resolved "https://registry.yarnpkg.com/picocolors/-/picocolors-1.0.0.tgz#cb5bdc74ff3f51892236eaf79d68bc44564ab81c"

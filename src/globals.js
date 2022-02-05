@@ -4,6 +4,7 @@ import { CursorData } from "./message";
 import { loadOpus, loadVp9 } from "./codec";
 import { checkIfRetry, version } from "./gen_js_from_hbb";
 import { initZstd, translate } from "./common";
+import PCMPlayer from "pcm-player";
 
 var currentFrame = undefined;
 var events = [];
@@ -301,3 +302,12 @@ export function getPeers() {
     return {};
   }
 }
+
+export function newAudioPlayer(channels, sampleRate) {
+  return new PCMPlayer({
+    encoding: '16bitInt',
+    channels,
+    sampleRate,
+    flushingTime: 2000
+  });
+} 
