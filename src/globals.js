@@ -1,7 +1,7 @@
 import Connection from "./connection";
 import _sodium from "libsodium-wrappers";
 import { CursorData } from "./message";
-import { loadOpus, loadVp9 } from "./codec";
+import { loadVp9 } from "./codec";
 import { checkIfRetry, version } from "./gen_js_from_hbb";
 import { initZstd, translate } from "./common";
 import PCMPlayer from "pcm-player";
@@ -285,12 +285,27 @@ function _getByName(name, arg) {
   return '';
 }
 
+let opusWorker;
+let pcmPlayer;
+
+export function initAudio(channels, sampleRate) {
+  pcmPlayer = newAudioPlayer(channels, sampleRate);
+  opusWorker.postMessage({ channels, sampleRate });
+}
+
+export function playAudio(packet) {
+  opusWorker.postMessage(packet);
+}
+
 window.init = async () => {
   yuvWorker = new Worker("./yuv.js");
+  opusWorker = new Worker("./libopus.js");
   yuvWorker.onmessage = (e) => {
     currentFrame = e.data;
   }
-  loadOpus(() => { });
+  opusWorker.onmessage = (e) => {
+    pcmPlayer.feed(e.data);
+  }
   loadVp9(() => { });
   await initZstd();
 }
@@ -303,11 +318,10 @@ export function getPeers() {
   }
 }
 
-export function newAudioPlayer(channels, sampleRate) {
+function newAudioPlayer(channels, sampleRate) {
   return new PCMPlayer({
-    encoding: '16bitInt',
     channels,
     sampleRate,
     flushingTime: 2000
   });
-} 
+}

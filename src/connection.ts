@@ -1,7 +1,7 @@
 import Websock from "./websock";
 import * as message from "./message.js";
 import * as rendezvous from "./rendezvous.js";
-import { loadVp9, loadOpus } from "./codec";
+import { loadVp9 } from "./codec";
 import * as sha256 from "fast-sha256";
 import * as globals from "./globals";
 import { decompress, mapKey, sleep } from "./common";
@@ -24,8 +24,6 @@ export default class Connection {
   _peerInfo: message.PeerInfo | undefined;
   _firstFrame: Boolean | undefined;
   _videoDecoder: any;
-  _audioDecoder: any;
-  _audioPlayer: any;
   _password: Uint8Array | undefined;
   _options: any;
   _videoTestSpeed: number[];
@@ -242,13 +240,7 @@ export default class Connection {
       } else if (msg?.misc) {
         this.handleMisc(msg?.misc);
       } else if (msg?.audio_frame) {
-        const dec = this._audioDecoder;
-        dec.processAudio(msg?.audio_frame.data.slice(0).buffer, (res: any) => {
-          // ogv.js bug here, audioBuffer always empty
-          // and ogv.js vpx version is very old (2015), to-do: discard ogv
-          // let samples = dec.audioBuffer;
-          // console.log(res, dec);
-        });
+        globals.playAudio(msg?.audio_frame.data);
       }
     }
   }
@@ -428,9 +420,7 @@ export default class Connection {
 
   handleMisc(misc: message.Misc) {
     if (misc.audio_format) {
-      this._audioDecoder?.destroy();
-      // this._audioPlayer = globals.newAudioPlayer(misc.audio_format.channels, misc.audio_format.sample_rate);
-      this.loadAudioDecoder(misc.audio_format.channels, misc.audio_format.sample_rate);
+      globals.initAudio(misc.audio_format.channels, misc.audio_format.sample_rate);
     } else if (misc.chat_message) {
       globals.pushEvent("chat", misc.chat_message.text);
     } else if (misc.permission_info) {
@@ -656,11 +646,6 @@ export default class Connection {
   }
 
   loadAudioDecoder(channels: number, sample_rate: number) {
-    this._audioDecoder?.close();
-    loadOpus((decoder: any) => {
-      this._audioDecoder = decoder;
-      console.log("opus loaded");
-    }, channels, sample_rate);
   }
 }
 
