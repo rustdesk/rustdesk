@@ -50,6 +50,7 @@ class FfiModel with ChangeNotifier {
       _permissions[k] = v == 'true';
     });
     print('$_permissions');
+    notifyListeners();
   }
 
   bool keyboard() => _permissions['keyboard'] != false;
@@ -274,6 +275,26 @@ class CanvasModel with ChangeNotifier {
     notifyListeners();
   }
 
+  void moveDesktopMouse(double x, double y) {
+    final size = MediaQueryData.fromWindow(ui.window).size;
+    final dw = FFI.ffiModel.display.width * _scale;
+    final dh = FFI.ffiModel.display.height * _scale;
+    var dxOffset = 0;
+    var dyOffset = 0;
+    if (dw > size.width) {
+      dxOffset = (x - dw * (x / size.width) - _x).toInt();
+    }
+    if (dh > size.height) {
+      dyOffset = (y - dh * (y / size.height) - _y).toInt();
+    }
+    _x += dxOffset;
+    _y += dyOffset;
+    if (dxOffset != 0 || dyOffset != 0) {
+      notifyListeners();
+    }
+    FFI.cursorModel.move(x, y);
+  }
+
   set scale(v) {
     _scale = v;
     notifyListeners();
@@ -366,13 +387,17 @@ class CursorModel with ChangeNotifier {
   }
 
   void touch(double x, double y, bool right) {
+    move(x, y);
+    FFI.moveMouse(_x, _y);
+    FFI.tap(right);
+  }
+
+  void move(double x, double y) {
     final scale = FFI.canvasModel.scale;
     final xoffset = FFI.canvasModel.x;
     final yoffset = FFI.canvasModel.y;
     _x = (x - xoffset) / scale + _displayOriginX;
     _y = (y - yoffset) / scale + _displayOriginY;
-    FFI.moveMouse(_x, _y);
-    FFI.tap(right);
     notifyListeners();
   }
 
@@ -660,6 +685,7 @@ class FFI {
 
   static handleMouse(Map<String, dynamic> evt) {
     var type = '';
+    var isMove = false;
     switch (evt['type']) {
       case 'mousedown':
         type = 'down';
@@ -668,6 +694,7 @@ class FFI {
         type = 'up';
         break;
       case 'mousemove':
+        isMove = true;
         break;
       default:
         return;
@@ -675,12 +702,17 @@ class FFI {
     evt['type'] = type;
     var x = evt['x'];
     var y = evt['y'];
+    if (isMove) {
+      FFI.canvasModel.moveDesktopMouse(x, y);
+    }
     final d = FFI.ffiModel.display;
     x -= FFI.canvasModel.x;
     y -= FFI.canvasModel.y;
-    if (x < 0 || x > d.width || y < 0 || y > d.height) {
+    if (!isMove && (x < 0 || x > d.width || y < 0 || y > d.height)) {
       return;
     }
+    x /= FFI.canvasModel.scale;
+    y /= FFI.canvasModel.scale;
     x += d.x;
     y += d.y;
     if (type != '') {

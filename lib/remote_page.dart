@@ -23,7 +23,7 @@ class RemotePage extends StatefulWidget {
 class _RemotePageState extends State<RemotePage> {
   Timer _interval;
   Timer _timer;
-  bool _showBar = true;
+  bool _showBar = !isDesktop;
   double _bottom = 0;
   String _value = '';
   double _xOffset = 0;
@@ -109,6 +109,7 @@ class _RemotePageState extends State<RemotePage> {
       enterPasswordDialog(id, context);
     } else {
       var hasRetry = evt['hasRetry'] == 'true';
+      print(evt);
       showMsgBox(type, title, text, hasRetry);
     }
   }
@@ -438,7 +439,16 @@ class _RemotePageState extends State<RemotePage> {
   }
 
   Widget getBodyForDesktopWithListener() {
+    final keyboard = FFI.ffiModel.permissions['keyboard'] != false;
+    var paints = <Widget>[ImagePaint()];
+    if (keyboard ||
+        FFI.getByName('toggle-option', 'show-remote-cursor') == 'true') {
+      paints.add(CursorPaint());
+    }
     return MouseRegion(
+        cursor: keyboard
+            ? SystemMouseCursors.none
+            : null, // still laggy, set cursor directly for web is better
         onEnter: (event) {
           print('enter');
           FFI.listenToMouse(true);
@@ -448,8 +458,7 @@ class _RemotePageState extends State<RemotePage> {
           FFI.listenToMouse(false);
         },
         child: Container(
-            color: MyTheme.canvasColor,
-            child: Stack(children: [ImagePaint(), CursorPaint()])));
+            color: MyTheme.canvasColor, child: Stack(children: paints)));
   }
 
   void showActions(BuildContext context) {

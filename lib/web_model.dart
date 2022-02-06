@@ -158,4 +158,12 @@ final ctrlKeyMap = {
   'NumpadEnter': 'NumpadEnter',
   'Enter': 'Return',
   'Space': 'Space',
+  'NumpadClear': 'Clear',
+  'NumpadBackspace': 'Backspace',
+  'PrintScreen': 'Snapshot',
+  'HangulMode': 'Hangul',
+  'HanjaMode': 'Hanja',
+  'KanaMode': 'Kana',
+  'JunjaMode': 'Junja',
+  'KanjiMode': 'Hanja',
 };
