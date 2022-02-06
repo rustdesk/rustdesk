@@ -1066,7 +1066,7 @@ impl Handler {
     fn call(&self, func: &str, args: &[Value]) {
         let r = self.read().unwrap();
         if let Some(ref e) = r.element {
-            allow_err!(e.call_method(func, args));
+            allow_err!(e.call_method(func, &super::value_crash_workaround(args)[..]));
         }
     }
 
@@ -1605,7 +1605,7 @@ impl Remote {
                         if !(self.handler.is_file_transfer()
                             || self.handler.is_port_forward()
                             || !unsafe { SERVER_CLIPBOARD_ENABLED }
-                            || !unsafe {  SERVER_KEYBOARD_ENABLED }
+                            || !unsafe { SERVER_KEYBOARD_ENABLED }
                             || self.handler.lc.read().unwrap().disable_clipboard)
                         {
                             let txt = self.old_clipboard.lock().unwrap().clone();
@@ -1681,12 +1681,16 @@ impl Remote {
                         log::info!("Change permission {:?} -> {}", p.permission, p.enabled);
                         match p.permission.enum_value_or_default() {
                             Permission::Keyboard => {
-                                unsafe { SERVER_KEYBOARD_ENABLED = p.enabled; }
+                                unsafe {
+                                    SERVER_KEYBOARD_ENABLED = p.enabled;
+                                }
                                 self.handler
                                     .call("setPermission", &make_args!("keyboard", p.enabled));
                             }
                             Permission::Clipboard => {
-                                unsafe { SERVER_CLIPBOARD_ENABLED = p.enabled; }
+                                unsafe {
+                                    SERVER_CLIPBOARD_ENABLED = p.enabled;
+                                }
                                 self.handler
                                     .call("setPermission", &make_args!("clipboard", p.enabled));
                             }

@@ -61,7 +61,7 @@ impl ConnectionManager {
     fn call(&self, func: &str, args: &[Value]) {
         let r = self.read().unwrap();
         if let Some(ref e) = r.root {
-            allow_err!(e.call_method(func, args));
+            allow_err!(e.call_method(func, &super::value_crash_workaround(args)[..]));
         }
     }
 

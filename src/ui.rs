@@ -22,6 +22,11 @@ use std::{
 
 pub type Childs = Arc<Mutex<(bool, HashMap<(String, String), Child>)>>;
 
+lazy_static::lazy_static! {
+    // stupid workaround for https://sciter.com/forums/topic/crash-on-latest-tis-mac-sdk-sometimes/
+    static ref STUPID_VALUES: Mutex<Vec<Arc<Vec<Value>>>> = Default::default();
+}
+
 #[derive(Default)]
 struct UI(
     Childs,
@@ -810,4 +815,11 @@ fn check_connect_status(
     let cloned_options = options.clone();
     std::thread::spawn(move || check_connect_status_(reconnect, cloned, cloned_options));
     (status, options)
+}
+
+// sacrifice some memory
+pub fn value_crash_workaround(values: &[Value]) -> Arc<Vec<Value>> {
+    let persist = Arc::new(values.to_vec());
+    STUPID_VALUES.lock().unwrap().push(persist.clone());
+    persist
 }
