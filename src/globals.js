@@ -28,7 +28,7 @@ export function msgbox(type, title, text) {
   if (!events) return;
   if (!type || (type == 'error' && !text)) return;
   const text2 = text.toLowerCase();
-  var hasRetry = checkIfRetry(type, title, text);
+  var hasRetry = checkIfRetry(type, title, text) ? 'true' : '';
   events.push({ name: 'msgbox', type, title, text, hasRetry });
 }
 
@@ -63,15 +63,10 @@ export function getConn() {
 }
 
 export async function startConn(id) {
-  try {
-    currentFrame = undefined;
-    events = [];
-    setByName('remote_id', id);
-    await curConn.start(id);
-  } catch (e) {
-    console.log(e);
-    msgbox('error', 'Error', String(e));
-  }
+  currentFrame = undefined;
+  events = [];
+  setByName('remote_id', id);
+  await curConn.start(id);
 }
 
 export function close() {
@@ -308,6 +303,7 @@ window.init = async () => {
   }
   loadVp9(() => { });
   await initZstd();
+  console.log('init done');
 }
 
 export function getPeers() {

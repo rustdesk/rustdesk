@@ -7,8 +7,12 @@ import * as globals from "./globals";
 import { decompress, mapKey, sleep } from "./common";
 
 const PORT = 21116;
-const HOSTS = ['rs-sg.rustdesk.com', 'rs-cn.rustdesk.com', 'rs-us.rustdesk.com'];
-let HOST = localStorage.getItem('rendezvous-server') || HOSTS[0];
+const HOSTS = [
+  "rs-sg.rustdesk.com",
+  "rs-cn.rustdesk.com",
+  "rs-us.rustdesk.com",
+];
+let HOST = localStorage.getItem("rendezvous-server") || HOSTS[0];
 const SCHEMA = "ws://";
 
 type MsgboxCallback = (type: string, title: string, text: string) => void;
@@ -38,6 +42,18 @@ export default class Connection {
   }
 
   async start(id: string) {
+    try {
+      await this._start(id);
+    } catch (e: any) {
+      this.msgbox(
+        "error",
+        "Connection Error",
+        e.type == "close" ? "Reset by the peer" : String(e)
+      );
+    }
+  }
+
+  async _start(id: string) {
     if (!this._options) {
       this._options = globals.getPeers()[id] || {};
     }
@@ -114,7 +130,7 @@ export default class Connection {
     }
     const uuid = rr.uuid;
     console.log(new Date() + ": Connecting to relay server: " + uri);
-    const ws = new Websock(uri, false, this.handleVideoFrame.bind(this));
+    const ws = new Websock(uri, false);
     await ws.open();
     console.log(new Date() + ": Connected to relay server");
     this._ws = ws;
@@ -214,7 +230,16 @@ export default class Connection {
       } else if (msg?.login_response) {
         const r = msg?.login_response;
         if (r.error) {
-          this.msgbox("error", "Error", r.error);
+          if (r.error == "Wrong Password") {
+            this._password = undefined;
+            this.msgbox(
+              "re-input-password",
+              r.error,
+              "Do you want to enter again?"
+            );
+          } else {
+            this.msgbox("error", "Login Error", r.error);
+          }
         } else if (r.peer_info) {
           this.handlePeerInfo(r.peer_info);
         }
@@ -239,7 +264,7 @@ export default class Connection {
       } else if (msg?.cursor_position) {
         globals.pushEvent("cursor_position", msg?.cursor_position);
       } else if (msg?.misc) {
-        this.handleMisc(msg?.misc);
+        if (!this.handleMisc(msg?.misc)) break;
       } else if (msg?.audio_frame) {
         globals.playAudio(msg?.audio_frame.data);
       }
@@ -421,7 +446,10 @@ export default class Connection {
 
   handleMisc(misc: message.Misc) {
     if (misc.audio_format) {
-      globals.initAudio(misc.audio_format.channels, misc.audio_format.sample_rate);
+      globals.initAudio(
+        misc.audio_format.channels,
+        misc.audio_format.sample_rate
+      );
     } else if (misc.chat_message) {
       globals.pushEvent("chat", misc.chat_message.text);
     } else if (misc.permission_info) {
@@ -447,7 +475,10 @@ export default class Connection {
       globals.pushEvent("switch_display", misc.switch_display);
     } else if (misc.close_reason) {
       this.msgbox("error", "Connection Error", misc.close_reason);
+      this.close();
+      return false;
     }
+    return true;
   }
 
   getRemember(): Boolean {
@@ -485,16 +516,16 @@ export default class Connection {
   ) {
     const key_event = mapKey(name, globals.isDesktop());
     if (!key_event) return;
-    if (alt && (name == "Alt" || name == 'RAlt')) {
+    if (alt && (name == "Alt" || name == "RAlt")) {
       alt = false;
     }
-    if (ctrl && (name == "Control" || name == 'RControl')) {
+    if (ctrl && (name == "Control" || name == "RControl")) {
       ctrl = false;
     }
-    if (shift && (name == "Shift" || name == 'RShift')) {
+    if (shift && (name == "Shift" || name == "RShift")) {
       shift = false;
     }
-    if (command && (name == "Meta" || name == 'RWin')) {
+    if (command && (name == "Meta" || name == "RWin")) {
       command = false;
     }
     key_event.down = down;
@@ -648,14 +679,14 @@ export default class Connection {
 }
 
 function testDelay() {
-  var nearest = '';
+  var nearest = "";
   HOSTS.forEach((host) => {
     const now = new Date().getTime();
     new Websock(getrUriFromRs(host), true).open().then(() => {
-      console.log('latency of ' + host + ': ' + (new Date().getTime() - now));
+      console.log("latency of " + host + ": " + (new Date().getTime() - now));
       if (!nearest) {
         HOST = host;
-        localStorage.setItem('rendezvous-server', host);
+        localStorage.setItem("rendezvous-server", host);
       }
     });
   });

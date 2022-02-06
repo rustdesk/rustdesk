@@ -13,13 +13,8 @@ export default class Websock {
   _secretKey: [Uint8Array, number, number] | undefined;
   _uri: string;
   _isRendezvous: boolean;
-  _videoCallback: ((v: message.VideoFrame) => void) | undefined;
 
-  constructor(
-    uri: string,
-    isRendezvous: boolean = true,
-    fn: ((v: message.VideoFrame) => void) | undefined = undefined
-  ) {
+  constructor(uri: string, isRendezvous: boolean = true) {
     this._eventHandlers = {
       message: (_: any) => {},
       open: () => {},
@@ -34,7 +29,6 @@ export default class Websock {
     this._websocket.binaryType = "arraybuffer";
     this._latency = new Date().getTime();
     this._isRendezvous = isRendezvous;
-    this._videoCallback = fn;
   }
 
   latency(): number {
@@ -106,11 +100,13 @@ export default class Websock {
       this._websocket.onclose = (e) => {
         if (this._status == "open") {
           // e.code 1000 means that the connection was closed normally.
-          reject("Reset by the peer");
+          //
         }
         this._status = e;
-        console.error("WebSock.onclose: " + e);
+        console.error("WebSock.onclose: ");
+        console.error(e);
         this._eventHandlers.close(e);
+        reject("Reset by the peer");
       };
       this._websocket.onerror = (e: any) => {
         if (!this._status) {
@@ -118,9 +114,9 @@ export default class Websock {
           return;
         }
         this._status = e;
-        console.error("WebSock.onerror: " + e);
+        console.error("WebSock.onerror: ")
+        console.error(e);
         this._eventHandlers.error(e);
-        reject(e["data"]);
       };
     });
   }
@@ -176,16 +172,11 @@ export default class Websock {
         k[2] += 1;
         bytes = globals.decrypt(bytes, k[2], k[0]);
       }
-      if (this._isRendezvous) {
-        this._buf.push(this.parseRendezvous(bytes));
-      } else {
-        const m = this.parseMessage(bytes);
-        if (this._videoCallback && m.video_frame) {
-          this._videoCallback(m.video_frame);
-        } else {
-          this._buf.push(m);
-        }
-      }
+      this._buf.push(
+        this._isRendezvous
+          ? this.parseRendezvous(bytes)
+          : this.parseMessage(bytes)
+      );
     }
     this._eventHandlers.message(e.data);
   }
