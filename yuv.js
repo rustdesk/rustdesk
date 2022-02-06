@@ -1,3 +1,8 @@
+/*
+var window = {};
+importScripts('./yuv-canvas-1.2.6.js');
+*/
+
 var wasmExports;
 
 fetch('yuv.wasm').then(function (res) { return res.arrayBuffer(); })
@@ -58,13 +63,27 @@ function I420ToARGB(yb) {
 }
 
 var currentFrame;
+var canvas;
+var yuvCanvas;
 self.addEventListener('message', (e) => {
-  currentFrame = e.data;
+  if (e.data.canvas) {
+    canvas = e.data.canvas;
+    yuvCanvas = window.YUVCanvas.attach(canvas, { webGL: true });
+  } else {
+    if (yuvCanvas) {
+      var now = new Date().getTime();
+      yuvCanvas.drawFrame(e.data);
+      console.log(new Date().getTime() - now);
+    } else {
+      currentFrame = e.data;
+    }
+  }
 });
 
 function run() {
   if (currentFrame) {
-    self.postMessage(I420ToARGB(currentFrame));
+    var data = I420ToARGB(currentFrame);
+    self.postMessage(data, [data.buffer]);
     currentFrame = undefined;
   }
   setTimeout(run, 1);

@@ -48,10 +48,38 @@ export function pushEvent(name, payload) {
   events.push(payload);
 }
 
-let yuvWorker;
+let yuvWorker = new Worker("./yuv.js");
+/*
+let yuvCanvas;
+let gl;
+let pixels;
+if (YUVCanvas.WebGLFrameSink.isAvailable()) {
+  var canvas = document.createElement('canvas');
+  yuvCanvas = YUVCanvas.attach(canvas, { webGL: true });
+  gl = canvas.getContext("webgl");
+} else {
+  yuvWorker = new Worker("./yuv.js");
+}
+*/
 
 export function draw(frame) {
-  if (yuvWorker) yuvWorker.postMessage(frame);
+  if (yuvWorker) {
+    // frame's (y/u/v).bytes already detached, can not transferrable any more.
+    yuvWorker.postMessage(frame);
+  } else {
+    var now = new Date().getTime();
+    yuvCanvas.drawFrame(frame);
+    console.log(new Date().getTime() - now);
+    now = new Date().getTime();
+    if (!pixels) pixels = new Uint8Array(canvas.width * canvas.height * 4);
+    gl.readPixels(0, 0, canvas.width, canvas.height, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
+    console.log(new Date().getTime() - now);
+  }
+}
+
+export function sendOffCanvas(c) {
+  let canvas = c.transferControlToOffscreen();
+  yuvWorker.postMessage({ canvas }, [canvas]);
 }
 
 export function setConn(conn) {
@@ -280,7 +308,7 @@ function _getByName(name, arg) {
   return '';
 }
 
-let opusWorker;
+let opusWorker = new Worker("./libopus.js");
 let pcmPlayer;
 
 export function initAudio(channels, sampleRate) {
@@ -289,14 +317,14 @@ export function initAudio(channels, sampleRate) {
 }
 
 export function playAudio(packet) {
-  opusWorker.postMessage(packet);
+  opusWorker.postMessage(packet, [packet.buffer]);
 }
 
 window.init = async () => {
-  yuvWorker = new Worker("./yuv.js");
-  opusWorker = new Worker("./libopus.js");
-  yuvWorker.onmessage = (e) => {
-    currentFrame = e.data;
+  if (yuvWorker) {
+    yuvWorker.onmessage = (e) => {
+      currentFrame = e.data;
+    }
   }
   opusWorker.onmessage = (e) => {
     pcmPlayer.feed(e.data);

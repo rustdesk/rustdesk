@@ -5550,6 +5550,7 @@ self.addEventListener('message', (e) => {
     dec = new Decoder(e.data.channels, e.data.sampleRate);
   } else {
     dec.input(e.data);
-    self.postMessage(dec.output().slice(0));
+    var out = dec.output().slice(0);
+    self.postMessage(out, [out.buffer]);
   }
 });

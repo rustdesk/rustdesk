@@ -37,7 +37,8 @@ if (app) {
     id.value = localStorage.getItem('id');
     const key = document.querySelector('#key');
     key.value = localStorage.getItem('key');
-    player = YUVCanvas.attach(document.getElementById('player'))
+    player = YUVCanvas.attach(document.getElementById('player'));
+    // globals.sendOffCanvas(document.getElementById('player'));
   };
 
   window.connect = () => {
@@ -51,6 +52,12 @@ if (app) {
       const conn = globals.newConn();
       conn.setMsgbox(msgbox);
       conn.setDraw((f) => {
+        /*
+        if (!(document.getElementById('player').width > 0)) {
+          document.getElementById('player').width = f.format.displayWidth;
+          document.getElementById('player').height = f.format.displayHeight;
+        }
+        */
         globals.draw(f);
         player.drawFrame(f);
       });
