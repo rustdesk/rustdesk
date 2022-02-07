@@ -565,9 +565,6 @@ impl Config {
 
     pub fn set_option(k: String, v: String) {
         let mut config = CONFIG2.write().unwrap();
-        if k == "custom-rendezvous-server" {
-            config.rendezvous_server = "".to_owned();
-        }
         let v2 = if v.is_empty() { None } else { Some(&v) };
         if v2 != config.options.get(&k) {
             if v2.is_none() {

@@ -37,7 +37,6 @@ pub struct RendezvousMediator {
     addr: TargetAddr<'static>,
     host: String,
     host_prefix: String,
-    rendezvous_servers: Vec<String>,
     last_id_pk_registry: String,
 }
 
@@ -77,7 +76,7 @@ impl RendezvousMediator {
                     let server = server.clone();
                     let servers = servers.clone();
                     futs.push(tokio::spawn(async move {
-                        allow_err!(Self::start(server, host, servers).await);
+                        allow_err!(Self::start(server, host).await);
                         // SHOULD_EXIT here is to ensure once one exits, the others also exit.
                         SHOULD_EXIT.store(true, Ordering::SeqCst);
                     }));
@@ -88,11 +87,7 @@ impl RendezvousMediator {
         }
     }
 
-    pub async fn start(
-        server: ServerPtr,
-        host: String,
-        rendezvous_servers: Vec<String>,
-    ) -> ResultType<()> {
+    pub async fn start(server: ServerPtr, host: String) -> ResultType<()> {
         log::info!("start rendezvous mediator of {}", host);
         let host_prefix: String = host
             .split(".")
@@ -109,7 +104,6 @@ impl RendezvousMediator {
             addr: Config::get_any_listen_addr().into_target_addr()?,
             host: host.clone(),
             host_prefix,
-            rendezvous_servers,
             last_id_pk_registry: "".to_owned(),
         };
 
@@ -207,8 +201,12 @@ impl RendezvousMediator {
                                         });
                                     }
                                     Some(rendezvous_message::Union::configure_update(cu)) => {
+                                        let v0 = Config::get_rendezvous_servers();
                                         Config::set_option("rendezvous-servers".to_owned(), cu.rendezvous_servers.join(","));
                                         Config::set_serial(cu.serial);
+                                        if v0 != Config::get_rendezvous_servers() {
+                                            Self::restart();
+                                        }
                                     }
                                     _ => {}
                                 }
@@ -223,12 +221,6 @@ impl RendezvousMediator {
                     }
                 },
                 _ = timer.tick() => {
-                    if Config::get_rendezvous_servers() != rz.rendezvous_servers {
-                        break;
-                    }
-                    if !Config::get_option("stop-service").is_empty() {
-                        break;
-                    }
                     if SHOULD_EXIT.load(Ordering::SeqCst) {
                         break;
                     }

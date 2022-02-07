@@ -1,3 +1,4 @@
+use crate::rendezvous_mediator::RendezvousMediator;
 use hbb_common::{
     allow_err, bail, bytes,
     bytes_codec::BytesCodec,
@@ -213,7 +214,7 @@ async fn handle(data: Data, stream: &mut Connection) {
                     Config::set_socks(Some(data));
                 }
                 crate::common::test_nat_type();
-                crate::rendezvous_mediator::RendezvousMediator::restart();
+                RendezvousMediator::restart();
                 log::info!("socks updated");
             }
         },
@@ -255,7 +256,14 @@ async fn handle(data: Data, stream: &mut Connection) {
                 allow_err!(stream.send(&Data::Options(Some(v))).await);
             }
             Some(value) => {
+                let v0 = Config::get_option("stop-service");
+                let v1 = Config::get_rendezvous_servers();
                 Config::set_options(value);
+                if v0 != Config::get_option("stop-service")
+                    || v1 != Config::get_rendezvous_servers()
+                {
+                    RendezvousMediator::restart();
+                }
             }
         },
         Data::NatType(_) => {
