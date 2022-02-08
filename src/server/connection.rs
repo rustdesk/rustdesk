@@ -330,7 +330,7 @@ impl Connection {
         if let Err(e) = handler_input.join() {
             log::error!("Failed to join input thread, {:?}", e);
         } else {
-            log::info!("Blank thread exited");
+            log::info!("input thread exited");
         }
 
         let _ = crate::platform::block_input(false);
