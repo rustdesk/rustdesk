@@ -32,17 +32,22 @@ apply plugin: 'kotlin-android'
 apply from: "$flutterRoot/packages/flutter_tools/gradle/flutter.gradle"
 
 android {
-    compileSdkVersion 30
+    compileSdkVersion 31
     ndkVersion '22.1.7171670' // * 仅个人使用 存在多版本NDK无法自动选择 需要使用此配置指定NDK版本 [CSF]
     sourceSets {
         main.java.srcDirs += 'src/main/kotlin'
     }
 
+    compileOptions {
+        targetCompatibility JavaVersion.VERSION_1_8
+        sourceCompatibility JavaVersion.VERSION_1_8
+    }
+
     defaultConfig {
         // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
         applicationId "com.carriez.flutter_hbb"
-        minSdkVersion 16
-        targetSdkVersion 30
+        minSdkVersion 21
+        targetSdkVersion 31
         versionCode flutterVersionCode.toInteger()
         versionName flutterVersionName
     }
@@ -70,6 +75,8 @@ flutter {
 }
 
 dependencies {
+    implementation "androidx.media:media:1.4.3"
+    implementation 'com.github.getActivity:XXPermissions:13.2'
     implementation "org.jetbrains.kotlin:kotlin-stdlib-jdk7:$kotlin_version"
 }
 

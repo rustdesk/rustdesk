@@ -1,10 +1,13 @@
 package com.carriez.flutter_hbb
 
 import android.app.Activity
+import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.content.ServiceConnection
 import android.media.projection.MediaProjectionManager
 import android.os.Build
+import android.os.IBinder
 import android.provider.Settings
 import android.util.DisplayMetrics
 import android.util.Log
@@ -14,9 +17,7 @@ import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 
-const val NOTIFY_TYPE_LOGIN_REQ = "NOTIFY_TYPE_LOGIN_REQ"
 const val MEDIA_REQUEST_CODE = 42
-const val INPUT_REQUEST_CODE = 43
 
 class MainActivity : FlutterActivity() {
     companion object {
@@ -26,76 +27,14 @@ class MainActivity : FlutterActivity() {
     private val channelTag = "mChannel"
     private val logTag = "mMainActivity"
     private var mediaProjectionResultIntent: Intent? = null
-
-    init {
-        System.loadLibrary("rustdesk")
-    }
-
-    private external fun init(context: Context)
-    private external fun close()
-
-    fun rustSetByName(name: String, arg1: String, arg2: String) {
-        when (name) {
-            "try_start_without_auth" -> {
-                // to UI
-                Log.d(logTag, "from rust:got try_start_without_auth")
-                activity.runOnUiThread {
-                    flutterMethodChannel.invokeMethod(name, mapOf("peerID" to arg1, "name" to arg2))
-                    Log.d(logTag, "activity.runOnUiThread invokeMethod try_start_without_auth,done")
-                }
-                val notification = createNormalNotification(
-                    this,
-                    "请求控制",
-                    "来自$arg1:$arg2 请求连接",
-                    NOTIFY_TYPE_LOGIN_REQ
-                )
-                with(NotificationManagerCompat.from(this)) {
-                    notify(12, notification)
-                }
-                Log.d(logTag, "kotlin invokeMethod try_start_without_auth,done")
-            }
-            "start_capture" -> {
-                Log.d(logTag, "from rust:start_capture")
-                activity.runOnUiThread {
-                    flutterMethodChannel.invokeMethod(name, mapOf("peerID" to arg1, "name" to arg2))
-                    Log.d(logTag, "activity.runOnUiThread invokeMethod try_start_without_auth,done")
-                }
-                // 1.开始捕捉音视频 2.通知栏
-                startCapture()
-                val notification = createNormalNotification(
-                    this,
-                    "开始共享屏幕",
-                    "From:$arg2:$arg1",
-                    NOTIFY_TYPE_START_CAPTURE
-                )
-                with(NotificationManagerCompat.from(this)) {
-                    notify(13, notification)
-                }
-            }
-            "stop_capture" -> {
-                Log.d(logTag, "from rust:stop_capture")
-                stopCapture()
-                activity.runOnUiThread {
-                    flutterMethodChannel.invokeMethod(name, null)
-                    Log.d(logTag, "activity.runOnUiThread invokeMethod try_start_without_auth,done")
-                }
-            }
-            else -> {}
-        }
-    }
-
-    override fun onDestroy() {
-        Log.e(logTag, "onDestroy")
-        close()
-        stopCapture()
-        stopMainService()
-        stopService(Intent(this, MainService::class.java))
-        stopService(Intent(this, InputService::class.java))
-        super.onDestroy()
-    }
+    private var mainService: MainService? = null
 
     @RequiresApi(Build.VERSION_CODES.M)
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
+        Log.d(logTag, "MainActivity configureFlutterEngine,bind to main service")
+        Intent(this, MainService::class.java).also {
+            bindService(it, serviceConnection, Context.BIND_AUTO_CREATE)
+        }
         super.configureFlutterEngine(flutterEngine) // 必要 否则无法正确初始化flutter
         checkPermissions(this)
         updateMachineInfo()
@@ -107,26 +46,46 @@ class MainActivity : FlutterActivity() {
                 when (call.method) {
                     "init_service" -> {
                         Log.d(logTag, "event from flutter,getPer")
-                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-                            getMediaProjection()
-                        }
+                        getMediaProjection()
                         result.success(true)
                     }
                     "start_capture" -> {
-                        startCapture()
-                        result.success(true)
+                        // return bool
+                        mainService?.let {
+                            result.success(it.startCapture())
+                        } ?: let {
+                            result.success(false)
+                        }
                     }
                     "stop_service" -> {
-                        stopMainService()
-                        result.success(true)
-                    }
-                    "check_input" -> {
-                        checkInput()
-                        result.success(true)
+                        Log.d(logTag,"Stop service")
+                        mainService?.let {
+                            it.destroy()
+                            result.success(true)
+                        } ?: let {
+                            result.success(false)
+                        }
                     }
                     "check_video_permission" -> {
-                        val res = MainService.checkMediaPermission()
-                        result.success(res)
+                        mainService?.let {
+                            result.success(it.checkMediaPermission())
+                        } ?: let {
+                            result.success(false)
+                        }
+                    }
+                    "check_service" -> {
+                        flutterMethodChannel.invokeMethod(
+                            "on_permission_changed",
+                            mapOf("name" to "input", "value" to InputService.isOpen().toString())
+                        )
+                        flutterMethodChannel.invokeMethod(
+                            "on_permission_changed",
+                            mapOf("name" to "media", "value" to mainService?.isReady.toString())
+                        )
+                    }
+                    "init_input" -> {
+                        initInput()
+                        result.success(true)
                     }
                     else -> {}
                 }
@@ -134,7 +93,6 @@ class MainActivity : FlutterActivity() {
         }
     }
 
-    @RequiresApi(Build.VERSION_CODES.LOLLIPOP)
     private fun getMediaProjection() {
         val mMediaProjectionManager =
             getSystemService(MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
@@ -142,48 +100,17 @@ class MainActivity : FlutterActivity() {
         startActivityForResult(mIntent, MEDIA_REQUEST_CODE)
     }
 
-    // 实际逻辑是开始监听服务 在成功获取到mediaProjection就开始
+    // 在onActivityResult中成功获取到mediaProjection就开始就调用此函数，开始初始化监听服务
     private fun initService() {
         if (mediaProjectionResultIntent == null) {
             Log.w(logTag, "initService fail,mediaProjectionResultIntent is null")
             return
         }
         Log.d(logTag, "Init service")
-        // call init service to rust
-        init(this)
         val serviceIntent = Intent(this, MainService::class.java)
         serviceIntent.action = INIT_SERVICE
         serviceIntent.putExtra(EXTRA_MP_DATA, mediaProjectionResultIntent)
 
-        launchMainService(serviceIntent)
-    }
-
-    private fun startCapture() {
-        if (mediaProjectionResultIntent == null) {
-            Log.w(logTag, "startCapture fail,mediaProjectionResultIntent is null")
-            return
-        }
-        Log.d(logTag, "Start Capture")
-        val serviceIntent = Intent(this, MainService::class.java)
-        serviceIntent.action = START_CAPTURE
-        serviceIntent.putExtra(EXTRA_MP_DATA, mediaProjectionResultIntent)
-
-        launchMainService(serviceIntent)
-    }
-
-    private fun stopCapture() {
-        Log.d(logTag, "Stop Capture")
-        val serviceIntent = Intent(this, MainService::class.java)
-        serviceIntent.action = STOP_CAPTURE
-
-        launchMainService(serviceIntent)
-    }
-
-    // TODO 关闭逻辑
-    private fun stopMainService() {
-        Log.d(logTag, "Stop service")
-        val serviceIntent = Intent(this, MainService::class.java)
-        serviceIntent.action = STOP_SERVICE
         launchMainService(serviceIntent)
     }
 
@@ -196,7 +123,7 @@ class MainActivity : FlutterActivity() {
         }
     }
 
-    private fun checkInput() {
+    private fun initInput() {
         val intent = Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)
         if (intent.resolveActivity(packageManager) != null) {
             startActivity(intent)
@@ -206,9 +133,12 @@ class MainActivity : FlutterActivity() {
     override fun onResume() {
         super.onResume()
         val inputPer = InputService.isOpen()
-        Log.d(logTag,"onResume inputPer:$inputPer")
+        Log.d(logTag, "onResume inputPer:$inputPer")
         activity.runOnUiThread {
-            flutterMethodChannel.invokeMethod("on_permission_changed",mapOf("name" to "input", "value" to inputPer.toString()))
+            flutterMethodChannel.invokeMethod(
+                "on_permission_changed",
+                mapOf("name" to "input", "value" to inputPer.toString())
+            )
         }
     }
 
@@ -225,16 +155,11 @@ class MainActivity : FlutterActivity() {
         // 屏幕尺寸 控制最长边不超过1400 超过则减半并储存缩放比例 实际发送给手机端的尺寸为缩小后的尺寸
         // input控制时再通过缩放比例恢复原始尺寸进行path入参
         val dm = DisplayMetrics()
+        @Suppress("DEPRECATION")
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             display?.getRealMetrics(dm)
         } else {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN_MR1) {
-                @Suppress("DEPRECATION")
-                windowManager.defaultDisplay.getRealMetrics(dm)
-            } else {
-                @Suppress("DEPRECATION")
-                windowManager.defaultDisplay.getMetrics(dm)
-            }
+            windowManager.defaultDisplay.getRealMetrics(dm)
         }
         var w = dm.widthPixels
         var h = dm.heightPixels
@@ -256,6 +181,27 @@ class MainActivity : FlutterActivity() {
 
         } else {
             Log.e(logTag, "Got Screen Size Fail!")
+        }
+    }
+
+    override fun onDestroy() {
+        Log.e(logTag, "onDestroy")
+        mainService?.let {
+            unbindService(serviceConnection)
+        }
+        super.onDestroy()
+    }
+
+    private val serviceConnection = object : ServiceConnection {
+        override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
+            Log.d(logTag, "onServiceConnected")
+            val binder = service as MainService.LocalBinder
+            mainService = binder.getService()
+        }
+
+        override fun onServiceDisconnected(name: ComponentName?) {
+            Log.d(logTag, "onServiceDisconnected")
+            mainService = null
         }
     }
 }

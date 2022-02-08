@@ -3,10 +3,15 @@
  */
 package com.carriez.flutter_hbb
 
+import android.Manifest
 import android.annotation.SuppressLint
 import android.app.*
+import android.app.PendingIntent.FLAG_IMMUTABLE
+import android.app.PendingIntent.FLAG_UPDATE_CURRENT
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
+import android.graphics.Color
 import android.graphics.PixelFormat
 import android.hardware.display.DisplayManager.VIRTUAL_DISPLAY_FLAG_PUBLIC
 import android.hardware.display.VirtualDisplay
@@ -14,27 +19,29 @@ import android.media.*
 import android.media.AudioRecord.READ_BLOCKING
 import android.media.projection.MediaProjection
 import android.media.projection.MediaProjectionManager
-import android.os.Build
-import android.os.Handler
-import android.os.IBinder
-import android.os.Looper
+import android.os.*
 import android.util.Log
 import android.view.Surface
 import android.view.Surface.FRAME_RATE_COMPATIBILITY_DEFAULT
-import android.widget.Toast
 import androidx.annotation.RequiresApi
+import androidx.core.app.ActivityCompat
+import androidx.core.app.NotificationCompat
+import androidx.core.content.ContextCompat
 import java.util.concurrent.Executors
 import kotlin.concurrent.thread
+import androidx.media.app.NotificationCompat.MediaStyle
 
 const val EXTRA_MP_DATA = "mp_intent"
 const val INIT_SERVICE = "init_service"
-const val START_CAPTURE = "start_capture"
-const val STOP_CAPTURE = "stop_capture"
-const val STOP_SERVICE = "stop_service"
+const val ACTION_LOGIN_REQ_NOTIFY = "ACTION_LOGIN_REQ_NOTIFY"
+const val EXTRA_LOGIN_REQ_NOTIFY = "EXTRA_LOGIN_REQ_NOTIFY"
+
+const val DEFAULT_NOTIFY_TITLE = "RustDesk"
+const val DEFAULT_NOTIFY_TEXT = "Service is listening"
+const val NOTIFY_ID = 11
 
 const val NOTIFY_TYPE_START_CAPTURE = "NOTIFY_TYPE_START_CAPTURE"
 
-@RequiresApi(Build.VERSION_CODES.LOLLIPOP)
 const val MIME_TYPE = MediaFormat.MIMETYPE_VIDEO_VP9
 
 // video const
@@ -44,26 +51,11 @@ const val VIDEO_KEY_BIT_RATE = 1024_000
 const val VIDEO_KEY_FRAME_RATE = 30
 
 // audio const
-@RequiresApi(Build.VERSION_CODES.LOLLIPOP)
 const val AUDIO_ENCODING = AudioFormat.ENCODING_PCM_FLOAT //  ENCODING_OPUS need API 30
 const val AUDIO_SAMPLE_RATE = 48000
 const val AUDIO_CHANNEL_MASK = AudioFormat.CHANNEL_IN_STEREO
 
 class MainService : Service() {
-
-    companion object {
-        private var mediaProjection: MediaProjection? = null
-        fun checkMediaPermission(): Boolean {
-            val value = mediaProjection != null
-            Handler(Looper.getMainLooper()).post {
-                MainActivity.flutterMethodChannel.invokeMethod(
-                    "on_permission_changed",
-                    mapOf("name" to "media", "value" to value.toString())
-                )
-            }
-            return value
-        }
-    }
 
     init {
         System.loadLibrary("rustdesk")
@@ -100,27 +92,72 @@ class MainService : Service() {
         }
     }
 
-    @RequiresApi(Build.VERSION_CODES.LOLLIPOP)
     fun rustSetByName(name: String, arg1: String, arg2: String) {
         when (name) {
+            "try_start_without_auth" -> {
+                // to UI
+                Log.d(logTag, "from rust:got try_start_without_auth")
+                Handler(Looper.getMainLooper()).post {
+                    MainActivity.flutterMethodChannel.invokeMethod(
+                        name,
+                        mapOf("peerID" to arg1, "name" to arg2)
+                    )
+                    Log.d(logTag, "activity.runOnUiThread invokeMethod try_start_without_auth,done")
+                }
+                // TODO notify
+                Log.d(logTag, "kotlin invokeMethod try_start_without_auth,done")
+            }
+            "start_capture" -> {
+                Log.d(logTag, "from rust:start_capture")
+                Handler(Looper.getMainLooper()).post {
+                    MainActivity.flutterMethodChannel.invokeMethod(
+                        name,
+                        mapOf("peerID" to arg1, "name" to arg2)
+                    )
+                    Log.d(logTag, "activity.runOnUiThread invokeMethod try_start_without_auth,done")
+                }
+                if (isStart) {
+                    Log.d(logTag, "正在录制")
+                    return
+                }
+                // 1.开始捕捉音视频 2.通知栏
+                startCapture()
+                // TODO notify
+            }
+            "stop_capture" -> {
+                Log.d(logTag, "from rust:stop_capture")
+                stopCapture()
+                Handler(Looper.getMainLooper()).post {
+                    MainActivity.flutterMethodChannel.invokeMethod(name, null)
+                    Log.d(logTag, "activity.runOnUiThread invokeMethod try_start_without_auth,done")
+                }
+            }
             else -> {}
         }
     }
 
     // jvm call rust
     private external fun init(ctx: Context)
+    private external fun startServer()
     private external fun sendVp9(data: ByteArray)
 
     private val logTag = "LOG_SERVICE"
     private val useVP9 = false
+    private val binder = LocalBinder()
+    private var _isReady = false
+    private var _isStart = false
+    val isReady: Boolean
+        get() = _isReady
+    val isStart: Boolean
+        get() = _isStart
 
-    // video
+    // video 注意 这里imageReader要成为成员变量，防止被回收 https://www.cnblogs.com/yongdaimi/p/11004560.html
+    private var mediaProjection: MediaProjection? = null
     private var surface: Surface? = null
     private val sendVP9Thread = Executors.newSingleThreadExecutor()
     private var videoEncoder: MediaCodec? = null
     private var videoData: ByteArray? = null
-    private var imageReader: ImageReader? =
-        null // * 注意 这里要成为成员变量，防止被回收 https://www.cnblogs.com/yongdaimi/p/11004560.html
+    private var imageReader: ImageReader? = null
     private val videoZeroData = ByteArray(32)
     private var virtualDisplay: VirtualDisplay? = null
 
@@ -132,61 +169,126 @@ class MainService : Service() {
     private val audioZeroData: FloatArray = FloatArray(32)  // 必须是32位 如果只有8位进行ffi传输时会出错
     private var audioRecordStat = false
 
-    @RequiresApi(Build.VERSION_CODES.LOLLIPOP)
+    // notification
+    private lateinit var notificationManager: NotificationManager
+    private lateinit var notificationChannel: String
+    private lateinit var notificationBuilder: NotificationCompat.Builder
+
+    override fun onCreate() {
+        super.onCreate()
+        initNotification()
+    }
+
+    override fun onBind(intent: Intent): IBinder {
+        Log.d(logTag, "service onBind")
+        return binder
+    }
+
+    inner class LocalBinder : Binder() {
+        init {
+            Log.d(logTag, "LocalBinder init")
+        }
+
+        fun getService(): MainService = this@MainService
+    }
+
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         Log.d("whichService", "this service:${Thread.currentThread()}")
-        when (intent?.action) {
-            INIT_SERVICE -> {
-                Log.d(logTag, "service starting:${startId}:${Thread.currentThread()}")
-                createForegroundNotification(this)
-                val mMediaProjectionManager =
-                    getSystemService(MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
-                intent.getParcelableExtra<Intent>(EXTRA_MP_DATA)?.let {
-                    mediaProjection =
-                        mMediaProjectionManager.getMediaProjection(Activity.RESULT_OK, it)
-                    Log.d(logTag, "获取mMediaProjection成功$mediaProjection")
-                    checkMediaPermission()
-                    init(this)
-                } ?: let {
-                    Log.d(logTag, "获取mMediaProjection失败！")
-                }
-            }
-            START_CAPTURE -> {
-                startCapture()
-            }
-            STOP_CAPTURE -> {
-                stopCapture()
-            }
-            STOP_SERVICE -> {
-                stopCapture()
-                mediaProjection = null
+        // initService是关键的逻辑 在用户点击开始监听或者获取到视频捕捉权限的时候执行initService
+        // 只有init的时候通过onStartCommand 且开启前台服务
+        if (intent?.action == INIT_SERVICE) {
+            Log.d(logTag, "service starting:${startId}:${Thread.currentThread()}")
+//            createForegroundNotification(this)
+            createForegroundNotification()
+            val mMediaProjectionManager =
+                getSystemService(MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
+            intent.getParcelableExtra<Intent>(EXTRA_MP_DATA)?.let {
+                mediaProjection =
+                    mMediaProjectionManager.getMediaProjection(Activity.RESULT_OK, it)
+                Log.d(logTag, "获取mMediaProjection成功$mediaProjection")
                 checkMediaPermission()
-                stopSelf()
+                surface = createSurface()
+                init(this)
+                startServer()
+                _isReady = true
+            } ?: let {
+                Log.d(logTag, "获取mMediaProjection失败！")
             }
+        } else if (intent?.action == ACTION_LOGIN_REQ_NOTIFY) {
+            val notifyLoginRes = intent.getBooleanExtra(EXTRA_LOGIN_REQ_NOTIFY, false)
+            Log.d(logTag, "从通知栏点击了:$notifyLoginRes")
         }
         return super.onStartCommand(intent, flags, startId)
     }
 
-    @RequiresApi(Build.VERSION_CODES.LOLLIPOP)
-    private fun startCapture(): Boolean {
-        if (testVP9Support()) {  // testVP9Support一直返回true 暂时只使用原始数据
-            startVideoRecorder()
+    @SuppressLint("WrongConstant")
+    private fun createSurface(): Surface? {
+        // 暂时只使用原始数据的情况
+        return if (useVP9) {
+            // TODO
+            null
         } else {
-            Toast.makeText(this, "此设备不支持:$MIME_TYPE", Toast.LENGTH_SHORT).show()
+            imageReader =
+                ImageReader.newInstance(
+                    INFO.screenWidth,
+                    INFO.screenHeight,
+                    PixelFormat.RGBA_8888,
+                    2 // maxImages 至少是2
+                ).apply {
+                    setOnImageAvailableListener({ imageReader: ImageReader ->
+                        try {
+                            imageReader.acquireLatestImage().use { image ->
+                                if (image == null) return@setOnImageAvailableListener
+                                val planes = image.planes
+                                val buffer = planes[0].buffer
+                                buffer.rewind()
+                                // Be careful about OOM!
+                                if (videoData == null) {
+                                    videoData = ByteArray(buffer.capacity())
+                                    buffer.get(videoData!!)
+                                    Log.d(logTag, "init video ${videoData!!.size}")
+                                } else {
+                                    buffer.get(videoData!!)
+                                }
+                            }
+                        } catch (ignored: java.lang.Exception) {
+                        }
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                            imageReader.discardFreeBuffers()
+                        }
+                    }, null)
+                }
+            Log.d(logTag, "ImageReader.setOnImageAvailableListener done")
+            imageReader?.surface
+        }
+    }
+
+    fun startCapture(): Boolean {
+        if (mediaProjection == null) {
+            Log.w(logTag, "startCapture fail,mediaProjection is null")
             return false
         }
+        Log.d(logTag, "Start Capture")
+
+        if (useVP9) {
+            startVP9VideoRecorder(mediaProjection!!)
+        } else {
+            startRawVideoRecorder(mediaProjection!!)
+        }
+
         // 音频只支持安卓10以及以上
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             startAudioRecorder()
         }
         checkMediaPermission()
+        _isStart = true
         return true
     }
 
-    @RequiresApi(Build.VERSION_CODES.LOLLIPOP)
-    private fun stopCapture() {
+    fun stopCapture() {
+        Log.d(logTag, "Stop Capture")
+        _isStart = false
         virtualDisplay?.release()
-        imageReader?.close()
         videoEncoder?.let {
             it.signalEndOfInputStream()
             it.stop()
@@ -200,75 +302,51 @@ class MainService : Service() {
 //        mediaProjection?.stop()
 
         virtualDisplay = null
-        imageReader = null
         videoEncoder = null
         videoData = null
 //        audioRecorder = null
 //        audioData = null
     }
 
+    fun destroy() {
+        Log.d(logTag, "destroy service")
+        _isReady = false
 
-    @SuppressLint("WrongConstant")
-    @RequiresApi(Build.VERSION_CODES.LOLLIPOP)
-    private fun startVideoRecorder() {
-        Log.d(logTag, "startVideoRecorder")
-        mediaProjection?.let { mp ->
-            if (useVP9) {
-                startVP9VideoRecorder(mp)
-            } else {
-                startRawVideoRecorder(mp)
-            }
-        } ?: let {
-            Log.d(logTag, "startRecorder fail,mMediaProjection is null")
+        stopCapture()
+        imageReader?.close()
+        imageReader = null
+
+        mediaProjection = null
+        checkMediaPermission()
+        stopForeground(true)
+        stopSelf()
+    }
+
+    fun checkMediaPermission(): Boolean {
+        Handler(Looper.getMainLooper()).post {
+            MainActivity.flutterMethodChannel.invokeMethod(
+                "on_permission_changed",
+                mapOf("name" to "media", "value" to isReady.toString())
+            )
         }
+        return isReady
     }
 
     @SuppressLint("WrongConstant")
-    @RequiresApi(Build.VERSION_CODES.LOLLIPOP)
     private fun startRawVideoRecorder(mp: MediaProjection) {
         Log.d(logTag, "startRawVideoRecorder,screen info:$INFO")
-        // 使用原始数据
-        imageReader =
-            ImageReader.newInstance(
-                INFO.screenWidth,
-                INFO.screenHeight,
-                PixelFormat.RGBA_8888,
-                2 // maxImages 至少是2
-            ).apply {
-                // 奇怪的现象，必须从MainActivity调用 无法从MainService中调用 会阻塞在这个函数
-                setOnImageAvailableListener({ imageReader: ImageReader ->
-                    try {
-                        imageReader.acquireLatestImage().use { image ->
-                            if (image == null) return@setOnImageAvailableListener
-                            val planes = image.planes
-                            val buffer = planes[0].buffer
-                            buffer.rewind()
-                            // Be careful about OOM!
-                            if (videoData == null) {
-                                videoData = ByteArray(buffer.capacity())
-                                buffer.get(videoData!!)
-                                Log.d(logTag, "init video ${videoData!!.size}")
-                            } else {
-                                buffer.get(videoData!!)
-                            }
-                        }
-                    } catch (ignored: java.lang.Exception) {
-                    }
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-                        imageReader.discardFreeBuffers()
-                    }
-                }, null)
-            }
-        Log.d(logTag, "ImageReader.setOnImageAvailableListener done")
+        if(surface==null){
+            Log.d(logTag, "startRawVideoRecorder failed,surface is null")
+            return
+        }
         virtualDisplay = mp.createVirtualDisplay(
             "RustDesk",
             INFO.screenWidth, INFO.screenHeight, 200, VIRTUAL_DISPLAY_FLAG_PUBLIC,
-            imageReader?.surface, null, null
+            surface, null, null
         )
-        Log.d(logTag, "startRawVideoRecorder done")
     }
 
-    @RequiresApi(Build.VERSION_CODES.LOLLIPOP)
+    @SuppressLint("WrongConstant")
     private fun startVP9VideoRecorder(mp: MediaProjection) {
         //使用内置编码器
         createMediaCodec()
@@ -287,8 +365,7 @@ class MainService : Service() {
         }
     }
 
-    private val cb: MediaCodec.Callback = @RequiresApi(Build.VERSION_CODES.LOLLIPOP)
-    object : MediaCodec.Callback() {
+    private val cb: MediaCodec.Callback = object : MediaCodec.Callback() {
         override fun onInputBufferAvailable(codec: MediaCodec, index: Int) {}
         override fun onOutputFormatChanged(codec: MediaCodec, format: MediaFormat) {}
 
@@ -314,7 +391,6 @@ class MainService : Service() {
     }
 
 
-    @RequiresApi(Build.VERSION_CODES.LOLLIPOP)
     private fun createMediaCodec() {
         Log.d(logTag, "MediaFormat.MIMETYPE_VIDEO_VP9 :$MIME_TYPE")
         videoEncoder = MediaCodec.createEncoderByType(MIME_TYPE)
@@ -377,6 +453,13 @@ class MainService : Service() {
                     .addMatchingUsage(AudioAttributes.USAGE_ALARM)
                     .addMatchingUsage(AudioAttributes.USAGE_GAME)
                     .addMatchingUsage(AudioAttributes.USAGE_UNKNOWN).build()
+                if (ActivityCompat.checkSelfPermission(
+                        this,
+                        Manifest.permission.RECORD_AUDIO
+                    ) != PackageManager.PERMISSION_GRANTED
+                ) {
+                    return
+                }
                 audioRecorder = AudioRecord.Builder()
                     .setAudioFormat(
                         AudioFormat.Builder()
@@ -393,12 +476,85 @@ class MainService : Service() {
         Log.d(logTag, "createAudioRecorder fail")
     }
 
-    override fun onDestroy() {
-        Log.d(logTag, "service stop:${Thread.currentThread()}")
-        Toast.makeText(this, "service done", Toast.LENGTH_SHORT).show()
+    private fun initNotification() {
+        notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        // 设置通知渠道 android8开始引入 老版本会被忽略 这个东西的作用相当于为通知分类 给用户选择通知消息的种类
+        notificationChannel = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val channelId = "RustDesk"
+            val channelName = "RustDesk Service"
+            val channel = NotificationChannel(
+                channelId,
+                channelName, NotificationManager.IMPORTANCE_DEFAULT
+            ).apply {
+                description = "RustDesk Service Channel"
+            }
+            channel.lightColor = Color.BLUE
+            channel.lockscreenVisibility = Notification.VISIBILITY_PRIVATE
+            notificationManager.createNotificationChannel(channel)
+            channelId
+        } else {
+            ""
+        }
+        notificationBuilder = NotificationCompat.Builder(this, notificationChannel)
     }
 
-    override fun onBind(intent: Intent): IBinder? {
-        return null
+    private fun createForegroundNotification() {
+        val intent = Intent(this, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED
+            action = Intent.ACTION_MAIN // 不设置会造成每次都重新启动一个新的Activity
+            addCategory(Intent.CATEGORY_LAUNCHER)
+            putExtra("type", type)
+        }
+        val pendingIntent = PendingIntent.getActivity(
+            this, 0, intent,
+            FLAG_UPDATE_CURRENT
+        )
+        val notification = notificationBuilder
+            .setOngoing(true)
+            .setSmallIcon(R.mipmap.ic_launcher)
+            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+            .setContentTitle(DEFAULT_NOTIFY_TITLE)
+            .setContentText(DEFAULT_NOTIFY_TEXT)
+            .setOnlyAlertOnce(true)
+            .setContentIntent(pendingIntent)
+            .setColor(ContextCompat.getColor(this, R.color.primary))
+            .setWhen(System.currentTimeMillis())
+            .build()
+        startForeground(NOTIFY_ID, notification)
+    }
+
+    private fun loginRequestActionNotification(type: String, name: String, id: String) {
+        val notification = notificationBuilder
+            .setContentTitle("收到${type}连接请求")
+            .setContentText("来自:$name-$id 是否接受")
+            .setStyle(MediaStyle().setShowActionsInCompactView(0, 1))
+            .addAction(R.drawable.check_blue, "check", genLoginRequestPendingIntent(true))
+            .addAction(R.drawable.close_red, "close", genLoginRequestPendingIntent(false))
+            .build()
+        notificationManager.notify(NOTIFY_ID, notification)
+    }
+
+    private fun genLoginRequestPendingIntent(res: Boolean): PendingIntent {
+        val intent = Intent(this, MainService::class.java).apply {
+            action = ACTION_LOGIN_REQ_NOTIFY
+            putExtra(EXTRA_LOGIN_REQ_NOTIFY, res)
+        }
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            PendingIntent.getService(this, 111, intent, FLAG_IMMUTABLE)
+        } else {
+            PendingIntent.getService(this, 111, intent, 0)
+        }
+    }
+
+    private fun setTextNotification(_title: String?, _text: String?) {
+        val title = _title ?: DEFAULT_NOTIFY_TITLE
+        val text = _text ?: DEFAULT_NOTIFY_TEXT
+        val notification = notificationBuilder
+            .clearActions()
+            .setStyle(null)
+            .setContentTitle(title)
+            .setContentText(text)
+            .build()
+        notificationManager.notify(NOTIFY_ID, notification)
     }
 }
