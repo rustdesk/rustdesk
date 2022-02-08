@@ -84,7 +84,7 @@ class Header: Reactor.Component {
         var title = get_id();
         if (pi.hostname) title += "(" + pi.username + "@" + pi.hostname + ")";
         if ((pi.displays || []).length == 0) {
-            return <div .ellipsis style="size:*;text-align:center;margin:*;">{title}</div>;
+            return <div .ellipsis style="size:*;text-align:center;margin:* 0;">{title}</div>;
         }
         var screens = pi.displays.map(function(d, i) {
             return <div #screen class={pi.current_display == i ? "current" : ""}>

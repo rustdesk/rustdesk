@@ -25,11 +25,6 @@ body {
     color: color(text);
 }
 
-div {
-    word-wrap: break-word;
-    // word-break: break-all; // this will break english word
-}
-
 button.button {
     height: 2em;
     border-radius: 0.5em;
