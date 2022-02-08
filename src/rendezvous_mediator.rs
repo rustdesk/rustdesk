@@ -43,6 +43,7 @@ pub struct RendezvousMediator {
 impl RendezvousMediator {
     pub fn restart() {
         SHOULD_EXIT.store(true, Ordering::SeqCst);
+        log::info!("server restar");
     }
 
     pub async fn start_all() {
@@ -74,7 +75,6 @@ impl RendezvousMediator {
                 SHOULD_EXIT.store(false, Ordering::SeqCst);
                 for host in servers.clone() {
                     let server = server.clone();
-                    let servers = servers.clone();
                     futs.push(tokio::spawn(async move {
                         allow_err!(Self::start(server, host).await);
                         // SHOULD_EXIT here is to ensure once one exits, the others also exit.
