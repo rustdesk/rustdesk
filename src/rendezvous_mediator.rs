@@ -43,7 +43,7 @@ pub struct RendezvousMediator {
 impl RendezvousMediator {
     pub fn restart() {
         SHOULD_EXIT.store(true, Ordering::SeqCst);
-        log::info!("server restar");
+        log::info!("server restart");
     }
 
     pub async fn start_all() {
