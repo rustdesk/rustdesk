@@ -4,6 +4,7 @@ import 'package:flutter/gestures.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:device_info/device_info.dart';
+import 'package:external_path/external_path.dart';
 import 'dart:io';
 import 'dart:math';
 import 'dart:ffi';
@@ -518,11 +519,37 @@ class CursorModel with ChangeNotifier {
   }
 }
 
+class ClientState {
+  bool isStart;
+  bool isFileTransfer;
+  String name;
+  String peerId;
+
+  ClientState({this.isStart, this.isFileTransfer, this.name, this.peerId});
+
+  ClientState.fromJson(Map<String, dynamic> json) {
+    isStart = json['is_start'];
+    isFileTransfer = json['is_file_transfer'];
+    name = json['name'];
+    peerId = json['peer_id'];
+  }
+
+  Map<String, dynamic> toJson() {
+    final Map<String, dynamic> data = new Map<String, dynamic>();
+    data['is_start'] = this.isStart;
+    data['is_file_transfer'] = this.isFileTransfer;
+    data['name'] = this.name;
+    data['peer_id'] = this.peerId;
+    return data;
+  }
+}
+
 class ServerModel with ChangeNotifier {
   bool _mediaOk;
   bool _inputOk;
 
-  bool _peerEnabled;
+  bool _isStart;
+  bool _isFileTransfer;
   String _peerName;
   String _peerID;
 
@@ -530,7 +557,9 @@ class ServerModel with ChangeNotifier {
 
   bool get inputOk => _inputOk;
 
-  bool get peerEnabled => _peerEnabled;
+  bool get isStart => _isStart;
+
+  bool get isFileTransfer => _isFileTransfer;
 
   String get peerName => _peerName;
 
@@ -539,7 +568,7 @@ class ServerModel with ChangeNotifier {
   ServerModel() {
     _mediaOk = false;
     _inputOk = false;
-    _peerEnabled = false;
+    _isStart = false;
     _peerName = "";
     _peerID = "";
   }
@@ -559,14 +588,28 @@ class ServerModel with ChangeNotifier {
   }
 
   setPeer(bool enabled, {String name = "", String id = ""}) {
-    _peerEnabled = enabled;
+    _isStart = enabled;
     if (name != "") _peerName = name;
     if (id != "") _peerID = id;
     notifyListeners();
   }
 
+  updateClientState() {
+    var res = FFI.getByName("client_state");
+    debugPrint("getByName client_state string:$res");
+    try {
+      var clientState = ClientState.fromJson(jsonDecode(res));
+      _isStart = clientState.isStart;
+      _isFileTransfer = clientState.isFileTransfer;
+      _peerName = clientState.name;
+      _peerID = clientState.peerId;
+      debugPrint("updateClientState:${clientState.toJson()}");
+    } catch (e) {}
+    notifyListeners();
+  }
+
   clearPeer() {
-    _peerEnabled = false;
+    _isStart = false;
     _peerName = "";
     _peerID = "";
     notifyListeners();
@@ -575,7 +618,8 @@ class ServerModel with ChangeNotifier {
 
 class FFI {
   static String id = "";
-  static String _dir = '';
+  static String _dir = "";
+  static String _homeDir = "";
   static F2 _getByName;
   static F3 _setByName;
   static F4 _freeRgba;
@@ -742,6 +786,7 @@ class FFI {
           .lookupFunction<Void Function(Pointer<RgbaFrame>), F4>('free_rgba');
       _getRgba = dylib.lookupFunction<F5, F5>('get_rgba');
       _dir = (await getApplicationDocumentsDirectory()).path;
+      _homeDir = (await ExternalPath.getExternalStorageDirectories())[0];
       String id = 'NA';
       String name = 'Flutter';
       DeviceInfoPlugin deviceInfo = DeviceInfoPlugin();
@@ -754,8 +799,10 @@ class FFI {
         name = iosInfo.utsname.machine;
         id = iosInfo.identifierForVendor.hashCode.toString();
       }
+      debugPrint("info1-id:$id,info2-name:$name,dir:$_dir,homeDir:$_homeDir");
       setByName('info1', id);
       setByName('info2', name);
+      setByName('home_dir',_homeDir);
       setByName('init', _dir);
     } catch (e) {
       print(e);

@@ -219,10 +219,10 @@ toAndroidChannelInit() {
       switch (call.method) {
         case "try_start_without_auth":
           {
-            var peerID = call.arguments["peerID"] as String;
-            var name = call.arguments["name"] as String;
-            ServerPage.serverModel.setPeer(false, name: name, id: peerID);
-            showLoginReqAlert(nowCtx, peerID, name);
+            // 可以不需要传递 通过FFI直接去获取 serverModel里面直接封装一个update通过FFI从rust端获取
+            ServerPage.serverModel.updateClientState();
+            debugPrint("pre show loginAlert:${ServerPage.serverModel.isFileTransfer.toString()}");
+            showLoginReqAlert(nowCtx, ServerPage.serverModel.peerID, ServerPage.serverModel.peerName);
             debugPrint("from jvm:try_start_without_auth done");
             break;
           }

@@ -30,8 +30,9 @@ dependencies:
   cupertino_icons: ^1.0.3
   ffi: ^1.1.2
   path_provider: ^2.0.2
+  external_path: ^1.0.1
   provider: ^5.0.0
-  flutter_easyloading:
+  flutter_easyloading: # not Null safety 2.2.0
     git:
       url: git://github.com/open-trade/flutter_easyloading
     #path: flutter_easyloading

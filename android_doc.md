@@ -51,7 +51,7 @@ MediaProjectionManager -> MediaProjection
     ...
     android:foregroundServiceType="mediaProjection"/>
 ```
-- API大于O(26)时需要startForegroundService，且需要正确设置通知栏，
+- API大于O(26/Android8.0)时需要startForegroundService，且需要正确设置通知栏，
   新特性中使用ForegroundService不会被系统杀掉
 
 
@@ -246,6 +246,48 @@ Config::set_option("stop_service","")
 横屏模式
 首次登录不显示id密码
 安卓前后分离的问题 通过IPC或者广播解耦
+
+### 关于安卓的service和进程
+实际测试 安卓7和安卓11表现不同 同一个apk下若有多个activity或service
+安卓7 关闭activity后所有的服务都会强制关闭 可能是锤子手机特有
+
+安卓8.1 和7类似  且安卓8.1和7录屏权限比较宽松 只需要获取一次 不需要每次播放都要获取录屏权限
+
+*安卓7/8.1关闭activity 后就关闭service 可能是锤子OS的特质
+
+理论上 非bind启动的service可以脱离activity运行 就像三星安卓11上测试的情况
+
+安卓11 关闭activity后service可以单独运行 可能由于前台应用可以持续维持
+  再次进入程序新的activity会共用之前在内存中的so程序
+
+安卓Service运行在主线程！才能实现脱离activity独立运行
+
+>只有在内存过低且必须回收系统资源以供拥有用户焦点的 Activity 使用时，Android 系统才会停止服务。如果将服务绑定到拥有用户焦点的 Activity，则它其不太可能会终止；如果将服务声明为在前台运行，则其几乎永远不会终止。如果服务已启动并长时间运行，则系统逐渐降低其在后台任务列表中的位置，而服务被终止的概率也会大幅提升—如果服务是启动服务，则您必须将其设计为能够妥善处理系统执行的重启。如果系统终止服务，则其会在资源可用时立即重启服务，但这还取决于您从 onStartCommand() 返回的值。
+
+>如服务文档中所述，您可以创建同时具有已启动和已绑定两种状态的服务。换言之，您可以通过调用 startService() 来启动服务，让服务无限期运行，您也可以通过调用 bindService() 让客户端绑定到该服务。
+如果您确实允许服务同时具有已启动和已绑定状态，那么服务启动后，系统不会在所有客户端均与服务取消绑定后销毁服务，而必须由您通过调用 stopSelf() 或 stopService() 显式停止服务。
+尽管您通常应实现 onBind() 或 onStartCommand()，但有时也需要同时实现这两种方法。例如，音乐播放器可能认为，让其服务无限期运行并同时提供绑定很有用处。如此一来，Activity 便可启动服务来播放音乐，并且即使用户离开应用，音乐播放也不会停止。然后，当用户返回应用时，Activity 便能绑定到服务，重新获得播放控制权。
+
+onRebind()
+
+[进程和应用生命周期](https://developer.android.com/guide/components/activities/process-lifecycle?hl=zh-cn)
+
+[进程和线程概览](https://developer.android.com/guide/components/processes-and-threads?hl=zh-cn)
+
+[绑定服务概览](https://developer.android.com/guide/components/bound-services?hl=zh-cn)
+
+Service持久化与绑定具体操作 [已测试安卓7.1以上系统特性相同]
+1.前台服务 service中调用startForeground，启用持久化Service需要保证至少一次通过startForegroundService/startService 启动了Service且在Service中主动startForeground，可以通过intent传参指定一次init操作，在init的过程中startForeground，最关键的操作就是startForeground
+即 通过startService 调用过的Service并且Service中调用过startForeground的Service就是持久化的前台服务，服务不会被系统kill
+2.通过使用bindService将Activity与Service绑定 使用unbindService在onDestroy中解绑，如果不解绑会造成对Service的引用泄漏引发错误。可以在Activity中的onCreate中进行绑定，也可以根据需求按需手动进行绑定，bindService startService的先后顺序无所谓
+*只要注意至少一次对Service调用过startForegroundService/startService*
+
+关于startForegroundService
+https://developer.android.com/about/versions/oreo/background?hl=zh-cn#services
+尽量使用startForegroundService传递start命令 注意首次使用的时候需要在5秒内在服务中主动调用startService
+
+改成bindService逻辑
+直接在activity onCreate时候进行绑定 onDestroy时解绑（注意判空），绑定的时候进行一些判断。如果已存在服务会话则恢复之前的情况。如果不存在不服务会话则等待需要的时候再启动前台服务
 
 <hr>
 

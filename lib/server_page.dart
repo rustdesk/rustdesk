@@ -11,7 +11,7 @@ class ServerPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // TODO: implement build
+    checkService();
     return ChangeNotifierProvider.value(
         value: serverModel,
         child: Scaffold(
@@ -55,13 +55,24 @@ class ServerPage extends StatelessWidget {
   }
 }
 
+void checkService() {
+  // 检测当前服务状态，若已存在服务则异步更新数据回来
+  toAndroidChannel.invokeMethod("check_service");  // jvm
+  ServerPage.serverModel.updateClientState();
+  // var state = FFI.getByName("client_state").split(":"); // rust
+  // var isStart = FFI.getByName("client_is_start") !="";// 使用JSON
+  // if(state.length == 2){
+  //   ServerPage.serverModel.setPeer(isStart,name:state[0],id:state[1]);
+  // }
+}
+
 class ServerInfo extends StatefulWidget {
   @override
   _ServerInfoState createState() => _ServerInfoState();
 }
 
 class _ServerInfoState extends State<ServerInfo> {
-  var _passwdShow = true;
+  var _passwdShow = false;
 
   // TODO set ID / PASSWORD
   var _serverId = "";
@@ -96,7 +107,7 @@ class _ServerInfoState extends State<ServerInfo> {
         ),
         TextFormField(
           readOnly: true,
-          obscureText: _passwdShow,
+          obscureText: !_passwdShow,
           style: TextStyle(
               fontSize: 25.0,
               fontWeight: FontWeight.bold,
@@ -144,7 +155,7 @@ class _PermissionCheckerState extends State<PermissionChecker> {
         cardTitle("权限列表"),
         PermissionRow("媒体权限", serverModel.mediaOk, _toAndroidInitService),
         const Divider(height: 0),
-        PermissionRow("输入权限", serverModel.inputOk, _toAndroidCheckInput),
+        PermissionRow("输入权限", serverModel.inputOk, _toAndroidInitInput),
         const Divider(),
         serverModel.mediaOk
             ? ElevatedButton.icon(
@@ -172,7 +183,9 @@ void showLoginReqAlert(BuildContext context, String peerID, String name) {
                   child: Text("接受"),
                   onPressed: () {
                     FFI.setByName("login_res", "true");
-                    _toAndroidStartCapture();
+                    if(!ServerPage.serverModel.isFileTransfer){
+                      _toAndroidStartCapture();
+                    }
                     ServerPage.serverModel.setPeer(true);
                     Navigator.of(context).pop();
                   }),
@@ -224,7 +237,7 @@ class ConnectionManager extends StatelessWidget {
     final serverModel = Provider.of<ServerModel>(context);
     var info =
         "${serverModel.peerName != "" ? serverModel.peerName : "NA"}-${serverModel.peerID != "" ? serverModel.peerID : "NA"}";
-    return serverModel.peerEnabled
+    return serverModel.isStart
         ? myCard(Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -239,7 +252,7 @@ class ConnectionManager extends StatelessWidget {
                   icon: Icon(Icons.close),
                   onPressed: () {
                     FFI.setByName("close_conn");
-                    _toAndroidStopCapture();
+                    // _toAndroidStopCapture();
                     serverModel.setPeer(false);
                   },
                   label: Text("断开连接"))
@@ -286,10 +299,10 @@ Future<Null> _toAndroidStartCapture() async {
   debugPrint("_toAndroidStartCapture:$res");
 }
 
-Future<Null> _toAndroidStopCapture() async {
-  bool res = await toAndroidChannel.invokeMethod("stop_capture");
-  debugPrint("_toAndroidStopCapture:$res");
-}
+// Future<Null> _toAndroidStopCapture() async {
+//   bool res = await toAndroidChannel.invokeMethod("stop_capture");
+//   debugPrint("_toAndroidStopCapture:$res");
+// }
 
 Future<Null> _toAndroidStopService() async {
   FFI.setByName("stop_service");
@@ -297,7 +310,7 @@ Future<Null> _toAndroidStopService() async {
   debugPrint("_toAndroidStopSer:$res");
 }
 
-Future<Null> _toAndroidCheckInput() async {
-  bool res = await toAndroidChannel.invokeMethod("check_input");
-  debugPrint("_toAndroidStopSer:$res");
+Future<Null> _toAndroidInitInput() async {
+  bool res = await toAndroidChannel.invokeMethod("init_input");
+  debugPrint("_toAndroidInitInput:$res");
 }
