@@ -33,7 +33,6 @@ apply from: "$flutterRoot/packages/flutter_tools/gradle/flutter.gradle"
 
 android {
     compileSdkVersion 31
-    ndkVersion '22.1.7171670' // * 仅个人使用 存在多版本NDK无法自动选择 需要使用此配置指定NDK版本 [CSF]
     sourceSets {
         main.java.srcDirs += 'src/main/kotlin'
     }
