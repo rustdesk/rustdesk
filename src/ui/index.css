@@ -39,6 +39,10 @@ body {
     padding: 20px;
 }
 
+.left-pane div {
+  word-wrap: break-word;
+}
+
 div.sessions-bar {
     color: color(light-text);
     padding-top: 0.5em;
