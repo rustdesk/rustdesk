@@ -510,8 +510,7 @@ class FolderView : Reactor.Component {
     }
 
     event keydown $(.select-dir) (evt, me) {
-      if (evt.keyCode == Event.VK_ENTER || 
-            (view.mediaVar("platform") == "OSX" && evt.keyCode == 0x4C)) {
+      if (isEnterKey(evt)) {
         this.goto(me.value, true);
       }
     }

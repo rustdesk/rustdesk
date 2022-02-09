@@ -349,6 +349,10 @@ async fn start_ipc(cm: ConnectionManager) {
                                                         conn_id = id;
                                                         cm.add_connection(id, is_file_transfer, port_forward, peer_id, name, authorized, keyboard, clipboard, audio, tx.clone());
                                                     }
+                                                    Data::Close => {
+                                                        log::info!("cm ipc connection closed from connection request");
+                                                        break;
+                                                    }
                                                     _ => {
                                                         cm.handle_data(conn_id, data, &mut write_jobs, &mut stream).await;
                                                     }

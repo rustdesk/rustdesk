@@ -18,6 +18,7 @@ div.left-panel {
 div.chaticon svg {
     size: 24px;
     margin: 4px;
+    opacity: 0.66;
 }
 
 div.chaticon {
@@ -25,10 +26,11 @@ div.chaticon {
     right: 0;
     top: 0;
     size: 32px;
+    background-color: color(gray-bg);
 }
 
-div.chaticon.active {
-    opacity: 0.5;
+div.chaticon:hover svg {
+    opacity: 1;
 }
 
 div.chaticon:active {
@@ -209,6 +211,7 @@ div.tab-arrows {
     position: absolute;
     right: 2px;
     font-weight: bold;
+    background: white;
 }
 
 div.tab-arrows span {
@@ -216,4 +219,15 @@ div.tab-arrows span {
     height: *;
     margin: 0;
     padding: 6px 2px;
+    line-height: 20px;
+    opacity: 0.66;
+}
+
+div.tab-arrows span:hover {
+    opacity: 1;
+}
+
+div.tab-arrows span:active {
+    opacity: 1;
+    background-color: #ddd;
 }

@@ -22,7 +22,6 @@ class Body: Reactor.Component
         var callback = function(msg) {
             me.sendMsg(msg);
         };
-        self.timer(1ms, adaptSize);
         var right_style = show_chat ? "" : "display: none";
         return <div .content>
             <div .left-panel>
@@ -153,8 +152,8 @@ class Header: Reactor.Component
             {tabs}
             </div>
             <div .tab-arrows>
-                <span .left-arrow>&lt;</span>
-                <span .right-arrow>&gt;</span>
+                <span #left-arrow>&lt;</span>
+                <span #right-arrow>&gt;</span>
             </div>
         </div>;
     }
@@ -181,13 +180,13 @@ class Header: Reactor.Component
         this.update_cur(idx);
     }
 
-    event click $(span.left-arrow) {
+    event click $(span#left-arrow) {
         var cur = body.cur;
         if (cur == 0) return;
         this.update_cur(cur - 1);
     }
 
-    event click $(span.right-arrow) {
+    event click $(span#right-arrow) {
         var cur = body.cur;
         if (cur == connections.length - 1) return;
         this.update_cur(cur + 1);
@@ -205,7 +204,7 @@ if (is_osx) {
 event click $(div.chaticon) {
     checkClickTime(function() {
         show_chat = !show_chat;
-        adaptSize();
+        adaptSizeForChat();
     });
 }
 
@@ -213,12 +212,10 @@ function checkClickTime(callback) {
     callback();
 }
 
-function adaptSize() {
+function adaptSizeForChat() {
     $(div.right-panel).style.set {
         display: show_chat ? "block" : "none",
     };
-    var el = $(div.chaticon);
-    if (el) el.attributes.toggleClass("active", show_chat);
     var (x, y, w, h) = view.box(#rectw, #border, #screen);
     if (show_chat && w < 600) {
         view.move(x - (600 - w), y, 600, h);
@@ -298,7 +295,11 @@ handler.newMessage = function(id, text) {
     if (!conn) return;
     conn.msgs.push({name: conn.name, text: text, time: getNowStr()});
     bring_to_top(idx);
-    if (idx == body.cur) show_chat = true;
+    if (idx == body.cur) {
+        var shouldAdapt = !show_chat;
+        show_chat = true;
+        if (shouldAdapt) adaptSizeForChat();
+    }
     conn.unreaded += 1;
     update();
 }

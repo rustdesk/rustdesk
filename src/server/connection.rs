@@ -335,6 +335,7 @@ impl Connection {
 
         let _ = crate::platform::block_input(false);
         crate::platform::toggle_blank_screen(false);
+        log::info!("#{} connection loop exited", id);
     }
 
     fn handle_input(receiver: std_mpsc::Receiver<MessageInput>, tx: Sender) {
@@ -933,7 +934,10 @@ impl Connection {
                         }
                     }
                     Some(misc::Union::video_received(_)) => {
-                        video_service::notify_video_frame_feched(self.inner.id, Some(Instant::now().into()));
+                        video_service::notify_video_frame_feched(
+                            self.inner.id,
+                            Some(Instant::now().into()),
+                        );
                     }
                     _ => {}
                 },
@@ -1039,6 +1043,7 @@ impl Connection {
             crate::platform::lock_screen();
             super::video_service::switch_to_primary();
         }
+        self.tx_to_cm.send(ipc::Data::Close).ok();
         self.port_forward_socket.take();
     }
 

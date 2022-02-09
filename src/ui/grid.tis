@@ -250,8 +250,7 @@ class Grid: Behavior {
           idx += 1;
         }
       }
-      if (evt.keyCode == Event.VK_ENTER || 
-            (view.mediaVar("platform") == "OSX" && evt.keyCode == 0x4C)) {
+      if (isEnterKey(evt)) {
         this.onRowDoubleClick(this.getCurrentRow());
       }
       return false;

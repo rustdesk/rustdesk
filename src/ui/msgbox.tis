@@ -174,9 +174,7 @@ class MsgboxComponent: Reactor.Component {
     
     event keydown (evt) {
         if (!evt.shortcutKey) {
-            if (evt.keyCode == Event.VK_ENTER || 
-                (is_osx && evt.keyCode == 0x4C) ||
-                (is_linux && evt.keyCode == 65421)) {
+            if (isEnterKey(evt)) {
                 this.submit();
             }
             if (evt.keyCode == Event.VK_ESCAPE) {

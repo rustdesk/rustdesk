@@ -10,6 +10,11 @@ var is_file_transfer;
 var is_xfce = false;
 try { is_xfce = handler.is_xfce(); } catch(e) {}
 
+function isEnterKey(evt) {
+    return (evt.keyCode == Event.VK_ENTER || 
+             (is_osx && evt.keyCode == 0x4C) ||
+              (is_linux && evt.keyCode == 65421));
+}
 
 function translate(name) {
     try {
@@ -195,10 +200,9 @@ class ChatBox: Reactor.Component {
 
   event keydown $(input) (evt) {
     if (!evt.shortcutKey) {
-        if (evt.keyCode == Event.VK_ENTER ||
-            (view.mediaVar("platform") == "OSX" && evt.keyCode == 0x4C)) {
-                this.send();
-            }
+        if (isEnterKey(evt)) {
+            this.send();
+        }
     }
   }
 
