@@ -451,7 +451,7 @@ export default class Connection {
         misc.audio_format.sample_rate
       );
     } else if (misc.chat_message) {
-      globals.pushEvent("chat", misc.chat_message.text);
+      globals.pushEvent("chat", { text: misc.chat_message.text });
     } else if (misc.permission_info) {
       const p = misc.permission_info;
       console.info("Change permission " + p.permission + " -> " + p.enabled);
