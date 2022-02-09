@@ -1,12 +1,10 @@
 import 'package:flutter/material.dart';
 import 'dart:async';
 import 'package:flutter_easyloading/flutter_easyloading.dart';
-import 'package:flutter_hbb/server_page.dart';
 import 'package:tuple/tuple.dart';
-import 'dart:io';
-import 'main.dart';
 
 typedef F = String Function(String);
+typedef FMethod = String Function(String, dynamic);
 
 class Translator {
   static F call;
@@ -22,6 +20,8 @@ class MyTheme {
   static const Color accent80 = Color(0xAA0071FF);
   static const Color canvasColor = Color(0xFF212121);
   static const Color border = Color(0xFFCCCCCC);
+  static const Color idColor = Color(0xFF00B6F0);
+  static const Color darkGray = Color(0xFFB9BABC);
 }
 
 final ButtonStyle flatButtonStyle = TextButton.styleFrom(
@@ -32,41 +32,44 @@ final ButtonStyle flatButtonStyle = TextButton.styleFrom(
   ),
 );
 
-void Function() loadingCancelCallback = null;
-
+void Function() loadingCancelCallback;
 void showLoading(String text, BuildContext context) {
   if (_hasDialog && context != null) {
     Navigator.pop(context);
+    _hasDialog = false;
   }
   dismissLoading();
-  if (Platform.isAndroid) {
+  if (isAndroid) {
     EasyLoading.show(status: text, maskType: EasyLoadingMaskType.black);
     return;
   }
   EasyLoading.showWidget(
-      Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Center(child: CircularProgressIndicator()),
-          SizedBox(height: 20),
-          Center(
-              child:
-                  Text(Translator.call(text), style: TextStyle(fontSize: 15))),
-          SizedBox(height: 20),
-          Center(
-              child: TextButton(
-                  style: flatButtonStyle,
-                  onPressed: () {
-                    // with out loadingCancelCallback, we can see unexpected input password
-                    // dialog shown in home, no clue why, so use this as workaround
-                    // why no such issue on android?
-                    if (loadingCancelCallback != null) loadingCancelCallback();
-                    Navigator.pop(context);
-                  },
-                  child: Text(Translator.call('Cancel'),
-                      style: TextStyle(color: MyTheme.accent))))
-        ],
-      ),
+      Container(
+          constraints: BoxConstraints(maxWidth: 300),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(child: CircularProgressIndicator()),
+              SizedBox(height: 20),
+              Center(
+                  child: Text(Translator.call(text),
+                      style: TextStyle(fontSize: 15))),
+              SizedBox(height: 20),
+              Center(
+                  child: TextButton(
+                      style: flatButtonStyle,
+                      onPressed: () {
+                        // with out loadingCancelCallback, we can see unexpected input password
+                        // dialog shown in home, no clue why, so use this as workaround
+                        // why no such issue on android?
+                        if (loadingCancelCallback != null)
+                          loadingCancelCallback();
+                        Navigator.pop(context);
+                      },
+                      child: Text(Translator.call('Cancel'),
+                          style: TextStyle(color: MyTheme.accent))))
+            ],
+          )),
       maskType: EasyLoadingMaskType.black);
 }
 
@@ -126,6 +129,7 @@ void msgbox(String type, String title, String text, BuildContext context,
   dismissLoading();
   if (_hasDialog) {
     Navigator.pop(context);
+    _hasDialog = false;
   }
   final buttons = [
     Expanded(child: Container()),
@@ -145,18 +149,20 @@ void msgbox(String type, String title, String text, BuildContext context,
         }));
   }
   EasyLoading.showWidget(
-      Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(Translator.call(title), style: TextStyle(fontSize: 21)),
-          SizedBox(height: 20),
-          Text(Translator.call(text), style: TextStyle(fontSize: 15)),
-          SizedBox(height: 20),
-          Row(
-            children: buttons,
-          )
-        ],
-      ),
+      Container(
+          constraints: BoxConstraints(maxWidth: 300),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(Translator.call(title), style: TextStyle(fontSize: 21)),
+              SizedBox(height: 20),
+              Text(Translator.call(text), style: TextStyle(fontSize: 15)),
+              SizedBox(height: 20),
+              Row(
+                children: buttons,
+              )
+            ],
+          )),
       maskType: EasyLoadingMaskType.black);
 }
 
@@ -211,44 +217,8 @@ Color str2color(String str, [alpha = 0xFF]) {
   return Color((hash & 0xFF7FFF) | (alpha << 24));
 }
 
-toAndroidChannelInit() {
-  toAndroidChannel.setMethodCallHandler((call) async {
-    debugPrint("flutter got android msg");
-
-    try {
-      switch (call.method) {
-        case "try_start_without_auth":
-          {
-            // 可以不需要传递 通过FFI直接去获取 serverModel里面直接封装一个update通过FFI从rust端获取
-            ServerPage.serverModel.updateClientState();
-            debugPrint("pre show loginAlert:${ServerPage.serverModel.isFileTransfer.toString()}");
-            showLoginReqAlert(nowCtx, ServerPage.serverModel.peerID, ServerPage.serverModel.peerName);
-            debugPrint("from jvm:try_start_without_auth done");
-            break;
-          }
-        case "start_capture":
-          {
-            clearLoginReqAlert();
-            ServerPage.serverModel.updateClientState();
-            break;
-          }
-        case "stop_capture":
-          {
-            ServerPage.serverModel.setPeer(false);
-            break;
-          }
-        case "on_permission_changed":
-          {
-            var name = call.arguments["name"] as String;
-            var value = call.arguments["value"] as String == "true";
-            debugPrint("from jvm:on_permission_changed,$name:$value");
-            ServerPage.serverModel.changeStatue(name, value);
-            break;
-          }
-      }
-    } catch (e) {
-      debugPrint("MethodCallHandler err:$e");
-    }
-    return null;
-  });
-}
+bool isAndroid = false;
+bool isIOS = false;
+bool isWeb = false;
+bool isDesktop = false;
+BuildContext nowCtx;

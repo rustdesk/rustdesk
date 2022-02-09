@@ -1,13 +1,6 @@
-import 'package:ffi/ffi.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter/gestures.dart';
-import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:device_info/device_info.dart';
-import 'package:external_path/external_path.dart';
-import 'dart:io';
 import 'dart:math';
-import 'dart:ffi';
 import 'dart:convert';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
@@ -15,17 +8,7 @@ import 'package:flutter/material.dart';
 import 'package:tuple/tuple.dart';
 import 'dart:async';
 import 'common.dart';
-
-class RgbaFrame extends Struct {
-  @Uint32()
-  int len;
-  Pointer<Uint8> data;
-}
-
-typedef F2 = Pointer<Utf8> Function(Pointer<Utf8>, Pointer<Utf8>);
-typedef F3 = void Function(Pointer<Utf8>, Pointer<Utf8>);
-typedef F4 = void Function(Pointer<RgbaFrame>);
-typedef F5 = Pointer<RgbaFrame> Function();
+import 'native_model.dart' if (dart.library.html) 'web_model.dart';
 
 class FfiModel with ChangeNotifier {
   PeerInfo _pi;
@@ -33,6 +16,7 @@ class FfiModel with ChangeNotifier {
   var _decoding = false;
   bool _waitForImage;
   bool _initialized = false;
+  var _inputBlocked = false;
   final _permissions = Map<String, bool>();
   bool _secure;
   bool _direct;
@@ -48,12 +32,17 @@ class FfiModel with ChangeNotifier {
   get direct => _direct;
 
   get pi => _pi;
+  get inputBlocked => _inputBlocked;
+
+  set inputBlocked(v) {
+    _inputBlocked = v;
+  }
 
   FfiModel() {
     Translator.call = translate;
     clear();
     () async {
-      await FFI.init();
+      await PlatformFFI.init();
       _initialized = true;
       print("FFI initialized");
       notifyListeners();
@@ -66,6 +55,7 @@ class FfiModel with ChangeNotifier {
       _permissions[k] = v == 'true';
     });
     print('$_permissions');
+    notifyListeners();
   }
 
   bool keyboard() => _permissions['keyboard'] != false;
@@ -76,6 +66,7 @@ class FfiModel with ChangeNotifier {
     _waitForImage = false;
     _secure = null;
     _direct = null;
+    _inputBlocked = false;
     clearPermissions();
   }
 
@@ -101,6 +92,7 @@ class FfiModel with ChangeNotifier {
   }
 
   void clearPermissions() {
+    _inputBlocked = false;
     _permissions.clear();
   }
 
@@ -140,7 +132,7 @@ class FfiModel with ChangeNotifier {
     }
     if (pos != null) FFI.cursorModel.updateCursorPosition(pos);
     if (!_decoding) {
-      var rgba = FFI.getRgba();
+      var rgba = PlatformFFI.getRgba();
       if (rgba != null) {
         if (_waitForImage) {
           _waitForImage = false;
@@ -151,7 +143,7 @@ class FfiModel with ChangeNotifier {
         ui.decodeImageFromPixels(
             rgba, _display.width, _display.height, ui.PixelFormat.bgra8888,
             (image) {
-          FFI.clearRgbaFrame();
+          PlatformFFI.clearRgbaFrame();
           _decoding = false;
           if (FFI.id != pid) return;
           try {
@@ -198,7 +190,6 @@ class FfiModel with ChangeNotifier {
     }
     if (_pi.currentDisplay < _pi.displays.length) {
       _display = _pi.displays[_pi.currentDisplay];
-      initializeCursorAndCanvas();
     }
     if (displays.length > 0) {
       showLoading(translate('Connected, waiting for image...'), context);
@@ -215,10 +206,15 @@ class ImageModel with ChangeNotifier {
 
   void update(ui.Image image) {
     if (_image == null && image != null) {
-      final size = MediaQueryData.fromWindow(ui.window).size;
-      final xscale = size.width / image.width;
-      final yscale = size.height / image.height;
-      FFI.canvasModel.scale = max(xscale, yscale);
+      if (isDesktop) {
+        FFI.canvasModel.updateViewStyle();
+      } else {
+        final size = MediaQueryData.fromWindow(ui.window).size;
+        final xscale = size.width / image.width;
+        final yscale = size.height / image.height;
+        FFI.canvasModel.scale = max(xscale, yscale);
+      }
+      initializeCursorAndCanvas();
     }
     _image = image;
     if (image != null) notifyListeners();
@@ -256,11 +252,54 @@ class CanvasModel with ChangeNotifier {
 
   double get scale => _scale;
 
+  void updateViewStyle() {
+    final s = FFI.getByName('peer_option', 'view-style');
+    final size = MediaQueryData.fromWindow(ui.window).size;
+    final s1 = size.width / FFI.ffiModel.display.width;
+    final s2 = size.height / FFI.ffiModel.display.height;
+    if (s == 'shrink') {
+      final s = s1 < s2 ? s1 : s2;
+      if (s < 1) {
+        _scale = s;
+      }
+    } else if (s == 'stretch') {
+      final s = s1 > s2 ? s1 : s2;
+      if (s > 1) {
+        _scale = s;
+      }
+    } else {
+      _scale = 1;
+    }
+    _x = (size.width - FFI.ffiModel.display.width * _scale) / 2;
+    _y = (size.height - FFI.ffiModel.display.height * _scale) / 2;
+    notifyListeners();
+  }
+
   void update(double x, double y, double scale) {
     _x = x;
     _y = y;
     _scale = scale;
     notifyListeners();
+  }
+
+  void moveDesktopMouse(double x, double y) {
+    final size = MediaQueryData.fromWindow(ui.window).size;
+    final dw = FFI.ffiModel.display.width * _scale;
+    final dh = FFI.ffiModel.display.height * _scale;
+    var dxOffset = 0;
+    var dyOffset = 0;
+    if (dw > size.width) {
+      dxOffset = (x - dw * (x / size.width) - _x).toInt();
+    }
+    if (dh > size.height) {
+      dyOffset = (y - dh * (y / size.height) - _y).toInt();
+    }
+    _x += dxOffset;
+    _y += dyOffset;
+    if (dxOffset != 0 || dyOffset != 0) {
+      notifyListeners();
+    }
+    FFI.cursorModel.move(x, y);
   }
 
   set scale(v) {
@@ -274,8 +313,12 @@ class CanvasModel with ChangeNotifier {
   }
 
   void resetOffset() {
-    _x = 0;
-    _y = 0;
+    if (isDesktop) {
+      updateViewStyle();
+    } else {
+      _x = 0;
+      _y = 0;
+    }
     notifyListeners();
   }
 
@@ -356,13 +399,17 @@ class CursorModel with ChangeNotifier {
   }
 
   void touch(double x, double y, bool right) {
+    move(x, y);
+    FFI.moveMouse(_x, _y);
+    FFI.tap(right);
+  }
+
+  void move(double x, double y) {
     final scale = FFI.canvasModel.scale;
     final xoffset = FFI.canvasModel.x;
     final yoffset = FFI.canvasModel.y;
     _x = (x - xoffset) / scale + _displayOriginX;
     _y = (y - yoffset) / scale + _displayOriginY;
-    FFI.moveMouse(_x, _y);
-    FFI.tap(right);
     notifyListeners();
   }
 
@@ -558,7 +605,7 @@ class ServerModel with ChangeNotifier {
   bool get inputOk => _inputOk;
 
   // bool get needServerOpen => _needServerOpen;
-  
+
   bool get isPeerStart => _isPeerStart;
 
   bool get isFileTransfer => _isFileTransfer;
@@ -625,13 +672,6 @@ class ServerModel with ChangeNotifier {
 
 class FFI {
   static String id = "";
-  static String _dir = "";
-  static String _homeDir = "";
-  static F2 _getByName;
-  static F3 _setByName;
-  static F4 _freeRgba;
-  static F5 _getRgba;
-  static Pointer<RgbaFrame> _lastRgbaFrame;
   static var shift = false;
   static var ctrl = false;
   static var alt = false;
@@ -640,6 +680,7 @@ class FFI {
   static final ffiModel = FfiModel();
   static final cursorModel = CursorModel();
   static final canvasModel = CanvasModel();
+  static final serverModel = ServerModel();
 
   static String getId() {
     return getByName('remote_id');
@@ -682,7 +723,8 @@ class FFI {
 
   static void inputKey(String name) {
     if (!ffiModel.keyboard()) return;
-    setByName('input_key', json.encode(modify({'name': name})));
+    setByName(
+        'input_key', json.encode(modify({'name': name, 'press': 'true'})));
   }
 
   static void moveMouse(double x, double y) {
@@ -711,19 +753,6 @@ class FFI {
     FFI.id = id;
   }
 
-  static void clearRgbaFrame() {
-    if (_lastRgbaFrame != null && _lastRgbaFrame != nullptr)
-      _freeRgba(_lastRgbaFrame);
-  }
-
-  static Uint8List getRgba() {
-    if (_getRgba == null) return null;
-    _lastRgbaFrame = _getRgba();
-    if (_lastRgbaFrame == null || _lastRgbaFrame == nullptr) return null;
-    final ref = _lastRgbaFrame.ref;
-    return Uint8List.sublistView(ref.data.asTypedList(ref.len));
-  }
-
   static Map<String, dynamic> popEvent() {
     var s = getByName('event');
     if (s == '') return null;
@@ -746,8 +775,10 @@ class FFI {
   }
 
   static void close() {
-    savePreference(id, cursorModel.x, cursorModel.y, canvasModel.x,
-        canvasModel.y, canvasModel.scale, ffiModel.pi.currentDisplay);
+    if (FFI.imageModel.image != null && !isDesktop) {
+      savePreference(id, cursorModel.x, cursorModel.y, canvasModel.x,
+          canvasModel.y, canvasModel.scale, ffiModel.pi.currentDisplay);
+    }
     id = "";
     setByName('close', '');
     imageModel.update(null);
@@ -757,63 +788,86 @@ class FFI {
     resetModifiers();
   }
 
-  static void setByName(String name, [String value = '']) {
-    if (_setByName == null) return;
-    var a = name.toNativeUtf8();
-    var b = value.toNativeUtf8();
-    _setByName(a, b);
-    calloc.free(a);
-    calloc.free(b);
-  }
-
   static String getByName(String name, [String arg = '']) {
-    if (_getByName == null) return '';
-    var a = name.toNativeUtf8();
-    var b = arg.toNativeUtf8();
-    var p = _getByName(a, b);
-    assert(p != nullptr && p != null);
-    var res = p.toDartString();
-    calloc.free(p);
-    calloc.free(a);
-    calloc.free(b);
-    return res;
+    return PlatformFFI.getByName(name, arg);
   }
 
-  static Future<Null> init() async {
-    final dylib = Platform.isAndroid
-        ? DynamicLibrary.open('librustdesk.so')
-        : DynamicLibrary.process();
-    print('initializing FFI');
-    try {
-      _getByName = dylib.lookupFunction<F2, F2>('get_by_name');
-      _setByName =
-          dylib.lookupFunction<Void Function(Pointer<Utf8>, Pointer<Utf8>), F3>(
-              'set_by_name');
-      _freeRgba = dylib
-          .lookupFunction<Void Function(Pointer<RgbaFrame>), F4>('free_rgba');
-      _getRgba = dylib.lookupFunction<F5, F5>('get_rgba');
-      _dir = (await getApplicationDocumentsDirectory()).path;
-      _homeDir = (await ExternalPath.getExternalStorageDirectories())[0];
-      String id = 'NA';
-      String name = 'Flutter';
-      DeviceInfoPlugin deviceInfo = DeviceInfoPlugin();
-      if (Platform.isAndroid) {
-        AndroidDeviceInfo androidInfo = await deviceInfo.androidInfo;
-        name = '${androidInfo.brand}-${androidInfo.model}';
-        id = androidInfo.id.hashCode.toString();
-      } else {
-        IosDeviceInfo iosInfo = await deviceInfo.iosInfo;
-        name = iosInfo.utsname.machine;
-        id = iosInfo.identifierForVendor.hashCode.toString();
-      }
-      debugPrint("info1-id:$id,info2-name:$name,dir:$_dir,homeDir:$_homeDir");
-      setByName('info1', id);
-      setByName('info2', name);
-      setByName('home_dir',_homeDir);
-      setByName('init', _dir);
-    } catch (e) {
-      print(e);
+  static void setByName(String name, [String value = '']) {
+    PlatformFFI.setByName(name, value);
+  }
+
+  static Future<String> getVersion() async {
+    return await PlatformFFI.getVersion();
+  }
+
+  static handleMouse(Map<String, dynamic> evt) {
+    var type = '';
+    var isMove = false;
+    switch (evt['type']) {
+      case 'mousedown':
+        type = 'down';
+        break;
+      case 'mouseup':
+        type = 'up';
+        break;
+      case 'mousemove':
+        isMove = true;
+        break;
+      default:
+        return;
     }
+    evt['type'] = type;
+    var x = evt['x'];
+    var y = evt['y'];
+    if (isMove) {
+      FFI.canvasModel.moveDesktopMouse(x, y);
+    }
+    final d = FFI.ffiModel.display;
+    x -= FFI.canvasModel.x;
+    y -= FFI.canvasModel.y;
+    if (!isMove && (x < 0 || x > d.width || y < 0 || y > d.height)) {
+      return;
+    }
+    x /= FFI.canvasModel.scale;
+    y /= FFI.canvasModel.scale;
+    x += d.x;
+    y += d.y;
+    if (type != '') {
+      x = 0;
+      y = 0;
+    }
+    evt['x'] = '$x';
+    evt['y'] = '$y';
+    var buttons = '';
+    switch (evt['buttons']) {
+      case 1:
+        buttons = 'left';
+        break;
+      case 2:
+        buttons = 'right';
+        break;
+      case 4:
+        buttons = 'wheel';
+        break;
+    }
+    evt['buttons'] = buttons;
+    setByName('send_mouse', json.encode(evt));
+  }
+
+  static listenToMouse(bool yesOrNo) {
+    if (yesOrNo) {
+      PlatformFFI.startDesktopWebListener(handleMouse);
+    } else {
+      PlatformFFI.stopDesktopWebListener();
+    }
+  }
+
+  static void setMethodCallHandler(FMethod callback) {
+    PlatformFFI.setMethodCallHandler(callback);
+  }
+
+  static Future<bool> invokeMethod(String method) async {
+    return await PlatformFFI.invokeMethod(method);
   }
 }
 
@@ -861,6 +915,7 @@ void savePreference(String id, double xCursor, double yCursor, double xCanvas,
 }
 
 Future<Map<String, dynamic>> getPreference(String id) async {
+  if (!isDesktop) return null;
   SharedPreferences prefs = await SharedPreferences.getInstance();
   var p = prefs.getString('peer' + id);
   if (p == null) return null;
@@ -894,33 +949,11 @@ void initializeCursorAndCanvas() async {
   FFI.canvasModel.update(xCanvas, yCanvas, scale);
 }
 
-final locale = Platform.localeName;
-final bool isCn =
-    locale.startsWith('zh') && (locale.endsWith('CN') || locale.endsWith('SG'));
-
-final langs = <String, Map<String, String>>{
-  'cn': <String, String>{
-    'Remote ID': '远程ID',
-    'Paste': '粘贴',
-    'Are you sure to close the connection?': '是否确认关闭连接？',
-    'Download new version': '下载新版本',
-    'Touch mode': '触屏模式',
-    'Reset canvas': '重置画布',
-  },
-  'en': <String, String>{}
-};
-
 String translate(String name) {
-  if (name.startsWith('Failed') && name.contains(':')) {
+  if (name.startsWith('Failed to') && name.contains(': ')) {
     return name.split(': ').map((x) => translate(x)).join(': ');
   }
-  final tmp = isCn ? langs['cn'] : langs['en'];
-  final v = tmp[name];
-  if (v == null) {
-    var a = 'translate';
-    var b = '{"locale": "${Platform.localeName}", "text": "${name}"}';
-    return FFI.getByName(a, b);
-  } else {
-    return v;
-  }
+  var a = 'translate';
+  var b = '{"locale": "$localeName", "text": "$name"}';
+  return FFI.getByName(a, b);
 }

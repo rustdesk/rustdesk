@@ -1,16 +1,11 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
-import 'package:flutter_hbb/server_page.dart';
 import 'package:provider/provider.dart';
 import 'package:firebase_analytics/firebase_analytics.dart';
 import 'package:firebase_analytics/observer.dart';
 import 'package:firebase_core/firebase_core.dart';
-import 'common.dart';
 import 'model.dart';
 import 'home_page.dart';
-
-const toAndroidChannel = MethodChannel("mChannel");
-BuildContext nowCtx;
+import 'server_page.dart';
 
 Future<Null> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -20,7 +15,6 @@ Future<Null> main() async {
 }
 
 class App extends StatelessWidget {
-
   @override
   Widget build(BuildContext context) {
     final analytics = FirebaseAnalytics();
@@ -40,7 +34,7 @@ class App extends StatelessWidget {
         ),
         home: HomePage(title: 'RustDesk'),
         routes: {
-          "server_page":(context) => ServerPage(),
+          "server_page": (context) => ServerPage(),
         },
         navigatorObservers: [
           FirebaseAnalyticsObserver(analytics: analytics),

@@ -4,16 +4,14 @@ import 'package:flutter_hbb/model.dart';
 import 'package:provider/provider.dart';
 
 import 'common.dart';
-import 'main.dart';
+import 'model.dart';
 
 class ServerPage extends StatelessWidget {
-  static final serverModel = ServerModel();
-
   @override
   Widget build(BuildContext context) {
     checkService();
     return ChangeNotifierProvider.value(
-        value: serverModel,
+        value: FFI.serverModel,
         child: Scaffold(
             backgroundColor: MyTheme.grayBg,
             appBar: AppBar(
@@ -57,8 +55,8 @@ class ServerPage extends StatelessWidget {
 
 void checkService() {
   // 检测当前服务状态，若已存在服务则异步更新数据回来
-  toAndroidChannel.invokeMethod("check_service"); // jvm
-  ServerPage.serverModel.updateClientState();
+  FFI.invokeMethod("check_service"); // jvm
+  FFI.serverModel.updateClientState();
 }
 
 class ServerInfo extends StatefulWidget {
@@ -74,14 +72,13 @@ class _ServerInfoState extends State<ServerInfo> {
   var _serverPasswd = TextEditingController(text: "");
   static const _emptyIdShow = "正在获取ID...";
 
-
   @override
   void initState() {
     super.initState();
     var id = FFI.getByName("server_id");
-    _serverId.text = id==""?_emptyIdShow:id;
+    _serverId.text = id == "" ? _emptyIdShow : id;
     _serverPasswd.text = FFI.getByName("server_password");
-    if(_serverId.text == _emptyIdShow || _serverPasswd.text == ""){
+    if (_serverId.text == _emptyIdShow || _serverPasswd.text == "") {
       fetchConfigAgain();
     }
   }
@@ -132,19 +129,21 @@ class _ServerInfoState extends State<ServerInfo> {
       ],
     ));
   }
-  fetchConfigAgain()async{
+
+  fetchConfigAgain() async {
     FFI.setByName("start_service");
     var count = 0;
     const maxCount = 10;
-    while(count<maxCount){
-      if(_serverId.text!=_emptyIdShow && _serverPasswd.text!=""){
+    while (count < maxCount) {
+      if (_serverId.text != _emptyIdShow && _serverPasswd.text != "") {
         break;
       }
       await Future.delayed(Duration(seconds: 2));
       var id = FFI.getByName("server_id");
-      _serverId.text = id==""?_emptyIdShow:id;
+      _serverId.text = id == "" ? _emptyIdShow : id;
       _serverPasswd.text = FFI.getByName("server_password");
-      debugPrint("fetch id & passwd again at $count:id:${_serverId.text},passwd:${_serverPasswd.text}");
+      debugPrint(
+          "fetch id & passwd again at $count:id:${_serverId.text},passwd:${_serverPasswd.text}");
       count++;
     }
     FFI.setByName("stop_service");
@@ -191,7 +190,7 @@ class _PermissionCheckerState extends State<PermissionChecker> {
 
 BuildContext loginReqAlertCtx;
 
-void showLoginReqAlert(BuildContext context, String peerID, String name)async {
+void showLoginReqAlert(BuildContext context, String peerID, String name) async {
   debugPrint("got try_start_without_auth");
   await showDialog(
       context: context,
@@ -205,10 +204,10 @@ void showLoginReqAlert(BuildContext context, String peerID, String name)async {
                 child: Text("接受"),
                 onPressed: () {
                   FFI.setByName("login_res", "true");
-                  if (!ServerPage.serverModel.isFileTransfer) {
+                  if (!FFI.serverModel.isFileTransfer) {
                     _toAndroidStartCapture();
                   }
-                  ServerPage.serverModel.setPeer(true);
+                  FFI.serverModel.setPeer(true);
                   Navigator.of(alertContext).pop();
                 }),
             TextButton(
@@ -224,10 +223,10 @@ void showLoginReqAlert(BuildContext context, String peerID, String name)async {
   loginReqAlertCtx = null;
 }
 
-clearLoginReqAlert(){
-  if (loginReqAlertCtx!=null){
+clearLoginReqAlert() {
+  if (loginReqAlertCtx != null) {
     Navigator.of(loginReqAlertCtx).pop();
-    ServerPage.serverModel.updateClientState();
+    FFI.serverModel.updateClientState();
   }
 }
 
@@ -321,31 +320,73 @@ Widget myCard(Widget child) {
 }
 
 Future<Null> _toAndroidInitService() async {
-  bool res = await toAndroidChannel.invokeMethod("init_service");
+  bool res = await FFI.invokeMethod("init_service");
   FFI.setByName("start_service");
   debugPrint("_toAndroidInitService:$res");
 }
 
 Future<Null> _toAndroidStartCapture() async {
-  bool res = await toAndroidChannel.invokeMethod("start_capture");
+  bool res = await FFI.invokeMethod("start_capture");
   debugPrint("_toAndroidStartCapture:$res");
 }
 
 // Future<Null> _toAndroidStopCapture() async {
-//   bool res = await toAndroidChannel.invokeMethod("stop_capture");
+//   bool res = await FFI.invokeMethod("stop_capture");
 //   debugPrint("_toAndroidStopCapture:$res");
 // }
 
 Future<Null> _toAndroidStopService() async {
   FFI.setByName("close_conn");
-  ServerPage.serverModel.setPeer(false);
+  FFI.serverModel.setPeer(false);
 
-  bool res = await toAndroidChannel.invokeMethod("stop_service");
+  bool res = await FFI.invokeMethod("stop_service");
   FFI.setByName("stop_service");
   debugPrint("_toAndroidStopSer:$res");
 }
 
 Future<Null> _toAndroidInitInput() async {
-  bool res = await toAndroidChannel.invokeMethod("init_input");
+  bool res = await FFI.invokeMethod("init_input");
   debugPrint("_toAndroidInitInput:$res");
+}
+
+void toAndroidChannelInit() {
+  FFI.setMethodCallHandler((method, arguments) {
+    debugPrint("flutter got android msg");
+    try {
+      switch (method) {
+        case "try_start_without_auth":
+          {
+            FFI.serverModel.updateClientState();
+            debugPrint(
+                "pre show loginAlert:${FFI.serverModel.isFileTransfer.toString()}");
+            showLoginReqAlert(
+                nowCtx, FFI.serverModel.peerID, FFI.serverModel.peerName);
+            debugPrint("from jvm:try_start_without_auth done");
+            break;
+          }
+        case "start_capture":
+          {
+            clearLoginReqAlert();
+            FFI.serverModel.updateClientState();
+            break;
+          }
+        case "stop_capture":
+          {
+            FFI.serverModel.setPeer(false);
+            break;
+          }
+        case "on_permission_changed":
+          {
+            var name = arguments["name"] as String;
+            var value = arguments["value"] as String == "true";
+            debugPrint("from jvm:on_permission_changed,$name:$value");
+            FFI.serverModel.changeStatue(name, value);
+            break;
+          }
+      }
+    } catch (e) {
+      debugPrint("MethodCallHandler err:$e");
+    }
+    return "";
+  });
 }

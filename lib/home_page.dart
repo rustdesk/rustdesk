@@ -1,14 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:tuple/tuple.dart';
-import 'package:package_info/package_info.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'dart:async';
 import 'common.dart';
-import 'main.dart';
 import 'model.dart';
 import 'remote_page.dart';
-import 'dart:io';
 
 class HomePage extends StatefulWidget {
   HomePage({Key key, this.title}) : super(key: key);
@@ -22,12 +19,13 @@ class HomePage extends StatefulWidget {
 class _HomePageState extends State<HomePage> {
   final _idController = TextEditingController();
   var _updateUrl = '';
+  var _menuPos;
 
   @override
   void initState() {
     super.initState();
     nowCtx = context;
-    if (Platform.isAndroid) {
+    if (isAndroid) {
       Timer(Duration(seconds: 5), () {
         _updateUrl = FFI.getByName('software_update_url');
         if (_updateUrl.isNotEmpty) setState(() {});
@@ -45,37 +43,45 @@ class _HomePageState extends State<HomePage> {
         appBar: AppBar(
           centerTitle: true,
           actions: [
-            IconButton(
-                icon: Icon(Icons.more_vert),
-                onPressed: () {
-                  () async {
-                    var value = await showMenu(
-                      context: context,
-                      position: RelativeRect.fromLTRB(3000, 70, 3000, 70),
-                      items: [
-                        PopupMenuItem<String>(
-                            child: Text(translate('ID Server')),
-                            value: 'id_server'),
-                        Platform.isAndroid
-                            ? PopupMenuItem<String>(
-                                child: Text(translate('Share My Screen')),
-                                value: 'server')
-                            : null,
-                        PopupMenuItem<String>(
-                            child: Text(translate('About') + ' RustDesk'),
-                            value: 'about'),
-                      ],
-                      elevation: 8,
-                    );
-                    if (value == 'id_server') {
-                      showServer(context);
-                    } else if (value == 'server') {
-                      Navigator.pushNamed(context, "server_page");
-                    } else if (value == 'about') {
-                      showAbout(context);
-                    }
-                  }();
-                })
+            Ink(
+                child: InkWell(
+                    child: Padding(
+                        padding: const EdgeInsets.all(12),
+                        child: Icon(Icons.more_vert)),
+                    onTapDown: (e) {
+                      var x = e.globalPosition.dx;
+                      var y = e.globalPosition.dy;
+                      this._menuPos = RelativeRect.fromLTRB(x, y, x, y);
+                    },
+                    onTap: () {
+                      () async {
+                        var value = await showMenu(
+                          context: context,
+                          position: this._menuPos,
+                          items: [
+                            PopupMenuItem<String>(
+                                child: Text(translate('ID Server')),
+                                value: 'server'),
+                            isAndroid
+                                ? PopupMenuItem<String>(
+                                    child: Text(translate('Share My Screen')),
+                                    value: 'server')
+                                : null,
+                            PopupMenuItem<String>(
+                                child: Text(translate('About') + ' RustDesk'),
+                                value: 'about'),
+                          ],
+                          elevation: 8,
+                        );
+                        if (value == 'server') {
+                          showServer(context);
+                        } else if (value == 'server') {
+                          Navigator.pushNamed(context, "server_page");
+                        } else if (value == 'about') {
+                          showAbout(context);
+                        }
+                      }();
+                    }))
           ],
           title: Text(widget.title),
         ),
@@ -104,6 +110,7 @@ class _HomePageState extends State<HomePage> {
                                     color: Colors.white,
                                     fontWeight: FontWeight.bold)))),
                 getSearchBarUI(),
+                Container(height: 12),
                 getPeers(),
               ]),
         ));
@@ -136,13 +143,13 @@ class _HomePageState extends State<HomePage> {
     if (!FFI.ffiModel.initialized) {
       return Container();
     }
-    return Padding(
+    var w = Padding(
       padding: const EdgeInsets.fromLTRB(16.0, 8.0, 16.0, 0.0),
       child: Container(
         height: 84,
         child: Padding(
           padding: const EdgeInsets.only(top: 8, bottom: 8),
-          child: Container(
+          child: Ink(
             decoration: BoxDecoration(
               color: MyTheme.white,
               borderRadius: const BorderRadius.only(
@@ -166,7 +173,7 @@ class _HomePageState extends State<HomePage> {
                         fontFamily: 'WorkSans',
                         fontWeight: FontWeight.bold,
                         fontSize: 30,
-                        color: Color(0xFF00B6F0),
+                        color: MyTheme.idColor,
                       ),
                       decoration: InputDecoration(
                         labelText: translate('Remote ID'),
@@ -175,13 +182,13 @@ class _HomePageState extends State<HomePage> {
                         helperStyle: TextStyle(
                           fontWeight: FontWeight.bold,
                           fontSize: 16,
-                          color: Color(0xFFB9BABC),
+                          color: MyTheme.darkGray,
                         ),
                         labelStyle: TextStyle(
                           fontWeight: FontWeight.w600,
                           fontSize: 16,
                           letterSpacing: 0.2,
-                          color: Color(0xFFB9BABC),
+                          color: MyTheme.darkGray,
                         ),
                       ),
                       autofocus: _idController.text.isEmpty,
@@ -194,7 +201,7 @@ class _HomePageState extends State<HomePage> {
                   height: 60,
                   child: IconButton(
                     icon: Icon(Icons.arrow_forward,
-                        color: Color(0xFFB9BABC), size: 45),
+                        color: MyTheme.darkGray, size: 45),
                     onPressed: onConnect,
                     autofocus: _idController.text.isNotEmpty,
                   ),
@@ -205,6 +212,8 @@ class _HomePageState extends State<HomePage> {
         ),
       ),
     );
+    return Center(
+        child: Container(constraints: BoxConstraints(maxWidth: 600), child: w));
   }
 
   @override
@@ -225,46 +234,75 @@ class _HomePageState extends State<HomePage> {
     if (!FFI.ffiModel.initialized) {
       return Container();
     }
+    final size = MediaQuery.of(context).size;
+    final space = 8.0;
+    var width = size.width - 2 * space;
+    final minWidth = 320.0;
+    if (size.width > minWidth + 2 * space) {
+      final n = (size.width / (minWidth + 2 * space)).floor();
+      width = size.width / n - 2 * space;
+    }
     final cards = <Widget>[];
     var peers = FFI.peers();
     peers.forEach((p) {
-      cards.add(Padding(
-          padding: EdgeInsets.symmetric(horizontal: 12),
+      cards.add(Container(
+          width: width,
           child: Card(
               child: GestureDetector(
-                  onTap: () => connect('${p.id}'),
+                  onTap: () => {
+                        if (!isDesktop) {connect('${p.id}')}
+                      },
+                  onDoubleTap: () => {
+                        if (isDesktop) {connect('${p.id}')}
+                      },
                   onLongPressStart: (details) {
                     var x = details.globalPosition.dx;
                     var y = details.globalPosition.dy;
-                    () async {
-                      var value = await showMenu(
-                        context: context,
-                        position: RelativeRect.fromLTRB(x, y, x, y),
-                        items: [
-                          PopupMenuItem<String>(
-                              child: Text(translate('Remove')),
-                              value: 'remove'),
-                        ],
-                        elevation: 8,
-                      );
-                      if (value == 'remove') {
-                        setState(() => FFI.setByName('remove', '${p.id}'));
-                        () async {
-                          removePreference(p.id);
-                        }();
-                      }
-                    }();
+                    this._menuPos = RelativeRect.fromLTRB(x, y, x, y);
+                    this.showPeerMenu(context, p.id);
                   },
                   child: ListTile(
+                    contentPadding: const EdgeInsets.only(left: 12),
                     subtitle: Text('${p.username}@${p.hostname}'),
                     title: Text('${p.id}'),
                     leading: Container(
                         padding: const EdgeInsets.all(6),
                         child: getPlatformImage('${p.platform}'),
                         color: str2color('${p.id}${p.platform}', 0x7f)),
+                    trailing: InkWell(
+                        child: Padding(
+                            padding: const EdgeInsets.all(12),
+                            child: Icon(Icons.more_vert)),
+                        onTapDown: (e) {
+                          var x = e.globalPosition.dx;
+                          var y = e.globalPosition.dy;
+                          this._menuPos = RelativeRect.fromLTRB(x, y, x, y);
+                        },
+                        onDoubleTap: () {},
+                        onTap: () {
+                          showPeerMenu(context, p.id);
+                        }),
                   )))));
     });
-    return Wrap(children: cards);
+    return Wrap(children: cards, spacing: space, runSpacing: space);
+  }
+
+  void showPeerMenu(BuildContext context, String id) async {
+    var value = await showMenu(
+      context: context,
+      position: this._menuPos,
+      items: [
+        PopupMenuItem<String>(
+            child: Text(translate('Remove')), value: 'remove'),
+      ],
+      elevation: 8,
+    );
+    if (value == 'remove') {
+      setState(() => FFI.setByName('remove', '$id'));
+      () async {
+        removePreference(id);
+      }();
+    }
   }
 }
 
@@ -332,13 +370,13 @@ void showServer(BuildContext context) {
                     formKey.currentState.save();
                     if (id != id0)
                       FFI.setByName('option',
-                          '{"name": "custom-rendezvous-server", "value": "${id}"}');
+                          '{"name": "custom-rendezvous-server", "value": "$id"}');
                     if (relay != relay0)
                       FFI.setByName('option',
-                          '{"name": "relay-server", "value": "${relay}"}');
+                          '{"name": "relay-server", "value": "$relay"}');
                     if (key != key0)
                       FFI.setByName(
-                          'option', '{"name": "key", "value": "${key}"}');
+                          'option', '{"name": "key", "value": "$key"}');
                     Navigator.pop(context);
                   }
                 },
@@ -349,13 +387,13 @@ void showServer(BuildContext context) {
 }
 
 Future<Null> showAbout(BuildContext context) async {
-  PackageInfo packageInfo = await PackageInfo.fromPlatform();
+  var version = await FFI.getVersion();
   showAlertDialog(
       context,
       (setState) => Tuple3(
           null,
           Wrap(direction: Axis.vertical, spacing: 12, children: [
-            Text('Version: ${packageInfo.version}'),
+            Text('Version: $version'),
             InkWell(
                 onTap: () async {
                   const url = 'https://rustdesk.com/';

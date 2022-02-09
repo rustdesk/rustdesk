@@ -8,7 +8,6 @@ import 'package:tuple/tuple.dart';
 import 'package:wakelock/wakelock.dart';
 import 'common.dart';
 import 'model.dart';
-import 'dart:io';
 
 final initText = '\1' * 1024;
 
@@ -24,7 +23,7 @@ class RemotePage extends StatefulWidget {
 class _RemotePageState extends State<RemotePage> {
   Timer _interval;
   Timer _timer;
-  bool _showBar = true;
+  bool _showBar = !isDesktop;
   double _bottom = 0;
   String _value = '';
   double _xOffset = 0;
@@ -79,7 +78,8 @@ class _RemotePageState extends State<RemotePage> {
     return _bottom >= 100;
   }
 
-  void interval() {
+  // crash on web before widgit initiated.
+  void intervalUnsafe() {
     var v = MediaQuery.of(context).viewInsets.bottom;
     if (v != _bottom) {
       resetTool();
@@ -93,6 +93,12 @@ class _RemotePageState extends State<RemotePage> {
     FFI.ffiModel.update(widget.id, context, handleMsgbox);
   }
 
+  void interval() {
+    try {
+      intervalUnsafe();
+    } catch (e) {}
+  }
+
   void handleMsgbox(Map<String, dynamic> evt, String id) {
     var type = evt['type'];
     var title = evt['title'];
@@ -103,6 +109,7 @@ class _RemotePageState extends State<RemotePage> {
       enterPasswordDialog(id, context);
     } else {
       var hasRetry = evt['hasRetry'] == 'true';
+      print(evt);
       showMsgBox(type, title, text, hasRetry);
     }
   }
@@ -124,7 +131,7 @@ class _RemotePageState extends State<RemotePage> {
   void handleInput(String newValue) {
     var oldValue = _value;
     _value = newValue;
-    if (Platform.isIOS) {
+    if (isIOS) {
       var i = newValue.length - 1;
       for (; i >= 0 && newValue[i] != '\1'; --i) {}
       var j = oldValue.length - 1;
@@ -236,6 +243,7 @@ class _RemotePageState extends State<RemotePage> {
         return false;
       },
       child: Scaffold(
+          // resizeToAvoidBottomInset: true,
           floatingActionButton: !showActionButton
               ? null
               : FloatingActionButton(
@@ -252,159 +260,205 @@ class _RemotePageState extends State<RemotePage> {
                       }
                     });
                   }),
-          bottomNavigationBar: _showBar && pi.displays != null
-              ? BottomAppBar(
-                  elevation: 10,
-                  color: MyTheme.accent,
-                  child: Row(
-                    mainAxisSize: MainAxisSize.max,
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: <Widget>[
-                      Row(children: [
-                        IconButton(
-                          color: Colors.white,
-                          icon: Icon(Icons.clear),
-                          onPressed: () {
-                            close();
-                          },
-                        ),
-                        IconButton(
-                            color: Colors.white,
-                            icon: Icon(Icons.keyboard),
-                            onPressed: openKeyboard),
-                        IconButton(
-                          color: Colors.white,
-                          icon: Icon(Icons.tv),
-                          onPressed: () {
-                            setState(() => _showEdit = false);
-                            showOptions(context);
-                          },
-                        ),
-                        Container(
-                            color: _mouseTools ? Colors.blue[500] : null,
-                            child: IconButton(
-                              color: Colors.white,
-                              icon: Icon(Icons.mouse),
-                              onPressed: () {
-                                setState(() {
-                                  _mouseTools = !_mouseTools;
-                                  resetTool();
-                                  if (_mouseTools) _drag = true;
-                                });
-                              },
-                            )),
-                        IconButton(
-                          color: Colors.white,
-                          icon: Icon(Icons.more_vert),
-                          onPressed: () {
-                            setState(() => _showEdit = false);
-                            showActions(context);
-                          },
-                        ),
-                      ]),
-                      IconButton(
-                          color: Colors.white,
-                          icon: Icon(Icons.expand_more),
-                          onPressed: () {
-                            setState(() => _showBar = !_showBar);
-                          }),
-                    ],
-                  ),
-                )
-              : null,
+          bottomNavigationBar:
+              _showBar && pi.displays != null ? getBottomAppBar() : null,
           body: FlutterEasyLoading(
             child: Container(
                 color: Colors.black,
-                child: SafeArea(
-                    child: GestureDetector(
-                        onLongPress: () {
-                          if (_drag || _scroll) return;
-                          // make right click and real left long click both work
-                          // should add "long press = right click" option?
-                          FFI.sendMouse('down', 'left');
-                          FFI.tap(true);
-                        },
-                        onLongPressUp: () {
-                          FFI.sendMouse('up', 'left');
-                        },
-                        onTapUp: (details) {
-                          if (_drag || _scroll) return;
-                          if (_touchMode) {
-                            FFI.cursorModel.touch(details.localPosition.dx,
-                                details.localPosition.dy, _right);
-                          } else {
-                            FFI.tap(_right);
-                          }
-                        },
-                        onScaleStart: (details) {
-                          _scale = 1;
-                          _xOffset = details.focalPoint.dx;
-                          _yOffset = _yOffset0 = details.focalPoint.dy;
-                          if (_drag) {
-                            FFI.sendMouse('down', 'left');
-                          }
-                        },
-                        onScaleUpdate: (details) {
-                          var scale = details.scale;
-                          if (scale == 1) {
-                            if (!_scroll) {
-                              var x = details.focalPoint.dx;
-                              var y = details.focalPoint.dy;
-                              var dx = x - _xOffset;
-                              var dy = y - _yOffset;
-                              FFI.cursorModel
-                                  .updatePan(dx, dy, _touchMode, _drag);
-                              _xOffset = x;
-                              _yOffset = y;
-                            } else {
-                              _xOffset = details.focalPoint.dx;
-                              _yOffset = details.focalPoint.dy;
-                            }
-                          } else if (!_drag && !_scroll) {
-                            FFI.canvasModel.updateScale(scale / _scale);
-                            _scale = scale;
-                          }
-                        },
-                        onScaleEnd: (details) {
-                          if (_drag) {
-                            FFI.sendMouse('up', 'left');
-                            setState(resetMouse);
-                          } else if (_scroll) {
-                            var dy = (_yOffset - _yOffset0) / 10;
-                            if (dy.abs() > 0.1) {
-                              if (dy > 0 && dy < 1) dy = 1;
-                              if (dy < 0 && dy > -1) dy = -1;
-                              FFI.scroll(dy);
-                            }
-                          }
-                        },
-                        child: Container(
-                            color: MyTheme.canvasColor,
-                            child: Stack(children: [
-                              ImagePaint(),
-                              CursorPaint(),
-                              getHelpTools(),
-                              SizedBox(
-                                width: 0,
-                                height: 0,
-                                child: !_showEdit
-                                    ? Container()
-                                    : TextFormField(
-                                        textInputAction:
-                                            TextInputAction.newline,
-                                        autocorrect: false,
-                                        enableSuggestions: false,
-                                        focusNode: _focusNode,
-                                        maxLines: null,
-                                        initialValue:
-                                            _value, // trick way to make backspace work always
-                                        keyboardType: TextInputType.multiline,
-                                        onChanged: handleInput,
-                                      ),
-                              ),
-                            ]))))),
+                child: isDesktop
+                    ? getBodyForDesktopWithListener()
+                    : SafeArea(child: getBodyForMobileWithGuesture())),
           )),
     );
+  }
+
+  Widget getBottomAppBar() {
+    return BottomAppBar(
+      elevation: 10,
+      color: MyTheme.accent,
+      child: Row(
+        mainAxisSize: MainAxisSize.max,
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: <Widget>[
+          Row(
+              children: <Widget>[
+                    IconButton(
+                      color: Colors.white,
+                      icon: Icon(Icons.clear),
+                      onPressed: () {
+                        close();
+                      },
+                    )
+                  ] +
+                  (isDesktop
+                      ? []
+                      : [
+                          IconButton(
+                              color: Colors.white,
+                              icon: Icon(Icons.keyboard),
+                              onPressed: openKeyboard)
+                        ]) +
+                  <Widget>[
+                    IconButton(
+                      color: Colors.white,
+                      icon: Icon(Icons.tv),
+                      onPressed: () {
+                        setState(() => _showEdit = false);
+                        showOptions(context);
+                      },
+                    )
+                  ] +
+                  (isDesktop
+                      ? []
+                      : [
+                          Container(
+                              color: _mouseTools ? Colors.blue[500] : null,
+                              child: IconButton(
+                                color: Colors.white,
+                                icon: Icon(Icons.mouse),
+                                onPressed: () {
+                                  setState(() {
+                                    _mouseTools = !_mouseTools;
+                                    resetTool();
+                                    if (_mouseTools) _drag = true;
+                                  });
+                                },
+                              ))
+                        ]) +
+                  <Widget>[
+                    IconButton(
+                      color: Colors.white,
+                      icon: Icon(Icons.more_vert),
+                      onPressed: () {
+                        setState(() => _showEdit = false);
+                        showActions(context);
+                      },
+                    ),
+                  ]),
+          IconButton(
+              color: Colors.white,
+              icon: Icon(Icons.expand_more),
+              onPressed: () {
+                setState(() => _showBar = !_showBar);
+              }),
+        ],
+      ),
+    );
+  }
+
+  Widget getBodyForMobileWithGuesture() {
+    return GestureDetector(
+        onLongPress: () {
+          if (_drag || _scroll) return;
+          // make right click and real left long click both work
+          // should add "long press = right click" option?
+          FFI.sendMouse('down', 'left');
+          FFI.tap(true);
+        },
+        onLongPressUp: () {
+          FFI.sendMouse('up', 'left');
+        },
+        onTapUp: (details) {
+          if (_drag || _scroll) return;
+          if (_touchMode) {
+            FFI.cursorModel.touch(
+                details.localPosition.dx, details.localPosition.dy, _right);
+          } else {
+            FFI.tap(_right);
+          }
+        },
+        onScaleStart: (details) {
+          _scale = 1;
+          _xOffset = details.focalPoint.dx;
+          _yOffset = _yOffset0 = details.focalPoint.dy;
+          if (_drag) {
+            FFI.sendMouse('down', 'left');
+          }
+        },
+        onScaleUpdate: (details) {
+          var scale = details.scale;
+          if (scale == 1) {
+            if (!_scroll) {
+              var x = details.focalPoint.dx;
+              var y = details.focalPoint.dy;
+              var dx = x - _xOffset;
+              var dy = y - _yOffset;
+              FFI.cursorModel.updatePan(dx, dy, _touchMode, _drag);
+              _xOffset = x;
+              _yOffset = y;
+            } else {
+              _xOffset = details.focalPoint.dx;
+              _yOffset = details.focalPoint.dy;
+            }
+          } else if (!_drag && !_scroll) {
+            FFI.canvasModel.updateScale(scale / _scale);
+            _scale = scale;
+          }
+        },
+        onScaleEnd: (details) {
+          if (_drag) {
+            FFI.sendMouse('up', 'left');
+            setState(resetMouse);
+          } else if (_scroll) {
+            var dy = (_yOffset - _yOffset0) / 10;
+            if (dy.abs() > 0.1) {
+              if (dy > 0 && dy < 1) dy = 1;
+              if (dy < 0 && dy > -1) dy = -1;
+              FFI.scroll(dy);
+            }
+          }
+        },
+        child: getBodyForMobile());
+  }
+
+  Widget getBodyForMobile() {
+    return Container(
+        color: MyTheme.canvasColor,
+        child: Stack(children: [
+          ImagePaint(),
+          CursorPaint(),
+          getHelpTools(),
+          SizedBox(
+            width: 0,
+            height: 0,
+            child: !_showEdit
+                ? Container()
+                : TextFormField(
+                    textInputAction: TextInputAction.newline,
+                    autocorrect: false,
+                    enableSuggestions: false,
+                    focusNode: _focusNode,
+                    maxLines: null,
+                    initialValue:
+                        _value, // trick way to make backspace work always
+                    keyboardType: TextInputType.multiline,
+                    onChanged: handleInput,
+                  ),
+          ),
+        ]));
+  }
+
+  Widget getBodyForDesktopWithListener() {
+    final keyboard = FFI.ffiModel.permissions['keyboard'] != false;
+    var paints = <Widget>[ImagePaint()];
+    if (keyboard ||
+        FFI.getByName('toggle-option', 'show-remote-cursor') == 'true') {
+      paints.add(CursorPaint());
+    }
+    return MouseRegion(
+        cursor: keyboard
+            ? SystemMouseCursors.none
+            : null, // still laggy, set cursor directly for web is better
+        onEnter: (event) {
+          print('enter');
+          FFI.listenToMouse(true);
+        },
+        onExit: (event) {
+          print('exit');
+          FFI.listenToMouse(false);
+        },
+        child: Container(
+            color: MyTheme.canvasColor, child: Stack(children: paints)));
   }
 
   void showActions(BuildContext context) {
@@ -412,14 +466,11 @@ class _RemotePageState extends State<RemotePage> {
     final x = 120.0;
     final y = size.height;
     final more = <PopupMenuItem<String>>[];
-    if (FFI.ffiModel.pi.version.isNotEmpty) {
+    final pi = FFI.ffiModel.pi;
+    final perms = FFI.ffiModel.permissions;
+    if (pi.version.isNotEmpty) {
       more.add(PopupMenuItem<String>(
           child: Text(translate('Refresh')), value: 'refresh'));
-    }
-    if (FFI.ffiModel.permissions['keyboard'] != false &&
-        FFI.ffiModel.permissions['clipboard'] != false) {
-      more.add(PopupMenuItem<String>(
-          child: Text(translate('Paste')), value: 'paste'));
     }
     more.add(PopupMenuItem<String>(
         child: Row(
@@ -435,38 +486,57 @@ class _RemotePageState extends State<RemotePage> {
           )
         ])),
         value: 'enter_os_password'));
-    more.add(PopupMenuItem<String>(
-        child: Row(
-            children: ([
-          Container(width: 100.0, child: Text(translate('Touch mode'))),
-          Padding(padding: EdgeInsets.symmetric(horizontal: 16.0)),
-          Icon(
-              _touchMode
-                  ? Icons.check_box_outlined
-                  : Icons.check_box_outline_blank,
-              color: MyTheme.accent)
-        ])),
-        value: 'touch_mode'));
-    more.add(PopupMenuItem<String>(
-        child: Text(translate('Reset canvas')), value: 'reset_canvas'));
+    if (!isDesktop) {
+      if (perms['keyboard'] != false && perms['clipboard'] != false) {
+        more.add(PopupMenuItem<String>(
+            child: Text(translate('Paste')), value: 'paste'));
+      }
+      more.add(PopupMenuItem<String>(
+          child: Row(
+              children: ([
+            Container(width: 100.0, child: Text(translate('Touch mode'))),
+            Padding(padding: EdgeInsets.symmetric(horizontal: 16.0)),
+            Icon(
+                _touchMode
+                    ? Icons.check_box_outlined
+                    : Icons.check_box_outline_blank,
+                color: MyTheme.accent)
+          ])),
+          value: 'touch_mode'));
+      more.add(PopupMenuItem<String>(
+          child: Text(translate('Reset canvas')), value: 'reset_canvas'));
+    }
+    if (perms['keyboard'] != false) {
+      if (pi.platform == 'Linux' || pi.sasEnabled) {
+        more.add(PopupMenuItem<String>(
+            child: Text(translate('Insert') + ' Ctrl + Alt + Del'),
+            value: 'cad'));
+      }
+      more.add(PopupMenuItem<String>(
+          child: Text(translate('Insert Lock')), value: 'lock'));
+      if (pi.platform == 'Windows' &&
+          FFI.getByName('toggle_option', 'privacy-mode') != 'true') {
+        more.add(PopupMenuItem<String>(
+            child: Text(translate(
+                (FFI.ffiModel.inputBlocked ? 'Unb' : 'B') + 'lock user input')),
+            value: 'block-input'));
+      }
+    }
     () async {
       var value = await showMenu(
         context: context,
         position: RelativeRect.fromLTRB(x, y, x, y),
-        items: [
-              PopupMenuItem<String>(
-                  child: Text(translate('Insert') + ' Ctrl + Alt + Del'),
-                  value: 'cad'),
-              PopupMenuItem<String>(
-                  child: Text(translate('Insert Lock')), value: 'lock'),
-            ] +
-            more,
+        items: more,
         elevation: 8,
       );
       if (value == 'cad') {
         FFI.setByName('ctrl_alt_del');
       } else if (value == 'lock') {
         FFI.setByName('lock_screen');
+      } else if (value == 'block-input') {
+        FFI.setByName('toggle_option',
+            (FFI.ffiModel.inputBlocked ? 'un' : '') + 'block-inpu');
+        FFI.ffiModel.inputBlocked = !FFI.ffiModel.inputBlocked;
       } else if (value == 'refresh') {
         FFI.setByName('refresh');
       } else if (value == 'paste') {
@@ -486,7 +556,7 @@ class _RemotePageState extends State<RemotePage> {
       } else if (value == 'touch_mode') {
         _touchMode = !_touchMode;
         final v = _touchMode ? 'Y' : '';
-        FFI.setByName('peer_option', '{"name": "touch-mode", "value": "${v}"}');
+        FFI.setByName('peer_option', '{"name": "touch-mode", "value": "$v"}');
       } else if (value == 'reset_canvas') {
         FFI.cursorModel.reset();
       }
@@ -790,9 +860,36 @@ void wrongPasswordDialog(String id, BuildContext context) {
           ]));
 }
 
+CheckboxListTile getToggle(
+    void Function(void Function()) setState, option, name) {
+  return CheckboxListTile(
+      value: FFI.getByName('toggle_option', option) == 'true',
+      onChanged: (v) {
+        setState(() {
+          FFI.setByName('toggle_option', option);
+        });
+      },
+      dense: true,
+      title: Text(translate(name)));
+}
+
+RadioListTile<String> getRadio(String name, String toValue, String curValue,
+    void Function(String) onChange) {
+  return RadioListTile<String>(
+    controlAffinity: ListTileControlAffinity.trailing,
+    title: Text(translate(name)),
+    value: toValue,
+    groupValue: curValue,
+    onChanged: onChange,
+    dense: true,
+  );
+}
+
 void showOptions(BuildContext context) {
   String quality = FFI.getByName('image_quality');
   if (quality == '') quality = 'balanced';
+  String viewStyle = FFI.getByName('peer_option', 'view-style');
+  if (viewStyle == '') viewStyle = 'original';
   var displays = <Widget>[];
   final pi = FFI.ffiModel.pi;
   final image = FFI.ffiModel.getConnectionImage();
@@ -829,82 +926,57 @@ void showOptions(BuildContext context) {
   if (displays.isNotEmpty) {
     displays.add(Divider(color: MyTheme.border));
   }
+  final perms = FFI.ffiModel.permissions;
   showAlertDialog(context, (setState) {
     final more = <Widget>[];
-    if (FFI.ffiModel.permissions['audio'] != false) {
-      more.add(CheckboxListTile(
-          value: FFI.getByName('toggle_option', 'disable-audio') == 'true',
-          onChanged: (v) {
-            setState(() {
-              FFI.setByName('toggle_option', 'disable-audio');
-            });
-          },
-          title: Text(translate('Mute'))));
+    if (perms['audio'] != false) {
+      more.add(getToggle(setState, 'disable-audio', 'Mute'));
     }
-    if (FFI.ffiModel.permissions['keyboard'] != false) {
-      more.add(CheckboxListTile(
-          value: FFI.getByName('toggle_option', 'lock-after-session-end') ==
-              'true',
-          onChanged: (v) {
-            setState(() {
-              FFI.setByName('toggle_option', 'lock-after-session-end');
-            });
-          },
-          title: Text(translate('Lock after session end'))));
+    if (perms['keyboard'] != false) {
+      if (perms['clipboard'] != false)
+        more.add(getToggle(setState, 'disable-clipboard', 'Disable clipboard'));
+      more.add(getToggle(
+          setState, 'lock-after-session-end', 'Lock after session end'));
+      if (pi.platform == 'Windows') {
+        more.add(getToggle(setState, 'privacy-mode', 'Privacy mode'));
+      }
     }
+    var setQuality = (String value) {
+      setState(() {
+        quality = value;
+        FFI.setByName('image_quality', value);
+      });
+    };
+    var setViewStyle = (String value) {
+      setState(() {
+        viewStyle = value;
+        FFI.setByName(
+            'peer_option', '{"name": "view-style", "value": "$value"}');
+        FFI.canvasModel.updateViewStyle();
+      });
+    };
     return Tuple3(
         null,
         Column(
             mainAxisSize: MainAxisSize.min,
             children: displays +
+                (isDesktop
+                    ? <Widget>[
+                        getRadio(
+                            'Original', 'original', viewStyle, setViewStyle),
+                        getRadio('Shrink', 'shrink', viewStyle, setViewStyle),
+                        getRadio('Stretch', 'stretch', viewStyle, setViewStyle),
+                        Divider(color: MyTheme.border),
+                      ]
+                    : {}) +
                 <Widget>[
-                  RadioListTile<String>(
-                    controlAffinity: ListTileControlAffinity.trailing,
-                    title: Text(translate('Good image quality')),
-                    value: 'best',
-                    groupValue: quality,
-                    onChanged: (String value) {
-                      setState(() {
-                        quality = value;
-                        FFI.setByName('image_quality', value);
-                      });
-                    },
-                  ),
-                  RadioListTile<String>(
-                    controlAffinity: ListTileControlAffinity.trailing,
-                    title: Text(translate('Balanced')),
-                    value: 'balanced',
-                    groupValue: quality,
-                    onChanged: (String value) {
-                      setState(() {
-                        quality = value;
-                        FFI.setByName('image_quality', value);
-                      });
-                    },
-                  ),
-                  RadioListTile<String>(
-                    controlAffinity: ListTileControlAffinity.trailing,
-                    title: Text(translate('Optimize reaction time')),
-                    value: 'low',
-                    groupValue: quality,
-                    onChanged: (String value) {
-                      setState(() {
-                        quality = value;
-                        FFI.setByName('image_quality', value);
-                      });
-                    },
-                  ),
+                  getRadio('Good image quality', 'best', quality, setQuality),
+                  getRadio('Balanced', 'balanced', quality, setQuality),
+                  getRadio(
+                      'Optimize reaction time', 'low', quality, setQuality),
                   Divider(color: MyTheme.border),
-                  CheckboxListTile(
-                      value: FFI.getByName(
-                              'toggle_option', 'show-remote-cursor') ==
-                          'true',
-                      onChanged: (v) {
-                        setState(() {
-                          FFI.setByName('toggle_option', 'show-remote-cursor');
-                        });
-                      },
-                      title: Text(translate('Show remote cursor'))),
+                  getToggle(
+                      setState, 'show-remote-cursor', 'Show remote cursor'),
                 ] +
                 more),
         null);
@@ -948,7 +1020,7 @@ void showSetOSPassword(BuildContext context, bool login) {
                 onPressed: () {
                   var text = controller.text.trim();
                   FFI.setByName('peer_option',
-                      '{"name": "os-password", "value": "${text}"}');
+                      '{"name": "os-password", "value": "$text"}');
                   FFI.setByName('peer_option',
                       '{"name": "auto-login", "value": "${autoLogin ? 'Y' : ''}"}');
                   if (text != "" && login) {
