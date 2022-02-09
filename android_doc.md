@@ -291,6 +291,50 @@ https://developer.android.com/about/versions/oreo/background?hl=zh-cn#services
 
 <hr>
 
+### 开机自启动
+利用接收RECEIVE_BOOT_COMPLETED的系统广播
+- 权限：
+  - 清单文件
+  ```xml
+  <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+  ...
+  <application...>
+    ...
+    <receiver
+      android:name=".BootReceiver"
+      android:enabled="true"
+      android:exported="true">
+      <intent-filter android:priority="1000">
+          <action android:name="android.intent.action.BOOT_COMPLETED" />
+      </intent-filter>
+    </receiver>
+    ...
+  ```
+  - 创建一个class文件，类继承自BroadcastReceiver()
+  ```kotlin
+  class BootReceiver : BroadcastReceiver() {
+    override fun onReceive(context: Context?, intent: Intent?) {
+        if (intent != null) {
+            if ("android.intent.action.BOOT_COMPLETED" == intent.action){
+                val it = Intent(context,MainService::class.java).apply {
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    context?.startForegroundService(it)
+                }else{
+                    context?.startService(it)
+                }
+                Log.d(LOG_TAG,"onReceive done")
+            }
+        }
+    }
+  }
+  ```
+
+<hr>
+
+
+
 ### 其他
 - Kotlin 与 compose 版本设置问题
     - https://stackoverflow.com/questions/67600344/jetpack-compose-on-kotlin-1-5-0

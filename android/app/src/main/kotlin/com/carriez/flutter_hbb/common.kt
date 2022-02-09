@@ -35,34 +35,6 @@ fun testVP9Support(): Boolean {
     return res != null
 }
 
-fun createForegroundNotification(ctx: Service) {
-    // 设置通知渠道 android8开始引入 老版本会被忽略 这个东西的作用相当于为通知分类 给用户选择通知消息的种类
-    val channelId =
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channelId = "RustDeskForeground"
-            val channelName = "RustDesk屏幕分享服务状态"
-            val channel = NotificationChannel(
-                channelId,
-                channelName, NotificationManager.IMPORTANCE_DEFAULT
-            ).apply {
-                description = "Share your Android Screen with RustDeskService"
-            }
-            channel.lightColor = Color.BLUE
-            channel.lockscreenVisibility = Notification.VISIBILITY_PRIVATE
-            val service = ctx.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-            service.createNotificationChannel(channel)
-            channelId
-        } else {
-            ""
-        }
-
-    val notification: Notification = NotificationCompat.Builder(ctx, channelId)
-        .setOngoing(true)
-        .setPriority(NotificationCompat.PRIORITY_LOW)
-        .build()
-    ctx.startForeground(11, notification)
-}
-
 fun createNormalNotification(
     ctx: Context,
     title: String,

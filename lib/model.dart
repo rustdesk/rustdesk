@@ -547,8 +547,8 @@ class ClientState {
 class ServerModel with ChangeNotifier {
   bool _mediaOk;
   bool _inputOk;
-
-  bool _isStart;
+  // bool _needServerOpen;
+  bool _isPeerStart;
   bool _isFileTransfer;
   String _peerName;
   String _peerID;
@@ -557,7 +557,9 @@ class ServerModel with ChangeNotifier {
 
   bool get inputOk => _inputOk;
 
-  bool get isStart => _isStart;
+  // bool get needServerOpen => _needServerOpen;
+  
+  bool get isPeerStart => _isPeerStart;
 
   bool get isFileTransfer => _isFileTransfer;
 
@@ -568,10 +570,15 @@ class ServerModel with ChangeNotifier {
   ServerModel() {
     _mediaOk = false;
     _inputOk = false;
-    _isStart = false;
+    _isPeerStart = false;
     _peerName = "";
     _peerID = "";
   }
+
+  // setNeedServerOpen(bool v){
+  //   _needServerOpen = v;
+  //   notifyListeners();
+  // }
 
   changeStatue(String name, bool value) {
     switch (name) {
@@ -588,7 +595,7 @@ class ServerModel with ChangeNotifier {
   }
 
   setPeer(bool enabled, {String name = "", String id = ""}) {
-    _isStart = enabled;
+    _isPeerStart = enabled;
     if (name != "") _peerName = name;
     if (id != "") _peerID = id;
     notifyListeners();
@@ -599,7 +606,7 @@ class ServerModel with ChangeNotifier {
     debugPrint("getByName client_state string:$res");
     try {
       var clientState = ClientState.fromJson(jsonDecode(res));
-      _isStart = clientState.isStart;
+      _isPeerStart = clientState.isStart;
       _isFileTransfer = clientState.isFileTransfer;
       _peerName = clientState.name;
       _peerID = clientState.peerId;
@@ -609,7 +616,7 @@ class ServerModel with ChangeNotifier {
   }
 
   clearPeer() {
-    _isStart = false;
+    _isPeerStart = false;
     _peerName = "";
     _peerID = "";
     notifyListeners();

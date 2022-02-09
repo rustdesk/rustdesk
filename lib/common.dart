@@ -228,9 +228,8 @@ toAndroidChannelInit() {
           }
         case "start_capture":
           {
-            var peerID = call.arguments["peerID"] as String;
-            var name = call.arguments["name"] as String;
-            ServerPage.serverModel.setPeer(true, name: name, id: peerID);
+            clearLoginReqAlert();
+            ServerPage.serverModel.updateClientState();
             break;
           }
         case "stop_capture":

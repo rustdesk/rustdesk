@@ -50,7 +50,6 @@ class MainActivity : FlutterActivity() {
                         result.success(true)
                     }
                     "start_capture" -> {
-                        // return bool
                         mainService?.let {
                             result.success(it.startCapture())
                         } ?: let {

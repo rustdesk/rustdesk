@@ -95,6 +95,7 @@ class MainService : Service() {
     fun rustSetByName(name: String, arg1: String, arg2: String) {
         when (name) {
             "try_start_without_auth" -> {
+                // TODO 改成 json 三个参数 类型 name id
                 // to UI
                 Log.d(logTag, "from rust:got try_start_without_auth")
                 Handler(Looper.getMainLooper()).post {
@@ -105,7 +106,6 @@ class MainService : Service() {
                     Log.d(logTag, "activity.runOnUiThread invokeMethod try_start_without_auth,done")
                 }
                 // TODO notify
-                Log.d(logTag, "kotlin invokeMethod try_start_without_auth,done")
             }
             "start_capture" -> {
                 Log.d(logTag, "from rust:start_capture")
@@ -114,7 +114,7 @@ class MainService : Service() {
                         name,
                         mapOf("peerID" to arg1, "name" to arg2)
                     )
-                    Log.d(logTag, "activity.runOnUiThread invokeMethod try_start_without_auth,done")
+                    Log.d(logTag, "activity.runOnUiThread invokeMethod start_capture,done")
                 }
                 if (isStart) {
                     Log.d(logTag, "正在录制")
@@ -129,7 +129,7 @@ class MainService : Service() {
                 stopCapture()
                 Handler(Looper.getMainLooper()).post {
                     MainActivity.flutterMethodChannel.invokeMethod(name, null)
-                    Log.d(logTag, "activity.runOnUiThread invokeMethod try_start_without_auth,done")
+                    Log.d(logTag, "activity.runOnUiThread invokeMethod stop_capture,done")
                 }
             }
             else -> {}
@@ -139,13 +139,14 @@ class MainService : Service() {
     // jvm call rust
     private external fun init(ctx: Context)
     private external fun startServer()
+    private external fun ready()
     private external fun sendVp9(data: ByteArray)
 
     private val logTag = "LOG_SERVICE"
     private val useVP9 = false
     private val binder = LocalBinder()
-    private var _isReady = false
-    private var _isStart = false
+    private var _isReady = false // 是否获取了录屏权限
+    private var _isStart = false // 是否正在进行录制
     val isReady: Boolean
         get() = _isReady
     val isStart: Boolean
@@ -177,6 +178,7 @@ class MainService : Service() {
     override fun onCreate() {
         super.onCreate()
         initNotification()
+        startServer() // 开启了rust服务但是没有设置可以接收连接 如果不开启 首次启动没法获得服务ID
     }
 
     override fun onBind(intent: Intent): IBinder {
@@ -194,11 +196,9 @@ class MainService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         Log.d("whichService", "this service:${Thread.currentThread()}")
-        // initService是关键的逻辑 在用户点击开始监听或者获取到视频捕捉权限的时候执行initService
         // 只有init的时候通过onStartCommand 且开启前台服务
         if (intent?.action == INIT_SERVICE) {
             Log.d(logTag, "service starting:${startId}:${Thread.currentThread()}")
-//            createForegroundNotification(this)
             createForegroundNotification()
             val mMediaProjectionManager =
                 getSystemService(MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
@@ -209,12 +209,13 @@ class MainService : Service() {
                 checkMediaPermission()
                 surface = createSurface()
                 init(this)
-                startServer()
+                ready()
                 _isReady = true
             } ?: let {
                 Log.d(logTag, "获取mMediaProjection失败！")
             }
         } else if (intent?.action == ACTION_LOGIN_REQ_NOTIFY) {
+            // TODO notify 重新适配多连接的情况
             val notifyLoginRes = intent.getBooleanExtra(EXTRA_LOGIN_REQ_NOTIFY, false)
             Log.d(logTag, "从通知栏点击了:$notifyLoginRes")
         }
@@ -264,6 +265,9 @@ class MainService : Service() {
     }
 
     fun startCapture(): Boolean {
+        if (isStart){
+            return true
+        }
         if (mediaProjection == null) {
             Log.w(logTag, "startCapture fail,mediaProjection is null")
             return false
@@ -288,6 +292,7 @@ class MainService : Service() {
     fun stopCapture() {
         Log.d(logTag, "Stop Capture")
         _isStart = false
+        audioRecordStat = false
         virtualDisplay?.release()
         videoEncoder?.let {
             it.signalEndOfInputStream()
@@ -295,15 +300,12 @@ class MainService : Service() {
             it.release()
         }
         audioRecorder?.startRecording()
-        audioRecordStat = false
-
-        // audioRecorder 如果无法重新创建 保留服务的情况不要释放
-//        audioRecorder?.stop()
-//        mediaProjection?.stop()
 
         virtualDisplay = null
         videoEncoder = null
         videoData = null
+//        audioRecorder 如果无法重新创建 保留服务的情况不要释放
+//        audioRecorder?.stop()
 //        audioRecorder = null
 //        audioData = null
     }
@@ -318,6 +320,7 @@ class MainService : Service() {
 
         mediaProjection = null
         checkMediaPermission()
+        stopService(Intent(this,InputService::class.java)) // close input service maybe not work
         stopForeground(true)
         stopSelf()
     }

@@ -57,13 +57,8 @@ class ServerPage extends StatelessWidget {
 
 void checkService() {
   // 检测当前服务状态，若已存在服务则异步更新数据回来
-  toAndroidChannel.invokeMethod("check_service");  // jvm
+  toAndroidChannel.invokeMethod("check_service"); // jvm
   ServerPage.serverModel.updateClientState();
-  // var state = FFI.getByName("client_state").split(":"); // rust
-  // var isStart = FFI.getByName("client_is_start") !="";// 使用JSON
-  // if(state.length == 2){
-  //   ServerPage.serverModel.setPeer(isStart,name:state[0],id:state[1]);
-  // }
 }
 
 class ServerInfo extends StatefulWidget {
@@ -75,14 +70,20 @@ class _ServerInfoState extends State<ServerInfo> {
   var _passwdShow = false;
 
   // TODO set ID / PASSWORD
-  var _serverId = "";
-  var _serverPasswd = "";
+  var _serverId = TextEditingController(text: "");
+  var _serverPasswd = TextEditingController(text: "");
+  static const _emptyIdShow = "正在获取ID...";
+
 
   @override
   void initState() {
     super.initState();
-    _serverId = FFI.getByName("server_id");
-    _serverPasswd = FFI.getByName("server_password");
+    var id = FFI.getByName("server_id");
+    _serverId.text = id==""?_emptyIdShow:id;
+    _serverPasswd.text = FFI.getByName("server_password");
+    if(_serverId.text == _emptyIdShow || _serverPasswd.text == ""){
+      fetchConfigAgain();
+    }
   }
 
   @override
@@ -96,7 +97,7 @@ class _ServerInfoState extends State<ServerInfo> {
               fontSize: 25.0,
               fontWeight: FontWeight.bold,
               color: MyTheme.accent),
-          initialValue: _serverId,
+          controller: _serverId,
           decoration: InputDecoration(
             icon: const Icon(Icons.perm_identity),
             labelText: '服务ID',
@@ -112,7 +113,7 @@ class _ServerInfoState extends State<ServerInfo> {
               fontSize: 25.0,
               fontWeight: FontWeight.bold,
               color: MyTheme.accent),
-          initialValue: _serverPasswd,
+          controller: _serverPasswd,
           decoration: InputDecoration(
               icon: const Icon(Icons.lock),
               labelText: '密码',
@@ -130,6 +131,23 @@ class _ServerInfoState extends State<ServerInfo> {
         ),
       ],
     ));
+  }
+  fetchConfigAgain()async{
+    FFI.setByName("start_service");
+    var count = 0;
+    const maxCount = 10;
+    while(count<maxCount){
+      if(_serverId.text!=_emptyIdShow && _serverPasswd.text!=""){
+        break;
+      }
+      await Future.delayed(Duration(seconds: 2));
+      var id = FFI.getByName("server_id");
+      _serverId.text = id==""?_emptyIdShow:id;
+      _serverPasswd.text = FFI.getByName("server_password");
+      debugPrint("fetch id & passwd again at $count:id:${_serverId.text},passwd:${_serverPasswd.text}");
+      count++;
+    }
+    FFI.setByName("stop_service");
   }
 }
 
@@ -171,32 +189,46 @@ class _PermissionCheckerState extends State<PermissionChecker> {
   }
 }
 
-void showLoginReqAlert(BuildContext context, String peerID, String name) {
+BuildContext loginReqAlertCtx;
+
+void showLoginReqAlert(BuildContext context, String peerID, String name)async {
   debugPrint("got try_start_without_auth");
-  showDialog(
+  await showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-            title: Text("收到连接请求"),
-            content: Text("是否同意来自$name:$peerID的控制？"),
-            actions: [
-              TextButton(
-                  child: Text("接受"),
-                  onPressed: () {
-                    FFI.setByName("login_res", "true");
-                    if(!ServerPage.serverModel.isFileTransfer){
-                      _toAndroidStartCapture();
-                    }
-                    ServerPage.serverModel.setPeer(true);
-                    Navigator.of(context).pop();
-                  }),
-              TextButton(
-                  child: Text("不接受"),
-                  onPressed: () {
-                    FFI.setByName("login_res", "false");
-                    Navigator.of(context).pop();
-                  })
-            ],
-          ));
+      builder: (alertContext) {
+        loginReqAlertCtx = alertContext;
+        return AlertDialog(
+          title: Text("收到连接请求"),
+          content: Text("是否同意来自$name:$peerID的控制？"),
+          actions: [
+            TextButton(
+                child: Text("接受"),
+                onPressed: () {
+                  FFI.setByName("login_res", "true");
+                  if (!ServerPage.serverModel.isFileTransfer) {
+                    _toAndroidStartCapture();
+                  }
+                  ServerPage.serverModel.setPeer(true);
+                  Navigator.of(alertContext).pop();
+                }),
+            TextButton(
+                child: Text("不接受"),
+                onPressed: () {
+                  FFI.setByName("login_res", "false");
+                  Navigator.of(alertContext).pop();
+                })
+          ],
+        );
+      });
+  debugPrint("alert done");
+  loginReqAlertCtx = null;
+}
+
+clearLoginReqAlert(){
+  if (loginReqAlertCtx!=null){
+    Navigator.of(loginReqAlertCtx).pop();
+    ServerPage.serverModel.updateClientState();
+  }
 }
 
 class PermissionRow extends StatelessWidget {
@@ -213,7 +245,7 @@ class PermissionRow extends StatelessWidget {
       children: [
         Text.rich(TextSpan(children: [
           TextSpan(
-              text: name + ":",
+              text: name + ":  ",
               style: TextStyle(fontSize: 16.0, color: MyTheme.accent50)),
           TextSpan(
               text: isOk ? "已开启" : "未开启",
@@ -237,7 +269,7 @@ class ConnectionManager extends StatelessWidget {
     final serverModel = Provider.of<ServerModel>(context);
     var info =
         "${serverModel.peerName != "" ? serverModel.peerName : "NA"}-${serverModel.peerID != "" ? serverModel.peerID : "NA"}";
-    return serverModel.isStart
+    return serverModel.isPeerStart
         ? myCard(Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -305,8 +337,11 @@ Future<Null> _toAndroidStartCapture() async {
 // }
 
 Future<Null> _toAndroidStopService() async {
-  FFI.setByName("stop_service");
+  FFI.setByName("close_conn");
+  ServerPage.serverModel.setPeer(false);
+
   bool res = await toAndroidChannel.invokeMethod("stop_service");
+  FFI.setByName("stop_service");
   debugPrint("_toAndroidStopSer:$res");
 }
 
