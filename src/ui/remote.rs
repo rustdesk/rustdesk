@@ -197,7 +197,6 @@ impl sciter::EventHandler for Handler {
         fn save_image_quality(String);
         fn save_custom_image_quality(i32, i32);
         fn refresh_video();
-        fn support_refresh();
         fn get_toggle_option(String);
         fn toggle_option(String);
         fn get_remember();
@@ -401,10 +400,6 @@ impl Handler {
 
     fn refresh_video(&mut self) {
         self.send(Data::Message(LoginConfigHandler::refresh()));
-    }
-
-    fn support_refresh(&self) -> bool {
-        self.lc.read().unwrap().support_refresh
     }
 
     fn save_custom_image_quality(&mut self, bitrate: i32, quantizer: i32) {

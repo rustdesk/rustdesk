@@ -144,7 +144,7 @@ class Header: Reactor.Component {
                 <div .separator />
                 {keyboard_enabled ? <li #lock-screen>{translate('Insert Lock')}</li> : ""}
                 {keyboard_enabled && pi.platform == "Windows" ? <li #block-input>{translate("Block user input")}</li> : ""}
-                {handler.support_refresh() ? <li #refresh>{translate('Refresh')}</li> : ""}
+                <li #refresh>{translate('Refresh')}</li>
             </menu>
         </popup>;
     }

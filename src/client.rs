@@ -675,8 +675,6 @@ pub struct LoginConfigHandler {
     pub remember: bool,
     config: PeerConfig,
     pub port_forward: (String, i32),
-    pub support_press: bool,
-    pub support_refresh: bool,
     pub version: i64,
 }
 
@@ -942,8 +940,6 @@ impl LoginConfigHandler {
 
     pub fn handle_peer_info(&mut self, username: String, pi: PeerInfo) {
         if !pi.version.is_empty() {
-            self.support_press = true;
-            self.support_refresh = true;
             self.version = hbb_common::get_version_number(&pi.version);
         }
         let serde = PeerInfoSerde {
