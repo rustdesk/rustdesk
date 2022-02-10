@@ -95,7 +95,7 @@ class SessionList: Reactor.Component {
     function render() {
         var sessions = this.getSessions();
         if (sessions.length == 0) {
-            return <div style="margin: *; font-size: 1.6em; text-align: center;">{translate("Empty")}</div>;
+            return <div style="margin: *; font-size: 1.6em; width: 100px; text-align: center;">{translate("Empty")}</div>;
         }
         var me = this;
         sessions = sessions.map(function(x) { return me.getSession(x); });
