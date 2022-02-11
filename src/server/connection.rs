@@ -326,15 +326,6 @@ impl Connection {
         }
 
         conn.tx_input.send(MessageInput::Exit).ok();
-        // join at the end so that not blocking video
-        if let Err(e) = handler_input.join() {
-            log::error!("Failed to join input thread, {:?}", e);
-        } else {
-            log::info!("input thread exited");
-        }
-
-        let _ = crate::platform::block_input(false);
-        crate::platform::toggle_blank_screen(false);
         log::info!("#{} connection loop exited", id);
     }
 
@@ -402,6 +393,7 @@ impl Connection {
         } else {
             log::info!("Blank thread exited");
         }
+        log::info!("Input thread exited");
     }
 
     fn handle_blank(receiver: std_mpsc::Receiver<MessageInput>) {
