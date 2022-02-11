@@ -61,7 +61,7 @@ class _HomePageState extends State<HomePage> {
                           items: [
                             PopupMenuItem<String>(
                                 child: Text(translate('ID Server')),
-                                value: 'server'),
+                                value: 'id_server'),
                             isAndroid
                                 ? PopupMenuItem<String>(
                                     child: Text(translate('Share My Screen')),
@@ -73,7 +73,7 @@ class _HomePageState extends State<HomePage> {
                           ],
                           elevation: 8,
                         );
-                        if (value == 'server') {
+                        if (value == 'id_server') {
                           showServer(context);
                         } else if (value == 'server') {
                           Navigator.pushNamed(context, "server_page");
