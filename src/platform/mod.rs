@@ -15,6 +15,7 @@ pub mod macos;
 pub mod linux;
 
 use hbb_common::{message_proto::CursorData, ResultType};
+#[cfg(not(target_os = "macos"))]
 const SERVICE_INTERVAL: u64 = 300;
 
 pub fn is_xfce() -> bool {

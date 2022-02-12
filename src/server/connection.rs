@@ -174,7 +174,7 @@ impl Connection {
             },
         );
 
-        let handler_input = std::thread::spawn(move || Self::handle_input(rx_input, tx_cloned));
+        std::thread::spawn(move || Self::handle_input(rx_input, tx_cloned));
 
         loop {
             tokio::select! {
