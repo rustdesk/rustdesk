@@ -1,4 +1,7 @@
 use super::{input_service::*, *};
+#[cfg(windows)]
+use crate::ipc;
+#[cfg(not(windows))]
 use crate::{common::update_clipboard, ipc};
 use hbb_common::{
     config::Config,
@@ -221,8 +224,13 @@ impl Connection {
                                 conn.clipboard = enabled;
                                 conn.send_permission(Permission::Clipboard, enabled).await;
                                 if let Some(s) = conn.server.upgrade() {
+                                    #[cfg(not(windows))]
                                     s.write().unwrap().subscribe(
                                         super::clipboard_service::NAME,
+                                        conn.inner.clone(), conn.clipboard_enabled() && conn.keyboard);
+                                    #[cfg(windows)]
+                                    s.write().unwrap().subscribe(
+                                        super::cliprdr_service::NAME,
                                         conn.inner.clone(), conn.clipboard_enabled() && conn.keyboard);
                                 }
                             } else if &name == "audio" {
@@ -599,7 +607,10 @@ impl Connection {
                     noperms.push(NAME_POS);
                 }
                 if !self.clipboard_enabled() || !self.keyboard {
+                    #[cfg(not(windows))]
                     noperms.push(super::clipboard_service::NAME);
+                    #[cfg(windows)]
+                    noperms.push(super::cliprdr_service::NAME);
                 }
                 if !self.audio_enabled() {
                     noperms.push(super::audio_service::NAME);
@@ -819,10 +830,16 @@ impl Connection {
                         }
                     }
                 }
+                #[cfg(not(windows))]
                 Some(message::Union::clipboard(cb)) => {
                     if self.clipboard {
                         update_clipboard(cb, None);
                     }
+                }
+                #[cfg(windows)]
+                Some(message::Union::cliprdr(clip)) => {
+                    log::info!("received cliprdr msg");
+                    cliprdr_service::handle_serve_cliprdr_msg(self.inner.id, clip)
                 }
                 Some(message::Union::file_action(fa)) => {
                     if self.file_transfer.is_some() {
@@ -988,8 +1005,15 @@ impl Connection {
             if q != BoolOption::NotSet {
                 self.disable_clipboard = q == BoolOption::Yes;
                 if let Some(s) = self.server.upgrade() {
+                    #[cfg(not(windows))]
                     s.write().unwrap().subscribe(
                         super::clipboard_service::NAME,
+                        self.inner.clone(),
+                        self.clipboard_enabled() && self.keyboard,
+                    );
+                    #[cfg(windows)]
+                    s.write().unwrap().subscribe(
+                        super::cliprdr_service::NAME,
                         self.inner.clone(),
                         self.clipboard_enabled() && self.keyboard,
                     );

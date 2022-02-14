@@ -21,6 +21,7 @@ whoami = "1.2"
 scrap = { path = "libs/scrap" }
 hbb_common = { path = "libs/hbb_common" }
 enigo = { path = "libs/enigo" }
+clipboard = { path = "libs/clipboard" }
 sys-locale = "0.1"
 serde_derive = "1.0"
 serde = "1.0"
@@ -82,7 +83,7 @@ rust-pulsectl = { git = "https://github.com/open-trade/pulsectl" }
 android_logger = "0.10"
 
 [workspace]
-members = ["libs/scrap", "libs/hbb_common", "libs/enigo"]
+members = ["libs/scrap", "libs/hbb_common", "libs/enigo", "libs/clipboard"]
 
 [package.metadata.winres]
 LegalCopyright = "Copyright © 2020"
