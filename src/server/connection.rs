@@ -224,6 +224,10 @@ impl Connection {
                                     s.write().unwrap().subscribe(
                                         super::clipboard_service::NAME,
                                         conn.inner.clone(), conn.clipboard_enabled() && conn.keyboard);
+                                    #[cfg(windows)]
+                                    s.write().unwrap().subscribe(
+                                        super::cliprdr_service::NAME,
+                                        conn.inner.clone(), conn.clipboard_enabled() && conn.keyboard);
                                 }
                             } else if &name == "audio" {
                                 conn.audio = enabled;
@@ -600,6 +604,8 @@ impl Connection {
                 }
                 if !self.clipboard_enabled() || !self.keyboard {
                     noperms.push(super::clipboard_service::NAME);
+                    #[cfg(windows)]
+                    noperms.push(super::cliprdr_service::NAME);
                 }
                 if !self.audio_enabled() {
                     noperms.push(super::audio_service::NAME);
@@ -824,6 +830,11 @@ impl Connection {
                         update_clipboard(cb, None);
                     }
                 }
+                #[cfg(windows)]
+                Some(message::Union::cliprdr(clip)) => {
+                    log::debug!("received cliprdr msg");
+                    cliprdr_service::handle_serve_cliprdr_msg(self.inner.id, clip)
+                }
                 Some(message::Union::file_action(fa)) => {
                     if self.file_transfer.is_some() {
                         match fa.union {
@@ -990,6 +1001,12 @@ impl Connection {
                 if let Some(s) = self.server.upgrade() {
                     s.write().unwrap().subscribe(
                         super::clipboard_service::NAME,
+                        self.inner.clone(),
+                        self.clipboard_enabled() && self.keyboard,
+                    );
+                    #[cfg(windows)]
+                    s.write().unwrap().subscribe(
+                        super::cliprdr_service::NAME,
                         self.inner.clone(),
                         self.clipboard_enabled() && self.keyboard,
                     );
