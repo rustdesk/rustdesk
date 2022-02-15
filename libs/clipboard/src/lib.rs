@@ -77,7 +77,8 @@ pub fn server_msg(context: &mut Box<CliprdrClientContext>, conn_id: ConnID, msg:
             ret
         }
         None => {
-            unreachable!()
+            // unreachable!()
+            0
         }
     }
 }

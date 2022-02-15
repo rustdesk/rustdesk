@@ -76,6 +76,7 @@ impl ConnectionManager {
         keyboard: bool,
         clipboard: bool,
         audio: bool,
+        file: bool,
         tx: mpsc::UnboundedSender<Data>,
     ) {
         self.call(
@@ -89,7 +90,8 @@ impl ConnectionManager {
                 authorized,
                 keyboard,
                 clipboard,
-                audio
+                audio,
+                file
             ),
         );
         self.write().unwrap().senders.insert(id, tx);
@@ -345,9 +347,9 @@ async fn start_ipc(cm: ConnectionManager) {
                                             }
                                             Ok(Some(data)) => {
                                                 match data {
-                                                    Data::Login{id, is_file_transfer, port_forward, peer_id, name, authorized, keyboard, clipboard, audio} => {
+                                                    Data::Login{id, is_file_transfer, port_forward, peer_id, name, authorized, keyboard, clipboard, audio, file} => {
                                                         conn_id = id;
-                                                        cm.add_connection(id, is_file_transfer, port_forward, peer_id, name, authorized, keyboard, clipboard, audio, tx.clone());
+                                                        cm.add_connection(id, is_file_transfer, port_forward, peer_id, name, authorized, keyboard, clipboard, audio, file, tx.clone());
                                                     }
                                                     Data::Close => {
                                                         log::info!("cm ipc connection closed from connection request");

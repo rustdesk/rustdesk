@@ -139,6 +139,8 @@ pub struct PeerConfig {
     pub disable_audio: bool,
     #[serde(default)]
     pub disable_clipboard: bool,
+    #[serde(default)]
+    pub enable_file_transfer: bool,
 
     // the other scalar value must before this
     #[serde(default)]

@@ -54,6 +54,7 @@ pub struct Connection {
     keyboard: bool,
     clipboard: bool,
     audio: bool,
+    file: bool,
     last_test_delay: i64,
     image_quality: i32,
     lock_after_session_end: bool,
@@ -62,6 +63,7 @@ pub struct Connection {
     ip: String,
     disable_clipboard: bool,                  // by peer
     disable_audio: bool,                      // by peer
+    enable_file_transfer: bool,               // by peer
     tx_input: std_mpsc::Sender<MessageInput>, // handle input messages
     video_ack_required: bool,
 }
@@ -134,6 +136,7 @@ impl Connection {
             keyboard: Config::get_option("enable-keyboard").is_empty(),
             clipboard: Config::get_option("enable-clipboard").is_empty(),
             audio: Config::get_option("audio-input") != "Mute",
+            file: Config::get_option("enable-file-transfer").is_empty(),
             last_test_delay: 0,
             image_quality: ImageQuality::Balanced.value(),
             lock_after_session_end: false,
@@ -141,6 +144,7 @@ impl Connection {
             privacy_mode: false,
             ip: "".to_owned(),
             disable_audio: false,
+            enable_file_transfer: false,
             disable_clipboard: false,
             tx_input,
             video_ack_required: false,
@@ -161,6 +165,9 @@ impl Connection {
         }
         if !conn.audio {
             conn.send_permission(Permission::Audio, false).await;
+        }
+        if !conn.file {
+            conn.send_permission(Permission::File, false).await;
         }
         let mut test_delay_timer =
             time::interval_at(Instant::now() + TEST_DELAY_TIMEOUT, TEST_DELAY_TIMEOUT);
@@ -224,10 +231,6 @@ impl Connection {
                                     s.write().unwrap().subscribe(
                                         super::clipboard_service::NAME,
                                         conn.inner.clone(), conn.clipboard_enabled() && conn.keyboard);
-                                    #[cfg(windows)]
-                                    s.write().unwrap().subscribe(
-                                        super::cliprdr_service::NAME,
-                                        conn.inner.clone(), conn.clipboard_enabled() && conn.keyboard);
                                 }
                             } else if &name == "audio" {
                                 conn.audio = enabled;
@@ -236,6 +239,15 @@ impl Connection {
                                     s.write().unwrap().subscribe(
                                         super::audio_service::NAME,
                                         conn.inner.clone(), conn.audio_enabled());
+                                }
+                            } else if &name == "file" {
+                                conn.file = enabled;
+                                conn.send_permission(Permission::File, enabled).await;
+                                #[cfg(windows)]
+                                if let Some(s) = conn.server.upgrade() {
+                                    s.write().unwrap().subscribe(
+                                        super::clipboard_file_service::NAME,
+                                        conn.inner.clone(), conn.file_transfer_enabled());
                                 }
                             }
                         }
@@ -604,11 +616,13 @@ impl Connection {
                 }
                 if !self.clipboard_enabled() || !self.keyboard {
                     noperms.push(super::clipboard_service::NAME);
-                    #[cfg(windows)]
-                    noperms.push(super::cliprdr_service::NAME);
                 }
                 if !self.audio_enabled() {
                     noperms.push(super::audio_service::NAME);
+                }
+                if !self.file_transfer_enabled() {
+                    #[cfg(windows)]
+                    noperms.push(super::clipboard_file_service::NAME);
                 }
                 s.write()
                     .unwrap()
@@ -625,6 +639,10 @@ impl Connection {
         self.audio && !self.disable_audio
     }
 
+    fn file_transfer_enabled(&self) -> bool {
+        self.file && self.enable_file_transfer
+    }
+
     async fn try_start_cm(&mut self, peer_id: String, name: String, authorized: bool) {
         self.send_to_cm(ipc::Data::Login {
             id: self.inner.id(),
@@ -636,6 +654,7 @@ impl Connection {
             keyboard: self.keyboard,
             clipboard: self.clipboard,
             audio: self.audio,
+            file: self.file,
         });
     }
 
@@ -832,8 +851,7 @@ impl Connection {
                 }
                 #[cfg(windows)]
                 Some(message::Union::cliprdr(clip)) => {
-                    log::debug!("received cliprdr msg");
-                    cliprdr_service::handle_serve_cliprdr_msg(self.inner.id, clip)
+                    clipboard_file_service::handle_serve_clipboard_file_msg(self.inner.id, clip)
                 }
                 Some(message::Union::file_action(fa)) => {
                     if self.file_transfer.is_some() {
@@ -995,18 +1013,23 @@ impl Connection {
                 }
             }
         }
+        #[cfg(windows)]
+        if let Ok(q) = o.enable_file_transfer.enum_value() {
+            if q != BoolOption::NotSet {
+                self.enable_file_transfer = q == BoolOption::Yes;
+                s.write().unwrap().subscribe(
+                    super::clipboard_file_service::NAME,
+                    self.inner.clone(),
+                    self.file_transfer_enabled(),
+                );
+            }
+        }
         if let Ok(q) = o.disable_clipboard.enum_value() {
             if q != BoolOption::NotSet {
                 self.disable_clipboard = q == BoolOption::Yes;
                 if let Some(s) = self.server.upgrade() {
                     s.write().unwrap().subscribe(
                         super::clipboard_service::NAME,
-                        self.inner.clone(),
-                        self.clipboard_enabled() && self.keyboard,
-                    );
-                    #[cfg(windows)]
-                    s.write().unwrap().subscribe(
-                        super::cliprdr_service::NAME,
                         self.inner.clone(),
                         self.clipboard_enabled() && self.keyboard,
                     );

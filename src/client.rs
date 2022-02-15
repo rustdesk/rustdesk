@@ -765,6 +765,14 @@ impl LoginConfigHandler {
                 BoolOption::No
             })
             .into();
+        } else if name == "enable-file-transfer" {
+            config.enable_file_transfer = !config.enable_file_transfer;
+            option.enable_file_transfer = (if config.enable_file_transfer {
+                BoolOption::Yes
+            } else {
+                BoolOption::No
+            })
+            .into();
         } else if name == "block-input" {
             option.block_input = BoolOption::Yes.into();
         } else if name == "unblock-input" {
@@ -825,6 +833,10 @@ impl LoginConfigHandler {
         }
         if self.get_toggle_option("disable-audio") {
             msg.disable_audio = BoolOption::Yes.into();
+            n += 1;
+        }
+        if self.get_toggle_option("enable-file-transfer") {
+            msg.enable_file_transfer = BoolOption::Yes.into();
             n += 1;
         }
         if self.get_toggle_option("disable-clipboard") {

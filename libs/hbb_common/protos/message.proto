@@ -318,11 +318,13 @@ message CliprdrFormat {
   int32 id = 3;
   string format = 4;
 }
+
 message CliprdrServerFormatList {
   int32 server_conn_id = 1;
   int32 remote_conn_id = 2;
   repeated CliprdrFormat formats = 3;
 }
+
 message CliprdrServerFormatListResponse {
   int32 server_conn_id = 1;
   int32 remote_conn_id = 2;
@@ -334,6 +336,7 @@ message CliprdrServerFormatDataRequest {
   int32 remote_conn_id = 2;
   int32 requested_format_id = 3;
 }
+
 message CliprdrServerFormatDataResponse {
   int32 server_conn_id = 1;
   int32 remote_conn_id = 2;
@@ -353,6 +356,7 @@ message CliprdrFileContentsRequest {
 	bool have_clip_data_id = 9;
 	int32 clip_data_id = 10;
 }
+
 message CliprdrFileContentsResponse {
   int32 server_conn_id = 1;
   int32 remote_conn_id = 2;
@@ -386,6 +390,7 @@ message PermissionInfo {
     Keyboard = 0;
     Clipboard = 2;
     Audio = 3;
+    File = 4;
   }
 
   Permission permission = 1;
@@ -413,6 +418,7 @@ message OptionMessage {
   int32 custom_image_quality = 6;
   BoolOption disable_audio = 7;
   BoolOption disable_clipboard = 8;
+  BoolOption enable_file_transfer = 9;
 }
 
 message OptionResponse {

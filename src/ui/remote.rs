@@ -4,7 +4,9 @@ use crate::common::{
 };
 #[cfg(windows)]
 use clipboard::{
-    cliprdr::CliprdrClientContext, create_cliprdr_context, get_rx_client_msg, server_msg, ConnID,
+    cliprdrfile::CliprdrClientContext, create_cliprdr_context as create_clipboard_file_context,
+    get_rx_client_msg as get_clipboard_file_rx_client_msg, server_msg as clipboard_file_msg,
+    ConnID as ClipboardFileConnID,
 };
 use enigo::{self, Enigo, KeyboardControllable};
 use hbb_common::{
@@ -1165,7 +1167,7 @@ async fn io_loop(handler: Handler) {
     });
 
     #[cfg(windows)]
-    let cliprdr_context = match create_cliprdr_context(true, false) {
+    let clipboard_file_context = match create_clipboard_file_context(true, false) {
         Ok(context) => Some(context),
         Err(err) => {
             handler.msgbox("error", "Create clipboard error", &err.to_string());
@@ -1187,7 +1189,7 @@ async fn io_loop(handler: Handler) {
         last_update_jobs_status: (Instant::now(), Default::default()),
         first_frame: false,
         #[cfg(windows)]
-        cliprdr_context,
+        clipboard_file_context,
         #[cfg(windows)]
         pid: std::process::id(),
     };
@@ -1230,7 +1232,7 @@ struct Remote {
     last_update_jobs_status: (Instant, HashMap<i32, u64>),
     first_frame: bool,
     #[cfg(windows)]
-    cliprdr_context: Option<Box<CliprdrClientContext>>,
+    clipboard_file_context: Option<Box<CliprdrClientContext>>,
     #[cfg(windows)]
     pid: u32,
 }
@@ -1255,9 +1257,9 @@ impl Remote {
 
                 // just build for now
                 #[cfg(not(windows))]
-                let (_client_tx, mut client_rx) = mpsc::unbounded_channel::<i32>();
+                let (_, mut clipboard_file_client_rx) = mpsc::unbounded_channel::<i32>();
                 #[cfg(windows)]
-                let mut client_rx = get_rx_client_msg().lock().await;
+                let mut clipboard_file_client_rx = get_clipboard_file_rx_client_msg().lock().await;
 
                 loop {
                     tokio::select! {
@@ -1289,18 +1291,16 @@ impl Remote {
                                 }
                             }
                         }
-                        msg = client_rx.recv() => {
-                            #[cfg(not(windows))]
-                            println!("{:?}", msg);
+                        _msg = clipboard_file_client_rx.recv() => {
                             #[cfg(windows)]
-                            match msg {
+                            match _msg {
                                 Some((conn_id, msg)) => {
                                     if conn_id.remote_conn_id == 0 || conn_id.remote_conn_id == self.pid {
                                         allow_err!(peer.send(&msg).await);
                                     }
                                 }
                                 None => {
-                                    unreachable!()
+                                    // unreachable!()
                                 }
                             }
                         }
@@ -1675,21 +1675,18 @@ impl Remote {
                         update_clipboard(cb, Some(&self.old_clipboard));
                     }
                 }
-                #[allow(unused_variables)]
+                #[cfg(windows)]
                 Some(message::Union::cliprdr(clip)) => {
-                    log::debug!("received cliprdr msg");
-                    #[cfg(windows)]
                     if !self.handler.lc.read().unwrap().disable_clipboard {
-                        if let Some(context) = &mut self.cliprdr_context {
-                            let res = server_msg(
+                        if let Some(context) = &mut self.clipboard_file_context {
+                            let res = clipboard_file_msg(
                                 context,
-                                ConnID {
+                                ClipboardFileConnID {
                                     server_conn_id: 0,
                                     remote_conn_id: self.pid,
                                 },
                                 clip,
                             );
-                            log::debug!("server msg returns {}", res);
                         }
                     }
                 }
@@ -1754,6 +1751,10 @@ impl Remote {
                             Permission::Audio => {
                                 self.handler
                                     .call("setPermission", &make_args!("audio", p.enabled));
+                            }
+                            Permission::File => {
+                                self.handler
+                                    .call("setPermission", &make_args!("file", p.enabled));
                             }
                         }
                     }

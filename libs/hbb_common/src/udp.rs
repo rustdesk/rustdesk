@@ -84,7 +84,7 @@ impl FramedSocket {
         let _ = match self {
             Self::Direct(f) => match addr {
                 TargetAddr::Ip(addr) => f.send((send_data, addr)).await?,
-                _ => unreachable!(),
+                _ => {}
             },
             Self::ProxySocks(f) => f.send((send_data, addr)).await?,
         };
@@ -103,7 +103,7 @@ impl FramedSocket {
         let _ = match self {
             Self::Direct(f) => match addr {
                 TargetAddr::Ip(addr) => f.send((Bytes::from(msg), addr)).await?,
-                _ => unreachable!(),
+                _ => {}
             },
             Self::ProxySocks(f) => f.send((Bytes::from(msg), addr)).await?,
         };

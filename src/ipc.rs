@@ -72,6 +72,7 @@ pub enum Data {
         keyboard: bool,
         clipboard: bool,
         audio: bool,
+        file: bool,
     },
     ChatMessage {
         text: String,

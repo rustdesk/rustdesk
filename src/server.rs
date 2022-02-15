@@ -30,7 +30,7 @@ use std::{
 mod audio_service;
 mod clipboard_service;
 #[cfg(windows)]
-pub mod cliprdr_service;
+pub mod clipboard_file_service;
 mod connection;
 pub mod input_service;
 mod service;
@@ -64,7 +64,7 @@ pub fn new() -> ServerPtr {
     server.add_service(Box::new(video_service::new()));
     server.add_service(Box::new(clipboard_service::new()));
     #[cfg(windows)]
-    server.add_service(Box::new(cliprdr_service::new()));
+    server.add_service(Box::new(clipboard_file_service::new()));
     server.add_service(Box::new(input_service::new_cursor()));
     server.add_service(Box::new(input_service::new_pos()));
     Arc::new(RwLock::new(server))
