@@ -873,6 +873,8 @@ impl LoginConfigHandler {
             self.config.lock_after_session_end
         } else if name == "privacy-mode" {
             self.config.privacy_mode
+        } else if name == "enable-file-transfer" {
+            self.config.enable_file_transfer
         } else if name == "disable-audio" {
             self.config.disable_audio
         } else if name == "disable-clipboard" {
@@ -1152,6 +1154,7 @@ pub enum Data {
     CancelJob(i32),
     RemovePortForward(i32),
     AddPortForward((i32, String, i32)),
+    ToggleClipboardFile,
     NewRDP,
 }
 

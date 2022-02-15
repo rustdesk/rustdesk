@@ -4,7 +4,7 @@ use crate::common::{
 };
 #[cfg(windows)]
 use clipboard::{
-    cliprdrfile::CliprdrClientContext, create_cliprdr_context as create_clipboard_file_context,
+    cliprdr::CliprdrClientContext, create_cliprdr_context as create_clipboard_file_context,
     get_rx_client_msg as get_clipboard_file_rx_client_msg, server_msg as clipboard_file_msg,
     ConnID as ClipboardFileConnID,
 };
@@ -57,6 +57,7 @@ fn get_key_state(key: enigo::Key) -> bool {
 static mut IS_IN: bool = false;
 static mut KEYBOARD_HOOKED: bool = false;
 static mut SERVER_KEYBOARD_ENABLED: bool = true;
+static mut SERVER_FILE_TRANSFER_ENABLED: bool = true;
 static mut SERVER_CLIPBOARD_ENABLED: bool = true;
 
 #[derive(Default)]
@@ -394,7 +395,10 @@ impl Handler {
     }
 
     fn toggle_option(&mut self, name: String) {
-        let msg = self.lc.write().unwrap().toggle_option(name);
+        let msg = self.lc.write().unwrap().toggle_option(name.clone());
+        if name == "enable-file-transfer" {
+            self.send(Data::ToggleClipboardFile);
+        }
         if let Some(msg) = msg {
             self.send(Data::Message(msg));
         }
@@ -1166,15 +1170,6 @@ async fn io_loop(handler: Handler) {
             .map(|v| v.render_frame(data).ok());
     });
 
-    #[cfg(windows)]
-    let clipboard_file_context = match create_clipboard_file_context(true, false) {
-        Ok(context) => Some(context),
-        Err(err) => {
-            handler.msgbox("error", "Create clipboard error", &err.to_string());
-            None
-        }
-    };
-
     let mut remote = Remote {
         handler,
         video_sender,
@@ -1189,10 +1184,11 @@ async fn io_loop(handler: Handler) {
         last_update_jobs_status: (Instant::now(), Default::default()),
         first_frame: false,
         #[cfg(windows)]
-        clipboard_file_context,
+        clipboard_file_context: None,
         #[cfg(windows)]
         pid: std::process::id(),
     };
+    remote.check_clipboard_file_context();
     remote.io_loop().await;
 }
 
@@ -1251,6 +1247,7 @@ impl Remote {
                 unsafe {
                     SERVER_KEYBOARD_ENABLED = true;
                     SERVER_CLIPBOARD_ENABLED = true;
+                    SERVER_FILE_TRANSFER_ENABLED = true;
                 }
                 self.handler
                     .call("setConnectionType", &make_args!(peer.is_secured(), direct));
@@ -1334,6 +1331,7 @@ impl Remote {
         unsafe {
             SERVER_KEYBOARD_ENABLED = false;
             SERVER_CLIPBOARD_ENABLED = false;
+            SERVER_FILE_TRANSFER_ENABLED = false;
         }
     }
 
@@ -1413,6 +1411,9 @@ impl Remote {
                 self.handler
                     .handle_login_from_ui(password, remember, peer)
                     .await;
+            }
+            Data::ToggleClipboardFile => {
+                self.check_clipboard_file_context();
             }
             Data::Message(msg) => {
                 allow_err!(peer.send(&msg).await);
@@ -1679,7 +1680,7 @@ impl Remote {
                 Some(message::Union::cliprdr(clip)) => {
                     if !self.handler.lc.read().unwrap().disable_clipboard {
                         if let Some(context) = &mut self.clipboard_file_context {
-                            let res = clipboard_file_msg(
+                            clipboard_file_msg(
                                 context,
                                 ClipboardFileConnID {
                                     server_conn_id: 0,
@@ -1753,6 +1754,10 @@ impl Remote {
                                     .call("setPermission", &make_args!("audio", p.enabled));
                             }
                             Permission::File => {
+                                unsafe {
+                                    SERVER_FILE_TRANSFER_ENABLED = p.enabled;
+                                }
+                                self.check_clipboard_file_context();
                                 self.handler
                                     .call("setPermission", &make_args!("file", p.enabled));
                             }
@@ -1795,6 +1800,34 @@ impl Remote {
             }
         }
         true
+    }
+
+    fn check_clipboard_file_context(&mut self) {
+        #[cfg(windows)]
+        {
+            let enabled = unsafe { SERVER_FILE_TRANSFER_ENABLED }
+                && self.handler.lc.read().unwrap().enable_file_transfer;
+            if enabled == self.clipboard_file_context.is_none() {
+                self.clipboard_file_context = if enabled {
+                    match create_clipboard_file_context(true, false) {
+                        Ok(context) => {
+                            log::info!("clipboard context for file transfer created.");
+                            Some(context)
+                        }
+                        Err(err) => {
+                            log::error!(
+                                "Create clipboard context for file transfer: {}",
+                                err.to_string()
+                            );
+                            None
+                        }
+                    }
+                } else {
+                    log::info!("clipboard context for file transfer destroyed.");
+                    None
+                };
+            }
+        }
     }
 }
 

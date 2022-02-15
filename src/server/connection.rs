@@ -851,7 +851,7 @@ impl Connection {
                 }
                 #[cfg(windows)]
                 Some(message::Union::cliprdr(clip)) => {
-                    clipboard_file_service::handle_serve_clipboard_file_msg(self.inner.id, clip)
+                    clipboard_file_service::handle_serve_cliprdr_msg(self.inner.id, clip)
                 }
                 Some(message::Union::file_action(fa)) => {
                     if self.file_transfer.is_some() {
@@ -1017,11 +1017,13 @@ impl Connection {
         if let Ok(q) = o.enable_file_transfer.enum_value() {
             if q != BoolOption::NotSet {
                 self.enable_file_transfer = q == BoolOption::Yes;
-                s.write().unwrap().subscribe(
-                    super::clipboard_file_service::NAME,
-                    self.inner.clone(),
-                    self.file_transfer_enabled(),
-                );
+                if let Some(s) = self.server.upgrade() {
+                    s.write().unwrap().subscribe(
+                        super::clipboard_file_service::NAME,
+                        self.inner.clone(),
+                        self.file_transfer_enabled(),
+                    );
+                }
             }
         }
         if let Ok(q) = o.disable_clipboard.enum_value() {
