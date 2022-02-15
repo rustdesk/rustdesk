@@ -143,6 +143,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Allow using keyboard and mouse", "允許使用鍵盤和滑鼠"),
         ("Allow using clipboard", "允許使用剪貼簿"),
         ("Allow hearing sound", "允許分享音訊"),
+        ("Allow file transfer", "允許文件傳輸"),
+        ("File transfer", "文件傳輸"),
         ("Connected", "已連接"),
         ("Direct and encrypted connection", "加密直接連線"),
         ("Relayed and encrypted connection", "加密轉送連線"),
