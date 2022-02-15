@@ -248,7 +248,7 @@ typedef struct wf_clipboard wfClipboard;
 
 #define WM_CLIPRDR_MESSAGE (WM_USER + 156)
 #define OLE_SETCLIPBOARD 1
-#define DELAY_RENDERING 2
+#define DELAYED_RENDERING 2
 
 BOOL wf_cliprdr_init(wfClipboard *clipboard, CliprdrClientContext *cliprdr);
 BOOL wf_cliprdr_uninit(wfClipboard *clipboard, CliprdrClientContext *cliprdr);
@@ -1632,14 +1632,16 @@ static LRESULT CALLBACK cliprdr_proc(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM 
 
 			break;
 
-		case DELAY_RENDERING:
+		case DELAYED_RENDERING:
+			FORMAT_IDS *format_ids = (FORMAT_IDS *)lParam;
 			if (!try_open_clipboard(clipboard->hwnd))
 			{
 				// failed to open clipboard
+				free(format_ids->formats);
+				free(format_ids);
 				break;
 			}
 
-			FORMAT_IDS *format_ids = (FORMAT_IDS *)lParam;
 			for (UINT32 i = 0; i < format_ids->size; ++i)
 			{
 				if (cliprdr_send_data_request(format_ids->serverConnID, format_ids->remoteConnID, clipboard, format_ids->formats[i]) != 0)
@@ -1668,7 +1670,6 @@ static LRESULT CALLBACK cliprdr_proc(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM 
 
 			free(format_ids->formats);
 			free(format_ids);
-
 			break;
 
 		default:
@@ -2159,7 +2160,7 @@ static UINT wf_cliprdr_server_format_list(CliprdrClientContext *context,
 				{
 					format_ids->formats[i] = clipboard->format_mappings[i].local_format_id;
 				}
-				if (PostMessage(clipboard->hwnd, WM_CLIPRDR_MESSAGE, DELAY_RENDERING, format_ids))
+				if (PostMessage(clipboard->hwnd, WM_CLIPRDR_MESSAGE, DELAYED_RENDERING, format_ids))
 				{
 					rc = CHANNEL_RC_OK;
 				}
