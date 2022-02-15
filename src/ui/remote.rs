@@ -2,6 +2,10 @@ use crate::client::*;
 use crate::common::{
     self, check_clipboard, update_clipboard, ClipboardContext, CLIPBOARD_INTERVAL,
 };
+#[cfg(windows)]
+use clipboard::{
+    cliprdr::CliprdrClientContext, create_cliprdr_context, get_rx_client_msg, server_msg, ConnID,
+};
 use enigo::{self, Enigo, KeyboardControllable};
 use hbb_common::{
     allow_err,
@@ -1159,6 +1163,16 @@ async fn io_loop(handler: Handler) {
             .as_mut()
             .map(|v| v.render_frame(data).ok());
     });
+
+    #[cfg(windows)]
+    let cliprdr_context = match create_cliprdr_context(true, false) {
+        Ok(context) => Some(context),
+        Err(err) => {
+            handler.msgbox("error", "Create clipboard error", &err.to_string());
+            None
+        }
+    };
+
     let mut remote = Remote {
         handler,
         video_sender,
@@ -1172,6 +1186,10 @@ async fn io_loop(handler: Handler) {
         timer: time::interval(SEC30),
         last_update_jobs_status: (Instant::now(), Default::default()),
         first_frame: false,
+        #[cfg(windows)]
+        cliprdr_context,
+        #[cfg(windows)]
+        pid: std::process::id(),
     };
     remote.io_loop().await;
 }
@@ -1211,6 +1229,10 @@ struct Remote {
     timer: Interval,
     last_update_jobs_status: (Instant, HashMap<i32, u64>),
     first_frame: bool,
+    #[cfg(windows)]
+    cliprdr_context: Option<Box<CliprdrClientContext>>,
+    #[cfg(windows)]
+    pid: u32,
 }
 
 impl Remote {
@@ -1230,6 +1252,13 @@ impl Remote {
                 }
                 self.handler
                     .call("setConnectionType", &make_args!(peer.is_secured(), direct));
+
+                // just build for now
+                #[cfg(not(windows))]
+                let (_client_tx, mut client_rx) = mpsc::unbounded_channel::<i32>();
+                #[cfg(windows)]
+                let mut client_rx = get_rx_client_msg().lock().await;
+
                 loop {
                     tokio::select! {
                         res = peer.next() => {
@@ -1257,6 +1286,21 @@ impl Remote {
                             if let Some(d) = d {
                                 if !self.handle_msg_from_ui(d, &mut peer).await {
                                     break;
+                                }
+                            }
+                        }
+                        msg = client_rx.recv() => {
+                            #[cfg(not(windows))]
+                            println!("{:?}", msg);
+                            #[cfg(windows)]
+                            match msg {
+                                Some((conn_id, msg)) => {
+                                    if conn_id.remote_conn_id == 0 || conn_id.remote_conn_id == self.pid {
+                                        allow_err!(peer.send(&msg).await);
+                                    }
+                                }
+                                None => {
+                                    unreachable!()
                                 }
                             }
                         }
@@ -1629,6 +1673,24 @@ impl Remote {
                 Some(message::Union::clipboard(cb)) => {
                     if !self.handler.lc.read().unwrap().disable_clipboard {
                         update_clipboard(cb, Some(&self.old_clipboard));
+                    }
+                }
+                #[allow(unused_variables)]
+                Some(message::Union::cliprdr(clip)) => {
+                    log::debug!("received cliprdr msg");
+                    #[cfg(windows)]
+                    if !self.handler.lc.read().unwrap().disable_clipboard {
+                        if let Some(context) = &mut self.cliprdr_context {
+                            let res = server_msg(
+                                context,
+                                ConnID {
+                                    server_conn_id: 0,
+                                    remote_conn_id: self.pid,
+                                },
+                                clip,
+                            );
+                            log::debug!("server msg returns {}", res);
+                        }
                     }
                 }
                 Some(message::Union::file_response(fr)) => match fr.union {

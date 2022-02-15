@@ -137,6 +137,12 @@ impl<T: Subscriber + From<ConnInner>> ServiceTmpl<T> {
         self.send_shared(Arc::new(msg));
     }
 
+    pub fn send_to(&self, msg: Message, id: i32) {
+        if let Some(s) = self.0.write().unwrap().subscribes.get_mut(&id) {
+            s.send(Arc::new(msg));
+        }
+    }
+
     pub fn send_shared(&self, msg: Arc<Message>) {
         let mut lock = self.0.write().unwrap();
         for s in lock.subscribes.values_mut() {
