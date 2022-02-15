@@ -11,7 +11,7 @@ use hbb_common::{
 };
 use std::sync::atomic::{AtomicBool, Ordering};
 
-pub use crate::common::CLIPRDR_NAME as NAME;
+pub const NAME: &'static str = "cliprdr";
 
 lazy_static::lazy_static! {
     static ref MSG_CHANNEL_SERVER: (UnboundedSender<(ConnID, Cliprdr)>, TokioMutex<UnboundedReceiver<(ConnID, Cliprdr)>>) = {

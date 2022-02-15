@@ -16,7 +16,6 @@ use hbb_common::{config::RENDEZVOUS_PORT, futures::future::join_all};
 use std::sync::{Arc, Mutex};
 
 pub const CLIPBOARD_NAME: &'static str = "clipboard";
-pub const CLIPRDR_NAME: &'static str = "cliprdr";
 pub const CLIPBOARD_INTERVAL: u64 = 333;
 
 lazy_static::lazy_static! {
