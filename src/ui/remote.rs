@@ -1188,7 +1188,6 @@ async fn io_loop(handler: Handler) {
         #[cfg(windows)]
         pid: std::process::id(),
     };
-    remote.check_clipboard_file_context();
     remote.io_loop().await;
 }
 
@@ -1642,6 +1641,7 @@ impl Remote {
                     }
                     Some(login_response::Union::peer_info(pi)) => {
                         self.handler.handle_peer_info(pi);
+                        self.check_clipboard_file_context();
                         if !(self.handler.is_file_transfer()
                             || self.handler.is_port_forward()
                             || !unsafe { SERVER_CLIPBOARD_ENABLED }
