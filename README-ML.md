@@ -5,7 +5,7 @@
   <a href="#how-to-build-with-docker">Docker</a> •
   <a href="#file-structure">Structure</a> •
   <a href="#snapshot">Snapshot</a><br>
-  [<a href="README-ZH.md">中文</a>] | [<a href="README-ES.md">Español</a>] | [<a href="README-FR.md">Français</a>] | [<a href="README-DE.md">Deutsch</a>] | [<a href="README-NL.md">Nederlands</a>] | [<a href="README-PL.md">Polski</a>] | [<a href="README-FI.md">Suomi</a>] | [<a href="README-JP.md">日本語</a>] | [<a href="README-RU.md">Русский</a>] | [<a href="README-PT.md">Português</a>]<br>
+  [<a href="README.md">English</a>] | [<a href="README-ZH.md">中文</a>] | [<a href="README-ES.md">Español</a>] | [<a href="README-FR.md">Français</a>] | [<a href="README-DE.md">Deutsch</a>] | [<a href="README-PL.md">Polski</a>] | [<a href="README-FI.md">Suomi</a>] | [<a href="README-ML.md">മലയാളം</a>] | [<a href="README-JP.md">日本語</a>] | [<a href="README-NL.md">Nederlands</a>] | [<a href="README-IT.md">Italiano</a>]<br>
   <b>ഈ README നിങ്ങളുടെ മാതൃഭാഷയിലേക്ക് വിവർത്തനം ചെയ്യാൻ ഞങ്ങൾക്ക് നിങ്ങളുടെ സഹായം ആവശ്യമാണ്</b>
 </p>
 
@@ -28,7 +28,7 @@
 | Singapore | Vultr | 1 VCPU / 1GB RAM |
 | Dallas | Vultr | 1 VCPU / 1GB RAM | |
 
-## ഡിപെൻഡൻസികൾ 
+## ഡിപെൻഡൻസികൾ
 
 ഡെസ്‌ക്‌ടോപ്പ് പതിപ്പുകൾ GUI-യ്‌ക്കായി [sciter](https://sciter.com/) ഉപയോഗിക്കുന്നു, ദയവായി സ്‌സൈറ്റർ ഡൈനാമിക് ലൈബ്രറി സ്വയം ഡൗൺലോഡ് ചെയ്യുക.
 
@@ -92,7 +92,7 @@ cp libvpx.a $HOME/vcpkg/installed/x64-linux/lib/
 cd
 ```
 
-### നിർമാണം 
+### നിർമാണം
 
 ```sh
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh

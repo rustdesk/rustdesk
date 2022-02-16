@@ -5,7 +5,7 @@
   <a href="#how-to-build-with-docker">Docker</a> •
   <a href="#file-structure">Structure</a> •
   <a href="#snapshot">Snapshot</a><br>
-  [<a href="README-ZH.md">中文</a>] | [<a href="README-ES.md">Español</a>] | [<a href="README-FR.md">Français</a>] | [<a href="README-DE.md">Deutsch</a>] | [<a href="README-NL.md">Nederlands</a>] | [<a href="README-PL.md">Polski</a>] | [<a href="README-FI.md">Suomi</a>] | [<a href="README-ML.md">മലയാളം</a>] | [<a href="README-JP.md">日本語</a>] | [<a href="README-RU.md">Русский</a>] | [<a href="README-PT.md">Português</a>]<br>
+  [<a href="README.md">English</a>] | [<a href="README-ZH.md">中文</a>] | [<a href="README-ES.md">Español</a>] | [<a href="README-FR.md">Français</a>] | [<a href="README-DE.md">Deutsch</a>] | [<a href="README-PL.md">Polski</a>] | [<a href="README-FI.md">Suomi</a>] | [<a href="README-ML.md">മലയാളം</a>] | [<a href="README-JP.md">日本語</a>] | [<a href="README-NL.md">Nederlands</a>] | [<a href="README-IT.md">Italiano</a>]<br>
   <b>このREADMEをあなたの母国語に翻訳するために、あなたの助けが必要です。</b>
 </p>
 
@@ -114,7 +114,6 @@ RustDeskはWaylandをサポートしていません。
 
 リポジトリのクローンを作成し、Dockerコンテナを構築することから始めます。
 
-
 ```sh
 git clone https://github.com/rustdesk/rustdesk
 cd rustdesk
@@ -127,7 +126,7 @@ docker build -t "rustdesk-builder" .
 docker run --rm -it -v $PWD:/home/user/rustdesk -v rustdesk-git-cache:/home/user/.cargo/git -v rustdesk-registry-cache:/home/user/.cargo/registry -e PUID="$(id -u)" -e PGID="$(id -g)" rustdesk-builder
 ```
 
-なお、最初のビルドでは、依存関係がキャッシュされるまで時間がかかることがありますが、その後のビルドではより速くなります。さらに、ビルドコマンドに別の引数を指定する必要がある場合は、コマンドの最後にある `<OPTIONAL-ARGS>` の位置で指定することができます。例えば、最適化されたリリースバージョンをビルドしたい場合は、上記のコマンドの後に 
+なお、最初のビルドでは、依存関係がキャッシュされるまで時間がかかることがありますが、その後のビルドではより速くなります。さらに、ビルドコマンドに別の引数を指定する必要がある場合は、コマンドの最後にある `<OPTIONAL-ARGS>` の位置で指定することができます。例えば、最適化されたリリースバージョンをビルドしたい場合は、上記のコマンドの後に
 `---release` を実行します。できあがった実行ファイルは、システムのターゲット・フォルダに格納され、次のコマンドで実行できます。
 
 ```sh
