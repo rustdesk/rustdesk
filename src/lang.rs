@@ -7,6 +7,7 @@ mod fr;
 mod it;
 mod tw;
 mod de;
+mod ru;
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub fn translate(name: String) -> String {
@@ -32,6 +33,7 @@ pub fn translate_locale(name: String, locale: &str) -> String {
         "it" => it::T.deref(),
         "tw" => tw::T.deref(),
         "de" => tw::T.deref(),
+        "ru" => ru::T.deref(),
         _ => en::T.deref(),
     };
     if let Some(v) = m.get(&name as &str) {
