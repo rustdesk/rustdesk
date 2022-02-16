@@ -13,7 +13,7 @@ Chatta con noi: [Discord](https://discord.gg/nDceKgxnkV) | [Reddit](https://www.
 
 [![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/I2I04VU09)
 
-Ancora un altro software per il controllo remoto del desktop, scritto in Rust. Funziona immediatamente, nessuna configurazione richiesta. Hai il pieno controllo dei tuoi dati, senza preoccupazioni per la sicurezza. Puoi utilizzare il nostro server rendezvous/relay, [configurare il tuo](https://rustdesk.com/blog/id-relay-set/) o [scrivere il tuo rendezvous/relay server](<https://github> .com/rustdesk/rustdesk-server-demo).
+Ancora un altro software per il controllo remoto del desktop, scritto in Rust. Funziona immediatamente, nessuna configurazione richiesta. Hai il pieno controllo dei tuoi dati, senza preoccupazioni per la sicurezza. Puoi utilizzare il nostro server rendezvous/relay, [configurare il tuo](https://rustdesk.com/blog/id-relay-set/) o [scrivere il tuo rendezvous/relay server](https://github.com/rustdesk/rustdesk-server-demo).
 
 RustDesk accoglie il contributo di tutti. Per ulteriori informazioni su come inizare a contribuire, vedere [`CONTRIBUTING.md`](CONTRIBUTING.md).
 
