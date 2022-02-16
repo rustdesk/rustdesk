@@ -211,6 +211,7 @@ pub fn resample_channels(
 }
 
 pub fn test_nat_type() {
+    let mut i = 0;
     std::thread::spawn(move || loop {
         match test_nat_type_() {
             Ok(true) => break,
@@ -222,7 +223,11 @@ pub fn test_nat_type() {
         if Config::get_nat_type() != 0 {
             break;
         }
-        std::thread::sleep(std::time::Duration::from_secs(12));
+        i = i * 2 + 1;
+        if i > 300 {
+            i = 300;
+        }
+        std::thread::sleep(std::time::Duration::from_secs(i));
     });
 }
 
