@@ -13,7 +13,7 @@ Rede mit uns: [Discord](https://discord.gg/nDceKgxnkV) | [Reddit](https://www.re
 
 [![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/I2I04VU09)
 
-Das hier ist ein Programm was man nutzen kann, um einen Computer fernzusteuern, es wurde in Rust geschrieben. Es funktioniert ohne Konfiguration oder ähnliches, man kann es einfach direkt nutzen. Du hast volle Kontrolle über deine Daten und brauchst dir daher auch keine Sorgen um die Sicherheit dieser Daten zu machen. Du kannst unseren rendezvous/relay Server nutzen, [einen eigenen Server eröffnen](https://rustdesk.com/blog/id-relay-set/) oder [einen neuen eigenen Server programmieren](https://github.com/rustdesk/rustdesk-server-demo).
+Das hier ist ein Programm was, man nutzen kann, um einen Computer fernzusteuern, es wurde in Rust geschrieben. Es funktioniert ohne Konfiguration oder ähnliches, man kann es einfach direkt nutzen. Du hast volle Kontrolle über deine Daten und brauchst dir daher auch keine Sorgen um die Sicherheit dieser Daten zu machen. Du kannst unseren Rendezvous/Relay Server nutzen, [einen eigenen Server eröffnen](https://rustdesk.com/blog/id-relay-set/) oder [einen neuen eigenen Server programmieren](https://github.com/rustdesk/rustdesk-server-demo).
 
 RustDesk heißt jegliche Mitarbeit willkommen. Schau dir [`CONTRIBUTING.md`](CONTRIBUTING.md) an, wenn du Hilfe brauchst für den Start.
 
@@ -21,7 +21,7 @@ RustDesk heißt jegliche Mitarbeit willkommen. Schau dir [`CONTRIBUTING.md`](CON
 
 ## Kostenlose öffentliche Server
 
-Hier sind die Server die du kostenlos nutzen kannst, es kann sein das sich diese Liste immer mal wieder ändert. Falls du nicht in der Nähe einer dieser Server bist, kann es sein, dass deine Verbindung langsam sein wird.
+Hier sind die Server, die du kostenlos nutzen kannst, es kann sein das sich diese Liste immer mal wieder ändert. Falls du nicht in der Nähe einer dieser Server bist, kann es sein, dass deine Verbindung langsam sein wird.
 
 | Standort  | Serverart     | Spezifikationen    | Kommentare |
 | --------- | ------------- | ------------------ | ---------- |
@@ -31,7 +31,7 @@ Hier sind die Server die du kostenlos nutzen kannst, es kann sein das sich diese
 
 ## Abhängigkeiten
 
-Die Desktop Versionen nutzen [Sciter](https://sciter.com/) für die Oberfläche, bitte lade die dynamische Sciter Bibliothek selbst herunter.
+Die Desktop-Versionen nutzen [Sciter](https://sciter.com/) für die Oberfläche, bitte lade die dynamische Sciter Bibliothek selbst herunter.
 
 [Windows](https://raw.githubusercontent.com/c-smile/sciter-sdk/master/bin.win/x64/sciter.dll) |
 [Linux](https://raw.githubusercontent.com/c-smile/sciter-sdk/master/bin.lnx/x64/libsciter-gtk.so) |
@@ -126,7 +126,7 @@ Jedes Mal, wenn du das Programm Kompilieren musst, nutze diesen Befehl:
 docker run --rm -it -v $PWD:/home/user/rustdesk -v rustdesk-git-cache:/home/user/.cargo/git -v rustdesk-registry-cache:/home/user/.cargo/registry -e PUID="$(id -u)" -e PGID="$(id -g)" rustdesk-builder
 ```
 
-Bedenke, dass das erste Mal Kompilieren länger dauern kann, da die Abhängigkeiten erst kompiliert werden müssen bevor sie zwischengespeichert werden können. Darauf folgende Kompiliervorgänge werden schneller sein. Falls du zusätzliche oder andere Argumente für den Kompilierbefehl angeben musst, kannst du diese am Ende des Befehls an der `<OPTIONAL-ARGS>` Position machen. Wenn du zum Beispiel eine optimierte Releaseversion kompilieren willst, kannst du das tun indem du `--release` am Ende des Befehls anhängst. Das daraus entstehende Programm kannst du im “target” Ordner auf deinem System finden. Du kannst es mit folgenden Befehlen ausführen:
+Bedenke, dass das erste Mal Kompilieren länger dauern kann, da die Abhängigkeiten erst kompiliert werden müssen bevor sie zwischengespeichert werden können. Darauf folgende Kompiliervorgänge werden schneller sein. Falls du zusätzliche oder andere Argumente für den Kompilierbefehl angeben musst, kannst du diese am Ende des Befehls an der `<OPTIONAL-ARGS>` Position machen. Wenn du zum Beispiel eine optimierte Releaseversion kompilieren willst, kannst du das tun, indem du `--release` am Ende des Befehls anhängst. Das daraus entstehende Programm kannst du im “target” Ordner auf deinem System finden. Du kannst es mit folgenden Befehlen ausführen:
 
 ```sh
 target/debug/rustdesk
@@ -138,7 +138,7 @@ Oder, wenn du eine Releaseversion benutzt:
 target/release/rustdesk
 ```
 
-Bitte gehe sicher, dass du diese Befehle vom Stammverzeichnis vom RustDesk Repository nutzt, sonst kann es passieren, dass das Programm die Ressourcen nicht finden kann. Bitte bedenke auch, dass Unterbefehle von Cargo, wie z.B. `install` oder `run` aktuell noch nicht unterstützt werden, da sie das Programm innerhalb des Containers starten oder installieren würden, anstatt auf deinem eigentlichen System.
+Bitte gehe sicher, dass du diese Befehle vom Stammverzeichnis vom RustDesk Repository nutzt, sonst kann es passieren, dass das Programm die Ressourcen nicht finden kann. Bitte bedenke auch, dass Unterbefehle von Cargo, wie z. B. `install` oder `run` aktuell noch nicht unterstützt werden, da sie das Programm innerhalb des Containers starten oder installieren würden, anstatt auf deinem eigentlichen System.
 
 ## Dateistruktur
 
