@@ -1,3 +1,4 @@
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter/services.dart';
@@ -7,6 +8,7 @@ import 'dart:async';
 import 'package:tuple/tuple.dart';
 import 'package:wakelock/wakelock.dart';
 import 'common.dart';
+import 'gestures.dart';
 import 'model.dart';
 
 final initText = '\1' * 1024;
@@ -267,7 +269,7 @@ class _RemotePageState extends State<RemotePage> {
                 color: Colors.black,
                 child: isDesktop
                     ? getBodyForDesktopWithListener()
-                    : SafeArea(child: getBodyForMobileWithGuesture())),
+                    : SafeArea(child: getBodyForMobileWithGesture())),
           )),
     );
   }
@@ -346,7 +348,50 @@ class _RemotePageState extends State<RemotePage> {
     );
   }
 
-  Widget getBodyForMobileWithGuesture() {
+  Widget getBodyForMobileWithGesture() {
+    return getMixinGestureDetector(
+        child: getBodyForMobile(),
+        onTapUp: (d) {
+          if (_drag || _scroll) return;
+          if (_touchMode) {
+            FFI.cursorModel.touch(
+                d.localPosition.dx, d.localPosition.dy, _right);
+          } else {
+            FFI.tap(_right);
+          }
+        },
+        onDoubleTap: () {
+          if (_drag || _scroll) return;
+          FFI.tap(_right);
+          FFI.tap(_right);
+        },
+        onDoubleFinerTap: (d) {
+          if (_drag || _scroll) return;
+          FFI.tap(true);
+        },
+        onHoldDragStart: (d) {
+          FFI.sendMouse('down', 'left');
+        },
+        onHoldDragUpdate: (d) {
+          FFI.cursorModel.updatePan(d.delta.dx, d.delta.dy, _touchMode, _drag);
+        },
+        onHoldDragCancel: () {
+          FFI.sendMouse('up', 'left');
+        },
+        onOneFingerPanStart: (d) {
+          FFI.sendMouse('up', 'left');
+        },
+        onOneFingerPanUpdate: (d) {
+          FFI.cursorModel.updatePan(d.delta.dx, d.delta.dy, _touchMode, _drag);
+        },
+        onTwoFingerScaleUpdate: (d) {
+          var scale = (d.scale -1) / 20 + 1;
+          FFI.canvasModel.updateScale(scale);
+          _scale = scale;
+        },
+        onTwoFingerVerticalDragUpdate: (d) {
+          FFI.scroll( - d.delta.dy / 20);
+        });
     return GestureDetector(
         onLongPress: () {
           if (_drag || _scroll) return;
@@ -429,8 +474,8 @@ class _RemotePageState extends State<RemotePage> {
                     enableSuggestions: false,
                     focusNode: _focusNode,
                     maxLines: null,
-                    initialValue:
-                        _value, // trick way to make backspace work always
+                    initialValue: _value,
+                    // trick way to make backspace work always
                     keyboardType: TextInputType.multiline,
                     onChanged: handleInput,
                   ),
@@ -578,11 +623,10 @@ class _RemotePageState extends State<RemotePage> {
       return TextButton(
           style: TextButton.styleFrom(
             minimumSize: Size(0, 0),
-            padding: EdgeInsets.symmetric(
-                vertical: 10,
-                horizontal: 9.75), //adds padding inside the button
-            tapTargetSize: MaterialTapTargetSize
-                .shrinkWrap, //limits the touch area to the button area
+            padding: EdgeInsets.symmetric(vertical: 10, horizontal: 9.75),
+            //adds padding inside the button
+            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            //limits the touch area to the button area
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(5.0),
             ),

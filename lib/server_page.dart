@@ -22,13 +22,13 @@ class ServerPage extends StatelessWidget {
                     itemBuilder: (context) {
                       return [
                         PopupMenuItem(
-                          child: Text("修改服务ID"),
+                          child: Text(translate("Change ID")),
                           value: "changeID",
                           enabled: false,
                         ),
                         PopupMenuItem(
-                          child: Text("修改服务密码"),
-                          value: "changeID",
+                          child: Text("Set your own password"),
+                          value: "changePW",
                           enabled: false,
                         )
                       ];
@@ -70,7 +70,7 @@ class _ServerInfoState extends State<ServerInfo> {
   // TODO set ID / PASSWORD
   var _serverId = TextEditingController(text: "");
   var _serverPasswd = TextEditingController(text: "");
-  static const _emptyIdShow = "正在获取ID...";
+  var _emptyIdShow = translate("connecting_status");
 
   @override
   void initState() {
@@ -97,7 +97,7 @@ class _ServerInfoState extends State<ServerInfo> {
           controller: _serverId,
           decoration: InputDecoration(
             icon: const Icon(Icons.perm_identity),
-            labelText: '服务ID',
+            labelText: translate("ID"),
             labelStyle:
                 TextStyle(fontWeight: FontWeight.bold, color: MyTheme.accent50),
           ),
@@ -113,13 +113,12 @@ class _ServerInfoState extends State<ServerInfo> {
           controller: _serverPasswd,
           decoration: InputDecoration(
               icon: const Icon(Icons.lock),
-              labelText: '密码',
+              labelText: translate("Password"),
               labelStyle: TextStyle(
                   fontWeight: FontWeight.bold, color: MyTheme.accent50),
               suffix: IconButton(
                   icon: Icon(Icons.visibility),
                   onPressed: () {
-                    debugPrint("icon btn");
                     setState(() {
                       _passwdShow = !_passwdShow;
                     });
@@ -159,7 +158,7 @@ class _PermissionCheckerState extends State<PermissionChecker> {
   @override
   void initState() {
     super.initState();
-    nowCtx = context;
+    currentCtx = context;
   }
 
   @override
@@ -169,20 +168,20 @@ class _PermissionCheckerState extends State<PermissionChecker> {
     return myCard(Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        cardTitle("权限列表"),
-        PermissionRow("媒体权限", serverModel.mediaOk, _toAndroidInitService),
+        cardTitle(translate("Configuration Permissions")),
+        PermissionRow(translate("Media"), serverModel.mediaOk, _toAndroidInitService),
         const Divider(height: 0),
-        PermissionRow("输入权限", serverModel.inputOk, _toAndroidInitInput),
+        PermissionRow(translate("Input"), serverModel.inputOk, _toAndroidInitInput),
         const Divider(),
         serverModel.mediaOk
             ? ElevatedButton.icon(
                 icon: Icon(Icons.stop),
                 onPressed: _toAndroidStopService,
-                label: Text("Stop"))
+                label: Text(translate("Stop service")))
             : ElevatedButton.icon(
                 icon: Icon(Icons.play_arrow),
                 onPressed: _toAndroidInitService,
-                label: Text("Start")),
+                label: Text(translate("Start Service"))),
       ],
     ));
   }
@@ -191,17 +190,32 @@ class _PermissionCheckerState extends State<PermissionChecker> {
 BuildContext loginReqAlertCtx;
 
 void showLoginReqAlert(BuildContext context, String peerID, String name) async {
-  debugPrint("got try_start_without_auth");
   await showDialog(
       context: context,
       builder: (alertContext) {
         loginReqAlertCtx = alertContext;
         return AlertDialog(
-          title: Text("收到连接请求"),
-          content: Text("是否同意来自$name:$peerID的控制？"),
+          title: Text("Control Request"),
+          content:Column(
+            mainAxisAlignment: MainAxisAlignment.start,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(translate("Do you accept?")),
+              SizedBox(width: 20),
+              Row(
+                children: [
+                  CircleAvatar(child: Text(name[0])),
+                  SizedBox(width: 10),
+                  Text(name),
+                  SizedBox(width: 5),
+                  Text(peerID)
+                ],
+              ),
+            ],
+          ),
           actions: [
             TextButton(
-                child: Text("接受"),
+                child: Text(translate("Accept")),
                 onPressed: () {
                   FFI.setByName("login_res", "true");
                   if (!FFI.serverModel.isFileTransfer) {
@@ -211,7 +225,7 @@ void showLoginReqAlert(BuildContext context, String peerID, String name) async {
                   Navigator.of(alertContext).pop();
                 }),
             TextButton(
-                child: Text("不接受"),
+                child: Text(translate("Dismiss")),
                 onPressed: () {
                   FFI.setByName("login_res", "false");
                   Navigator.of(alertContext).pop();
@@ -219,7 +233,6 @@ void showLoginReqAlert(BuildContext context, String peerID, String name) async {
           ],
         );
       });
-  debugPrint("alert done");
   loginReqAlertCtx = null;
 }
 
@@ -247,14 +260,14 @@ class PermissionRow extends StatelessWidget {
               text: name + ":  ",
               style: TextStyle(fontSize: 16.0, color: MyTheme.accent50)),
           TextSpan(
-              text: isOk ? "已开启" : "未开启",
+              text: isOk ? translate("ON") : translate("OFF"),
               style: TextStyle(
                   fontSize: 16.0, color: isOk ? Colors.green : Colors.grey)),
         ])),
         TextButton(
             onPressed: isOk ? null : onPressed,
-            child: const Text(
-              "去开启",
+            child: Text(
+              translate("OPEN"),
               style: TextStyle(fontWeight: FontWeight.bold),
             )),
       ],
@@ -360,7 +373,7 @@ void toAndroidChannelInit() {
             debugPrint(
                 "pre show loginAlert:${FFI.serverModel.isFileTransfer.toString()}");
             showLoginReqAlert(
-                nowCtx, FFI.serverModel.peerID, FFI.serverModel.peerName);
+                currentCtx, FFI.serverModel.peerID, FFI.serverModel.peerName);
             debugPrint("from jvm:try_start_without_auth done");
             break;
           }
