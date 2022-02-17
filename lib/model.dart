@@ -42,7 +42,7 @@ class FfiModel with ChangeNotifier {
   FfiModel() {
     Translator.call = translate;
     clear();
-    () async {
+        () async {
       await PlatformFFI.init();
       _initialized = true;
       print("FFI initialized");
@@ -97,14 +97,13 @@ class FfiModel with ChangeNotifier {
     _permissions.clear();
   }
 
-  void update(
-      String id,
+  void update(String id,
       BuildContext context,
       void Function(
-    Map<String, dynamic> evt,
-    String id,
-  )
-          handleMsgbox) {
+          Map<String, dynamic> evt,
+          String id,
+          )
+      handleMsgbox) {
     var pos;
     for (;;) {
       var evt = FFI.popEvent();
@@ -143,17 +142,17 @@ class FfiModel with ChangeNotifier {
         final pid = FFI.id;
         ui.decodeImageFromPixels(
             rgba, _display.width, _display.height, ui.PixelFormat.bgra8888,
-            (image) {
-          PlatformFFI.clearRgbaFrame();
-          _decoding = false;
-          if (FFI.id != pid) return;
-          try {
-            // my throw exception, because the listener maybe already dispose
-            FFI.imageModel.update(image);
-          } catch (e) {
-            print('update image: $e');
-          }
-        });
+                (image) {
+              PlatformFFI.clearRgbaFrame();
+              _decoding = false;
+              if (FFI.id != pid) return;
+              try {
+                // my throw exception, because the listener maybe already dispose
+                FFI.imageModel.update(image);
+              } catch (e) {
+                print('update image: $e');
+              }
+            });
       }
     }
   }
@@ -210,7 +209,9 @@ class ImageModel with ChangeNotifier {
       if (isDesktop) {
         FFI.canvasModel.updateViewStyle();
       } else {
-        final size = MediaQueryData.fromWindow(ui.window).size;
+        final size = MediaQueryData
+            .fromWindow(ui.window)
+            .size;
         final xscale = size.width / image.width;
         final yscale = size.height / image.height;
         FFI.canvasModel.scale = max(xscale, yscale);
@@ -223,7 +224,9 @@ class ImageModel with ChangeNotifier {
 
   double get maxScale {
     if (_image == null) return 1.0;
-    final size = MediaQueryData.fromWindow(ui.window).size;
+    final size = MediaQueryData
+        .fromWindow(ui.window)
+        .size;
     final xscale = size.width / _image!.width;
     final yscale = size.height / _image!.height;
     return max(1.0, max(xscale, yscale));
@@ -231,7 +234,9 @@ class ImageModel with ChangeNotifier {
 
   double get minScale {
     if (_image == null) return 1.0;
-    final size = MediaQueryData.fromWindow(ui.window).size;
+    final size = MediaQueryData
+        .fromWindow(ui.window)
+        .size;
     final xscale = size.width / _image!.width;
     final yscale = size.height / _image!.height;
     return min(xscale, yscale);
@@ -253,7 +258,9 @@ class CanvasModel with ChangeNotifier {
 
   void updateViewStyle() {
     final s = FFI.getByName('peer_option', 'view-style');
-    final size = MediaQueryData.fromWindow(ui.window).size;
+    final size = MediaQueryData
+        .fromWindow(ui.window)
+        .size;
     final s1 = size.width / FFI.ffiModel.display.width;
     final s2 = size.height / FFI.ffiModel.display.height;
     if (s == 'shrink') {
@@ -282,7 +289,9 @@ class CanvasModel with ChangeNotifier {
   }
 
   void moveDesktopMouse(double x, double y) {
-    final size = MediaQueryData.fromWindow(ui.window).size;
+    final size = MediaQueryData
+        .fromWindow(ui.window)
+        .size;
     final dw = FFI.ffiModel.display.width * _scale;
     final dh = FFI.ffiModel.display.height * _scale;
     var dxOffset = 0;
@@ -298,7 +307,7 @@ class CanvasModel with ChangeNotifier {
     if (dxOffset != 0 || dyOffset != 0) {
       notifyListeners();
     }
-    FFI.cursorModel.move(x, y);
+    FFI.cursorModel.moveLocal(x, y);
   }
 
   set scale(v) {
@@ -377,7 +386,9 @@ class CursorModel with ChangeNotifier {
 
   // remote physical display coordinate
   Rect getVisibleRect() {
-    final size = MediaQueryData.fromWindow(ui.window).size;
+    final size = MediaQueryData
+        .fromWindow(ui.window)
+        .size;
     final xoffset = FFI.canvasModel.x;
     final yoffset = FFI.canvasModel.y;
     final scale = FFI.canvasModel.scale;
@@ -397,13 +408,18 @@ class CursorModel with ChangeNotifier {
     return h - thresh;
   }
 
-  void touch(double x, double y, bool right) {
-    move(x, y);
+  void touch(double x, double y, MouseButtons button) {
+    moveLocal(x, y);
     FFI.moveMouse(_x, _y);
-    FFI.tap(right);
+    FFI.tap(button);
   }
 
-  void move(double x, double y) {
+  void move(double x, double y){
+    moveLocal(x, y);
+    FFI.moveMouse(_x, _y);
+  }
+
+  void moveLocal(double x, double y) {
     final scale = FFI.canvasModel.scale;
     final xoffset = FFI.canvasModel.x;
     final yoffset = FFI.canvasModel.y;
@@ -420,10 +436,10 @@ class CursorModel with ChangeNotifier {
     notifyListeners();
   }
 
-  void updatePan(double dx, double dy, bool touchMode, bool drag) {
+  void updatePan(double dx, double dy,bool touchMode) {
     if (FFI.imageModel.image == null) return;
     if (touchMode) {
-      if (drag) {
+      if (true) {
         final scale = FFI.canvasModel.scale;
         _x += dx / scale;
         _y += dy / scale;
@@ -508,17 +524,17 @@ class CursorModel with ChangeNotifier {
     final rgba = Uint8List.fromList(colors.map((s) => s as int).toList());
     var pid = FFI.id;
     ui.decodeImageFromPixels(rgba, width, height, ui.PixelFormat.rgba8888,
-        (image) {
-      if (FFI.id != pid) return;
-      _image = image;
-      _images[id] = Tuple3(image, _hotx, _hoty);
-      try {
-        // my throw exception, because the listener maybe already dispose
-        notifyListeners();
-      } catch (e) {
-        print('notify cursor: $e');
-      }
-    });
+            (image) {
+          if (FFI.id != pid) return;
+          _image = image;
+          _images[id] = Tuple3(image, _hotx, _hoty);
+          try {
+            // my throw exception, because the listener maybe already dispose
+            notifyListeners();
+          } catch (e) {
+            print('notify cursor: $e');
+          }
+        });
   }
 
   void updateCursorId(Map<String, dynamic> evt) {
@@ -547,8 +563,8 @@ class CursorModel with ChangeNotifier {
     notifyListeners();
   }
 
-  void updateDisplayOriginWithCursor(
-      double x, double y, double xCursor, double yCursor) {
+  void updateDisplayOriginWithCursor(double x, double y, double xCursor,
+      double yCursor) {
     _displayOriginX = x;
     _displayOriginY = y;
     _x = xCursor;
@@ -655,6 +671,26 @@ class ServerModel with ChangeNotifier {
   }
 }
 
+enum MouseButtons {
+  left,
+  right,
+  wheel
+}
+
+extension ToString on MouseButtons{
+  String get value {
+    switch (this) {
+      case MouseButtons.left:
+        return "left";
+      case MouseButtons.right:
+        return "right";
+      case MouseButtons.wheel:
+        return "wheel";
+    }
+  }
+}
+
+
 class FFI {
   static String id = "";
   static var shift = false;
@@ -671,9 +707,9 @@ class FFI {
     return getByName('remote_id');
   }
 
-  static void tap(bool right) {
-    sendMouse('down', right ? 'right' : 'left');
-    sendMouse('up', right ? 'right' : 'left');
+  static void tap(MouseButtons button) {
+    sendMouse('down', button);
+    sendMouse('up', button);
   }
 
   static void scroll(double y) {
@@ -700,10 +736,10 @@ class FFI {
     return evt;
   }
 
-  static void sendMouse(String type, String buttons) {
+  static void sendMouse(String type, MouseButtons button) {
     if (!ffiModel.keyboard()) return;
     setByName(
-        'send_mouse', json.encode(modify({'type': type, 'buttons': buttons})));
+        'send_mouse', json.encode(modify({'type': type, 'buttons': button.value})));
   }
 
   static void inputKey(String name) {
@@ -725,7 +761,7 @@ class FFI {
       return peers
           .map((s) => s as List<dynamic>)
           .map((s) =>
-              Peer.fromJson(s[0] as String, s[1] as Map<String, dynamic>))
+          Peer.fromJson(s[0] as String, s[1] as Map<String, dynamic>))
           .toList();
     } catch (e) {
       print('peers(): $e');
@@ -761,8 +797,14 @@ class FFI {
 
   static void close() {
     if (FFI.imageModel.image != null && !isDesktop) {
-      savePreference(id, cursorModel.x, cursorModel.y, canvasModel.x,
-          canvasModel.y, canvasModel.scale, ffiModel.pi.currentDisplay);
+      savePreference(
+          id,
+          cursorModel.x,
+          cursorModel.y,
+          canvasModel.x,
+          canvasModel.y,
+          canvasModel.scale,
+          ffiModel.pi.currentDisplay);
     }
     id = "";
     setByName('close', '');

@@ -7,7 +7,8 @@ enum CustomTouchGestureState {
   oneFingerPan,
   twoFingerScale,
   twoFingerVerticalDrag,
-  twoFingerHorizontalDrag
+  twoFingerHorizontalDrag,
+  twoFingerPan
 }
 
 const kScaleSlop = kPrecisePointerPanSlop / 10;
@@ -43,11 +44,20 @@ class CustomTouchGestureRecognizer extends ScaleGestureRecognizer {
   GestureDragUpdateCallback? onTwoFingerHorizontalDragUpdate;
   GestureDragEndCallback? onTwoFingerHorizontalDragEnd;
 
+  // twoFingerPan
+  GestureDragStartCallback? onTwoFingerPanStart;
+  GestureDragUpdateCallback? onTwoFingerPanUpdate;
+  GestureDragEndCallback? onTwoFingerPanEnd;
+
   void _init() {
     debugPrint("CustomTouchGestureRecognizer init");
     onStart = (d) {
       if (d.pointerCount == 1) {
         _currentState = CustomTouchGestureState.oneFingerPan;
+        if (onOneFingerPanStart != null) {
+          onOneFingerPanStart!(DragStartDetails(
+              localPosition: d.localFocalPoint, globalPosition: d.focalPoint));
+        }
         debugPrint("start pan");
       } else if (d.pointerCount == 2) {
         _currentState = CustomTouchGestureState.none;
@@ -84,6 +94,11 @@ class CustomTouchGestureRecognizer extends ScaleGestureRecognizer {
               onTwoFingerVerticalDragUpdate!(_getDragUpdateDetails(d));
             }
             break;
+          case CustomTouchGestureState.twoFingerPan:
+            if (onTwoFingerPanUpdate != null) {
+              onTwoFingerPanUpdate!(_getDragUpdateDetails(d));
+            }
+            break;
           default:
             break;
         }
@@ -116,6 +131,12 @@ class CustomTouchGestureRecognizer extends ScaleGestureRecognizer {
           debugPrint("TwoFingerState.vertical onEnd");
           if (onTwoFingerVerticalDragEnd != null) {
             onTwoFingerVerticalDragEnd!(_getDragEndDetails(d));
+          }
+          break;
+        case CustomTouchGestureState.twoFingerPan:
+          debugPrint("TwoFingerState.twoFingerPan onEnd");
+          if (onTwoFingerPanEnd != null) {
+            onTwoFingerPanEnd!(_getDragEndDetails(d));
           }
           break;
         default:
@@ -154,23 +175,26 @@ class CustomTouchGestureRecognizer extends ScaleGestureRecognizer {
     if (_sumScale.abs() > kScaleSlop) {
       debugPrint("start Scale");
       _currentState = CustomTouchGestureState.twoFingerScale;
-      if (onOneFingerPanStart != null) {
-        onOneFingerPanStart!(_getDragStartDetails(d));
+      if (onTwoFingerScaleStart != null) {
+        onTwoFingerScaleStart!(ScaleStartDetails(
+            localFocalPoint: d.localFocalPoint, focalPoint: d.focalPoint));
       }
       _reset();
-    } else if (_sumHorizontal.abs() > kPrecisePointerPanSlop) {
-      debugPrint("start Horizontal");
-      _currentState = CustomTouchGestureState.twoFingerHorizontalDrag;
-      if (onTwoFingerHorizontalDragUpdate != null) {
-        onTwoFingerHorizontalDragUpdate!(_getDragUpdateDetails(d));
-      }
-      _reset();
-    } else if (_sumVertical.abs() > kPrecisePointerPanSlop) {
+    } else if (_sumVertical.abs() > kPrecisePointerPanSlop &&
+        _sumHorizontal.abs() < kPrecisePointerHitSlop) {
       debugPrint("start Vertical");
       if (onTwoFingerVerticalDragStart != null) {
         _getDragStartDetails(d);
       }
       _currentState = CustomTouchGestureState.twoFingerVerticalDrag;
+      _reset();
+    } else if ((_sumHorizontal.abs() + _sumVertical.abs()) >
+        kPrecisePointerPanSlop) {
+      debugPrint("start TwoFingerPan");
+      _currentState = CustomTouchGestureState.twoFingerPan;
+      if (onTwoFingerPanStart != null) {
+        onTwoFingerPanStart!(_getDragStartDetails(d));
+      }
       _reset();
     }
   }
@@ -672,7 +696,8 @@ class _TapTracker {
   void startTrackingPointer(PointerRoute route, Matrix4? transform) {
     if (!_isTrackingPointer) {
       _isTrackingPointer = true;
-      GestureBinding.instance!.pointerRouter.addRoute(pointer, route, transform);
+      GestureBinding.instance!.pointerRouter
+          .addRoute(pointer, route, transform);
     }
   }
 
@@ -716,17 +741,23 @@ class _CountdownZoned {
 RawGestureDetector getMixinGestureDetector({
   Widget? child,
   GestureTapUpCallback? onTapUp,
+  GestureTapDownCallback? onDoubleTapDown,
   GestureDoubleTapCallback? onDoubleTap,
+  GestureLongPressDownCallback? onLongPressDown,
+  GestureLongPressCallback? onLongPress,
   GestureDragStartCallback? onHoldDragStart,
   GestureDragUpdateCallback? onHoldDragUpdate,
   GestureDragCancelCallback? onHoldDragCancel,
   GestureTapDownCallback? onDoubleFinerTap,
   GestureDragStartCallback? onOneFingerPanStart,
   GestureDragUpdateCallback? onOneFingerPanUpdate,
+  GestureDragEndCallback? onOneFingerPanEnd,
   GestureScaleUpdateCallback? onTwoFingerScaleUpdate,
   GestureScaleEndCallback? onTwoFingerScaleEnd,
   GestureDragUpdateCallback? onTwoFingerHorizontalDragUpdate,
   GestureDragUpdateCallback? onTwoFingerVerticalDragUpdate,
+  GestureDragStartCallback? onTwoFingerPanStart,
+  GestureDragUpdateCallback? onTwoFingerPanUpdate,
 }) {
   return RawGestureDetector(
       child: child,
@@ -740,7 +771,16 @@ RawGestureDetector getMixinGestureDetector({
         DoubleTapGestureRecognizer:
             GestureRecognizerFactoryWithHandlers<DoubleTapGestureRecognizer>(
                 () => DoubleTapGestureRecognizer(), (instance) {
-          instance.onDoubleTap = onDoubleTap;
+          instance
+            ..onDoubleTapDown = onDoubleTapDown
+            ..onDoubleTap = onDoubleTap;
+        }),
+        LongPressGestureRecognizer:
+            GestureRecognizerFactoryWithHandlers<LongPressGestureRecognizer>(
+                () => LongPressGestureRecognizer(), (instance) {
+          instance
+            ..onLongPressDown = onLongPressDown
+            ..onLongPress = onLongPress;
         }),
         // Customized
         HoldTapMoveGestureRecognizer:
@@ -763,10 +803,13 @@ RawGestureDetector getMixinGestureDetector({
           instance
             ..onOneFingerPanStart = onOneFingerPanStart
             ..onOneFingerPanUpdate = onOneFingerPanUpdate
+            ..onOneFingerPanEnd = onOneFingerPanEnd
             ..onTwoFingerScaleUpdate = onTwoFingerScaleUpdate
             ..onTwoFingerScaleEnd = onTwoFingerScaleEnd
             ..onTwoFingerHorizontalDragUpdate = onTwoFingerHorizontalDragUpdate
-            ..onTwoFingerVerticalDragUpdate = onTwoFingerVerticalDragUpdate;
+            ..onTwoFingerVerticalDragUpdate = onTwoFingerVerticalDragUpdate
+            ..onTwoFingerPanStart = onTwoFingerPanStart
+            ..onTwoFingerPanUpdate = onTwoFingerPanUpdate;
         })
       });
 }

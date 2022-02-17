@@ -1,4 +1,3 @@
-import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter/services.dart';
@@ -28,14 +27,9 @@ class _RemotePageState extends State<RemotePage> {
   bool _showBar = !isDesktop;
   double _bottom = 0;
   String _value = '';
-  double _xOffset = 0;
-  double _yOffset = 0;
-  double _yOffset0 = 0;
   double _scale = 1;
   bool _mouseTools = false;
-  var _drag = false;
-  var _right = false;
-  var _scroll = false;
+
   var _more = true;
   var _fn = false;
   final FocusNode _focusNode = FocusNode();
@@ -72,7 +66,6 @@ class _RemotePageState extends State<RemotePage> {
   }
 
   void resetTool() {
-    _scroll = _drag = _right = false;
     FFI.resetModifiers();
   }
 
@@ -227,9 +220,6 @@ class _RemotePageState extends State<RemotePage> {
   }
 
   void resetMouse() {
-    _drag = false;
-    _scroll = false;
-    _right = false;
     _mouseTools = false;
   }
 
@@ -322,7 +312,6 @@ class _RemotePageState extends State<RemotePage> {
                                   setState(() {
                                     _mouseTools = !_mouseTools;
                                     resetTool();
-                                    if (_mouseTools) _drag = true;
                                   });
                                 },
                               ))
@@ -348,112 +337,97 @@ class _RemotePageState extends State<RemotePage> {
     );
   }
 
+  /// touchMode only:
+  ///   LongPress -> right click
+  ///   OneFingerPan -> start/end -> left down start/end
+  ///   onDoubleTapDown -> move to
+  ///   onLongPressDown => move to
+  ///
+  /// mouseMode only:
+  ///   DoubleFiner -> right click
+  ///   HoldDrag -> left drag
+
   Widget getBodyForMobileWithGesture() {
     return getMixinGestureDetector(
         child: getBodyForMobile(),
         onTapUp: (d) {
-          if (_drag || _scroll) return;
           if (_touchMode) {
-            FFI.cursorModel
-                .touch(d.localPosition.dx, d.localPosition.dy, _right);
+            FFI.cursorModel.touch(
+                d.localPosition.dx, d.localPosition.dy, MouseButtons.left);
           } else {
-            FFI.tap(_right);
+            FFI.tap(MouseButtons.left);
+          }
+        },
+        onDoubleTapDown: (d){
+          if(_touchMode){
+            FFI.cursorModel.move(d.localPosition.dx, d.localPosition.dy);
           }
         },
         onDoubleTap: () {
-          if (_drag || _scroll) return;
-          FFI.tap(_right);
-          FFI.tap(_right);
+          FFI.tap(MouseButtons.left);
+          FFI.tap(MouseButtons.left);
+        },
+        onLongPressDown: (d){
+          if (_touchMode){
+            FFI.cursorModel.move(d.localPosition.dx, d.localPosition.dy);
+          }
+        },
+        onLongPress: () {
+          if (_touchMode) {
+            FFI.tap(MouseButtons.right);
+          }
         },
         onDoubleFinerTap: (d) {
-          if (_drag || _scroll) return;
-          FFI.tap(true);
+          if (!_touchMode) {
+            FFI.tap(MouseButtons.right);
+          }
         },
         onHoldDragStart: (d) {
-          FFI.sendMouse('down', 'left');
+          if (!_touchMode) {
+            FFI.sendMouse('down', MouseButtons.left);
+          }
         },
         onHoldDragUpdate: (d) {
-          FFI.cursorModel.updatePan(d.delta.dx, d.delta.dy, _touchMode, _drag);
+          if (!_touchMode) {
+            FFI.cursorModel.updatePan(d.delta.dx, d.delta.dy, _touchMode);
+          }
         },
         onHoldDragCancel: () {
-          FFI.sendMouse('up', 'left');
+          if (!_touchMode) {
+            FFI.sendMouse('up', MouseButtons.left);
+          }
         },
         onOneFingerPanStart: (d) {
-          FFI.sendMouse('up', 'left');
+          if (_touchMode) {
+            debugPrint("_touchMode , onOneFingerPanStart");
+            FFI.cursorModel.move(d.localPosition.dx, d.localPosition.dy);
+            FFI.sendMouse('down', MouseButtons.left);
+          } else {
+            FFI.sendMouse('up', MouseButtons.left);
+          }
         },
         onOneFingerPanUpdate: (d) {
-          FFI.cursorModel.updatePan(d.delta.dx, d.delta.dy, _touchMode, _drag);
+          FFI.cursorModel.updatePan(d.delta.dx, d.delta.dy, _touchMode);
+        },
+        onOneFingerPanEnd: (d) {
+          if (_touchMode) {
+            FFI.sendMouse('up', MouseButtons.left);
+          }
         },
         onTwoFingerScaleUpdate: (d) {
-          FFI.canvasModel.updateScale(d.scale/_scale);
+          FFI.canvasModel.updateScale(d.scale / _scale);
           _scale = d.scale;
+          FFI.canvasModel.panX(d.focalPointDelta.dx);
+          FFI.canvasModel.panY(d.focalPointDelta.dy);
         },
-        onTwoFingerScaleEnd: (d)=>_scale = 1,
+        onTwoFingerScaleEnd: (d) => _scale = 1,
         onTwoFingerVerticalDragUpdate: (d) {
           FFI.scroll(d.delta.dy / 2);
+        },
+        onTwoFingerPanUpdate: (d) {
+          FFI.canvasModel.panX(d.delta.dx);
+          FFI.canvasModel.panY(d.delta.dy);
         });
-    return GestureDetector(
-        onLongPress: () {
-          if (_drag || _scroll) return;
-          // make right click and real left long click both work
-          // should add "long press = right click" option?
-          FFI.sendMouse('down', 'left');
-          FFI.tap(true);
-        },
-        onLongPressUp: () {
-          FFI.sendMouse('up', 'left');
-        },
-        onTapUp: (details) {
-          if (_drag || _scroll) return;
-          if (_touchMode) {
-            FFI.cursorModel.touch(
-                details.localPosition.dx, details.localPosition.dy, _right);
-          } else {
-            FFI.tap(_right);
-          }
-        },
-        onScaleStart: (details) {
-          _scale = 1;
-          _xOffset = details.focalPoint.dx;
-          _yOffset = _yOffset0 = details.focalPoint.dy;
-          if (_drag) {
-            FFI.sendMouse('down', 'left');
-          }
-        },
-        onScaleUpdate: (details) {
-          var scale = details.scale;
-          if (scale == 1) {
-            if (!_scroll) {
-              var x = details.focalPoint.dx;
-              var y = details.focalPoint.dy;
-              var dx = x - _xOffset;
-              var dy = y - _yOffset;
-              FFI.cursorModel.updatePan(dx, dy, _touchMode, _drag);
-              _xOffset = x;
-              _yOffset = y;
-            } else {
-              _xOffset = details.focalPoint.dx;
-              _yOffset = details.focalPoint.dy;
-            }
-          } else if (!_drag && !_scroll) {
-            FFI.canvasModel.updateScale(scale / _scale);
-            _scale = scale;
-          }
-        },
-        onScaleEnd: (details) {
-          if (_drag) {
-            FFI.sendMouse('up', 'left');
-            setState(resetMouse);
-          } else if (_scroll) {
-            var dy = (_yOffset - _yOffset0) / 10;
-            if (dy.abs() > 0.1) {
-              if (dy > 0 && dy < 1) dy = 1;
-              if (dy < 0 && dy > -1) dy = -1;
-              FFI.scroll(dy);
-            }
-          }
-        },
-        child: getBodyForMobile());
   }
 
   Widget getBodyForMobile() {
@@ -637,35 +611,6 @@ class _RemotePageState extends State<RemotePage> {
                   style: TextStyle(color: Colors.white, fontSize: 11)),
           onPressed: onPressed);
     };
-    final mouse = <Widget>[
-      wrap('Drag', () {
-        setState(() {
-          _drag = !_drag;
-          if (_drag) {
-            _scroll = false;
-            _right = false;
-          }
-        });
-      }, _drag),
-      wrap('Scroll', () {
-        setState(() {
-          _scroll = !_scroll;
-          if (_scroll) {
-            _drag = false;
-            _right = false;
-          }
-        });
-      }, _scroll),
-      wrap('Right', () {
-        setState(() {
-          _right = !_right;
-          if (_right) {
-            _scroll = false;
-            _drag = false;
-          }
-        });
-      }, _right)
-    ];
     final pi = FFI.ffiModel.pi;
     final isMac = pi.platform == "Mac OS";
     final modifiers = <Widget>[
@@ -772,7 +717,7 @@ class _RemotePageState extends State<RemotePage> {
           children: <Widget>[SizedBox(width: 9999)] +
               (keyboard
                   ? modifiers + keys + (_fn ? fn : []) + (_more ? more : [])
-                  : mouse + modifiers),
+                  : modifiers),
         ));
   }
 }
@@ -987,14 +932,14 @@ void showOptions(BuildContext context) {
       }
     }
     var setQuality = (String? value) {
-      if(value == null) return;
+      if (value == null) return;
       setState(() {
         quality = value;
         FFI.setByName('image_quality', value);
       });
     };
     var setViewStyle = (String? value) {
-      if(value == null) return;
+      if (value == null) return;
       setState(() {
         viewStyle = value;
         FFI.setByName(
@@ -1050,7 +995,7 @@ void showSetOSPassword(BuildContext context, bool login) {
                 ),
                 value: autoLogin,
                 onChanged: (v) {
-                  if(v==null) return;
+                  if (v == null) return;
                   setState(() => autoLogin = v);
                 },
               ),
