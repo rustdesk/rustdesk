@@ -31,7 +31,7 @@ pub fn translate_locale(name: String, locale: &str) -> String {
         "cn" => cn::T.deref(),
         "it" => it::T.deref(),
         "tw" => tw::T.deref(),
-        "de" => tw::T.deref(),
+        "de" => de::T.deref(),
         _ => en::T.deref(),
     };
     if let Some(v) = m.get(&name as &str) {
