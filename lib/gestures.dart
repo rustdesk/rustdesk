@@ -14,8 +14,8 @@ const kScaleSlop = kPrecisePointerPanSlop / 10;
 
 class CustomTouchGestureRecognizer extends ScaleGestureRecognizer {
   CustomTouchGestureRecognizer({
-    Object debugOwner,
-    Set<PointerDeviceKind> supportedDevices,
+    Object? debugOwner,
+    Set<PointerDeviceKind>? supportedDevices,
   }) : super(
           debugOwner: debugOwner,
           supportedDevices: supportedDevices,
@@ -24,24 +24,24 @@ class CustomTouchGestureRecognizer extends ScaleGestureRecognizer {
   }
 
   // oneFingerPan
-  GestureDragStartCallback onOneFingerPanStart;
-  GestureDragUpdateCallback onOneFingerPanUpdate;
-  GestureDragEndCallback onOneFingerPanEnd;
+  GestureDragStartCallback? onOneFingerPanStart;
+  GestureDragUpdateCallback? onOneFingerPanUpdate;
+  GestureDragEndCallback? onOneFingerPanEnd;
 
   // twoFingerScale
-  GestureScaleStartCallback onTwoFingerScaleStart;
-  GestureScaleUpdateCallback onTwoFingerScaleUpdate;
-  GestureScaleEndCallback onTwoFingerScaleEnd;
+  GestureScaleStartCallback? onTwoFingerScaleStart;
+  GestureScaleUpdateCallback? onTwoFingerScaleUpdate;
+  GestureScaleEndCallback? onTwoFingerScaleEnd;
 
   // twoFingerVerticalDrag
-  GestureDragStartCallback onTwoFingerVerticalDragStart;
-  GestureDragUpdateCallback onTwoFingerVerticalDragUpdate;
-  GestureDragEndCallback onTwoFingerVerticalDragEnd;
+  GestureDragStartCallback? onTwoFingerVerticalDragStart;
+  GestureDragUpdateCallback? onTwoFingerVerticalDragUpdate;
+  GestureDragEndCallback? onTwoFingerVerticalDragEnd;
 
   // twoFingerHorizontalDrag
-  GestureDragStartCallback onTwoFingerHorizontalDragStart;
-  GestureDragUpdateCallback onTwoFingerHorizontalDragUpdate;
-  GestureDragEndCallback onTwoFingerHorizontalDragEnd;
+  GestureDragStartCallback? onTwoFingerHorizontalDragStart;
+  GestureDragUpdateCallback? onTwoFingerHorizontalDragUpdate;
+  GestureDragEndCallback? onTwoFingerHorizontalDragEnd;
 
   void _init() {
     debugPrint("CustomTouchGestureRecognizer init");
@@ -66,22 +66,22 @@ class CustomTouchGestureRecognizer extends ScaleGestureRecognizer {
         switch (_currentState) {
           case CustomTouchGestureState.oneFingerPan:
             if (onOneFingerPanUpdate != null) {
-              onOneFingerPanUpdate(_getDragUpdateDetails(d));
+              onOneFingerPanUpdate!(_getDragUpdateDetails(d));
             }
             break;
           case CustomTouchGestureState.twoFingerScale:
             if (onTwoFingerScaleUpdate != null) {
-              onTwoFingerScaleUpdate(d);
+              onTwoFingerScaleUpdate!(d);
             }
             break;
           case CustomTouchGestureState.twoFingerHorizontalDrag:
             if (onTwoFingerHorizontalDragUpdate != null) {
-              onTwoFingerHorizontalDragUpdate(_getDragUpdateDetails(d));
+              onTwoFingerHorizontalDragUpdate!(_getDragUpdateDetails(d));
             }
             break;
           case CustomTouchGestureState.twoFingerVerticalDrag:
             if (onTwoFingerVerticalDragUpdate != null) {
-              onTwoFingerVerticalDragUpdate(_getDragUpdateDetails(d));
+              onTwoFingerVerticalDragUpdate!(_getDragUpdateDetails(d));
             }
             break;
           default:
@@ -97,25 +97,25 @@ class CustomTouchGestureRecognizer extends ScaleGestureRecognizer {
         case CustomTouchGestureState.oneFingerPan:
           debugPrint("TwoFingerState.pan onEnd");
           if (onOneFingerPanEnd != null) {
-            onOneFingerPanEnd(_getDragEndDetails(d));
+            onOneFingerPanEnd!(_getDragEndDetails(d));
           }
           break;
         case CustomTouchGestureState.twoFingerScale:
           debugPrint("TwoFingerState.scale onEnd");
           if (onTwoFingerScaleEnd != null) {
-            onTwoFingerScaleEnd(d);
+            onTwoFingerScaleEnd!(d);
           }
           break;
         case CustomTouchGestureState.twoFingerHorizontalDrag:
           debugPrint("TwoFingerState.horizontal onEnd");
           if (onTwoFingerHorizontalDragEnd != null) {
-            onTwoFingerHorizontalDragEnd(_getDragEndDetails(d));
+            onTwoFingerHorizontalDragEnd!(_getDragEndDetails(d));
           }
           break;
         case CustomTouchGestureState.twoFingerVerticalDrag:
           debugPrint("TwoFingerState.vertical onEnd");
           if (onTwoFingerVerticalDragEnd != null) {
-            onTwoFingerVerticalDragEnd(_getDragEndDetails(d));
+            onTwoFingerVerticalDragEnd!(_getDragEndDetails(d));
           }
           break;
         default:
@@ -129,7 +129,7 @@ class CustomTouchGestureRecognizer extends ScaleGestureRecognizer {
   var _currentState = CustomTouchGestureState.none;
   var _isWatch = false;
 
-  Timer _timer;
+  Timer? _timer;
   double _sumScale = 0;
   double _sumVertical = 0;
   double _sumHorizontal = 0;
@@ -143,7 +143,7 @@ class CustomTouchGestureRecognizer extends ScaleGestureRecognizer {
   void _reset() {
     _isWatch = false;
     _clearSum();
-    if (_timer != null) _timer.cancel();
+    if (_timer != null) _timer!.cancel();
   }
 
   void _updateCompute(ScaleUpdateDetails d) {
@@ -155,14 +155,14 @@ class CustomTouchGestureRecognizer extends ScaleGestureRecognizer {
       debugPrint("start Scale");
       _currentState = CustomTouchGestureState.twoFingerScale;
       if (onOneFingerPanStart != null) {
-        onOneFingerPanStart(_getDragStartDetails(d));
+        onOneFingerPanStart!(_getDragStartDetails(d));
       }
       _reset();
     } else if (_sumHorizontal.abs() > kPrecisePointerPanSlop) {
       debugPrint("start Horizontal");
       _currentState = CustomTouchGestureState.twoFingerHorizontalDrag;
       if (onTwoFingerHorizontalDragUpdate != null) {
-        onTwoFingerHorizontalDragUpdate(_getDragUpdateDetails(d));
+        onTwoFingerHorizontalDragUpdate!(_getDragUpdateDetails(d));
       }
       _reset();
     } else if (_sumVertical.abs() > kPrecisePointerPanSlop) {
@@ -179,7 +179,7 @@ class CustomTouchGestureRecognizer extends ScaleGestureRecognizer {
     debugPrint("startWatchTimer");
     _isWatch = true;
     _clearSum();
-    if (_timer != null) _timer.cancel();
+    if (_timer != null) _timer!.cancel();
     _timer = Timer(const Duration(milliseconds: 200), _reset);
   }
 
@@ -201,24 +201,24 @@ class CustomTouchGestureRecognizer extends ScaleGestureRecognizer {
 
 class HoldTapMoveGestureRecognizer extends GestureRecognizer {
   HoldTapMoveGestureRecognizer({
-    Object debugOwner,
-    Set<PointerDeviceKind> supportedDevices,
+    Object? debugOwner,
+    Set<PointerDeviceKind>? supportedDevices,
   }) : super(
           debugOwner: debugOwner,
           supportedDevices: supportedDevices,
         );
 
-  GestureDragStartCallback onHoldDragStart;
-  GestureDragUpdateCallback onHoldDragUpdate;
-  GestureDragDownCallback onHoldDragDown;
-  GestureDragCancelCallback onHoldDragCancel;
+  GestureDragStartCallback? onHoldDragStart;
+  GestureDragUpdateCallback? onHoldDragUpdate;
+  GestureDragDownCallback? onHoldDragDown;
+  GestureDragCancelCallback? onHoldDragCancel;
 
   bool _isStart = false;
 
-  Timer _firstTapUpTimer; // 第一次点击后的计时 超时未等到第二次操作则reject
-  Timer _secondTapDownTimer; // 第二次点击后的计时 期间内有其他的操作则reject 超时则判定成功 drag update
-  _TapTracker _firstTap;
-  _TapTracker _secondTap;
+  Timer? _firstTapUpTimer; // 第一次点击后的计时 超时未等到第二次操作则reject
+  Timer? _secondTapDownTimer; // 第二次点击后的计时 期间内有其他的操作则reject 超时则判定成功 drag update
+  _TapTracker? _firstTap;
+  _TapTracker? _secondTap;
 
   final Map<int, _TapTracker> _trackers = <int, _TapTracker>{};
 
@@ -244,11 +244,11 @@ class HoldTapMoveGestureRecognizer extends GestureRecognizer {
   void addAllowedPointer(PointerDownEvent event) {
     // 检测按下事件
     if (_firstTap != null) {
-      if (!_firstTap.isWithinGlobalTolerance(event, kDoubleTapSlop)) {
+      if (!_firstTap!.isWithinGlobalTolerance(event, kDoubleTapSlop)) {
         // Ignore out-of-bounds second taps.
         return;
-      } else if (!_firstTap.hasElapsedMinTime() ||
-          !_firstTap.hasSameButton(event)) {
+      } else if (!_firstTap!.hasElapsedMinTime() ||
+          !_firstTap!.hasSameButton(event)) {
         // Restart when the second tap is too close to the first (touch screens
         // often detect touches intermittently), or when buttons mismatch.
         _reset();
@@ -256,7 +256,7 @@ class HoldTapMoveGestureRecognizer extends GestureRecognizer {
       } else if (onHoldDragDown != null) {
         invokeCallback<void>(
             'onHoldDragDown',
-            () => onHoldDragDown(DragDownDetails(
+            () => onHoldDragDown!(DragDownDetails(
                 globalPosition: event.position,
                 localPosition: event.localPosition)));
       }
@@ -269,7 +269,7 @@ class HoldTapMoveGestureRecognizer extends GestureRecognizer {
     _stopSecondTapDownTimer();
     final _TapTracker tracker = _TapTracker(
       event: event,
-      entry: GestureBinding.instance.gestureArena.add(event.pointer, this),
+      entry: GestureBinding.instance!.gestureArena.add(event.pointer, this),
       doubleTapMinTime: kDoubleTapMinTime,
       gestureSettings: gestureSettings,
     );
@@ -279,7 +279,7 @@ class HoldTapMoveGestureRecognizer extends GestureRecognizer {
 
   // 实际的逻辑应该是第二次down后一段时间没有抬起则表示start 刚好是双击取反
   void _handleEvent(PointerEvent event) {
-    final _TapTracker tracker = _trackers[event.pointer];
+    final _TapTracker tracker = _trackers[event.pointer]!;
     if (event is PointerUpEvent) {
       if (_firstTap == null && _secondTap == null) {
         _registerFirstTap(tracker);
@@ -294,17 +294,17 @@ class HoldTapMoveGestureRecognizer extends GestureRecognizer {
     } else if (event is PointerMoveEvent) {
       // 检测到first tap move 则取消，检测到second tap move且已经通过竞技场则update
       if (!tracker.isWithinGlobalTolerance(event, kDoubleTapTouchSlop)) {
-        if (_firstTap != null && _firstTap.pointer == event.pointer) {
+        if (_firstTap != null && _firstTap!.pointer == event.pointer) {
           // first tap move
           _reject(tracker);
-        } else if (_secondTap != null && _secondTap.pointer == event.pointer) {
+        } else if (_secondTap != null && _secondTap!.pointer == event.pointer) {
           // debugPrint("_secondTap move");
           // second tap move
           if (!_isStart) {
             _resolve();
           }
           if (onHoldDragUpdate != null)
-            onHoldDragUpdate(DragUpdateDetails(
+            onHoldDragUpdate!(DragUpdateDetails(
                 globalPosition: event.position,
                 localPosition: event.localPosition,
                 delta: event.delta));
@@ -320,9 +320,9 @@ class HoldTapMoveGestureRecognizer extends GestureRecognizer {
 
   @override
   void rejectGesture(int pointer) {
-    _TapTracker tracker = _trackers[pointer];
+    _TapTracker? tracker = _trackers[pointer];
     // If tracker isn't in the list, check if this is the first tap tracker
-    if (tracker == null && _firstTap != null && _firstTap.pointer == pointer) {
+    if (tracker == null && _firstTap != null && _firstTap!.pointer == pointer) {
       tracker = _firstTap;
     }
     // If tracker is still null, we rejected ourselves already
@@ -333,11 +333,11 @@ class HoldTapMoveGestureRecognizer extends GestureRecognizer {
 
   void _resolve() {
     _stopSecondTapDownTimer();
-    _firstTap?.entry?.resolve(GestureDisposition.accepted);
-    _secondTap?.entry?.resolve(GestureDisposition.accepted);
+    _firstTap?.entry.resolve(GestureDisposition.accepted);
+    _secondTap?.entry.resolve(GestureDisposition.accepted);
     _isStart = true;
     // TODO start details
-    if (onHoldDragStart != null) onHoldDragStart(DragStartDetails());
+    if (onHoldDragStart != null) onHoldDragStart!(DragStartDetails());
   }
 
   void _reject(_TapTracker tracker) {
@@ -367,16 +367,16 @@ class HoldTapMoveGestureRecognizer extends GestureRecognizer {
       }
       // Note, order is important below in order for the resolve -> reject logic
       // to work properly.
-      final _TapTracker tracker = _firstTap;
+      final _TapTracker tracker = _firstTap!;
       _firstTap = null;
       _reject(tracker);
-      GestureBinding.instance.gestureArena.release(tracker.pointer);
+      GestureBinding.instance!.gestureArena.release(tracker.pointer);
 
       if (_secondTap != null) {
-        final _TapTracker tracker = _secondTap;
+        final _TapTracker tracker = _secondTap!;
         _secondTap = null;
         _reject(tracker);
-        GestureBinding.instance.gestureArena.release(tracker.pointer);
+        GestureBinding.instance!.gestureArena.release(tracker.pointer);
       }
     }
     // TODO  正确的释放资源
@@ -387,7 +387,7 @@ class HoldTapMoveGestureRecognizer extends GestureRecognizer {
 
   void _registerFirstTap(_TapTracker tracker) {
     _startFirstTapUpTimer();
-    GestureBinding.instance.gestureArena.hold(tracker.pointer);
+    GestureBinding.instance!.gestureArena.hold(tracker.pointer);
     // Note, order is important below in order for the clear -> reject logic to
     // work properly.
     _freezeTracker(tracker);
@@ -399,12 +399,12 @@ class HoldTapMoveGestureRecognizer extends GestureRecognizer {
     // 清除first tap的状态
     if (_firstTap != null) {
       _stopFirstTapUpTimer();
-      _freezeTracker(_firstTap);
+      _freezeTracker(_firstTap!);
       _firstTap = null;
     }
 
     _startSecondTapDownTimer();
-    GestureBinding.instance.gestureArena.hold(tracker.pointer);
+    GestureBinding.instance!.gestureArena.hold(tracker.pointer);
 
     _secondTap = tracker;
 
@@ -430,21 +430,21 @@ class HoldTapMoveGestureRecognizer extends GestureRecognizer {
 
   void _stopFirstTapUpTimer() {
     if (_firstTapUpTimer != null) {
-      _firstTapUpTimer.cancel();
+      _firstTapUpTimer!.cancel();
       _firstTapUpTimer = null;
     }
   }
 
   void _stopSecondTapDownTimer() {
     if (_secondTapDownTimer != null) {
-      _secondTapDownTimer.cancel();
+      _secondTapDownTimer!.cancel();
       _secondTapDownTimer = null;
     }
   }
 
   void _checkCancel() {
     if (onHoldDragCancel != null) {
-      invokeCallback<void>('onHoldDragCancel', onHoldDragCancel);
+      invokeCallback<void>('onHoldDragCancel', onHoldDragCancel!);
     }
   }
 
@@ -454,19 +454,19 @@ class HoldTapMoveGestureRecognizer extends GestureRecognizer {
 
 class DoubleFinerTapGestureRecognizer extends GestureRecognizer {
   DoubleFinerTapGestureRecognizer({
-    Object debugOwner,
-    Set<PointerDeviceKind> supportedDevices,
+    Object? debugOwner,
+    Set<PointerDeviceKind>? supportedDevices,
   }) : super(
           debugOwner: debugOwner,
           supportedDevices: supportedDevices,
         );
 
-  GestureTapDownCallback onDoubleFinerTapDown;
-  GestureTapDownCallback onDoubleFinerTap;
-  GestureTapCancelCallback onDoubleFinerTapCancel;
+  GestureTapDownCallback? onDoubleFinerTapDown;
+  GestureTapDownCallback? onDoubleFinerTap;
+  GestureTapCancelCallback? onDoubleFinerTapCancel;
 
-  Timer _firstTapTimer; // 第一次点击后的计时 超时未等到第二次操作则reject
-  _TapTracker _firstTap;
+  Timer? _firstTapTimer; // 第一次点击后的计时 超时未等到第二次操作则reject
+  _TapTracker? _firstTap;
 
   var _isStart = false;
 
@@ -505,7 +505,7 @@ class DoubleFinerTapGestureRecognizer extends GestureRecognizer {
           kind: getKindForPointer(event.pointer),
         );
         invokeCallback<void>(
-            'onDoubleFinerTapDown', () => onDoubleFinerTapDown(details));
+            'onDoubleFinerTapDown', () => onDoubleFinerTapDown!(details));
       }
     } else {
       // first tap
@@ -518,7 +518,7 @@ class DoubleFinerTapGestureRecognizer extends GestureRecognizer {
   void _trackTap(PointerDownEvent event) {
     final _TapTracker tracker = _TapTracker(
       event: event,
-      entry: GestureBinding.instance.gestureArena.add(event.pointer, this),
+      entry: GestureBinding.instance!.gestureArena.add(event.pointer, this),
       doubleTapMinTime: kDoubleTapMinTime,
       gestureSettings: gestureSettings,
     );
@@ -531,7 +531,7 @@ class DoubleFinerTapGestureRecognizer extends GestureRecognizer {
 
   // 实际的逻辑应该是第二次down后一段时间没有抬起则表示start 刚好是双击取反
   void _handleEvent(PointerEvent event) {
-    final _TapTracker tracker = _trackers[event.pointer];
+    final _TapTracker tracker = _trackers[event.pointer]!;
     if (event is PointerUpEvent) {
       debugPrint("PointerUpEvent");
       _upTap.add(tracker.pointer);
@@ -548,9 +548,9 @@ class DoubleFinerTapGestureRecognizer extends GestureRecognizer {
 
   @override
   void rejectGesture(int pointer) {
-    _TapTracker tracker = _trackers[pointer];
+    _TapTracker? tracker = _trackers[pointer];
     // If tracker isn't in the list, check if this is the first tap tracker
-    if (tracker == null && _firstTap != null && _firstTap.pointer == pointer) {
+    if (tracker == null && _firstTap != null && _firstTap!.pointer == pointer) {
       tracker = _firstTap;
     }
     // If tracker is still null, we rejected ourselves already
@@ -589,7 +589,7 @@ class DoubleFinerTapGestureRecognizer extends GestureRecognizer {
   }
 
   void _registerTap(_TapTracker tracker) {
-    GestureBinding.instance.gestureArena.hold(tracker.pointer);
+    GestureBinding.instance!.gestureArena.hold(tracker.pointer);
     // Note, order is important below in order for the clear -> reject logic to
     // work properly.
   }
@@ -609,7 +609,7 @@ class DoubleFinerTapGestureRecognizer extends GestureRecognizer {
 
   void _stopFirstTapUpTimer() {
     if (_firstTapTimer != null) {
-      _firstTapTimer.cancel();
+      _firstTapTimer!.cancel();
       _firstTapTimer = null;
     }
   }
@@ -626,7 +626,7 @@ class DoubleFinerTapGestureRecognizer extends GestureRecognizer {
 
   void _resolve() {
     // TODO tap down details
-    if (onDoubleFinerTap != null) onDoubleFinerTap(TapDownDetails());
+    if (onDoubleFinerTap != null) onDoubleFinerTap!(TapDownDetails());
     _trackers.forEach((key, value) {
       value.entry.resolve(GestureDisposition.accepted);
     });
@@ -635,7 +635,7 @@ class DoubleFinerTapGestureRecognizer extends GestureRecognizer {
 
   void _checkCancel() {
     if (onDoubleFinerTapCancel != null) {
-      invokeCallback<void>('onHoldDragCancel', onDoubleFinerTapCancel);
+      invokeCallback<void>('onHoldDragCancel', onDoubleFinerTapCancel!);
     }
   }
 
@@ -647,10 +647,10 @@ class DoubleFinerTapGestureRecognizer extends GestureRecognizer {
 /// larger gesture.
 class _TapTracker {
   _TapTracker({
-    PointerDownEvent event,
-    this.entry,
-    Duration doubleTapMinTime,
-    this.gestureSettings,
+    required PointerDownEvent event,
+    required this.entry,
+    required Duration doubleTapMinTime,
+    required this.gestureSettings,
   })  : assert(doubleTapMinTime != null),
         assert(event != null),
         assert(event.buttons != null),
@@ -660,7 +660,7 @@ class _TapTracker {
         _doubleTapMinTimeCountdown =
             _CountdownZoned(duration: doubleTapMinTime);
 
-  final DeviceGestureSettings gestureSettings;
+  final DeviceGestureSettings? gestureSettings;
   final int pointer;
   final GestureArenaEntry entry;
   final Offset _initialGlobalPosition;
@@ -669,17 +669,17 @@ class _TapTracker {
 
   bool _isTrackingPointer = false;
 
-  void startTrackingPointer(PointerRoute route, Matrix4 transform) {
+  void startTrackingPointer(PointerRoute route, Matrix4? transform) {
     if (!_isTrackingPointer) {
       _isTrackingPointer = true;
-      GestureBinding.instance.pointerRouter.addRoute(pointer, route, transform);
+      GestureBinding.instance!.pointerRouter.addRoute(pointer, route, transform);
     }
   }
 
   void stopTrackingPointer(PointerRoute route) {
     if (_isTrackingPointer) {
       _isTrackingPointer = false;
-      GestureBinding.instance.pointerRouter.removeRoute(pointer, route);
+      GestureBinding.instance!.pointerRouter.removeRoute(pointer, route);
     }
   }
 
@@ -700,7 +700,7 @@ class _TapTracker {
 /// CountdownZoned tracks whether the specified duration has elapsed since
 /// creation, honoring [Zone].
 class _CountdownZoned {
-  _CountdownZoned({Duration duration}) : assert(duration != null) {
+  _CountdownZoned({required Duration duration}) : assert(duration != null) {
     Timer(duration, _onTimeout);
   }
 
@@ -714,18 +714,19 @@ class _CountdownZoned {
 }
 
 RawGestureDetector getMixinGestureDetector({
-  Widget child,
-  GestureTapUpCallback onTapUp,
-  GestureDoubleTapCallback onDoubleTap,
-  GestureDragStartCallback onHoldDragStart,
-  GestureDragUpdateCallback onHoldDragUpdate,
-  GestureDragCancelCallback onHoldDragCancel,
-  GestureTapDownCallback onDoubleFinerTap,
-  GestureDragStartCallback onOneFingerPanStart,
-  GestureDragUpdateCallback onOneFingerPanUpdate,
-  GestureScaleUpdateCallback onTwoFingerScaleUpdate,
-  GestureDragUpdateCallback onTwoFingerHorizontalDragUpdate,
-  GestureDragUpdateCallback onTwoFingerVerticalDragUpdate,
+  Widget? child,
+  GestureTapUpCallback? onTapUp,
+  GestureDoubleTapCallback? onDoubleTap,
+  GestureDragStartCallback? onHoldDragStart,
+  GestureDragUpdateCallback? onHoldDragUpdate,
+  GestureDragCancelCallback? onHoldDragCancel,
+  GestureTapDownCallback? onDoubleFinerTap,
+  GestureDragStartCallback? onOneFingerPanStart,
+  GestureDragUpdateCallback? onOneFingerPanUpdate,
+  GestureScaleUpdateCallback? onTwoFingerScaleUpdate,
+  GestureScaleEndCallback? onTwoFingerScaleEnd,
+  GestureDragUpdateCallback? onTwoFingerHorizontalDragUpdate,
+  GestureDragUpdateCallback? onTwoFingerVerticalDragUpdate,
 }) {
   return RawGestureDetector(
       child: child,
@@ -763,6 +764,7 @@ RawGestureDetector getMixinGestureDetector({
             ..onOneFingerPanStart = onOneFingerPanStart
             ..onOneFingerPanUpdate = onOneFingerPanUpdate
             ..onTwoFingerScaleUpdate = onTwoFingerScaleUpdate
+            ..onTwoFingerScaleEnd = onTwoFingerScaleEnd
             ..onTwoFingerHorizontalDragUpdate = onTwoFingerHorizontalDragUpdate
             ..onTwoFingerVerticalDragUpdate = onTwoFingerVerticalDragUpdate;
         })

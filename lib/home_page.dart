@@ -8,7 +8,7 @@ import 'model.dart';
 import 'remote_page.dart';
 
 class HomePage extends StatefulWidget {
-  HomePage({Key key, this.title}) : super(key: key);
+  HomePage({Key? key, required this.title}) : super(key: key);
 
   final String title;
 
@@ -55,18 +55,20 @@ class _HomePageState extends State<HomePage> {
                     },
                     onTap: () {
                       () async {
-                        var value = await showMenu(
+                        var value = await showMenu<dynamic>(
                           context: context,
                           position: this._menuPos,
                           items: [
                             PopupMenuItem<String>(
                                 child: Text(translate('ID Server')),
                                 value: 'id_server'),
+                            // TODO　test
                             isAndroid
-                                ? PopupMenuItem<String>(
+                                ? PopupMenuItem<dynamic>(
                                     child: Text(translate('Share My Screen')),
                                     value: 'server')
-                                : null,
+                                : PopupMenuItem<dynamic>(
+                                    child: SizedBox.shrink(), value: ''),
                             PopupMenuItem<String>(
                                 child: Text(translate('About') + ' RustDesk'),
                                 value: 'about'),
@@ -328,8 +330,8 @@ void showServer(BuildContext context) {
                       labelText: translate('ID Server'),
                     ),
                     validator: validate,
-                    onSaved: (String value) {
-                      id = value.trim();
+                    onSaved: (String? value) {
+                      if (value != null) id = value.trim();
                     },
                   ),
                   /*
@@ -350,8 +352,8 @@ void showServer(BuildContext context) {
                       labelText: 'Key',
                     ),
                     validator: null,
-                    onSaved: (String value) {
-                      key = value.trim();
+                    onSaved: (String? value) {
+                      if (value != null) key = value.trim();
                     },
                   ),
                 ])),
@@ -366,8 +368,8 @@ void showServer(BuildContext context) {
               TextButton(
                 style: flatButtonStyle,
                 onPressed: () {
-                  if (formKey.currentState.validate()) {
-                    formKey.currentState.save();
+                  if (formKey.currentState != null && formKey.currentState!.validate()) {
+                    formKey.currentState!.save();
                     if (id != id0)
                       FFI.setByName('option',
                           '{"name": "custom-rendezvous-server", "value": "$id"}');
@@ -391,7 +393,7 @@ Future<Null> showAbout(BuildContext context) async {
   showAlertDialog(
       context,
       (setState) => Tuple3(
-          null,
+          SizedBox.shrink(), // TODO test old:null
           Wrap(direction: Axis.vertical, spacing: 12, children: [
             Text('Version: $version'),
             InkWell(
@@ -409,12 +411,12 @@ Future<Null> showAbout(BuildContext context) async {
                       )),
                 )),
           ]),
-          null),
+          []),
       () async => true,
       true);
 }
 
-String validate(value) {
+String? validate(value) {
   value = value.trim();
   if (value.isEmpty) {
     return null;

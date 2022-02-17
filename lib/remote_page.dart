@@ -14,7 +14,7 @@ import 'model.dart';
 final initText = '\1' * 1024;
 
 class RemotePage extends StatefulWidget {
-  RemotePage({Key key, this.id}) : super(key: key);
+  RemotePage({Key? key, required this.id}) : super(key: key);
 
   final String id;
 
@@ -23,8 +23,8 @@ class RemotePage extends StatefulWidget {
 }
 
 class _RemotePageState extends State<RemotePage> {
-  Timer _interval;
-  Timer _timer;
+  Timer? _interval;
+  Timer? _timer;
   bool _showBar = !isDesktop;
   double _bottom = 0;
   String _value = '';
@@ -47,14 +47,14 @@ class _RemotePageState extends State<RemotePage> {
   void initState() {
     super.initState();
     FFI.connect(widget.id);
-    WidgetsBinding.instance.addPostFrameCallback((_) {
+    WidgetsBinding.instance!.addPostFrameCallback((_) {
       SystemChrome.setEnabledSystemUIOverlays([]);
       showLoading(translate('Connecting...'), context);
       _interval =
           Timer.periodic(Duration(milliseconds: 30), (timer) => interval());
     });
     Wakelock.enable();
-    loadingCancelCallback = () => _interval.cancel();
+    loadingCancelCallback = () => _interval?.cancel();
     _touchMode = FFI.getByName('peer_option', "touch-mode") != '';
   }
 
@@ -63,7 +63,7 @@ class _RemotePageState extends State<RemotePage> {
     _focusNode.dispose();
     FFI.close();
     loadingCancelCallback = null;
-    _interval.cancel();
+    _interval?.cancel();
     _timer?.cancel();
     dismissLoading();
     SystemChrome.setEnabledSystemUIOverlays(SystemUiOverlay.values);
@@ -354,8 +354,8 @@ class _RemotePageState extends State<RemotePage> {
         onTapUp: (d) {
           if (_drag || _scroll) return;
           if (_touchMode) {
-            FFI.cursorModel.touch(
-                d.localPosition.dx, d.localPosition.dy, _right);
+            FFI.cursorModel
+                .touch(d.localPosition.dx, d.localPosition.dy, _right);
           } else {
             FFI.tap(_right);
           }
@@ -385,12 +385,12 @@ class _RemotePageState extends State<RemotePage> {
           FFI.cursorModel.updatePan(d.delta.dx, d.delta.dy, _touchMode, _drag);
         },
         onTwoFingerScaleUpdate: (d) {
-          var scale = (d.scale -1) / 20 + 1;
-          FFI.canvasModel.updateScale(scale);
-          _scale = scale;
+          FFI.canvasModel.updateScale(d.scale/_scale);
+          _scale = d.scale;
         },
+        onTwoFingerScaleEnd: (d)=>_scale = 1,
         onTwoFingerVerticalDragUpdate: (d) {
-          FFI.scroll( - d.delta.dy / 20);
+          FFI.scroll(d.delta.dy / 2);
         });
     return GestureDetector(
         onLongPress: () {
@@ -491,9 +491,8 @@ class _RemotePageState extends State<RemotePage> {
       paints.add(CursorPaint());
     }
     return MouseRegion(
-        cursor: keyboard
-            ? SystemMouseCursors.none
-            : null, // still laggy, set cursor directly for web is better
+        cursor: keyboard ? SystemMouseCursors.none : MouseCursor.defer,
+        // TODO old null // still laggy, set cursor directly for web is better
         onEnter: (event) {
           print('enter');
           FFI.listenToMouse(true);
@@ -586,8 +585,8 @@ class _RemotePageState extends State<RemotePage> {
         FFI.setByName('refresh');
       } else if (value == 'paste') {
         () async {
-          ClipboardData data = await Clipboard.getData(Clipboard.kTextPlain);
-          if (data.text != null) {
+          ClipboardData? data = await Clipboard.getData(Clipboard.kTextPlain);
+          if (data != null && data.text != null) {
             FFI.setByName('input_string', '${data.text}');
           }
         }();
@@ -618,8 +617,8 @@ class _RemotePageState extends State<RemotePage> {
       return SizedBox();
     }
     final size = MediaQuery.of(context).size;
-    var wrap =
-        (String text, void Function() onPressed, [bool active, IconData icon]) {
+    var wrap = (String text, void Function() onPressed,
+        [bool? active, IconData? icon]) {
       return TextButton(
           style: TextButton.styleFrom(
             minimumSize: Size(0, 0),
@@ -811,13 +810,13 @@ class CursorPaint extends StatelessWidget {
 
 class ImagePainter extends CustomPainter {
   ImagePainter({
-    this.image,
-    this.x,
-    this.y,
-    this.scale,
+    required this.image,
+    required this.x,
+    required this.y,
+    required this.scale,
   });
 
-  ui.Image image;
+  ui.Image? image;
   double x;
   double y;
   double scale;
@@ -826,7 +825,7 @@ class ImagePainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     if (image == null) return;
     canvas.scale(scale, scale);
-    canvas.drawImage(image, new Offset(x, y), new Paint());
+    canvas.drawImage(image!, new Offset(x, y), new Paint());
   }
 
   @override
@@ -853,7 +852,9 @@ void enterPasswordDialog(String id, BuildContext context) {
                 ),
                 value: remember,
                 onChanged: (v) {
-                  setState(() => remember = v);
+                  if (v != null) {
+                    setState(() => remember = v);
+                  }
                 },
               ),
             ]),
@@ -918,7 +919,7 @@ CheckboxListTile getToggle(
 }
 
 RadioListTile<String> getRadio(String name, String toValue, String curValue,
-    void Function(String) onChange) {
+    void Function(String?) onChange) {
   return RadioListTile<String>(
     controlAffinity: ListTileControlAffinity.trailing,
     title: Text(translate(name)),
@@ -985,13 +986,15 @@ void showOptions(BuildContext context) {
         more.add(getToggle(setState, 'privacy-mode', 'Privacy mode'));
       }
     }
-    var setQuality = (String value) {
+    var setQuality = (String? value) {
+      if(value == null) return;
       setState(() {
         quality = value;
         FFI.setByName('image_quality', value);
       });
     };
-    var setViewStyle = (String value) {
+    var setViewStyle = (String? value) {
+      if(value == null) return;
       setState(() {
         viewStyle = value;
         FFI.setByName(
@@ -1000,7 +1003,7 @@ void showOptions(BuildContext context) {
       });
     };
     return Tuple3(
-        null,
+        SizedBox.shrink(),
         Column(
             mainAxisSize: MainAxisSize.min,
             children: displays +
@@ -1012,7 +1015,7 @@ void showOptions(BuildContext context) {
                         getRadio('Stretch', 'stretch', viewStyle, setViewStyle),
                         Divider(color: MyTheme.border),
                       ]
-                    : {}) +
+                    : []) +
                 <Widget>[
                   getRadio('Good image quality', 'best', quality, setQuality),
                   getRadio('Balanced', 'balanced', quality, setQuality),
@@ -1023,7 +1026,7 @@ void showOptions(BuildContext context) {
                       setState, 'show-remote-cursor', 'Show remote cursor'),
                 ] +
                 more),
-        null);
+        []);
   }, () async => true, true, 0);
 }
 
@@ -1047,6 +1050,7 @@ void showSetOSPassword(BuildContext context, bool login) {
                 ),
                 value: autoLogin,
                 onChanged: (v) {
+                  if(v==null) return;
                   setState(() => autoLogin = v);
                 },
               ),

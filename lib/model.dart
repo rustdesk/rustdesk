@@ -11,15 +11,15 @@ import 'common.dart';
 import 'native_model.dart' if (dart.library.html) 'web_model.dart';
 
 class FfiModel with ChangeNotifier {
-  PeerInfo _pi;
-  Display _display;
+  PeerInfo _pi = PeerInfo();
+  Display _display = Display();
   var _decoding = false;
-  bool _waitForImage;
+  bool _waitForImage = false;
   bool _initialized = false;
   var _inputBlocked = false;
   final _permissions = Map<String, bool>();
-  bool _secure;
-  bool _direct;
+  bool? _secure;
+  bool? _direct;
 
   get permissions => _permissions;
 
@@ -32,6 +32,7 @@ class FfiModel with ChangeNotifier {
   get direct => _direct;
 
   get pi => _pi;
+
   get inputBlocked => _inputBlocked;
 
   set inputBlocked(v) {
@@ -75,8 +76,8 @@ class FfiModel with ChangeNotifier {
     _direct = direct;
   }
 
-  Image getConnectionImage() {
-    String icon;
+  Image? getConnectionImage() {
+    String? icon;
     if (secure == true && direct == true) {
       icon = 'secure';
     } else if (secure == false && direct == true) {
@@ -200,11 +201,11 @@ class FfiModel with ChangeNotifier {
 }
 
 class ImageModel with ChangeNotifier {
-  ui.Image _image;
+  ui.Image? _image;
 
-  ui.Image get image => _image;
+  ui.Image? get image => _image;
 
-  void update(ui.Image image) {
+  void update(ui.Image? image) {
     if (_image == null && image != null) {
       if (isDesktop) {
         FFI.canvasModel.updateViewStyle();
@@ -223,28 +224,26 @@ class ImageModel with ChangeNotifier {
   double get maxScale {
     if (_image == null) return 1.0;
     final size = MediaQueryData.fromWindow(ui.window).size;
-    final xscale = size.width / _image.width;
-    final yscale = size.height / _image.height;
+    final xscale = size.width / _image!.width;
+    final yscale = size.height / _image!.height;
     return max(1.0, max(xscale, yscale));
   }
 
   double get minScale {
     if (_image == null) return 1.0;
     final size = MediaQueryData.fromWindow(ui.window).size;
-    final xscale = size.width / _image.width;
-    final yscale = size.height / _image.height;
+    final xscale = size.width / _image!.width;
+    final yscale = size.height / _image!.height;
     return min(xscale, yscale);
   }
 }
 
 class CanvasModel with ChangeNotifier {
-  double _x;
-  double _y;
-  double _scale;
+  double _x = 0;
+  double _y = 0;
+  double _scale = 1.0;
 
-  CanvasModel() {
-    clear();
-  }
+  CanvasModel();
 
   double get x => _x;
 
@@ -355,7 +354,7 @@ class CanvasModel with ChangeNotifier {
 }
 
 class CursorModel with ChangeNotifier {
-  ui.Image _image;
+  ui.Image? _image;
   final _images = Map<int, Tuple3<ui.Image, double, double>>();
   double _x = -10000;
   double _y = -10000;
@@ -364,7 +363,7 @@ class CursorModel with ChangeNotifier {
   double _displayOriginX = 0;
   double _displayOriginY = 0;
 
-  ui.Image get image => _image;
+  ui.Image? get image => _image;
 
   double get x => _x - _displayOriginX;
 
@@ -445,7 +444,7 @@ class CursorModel with ChangeNotifier {
     var tryMoveCanvasX = false;
     if (dx > 0) {
       final maxCanvasCanMove =
-          _displayOriginX + FFI.imageModel.image.width - r.right;
+          _displayOriginX + FFI.imageModel.image!.width - r.right;
       tryMoveCanvasX = _x + dx > cx && maxCanvasCanMove > 0;
       if (tryMoveCanvasX) {
         dx = min(dx, maxCanvasCanMove);
@@ -466,7 +465,7 @@ class CursorModel with ChangeNotifier {
     var tryMoveCanvasY = false;
     if (dy > 0) {
       final mayCanvasCanMove =
-          _displayOriginY + FFI.imageModel.image.height - r.bottom;
+          _displayOriginY + FFI.imageModel.image!.height - r.bottom;
       tryMoveCanvasY = _y + dy > cy && mayCanvasCanMove > 0;
       if (tryMoveCanvasY) {
         dy = min(dy, mayCanvasCanMove);
@@ -567,12 +566,12 @@ class CursorModel with ChangeNotifier {
 }
 
 class ClientState {
-  bool isStart;
-  bool isFileTransfer;
-  String name;
-  String peerId;
+  bool isStart = false;
+  bool isFileTransfer = false;
+  String name = "";
+  String peerId = "";
 
-  ClientState({this.isStart, this.isFileTransfer, this.name, this.peerId});
+  ClientState(this.isStart, this.isFileTransfer, this.name, this.peerId);
 
   ClientState.fromJson(Map<String, dynamic> json) {
     isStart = json['is_start'];
@@ -592,19 +591,16 @@ class ClientState {
 }
 
 class ServerModel with ChangeNotifier {
-  bool _mediaOk;
-  bool _inputOk;
-  // bool _needServerOpen;
-  bool _isPeerStart;
-  bool _isFileTransfer;
-  String _peerName;
-  String _peerID;
+  bool _mediaOk = false;
+  bool _inputOk = false;
+  bool _isPeerStart = false;
+  bool _isFileTransfer = false;
+  String _peerName = "";
+  String _peerID = "";
 
   bool get mediaOk => _mediaOk;
 
   bool get inputOk => _inputOk;
-
-  // bool get needServerOpen => _needServerOpen;
 
   bool get isPeerStart => _isPeerStart;
 
@@ -614,18 +610,7 @@ class ServerModel with ChangeNotifier {
 
   String get peerID => _peerID;
 
-  ServerModel() {
-    _mediaOk = false;
-    _inputOk = false;
-    _isPeerStart = false;
-    _peerName = "";
-    _peerID = "";
-  }
-
-  // setNeedServerOpen(bool v){
-  //   _needServerOpen = v;
-  //   notifyListeners();
-  // }
+  ServerModel();
 
   changeStatue(String name, bool value) {
     switch (name) {
@@ -753,7 +738,7 @@ class FFI {
     FFI.id = id;
   }
 
-  static Map<String, dynamic> popEvent() {
+  static Map<String, dynamic>? popEvent() {
     var s = getByName('event');
     if (s == '') return null;
     try {
@@ -892,13 +877,13 @@ class Display {
 }
 
 class PeerInfo {
-  String version;
-  String username;
-  String hostname;
-  String platform;
-  bool sasEnabled;
-  int currentDisplay;
-  List<Display> displays;
+  String version = "";
+  String username = "";
+  String hostname = "";
+  String platform = "";
+  bool sasEnabled = false;
+  int currentDisplay = 0;
+  List<Display> displays = [];
 }
 
 void savePreference(String id, double xCursor, double yCursor, double xCanvas,
@@ -914,7 +899,7 @@ void savePreference(String id, double xCursor, double yCursor, double xCanvas,
   prefs.setString('peer' + id, json.encode(p));
 }
 
-Future<Map<String, dynamic>> getPreference(String id) async {
+Future<Map<String, dynamic>?> getPreference(String id) async {
   if (!isDesktop) return null;
   SharedPreferences prefs = await SharedPreferences.getInstance();
   var p = prefs.getString('peer' + id);

@@ -101,7 +101,7 @@ class _ServerInfoState extends State<ServerInfo> {
             labelStyle:
                 TextStyle(fontWeight: FontWeight.bold, color: MyTheme.accent50),
           ),
-          onSaved: (String value) {},
+          onSaved: (String? value) {},
         ),
         TextFormField(
           readOnly: true,
@@ -123,7 +123,7 @@ class _ServerInfoState extends State<ServerInfo> {
                       _passwdShow = !_passwdShow;
                     });
                   })),
-          onSaved: (String value) {},
+          onSaved: (String? value) {},
         ),
       ],
     ));
@@ -187,7 +187,7 @@ class _PermissionCheckerState extends State<PermissionChecker> {
   }
 }
 
-BuildContext loginReqAlertCtx;
+BuildContext? loginReqAlertCtx;
 
 void showLoginReqAlert(BuildContext context, String peerID, String name) async {
   await showDialog(
@@ -238,7 +238,7 @@ void showLoginReqAlert(BuildContext context, String peerID, String name) async {
 
 clearLoginReqAlert() {
   if (loginReqAlertCtx != null) {
-    Navigator.of(loginReqAlertCtx).pop();
+    Navigator.of(loginReqAlertCtx!).pop();
     FFI.serverModel.updateClientState();
   }
 }
@@ -372,8 +372,10 @@ void toAndroidChannelInit() {
             FFI.serverModel.updateClientState();
             debugPrint(
                 "pre show loginAlert:${FFI.serverModel.isFileTransfer.toString()}");
-            showLoginReqAlert(
-                currentCtx, FFI.serverModel.peerID, FFI.serverModel.peerName);
+            if(currentCtx!=null){
+              showLoginReqAlert(
+                  currentCtx!, FFI.serverModel.peerID, FFI.serverModel.peerName);
+            }
             debugPrint("from jvm:try_start_without_auth done");
             break;
           }

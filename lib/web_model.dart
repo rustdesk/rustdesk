@@ -105,7 +105,7 @@ Map<String, dynamic> getEvent(MouseEvent evt) {
   out['buttons'] = evt
       .buttons; // left button: 1, right button: 2, middle button: 4, 1 | 2 = 3 (left + right)
   if (evt.buttons != 0) {
-    lastMouseDownButtons = evt.buttons;
+    lastMouseDownButtons = evt.buttons!;
   } else {
     out['buttons'] = lastMouseDownButtons;
   }
@@ -125,7 +125,7 @@ void handleKey(KeyboardEvent evt, bool down) {
       name = evt.code;
     } else {
       name = evt.key;
-      if (name.toLowerCase() != name.toUpperCase() &&
+      if (name!=null && name.toLowerCase() != name.toUpperCase() &&
           name == name.toUpperCase()) {
         if (!evt.shiftKey) out['shift'] = 'true';
       }

@@ -11,8 +11,8 @@ import 'common.dart';
 
 class RgbaFrame extends Struct {
   @Uint32()
-  int len;
-  Pointer<Uint8> data;
+  external int len;
+  external Pointer<Uint8> data;
 }
 
 typedef F2 = Pointer<Utf8> Function(Pointer<Utf8>, Pointer<Utf8>);
@@ -21,24 +21,25 @@ typedef F4 = void Function(Pointer<RgbaFrame>);
 typedef F5 = Pointer<RgbaFrame> Function();
 
 class PlatformFFI {
-  static Pointer<RgbaFrame> _lastRgbaFrame;
+  static Pointer<RgbaFrame>? _lastRgbaFrame;
   static String _dir = '';
   static String _homeDir = '';
-  static F2 _getByName;
-  static F3 _setByName;
-  static F4 _freeRgba;
-  static F5 _getRgba;
+  static F2? _getByName;
+  static F3? _setByName;
+  static F4? _freeRgba;
+  static F5? _getRgba;
 
   static void clearRgbaFrame() {
-    if (_lastRgbaFrame != null && _lastRgbaFrame != nullptr)
-      _freeRgba(_lastRgbaFrame);
+    if (_lastRgbaFrame != null &&
+        _lastRgbaFrame != nullptr &&
+        _freeRgba != null) _freeRgba!(_lastRgbaFrame!);
   }
 
-  static Uint8List getRgba() {
+  static Uint8List? getRgba() {
     if (_getRgba == null) return null;
-    _lastRgbaFrame = _getRgba();
+    _lastRgbaFrame = _getRgba!();
     if (_lastRgbaFrame == null || _lastRgbaFrame == nullptr) return null;
-    final ref = _lastRgbaFrame.ref;
+    final ref = _lastRgbaFrame!.ref;
     return Uint8List.sublistView(ref.data.asTypedList(ref.len));
   }
 
@@ -51,7 +52,7 @@ class PlatformFFI {
     if (_getByName == null) return '';
     var a = name.toNativeUtf8();
     var b = arg.toNativeUtf8();
-    var p = _getByName(a, b);
+    var p = _getByName!(a, b);
     assert(p != nullptr && p != null);
     var res = p.toDartString();
     calloc.free(p);
@@ -64,7 +65,7 @@ class PlatformFFI {
     if (_setByName == null) return;
     var a = name.toNativeUtf8();
     var b = value.toNativeUtf8();
-    _setByName(a, b);
+    _setByName!(a, b);
     calloc.free(a);
     calloc.free(b);
   }
@@ -110,6 +111,7 @@ class PlatformFFI {
 
   static void startDesktopWebListener(
       Function(Map<String, dynamic>) handleMouse) {}
+
   static void stopDesktopWebListener() {}
 
   static void setMethodCallHandler(FMethod callback) {
