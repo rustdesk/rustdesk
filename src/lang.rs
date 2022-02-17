@@ -32,7 +32,7 @@ pub fn translate_locale(name: String, locale: &str) -> String {
         "cn" => cn::T.deref(),
         "it" => it::T.deref(),
         "tw" => tw::T.deref(),
-        "de" => tw::T.deref(),
+        "de" => de::T.deref(),
         "ru" => ru::T.deref(),
         _ => en::T.deref(),
     };
