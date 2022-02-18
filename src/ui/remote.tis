@@ -187,7 +187,14 @@ function handler.onMouse(evt)
       case Event.MOUSE_MOVE:
         if (cursor_img.style#display != "none" && keyboard_enabled) {
             cursor_img.style#display = "none";
-            handler.style#cursor = '';
+        }
+        if (!keyboard_enabled && handler.style#cursor) {
+            handler.style#cursor = undefined;
+        }
+        if (keyboard_enabled && !handler.style#cursor) {
+            if (cur_img) {
+                handler.style.cursor(cur_img, cur_hotx, cur_hoty);
+            }
         }
         break;
       case Event.MOUSE_WHEEL:
@@ -361,7 +368,6 @@ handler.setCursorPosition = function(x, y) {
         top: y + "px",
     };
     if (cursor_img.style#display == 'none') {
-        handler.style#cursor = 'none';
         cursor_img.style#display = "block";
     }
 }
