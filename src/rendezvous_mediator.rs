@@ -56,7 +56,7 @@ impl RendezvousMediator {
         }
         let server_cloned = server.clone();
         tokio::spawn(async move {
-            allow_err!(direct_server(server_cloned).await);
+            direct_server(server_cloned).await;
         });
         if crate::platform::is_installed() {
             std::thread::spawn(move || {
@@ -457,26 +457,58 @@ impl RendezvousMediator {
     }
 }
 
-async fn direct_server(server: ServerPtr) -> ResultType<()> {
-    let port = RENDEZVOUS_PORT + 2;
-    let addr = format!("0.0.0.0:{}", port);
+fn get_direct_port() -> i32 {
+    let mut port = Config::get_option("direct-access-port")
+        .parse::<i32>()
+        .unwrap_or(0);
+    if port <= 0 {
+        port = RENDEZVOUS_PORT + 2;
+    }
+    port
+}
+
+async fn direct_server(server: ServerPtr) {
     let mut listener = None;
+    let mut port = 0;
     loop {
-        if !Config::get_option("direct-server").is_empty() && listener.is_none() {
-            listener = Some(hbb_common::tcp::new_listener(&addr, false).await?);
-            log::info!(
-                "Direct server listening on: {}",
-                &listener.as_ref().unwrap().local_addr()?
-            );
+        let disabled = Config::get_option("direct-server").is_empty();
+        if !disabled && listener.is_none() {
+            port = get_direct_port();
+            let addr = format!("0.0.0.0:{}", port);
+            match hbb_common::tcp::new_listener(&addr, false).await {
+                Ok(l) => {
+                    listener = Some(l);
+                    log::info!(
+                        "Direct server listening on: {:?}",
+                        listener.as_ref().unwrap().local_addr()
+                    );
+                }
+                Err(err) => {
+                    // to-do: pass to ui
+                    log::error!(
+                        "Failed to start direct server on : {}, error: {}",
+                        addr,
+                        err
+                    );
+                    loop {
+                        if port != get_direct_port() {
+                            break;
+                        }
+                        sleep(1.).await;
+                    }
+                }
+            }
         }
         if let Some(l) = listener.as_mut() {
+            if disabled || port != get_direct_port() {
+                log::info!("Exit direct access listen");
+                listener = None;
+                continue;
+            }
             if let Ok(Ok((stream, addr))) = hbb_common::timeout(1000, l.accept()).await {
-                if Config::get_option("direct-server").is_empty() {
-                    continue;
-                }
                 stream.set_nodelay(true).ok();
                 log::info!("direct access from {}", addr);
-                let local_addr = stream.local_addr()?;
+                let local_addr = stream.local_addr().unwrap_or(Config::get_any_listen_addr());
                 let server = server.clone();
                 tokio::spawn(async move {
                     allow_err!(

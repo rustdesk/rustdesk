@@ -461,7 +461,7 @@ pub fn get_full_name() -> String {
 }
 
 pub fn is_ip(id: &str) -> bool {
-    hbb_common::regex::Regex::new(r"^\d+\.\d+\.\d+\.\d+$")
+    hbb_common::regex::Regex::new(r"^\d+\.\d+\.\d+\.\d+(:\d+)?$")
         .unwrap()
         .is_match(id)
 }

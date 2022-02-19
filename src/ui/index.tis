@@ -70,11 +70,16 @@ class DirectServer: Reactor.Component {
 
     function render() {
         var text = translate("Enable Direct IP Access");
-        var cls = handler.get_option("direct-server") == "Y" ? "selected" : "line-through";
-        return <li class={cls}><span>{svg_checkmark}</span>{text}</li>;
+        var enabled = handler.get_option("direct-server") == "Y";
+        var cls = enabled ? "selected" : "line-through";
+        return <li class={cls}><span>{svg_checkmark}</span>{text}{enabled && <EditDirectAccessPort />}</li>;
     }
     
     function onClick() {
+        if (is_edit_rdp_port) {
+            is_edit_rdp_port = false;
+            return;
+        }
         handler.set_option("direct-server", handler.get_option("direct-server") == "Y" ? "" : "Y");
         this.update();
     }
@@ -273,6 +278,40 @@ class MyIdMenu: Reactor.Component {
             }, 400);
         }
     }
+}
+
+var is_edit_direct_access_port;
+class EditDirectAccessPort: Reactor.Component {
+    function render() {
+        return <span style="margin-left: 12px; padding: 0 6px; display: inline-block;" .link>{svg_edit}</span>;
+    }
+
+    function onMouse(evt) {
+        if (evt.type == Event.MOUSE_DOWN) {
+            is_edit_direct_access_port = true;
+            editDirectAccessPort();
+        }
+    }
+}
+
+function editDirectAccessPort() {
+    var p0 = handler.get_option('direct-access-port');
+    var port = p0 ? <input|text name='port' value={p0} /> :
+                    <input|text name='port' novalue={21118} />;
+    msgbox("custom-direct-access-port", translate('Direct IP Access Settings'), <div .form .set-password>
+            <div><span style="width: 60px; ">{translate('Port')}:</span>{port}</div>
+        </div>, function(res=null) {
+        if (!res) return;
+        var p = (res.port || '').trim();
+        if (p) {
+            p = p.toInteger();
+            if (!(p > 0)) {
+                return translate("Invalid port");
+            }
+            p = p + '';
+        }
+        if (p != p0) handler.set_option('direct-access-port', p);
+      });
 }
 
 class App: Reactor.Component
@@ -623,7 +662,7 @@ class Password: Reactor.Component {
 
 class ID: Reactor.Component {
     function render() {
-        return <input type="text" #remote_id .outline-focus novalue={translate("Enter Remote ID")} maxlength="15"
+        return <input type="text" #remote_id .outline-focus novalue={translate("Enter Remote ID")} maxlength="21"
         value={formatId(handler.get_remote_id())} />;
     }
 

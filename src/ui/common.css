@@ -303,7 +303,7 @@ menu li span {
   display: none;
 }
 
-menu li.selected span {
+menu li.selected span:nth-child(1) {
   display: inline-block;
   position: absolute;
   left: -10px;
