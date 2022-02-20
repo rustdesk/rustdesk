@@ -118,13 +118,13 @@ cd rustdesk
 docker build -t "rustdesk-builder" .
 ```
 
-Ensuite, chaque fois que vous devez build le logiciel, exécutez la commande suivante :
+Ensuite, chaque fois que vous devez compiler le logiciel, exécutez la commande suivante :
 
 ```sh
 docker run --rm -it -v $PWD:/home/user/rustdesk -v rustdesk-git-cache:/home/user/.cargo/git -v rustdesk-registry-cache:/home/user/.cargo/registry -e PUID="$(id -u)" -e PGID="$(id -g)" rustdesk-builder
 ```
 
-Notez que le premier build peut prendre plus de temps avant que les dépendances ne soient mises en cache, les constructions suivantes seront plus rapides. De plus, si vous devez spécifier différents arguments à la commande de compilation, vous pouvez le faire à la fin de la commande dans la position `<OPTIONAL-ARGS>`. Par exemple, si vous voulez construire une version optimisée de la version release, vous devez exécuter la commande ci-dessus suivie de `---release`. L'exécutable résultant sera disponible dans le dossier cible sur votre système, et peut être lancé avec :
+Notez que la première compilation peut prendre plus de temps avant que les dépendances ne soient mises en cache, les compilations suivantes seront plus rapides. De plus, si vous devez spécifier différents arguments à la commande de compilation, vous pouvez le faire à la fin de la commande à la position `<OPTIONAL-ARGS>`. Par exemple, si vous voulez compiler une version de release optimisée, vous devez exécuter la commande ci-dessus suivie de `---release`. L'exécutable résultant sera disponible dans le dossier cible sur votre système, et peut être lancé avec :
 
 ```sh
 target/debug/rustdesk
@@ -136,14 +136,14 @@ Ou, si vous exécutez un exécutable provenant d'une release :
 target/release/rustdesk
 ```
 
-Veuillez vous assurer que vous exécutez ces commandes à partir de la racine du référentiel RustDesk, sinon l'application ne pourra pas trouver les ressources requises. Notez également que les autres sous-commandes de cargo telles que `install` ou `run` ne sont pas actuellement supportées par cette méthode car elles installeraient ou exécuteraient le programme à l'intérieur du conteneur au lieu de l'hôte.
+Veuillez vous assurer que vous exécutez ces commandes à partir de la racine du dépôt RustDesk, sinon l'application ne pourra pas trouver les ressources requises. Notez également que les autres sous-commandes de cargo telles que `install` ou `run` ne sont pas actuellement supportées par cette méthode car elles installeraient ou exécuteraient le programme à l'intérieur du conteneur au lieu de l'hôte.
 
 ## Structure du projet
 
 - **[libs/hbb_common](https://github.com/rustdesk/rustdesk/tree/master/libs/hbb_common)** : codec vidéo, config, wrapper tcp/udp, protobuf, fonctions fs pour le transfert de fichiers, et quelques autres fonctions utilitaires.
 - **[libs/scrap](https://github.com/rustdesk/rustdesk/tree/master/libs/scrap)** : capture d'écran
 - **[libs/enigo](https://github.com/rustdesk/rustdesk/tree/master/libs/enigo)** : contrôle clavier/souris spécifique à la plate-forme
-- **[src/ui](https://github.com/rustdesk/rustdesk/tree/master/src/ui)** : INTERFACE GRAPHIQUE
+- **[src/ui](https://github.com/rustdesk/rustdesk/tree/master/src/ui)** : interface graphique
 - **[src/server](https://github.com/rustdesk/rustdesk/tree/master/src/server)** : services audio/clipboard/input/vidéo, et connexions réseau
 - **[src/client.rs](https://github.com/rustdesk/rustdesk/tree/master/src/client.rs)** : démarrer une connexion entre pairs
 - **[src/rendezvous_mediator.rs](https://github.com/rustdesk/rustdesk/tree/master/src/rendezvous_mediator.rs)** : Communiquer avec [rustdesk-server](https://github.com/rustdesk/rustdesk-server), attendre une connexion distante directe (TCP hole punching) ou relayée.
