@@ -31,7 +31,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Change ID", "Changer d'ID"),
         ("Website", "Site Web"),
         ("About", "À propos de"),
-        ("About RustDesk", "À propos de RustDesk")
+        ("About RustDesk", "À propos de RustDesk"),
         ("Mute", "Muet"),
         ("Audio Input", "Entrée audio"),
         ("ID Server", "Serveur ID"),
