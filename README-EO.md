@@ -6,16 +6,16 @@
   <a href="#dosierstrukturo">Strukturo</a> •
   <a href="#ekrankopio">Ekrankopio</a><br>
   [<a href="README-ZH.md">中文</a>] | [<a href="README-ES.md">Español</a>] | [<a href="README-FR.md">Français</a>] | [<a href="README-DE.md">Deutsch</a>] | [<a href="README-PL.md">Polski</a>] | [<a href="README-FI.md">Suomi</a>] | [<a href="README-ML.md">മലയാളം</a>] | [<a href="README-JP.md">日本語</a>] | [<a href="README-NL.md">Nederlands</a>] | [<a href="README-IT.md">Italiano</a>] | [<a href="README-RU.md">Русский</a>] | [<a href="README-EO.md">Esperanto</a>]<br>
-  <b>Ni bezonas helpo traduki tiun README kaj <a href="https://github.com/rustdesk/rustdesk/tree/master/src/lang">la interfacon</a> al via denaska lingvo</b>
+  <b>Ni bezonas helpon traduki tiun README kaj <a href="https://github.com/rustdesk/rustdesk/tree/master/src/lang">la interfacon</a> al via denaska lingvo</b>
 </p>
 
 Babili kun ni: [Discord](https://discord.gg/nDceKgxnkV) | [Reddit](https://www.reddit.com/r/rustdesk)
 
 [![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/I2I04VU09)
 
-Denove alia fora labortabla programo, skribita en Rust. Ĝi funkcias elskatole, ne bezonas konfiguraĵon. Vi havas la tutan kontrolon sur via datumo, sen zorgo pri sekureco. Vi povas uzi nian servilon rendezvous/relajsan, [agordi vian propran](https://rustdesk.com/blog/id-relay-set/), aŭ [skribi vian propran servilon rendezvous/relajsan](https://github.com/rustdesk/rustdesk-server-demo).
+Denove alia fora labortabla programo, skribita en Rust. Ĝi funkcias elskatole, ne bezonas konfiguraĵon. Vi havas la tutan kontrolon sur viaj datumoj, sen zorgo pri sekureco. Vi povas uzi nian servilon rendezvous/relajsan, [agordi vian propran](https://rustdesk.com/blog/id-relay-set/), aŭ [skribi vian propran servilon rendezvous/relajsan](https://github.com/rustdesk/rustdesk-server-demo).
 
-RustDesk bonvenigas kontribuo de ĉiuj. Vidu [`CONTRIBUTING.md`](CONTRIBUTING.md) por helpo komenci.
+RustDesk bonvenigas kontribuon de ĉiuj. Vidu [`CONTRIBUTING.md`](CONTRIBUTING.md) por helpo komenci.
 
 [**BINARA ELŜUTO**](https://github.com/rustdesk/rustdesk/releases)
 
@@ -30,7 +30,7 @@ Malsupre estas la serviloj, kiuj vi uzas senpage, ĝi povas ŝanĝi laŭlonge de
 
 ## Dependantaĵoj
 
-La labortabla versio uzas [sciter](https://sciter.com/) por la interfaco, bonvolu elŝuti la biblioteko dinamika sciter.
+La labortabla versio uzas [sciter](https://sciter.com/) por la interfaco, bonvolu elŝuti la bibliotekon dinamikan sciter.
 
 [Windows](https://raw.githubusercontent.com/c-smile/sciter-sdk/master/bin.win/x64/sciter.dll) |
 [Linux](https://raw.githubusercontent.com/c-smile/sciter-sdk/master/bin.lnx/x64/libsciter-gtk.so) |
@@ -40,7 +40,7 @@ La labortabla versio uzas [sciter](https://sciter.com/) por la interfaco, bonvol
 
 - Preparu vian medion de programado Rust kaj vian medion de kompilado C++
 
-- Instalu [vcpkg](https://github.com/microsoft/vcpkg), kaj agordi la medivariablo `VCPKG_ROOT` korekte
+- Instalu [vcpkg](https://github.com/microsoft/vcpkg), kaj agordu la medivariablon `VCPKG_ROOT` korekte
 
   - Windows: vcpkg install libvpx:x64-windows-static libyuv:x64-windows-static opus:x64-windows-static
   - Linux/MacOS: vcpkg install libvpx libyuv opus
@@ -107,11 +107,11 @@ VCPKG_ROOT=$HOME/vcpkg cargo run
 
 ### Ŝanĝi Wayland por X11 (Xorg)
 
-RustDesk ne subtenas Wayland. Kontrolu [tio](https://docs.fedoraproject.org/en-US/quick-docs/configuring-xorg-as-default-gnome-session/) por agordi Xorg kiel defaŭlta sesio GNOME.
+RustDesk ne subtenas Wayland. Kontrolu [tion](https://docs.fedoraproject.org/en-US/quick-docs/configuring-xorg-as-default-gnome-session/) por agordi Xorg kiel defaŭlta sesio GNOME.
 
 ## Kiel kompili kun Docker
 
-Komencu klonante la deponejo kaj kompilu la kontenero Docker:
+Komencu klonante la deponejon kaj kompilu la konteneron Docker:
 
 ```sh
 git clone https://github.com/rustdesk/rustdesk
@@ -125,19 +125,19 @@ Tiam, ĉiuj fojoj, kiuj vi bezonas kompili la programon, plenumu tiun komandon:
 docker run --rm -it -v $PWD:/home/user/rustdesk -v rustdesk-git-cache:/home/user/.cargo/git -v rustdesk-registry-cache:/home/user/.cargo/registry -e PUID="$(id -u)" -e PGID="$(id -g)" rustdesk-builder
 ```
 
-Notu, ke la unua kompilado povas daŭri longe, antaŭ ke la dependantaĵoj estu kaŝitaj, sekvaj kompiladoj estos pli rapidaj. Aldone, se vi bezonas specifi diferentajn argumentojn por la kompilkomando, vi povas fari ĝin en la fine de la komando, en la posicio `<OPTIONAL-ARGS>`. Ekzemple, se vi volas kompili versio de eldono optimigita, vi plenumus la komandon supre, kun `---release`. La plenumebla dosiero disponeblos en la cela dosierujo sur via sistemo, kaj povos esti plenumita kun:
+Notu, ke la unua kompilado povas daŭri longe, antaŭ ke la dependantaĵoj estu kaŝitaj, sekvaj kompiladoj estos pli rapidaj. Aldone, se vi bezonas specifi diferentajn argumentojn por la kompilkomando, vi povas fari ĝin en la fine de la komando, en la posicio `<OPTIONAL-ARGS>`. Ekzemple, se vi volas kompili version de eldono optimigita, vi plenumus la komandon supre, kun `---release`. La plenumebla dosiero disponeblos en la cela dosierujo sur via sistemo, kaj povos esti plenumita kun:
 
 ```sh
 target/debug/rustdesk
 ```
 
-Aŭ, se vi plenumas eldona plenumebla dosiero:
+Aŭ, se vi plenumas eldonan plenumeblan dosieron:
 
 ```sh
 target/release/rustdesk
 ```
 
-Bonvolu certigi, ke vi plenumas tiujn komandojn el la radiko de la deponejo RustDesk, alie la programo povus esti nekapabla de trovi la devigajn resursojn. Ankaŭ notu, ke la aliaj subkomandoj de cargo kiel `install` aŭ `run` momente ne estas subtenitaj per tiun metodon, ĉar instalus aŭ plenumus la programon en la kontenero anstataŭ de la gastiganto.
+Bonvolu certigi, ke vi plenumas tiujn komandojn el la radiko de la deponejo RustDesk, alie la programo povus esti nekapabla de trovi la devigajn resursojn. Ankaŭ notu, ke la aliaj subkomandoj de cargo kiel `install` aŭ `run` momente ne estas subtenitaj per tiu metodo, ĉar instalus aŭ plenumus la programon en la kontenero anstataŭ de la gastiganto.
 
 ## Dosierstrukturo
 
@@ -147,7 +147,7 @@ Bonvolu certigi, ke vi plenumas tiujn komandojn el la radiko de la deponejo Rust
 - **[src/ui](https://github.com/rustdesk/rustdesk/tree/master/src/ui)**: interfaco
 - **[src/server](https://github.com/rustdesk/rustdesk/tree/master/src/server)**: aŭdio/poŝo/enigo/videa servoj, kaj retkonektoj
 - **[src/client.rs](https://github.com/rustdesk/rustdesk/tree/master/src/client.rs)**: starti konekto kun samtavolo
-- **[src/rendezvous_mediator.rs](https://github.com/rustdesk/rustdesk/tree/master/src/rendezvous_mediator.rs)**: komuniki kun [rustdesk-server](https://github.com/rustdesk/rustdesk-server), atendu fora direkta (TCP hole punching) aŭ relajsata konekto
+- **[src/rendezvous_mediator.rs](https://github.com/rustdesk/rustdesk/tree/master/src/rendezvous_mediator.rs)**: komuniki kun [rustdesk-server](https://github.com/rustdesk/rustdesk-server), atendi foran direktan (TCP hole punching) aŭ relajsatan konekton
 - **[src/platform](https://github.com/rustdesk/rustdesk/tree/master/src/platform)**: operaciumspecifa kodo
 
 ## Ekrankopio
