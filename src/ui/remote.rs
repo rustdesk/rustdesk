@@ -341,10 +341,70 @@ impl Handler {
                 if let Some(k) = control_key {
                     key_event.set_control_key(k);
                 } else {
-                    let chr = match evt.name {
-                        Some(ref s) => s.chars().next().unwrap_or('\0'),
+                    let mut chr = match evt.name {
+                        Some(ref s) => {
+                            if s.len() <= 2 { // exclude chinese characters
+                                s.chars().next().unwrap_or('\0')
+                            } else {
+                                '\0'
+                            }
+                        }
                         _ => '\0',
                     };
+                    if chr == '·' { // special for Chinese
+                        chr = '`';
+                    }
+                    if chr == '\0' {
+                        chr = match key {
+                            Key::Num1 => '1',
+                            Key::Num2 => '2',
+                            Key::Num3 => '3',
+                            Key::Num4 => '4',
+                            Key::Num5 => '5',
+                            Key::Num6 => '6',
+                            Key::Num7 => '7',
+                            Key::Num8 => '8',
+                            Key::Num9 => '9',
+                            Key::Num0 => '0',
+                            Key::KeyA => 'a',
+                            Key::KeyB => 'b',
+                            Key::KeyC => 'c',
+                            Key::KeyD => 'd',
+                            Key::KeyE => 'e',
+                            Key::KeyF => 'f',
+                            Key::KeyG => 'g',
+                            Key::KeyH => 'h',
+                            Key::KeyI => 'i',
+                            Key::KeyJ => 'j',
+                            Key::KeyK => 'k',
+                            Key::KeyL => 'l',
+                            Key::KeyM => 'm',
+                            Key::KeyN => 'n',
+                            Key::KeyO => 'o',
+                            Key::KeyP => 'p',
+                            Key::KeyQ => 'q',
+                            Key::KeyR => 'r',
+                            Key::KeyS => 's',
+                            Key::KeyT => 't',
+                            Key::KeyU => 'u',
+                            Key::KeyV => 'v',
+                            Key::KeyW => 'w',
+                            Key::KeyX => 'x',
+                            Key::KeyY => 'y',
+                            Key::KeyZ => 'z',
+                            Key::Comma => ',',
+                            Key::Dot => '.',
+                            Key::SemiColon => ';',
+                            Key::Quote => '\'',
+                            Key::LeftBracket => '[',
+                            Key::RightBracket => ']',
+                            Key::BackSlash => '\\',
+                            Key::Minus => '-',
+                            Key::Equal => '=',
+                            Key::BackQuote => '`',
+                            _ => '\0',
+                        }
+                    }
                     if chr != '\0' {
                         if chr == 'l' && is_win && command {
                             me.lock_screen();
