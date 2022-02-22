@@ -28,3 +28,6 @@ pub mod cli;
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 mod port_forward;
 mod lang;
+
+#[cfg(windows)]
+pub mod clipboard_file;
