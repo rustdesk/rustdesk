@@ -228,6 +228,8 @@ struct wf_clipboard
 	HANDLE response_data_event;
 
 	LPDATAOBJECT data_obj;
+	HANDLE data_obj_mutex;
+
 	ULONG req_fsize;
 	char *req_fdata;
 	HANDLE req_fevent;
@@ -682,6 +684,10 @@ static HRESULT STDMETHODCALLTYPE CliprdrDataObject_GetData(IDataObject *This, FO
 		return E_INVALIDARG;
 
 	clipboard = (wfClipboard *)instance->m_pData;
+	if (!clipboard->context->CheckEnabled(instance->m_serverConnID, instance->m_remoteConnID))
+	{
+		return E_INVALIDARG;
+	}
 
 	if (!clipboard)
 		return E_INVALIDARG;
@@ -1450,12 +1456,15 @@ static UINT cliprdr_send_data_request(UINT32 serverConnID, UINT32 remoteConnID, 
 	clipboard->requestedFormatId = formatId;
 	rc = clipboard->context->ClientFormatDataRequest(clipboard->context, &formatDataRequest);
 
-	if (WaitForSingleObject(clipboard->response_data_event, INFINITE) != WAIT_OBJECT_0)
-		rc = ERROR_INTERNAL_ERROR;
-	else if (!ResetEvent(clipboard->response_data_event))
-		rc = ERROR_INTERNAL_ERROR;
-
-	return rc;
+	while (clipboard->context->CheckEnabled(serverConnID, remoteConnID))
+	{
+		if (WaitForSingleObject(clipboard->response_data_event, 50) != WAIT_OBJECT_0)
+			rc = ERROR_INTERNAL_ERROR;
+		else if (!ResetEvent(clipboard->response_data_event))
+			rc = ERROR_INTERNAL_ERROR;
+		return rc;
+	}
+	return ERROR_INTERNAL_ERROR;
 }
 
 UINT cliprdr_send_request_filecontents(wfClipboard *clipboard, UINT32 serverConnID, UINT32 remoteConnID, const void *streamid, ULONG index,
@@ -1480,12 +1489,15 @@ UINT cliprdr_send_request_filecontents(wfClipboard *clipboard, UINT32 serverConn
 	fileContentsRequest.msgFlags = 0;
 	rc = clipboard->context->ClientFileContentsRequest(clipboard->context, &fileContentsRequest);
 
-	if (WaitForSingleObject(clipboard->req_fevent, INFINITE) != WAIT_OBJECT_0)
-		rc = ERROR_INTERNAL_ERROR;
-	else if (!ResetEvent(clipboard->req_fevent))
-		rc = ERROR_INTERNAL_ERROR;
-
-	return rc;
+	while (clipboard->context->CheckEnabled(serverConnID, remoteConnID))
+	{
+		if (WaitForSingleObject(clipboard->req_fevent, INFINITE) != WAIT_OBJECT_0)
+			rc = ERROR_INTERNAL_ERROR;
+		else if (!ResetEvent(clipboard->req_fevent))
+			rc = ERROR_INTERNAL_ERROR;
+		return rc;
+	}
+	return ERROR_INTERNAL_ERROR;
 }
 
 static UINT cliprdr_send_response_filecontents(wfClipboard *clipboard, UINT32 serverConnID, UINT32 remoteConnID, UINT32 streamId, UINT32 size,
@@ -1540,7 +1552,6 @@ static LRESULT CALLBACK cliprdr_proc(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM 
 
 	case WM_CLIPBOARDUPDATE:
 		DEBUG_CLIPRDR("info: WM_CLIPBOARDUPDATE");
-
 		// if (clipboard->sync)
 		{
 			if ((GetClipboardOwner() != clipboard->hwnd) &&
@@ -1632,6 +1643,11 @@ static LRESULT CALLBACK cliprdr_proc(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM 
 		case OLE_SETCLIPBOARD:
 			DEBUG_CLIPRDR("info: OLE_SETCLIPBOARD");
 
+			if (WaitForSingleObject(clipboard->data_obj_mutex, INFINITE) != WAIT_OBJECT_0)
+			{
+				break;
+			}
+
 			if (clipboard->data_obj != NULL)
 			{
 				wf_destroy_file_obj(clipboard->data_obj);
@@ -1647,6 +1663,11 @@ static LRESULT CALLBACK cliprdr_proc(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM 
 				}
 			}
 			free((void *)lParam);
+
+			if (!ReleaseMutex(clipboard->data_obj_mutex))
+			{
+				// critical error!!!
+			}
 
 			break;
 
@@ -2738,6 +2759,9 @@ BOOL wf_cliprdr_init(wfClipboard *clipboard, CliprdrClientContext *cliprdr)
 	if (!(clipboard->response_data_event = CreateEvent(NULL, TRUE, FALSE, NULL)))
 		goto error;
 
+	if (!(clipboard->data_obj_mutex = CreateMutex(NULL, FALSE, "data_obj_mutex")))
+		goto error;
+
 	if (!(clipboard->req_fevent = CreateEvent(NULL, TRUE, FALSE, NULL)))
 		goto error;
 
@@ -2805,4 +2829,70 @@ BOOL init_cliprdr(CliprdrClientContext *context)
 BOOL uninit_cliprdr(CliprdrClientContext *context)
 {
 	return wf_cliprdr_uninit(&clipboard, context);
+}
+
+BOOL empty_cliprdr(CliprdrClientContext *context, UINT32 server_conn_id, UINT32 remote_conn_id)
+{
+	wfClipboard *clipboard = NULL;
+	BOOL rc = FALSE;
+	if (!context)
+	{
+		return FALSE;
+	}
+	if (server_conn_id == 0 && remote_conn_id == 0)
+	{
+		return TRUE;
+	}
+
+	clipboard = (wfClipboard *)context->custom;
+
+	if (WaitForSingleObject(clipboard->data_obj_mutex, INFINITE) != WAIT_OBJECT_0)
+	{
+		return FALSE;
+	}
+
+	while (0)
+	{
+		if (clipboard->data_obj != NULL)
+		{
+			CliprdrDataObject *instance = clipboard->data_obj;
+			if (server_conn_id != 0 && instance->m_serverConnID != server_conn_id)
+			{
+				rc = TRUE;
+				break;
+			}
+			if (remote_conn_id != 0 && instance->m_remoteConnID != remote_conn_id)
+			{
+				rc = TRUE;
+				break;
+			}
+
+			wf_destroy_file_obj(clipboard->data_obj);
+			clipboard->data_obj = NULL;
+		}
+
+		/* discard all contexts in clipboard */
+		if (!try_open_clipboard(clipboard->hwnd))
+		{
+			DEBUG_CLIPRDR("OpenClipboard failed with 0x%x", GetLastError());
+			rc = FALSE;
+			break;
+		}
+
+		if (!EmptyClipboard())
+		{
+			rc = FALSE;
+		}
+		if (!CloseClipboard())
+		{
+			// critical error!!!
+		}
+		rc = TRUE;
+	}
+
+	if (!ReleaseMutex(clipboard->data_obj_mutex))
+	{
+		// critical error!!!
+	}
+	return rc;
 }

@@ -74,6 +74,7 @@ pub enum Data {
         clipboard: bool,
         audio: bool,
         file: bool,
+        file_transfer_enabled: bool,
     },
     ChatMessage {
         text: String,
@@ -105,6 +106,7 @@ pub enum Data {
     },
     SyncConfigToUserResp(bool),
     ClipbaordFile(ClipbaordFile),
+    ClipboardFileEnabled(bool),
 }
 
 #[tokio::main(flavor = "current_thread")]

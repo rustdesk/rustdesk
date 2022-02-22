@@ -10,7 +10,9 @@ use hbb_common::{
 use serde_derive::{Deserialize, Serialize};
 use std::{
     boxed::Box,
+    collections::HashMap,
     ffi::{CStr, CString},
+    sync::Mutex,
 };
 
 pub mod cliprdr;
@@ -66,16 +68,34 @@ pub enum ClipbaordFile {
     },
 }
 
+#[derive(Default)]
+struct ConnEnabled {
+    server_conn_enabled: HashMap<i32, bool>,
+    remote_conn_enabled: HashMap<i32, bool>,
+}
+
 lazy_static::lazy_static! {
     static ref MSG_CHANNEL_CLIENT: (UnboundedSender<(ConnID, ClipbaordFile)>, TokioMutex<UnboundedReceiver<(ConnID, ClipbaordFile)>>) = {
         let (tx, rx) = unbounded_channel();
         (tx, TokioMutex::new(rx))
     };
+
+    static ref CLIP_CONN_ENABLED: Mutex<ConnEnabled> = Mutex::new(ConnEnabled::default());
 }
 
 #[inline(always)]
 pub fn get_rx_clip_client<'a>() -> &'a TokioMutex<UnboundedReceiver<(ConnID, ClipbaordFile)>> {
     &MSG_CHANNEL_CLIENT.1
+}
+
+pub fn set_conn_enabled(server_conn_id: i32, remote_conn_id: i32, enabled: bool) {
+    let mut lock = CLIP_CONN_ENABLED.lock().unwrap();
+    if server_conn_id != 0 {
+        let _ = lock.server_conn_enabled.insert(server_conn_id, enabled);
+    }
+    if remote_conn_id != 0 {
+        let _ = lock.remote_conn_enabled.insert(remote_conn_id, enabled);
+    }
 }
 
 pub fn server_clip_file(
@@ -409,6 +429,7 @@ pub fn create_cliprdr_context(
     Ok(CliprdrClientContext::create(
         enable_files,
         enable_others,
+        Some(check_enabled),
         Some(client_format_list),
         Some(client_format_list_response),
         Some(client_format_data_request),
@@ -416,6 +437,37 @@ pub fn create_cliprdr_context(
         Some(client_file_contents_request),
         Some(client_file_contents_response),
     )?)
+}
+
+extern "C" fn check_enabled(server_conn_id: UINT32, remote_conn_id: UINT32) -> BOOL {
+    let lock = CLIP_CONN_ENABLED.lock().unwrap();
+    if server_conn_id == 0 && remote_conn_id == 0 {
+        return FALSE;
+    }
+
+    let mut server_conn_enabled = false;
+    if server_conn_id != 0 {
+        if let Some(true) = lock.server_conn_enabled.get(&(server_conn_id as i32)) {
+            server_conn_enabled = true;
+        }
+    } else {
+        server_conn_enabled = true;
+    }
+
+    let mut remote_conn_enabled = false;
+    if remote_conn_id != 0 {
+        if let Some(true) = lock.remote_conn_enabled.get(&(remote_conn_id as i32)) {
+            remote_conn_enabled = true;
+        }
+    } else {
+        remote_conn_enabled = true;
+    }
+
+    if server_conn_enabled && remote_conn_enabled {
+        return TRUE;
+    } else {
+        return FALSE;
+    }
 }
 
 extern "C" fn client_format_list(

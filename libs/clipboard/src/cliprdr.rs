@@ -456,6 +456,9 @@ pub type pcCliprdrServerFileContentsResponse = ::std::option::Option<
         fileContentsResponse: *const CLIPRDR_FILE_CONTENTS_RESPONSE,
     ) -> UINT,
 >;
+pub type pcCheckEnabled = ::std::option::Option<
+    unsafe extern "C" fn(server_conn_id: UINT32, remote_conn_id: UINT32) -> BOOL,
+>;
 
 // TODO: hide more members of clipboard context
 #[repr(C)]
@@ -464,6 +467,7 @@ pub struct _cliprdr_client_context {
     pub custom: *mut ::std::os::raw::c_void,
     pub enableFiles: BOOL,
     pub enableOthers: BOOL,
+    pub CheckEnabled: pcCheckEnabled,
     pub ServerCapabilities: pcCliprdrServerCapabilities,
     pub ClientCapabilities: pcCliprdrClientCapabilities,
     pub MonitorReady: pcCliprdrMonitorReady,
@@ -492,6 +496,11 @@ pub struct _cliprdr_client_context {
 extern "C" {
     pub(crate) fn init_cliprdr(context: *mut CliprdrClientContext) -> BOOL;
     pub(crate) fn uninit_cliprdr(context: *mut CliprdrClientContext) -> BOOL;
+    pub fn empty_clipboard(
+        context: *mut CliprdrClientContext,
+        server_conn_id: u32,
+        remote_conn_id: u32,
+    ) -> BOOL;
 }
 
 #[derive(Error, Debug)]
@@ -508,6 +517,7 @@ impl CliprdrClientContext {
     pub fn create(
         enable_files: bool,
         enable_others: bool,
+        check_enabled: pcCheckEnabled,
         client_format_list: pcCliprdrClientFormatList,
         client_format_list_response: pcCliprdrClientFormatListResponse,
         client_format_data_request: pcCliprdrClientFormatDataRequest,
@@ -519,6 +529,7 @@ impl CliprdrClientContext {
             custom: 0 as *mut _,
             enableFiles: if enable_files { TRUE } else { FALSE },
             enableOthers: if enable_others { TRUE } else { FALSE },
+            CheckEnabled: check_enabled,
             ServerCapabilities: None,
             ClientCapabilities: None,
             MonitorReady: None,

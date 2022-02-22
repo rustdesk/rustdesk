@@ -1,6 +1,8 @@
 use crate::ipc::{self, new_listener, Connection, Data};
 #[cfg(windows)]
-use clipboard::{create_cliprdr_context, get_rx_clip_client, server_clip_file, ConnID};
+use clipboard::{
+    create_cliprdr_context, get_rx_clip_client, server_clip_file, set_conn_enabled, ConnID,
+};
 use hbb_common::{
     allow_err,
     config::{Config, ICON},
@@ -193,6 +195,9 @@ impl ConnectionManager {
                 #[cfg(windows)]
                 allow_err!(_tx_clip_file.send((id, _clip)));
             }
+            Data::ClipboardFileEnabled(enabled) => {
+                set_conn_enabled(id, 0, enabled);
+            }
             _ => {}
         }
     }
@@ -361,8 +366,9 @@ async fn start_ipc(cm: ConnectionManager) {
                                             }
                                             Ok(Some(data)) => {
                                                 match data {
-                                                    Data::Login{id, is_file_transfer, port_forward, peer_id, name, authorized, keyboard, clipboard, audio, file} => {
+                                                    Data::Login{id, is_file_transfer, port_forward, peer_id, name, authorized, keyboard, clipboard, audio, file, file_transfer_enabled} => {
                                                         conn_id = id;
+                                                        set_conn_enabled(id, 0, file_transfer_enabled);
                                                         cm.add_connection(id, is_file_transfer, port_forward, peer_id, name, authorized, keyboard, clipboard, audio, file, tx.clone());
                                                     }
                                                     Data::Close => {
@@ -532,7 +538,7 @@ async fn start_clipboard_file(
 }
 
 #[cfg(windows)]
-fn cmd_inner_send<'a>(cm: &'a ConnectionManager, id: i32, data: Data) {
+fn cmd_inner_send(cm: &ConnectionManager, id: i32, data: Data) {
     let lock = cm.read().unwrap();
     if id != 0 {
         if let Some(s) = lock.senders.get(&id) {

@@ -246,6 +246,7 @@ impl Connection {
                             } else if &name == "file" {
                                 conn.file = enabled;
                                 conn.send_permission(Permission::File, enabled).await;
+                                conn.send_to_cm(ipc::Data::ClipboardFileEnabled(conn.file_transfer_enabled()));
                             }
                         }
                         ipc::Data::RawMessage(bytes) => {
@@ -654,6 +655,7 @@ impl Connection {
             clipboard: self.clipboard,
             audio: self.audio,
             file: self.file,
+            file_transfer_enabled: self.file_transfer_enabled(),
         });
     }
 
@@ -1020,6 +1022,7 @@ impl Connection {
         if let Ok(q) = o.enable_file_transfer.enum_value() {
             if q != BoolOption::NotSet {
                 self.enable_file_transfer = q == BoolOption::Yes;
+                self.send_to_cm(ipc::Data::ClipboardFileEnabled(self.file_transfer_enabled()));
             }
         }
         if let Ok(q) = o.disable_clipboard.enum_value() {
