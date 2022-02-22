@@ -1355,7 +1355,16 @@ static UINT cliprdr_send_format_list(wfClipboard *clipboard)
 	/* Ignore if other app is holding clipboard */
 	if (try_open_clipboard(clipboard->hwnd))
 	{
+		// If current process is running as service with SYSTEM user.
+		// Clipboard api works fine for text, but copying files works no good.
+		// GetLastError() returns various error codes
 		count = CountClipboardFormats();
+		if (count == 0)
+		{
+			CloseClipboard();
+			return CHANNEL_RC_NULL_DATA;
+		}
+
 		numFormats = (UINT32)count;
 		formats = (CLIPRDR_FORMAT *)calloc(numFormats, sizeof(CLIPRDR_FORMAT));
 
@@ -1377,7 +1386,7 @@ static UINT cliprdr_send_format_list(wfClipboard *clipboard)
 		}
 		else
 		{
-			while (formatId = EnumClipboardFormats(formatId))
+			while (formatId = EnumClipboardFormats(formatId) && index < numFormats)
 				formats[index++].formatId = formatId;
 		}
 
@@ -1395,6 +1404,10 @@ static UINT cliprdr_send_format_list(wfClipboard *clipboard)
 			{
 				formats[index].formatName = _strdup(formatName);
 			}
+			else
+			{
+				formats[index].formatName = NULL;
+			}
 		}
 	}
 
@@ -1408,11 +1421,16 @@ static UINT cliprdr_send_format_list(wfClipboard *clipboard)
 	rc = clipboard->context->ClientFormatList(clipboard->context, &formatList);
 
 	for (index = 0; index < numFormats; index++)
-		free(formats[index].formatName);
-
+	{
+		if (formats[index].formatName != NULL)
+		{
+			free(formats[index].formatName);
+			formats[index].formatName = NULL;
+		}
+	}
 	free(formats);
+
 	return rc;
-	// return 0;
 }
 
 static UINT cliprdr_send_data_request(UINT32 serverConnID, UINT32 remoteConnID, wfClipboard *clipboard, UINT32 formatId)

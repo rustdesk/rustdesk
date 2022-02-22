@@ -1,4 +1,6 @@
 use crate::ipc::{self, new_listener, Connection, Data};
+#[cfg(windows)]
+use clipboard::{create_cliprdr_context, get_rx_clip_client, server_clip_file, ConnID};
 use hbb_common::{
     allow_err,
     config::{Config, ICON},
@@ -106,6 +108,7 @@ impl ConnectionManager {
         &self,
         id: i32,
         data: Data,
+        _tx_clip_file: &mpsc::UnboundedSender<(i32, ipc::ClipbaordFile)>,
         write_jobs: &mut Vec<fs::TransferJob>,
         conn: &mut Connection,
     ) {
@@ -186,6 +189,10 @@ impl ConnectionManager {
                     }
                 }
             },
+            Data::ClipbaordFile(_clip) => {
+                #[cfg(windows)]
+                allow_err!(_tx_clip_file.send((id, _clip)));
+            }
             _ => {}
         }
     }
@@ -326,6 +333,12 @@ impl sciter::EventHandler for ConnectionManager {
 
 #[tokio::main(flavor = "current_thread")]
 async fn start_ipc(cm: ConnectionManager) {
+    let (tx_file, _rx_file) = mpsc::unbounded_channel::<(i32, ipc::ClipbaordFile)>();
+    #[cfg(windows)]
+    let cm_clip = cm.clone();
+    #[cfg(windows)]
+    std::thread::spawn(move || start_clipboard_file(cm_clip, _rx_file));
+
     match new_listener("_cm").await {
         Ok(mut incoming) => {
             while let Some(result) = incoming.next().await {
@@ -333,6 +346,7 @@ async fn start_ipc(cm: ConnectionManager) {
                     Ok(stream) => {
                         let mut stream = Connection::new(stream);
                         let cm = cm.clone();
+                        let tx_file = tx_file.clone();
                         tokio::spawn(async move {
                             let mut conn_id: i32 = 0;
                             let (tx, mut rx) = mpsc::unbounded_channel::<Data>();
@@ -356,7 +370,7 @@ async fn start_ipc(cm: ConnectionManager) {
                                                         break;
                                                     }
                                                     _ => {
-                                                        cm.handle_data(conn_id, data, &mut write_jobs, &mut stream).await;
+                                                        cm.handle_data(conn_id, data, &tx_file, &mut write_jobs, &mut stream).await;
                                                     }
                                                 }
                                             }
@@ -462,6 +476,71 @@ async fn start_pa() {
         }
         Err(err) => {
             log::error!("Failed to start pa ipc server: {}", err);
+        }
+    }
+}
+
+#[cfg(windows)]
+#[tokio::main(flavor = "current_thread")]
+async fn start_clipboard_file(
+    cm: ConnectionManager,
+    mut rx: mpsc::UnboundedReceiver<(i32, ipc::ClipbaordFile)>,
+) {
+    let mut cliprdr_context = match create_cliprdr_context(true, false) {
+        Ok(context) => {
+            log::info!("clipboard context for file transfer created.");
+            context
+        }
+        Err(err) => {
+            log::error!(
+                "Create clipboard context for file transfer: {}",
+                err.to_string()
+            );
+            return;
+        }
+    };
+    let mut rx_clip_client = get_rx_clip_client().lock().await;
+
+    loop {
+        tokio::select! {
+            clip_file = rx_clip_client.recv() => match clip_file {
+                Some((conn_id, clip)) => {
+                    cmd_inner_send(
+                        &cm,
+                        conn_id.server_conn_id as i32,
+                        Data::ClipbaordFile(clip)
+                    );
+                }
+                None => {
+                    //
+                }
+            },
+            server_msg = rx.recv() => match server_msg {
+                Some((server_conn_id, clip)) => {
+                    let conn_id = ConnID {
+                        server_conn_id: server_conn_id as u32,
+                        remote_conn_id: 0,
+                    };
+                    server_clip_file(&mut cliprdr_context, conn_id, clip);
+                }
+                None => {
+                    break
+                }
+            }
+        }
+    }
+}
+
+#[cfg(windows)]
+fn cmd_inner_send<'a>(cm: &'a ConnectionManager, id: i32, data: Data) {
+    let lock = cm.read().unwrap();
+    if id != 0 {
+        if let Some(s) = lock.senders.get(&id) {
+            allow_err!(s.send(data));
+        }
+    } else {
+        for s in lock.senders.values() {
+            allow_err!(s.send(data.clone()));
         }
     }
 }
