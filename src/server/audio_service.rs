@@ -16,6 +16,7 @@ use super::*;
 use magnum_opus::{Application::*, Channels::*, Encoder};
 
 pub const NAME: &'static str = "audio";
+pub const AUDIO_DATA_SIZE_U8: usize = 960 * 4; // 10ms in 48000 stereo
 
 #[cfg(not(target_os = "linux"))]
 pub fn new() -> GenericService {
@@ -50,21 +51,24 @@ mod pa_impl {
                 )))
                 .await
         );
+        let zero_audio_frame: Vec<f32> = vec![0.; AUDIO_DATA_SIZE_U8 / 4];
         while sp.ok() {
             sp.snapshot(|sps| {
                 sps.send(create_format_msg(crate::platform::linux::PA_SAMPLE_RATE, 2));
                 Ok(())
             })?;
-            if let Some(data) = stream.next_timeout2(1000).await {
-                match data? {
-                    Some(crate::ipc::Data::RawMessage(bytes)) => {
-                        let data = unsafe {
-                            std::slice::from_raw_parts::<f32>(bytes.as_ptr() as _, bytes.len() / 4)
-                        };
-                        send_f32(data, &mut encoder, &sp);
-                    }
-                    _ => {}
+            if let Ok(data) = stream.next_raw().await {
+                if data.len() == 0 {
+                    send_f32(&zero_audio_frame, &mut encoder, &sp);
+                    continue;
+                } 
+                if data.len() != AUDIO_DATA_SIZE_U8 {
+                    continue;
                 }
+                let data = unsafe {
+                    std::slice::from_raw_parts::<f32>(data.as_ptr() as _, data.len() / 4)
+                };
+                send_f32(data, &mut encoder, &sp);
             }
         }
         Ok(())

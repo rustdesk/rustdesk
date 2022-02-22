@@ -400,6 +400,20 @@ where
             }
         }
     }
+
+    pub async fn send_raw(&mut self, data: Vec<u8>) -> ResultType<()> {
+        self.inner.send(bytes::Bytes::from(data)).await?;
+        Ok(())
+    }
+
+    pub async fn next_raw(&mut self) -> ResultType<bytes::BytesMut> {
+        match self.inner.next().await {
+            Some(Ok(res)) => Ok(res),
+            _ => {
+                bail!("reset by the peer");
+            }
+        }
+    }
 }
 
 #[tokio::main(flavor = "current_thread")]

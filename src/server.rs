@@ -27,7 +27,7 @@ use std::{
     time::Duration,
 };
 
-mod audio_service;
+pub mod audio_service;
 mod clipboard_service;
 #[cfg(windows)]
 pub mod clipboard_file_service;
