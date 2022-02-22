@@ -1,7 +1,8 @@
 use crate::ipc::{self, new_listener, Connection, Data};
 #[cfg(windows)]
 use clipboard::{
-    create_cliprdr_context, get_rx_clip_client, server_clip_file, set_conn_enabled, ConnID,
+    create_cliprdr_context, empty_clipboard, get_rx_clip_client, server_clip_file,
+    set_conn_enabled, ConnID,
 };
 use hbb_common::{
     allow_err,
@@ -111,6 +112,7 @@ impl ConnectionManager {
         id: i32,
         data: Data,
         _tx_clip_file: &mpsc::UnboundedSender<(i32, ipc::ClipbaordFile)>,
+        _tx_clip_empty: &mpsc::UnboundedSender<i32>,
         write_jobs: &mut Vec<fs::TransferJob>,
         conn: &mut Connection,
     ) {
@@ -197,6 +199,9 @@ impl ConnectionManager {
             }
             Data::ClipboardFileEnabled(enabled) => {
                 set_conn_enabled(id, 0, enabled);
+                if !enabled {
+                    allow_err!(_tx_clip_empty.send(id));
+                }
             }
             _ => {}
         }
@@ -339,10 +344,11 @@ impl sciter::EventHandler for ConnectionManager {
 #[tokio::main(flavor = "current_thread")]
 async fn start_ipc(cm: ConnectionManager) {
     let (tx_file, _rx_file) = mpsc::unbounded_channel::<(i32, ipc::ClipbaordFile)>();
+    let (tx_clip_empty, _rx_clip_empty) = mpsc::unbounded_channel::<i32>();
     #[cfg(windows)]
     let cm_clip = cm.clone();
     #[cfg(windows)]
-    std::thread::spawn(move || start_clipboard_file(cm_clip, _rx_file));
+    std::thread::spawn(move || start_clipboard_file(cm_clip, _rx_file, _rx_clip_empty));
 
     match new_listener("_cm").await {
         Ok(mut incoming) => {
@@ -352,6 +358,7 @@ async fn start_ipc(cm: ConnectionManager) {
                         let mut stream = Connection::new(stream);
                         let cm = cm.clone();
                         let tx_file = tx_file.clone();
+                        let tx_clip_empty = tx_clip_empty.clone();
                         tokio::spawn(async move {
                             let mut conn_id: i32 = 0;
                             let (tx, mut rx) = mpsc::unbounded_channel::<Data>();
@@ -372,11 +379,13 @@ async fn start_ipc(cm: ConnectionManager) {
                                                         cm.add_connection(id, is_file_transfer, port_forward, peer_id, name, authorized, keyboard, clipboard, audio, file, tx.clone());
                                                     }
                                                     Data::Close => {
+                                                        allow_err!(tx_clip_empty.send(conn_id));
+                                                        set_conn_enabled(conn_id, 0, false);
                                                         log::info!("cm ipc connection closed from connection request");
                                                         break;
                                                     }
                                                     _ => {
-                                                        cm.handle_data(conn_id, data, &tx_file, &mut write_jobs, &mut stream).await;
+                                                        cm.handle_data(conn_id, data, &tx_file, &tx_clip_empty, &mut write_jobs, &mut stream).await;
                                                     }
                                                 }
                                             }
@@ -491,6 +500,7 @@ async fn start_pa() {
 async fn start_clipboard_file(
     cm: ConnectionManager,
     mut rx: mpsc::UnboundedReceiver<(i32, ipc::ClipbaordFile)>,
+    mut rx_clip_empty: mpsc::UnboundedReceiver<i32>,
 ) {
     let mut cliprdr_context = match create_cliprdr_context(true, false) {
         Ok(context) => {
@@ -528,6 +538,16 @@ async fn start_clipboard_file(
                         remote_conn_id: 0,
                     };
                     server_clip_file(&mut cliprdr_context, conn_id, clip);
+                }
+                None => {
+                    break
+                }
+            },
+            server_conn_id = rx_clip_empty.recv() => match server_conn_id {
+                Some(server_conn_id) => {
+                    if !empty_clipboard(&mut cliprdr_context, server_conn_id, 0) {
+                        // log::error!("failed to empty clipboard");
+                    }
                 }
                 None => {
                     break

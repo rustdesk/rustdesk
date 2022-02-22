@@ -496,10 +496,10 @@ pub struct _cliprdr_client_context {
 extern "C" {
     pub(crate) fn init_cliprdr(context: *mut CliprdrClientContext) -> BOOL;
     pub(crate) fn uninit_cliprdr(context: *mut CliprdrClientContext) -> BOOL;
-    pub fn empty_clipboard(
+    pub(crate) fn empty_cliprdr(
         context: *mut CliprdrClientContext,
-        server_conn_id: u32,
-        remote_conn_id: u32,
+        server_conn_id: UINT32,
+        remote_conn_id: UINT32,
     ) -> BOOL;
 }
 

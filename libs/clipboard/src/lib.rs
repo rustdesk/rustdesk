@@ -98,6 +98,20 @@ pub fn set_conn_enabled(server_conn_id: i32, remote_conn_id: i32, enabled: bool)
     }
 }
 
+pub fn empty_clipboard(
+    context: &mut Box<CliprdrClientContext>,
+    server_conn_id: i32,
+    remote_conn_id: i32,
+) -> bool {
+    unsafe {
+        TRUE == cliprdr::empty_cliprdr(
+            &mut (**context),
+            server_conn_id as u32,
+            remote_conn_id as u32,
+        )
+    }
+}
+
 pub fn server_clip_file(
     context: &mut Box<CliprdrClientContext>,
     conn_id: ConnID,
@@ -454,14 +468,16 @@ extern "C" fn check_enabled(server_conn_id: UINT32, remote_conn_id: UINT32) -> B
         server_conn_enabled = true;
     }
 
-    let mut remote_conn_enabled = false;
-    if remote_conn_id != 0 {
-        if let Some(true) = lock.remote_conn_enabled.get(&(remote_conn_id as i32)) {
-            remote_conn_enabled = true;
-        }
-    } else {
-        remote_conn_enabled = true;
-    }
+    // let mut remote_conn_enabled = false;
+    // remote connection is always enabled
+    // if remote_conn_id != 0 {
+    //     if let Some(true) = lock.remote_conn_enabled.get(&(remote_conn_id as i32)) {
+    //         remote_conn_enabled = true;
+    //     }
+    // } else {
+    //     remote_conn_enabled = true;
+    // }
+    let remote_conn_enabled = true;
 
     if server_conn_enabled && remote_conn_enabled {
         return TRUE;

@@ -2792,6 +2792,23 @@ BOOL wf_cliprdr_uninit(wfClipboard *clipboard, CliprdrClientContext *cliprdr)
 
 	cliprdr->custom = NULL;
 
+	/* discard all contexts in clipboard */
+	if (try_open_clipboard(clipboard->hwnd))
+	{
+		if (!EmptyClipboard())
+		{
+			DEBUG_CLIPRDR("EmptyClipboard failed with 0x%x", GetLastError());
+		}
+		if (!CloseClipboard())
+		{
+			// critical error!!!
+		}
+	}
+	else
+	{
+		DEBUG_CLIPRDR("OpenClipboard failed with 0x%x", GetLastError());
+	}
+
 	if (clipboard->hwnd)
 		PostMessage(clipboard->hwnd, WM_QUIT, 0, 0);
 
@@ -2809,6 +2826,9 @@ BOOL wf_cliprdr_uninit(wfClipboard *clipboard, CliprdrClientContext *cliprdr)
 
 	if (clipboard->response_data_event)
 		CloseHandle(clipboard->response_data_event);
+
+	if (clipboard->data_obj_mutex)
+		CloseHandle(clipboard->data_obj_mutex);
 
 	if (clipboard->req_fevent)
 		CloseHandle(clipboard->req_fevent);
@@ -2851,7 +2871,7 @@ BOOL empty_cliprdr(CliprdrClientContext *context, UINT32 server_conn_id, UINT32 
 		return FALSE;
 	}
 
-	while (0)
+	do
 	{
 		if (clipboard->data_obj != NULL)
 		{
@@ -2888,7 +2908,7 @@ BOOL empty_cliprdr(CliprdrClientContext *context, UINT32 server_conn_id, UINT32 
 			// critical error!!!
 		}
 		rc = TRUE;
-	}
+	} while (0);
 
 	if (!ReleaseMutex(clipboard->data_obj_mutex))
 	{
