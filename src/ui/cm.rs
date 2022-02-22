@@ -390,6 +390,8 @@ async fn start_pa() {
     use hbb_common::config::APP_NAME;
     use libpulse_binding as pulse;
     use libpulse_simple_binding as psimple;
+    use crate::audio_service::AUDIO_DATA_SIZE_U8;
+
     match new_listener("_pa").await {
         Ok(mut incoming) => {
             loop {
@@ -422,7 +424,7 @@ async fn start_pa() {
                             };
                             log::info!("pa monitor: {:?}", device);
                             // systemctl --user status pulseaudio.service
-                            let mut buf: Vec<u8> = vec![0; 480 * 4];
+                            let mut buf: Vec<u8> = vec![0; AUDIO_DATA_SIZE_U8];
                             match psimple::Simple::new(
                                 None,                             // Use the default server
                                 APP_NAME,                         // Our application’s name
@@ -434,13 +436,16 @@ async fn start_pa() {
                                 None, // Use default buffering attributes
                             ) {
                                 Ok(s) => loop {
-                                    if let Some(Err(_)) = stream.next_timeout2(1).await {
-                                        break;
-                                    }
                                     if let Ok(_) = s.read(&mut buf) {
-                                        allow_err!(
-                                            stream.send(&Data::RawMessage(buf.clone())).await
-                                        );
+                                        let out = if buf.iter().filter(|x| **x != 0).next().is_none(){
+                                            vec![]
+                                        }else{
+                                            buf.clone()
+                                        };
+                                        if let Err(err) = stream.send_raw(out).await{
+                                            log::error!("Failed to send audio data:{}",err);
+                                            break;
+                                        }
                                     }
                                 },
                                 Err(err) => {
