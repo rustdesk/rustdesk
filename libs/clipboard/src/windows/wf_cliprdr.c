@@ -705,7 +705,9 @@ static HRESULT STDMETHODCALLTYPE CliprdrDataObject_GetData(IDataObject *This, FO
 		// DWORD remote_format_id = get_remote_format_id(clipboard, instance->m_pFormatEtc[idx].cfFormat);
 		// FIXME: origin code may be failed here???
 		if (cliprdr_send_data_request(instance->m_serverConnID, instance->m_remoteConnID, clipboard, instance->m_pFormatEtc[idx].cfFormat) != 0)
+		{
 			return E_UNEXPECTED;
+		}
 
 		pMedium->hGlobal = clipboard->hmem; /* points to a FILEGROUPDESCRIPTOR structure */
 		/* GlobalLock returns a pointer to the first byte of the memory block,
@@ -1455,13 +1457,29 @@ static UINT cliprdr_send_data_request(UINT32 serverConnID, UINT32 remoteConnID, 
 	formatDataRequest.requestedFormatId = remoteFormatId;
 	clipboard->requestedFormatId = formatId;
 	rc = clipboard->context->ClientFormatDataRequest(clipboard->context, &formatDataRequest);
+	if (rc != ERROR_SUCCESS)
+	{
+		return rc;
+	}
 
 	while (clipboard->context->CheckEnabled(serverConnID, remoteConnID))
 	{
-		if (WaitForSingleObject(clipboard->response_data_event, 50) != WAIT_OBJECT_0)
+		DWORD waitRes = WaitForSingleObject(clipboard->response_data_event, 50);
+		if (waitRes == WAIT_TIMEOUT)
+		{
+			continue;
+		}
+
+		if (waitRes != WAIT_OBJECT_0)
+		{
+			return ERROR_INTERNAL_ERROR;
+		}
+
+		if (!ResetEvent(clipboard->response_data_event))
+		{
+			// NOTE: critical error here, crash may be better
 			rc = ERROR_INTERNAL_ERROR;
-		else if (!ResetEvent(clipboard->response_data_event))
-			rc = ERROR_INTERNAL_ERROR;
+		}
 		return rc;
 	}
 	return ERROR_INTERNAL_ERROR;
@@ -1488,13 +1506,29 @@ UINT cliprdr_send_request_filecontents(wfClipboard *clipboard, UINT32 serverConn
 	fileContentsRequest.clipDataId = 0;
 	fileContentsRequest.msgFlags = 0;
 	rc = clipboard->context->ClientFileContentsRequest(clipboard->context, &fileContentsRequest);
+	if (rc != ERROR_SUCCESS)
+	{
+		return rc;
+	}
 
 	while (clipboard->context->CheckEnabled(serverConnID, remoteConnID))
 	{
-		if (WaitForSingleObject(clipboard->req_fevent, INFINITE) != WAIT_OBJECT_0)
+		DWORD waitRes = WaitForSingleObject(clipboard->req_fevent, 50);
+		if (waitRes == WAIT_TIMEOUT)
+		{
+			continue;
+		}
+
+		if (waitRes != WAIT_OBJECT_0)
+		{
+			return ERROR_INTERNAL_ERROR;
+		}
+
+		if (!ResetEvent(clipboard->req_fevent))
+		{
+			// NOTE: critical error here, crash may be better
 			rc = ERROR_INTERNAL_ERROR;
-		else if (!ResetEvent(clipboard->req_fevent))
-			rc = ERROR_INTERNAL_ERROR;
+		}
 		return rc;
 	}
 	return ERROR_INTERNAL_ERROR;
