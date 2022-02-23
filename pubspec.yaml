@@ -44,6 +44,7 @@ dependencies:
   package_info: ^2.0.2
   url_launcher: ^6.0.9
   shared_preferences: ^2.0.6
+  toggle_switch: ^1.4.0
 
 dev_dependencies:
   flutter_launcher_icons: ^0.9.1
@@ -70,6 +71,11 @@ flutter:
   # To add assets to your application, add an assets section, like this:
   assets:
     - assets/
+
+  fonts:
+    - family: GestureIcons
+      fonts:
+        - asset: assets/gestures.ttf
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/assets-and-images/#resolution-aware.
