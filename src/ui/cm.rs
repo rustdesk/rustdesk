@@ -198,6 +198,7 @@ impl ConnectionManager {
                 allow_err!(_tx_clip_file.send((id, _clip)));
             }
             Data::ClipboardFileEnabled(enabled) => {
+                #[cfg(windows)]
                 set_conn_enabled(id, 0, enabled);
                 if !enabled {
                     allow_err!(_tx_clip_empty.send(id));
@@ -375,11 +376,14 @@ async fn start_ipc(cm: ConnectionManager) {
                                                 match data {
                                                     Data::Login{id, is_file_transfer, port_forward, peer_id, name, authorized, keyboard, clipboard, audio, file, file_transfer_enabled} => {
                                                         conn_id = id;
+                                                        #[cfg(windows)]
                                                         set_conn_enabled(id, 0, file_transfer_enabled);
+                                                        let _ = file_transfer_enabled;
                                                         cm.add_connection(id, is_file_transfer, port_forward, peer_id, name, authorized, keyboard, clipboard, audio, file, tx.clone());
                                                     }
                                                     Data::Close => {
                                                         allow_err!(tx_clip_empty.send(conn_id));
+                                                        #[cfg(windows)]
                                                         set_conn_enabled(conn_id, 0, false);
                                                         log::info!("cm ipc connection closed from connection request");
                                                         break;
