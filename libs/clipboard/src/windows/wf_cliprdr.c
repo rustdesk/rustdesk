@@ -254,6 +254,7 @@ typedef struct wf_clipboard wfClipboard;
 
 BOOL wf_cliprdr_init(wfClipboard *clipboard, CliprdrClientContext *cliprdr);
 BOOL wf_cliprdr_uninit(wfClipboard *clipboard, CliprdrClientContext *cliprdr);
+BOOL wf_do_empty_cliprdr(wfClipboard *clipboard);
 
 static BOOL wf_create_file_obj(UINT32 serverConnID, UINT32 remoteConnID, wfClipboard *cliprdrrdr, IDataObject **ppDataObject);
 static void wf_destroy_file_obj(IDataObject *instance);
@@ -705,6 +706,10 @@ static HRESULT STDMETHODCALLTYPE CliprdrDataObject_GetData(IDataObject *This, FO
 		// DWORD remote_format_id = get_remote_format_id(clipboard, instance->m_pFormatEtc[idx].cfFormat);
 		// FIXME: origin code may be failed here???
 		if (cliprdr_send_data_request(instance->m_serverConnID, instance->m_remoteConnID, clipboard, instance->m_pFormatEtc[idx].cfFormat) != 0)
+		{
+			return E_UNEXPECTED;
+		}
+		if (!clipboard->hmem)
 		{
 			return E_UNEXPECTED;
 		}
@@ -1462,12 +1467,20 @@ static UINT cliprdr_send_data_request(UINT32 serverConnID, UINT32 remoteConnID, 
 		return rc;
 	}
 
-	while (clipboard->context->CheckEnabled(serverConnID, remoteConnID))
+	// with default 3min timeout
+	for (int i = 0; i < 20 * 60 * 3; i++)
 	{
 		DWORD waitRes = WaitForSingleObject(clipboard->response_data_event, 50);
 		if (waitRes == WAIT_TIMEOUT)
 		{
-			continue;
+			if (clipboard->context->CheckEnabled(serverConnID, remoteConnID))
+			{
+				continue;
+			}
+			else
+			{
+				break;
+			}
 		}
 
 		if (waitRes != WAIT_OBJECT_0)
@@ -1480,8 +1493,24 @@ static UINT cliprdr_send_data_request(UINT32 serverConnID, UINT32 remoteConnID, 
 			// NOTE: critical error here, crash may be better
 			rc = ERROR_INTERNAL_ERROR;
 		}
+
+		if (!clipboard->hmem)
+		{
+			rc = ERROR_INTERNAL_ERROR;
+		}
+
 		return rc;
 	}
+
+	if (clipboard->hmem)
+	{
+		if (!ResetEvent(clipboard->response_data_event))
+		{
+			// NOTE: critical error here, crash may be better
+		}
+		return ERROR_SUCCESS;
+	}
+
 	return ERROR_INTERNAL_ERROR;
 }
 
@@ -1511,12 +1540,20 @@ UINT cliprdr_send_request_filecontents(wfClipboard *clipboard, UINT32 serverConn
 		return rc;
 	}
 
-	while (clipboard->context->CheckEnabled(serverConnID, remoteConnID))
+	// with default 3min timeout
+	for (int i = 0; i < 20 * 60 * 3; i++)
 	{
 		DWORD waitRes = WaitForSingleObject(clipboard->req_fevent, 50);
 		if (waitRes == WAIT_TIMEOUT)
 		{
-			continue;
+			if (clipboard->context->CheckEnabled(serverConnID, remoteConnID))
+			{
+				continue;
+			}
+			else
+			{
+				break;
+			}
 		}
 
 		if (waitRes != WAIT_OBJECT_0)
@@ -1529,25 +1566,50 @@ UINT cliprdr_send_request_filecontents(wfClipboard *clipboard, UINT32 serverConn
 			// NOTE: critical error here, crash may be better
 			rc = ERROR_INTERNAL_ERROR;
 		}
+		if (!clipboard->req_fdata)
+		{
+			rc = ERROR_INTERNAL_ERROR;
+		}
+
 		return rc;
 	}
+
+	if (clipboard->req_fdata)
+	{
+		if (!ResetEvent(clipboard->req_fevent))
+		{
+			// NOTE: critical error here, crash may be better
+		}
+		return ERROR_SUCCESS;
+	}
+
 	return ERROR_INTERNAL_ERROR;
 }
 
-static UINT cliprdr_send_response_filecontents(wfClipboard *clipboard, UINT32 serverConnID, UINT32 remoteConnID, UINT32 streamId, UINT32 size,
-											   BYTE *data)
+static UINT cliprdr_send_response_filecontents(
+	wfClipboard *clipboard,
+	UINT32 serverConnID,
+	UINT32 remoteConnID,
+	UINT16 msgFlags,
+	UINT32 streamId,
+	UINT32 size,
+	BYTE *data)
 {
 	CLIPRDR_FILE_CONTENTS_RESPONSE fileContentsResponse;
 
 	if (!clipboard || !clipboard->context || !clipboard->context->ClientFileContentsResponse)
-		return ERROR_INTERNAL_ERROR;
+	{
+		data = NULL;
+		size = 0;
+		msgFlags = CB_RESPONSE_FAIL;
+	}
 
 	fileContentsResponse.serverConnID = serverConnID;
 	fileContentsResponse.remoteConnID = remoteConnID;
 	fileContentsResponse.streamId = streamId;
 	fileContentsResponse.cbRequested = size;
 	fileContentsResponse.requestedData = data;
-	fileContentsResponse.msgFlags = CB_RESPONSE_OK;
+	fileContentsResponse.msgFlags = msgFlags;
 	return clipboard->context->ClientFileContentsResponse(clipboard->context,
 														  &fileContentsResponse);
 }
@@ -2343,7 +2405,7 @@ static UINT
 wf_cliprdr_server_format_data_request(CliprdrClientContext *context,
 									  const CLIPRDR_FORMAT_DATA_REQUEST *formatDataRequest)
 {
-	UINT rc;
+	UINT rc = ERROR_SUCCESS;
 	size_t size = 0;
 	void *buff = NULL;
 	char *globlemem = NULL;
@@ -2353,12 +2415,18 @@ wf_cliprdr_server_format_data_request(CliprdrClientContext *context,
 	wfClipboard *clipboard;
 
 	if (!context || !formatDataRequest)
-		return ERROR_INTERNAL_ERROR;
+	{
+		rc = ERROR_INTERNAL_ERROR;
+		goto exit;
+	}
 
 	clipboard = (wfClipboard *)context->custom;
 
 	if (!clipboard)
-		return ERROR_INTERNAL_ERROR;
+	{
+		rc = ERROR_INTERNAL_ERROR;
+		goto exit;
+	}
 
 	requestedFormatId = formatDataRequest->requestedFormatId;
 
@@ -2376,7 +2444,10 @@ wf_cliprdr_server_format_data_request(CliprdrClientContext *context,
 		result = OleGetClipboard(&dataObj);
 
 		if (FAILED(result))
-			return ERROR_INTERNAL_ERROR;
+		{
+			rc = ERROR_INTERNAL_ERROR;
+			goto exit;
+		}
 
 		ZeroMemory(&format_etc, sizeof(FORMATETC));
 		ZeroMemory(&stg_medium, sizeof(STGMEDIUM));
@@ -2389,7 +2460,7 @@ wf_cliprdr_server_format_data_request(CliprdrClientContext *context,
 
 		if (FAILED(result))
 		{
-			DEBUG_CLIPRDR("dataObj->GetData failed.");
+			rc = ERROR_INTERNAL_ERROR;
 			goto exit;
 		}
 
@@ -2400,7 +2471,7 @@ wf_cliprdr_server_format_data_request(CliprdrClientContext *context,
 			GlobalUnlock(stg_medium.hGlobal);
 			ReleaseStgMedium(&stg_medium);
 			clipboard->nFiles = 0;
-			goto exit;
+			goto resp;
 		}
 
 		clear_file_array(clipboard);
@@ -2417,7 +2488,6 @@ wf_cliprdr_server_format_data_request(CliprdrClientContext *context,
 		else
 		{
 			char *p;
-
 			for (p = (char *)((char *)dropFiles + dropFiles->pFiles); (len = strlen(p)) > 0;
 				 p += len + 1, clipboard->nFiles++)
 			{
@@ -2432,7 +2502,7 @@ wf_cliprdr_server_format_data_request(CliprdrClientContext *context,
 
 		GlobalUnlock(stg_medium.hGlobal);
 		ReleaseStgMedium(&stg_medium);
-	exit:
+	resp:
 		size = 4 + clipboard->nFiles * sizeof(FILEDESCRIPTORW);
 		groupDsc = (FILEGROUPDESCRIPTORW *)malloc(size);
 
@@ -2450,6 +2520,7 @@ wf_cliprdr_server_format_data_request(CliprdrClientContext *context,
 		}
 
 		IDataObject_Release(dataObj);
+		rc = ERROR_SUCCESS;
 	}
 	else
 	{
@@ -2461,26 +2532,50 @@ wf_cliprdr_server_format_data_request(CliprdrClientContext *context,
 			if (!hClipdata)
 			{
 				CloseClipboard();
-				return ERROR_INTERNAL_ERROR;
+				{
+					rc = ERROR_INTERNAL_ERROR;
+					goto exit;
+				}
 			}
-
-			globlemem = (char *)GlobalLock(hClipdata);
-			size = (int)GlobalSize(hClipdata);
-			buff = malloc(size);
-			CopyMemory(buff, globlemem, size);
-			GlobalUnlock(hClipdata);
-			CloseClipboard();
+			else
+			{
+				globlemem = (char *)GlobalLock(hClipdata);
+				size = (int)GlobalSize(hClipdata);
+				buff = malloc(size);
+				CopyMemory(buff, globlemem, size);
+				GlobalUnlock(hClipdata);
+				CloseClipboard();
+				rc = ERROR_SUCCESS;
+			}
+		}
+		else
+		{
+			rc = ERROR_INTERNAL_ERROR;
 		}
 	}
 
+exit:
+	if (rc == ERROR_SUCCESS)
+	{
+		response.msgFlags = CB_RESPONSE_OK;
+	}
+	else
+	{
+		response.msgFlags = CB_RESPONSE_FAIL;
+	}
 	response.serverConnID = formatDataRequest->serverConnID;
 	response.remoteConnID = formatDataRequest->remoteConnID;
-	response.msgFlags = CB_RESPONSE_OK;
 	response.dataLen = size;
 	response.requestedFormatData = (BYTE *)buff;
-	rc = clipboard->context->ClientFormatDataResponse(clipboard->context, &response);
+	if (ERROR_SUCCESS != clipboard->context->ClientFormatDataResponse(clipboard->context, &response))
+	{
+		// CAUTION: if failed to send, server will wait a long time
+	}
 
-	free(buff);
+	if (buff)
+	{
+		free(buff);
+	}
 	return rc;
 }
 
@@ -2493,48 +2588,69 @@ static UINT
 wf_cliprdr_server_format_data_response(CliprdrClientContext *context,
 									   const CLIPRDR_FORMAT_DATA_RESPONSE *formatDataResponse)
 {
+	UINT rc = ERROR_INTERNAL_ERROR;
 	BYTE *data;
 	HANDLE hMem;
 	wfClipboard *clipboard;
 
-	if (!context || !formatDataResponse)
-		return ERROR_INTERNAL_ERROR;
-
-	if (formatDataResponse->msgFlags != CB_RESPONSE_OK)
-		return E_FAIL;
-
-	clipboard = (wfClipboard *)context->custom;
-
-	if (!clipboard)
-		return ERROR_INTERNAL_ERROR;
-
-	hMem = GlobalAlloc(GMEM_MOVEABLE, formatDataResponse->dataLen);
-
-	if (!hMem)
-		return ERROR_INTERNAL_ERROR;
-
-	data = (BYTE *)GlobalLock(hMem);
-
-	if (!data)
+	do
 	{
-		GlobalFree(hMem);
-		return ERROR_INTERNAL_ERROR;
-	}
+		if (!context || !formatDataResponse)
+		{
+			rc = ERROR_INTERNAL_ERROR;
+			break;
+		}
 
-	CopyMemory(data, formatDataResponse->requestedFormatData, formatDataResponse->dataLen);
+		clipboard = (wfClipboard *)context->custom;
+		if (!clipboard)
+		{
+			rc = ERROR_INTERNAL_ERROR;
+			break;
+		}
+		clipboard->hmem = NULL;
 
-	if (!GlobalUnlock(hMem) && GetLastError())
-	{
-		GlobalFree(hMem);
-		return ERROR_INTERNAL_ERROR;
-	}
+		if (formatDataResponse->msgFlags != CB_RESPONSE_OK)
+		{
+			// BOOL emptyRes = wf_do_empty_cliprdr((wfClipboard *)context->custom);
+			// (void)emptyRes;
+			rc = E_FAIL;
+			break;
+		}
 
-	clipboard->hmem = hMem;
+		hMem = GlobalAlloc(GMEM_MOVEABLE, formatDataResponse->dataLen);
+		if (!hMem)
+		{
+			rc = ERROR_INTERNAL_ERROR;
+			break;
+		}
+
+		data = (BYTE *)GlobalLock(hMem);
+		if (!data)
+		{
+			GlobalFree(hMem);
+			rc = ERROR_INTERNAL_ERROR;
+			break;
+		}
+
+		CopyMemory(data, formatDataResponse->requestedFormatData, formatDataResponse->dataLen);
+
+		if (!GlobalUnlock(hMem) && GetLastError())
+		{
+			GlobalFree(hMem);
+			rc = ERROR_INTERNAL_ERROR;
+			break;
+		}
+
+		clipboard->hmem = hMem;
+		rc = CHANNEL_RC_OK;
+	} while (0);
 
 	if (!SetEvent(clipboard->response_data_event))
-		return ERROR_INTERNAL_ERROR;
-
-	return CHANNEL_RC_OK;
+	{
+		// CAUTION: critical error here, process will hang up until wait timeout default 3min.
+		rc = ERROR_INTERNAL_ERROR;
+	}
+	return rc;
 }
 
 /**
@@ -2561,12 +2677,18 @@ wf_cliprdr_server_file_contents_request(CliprdrClientContext *context,
 	UINT32 cbRequested;
 
 	if (!context || !fileContentsRequest)
-		return ERROR_INTERNAL_ERROR;
+	{
+		rc = ERROR_INTERNAL_ERROR;
+		goto exit;
+	}
 
 	clipboard = (wfClipboard *)context->custom;
 
 	if (!clipboard)
-		return ERROR_INTERNAL_ERROR;
+	{
+		rc = ERROR_INTERNAL_ERROR;
+		goto exit;
+	}
 
 	cbRequested = fileContentsRequest->cbRequested;
 	if (fileContentsRequest->dwFlags == FILECONTENTS_SIZE)
@@ -2575,14 +2697,18 @@ wf_cliprdr_server_file_contents_request(CliprdrClientContext *context,
 	pData = (BYTE *)calloc(1, cbRequested);
 
 	if (!pData)
-		goto error;
+	{
+		rc = ERROR_INTERNAL_ERROR;
+		goto exit;
+	}
 
 	hRet = OleGetClipboard(&pDataObj);
 
 	if (FAILED(hRet))
 	{
 		printf("filecontents: get ole clipboard failed.\n");
-		goto error;
+		rc = ERROR_INTERNAL_ERROR;
+		goto exit;
 	}
 
 	ZeroMemory(&vFormatEtc, sizeof(FORMATETC));
@@ -2666,7 +2792,10 @@ wf_cliprdr_server_file_contents_request(CliprdrClientContext *context,
 		if (fileContentsRequest->dwFlags == FILECONTENTS_SIZE)
 		{
 			if (clipboard->nFiles <= fileContentsRequest->listIndex)
-				goto error;
+			{
+				rc = ERROR_INTERNAL_ERROR;
+				goto exit;
+			}
 			*((UINT32 *)&pData[0]) =
 				clipboard->fileDescriptor[fileContentsRequest->listIndex]->nFileSizeLow;
 			*((UINT32 *)&pData[4]) =
@@ -2677,7 +2806,10 @@ wf_cliprdr_server_file_contents_request(CliprdrClientContext *context,
 		{
 			BOOL bRet;
 			if (clipboard->nFiles <= fileContentsRequest->listIndex)
-				goto error;
+			{
+				rc = ERROR_INTERNAL_ERROR;
+				goto exit;
+			}
 			bRet = wf_cliprdr_get_file_contents(
 				clipboard->file_names[fileContentsRequest->listIndex], pData,
 				fileContentsRequest->nPositionLow, fileContentsRequest->nPositionHigh, cbRequested,
@@ -2687,21 +2819,30 @@ wf_cliprdr_server_file_contents_request(CliprdrClientContext *context,
 			{
 				printf("get file contents failed.\n");
 				uSize = 0;
-				goto error;
+				rc = ERROR_INTERNAL_ERROR;
+				goto exit;
 			}
 		}
 	}
 
 	rc = CHANNEL_RC_OK;
-error:
+exit:
 
 	if (pDataObj)
 		IDataObject_Release(pDataObj);
 
+	if (rc != CHANNEL_RC_OK)
+	{
+		uSize = 0;
+	}
+
 	if (uSize == 0)
 	{
-		free(pData);
-		pData = NULL;
+		if (pData)
+		{
+			free(pData);
+			pData = NULL;
+		}
 	}
 
 	sRc =
@@ -2709,13 +2850,18 @@ error:
 			clipboard,
 			fileContentsRequest->serverConnID,
 			fileContentsRequest->remoteConnID,
+			rc == CHANNEL_RC_OK ? CB_RESPONSE_OK : CB_RESPONSE_FAIL,
 			fileContentsRequest->streamId,
 			uSize,
 			pData);
-	free(pData);
 
-	if (sRc != CHANNEL_RC_OK)
-		return sRc;
+	if (pData)
+	{
+		free(pData);
+	}
+
+	// if (sRc != CHANNEL_RC_OK)
+	// 	return sRc;
 
 	return rc;
 }
@@ -2730,34 +2876,50 @@ wf_cliprdr_server_file_contents_response(CliprdrClientContext *context,
 										 const CLIPRDR_FILE_CONTENTS_RESPONSE *fileContentsResponse)
 {
 	wfClipboard *clipboard;
+	UINT rc = ERROR_INTERNAL_ERROR;
 
-	if (!context || !fileContentsResponse)
-		return ERROR_INTERNAL_ERROR;
+	do
+	{
+		if (!context || !fileContentsResponse)
+		{
+			rc = ERROR_INTERNAL_ERROR;
+			break;
+		}
 
-	if (fileContentsResponse->msgFlags != CB_RESPONSE_OK)
-		return E_FAIL;
+		clipboard = (wfClipboard *)context->custom;
+		if (!clipboard)
+		{
+			rc = ERROR_INTERNAL_ERROR;
+			break;
+		}
+		clipboard->req_fsize = 0;
+		clipboard->req_fdata = NULL;
 
-	clipboard = (wfClipboard *)context->custom;
+		if (fileContentsResponse->msgFlags != CB_RESPONSE_OK)
+		{
+			rc = E_FAIL;
+			break;
+		}
 
-	if (!clipboard)
-		return ERROR_INTERNAL_ERROR;
+		clipboard->req_fsize = fileContentsResponse->cbRequested;
+		clipboard->req_fdata = (char *)malloc(fileContentsResponse->cbRequested);
+		if (!clipboard->req_fdata)
+		{
+			rc = ERROR_INTERNAL_ERROR;
+			break;
+		}
 
-	clipboard->req_fsize = fileContentsResponse->cbRequested;
-	clipboard->req_fdata = (char *)malloc(fileContentsResponse->cbRequested);
+		CopyMemory(clipboard->req_fdata, fileContentsResponse->requestedData,
+				   fileContentsResponse->cbRequested);
 
-	if (!clipboard->req_fdata)
-		return ERROR_INTERNAL_ERROR;
-
-	CopyMemory(clipboard->req_fdata, fileContentsResponse->requestedData,
-			   fileContentsResponse->cbRequested);
+		rc = CHANNEL_RC_OK;
+	} while (0);
 
 	if (!SetEvent(clipboard->req_fevent))
 	{
-		free(clipboard->req_fdata);
-		return ERROR_INTERNAL_ERROR;
+		// CAUTION: critical error here, process will hang up until wait timeout default 3min.
 	}
-
-	return CHANNEL_RC_OK;
+	return rc;
 }
 
 BOOL wf_cliprdr_init(wfClipboard *clipboard, CliprdrClientContext *cliprdr)
@@ -2888,6 +3050,7 @@ BOOL uninit_cliprdr(CliprdrClientContext *context)
 BOOL empty_cliprdr(CliprdrClientContext *context, UINT32 server_conn_id, UINT32 remote_conn_id)
 {
 	wfClipboard *clipboard = NULL;
+	CliprdrDataObject *instance = NULL;
 	BOOL rc = FALSE;
 	if (!context)
 	{
@@ -2899,6 +3062,34 @@ BOOL empty_cliprdr(CliprdrClientContext *context, UINT32 server_conn_id, UINT32 
 	}
 
 	clipboard = (wfClipboard *)context->custom;
+	if (!clipboard)
+	{
+		return FALSE;
+	}
+
+	instance = clipboard->data_obj;
+	if (instance)
+	{
+		if (server_conn_id != 0 && instance->m_serverConnID != server_conn_id)
+		{
+			return TRUE;
+		}
+		if (remote_conn_id != 0 && instance->m_remoteConnID != remote_conn_id)
+		{
+			return TRUE;
+		}
+	}
+
+	return wf_do_empty_cliprdr(clipboard);
+}
+
+BOOL wf_do_empty_cliprdr(wfClipboard *clipboard)
+{
+	BOOL rc = FALSE;
+	if (!clipboard)
+	{
+		return FALSE;
+	}
 
 	if (WaitForSingleObject(clipboard->data_obj_mutex, INFINITE) != WAIT_OBJECT_0)
 	{
@@ -2909,18 +3100,6 @@ BOOL empty_cliprdr(CliprdrClientContext *context, UINT32 server_conn_id, UINT32 
 	{
 		if (clipboard->data_obj != NULL)
 		{
-			CliprdrDataObject *instance = clipboard->data_obj;
-			if (server_conn_id != 0 && instance->m_serverConnID != server_conn_id)
-			{
-				rc = TRUE;
-				break;
-			}
-			if (remote_conn_id != 0 && instance->m_remoteConnID != remote_conn_id)
-			{
-				rc = TRUE;
-				break;
-			}
-
 			wf_destroy_file_obj(clipboard->data_obj);
 			clipboard->data_obj = NULL;
 		}

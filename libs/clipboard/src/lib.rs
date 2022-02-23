@@ -605,11 +605,15 @@ extern "C" fn client_format_data_response(
         server_conn_id = (*format_data_response).serverConnID as i32;
         remote_conn_id = (*format_data_response).remoteConnID as i32;
         msg_flags = (*format_data_response).msgFlags as i32;
-        format_data = std::slice::from_raw_parts(
-            (*format_data_response).requestedFormatData,
-            (*format_data_response).dataLen as usize,
-        )
-        .to_vec();
+        if (*format_data_response).requestedFormatData.is_null() {
+            format_data = Vec::new();
+        } else {
+            format_data = std::slice::from_raw_parts(
+                (*format_data_response).requestedFormatData,
+                (*format_data_response).dataLen as usize,
+            )
+            .to_vec();
+        }
     }
     let conn_id = ConnID {
         server_conn_id: server_conn_id as u32,
@@ -704,11 +708,15 @@ extern "C" fn client_file_contents_response(
         remote_conn_id = (*file_contents_response).remoteConnID as i32;
         msg_flags = (*file_contents_response).msgFlags as i32;
         stream_id = (*file_contents_response).streamId as i32;
-        requested_data = std::slice::from_raw_parts(
-            (*file_contents_response).requestedData,
-            (*file_contents_response).cbRequested as usize,
-        )
-        .to_vec();
+        if (*file_contents_response).requestedData.is_null() {
+            requested_data = Vec::new();
+        } else {
+            requested_data = std::slice::from_raw_parts(
+                (*file_contents_response).requestedData,
+                (*file_contents_response).cbRequested as usize,
+            )
+            .to_vec();
+        }
     }
     let conn_id = ConnID {
         server_conn_id: server_conn_id as u32,
