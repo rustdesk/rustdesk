@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_hbb/common.dart';
 import 'package:toggle_switch/toggle_switch.dart';
 
 class GestureIcons {
@@ -32,15 +33,22 @@ class GestureIcons {
 }
 
 class GestureHelp extends StatefulWidget {
-  GestureHelp({Key? key}) : super(key: key);
-
+  GestureHelp({Key? key,this.initTouchMode = false}) : super(key: key);
+  final initTouchMode;
   @override
   State<StatefulWidget> createState() => _GestureHelpState();
 }
 
 class _GestureHelpState extends State<GestureHelp> {
-  var _selectedIndex = 0;
-  var _touchMode = false;
+  var _selectedIndex;
+  var _touchMode;
+
+  @override
+  void initState() {
+    _touchMode = widget.initTouchMode;
+    _selectedIndex = _touchMode ? 1 : 0;
+    super.initState();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -118,9 +126,9 @@ class GestureInfo extends StatelessWidget {
   final IconData icon;
 
   final textSize = 15.0;
-  final textColor = Colors.blue;
+  final textColor = MyTheme.accent80;
   final iconSize = 35.0;
-  final iconColor = Colors.black54;
+  final iconColor = MyTheme.darkGray;
 
   @override
   Widget build(BuildContext context) {

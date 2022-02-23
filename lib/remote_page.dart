@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_hbb/widgets/gesture_help.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter/services.dart';
 import 'dart:ui' as ui;
@@ -282,14 +283,6 @@ class _RemotePageState extends State<RemotePage> {
                       },
                     )
                   ] +
-                  (isDesktop
-                      ? []
-                      : [
-                          IconButton(
-                              color: Colors.white,
-                              icon: Icon(Icons.keyboard),
-                              onPressed: openKeyboard)
-                        ]) +
                   <Widget>[
                     IconButton(
                       color: Colors.white,
@@ -303,6 +296,10 @@ class _RemotePageState extends State<RemotePage> {
                   (isDesktop
                       ? []
                       : [
+                          IconButton(
+                              color: Colors.white,
+                              icon: Icon(Icons.keyboard),
+                              onPressed: openKeyboard),
                           Container(
                               color: _mouseTools ? Colors.blue[500] : null,
                               child: IconButton(
@@ -314,7 +311,19 @@ class _RemotePageState extends State<RemotePage> {
                                     resetTool();
                                   });
                                 },
-                              ))
+                              )),
+                          IconButton(
+                            color: Colors.white,
+                            icon: Icon(Icons.help),
+                            onPressed: () {
+                              setState(() => _showEdit = false);
+                              showModalBottomSheet(
+                                  backgroundColor: MyTheme.grayBg,
+                                  context: context,
+                                  builder: (context) =>
+                                      GestureHelp(initTouchMode: _touchMode));
+                            },
+                          )
                         ]) +
                   <Widget>[
                     IconButton(
@@ -358,8 +367,8 @@ class _RemotePageState extends State<RemotePage> {
             FFI.tap(MouseButtons.left);
           }
         },
-        onDoubleTapDown: (d){
-          if(_touchMode){
+        onDoubleTapDown: (d) {
+          if (_touchMode) {
             FFI.cursorModel.move(d.localPosition.dx, d.localPosition.dy);
           }
         },
@@ -367,8 +376,8 @@ class _RemotePageState extends State<RemotePage> {
           FFI.tap(MouseButtons.left);
           FFI.tap(MouseButtons.left);
         },
-        onLongPressDown: (d){
-          if (_touchMode){
+        onLongPressDown: (d) {
+          if (_touchMode) {
             FFI.cursorModel.move(d.localPosition.dx, d.localPosition.dy);
           }
         },
