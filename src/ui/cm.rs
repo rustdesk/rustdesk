@@ -111,8 +111,7 @@ impl ConnectionManager {
         &self,
         id: i32,
         data: Data,
-        _tx_clip_file: &mpsc::UnboundedSender<(i32, ipc::ClipbaordFile)>,
-        _tx_clip_empty: &mpsc::UnboundedSender<i32>,
+        _tx_clip_file: &mpsc::UnboundedSender<ClipboardFileData>,
         write_jobs: &mut Vec<fs::TransferJob>,
         conn: &mut Connection,
     ) {
@@ -195,14 +194,15 @@ impl ConnectionManager {
             },
             Data::ClipbaordFile(_clip) => {
                 #[cfg(windows)]
-                allow_err!(_tx_clip_file.send((id, _clip)));
+                _tx_clip_file
+                    .send(ClipboardFileData::Clip((id, _clip)))
+                    .ok();
             }
             Data::ClipboardFileEnabled(enabled) => {
                 #[cfg(windows)]
-                set_conn_enabled(id, 0, enabled);
-                if !enabled {
-                    allow_err!(_tx_clip_empty.send(id));
-                }
+                _tx_clip_file
+                    .send(ClipboardFileData::Enable((id, enabled)))
+                    .ok();
             }
             _ => {}
         }
@@ -342,14 +342,18 @@ impl sciter::EventHandler for ConnectionManager {
     }
 }
 
+enum ClipboardFileData {
+    Clip((i32, ipc::ClipbaordFile)),
+    Enable((i32, bool)),
+}
+
 #[tokio::main(flavor = "current_thread")]
 async fn start_ipc(cm: ConnectionManager) {
-    let (tx_file, _rx_file) = mpsc::unbounded_channel::<(i32, ipc::ClipbaordFile)>();
-    let (tx_clip_empty, _rx_clip_empty) = mpsc::unbounded_channel::<i32>();
+    let (tx_file, _rx_file) = mpsc::unbounded_channel::<ClipboardFileData>();
     #[cfg(windows)]
     let cm_clip = cm.clone();
     #[cfg(windows)]
-    std::thread::spawn(move || start_clipboard_file(cm_clip, _rx_file, _rx_clip_empty));
+    std::thread::spawn(move || start_clipboard_file(cm_clip, _rx_file));
 
     match new_listener("_cm").await {
         Ok(mut incoming) => {
@@ -359,7 +363,6 @@ async fn start_ipc(cm: ConnectionManager) {
                         let mut stream = Connection::new(stream);
                         let cm = cm.clone();
                         let tx_file = tx_file.clone();
-                        let tx_clip_empty = tx_clip_empty.clone();
                         tokio::spawn(async move {
                             let mut conn_id: i32 = 0;
                             let (tx, mut rx) = mpsc::unbounded_channel::<Data>();
@@ -376,20 +379,16 @@ async fn start_ipc(cm: ConnectionManager) {
                                                 match data {
                                                     Data::Login{id, is_file_transfer, port_forward, peer_id, name, authorized, keyboard, clipboard, audio, file, file_transfer_enabled} => {
                                                         conn_id = id;
-                                                        #[cfg(windows)]
-                                                        set_conn_enabled(id, 0, file_transfer_enabled);
-                                                        let _ = file_transfer_enabled;
+                                                        tx_file.send(ClipboardFileData::Enable((id, file_transfer_enabled))).ok();
                                                         cm.add_connection(id, is_file_transfer, port_forward, peer_id, name, authorized, keyboard, clipboard, audio, file, tx.clone());
                                                     }
                                                     Data::Close => {
-                                                        allow_err!(tx_clip_empty.send(conn_id));
-                                                        #[cfg(windows)]
-                                                        set_conn_enabled(conn_id, 0, false);
+                                                        tx_file.send(ClipboardFileData::Enable((conn_id, false))).ok();
                                                         log::info!("cm ipc connection closed from connection request");
                                                         break;
                                                     }
                                                     _ => {
-                                                        cm.handle_data(conn_id, data, &tx_file, &tx_clip_empty, &mut write_jobs, &mut stream).await;
+                                                        cm.handle_data(conn_id, data, &tx_file, &mut write_jobs, &mut stream).await;
                                                     }
                                                 }
                                             }
@@ -420,10 +419,10 @@ async fn start_ipc(cm: ConnectionManager) {
 #[cfg(target_os = "linux")]
 #[tokio::main(flavor = "current_thread")]
 async fn start_pa() {
+    use crate::audio_service::AUDIO_DATA_SIZE_U8;
     use hbb_common::config::APP_NAME;
     use libpulse_binding as pulse;
     use libpulse_simple_binding as psimple;
-    use crate::audio_service::AUDIO_DATA_SIZE_U8;
 
     match new_listener("_pa").await {
         Ok(mut incoming) => {
@@ -470,13 +469,14 @@ async fn start_pa() {
                             ) {
                                 Ok(s) => loop {
                                     if let Ok(_) = s.read(&mut buf) {
-                                        let out = if buf.iter().filter(|x| **x != 0).next().is_none(){
-                                            vec![]
-                                        }else{
-                                            buf.clone()
-                                        };
-                                        if let Err(err) = stream.send_raw(out).await{
-                                            log::error!("Failed to send audio data:{}",err);
+                                        let out =
+                                            if buf.iter().filter(|x| **x != 0).next().is_none() {
+                                                vec![]
+                                            } else {
+                                                buf.clone()
+                                            };
+                                        if let Err(err) = stream.send_raw(out).await {
+                                            log::error!("Failed to send audio data:{}", err);
                                             break;
                                         }
                                     }
@@ -503,22 +503,9 @@ async fn start_pa() {
 #[tokio::main(flavor = "current_thread")]
 async fn start_clipboard_file(
     cm: ConnectionManager,
-    mut rx: mpsc::UnboundedReceiver<(i32, ipc::ClipbaordFile)>,
-    mut rx_clip_empty: mpsc::UnboundedReceiver<i32>,
+    mut rx: mpsc::UnboundedReceiver<ClipboardFileData>,
 ) {
-    let mut cliprdr_context = match create_cliprdr_context(true, false) {
-        Ok(context) => {
-            log::info!("clipboard context for file transfer created.");
-            context
-        }
-        Err(err) => {
-            log::error!(
-                "Create clipboard context for file transfer: {}",
-                err.to_string()
-            );
-            return;
-        }
-    };
+    let mut cliprdr_context = None;
     let mut rx_clip_client = get_rx_clip_client().lock().await;
 
     loop {
@@ -536,21 +523,36 @@ async fn start_clipboard_file(
                 }
             },
             server_msg = rx.recv() => match server_msg {
-                Some((server_conn_id, clip)) => {
+                Some(ClipboardFileData::Clip((server_conn_id, clip))) => {
                     let conn_id = ConnID {
                         server_conn_id: server_conn_id as u32,
                         remote_conn_id: 0,
                     };
-                    server_clip_file(&mut cliprdr_context, conn_id, clip);
+                    if let Some(ctx) = cliprdr_context.as_mut() {
+                        server_clip_file(ctx, conn_id, clip);
+                    }
                 }
-                None => {
-                    break
-                }
-            },
-            server_conn_id = rx_clip_empty.recv() => match server_conn_id {
-                Some(server_conn_id) => {
-                    if !empty_clipboard(&mut cliprdr_context, server_conn_id, 0) {
-                        // log::error!("failed to empty clipboard");
+                Some(ClipboardFileData::Enable((id, enabled))) => {
+                    if enabled && cliprdr_context.is_none() {
+                        cliprdr_context = Some(match create_cliprdr_context(true, false) {
+                            Ok(context) => {
+                                log::info!("clipboard context for file transfer created.");
+                                context
+                            }
+                            Err(err) => {
+                                log::error!(
+                                    "Create clipboard context for file transfer: {}",
+                                    err.to_string()
+                                );
+                                return;
+                            }
+                        });
+                    }
+                    set_conn_enabled(id, 0, enabled);
+                    if !enabled {
+                        if let Some(ctx) = cliprdr_context.as_mut() {
+                            empty_clipboard(ctx, id, 0);
+                        }
                     }
                 }
                 None => {
