@@ -99,17 +99,9 @@ struct _CLIPRDR_MFPICT
 };
 typedef struct _CLIPRDR_MFPICT CLIPRDR_MFPICT;
 
-struct _CONN_ID
-{
-	UINT32 serverConnID;
-	UINT32 remoteConnID;
-};
-typedef struct _CONN_ID CONN_ID;
-
 struct _FORMAT_IDS
 {
-	UINT32 serverConnID;
-	UINT32 remoteConnID;
+	UINT32 connID;
 	UINT32 size;
 	UINT32 *formats;
 };
@@ -186,8 +178,7 @@ struct _CliprdrStream
 	ULARGE_INTEGER m_lOffset;
 	FILEDESCRIPTORW m_Dsc;
 	void *m_pData;
-	UINT32 m_serverConnID;
-	UINT32 m_remoteConnID;
+	UINT32 m_connID;
 };
 typedef struct _CliprdrStream CliprdrStream;
 
@@ -202,8 +193,7 @@ struct _CliprdrDataObject
 	ULONG m_nStreams;
 	IStream **m_pStream;
 	void *m_pData;
-	UINT32 m_serverConnID;
-	UINT32 m_remoteConnID;
+	UINT32 m_connID;
 };
 typedef struct _CliprdrDataObject CliprdrDataObject;
 
@@ -256,13 +246,13 @@ BOOL wf_cliprdr_init(wfClipboard *clipboard, CliprdrClientContext *cliprdr);
 BOOL wf_cliprdr_uninit(wfClipboard *clipboard, CliprdrClientContext *cliprdr);
 BOOL wf_do_empty_cliprdr(wfClipboard *clipboard);
 
-static BOOL wf_create_file_obj(UINT32 serverConnID, UINT32 remoteConnID, wfClipboard *cliprdrrdr, IDataObject **ppDataObject);
+static BOOL wf_create_file_obj(UINT32 connID, wfClipboard *cliprdrrdr, IDataObject **ppDataObject);
 static void wf_destroy_file_obj(IDataObject *instance);
 static UINT32 get_remote_format_id(wfClipboard *clipboard, UINT32 local_format);
-static UINT cliprdr_send_data_request(UINT32 serverConnID, UINT32 remoteConnID, wfClipboard *clipboard, UINT32 format);
+static UINT cliprdr_send_data_request(UINT32 connID, wfClipboard *clipboard, UINT32 format);
 static UINT cliprdr_send_lock(wfClipboard *clipboard);
 static UINT cliprdr_send_unlock(wfClipboard *clipboard);
-static UINT cliprdr_send_request_filecontents(wfClipboard *clipboard, UINT32 serverConnID, UINT32 remoteConnID, const void *streamid,
+static UINT cliprdr_send_request_filecontents(wfClipboard *clipboard, UINT32 connID, const void *streamid,
 											  ULONG index, UINT32 flag, DWORD positionhigh,
 											  DWORD positionlow, ULONG request);
 
@@ -352,7 +342,7 @@ static HRESULT STDMETHODCALLTYPE CliprdrStream_Read(IStream *This, void *pv, ULO
 	if (instance->m_lOffset.QuadPart >= instance->m_lSize.QuadPart)
 		return S_FALSE;
 
-	ret = cliprdr_send_request_filecontents(clipboard, instance->m_serverConnID, instance->m_remoteConnID, (void *)This, instance->m_lIndex,
+	ret = cliprdr_send_request_filecontents(clipboard, instance->m_connID, (void *)This, instance->m_lIndex,
 											FILECONTENTS_RANGE, instance->m_lOffset.HighPart,
 											instance->m_lOffset.LowPart, cb);
 
@@ -519,7 +509,7 @@ static HRESULT STDMETHODCALLTYPE CliprdrStream_Clone(IStream *This, IStream **pp
 	return E_NOTIMPL;
 }
 
-static CliprdrStream *CliprdrStream_New(UINT32 serverConnID, UINT32 remoteConnID, ULONG index, void *pData, const FILEDESCRIPTORW *dsc)
+static CliprdrStream *CliprdrStream_New(UINT32 connID, ULONG index, void *pData, const FILEDESCRIPTORW *dsc)
 {
 	IStream *iStream;
 	BOOL success = FALSE;
@@ -554,8 +544,7 @@ static CliprdrStream *CliprdrStream_New(UINT32 serverConnID, UINT32 remoteConnID
 			instance->m_lIndex = index;
 			instance->m_pData = pData;
 			instance->m_lOffset.QuadPart = 0;
-			instance->m_serverConnID = serverConnID;
-			instance->m_remoteConnID = remoteConnID;
+			instance->m_connID = connID;
 
 			if (instance->m_Dsc.dwFlags & FD_ATTRIBUTES)
 			{
@@ -566,7 +555,7 @@ static CliprdrStream *CliprdrStream_New(UINT32 serverConnID, UINT32 remoteConnID
 			if (((instance->m_Dsc.dwFlags & FD_FILESIZE) == 0) && !isDir)
 			{
 				/* get content size of this stream */
-				if (cliprdr_send_request_filecontents(clipboard, instance->m_serverConnID, instance->m_remoteConnID, (void *)instance,
+				if (cliprdr_send_request_filecontents(clipboard, instance->m_connID, (void *)instance,
 													  instance->m_lIndex, FILECONTENTS_SIZE, 0, 0,
 													  8) == CHANNEL_RC_OK)
 				{
@@ -685,7 +674,7 @@ static HRESULT STDMETHODCALLTYPE CliprdrDataObject_GetData(IDataObject *This, FO
 		return E_INVALIDARG;
 
 	clipboard = (wfClipboard *)instance->m_pData;
-	if (!clipboard->context->CheckEnabled(instance->m_serverConnID, instance->m_remoteConnID))
+	if (!clipboard->context->CheckEnabled(instance->m_connID))
 	{
 		return E_INVALIDARG;
 	}
@@ -694,7 +683,10 @@ static HRESULT STDMETHODCALLTYPE CliprdrDataObject_GetData(IDataObject *This, FO
 		return E_INVALIDARG;
 
 	if ((idx = cliprdr_lookup_format(instance, pFormatEtc)) == -1)
+	{
+		// empty clipboard here?
 		return DV_E_FORMATETC;
+	}
 
 	pMedium->tymed = instance->m_pFormatEtc[idx].tymed;
 	pMedium->pUnkForRelease = 0;
@@ -705,7 +697,7 @@ static HRESULT STDMETHODCALLTYPE CliprdrDataObject_GetData(IDataObject *This, FO
 		FILEGROUPDESCRIPTORW *dsc;
 		// DWORD remote_format_id = get_remote_format_id(clipboard, instance->m_pFormatEtc[idx].cfFormat);
 		// FIXME: origin code may be failed here???
-		if (cliprdr_send_data_request(instance->m_serverConnID, instance->m_remoteConnID, clipboard, instance->m_pFormatEtc[idx].cfFormat) != 0)
+		if (cliprdr_send_data_request(instance->m_connID, clipboard, instance->m_pFormatEtc[idx].cfFormat) != 0)
 		{
 			return E_UNEXPECTED;
 		}
@@ -734,7 +726,7 @@ static HRESULT STDMETHODCALLTYPE CliprdrDataObject_GetData(IDataObject *This, FO
 					for (i = 0; i < instance->m_nStreams; i++)
 					{
 						instance->m_pStream[i] =
-							(IStream *)CliprdrStream_New(instance->m_serverConnID, instance->m_remoteConnID, i, clipboard, &dsc->fgd[i]);
+							(IStream *)CliprdrStream_New(instance->m_connID, i, clipboard, &dsc->fgd[i]);
 
 						if (!instance->m_pStream[i])
 							return E_OUTOFMEMORY;
@@ -867,7 +859,7 @@ static HRESULT STDMETHODCALLTYPE CliprdrDataObject_EnumDAdvise(IDataObject *This
 	return OLE_E_ADVISENOTSUPPORTED;
 }
 
-static CliprdrDataObject *CliprdrDataObject_New(UINT32 serverConnID, UINT32 remoteConnID, FORMATETC *fmtetc, STGMEDIUM *stgmed, ULONG count,
+static CliprdrDataObject *CliprdrDataObject_New(UINT32 connID, FORMATETC *fmtetc, STGMEDIUM *stgmed, ULONG count,
 												void *data)
 {
 	CliprdrDataObject *instance;
@@ -900,8 +892,7 @@ static CliprdrDataObject *CliprdrDataObject_New(UINT32 serverConnID, UINT32 remo
 	instance->m_pData = data;
 	instance->m_nStreams = 0;
 	instance->m_pStream = NULL;
-	instance->m_serverConnID = serverConnID;
-	instance->m_remoteConnID = remoteConnID;
+	instance->m_connID = connID;
 
 	if (count > 0)
 	{
@@ -951,7 +942,7 @@ void CliprdrDataObject_Delete(CliprdrDataObject *instance)
 	}
 }
 
-static BOOL wf_create_file_obj(CONN_ID *conn_id, wfClipboard *clipboard, IDataObject **ppDataObject)
+static BOOL wf_create_file_obj(UINT32 *connID, wfClipboard *clipboard, IDataObject **ppDataObject)
 {
 	FORMATETC fmtetc[2];
 	STGMEDIUM stgmeds[2];
@@ -975,7 +966,7 @@ static BOOL wf_create_file_obj(CONN_ID *conn_id, wfClipboard *clipboard, IDataOb
 	stgmeds[1].tymed = TYMED_ISTREAM;
 	stgmeds[1].pstm = NULL;
 	stgmeds[1].pUnkForRelease = NULL;
-	*ppDataObject = (IDataObject *)CliprdrDataObject_New(conn_id->serverConnID, conn_id->remoteConnID, fmtetc, stgmeds, 2, clipboard);
+	*ppDataObject = (IDataObject *)CliprdrDataObject_New(*connID, fmtetc, stgmeds, 2, clipboard);
 	return (*ppDataObject) ? TRUE : FALSE;
 }
 
@@ -1424,8 +1415,7 @@ static UINT cliprdr_send_format_list(wfClipboard *clipboard)
 		}
 	}
 
-	formatList.serverConnID = 0;
-	formatList.remoteConnID = 0;
+	formatList.connID = 0;
 	formatList.numFormats = numFormats;
 	formatList.formats = formats;
 	formatList.msgType = CB_FORMAT_LIST;
@@ -1446,7 +1436,7 @@ static UINT cliprdr_send_format_list(wfClipboard *clipboard)
 	return rc;
 }
 
-static UINT cliprdr_send_data_request(UINT32 serverConnID, UINT32 remoteConnID, wfClipboard *clipboard, UINT32 formatId)
+static UINT cliprdr_send_data_request(UINT32 connID, wfClipboard *clipboard, UINT32 formatId)
 {
 	UINT rc;
 	UINT32 remoteFormatId;
@@ -1457,8 +1447,7 @@ static UINT cliprdr_send_data_request(UINT32 serverConnID, UINT32 remoteConnID, 
 
 	remoteFormatId = get_remote_format_id(clipboard, formatId);
 
-	formatDataRequest.serverConnID = serverConnID;
-	formatDataRequest.remoteConnID = remoteConnID;
+	formatDataRequest.connID = connID;
 	formatDataRequest.requestedFormatId = remoteFormatId;
 	clipboard->requestedFormatId = formatId;
 	rc = clipboard->context->ClientFormatDataRequest(clipboard->context, &formatDataRequest);
@@ -1473,7 +1462,7 @@ static UINT cliprdr_send_data_request(UINT32 serverConnID, UINT32 remoteConnID, 
 		DWORD waitRes = WaitForSingleObject(clipboard->response_data_event, 50);
 		if (waitRes == WAIT_TIMEOUT)
 		{
-			if (clipboard->context->CheckEnabled(serverConnID, remoteConnID))
+			if (clipboard->context->CheckEnabled(connID))
 			{
 				continue;
 			}
@@ -1514,7 +1503,7 @@ static UINT cliprdr_send_data_request(UINT32 serverConnID, UINT32 remoteConnID, 
 	return ERROR_INTERNAL_ERROR;
 }
 
-UINT cliprdr_send_request_filecontents(wfClipboard *clipboard, UINT32 serverConnID, UINT32 remoteConnID, const void *streamid, ULONG index,
+UINT cliprdr_send_request_filecontents(wfClipboard *clipboard, UINT32 connID, const void *streamid, ULONG index,
 									   UINT32 flag, DWORD positionhigh, DWORD positionlow,
 									   ULONG nreq)
 {
@@ -1524,8 +1513,7 @@ UINT cliprdr_send_request_filecontents(wfClipboard *clipboard, UINT32 serverConn
 	if (!clipboard || !clipboard->context || !clipboard->context->ClientFileContentsRequest)
 		return ERROR_INTERNAL_ERROR;
 
-	fileContentsRequest.serverConnID = serverConnID;
-	fileContentsRequest.remoteConnID = remoteConnID;
+	fileContentsRequest.connID = connID;
 	fileContentsRequest.streamId = (UINT32)(ULONG_PTR)streamid;
 	fileContentsRequest.listIndex = index;
 	fileContentsRequest.dwFlags = flag;
@@ -1546,7 +1534,7 @@ UINT cliprdr_send_request_filecontents(wfClipboard *clipboard, UINT32 serverConn
 		DWORD waitRes = WaitForSingleObject(clipboard->req_fevent, 50);
 		if (waitRes == WAIT_TIMEOUT)
 		{
-			if (clipboard->context->CheckEnabled(serverConnID, remoteConnID))
+			if (clipboard->context->CheckEnabled(connID))
 			{
 				continue;
 			}
@@ -1588,8 +1576,7 @@ UINT cliprdr_send_request_filecontents(wfClipboard *clipboard, UINT32 serverConn
 
 static UINT cliprdr_send_response_filecontents(
 	wfClipboard *clipboard,
-	UINT32 serverConnID,
-	UINT32 remoteConnID,
+	UINT32 connID,
 	UINT16 msgFlags,
 	UINT32 streamId,
 	UINT32 size,
@@ -1604,8 +1591,7 @@ static UINT cliprdr_send_response_filecontents(
 		msgFlags = CB_RESPONSE_FAIL;
 	}
 
-	fileContentsResponse.serverConnID = serverConnID;
-	fileContentsResponse.remoteConnID = remoteConnID;
+	fileContentsResponse.connID = connID;
 	fileContentsResponse.streamId = streamId;
 	fileContentsResponse.cbRequested = size;
 	fileContentsResponse.requestedData = data;
@@ -1749,7 +1735,7 @@ static LRESULT CALLBACK cliprdr_proc(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM 
 				wf_destroy_file_obj(clipboard->data_obj);
 				clipboard->data_obj = NULL;
 			}
-			if (wf_create_file_obj((CONN_ID *)lParam, clipboard, &clipboard->data_obj))
+			if (wf_create_file_obj((UINT32 *)lParam, clipboard, &clipboard->data_obj))
 			{
 				HRESULT res = OleSetClipboard(clipboard->data_obj);
 				if (res != S_OK)
@@ -1779,7 +1765,7 @@ static LRESULT CALLBACK cliprdr_proc(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM 
 
 			for (UINT32 i = 0; i < format_ids->size; ++i)
 			{
-				if (cliprdr_send_data_request(format_ids->serverConnID, format_ids->remoteConnID, clipboard, format_ids->formats[i]) != 0)
+				if (cliprdr_send_data_request(format_ids->connID, clipboard, format_ids->formats[i]) != 0)
 				{
 					DEBUG_CLIPRDR("error: cliprdr_send_data_request failed.");
 					continue;
@@ -2145,8 +2131,7 @@ static UINT wf_cliprdr_send_client_capabilities(wfClipboard *clipboard)
 	if (!clipboard || !clipboard->context || !clipboard->context->ClientCapabilities)
 		return ERROR_INTERNAL_ERROR;
 
-	capabilities.serverConnID = 0;
-	capabilities.remoteConnID = 0;
+	capabilities.connID = 0;
 	capabilities.cCapabilitiesSets = 1;
 	capabilities.capabilitySets = (CLIPRDR_CAPABILITY_SET *)&(generalCapabilitySet);
 	generalCapabilitySet.capabilitySetType = CB_CAPSTYPE_GENERAL;
@@ -2262,9 +2247,8 @@ static UINT wf_cliprdr_server_format_list(CliprdrClientContext *context,
 	{
 		if (context->enableFiles)
 		{
-			CONN_ID *p_conn_id = (CONN_ID *)calloc(1, sizeof(CONN_ID));
-			p_conn_id->serverConnID = formatList->serverConnID;
-			p_conn_id->remoteConnID = formatList->remoteConnID;
+			UINT32 *p_conn_id = (UINT32 *)calloc(1, sizeof(UINT32));
+			*p_conn_id = formatList->connID;
 			if (PostMessage(clipboard->hwnd, WM_CLIPRDR_MESSAGE, OLE_SETCLIPBOARD, p_conn_id))
 				rc = CHANNEL_RC_OK;
 		}
@@ -2287,8 +2271,7 @@ static UINT wf_cliprdr_server_format_list(CliprdrClientContext *context,
 				//	SetClipboardData(clipboard->format_mappings[i].local_format_id, NULL);
 
 				FORMAT_IDS *format_ids = (FORMAT_IDS *)calloc(1, sizeof(FORMAT_IDS));
-				format_ids->serverConnID = formatList->serverConnID;
-				format_ids->remoteConnID = formatList->remoteConnID;
+				format_ids->connID = formatList->connID;
 				format_ids->size = (UINT32)clipboard->map_size;
 				format_ids->formats = (UINT32 *)calloc(format_ids->size, sizeof(UINT32));
 				for (i = 0; i < format_ids->size; ++i)
@@ -2563,8 +2546,7 @@ exit:
 	{
 		response.msgFlags = CB_RESPONSE_FAIL;
 	}
-	response.serverConnID = formatDataRequest->serverConnID;
-	response.remoteConnID = formatDataRequest->remoteConnID;
+	response.connID = formatDataRequest->connID;
 	response.dataLen = size;
 	response.requestedFormatData = (BYTE *)buff;
 	if (ERROR_SUCCESS != clipboard->context->ClientFormatDataResponse(clipboard->context, &response))
@@ -2848,8 +2830,7 @@ exit:
 	sRc =
 		cliprdr_send_response_filecontents(
 			clipboard,
-			fileContentsRequest->serverConnID,
-			fileContentsRequest->remoteConnID,
+			fileContentsRequest->connID,
 			rc == CHANNEL_RC_OK ? CB_RESPONSE_OK : CB_RESPONSE_FAIL,
 			fileContentsRequest->streamId,
 			uSize,
@@ -3047,7 +3028,7 @@ BOOL uninit_cliprdr(CliprdrClientContext *context)
 	return wf_cliprdr_uninit(&clipboard, context);
 }
 
-BOOL empty_cliprdr(CliprdrClientContext *context, UINT32 server_conn_id, UINT32 remote_conn_id)
+BOOL empty_cliprdr(CliprdrClientContext *context, UINT32 connID)
 {
 	wfClipboard *clipboard = NULL;
 	CliprdrDataObject *instance = NULL;
@@ -3056,7 +3037,7 @@ BOOL empty_cliprdr(CliprdrClientContext *context, UINT32 server_conn_id, UINT32 
 	{
 		return FALSE;
 	}
-	if (server_conn_id == 0 && remote_conn_id == 0)
+	if (connID == 0)
 	{
 		return TRUE;
 	}
@@ -3070,11 +3051,7 @@ BOOL empty_cliprdr(CliprdrClientContext *context, UINT32 server_conn_id, UINT32 
 	instance = clipboard->data_obj;
 	if (instance)
 	{
-		if (server_conn_id != 0 && instance->m_serverConnID != server_conn_id)
-		{
-			return TRUE;
-		}
-		if (remote_conn_id != 0 && instance->m_remoteConnID != remote_conn_id)
+		if (instance->m_connID != connID)
 		{
 			return TRUE;
 		}

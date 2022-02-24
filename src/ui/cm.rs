@@ -1,8 +1,7 @@
 use crate::ipc::{self, new_listener, Connection, Data};
 #[cfg(windows)]
 use clipboard::{
-    create_cliprdr_context, empty_clipboard, get_rx_clip_client, server_clip_file,
-    set_conn_enabled, ConnID,
+    create_cliprdr_context, empty_clipboard, get_rx_clip_client, server_clip_file, set_conn_enabled,
 };
 use hbb_common::{
     allow_err,
@@ -514,7 +513,7 @@ async fn start_clipboard_file(
                 Some((conn_id, clip)) => {
                     cmd_inner_send(
                         &cm,
-                        conn_id.server_conn_id as i32,
+                        conn_id,
                         Data::ClipbaordFile(clip)
                     );
                 }
@@ -523,11 +522,7 @@ async fn start_clipboard_file(
                 }
             },
             server_msg = rx.recv() => match server_msg {
-                Some(ClipboardFileData::Clip((server_conn_id, clip))) => {
-                    let conn_id = ConnID {
-                        server_conn_id: server_conn_id as u32,
-                        remote_conn_id: 0,
-                    };
+                Some(ClipboardFileData::Clip((conn_id, clip))) => {
                     if let Some(ctx) = cliprdr_context.as_mut() {
                         server_clip_file(ctx, conn_id, clip);
                     }
@@ -548,10 +543,10 @@ async fn start_clipboard_file(
                             }
                         });
                     }
-                    set_conn_enabled(id, 0, enabled);
+                    set_conn_enabled(id, enabled);
                     if !enabled {
                         if let Some(ctx) = cliprdr_context.as_mut() {
-                            empty_clipboard(ctx, id, 0);
+                            empty_clipboard(ctx, id);
                         }
                     }
                 }

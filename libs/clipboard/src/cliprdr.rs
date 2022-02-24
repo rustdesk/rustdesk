@@ -175,8 +175,7 @@ pub const FALSE: ::std::os::raw::c_int = 0;
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct _CLIPRDR_HEADER {
-    pub serverConnID: UINT32,
-    pub remoteConnID: UINT32,
+    pub connID: UINT32,
     pub msgType: UINT16,
     pub msgFlags: UINT16,
     pub dataLen: UINT32,
@@ -201,8 +200,7 @@ pub type CLIPRDR_GENERAL_CAPABILITY_SET = _CLIPRDR_GENERAL_CAPABILITY_SET;
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct _CLIPRDR_CAPABILITIES {
-    pub serverConnID: UINT32,
-    pub remoteConnID: UINT32,
+    pub connID: UINT32,
     pub msgType: UINT16,
     pub msgFlags: UINT16,
     pub dataLen: UINT32,
@@ -213,8 +211,7 @@ pub type CLIPRDR_CAPABILITIES = _CLIPRDR_CAPABILITIES;
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct _CLIPRDR_MONITOR_READY {
-    pub serverConnID: UINT32,
-    pub remoteConnID: UINT32,
+    pub connID: UINT32,
     pub msgType: UINT16,
     pub msgFlags: UINT16,
     pub dataLen: UINT32,
@@ -223,8 +220,7 @@ pub type CLIPRDR_MONITOR_READY = _CLIPRDR_MONITOR_READY;
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct _CLIPRDR_TEMP_DIRECTORY {
-    pub serverConnID: UINT32,
-    pub remoteConnID: UINT32,
+    pub connID: UINT32,
     pub msgType: UINT16,
     pub msgFlags: UINT16,
     pub dataLen: UINT32,
@@ -241,8 +237,7 @@ pub type CLIPRDR_FORMAT = _CLIPRDR_FORMAT;
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct _CLIPRDR_FORMAT_LIST {
-    pub serverConnID: UINT32,
-    pub remoteConnID: UINT32,
+    pub connID: UINT32,
     pub msgType: UINT16,
     pub msgFlags: UINT16,
     pub dataLen: UINT32,
@@ -253,8 +248,7 @@ pub type CLIPRDR_FORMAT_LIST = _CLIPRDR_FORMAT_LIST;
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct _CLIPRDR_FORMAT_LIST_RESPONSE {
-    pub serverConnID: UINT32,
-    pub remoteConnID: UINT32,
+    pub connID: UINT32,
     pub msgType: UINT16,
     pub msgFlags: UINT16,
     pub dataLen: UINT32,
@@ -263,8 +257,7 @@ pub type CLIPRDR_FORMAT_LIST_RESPONSE = _CLIPRDR_FORMAT_LIST_RESPONSE;
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct _CLIPRDR_LOCK_CLIPBOARD_DATA {
-    pub serverConnID: UINT32,
-    pub remoteConnID: UINT32,
+    pub connID: UINT32,
     pub msgType: UINT16,
     pub msgFlags: UINT16,
     pub dataLen: UINT32,
@@ -274,8 +267,7 @@ pub type CLIPRDR_LOCK_CLIPBOARD_DATA = _CLIPRDR_LOCK_CLIPBOARD_DATA;
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct _CLIPRDR_UNLOCK_CLIPBOARD_DATA {
-    pub serverConnID: UINT32,
-    pub remoteConnID: UINT32,
+    pub connID: UINT32,
     pub msgType: UINT16,
     pub msgFlags: UINT16,
     pub dataLen: UINT32,
@@ -285,8 +277,7 @@ pub type CLIPRDR_UNLOCK_CLIPBOARD_DATA = _CLIPRDR_UNLOCK_CLIPBOARD_DATA;
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct _CLIPRDR_FORMAT_DATA_REQUEST {
-    pub serverConnID: UINT32,
-    pub remoteConnID: UINT32,
+    pub connID: UINT32,
     pub msgType: UINT16,
     pub msgFlags: UINT16,
     pub dataLen: UINT32,
@@ -296,8 +287,7 @@ pub type CLIPRDR_FORMAT_DATA_REQUEST = _CLIPRDR_FORMAT_DATA_REQUEST;
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct _CLIPRDR_FORMAT_DATA_RESPONSE {
-    pub serverConnID: UINT32,
-    pub remoteConnID: UINT32,
+    pub connID: UINT32,
     pub msgType: UINT16,
     pub msgFlags: UINT16,
     pub dataLen: UINT32,
@@ -307,8 +297,7 @@ pub type CLIPRDR_FORMAT_DATA_RESPONSE = _CLIPRDR_FORMAT_DATA_RESPONSE;
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct _CLIPRDR_FILE_CONTENTS_REQUEST {
-    pub serverConnID: UINT32,
-    pub remoteConnID: UINT32,
+    pub connID: UINT32,
     pub msgType: UINT16,
     pub msgFlags: UINT16,
     pub dataLen: UINT32,
@@ -325,8 +314,7 @@ pub type CLIPRDR_FILE_CONTENTS_REQUEST = _CLIPRDR_FILE_CONTENTS_REQUEST;
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct _CLIPRDR_FILE_CONTENTS_RESPONSE {
-    pub serverConnID: UINT32,
-    pub remoteConnID: UINT32,
+    pub connID: UINT32,
     pub msgType: UINT16,
     pub msgFlags: UINT16,
     pub dataLen: UINT32,
@@ -457,7 +445,7 @@ pub type pcCliprdrServerFileContentsResponse = ::std::option::Option<
     ) -> UINT,
 >;
 pub type pcCheckEnabled = ::std::option::Option<
-    unsafe extern "C" fn(server_conn_id: UINT32, remote_conn_id: UINT32) -> BOOL,
+    unsafe extern "C" fn(connID: UINT32) -> BOOL,
 >;
 
 // TODO: hide more members of clipboard context
@@ -498,8 +486,7 @@ extern "C" {
     pub(crate) fn uninit_cliprdr(context: *mut CliprdrClientContext) -> BOOL;
     pub(crate) fn empty_cliprdr(
         context: *mut CliprdrClientContext,
-        server_conn_id: UINT32,
-        remote_conn_id: UINT32,
+        connID: UINT32,
     ) -> BOOL;
 }
 

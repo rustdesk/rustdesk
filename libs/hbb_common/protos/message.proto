@@ -308,58 +308,50 @@ message FileDirCreate {
 
 // main logic from freeRDP
 message CliprdrMonitorReady {
-  int32 server_conn_id = 1;
-  int32 remote_conn_id = 2;
+  int32 conn_id = 1;
 }
 
 message CliprdrFormat {
-  int32 server_conn_id = 1;
-  int32 remote_conn_id = 2;
-  int32 id = 3;
-  string format = 4;
+  int32 conn_id = 1;
+  int32 id = 2;
+  string format = 3;
 }
 
 message CliprdrServerFormatList {
-  int32 server_conn_id = 1;
-  int32 remote_conn_id = 2;
-  repeated CliprdrFormat formats = 3;
+  int32 conn_id = 1;
+  repeated CliprdrFormat formats = 2;
 }
 
 message CliprdrServerFormatListResponse {
-  int32 server_conn_id = 1;
-  int32 remote_conn_id = 2;
-  int32 msg_flags = 3;
+  int32 conn_id = 1;
+  int32 msg_flags = 2;
 }
 
 message CliprdrServerFormatDataRequest {
-  int32 server_conn_id = 1;
-  int32 remote_conn_id = 2;
-  int32 requested_format_id = 3;
+  int32 conn_id = 1;
+  int32 requested_format_id = 2;
 }
 
 message CliprdrServerFormatDataResponse {
-  int32 server_conn_id = 1;
-  int32 remote_conn_id = 2;
-  int32 msg_flags = 3;
-  bytes format_data = 4;
+  int32 conn_id = 1;
+  int32 msg_flags = 2;
+  bytes format_data = 3;
 }
 
 message CliprdrFileContentsRequest {
-  int32 server_conn_id = 1;
-  int32 remote_conn_id = 2;
-  int32 stream_id = 3;
-	int32 list_index = 4;
-	int32 dw_flags = 5;
-	int32 n_position_low = 6;
-	int32 n_position_high = 7;
-	int32 cb_requested = 8;
-	bool have_clip_data_id = 9;
-	int32 clip_data_id = 10;
+  int32 conn_id = 1;
+  int32 stream_id = 2;
+	int32 list_index = 3;
+	int32 dw_flags = 4;
+	int32 n_position_low = 5;
+	int32 n_position_high = 6;
+	int32 cb_requested = 7;
+	bool have_clip_data_id = 8;
+	int32 clip_data_id = 9;
 }
 
 message CliprdrFileContentsResponse {
-  int32 server_conn_id = 1;
-  int32 remote_conn_id = 2;
+  int32 conn_id = 1;
   int32 msg_flags = 3;
   int32 stream_id = 4;
 	bytes requested_data = 5;
