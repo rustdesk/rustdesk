@@ -18,8 +18,7 @@ extern "C"
 
 /* Clipboard Messages */
 #define DEFINE_CLIPRDR_HEADER_COMMON() \
-    UINT32 serverConnID;               \
-    UINT32 remoteConnID;               \
+    UINT32 connID;                     \
     UINT16 msgType;                    \
     UINT16 msgFlags;                   \
     UINT32 dataLen
@@ -192,7 +191,7 @@ extern "C"
     typedef UINT (*pcCliprdrServerFileContentsResponse)(
         CliprdrClientContext *context, const CLIPRDR_FILE_CONTENTS_RESPONSE *fileContentsResponse);
 
-    typedef BOOL (*pcCheckEnabled)(UINT32 server_conn_id, UINT32 remote_conn_id);
+    typedef BOOL (*pcCheckEnabled)(UINT32 connID);
 
     // TODO: hide more members of clipboard context
     struct _cliprdr_client_context

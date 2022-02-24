@@ -12,7 +12,7 @@ use crate::{
 #[cfg(windows)]
 use clipboard::{
     cliprdr::CliprdrClientContext, create_cliprdr_context as create_clipboard_file_context,
-    get_rx_clip_client, server_clip_file, ConnID as ClipboardFileConnID,
+    get_rx_clip_client, server_clip_file,
 };
 use enigo::{self, Enigo, KeyboardControllable};
 use hbb_common::{
@@ -349,7 +349,8 @@ impl Handler {
                 } else {
                     let mut chr = match evt.name {
                         Some(ref s) => {
-                            if s.len() <= 2 { // exclude chinese characters
+                            if s.len() <= 2 {
+                                // exclude chinese characters
                                 s.chars().next().unwrap_or('\0')
                             } else {
                                 '\0'
@@ -357,7 +358,8 @@ impl Handler {
                         }
                         _ => '\0',
                     };
-                    if chr == '·' { // special for Chinese
+                    if chr == '·' {
+                        // special for Chinese
                         chr = '`';
                     }
                     if chr == '\0' {
@@ -1251,8 +1253,6 @@ async fn io_loop(handler: Handler) {
         first_frame: false,
         #[cfg(windows)]
         clipboard_file_context: None,
-        #[cfg(windows)]
-        pid: std::process::id(),
     };
     remote.io_loop().await;
 }
@@ -1294,8 +1294,6 @@ struct Remote {
     first_frame: bool,
     #[cfg(windows)]
     clipboard_file_context: Option<Box<CliprdrClientContext>>,
-    #[cfg(windows)]
-    pid: u32,
 }
 
 impl Remote {
@@ -1356,10 +1354,8 @@ impl Remote {
                         _msg = rx_clip_client.recv() => {
                             #[cfg(windows)]
                             match _msg {
-                                Some((conn_id, clip)) => {
-                                    if conn_id.remote_conn_id == 0 || conn_id.remote_conn_id == self.pid {
-                                        allow_err!(peer.send(&clip_2_msg(clip)).await);
-                                    }
+                                Some((_, clip)) => {
+                                    allow_err!(peer.send(&clip_2_msg(clip)).await);
                                 }
                                 None => {
                                     // unreachable!()
@@ -1747,14 +1743,7 @@ impl Remote {
                     if !self.handler.lc.read().unwrap().disable_clipboard {
                         if let Some(context) = &mut self.clipboard_file_context {
                             if let Some(clip) = msg_2_clip(clip) {
-                                server_clip_file(
-                                    context,
-                                    ClipboardFileConnID {
-                                        server_conn_id: 0,
-                                        remote_conn_id: self.pid,
-                                    },
-                                    clip,
-                                );
+                                server_clip_file(context, 0, clip);
                             }
                         }
                     }
