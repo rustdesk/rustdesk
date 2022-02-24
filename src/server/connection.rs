@@ -1,7 +1,6 @@
 use super::{input_service::*, *};
 #[cfg(windows)]
-use crate::{clipboard_file::*, common::update_clipboard, ipc};
-#[cfg(not(windows))]
+use crate::clipboard_file::*;
 use crate::{common::update_clipboard, ipc};
 use hbb_common::{
     config::Config,

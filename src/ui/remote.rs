@@ -1,10 +1,5 @@
 #[cfg(windows)]
-use crate::{
-    client::*,
-    clipboard_file::*,
-    common::{self, check_clipboard, update_clipboard, ClipboardContext, CLIPBOARD_INTERVAL},
-};
-#[cfg(not(windows))]
+use crate::clipboard_file::*;
 use crate::{
     client::*,
     common::{self, check_clipboard, update_clipboard, ClipboardContext, CLIPBOARD_INTERVAL},
