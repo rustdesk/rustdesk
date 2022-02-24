@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_easyloading/flutter_easyloading.dart';
 import 'package:provider/provider.dart';
 import 'package:firebase_analytics/firebase_analytics.dart';
 import 'package:firebase_analytics/observer.dart';
@@ -10,11 +11,13 @@ import 'server_page.dart';
 Future<Null> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp();
+  // EasyLoading.instance.loadingStyle = EasyLoadingStyle.light;
   toAndroidChannelInit();
   runApp(App());
 }
 
 class App extends StatelessWidget {
+
   @override
   Widget build(BuildContext context) {
     final analytics = FirebaseAnalytics();
@@ -39,6 +42,7 @@ class App extends StatelessWidget {
         navigatorObservers: [
           FirebaseAnalyticsObserver(analytics: analytics),
         ],
+        builder: EasyLoading.init(),
       ),
     );
   }

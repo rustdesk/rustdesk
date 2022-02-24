@@ -3,7 +3,6 @@ import 'package:flutter_hbb/widgets/gesture_help.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter/services.dart';
 import 'dart:ui' as ui;
-import 'package:flutter_easyloading/flutter_easyloading.dart';
 import 'dart:async';
 import 'package:tuple/tuple.dart';
 import 'package:wakelock/wakelock.dart';
@@ -48,7 +47,6 @@ class _RemotePageState extends State<RemotePage> {
           Timer.periodic(Duration(milliseconds: 30), (timer) => interval());
     });
     Wakelock.enable();
-    loadingCancelCallback = () => _interval?.cancel();
     _touchMode = FFI.getByName('peer_option', "touch-mode") != '';
   }
 
@@ -56,7 +54,6 @@ class _RemotePageState extends State<RemotePage> {
   void dispose() {
     _focusNode.dispose();
     FFI.close();
-    loadingCancelCallback = null;
     _interval?.cancel();
     _timer?.cancel();
     dismissLoading();
@@ -110,7 +107,7 @@ class _RemotePageState extends State<RemotePage> {
   }
 
   void showMsgBox(String type, String title, String text, bool hasRetry) {
-    msgbox(type, title, text, context);
+    msgBox(type, title, text, context);
     if (hasRetry) {
       _timer?.cancel();
       _timer = Timer(Duration(seconds: _reconnects), () {
@@ -223,7 +220,6 @@ class _RemotePageState extends State<RemotePage> {
     final pi = Provider.of<FfiModel>(context).pi;
     final hideKeyboard = isKeyboardShown() && _showEdit;
     final showActionButton = !_showBar || hideKeyboard;
-    EasyLoading.instance.loadingStyle = EasyLoadingStyle.light;
     return WillPopScope(
       onWillPop: () async {
         close();
@@ -249,13 +245,12 @@ class _RemotePageState extends State<RemotePage> {
                   }),
           bottomNavigationBar:
               _showBar && pi.displays != null ? getBottomAppBar() : null,
-          body: FlutterEasyLoading(
-            child: Container(
+          body: Container(
                 color: Colors.black,
                 child: isDesktop
                     ? getBodyForDesktopWithListener()
                     : SafeArea(child: getBodyForMobileWithGesture())),
-          )),
+          ),
     );
   }
 
@@ -575,7 +570,7 @@ class _RemotePageState extends State<RemotePage> {
   }
 
   void close() {
-    msgbox('', 'Close', 'Are you sure to close the connection?', context);
+    msgBox('', 'Close', 'Are you sure to close the connection?', context);
   }
 
   Widget getHelpTools() {

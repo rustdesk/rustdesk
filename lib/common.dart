@@ -32,45 +32,13 @@ final ButtonStyle flatButtonStyle = TextButton.styleFrom(
   ),
 );
 
-void Function()? loadingCancelCallback;
 void showLoading(String text, BuildContext? context) {
   if (_hasDialog && context != null) {
     Navigator.pop(context);
     _hasDialog = false;
   }
   dismissLoading();
-  if (isAndroid) {
-    EasyLoading.show(status: text, maskType: EasyLoadingMaskType.black);
-    return;
-  }
-  // EasyLoading.showWidget(
-  //     Container(
-  //         constraints: BoxConstraints(maxWidth: 300),
-  //         child: Column(
-  //           crossAxisAlignment: CrossAxisAlignment.start,
-  //           children: [
-  //             Center(child: CircularProgressIndicator()),
-  //             SizedBox(height: 20),
-  //             Center(
-  //                 child: Text(Translator.call(text),
-  //                     style: TextStyle(fontSize: 15))),
-  //             SizedBox(height: 20),
-  //             Center(
-  //                 child: TextButton(
-  //                     style: flatButtonStyle,
-  //                     onPressed: () {
-  //                       // with out loadingCancelCallback, we can see unexpected input password
-  //                       // dialog shown in home, no clue why, so use this as workaround
-  //                       // why no such issue on android?
-  //                       if (loadingCancelCallback != null)
-  //                         loadingCancelCallback();
-  //                       Navigator.pop(context);
-  //                     },
-  //                     child: Text(Translator.call('Cancel'),
-  //                         style: TextStyle(color: MyTheme.accent))))
-  //           ],
-  //         )),
-  //     maskType: EasyLoadingMaskType.black);
+  EasyLoading.show(status: text, maskType: EasyLoadingMaskType.black);
 }
 
 void dismissLoading() {
@@ -112,7 +80,7 @@ Future<T?> showAlertDialog<T>(BuildContext context, BuildAlertDailog build,
   return res;
 }
 
-void msgbox(String type, String title, String text, BuildContext context,
+void msgBox(String type, String title, String text, BuildContext context,
     {bool? hasCancel}) {
   var wrap = (String text, void Function() onPressed) => ButtonTheme(
       padding: EdgeInsets.symmetric(horizontal: 20, vertical: 10),
@@ -167,22 +135,6 @@ void msgbox(String type, String title, String text, BuildContext context,
           ],
         ))
   );
-  // EasyLoading.showWidget(
-  //     Container(
-  //         constraints: BoxConstraints(maxWidth: 300),
-  //         child: Column(
-  //           crossAxisAlignment: CrossAxisAlignment.start,
-  //           children: [
-  //             Text(Translator.call(title), style: TextStyle(fontSize: 21)),
-  //             SizedBox(height: 20),
-  //             Text(Translator.call(text), style: TextStyle(fontSize: 15)),
-  //             SizedBox(height: 20),
-  //             Row(
-  //               children: buttons,
-  //             )
-  //           ],
-  //         )),
-  //     maskType: EasyLoadingMaskType.black);
 }
 
 class PasswordWidget extends StatefulWidget {
