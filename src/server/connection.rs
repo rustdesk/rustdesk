@@ -1,4 +1,7 @@
 use super::{input_service::*, *};
+#[cfg(windows)]
+use crate::{clipboard_file::*, common::update_clipboard, ipc};
+#[cfg(not(windows))]
 use crate::{common::update_clipboard, ipc};
 use hbb_common::{
     config::Config,
@@ -243,16 +246,17 @@ impl Connection {
                             } else if &name == "file" {
                                 conn.file = enabled;
                                 conn.send_permission(Permission::File, enabled).await;
-                                #[cfg(windows)]
-                                if let Some(s) = conn.server.upgrade() {
-                                    s.write().unwrap().subscribe(
-                                        super::clipboard_file_service::NAME,
-                                        conn.inner.clone(), conn.file_transfer_enabled());
-                                }
+                                conn.send_to_cm(ipc::Data::ClipboardFileEnabled(conn.file_transfer_enabled()));
                             }
                         }
                         ipc::Data::RawMessage(bytes) => {
                             allow_err!(conn.stream.send_raw(bytes).await);
+                        }
+                        ipc::Data::ClipbaordFile(_clip) => {
+                            if conn.file_transfer_enabled() {
+                                #[cfg(windows)]
+                                allow_err!(conn.stream.send(&clip_2_msg(_clip)).await);
+                            }
                         }
                         _ => {}
                     }
@@ -620,10 +624,6 @@ impl Connection {
                 if !self.audio_enabled() {
                     noperms.push(super::audio_service::NAME);
                 }
-                if !self.file_transfer_enabled() {
-                    #[cfg(windows)]
-                    noperms.push(super::clipboard_file_service::NAME);
-                }
                 s.write()
                     .unwrap()
                     .add_connection(self.inner.clone(), &noperms);
@@ -655,6 +655,7 @@ impl Connection {
             clipboard: self.clipboard,
             audio: self.audio,
             file: self.file,
+            file_transfer_enabled: self.file_transfer_enabled(),
         });
     }
 
@@ -849,9 +850,13 @@ impl Connection {
                         update_clipboard(cb, None);
                     }
                 }
-                #[cfg(windows)]
-                Some(message::Union::cliprdr(clip)) => {
-                    clipboard_file_service::handle_serve_cliprdr_msg(self.inner.id, clip)
+                Some(message::Union::cliprdr(_clip)) => {
+                    if self.file_transfer_enabled() {
+                        #[cfg(windows)]
+                        if let Some(clip) = msg_2_clip(_clip) {
+                            self.send_to_cm(ipc::Data::ClipbaordFile(clip))
+                        }
+                    }
                 }
                 Some(message::Union::file_action(fa)) => {
                     if self.file_transfer.is_some() {
@@ -1017,13 +1022,7 @@ impl Connection {
         if let Ok(q) = o.enable_file_transfer.enum_value() {
             if q != BoolOption::NotSet {
                 self.enable_file_transfer = q == BoolOption::Yes;
-                if let Some(s) = self.server.upgrade() {
-                    s.write().unwrap().subscribe(
-                        super::clipboard_file_service::NAME,
-                        self.inner.clone(),
-                        self.file_transfer_enabled(),
-                    );
-                }
+                self.send_to_cm(ipc::Data::ClipboardFileEnabled(self.file_transfer_enabled()));
             }
         }
         if let Ok(q) = o.disable_clipboard.enum_value() {

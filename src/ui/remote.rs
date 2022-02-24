@@ -1,12 +1,18 @@
-use crate::client::*;
-use crate::common::{
-    self, check_clipboard, update_clipboard, ClipboardContext, CLIPBOARD_INTERVAL,
+#[cfg(windows)]
+use crate::{
+    client::*,
+    clipboard_file::*,
+    common::{self, check_clipboard, update_clipboard, ClipboardContext, CLIPBOARD_INTERVAL},
+};
+#[cfg(not(windows))]
+use crate::{
+    client::*,
+    common::{self, check_clipboard, update_clipboard, ClipboardContext, CLIPBOARD_INTERVAL},
 };
 #[cfg(windows)]
 use clipboard::{
     cliprdr::CliprdrClientContext, create_cliprdr_context as create_clipboard_file_context,
-    get_rx_client_msg as get_clipboard_file_rx_client_msg, server_msg as clipboard_file_msg,
-    ConnID as ClipboardFileConnID,
+    get_rx_clip_client, server_clip_file, ConnID as ClipboardFileConnID,
 };
 use enigo::{self, Enigo, KeyboardControllable};
 use hbb_common::{
@@ -1313,9 +1319,9 @@ impl Remote {
 
                 // just build for now
                 #[cfg(not(windows))]
-                let (_, mut clipboard_file_client_rx) = mpsc::unbounded_channel::<i32>();
+                let (_, mut rx_clip_client) = mpsc::unbounded_channel::<i32>();
                 #[cfg(windows)]
-                let mut clipboard_file_client_rx = get_clipboard_file_rx_client_msg().lock().await;
+                let mut rx_clip_client = get_rx_clip_client().lock().await;
 
                 loop {
                     tokio::select! {
@@ -1347,12 +1353,12 @@ impl Remote {
                                 }
                             }
                         }
-                        _msg = clipboard_file_client_rx.recv() => {
+                        _msg = rx_clip_client.recv() => {
                             #[cfg(windows)]
                             match _msg {
-                                Some((conn_id, msg)) => {
+                                Some((conn_id, clip)) => {
                                     if conn_id.remote_conn_id == 0 || conn_id.remote_conn_id == self.pid {
-                                        allow_err!(peer.send(&msg).await);
+                                        allow_err!(peer.send(&clip_2_msg(clip)).await);
                                     }
                                 }
                                 None => {
@@ -1740,14 +1746,16 @@ impl Remote {
                 Some(message::Union::cliprdr(clip)) => {
                     if !self.handler.lc.read().unwrap().disable_clipboard {
                         if let Some(context) = &mut self.clipboard_file_context {
-                            clipboard_file_msg(
-                                context,
-                                ClipboardFileConnID {
-                                    server_conn_id: 0,
-                                    remote_conn_id: self.pid,
-                                },
-                                clip,
-                            );
+                            if let Some(clip) = msg_2_clip(clip) {
+                                server_clip_file(
+                                    context,
+                                    ClipboardFileConnID {
+                                        server_conn_id: 0,
+                                        remote_conn_id: self.pid,
+                                    },
+                                    clip,
+                                );
+                            }
                         }
                     }
                 }

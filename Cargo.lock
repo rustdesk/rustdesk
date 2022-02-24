@@ -395,6 +395,8 @@ dependencies = [
  "cc",
  "hbb_common",
  "lazy_static",
+ "serde 1.0.135",
+ "serde_derive",
  "thiserror",
 ]
 

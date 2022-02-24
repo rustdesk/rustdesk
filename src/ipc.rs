@@ -1,4 +1,5 @@
 use crate::rendezvous_mediator::RendezvousMediator;
+pub use clipboard::ClipbaordFile;
 use hbb_common::{
     allow_err, bail, bytes,
     bytes_codec::BytesCodec,
@@ -73,6 +74,7 @@ pub enum Data {
         clipboard: bool,
         audio: bool,
         file: bool,
+        file_transfer_enabled: bool,
     },
     ChatMessage {
         text: String,
@@ -103,6 +105,8 @@ pub enum Data {
         to: String,
     },
     SyncConfigToUserResp(bool),
+    ClipbaordFile(ClipbaordFile),
+    ClipboardFileEnabled(bool),
 }
 
 #[tokio::main(flavor = "current_thread")]
