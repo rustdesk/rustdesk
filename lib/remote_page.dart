@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_easyloading/flutter_easyloading.dart';
 import 'package:flutter_hbb/widgets/gesture_help.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter/services.dart';
@@ -41,7 +42,7 @@ class _RemotePageState extends State<RemotePage> {
     super.initState();
     FFI.connect(widget.id);
     WidgetsBinding.instance!.addPostFrameCallback((_) {
-      SystemChrome.setEnabledSystemUIOverlays([]);
+      SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual, overlays: []);
       showLoading(translate('Connecting...'), context);
       _interval =
           Timer.periodic(Duration(milliseconds: 30), (timer) => interval());
@@ -57,7 +58,8 @@ class _RemotePageState extends State<RemotePage> {
     _interval?.cancel();
     _timer?.cancel();
     dismissLoading();
-    SystemChrome.setEnabledSystemUIOverlays(SystemUiOverlay.values);
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual,
+        overlays: SystemUiOverlay.values);
     Wakelock.disable();
     super.dispose();
   }
@@ -70,7 +72,7 @@ class _RemotePageState extends State<RemotePage> {
     return _bottom >= 100;
   }
 
-  // crash on web before widgit initiated.
+  // crash on web before widget initiated.
   void intervalUnsafe() {
     var v = MediaQuery.of(context).viewInsets.bottom;
     if (v != _bottom) {
@@ -78,11 +80,12 @@ class _RemotePageState extends State<RemotePage> {
       setState(() {
         _bottom = v;
         if (v < 100) {
-          SystemChrome.setEnabledSystemUIOverlays([]);
+          SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual,
+              overlays: []);
         }
       });
     }
-    FFI.ffiModel.update(widget.id, context, handleMsgbox);
+    FFI.ffiModel.update(widget.id, context, handleMsgBox);
   }
 
   void interval() {
@@ -91,7 +94,7 @@ class _RemotePageState extends State<RemotePage> {
     } catch (e) {}
   }
 
-  void handleMsgbox(Map<String, dynamic> evt, String id) {
+  void handleMsgBox(Map<String, dynamic> evt, String id) {
     var type = evt['type'];
     var title = evt['title'];
     var text = evt['text'];
@@ -208,7 +211,8 @@ class _RemotePageState extends State<RemotePage> {
       setState(() => _showEdit = true);
       _timer?.cancel();
       _timer = Timer(Duration(milliseconds: 30), () {
-        SystemChrome.setEnabledSystemUIOverlays(SystemUiOverlay.values);
+        SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual,
+            overlays: SystemUiOverlay.values);
         SystemChannels.textInput.invokeMethod('TextInput.show');
         _focusNode.requestFocus();
       });
@@ -245,12 +249,17 @@ class _RemotePageState extends State<RemotePage> {
                   }),
           bottomNavigationBar:
               _showBar && pi.displays != null ? getBottomAppBar() : null,
-          body: Container(
-                color: Colors.black,
-                child: isDesktop
-                    ? getBodyForDesktopWithListener()
-                    : SafeArea(child: getBodyForMobileWithGesture())),
-          ),
+          body: Overlay(
+            initialEntries: [
+              OverlayEntry(builder: (context) {
+                return Container(
+                    color: Colors.black,
+                    child: isDesktop
+                        ? getBodyForDesktopWithListener()
+                        : SafeArea(child: getBodyForMobileWithGesture()));
+              })
+            ],
+          )),
     );
   }
 

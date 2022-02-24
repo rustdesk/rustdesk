@@ -11,7 +11,7 @@ import 'server_page.dart';
 Future<Null> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp();
-  // EasyLoading.instance.loadingStyle = EasyLoadingStyle.light;
+  EasyLoading.instance.loadingStyle = EasyLoadingStyle.light;
   toAndroidChannelInit();
   runApp(App());
 }
