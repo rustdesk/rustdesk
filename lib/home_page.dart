@@ -54,25 +54,25 @@ class _HomePageState extends State<HomePage> {
                       this._menuPos = RelativeRect.fromLTRB(x, y, x, y);
                     },
                     onTap: () {
+                      List<PopupMenuItem<String>> items = [];
+                      items.add(PopupMenuItem<String>(
+                          child: Text(translate('ID Server')),
+                          value: 'id_server'));
+                      if (isAndroid){
+                        items.add(
+                            PopupMenuItem<String>(
+                                child: Text(translate('Share My Screen')),
+                                value: 'server')
+                        );
+                      }
+                      items.add(PopupMenuItem<String>(
+                          child: Text(translate('About') + ' RustDesk'),
+                          value: 'about'));
                       () async {
                         var value = await showMenu<dynamic>(
                           context: context,
                           position: this._menuPos,
-                          items: [
-                            PopupMenuItem<String>(
-                                child: Text(translate('ID Server')),
-                                value: 'id_server'),
-                            // TODO　test
-                            isAndroid
-                                ? PopupMenuItem<dynamic>(
-                                    child: Text(translate('Share My Screen')),
-                                    value: 'server')
-                                : PopupMenuItem<dynamic>(
-                                    child: SizedBox.shrink(), value: ''),
-                            PopupMenuItem<String>(
-                                child: Text(translate('About') + ' RustDesk'),
-                                value: 'about'),
-                          ],
+                          items: items,
                           elevation: 8,
                         );
                         if (value == 'id_server') {

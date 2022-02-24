@@ -32,9 +32,12 @@ class GestureIcons {
       IconData(0xe691, fontFamily: _family);
 }
 
+typedef OnTouchModeChange = void Function(bool);
+
 class GestureHelp extends StatefulWidget {
-  GestureHelp({Key? key,this.initTouchMode = false}) : super(key: key);
-  final initTouchMode;
+  GestureHelp({Key? key,required this.touchMode,required this.onTouchModeChange}) : super(key: key);
+  final bool touchMode;
+  final OnTouchModeChange onTouchModeChange;
   @override
   State<StatefulWidget> createState() => _GestureHelpState();
 }
@@ -45,7 +48,7 @@ class _GestureHelpState extends State<GestureHelp> {
 
   @override
   void initState() {
-    _touchMode = widget.initTouchMode;
+    _touchMode = widget.touchMode;
     _selectedIndex = _touchMode ? 1 : 0;
     super.initState();
   }
@@ -61,20 +64,24 @@ class _GestureHelpState extends State<GestureHelp> {
               children: <Widget>[
                 ToggleSwitch(
                   initialLabelIndex: _selectedIndex,
+                  inactiveBgColor: MyTheme.darkGray,
                   totalSwitches: 2,
                   minWidth: 130,
                   fontSize: 15,
                   iconSize: 20,
                   labels: ["触摸板模式", "触屏模式"],
                   icons: [
-                    GestureIcons.icon_mouse,
-                    GestureIcons.icon_Tablet_Touch
+                    Icons.mouse,
+                    Icons.touch_app
                   ],
                   onToggle: (index) {
                     debugPrint(index.toString());
                     setState(() {
-                      _touchMode = index == 0 ? false : true;
-                      _selectedIndex = index ?? 0;
+                      if (_selectedIndex != index){
+                        _selectedIndex = index ?? 0;
+                        _touchMode = index == 0 ? false : true;
+                        widget.onTouchModeChange(_touchMode);
+                      }
                     });
                   },
                 ),

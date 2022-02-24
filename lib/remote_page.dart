@@ -29,7 +29,6 @@ class _RemotePageState extends State<RemotePage> {
   double _bottom = 0;
   String _value = '';
   double _scale = 1;
-  bool _mouseTools = false;
 
   var _more = true;
   var _fn = false;
@@ -204,7 +203,6 @@ class _RemotePageState extends State<RemotePage> {
   void openKeyboard() {
     // destroy first, so that our _value trick can work
     _value = initText;
-    resetMouse();
     setState(() => _showEdit = false);
     _timer?.cancel();
     _timer = Timer(Duration(milliseconds: 30), () {
@@ -218,10 +216,6 @@ class _RemotePageState extends State<RemotePage> {
         _focusNode.requestFocus();
       });
     });
-  }
-
-  void resetMouse() {
-    _mouseTools = false;
   }
 
   @override
@@ -300,29 +294,11 @@ class _RemotePageState extends State<RemotePage> {
                               color: Colors.white,
                               icon: Icon(Icons.keyboard),
                               onPressed: openKeyboard),
-                          Container(
-                              color: _mouseTools ? Colors.blue[500] : null,
-                              child: IconButton(
-                                color: Colors.white,
-                                icon: Icon(Icons.mouse),
-                                onPressed: () {
-                                  setState(() {
-                                    _mouseTools = !_mouseTools;
-                                    resetTool();
-                                  });
-                                },
-                              )),
                           IconButton(
                             color: Colors.white,
-                            icon: Icon(Icons.help),
-                            onPressed: () {
-                              setState(() => _showEdit = false);
-                              showModalBottomSheet(
-                                  backgroundColor: MyTheme.grayBg,
-                                  context: context,
-                                  builder: (context) =>
-                                      GestureHelp(initTouchMode: _touchMode));
-                            },
+                            icon: Icon(
+                                _touchMode ? Icons.touch_app : Icons.mouse),
+                            onPressed: changeTouchMode,
                           )
                         ]) +
                   <Widget>[
@@ -519,18 +495,6 @@ class _RemotePageState extends State<RemotePage> {
             child: Text(translate('Paste')), value: 'paste'));
       }
       more.add(PopupMenuItem<String>(
-          child: Row(
-              children: ([
-            Container(width: 100.0, child: Text(translate('Touch mode'))),
-            Padding(padding: EdgeInsets.symmetric(horizontal: 16.0)),
-            Icon(
-                _touchMode
-                    ? Icons.check_box_outlined
-                    : Icons.check_box_outline_blank,
-                color: MyTheme.accent)
-          ])),
-          value: 'touch_mode'));
-      more.add(PopupMenuItem<String>(
           child: Text(translate('Reset canvas')), value: 'reset_canvas'));
     }
     if (perms['keyboard'] != false) {
@@ -580,14 +544,34 @@ class _RemotePageState extends State<RemotePage> {
         } else {
           showSetOSPassword(context, true);
         }
-      } else if (value == 'touch_mode') {
-        _touchMode = !_touchMode;
-        final v = _touchMode ? 'Y' : '';
-        FFI.setByName('peer_option', '{"name": "touch-mode", "value": "$v"}');
       } else if (value == 'reset_canvas') {
         FFI.cursorModel.reset();
       }
     }();
+  }
+
+  void changeTouchMode() {
+    setState(() => _showEdit = false);
+    showModalBottomSheet(
+        backgroundColor: MyTheme.grayBg,
+        isScrollControlled: true,
+        context: context,
+        shape: const RoundedRectangleBorder(
+            borderRadius: BorderRadius.vertical(top: Radius.circular(5))),
+        builder: (context) => DraggableScrollableSheet(
+            expand: false,
+            builder: (context, scrollController) {
+              return SingleChildScrollView(
+                  padding: EdgeInsets.symmetric(vertical: 10),
+                  child: GestureHelp(
+                      touchMode: _touchMode,
+                      onTouchModeChange: (t) {
+                        setState(() => _touchMode = t);
+                        final v = _touchMode ? 'Y' : '';
+                        FFI.setByName('peer_option',
+                            '{"name": "touch-mode", "value": "$v"}');
+                      }));
+            }));
   }
 
   void close() {
@@ -596,7 +580,7 @@ class _RemotePageState extends State<RemotePage> {
 
   Widget getHelpTools() {
     final keyboard = isKeyboardShown();
-    if (!_mouseTools && !keyboard) {
+    if (!keyboard) {
       return SizedBox();
     }
     final size = MediaQuery.of(context).size;
