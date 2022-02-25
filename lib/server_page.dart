@@ -172,6 +172,8 @@ class _PermissionCheckerState extends State<PermissionChecker> {
         const Divider(),
         serverModel.mediaOk
             ? ElevatedButton.icon(
+                style: ButtonStyle(
+                    backgroundColor: MaterialStateProperty.all(Colors.red)),
                 icon: Icon(Icons.stop),
                 onPressed: _toAndroidStopService,
                 label: Text(translate("Stop service")))
@@ -182,6 +184,18 @@ class _PermissionCheckerState extends State<PermissionChecker> {
       ],
     ));
   }
+}
+
+Widget getConnInfo(String name, String peerID) {
+  return Row(
+    children: [
+      CircleAvatar(child: Text(name[0]), backgroundColor: MyTheme.border),
+      SizedBox(width: 12),
+      Text(name, style: TextStyle(color: MyTheme.idColor)),
+      SizedBox(width: 8),
+      Text(peerID, style: TextStyle(color: MyTheme.idColor))
+    ],
+  );
 }
 
 BuildContext? loginReqAlertCtx;
@@ -203,15 +217,7 @@ void showLoginReqAlert(String peerID, String name) async {
                 children: [
                   Text(translate("Do you accept?")),
                   SizedBox(height: 20),
-                  Row(
-                    children: [
-                      CircleAvatar(child: Text(name[0])),
-                      SizedBox(width: 10),
-                      Text(name),
-                      SizedBox(width: 5),
-                      Text(peerID)
-                    ],
-                  ),
+                  getConnInfo(name, peerID),
                 ],
               )),
           actions: [
@@ -257,15 +263,21 @@ class PermissionRow extends StatelessWidget {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Text.rich(TextSpan(children: [
-          TextSpan(
-              text: name + ":  ",
-              style: TextStyle(fontSize: 16.0, color: MyTheme.accent50)),
-          TextSpan(
-              text: isOk ? translate("ON") : translate("OFF"),
-              style: TextStyle(
-                  fontSize: 16.0, color: isOk ? Colors.green : Colors.grey)),
-        ])),
+        Row(
+          children: [
+            SizedBox(
+                width: 60,
+                child: Text(name + ":",
+                    style: TextStyle(fontSize: 16.0, color: MyTheme.accent50))),
+            SizedBox(
+              width: 50,
+              child: Text(isOk ? translate("ON") : translate("OFF"),
+                  style: TextStyle(
+                      fontSize: 16.0,
+                      color: isOk ? Colors.green : Colors.grey)),
+            )
+          ],
+        ),
         TextButton(
             onPressed: isOk ? null : onPressed,
             child: Text(
@@ -281,16 +293,14 @@ class ConnectionManager extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final serverModel = Provider.of<ServerModel>(context);
-    var info =
-        "${serverModel.peerName != "" ? serverModel.peerName : "NA"}-${serverModel.peerID != "" ? serverModel.peerID : "NA"}";
     return serverModel.isPeerStart
         ? myCard(Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              cardTitle("当前连接"),
+              cardTitle(translate("Connection")), // TODO t
               Padding(
                 padding: EdgeInsets.symmetric(vertical: 5.0),
-                child: Text(info, style: TextStyle(color: Colors.grey)),
+                child: getConnInfo(serverModel.peerName, serverModel.peerID),
               ),
               ElevatedButton.icon(
                   style: ButtonStyle(
@@ -301,7 +311,7 @@ class ConnectionManager extends StatelessWidget {
                     // _toAndroidStopCapture();
                     serverModel.setPeer(false);
                   },
-                  label: Text("断开连接"))
+                  label: Text(translate("Close")))
             ],
           ))
         : SizedBox.shrink();
@@ -369,19 +379,19 @@ showInputWarnAlert() async {
   await showDialog<bool>(
       context: globalKey.currentContext!,
       builder: (alertContext) {
+        // TODO t
         return AlertDialog(
           title: Text("获取输入权限引导"),
           // content: Text("请在接下来的系统设置页面 \n进入 [服务] 配置页面\n将[RustDesk Input]服务开启"),
-          content: Text.rich(TextSpan(
-            style: TextStyle(),
-            children: [
-              TextSpan(text:"请在接下来的系统设置页\n进入"),
-              TextSpan(text:" [服务] ",style: TextStyle(color: MyTheme.accent)),
-              TextSpan(text:"配置页面\n将"),
-              TextSpan(text:" [RustDesk Input] ",style: TextStyle(color: MyTheme.accent)),
-              TextSpan(text:"服务开启")
-            ]
-          )),
+          content: Text.rich(TextSpan(style: TextStyle(), children: [
+            TextSpan(text: "请在接下来的系统设置页\n进入"),
+            TextSpan(text: " [服务] ", style: TextStyle(color: MyTheme.accent)),
+            TextSpan(text: "配置页面\n将"),
+            TextSpan(
+                text: " [RustDesk Input] ",
+                style: TextStyle(color: MyTheme.accent)),
+            TextSpan(text: "服务开启")
+          ])),
           actions: [
             TextButton(
                 child: Text(translate("Do nothing")),
