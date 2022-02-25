@@ -192,4 +192,3 @@ bool isAndroid = false;
 bool isIOS = false;
 bool isWeb = false;
 bool isDesktop = false;
-BuildContext? currentCtx;

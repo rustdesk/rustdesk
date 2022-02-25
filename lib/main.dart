@@ -16,6 +16,7 @@ Future<Null> main() async {
   runApp(App());
 }
 
+final globalKey = GlobalKey<NavigatorState>();
 class App extends StatelessWidget {
 
   @override
@@ -29,6 +30,7 @@ class App extends StatelessWidget {
         ChangeNotifierProvider.value(value: FFI.canvasModel),
       ],
       child: MaterialApp(
+        navigatorKey: globalKey,
         debugShowCheckedModeBanner: false,
         title: 'RustDesk',
         theme: ThemeData(

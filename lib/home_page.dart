@@ -24,7 +24,6 @@ class _HomePageState extends State<HomePage> {
   @override
   void initState() {
     super.initState();
-    currentCtx = context;
     if (isAndroid) {
       Timer(Duration(seconds: 5), () {
         _updateUrl = FFI.getByName('software_update_url');

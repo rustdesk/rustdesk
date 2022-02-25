@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter_hbb/main.dart';
 import 'package:flutter_hbb/model.dart';
 import 'package:provider/provider.dart';
 
@@ -156,12 +157,6 @@ class PermissionChecker extends StatefulWidget {
 
 class _PermissionCheckerState extends State<PermissionChecker> {
   @override
-  void initState() {
-    super.initState();
-    currentCtx = context;
-  }
-
-  @override
   Widget build(BuildContext context) {
     final serverModel = Provider.of<ServerModel>(context);
 
@@ -169,9 +164,11 @@ class _PermissionCheckerState extends State<PermissionChecker> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         cardTitle(translate("Configuration Permissions")),
-        PermissionRow(translate("Media"), serverModel.mediaOk, _toAndroidInitService),
+        PermissionRow(
+            translate("Media"), serverModel.mediaOk, _toAndroidInitService),
         const Divider(height: 0),
-        PermissionRow(translate("Input"), serverModel.inputOk, _toAndroidInitInput),
+        PermissionRow(
+            translate("Input"), serverModel.inputOk, showInputWarnAlert),
         const Divider(),
         serverModel.mediaOk
             ? ElevatedButton.icon(
@@ -189,32 +186,42 @@ class _PermissionCheckerState extends State<PermissionChecker> {
 
 BuildContext? loginReqAlertCtx;
 
-void showLoginReqAlert(BuildContext context, String peerID, String name) async {
+void showLoginReqAlert(String peerID, String name) async {
+  if (globalKey.currentContext == null) return;
   await showDialog(
-      context: context,
+      barrierDismissible: false,
+      context: globalKey.currentContext!,
       builder: (alertContext) {
         loginReqAlertCtx = alertContext;
         return AlertDialog(
           title: Text("Control Request"),
-          content:Column(
-            mainAxisAlignment: MainAxisAlignment.start,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(translate("Do you accept?")),
-              SizedBox(width: 20),
-              Row(
+          content: Container(
+              height: 100,
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  CircleAvatar(child: Text(name[0])),
-                  SizedBox(width: 10),
-                  Text(name),
-                  SizedBox(width: 5),
-                  Text(peerID)
+                  Text(translate("Do you accept?")),
+                  SizedBox(height: 20),
+                  Row(
+                    children: [
+                      CircleAvatar(child: Text(name[0])),
+                      SizedBox(width: 10),
+                      Text(name),
+                      SizedBox(width: 5),
+                      Text(peerID)
+                    ],
+                  ),
                 ],
-              ),
-            ],
-          ),
+              )),
           actions: [
             TextButton(
+                child: Text(translate("Dismiss")),
+                onPressed: () {
+                  FFI.setByName("login_res", "false");
+                  Navigator.of(alertContext).pop();
+                }),
+            ElevatedButton(
                 child: Text(translate("Accept")),
                 onPressed: () {
                   FFI.setByName("login_res", "true");
@@ -224,12 +231,6 @@ void showLoginReqAlert(BuildContext context, String peerID, String name) async {
                   FFI.serverModel.setPeer(true);
                   Navigator.of(alertContext).pop();
                 }),
-            TextButton(
-                child: Text(translate("Dismiss")),
-                onPressed: () {
-                  FFI.setByName("login_res", "false");
-                  Navigator.of(alertContext).pop();
-                })
           ],
         );
       });
@@ -240,6 +241,7 @@ clearLoginReqAlert() {
   if (loginReqAlertCtx != null) {
     Navigator.of(loginReqAlertCtx!).pop();
     FFI.serverModel.updateClientState();
+    loginReqAlertCtx = null;
   }
 }
 
@@ -362,9 +364,44 @@ Future<Null> _toAndroidInitInput() async {
   debugPrint("_toAndroidInitInput:$res");
 }
 
+showInputWarnAlert() async {
+  if (globalKey.currentContext == null) return;
+  await showDialog<bool>(
+      context: globalKey.currentContext!,
+      builder: (alertContext) {
+        return AlertDialog(
+          title: Text("获取输入权限引导"),
+          // content: Text("请在接下来的系统设置页面 \n进入 [服务] 配置页面\n将[RustDesk Input]服务开启"),
+          content: Text.rich(TextSpan(
+            style: TextStyle(),
+            children: [
+              TextSpan(text:"请在接下来的系统设置页\n进入"),
+              TextSpan(text:" [服务] ",style: TextStyle(color: MyTheme.accent)),
+              TextSpan(text:"配置页面\n将"),
+              TextSpan(text:" [RustDesk Input] ",style: TextStyle(color: MyTheme.accent)),
+              TextSpan(text:"服务开启")
+            ]
+          )),
+          actions: [
+            TextButton(
+                child: Text(translate("Do nothing")),
+                onPressed: () {
+                  Navigator.of(alertContext).pop();
+                }),
+            ElevatedButton(
+                child: Text(translate("Go System Setting")),
+                onPressed: () {
+                  _toAndroidInitInput();
+                  Navigator.of(alertContext).pop();
+                }),
+          ],
+        );
+      });
+}
+
 void toAndroidChannelInit() {
   FFI.setMethodCallHandler((method, arguments) {
-    debugPrint("flutter got android msg");
+    debugPrint("flutter got android msg,$method,$arguments");
     try {
       switch (method) {
         case "try_start_without_auth":
@@ -372,10 +409,7 @@ void toAndroidChannelInit() {
             FFI.serverModel.updateClientState();
             debugPrint(
                 "pre show loginAlert:${FFI.serverModel.isFileTransfer.toString()}");
-            if(currentCtx!=null){
-              showLoginReqAlert(
-                  currentCtx!, FFI.serverModel.peerID, FFI.serverModel.peerName);
-            }
+            showLoginReqAlert(FFI.serverModel.peerID, FFI.serverModel.peerName);
             debugPrint("from jvm:try_start_without_auth done");
             break;
           }
@@ -388,6 +422,7 @@ void toAndroidChannelInit() {
         case "stop_capture":
           {
             FFI.serverModel.setPeer(false);
+            clearLoginReqAlert();
             break;
           }
         case "on_permission_changed":
