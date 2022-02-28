@@ -607,12 +607,9 @@ impl AudioHandler {
             config,
             move |data: &mut [T], _: &_| {
                 let mut lock = audio_buffer.lock().unwrap();
-                let n = data.len();
+                let mut n = data.len();
                 if lock.len() < n {
-                    // [data] -- the audio data consumer,size around 2500 in 48000/f32 (50ms),
-                    // [audio_buffer] -- the audio data provider,must bigger than the consumer to avoid audio clipping noise
-                    // the audio_buffer may have empty data when idle,there will always ZERO AUDIO DATA
-                    return;
+                    n = lock.len();
                 }
                 let mut input = lock.drain(0..n);
                 for sample in data.iter_mut() {
