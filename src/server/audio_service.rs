@@ -63,7 +63,7 @@ mod pa_impl {
                 .await
         );
         let zero_audio_frame: Vec<f32> = vec![0.; AUDIO_DATA_SIZE_U8 / 4];
-        while sp.ok() {
+        while sp.ok() && !RESTARTING.load(Ordering::SeqCst) {
             sp.snapshot(|sps| {
                 sps.send(create_format_msg(crate::platform::linux::PA_SAMPLE_RATE, 2));
                 Ok(())
