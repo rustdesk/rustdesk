@@ -364,6 +364,10 @@ impl UI {
         }
     }
 
+    fn refresh_audio_input(&self) {
+        ipc::restart_autdio_input();
+    }
+
     fn install_path(&mut self) -> String {
         #[cfg(windows)]
         return crate::platform::windows::get_install_info().1;
@@ -701,6 +705,7 @@ impl sciter::EventHandler for UI {
         fn create_shortcut(String);
         fn discover();
         fn get_lan_peers();
+        fn refresh_audio_input();
     }
 }
 
