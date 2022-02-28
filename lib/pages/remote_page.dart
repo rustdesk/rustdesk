@@ -8,9 +8,9 @@ import 'dart:ui' as ui;
 import 'dart:async';
 import 'package:tuple/tuple.dart';
 import 'package:wakelock/wakelock.dart';
-import 'common.dart';
-import 'gestures.dart';
-import 'model.dart';
+import '../common.dart';
+import '../gestures.dart';
+import '../models/model.dart';
 
 final initText = '\1' * 1024;
 

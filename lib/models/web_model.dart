@@ -3,7 +3,7 @@ import 'dart:js' as js;
 import 'package:flutter/cupertino.dart';
 import 'dart:convert';
 
-import 'common.dart';
+import '../common.dart';
 import 'dart:html';
 import 'dart:async';
 

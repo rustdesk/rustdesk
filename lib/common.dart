@@ -51,6 +51,10 @@ class DialogManager{
   static void register(BuildContext dialogContext){
     _dialogContext = dialogContext;
   }
+
+  static void drop(){
+    _dialogContext = null;
+  }
 }
 
 typedef BuildAlertDialog = Tuple3<Widget, Widget, List<Widget>> Function(
@@ -83,7 +87,7 @@ Future<T?> showAlertDialog<T>(BuildAlertDialog build,
         DialogManager.register(context);
         return dialog;
       });
-  DialogManager.reset();
+  DialogManager.drop();
   return res;
 }
 

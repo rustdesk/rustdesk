@@ -1,56 +1,59 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/main.dart';
-import 'package:flutter_hbb/model.dart';
+import 'package:flutter_hbb/models/model.dart';
 import 'package:provider/provider.dart';
 
-import 'common.dart';
-import 'model.dart';
+import '../common.dart';
+import 'home_page.dart';
+import '../models/model.dart';
 
-class ServerPage extends StatelessWidget {
+class ServerPage extends StatelessWidget implements PageShape {
+  @override
+  final title = "Share Screen";
+
+  @override
+  final icon = Icon(Icons.mobile_screen_share);
+
+  @override
+  final appBarActions = [
+    PopupMenuButton<String>(
+        itemBuilder: (context) {
+          return [
+            PopupMenuItem(
+              child: Text(translate("Change ID")),
+              value: "changeID",
+              enabled: false,
+            ),
+            PopupMenuItem(
+              child: Text("Set your own password"),
+              value: "changePW",
+              enabled: false,
+            )
+          ];
+        },
+        onSelected: (value) => debugPrint("PopupMenuItem onSelected:$value"))
+  ];
+
   @override
   Widget build(BuildContext context) {
     checkService();
     return ChangeNotifierProvider.value(
-        value: FFI.serverModel,
-        child: Scaffold(
-            backgroundColor: MyTheme.grayBg,
-            appBar: AppBar(
-              centerTitle: true,
-              title: const Text("Share My Screen"),
-              actions: [
-                PopupMenuButton<String>(
-                    itemBuilder: (context) {
-                      return [
-                        PopupMenuItem(
-                          child: Text(translate("Change ID")),
-                          value: "changeID",
-                          enabled: false,
-                        ),
-                        PopupMenuItem(
-                          child: Text("Set your own password"),
-                          value: "changePW",
-                          enabled: false,
-                        )
-                      ];
-                    },
-                    onSelected: (value) =>
-                        debugPrint("PopupMenuItem onSelected:$value"))
-              ],
-            ),
-            body: SingleChildScrollView(
-              child: Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.start,
-                  children: [
-                    ServerInfo(),
-                    PermissionChecker(),
-                    ConnectionManager(),
-                    SizedBox.fromSize(size: Size(0, 15.0)), // Bottom padding
-                  ],
-                ),
-              ),
-            )));
+      value: FFI.serverModel,
+      child: SingleChildScrollView(
+        child: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.start,
+            children: [
+              ServerInfo(),
+              PermissionChecker(),
+              ConnectionManager(),
+              SizedBox.fromSize(size: Size(0, 15.0)), // Bottom padding
+            ],
+          ),
+        ),
+      ),
+    );
   }
 }
 

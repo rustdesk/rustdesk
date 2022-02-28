@@ -8,7 +8,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:tuple/tuple.dart';
 import 'dart:async';
-import 'common.dart';
+import '../common.dart';
 import 'native_model.dart' if (dart.library.html) 'web_model.dart';
 
 class FfiModel with ChangeNotifier {

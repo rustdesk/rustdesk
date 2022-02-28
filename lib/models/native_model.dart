@@ -7,7 +7,7 @@ import 'package:device_info/device_info.dart';
 import 'package:package_info/package_info.dart';
 import 'package:external_path/external_path.dart';
 import 'package:flutter/services.dart';
-import 'common.dart';
+import '../common.dart';
 
 class RgbaFrame extends Struct {
   @Uint32()

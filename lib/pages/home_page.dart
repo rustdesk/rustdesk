@@ -1,22 +1,89 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_hbb/pages/server_page.dart';
 import 'package:provider/provider.dart';
 import 'package:tuple/tuple.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'dart:async';
-import 'common.dart';
-import 'model.dart';
+import '../common.dart';
+import '../models/model.dart';
 import 'remote_page.dart';
 
-class HomePage extends StatefulWidget {
-  HomePage({Key? key, required this.title}) : super(key: key);
+abstract class PageShape extends Widget {
+  final String title = "";
+  final Icon icon = Icon(null);
+  final List<Widget> appBarActions = [];
+}
 
-  final String title;
+class HomePage extends StatefulWidget {
+  HomePage({Key? key}) : super(key: key);
 
   @override
   _HomePageState createState() => _HomePageState();
 }
 
 class _HomePageState extends State<HomePage> {
+  var _selectedIndex = 0;
+  final List<PageShape> _pages = [ConnectionPage(), ServerPage()];
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: MyTheme.grayBg,
+      appBar: AppBar(
+        centerTitle: true,
+        title: Text("RustDesk"),
+        actions: _pages.elementAt(_selectedIndex).appBarActions,
+      ),
+      bottomNavigationBar: BottomNavigationBar(
+        items: _pages
+            .map((page) =>
+                BottomNavigationBarItem(icon: page.icon, label: page.title))
+            .toList(),
+        currentIndex: _selectedIndex,
+        type: BottomNavigationBarType.fixed,
+        selectedItemColor: MyTheme.accent,
+        unselectedItemColor: MyTheme.darkGray,
+        onTap: (index) => setState(() {
+          _selectedIndex = index;
+        }),
+      ),
+      body: _pages.elementAt(_selectedIndex),
+    );
+  }
+}
+
+class ConnectionPage extends StatefulWidget implements PageShape {
+  ConnectionPage({Key? key}) : super(key: key);
+
+  @override
+  final icon = Icon(Icons.connected_tv);
+
+  @override
+  final title = translate("Connection");
+
+  @override
+  final appBarActions = [
+    PopupMenuButton<String>(
+        itemBuilder: (context) => [
+              PopupMenuItem<String>(
+                  child: Text(translate('ID Server')), value: 'id_server'),
+              PopupMenuItem<String>(
+                  child: Text(translate('About') + ' RustDesk'), value: 'about')
+            ],
+        onSelected: (value) {
+          if (value == 'id_server') {
+            showServer();
+          } else if (value == 'about') {
+            showAbout();
+          }
+        })
+  ];
+
+  @override
+  _ConnectionPageState createState() => _ConnectionPageState();
+}
+
+class _ConnectionPageState extends State<ConnectionPage> {
   final _idController = TextEditingController();
   var _updateUrl = '';
   var _menuPos;
@@ -36,83 +103,18 @@ class _HomePageState extends State<HomePage> {
   Widget build(BuildContext context) {
     Provider.of<FfiModel>(context);
     if (_idController.text.isEmpty) _idController.text = FFI.getId();
-    // This method is rerun every time setState is called
-    return Scaffold(
-        backgroundColor: MyTheme.grayBg,
-        appBar: AppBar(
-          centerTitle: true,
-          actions: [
-            Ink(
-                child: InkWell(
-                    child: Padding(
-                        padding: const EdgeInsets.all(12),
-                        child: Icon(Icons.more_vert)),
-                    onTapDown: (e) {
-                      var x = e.globalPosition.dx;
-                      var y = e.globalPosition.dy;
-                      this._menuPos = RelativeRect.fromLTRB(x, y, x, y);
-                    },
-                    onTap: () {
-                      List<PopupMenuItem<String>> items = [];
-                      items.add(PopupMenuItem<String>(
-                          child: Text(translate('ID Server')),
-                          value: 'id_server'));
-                      if (isAndroid) {
-                        items.add(PopupMenuItem<String>(
-                            child: Text(translate('Share My Screen')),
-                            value: 'server'));
-                      }
-                      items.add(PopupMenuItem<String>(
-                          child: Text(translate('About') + ' RustDesk'),
-                          value: 'about'));
-                      () async {
-                        var value = await showMenu<dynamic>(
-                          context: context,
-                          position: this._menuPos,
-                          items: items,
-                          elevation: 8,
-                        );
-                        if (value == 'id_server') {
-                          showServer(context);
-                        } else if (value == 'server') {
-                          Navigator.pushNamed(context, "server_page");
-                        } else if (value == 'about') {
-                          showAbout(context);
-                        }
-                      }();
-                    }))
-          ],
-          title: Text(widget.title),
-        ),
-        body: SingleChildScrollView(
-          child: Column(
-              mainAxisAlignment: MainAxisAlignment.start,
-              mainAxisSize: MainAxisSize.max,
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: <Widget>[
-                _updateUrl.isEmpty
-                    ? SizedBox(height: 0)
-                    : InkWell(
-                        onTap: () async {
-                          final url = _updateUrl + '.apk';
-                          if (await canLaunch(url)) {
-                            await launch(url);
-                          }
-                        },
-                        child: Container(
-                            alignment: AlignmentDirectional.center,
-                            width: double.infinity,
-                            color: Colors.pinkAccent,
-                            padding: EdgeInsets.symmetric(vertical: 12),
-                            child: Text(translate('Download new version'),
-                                style: TextStyle(
-                                    color: Colors.white,
-                                    fontWeight: FontWeight.bold)))),
-                getSearchBarUI(),
-                Container(height: 12),
-                getPeers(),
-              ]),
-        ));
+    return SingleChildScrollView(
+      child: Column(
+          mainAxisAlignment: MainAxisAlignment.start,
+          mainAxisSize: MainAxisSize.max,
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: <Widget>[
+            getUpdateUI(),
+            getSearchBarUI(),
+            Container(height: 12),
+            getPeers(),
+          ]),
+    );
   }
 
   void onConnect() {
@@ -136,6 +138,26 @@ class _HomePageState extends State<HomePage> {
     if (!currentFocus.hasPrimaryFocus) {
       currentFocus.unfocus();
     }
+  }
+
+  Widget getUpdateUI() {
+    return _updateUrl.isEmpty
+        ? SizedBox(height: 0)
+        : InkWell(
+            onTap: () async {
+              final url = _updateUrl + '.apk';
+              if (await canLaunch(url)) {
+                await launch(url);
+              }
+            },
+            child: Container(
+                alignment: AlignmentDirectional.center,
+                width: double.infinity,
+                color: Colors.pinkAccent,
+                padding: EdgeInsets.symmetric(vertical: 12),
+                child: Text(translate('Download new version'),
+                    style: TextStyle(
+                        color: Colors.white, fontWeight: FontWeight.bold))));
   }
 
   Widget getSearchBarUI() {
@@ -305,7 +327,7 @@ class _HomePageState extends State<HomePage> {
   }
 }
 
-void showServer(BuildContext context) {
+void showServer() {
   final formKey = GlobalKey<FormState>();
   final id0 = FFI.getByName('option', 'custom-rendezvous-server');
   final relay0 = FFI.getByName('option', 'relay-server');
@@ -355,7 +377,7 @@ void showServer(BuildContext context) {
           TextButton(
             style: flatButtonStyle,
             onPressed: () {
-              Navigator.pop(context);
+              DialogManager.reset();
             },
             child: Text(translate('Cancel')),
           ),
@@ -373,7 +395,7 @@ void showServer(BuildContext context) {
                       'option', '{"name": "relay-server", "value": "$relay"}');
                 if (key != key0)
                   FFI.setByName('option', '{"name": "key", "value": "$key"}');
-                Navigator.pop(context);
+                DialogManager.reset();
               }
             },
             child: Text(translate('OK')),
@@ -382,7 +404,7 @@ void showServer(BuildContext context) {
       ));
 }
 
-Future<Null> showAbout(BuildContext context) async {
+Future<Null> showAbout() async {
   var version = await FFI.getVersion();
   showAlertDialog(
       (setState) => Tuple3(

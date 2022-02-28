@@ -4,9 +4,9 @@ import 'package:provider/provider.dart';
 import 'package:firebase_analytics/firebase_analytics.dart';
 import 'package:firebase_analytics/observer.dart';
 import 'package:firebase_core/firebase_core.dart';
-import 'model.dart';
-import 'home_page.dart';
-import 'server_page.dart';
+import 'models/model.dart';
+import 'pages/home_page.dart';
+import 'pages/server_page.dart';
 
 Future<Null> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -37,7 +37,7 @@ class App extends StatelessWidget {
           primarySwatch: Colors.blue,
           visualDensity: VisualDensity.adaptivePlatformDensity,
         ),
-        home: HomePage(title: 'RustDesk'),
+        home: HomePage(),
         routes: {
           "server_page": (context) => ServerPage(),
         },
