@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_easyloading/flutter_easyloading.dart';
+import 'package:flutter_hbb/main.dart';
 import 'package:flutter_hbb/widgets/gesture_help.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter/services.dart';
@@ -43,7 +44,7 @@ class _RemotePageState extends State<RemotePage> {
     FFI.connect(widget.id);
     WidgetsBinding.instance!.addPostFrameCallback((_) {
       SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual, overlays: []);
-      showLoading(translate('Connecting...'), context);
+      showLoading(translate('Connecting...'));
       _interval =
           Timer.periodic(Duration(milliseconds: 30), (timer) => interval());
     });
@@ -57,7 +58,7 @@ class _RemotePageState extends State<RemotePage> {
     FFI.close();
     _interval?.cancel();
     _timer?.cancel();
-    dismissLoading();
+    EasyLoading.dismiss();
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual,
         overlays: SystemUiOverlay.values);
     Wakelock.disable();
@@ -99,9 +100,9 @@ class _RemotePageState extends State<RemotePage> {
     var title = evt['title'];
     var text = evt['text'];
     if (type == 're-input-password') {
-      wrongPasswordDialog(id, context);
+      wrongPasswordDialog(id);
     } else if (type == 'input-password') {
-      enterPasswordDialog(id, context);
+      enterPasswordDialog(id);
     } else {
       var hasRetry = evt['hasRetry'] == 'true';
       print(evt);
@@ -110,12 +111,12 @@ class _RemotePageState extends State<RemotePage> {
   }
 
   void showMsgBox(String type, String title, String text, bool hasRetry) {
-    msgBox(type, title, text, context);
+    msgBox(type, title, text);
     if (hasRetry) {
       _timer?.cancel();
       _timer = Timer(Duration(seconds: _reconnects), () {
         FFI.reconnect();
-        showLoading(translate('Connecting...'), context);
+        showLoading(translate('Connecting...'));
       });
       _reconnects *= 2;
     } else {
@@ -530,7 +531,7 @@ class _RemotePageState extends State<RemotePage> {
         FFI.setByName('lock_screen');
       } else if (value == 'block-input') {
         FFI.setByName('toggle_option',
-            (FFI.ffiModel.inputBlocked ? 'un' : '') + 'block-inpu');
+            (FFI.ffiModel.inputBlocked ? 'un' : '') + 'block-input');
         FFI.ffiModel.inputBlocked = !FFI.ffiModel.inputBlocked;
       } else if (value == 'refresh') {
         FFI.setByName('refresh');
@@ -579,7 +580,7 @@ class _RemotePageState extends State<RemotePage> {
   }
 
   void close() {
-    msgBox('', 'Close', 'Are you sure to close the connection?', context);
+    msgBox('', 'Close', 'Are you sure to close the connection?');
   }
 
   Widget getHelpTools() {
@@ -776,75 +777,73 @@ class ImagePainter extends CustomPainter {
   }
 }
 
-void enterPasswordDialog(String id, BuildContext context) {
+void enterPasswordDialog(String id) {
   final controller = TextEditingController();
   var remember = FFI.getByName('remember', id) == 'true';
-  showAlertDialog(
-      context,
-      (setState) => Tuple3(
-            Text(translate('Password Required')),
-            Column(mainAxisSize: MainAxisSize.min, children: [
-              PasswordWidget(controller: controller),
-              CheckboxListTile(
-                contentPadding: const EdgeInsets.all(0),
-                dense: true,
-                controlAffinity: ListTileControlAffinity.leading,
-                title: Text(
-                  translate('Remember password'),
-                ),
-                value: remember,
-                onChanged: (v) {
-                  if (v != null) {
-                    setState(() => remember = v);
-                  }
-                },
-              ),
-            ]),
-            [
-              TextButton(
-                style: flatButtonStyle,
-                onPressed: () {
-                  Navigator.pop(context);
-                  Navigator.pop(context);
-                },
-                child: Text(translate('Cancel')),
-              ),
-              TextButton(
-                style: flatButtonStyle,
-                onPressed: () {
-                  var text = controller.text.trim();
-                  if (text == '') return;
-                  FFI.login(text, remember);
-                  showLoading(translate('Logging in...'), null);
-                  Navigator.pop(context);
-                },
-                child: Text(translate('OK')),
-              ),
-            ],
-          ));
+  if (globalKey.currentContext == null) return;
+  showAlertDialog((setState) => Tuple3(
+        Text(translate('Password Required')),
+        Column(mainAxisSize: MainAxisSize.min, children: [
+          PasswordWidget(controller: controller),
+          CheckboxListTile(
+            contentPadding: const EdgeInsets.all(0),
+            dense: true,
+            controlAffinity: ListTileControlAffinity.leading,
+            title: Text(
+              translate('Remember password'),
+            ),
+            value: remember,
+            onChanged: (v) {
+              if (v != null) {
+                setState(() => remember = v);
+              }
+            },
+          ),
+        ]),
+        [
+          TextButton(
+            style: flatButtonStyle,
+            onPressed: () {
+              DialogManager.reset();
+              Navigator.pop(globalKey.currentContext!);
+            },
+            child: Text(translate('Cancel')),
+          ),
+          TextButton(
+            style: flatButtonStyle,
+            onPressed: () {
+              var text = controller.text.trim();
+              if (text == '') return;
+              FFI.login(text, remember);
+              DialogManager.reset();
+              showLoading(translate('Logging in...'));
+            },
+            child: Text(translate('OK')),
+          ),
+        ],
+      ));
 }
 
-void wrongPasswordDialog(String id, BuildContext context) {
-  showAlertDialog(
-      context,
-      (_) => Tuple3(Text(translate('Wrong Password')),
-              Text(translate('Do you want to enter again?')), [
-            TextButton(
-              style: flatButtonStyle,
-              onPressed: () {
-                Navigator.pop(context);
-                Navigator.pop(context);
-              },
-              child: Text(translate('Cancel')),
-            ),
-            TextButton(
-              style: flatButtonStyle,
-              onPressed: () {
-                enterPasswordDialog(id, context);
-              },
-              child: Text(translate('Retry')),
-            ),
-          ]));
+void wrongPasswordDialog(String id) {
+  if (globalKey.currentContext == null) return;
+  showAlertDialog((_) => Tuple3(Text(translate('Wrong Password')),
+          Text(translate('Do you want to enter again?')), [
+        TextButton(
+          style: flatButtonStyle,
+          onPressed: () {
+            DialogManager.reset();
+            Navigator.pop(globalKey.currentContext!);
+          },
+          child: Text(translate('Cancel')),
+        ),
+        TextButton(
+          style: flatButtonStyle,
+          onPressed: () {
+            enterPasswordDialog(id);
+          },
+          child: Text(translate('Retry')),
+        ),
+      ]));
 }
 
 CheckboxListTile getToggle(
@@ -914,7 +913,7 @@ void showOptions(BuildContext context) {
     displays.add(Divider(color: MyTheme.border));
   }
   final perms = FFI.ffiModel.permissions;
-  showAlertDialog(context, (setState) {
+  showAlertDialog((setState) {
     final more = <Widget>[];
     if (perms['audio'] != false) {
       more.add(getToggle(setState, 'disable-audio', 'Mute'));
@@ -977,51 +976,49 @@ void showSetOSPassword(BuildContext context, bool login) {
   var password = FFI.getByName('peer_option', "os-password");
   var autoLogin = FFI.getByName('peer_option', "auto-login") != "";
   controller.text = password;
-  showAlertDialog(
-      context,
-      (setState) => Tuple3(
-            Text(translate('OS Password')),
-            Column(mainAxisSize: MainAxisSize.min, children: [
-              PasswordWidget(controller: controller),
-              CheckboxListTile(
-                contentPadding: const EdgeInsets.all(0),
-                dense: true,
-                controlAffinity: ListTileControlAffinity.leading,
-                title: Text(
-                  translate('Auto Login'),
-                ),
-                value: autoLogin,
-                onChanged: (v) {
-                  if (v == null) return;
-                  setState(() => autoLogin = v);
-                },
-              ),
-            ]),
-            [
-              TextButton(
-                style: flatButtonStyle,
-                onPressed: () {
-                  Navigator.pop(context);
-                },
-                child: Text(translate('Cancel')),
-              ),
-              TextButton(
-                style: flatButtonStyle,
-                onPressed: () {
-                  var text = controller.text.trim();
-                  FFI.setByName('peer_option',
-                      '{"name": "os-password", "value": "$text"}');
-                  FFI.setByName('peer_option',
-                      '{"name": "auto-login", "value": "${autoLogin ? 'Y' : ''}"}');
-                  if (text != "" && login) {
-                    FFI.setByName('input_os_password', text);
-                  }
-                  Navigator.pop(context);
-                },
-                child: Text(translate('OK')),
-              ),
-            ],
-          ));
+  showAlertDialog((setState) => Tuple3(
+        Text(translate('OS Password')),
+        Column(mainAxisSize: MainAxisSize.min, children: [
+          PasswordWidget(controller: controller),
+          CheckboxListTile(
+            contentPadding: const EdgeInsets.all(0),
+            dense: true,
+            controlAffinity: ListTileControlAffinity.leading,
+            title: Text(
+              translate('Auto Login'),
+            ),
+            value: autoLogin,
+            onChanged: (v) {
+              if (v == null) return;
+              setState(() => autoLogin = v);
+            },
+          ),
+        ]),
+        [
+          TextButton(
+            style: flatButtonStyle,
+            onPressed: () {
+              Navigator.pop(context);
+            },
+            child: Text(translate('Cancel')),
+          ),
+          TextButton(
+            style: flatButtonStyle,
+            onPressed: () {
+              var text = controller.text.trim();
+              FFI.setByName(
+                  'peer_option', '{"name": "os-password", "value": "$text"}');
+              FFI.setByName('peer_option',
+                  '{"name": "auto-login", "value": "${autoLogin ? 'Y' : ''}"}');
+              if (text != "" && login) {
+                FFI.setByName('input_os_password', text);
+              }
+              Navigator.pop(context);
+            },
+            child: Text(translate('OK')),
+          ),
+        ],
+      ));
 }
 
 void sendPrompt(bool isMac, String key) {

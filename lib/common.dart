@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'dart:async';
 import 'package:flutter_easyloading/flutter_easyloading.dart';
+import 'package:flutter_hbb/main.dart';
 import 'package:tuple/tuple.dart';
 
 typedef F = String Function(String);
@@ -32,34 +33,36 @@ final ButtonStyle flatButtonStyle = TextButton.styleFrom(
   ),
 );
 
-void showLoading(String text, BuildContext? context) {
-  if (_hasDialog && context != null) {
-    Navigator.pop(context);
-    _hasDialog = false;
-  }
-  dismissLoading();
+void showLoading(String text) {
+  DialogManager.reset();
+  EasyLoading.dismiss();
   EasyLoading.show(status: text, maskType: EasyLoadingMaskType.black);
 }
 
-void dismissLoading() {
-  EasyLoading.dismiss();
+class DialogManager{
+  static BuildContext? _dialogContext;
+
+  static void reset(){
+    if(_dialogContext!=null){
+      Navigator.pop(_dialogContext!);
+    }
+    _dialogContext = null;
+  }
+  static void register(BuildContext dialogContext){
+    _dialogContext = dialogContext;
+  }
 }
 
-bool _hasDialog = false;
-
-typedef BuildAlertDailog = Tuple3<Widget, Widget, List<Widget>> Function(
+typedef BuildAlertDialog = Tuple3<Widget, Widget, List<Widget>> Function(
     void Function(void Function()));
 
-// ??
-Future<T?> showAlertDialog<T>(BuildContext context, BuildAlertDailog build,
+// flutter Dialog
+Future<T?> showAlertDialog<T>(BuildAlertDialog build,
     [WillPopCallback? onWillPop,
     bool barrierDismissible = false,
     double contentPadding = 20]) async {
-  dismissLoading();
-  if (_hasDialog) {
-    Navigator.pop(context);
-  }
-  _hasDialog = true;
+  EasyLoading.dismiss();
+  DialogManager.reset();
   var dialog = StatefulBuilder(builder: (context, setState) {
     var widgets = build(setState);
     if (onWillPop == null) onWillPop = () async => false;
@@ -72,15 +75,20 @@ Future<T?> showAlertDialog<T>(BuildContext context, BuildAlertDailog build,
           actions: widgets.item3,
         ));
   });
+  if(globalKey.currentContext == null) return null;
   var res = await showDialog<T>(
-      context: context,
+      context: globalKey.currentContext!,
       barrierDismissible: barrierDismissible,
-      builder: (context) => dialog);
-  _hasDialog = false;
+      builder: (context) {
+        DialogManager.register(context);
+        return dialog;
+      });
+  DialogManager.reset();
   return res;
 }
 
-void msgBox(String type, String title, String text, BuildContext context,
+// EasyLoading
+void msgBox(String type, String title, String text,
     {bool? hasCancel}) {
   var wrap = (String text, void Function() onPressed) => ButtonTheme(
       padding: EdgeInsets.symmetric(horizontal: 20, vertical: 10),
@@ -95,16 +103,14 @@ void msgBox(String type, String title, String text, BuildContext context,
           child: Text(Translator.call(text),
               style: TextStyle(color: MyTheme.accent))));
 
-  dismissLoading();
-  if (_hasDialog) {
-    Navigator.pop(context);
-    _hasDialog = false;
-  }
+  EasyLoading.dismiss();
+  DialogManager.reset();
+  if(globalKey.currentContext == null) return;
   final buttons = [
     Expanded(child: Container()),
     wrap(Translator.call('OK'), () {
-      dismissLoading();
-      Navigator.pop(context);
+      EasyLoading.dismiss();
+      Navigator.pop(globalKey.currentContext!); // TODO
     })
   ];
   if (hasCancel == null) {
@@ -114,7 +120,7 @@ void msgBox(String type, String title, String text, BuildContext context,
     buttons.insert(
         1,
         wrap(Translator.call('Cancel'), () {
-          dismissLoading();
+          EasyLoading.dismiss();
         }));
   }
   EasyLoading.show(

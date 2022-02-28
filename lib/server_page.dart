@@ -198,15 +198,14 @@ Widget getConnInfo(String name, String peerID) {
   );
 }
 
-BuildContext? loginReqAlertCtx;
-
 void showLoginReqAlert(String peerID, String name) async {
   if (globalKey.currentContext == null) return;
   await showDialog(
       barrierDismissible: false,
       context: globalKey.currentContext!,
       builder: (alertContext) {
-        loginReqAlertCtx = alertContext;
+        DialogManager.reset();
+        DialogManager.register(alertContext);
         return AlertDialog(
           title: Text("Control Request"),
           content: Container(
@@ -225,7 +224,7 @@ void showLoginReqAlert(String peerID, String name) async {
                 child: Text(translate("Dismiss")),
                 onPressed: () {
                   FFI.setByName("login_res", "false");
-                  Navigator.of(alertContext).pop();
+                  DialogManager.reset();
                 }),
             ElevatedButton(
                 child: Text(translate("Accept")),
@@ -235,20 +234,12 @@ void showLoginReqAlert(String peerID, String name) async {
                     _toAndroidStartCapture();
                   }
                   FFI.serverModel.setPeer(true);
-                  Navigator.of(alertContext).pop();
+                  DialogManager.reset();
                 }),
           ],
         );
       });
-  loginReqAlertCtx = null;
-}
-
-clearLoginReqAlert() {
-  if (loginReqAlertCtx != null) {
-    Navigator.of(loginReqAlertCtx!).pop();
-    FFI.serverModel.updateClientState();
-    loginReqAlertCtx = null;
-  }
+  DialogManager.reset();
 }
 
 class PermissionRow extends StatelessWidget {
@@ -376,10 +367,12 @@ Future<Null> _toAndroidInitInput() async {
 
 showInputWarnAlert() async {
   if (globalKey.currentContext == null) return;
+  DialogManager.reset();
   await showDialog<bool>(
       context: globalKey.currentContext!,
       builder: (alertContext) {
         // TODO t
+        DialogManager.register(alertContext);
         return AlertDialog(
           title: Text("获取输入权限引导"),
           // content: Text("请在接下来的系统设置页面 \n进入 [服务] 配置页面\n将[RustDesk Input]服务开启"),
@@ -396,17 +389,18 @@ showInputWarnAlert() async {
             TextButton(
                 child: Text(translate("Do nothing")),
                 onPressed: () {
-                  Navigator.of(alertContext).pop();
+                  DialogManager.reset();
                 }),
             ElevatedButton(
                 child: Text(translate("Go System Setting")),
                 onPressed: () {
                   _toAndroidInitInput();
-                  Navigator.of(alertContext).pop();
+                  DialogManager.reset();
                 }),
           ],
         );
       });
+  DialogManager.reset();
 }
 
 void toAndroidChannelInit() {
@@ -425,14 +419,14 @@ void toAndroidChannelInit() {
           }
         case "start_capture":
           {
-            clearLoginReqAlert();
+            DialogManager.reset();
             FFI.serverModel.updateClientState();
             break;
           }
         case "stop_capture":
           {
+            DialogManager.reset();
             FFI.serverModel.setPeer(false);
-            clearLoginReqAlert();
             break;
           }
         case "on_permission_changed":

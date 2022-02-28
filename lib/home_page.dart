@@ -57,12 +57,10 @@ class _HomePageState extends State<HomePage> {
                       items.add(PopupMenuItem<String>(
                           child: Text(translate('ID Server')),
                           value: 'id_server'));
-                      if (isAndroid){
-                        items.add(
-                            PopupMenuItem<String>(
-                                child: Text(translate('Share My Screen')),
-                                value: 'server')
-                        );
+                      if (isAndroid) {
+                        items.add(PopupMenuItem<String>(
+                            child: Text(translate('Share My Screen')),
+                            value: 'server'));
                       }
                       items.add(PopupMenuItem<String>(
                           child: Text(translate('About') + ' RustDesk'),
@@ -315,25 +313,22 @@ void showServer(BuildContext context) {
   var id = '';
   var relay = '';
   var key = '';
-  showAlertDialog(
-      context,
-      (setState) => Tuple3(
-            Text(translate('ID Server')),
-            Form(
-                key: formKey,
-                child:
-                    Column(mainAxisSize: MainAxisSize.min, children: <Widget>[
-                  TextFormField(
-                    initialValue: id0,
-                    decoration: InputDecoration(
-                      labelText: translate('ID Server'),
-                    ),
-                    validator: validate,
-                    onSaved: (String? value) {
-                      if (value != null) id = value.trim();
-                    },
-                  ),
-                  /*
+  showAlertDialog((setState) => Tuple3(
+        Text(translate('ID Server')),
+        Form(
+            key: formKey,
+            child: Column(mainAxisSize: MainAxisSize.min, children: <Widget>[
+              TextFormField(
+                initialValue: id0,
+                decoration: InputDecoration(
+                  labelText: translate('ID Server'),
+                ),
+                validator: validate,
+                onSaved: (String? value) {
+                  if (value != null) id = value.trim();
+                },
+              ),
+              /*
                   TextFormField(
                     initialValue: relay0,
                     decoration: InputDecoration(
@@ -345,52 +340,51 @@ void showServer(BuildContext context) {
                     },
                   ),
                   */
-                  TextFormField(
-                    initialValue: key0,
-                    decoration: InputDecoration(
-                      labelText: 'Key',
-                    ),
-                    validator: null,
-                    onSaved: (String? value) {
-                      if (value != null) key = value.trim();
-                    },
-                  ),
-                ])),
-            [
-              TextButton(
-                style: flatButtonStyle,
-                onPressed: () {
-                  Navigator.pop(context);
+              TextFormField(
+                initialValue: key0,
+                decoration: InputDecoration(
+                  labelText: 'Key',
+                ),
+                validator: null,
+                onSaved: (String? value) {
+                  if (value != null) key = value.trim();
                 },
-                child: Text(translate('Cancel')),
               ),
-              TextButton(
-                style: flatButtonStyle,
-                onPressed: () {
-                  if (formKey.currentState != null && formKey.currentState!.validate()) {
-                    formKey.currentState!.save();
-                    if (id != id0)
-                      FFI.setByName('option',
-                          '{"name": "custom-rendezvous-server", "value": "$id"}');
-                    if (relay != relay0)
-                      FFI.setByName('option',
-                          '{"name": "relay-server", "value": "$relay"}');
-                    if (key != key0)
-                      FFI.setByName(
-                          'option', '{"name": "key", "value": "$key"}');
-                    Navigator.pop(context);
-                  }
-                },
-                child: Text(translate('OK')),
-              ),
-            ],
-          ));
+            ])),
+        [
+          TextButton(
+            style: flatButtonStyle,
+            onPressed: () {
+              Navigator.pop(context);
+            },
+            child: Text(translate('Cancel')),
+          ),
+          TextButton(
+            style: flatButtonStyle,
+            onPressed: () {
+              if (formKey.currentState != null &&
+                  formKey.currentState!.validate()) {
+                formKey.currentState!.save();
+                if (id != id0)
+                  FFI.setByName('option',
+                      '{"name": "custom-rendezvous-server", "value": "$id"}');
+                if (relay != relay0)
+                  FFI.setByName(
+                      'option', '{"name": "relay-server", "value": "$relay"}');
+                if (key != key0)
+                  FFI.setByName('option', '{"name": "key", "value": "$key"}');
+                Navigator.pop(context);
+              }
+            },
+            child: Text(translate('OK')),
+          ),
+        ],
+      ));
 }
 
 Future<Null> showAbout(BuildContext context) async {
   var version = await FFI.getVersion();
   showAlertDialog(
-      context,
       (setState) => Tuple3(
           SizedBox.shrink(), // TODO test old:null
           Wrap(direction: Axis.vertical, spacing: 12, children: [

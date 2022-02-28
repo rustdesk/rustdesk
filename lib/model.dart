@@ -1,4 +1,5 @@
 import 'package:flutter/services.dart';
+import 'package:flutter_easyloading/flutter_easyloading.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:math';
 import 'dart:convert';
@@ -96,7 +97,6 @@ class FfiModel with ChangeNotifier {
     _inputBlocked = false;
     _permissions.clear();
   }
-
   void update(String id,
       BuildContext context,
       void Function(
@@ -136,7 +136,7 @@ class FfiModel with ChangeNotifier {
       if (rgba != null) {
         if (_waitForImage) {
           _waitForImage = false;
-          dismissLoading();
+          EasyLoading.dismiss();
         }
         _decoding = true;
         final pid = FFI.id;
@@ -170,7 +170,7 @@ class FfiModel with ChangeNotifier {
   }
 
   void handlePeerInfo(Map<String, dynamic> evt, BuildContext context) {
-    dismissLoading();
+    EasyLoading.dismiss();
     _pi.version = evt['version'];
     _pi.username = evt['username'];
     _pi.hostname = evt['hostname'];
@@ -192,7 +192,7 @@ class FfiModel with ChangeNotifier {
       _display = _pi.displays[_pi.currentDisplay];
     }
     if (displays.length > 0) {
-      showLoading(translate('Connected, waiting for image...'), context);
+      showLoading(translate('Connected, waiting for image...'));
       _waitForImage = true;
     }
     notifyListeners();
