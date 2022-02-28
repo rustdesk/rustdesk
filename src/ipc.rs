@@ -263,11 +263,15 @@ async fn handle(data: Data, stream: &mut Connection) {
             Some(value) => {
                 let v0 = Config::get_option("stop-service");
                 let v1 = Config::get_rendezvous_servers();
+                let v2 = Config::get_option("audio-input");
                 Config::set_options(value);
                 if v0 != Config::get_option("stop-service")
                     || v1 != Config::get_rendezvous_servers()
                 {
                     RendezvousMediator::restart();
+                }
+                if v2 != Config::get_option("audio-input") {
+                    crate::audio_service::restart();
                 }
                 allow_err!(stream.send(&Data::Options(None)).await);
             }
@@ -513,10 +517,6 @@ pub fn set_option(key: &str, value: &str) {
         options.insert(key.to_owned(), value.to_owned());
     }
     set_options(options).ok();
-}
-
-pub fn restart_autdio_service() {
-    crate::audio_service::restart();
 }
 
 #[tokio::main(flavor = "current_thread")]

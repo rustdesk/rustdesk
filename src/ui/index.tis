@@ -131,7 +131,6 @@ class AudioInputs: Reactor.Component {
         if (v == this.get_value()) return;
         if (v == this.get_default()) v = "";
         handler.set_option("audio-input", v);
-        handler.refresh_audio_input();
         this.toggleMenuState();
     }
 }
