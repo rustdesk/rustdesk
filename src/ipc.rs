@@ -515,6 +515,10 @@ pub fn set_option(key: &str, value: &str) {
     set_options(options).ok();
 }
 
+pub fn restart_autdio_service() {
+    crate::audio_service::restart();
+}
+
 #[tokio::main(flavor = "current_thread")]
 pub async fn set_options(value: HashMap<String, String>) -> ResultType<()> {
     let mut c = connect(1000, "").await?;

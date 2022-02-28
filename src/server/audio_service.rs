@@ -14,9 +14,11 @@
 
 use super::*;
 use magnum_opus::{Application::*, Channels::*, Encoder};
+use std::sync::atomic::{AtomicBool, Ordering};
 
 pub const NAME: &'static str = "audio";
 pub const AUDIO_DATA_SIZE_U8: usize = 960 * 4; // 10ms in 48000 stereo
+static RESTARTING: AtomicBool = AtomicBool::new(false);
 
 #[cfg(not(target_os = "linux"))]
 pub fn new() -> GenericService {
@@ -32,12 +34,21 @@ pub fn new() -> GenericService {
     sp
 }
 
+pub fn restart() {
+    log::info!("restart the audio service, freezing now...");
+    if RESTARTING.load(Ordering::SeqCst) {
+        return;
+    }
+    RESTARTING.store(true, Ordering::SeqCst);
+}
+
 #[cfg(target_os = "linux")]
 mod pa_impl {
     use super::*;
     #[tokio::main(flavor = "current_thread")]
     pub async fn run(sp: GenericService) -> ResultType<()> {
         hbb_common::sleep(0.1).await; // one moment to wait for _pa ipc
+        RESTARTING.store(false, Ordering::SeqCst);
         let mut stream = crate::ipc::connect(1000, "_pa").await?;
         unsafe {
             AUDIO_ZERO_COUNT = 0;
@@ -52,7 +63,7 @@ mod pa_impl {
                 .await
         );
         let zero_audio_frame: Vec<f32> = vec![0.; AUDIO_DATA_SIZE_U8 / 4];
-        while sp.ok() {
+        while sp.ok() && !RESTARTING.load(Ordering::SeqCst) {
             sp.snapshot(|sps| {
                 sps.send(create_format_msg(crate::platform::linux::PA_SAMPLE_RATE, 2));
                 Ok(())
@@ -61,7 +72,7 @@ mod pa_impl {
                 if data.len() == 0 {
                     send_f32(&zero_audio_frame, &mut encoder, &sp);
                     continue;
-                } 
+                }
                 if data.len() != AUDIO_DATA_SIZE_U8 {
                     continue;
                 }
