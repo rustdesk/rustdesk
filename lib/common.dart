@@ -114,7 +114,7 @@ void msgBox(String type, String title, String text,
     Expanded(child: Container()),
     wrap(Translator.call('OK'), () {
       EasyLoading.dismiss();
-      Navigator.pop(globalKey.currentContext!); // TODO
+      Navigator.pop(globalKey.currentContext!);
     })
   ];
   if (hasCancel == null) {
@@ -202,3 +202,4 @@ bool isAndroid = false;
 bool isIOS = false;
 bool isWeb = false;
 bool isDesktop = false;
+var version = "";

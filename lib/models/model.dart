@@ -692,11 +692,12 @@ extension ToString on MouseButtons{
 
 
 class FFI {
-  static String id = "";
+  static var id = "";
   static var shift = false;
   static var ctrl = false;
   static var alt = false;
   static var command = false;
+  static var version = "";
   static final imageModel = ImageModel();
   static final ffiModel = FfiModel();
   static final cursorModel = CursorModel();
@@ -821,10 +822,6 @@ class FFI {
 
   static void setByName(String name, [String value = '']) {
     PlatformFFI.setByName(name, value);
-  }
-
-  static Future<String> getVersion() async {
-    return await PlatformFFI.getVersion();
   }
 
   static handleMouse(Map<String, dynamic> evt) {

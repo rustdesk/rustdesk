@@ -260,8 +260,8 @@ class PermissionRow extends StatelessWidget {
         Row(
           children: [
             SizedBox(
-                width: 60,
-                child: Text(name + ":",
+                width: 70,
+                child: Text(name,
                     style: TextStyle(fontSize: 16.0, color: MyTheme.accent50))),
             SizedBox(
               width: 50,

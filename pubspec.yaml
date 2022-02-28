@@ -45,6 +45,8 @@ dependencies:
   url_launcher: ^6.0.9
   shared_preferences: ^2.0.6
   toggle_switch: ^1.4.0
+  dash_chat: ^1.1.16
+  settings_ui: ^2.0.2
 
 dev_dependencies:
   flutter_launcher_icons: ^0.9.1

@@ -107,6 +107,7 @@ class PlatformFFI {
     } catch (e) {
       print(e);
     }
+    version = await getVersion();
   }
 
   static void startDesktopWebListener(
