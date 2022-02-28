@@ -515,7 +515,7 @@ pub fn set_option(key: &str, value: &str) {
     set_options(options).ok();
 }
 
-pub fn restart_autdio_input() {
+pub fn restart_autdio_service() {
     crate::audio_service::restart();
 }
 

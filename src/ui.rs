@@ -365,7 +365,7 @@ impl UI {
     }
 
     fn refresh_audio_input(&self) {
-        ipc::restart_autdio_input();
+        ipc::restart_autdio_service();
     }
 
     fn install_path(&mut self) -> String {
