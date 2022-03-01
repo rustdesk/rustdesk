@@ -447,7 +447,7 @@ async fn start_pa() {
                                 device = crate::platform::linux::get_pa_monitor();
                             }
                             if device.is_empty() {
-                                break;
+                                continue;
                             }
                             let spec = pulse::sample::Spec {
                                 format: pulse::sample::Format::F32le,
