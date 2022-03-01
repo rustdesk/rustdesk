@@ -97,11 +97,12 @@ class AudioInputs: Reactor.Component {
         var inputs = handler.get_sound_inputs();
         if (is_win) inputs = ["System Sound"].concat(inputs);
         if (!inputs.length) return <li style="display:hidden" />;
-        inputs = ["Mute"].concat(inputs);
         var me = this;
         self.timer(1ms, function() { me.toggleMenuState() });
         return <li>{translate('Audio Input')}
             <menu #audio-input key={inputs.length}>
+                <li #enable-audio><span>{svg_checkmark}</span>{translate("Mute")}</li>
+                <div .separator />
                 {inputs.map(function(name) {
                 return <li id={name}><span>{svg_checkmark}</span>{translate(name)}</li>;
                 })}
@@ -119,8 +120,12 @@ class AudioInputs: Reactor.Component {
     }
 
     function toggleMenuState() {
+        var el = this.$(li#enable-audio);
+        var enabled = handler.get_option(el.id) != "N";
+        el.attributes.toggleClass("selected", !enabled);
         var v = this.get_value();
-        for (var el in $$(menu#audio-input>li)) {
+        for (var el in this.$$(menu#audio-input>li)) {
+            if (el.id == 'enable-audio') continue;
             var selected = el.id == v;
             el.attributes.toggleClass("selected", selected);
         }
@@ -128,9 +133,13 @@ class AudioInputs: Reactor.Component {
 
     event click $(menu#audio-input>li) (_, me) {
         var v = me.id;
-        if (v == this.get_value()) return;
-        if (v == this.get_default()) v = "";
-        handler.set_option("audio-input", v);
+        if (v == 'enable-audio') {
+            handler.set_option(v, handler.get_option(v) != 'N' ? 'N' : '');
+        } else {
+          if (v == this.get_value()) return;
+          if (v == this.get_default()) v = "";
+          handler.set_option("audio-input", v);
+        }
         this.toggleMenuState();
     }
 }

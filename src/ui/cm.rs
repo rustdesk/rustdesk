@@ -191,14 +191,14 @@ impl ConnectionManager {
                     }
                 }
             },
+            #[cfg(windows)]
             Data::ClipbaordFile(_clip) => {
-                #[cfg(windows)]
                 _tx_clip_file
                     .send(ClipboardFileData::Clip((id, _clip)))
                     .ok();
             }
+            #[cfg(windows)]
             Data::ClipboardFileEnabled(enabled) => {
-                #[cfg(windows)]
                 _tx_clip_file
                     .send(ClipboardFileData::Enable((id, enabled)))
                     .ok();
@@ -342,6 +342,7 @@ impl sciter::EventHandler for ConnectionManager {
 }
 
 enum ClipboardFileData {
+    #[cfg(windows)]
     Clip((i32, ipc::ClipbaordFile)),
     Enable((i32, bool)),
 }
@@ -435,10 +436,6 @@ async fn start_pa() {
                                 stream.next_timeout2(1000).await
                             {
                                 device = x;
-                            }
-                            if device == "Mute" {
-                                log::info!("Switch mute mode, skip sample audio.");
-                                continue;
                             }
                             if !device.is_empty() {
                                 device = crate::platform::linux::get_pa_source_name(&device);

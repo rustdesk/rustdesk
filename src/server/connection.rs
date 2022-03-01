@@ -137,7 +137,7 @@ impl Connection {
             authorized: false,
             keyboard: Config::get_option("enable-keyboard").is_empty(),
             clipboard: Config::get_option("enable-clipboard").is_empty(),
-            audio: Config::get_option("audio-input") != "Mute",
+            audio: Config::get_option("enable-audio").is_empty(),
             file: Config::get_option("enable-file-transfer").is_empty(),
             last_test_delay: 0,
             image_quality: ImageQuality::Balanced.value(),

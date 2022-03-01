@@ -171,9 +171,6 @@ mod cpal_impl {
     }
 
     fn get_audio_input(audio_input: &str) -> ResultType<(Device, SupportedStreamConfig)> {
-        if audio_input == "Mute" {
-            bail!("Mute");
-        }
         let mut device = None;
         if !audio_input.is_empty() {
             for d in HOST
