@@ -437,7 +437,8 @@ async fn start_pa() {
                                 device = x;
                             }
                             if device == "Mute" {
-                                break;
+                                log::info!("Switch mute mode, skip sample audio.");
+                                continue;
                             }
                             if !device.is_empty() {
                                 device = crate::platform::linux::get_pa_source_name(&device);
