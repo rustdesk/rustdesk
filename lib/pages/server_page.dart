@@ -209,40 +209,44 @@ void showLoginReqAlert(String peerID, String name) async {
       builder: (alertContext) {
         DialogManager.reset();
         DialogManager.register(alertContext);
-        return AlertDialog(
-          title: Text("Control Request"),
-          content: Container(
-              height: 100,
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(translate("Do you accept?")),
-                  SizedBox(height: 20),
-                  getConnInfo(name, peerID),
-                ],
-              )),
-          actions: [
-            TextButton(
-                child: Text(translate("Dismiss")),
-                onPressed: () {
-                  FFI.setByName("login_res", "false");
-                  DialogManager.reset();
-                }),
-            ElevatedButton(
-                child: Text(translate("Accept")),
-                onPressed: () {
-                  FFI.setByName("login_res", "true");
-                  if (!FFI.serverModel.isFileTransfer) {
-                    _toAndroidStartCapture();
-                  }
-                  FFI.serverModel.setPeer(true);
-                  DialogManager.reset();
-                }),
-          ],
-        );
+        return WillPopScope(
+            onWillPop: () async {
+              return false;
+            },
+            child: AlertDialog(
+              title: Text("Control Request"),
+              content: Container(
+                  height: 100,
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(translate("Do you accept?")),
+                      SizedBox(height: 20),
+                      getConnInfo(name, peerID),
+                    ],
+                  )),
+              actions: [
+                TextButton(
+                    child: Text(translate("Dismiss")),
+                    onPressed: () {
+                      FFI.setByName("login_res", "false");
+                      DialogManager.reset();
+                    }),
+                ElevatedButton(
+                    child: Text(translate("Accept")),
+                    onPressed: () {
+                      FFI.setByName("login_res", "true");
+                      if (!FFI.serverModel.isFileTransfer) {
+                        _toAndroidStartCapture();
+                      }
+                      FFI.serverModel.setPeer(true);
+                      DialogManager.reset();
+                    }),
+              ],
+            ));
       });
-  DialogManager.reset();
+  DialogManager.drop();
 }
 
 class PermissionRow extends StatelessWidget {
@@ -403,7 +407,7 @@ showInputWarnAlert() async {
           ],
         );
       });
-  DialogManager.reset();
+  DialogManager.drop();
 }
 
 void toAndroidChannelInit() {

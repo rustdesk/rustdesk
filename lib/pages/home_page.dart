@@ -29,27 +29,38 @@ class _HomePageState extends State<HomePage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: MyTheme.grayBg,
-      appBar: AppBar(
-        centerTitle: true,
-        title: Text("RustDesk"),
-        actions: _pages.elementAt(_selectedIndex).appBarActions,
-      ),
-      bottomNavigationBar: BottomNavigationBar(
-        items: _pages
-            .map((page) =>
-                BottomNavigationBarItem(icon: page.icon, label: page.title))
-            .toList(),
-        currentIndex: _selectedIndex,
-        type: BottomNavigationBarType.fixed,
-        selectedItemColor: MyTheme.accent,
-        unselectedItemColor: MyTheme.darkGray,
-        onTap: (index) => setState(() {
-          _selectedIndex = index;
-        }),
-      ),
-      body: _pages.elementAt(_selectedIndex),
-    );
+    return WillPopScope(
+        onWillPop: () async {
+          if (_selectedIndex != 0) {
+            setState(() {
+              _selectedIndex = 0;
+            });
+          } else {
+            return true;
+          }
+          return false;
+        },
+        child: Scaffold(
+          backgroundColor: MyTheme.grayBg,
+          appBar: AppBar(
+            centerTitle: true,
+            title: Text("RustDesk"),
+            actions: _pages.elementAt(_selectedIndex).appBarActions,
+          ),
+          bottomNavigationBar: BottomNavigationBar(
+            items: _pages
+                .map((page) =>
+                    BottomNavigationBarItem(icon: page.icon, label: page.title))
+                .toList(),
+            currentIndex: _selectedIndex,
+            type: BottomNavigationBarType.fixed,
+            selectedItemColor: MyTheme.accent,
+            unselectedItemColor: MyTheme.darkGray,
+            onTap: (index) => setState(() {
+              _selectedIndex = index;
+            }),
+          ),
+          body: _pages.elementAt(_selectedIndex),
+        ));
   }
 }

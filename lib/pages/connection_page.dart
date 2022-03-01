@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:tuple/tuple.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'dart:async';
 import '../common.dart';
@@ -164,7 +163,6 @@ class _ConnectionPageState extends State<ConnectionPage> {
                     icon: Icon(Icons.arrow_forward,
                         color: MyTheme.darkGray, size: 45),
                     onPressed: onConnect,
-                    autofocus: _idController.text.isNotEmpty,
                   ),
                 )
               ],
