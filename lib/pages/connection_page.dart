@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_hbb/pages/chat_page.dart';
+import 'package:flutter_hbb/pages/file_manager_page.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'dart:async';
@@ -53,6 +55,21 @@ class _ConnectionPageState extends State<ConnectionPage> {
             getSearchBarUI(),
             Container(height: 12),
             getPeers(),
+            ElevatedButton(
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (BuildContext context) => FileManagerPage(),
+                    ),
+                  );
+                },
+                child: Text("File")),
+            ElevatedButton(
+                onPressed: () {
+                  toggleChatOverlay();
+                },
+                child: Text("Chat"))
           ]),
     );
   }
@@ -65,15 +82,12 @@ class _ConnectionPageState extends State<ConnectionPage> {
   void connect(String id) {
     if (id == '') return;
     id = id.replaceAll(' ', '');
-        () async {
-      await Navigator.push<dynamic>(
-        context,
-        MaterialPageRoute<dynamic>(
-          builder: (BuildContext context) => RemotePage(id: id),
-        ),
-      );
-      setState(() {});
-    }();
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (BuildContext context) => RemotePage(id: id),
+      ),
+    );
     FocusScopeNode currentFocus = FocusScope.of(context);
     if (!currentFocus.hasPrimaryFocus) {
       currentFocus.unfocus();
@@ -84,20 +98,20 @@ class _ConnectionPageState extends State<ConnectionPage> {
     return _updateUrl.isEmpty
         ? SizedBox(height: 0)
         : InkWell(
-        onTap: () async {
-          final url = _updateUrl + '.apk';
-          if (await canLaunch(url)) {
-            await launch(url);
-          }
-        },
-        child: Container(
-            alignment: AlignmentDirectional.center,
-            width: double.infinity,
-            color: Colors.pinkAccent,
-            padding: EdgeInsets.symmetric(vertical: 12),
-            child: Text(translate('Download new version'),
-                style: TextStyle(
-                    color: Colors.white, fontWeight: FontWeight.bold))));
+            onTap: () async {
+              final url = _updateUrl + '.apk';
+              if (await canLaunch(url)) {
+                await launch(url);
+              }
+            },
+            child: Container(
+                alignment: AlignmentDirectional.center,
+                width: double.infinity,
+                color: Colors.pinkAccent,
+                padding: EdgeInsets.symmetric(vertical: 12),
+                child: Text(translate('Download new version'),
+                    style: TextStyle(
+                        color: Colors.white, fontWeight: FontWeight.bold))));
   }
 
   Widget getSearchBarUI() {
@@ -113,12 +127,7 @@ class _ConnectionPageState extends State<ConnectionPage> {
           child: Ink(
             decoration: BoxDecoration(
               color: MyTheme.white,
-              borderRadius: const BorderRadius.only(
-                bottomRight: Radius.circular(13.0),
-                bottomLeft: Radius.circular(13.0),
-                topLeft: Radius.circular(13.0),
-                topRight: Radius.circular(13.0),
-              ),
+              borderRadius: const BorderRadius.all(Radius.circular(13)),
             ),
             child: Row(
               children: <Widget>[
@@ -164,7 +173,7 @@ class _ConnectionPageState extends State<ConnectionPage> {
                         color: MyTheme.darkGray, size: 45),
                     onPressed: onConnect,
                   ),
-                )
+                ),
               ],
             ),
           ),
@@ -209,11 +218,11 @@ class _ConnectionPageState extends State<ConnectionPage> {
           child: Card(
               child: GestureDetector(
                   onTap: () => {
-                    if (!isDesktop) {connect('${p.id}')}
-                  },
+                        if (!isDesktop) {connect('${p.id}')}
+                      },
                   onDoubleTap: () => {
-                    if (isDesktop) {connect('${p.id}')}
-                  },
+                        if (isDesktop) {connect('${p.id}')}
+                      },
                   onLongPressStart: (details) {
                     var x = details.globalPosition.dx;
                     var y = details.globalPosition.dy;
@@ -258,7 +267,7 @@ class _ConnectionPageState extends State<ConnectionPage> {
     );
     if (value == 'remove') {
       setState(() => FFI.setByName('remove', '$id'));
-          () async {
+      () async {
         removePreference(id);
       }();
     }

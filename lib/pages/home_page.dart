@@ -22,7 +22,7 @@ class _HomePageState extends State<HomePage> {
   var _selectedIndex = 0;
   final List<PageShape> _pages = [
     ConnectionPage(),
-    ChatPage(),
+    chatPage,
     ServerPage(),
     SettingsPage()
   ];

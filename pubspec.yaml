@@ -46,7 +46,9 @@ dependencies:
   shared_preferences: ^2.0.6
   toggle_switch: ^1.4.0
   dash_chat: ^1.1.16
+  draggable_float_widget: ^0.0.2
   settings_ui: ^2.0.2
+  file_manager: ^1.0.0
 
 dev_dependencies:
   flutter_launcher_icons: ^0.9.1

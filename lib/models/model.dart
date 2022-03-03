@@ -1,5 +1,6 @@
 import 'package:flutter/services.dart';
 import 'package:flutter_easyloading/flutter_easyloading.dart';
+import 'package:flutter_hbb/models/chat_model.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:math';
 import 'dart:convert';
@@ -128,6 +129,9 @@ class FfiModel with ChangeNotifier {
         Clipboard.setData(ClipboardData(text: evt['content']));
       } else if (name == 'permission') {
         FFI.ffiModel.updatePermission(evt);
+      } else if (name == 'chat'){
+        // FFI.setByName("chat",msg);
+        FFI.chatModel.receive(evt['text']??"");
       }
     }
     if (pos != null) FFI.cursorModel.updateCursorPosition(pos);
@@ -703,6 +707,7 @@ class FFI {
   static final cursorModel = CursorModel();
   static final canvasModel = CanvasModel();
   static final serverModel = ServerModel();
+  static final chatModel = ChatModel();
 
   static String getId() {
     return getByName('remote_id');
@@ -797,6 +802,7 @@ class FFI {
   }
 
   static void close() {
+    chatModel.release();
     if (FFI.imageModel.image != null && !isDesktop) {
       savePreference(
           id,

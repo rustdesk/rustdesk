@@ -11,6 +11,7 @@ import 'package:wakelock/wakelock.dart';
 import '../common.dart';
 import '../gestures.dart';
 import '../models/model.dart';
+import 'chat_page.dart';
 
 final initText = '\1' * 1024;
 
@@ -307,6 +308,11 @@ class _RemotePageState extends State<RemotePage> {
                           )
                         ]) +
                   <Widget>[
+                    IconButton(
+                      color: Colors.white,
+                      icon: Icon(Icons.message),
+                      onPressed:toggleChatOverlay,
+                    ),
                     IconButton(
                       color: Colors.white,
                       icon: Icon(Icons.more_vert),
