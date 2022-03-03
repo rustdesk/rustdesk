@@ -1312,7 +1312,7 @@ impl Remote {
 
                 // just build for now
                 #[cfg(not(windows))]
-                let (_, mut rx_clip_client) = mpsc::unbounded_channel::<i32>();
+                let (_tx_holder, mut rx_clip_client) = mpsc::unbounded_channel::<i32>();
                 #[cfg(windows)]
                 let mut rx_clip_client = get_rx_clip_client().lock().await;
 
