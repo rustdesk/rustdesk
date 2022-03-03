@@ -161,12 +161,12 @@ class MsgboxComponent: Reactor.Component {
         }
         var values = this.getValues();
         if (this.callback) {
-            var err = (this.callback(values, this.show_progress) || '').trim();
+            var err = this.callback(values, this.show_progress);
             if (!err) {
                 this.close();
                 return;
             }
-            if (err) this.show_progress(false, err);
+            if (err && err.trim()) this.show_progress(false, err);
         } else {
             this.close();
         }
