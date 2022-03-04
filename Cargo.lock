@@ -263,9 +263,9 @@ checksum = "a4a45a46ab1f2412e53d3a0ade76ffad2025804294569aae387231a0cd6e0899"
 
 [[package]]
 name = "bytemuck"
-version = "1.7.3"
+version = "1.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "439989e6b8c38d1b6570a384ef1e49c8848128f5a97f3914baef02920842712f"
+checksum = "0e851ca7c24871e7336801608a4797d7376545b6928a10d32d75685687141ead"
 
 [[package]]
 name = "byteorder"
@@ -378,9 +378,9 @@ dependencies = [
 
 [[package]]
 name = "clap"
-version = "3.1.3"
+version = "3.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "86f8c0e2a6b902acc18214e24a6935cdaf8a8e34231913d4404dcaee659f65a1"
+checksum = "ced1892c55c910c1219e98d6fc8d71f6bddba7905866ce740066d8bfea859312"
 dependencies = [
  "atty",
  "bitflags",
@@ -388,7 +388,7 @@ dependencies = [
  "os_str_bytes",
  "strsim 0.10.0",
  "termcolor",
- "textwrap 0.14.2",
+ "textwrap 0.15.0",
 ]
 
 [[package]]
@@ -2639,9 +2639,9 @@ dependencies = [
 
 [[package]]
 name = "once_cell"
-version = "1.9.0"
+version = "1.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "da32515d9f6e6e489d7bc9d84c71b060db7247dc035bbe44eac88cf87486d8d5"
+checksum = "87f3e037eac156d1775da914196f0f37741a274155e34a0b7e427c35d2a2ecb9"
 
 [[package]]
 name = "openssl-probe"
@@ -3226,7 +3226,7 @@ dependencies = [
 [[package]]
 name = "rdev"
 version = "0.5.0"
-source = "git+https://github.com/open-trade/rdev#c83764e1b0e52b1f51814c706a96c401a687243f"
+source = "git+https://github.com/open-trade/rdev#6d431464a29fa51008356734eb568f09e26d723f"
 dependencies = [
  "cocoa 0.22.0",
  "core-foundation 0.7.0",
@@ -3400,7 +3400,7 @@ dependencies = [
  "base64",
  "cc",
  "cfg-if 1.0.0",
- "clap 3.1.3",
+ "clap 3.1.5",
  "clipboard",
  "clipboard-master",
  "cocoa 0.24.0",
@@ -3914,9 +3914,9 @@ dependencies = [
 
 [[package]]
 name = "termcolor"
-version = "1.1.2"
+version = "1.1.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2dfed899f0eb03f32ee8c6a0aabdb8a7949659e3466561fc0adf54e26d88c5f4"
+checksum = "bab24d30b911b2376f3a13cc2cd443142f0c81dda04c118693e35b3835757755"
 dependencies = [
  "winapi-util",
 ]
@@ -3941,9 +3941,9 @@ dependencies = [
 
 [[package]]
 name = "textwrap"
-version = "0.14.2"
+version = "0.15.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0066c8d12af8b5acd21e00547c3797fde4e8677254a7ee429176ccebbe93dd80"
+checksum = "b1141d4d61095b28419e22cb0bbf02755f5e54e0526f97f1e3d1d160e60885fb"
 
 [[package]]
 name = "thiserror"
