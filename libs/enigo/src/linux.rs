@@ -3,7 +3,7 @@ use libc;
 use crate::{Key, KeyboardControllable, MouseButton, MouseControllable};
 
 use self::libc::{c_char, c_int, c_void, useconds_t};
-use std::{borrow::Cow, ffi::CString, ptr};
+use std::{borrow::Cow, ffi::CString, io::prelude::*, ptr, sync::mpsc};
 
 const CURRENT_WINDOW: c_int = 0;
 const DEFAULT_DELAY: u64 = 12000;
@@ -64,6 +64,7 @@ fn mousebutton(button: MouseButton) -> c_int {
 pub struct Enigo {
     xdo: Xdo,
     delay: u64,
+    tx: mpsc::Sender<(char, bool)>,
 }
 // This is safe, we have a unique pointer.
 // TODO: use Unique<c_char> once stable.
@@ -72,9 +73,12 @@ unsafe impl Send for Enigo {}
 impl Default for Enigo {
     /// Create a new Enigo instance
     fn default() -> Self {
+        let (tx, rx) = mpsc::channel();
+        // start_pynput_service(rx);
         Self {
             xdo: unsafe { xdo_new(ptr::null()) },
             delay: DEFAULT_DELAY,
+            tx,
         }
     }
 }
@@ -89,6 +93,16 @@ impl Enigo {
     /// This is Linux-specific.
     pub fn set_delay(&mut self, delay: u64) {
         self.delay = delay;
+    }
+    #[inline]
+    fn send_pynput(&mut self, key: &Key, is_press: bool) -> bool {
+        if unsafe { PYNPUT_EXIT || !PYNPUT_REDAY } {
+            return false;
+        }
+        if let Key::Layout(c) = key {
+            return self.tx.send((*c, is_press)).is_ok();
+        }
+        false
     }
 }
 impl Drop for Enigo {
@@ -288,7 +302,6 @@ impl KeyboardControllable for Enigo {
         let mod_numlock = 1 << 4;
         let mod_meta = 1 << 6;
         let mask = unsafe { xdo_get_input_state(self.xdo) };
-        // println!("{:b}", mask);
         match key {
             Key::Shift => mask & mod_shift != 0,
             Key::CapsLock => mask & mod_lock != 0,
@@ -319,6 +332,9 @@ impl KeyboardControllable for Enigo {
         if self.xdo.is_null() {
             return Ok(());
         }
+        if self.send_pynput(&key, true) {
+            return Ok(());
+        }
         let string = CString::new(&*keysequence(key))?;
         unsafe {
             xdo_send_keysequence_window_down(
@@ -332,6 +348,9 @@ impl KeyboardControllable for Enigo {
     }
     fn key_up(&mut self, key: Key) {
         if self.xdo.is_null() {
+            return;
+        }
+        if self.send_pynput(&key, false) {
             return;
         }
         if let Ok(string) = CString::new(&*keysequence(key)) {
@@ -360,4 +379,76 @@ impl KeyboardControllable for Enigo {
             }
         }
     }
+}
+
+static mut PYNPUT_EXIT: bool = false;
+static mut PYNPUT_REDAY: bool = false;
+static IPC_FILE: &'static str = "/tmp/RustDesk/pynput_service";
+
+fn start_pynput_service(rx: mpsc::Receiver<(char, bool)>) {
+    let mut py = "./pynput_service.py".to_owned();
+    if !std::path::Path::new(&py).exists() {
+        py = "/usr/share/rustdesk/files/pynput_service.py".to_owned();
+        if !std::path::Path::new(&py).exists() {
+            log::error!("{} not exits", py);
+        }
+    }
+    log::info!("pynput service: {}", py);
+    std::thread::spawn(move || {
+        log::error!(
+            "pynput server exit: {:?}",
+            std::process::Command::new("python3")
+                .arg("./pynput_service.py")
+                .arg(IPC_FILE)
+                .status()
+        );
+        unsafe {
+            PYNPUT_EXIT = true;
+        }
+    });
+    std::thread::spawn(move || {
+        // wait for pynput_server.py
+        std::thread::sleep(std::time::Duration::from_millis(1000));
+        let mut conn = match std::os::unix::net::UnixStream::connect(IPC_FILE) {
+            Ok(conn) => conn,
+            Err(err) => {
+                log::error!("Failed to connect to {}: {}", IPC_FILE, err);
+                return;
+            }
+        };
+        if let Err(err) = conn.set_nonblocking(true) {
+            log::error!("Failed to set ipc nonblocking: {}", err);
+            return;
+        }
+        let d = std::time::Duration::from_millis(30);
+        unsafe { PYNPUT_REDAY = true; }
+        let mut buf = [0u8; 10];
+        loop {
+            if unsafe { PYNPUT_EXIT } {
+                break;
+            }
+            match rx.recv_timeout(d) {
+                Ok((chr, is_press)) => {
+                    let msg = format!("{}{}", if is_press { 'p' } else { 'r' }, chr);
+                    let n = msg.len();
+                    buf[0] = n as _;
+                    buf[1..(n+1)].copy_from_slice(msg.as_bytes());
+                    if let Err(err) = conn.write_all(&buf[..n + 1]) {
+                        log::error!("Failed to write to ipc: {}", err);
+                        break;
+                    }
+                }
+                Err(err) => match err {
+                    mpsc::RecvTimeoutError::Disconnected => {
+                        log::error!("pynput sender disconnecte");
+                        break;
+                    }
+                    _ => {}
+                },
+            }
+        }
+        unsafe {
+            PYNPUT_REDAY = false;
+        }
+    });
 }
