@@ -31,6 +31,7 @@ struct StatePos {
 impl super::service::Reset for StatePos {
     fn reset(&mut self) {
         self.cursor_pos = (0, 0);
+        fix_key_down_timeout(true);
     }
 }
 
@@ -258,7 +259,7 @@ fn fix_key_down_timeout(force: bool) {
     let cloned = (*KEYS_DOWN.lock().unwrap()).clone();
     log::debug!("{} keys in key down timeout map", cloned.len());
     for (key, value) in cloned.into_iter() {
-        if force || value.elapsed().as_millis() >= 3_000 {
+        if force || value.elapsed().as_millis() >= 360_000 {
             KEYS_DOWN.lock().unwrap().remove(&key);
             let key = if key < KEY_CHAR_START {
                 if let Some(key) = KEY_MAP.get(&(key as _)) {
