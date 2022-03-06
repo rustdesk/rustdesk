@@ -1,7 +1,10 @@
-from pynput.keyboard import Controller
+from pynput.keyboard import Key, Controller
+from pynput.keyboard._xorg import KeyCode
 import os
 import sys
 import socket
+
+INVALID = KeyCode._from_symbol("\0")  # test
 
 keyboard = Controller()
 
@@ -20,24 +23,44 @@ server.bind(server_address)
 server.listen(1)
 clientsocket, address = server.accept()
 print("Got pynput connection")
-buf = []
-while True:
-    data = clientsocket.recv(1024)
-    if not data:
-        print("Connection broken")
-        break
-    buf.extend(data)
-    n = buf[0]
-    n = n + 1
-    if len(buf) >= n:
-        msg = bytearray(buf[1:n]).decode("utf-8")
-        if len(msg) != 2:
-            print("Wrong message")
+
+
+def loop():
+    global keyboard
+    buf = []
+    while True:
+        data = clientsocket.recv(1024)
+        if not data:
+            print("Connection broken")
             break
-        if msg[0] == "p":
-            keyboard.press(msg[1])
-        else:
-            keyboard.release(msg[1])
-        buf = buf[n:]
+        buf.extend(data)
+        while buf:
+            n = buf[0]
+            n = n + 1
+            if len(buf) < n:
+                break
+            msg = bytearray(buf[1:n]).decode("utf-8")
+            buf = buf[n:]
+            if len(msg) < 2:
+                continue
+            if msg[1] == "\0":
+                keyboard = Controller()
+                print("Keyboard reset")
+                continue
+            print(msg)
+            if len(msg) == 2:
+                name = msg[1]
+            else:
+                name = KeyCode._from_symbol(msg[1:])
+            print(name)
+            if name == INVALID:
+                continue
+            if msg[0] == "p":
+                keyboard.press(name)
+            else:
+                keyboard.release(name)
+
+
+loop()
 clientsocket.close()
 server.close()
