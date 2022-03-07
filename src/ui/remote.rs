@@ -261,7 +261,15 @@ impl Handler {
                     Key::Alt => Some(ControlKey::Alt),
                     Key::AltGr => Some(ControlKey::RAlt),
                     Key::Backspace => Some(ControlKey::Backspace),
-                    Key::ControlLeft => Some(ControlKey::Control),
+                    Key::ControlLeft => {
+                        // when pressing AltGr, an extra VK_LCONTROL with a special
+                        // scancode with bit 9 set is sent, let's ignore this.
+                        #[cfg(windows)]
+                        if evt.scan_code & 0x200 != 0 {
+                            return;
+                        }
+                        Some(ControlKey::Control)
+                    }
                     Key::ControlRight => Some(ControlKey::RControl),
                     Key::DownArrow => Some(ControlKey::DownArrow),
                     Key::Escape => Some(ControlKey::Escape),

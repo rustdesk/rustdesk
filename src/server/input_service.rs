@@ -20,6 +20,7 @@ impl super::service::Reset for StateCursor {
     fn reset(&mut self) {
         *self = Default::default();
         crate::platform::reset_input_cache();
+        fix_key_down_timeout(true);
     }
 }
 
@@ -31,7 +32,6 @@ struct StatePos {
 impl super::service::Reset for StatePos {
     fn reset(&mut self) {
         self.cursor_pos = (0, 0);
-        fix_key_down_timeout(true);
     }
 }
 
@@ -227,7 +227,7 @@ pub fn handle_mouse(evt: &MouseEvent, conn: i32) {
 
 pub fn fix_key_down_timeout_loop() {
     std::thread::spawn(move || loop {
-        std::thread::sleep(std::time::Duration::from_millis(300));
+        std::thread::sleep(std::time::Duration::from_millis(1_000));
         fix_key_down_timeout(false);
     });
     if let Err(err) = ctrlc::set_handler(move || {
@@ -257,7 +257,6 @@ fn fix_key_down_timeout(force: bool) {
         return;
     }
     let cloned = (*KEYS_DOWN.lock().unwrap()).clone();
-    log::debug!("{} keys in key down timeout map", cloned.len());
     for (key, value) in cloned.into_iter() {
         if force || value.elapsed().as_millis() >= 360_000 {
             KEYS_DOWN.lock().unwrap().remove(&key);
@@ -273,10 +272,8 @@ fn fix_key_down_timeout(force: bool) {
             if let Some(key) = key {
                 let func = move || {
                     let mut en = ENIGO.lock().unwrap();
-                    if get_modifier_state(key, &mut en) {
-                        en.key_up(key);
-                        log::debug!("Fixed {:?} timeout", key);
-                    }
+                    en.key_up(key);
+                    log::debug!("Fixed {:?} timeout", key);
                 };
                 #[cfg(target_os = "macos")]
                 QUEUE.exec_async(func);
@@ -357,8 +354,6 @@ fn handle_mouse_(evt: &MouseEvent, conn: i32) {
                         en.key_down(key.clone()).ok();
                         modifier_sleep();
                         to_release.push(key);
-                    } else {
-                        KEYS_DOWN.lock().unwrap().insert(ck.value() as _, Instant::now());
                     }
                 }
             }
@@ -577,8 +572,6 @@ fn handle_key_(evt: &KeyEvent) {
                             en.key_down(key.clone()).ok();
                             modifier_sleep();
                             to_release.push(key);
-                        } else {
-                            KEYS_DOWN.lock().unwrap().insert(ck.value() as _, Instant::now());
                         }
                     }
                 }

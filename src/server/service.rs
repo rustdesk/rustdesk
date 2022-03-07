@@ -184,6 +184,7 @@ impl<T: Subscriber + From<ConnInner>> ServiceTmpl<T> {
         let sp = self.clone();
         let thread = thread::spawn(move || {
             let mut state = S::default();
+            let mut may_reset = false;
             while sp.active() {
                 let now = time::Instant::now();
                 if sp.has_subscribes() {
@@ -193,8 +194,12 @@ impl<T: Subscriber + From<ConnInner>> ServiceTmpl<T> {
                         #[cfg(windows)]
                         crate::platform::windows::try_change_desktop();
                     }
-                } else {
+                    if !may_reset {
+                        may_reset = true;
+                    }
+                } else if may_reset {
                     state.reset();
+                    may_reset = false;
                 }
                 let elapsed = now.elapsed();
                 if elapsed < interval {
