@@ -261,7 +261,7 @@ impl Handler {
                     let mut tmp = get_key_state(enigo::Key::Control);
                     unsafe {
                         if IS_ALT_GR {
-                            if alt || key == Key::Alt {
+                            if alt || key == Key::AltGr {
                                 if tmp {
                                     tmp = false;
                                 }
