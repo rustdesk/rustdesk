@@ -38,7 +38,6 @@ enum MessageInput {
     BlockOff,
     PrivacyOn,
     PrivacyOff,
-    Exit,
 }
 
 pub struct Connection {
@@ -346,7 +345,6 @@ impl Connection {
             conn.on_close(&err.to_string(), false);
         }
 
-        conn.tx_input.send(MessageInput::Exit).ok();
         log::info!("#{} connection loop exited", id);
     }
 
@@ -354,7 +352,7 @@ impl Connection {
         let mut block_input_mode = false;
         let (tx_blank, rx_blank) = std_mpsc::channel();
 
-        let handler_blank = std::thread::spawn(|| Self::handle_blank(rx_blank));
+        std::thread::spawn(|| Self::handle_blank(rx_blank));
 
         loop {
             match receiver.recv_timeout(std::time::Duration::from_millis(500)) {
@@ -398,21 +396,16 @@ impl Connection {
                         }
                         tx_blank.send(MessageInput::PrivacyOff).ok();
                     }
-                    MessageInput::Exit => break,
                 },
-                _ => {
+                Err(err) => {
                     if block_input_mode {
                         let _ = crate::platform::block_input(true);
                     }
+                    if std_mpsc::RecvTimeoutError::Disconnected == err {
+                        break;
+                    }
                 }
             }
-        }
-
-        tx_blank.send(MessageInput::Exit).ok();
-        if let Err(_) = handler_blank.join() {
-            log::error!("Failed to join blank thread handler");
-        } else {
-            log::info!("Blank thread exited");
         }
         log::info!("Input thread exited");
     }
@@ -432,13 +425,17 @@ impl Connection {
                     }
                     _ => break,
                 },
-                _ => {
+                Err(err) => {
                     if last_privacy {
                         crate::platform::toggle_blank_screen(true);
+                    }
+                    if std_mpsc::RecvTimeoutError::Disconnected == err {
+                        break;
                     }
                 }
             }
         }
+        log::info!("Blank thread exited");
     }
 
     async fn try_port_forward_loop(
