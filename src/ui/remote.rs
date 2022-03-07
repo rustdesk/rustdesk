@@ -60,6 +60,8 @@ static mut KEYBOARD_HOOKED: bool = false;
 static mut SERVER_KEYBOARD_ENABLED: bool = true;
 static mut SERVER_FILE_TRANSFER_ENABLED: bool = true;
 static mut SERVER_CLIPBOARD_ENABLED: bool = true;
+#[cfg(windows)]
+static mut IS_ALT_GR: bool = false;
 
 #[derive(Default)]
 pub struct HandlerInner {
@@ -254,6 +256,23 @@ impl Handler {
                     _ => return,
                 };
                 let alt = get_key_state(enigo::Key::Alt);
+                #[cfg(windows)]
+                let ctrl = {
+                    let mut tmp = get_key_state(enigo::Key::Control);
+                    unsafe {
+                        if IS_ALT_GR {
+                            if alt || key == Key::Alt {
+                                if tmp {
+                                    tmp = false;
+                                }
+                            } else {
+                                IS_ALT_GR = false;
+                            }
+                        }
+                    }
+                    tmp
+                };
+                #[cfg(not(windows))]
                 let ctrl = get_key_state(enigo::Key::Control);
                 let shift = get_key_state(enigo::Key::Shift);
                 let command = get_key_state(enigo::Key::Meta);
@@ -266,6 +285,9 @@ impl Handler {
                         // scancode with bit 9 set is sent, let's ignore this.
                         #[cfg(windows)]
                         if evt.scan_code & 0x200 != 0 {
+                            unsafe {
+                                IS_ALT_GR = true;
+                            }
                             return;
                         }
                         Some(ControlKey::Control)
@@ -1844,7 +1866,8 @@ impl Remote {
                         return false;
                     }
                     Some(misc::Union::option_response(resp)) => {
-                        self.handler.msgbox("warn", "Option Error", &resp.error);
+                        self.handler
+                            .msgbox("custom-error", "Option Error", &resp.error);
                     }
                     _ => {}
                 },

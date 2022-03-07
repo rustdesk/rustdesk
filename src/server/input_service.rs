@@ -198,6 +198,7 @@ fn modifier_sleep() {
 
 #[inline]
 fn get_modifier_state(key: Key, en: &mut Enigo) -> bool {
+    // https://github.com/rustdesk/rustdesk/issues/332
     // on Linux, if RightAlt is down, RightAlt status is false, Alt status is true
     // but on Windows, both are true
     let x = en.get_key_state(key.clone());
@@ -293,6 +294,11 @@ fn fix_modifier(
     en: &mut Enigo,
 ) {
     if get_modifier_state(key1, en) && !modifiers.contains(&ProtobufEnumOrUnknown::new(key0)) {
+        #[cfg(windows)]
+        if key0 == ControlKey::Control && get_modifier_state(Key::Alt, en) {
+            // AltGr case
+            return;
+        }
         en.key_up(key1);
         log::debug!("Fixed {:?}", key1);
     }

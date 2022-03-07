@@ -13,7 +13,7 @@ mod eo;
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub fn translate(name: String) -> String {
     let locale = sys_locale::get_locale().unwrap_or_default().to_lowercase();
-    log::debug!("The current locale is {}", locale);
+    log::trace!("The current locale is {}", locale);
     translate_locale(name, &locale)
 }
 
