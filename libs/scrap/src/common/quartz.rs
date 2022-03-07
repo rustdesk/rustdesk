@@ -20,7 +20,7 @@ impl Capturer {
             display.width(),
             display.height(),
             if use_yuv {
-                quartz::PixelFormat::YCbCr420Full
+                quartz::PixelFormat::YCbCr420Video
             } else {
                 quartz::PixelFormat::Argb8888
             },
