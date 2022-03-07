@@ -188,13 +188,11 @@ function handler.onMouse(evt)
         if (cursor_img.style#display != "none" && keyboard_enabled) {
             cursor_img.style#display = "none";
         }
-        if (!keyboard_enabled && handler.style#cursor) {
-            handler.style#cursor = undefined;
+        if (!keyboard_enabled && !useSystemCursor) {
+            updateCursor(true);
         }
-        if (keyboard_enabled && !handler.style#cursor) {
-            if (cur_img) {
-                handler.style.cursor(cur_img, cur_hotx, cur_hoty);
-            }
+        if (keyboard_enabled && useSystemCursor) {
+            updateCursor();
         }
         break;
       case Event.MOUSE_WHEEL:
@@ -315,20 +313,42 @@ var cur_local_y = 0;
 var cursors = {};
 var image_binded;
 
+function scaleCursorImage(img) {
+    var w = (img.width * display_scale).toInteger();
+    var h = (img.height * display_scale).toInteger();
+    cursor_img.style.set {
+        width: w + "px",
+        height: h + "px",
+    };
+    self.bindImage("in-memory:cursor", img);
+    if (display_scale == 1) return img;
+    function paint(gfx) {
+        gfx.drawImage(img, 0, 0, w, h);
+    }
+    return new Image(w, h, paint);
+}
+
+var useSystemCursor = true;
+function updateCursor(system=false) {
+    stdout.println("Update cursor, system: " + system);
+    useSystemCursor= system;
+    if (system) {
+        handler.style#cursor = undefined;
+    } else if (cur_img) {
+        handler.style.cursor(cur_img, (cur_hotx * display_scale).toInteger(), (cur_hoty * display_scale).toInteger());
+    }
+}
+
 handler.setCursorData = function(id, hotx, hoty, width, height, colors) {
     cur_hotx = hotx;
     cur_hoty = hoty;
-    cursor_img.style.set {
-        width: width + "px",
-        height: height + "px",
-    };
     var img = Image.fromBytes(colors);
     if (img) {
         image_binded = true;
         cursors[id] = [img, hotx, hoty, width, height];
-        this.bindImage("in-memory:cursor", img);
+        img = scaleCursorImage(img);
         if (cursor_img.style#display == 'none') {
-            self.timer(1ms, function() { handler.style.cursor(cur_img, cur_hotx, cur_hoty); });
+            self.timer(1ms, updateCursor);
         }
         cur_img = img;
     }
@@ -340,14 +360,9 @@ handler.setCursorId = function(id) {
         image_binded = true;
         cur_hotx = img[1];
         cur_hoty = img[2];
-        cursor_img.style.set {
-            width: img[3] + "px",
-            height: img[4] + "px",
-        };
-        img = img[0];
-        this.bindImage("in-memory:cursor", img);
+        img = scaleCursorImage(img[0]);
         if (cursor_img.style#display == 'none') {
-            self.timer(1ms, function() { handler.style.cursor(cur_img, cur_hotx, cur_hoty); });
+            self.timer(1ms, updateCursor);
         }
         cur_img = img;
     }
