@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_hbb/pages/chat_page.dart';
 import 'package:flutter_hbb/pages/file_manager_page.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -55,21 +54,11 @@ class _ConnectionPageState extends State<ConnectionPage> {
             getSearchBarUI(),
             Container(height: 12),
             getPeers(),
-            ElevatedButton(
-                onPressed: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (BuildContext context) => FileManagerPage(),
-                    ),
-                  );
-                },
-                child: Text("File")),
-            ElevatedButton(
-                onPressed: () {
-                  toggleChatOverlay();
-                },
-                child: Text("Chat"))
+            // ElevatedButton(
+            //     onPressed: () {
+            //       toggleChatOverlay();
+            //     },
+            //     child: Text("Chat Debug"))
           ]),
     );
   }
@@ -79,15 +68,24 @@ class _ConnectionPageState extends State<ConnectionPage> {
     connect(id);
   }
 
-  void connect(String id) {
+  void connect(String id,{bool isFileTransfer = false}) {
     if (id == '') return;
     id = id.replaceAll(' ', '');
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (BuildContext context) => RemotePage(id: id),
-      ),
-    );
+    if (isFileTransfer) {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (BuildContext context) => FileManagerPage(id: id),
+        ),
+      );
+    }else{
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (BuildContext context) => RemotePage(id: id),
+        ),
+      );
+    }
     FocusScopeNode currentFocus = FocusScope.of(context);
     if (!currentFocus.hasPrimaryFocus) {
       currentFocus.unfocus();
@@ -262,6 +260,8 @@ class _ConnectionPageState extends State<ConnectionPage> {
       items: [
         PopupMenuItem<String>(
             child: Text(translate('Remove')), value: 'remove'),
+        PopupMenuItem<String>(
+            child: Text(translate('File transfer')), value: 'file'),
       ],
       elevation: 8,
     );
@@ -270,6 +270,8 @@ class _ConnectionPageState extends State<ConnectionPage> {
       () async {
         removePreference(id);
       }();
+    }else if (value == 'file') {
+      connect(id,isFileTransfer: true);
     }
   }
 }

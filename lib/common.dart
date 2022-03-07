@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 import 'dart:async';
 import 'package:flutter_easyloading/flutter_easyloading.dart';
-import 'package:flutter_hbb/main.dart';
 import 'package:tuple/tuple.dart';
+
+final globalKey = GlobalKey<NavigatorState>();
 
 typedef F = String Function(String);
 typedef FMethod = String Function(String, dynamic);

@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import 'package:firebase_analytics/firebase_analytics.dart';
 import 'package:firebase_analytics/observer.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'common.dart';
 import 'models/model.dart';
 import 'pages/home_page.dart';
 import 'pages/server_page.dart';
@@ -16,7 +17,6 @@ Future<Null> main() async {
   runApp(App());
 }
 
-final globalKey = GlobalKey<NavigatorState>();
 class App extends StatelessWidget {
 
   @override

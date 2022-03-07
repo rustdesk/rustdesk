@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_easyloading/flutter_easyloading.dart';
-import 'package:flutter_hbb/main.dart';
 import 'package:flutter_hbb/widgets/gesture_help.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter/services.dart';
@@ -11,6 +10,7 @@ import 'package:wakelock/wakelock.dart';
 import '../common.dart';
 import '../gestures.dart';
 import '../models/model.dart';
+import '../widgets/dialog.dart';
 import 'chat_page.dart';
 
 final initText = '\1' * 1024;
@@ -228,7 +228,7 @@ class _RemotePageState extends State<RemotePage> {
     final showActionButton = !_showBar || hideKeyboard;
     return WillPopScope(
       onWillPop: () async {
-        close();
+        clientClose();
         return false;
       },
       child: Scaffold(
@@ -279,7 +279,7 @@ class _RemotePageState extends State<RemotePage> {
                       color: Colors.white,
                       icon: Icon(Icons.clear),
                       onPressed: () {
-                        close();
+                        clientClose();
                       },
                     )
                   ] +
@@ -585,10 +585,6 @@ class _RemotePageState extends State<RemotePage> {
             }));
   }
 
-  void close() {
-    msgBox('', 'Close', 'Are you sure to close the connection?');
-  }
-
   Widget getHelpTools() {
     final keyboard = isKeyboardShown();
     if (!keyboard) {
@@ -783,74 +779,7 @@ class ImagePainter extends CustomPainter {
   }
 }
 
-void enterPasswordDialog(String id) {
-  final controller = TextEditingController();
-  var remember = FFI.getByName('remember', id) == 'true';
-  if (globalKey.currentContext == null) return;
-  showAlertDialog((setState) => Tuple3(
-        Text(translate('Password Required')),
-        Column(mainAxisSize: MainAxisSize.min, children: [
-          PasswordWidget(controller: controller),
-          CheckboxListTile(
-            contentPadding: const EdgeInsets.all(0),
-            dense: true,
-            controlAffinity: ListTileControlAffinity.leading,
-            title: Text(
-              translate('Remember password'),
-            ),
-            value: remember,
-            onChanged: (v) {
-              if (v != null) {
-                setState(() => remember = v);
-              }
-            },
-          ),
-        ]),
-        [
-          TextButton(
-            style: flatButtonStyle,
-            onPressed: () {
-              DialogManager.reset();
-              Navigator.pop(globalKey.currentContext!);
-            },
-            child: Text(translate('Cancel')),
-          ),
-          TextButton(
-            style: flatButtonStyle,
-            onPressed: () {
-              var text = controller.text.trim();
-              if (text == '') return;
-              FFI.login(text, remember);
-              DialogManager.reset();
-              showLoading(translate('Logging in...'));
-            },
-            child: Text(translate('OK')),
-          ),
-        ],
-      ));
-}
 
-void wrongPasswordDialog(String id) {
-  if (globalKey.currentContext == null) return;
-  showAlertDialog((_) => Tuple3(Text(translate('Wrong Password')),
-          Text(translate('Do you want to enter again?')), [
-        TextButton(
-          style: flatButtonStyle,
-          onPressed: () {
-            DialogManager.reset();
-            Navigator.pop(globalKey.currentContext!);
-          },
-          child: Text(translate('Cancel')),
-        ),
-        TextButton(
-          style: flatButtonStyle,
-          onPressed: () {
-            enterPasswordDialog(id);
-          },
-          child: Text(translate('Retry')),
-        ),
-      ]));
-}
 
 CheckboxListTile getToggle(
     void Function(void Function()) setState, option, name) {
