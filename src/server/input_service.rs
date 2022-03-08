@@ -165,7 +165,16 @@ fn run_cursor(sp: MouseCursorService, state: &mut StateCursor) -> ResultType<()>
 }
 
 lazy_static::lazy_static! {
-    static ref ENIGO: Arc<Mutex<Enigo>> = Arc::new(Mutex::new(Enigo::new()));
+    static ref ENIGO: Arc<Mutex<Enigo>> = {
+        #[cfg(target_os = "linux")]
+        {
+            if crate::platform::is_root() {
+                std::env::set_var("PYNPUT_USERNAME", crate::platform::linux::get_active_username());
+                std::env::set_var("PYNPUT_USERID", crate::platform::linux::get_active_userid());
+            }
+        }
+        Arc::new(Mutex::new(Enigo::new()))
+    };
     static ref KEYS_DOWN: Arc<Mutex<HashMap<u64, Instant>>> = Default::default();
     static ref LATEST_INPUT: Arc<Mutex<Input>> = Default::default();
 }

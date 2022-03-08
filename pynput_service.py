@@ -22,6 +22,7 @@ server = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
 server.bind(server_address)
 server.listen(1)
 clientsocket, address = server.accept()
+os.system('chmod a+rw %s'%server_address)
 print("Got pynput connection")
 
 

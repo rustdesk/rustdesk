@@ -494,12 +494,24 @@ fn start_pynput_service(rx: mpsc::Receiver<(PyMsg, bool)>) {
     }
     log::info!("pynput service: {}", py);
     std::thread::spawn(move || {
-        log::error!(
-            "pynput server exit: {:?}",
+        let username = std::env::var("PYNPUT_USERNAME").unwrap_or("".to_owned());
+        let userid = std::env::var("PYNPUT_USERID").unwrap_or("".to_owned());
+        let status = if username.is_empty() {
             std::process::Command::new("python3")
-                .arg("./pynput_service.py")
-                .arg(IPC_FILE)
-                .status()
+                .arg(&py)
+                .arg(IPC_FILE).status()
+        } else {
+            std::process::Command::new("sudo").args(vec![
+            &format!("XDG_RUNTIME_DIR=/run/user/{}", userid) as &str,
+            "-u",
+            &username,
+            "python3",
+            &py,
+            IPC_FILE,
+        ]).status()
+        };
+        log::info!(
+            "pynput server exit: {:?}", status
         );
         unsafe {
             PYNPUT_EXIT = true;

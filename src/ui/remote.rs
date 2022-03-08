@@ -353,7 +353,7 @@ impl Handler {
                     Key::Kp8 => Some(ControlKey::Numpad8),
                     Key::Kp9 => Some(ControlKey::Numpad9),
                     Key::KpDivide => Some(ControlKey::Divide),
-                    Key::KpMultiply => Some(ControlKey::Subtract),
+                    Key::KpMultiply => Some(ControlKey::Multiply),
                     Key::KpDecimal => Some(ControlKey::Decimal),
                     Key::KpMinus => Some(ControlKey::Subtract),
                     Key::KpPlus => Some(ControlKey::Add),

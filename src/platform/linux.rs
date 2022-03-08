@@ -243,7 +243,7 @@ pub fn start_os_service() {
     log::info!("Exit");
 }
 
-fn get_active_userid() -> String {
+pub fn get_active_userid() -> String {
     get_value_of_seat0(1)
 }
 
