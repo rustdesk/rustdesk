@@ -499,72 +499,95 @@ fn start_pynput_service(rx: mpsc::Receiver<(PyMsg, bool)>) {
         let status = if username.is_empty() {
             std::process::Command::new("python3")
                 .arg(&py)
-                .arg(IPC_FILE).status()
+                .arg(IPC_FILE)
+                .status()
+                .map(|x| x.success())
         } else {
-            std::process::Command::new("sudo").args(vec![
-            &format!("XDG_RUNTIME_DIR=/run/user/{}", userid) as &str,
-            "-u",
-            &username,
-            "python3",
-            &py,
-            IPC_FILE,
-        ]).status()
+            let mut status = Ok(true);
+            for i in 0..100 {
+                log::info!("#{} try to start pynput server", i);
+                status = std::process::Command::new("sudo")
+                    .args(vec![
+                        &format!("XDG_RUNTIME_DIR=/run/user/{}", userid) as &str,
+                        "-u",
+                        &username,
+                        "python3",
+                        &py,
+                        IPC_FILE,
+                    ])
+                    .status()
+                    .map(|x| x.success());
+                match status {
+                    Ok(true) => break,
+                    _ => {}
+                }
+                std::thread::sleep(std::time::Duration::from_millis(100));
+            }
+            status
         };
         log::info!(
-            "pynput server exit: {:?}", status
+            "pynput server exit with username/id {}/{}: {:?}",
+            username,
+            userid,
+            status
         );
         unsafe {
             PYNPUT_EXIT = true;
         }
     });
     std::thread::spawn(move || {
-        // wait for pynput_server.py
-        std::thread::sleep(std::time::Duration::from_millis(1000));
-        let mut conn = match std::os::unix::net::UnixStream::connect(IPC_FILE) {
-            Ok(conn) => conn,
-            Err(err) => {
-                log::error!("Failed to connect to {}: {}", IPC_FILE, err);
+        for _ in 0..300 {
+            std::thread::sleep(std::time::Duration::from_millis(100));
+            let mut conn = match std::os::unix::net::UnixStream::connect(IPC_FILE) {
+                Ok(conn) => conn,
+                Err(err) => {
+                    log::error!("Failed to connect to {}: {}", IPC_FILE, err);
+                    continue;
+                }
+            };
+            if let Err(err) = conn.set_nonblocking(true) {
+                log::error!("Failed to set ipc nonblocking: {}", err);
                 return;
             }
-        };
-        if let Err(err) = conn.set_nonblocking(true) {
-            log::error!("Failed to set ipc nonblocking: {}", err);
-            return;
-        }
-        let d = std::time::Duration::from_millis(30);
-        unsafe {
-            PYNPUT_REDAY = true;
-        }
-        let mut buf = [0u8; 1024];
-        loop {
-            if unsafe { PYNPUT_EXIT } {
-                break;
+            log::info!("Conntected to pynput server");
+            let d = std::time::Duration::from_millis(30);
+            unsafe {
+                PYNPUT_REDAY = true;
             }
-            match rx.recv_timeout(d) {
-                Ok((msg, is_press)) => {
-                    let msg = match msg {
-                        PyMsg::Char(chr) => format!("{}{}", if is_press { 'p' } else { 'r' }, chr),
-                        PyMsg::Str(s) => format!("{}{}", if is_press { 'p' } else { 'r' }, s),
-                    };
-                    let n = msg.len();
-                    buf[0] = n as _;
-                    buf[1..(n + 1)].copy_from_slice(msg.as_bytes());
-                    if let Err(err) = conn.write_all(&buf[..n + 1]) {
-                        log::error!("Failed to write to ipc: {}", err);
-                        break;
-                    }
+            let mut buf = [0u8; 1024];
+            loop {
+                if unsafe { PYNPUT_EXIT } {
+                    break;
                 }
-                Err(err) => match err {
-                    mpsc::RecvTimeoutError::Disconnected => {
-                        log::error!("pynput sender disconnecte");
-                        break;
+                match rx.recv_timeout(d) {
+                    Ok((msg, is_press)) => {
+                        let msg = match msg {
+                            PyMsg::Char(chr) => {
+                                format!("{}{}", if is_press { 'p' } else { 'r' }, chr)
+                            }
+                            PyMsg::Str(s) => format!("{}{}", if is_press { 'p' } else { 'r' }, s),
+                        };
+                        let n = msg.len();
+                        buf[0] = n as _;
+                        buf[1..(n + 1)].copy_from_slice(msg.as_bytes());
+                        if let Err(err) = conn.write_all(&buf[..n + 1]) {
+                            log::error!("Failed to write to ipc: {}", err);
+                            break;
+                        }
                     }
-                    _ => {}
-                },
+                    Err(err) => match err {
+                        mpsc::RecvTimeoutError::Disconnected => {
+                            log::error!("pynput sender disconnecte");
+                            break;
+                        }
+                        _ => {}
+                    },
+                }
             }
-        }
-        unsafe {
-            PYNPUT_REDAY = false;
+            unsafe {
+                PYNPUT_REDAY = false;
+            }
+            break;
         }
     });
 }
