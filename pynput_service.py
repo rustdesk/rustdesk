@@ -47,18 +47,19 @@ def loop():
                 keyboard = Controller()
                 print("Keyboard reset")
                 continue
-            print(msg)
             if len(msg) == 2:
                 name = msg[1]
             else:
                 name = KeyCode._from_symbol(msg[1:])
-            print(name)
             if name == INVALID:
                 continue
-            if msg[0] == "p":
-                keyboard.press(name)
-            else:
-                keyboard.release(name)
+            try:
+                if msg[0] == "p":
+                    keyboard.press(name)
+                else:
+                    keyboard.release(name)
+            except Exception as e:
+                print(e)
 
 
 loop()

@@ -21,6 +21,8 @@ impl super::service::Reset for StateCursor {
         *self = Default::default();
         crate::platform::reset_input_cache();
         fix_key_down_timeout(true);
+        #[cfg(target_os = "linux")]
+        ENIGO.lock().unwrap().reset();
     }
 }
 
@@ -346,8 +348,8 @@ fn handle_mouse_(evt: &MouseEvent, conn: i32) {
     let mut en = ENIGO.lock().unwrap();
     #[cfg(not(target_os = "macos"))]
     let mut to_release = Vec::new();
-    fix_modifiers(&evt.modifiers[..], &mut en, 0);
     if evt_type == 1 {
+        fix_modifiers(&evt.modifiers[..], &mut en, 0);
         #[cfg(target_os = "macos")]
         en.reset_flag();
         for ref ck in evt.modifiers.iter() {
@@ -562,6 +564,18 @@ fn handle_key_(evt: &KeyEvent) {
         fix_modifiers(&evt.modifiers[..], &mut en, ck);
         for ref ck in evt.modifiers.iter() {
             if let Some(key) = KEY_MAP.get(&ck.value()) {
+                #[cfg(target_os = "linux")]
+                if key == &Key::Alt && !get_modifier_state(key.clone(), &mut en) {
+                    // for AltGr on Linux
+                    if KEYS_DOWN
+                        .lock()
+                        .unwrap()
+                        .get(&(ControlKey::RAlt.value() as _))
+                        .is_some()
+                    {
+                        continue;
+                    }
+                }
                 #[cfg(target_os = "macos")]
                 en.add_flag(key);
                 #[cfg(not(target_os = "macos"))]
