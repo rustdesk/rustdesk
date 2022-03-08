@@ -83,9 +83,9 @@ dependencies = [
 
 [[package]]
 name = "anyhow"
-version = "1.0.55"
+version = "1.0.56"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "159bb86af3a200e19a068f4224eae4c8bb2d0fa054c7e5d1cacd5cef95e684cd"
+checksum = "4361135be9122e0870de935d7c439aef945b9f9ddd4199a553b5270b49c82a27"
 
 [[package]]
 name = "arboard"
@@ -378,9 +378,9 @@ dependencies = [
 
 [[package]]
 name = "clap"
-version = "3.1.5"
+version = "3.1.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ced1892c55c910c1219e98d6fc8d71f6bddba7905866ce740066d8bfea859312"
+checksum = "d8c93436c21e4698bacadf42917db28b23017027a4deccb35dbe47a7e7840123"
 dependencies = [
  "atty",
  "bitflags",
@@ -3226,7 +3226,7 @@ dependencies = [
 [[package]]
 name = "rdev"
 version = "0.5.0"
-source = "git+https://github.com/open-trade/rdev#f2265895d92b4e9fcdc6f41e6e168d5da6d94493"
+source = "git+https://github.com/open-trade/rdev#fbbefd0b5d87095a7349965aec9ecd33de7035ac"
 dependencies = [
  "cocoa 0.22.0",
  "core-foundation 0.7.0",
@@ -3400,7 +3400,7 @@ dependencies = [
  "base64",
  "cc",
  "cfg-if 1.0.0",
- "clap 3.1.5",
+ "clap 3.1.6",
  "clipboard",
  "clipboard-master",
  "cocoa 0.24.0",
