@@ -48,7 +48,6 @@ dependencies:
   dash_chat: ^1.1.16
   draggable_float_widget: ^0.0.2
   settings_ui: ^2.0.2
-  file_manager: ^1.0.0
   flutter_breadcrumb: ^1.0.1
 
 dev_dependencies:

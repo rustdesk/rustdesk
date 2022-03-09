@@ -135,7 +135,7 @@ class FfiModel with ChangeNotifier {
       } else if (name == 'chat') {
         FFI.chatModel.receive(evt['text'] ?? "");
       } else if (name == 'file_dir') {
-        FFI.remoteFileModel.tryUpdateRemoteDir(evt['value'] ?? "");
+        FFI.fileModel.tryUpdateDir(evt['value'] ?? "",false);
       }
     }
     if (pos != null) FFI.cursorModel.updateCursorPosition(pos);
@@ -695,7 +695,7 @@ class FFI {
   static final canvasModel = CanvasModel();
   static final serverModel = ServerModel();
   static final chatModel = ChatModel();
-  static final remoteFileModel = RemoteFileModel();
+  static final fileModel = FileModel();
 
   static String getId() {
     return getByName('remote_id');

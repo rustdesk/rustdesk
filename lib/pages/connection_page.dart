@@ -54,11 +54,12 @@ class _ConnectionPageState extends State<ConnectionPage> {
             getSearchBarUI(),
             Container(height: 12),
             getPeers(),
-            // ElevatedButton(
-            //     onPressed: () {
-            //       toggleChatOverlay();
-            //     },
-            //     child: Text("Chat Debug"))
+            ElevatedButton(
+                onPressed: () {
+                  final res = FFI.getByName("read_dir");
+                  debugPrint("read_dir : $res");
+                },
+                child: Text("Local File Debug"))
           ]),
     );
   }

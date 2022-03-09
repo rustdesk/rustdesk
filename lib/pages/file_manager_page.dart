@@ -1,11 +1,10 @@
 import 'dart:async';
-import 'dart:io';
-import 'package:file_manager/file_manager.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_easyloading/flutter_easyloading.dart';
 import 'package:flutter_hbb/models/file_model.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_breadcrumb/flutter_breadcrumb.dart';
+import 'package:path/path.dart' as p;
 
 import '../common.dart';
 import '../models/model.dart';
@@ -20,30 +19,33 @@ class FileManagerPage extends StatefulWidget {
 }
 
 class _FileManagerPageState extends State<FileManagerPage> {
-  final _localFileModel = FileManagerController();
-  final _remoteFileModel = FFI.remoteFileModel;
+  final _fileModel = FFI.fileModel;
   Timer? _interval;
   Timer? _timer;
   var _reconnects = 1;
+
   var _isLocal = false;
   var _selectMode = false;
-  final List<String> _selectedItems = [];
+  final List<String> _selectedItems = []; // 换成entry对象数组
 
-  // final _breadCrumbScrollController = ScrollController();
 
   @override
   void initState() {
     super.initState();
     showLoading(translate('Connecting...'));
     FFI.connect(widget.id, isFileTransfer: true);
+    Future.delayed(Duration(seconds: 1), () {
+      final res = FFI.getByName("read_dir", FFI.getByName("get_home_dir"));
+      debugPrint("read_dir local :$res");
+      _fileModel.tryUpdateDir(res, true);
+    });
     _interval = Timer.periodic(Duration(milliseconds: 30),
         (timer) => FFI.ffiModel.update(widget.id, context, handleMsgBox));
   }
 
   @override
   void dispose() {
-    _remoteFileModel.dispose();
-    _localFileModel.dispose();
+    _fileModel.clear();
     _interval?.cancel();
     FFI.close();
     EasyLoading.dismiss();
@@ -53,7 +55,7 @@ class _FileManagerPageState extends State<FileManagerPage> {
   @override
   Widget build(BuildContext context) {
     return ChangeNotifierProvider.value(
-        value: _remoteFileModel,
+        value: _fileModel,
         child: Scaffold(
           backgroundColor: MyTheme.grayBg,
           appBar: AppBar(
@@ -66,10 +68,11 @@ class _FileManagerPageState extends State<FileManagerPage> {
             title: Text(translate(_isLocal ? "Local" : "Remote")),
             actions: [
               IconButton(
-                  icon: Icon(Icons.change_circle),
-                  onPressed: () => setState(() {
-                        _isLocal = !_isLocal;
-                      })),
+                icon: Icon(Icons.change_circle),
+                onPressed: () => setState(() {
+                  _isLocal = !_isLocal;
+                }),
+              )
             ],
           ),
           body: body(),
@@ -77,94 +80,71 @@ class _FileManagerPageState extends State<FileManagerPage> {
         ));
   }
 
-  Widget body() => Consumer<RemoteFileModel>(
-      builder: (context, remoteModel, _child) => FileManager(
-          controller: _localFileModel,
-          emptyFolder: emptyPage(),
-          builder: (context, localSnapshot) {
-            final snapshot =
-                _isLocal ? localSnapshot : remoteModel.currentRemoteDir.entries;
-            return Column(children: [
-              headTools(),
-              Expanded(
-                  child: ListView.builder(
-                itemCount: snapshot.length + 1,
-                itemBuilder: (context, index) {
-                  if (index >= snapshot.length) {
-                    // 添加尾部信息 文件统计信息等
-                    // 添加快速返回上部
-                    // 使用 bottomSheet 提示以选择的文件数量 点击后展开查看更多
-                    return listTail();
-                  }
-
-                  var isFile = false;
-                  if (_isLocal){
-                    isFile = FileManager.isFile(snapshot[index]);
-                  }else {
-                    isFile = (snapshot[index] as RemoteFileSystemEntity).isFile();
-                  }
-
-                  final path = snapshot[index].path;
-                  var selected = false;
-                  if (_selectMode) {
-                    selected = _selectedItems.any((e) => e == path);
-                  }
-                  return Card(
-                    child: ListTile(
-                      leading: isFile
-                            ? Icon(Icons.feed_outlined)
-                            : Icon(Icons.folder),
-                      title: Text(FileManager.basename(snapshot[index])),
-                      trailing: _selectMode
-                          ? Checkbox(
-                              value: selected,
-                              onChanged: (v) {
-                                if (v == null) return;
-                                if (v && !selected) {
-                                  setState(() {
-                                    _selectedItems.add(path);
-                                  });
-                                } else if (!v && selected) {
-                                  setState(() {
-                                    _selectedItems.remove(path);
-                                  });
-                                }
-                              })
-                          : null,
-                      onTap: () {
-                        if (!isFile) {
-                          if (_isLocal) {
-                            _localFileModel.openDirectory(snapshot[index]);
-                          } else {
-                            readRemoteDir(path);
-                          }
-                        } else {
-                          // Perform file-related tasks.
-                        }
-                      },
-                      onLongPress: () {
-                        setState(() {
-                          _selectedItems.clear();
-                          _selectMode = !_selectMode;
-                        });
-                      },
-                    ),
-                  );
-                },
-              ))
-            ]);
-          }));
+  Widget body() => Consumer<FileModel>(builder: (context, fileModel, _child) {
+        final fd =
+            _isLocal ? fileModel.currentLocalDir : fileModel.currentRemoteDir;
+        final entries = fd.entries;
+        return Column(children: [
+          headTools(),
+          Expanded(
+              child: ListView.builder(
+            itemCount: entries.length + 1,
+            itemBuilder: (context, index) {
+              if (index >= entries.length) {
+                // 添加尾部信息 文件统计信息等
+                // 添加快速返回上部
+                // 使用 bottomSheet 提示以选择的文件数量 点击后展开查看更多
+                return listTail();
+              }
+              final path = p.join(fd.path,entries[index].name);
+              var selected = false;
+              if (_selectMode) {
+                selected = _selectedItems.any((e) => e == path);
+              }
+              return Card(
+                child: ListTile(
+                  leading: entries[index].isFile
+                      ? Icon(Icons.feed_outlined)
+                      : Icon(Icons.folder),
+                  title: Text(entries[index].name),
+                  trailing: _selectMode
+                      ? Checkbox(
+                          value: selected,
+                          onChanged: (v) {
+                            if (v == null) return;
+                            if (v && !selected) {
+                              setState(() {
+                                _selectedItems.add(path);
+                              });
+                            } else if (!v && selected) {
+                              setState(() {
+                                _selectedItems.remove(path);
+                              });
+                            }
+                          })
+                      : null,
+                  onTap: () {
+                    if (entries[index].isDirectory) {
+                      _fileModel.openDirectory(path,_isLocal);
+                    } else {
+                      // Perform file-related tasks.
+                    }
+                  },
+                  onLongPress: () {
+                    setState(() {
+                      _selectedItems.clear();
+                      _selectMode = !_selectMode;
+                    });
+                  },
+                ),
+              );
+            },
+          ))
+        ]);
+      });
 
   goBack() {
-    if (_isLocal) {
-      _localFileModel.goToParentDirectory();
-    } else {
-      _remoteFileModel.goToParentDirectory();
-    }
-  }
-
-  void readRemoteDir(String path) {
-    FFI.setByName("read_remote_dir", path);
+    _fileModel.goToParentDirectory(_isLocal);
   }
 
   void handleMsgBox(Map<String, dynamic> evt, String id) {
@@ -210,27 +190,41 @@ class _FileManagerPageState extends State<FileManagerPage> {
             children: [
               // IconButton(onPressed: () {}, icon: Icon(Icons.sort)),
               PopupMenuButton<SortBy>(
-                icon: Icon(Icons.sort),
+                  icon: Icon(Icons.sort),
                   itemBuilder: (context) {
-                    return SortBy.values.map((e) => PopupMenuItem(
-                      child: Text(translate(e.toString().split(".").last)),
-                      value: e,
-                    )).toList();
+                    return SortBy.values
+                        .map((e) => PopupMenuItem(
+                              child:
+                                  Text(translate(e.toString().split(".").last)),
+                              value: e,
+                            ))
+                        .toList();
                   },
-                  onSelected: changeSortStyle),
-              IconButton(onPressed: () {}, icon: Icon(Icons.more_vert)),
+                  onSelected: _fileModel.changeSortStyle),
+              PopupMenuButton<String>(
+                  icon: Icon(Icons.more_vert),
+                  itemBuilder: (context) {
+                    return [
+                      PopupMenuItem(
+                        child: Row(
+                          children: [
+                            Icon(Icons.refresh),
+                            Text("刷新")
+                          ],
+                        ),
+                        value: "refresh",
+                      )
+                    ];
+                  },
+                  onSelected: (v){
+                    if(v == "refresh"){
+                      _fileModel.refresh(_isLocal);
+                    }
+                  }),
             ],
           )
         ],
       ));
-
-  changeSortStyle(SortBy sort){
-    if(_isLocal){
-      _localFileModel.sortedBy = sort;
-    }else{
-      _remoteFileModel.changeSortStyle(sort);
-    }
-  }
 
   Widget emptyPage() {
     return Column(
@@ -279,7 +273,10 @@ class _FileManagerPageState extends State<FileManagerPage> {
                     children: [
                       IconButton(
                         icon: Icon(Icons.paste),
-                        onPressed: () {},
+                        onPressed: () {
+                          debugPrint("paste");
+                          _fileModel.sendFiles(_selectedItems.first, _fileModel.currentRemoteDir.path+'/'+_selectedItems.first.split('/').last, false, false);
+                        },
                       ),
                       IconButton(
                         icon: Icon(Icons.delete_forever),
@@ -305,8 +302,8 @@ class _FileManagerPageState extends State<FileManagerPage> {
   List<BreadCrumbItem> getPathBreadCrumbItems(
       void Function() onHome, void Function(String) onPressed) {
     final path = _isLocal
-        ? _localFileModel.getCurrentPath
-        : _remoteFileModel.currentRemoteDir.path;
+        ? _fileModel.currentLocalDir.path
+        : _fileModel.currentRemoteDir.path;
     final list = path.trim().split('/');
     list.remove("");
     final breadCrumbList = [
@@ -325,14 +322,4 @@ class _FileManagerPageState extends State<FileManagerPage> {
     return breadCrumbList;
   }
 
-// // NOT GOOD
-// void breadCrumbToLast() {
-//   try {
-//     _breadCrumbScrollController.animateTo(
-//       _breadCrumbScrollController.position.maxScrollExtent,
-//       curve: Curves.easeOut,
-//       duration: const Duration(milliseconds: 300),
-//     );
-//   } catch (e) {}
-// }
 }
