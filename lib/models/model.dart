@@ -136,6 +136,12 @@ class FfiModel with ChangeNotifier {
         FFI.chatModel.receive(evt['text'] ?? "");
       } else if (name == 'file_dir') {
         FFI.fileModel.tryUpdateDir(evt['value'] ?? "",false);
+      } else if (name == 'job_progress'){
+        FFI.fileModel.tryUpdateJobProgress(evt);
+      } else if (name == 'job_done'){
+        FFI.fileModel.jobDone(evt);
+      } else if (name == 'job_error'){
+        FFI.fileModel.jobError(evt);
       }
     }
     if (pos != null) FFI.cursorModel.updateCursorPosition(pos);

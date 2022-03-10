@@ -4,11 +4,12 @@ import 'package:flutter_easyloading/flutter_easyloading.dart';
 import 'package:flutter_hbb/models/file_model.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_breadcrumb/flutter_breadcrumb.dart';
-import 'package:path/path.dart' as p;
+import 'package:path/path.dart' as Path;
 
 import '../common.dart';
 import '../models/model.dart';
 import '../widgets/dialog.dart';
+
 
 class FileManagerPage extends StatefulWidget {
   FileManagerPage({Key? key, required this.id}) : super(key: key);
@@ -19,33 +20,30 @@ class FileManagerPage extends StatefulWidget {
 }
 
 class _FileManagerPageState extends State<FileManagerPage> {
-  final _fileModel = FFI.fileModel;
+  final model = FFI.fileModel;
+  final _selectedItems = SelectedItems();
   Timer? _interval;
   Timer? _timer;
   var _reconnects = 1;
-
-  var _isLocal = false;
-  var _selectMode = false;
-  final List<String> _selectedItems = []; // 换成entry对象数组
-
+  final _breadCrumbScroller = ScrollController();
 
   @override
   void initState() {
     super.initState();
     showLoading(translate('Connecting...'));
     FFI.connect(widget.id, isFileTransfer: true);
-    Future.delayed(Duration(seconds: 1), () {
-      final res = FFI.getByName("read_dir", FFI.getByName("get_home_dir"));
-      debugPrint("read_dir local :$res");
-      _fileModel.tryUpdateDir(res, true);
-    });
+
+    final res = FFI.getByName("read_dir", FFI.getByName("get_home_dir"));
+    debugPrint("read_dir local :$res");
+    model.tryUpdateDir(res, true);
+
     _interval = Timer.periodic(Duration(milliseconds: 30),
         (timer) => FFI.ffiModel.update(widget.id, context, handleMsgBox));
   }
 
   @override
   void dispose() {
-    _fileModel.clear();
+    model.clear();
     _interval?.cancel();
     FFI.close();
     EasyLoading.dismiss();
@@ -53,9 +51,16 @@ class _FileManagerPageState extends State<FileManagerPage> {
   }
 
   @override
-  Widget build(BuildContext context) {
-    return ChangeNotifierProvider.value(
-        value: _fileModel,
+  Widget build(BuildContext context)  => Consumer<FileModel>(builder: (_context, _model, _child) {
+    return  WillPopScope(
+        onWillPop: () async {
+          if (model.selectMode) {
+            model.toggleSelectMode();
+          } else {
+            goBack();
+          }
+          return false;
+        },
         child: Scaffold(
           backgroundColor: MyTheme.grayBg,
           appBar: AppBar(
@@ -65,24 +70,29 @@ class _FileManagerPageState extends State<FileManagerPage> {
             ]),
             leadingWidth: 200,
             centerTitle: true,
-            title: Text(translate(_isLocal ? "Local" : "Remote")),
+            title: Text(translate(model.isLocal ? "Local" : "Remote")),
             actions: [
               IconButton(
                 icon: Icon(Icons.change_circle),
-                onPressed: () => setState(() {
-                  _isLocal = !_isLocal;
-                }),
+                onPressed: ()=> model.togglePage(),
               )
             ],
           ),
           body: body(),
           bottomSheet: bottomSheet(),
         ));
+  });
+
+  bool needShowCheckBox(){
+    if(!model.selectMode){
+      return false;
+    }
+    return !_selectedItems.isOtherPage(model.isLocal);
   }
 
-  Widget body() => Consumer<FileModel>(builder: (context, fileModel, _child) {
-        final fd =
-            _isLocal ? fileModel.currentLocalDir : fileModel.currentRemoteDir;
+  Widget body() {
+        final isLocal = model.isLocal;
+        final fd = model.currentDir;
         final entries = fd.entries;
         return Column(children: [
           headTools(),
@@ -96,55 +106,66 @@ class _FileManagerPageState extends State<FileManagerPage> {
                 // 使用 bottomSheet 提示以选择的文件数量 点击后展开查看更多
                 return listTail();
               }
-              final path = p.join(fd.path,entries[index].name);
+              final path = Path.join(fd.path, entries[index].name);
               var selected = false;
-              if (_selectMode) {
-                selected = _selectedItems.any((e) => e == path);
+              if (model.selectMode) {
+                selected = _selectedItems.contains(path);
               }
               return Card(
                 child: ListTile(
-                  leading: entries[index].isFile
-                      ? Icon(Icons.feed_outlined)
-                      : Icon(Icons.folder),
+                  leading: Icon(entries[index].isFile?Icons.feed_outlined:Icons.folder,
+                        size: 40),
+
                   title: Text(entries[index].name),
-                  trailing: _selectMode
+                  selected: selected,
+                  // subtitle:  Text(entries[index].lastModified().toString()),
+                  trailing: needShowCheckBox()
                       ? Checkbox(
                           value: selected,
                           onChanged: (v) {
                             if (v == null) return;
                             if (v && !selected) {
-                              setState(() {
-                                _selectedItems.add(path);
-                              });
+                                _selectedItems.add(isLocal,path);
                             } else if (!v && selected) {
-                              setState(() {
                                 _selectedItems.remove(path);
-                              });
                             }
+                            setState(() {});
                           })
                       : null,
                   onTap: () {
+                    if (model.selectMode && !_selectedItems.isOtherPage(isLocal)) {
+                      if (selected) {
+                        _selectedItems.remove(path);
+                      } else {
+                        _selectedItems.add(isLocal,path);
+                      }
+                      setState(() {});
+                      return;
+                    }
                     if (entries[index].isDirectory) {
-                      _fileModel.openDirectory(path,_isLocal);
+                      model.openDirectory(path);
+                      breadCrumbScrollToEnd();
                     } else {
                       // Perform file-related tasks.
                     }
                   },
                   onLongPress: () {
-                    setState(() {
-                      _selectedItems.clear();
-                      _selectMode = !_selectMode;
-                    });
+                    _selectedItems.clear();
+                    model.toggleSelectMode();
+                    if (model.selectMode) {
+                      _selectedItems.add(isLocal,path);
+                    }
+                    setState(() {});
                   },
                 ),
               );
             },
           ))
         ]);
-      });
+      }
 
   goBack() {
-    _fileModel.goToParentDirectory(_isLocal);
+    model.goToParentDirectory();
   }
 
   void handleMsgBox(Map<String, dynamic> evt, String id) {
@@ -176,6 +197,15 @@ class _FileManagerPageState extends State<FileManagerPage> {
     }
   }
 
+  breadCrumbScrollToEnd() {
+    Future.delayed(Duration(milliseconds: 200), () {
+      _breadCrumbScroller.animateTo(
+          _breadCrumbScroller.position.maxScrollExtent,
+          duration: Duration(milliseconds: 200),
+          curve: Curves.fastLinearToSlowEaseIn);
+    });
+  }
+
   Widget headTools() => Container(
           child: Row(
         children: [
@@ -184,7 +214,7 @@ class _FileManagerPageState extends State<FileManagerPage> {
             items: getPathBreadCrumbItems(() => debugPrint("pressed home"),
                 (e) => debugPrint("pressed url:$e")),
             divider: Icon(Icons.chevron_right),
-            overflow: ScrollableOverflow(reverse: false), // TODO 计算容器宽度判断
+            overflow: ScrollableOverflow(controller: _breadCrumbScroller),
           )),
           Row(
             children: [
@@ -200,25 +230,31 @@ class _FileManagerPageState extends State<FileManagerPage> {
                             ))
                         .toList();
                   },
-                  onSelected: _fileModel.changeSortStyle),
+                  onSelected: model.changeSortStyle),
               PopupMenuButton<String>(
                   icon: Icon(Icons.more_vert),
                   itemBuilder: (context) {
                     return [
                       PopupMenuItem(
                         child: Row(
-                          children: [
-                            Icon(Icons.refresh),
-                            Text("刷新")
-                          ],
+                          children: [Icon(Icons.refresh), Text("刷新")],
                         ),
                         value: "refresh",
+                      ),
+                      PopupMenuItem(
+                        child: Row(
+                          children: [Icon(Icons.check), Text("多选")],
+                        ),
+                        value: "select",
                       )
                     ];
                   },
-                  onSelected: (v){
-                    if(v == "refresh"){
-                      _fileModel.refresh(_isLocal);
+                  onSelected: (v) {
+                    if (v == "refresh") {
+                      model.refresh();
+                    } else if (v == "select") {
+                      _selectedItems.clear();
+                      model.toggleSelectMode();
                     }
                   }),
             ],
@@ -239,8 +275,13 @@ class _FileManagerPageState extends State<FileManagerPage> {
     return SizedBox(height: 100);
   }
 
+  /// 有几种状态
+  /// 选择模式 localPage
+  /// 准备复制模式 otherPage
+  /// 正在复制模式 动态数字和显示速度
+  /// 粘贴完成模式
   BottomSheet? bottomSheet() {
-    if (!_selectMode) return null;
+    if (!model.selectMode) return null;
     return BottomSheet(
         backgroundColor: MyTheme.grayBg,
         enableDrag: false,
@@ -248,6 +289,7 @@ class _FileManagerPageState extends State<FileManagerPage> {
           debugPrint("BottomSheet close");
         },
         builder: (context) {
+          final isOtherPage = _selectedItems.isOtherPage(model.isLocal);
           return Container(
             height: 65,
             alignment: Alignment.centerLeft,
@@ -259,35 +301,50 @@ class _FileManagerPageState extends State<FileManagerPage> {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
+                  // 做一个bottomSheet类框架 不同状态下显示不同的内容
                   Row(
                     children: [
-                      Icon(Icons.check),
-                      SizedBox(width: 5),
-                      Text(
-                        "已选择 ${_selectedItems.length}",
-                        style: TextStyle(fontSize: 18),
-                      ),
+                      CircularProgressIndicator(),
+                      isOtherPage?Icon(Icons.input):Icon(Icons.check),
+                      SizedBox(width: 16),
+                      Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(isOtherPage?'粘贴到这里?':'已选择',style: TextStyle(fontSize: 18)),
+                          Text("${_selectedItems.length} 个文件 [${model.isLocal?'本地':'远程'}]",style: TextStyle(fontSize: 14,color: MyTheme.grayBg))
+                        ],
+                      )
                     ],
                   ),
                   Row(
                     children: [
-                      IconButton(
+                      (_selectedItems.length>0 && isOtherPage)? IconButton(
                         icon: Icon(Icons.paste),
-                        onPressed: () {
+                        onPressed:() {
                           debugPrint("paste");
-                          _fileModel.sendFiles(_selectedItems.first, _fileModel.currentRemoteDir.path+'/'+_selectedItems.first.split('/').last, false, false);
+                          // TODO　
+
+
+                          model.sendFiles(
+                              _selectedItems.items.first,
+                              model.currentRemoteDir.path +
+                                  '/' +
+                                  _selectedItems.items.first.split('/').last,
+                              false,
+                              false);
+
+                          // unused set callback
+                          // _fileModel.set
                         },
-                      ),
-                      IconButton(
+                      ):IconButton(
                         icon: Icon(Icons.delete_forever),
                         onPressed: () {},
                       ),
                       IconButton(
                         icon: Icon(Icons.cancel_outlined),
                         onPressed: () {
-                          setState(() {
-                            _selectMode = false;
-                          });
+                          model.toggleSelectMode();
                         },
                       ),
                     ],
@@ -301,10 +358,8 @@ class _FileManagerPageState extends State<FileManagerPage> {
 
   List<BreadCrumbItem> getPathBreadCrumbItems(
       void Function() onHome, void Function(String) onPressed) {
-    final path = _isLocal
-        ? _fileModel.currentLocalDir.path
-        : _fileModel.currentRemoteDir.path;
-    final list = path.trim().split('/');
+    final path = model.currentDir.path;
+    final list = path.trim().split('/'); // TODO use Path
     list.remove("");
     final breadCrumbList = [
       BreadCrumbItem(
@@ -321,5 +376,52 @@ class _FileManagerPageState extends State<FileManagerPage> {
             onPressed: () => onPressed(e)))));
     return breadCrumbList;
   }
+}
 
+
+class SelectedItems {
+  bool? _isLocal;
+  final List<String> _items = [];
+
+  List<String> get items => _items;
+
+  int get length => _items.length;
+
+  // bool get isEmpty => _items.length == 0;
+
+  add(bool isLocal, String path) {
+    if (_isLocal == null) {
+      _isLocal = isLocal;
+    }
+    if (_isLocal != null && _isLocal != isLocal) {
+      return;
+    }
+    if (!_items.contains(path)) {
+      _items.add(path);
+    }
+  }
+
+  bool contains(String path) {
+    return _items.contains(path);
+  }
+
+  remove(String path) {
+    _items.remove(path);
+    if (_items.length == 0) {
+      _isLocal = null;
+    }
+  }
+
+  bool isOtherPage(bool currentIsLocal) {
+    if (_isLocal == null) {
+      return false;
+    } else {
+      return _isLocal != currentIsLocal;
+    }
+  }
+
+  clear() {
+    _items.clear();
+    _isLocal = null;
+  }
 }

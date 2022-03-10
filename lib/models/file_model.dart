@@ -13,6 +13,146 @@ enum SortBy { name, type, date, size }
 //   FileLink = 5,
 // }
 
+typedef OnJobStateChange = void Function(JobState state, JobProgress jp);
+
+// TODO 使用工厂单例模式
+
+class FileModel extends ChangeNotifier {
+  var _isLocal = false;
+  var _selectMode = false;
+
+
+  var _jobId = 0;
+
+  var _jobProgress = JobProgress(); // from rust update
+
+  bool get isLocal => _isLocal;
+
+  bool get selectMode => _selectMode;
+
+  JobProgress get jobProgress => _jobProgress;
+
+  JobState get jobState => _jobProgress.state;
+
+  SortBy _sortStyle = SortBy.name;
+
+  SortBy get sortStyle => _sortStyle;
+
+  FileDirectory _currentLocalDir = FileDirectory();
+
+  FileDirectory get currentLocalDir => _currentLocalDir;
+
+  FileDirectory _currentRemoteDir = FileDirectory();
+
+  FileDirectory get currentRemoteDir => _currentRemoteDir;
+
+  FileDirectory get currentDir => _isLocal ? currentLocalDir : currentRemoteDir;
+
+  OnJobStateChange? _onJobStateChange;
+
+  setOnJobStateChange(OnJobStateChange v) {
+    _onJobStateChange = v;
+  }
+
+  toggleSelectMode() {
+    _selectMode = !_selectMode;
+    notifyListeners();
+  }
+
+  togglePage() {
+    _isLocal = !_isLocal;
+    notifyListeners();
+  }
+
+  tryUpdateJobProgress(Map<String, dynamic> evt) {
+    try {
+      int id = int.parse(evt['id']);
+      if (id == _jobId) {
+        _jobProgress.id = id;
+        _jobProgress.fileNum = int.parse(evt['file_num']);
+        _jobProgress.speed = int.parse(evt['speed']);
+        _jobProgress.finishedSize = int.parse(evt['finished_size']);
+        notifyListeners();
+      } else {
+        debugPrint(
+            "Failed to updateJobProgress ,id != _jobId,id:$id,_jobId:$_jobId");
+      }
+    } catch (e) {
+      debugPrint("Failed to tryUpdateJobProgress,evt:${evt.toString()}");
+    }
+  }
+
+  jobDone(Map<String, dynamic> evt) {
+    _jobProgress.state = JobState.done;
+    // TODO
+
+    notifyListeners();
+  }
+
+  jobError(Map<String, dynamic> evt) {
+    // TODO
+    _jobProgress.clear();
+    _jobProgress.state = JobState.error;
+    notifyListeners();
+  }
+
+  tryUpdateDir(String fd, bool isLocal) {
+    try {
+      final fileDir = FileDirectory.fromJson(jsonDecode(fd), _sortStyle);
+      if (isLocal) {
+        _currentLocalDir = fileDir;
+      } else {
+        _currentRemoteDir = fileDir;
+      }
+      notifyListeners();
+    } catch (e) {
+      debugPrint("Failed to tryUpdateDir :$fd");
+    }
+  }
+
+  refresh() {
+    openDirectory(_isLocal ? _currentLocalDir.path : _currentRemoteDir.path);
+  }
+
+  openDirectory(String path) {
+    if (_isLocal) {
+      final res = FFI.getByName("read_dir", path);
+      tryUpdateDir(res, true);
+    } else {
+      FFI.setByName("read_remote_dir", path);
+    }
+  }
+
+  goToParentDirectory() {
+    final fd = _isLocal ? _currentLocalDir : _currentRemoteDir;
+    openDirectory(fd.parent);
+  }
+
+  sendFiles(String path, String to, bool showHidden, bool isRemote) {
+    _jobId++;
+    final msg = {
+      "id": _jobId.toString(),
+      "path": path,
+      "to": to,
+      "show_hidden": showHidden.toString(),
+      "is_remote": isRemote.toString() // isRemote 指path的位置而不是to的位置
+    };
+    FFI.setByName("send_files", jsonEncode(msg));
+  }
+
+  changeSortStyle(SortBy sort) {
+    _sortStyle = sort;
+    _currentLocalDir.changeSortStyle(sort);
+    _currentRemoteDir.changeSortStyle(sort);
+    notifyListeners();
+  }
+
+  void clear() {
+    _currentLocalDir.clear();
+    _currentRemoteDir.clear();
+  }
+}
+
 class FileDirectory {
   List<Entry> entries = [];
   int id = 0;
@@ -69,77 +209,21 @@ class Entry {
   }
 }
 
-// TODO 使用工厂单例模式
+enum JobState { none, inProgress, done, error }
 
-class FileModel extends ChangeNotifier {
-  var _jobCount = 0;
+class JobProgress {
+  JobState state = JobState.none;
+  var id = 0;
+  var fileNum = 0;
+  var speed = 0;
+  var finishedSize = 0;
 
-  SortBy _sortStyle = SortBy.name;
-
-  SortBy get sortStyle => _sortStyle;
-
-  FileDirectory _currentLocalDir = FileDirectory();
-
-  FileDirectory get currentLocalDir => _currentLocalDir;
-
-  FileDirectory _currentRemoteDir = FileDirectory();
-
-  FileDirectory get currentRemoteDir => _currentRemoteDir;
-
-  tryUpdateDir(String fd, bool isLocal) {
-    try {
-      final fileDir = FileDirectory.fromJson(jsonDecode(fd), _sortStyle);
-      if (isLocal) {
-        _currentLocalDir = fileDir;
-      } else {
-        _currentRemoteDir = fileDir;
-      }
-      notifyListeners();
-    } catch (e) {
-      debugPrint("tryUpdateDir fail:$fd");
-    }
-  }
-
-  refresh(bool isLocal){
-    openDirectory(isLocal?_currentLocalDir.path:_currentRemoteDir.path,isLocal);
-  }
-
-  openDirectory(String path, bool isLocal) {
-    if (isLocal) {
-      final res = FFI.getByName("read_dir", path);
-      tryUpdateDir(res, true);
-    } else {
-      FFI.setByName("read_remote_dir", path);
-    }
-  }
-
-  goToParentDirectory(bool isLocal) {
-    final fd = isLocal ? _currentLocalDir : _currentRemoteDir;
-    openDirectory(fd.parent, isLocal);
-  }
-
-  sendFiles(String path, String to, bool showHidden, bool isRemote) {
-    _jobCount++;
-    final msg = {
-      "id": _jobCount.toString(),
-      "path": path,
-      "to": to,
-      "show_hidden": showHidden.toString(),
-      "is_remote": isRemote.toString() // isRemote 指path的位置而不是to的位置
-    };
-    FFI.setByName("send_files",jsonEncode(msg));
-  }
-
-  changeSortStyle(SortBy sort) {
-    _sortStyle = sort;
-    _currentLocalDir.changeSortStyle(sort);
-    _currentRemoteDir.changeSortStyle(sort);
-    notifyListeners();
-  }
-
-  void clear() {
-    _currentLocalDir.clear();
-    _currentRemoteDir.clear();
+  clear() {
+    state = JobState.none;
+    id = 0;
+    fileNum = 0;
+    speed = 0;
+    finishedSize = 0;
   }
 }
 
