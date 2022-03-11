@@ -585,19 +585,7 @@ pub fn get_pa_sources() -> Vec<(String, String)> {
 }
 
 pub fn lock_screen() {
-    std::thread::spawn(move || {
-        use crate::server::input_service::handle_key;
-        use hbb_common::message_proto::*;
-        let mut evt = KeyEvent {
-            down: true,
-            modifiers: vec![ControlKey::Meta.into()],
-            ..Default::default()
-        };
-        evt.set_chr('l' as _);
-        handle_key(&evt);
-        evt.down = false;
-        handle_key(&evt);
-    });
+    std::process::Command::new("xdg-screensaver").arg("lock").spawn().ok();
 }
 
 pub fn toggle_blank_screen(_v: bool) {
