@@ -547,7 +547,7 @@ impl Connection {
             return;
         }
         #[cfg(target_os = "linux")]
-        if !self.file_transfer.is_some() {
+        if !self.file_transfer.is_some() && !self.port_forward_socket.is_some() {
             let dtype = crate::platform::linux::get_display_server();
             if dtype != "x11" {
                 res.set_error(format!(
