@@ -282,7 +282,7 @@ VOID DeviceClose(HSWDEVICE hSwDevice)
     }
 }
 
-BOOL MonitorPlugIn(UINT index, INT retries)
+BOOL MonitorPlugIn(UINT index, UINT edid, INT retries)
 {
     SetLastMsg("Sucess");
 
@@ -315,6 +315,7 @@ BOOL MonitorPlugIn(UINT index, INT retries)
     DWORD junk = 0;
     CtlPlugIn plugIn;
     plugIn.ConnectorIndex = index;
+    plugIn.MonitorEDID = edid;
     HRESULT hr = CoCreateGuid(&plugIn.ContainerId);
     if (!SUCCEEDED(hr))
     {

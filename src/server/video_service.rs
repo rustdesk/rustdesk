@@ -32,6 +32,7 @@ use std::{
     io::ErrorKind::WouldBlock,
     time::{self, Duration, Instant},
 };
+use virtual_display;
 
 const WAIT_BASE: i32 = 17;
 pub const NAME: &'static str = "video";
@@ -446,6 +447,12 @@ fn get_current_display() -> ResultType<(usize, usize, Display)> {
     let mut current = *CURRENT_DISPLAY.lock().unwrap() as usize;
     let mut displays = Display::all()?;
     if displays.len() == 0 {
+        // try plugin monitor
+        if virtual_display::is_device_created() {
+            if let Err(e) = virtual_display::plug_in_monitor() {
+                log::error!("plug in monitor failed {}", e)
+            }
+        }
         bail!("No displays");
     }
     let n = displays.len();

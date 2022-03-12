@@ -70,6 +70,9 @@ VOID DeviceClose(HSWDEVICE hSwDevice);
  * @brief Plug in monitor.
  *
  * @param index [in] Monitor index, should be 0, 1, 2.
+ * @param edid  [in] Monitor edid.
+ *                   0 Modified EDID from Dell S2719DGF
+ *                   1 Modified EDID from Lenovo Y27fA
  * @param retries [in] Retry times. Retry 1 time / sec. 25~30 seconds may be good choices.
  *                     -1 is invalid.
  *                     0 means doing once and no retries.
@@ -83,7 +86,7 @@ VOID DeviceClose(HSWDEVICE hSwDevice);
  *          System need some time to prepare the device.
  *
  */
-BOOL MonitorPlugIn(UINT index, INT retries);
+BOOL MonitorPlugIn(UINT index, UINT edid, INT retries);
 
 /**
  * @brief Plug out monitor.

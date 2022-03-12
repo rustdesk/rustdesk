@@ -206,7 +206,7 @@ extern "C" {
 
 extern "C" {
     pub fn Uninstall(fullInfPath: LPCTSTR, rebootRequired: PBOOL) -> BOOL;
-    pub fn MonitorPlugIn(index: UINT, retries: INT) -> BOOL;
+    pub fn MonitorPlugIn(index: UINT, edid: UINT, retries: INT) -> BOOL;
     pub fn MonitorPlugOut(index: UINT) -> BOOL;
     pub fn MonitorModesUpdate(index: UINT, modeCount: UINT, modes: PMonitorMode) -> BOOL;
 
