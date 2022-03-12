@@ -54,12 +54,6 @@ class _ConnectionPageState extends State<ConnectionPage> {
             getSearchBarUI(),
             Container(height: 12),
             getPeers(),
-            ElevatedButton(
-                onPressed: () {
-                  final res = FFI.getByName("read_dir");
-                  debugPrint("read_dir : $res");
-                },
-                child: Text("Local File Debug"))
           ]),
     );
   }
@@ -69,7 +63,7 @@ class _ConnectionPageState extends State<ConnectionPage> {
     connect(id);
   }
 
-  void connect(String id,{bool isFileTransfer = false}) {
+  void connect(String id, {bool isFileTransfer = false}) {
     if (id == '') return;
     id = id.replaceAll(' ', '');
     if (isFileTransfer) {
@@ -79,7 +73,7 @@ class _ConnectionPageState extends State<ConnectionPage> {
           builder: (BuildContext context) => FileManagerPage(id: id),
         ),
       );
-    }else{
+    } else {
       Navigator.push(
         context,
         MaterialPageRoute(
@@ -271,8 +265,8 @@ class _ConnectionPageState extends State<ConnectionPage> {
       () async {
         removePreference(id);
       }();
-    }else if (value == 'file') {
-      connect(id,isFileTransfer: true);
+    } else if (value == 'file') {
+      connect(id, isFileTransfer: true);
     }
   }
 }

@@ -5,10 +5,9 @@ import 'package:provider/provider.dart';
 import 'package:flutter/services.dart';
 import 'dart:ui' as ui;
 import 'dart:async';
-import 'package:tuple/tuple.dart';
 import 'package:wakelock/wakelock.dart';
 import '../common.dart';
-import '../gestures.dart';
+import '../widgets/gestures.dart';
 import '../models/model.dart';
 import '../widgets/dialog.dart';
 import 'chat_page.dart';
@@ -289,7 +288,7 @@ class _RemotePageState extends State<RemotePage> {
                       icon: Icon(Icons.tv),
                       onPressed: () {
                         setState(() => _showEdit = false);
-                        showOptions(context);
+                        showOptions();
                       },
                     )
                   ] +
@@ -318,7 +317,7 @@ class _RemotePageState extends State<RemotePage> {
                       icon: Icon(Icons.more_vert),
                       onPressed: () {
                         setState(() => _showEdit = false);
-                        showActions(context);
+                        showActions();
                       },
                     ),
                   ]),
@@ -475,7 +474,7 @@ class _RemotePageState extends State<RemotePage> {
             color: MyTheme.canvasColor, child: Stack(children: paints)));
   }
 
-  void showActions(BuildContext context) {
+  void showActions() {
     final size = MediaQuery.of(context).size;
     final x = 120.0;
     final y = size.height;
@@ -494,7 +493,7 @@ class _RemotePageState extends State<RemotePage> {
             style: flatButtonStyle,
             onPressed: () {
               Navigator.pop(context);
-              showSetOSPassword(context, false);
+              showSetOSPassword(false);
             },
             child: Icon(Icons.edit, color: MyTheme.accent),
           )
@@ -553,7 +552,7 @@ class _RemotePageState extends State<RemotePage> {
         if (password != "") {
           FFI.setByName('input_os_password', password);
         } else {
-          showSetOSPassword(context, true);
+          showSetOSPassword(true);
         }
       } else if (value == 'reset_canvas') {
         FFI.cursorModel.reset();
@@ -806,7 +805,7 @@ RadioListTile<String> getRadio(String name, String toValue, String curValue,
   );
 }
 
-void showOptions(BuildContext context) {
+void showOptions() {
   String quality = FFI.getByName('image_quality');
   if (quality == '') quality = 'balanced';
   String viewStyle = FFI.getByName('peer_option', 'view-style');
@@ -824,7 +823,7 @@ void showOptions(BuildContext context) {
           onTap: () {
             if (i == cur) return;
             FFI.setByName('switch_display', i.toString());
-            Navigator.pop(context);
+            DialogManager.reset();
           },
           child: Ink(
               width: 40,
@@ -848,7 +847,8 @@ void showOptions(BuildContext context) {
     displays.add(Divider(color: MyTheme.border));
   }
   final perms = FFI.ffiModel.permissions;
-  showAlertDialog((setState) {
+
+  DialogManager.show((context, setState) {
     final more = <Widget>[];
     if (perms['audio'] != false) {
       more.add(getToggle(setState, 'disable-audio', 'Mute'));
@@ -878,19 +878,19 @@ void showOptions(BuildContext context) {
         FFI.canvasModel.updateViewStyle();
       });
     };
-    return Tuple3(
-        SizedBox.shrink(),
-        Column(
+    return CustomAlertDialog(
+        title: SizedBox.shrink(),
+        content: Column(
             mainAxisSize: MainAxisSize.min,
             children: displays +
                 (isDesktop
                     ? <Widget>[
-                        getRadio(
-                            'Original', 'original', viewStyle, setViewStyle),
-                        getRadio('Shrink', 'shrink', viewStyle, setViewStyle),
-                        getRadio('Stretch', 'stretch', viewStyle, setViewStyle),
-                        Divider(color: MyTheme.border),
-                      ]
+                  getRadio(
+                      'Original', 'original', viewStyle, setViewStyle),
+                  getRadio('Shrink', 'shrink', viewStyle, setViewStyle),
+                  getRadio('Stretch', 'stretch', viewStyle, setViewStyle),
+                  Divider(color: MyTheme.border),
+                ]
                     : []) +
                 <Widget>[
                   getRadio('Good image quality', 'best', quality, setQuality),
@@ -902,18 +902,22 @@ void showOptions(BuildContext context) {
                       setState, 'show-remote-cursor', 'Show remote cursor'),
                 ] +
                 more),
-        []);
-  }, () async => true, true, 0);
+        actions: [],
+        onWillPop: () async => true,
+        contentPadding: 0,
+    );
+  },barrierDismissible: true);
 }
 
-void showSetOSPassword(BuildContext context, bool login) {
+void showSetOSPassword(bool login) {
   final controller = TextEditingController();
   var password = FFI.getByName('peer_option', "os-password");
   var autoLogin = FFI.getByName('peer_option', "auto-login") != "";
   controller.text = password;
-  showAlertDialog((setState) => Tuple3(
-        Text(translate('OS Password')),
-        Column(mainAxisSize: MainAxisSize.min, children: [
+  DialogManager.show((context, setState) {
+    return CustomAlertDialog(
+        title: Text(translate('OS Password')),
+        content: Column(mainAxisSize: MainAxisSize.min, children: [
           PasswordWidget(controller: controller),
           CheckboxListTile(
             contentPadding: const EdgeInsets.all(0),
@@ -929,7 +933,7 @@ void showSetOSPassword(BuildContext context, bool login) {
             },
           ),
         ]),
-        [
+        actions: [
           TextButton(
             style: flatButtonStyle,
             onPressed: () {
@@ -952,8 +956,8 @@ void showSetOSPassword(BuildContext context, bool login) {
             },
             child: Text(translate('OK')),
           ),
-        ],
-      ));
+        ]);
+  });
 }
 
 void sendPrompt(bool isMac, String key) {

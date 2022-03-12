@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'dart:async';
 import 'package:flutter_easyloading/flutter_easyloading.dart';
-import 'package:tuple/tuple.dart';
 
 final globalKey = GlobalKey<NavigatorState>();
 
@@ -40,61 +39,73 @@ void showLoading(String text) {
   EasyLoading.show(status: text, maskType: EasyLoadingMaskType.black);
 }
 
-class DialogManager{
+typedef DialogBuilder = CustomAlertDialog Function(
+    BuildContext context, StateSetter setState);
+
+class DialogManager {
   static BuildContext? _dialogContext;
 
-  static void reset(){
-    if(_dialogContext!=null){
+  static void reset() {
+    if (_dialogContext != null) {
       Navigator.pop(_dialogContext!);
     }
     _dialogContext = null;
   }
-  static void register(BuildContext dialogContext){
+
+  static void register(BuildContext dialogContext) {
     _dialogContext = dialogContext;
   }
 
-  static void drop(){
+  static void drop() {
     _dialogContext = null;
+  }
+
+  static Future<T?> show<T>(DialogBuilder builder,
+      {bool barrierDismissible = false}) async {
+    if (globalKey.currentContext == null) return null;
+    EasyLoading.dismiss();
+    DialogManager.reset();
+    final res = await showDialog<T>(
+        context: globalKey.currentContext!,
+        barrierDismissible: barrierDismissible,
+        builder: (context) {
+          DialogManager.register(context);
+          return StatefulBuilder(builder: builder);
+        });
+    DialogManager.drop();
+    return res;
   }
 }
 
-typedef BuildAlertDialog = Tuple3<Widget, Widget, List<Widget>> Function(
-    void Function(void Function()));
+class CustomAlertDialog extends StatelessWidget {
+  CustomAlertDialog(
+      {required this.title,
+      required this.content,
+      required this.actions,
+      this.onWillPop,
+      this.contentPadding});
 
-// flutter Dialog
-Future<T?> showAlertDialog<T>(BuildAlertDialog build,
-    [WillPopCallback? onWillPop,
-    bool barrierDismissible = false,
-    double contentPadding = 20]) async {
-  EasyLoading.dismiss();
-  DialogManager.reset();
-  var dialog = StatefulBuilder(builder: (context, setState) {
-    var widgets = build(setState);
-    if (onWillPop == null) onWillPop = () async => false;
+  final Widget title;
+  final Widget content;
+  final List<Widget> actions;
+  final WillPopCallback? onWillPop;
+  final double? contentPadding;
+
+  @override
+  Widget build(BuildContext context) {
     return WillPopScope(
-        onWillPop: onWillPop,
+        onWillPop: onWillPop ?? () async => false,
         child: AlertDialog(
-          title: widgets.item1,
-          contentPadding: EdgeInsets.all(contentPadding),
-          content: widgets.item2,
-          actions: widgets.item3,
+          title: title,
+          contentPadding: EdgeInsets.all(contentPadding ?? 20),
+          content: content,
+          actions: actions,
         ));
-  });
-  if(globalKey.currentContext == null) return null;
-  var res = await showDialog<T>(
-      context: globalKey.currentContext!,
-      barrierDismissible: barrierDismissible,
-      builder: (context) {
-        DialogManager.register(context);
-        return dialog;
-      });
-  DialogManager.drop();
-  return res;
+  }
 }
 
 // EasyLoading
-void msgBox(String type, String title, String text,
-    {bool? hasCancel}) {
+void msgBox(String type, String title, String text, {bool? hasCancel}) {
   var wrap = (String text, void Function() onPressed) => ButtonTheme(
       padding: EdgeInsets.symmetric(horizontal: 20, vertical: 10),
       materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
@@ -110,7 +121,7 @@ void msgBox(String type, String title, String text,
 
   EasyLoading.dismiss();
   DialogManager.reset();
-  if(globalKey.currentContext == null) return;
+  if (globalKey.currentContext == null) return;
   final buttons = [
     Expanded(child: Container()),
     wrap(Translator.call('OK'), () {
@@ -129,65 +140,22 @@ void msgBox(String type, String title, String text,
         }));
   }
   EasyLoading.show(
-    status: "",
-    maskType: EasyLoadingMaskType.black,
-    indicator: Container(
-        constraints: BoxConstraints(maxWidth: 300),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(Translator.call(title), style: TextStyle(fontSize: 21)),
-            SizedBox(height: 20),
-            Text(Translator.call(text), style: TextStyle(fontSize: 15)),
-            SizedBox(height: 20),
-            Row(
-              children: buttons,
-            )
-          ],
-        ))
-  );
-}
-
-class PasswordWidget extends StatefulWidget {
-  PasswordWidget({Key? key, required this.controller}) : super(key: key);
-
-  final TextEditingController controller;
-
-  @override
-  _PasswordWidgetState createState() => _PasswordWidgetState();
-}
-
-class _PasswordWidgetState extends State<PasswordWidget> {
-  bool _passwordVisible = false;
-
-  @override
-  Widget build(BuildContext context) {
-    return TextField(
-      autofocus: true,
-      controller: widget.controller,
-      obscureText: !_passwordVisible,
-      //This will obscure text dynamically
-      keyboardType: TextInputType.visiblePassword,
-      decoration: InputDecoration(
-        labelText: Translator.call('Password'),
-        hintText: Translator.call('Enter your password'),
-        // Here is key idea
-        suffixIcon: IconButton(
-          icon: Icon(
-            // Based on passwordVisible state choose the icon
-            _passwordVisible ? Icons.visibility : Icons.visibility_off,
-            color: Theme.of(context).primaryColorDark,
-          ),
-          onPressed: () {
-            // Update the state i.e. toogle the state of passwordVisible variable
-            setState(() {
-              _passwordVisible = !_passwordVisible;
-            });
-          },
-        ),
-      ),
-    );
-  }
+      status: "",
+      maskType: EasyLoadingMaskType.black,
+      indicator: Container(
+          constraints: BoxConstraints(maxWidth: 300),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(Translator.call(title), style: TextStyle(fontSize: 21)),
+              SizedBox(height: 20),
+              Text(Translator.call(text), style: TextStyle(fontSize: 15)),
+              SizedBox(height: 20),
+              Row(
+                children: buttons,
+              )
+            ],
+          )));
 }
 
 Color str2color(String str, [alpha = 0xFF]) {

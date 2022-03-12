@@ -1,6 +1,5 @@
 import 'package:settings_ui/settings_ui.dart';
 import 'package:flutter/material.dart';
-import 'package:tuple/tuple.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../common.dart';
 import '../models/model.dart';
@@ -38,7 +37,7 @@ class SettingsPage extends StatelessWidget implements PageShape {
           title: Text("About"),
           tiles: [
             SettingsTile.navigation(
-                title: Text("Version: "+version),
+                title: Text("Version: " + version),
                 value: InkWell(
                   onTap: () async {
                     const url = 'https://rustdesk.com/';
@@ -70,9 +69,10 @@ void showServer() {
   var id = '';
   var relay = '';
   var key = '';
-  showAlertDialog((setState) => Tuple3(
-        Text(translate('ID Server')),
-        Form(
+  DialogManager.show((context, setState) {
+    return CustomAlertDialog(
+        title: Text(translate('ID Server')),
+        content: Form(
             key: formKey,
             child: Column(mainAxisSize: MainAxisSize.min, children: <Widget>[
               TextFormField(
@@ -108,7 +108,7 @@ void showServer() {
                 },
               ),
             ])),
-        [
+        actions: [
           TextButton(
             style: flatButtonStyle,
             onPressed: () {
@@ -135,8 +135,8 @@ void showServer() {
             },
             child: Text(translate('OK')),
           ),
-        ],
-      ));
+        ]);
+  });
 }
 
 String? validate(value) {
