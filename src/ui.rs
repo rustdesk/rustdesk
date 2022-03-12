@@ -367,9 +367,13 @@ impl UI {
 
     // TODO: ui prompt
     fn install_virtual_display(&self) {
-        match virtual_display::install_update_driver() {
+        let mut reboot_required = false;
+        match virtual_display::install_update_driver(&mut reboot_required) {
             Ok(_) => {
-                log::info!("Virtual Display: install virtual display done");
+                log::info!(
+                    "Virtual Display: install virtual display done, reboot is {} required",
+                    if reboot_required { "" } else { "not" }
+                );
             }
             Err(e) => {
                 log::error!("Virtual Display: install virtual display failed {}", e);

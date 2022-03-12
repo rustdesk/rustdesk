@@ -104,7 +104,7 @@ fn main() {
                     println!("Create device begin");
                     if h_sw_device != invalid_device {
                         println!("Device created before");
-                        break;
+                        continue;
                     }
                     if idd::FALSE == idd::DeviceCreate(&mut h_sw_device) {
                         println!("{}", CStr::from_ptr(idd::GetLastMsg()).to_str().unwrap());
