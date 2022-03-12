@@ -24,7 +24,7 @@ pub fn download_driver() -> ResultType<()> {
     Ok(())
 }
 
-pub fn install_update_driver() -> ResultType<()> {
+pub fn install_update_driver(reboot_required: &mut bool) -> ResultType<()> {
     #[cfg(windows)]
     let install_path = win10::DRIVER_INSTALL_PATH;
     #[cfg(not(windows))]
@@ -43,12 +43,45 @@ pub fn install_update_driver() -> ResultType<()> {
     unsafe {
         #[cfg(windows)]
         {
-            let mut reboot_required = win10::idd::FALSE;
-            if win10::idd::InstallUpdate(full_install_path, &mut reboot_required)
+            let mut reboot_required_tmp = win10::idd::FALSE;
+            if win10::idd::InstallUpdate(full_install_path, &mut reboot_required_tmp)
                 == win10::idd::FALSE
             {
                 bail!("{}", CStr::from_ptr(win10::idd::GetLastMsg()).to_str()?);
             }
+            *reboot_required = reboot_required_tmp == win10::idd::TRUE;
+        }
+    }
+
+    Ok(())
+}
+
+pub fn uninstall_driver(reboot_required: &mut bool) -> ResultType<()> {
+    #[cfg(windows)]
+    let install_path = win10::DRIVER_INSTALL_PATH;
+    #[cfg(not(windows))]
+    let install_path = "";
+
+    let abs_path = Path::new(install_path).canonicalize()?;
+    if !abs_path.exists() {
+        bail!("{} not exists", install_path)
+    }
+
+    let full_install_path = match abs_path.to_str() {
+        Some(p) => CString::new(p)?.into_raw(),
+        None => bail!("{} not exists", install_path),
+    };
+
+    unsafe {
+        #[cfg(windows)]
+        {
+            let mut reboot_required_tmp = win10::idd::FALSE;
+            if win10::idd::Uninstall(full_install_path, &mut reboot_required_tmp)
+                == win10::idd::FALSE
+            {
+                bail!("{}", CStr::from_ptr(win10::idd::GetLastMsg()).to_str()?);
+            }
+            *reboot_required = reboot_required_tmp == win10::idd::TRUE;
         }
     }
 
@@ -79,6 +112,7 @@ pub fn create_device() -> ResultType<()> {
 pub fn close_device() {
     unsafe {
         win10::idd::DeviceClose(*H_SW_DEVICE.lock().unwrap() as win10::idd::HSWDEVICE);
+        *H_SW_DEVICE.lock().unwrap() = 0;
     }
 }
 
