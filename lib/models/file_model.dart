@@ -1,6 +1,9 @@
 import 'dart:convert';
+import 'package:flutter_hbb/pages/file_manager_page.dart';
 import 'package:path/path.dart' as p;
 import 'package:flutter/material.dart';
+import 'package:path/path.dart' as Path;
+
 import 'model.dart';
 
 enum SortBy { name, type, date, size }
@@ -15,13 +18,16 @@ enum SortBy { name, type, date, size }
 
 typedef OnJobStateChange = void Function(JobState state, JobProgress jp);
 
-// TODO 使用工厂单例模式
+// TODO 每个fd设置操作系统属性，不同的操作系统 有不同的文件连字符 封装各类Path功能
 
 class FileModel extends ChangeNotifier {
   var _isLocal = false;
   var _selectMode = false;
 
-
+  /// 每一个选择的文件或文件夹占用一个 _jobId，file_num是文件夹中的单独文件id
+  /// 如
+  /// 发送单独一个文件  file_num = 0;
+  /// 发送一个文件夹，若文件夹下有3个文件  file_num = 2;
   var _jobId = 0;
 
   var _jobProgress = JobProgress(); // from rust update
@@ -48,12 +54,6 @@ class FileModel extends ChangeNotifier {
 
   FileDirectory get currentDir => _isLocal ? currentLocalDir : currentRemoteDir;
 
-  OnJobStateChange? _onJobStateChange;
-
-  setOnJobStateChange(OnJobStateChange v) {
-    _onJobStateChange = v;
-  }
-
   toggleSelectMode() {
     _selectMode = !_selectMode;
     notifyListeners();
@@ -67,16 +67,12 @@ class FileModel extends ChangeNotifier {
   tryUpdateJobProgress(Map<String, dynamic> evt) {
     try {
       int id = int.parse(evt['id']);
-      if (id == _jobId) {
-        _jobProgress.id = id;
-        _jobProgress.fileNum = int.parse(evt['file_num']);
-        _jobProgress.speed = int.parse(evt['speed']);
-        _jobProgress.finishedSize = int.parse(evt['finished_size']);
-        notifyListeners();
-      } else {
-        debugPrint(
-            "Failed to updateJobProgress ,id != _jobId,id:$id,_jobId:$_jobId");
-      }
+      _jobProgress.id = id;
+      _jobProgress.fileNum = int.parse(evt['file_num']);
+      _jobProgress.speed = double.parse(evt['speed']);
+      _jobProgress.finishedSize = int.parse(evt['finished_size']);
+      debugPrint("_jobProgress update:${_jobProgress.toString()}");
+      notifyListeners();
     } catch (e) {
       debugPrint("Failed to tryUpdateJobProgress,evt:${evt.toString()}");
     }
@@ -84,8 +80,7 @@ class FileModel extends ChangeNotifier {
 
   jobDone(Map<String, dynamic> evt) {
     _jobProgress.state = JobState.done;
-    // TODO
-
+    refresh();
     notifyListeners();
   }
 
@@ -93,6 +88,11 @@ class FileModel extends ChangeNotifier {
     // TODO
     _jobProgress.clear();
     _jobProgress.state = JobState.error;
+    notifyListeners();
+  }
+
+  jobReset() {
+    _jobProgress.clear();
     notifyListeners();
   }
 
@@ -128,16 +128,50 @@ class FileModel extends ChangeNotifier {
     openDirectory(fd.parent);
   }
 
-  sendFiles(String path, String to, bool showHidden, bool isRemote) {
-    _jobId++;
-    final msg = {
-      "id": _jobId.toString(),
-      "path": path,
-      "to": to,
-      "show_hidden": showHidden.toString(),
-      "is_remote": isRemote.toString() // isRemote 指path的位置而不是to的位置
-    };
-    FFI.setByName("send_files", jsonEncode(msg));
+  sendFiles(SelectedItems items) {
+    if (items.isLocal == null) {
+      debugPrint("Failed to sendFiles ,wrong path state");
+      return;
+    }
+    _jobProgress.state = JobState.inProgress;
+    final toPath =
+        items.isLocal! ? currentRemoteDir.path : currentLocalDir.path;
+    items.items.forEach((from) {
+      _jobId++;
+      final msg = {
+        "id": _jobId.toString(),
+        "path": from.path,
+        "to": Path.join(toPath, from.name),
+        "show_hidden": "false", // TODO showHidden
+        "is_remote": (!(items.isLocal!)).toString() // 指from的位置而不是to的位置
+      };
+      FFI.setByName("send_files", jsonEncode(msg));
+    });
+  }
+
+  removeAction(SelectedItems items) {
+    if (items.isLocal == null) {
+      debugPrint("Failed to removeFile ,wrong path state");
+      return;
+    }
+    items.items.forEach((entry) {
+      _jobId++;
+      if (entry.isFile) { // TODO dir
+        final msg = {
+          "id": _jobId.toString(),
+          "path": entry.path,
+          "file_num": "0",
+          "is_remote": (!(items.isLocal!)).toString()
+        };
+        debugPrint("remove :$msg");
+        FFI.setByName("remove_file", jsonEncode(msg));
+        // items.remove(entry);
+      }
+    });
+  }
+
+  createDir(String path){
+
   }
 
   changeSortStyle(SortBy sort) {
@@ -168,7 +202,7 @@ class FileDirectory {
     if (json['entries'] != null) {
       entries = <Entry>[];
       json['entries'].forEach((v) {
-        entries.add(new Entry.fromJson(v));
+        entries.add(new Entry.fromJsonWithPath(v, path));
       });
       entries = _sortList(entries, sort);
     }
@@ -189,15 +223,17 @@ class Entry {
   int entryType = 4;
   int modifiedTime = 0;
   String name = "";
+  String path = "";
   int size = 0;
 
   Entry();
 
-  Entry.fromJson(Map<String, dynamic> json) {
+  Entry.fromJsonWithPath(Map<String, dynamic> json, String parent) {
     entryType = json['entry_type'];
     modifiedTime = json['modified_time'];
     name = json['name'];
     size = json['size'];
+    path = Path.join(parent, name);
   }
 
   bool get isFile => entryType > 3;
@@ -215,7 +251,7 @@ class JobProgress {
   JobState state = JobState.none;
   var id = 0;
   var fileNum = 0;
-  var speed = 0;
+  var speed = 0.0;
   var finishedSize = 0;
 
   clear() {

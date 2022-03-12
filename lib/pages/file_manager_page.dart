@@ -10,7 +10,6 @@ import '../common.dart';
 import '../models/model.dart';
 import '../widgets/dialog.dart';
 
-
 class FileManagerPage extends StatefulWidget {
   FileManagerPage({Key? key, required this.id}) : super(key: key);
   final String id;
@@ -38,7 +37,7 @@ class _FileManagerPageState extends State<FileManagerPage> {
     model.tryUpdateDir(res, true);
 
     _interval = Timer.periodic(Duration(milliseconds: 30),
-        (timer) => FFI.ffiModel.update(widget.id, context, handleMsgBox));
+            (timer) => FFI.ffiModel.update(widget.id, context, handleMsgBox));
   }
 
   @override
@@ -51,53 +50,54 @@ class _FileManagerPageState extends State<FileManagerPage> {
   }
 
   @override
-  Widget build(BuildContext context)  => Consumer<FileModel>(builder: (_context, _model, _child) {
-    return  WillPopScope(
-        onWillPop: () async {
-          if (model.selectMode) {
-            model.toggleSelectMode();
-          } else {
-            goBack();
-          }
-          return false;
-        },
-        child: Scaffold(
-          backgroundColor: MyTheme.grayBg,
-          appBar: AppBar(
-            leading: Row(children: [
-              IconButton(icon: Icon(Icons.arrow_back), onPressed: goBack),
-              IconButton(icon: Icon(Icons.close), onPressed: clientClose),
-            ]),
-            leadingWidth: 200,
-            centerTitle: true,
-            title: Text(translate(model.isLocal ? "Local" : "Remote")),
-            actions: [
-              IconButton(
-                icon: Icon(Icons.change_circle),
-                onPressed: ()=> model.togglePage(),
-              )
-            ],
-          ),
-          body: body(),
-          bottomSheet: bottomSheet(),
-        ));
-  });
+  Widget build(BuildContext context) =>
+      Consumer<FileModel>(builder: (_context, _model, _child) {
+        return WillPopScope(
+            onWillPop: () async {
+              if (model.selectMode) {
+                model.toggleSelectMode();
+              } else {
+                goBack();
+              }
+              return false;
+            },
+            child: Scaffold(
+              backgroundColor: MyTheme.grayBg,
+              appBar: AppBar(
+                leading: Row(children: [
+                  IconButton(icon: Icon(Icons.arrow_back), onPressed: goBack),
+                  IconButton(icon: Icon(Icons.close), onPressed: clientClose),
+                ]),
+                leadingWidth: 200,
+                centerTitle: true,
+                title: Text(translate(model.isLocal ? "Local" : "Remote")),
+                actions: [
+                  IconButton(
+                    icon: Icon(Icons.change_circle),
+                    onPressed: () => model.togglePage(),
+                  )
+                ],
+              ),
+              body: body(),
+              bottomSheet: bottomSheet(),
+            ));
+      });
 
-  bool needShowCheckBox(){
-    if(!model.selectMode){
+  bool needShowCheckBox() {
+    if (!model.selectMode) {
       return false;
     }
     return !_selectedItems.isOtherPage(model.isLocal);
   }
 
   Widget body() {
-        final isLocal = model.isLocal;
-        final fd = model.currentDir;
-        final entries = fd.entries;
-        return Column(children: [
-          headTools(),
-          Expanded(
-              child: ListView.builder(
+    final isLocal = model.isLocal;
+    final fd = model.currentDir;
+    final entries = fd.entries;
+    return Column(children: [
+      headTools(),
+      Expanded(
+          child: ListView.builder(
             itemCount: entries.length + 1,
             itemBuilder: (context, index) {
               if (index >= entries.length) {
@@ -106,44 +106,61 @@ class _FileManagerPageState extends State<FileManagerPage> {
                 // 使用 bottomSheet 提示以选择的文件数量 点击后展开查看更多
                 return listTail();
               }
-              final path = Path.join(fd.path, entries[index].name);
               var selected = false;
               if (model.selectMode) {
-                selected = _selectedItems.contains(path);
+                selected = _selectedItems.contains(entries[index]);
+              }
+              var sizeStr = "";
+              if(entries[index].isFile){
+                final size = entries[index].size;
+                if(size< 1024){
+                  sizeStr += size.toString() + "B";
+                }else if(size< 1024 * 1024){
+                  sizeStr += (size/1024).toStringAsFixed(2) + "kB";
+                }else if(size < 1024 * 1024 * 1024){
+                  sizeStr += (size/1024/1024).toStringAsFixed(2) + "MB";
+                }else if(size < 1024 * 1024 * 1024 * 1024){
+                  sizeStr += (size/1024/1024/1024).toStringAsFixed(2) + "GB";
+                }
               }
               return Card(
                 child: ListTile(
-                  leading: Icon(entries[index].isFile?Icons.feed_outlined:Icons.folder,
-                        size: 40),
+                  leading: Icon(
+                      entries[index].isFile ? Icons.feed_outlined : Icons
+                          .folder,
+                      size: 40),
 
                   title: Text(entries[index].name),
                   selected: selected,
-                  // subtitle:  Text(entries[index].lastModified().toString()),
+                  subtitle: Text(
+                      entries[index].lastModified().toString().replaceAll(
+                          ".000", "") + "   " + sizeStr,style: TextStyle(fontSize: 12,color: MyTheme.darkGray),),
                   trailing: needShowCheckBox()
                       ? Checkbox(
-                          value: selected,
-                          onChanged: (v) {
-                            if (v == null) return;
-                            if (v && !selected) {
-                                _selectedItems.add(isLocal,path);
-                            } else if (!v && selected) {
-                                _selectedItems.remove(path);
-                            }
-                            setState(() {});
-                          })
+                      value: selected,
+                      onChanged: (v) {
+                        if (v == null) return;
+                        if (v && !selected) {
+                          _selectedItems.add(isLocal, entries[index]);
+                        } else if (!v && selected) {
+                          _selectedItems.remove(entries[index]);
+                        }
+                        setState(() {});
+                      })
                       : null,
                   onTap: () {
-                    if (model.selectMode && !_selectedItems.isOtherPage(isLocal)) {
+                    if (model.selectMode &&
+                        !_selectedItems.isOtherPage(isLocal)) {
                       if (selected) {
-                        _selectedItems.remove(path);
+                        _selectedItems.remove(entries[index]);
                       } else {
-                        _selectedItems.add(isLocal,path);
+                        _selectedItems.add(isLocal, entries[index]);
                       }
                       setState(() {});
                       return;
                     }
                     if (entries[index].isDirectory) {
-                      model.openDirectory(path);
+                      model.openDirectory(entries[index].path);
                       breadCrumbScrollToEnd();
                     } else {
                       // Perform file-related tasks.
@@ -153,7 +170,7 @@ class _FileManagerPageState extends State<FileManagerPage> {
                     _selectedItems.clear();
                     model.toggleSelectMode();
                     if (model.selectMode) {
-                      _selectedItems.add(isLocal,path);
+                      _selectedItems.add(isLocal, entries[index]);
                     }
                     setState(() {});
                   },
@@ -161,8 +178,8 @@ class _FileManagerPageState extends State<FileManagerPage> {
               );
             },
           ))
-        ]);
-      }
+    ]);
+  }
 
   goBack() {
     model.goToParentDirectory();
@@ -206,61 +223,68 @@ class _FileManagerPageState extends State<FileManagerPage> {
     });
   }
 
-  Widget headTools() => Container(
+  Widget headTools() =>
+      Container(
           child: Row(
-        children: [
-          Expanded(
-              child: BreadCrumb(
-            items: getPathBreadCrumbItems(() => debugPrint("pressed home"),
-                (e) => debugPrint("pressed url:$e")),
-            divider: Icon(Icons.chevron_right),
-            overflow: ScrollableOverflow(controller: _breadCrumbScroller),
-          )),
-          Row(
             children: [
-              // IconButton(onPressed: () {}, icon: Icon(Icons.sort)),
-              PopupMenuButton<SortBy>(
-                  icon: Icon(Icons.sort),
-                  itemBuilder: (context) {
-                    return SortBy.values
-                        .map((e) => PopupMenuItem(
+              Expanded(
+                  child: BreadCrumb(
+                    items: getPathBreadCrumbItems(() =>
+                        debugPrint("pressed home"),
+                            (e) => debugPrint("pressed url:$e")),
+                    divider: Icon(Icons.chevron_right),
+                    overflow: ScrollableOverflow(
+                        controller: _breadCrumbScroller),
+                  )),
+              Row(
+                children: [
+                  // IconButton(onPressed: () {}, icon: Icon(Icons.sort)),
+                  PopupMenuButton<SortBy>(
+                      icon: Icon(Icons.sort),
+                      itemBuilder: (context) {
+                        return SortBy.values
+                            .map((e) =>
+                            PopupMenuItem(
                               child:
-                                  Text(translate(e.toString().split(".").last)),
+                              Text(translate(e
+                                  .toString()
+                                  .split(".")
+                                  .last)),
                               value: e,
                             ))
-                        .toList();
-                  },
-                  onSelected: model.changeSortStyle),
-              PopupMenuButton<String>(
-                  icon: Icon(Icons.more_vert),
-                  itemBuilder: (context) {
-                    return [
-                      PopupMenuItem(
-                        child: Row(
-                          children: [Icon(Icons.refresh), Text("刷新")],
-                        ),
-                        value: "refresh",
-                      ),
-                      PopupMenuItem(
-                        child: Row(
-                          children: [Icon(Icons.check), Text("多选")],
-                        ),
-                        value: "select",
-                      )
-                    ];
-                  },
-                  onSelected: (v) {
-                    if (v == "refresh") {
-                      model.refresh();
-                    } else if (v == "select") {
-                      _selectedItems.clear();
-                      model.toggleSelectMode();
-                    }
-                  }),
+                            .toList();
+                      },
+                      onSelected: model.changeSortStyle),
+                  PopupMenuButton<String>(
+                      icon: Icon(Icons.more_vert),
+                      itemBuilder: (context) {
+                        return [
+                          PopupMenuItem(
+                            child: Row(
+                              children: [Icon(Icons.refresh), Text("刷新")],
+                            ),
+                            value: "refresh",
+                          ),
+                          PopupMenuItem(
+                            child: Row(
+                              children: [Icon(Icons.check), Text("多选")],
+                            ),
+                            value: "select",
+                          )
+                        ];
+                      },
+                      onSelected: (v) {
+                        if (v == "refresh") {
+                          model.refresh();
+                        } else if (v == "select") {
+                          _selectedItems.clear();
+                          model.toggleSelectMode();
+                        }
+                      }),
+                ],
+              )
             ],
-          )
-        ],
-      ));
+          ));
 
   Widget emptyPage() {
     return Column(
@@ -275,22 +299,123 @@ class _FileManagerPageState extends State<FileManagerPage> {
     return SizedBox(height: 100);
   }
 
-  /// 有几种状态
-  /// 选择模式 localPage
-  /// 准备复制模式 otherPage
-  /// 正在复制模式 动态数字和显示速度
-  /// 粘贴完成模式
-  BottomSheet? bottomSheet() {
-    if (!model.selectMode) return null;
+  Widget? bottomSheet() {
+    final state = model.jobState;
+    final isOtherPage = _selectedItems.isOtherPage(model.isLocal);
+    final selectedItemsLength = "${_selectedItems.length} 个项目";
+    final local = _selectedItems.isLocal == null
+        ? ""
+        : " [${_selectedItems.isLocal! ? '本地' : '远程'}]";
+
+    if (model.selectMode) {
+      if (_selectedItems.length == 0 || !isOtherPage) {
+        // 选择模式 当前选择页面
+        return BottomSheetBody(
+            leading: Icon(Icons.check),
+            title: "已选择",
+            text: selectedItemsLength + local,
+            onCanceled: () => model.toggleSelectMode(),
+            actions: [
+              IconButton(
+                icon: Icon(Icons.delete_forever),
+                onPressed: () {
+                  if(_selectedItems.length>0){
+                    model.removeAction(_selectedItems);
+                  }
+                },
+              )
+            ]);
+      } else {
+        // 选择模式 复制目标页面
+        return BottomSheetBody(
+            leading: Icon(Icons.input),
+            title: "粘贴到这里?",
+            text: selectedItemsLength + local,
+            onCanceled: () => model.toggleSelectMode(),
+            actions: [
+              IconButton(
+                icon: Icon(Icons.paste),
+                onPressed: () {
+                  model.toggleSelectMode();
+                  // TODO
+                  model.sendFiles(_selectedItems);
+                },
+              )
+            ]);
+      }
+    }
+
+    switch (state) {
+      case JobState.inProgress:
+        return BottomSheetBody(
+          leading: CircularProgressIndicator(),
+          title: "正在发送文件...",
+          text: "速度:  ${(model.jobProgress.speed / 1024).toStringAsFixed(
+              2)} kb/s",
+          onCanceled: null,
+        );
+      case JobState.done:
+        return BottomSheetBody(
+          leading: Icon(Icons.check),
+          title: "发送成功!",
+          text: "",
+          onCanceled: () => model.jobReset(),
+        );
+      case JobState.error:
+        return BottomSheetBody(
+          leading: Icon(Icons.error),
+          title: "发送错误!",
+          text: "",
+          onCanceled: () => model.jobReset(),
+        );
+      case JobState.none:
+        break;
+    }
+    return null;
+  }
+
+  List<BreadCrumbItem> getPathBreadCrumbItems(void Function() onHome,
+      void Function(String) onPressed) {
+    final path = model.currentDir.path;
+    final list = Path.split(path);
+    list.remove('/');
+    final breadCrumbList = [
+      BreadCrumbItem(
+          content: IconButton(
+            icon: Icon(Icons.home_filled),
+            onPressed: onHome,
+          ))
+    ];
+    breadCrumbList.addAll(list.map((e) =>
+        BreadCrumbItem(
+            content: TextButton(
+                child: Text(e),
+                style:
+                ButtonStyle(minimumSize: MaterialStateProperty.all(Size(0, 0))),
+                onPressed: () => onPressed(e)))));
+    return breadCrumbList;
+  }
+}
+
+class BottomSheetBody extends StatelessWidget {
+  BottomSheetBody({required this.leading,
+    required this.title,
+    required this.text,
+    this.onCanceled,
+    this.actions});
+
+  final Widget leading;
+  final String title;
+  final String text;
+  final VoidCallback? onCanceled;
+  final List<IconButton>? actions;
+
+  @override
+  BottomSheet build(BuildContext context) {
+    final _actions = actions ?? [];
     return BottomSheet(
-        backgroundColor: MyTheme.grayBg,
-        enableDrag: false,
-        onClosing: () {
-          debugPrint("BottomSheet close");
-        },
-        builder: (context) {
-          final isOtherPage = _selectedItems.isOtherPage(model.isLocal);
-          return Container(
+      builder: (BuildContext context) {
+        return Container(
             height: 65,
             alignment: Alignment.centerLeft,
             decoration: BoxDecoration(
@@ -301,112 +426,68 @@ class _FileManagerPageState extends State<FileManagerPage> {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  // 做一个bottomSheet类框架 不同状态下显示不同的内容
                   Row(
                     children: [
-                      CircularProgressIndicator(),
-                      isOtherPage?Icon(Icons.input):Icon(Icons.check),
+                      leading,
                       SizedBox(width: 16),
                       Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(isOtherPage?'粘贴到这里?':'已选择',style: TextStyle(fontSize: 18)),
-                          Text("${_selectedItems.length} 个文件 [${model.isLocal?'本地':'远程'}]",style: TextStyle(fontSize: 14,color: MyTheme.grayBg))
+                          Text(title, style: TextStyle(fontSize: 18)),
+                          Text(text,
+                              style: TextStyle(
+                                  fontSize: 14, color: MyTheme.grayBg))
                         ],
                       )
                     ],
                   ),
-                  Row(
-                    children: [
-                      (_selectedItems.length>0 && isOtherPage)? IconButton(
-                        icon: Icon(Icons.paste),
-                        onPressed:() {
-                          debugPrint("paste");
-                          // TODO　
-
-
-                          model.sendFiles(
-                              _selectedItems.items.first,
-                              model.currentRemoteDir.path +
-                                  '/' +
-                                  _selectedItems.items.first.split('/').last,
-                              false,
-                              false);
-
-                          // unused set callback
-                          // _fileModel.set
-                        },
-                      ):IconButton(
-                        icon: Icon(Icons.delete_forever),
-                        onPressed: () {},
-                      ),
-                      IconButton(
-                        icon: Icon(Icons.cancel_outlined),
-                        onPressed: () {
-                          model.toggleSelectMode();
-                        },
-                      ),
-                    ],
-                  )
+                  Row(children: () {
+                    _actions.add(IconButton(
+                      icon: Icon(Icons.cancel_outlined),
+                      onPressed: onCanceled,
+                    ));
+                    return _actions;
+                  }())
                 ],
               ),
-            ),
-          );
-        });
-  }
-
-  List<BreadCrumbItem> getPathBreadCrumbItems(
-      void Function() onHome, void Function(String) onPressed) {
-    final path = model.currentDir.path;
-    final list = path.trim().split('/'); // TODO use Path
-    list.remove("");
-    final breadCrumbList = [
-      BreadCrumbItem(
-          content: IconButton(
-        icon: Icon(Icons.home_filled),
-        onPressed: onHome,
-      ))
-    ];
-    breadCrumbList.addAll(list.map((e) => BreadCrumbItem(
-        content: TextButton(
-            child: Text(e),
-            style:
-                ButtonStyle(minimumSize: MaterialStateProperty.all(Size(0, 0))),
-            onPressed: () => onPressed(e)))));
-    return breadCrumbList;
+            ));
+      },
+      onClosing: () {},
+      backgroundColor: MyTheme.grayBg,
+      enableDrag: false,
+    );
   }
 }
 
-
 class SelectedItems {
   bool? _isLocal;
-  final List<String> _items = [];
+  final List<Entry> _items = [];
 
-  List<String> get items => _items;
+  List<Entry> get items => _items;
 
   int get length => _items.length;
 
-  // bool get isEmpty => _items.length == 0;
+  bool? get isLocal => _isLocal;
 
-  add(bool isLocal, String path) {
+  add(bool isLocal, Entry e) {
     if (_isLocal == null) {
       _isLocal = isLocal;
     }
     if (_isLocal != null && _isLocal != isLocal) {
       return;
     }
-    if (!_items.contains(path)) {
-      _items.add(path);
+    if (!_items.contains(e)) {
+      _items.add(e);
     }
   }
 
-  bool contains(String path) {
-    return _items.contains(path);
+  bool contains(Entry e) {
+    return _items.contains(e);
   }
 
-  remove(String path) {
-    _items.remove(path);
+  remove(Entry e) {
+    _items.remove(e);
     if (_items.length == 0) {
       _isLocal = null;
     }
