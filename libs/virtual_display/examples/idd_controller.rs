@@ -1,5 +1,5 @@
 #[cfg(windows)]
-use virtual_display::win10::idd;
+use virtual_display::win10::{idd, DRIVER_INSTALL_PATH};
 
 use std::{
     ffi::{CStr, CString},
@@ -24,9 +24,9 @@ fn prompt_input() -> u8 {
         .unwrap_or(0)
 }
 
-unsafe fn plug_in(index: idd::UINT) {
+unsafe fn plug_in(index: idd::UINT, edid: idd::UINT) {
     println!("Plug in monitor begin");
-    if idd::FALSE == idd::MonitorPlugIn(index, 25) {
+    if idd::FALSE == idd::MonitorPlugIn(index, edid, 25) {
         println!("{}", CStr::from_ptr(idd::GetLastMsg()).to_str().unwrap());
     } else {
         println!("Plug in monitor done");
@@ -58,8 +58,7 @@ unsafe fn plug_out(index: idd::UINT) {
 }
 
 fn main() {
-    let relative_path = "RustDeskIddDriver/RustDeskIddDriver.inf";
-    let abs_path = Path::new(relative_path).canonicalize().unwrap();
+    let abs_path = Path::new(DRIVER_INSTALL_PATH).canonicalize().unwrap();
     let full_inf_path = abs_path.to_str().unwrap();
 
     unsafe {
@@ -121,9 +120,9 @@ fn main() {
                     h_sw_device = invalid_device;
                     println!("Close device done");
                 }
-                '1' => plug_in(0),
-                '2' => plug_in(1),
-                '3' => plug_in(2),
+                '1' => plug_in(0, 0),
+                '2' => plug_in(1, 0),
+                '3' => plug_in(2, 0),
                 '4' => plug_out(0),
                 '5' => plug_out(1),
                 '6' => plug_out(2),
@@ -133,5 +132,7 @@ fn main() {
         if !full_inf_path.is_null() {
             let _ = CString::from_raw(full_inf_path);
         }
+
+        idd::DeviceClose(h_sw_device);
     }
 }

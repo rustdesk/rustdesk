@@ -168,6 +168,7 @@ class MyIdMenu: Reactor.Component {
                 <li #custom-server>{translate('ID/Relay Server')}</li>
                 <li #whitelist title={translate('whitelist_tip')}>{translate('IP Whitelisting')}</li>
                 <li #socks5-server>{translate('Socks5 Proxy')}</li>
+                {is_win ? <li #install-virtual-display>Install virtual display</li> : ""}
                 <div .separator />
                 <li #stop-service class={service_stopped ? "line-through" : "selected"}><span>{svg_checkmark}</span>{translate("Enable Service")}</li>
                 <DirectServer />
@@ -268,6 +269,8 @@ class MyIdMenu: Reactor.Component {
                 }
                 handler.set_socks(proxy, username, password);
             }, 240);
+        } else if (me.id == "install-virtual-display") {
+            handler.install_virtual_display();
         } else if (me.id == "stop-service") {
             handler.set_option("stop-service", service_stopped ? "" : "Y");
         } else if (me.id == "about") {

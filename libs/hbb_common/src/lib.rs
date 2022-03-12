@@ -27,13 +27,14 @@ pub use anyhow::{self, bail};
 pub use futures_util;
 pub mod config;
 pub mod fs;
+pub use lazy_static;
+pub use mac_address;
 pub use rand;
 pub use regex;
 pub use sodiumoxide;
 pub use tokio_socks;
 pub use tokio_socks::IntoTargetAddr;
 pub use tokio_socks::TargetAddr;
-pub use mac_address;
 
 #[cfg(feature = "quic")]
 pub type Stream = quic::Connection;

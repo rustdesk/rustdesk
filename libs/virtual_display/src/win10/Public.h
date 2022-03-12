@@ -26,8 +26,12 @@
 #define STATUS_ERROR_MONITOR_INVALID_PARAM (3 << 30) + 53
 #define STATUS_ERROR_MONITOR_OOM           (3 << 30) + 54
 
+#define MONITOR_EDID_MOD_DELL_S2719DGF 0
+#define MONITOR_EDID_MOD_LENOVO_Y27fA  1
+
 typedef struct _CtlPlugIn {
     UINT ConnectorIndex;
+    UINT MonitorEDID;
     GUID ContainerId;
 } CtlPlugIn, *PCtlPlugIn;
 

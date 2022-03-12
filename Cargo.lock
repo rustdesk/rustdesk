@@ -4186,6 +4186,7 @@ name = "virtual_display"
 version = "0.1.0"
 dependencies = [
  "cc",
+ "hbb_common",
  "lazy_static",
  "serde 1.0.136",
  "serde_derive",
