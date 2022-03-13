@@ -32,6 +32,7 @@ use std::{
     io::ErrorKind::WouldBlock,
     time::{self, Duration, Instant},
 };
+#[cfg(windows)]
 use virtual_display;
 
 const WAIT_BASE: i32 = 17;
@@ -104,7 +105,7 @@ impl VideoFrameController {
                     }
                     Ok(Some((id, instant))) => {
                         if let Some(tm) = instant {
-                            log::trace!("channel recv latency: {}", tm.elapsed().as_secs_f32());
+                            log::trace!("Channel recv latency: {}", tm.elapsed().as_secs_f32());
                         }
                         fetched_conn_ids.insert(id);
 
@@ -150,13 +151,35 @@ impl Drop for VideoService {
     }
 }
 
-pub fn new() -> VideoService {
-    let sp = VideoService(GenericService::new(NAME, true));
-    #[cfg(windows)]
-    if let Err(e) = virtual_display::create_device() {
-        log::error!("create device failed {}", e);
-    }
+impl VideoService {
+    fn new() -> Self {
+        #[cfg(windows)]
+        if let Err(e) = virtual_display::create_device() {
+            log::error!("Create device failed {}", e);
+        }
+        #[cfg(windows)]
+        match Display::all() {
+            Ok(displays) => {
+                if displays.len() == 0 {
+                    log::info!("Detect no displays, try create monitor");
+                    if virtual_display::is_device_created() {
+                        if let Err(e) = virtual_display::plug_in_monitor() {
+                            log::error!("Plug in monitor failed {}", e);
+                        }
+                    }
+                }
+            }
+            Err(e) => {
+                log::error!("Get all displays failed {}", e)
+            }
+        }
 
+        VideoService(GenericService::new(NAME, true))
+    }
+}
+
+pub fn new() -> VideoService {
+    let sp = VideoService::new();
     sp.0.run(run);
     sp
 }
@@ -484,7 +507,7 @@ fn get_current_display() -> ResultType<(usize, usize, Display)> {
         #[cfg(windows)]
         if virtual_display::is_device_created() {
             if let Err(e) = virtual_display::plug_in_monitor() {
-                log::error!("plug in monitor failed {}", e);
+                log::error!("Plug in monitor failed {}", e);
             }
         }
         bail!("No displays");
