@@ -104,7 +104,7 @@ class FileModel extends ChangeNotifier {
       } else {
         _currentRemoteDir = fileDir;
       }
-      notifyListeners();
+      notifyListeners(); // TODO use too early, error occur:setState() or markNeedsBuild() called during build.
     } catch (e) {
       debugPrint("Failed to tryUpdateDir :$fd");
     }
@@ -156,7 +156,8 @@ class FileModel extends ChangeNotifier {
     }
     items.items.forEach((entry) {
       _jobId++;
-      if (entry.isFile) { // TODO dir
+      if (entry.isFile) {
+        // TODO dir
         final msg = {
           "id": _jobId.toString(),
           "path": entry.path,
@@ -170,9 +171,7 @@ class FileModel extends ChangeNotifier {
     });
   }
 
-  createDir(String path){
-
-  }
+  createDir(String path) {}
 
   changeSortStyle(SortBy sort) {
     _sortStyle = sort;

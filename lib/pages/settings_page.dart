@@ -69,7 +69,7 @@ void showServer() {
   var id = '';
   var relay = '';
   var key = '';
-  DialogManager.show((context, setState) {
+  DialogManager.show((setState, close) {
     return CustomAlertDialog(
         title: Text(translate('ID Server')),
         content: Form(
@@ -112,7 +112,7 @@ void showServer() {
           TextButton(
             style: flatButtonStyle,
             onPressed: () {
-              DialogManager.reset();
+              close();
             },
             child: Text(translate('Cancel')),
           ),
@@ -130,7 +130,7 @@ void showServer() {
                       'option', '{"name": "relay-server", "value": "$relay"}');
                 if (key != key0)
                   FFI.setByName('option', '{"name": "key", "value": "$key"}');
-                DialogManager.reset();
+                close();
               }
             },
             child: Text(translate('OK')),

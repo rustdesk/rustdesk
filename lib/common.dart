@@ -39,8 +39,13 @@ void showLoading(String text) {
   EasyLoading.show(status: text, maskType: EasyLoadingMaskType.black);
 }
 
+backToHome() {
+  // use [popUntil()] to make sure pop action can't close the current MaterialApp context
+  Navigator.popUntil(globalKey.currentContext!, ModalRoute.withName("/"));
+}
+
 typedef DialogBuilder = CustomAlertDialog Function(
-    BuildContext context, StateSetter setState);
+    StateSetter setState, VoidCallback close);
 
 class DialogManager {
   static BuildContext? _dialogContext;
@@ -70,7 +75,8 @@ class DialogManager {
         barrierDismissible: barrierDismissible,
         builder: (context) {
           DialogManager.register(context);
-          return StatefulBuilder(builder: builder);
+          return StatefulBuilder(
+              builder: (_, setState) => builder(setState, DialogManager.reset));
         });
     DialogManager.drop();
     return res;
@@ -121,12 +127,11 @@ void msgBox(String type, String title, String text, {bool? hasCancel}) {
 
   EasyLoading.dismiss();
   DialogManager.reset();
-  if (globalKey.currentContext == null) return;
   final buttons = [
     Expanded(child: Container()),
     wrap(Translator.call('OK'), () {
       EasyLoading.dismiss();
-      Navigator.pop(globalKey.currentContext!);
+      backToHome();
     })
   ];
   if (hasCancel == null) {

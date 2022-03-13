@@ -39,9 +39,6 @@ class App extends StatelessWidget {
           visualDensity: VisualDensity.adaptivePlatformDensity,
         ),
         home: HomePage(),
-        routes: {
-          "server_page": (context) => ServerPage(),
-        },
         navigatorObservers: [
           FirebaseAnalyticsObserver(analytics: analytics),
         ],

@@ -9,7 +9,7 @@ void clientClose() {
 void enterPasswordDialog(String id) {
   final controller = TextEditingController();
   var remember = FFI.getByName('remember', id) == 'true';
-  DialogManager.show((context, setState) {
+  DialogManager.show((setState, close) {
     return CustomAlertDialog(
       title: Text(translate('Password Required')),
       content: Column(mainAxisSize: MainAxisSize.min, children: [
@@ -34,8 +34,8 @@ void enterPasswordDialog(String id) {
         TextButton(
           style: flatButtonStyle,
           onPressed: () {
-            DialogManager.reset();
-            Navigator.pop(globalKey.currentContext!);
+            close();
+            backToHome();
           },
           child: Text(translate('Cancel')),
         ),
@@ -45,7 +45,7 @@ void enterPasswordDialog(String id) {
             var text = controller.text.trim();
             if (text == '') return;
             FFI.login(text, remember);
-            DialogManager.reset();
+            close();
             showLoading(translate('Logging in...'));
           },
           child: Text(translate('OK')),
@@ -56,15 +56,15 @@ void enterPasswordDialog(String id) {
 }
 
 void wrongPasswordDialog(String id) {
-  DialogManager.show((context, setState) => CustomAlertDialog(
+  DialogManager.show((setState, close) => CustomAlertDialog(
           title: Text(translate('Wrong Password')),
           content: Text(translate('Do you want to enter again?')),
           actions: [
             TextButton(
               style: flatButtonStyle,
               onPressed: () {
-                DialogManager.reset();
-                Navigator.pop(globalKey.currentContext!);
+                close();
+                backToHome();
               },
               child: Text(translate('Cancel')),
             ),

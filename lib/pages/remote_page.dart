@@ -310,7 +310,7 @@ class _RemotePageState extends State<RemotePage> {
                     IconButton(
                       color: Colors.white,
                       icon: Icon(Icons.message),
-                      onPressed:toggleChatOverlay,
+                      onPressed: toggleChatOverlay,
                     ),
                     IconButton(
                       color: Colors.white,
@@ -778,8 +778,6 @@ class ImagePainter extends CustomPainter {
   }
 }
 
-
-
 CheckboxListTile getToggle(
     void Function(void Function()) setState, option, name) {
   return CheckboxListTile(
@@ -848,7 +846,7 @@ void showOptions() {
   }
   final perms = FFI.ffiModel.permissions;
 
-  DialogManager.show((context, setState) {
+  DialogManager.show((setState, close) {
     final more = <Widget>[];
     if (perms['audio'] != false) {
       more.add(getToggle(setState, 'disable-audio', 'Mute'));
@@ -879,34 +877,31 @@ void showOptions() {
       });
     };
     return CustomAlertDialog(
-        title: SizedBox.shrink(),
-        content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: displays +
-                (isDesktop
-                    ? <Widget>[
-                  getRadio(
-                      'Original', 'original', viewStyle, setViewStyle),
-                  getRadio('Shrink', 'shrink', viewStyle, setViewStyle),
-                  getRadio('Stretch', 'stretch', viewStyle, setViewStyle),
-                  Divider(color: MyTheme.border),
-                ]
-                    : []) +
-                <Widget>[
-                  getRadio('Good image quality', 'best', quality, setQuality),
-                  getRadio('Balanced', 'balanced', quality, setQuality),
-                  getRadio(
-                      'Optimize reaction time', 'low', quality, setQuality),
-                  Divider(color: MyTheme.border),
-                  getToggle(
-                      setState, 'show-remote-cursor', 'Show remote cursor'),
-                ] +
-                more),
-        actions: [],
-        onWillPop: () async => true,
-        contentPadding: 0,
+      title: SizedBox.shrink(),
+      content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: displays +
+              (isDesktop
+                  ? <Widget>[
+                      getRadio('Original', 'original', viewStyle, setViewStyle),
+                      getRadio('Shrink', 'shrink', viewStyle, setViewStyle),
+                      getRadio('Stretch', 'stretch', viewStyle, setViewStyle),
+                      Divider(color: MyTheme.border),
+                    ]
+                  : []) +
+              <Widget>[
+                getRadio('Good image quality', 'best', quality, setQuality),
+                getRadio('Balanced', 'balanced', quality, setQuality),
+                getRadio('Optimize reaction time', 'low', quality, setQuality),
+                Divider(color: MyTheme.border),
+                getToggle(setState, 'show-remote-cursor', 'Show remote cursor'),
+              ] +
+              more),
+      actions: [],
+      onWillPop: () async => true,
+      contentPadding: 0,
     );
-  },barrierDismissible: true);
+  }, barrierDismissible: true);
 }
 
 void showSetOSPassword(bool login) {
@@ -914,7 +909,7 @@ void showSetOSPassword(bool login) {
   var password = FFI.getByName('peer_option', "os-password");
   var autoLogin = FFI.getByName('peer_option', "auto-login") != "";
   controller.text = password;
-  DialogManager.show((context, setState) {
+  DialogManager.show((setState, close) {
     return CustomAlertDialog(
         title: Text(translate('OS Password')),
         content: Column(mainAxisSize: MainAxisSize.min, children: [
@@ -937,7 +932,7 @@ void showSetOSPassword(bool login) {
           TextButton(
             style: flatButtonStyle,
             onPressed: () {
-              Navigator.pop(context);
+              close();
             },
             child: Text(translate('Cancel')),
           ),
@@ -952,7 +947,7 @@ void showSetOSPassword(bool login) {
               if (text != "" && login) {
                 FFI.setByName('input_os_password', text);
               }
-              Navigator.pop(context);
+              close();
             },
             child: Text(translate('OK')),
           ),
