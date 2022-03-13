@@ -2,14 +2,9 @@
 pub mod win10;
 
 use hbb_common::{bail, lazy_static, ResultType};
-use std::{
-    ffi::{CStr, CString},
-    path::Path,
-    sync::Mutex,
-};
+use std::{ffi::CString, path::Path, sync::Mutex};
 
 lazy_static::lazy_static! {
-    #[cfg(windows)]
     static ref H_SW_DEVICE: Mutex<u64> = Mutex::new(0);
 }
 
@@ -24,7 +19,7 @@ pub fn download_driver() -> ResultType<()> {
     Ok(())
 }
 
-pub fn install_update_driver(reboot_required: &mut bool) -> ResultType<()> {
+pub fn install_update_driver(_reboot_required: &mut bool) -> ResultType<()> {
     #[cfg(windows)]
     let install_path = win10::DRIVER_INSTALL_PATH;
     #[cfg(not(windows))]
@@ -35,28 +30,28 @@ pub fn install_update_driver(reboot_required: &mut bool) -> ResultType<()> {
         bail!("{} not exists", install_path)
     }
 
-    let full_install_path = match abs_path.to_str() {
+    let _full_install_path = match abs_path.to_str() {
         Some(p) => CString::new(p)?.into_raw(),
         None => bail!("{} not exists", install_path),
     };
 
+    #[cfg(windows)]
     unsafe {
-        #[cfg(windows)]
         {
             let mut reboot_required_tmp = win10::idd::FALSE;
-            if win10::idd::InstallUpdate(full_install_path, &mut reboot_required_tmp)
+            if win10::idd::InstallUpdate(_full_install_path, &mut reboot_required_tmp)
                 == win10::idd::FALSE
             {
-                bail!("{}", CStr::from_ptr(win10::idd::GetLastMsg()).to_str()?);
+                bail!("{}", win10::get_last_msg()?);
             }
-            *reboot_required = reboot_required_tmp == win10::idd::TRUE;
+            *_reboot_required = reboot_required_tmp == win10::idd::TRUE;
         }
     }
 
     Ok(())
 }
 
-pub fn uninstall_driver(reboot_required: &mut bool) -> ResultType<()> {
+pub fn uninstall_driver(_reboot_required: &mut bool) -> ResultType<()> {
     #[cfg(windows)]
     let install_path = win10::DRIVER_INSTALL_PATH;
     #[cfg(not(windows))]
@@ -67,21 +62,21 @@ pub fn uninstall_driver(reboot_required: &mut bool) -> ResultType<()> {
         bail!("{} not exists", install_path)
     }
 
-    let full_install_path = match abs_path.to_str() {
+    let _full_install_path = match abs_path.to_str() {
         Some(p) => CString::new(p)?.into_raw(),
         None => bail!("{} not exists", install_path),
     };
 
+    #[cfg(windows)]
     unsafe {
-        #[cfg(windows)]
         {
             let mut reboot_required_tmp = win10::idd::FALSE;
-            if win10::idd::Uninstall(full_install_path, &mut reboot_required_tmp)
+            if win10::idd::Uninstall(_full_install_path, &mut reboot_required_tmp)
                 == win10::idd::FALSE
             {
-                bail!("{}", CStr::from_ptr(win10::idd::GetLastMsg()).to_str()?);
+                bail!("{}", win10::get_last_msg()?);
             }
-            *reboot_required = reboot_required_tmp == win10::idd::TRUE;
+            *_reboot_required = reboot_required_tmp == win10::idd::TRUE;
         }
     }
 
@@ -103,7 +98,7 @@ pub fn create_device() -> ResultType<()> {
     unsafe {
         let mut h_sw_device = *H_SW_DEVICE.lock().unwrap() as win10::idd::HSWDEVICE;
         if win10::idd::DeviceCreate(&mut h_sw_device) == win10::idd::FALSE {
-            bail!("{}", CStr::from_ptr(win10::idd::GetLastMsg()).to_str()?);
+            bail!("{}", win10::get_last_msg()?);
         } else {
             *H_SW_DEVICE.lock().unwrap() = h_sw_device as u64;
             Ok(())
@@ -123,7 +118,7 @@ pub fn close_device() {
 pub fn plug_in_monitor() -> ResultType<()> {
     unsafe {
         if win10::idd::MonitorPlugIn(0, 0, 30) == win10::idd::FALSE {
-            bail!("{}", CStr::from_ptr(win10::idd::GetLastMsg()).to_str()?);
+            bail!("{}", win10::get_last_msg()?);
         }
         Ok(())
     }
@@ -133,7 +128,7 @@ pub fn plug_in_monitor() -> ResultType<()> {
 pub fn plug_out_monitor() -> ResultType<()> {
     unsafe {
         if win10::idd::MonitorPlugOut(0) == win10::idd::FALSE {
-            bail!("{}", CStr::from_ptr(win10::idd::GetLastMsg()).to_str()?);
+            bail!("{}", win10::get_last_msg()?);
         }
         Ok(())
     }
