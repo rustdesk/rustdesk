@@ -97,6 +97,9 @@ pub fn is_device_created() -> bool {
 
 #[cfg(windows)]
 pub fn create_device() -> ResultType<()> {
+    if is_device_created() {
+        return Ok(());
+    }
     unsafe {
         let mut h_sw_device = *H_SW_DEVICE.lock().unwrap() as win10::idd::HSWDEVICE;
         if win10::idd::DeviceCreate(&mut h_sw_device) == win10::idd::FALSE {
