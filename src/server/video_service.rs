@@ -122,9 +122,42 @@ impl VideoFrameController {
     }
 }
 
-pub fn new() -> GenericService {
-    let sp = GenericService::new(NAME, true);
-    sp.run(run);
+#[derive(Clone)]
+pub struct VideoService(GenericService);
+
+impl Service for VideoService {
+    fn name(&self) -> &'static str {
+        self.0.name()
+    }
+    fn on_subscribe(&self, sub: ConnInner) {
+        self.0.on_subscribe(sub)
+    }
+    fn on_unsubscribe(&self, id: i32) {
+        self.0.on_unsubscribe(id)
+    }
+    fn is_subed(&self, id: i32) -> bool {
+        self.0.is_subed(id)
+    }
+    fn join(&self) {
+        self.0.join()
+    }
+}
+
+impl Drop for VideoService {
+    fn drop(&mut self) {
+        #[cfg(windows)]
+        virtual_display::close_device()
+    }
+}
+
+pub fn new() -> VideoService {
+    let sp = VideoService(GenericService::new(NAME, true));
+    #[cfg(windows)]
+    if let Err(e) = virtual_display::create_device() {
+        log::error!("create device failed {}", e);
+    }
+
+    sp.0.run(run);
     sp
 }
 
@@ -448,13 +481,15 @@ fn get_current_display() -> ResultType<(usize, usize, Display)> {
     let mut displays = Display::all()?;
     if displays.len() == 0 {
         // try plugin monitor
+        #[cfg(windows)]
         if virtual_display::is_device_created() {
             if let Err(e) = virtual_display::plug_in_monitor() {
-                log::error!("plug in monitor failed {}", e)
+                log::error!("plug in monitor failed {}", e);
             }
         }
         bail!("No displays");
     }
+
     let n = displays.len();
     if current >= n {
         current = 0;
