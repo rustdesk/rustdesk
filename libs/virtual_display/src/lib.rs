@@ -6,6 +6,7 @@ use std::{ffi::CString, path::Path, sync::Mutex};
 
 lazy_static::lazy_static! {
     static ref H_SW_DEVICE: Mutex<u64> = Mutex::new(0);
+    static ref MONITOR_PLUGIN: Mutex<Vec<u32>> = Mutex::new(Vec::new());
 }
 
 pub fn download_driver() -> ResultType<()> {
@@ -90,46 +91,88 @@ pub fn is_device_created() -> bool {
     return false;
 }
 
-#[cfg(windows)]
 pub fn create_device() -> ResultType<()> {
     if is_device_created() {
         return Ok(());
     }
+    #[cfg(windows)]
     unsafe {
         let mut h_sw_device = *H_SW_DEVICE.lock().unwrap() as win10::idd::HSWDEVICE;
         if win10::idd::DeviceCreate(&mut h_sw_device) == win10::idd::FALSE {
             bail!("{}", win10::get_last_msg()?);
         } else {
             *H_SW_DEVICE.lock().unwrap() = h_sw_device as u64;
-            Ok(())
         }
     }
+    Ok(())
 }
 
-#[cfg(windows)]
 pub fn close_device() {
+    #[cfg(windows)]
     unsafe {
         win10::idd::DeviceClose(*H_SW_DEVICE.lock().unwrap() as win10::idd::HSWDEVICE);
         *H_SW_DEVICE.lock().unwrap() = 0;
     }
 }
 
-#[cfg(windows)]
 pub fn plug_in_monitor() -> ResultType<()> {
+    #[cfg(windows)]
     unsafe {
-        if win10::idd::MonitorPlugIn(0, 0, 30) == win10::idd::FALSE {
+        let monitor_index = 0 as u32;
+        let plug_in_monitors = &mut *MONITOR_PLUGIN.lock().unwrap();
+        for i in 0..plug_in_monitors.len() {
+            if let Some(d) = plug_in_monitors.get(i) {
+                if *d == monitor_index {
+                    return Ok(());
+                }
+            };
+        }
+        if win10::idd::MonitorPlugIn(monitor_index, 0, 30) == win10::idd::FALSE {
             bail!("{}", win10::get_last_msg()?);
         }
-        Ok(())
+        (*plug_in_monitors).push(monitor_index);
     }
+    Ok(())
 }
 
-#[cfg(windows)]
 pub fn plug_out_monitor() -> ResultType<()> {
+    #[cfg(windows)]
     unsafe {
-        if win10::idd::MonitorPlugOut(0) == win10::idd::FALSE {
+        let monitor_index = 0 as u32;
+        if win10::idd::MonitorPlugOut(monitor_index) == win10::idd::FALSE {
             bail!("{}", win10::get_last_msg()?);
         }
-        Ok(())
+        let plug_in_monitors = &mut *MONITOR_PLUGIN.lock().unwrap();
+        for i in 0..plug_in_monitors.len() {
+            if let Some(d) = plug_in_monitors.get(i) {
+                if *d == monitor_index {
+                    plug_in_monitors.remove(i);
+                    break;
+                }
+            };
+        }
     }
+    Ok(())
+}
+
+pub fn update_monitor_modes() -> ResultType<()> {
+    #[cfg(windows)]
+    unsafe {
+        let monitor_index = 0 as u32;
+        let mut modes = vec![win10::idd::MonitorMode {
+            width: 1920,
+            height: 1080,
+            sync: 60,
+        }];
+        if win10::idd::FALSE
+            == win10::idd::MonitorModesUpdate(
+                monitor_index as win10::idd::UINT,
+                modes.len() as win10::idd::UINT,
+                modes.as_mut_ptr(),
+            )
+        {
+            bail!("{}", win10::get_last_msg()?);
+        }
+    }
+    Ok(())
 }

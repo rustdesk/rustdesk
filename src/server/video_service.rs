@@ -32,7 +32,6 @@ use std::{
     io::ErrorKind::WouldBlock,
     time::{self, Duration, Instant},
 };
-#[cfg(windows)]
 use virtual_display;
 
 const WAIT_BASE: i32 = 17;
@@ -123,64 +122,9 @@ impl VideoFrameController {
     }
 }
 
-#[derive(Clone)]
-pub struct VideoService(GenericService);
-
-impl Service for VideoService {
-    fn name(&self) -> &'static str {
-        self.0.name()
-    }
-    fn on_subscribe(&self, sub: ConnInner) {
-        self.0.on_subscribe(sub)
-    }
-    fn on_unsubscribe(&self, id: i32) {
-        self.0.on_unsubscribe(id)
-    }
-    fn is_subed(&self, id: i32) -> bool {
-        self.0.is_subed(id)
-    }
-    fn join(&self) {
-        self.0.join()
-    }
-}
-
-impl Drop for VideoService {
-    fn drop(&mut self) {
-        #[cfg(windows)]
-        virtual_display::close_device()
-    }
-}
-
-impl VideoService {
-    fn new() -> Self {
-        #[cfg(windows)]
-        if let Err(e) = virtual_display::create_device() {
-            log::error!("Create device failed {}", e);
-        }
-        #[cfg(windows)]
-        match Display::all() {
-            Ok(displays) => {
-                if displays.len() == 0 {
-                    log::info!("Detect no displays, try create monitor");
-                    if virtual_display::is_device_created() {
-                        if let Err(e) = virtual_display::plug_in_monitor() {
-                            log::error!("Plug in monitor failed {}", e);
-                        }
-                    }
-                }
-            }
-            Err(e) => {
-                log::error!("Get all displays failed {}", e)
-            }
-        }
-
-        VideoService(GenericService::new(NAME, true))
-    }
-}
-
-pub fn new() -> VideoService {
-    let sp = VideoService::new();
-    sp.0.run(run);
+pub fn new() -> GenericService {
+    let sp = GenericService::new(NAME, true);
+    sp.run(run);
     sp
 }
 
@@ -190,7 +134,7 @@ fn check_display_changed(
     last_width: usize,
     last_hegiht: usize,
 ) -> bool {
-    let displays = match Display::all() {
+    let displays = match try_get_displays() {
         Ok(d) => d,
         _ => return false,
     };
@@ -355,6 +299,11 @@ fn run(sp: GenericService) -> ResultType<()> {
             std::thread::sleep(spf - elapsed);
         }
     }
+
+    // Close device, if there are no connections
+    if virtual_display::is_device_created() {
+        virtual_display::close_device()
+    }
     Ok(())
 }
 
@@ -436,7 +385,7 @@ fn handle_one_frame(
 }
 
 fn get_display_num() -> usize {
-    if let Ok(d) = Display::all() {
+    if let Ok(d) = try_get_displays() {
         d.len()
     } else {
         0
@@ -450,7 +399,7 @@ pub fn get_displays() -> ResultType<(usize, Vec<DisplayInfo>)> {
     }
     let mut displays = Vec::new();
     let mut primary = 0;
-    for (i, d) in Display::all()?.iter().enumerate() {
+    for (i, d) in try_get_displays()?.iter().enumerate() {
         if d.is_primary() {
             primary = i;
         }
@@ -485,7 +434,7 @@ pub fn refresh() {
 }
 
 fn get_primary() -> usize {
-    if let Ok(all) = Display::all() {
+    if let Ok(all) = try_get_displays() {
         for (i, d) in all.iter().enumerate() {
             if d.is_primary() {
                 return i;
@@ -499,17 +448,38 @@ pub fn switch_to_primary() {
     switch_display(get_primary() as _);
 }
 
-fn get_current_display() -> ResultType<(usize, usize, Display)> {
-    let mut current = *CURRENT_DISPLAY.lock().unwrap() as usize;
+fn try_get_displays() -> ResultType<Vec<Display>> {
     let mut displays = Display::all()?;
     if displays.len() == 0 {
-        // try plugin monitor
-        #[cfg(windows)]
+        // Try plugin monitor
+        if !virtual_display::is_device_created() {
+            if let Err(e) = virtual_display::create_device() {
+                log::error!("Create device failed {}", e);
+            }
+        }
         if virtual_display::is_device_created() {
             if let Err(e) = virtual_display::plug_in_monitor() {
                 log::error!("Plug in monitor failed {}", e);
+            } else {
+                if let Err(e) = virtual_display::update_monitor_modes() {
+                    log::error!("Update monitor modes failed {}", e);
+                }
             }
         }
+        displays = Display::all()?;
+    } else if displays.len() > 1 {
+        // If more than one displays exists, close RustDeskVirtualDisplay
+        if virtual_display::is_device_created() {
+            virtual_display::close_device()
+        }
+    }
+    Ok(displays)
+}
+
+fn get_current_display() -> ResultType<(usize, usize, Display)> {
+    let mut current = *CURRENT_DISPLAY.lock().unwrap() as usize;
+    let mut displays = try_get_displays()?;
+    if displays.len() == 0 {
         bail!("No displays");
     }
 
