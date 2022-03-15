@@ -100,7 +100,7 @@ def loop():
             if len(msg) < 2:
                 continue
             if msg[1] == "\0":
-                keyboard = Controller()
+                keyboard = MyController()
                 print("Keyboard reset")
                 continue
             if len(msg) == 2:
