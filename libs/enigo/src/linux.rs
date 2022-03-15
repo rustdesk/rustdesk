@@ -505,7 +505,9 @@ fn start_pynput_service(rx: mpsc::Receiver<(PyMsg, bool)>) {
         } else {
             let mut status = Ok(true);
             for i in 0..100 {
-                log::info!("#{} try to start pynput server", i);
+                if i % 10 == 0 {
+                    log::info!("#{} try to start pynput server", i);
+                }
                 status = std::process::Command::new("sudo")
                     .args(vec![
                         &format!("XDG_RUNTIME_DIR=/run/user/{}", userid) as &str,
@@ -536,12 +538,14 @@ fn start_pynput_service(rx: mpsc::Receiver<(PyMsg, bool)>) {
         }
     });
     std::thread::spawn(move || {
-        for _ in 0..300 {
+        for i in 0..300 {
             std::thread::sleep(std::time::Duration::from_millis(100));
             let mut conn = match std::os::unix::net::UnixStream::connect(IPC_FILE) {
                 Ok(conn) => conn,
                 Err(err) => {
-                    log::error!("Failed to connect to {}: {}", IPC_FILE, err);
+                    if i % 15 == 0 {
+                        log::warn!("Failed to connect to {}: {}", IPC_FILE, err);
+                    }
                     continue;
                 }
             };
