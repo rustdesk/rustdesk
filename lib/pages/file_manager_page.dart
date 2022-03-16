@@ -32,12 +32,8 @@ class _FileManagerPageState extends State<FileManagerPage> {
     showLoading(translate('Connecting...'));
     FFI.connect(widget.id, isFileTransfer: true);
 
-    final res = FFI.getByName("read_dir", FFI.getByName("get_home_dir"));
-    debugPrint("read_dir local :$res");
-    model.tryUpdateDir(res, true);
-
     _interval = Timer.periodic(Duration(milliseconds: 30),
-            (timer) => FFI.ffiModel.update(widget.id, context, handleMsgBox));
+        (timer) => FFI.ffiModel.update(widget.id, context, handleMsgBox));
   }
 
   @override
@@ -98,45 +94,49 @@ class _FileManagerPageState extends State<FileManagerPage> {
       headTools(),
       Expanded(
           child: ListView.builder(
-            itemCount: entries.length + 1,
-            itemBuilder: (context, index) {
-              if (index >= entries.length) {
-                // 添加尾部信息 文件统计信息等
-                // 添加快速返回上部
-                // 使用 bottomSheet 提示以选择的文件数量 点击后展开查看更多
-                return listTail();
-              }
-              var selected = false;
-              if (model.selectMode) {
-                selected = _selectedItems.contains(entries[index]);
-              }
-              var sizeStr = "";
-              if(entries[index].isFile){
-                final size = entries[index].size;
-                if(size< 1024){
-                  sizeStr += size.toString() + "B";
-                }else if(size< 1024 * 1024){
-                  sizeStr += (size/1024).toStringAsFixed(2) + "kB";
-                }else if(size < 1024 * 1024 * 1024){
-                  sizeStr += (size/1024/1024).toStringAsFixed(2) + "MB";
-                }else if(size < 1024 * 1024 * 1024 * 1024){
-                  sizeStr += (size/1024/1024/1024).toStringAsFixed(2) + "GB";
-                }
-              }
-              return Card(
-                child: ListTile(
-                  leading: Icon(
-                      entries[index].isFile ? Icons.feed_outlined : Icons
-                          .folder,
-                      size: 40),
-
-                  title: Text(entries[index].name),
-                  selected: selected,
-                  subtitle: Text(
-                      entries[index].lastModified().toString().replaceAll(
-                          ".000", "") + "   " + sizeStr,style: TextStyle(fontSize: 12,color: MyTheme.darkGray),),
-                  trailing: needShowCheckBox()
-                      ? Checkbox(
+        itemCount: entries.length + 1,
+        itemBuilder: (context, index) {
+          if (index >= entries.length) {
+            // 添加尾部信息 文件统计信息等
+            // 添加快速返回上部
+            // 使用 bottomSheet 提示以选择的文件数量 点击后展开查看更多
+            return listTail();
+          }
+          var selected = false;
+          if (model.selectMode) {
+            selected = _selectedItems.contains(entries[index]);
+          }
+          var sizeStr = "";
+          if (entries[index].isFile) {
+            final size = entries[index].size;
+            if (size < 1024) {
+              sizeStr += size.toString() + "B";
+            } else if (size < 1024 * 1024) {
+              sizeStr += (size / 1024).toStringAsFixed(2) + "kB";
+            } else if (size < 1024 * 1024 * 1024) {
+              sizeStr += (size / 1024 / 1024).toStringAsFixed(2) + "MB";
+            } else if (size < 1024 * 1024 * 1024 * 1024) {
+              sizeStr += (size / 1024 / 1024 / 1024).toStringAsFixed(2) + "GB";
+            }
+          }
+          return Card(
+            child: ListTile(
+              leading: Icon(
+                  entries[index].isFile ? Icons.feed_outlined : Icons.folder,
+                  size: 40),
+              title: Text(entries[index].name),
+              selected: selected,
+              subtitle: Text(
+                entries[index]
+                        .lastModified()
+                        .toString()
+                        .replaceAll(".000", "") +
+                    "   " +
+                    sizeStr,
+                style: TextStyle(fontSize: 12, color: MyTheme.darkGray),
+              ),
+              trailing: needShowCheckBox()
+                  ? Checkbox(
                       value: selected,
                       onChanged: (v) {
                         if (v == null) return;
@@ -147,37 +147,57 @@ class _FileManagerPageState extends State<FileManagerPage> {
                         }
                         setState(() {});
                       })
-                      : null,
-                  onTap: () {
-                    if (model.selectMode &&
-                        !_selectedItems.isOtherPage(isLocal)) {
-                      if (selected) {
-                        _selectedItems.remove(entries[index]);
-                      } else {
-                        _selectedItems.add(isLocal, entries[index]);
-                      }
-                      setState(() {});
-                      return;
-                    }
-                    if (entries[index].isDirectory) {
-                      model.openDirectory(entries[index].path);
-                      breadCrumbScrollToEnd();
-                    } else {
-                      // Perform file-related tasks.
-                    }
-                  },
-                  onLongPress: () {
-                    _selectedItems.clear();
-                    model.toggleSelectMode();
-                    if (model.selectMode) {
-                      _selectedItems.add(isLocal, entries[index]);
-                    }
-                    setState(() {});
-                  },
-                ),
-              );
-            },
-          ))
+                  : PopupMenuButton<String>(
+                      icon: Icon(Icons.more_vert),
+                      itemBuilder: (context) {
+                        return [
+                          PopupMenuItem(
+                            child: Text("删除"),
+                            value: "delete",
+                          ),
+                          PopupMenuItem(
+                            child: Text("详细信息"),
+                            value: "delete",
+                            enabled: false,
+                          )
+                        ];
+                      },
+                      onSelected: (v) {
+                        if (v == "delete") {
+                          final items = SelectedItems();
+                          items.add(isLocal, entries[index]);
+                          model.removeAction(items);
+                        }
+                      }),
+              onTap: () {
+                if (model.selectMode && !_selectedItems.isOtherPage(isLocal)) {
+                  if (selected) {
+                    _selectedItems.remove(entries[index]);
+                  } else {
+                    _selectedItems.add(isLocal, entries[index]);
+                  }
+                  setState(() {});
+                  return;
+                }
+                if (entries[index].isDirectory) {
+                  model.openDirectory(entries[index].path);
+                  breadCrumbScrollToEnd();
+                } else {
+                  // Perform file-related tasks.
+                }
+              },
+              onLongPress: () {
+                _selectedItems.clear();
+                model.toggleSelectMode();
+                if (model.selectMode) {
+                  _selectedItems.add(isLocal, entries[index]);
+                }
+                setState(() {});
+              },
+            ),
+          );
+        },
+      ))
     ]);
   }
 
@@ -223,68 +243,101 @@ class _FileManagerPageState extends State<FileManagerPage> {
     });
   }
 
-  Widget headTools() =>
-      Container(
+  Widget headTools() => Container(
           child: Row(
+        children: [
+          Expanded(
+              child: BreadCrumb(
+            items: getPathBreadCrumbItems(() => debugPrint("pressed home"),
+                (e) => debugPrint("pressed url:$e")),
+            divider: Icon(Icons.chevron_right),
+            overflow: ScrollableOverflow(controller: _breadCrumbScroller),
+          )),
+          Row(
             children: [
-              Expanded(
-                  child: BreadCrumb(
-                    items: getPathBreadCrumbItems(() =>
-                        debugPrint("pressed home"),
-                            (e) => debugPrint("pressed url:$e")),
-                    divider: Icon(Icons.chevron_right),
-                    overflow: ScrollableOverflow(
-                        controller: _breadCrumbScroller),
-                  )),
-              Row(
-                children: [
-                  // IconButton(onPressed: () {}, icon: Icon(Icons.sort)),
-                  PopupMenuButton<SortBy>(
-                      icon: Icon(Icons.sort),
-                      itemBuilder: (context) {
-                        return SortBy.values
-                            .map((e) =>
-                            PopupMenuItem(
+              // IconButton(onPressed: () {}, icon: Icon(Icons.sort)),
+              PopupMenuButton<SortBy>(
+                  icon: Icon(Icons.sort),
+                  itemBuilder: (context) {
+                    return SortBy.values
+                        .map((e) => PopupMenuItem(
                               child:
-                              Text(translate(e
-                                  .toString()
-                                  .split(".")
-                                  .last)),
+                                  Text(translate(e.toString().split(".").last)),
                               value: e,
                             ))
-                            .toList();
-                      },
-                      onSelected: model.changeSortStyle),
-                  PopupMenuButton<String>(
-                      icon: Icon(Icons.more_vert),
-                      itemBuilder: (context) {
-                        return [
-                          PopupMenuItem(
-                            child: Row(
-                              children: [Icon(Icons.refresh), Text("刷新")],
-                            ),
-                            value: "refresh",
-                          ),
-                          PopupMenuItem(
-                            child: Row(
-                              children: [Icon(Icons.check), Text("多选")],
-                            ),
-                            value: "select",
-                          )
-                        ];
-                      },
-                      onSelected: (v) {
-                        if (v == "refresh") {
-                          model.refresh();
-                        } else if (v == "select") {
-                          _selectedItems.clear();
-                          model.toggleSelectMode();
-                        }
-                      }),
-                ],
-              )
+                        .toList();
+                  },
+                  onSelected: model.changeSortStyle),
+              PopupMenuButton<String>(
+                  icon: Icon(Icons.more_vert),
+                  itemBuilder: (context) {
+                    return [
+                      PopupMenuItem(
+                        child: Row(
+                          children: [Icon(Icons.refresh), Text("刷新")],
+                        ),
+                        value: "refresh",
+                      ),
+                      PopupMenuItem(
+                        child: Row(
+                          children: [Icon(Icons.check), Text("多选")],
+                        ),
+                        value: "select",
+                      ),
+                      PopupMenuItem(
+                        child: Row(
+                          children: [
+                            Icon(Icons.folder),
+                            Text(translate("Create Folder"))
+                          ],
+                        ),
+                        value: "folder",
+                      )
+                    ];
+                  },
+                  onSelected: (v) {
+                    if (v == "refresh") {
+                      model.refresh();
+                    } else if (v == "select") {
+                      _selectedItems.clear();
+                      model.toggleSelectMode();
+                    } else if (v == "folder") {
+                      final name = TextEditingController();
+                      DialogManager.show((setState, close) => CustomAlertDialog(
+                              title: Text(translate("Create Folder")),
+                              content: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  TextFormField(
+                                    decoration: InputDecoration(
+                                      labelText: translate(
+                                          "Please enter the folder name"),
+                                    ),
+                                    controller: name,
+                                  ),
+                                ],
+                              ),
+                              actions: [
+                                TextButton(
+                                    style: flatButtonStyle,
+                                    onPressed: () {
+                                      if (name.value.text.isNotEmpty) {
+                                        model.createDir(Path.join(model.currentDir.path,name.value.text));
+                                        close();
+                                      }
+                                    },
+                                    child: Text(translate("OK"))),
+                                TextButton(
+                                    style: flatButtonStyle,
+                                    onPressed: () => close(false),
+                                    child: Text(translate("Cancel")))
+                              ]));
+                    }
+                  }),
             ],
-          ));
+          )
+        ],
+      ));
 
   Widget emptyPage() {
     return Column(
@@ -319,7 +372,7 @@ class _FileManagerPageState extends State<FileManagerPage> {
               IconButton(
                 icon: Icon(Icons.delete_forever),
                 onPressed: () {
-                  if(_selectedItems.length>0){
+                  if (_selectedItems.length > 0) {
                     model.removeAction(_selectedItems);
                   }
                 },
@@ -337,7 +390,6 @@ class _FileManagerPageState extends State<FileManagerPage> {
                 icon: Icon(Icons.paste),
                 onPressed: () {
                   model.toggleSelectMode();
-                  // TODO
                   model.sendFiles(_selectedItems);
                 },
               )
@@ -350,21 +402,21 @@ class _FileManagerPageState extends State<FileManagerPage> {
         return BottomSheetBody(
           leading: CircularProgressIndicator(),
           title: "正在发送文件...",
-          text: "速度:  ${(model.jobProgress.speed / 1024).toStringAsFixed(
-              2)} kb/s",
+          text:
+              "速度:  ${(model.jobProgress.speed / 1024).toStringAsFixed(2)} kb/s",
           onCanceled: null,
         );
       case JobState.done:
         return BottomSheetBody(
           leading: Icon(Icons.check),
-          title: "发送成功!",
+          title: "操作成功!",
           text: "",
           onCanceled: () => model.jobReset(),
         );
       case JobState.error:
         return BottomSheetBody(
           leading: Icon(Icons.error),
-          title: "发送错误!",
+          title: "错误!",
           text: "",
           onCanceled: () => model.jobReset(),
         );
@@ -374,35 +426,35 @@ class _FileManagerPageState extends State<FileManagerPage> {
     return null;
   }
 
-  List<BreadCrumbItem> getPathBreadCrumbItems(void Function() onHome,
-      void Function(String) onPressed) {
+  List<BreadCrumbItem> getPathBreadCrumbItems(
+      void Function() onHome, void Function(String) onPressed) {
     final path = model.currentDir.path;
     final list = Path.split(path);
     list.remove('/');
     final breadCrumbList = [
       BreadCrumbItem(
           content: IconButton(
-            icon: Icon(Icons.home_filled),
-            onPressed: onHome,
-          ))
+        icon: Icon(Icons.home_filled),
+        onPressed: onHome,
+      ))
     ];
-    breadCrumbList.addAll(list.map((e) =>
-        BreadCrumbItem(
-            content: TextButton(
-                child: Text(e),
-                style:
+    breadCrumbList.addAll(list.map((e) => BreadCrumbItem(
+        content: TextButton(
+            child: Text(e),
+            style:
                 ButtonStyle(minimumSize: MaterialStateProperty.all(Size(0, 0))),
-                onPressed: () => onPressed(e)))));
+            onPressed: () => onPressed(e)))));
     return breadCrumbList;
   }
 }
 
 class BottomSheetBody extends StatelessWidget {
-  BottomSheetBody({required this.leading,
-    required this.title,
-    required this.text,
-    this.onCanceled,
-    this.actions});
+  BottomSheetBody(
+      {required this.leading,
+      required this.title,
+      required this.text,
+      this.onCanceled,
+      this.actions});
 
   final Widget leading;
   final String title;

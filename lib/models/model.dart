@@ -135,7 +135,8 @@ class FfiModel with ChangeNotifier {
       } else if (name == 'chat') {
         FFI.chatModel.receive(evt['text'] ?? "");
       } else if (name == 'file_dir') {
-        FFI.fileModel.tryUpdateDir(evt['value'] ?? "",false);
+        // FFI.fileModel.fileFetcher.tryCompleteTask(evt['value'],evt['is_local']);
+        FFI.fileModel.receiveFileDir(evt);
       } else if (name == 'job_progress'){
         FFI.fileModel.tryUpdateJobProgress(evt);
       } else if (name == 'job_done'){
@@ -185,29 +186,36 @@ class FfiModel with ChangeNotifier {
 
   void handlePeerInfo(Map<String, dynamic> evt, BuildContext context) {
     EasyLoading.dismiss();
+    DialogManager.reset();
     _pi.version = evt['version'];
     _pi.username = evt['username'];
     _pi.hostname = evt['hostname'];
     _pi.platform = evt['platform'];
     _pi.sasEnabled = evt['sas_enabled'] == "true";
     _pi.currentDisplay = int.parse(evt['current_display']);
-    List<dynamic> displays = json.decode(evt['displays']);
-    _pi.displays = [];
-    for (int i = 0; i < displays.length; ++i) {
-      Map<String, dynamic> d0 = displays[i];
-      var d = Display();
-      d.x = d0['x'].toDouble();
-      d.y = d0['y'].toDouble();
-      d.width = d0['width'];
-      d.height = d0['height'];
-      _pi.displays.add(d);
-    }
-    if (_pi.currentDisplay < _pi.displays.length) {
-      _display = _pi.displays[_pi.currentDisplay];
-    }
-    if (displays.length > 0) {
-      showLoading(translate('Connected, waiting for image...'));
-      _waitForImage = true;
+    _pi.homeDir = evt['home_dir'];
+
+    if(evt['is_file_transfer'] == "true"){
+      FFI.fileModel.onReady();
+    }else{
+      _pi.displays = [];
+      List<dynamic> displays = json.decode(evt['displays']);
+      for (int i = 0; i < displays.length; ++i) {
+        Map<String, dynamic> d0 = displays[i];
+        var d = Display();
+        d.x = d0['x'].toDouble();
+        d.y = d0['y'].toDouble();
+        d.width = d0['width'];
+        d.height = d0['height'];
+        _pi.displays.add(d);
+      }
+      if (_pi.currentDisplay < _pi.displays.length) {
+        _display = _pi.displays[_pi.currentDisplay];
+      }
+      if (displays.length > 0) {
+        showLoading(translate('Connected, waiting for image...'));
+        _waitForImage = true;
+      }
     }
     notifyListeners();
   }
@@ -918,6 +926,7 @@ class PeerInfo {
   String username = "";
   String hostname = "";
   String platform = "";
+  String homeDir = "";
   bool sasEnabled = false;
   int currentDisplay = 0;
   List<Display> displays = [];

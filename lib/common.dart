@@ -45,14 +45,14 @@ backToHome() {
 }
 
 typedef DialogBuilder = CustomAlertDialog Function(
-    StateSetter setState, VoidCallback close);
+    StateSetter setState, Function([dynamic]) close);
 
 class DialogManager {
   static BuildContext? _dialogContext;
 
-  static void reset() {
+  static void reset([result]) {
     if (_dialogContext != null) {
-      Navigator.pop(_dialogContext!);
+      Navigator.pop(_dialogContext!,result);
     }
     _dialogContext = null;
   }
@@ -76,7 +76,7 @@ class DialogManager {
         builder: (context) {
           DialogManager.register(context);
           return StatefulBuilder(
-              builder: (_, setState) => builder(setState, DialogManager.reset));
+              builder: (_, setState) => builder(setState,DialogManager.reset));
         });
     DialogManager.drop();
     return res;
