@@ -19,14 +19,12 @@ enum SortBy { name, type, date, size }
 //   FileLink = 5,
 // }
 
-class RemoveCompleter {}
-
-typedef OnJobStateChange = void Function(JobState state, JobProgress jp);
-
 class FileModel extends ChangeNotifier {
-  // TODO 添加 dispose 退出页面的时候清理数据以及尚未完成的任务和对话框
   var _isLocal = false;
   var _selectMode = false;
+
+  var _localOption = DirectoryOption();
+  var _remoteOption = DirectoryOption();
 
   /// 每一个选择的文件或文件夹占用一个 _jobId，file_num是文件夹中的单独文件id
   /// 如
@@ -58,6 +56,28 @@ class FileModel extends ChangeNotifier {
 
   FileDirectory get currentDir => _isLocal ? currentLocalDir : currentRemoteDir;
 
+  String get currentHome => _isLocal ? _localOption.home : _remoteOption.home;
+
+  String get currentShortPath {
+    if(currentDir.path.startsWith(currentHome)){
+      var path = currentDir.path.replaceFirst(currentHome, "");
+      if(path.length ==0 ) return "";
+      if(path[0] == "/" || path[0] == "\\") {
+        // remove more '/' or '\'
+        path = path.replaceFirst(path[0], "");
+      }
+      return path;
+    }else{
+      return currentDir.path.replaceFirst(currentHome, "");
+    }
+  }
+
+  bool get currentShowHidden =>
+      _isLocal ? _localOption.showHidden : _remoteOption.showHidden;
+
+  bool get currentIsWindows =>
+      _isLocal ? _localOption.isWindows : _remoteOption.isWindows;
+
   final _fileFetcher = FileFetcher();
 
   final _jobResultListener = JobResultListener<Map<String, dynamic>>();
@@ -72,6 +92,16 @@ class FileModel extends ChangeNotifier {
     notifyListeners();
   }
 
+  toggleShowHidden({bool? showHidden, bool? local}) {
+    final isLocal = local ?? _isLocal;
+    if (isLocal) {
+      _localOption.showHidden = showHidden ?? !_localOption.showHidden;
+    } else {
+      _remoteOption.showHidden = showHidden ?? !_remoteOption.showHidden;
+    }
+    refresh();
+  }
+
   tryUpdateJobProgress(Map<String, dynamic> evt) {
     try {
       int id = int.parse(evt['id']);
@@ -79,7 +109,6 @@ class FileModel extends ChangeNotifier {
       _jobProgress.fileNum = int.parse(evt['file_num']);
       _jobProgress.speed = double.parse(evt['speed']);
       _jobProgress.finishedSize = int.parse(evt['finished_size']);
-      debugPrint("_jobProgress update:${_jobProgress.toString()}");
       notifyListeners();
     } catch (e) {
       debugPrint("Failed to tryUpdateJobProgress,evt:${evt.toString()}");
@@ -107,7 +136,7 @@ class FileModel extends ChangeNotifier {
       return;
     }
 
-    // TODO
+    debugPrint("jobError $evt");
     _selectMode = false;
     _jobProgress.clear();
     _jobProgress.state = JobState.error;
@@ -120,19 +149,69 @@ class FileModel extends ChangeNotifier {
   }
 
   onReady() {
-    openDirectory(FFI.getByName("get_home_dir"), isLocal: true);
-    openDirectory(FFI.ffiModel.pi.homeDir, isLocal: false);
+    _localOption = DirectoryOption(
+        home: FFI.getByName("get_home_dir"),
+        showHidden: FFI.getByName("peer_option", "local_show_hidden") != "");
+    _remoteOption = DirectoryOption(
+        home: FFI.ffiModel.pi.homeDir,
+        showHidden: FFI.getByName("peer_option", "remote_show_hidden") != "",
+        isWindows: FFI.ffiModel.pi.platform == "Windows");
+
+    debugPrint("remote platform: ${FFI.ffiModel.pi.platform}");
+
+    final local = FFI.getByName("peer_option", "local_dir");
+    final remote = FFI.getByName("peer_option", "remote_dir");
+    openDirectory(local.isEmpty ? _localOption.home : local, isLocal: true);
+    openDirectory(remote.isEmpty ? _remoteOption.home : remote, isLocal: false);
+    Timer(Duration(seconds: 2), () {
+      if (_currentLocalDir.path.isEmpty) {
+        openDirectory(_localOption.home, isLocal: true);
+      }
+      if (_currentRemoteDir.path.isEmpty) {
+        openDirectory(_remoteOption.home, isLocal: false);
+      }
+    });
+  }
+
+  onClose() {
+    DialogManager.reset();
+    EasyLoading.dismiss();
+
+    // save config
+    Map<String, String> msg = Map();
+
+    msg["name"] = "local_dir";
+    msg["value"] = _currentLocalDir.path;
+    FFI.setByName('peer_option', jsonEncode(msg));
+
+    msg["name"] = "local_show_hidden";
+    msg["value"] = _localOption.showHidden ? "Y" : "";
+    FFI.setByName('peer_option', jsonEncode(msg));
+
+    msg["name"] = "remote_dir";
+    msg["value"] = _currentRemoteDir.path;
+    FFI.setByName('peer_option', jsonEncode(msg));
+
+    msg["name"] = "remote_show_hidden";
+    msg["value"] = _remoteOption.showHidden ? "Y" : "";
+    FFI.setByName('peer_option', jsonEncode(msg));
+    _currentLocalDir.clear();
+    _currentRemoteDir.clear();
   }
 
   refresh() {
-    openDirectory(_isLocal ? _currentLocalDir.path : _currentRemoteDir.path);
+    openDirectory(currentDir.path);
   }
 
   openDirectory(String path, {bool? isLocal}) async {
     isLocal = isLocal ?? _isLocal;
+    final showHidden =
+        isLocal ? _localOption.showHidden : _remoteOption.showHidden;
+    final isWindows =
+        isLocal ? _localOption.isWindows : _remoteOption.isWindows;
     try {
-      final fd = await _fileFetcher.fetchDirectory(path, isLocal);
-      fd.changeSortStyle(_sortStyle);
+      final fd = await _fileFetcher.fetchDirectory(path, isLocal, showHidden);
+      fd.format(isWindows, sort: _sortStyle);
       if (isLocal) {
         _currentLocalDir = fd;
       } else {
@@ -144,9 +223,12 @@ class FileModel extends ChangeNotifier {
     }
   }
 
+  goHome() {
+    openDirectory(currentHome);
+  }
+
   goToParentDirectory() {
-    final fd = _isLocal ? _currentLocalDir : _currentRemoteDir;
-    openDirectory(fd.parent);
+    openDirectory(currentDir.parent);
   }
 
   sendFiles(SelectedItems items) {
@@ -157,13 +239,17 @@ class FileModel extends ChangeNotifier {
     _jobProgress.state = JobState.inProgress;
     final toPath =
         items.isLocal! ? currentRemoteDir.path : currentLocalDir.path;
+    final isWindows =
+        items.isLocal! ? _localOption.isWindows : _remoteOption.isWindows;
+    final showHidden =
+        items.isLocal! ? _localOption.showHidden : _remoteOption.showHidden;
     items.items.forEach((from) {
       _jobId++;
       final msg = {
         "id": _jobId.toString(),
         "path": from.path,
-        "to": Path.join(toPath, from.name),
-        "show_hidden": "false", // TODO showHidden
+        "to": PathUtil.join(toPath, from.name, isWindows),
+        "show_hidden": showHidden.toString(),
         "is_remote": (!(items.isLocal!)).toString() // 指from的位置而不是to的位置
       };
       FFI.setByName("send_files", jsonEncode(msg));
@@ -178,6 +264,8 @@ class FileModel extends ChangeNotifier {
       debugPrint("Failed to removeFile ,wrong path state");
       return;
     }
+    final isWindows =
+        items.isLocal! ? _localOption.isWindows : _remoteOption.isWindows;
     await Future.forEach(items.items, (Entry item) async {
       _jobId++;
       var title = "";
@@ -191,35 +279,33 @@ class FileModel extends ChangeNotifier {
         title = "这不是一个空文件夹";
         showLoading("正在读取...");
         final fd = await _fileFetcher.fetchDirectoryRecursive(
-            _jobId, item.path, items.isLocal!);
+            _jobId, item.path, items.isLocal!, true);
+        fd.format(isWindows);
         EasyLoading.dismiss();
         // 空文件夹
-        if(fd.entries.isEmpty){
-          final confirm = await showRemoveDialog("是否删除空文件夹",item.name,false);
-          if(confirm == true){
+        if (fd.entries.isEmpty) {
+          final confirm = await showRemoveDialog("是否删除空文件夹", item.name, false);
+          if (confirm == true) {
             sendRemoveEmptyDir(item.path, 0, items.isLocal!);
           }
           return;
         }
-
-        debugPrint("removeDirAllIntent res:${fd.id}");
         entries = fd.entries;
       } else {
-        debugPrint("none : ${item.toString()}");
         entries = [];
       }
 
       for (var i = 0; i < entries.length; i++) {
-        final dirShow = item.isDirectory?"是否删除文件夹下的文件?\n":"";
-        final count = entries.length>1?"第 ${i + 1}/${entries.length} 项":"";
+        final dirShow = item.isDirectory ? "是否删除文件夹下的文件?\n" : "";
+        final count =
+            entries.length > 1 ? "第 ${i + 1}/${entries.length} 项" : "";
         content = dirShow + "$count \n${entries[i].path}";
-        final confirm = await showRemoveDialog(title,content,item.isDirectory);
-        debugPrint("已选择:$confirm");
+        final confirm =
+            await showRemoveDialog(title, content, item.isDirectory);
         try {
           if (confirm == true) {
             sendRemoveFile(entries[i].path, i, items.isLocal!);
             final res = await _jobResultListener.start();
-            debugPrint("remove got res ${res.toString()}");
             // handle remove res;
             if (item.isDirectory &&
                 res['file_num'] == (entries.length - 1).toString()) {
@@ -231,7 +317,6 @@ class FileModel extends ChangeNotifier {
               for (var j = i + 1; j < entries.length; j++) {
                 sendRemoveFile(entries[j].path, j, items.isLocal!);
                 final res = await _jobResultListener.start();
-                debugPrint("remove got res ${res.toString()}");
                 if (item.isDirectory &&
                     res['file_num'] == (entries.length - 1).toString()) {
                   sendRemoveEmptyDir(item.path, i, items.isLocal!);
@@ -246,9 +331,10 @@ class FileModel extends ChangeNotifier {
     refresh();
   }
 
-  Future<bool?> showRemoveDialog(String title,String content,bool showCheckbox) async {
-    return await DialogManager.show<bool>(
-            (setState, Function(bool v) close) => CustomAlertDialog(
+  Future<bool?> showRemoveDialog(
+      String title, String content, bool showCheckbox) async {
+    return await DialogManager.show<bool>((setState, Function(bool v) close) =>
+        CustomAlertDialog(
             title: Row(
               children: [
                 Icon(Icons.warning, color: Colors.red),
@@ -262,29 +348,33 @@ class FileModel extends ChangeNotifier {
                 children: [
                   Text(content),
                   SizedBox(height: 5),
-                  Text("此操作不可逆!",style: TextStyle(fontWeight: FontWeight.bold)),
-                  showCheckbox?
-                  CheckboxListTile(
-                    contentPadding: const EdgeInsets.all(0),
-                    dense: true,
-                    controlAffinity: ListTileControlAffinity.leading,
-                    title: Text(
-                      "应用于文件夹下所有文件",
-                    ),
-                    value: removeCheckboxRemember,
-                    onChanged: (v) {
-                      if (v == null) return;
-                      setState(() => removeCheckboxRemember = v);
-                    },
-                  ):SizedBox.shrink()
+                  Text("此操作不可逆!",
+                      style: TextStyle(fontWeight: FontWeight.bold)),
+                  showCheckbox
+                      ? CheckboxListTile(
+                          contentPadding: const EdgeInsets.all(0),
+                          dense: true,
+                          controlAffinity: ListTileControlAffinity.leading,
+                          title: Text(
+                            "应用于文件夹下所有文件",
+                          ),
+                          value: removeCheckboxRemember,
+                          onChanged: (v) {
+                            if (v == null) return;
+                            setState(() => removeCheckboxRemember = v);
+                          },
+                        )
+                      : SizedBox.shrink()
                 ]),
             actions: [
               TextButton(
                   style: flatButtonStyle,
-                  onPressed: () => close(true), child: Text("Yes")),
+                  onPressed: () => close(true),
+                  child: Text("Yes")),
               TextButton(
                   style: flatButtonStyle,
-                  onPressed: () => close(false), child: Text("No"))
+                  onPressed: () => close(false),
+                  child: Text("No"))
             ]));
   }
 
@@ -308,29 +398,22 @@ class FileModel extends ChangeNotifier {
   }
 
   createDir(String path) {
-    _jobId ++;
+    _jobId++;
     final msg = {
       "id": _jobId.toString(),
       "path": path,
       "is_remote": (!isLocal).toString()
     };
-    FFI.setByName("create_dir",jsonEncode(msg));
+    FFI.setByName("create_dir", jsonEncode(msg));
   }
-  
-  cancelJob(int id){
-    
-  }
+
+  cancelJob(int id) {}
 
   changeSortStyle(SortBy sort) {
     _sortStyle = sort;
     _currentLocalDir.changeSortStyle(sort);
     _currentRemoteDir.changeSortStyle(sort);
     notifyListeners();
-  }
-
-  void clear() {
-    _currentLocalDir.clear();
-    _currentRemoteDir.clear();
   }
 }
 
@@ -413,7 +496,6 @@ class FileFetcher {
   }
 
   tryCompleteTask(String? msg, String? isLocalStr) {
-    debugPrint("tryCompleteTask : $msg");
     if (msg == null || isLocalStr == null) return;
     late final isLocal;
     late final tasks;
@@ -444,15 +526,16 @@ class FileFetcher {
     }
   }
 
-  Future<FileDirectory> fetchDirectory(String path, bool isLocal) async {
-    debugPrint("fetch :$path");
+  Future<FileDirectory> fetchDirectory(
+      String path, bool isLocal, bool showHidden) async {
     try {
+      final msg = {"path": path, "show_hidden": showHidden.toString()};
       if (isLocal) {
-        final res = FFI.getByName("read_dir", path);
+        final res = FFI.getByName("read_local_dir_sync", jsonEncode(msg));
         final fd = FileDirectory.fromJson(jsonDecode(res));
         return fd;
       } else {
-        FFI.setByName("read_remote_dir", path);
+        FFI.setByName("read_remote_dir", jsonEncode(msg));
         return registerReadTask(isLocal, path);
       }
     } catch (e) {
@@ -461,12 +544,13 @@ class FileFetcher {
   }
 
   Future<FileDirectory> fetchDirectoryRecursive(
-      int id, String path, bool isLocal) async {
-    debugPrint("fetchDirectoryRecursive id:$id , path:$path");
+      int id, String path, bool isLocal, bool showHidden) async {
+    // TODO test Recursive is show hidden default?
     try {
       final msg = {
         "id": id.toString(),
         "path": path,
+        "show_hidden": showHidden.toString(),
         "is_remote": (!isLocal).toString()
       };
       FFI.setByName("read_dir_recursive", jsonEncode(msg));
@@ -486,26 +570,21 @@ class FileDirectory {
 
   FileDirectory();
 
-  FileDirectory.fromJsonWithSort(Map<String, dynamic> json, SortBy sort) {
-    id = json['id'];
-    path = json['path'];
-    if (json['entries'] != null) {
-      entries = <Entry>[];
-      json['entries'].forEach((v) {
-        entries.add(new Entry.fromJsonWithPath(v, path));
-      });
-      entries = _sortList(entries, sort);
-    }
-  }
-
   FileDirectory.fromJson(Map<String, dynamic> json) {
     id = json['id'];
     path = json['path'];
-    if (json['entries'] != null) {
-      entries = <Entry>[];
-      json['entries'].forEach((v) {
-        entries.add(new Entry.fromJsonWithPath(v, path));
-      });
+    json['entries'].forEach((v) {
+      entries.add(new Entry.fromJson(v));
+    });
+  }
+
+  // generate full path for every entry , init sort style if need.
+  format(bool isWindows, {SortBy? sort}) {
+    entries.forEach((entry) {
+      entry.path = PathUtil.join(path, entry.name, isWindows);
+    });
+    if (sort != null) {
+      changeSortStyle(sort);
     }
   }
 
@@ -529,12 +608,11 @@ class Entry {
 
   Entry();
 
-  Entry.fromJsonWithPath(Map<String, dynamic> json, String parent) {
+  Entry.fromJson(Map<String, dynamic> json) {
     entryType = json['entry_type'];
     modifiedTime = json['modified_time'];
     name = json['name'];
     size = json['size'];
-    path = Path.join(parent, name);
   }
 
   bool get isFile => entryType > 3;
@@ -569,6 +647,30 @@ class _PathStat {
   final DateTime dateTime;
 
   _PathStat(this.path, this.dateTime);
+}
+
+class PathUtil {
+  static final windowsContext = Path.Context(style: Path.Style.windows);
+  static final posixContext = Path.Context(style: Path.Style.posix);
+
+  static String join(String path1, String path2, bool isWindows) {
+    final pathUtil = isWindows ? windowsContext : posixContext;
+    return pathUtil.join(path1, path2);
+  }
+
+  static List<String> split(String path, bool isWindows) {
+    final pathUtil = isWindows ? windowsContext : posixContext;
+    return pathUtil.split(path);
+  }
+}
+
+class DirectoryOption {
+  String home;
+  bool showHidden;
+  bool isWindows;
+
+  DirectoryOption(
+      {this.home = "", this.showHidden = false, this.isWindows = false});
 }
 
 // code from file_manager pkg after edit

@@ -4,7 +4,6 @@ import 'package:flutter_easyloading/flutter_easyloading.dart';
 import 'package:flutter_hbb/models/file_model.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_breadcrumb/flutter_breadcrumb.dart';
-import 'package:path/path.dart' as Path;
 
 import '../common.dart';
 import '../models/model.dart';
@@ -38,7 +37,7 @@ class _FileManagerPageState extends State<FileManagerPage> {
 
   @override
   void dispose() {
-    model.clear();
+    model.onClose();
     _interval?.cancel();
     FFI.close();
     EasyLoading.dismiss();
@@ -97,28 +96,16 @@ class _FileManagerPageState extends State<FileManagerPage> {
         itemCount: entries.length + 1,
         itemBuilder: (context, index) {
           if (index >= entries.length) {
-            // 添加尾部信息 文件统计信息等
-            // 添加快速返回上部
-            // 使用 bottomSheet 提示以选择的文件数量 点击后展开查看更多
             return listTail();
           }
           var selected = false;
           if (model.selectMode) {
             selected = _selectedItems.contains(entries[index]);
           }
-          var sizeStr = "";
-          if (entries[index].isFile) {
-            final size = entries[index].size;
-            if (size < 1024) {
-              sizeStr += size.toString() + "B";
-            } else if (size < 1024 * 1024) {
-              sizeStr += (size / 1024).toStringAsFixed(2) + "kB";
-            } else if (size < 1024 * 1024 * 1024) {
-              sizeStr += (size / 1024 / 1024).toStringAsFixed(2) + "MB";
-            } else if (size < 1024 * 1024 * 1024 * 1024) {
-              sizeStr += (size / 1024 / 1024 / 1024).toStringAsFixed(2) + "GB";
-            }
-          }
+
+          final sizeStr = entries[index].isFile
+              ? readableFileSize(entries[index].size.toDouble())
+              : "";
           return Card(
             child: ListTile(
               leading: Icon(
@@ -248,8 +235,21 @@ class _FileManagerPageState extends State<FileManagerPage> {
         children: [
           Expanded(
               child: BreadCrumb(
-            items: getPathBreadCrumbItems(() => debugPrint("pressed home"),
-                (e) => debugPrint("pressed url:$e")),
+            items: getPathBreadCrumbItems(() => model.goHome(), (list) {
+              var path = "";
+              if (model.currentHome.startsWith(list[0])) {
+                // absolute path
+                for (var item in list) {
+                  path = PathUtil.join(path, item, model.currentIsWindows);
+                }
+              } else {
+                path += model.currentHome;
+                for (var item in list) {
+                  path = PathUtil.join(path, item, model.currentIsWindows);
+                }
+              }
+              model.openDirectory(path);
+            }),
             divider: Icon(Icons.chevron_right),
             overflow: ScrollableOverflow(controller: _breadCrumbScroller),
           )),
@@ -261,8 +261,8 @@ class _FileManagerPageState extends State<FileManagerPage> {
                   itemBuilder: (context) {
                     return SortBy.values
                         .map((e) => PopupMenuItem(
-                              child:
-                                  Text(translate(e.toString().split(".").last)),
+                              child: Text(
+                                  e.toString().split(".").last.toUpperCase()),
                               value: e,
                             ))
                         .toList();
@@ -274,24 +274,45 @@ class _FileManagerPageState extends State<FileManagerPage> {
                     return [
                       PopupMenuItem(
                         child: Row(
-                          children: [Icon(Icons.refresh), Text("刷新")],
+                          children: [
+                            Icon(Icons.refresh),
+                            SizedBox(width: 5),
+                            Text("刷新")
+                          ],
                         ),
                         value: "refresh",
                       ),
                       PopupMenuItem(
                         child: Row(
-                          children: [Icon(Icons.check), Text("多选")],
+                          children: [
+                            Icon(Icons.check),
+                            SizedBox(width: 5),
+                            Text("多选")
+                          ],
                         ),
                         value: "select",
                       ),
                       PopupMenuItem(
                         child: Row(
                           children: [
-                            Icon(Icons.folder),
+                            Icon(Icons.folder_outlined),
+                            SizedBox(width: 5),
                             Text(translate("Create Folder"))
                           ],
                         ),
                         value: "folder",
+                      ),
+                      PopupMenuItem(
+                        child: Row(
+                          children: [
+                            Icon(model.currentShowHidden
+                                ? Icons.check_box_outlined
+                                : Icons.check_box_outline_blank),
+                            SizedBox(width: 5),
+                            Text(translate("Toggle Hidden"))
+                          ],
+                        ),
+                        value: "hidden",
                       )
                     ];
                   },
@@ -322,7 +343,10 @@ class _FileManagerPageState extends State<FileManagerPage> {
                                     style: flatButtonStyle,
                                     onPressed: () {
                                       if (name.value.text.isNotEmpty) {
-                                        model.createDir(Path.join(model.currentDir.path,name.value.text));
+                                        model.createDir(PathUtil.join(
+                                            model.currentDir.path,
+                                            name.value.text,
+                                            model.currentIsWindows));
                                         close();
                                       }
                                     },
@@ -332,6 +356,8 @@ class _FileManagerPageState extends State<FileManagerPage> {
                                     onPressed: () => close(false),
                                     child: Text(translate("Cancel")))
                               ]));
+                    } else if (v == "hidden") {
+                      model.toggleShowHidden();
                     }
                   }),
             ],
@@ -349,7 +375,20 @@ class _FileManagerPageState extends State<FileManagerPage> {
   }
 
   Widget listTail() {
-    return SizedBox(height: 100);
+    return Container(
+      height: 100,
+      child: Column(
+        children: [
+          Padding(
+            padding: EdgeInsets.all(2),
+            child: Text(
+              "总计: ${model.currentDir.entries.length}个项目",
+              style: TextStyle(color: MyTheme.darkGray),
+            ),
+          )
+        ],
+      ),
+    );
   }
 
   Widget? bottomSheet() {
@@ -402,8 +441,7 @@ class _FileManagerPageState extends State<FileManagerPage> {
         return BottomSheetBody(
           leading: CircularProgressIndicator(),
           title: "正在发送文件...",
-          text:
-              "速度:  ${(model.jobProgress.speed / 1024).toStringAsFixed(2)} kb/s",
+          text: "速度:  ${readableFileSize(model.jobProgress.speed)}/s",
           onCanceled: null,
         );
       case JobState.done:
@@ -427,10 +465,9 @@ class _FileManagerPageState extends State<FileManagerPage> {
   }
 
   List<BreadCrumbItem> getPathBreadCrumbItems(
-      void Function() onHome, void Function(String) onPressed) {
-    final path = model.currentDir.path;
-    final list = Path.split(path);
-    list.remove('/');
+      void Function() onHome, void Function(List<String>) onPressed) {
+    final path = model.currentShortPath;
+    final list = PathUtil.split(path, model.currentIsWindows);
     final breadCrumbList = [
       BreadCrumbItem(
           content: IconButton(
@@ -438,12 +475,12 @@ class _FileManagerPageState extends State<FileManagerPage> {
         onPressed: onHome,
       ))
     ];
-    breadCrumbList.addAll(list.map((e) => BreadCrumbItem(
+    breadCrumbList.addAll(list.asMap().entries.map((e) => BreadCrumbItem(
         content: TextButton(
-            child: Text(e),
+            child: Text(e.value),
             style:
                 ButtonStyle(minimumSize: MaterialStateProperty.all(Size(0, 0))),
-            onPressed: () => onPressed(e)))));
+            onPressed: () => onPressed(list.sublist(0, e.key + 1))))));
     return breadCrumbList;
   }
 }

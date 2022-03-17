@@ -4,6 +4,12 @@ import 'package:flutter_easyloading/flutter_easyloading.dart';
 
 final globalKey = GlobalKey<NavigatorState>();
 
+var isAndroid = false;
+var isIOS = false;
+var isWeb = false;
+var isDesktop = false;
+var version = "";
+
 typedef F = String Function(String);
 typedef FMethod = String Function(String, dynamic);
 
@@ -172,8 +178,18 @@ Color str2color(String str, [alpha = 0xFF]) {
   return Color((hash & 0xFF7FFF) | (alpha << 24));
 }
 
-bool isAndroid = false;
-bool isIOS = false;
-bool isWeb = false;
-bool isDesktop = false;
-var version = "";
+const K = 1024;
+const M = K * K;
+const G = M * K;
+
+String readableFileSize(double size) {
+  if (size < K) {
+    return size.toString() + " B";
+  } else if (size < M) {
+    return (size / K).toStringAsFixed(2) + " KB";
+  } else if (size < G) {
+    return (size / M).toStringAsFixed(2) + " MB";
+  } else {
+    return (size / G).toStringAsFixed(2) + " GB";
+  }
+}
