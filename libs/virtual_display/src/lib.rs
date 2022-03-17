@@ -5,6 +5,8 @@ use hbb_common::{bail, lazy_static, ResultType};
 use std::{ffi::CString, path::Path, sync::Mutex};
 
 lazy_static::lazy_static! {
+    // If device is uninstalled though "Device Manager" Window.
+    // Rustdesk is unable to handle device any more...
     static ref H_SW_DEVICE: Mutex<u64> = Mutex::new(0);
     static ref MONITOR_PLUGIN: Mutex<Vec<u32>> = Mutex::new(Vec::new());
 }
@@ -97,11 +99,12 @@ pub fn create_device() -> ResultType<()> {
     }
     #[cfg(windows)]
     unsafe {
-        let mut h_sw_device = *H_SW_DEVICE.lock().unwrap() as win10::idd::HSWDEVICE;
+        let mut lock_device = H_SW_DEVICE.lock().unwrap();
+        let mut h_sw_device = *lock_device as win10::idd::HSWDEVICE;
         if win10::idd::DeviceCreate(&mut h_sw_device) == win10::idd::FALSE {
             bail!("{}", win10::get_last_msg()?);
         } else {
-            *H_SW_DEVICE.lock().unwrap() = h_sw_device as u64;
+            *lock_device = h_sw_device as u64;
         }
     }
     Ok(())
@@ -112,6 +115,7 @@ pub fn close_device() {
     unsafe {
         win10::idd::DeviceClose(*H_SW_DEVICE.lock().unwrap() as win10::idd::HSWDEVICE);
         *H_SW_DEVICE.lock().unwrap() = 0;
+        MONITOR_PLUGIN.lock().unwrap().clear();
     }
 }
 
@@ -119,7 +123,7 @@ pub fn plug_in_monitor() -> ResultType<()> {
     #[cfg(windows)]
     unsafe {
         let monitor_index = 0 as u32;
-        let plug_in_monitors = &mut *MONITOR_PLUGIN.lock().unwrap();
+        let mut plug_in_monitors = MONITOR_PLUGIN.lock().unwrap();
         for i in 0..plug_in_monitors.len() {
             if let Some(d) = plug_in_monitors.get(i) {
                 if *d == monitor_index {
@@ -142,7 +146,7 @@ pub fn plug_out_monitor() -> ResultType<()> {
         if win10::idd::MonitorPlugOut(monitor_index) == win10::idd::FALSE {
             bail!("{}", win10::get_last_msg()?);
         }
-        let plug_in_monitors = &mut *MONITOR_PLUGIN.lock().unwrap();
+        let mut plug_in_monitors = MONITOR_PLUGIN.lock().unwrap();
         for i in 0..plug_in_monitors.len() {
             if let Some(d) = plug_in_monitors.get(i) {
                 if *d == monitor_index {

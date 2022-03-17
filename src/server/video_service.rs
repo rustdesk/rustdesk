@@ -159,6 +159,18 @@ fn check_display_changed(
 }
 
 fn run(sp: GenericService) -> ResultType<()> {
+    let num_displays = Display::all()?.len();
+    if num_displays == 0 {
+        // Device may sometimes be uninstalled by user in "Device Manager" Window.
+        // Closing device will clear the instance data.
+        virtual_display::close_device();
+    } else if num_displays > 1 {
+        // Try close device, if display device changed.
+        if virtual_display::is_device_created() {
+            virtual_display::close_device();
+        }
+    }
+
     let fps = 30;
     let spf = time::Duration::from_secs_f32(1. / (fps as f32));
     let (ndisplay, current, display) = get_current_display()?;
@@ -300,10 +312,6 @@ fn run(sp: GenericService) -> ResultType<()> {
         }
     }
 
-    // Close device, if there are no connections
-    if virtual_display::is_device_created() {
-        virtual_display::close_device()
-    }
     Ok(())
 }
 
@@ -451,18 +459,19 @@ pub fn switch_to_primary() {
 fn try_get_displays() -> ResultType<Vec<Display>> {
     let mut displays = Display::all()?;
     if displays.len() == 0 {
+        log::debug!("no displays, create virtual display");
         // Try plugin monitor
         if !virtual_display::is_device_created() {
             if let Err(e) = virtual_display::create_device() {
-                log::error!("Create device failed {}", e);
+                log::debug!("Create device failed {}", e);
             }
         }
         if virtual_display::is_device_created() {
             if let Err(e) = virtual_display::plug_in_monitor() {
-                log::error!("Plug in monitor failed {}", e);
+                log::debug!("Plug in monitor failed {}", e);
             } else {
                 if let Err(e) = virtual_display::update_monitor_modes() {
-                    log::error!("Update monitor modes failed {}", e);
+                    log::debug!("Update monitor modes failed {}", e);
                 }
             }
         }
