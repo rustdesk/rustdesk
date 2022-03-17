@@ -22,6 +22,7 @@ scrap = { path = "libs/scrap" }
 hbb_common = { path = "libs/hbb_common" }
 enigo = { path = "libs/enigo" }
 clipboard = { path = "libs/clipboard" }
+virtual_display = { path = "libs/virtual_display" }
 sys-locale = "0.1"
 serde_derive = "1.0"
 serde = "1.0"
@@ -83,7 +84,7 @@ rust-pulsectl = { git = "https://github.com/open-trade/pulsectl" }
 android_logger = "0.10"
 
 [workspace]
-members = ["libs/scrap", "libs/hbb_common", "libs/enigo", "libs/clipboard"]
+members = ["libs/scrap", "libs/hbb_common", "libs/enigo", "libs/clipboard", "libs/virtual_display"]
 
 [package.metadata.winres]
 LegalCopyright = "Copyright © 2020"

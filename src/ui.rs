@@ -19,6 +19,7 @@ use std::{
     process::Child,
     sync::{Arc, Mutex},
 };
+use virtual_display;
 
 pub type Childs = Arc<Mutex<(bool, HashMap<(String, String), Child>)>>;
 
@@ -364,6 +365,22 @@ impl UI {
         }
     }
 
+    // TODO: ui prompt
+    fn install_virtual_display(&self) {
+        let mut reboot_required = false;
+        match virtual_display::install_update_driver(&mut reboot_required) {
+            Ok(_) => {
+                log::info!(
+                    "Virtual Display: install virtual display done, reboot is {} required",
+                    if reboot_required { "" } else { "not" }
+                );
+            }
+            Err(e) => {
+                log::error!("Virtual Display: install virtual display failed {}", e);
+            }
+        }
+    }
+
     fn install_path(&mut self) -> String {
         #[cfg(windows)]
         return crate::platform::windows::get_install_info().1;
@@ -690,6 +707,7 @@ impl sciter::EventHandler for UI {
         fn get_sound_inputs();
         fn set_options(Value);
         fn set_option(String, String);
+        fn install_virtual_display();
         fn get_software_update_url();
         fn get_new_version();
         fn get_version();
