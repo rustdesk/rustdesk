@@ -86,7 +86,7 @@ class _RemotePageState extends State<RemotePage> {
         }
       });
     }
-    FFI.ffiModel.update(widget.id, context, handleMsgBox);
+    FFI.ffiModel.update(widget.id, handleMsgBox);
   }
 
   void interval() {

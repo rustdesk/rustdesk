@@ -95,42 +95,21 @@ class MainService : Service() {
     fun rustSetByName(name: String, arg1: String, arg2: String) {
         when (name) {
             "try_start_without_auth" -> {
-                // TODO 改成 json 三个参数 类型 name id
-                // to UI
-                Log.d(logTag, "from rust:got try_start_without_auth")
-                Handler(Looper.getMainLooper()).post {
-                    MainActivity.flutterMethodChannel.invokeMethod(
-                        name,
-                        mapOf("peerID" to arg1, "name" to arg2)
-                    )
-                    Log.d(logTag, "activity.runOnUiThread invokeMethod try_start_without_auth,done")
-                }
                 // TODO notify
+
             }
             "start_capture" -> {
                 Log.d(logTag, "from rust:start_capture")
-                Handler(Looper.getMainLooper()).post {
-                    MainActivity.flutterMethodChannel.invokeMethod(
-                        name,
-                        mapOf("peerID" to arg1, "name" to arg2)
-                    )
-                    Log.d(logTag, "activity.runOnUiThread invokeMethod start_capture,done")
-                }
                 if (isStart) {
                     Log.d(logTag, "正在录制")
                     return
                 }
-                // 1.开始捕捉音视频 2.通知栏
                 startCapture()
                 // TODO notify
             }
             "stop_capture" -> {
                 Log.d(logTag, "from rust:stop_capture")
                 stopCapture()
-                Handler(Looper.getMainLooper()).post {
-                    MainActivity.flutterMethodChannel.invokeMethod(name, null)
-                    Log.d(logTag, "activity.runOnUiThread invokeMethod stop_capture,done")
-                }
             }
             else -> {}
         }

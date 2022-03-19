@@ -32,7 +32,7 @@ class _FileManagerPageState extends State<FileManagerPage> {
     FFI.connect(widget.id, isFileTransfer: true);
 
     _interval = Timer.periodic(Duration(milliseconds: 30),
-        (timer) => FFI.ffiModel.update(widget.id, context, handleMsgBox));
+        (timer) => FFI.ffiModel.update(widget.id, handleMsgBox));
   }
 
   @override

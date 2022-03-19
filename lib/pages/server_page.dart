@@ -1,10 +1,10 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:flutter_hbb/main.dart';
 import 'package:flutter_hbb/models/model.dart';
 import 'package:provider/provider.dart';
 
 import '../common.dart';
+import '../models/server_model.dart';
 import 'home_page.dart';
 import '../models/model.dart';
 
@@ -70,6 +70,7 @@ class ServerInfo extends StatefulWidget {
 
 class _ServerInfoState extends State<ServerInfo> {
   var _passwdShow = false;
+  Timer? _interval;
 
   // TODO set ID / PASSWORD
   var _serverId = TextEditingController(text: "");
@@ -80,11 +81,24 @@ class _ServerInfoState extends State<ServerInfo> {
   void initState() {
     super.initState();
     var id = FFI.getByName("server_id");
+
+    // TODO 需要重新优化开启监听 开启监听服务后再开始pop_event
+    FFI.setByName("ensure_init_event_queue");
+    _interval = Timer.periodic(Duration(milliseconds: 30),
+            (timer) {
+      FFI.ffiModel.update("", (_, __) {});});
+
     _serverId.text = id == "" ? _emptyIdShow : id;
     _serverPasswd.text = FFI.getByName("server_password");
     if (_serverId.text == _emptyIdShow || _serverPasswd.text == "") {
       fetchConfigAgain();
     }
+  }
+
+  @override
+  void dispose() {
+    _interval?.cancel();
+    super.dispose();
   }
 
   @override
@@ -189,66 +203,6 @@ class _PermissionCheckerState extends State<PermissionChecker> {
   }
 }
 
-Widget getConnInfo(String name, String peerID) {
-  return Row(
-    children: [
-      CircleAvatar(child: Text(name[0]), backgroundColor: MyTheme.border),
-      SizedBox(width: 12),
-      Text(name, style: TextStyle(color: MyTheme.idColor)),
-      SizedBox(width: 8),
-      Text(peerID, style: TextStyle(color: MyTheme.idColor))
-    ],
-  );
-}
-
-void showLoginReqAlert(String peerID, String name) async {
-  if (globalKey.currentContext == null) return;
-  await showDialog(
-      barrierDismissible: false,
-      context: globalKey.currentContext!,
-      builder: (alertContext) {
-        DialogManager.reset();
-        DialogManager.register(alertContext);
-        return WillPopScope(
-            onWillPop: () async {
-              return false;
-            },
-            child: AlertDialog(
-              title: Text("Control Request"),
-              content: Container(
-                  height: 100,
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(translate("Do you accept?")),
-                      SizedBox(height: 20),
-                      getConnInfo(name, peerID),
-                    ],
-                  )),
-              actions: [
-                TextButton(
-                    child: Text(translate("Dismiss")),
-                    onPressed: () {
-                      FFI.setByName("login_res", "false");
-                      DialogManager.reset();
-                    }),
-                ElevatedButton(
-                    child: Text(translate("Accept")),
-                    onPressed: () {
-                      FFI.setByName("login_res", "true");
-                      if (!FFI.serverModel.isFileTransfer) {
-                        _toAndroidStartCapture();
-                      }
-                      FFI.serverModel.setPeer(true);
-                      DialogManager.reset();
-                    }),
-              ],
-            ));
-      });
-  DialogManager.drop();
-}
-
 class PermissionRow extends StatelessWidget {
   PermissionRow(this.name, this.isOk, this.onPressed);
 
@@ -291,28 +245,28 @@ class ConnectionManager extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final serverModel = Provider.of<ServerModel>(context);
-    return serverModel.isPeerStart
-        ? myCard(Column(
+    return Column(
+      children: serverModel.clients.map((client) =>
+          myCard(Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              cardTitle(translate("Connection")), // TODO t
+              cardTitle(translate("Connection")),
               Padding(
                 padding: EdgeInsets.symmetric(vertical: 5.0),
-                child: getConnInfo(serverModel.peerName, serverModel.peerID),
+                child: clientInfo(client),
               ),
               ElevatedButton.icon(
                   style: ButtonStyle(
                       backgroundColor: MaterialStateProperty.all(Colors.red)),
                   icon: Icon(Icons.close),
                   onPressed: () {
-                    FFI.setByName("close_conn");
-                    // _toAndroidStopCapture();
-                    serverModel.setPeer(false);
+                    FFI.setByName("close_conn",client.id.toString());
                   },
                   label: Text(translate("Close")))
             ],
           ))
-        : SizedBox.shrink();
+      ).toList()
+    );
   }
 }
 
@@ -342,16 +296,28 @@ Widget myCard(Widget child) {
       ));
 }
 
+Widget clientInfo(Client client) {
+  return Row(
+    children: [
+      CircleAvatar(child: Text(client.name[0]), backgroundColor: MyTheme.border),
+      SizedBox(width: 12),
+      Text(client.name, style: TextStyle(color: MyTheme.idColor)),
+      SizedBox(width: 8),
+      Text(client.peerId, style: TextStyle(color: MyTheme.idColor))
+    ],
+  );
+}
+
 Future<Null> _toAndroidInitService() async {
   bool res = await FFI.invokeMethod("init_service");
   FFI.setByName("start_service");
   debugPrint("_toAndroidInitService:$res");
 }
 
-Future<Null> _toAndroidStartCapture() async {
-  bool res = await FFI.invokeMethod("start_capture");
-  debugPrint("_toAndroidStartCapture:$res");
-}
+// Future<Null> _toAndroidStartCapture() async {
+//   bool res = await FFI.invokeMethod("start_capture");
+//   debugPrint("_toAndroidStartCapture:$res");
+// }
 
 // Future<Null> _toAndroidStopCapture() async {
 //   bool res = await FFI.invokeMethod("stop_capture");
@@ -359,8 +325,7 @@ Future<Null> _toAndroidStartCapture() async {
 // }
 
 Future<Null> _toAndroidStopService() async {
-  FFI.setByName("close_conn");
-  FFI.serverModel.setPeer(false);
+  FFI.serverModel.closeAll();
 
   bool res = await FFI.invokeMethod("stop_service");
   FFI.setByName("stop_service");
@@ -415,27 +380,27 @@ void toAndroidChannelInit() {
     debugPrint("flutter got android msg,$method,$arguments");
     try {
       switch (method) {
-        case "try_start_without_auth":
-          {
-            FFI.serverModel.updateClientState();
-            debugPrint(
-                "pre show loginAlert:${FFI.serverModel.isFileTransfer.toString()}");
-            showLoginReqAlert(FFI.serverModel.peerID, FFI.serverModel.peerName);
-            debugPrint("from jvm:try_start_without_auth done");
-            break;
-          }
+        // case "try_start_without_auth":
+        //   {
+        //     FFI.serverModel.updateClientState();
+        //     debugPrint(
+        //         "pre show loginAlert:${FFI.serverModel.isFileTransfer.toString()}");
+        //     showLoginReqAlert(FFI.serverModel.peerID, FFI.serverModel.peerName);
+        //     debugPrint("from jvm:try_start_without_auth done");
+        //     break;
+        //   }
         case "start_capture":
           {
             DialogManager.reset();
             FFI.serverModel.updateClientState();
             break;
           }
-        case "stop_capture":
-          {
-            DialogManager.reset();
-            FFI.serverModel.setPeer(false);
-            break;
-          }
+        // case "stop_capture":
+        //   {
+        //     DialogManager.reset();
+        //     FFI.serverModel.setPeer(false);
+        //     break;
+        //   }
         case "on_permission_changed":
           {
             var name = arguments["name"] as String;

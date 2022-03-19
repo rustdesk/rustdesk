@@ -2,6 +2,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_easyloading/flutter_easyloading.dart';
 import 'package:flutter_hbb/models/chat_model.dart';
 import 'package:flutter_hbb/models/file_model.dart';
+import 'package:flutter_hbb/models/server_model.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:math';
 import 'dart:convert';
@@ -12,6 +13,8 @@ import 'package:tuple/tuple.dart';
 import 'dart:async';
 import '../common.dart';
 import 'native_model.dart' if (dart.library.html) 'web_model.dart';
+
+typedef HandleMsgBox = void Function(Map<String, dynamic> evt, String id);
 
 class FfiModel with ChangeNotifier {
   PeerInfo _pi = PeerInfo();
@@ -100,23 +103,17 @@ class FfiModel with ChangeNotifier {
     _permissions.clear();
   }
 
-  void update(
-      String id,
-      BuildContext context,
-      void Function(
-    Map<String, dynamic> evt,
-    String id,
-  )
-          handleMsgBox) {
+  void update(String peerId,HandleMsgBox handleMsgBox) {
     var pos;
     for (;;) {
       var evt = FFI.popEvent();
       if (evt == null) break;
       var name = evt['name'];
+      debugPrint("got message:$name");
       if (name == 'msgbox') {
-        handleMsgBox(evt, id);
+        handleMsgBox(evt, peerId);
       } else if (name == 'peer_info') {
-        handlePeerInfo(evt, context);
+        handlePeerInfo(evt);
       } else if (name == 'connection_ready') {
         FFI.ffiModel.setConnectionType(
             evt['secure'] == 'true', evt['direct'] == 'true');
@@ -135,14 +132,19 @@ class FfiModel with ChangeNotifier {
       } else if (name == 'chat') {
         FFI.chatModel.receive(evt['text'] ?? "");
       } else if (name == 'file_dir') {
-        // FFI.fileModel.fileFetcher.tryCompleteTask(evt['value'],evt['is_local']);
         FFI.fileModel.receiveFileDir(evt);
-      } else if (name == 'job_progress'){
+      } else if (name == 'job_progress') {
         FFI.fileModel.tryUpdateJobProgress(evt);
-      } else if (name == 'job_done'){
+      } else if (name == 'job_done') {
         FFI.fileModel.jobDone(evt);
-      } else if (name == 'job_error'){
+      } else if (name == 'job_error') {
         FFI.fileModel.jobError(evt);
+      } else if (name == 'try_start_without_auth') {
+        FFI.serverModel.loginRequest(evt);
+      } else if (name == 'on_client_logon') {
+
+      } else if (name == 'on_client_remove') {
+        FFI.serverModel.onClientRemove(evt);
       }
     }
     if (pos != null) FFI.cursorModel.updateCursorPosition(pos);
@@ -184,7 +186,7 @@ class FfiModel with ChangeNotifier {
     notifyListeners();
   }
 
-  void handlePeerInfo(Map<String, dynamic> evt, BuildContext context) {
+  void handlePeerInfo(Map<String, dynamic> evt) {
     EasyLoading.dismiss();
     DialogManager.reset();
     _pi.version = evt['version'];
@@ -195,9 +197,9 @@ class FfiModel with ChangeNotifier {
     _pi.currentDisplay = int.parse(evt['current_display']);
     _pi.homeDir = evt['home_dir'];
 
-    if(evt['is_file_transfer'] == "true"){
+    if (evt['is_file_transfer'] == "true") {
       FFI.fileModel.onReady();
-    }else{
+    } else {
       _pi.displays = [];
       List<dynamic> displays = json.decode(evt['displays']);
       for (int i = 0; i < displays.length; ++i) {
@@ -588,96 +590,6 @@ class CursorModel with ChangeNotifier {
     _x = -10000;
     _image = null;
     _images.clear();
-  }
-}
-
-class ClientState {
-  bool isStart = false;
-  bool isFileTransfer = false;
-  String name = "";
-  String peerId = "";
-
-  ClientState(this.isStart, this.isFileTransfer, this.name, this.peerId);
-
-  ClientState.fromJson(Map<String, dynamic> json) {
-    isStart = json['is_start'];
-    isFileTransfer = json['is_file_transfer'];
-    name = json['name'];
-    peerId = json['peer_id'];
-  }
-
-  Map<String, dynamic> toJson() {
-    final Map<String, dynamic> data = new Map<String, dynamic>();
-    data['is_start'] = this.isStart;
-    data['is_file_transfer'] = this.isFileTransfer;
-    data['name'] = this.name;
-    data['peer_id'] = this.peerId;
-    return data;
-  }
-}
-
-class ServerModel with ChangeNotifier {
-  bool _mediaOk = false;
-  bool _inputOk = false;
-  bool _isPeerStart = false;
-  bool _isFileTransfer = false;
-  String _peerName = "";
-  String _peerID = "";
-
-  bool get mediaOk => _mediaOk;
-
-  bool get inputOk => _inputOk;
-
-  bool get isPeerStart => _isPeerStart;
-
-  bool get isFileTransfer => _isFileTransfer;
-
-  String get peerName => _peerName;
-
-  String get peerID => _peerID;
-
-  ServerModel();
-
-  changeStatue(String name, bool value) {
-    switch (name) {
-      case "media":
-        _mediaOk = value;
-        break;
-      case "input":
-        _inputOk = value;
-        break;
-      default:
-        return;
-    }
-    notifyListeners();
-  }
-
-  setPeer(bool enabled, {String name = "", String id = ""}) {
-    _isPeerStart = enabled;
-    if (name != "") _peerName = name;
-    if (id != "") _peerID = id;
-    notifyListeners();
-  }
-
-  updateClientState() {
-    var res = FFI.getByName("client_state");
-    debugPrint("getByName client_state string:$res");
-    try {
-      var clientState = ClientState.fromJson(jsonDecode(res));
-      _isPeerStart = clientState.isStart;
-      _isFileTransfer = clientState.isFileTransfer;
-      _peerName = clientState.name;
-      _peerID = clientState.peerId;
-      debugPrint("updateClientState:${clientState.toJson()}");
-    } catch (e) {}
-    notifyListeners();
-  }
-
-  clearPeer() {
-    _isPeerStart = false;
-    _peerName = "";
-    _peerID = "";
-    notifyListeners();
   }
 }
 
