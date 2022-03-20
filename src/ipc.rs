@@ -521,10 +521,11 @@ pub fn set_option(key: &str, value: &str) {
 
 #[tokio::main(flavor = "current_thread")]
 pub async fn set_options(value: HashMap<String, String>) -> ResultType<()> {
-    let mut c = connect(1000, "").await?;
-    c.send(&Data::Options(Some(value.clone()))).await?;
-    // do not put below before connect, because we need to check should_exit
-    c.next_timeout(1000).await.ok();
+    if let Ok(mut c) = connect(1000, "").await {
+        c.send(&Data::Options(Some(value.clone()))).await?;
+        // do not put below before connect, because we need to check should_exit
+        c.next_timeout(1000).await.ok();
+    }
     Config::set_options(value);
     Ok(())
 }
