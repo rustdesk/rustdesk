@@ -17,7 +17,7 @@ use hbb_common::{
     sodiumoxide::crypto::{box_, secretbox, sign},
     timeout,
     tokio::time::Duration,
-    AddrMangle, ResultType, Stream,
+    AddrMangle, IdPk, ResultType, Stream,
 };
 use magnum_opus::{Channels::*, Decoder as AudioDecoder};
 use scrap::{Decoder, Image, VideoCodecId};
@@ -136,7 +136,7 @@ impl Client {
         let mut socket =
             socket_client::connect_tcp(&*rendezvous_server, any_addr, RENDEZVOUS_TIMEOUT).await?;
         let my_addr = socket.local_addr();
-        let mut pk = Vec::new();
+        let mut signed_id_pk = Vec::new();
         let mut relay_server = "".to_owned();
 
         let start = std::time::Instant::now();
@@ -161,6 +161,9 @@ impl Client {
                     match msg_in.union {
                         Some(rendezvous_message::Union::punch_hole_response(ph)) => {
                             if ph.socket_addr.is_empty() {
+                                if !ph.other_failure.is_empty() {
+                                    bail!(ph.other_failure);
+                                }
                                 match ph.failure.enum_value_or_default() {
                                     punch_hole_response::Failure::ID_NOT_EXIST => {
                                         bail!("ID does not exist");
@@ -171,16 +174,14 @@ impl Client {
                                     punch_hole_response::Failure::LICENSE_MISMATCH => {
                                         bail!("Key mismatch");
                                     }
-                                    _ => {
-                                        if !ph.other_failure.is_empty() {
-                                            bail!(ph.other_failure);
-                                        }
+                                    punch_hole_response::Failure::LICENSE_OVERUSE => {
+                                        bail!("Key overuse");
                                     }
                                 }
                             } else {
                                 peer_nat_type = ph.get_nat_type();
                                 is_local = ph.get_is_local();
-                                pk = ph.pk;
+                                signed_id_pk = ph.pk;
                                 relay_server = ph.relay_server;
                                 peer_addr = AddrMangle::decode(&ph.socket_addr);
                                 log::info!("Hole Punched {} = {}", peer, peer_addr);
@@ -193,11 +194,11 @@ impl Client {
                                 start.elapsed(),
                                 rr.relay_server
                             );
-                            pk = rr.get_pk().into();
+                            signed_id_pk = rr.get_pk().into();
                             let mut conn =
                                 Self::create_relay(peer, rr.uuid, rr.relay_server, conn_type)
                                     .await?;
-                            Self::secure_connection(peer, pk, &mut conn).await?;
+                            Self::secure_connection(peer, signed_id_pk, &mut conn).await?;
                             return Ok((conn, false));
                         }
                         _ => {
@@ -228,7 +229,7 @@ impl Client {
             my_addr,
             peer_addr,
             peer,
-            pk,
+            signed_id_pk,
             &relay_server,
             &rendezvous_server,
             time_used,
@@ -244,7 +245,7 @@ impl Client {
         local_addr: SocketAddr,
         peer: SocketAddr,
         peer_id: &str,
-        pk: Vec<u8>,
+        signed_id_pk: Vec<u8>,
         relay_server: &str,
         rendezvous_server: &str,
         punch_time_used: u64,
@@ -296,7 +297,7 @@ impl Client {
                     peer_id,
                     relay_server.to_owned(),
                     rendezvous_server,
-                    pk.len() == sign::PUBLICKEYBYTES,
+                    !signed_id_pk.is_empty(),
                     conn_type,
                 )
                 .await;
@@ -318,50 +319,46 @@ impl Client {
         }
         let mut conn = conn?;
         log::info!("{:?} used to establish connection", start.elapsed());
-        Self::secure_connection(peer_id, pk, &mut conn).await?;
+        Self::secure_connection(peer_id, signed_id_pk, &mut conn).await?;
         Ok((conn, direct))
     }
 
-    async fn secure_connection(peer_id: &str, pk: Vec<u8>, conn: &mut Stream) -> ResultType<()> {
-        let mut pk = pk;
+    async fn secure_connection(peer_id: &str, signed_id_pk: Vec<u8>, conn: &mut Stream) -> ResultType<()> {
         let rs_pk = get_rs_pk("OeVuKk5nlHiXp+APNn0Y3pC1Iwpwn44JGqrQCsWqmBw=");
-        if !pk.is_empty() && rs_pk.is_some() {
-            if let Ok(data) = sign::verify(&pk, &rs_pk.unwrap()) {
-                pk = data;
-            } else {
+        let mut sign_pk = None;
+        if !signed_id_pk.is_empty() && rs_pk.is_some() {
+            if let Ok(v) = serde_json::from_slice::<IdPk>(&signed_id_pk) {
+                if v.id == peer_id {
+                    sign_pk = Some(sign::PublicKey(v.pk));
+                }
+            }
+            if sign_pk.is_none() {
                 log::error!("Handshake failed: invalid public key from rendezvous server");
-                pk.clear();
             }
         }
-        if pk.len() != sign::PUBLICKEYBYTES {
-            // send an empty message out in case server is setting up secure and waiting for first message
-            conn.send(&Message::new()).await?;
-            return Ok(());
-        }
-        let mut tmp = [0u8; sign::PUBLICKEYBYTES];
-        tmp[..].copy_from_slice(&pk);
-        let sign_pk = sign::PublicKey(tmp);
+        let sign_pk = match sign_pk {
+            Some(v) => v,
+            None => {
+                // send an empty message out in case server is setting up secure and waiting for first message
+                conn.send(&Message::new()).await?;
+                return Ok(());
+            }
+        };
         match timeout(CONNECT_TIMEOUT, conn.next()).await? {
             Some(res) => {
                 let bytes = res?;
                 if let Ok(msg_in) = Message::parse_from_bytes(&bytes) {
                     if let Some(message::Union::signed_id(si)) = msg_in.union {
                         if let Ok(data) = sign::verify(&si.id, &sign_pk) {
-                            let s = String::from_utf8_lossy(&data);
-                            let mut it = s.split("\0");
-                            let id = it.next().unwrap_or_default();
-                            let pk =
-                                base64::decode(it.next().unwrap_or_default()).unwrap_or_default();
-                            let their_pk_b = if pk.len() == box_::PUBLICKEYBYTES {
-                                let mut pk_ = [0u8; box_::PUBLICKEYBYTES];
-                                pk_[..].copy_from_slice(&pk);
-                                box_::PublicKey(pk_)
-                            } else {
-                                log::error!(
-                                    "Handshake failed: invalid public box key length from peer"
-                                );
-                                conn.send(&Message::new()).await?;
-                                return Ok(());
+                            let (id, their_pk_b) = match serde_json::from_slice::<IdPk>(&data) {
+                                Ok(v) => (v.id, box_::PublicKey(v.pk)),
+                                Err(_) => {
+                                    log::error!(
+                                        "Handshake failed: invalid public box key length from peer"
+                                    );
+                                    conn.send(&Message::new()).await?;
+                                    return Ok(());
+                                }
                             };
                             if id == peer_id {
                                 let (our_pk_b, out_sk_b) = box_::gen_keypair();

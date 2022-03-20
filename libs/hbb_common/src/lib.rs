@@ -31,10 +31,19 @@ pub use lazy_static;
 pub use mac_address;
 pub use rand;
 pub use regex;
+use serde_derive::{Deserialize, Serialize};
 pub use sodiumoxide;
 pub use tokio_socks;
 pub use tokio_socks::IntoTargetAddr;
 pub use tokio_socks::TargetAddr;
+
+#[derive(Debug, Default, Serialize, Deserialize, Clone)]
+pub struct IdPk {
+    #[serde(default)]
+    pub id: String,
+    #[serde(default)]
+    pub pk: [u8; 32],
+}
 
 #[cfg(feature = "quic")]
 pub type Stream = quic::Connection;

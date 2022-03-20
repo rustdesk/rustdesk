@@ -101,12 +101,15 @@ pub async fn create_tcp_connection(
         let sk = sign::SecretKey(sk_);
         let mut msg_out = Message::new();
         let (our_pk_b, our_sk_b) = box_::gen_keypair();
-        let signed_id = sign::sign(
-            format!("{}\0{}", Config::get_id(), base64::encode(our_pk_b.0)).as_bytes(),
-            &sk,
-        );
         msg_out.set_signed_id(SignedId {
-            id: signed_id,
+            id: sign::sign(
+                &serde_json::to_vec(&hbb_common::IdPk {
+                    id: Config::get_id(),
+                    pk: our_pk_b.0,
+                })
+                .unwrap_or_default(),
+                &sk,
+            ),
             ..Default::default()
         });
         timeout(CONNECT_TIMEOUT, stream.send(&msg_out)).await??;
