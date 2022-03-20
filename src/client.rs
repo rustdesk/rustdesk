@@ -327,9 +327,11 @@ impl Client {
         let rs_pk = get_rs_pk("OeVuKk5nlHiXp+APNn0Y3pC1Iwpwn44JGqrQCsWqmBw=");
         let mut sign_pk = None;
         if !signed_id_pk.is_empty() && rs_pk.is_some() {
-            if let Ok(v) = serde_json::from_slice::<IdPk>(&signed_id_pk) {
-                if v.id == peer_id {
-                    sign_pk = Some(sign::PublicKey(v.pk));
+            if let Ok(data) = sign::verify(&signed_id_pk, &rs_pk.unwrap()) {
+                if let Ok(v) = serde_json::from_slice::<IdPk>(&data) {
+                    if v.id == peer_id {
+                        sign_pk = Some(sign::PublicKey(v.pk));
+                    }
                 }
             }
             if sign_pk.is_none() {
