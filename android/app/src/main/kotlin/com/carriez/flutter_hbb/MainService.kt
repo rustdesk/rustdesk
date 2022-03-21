@@ -271,22 +271,22 @@ class MainService : Service() {
     fun stopCapture() {
         Log.d(logTag, "Stop Capture")
         _isStart = false
-        audioRecordStat = false
+        // release video
         virtualDisplay?.release()
         videoEncoder?.let {
             it.signalEndOfInputStream()
             it.stop()
             it.release()
         }
-        audioRecorder?.startRecording()
-
         virtualDisplay = null
         videoEncoder = null
         videoData = null
-//        audioRecorder 如果无法重新创建 保留服务的情况不要释放
-//        audioRecorder?.stop()
-//        audioRecorder = null
-//        audioData = null
+
+        // release audio
+        audioRecordStat = false
+        audioRecorder?.release()
+        audioRecorder = null
+        minBufferSize = 0
     }
 
     fun destroy() {
