@@ -376,6 +376,10 @@ div#msgbox div.set-password div.password {
   width: *;
 }
 
+div#msgbox div.set-password div > input {
+  width: *;
+}
+
 div#msgbox div.set-password input {
   font-size: 1em;
 }

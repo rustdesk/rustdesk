@@ -226,9 +226,9 @@ class MyIdMenu: Reactor.Component {
             var configOptions = handler.get_options();
             var old_relay = configOptions["relay-server"] || "";
             var old_id = configOptions["custom-rendezvous-server"] || "";
-            msgbox("custom-server", "ID/Relay Server", "<div .form> \
-            <div><span style='width: 100px; display:inline-block'>" + translate("ID Server") + ": </span><input .outline-focus style='width: 250px' name='id' value='" + old_id + "' /></div> \
-            <div><span style='width: 100px; display:inline-block'>" + translate("Relay Server") + ": </span><input style='width: 250px' name='relay' value='" + old_relay + "' /></div> \
+            msgbox("custom-server", "ID/Relay Server", "<div .form .set-password> \
+            <div><span>" + translate("ID Server") + ": </span><input .outline-focus name='id' value='" + old_id + "' /></div> \
+            <div><span>" + translate("Relay Server") + ": </span><input name='relay' value='" + old_relay + "' /></div> \
             </div> \
             ", function(res=null) {
                 if (!res) return;
@@ -253,9 +253,9 @@ class MyIdMenu: Reactor.Component {
             var old_username = socks5[1] || "";
             var old_password = socks5[2] || "";
             msgbox("custom-server", "Socks5 Proxy", <div .form .set-password> 
-            <div><span>{translate("Hostname")}</span><input .outline-focus style='width: *' name='proxy' value={old_proxy} /></div>
-            <div><span>{translate("Username")}</span><input style='width: *' name='username' value={old_username} /></div>
-            <div><span>{translate("Password")}</span><PasswordComponent value={old_password} /></div>
+            <div><span>{translate("Hostname")}:</span><input .outline-focus name='proxy' value={old_proxy} /></div>
+            <div><span>{translate("Username")}:</span><input name='username' value={old_username} /></div>
+            <div><span>{translate("Password")}:</span><PasswordComponent value={old_password} /></div>
             </div>
             , function(res=null) {
                 if (!res) return;
@@ -311,7 +311,7 @@ function editDirectAccessPort() {
     var port = p0 ? <input|text name='port' value={p0} /> :
                     <input|text name='port' novalue={21118} />;
     msgbox("custom-direct-access-port", translate('Direct IP Access Settings'), <div .form .set-password>
-            <div><span style="width: 60px; ">{translate('Port')}:</span>{port}</div>
+            <div><span style="width: 60px;">{translate('Port')}:</span>{port}</div>
         </div>, function(res=null) {
         if (!res) return;
         var p = (res.port || '').trim();
