@@ -4,40 +4,32 @@ use std::{
 };
 
 fn find_package(name: &str) -> Vec<PathBuf> {
-    let vcpkg_root = std::env::var("VCPKG_ROOT").unwrap();
-    let mut path: PathBuf = vcpkg_root.into();
-    let target_os = std::env::var("CARGO_CFG_TARGET_OS").unwrap();
-    let mut target_arch = std::env::var("CARGO_CFG_TARGET_ARCH").unwrap();
-    if target_arch == "x86_64" {
-        target_arch = "x64".to_owned();
-    } else if target_arch == "aarch64" {
-        target_arch = "arm64".to_owned();
+    let library = vcpkg::find_package(name).expect("Failed to find package");
+    println!("cargo:info={}", library.vcpkg_triplet); //TODO
+    let lib_name = name.trim_start_matches("lib").to_string();
+    println!("{}", format!("cargo:rustc-link-lib=static={}", lib_name));
+
+    match (library.link_paths.as_slice(), library.include_paths.as_slice()) {
+        ([link_search, ..], [include, ..]) => {
+            println!(
+                "{}",
+                format!("cargo:rustc-link-search={}", link_search.display())
+            );
+            println!("{}", format!("cargo:include={}", include.display()));
+        }
+        _ => {
+            panic!(
+                "{}",
+                if library.link_paths.is_empty() {
+                    "link path not found"
+                } else {
+                    "include path not found"
+                }
+            )
+        }
     }
-    let mut target = if target_os == "macos" {
-        "x64-osx".to_owned()
-    } else if target_os == "windows" {
-        "x64-windows-static".to_owned()
-    } else {
-        format!("{}-{}", target_arch, target_os)
-    };
-    if target_arch == "x86" {
-        target = target.replace("x64", "x86");
-    }
-    println!("cargo:info={}", target);
-    path.push("installed");
-    path.push(target);
-    let lib = name.trim_start_matches("lib").to_string();
-    println!("{}", format!("cargo:rustc-link-lib=static={}", lib));
-    println!(
-        "{}",
-        format!(
-            "cargo:rustc-link-search={}",
-            path.join("lib").to_str().unwrap()
-        )
-    );
-    let include = path.join("include");
-    println!("{}", format!("cargo:include={}", include.to_str().unwrap()));
-    vec![include]
+
+    library.include_paths
 }
 
 fn generate_bindings(
