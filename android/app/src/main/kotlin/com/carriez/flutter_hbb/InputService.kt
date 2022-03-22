@@ -16,9 +16,8 @@ class InputService : AccessibilityService() {
 
     companion object{
         var ctx:InputService? = null
-        fun isOpen():Boolean{
-            return ctx!=null
-        }
+        val isOpen: Boolean
+            get() = ctx!=null
     }
     private val logTag = "input service"
     private var leftIsDown = false

@@ -143,8 +143,8 @@ class FfiModel with ChangeNotifier {
         FFI.fileModel.jobError(evt);
       } else if (name == 'try_start_without_auth') {
         FFI.serverModel.loginRequest(evt);
-      } else if (name == 'on_client_logon') {
-
+      } else if (name == 'on_client_authorized') {
+        FFI.serverModel.onClientAuthorized(evt);
       } else if (name == 'on_client_remove') {
         FFI.serverModel.onClientRemove(evt);
       }

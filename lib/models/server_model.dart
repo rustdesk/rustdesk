@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:flutter_hbb/models/native_model.dart';
 import '../common.dart';
 import '../pages/server_page.dart';
 import 'model.dart';
@@ -12,6 +13,7 @@ class ServerModel with ChangeNotifier {
   bool _isStart = false;
   bool _mediaOk = false;
   bool _inputOk = false;
+  late bool _audioOk;
   late bool _fileOk;
   final _serverId = TextEditingController(text: _emptyIdShow);
   final _serverPasswd = TextEditingController(text: "");
@@ -24,6 +26,8 @@ class ServerModel with ChangeNotifier {
 
   bool get inputOk => _inputOk;
 
+  bool get audioOk => _audioOk;
+
   bool get fileOk => _fileOk;
 
   TextEditingController get serverId => _serverId;
@@ -35,33 +39,70 @@ class ServerModel with ChangeNotifier {
   ServerModel() {
     ()async{
       await Future.delayed(Duration(seconds: 2));
-      final file = FFI.getByName('option', 'enable-file-transfer');
-      debugPrint("got file in option:$file");
-      if (file.isEmpty) {
-        _fileOk = false;
-        Map<String, String> res = Map()
-          ..["name"] = "enable-file-transfer"
-          ..["value"] = "N";
-        FFI.setByName('option', jsonEncode(res)); // 重新设置默认值
-      } else {
-        if (file == "Y") {
-          _fileOk = true;
-        } else {
-          _fileOk = false;
-        }
-      }
-    }();
+      final audioOption = FFI.getByName('option', 'enable-audio');
+      _audioOk = audioOption.isEmpty;   // audio true by default
 
+      final fileOption = FFI.getByName('option', 'enable-file-transfer');
+      _fileOk = fileOption.isEmpty;
+      Map<String, String> res = Map()
+        ..["name"] = "enable-keyboard"
+        ..["value"] = 'N';
+      FFI.setByName('option', jsonEncode(res)); // input false by default
+    }();
+  }
+
+  toggleAudio(){
+    _audioOk = !_audioOk;
+    Map<String, String> res = Map()
+      ..["name"] = "enable-audio"
+      ..["value"] = _audioOk ? '' : 'N';
+    FFI.setByName('option', jsonEncode(res));
+    notifyListeners();
   }
 
   toggleFile() {
     _fileOk = !_fileOk;
     Map<String, String> res = Map()
       ..["name"] = "enable-file-transfer"
-      ..["value"] = _fileOk ? 'Y' : 'N';
-    debugPrint("save option:$res");
+      ..["value"] = _fileOk ? '' : 'N';
     FFI.setByName('option', jsonEncode(res));
     notifyListeners();
+  }
+
+  toggleInput(){
+    if(_inputOk){
+      PlatformFFI.invokeMethod("stop_input");
+    }else{
+      showInputWarnAlert();
+    }
+  }
+
+  toggleService() async {
+    if(_isStart){
+      final res = await DialogManager.show<bool>((setState, close) => CustomAlertDialog(
+        title: Text("是否关闭"),
+        content: Text("关闭录屏服务将自动关闭所有已连接的控制"),
+        actions: [
+          TextButton(onPressed: ()=>close(), child: Text("Cancel")),
+          ElevatedButton(onPressed: ()=>close(true), child: Text("Ok")),
+        ],
+      ));
+      if(res == true){
+        stopService();
+      }
+    }else{
+      final res = await DialogManager.show<bool>((setState, close) => CustomAlertDialog(
+        title: Text("是否开启录屏服务"),
+        content: Text("将自动开启监听服务"),
+        actions: [
+          TextButton(onPressed: ()=>close(), child: Text("Cancel")),
+          ElevatedButton(onPressed: ()=>close(true), child: Text("Ok")),
+        ],
+      ));
+      if(res == true){
+        startService();
+      }
+    }
   }
 
   Future<Null> startService() async {
@@ -78,7 +119,8 @@ class ServerModel with ChangeNotifier {
 
   Future<Null> stopService() async {
     _isStart = false;
-    release();
+    _interval?.cancel();
+    _interval = null;
     FFI.serverModel.closeAll();
     await FFI.invokeMethod("stop_service");
     FFI.setByName("stop_service");
@@ -121,10 +163,6 @@ class ServerModel with ChangeNotifier {
     notifyListeners();
   }
 
-  release() {
-    _interval?.cancel();
-    _interval = null;
-  }
 
   changeStatue(String name, bool value) {
     debugPrint("changeStatue value $value");
@@ -137,8 +175,13 @@ class ServerModel with ChangeNotifier {
         }
         break;
       case "input":
+        if(_inputOk!= value){
+          Map<String, String> res = Map()
+            ..["name"] = "enable-keyboard"
+            ..["value"] = value ? '' : 'N';
+          FFI.setByName('option', jsonEncode(res));
+        }
         _inputOk = value;
-        //TODO change option
         break;
       default:
         return;
@@ -165,7 +208,7 @@ class ServerModel with ChangeNotifier {
       final Map<String, dynamic> response = Map();
       response["id"] = client.id;
       DialogManager.show((setState, close) => CustomAlertDialog(
-              title: Text("Control Request"),
+              title: Text(client.isFileTransfer?"File":"Screen" + "Control Request"),
               content: Column(
                 mainAxisSize: MainAxisSize.min,
                 mainAxisAlignment: MainAxisAlignment.center,
@@ -174,6 +217,7 @@ class ServerModel with ChangeNotifier {
                   Text(translate("Do you accept?")),
                   SizedBox(height: 20),
                   clientInfo(client),
+                  Text(translate("It will be control your device!")),
                 ],
               ),
               actions: [
@@ -198,13 +242,20 @@ class ServerModel with ChangeNotifier {
                       notifyListeners();
                       close();
                     }),
-              ]));
+              ],onWillPop:  ()async=>true,),barrierDismissible: true);
     } catch (e) {
       debugPrint("loginRequest failed,error:$e");
     }
   }
 
-  void onClientLogin(Map<String, dynamic> evt) {}
+  void onClientAuthorized(Map<String, dynamic> evt) {
+    try{
+      _clients.add(Client.fromJson(jsonDecode(evt['client'])));
+      notifyListeners();
+    }catch(e){
+
+    }
+  }
 
   void onClientRemove(Map<String, dynamic> evt) {
     try {
@@ -213,6 +264,8 @@ class ServerModel with ChangeNotifier {
       _clients.remove(client);
       notifyListeners();
     } catch (e) {
+      // singleWhere fail ,reset the login dialog
+      DialogManager.reset();
       debugPrint("onClientRemove failed,error:$e");
     }
   }
@@ -226,13 +279,16 @@ class ServerModel with ChangeNotifier {
 }
 
 class Client {
-  int id = 0; // for client connections inner count id
+  int id = 0; // client connections inner count id
   bool authorized = false;
   bool isFileTransfer = false;
   String name = "";
-  String peerId = ""; // for peer user's id,show at app
+  String peerId = ""; // peer user's id,show at app
+  bool keyboard = false;
+  bool clipboard = false;
+  bool audio = false;
 
-  Client(this.authorized, this.isFileTransfer, this.name, this.peerId);
+  Client(this.authorized, this.isFileTransfer, this.name, this.peerId,this.keyboard,this.clipboard,this.audio);
 
   Client.fromJson(Map<String, dynamic> json) {
     id = json['id'];
@@ -240,6 +296,9 @@ class Client {
     isFileTransfer = json['is_file_transfer'];
     name = json['name'];
     peerId = json['peer_id'];
+    keyboard= json['keyboard'];
+    clipboard= json['clipboard'];
+    audio= json['audio'];
   }
 
   Map<String, dynamic> toJson() {
@@ -249,6 +308,46 @@ class Client {
     data['is_file_transfer'] = this.isFileTransfer;
     data['name'] = this.name;
     data['peer_id'] = this.peerId;
+    data['keyboard'] = this.keyboard;
+    data['clipboard'] = this.clipboard;
+    data['audio'] = this.audio;
     return data;
   }
+}
+
+showInputWarnAlert() async {
+  if (globalKey.currentContext == null) return;
+  DialogManager.reset();
+  await showDialog<bool>(
+      context: globalKey.currentContext!,
+      builder: (alertContext) {
+        // TODO t
+        DialogManager.register(alertContext);
+        return AlertDialog(
+          title: Text("获取输入权限引导"),
+          content: Text.rich(TextSpan(style: TextStyle(), children: [
+            TextSpan(text: "请在接下来的系统设置页\n进入"),
+            TextSpan(text: " [服务] ", style: TextStyle(color: MyTheme.accent)),
+            TextSpan(text: "配置页面\n将"),
+            TextSpan(
+                text: " [RustDesk Input] ",
+                style: TextStyle(color: MyTheme.accent)),
+            TextSpan(text: "服务开启")
+          ])),
+          actions: [
+            TextButton(
+                child: Text(translate("Do nothing")),
+                onPressed: () {
+                  DialogManager.reset();
+                }),
+            ElevatedButton(
+                child: Text(translate("Go System Setting")),
+                onPressed: () {
+                  FFI.serverModel.initInput();
+                  DialogManager.reset();
+                }),
+          ],
+        );
+      });
+  DialogManager.drop();
 }

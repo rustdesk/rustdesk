@@ -12,7 +12,6 @@ import android.provider.Settings
 import android.util.DisplayMetrics
 import android.util.Log
 import androidx.annotation.RequiresApi
-import androidx.core.app.NotificationManagerCompat
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
@@ -77,7 +76,7 @@ class MainActivity : FlutterActivity() {
                     "check_service" -> {
                         flutterMethodChannel.invokeMethod(
                             "on_permission_changed",
-                            mapOf("name" to "input", "value" to InputService.isOpen().toString())
+                            mapOf("name" to "input", "value" to InputService.isOpen.toString())
                         )
                         flutterMethodChannel.invokeMethod(
                             "on_permission_changed",
@@ -87,6 +86,16 @@ class MainActivity : FlutterActivity() {
                     "init_input" -> {
                         initInput()
                         result.success(true)
+                    }
+                    "stop_input" -> {
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                            InputService.ctx?.disableSelf()
+                        }
+                        InputService.ctx = null
+                        flutterMethodChannel.invokeMethod(
+                            "on_permission_changed",
+                            mapOf("name" to "input", "value" to InputService.isOpen.toString())
+                        )
                     }
                     else -> {}
                 }
@@ -133,7 +142,7 @@ class MainActivity : FlutterActivity() {
 
     override fun onResume() {
         super.onResume()
-        val inputPer = InputService.isOpen()
+        val inputPer = InputService.isOpen
         Log.d(logTag, "onResume inputPer:$inputPer")
         activity.runOnUiThread {
             flutterMethodChannel.invokeMethod(

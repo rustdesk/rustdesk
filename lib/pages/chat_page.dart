@@ -4,9 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_hbb/common.dart';
 import 'package:flutter_hbb/models/chat_model.dart';
 import 'package:provider/provider.dart';
-import '../main.dart';
-import '../models/model.dart';
-import '../models/native_model.dart';
 import 'home_page.dart';
 
 OverlayEntry? iconOverlayEntry;
@@ -15,7 +12,6 @@ OverlayEntry? windowOverlayEntry;
 ChatPage chatPage = ChatPage();
 
 class ChatPage extends StatelessWidget implements PageShape {
-
   @override
   final title = "Chat";
 
@@ -28,17 +24,18 @@ class ChatPage extends StatelessWidget implements PageShape {
   @override
   Widget build(BuildContext context) {
     return Container(
-            color: MyTheme.grayBg,
-            child: Consumer<ChatModel>(builder: (context, chatModel, child) {
-              return DashChat(
-                sendOnEnter: false, // if true,reload keyboard everytime,need fix
-                onSend: (chatMsg) {
-                  chatModel.send(chatMsg);
-                },
-                user: chatModel.me,
-                messages: chatModel.messages[chatModel.currentID],
-              );
-            }));
+        color: MyTheme.grayBg,
+        child: Consumer<ChatModel>(builder: (context, chatModel, child) {
+          return DashChat(
+            inputContainerStyle: BoxDecoration(color: Colors.white70),
+            sendOnEnter: false, // if true,reload keyboard everytime,need fix
+            onSend: (chatMsg) {
+              chatModel.send(chatMsg);
+            },
+            user: chatModel.me,
+            messages: chatModel.messages[chatModel.currentID],
+          );
+        }));
   }
 }
 
@@ -116,14 +113,14 @@ toggleChatOverlay() {
 
 class ChatWindowOverlay extends StatefulWidget {
   final double windowWidth = 250;
-  final double windowHeight = 300;
+  final double windowHeight = 350;
 
   @override
   State<StatefulWidget> createState() => _ChatWindowOverlayState();
 }
 
 class _ChatWindowOverlayState extends State<ChatWindowOverlay> {
-  Offset _o = Offset(20, 20);
+  Offset _o = Offset(20, 80);
   bool _keyboardVisible = false;
   double _saveHeight = 0;
   double _lastBottomHeight = 0;
@@ -154,48 +151,47 @@ class _ChatWindowOverlayState extends State<ChatWindowOverlay> {
     });
   }
 
-  checkScreenSize(){
+  checkScreenSize() {
     // TODO 横屏处理
   }
 
-  checkKeyBoard(){
+  checkKeyboard() {
     final bottomHeight = MediaQuery.of(context).viewInsets.bottom;
     final currentVisible = bottomHeight != 0;
 
     debugPrint(bottomHeight.toString() + currentVisible.toString());
     // save
-    if (!_keyboardVisible && currentVisible){
+    if (!_keyboardVisible && currentVisible) {
       _saveHeight = _o.dy;
       debugPrint("on save $_saveHeight");
     }
 
     // reset
-    if (_lastBottomHeight>0 && bottomHeight == 0){
+    if (_lastBottomHeight > 0 && bottomHeight == 0) {
       debugPrint("on reset");
-      _o = Offset(_o.dx,_saveHeight);
+      _o = Offset(_o.dx, _saveHeight);
     }
 
     // onKeyboardVisible
-    if (_keyboardVisible && currentVisible){
-
-
+    if (_keyboardVisible && currentVisible) {
       final sumHeight = bottomHeight + widget.windowHeight;
       final contextHeight = MediaQuery.of(context).size.height;
-      debugPrint("prepare update sumHeight:$sumHeight,contextHeight:$contextHeight");
-      if(sumHeight + _o.dy > contextHeight){
+      debugPrint(
+          "prepare update sumHeight:$sumHeight,contextHeight:$contextHeight");
+      if (sumHeight + _o.dy > contextHeight) {
         final y = contextHeight - sumHeight;
         debugPrint("on update");
-        _o = Offset(_o.dx,y);
+        _o = Offset(_o.dx, y);
       }
     }
 
     _keyboardVisible = currentVisible;
     _lastBottomHeight = bottomHeight;
-
   }
+
   @override
   Widget build(BuildContext context) {
-    checkKeyBoard();
+    checkKeyboard();
     checkScreenSize();
     return Positioned(
         top: _o.dy,
@@ -206,8 +202,35 @@ class _ChatWindowOverlayState extends State<ChatWindowOverlay> {
           resizeToAvoidBottomInset: false,
           appBar: CustomAppBar(
             onPanUpdate: (d) => changeOffset(d.delta),
-            appBar: AppBar(
-                title: Text("Chat")),
+            appBar: Container(
+              color: MyTheme.accent50,
+              height: 50,
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Padding(padding: EdgeInsets.symmetric(horizontal: 15),child: Text(
+                    "Chat",
+                    style: TextStyle(
+                        color: Colors.white,
+                        fontFamily: 'WorkSans',
+                        fontWeight: FontWeight.bold,
+                        fontSize: 20),
+                  )),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      IconButton(onPressed: () {
+                        hideChatWindowOverlay();
+                      }, icon: Icon(Icons.keyboard_arrow_down)),
+                      IconButton(onPressed: () {
+                        hideChatWindowOverlay();
+                        hideChatIconOverlay();
+                      }, icon: Icon(Icons.close))
+                    ],
+                  )
+                ],
+              ),
+            ),
           ),
           body: chatPage,
         ));
@@ -216,7 +239,7 @@ class _ChatWindowOverlayState extends State<ChatWindowOverlay> {
 
 class CustomAppBar extends StatelessWidget implements PreferredSizeWidget {
   final GestureDragUpdateCallback onPanUpdate;
-  final AppBar appBar;
+  final Widget appBar;
 
   const CustomAppBar(
       {Key? key, required this.onPanUpdate, required this.appBar})

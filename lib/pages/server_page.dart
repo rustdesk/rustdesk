@@ -158,20 +158,20 @@ class _PermissionCheckerState extends State<PermissionChecker> {
   Widget build(BuildContext context) {
     final serverModel = Provider.of<ServerModel>(context);
     final androidVersion = PlatformFFI.androidVersion ?? 0;
-    final hasAudioPermission = androidVersion>=33;
+    final hasAudioPermission = androidVersion>=30;
     return PaddingCard(
         title: translate("Configuration Permissions"),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             PermissionRow(translate("Screen Capture"), serverModel.mediaOk,
-                serverModel.startService),
+                serverModel.toggleService),
             PermissionRow(translate("Mouse Control"), serverModel.inputOk,
-                showInputWarnAlert),
+                serverModel.toggleInput),
             PermissionRow(translate("File Transfer"), serverModel.fileOk,
                 serverModel.toggleFile),
             hasAudioPermission?PermissionRow(translate("Audio Capture"), serverModel.inputOk,
-                showInputWarnAlert):Text("* 当前安卓版本不支持音频捕获",style: TextStyle(color: MyTheme.darkGray),),
+                serverModel.toggleAudio):Text("* 当前安卓版本不支持音频捕获",style: TextStyle(color: MyTheme.darkGray),),
             SizedBox(height: 8),
             serverModel.mediaOk
                 ? ElevatedButton.icon(
@@ -235,7 +235,8 @@ class ConnectionManager extends StatelessWidget {
     return Column(
         children: serverModel.clients
             .map((client) => PaddingCard(
-                title: translate("Connection"),
+                title: translate(client.isFileTransfer?"File Connection":"Screen Connection"),
+                titleIcon: client.isFileTransfer?Icons.folder_outlined:Icons.mobile_screen_share,
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -259,9 +260,10 @@ class ConnectionManager extends StatelessWidget {
 }
 
 class PaddingCard extends StatelessWidget {
-  PaddingCard({required this.child, this.title});
+  PaddingCard({required this.child, this.title,this.titleIcon});
 
   final String? title;
+  final IconData? titleIcon;
   final Widget child;
 
   @override
@@ -272,15 +274,20 @@ class PaddingCard extends StatelessWidget {
           0,
           Padding(
               padding: EdgeInsets.symmetric(vertical: 5.0),
-              child: Text(
-                title!,
-                style: TextStyle(
-                  fontFamily: 'WorkSans',
-                  fontWeight: FontWeight.bold,
-                  fontSize: 22,
-                  color: MyTheme.accent80,
-                ),
-              )));
+              child: Row(
+                children: [
+                  titleIcon !=null?Padding(padding: EdgeInsets.only(right: 10),child:Icon(titleIcon,color: MyTheme.accent80,size: 30)):SizedBox.shrink(),
+                  Text(
+                    title!,
+                    style: TextStyle(
+                      fontFamily: 'WorkSans',
+                      fontWeight: FontWeight.bold,
+                      fontSize: 22,
+                      color: MyTheme.accent80,
+                    ),
+                  )
+                ],
+              ) ));
     }
     return Container(
         width: double.maxFinite,
@@ -306,51 +313,25 @@ Widget clientInfo(Client client) {
         CircleAvatar(
             child: Text(client.name[0]), backgroundColor: MyTheme.border),
         SizedBox(width: 12),
-        Text(client.name, style: TextStyle(color: MyTheme.idColor)),
-        SizedBox(width: 8),
-        Text(client.peerId, style: TextStyle(color: MyTheme.idColor))
+        Column(
+  crossAxisAlignment: CrossAxisAlignment.start,
+  mainAxisAlignment: MainAxisAlignment.center
+  ,children: [
+          Text(client.name, style: TextStyle(color: MyTheme.idColor,fontSize: 20)),
+          SizedBox(width: 8),
+          Text(client.peerId, style: TextStyle(color: MyTheme.idColor,fontSize: 10))
+        ])
       ],
     ),
-    Text("类型:${client.isFileTransfer?"管理文件":"屏幕控制"}" ,style: TextStyle(color: MyTheme.darkGray))
+    // !client.isFileTransfer?Row(
+    //   children: [
+    //     client.audio?Icon(Icons.volume_up):SizedBox.shrink(),
+    //     client.keyboard?Icon(Icons.mouse):SizedBox.shrink(),
+    //   ],
+    // ):SizedBox.shrink()
   ]);
 }
 
-showInputWarnAlert() async {
-  if (globalKey.currentContext == null) return;
-  DialogManager.reset();
-  await showDialog<bool>(
-      context: globalKey.currentContext!,
-      builder: (alertContext) {
-        // TODO t
-        DialogManager.register(alertContext);
-        return AlertDialog(
-          title: Text("获取输入权限引导"),
-          content: Text.rich(TextSpan(style: TextStyle(), children: [
-            TextSpan(text: "请在接下来的系统设置页\n进入"),
-            TextSpan(text: " [服务] ", style: TextStyle(color: MyTheme.accent)),
-            TextSpan(text: "配置页面\n将"),
-            TextSpan(
-                text: " [RustDesk Input] ",
-                style: TextStyle(color: MyTheme.accent)),
-            TextSpan(text: "服务开启")
-          ])),
-          actions: [
-            TextButton(
-                child: Text(translate("Do nothing")),
-                onPressed: () {
-                  DialogManager.reset();
-                }),
-            ElevatedButton(
-                child: Text(translate("Go System Setting")),
-                onPressed: () {
-                  FFI.serverModel.initInput();
-                  DialogManager.reset();
-                }),
-          ],
-        );
-      });
-  DialogManager.drop();
-}
 
 void toAndroidChannelInit() {
   FFI.setMethodCallHandler((method, arguments) {
