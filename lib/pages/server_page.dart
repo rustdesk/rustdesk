@@ -1,9 +1,10 @@
-import 'dart:async';
+import 'package:device_info/device_info.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/models/model.dart';
 import 'package:provider/provider.dart';
 
 import '../common.dart';
+import '../models/native_model.dart';
 import '../models/server_model.dart';
 import 'home_page.dart';
 import '../models/model.dart';
@@ -38,29 +39,26 @@ class ServerPage extends StatelessWidget implements PageShape {
   @override
   Widget build(BuildContext context) {
     checkService();
-    return ChangeNotifierProvider.value(
-      value: FFI.serverModel,
-      child: SingleChildScrollView(
-        child: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.start,
-            children: [
-              ServerInfo(),
-              PermissionChecker(),
-              ConnectionManager(),
-              SizedBox.fromSize(size: Size(0, 15.0)), // Bottom padding
-            ],
-          ),
-        ),
-      ),
-    );
+    return Consumer<ServerModel>(
+        builder: (context, serverModel, child) => SingleChildScrollView(
+              child: Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.start,
+                  children: [
+                    ServerInfo(),
+                    PermissionChecker(),
+                    ConnectionManager(),
+                    SizedBox.fromSize(size: Size(0, 15.0)), // Bottom padding
+                  ],
+                ),
+              ),
+            ));
   }
 }
 
 void checkService() {
   // 检测当前服务状态，若已存在服务则异步更新数据回来
   FFI.invokeMethod("check_service"); // jvm
-  FFI.serverModel.updateClientState();
 }
 
 class ServerInfo extends StatefulWidget {
@@ -69,101 +67,84 @@ class ServerInfo extends StatefulWidget {
 }
 
 class _ServerInfoState extends State<ServerInfo> {
+  final model = FFI.serverModel;
   var _passwdShow = false;
-  Timer? _interval;
-
-  // TODO set ID / PASSWORD
-  var _serverId = TextEditingController(text: "");
-  var _serverPasswd = TextEditingController(text: "");
-  var _emptyIdShow = translate("connecting_status");
-
-  @override
-  void initState() {
-    super.initState();
-    var id = FFI.getByName("server_id");
-
-    // TODO 需要重新优化开启监听 开启监听服务后再开始pop_event
-    FFI.setByName("ensure_init_event_queue");
-    _interval = Timer.periodic(Duration(milliseconds: 30),
-            (timer) {
-      FFI.ffiModel.update("", (_, __) {});});
-
-    _serverId.text = id == "" ? _emptyIdShow : id;
-    _serverPasswd.text = FFI.getByName("server_password");
-    if (_serverId.text == _emptyIdShow || _serverPasswd.text == "") {
-      fetchConfigAgain();
-    }
-  }
-
-  @override
-  void dispose() {
-    _interval?.cancel();
-    super.dispose();
-  }
 
   @override
   Widget build(BuildContext context) {
-    return myCard(Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        TextFormField(
-          readOnly: true,
-          style: TextStyle(
-              fontSize: 25.0,
-              fontWeight: FontWeight.bold,
-              color: MyTheme.accent),
-          controller: _serverId,
-          decoration: InputDecoration(
-            icon: const Icon(Icons.perm_identity),
-            labelText: translate("ID"),
-            labelStyle:
-                TextStyle(fontWeight: FontWeight.bold, color: MyTheme.accent50),
-          ),
-          onSaved: (String? value) {},
-        ),
-        TextFormField(
-          readOnly: true,
-          obscureText: !_passwdShow,
-          style: TextStyle(
-              fontSize: 25.0,
-              fontWeight: FontWeight.bold,
-              color: MyTheme.accent),
-          controller: _serverPasswd,
-          decoration: InputDecoration(
-              icon: const Icon(Icons.lock),
-              labelText: translate("Password"),
-              labelStyle: TextStyle(
-                  fontWeight: FontWeight.bold, color: MyTheme.accent50),
-              suffix: IconButton(
-                  icon: Icon(Icons.visibility),
-                  onPressed: () {
-                    setState(() {
-                      _passwdShow = !_passwdShow;
-                    });
-                  })),
-          onSaved: (String? value) {},
-        ),
-      ],
-    ));
-  }
-
-  fetchConfigAgain() async {
-    FFI.setByName("start_service");
-    var count = 0;
-    const maxCount = 10;
-    while (count < maxCount) {
-      if (_serverId.text != _emptyIdShow && _serverPasswd.text != "") {
-        break;
-      }
-      await Future.delayed(Duration(seconds: 2));
-      var id = FFI.getByName("server_id");
-      _serverId.text = id == "" ? _emptyIdShow : id;
-      _serverPasswd.text = FFI.getByName("server_password");
-      debugPrint(
-          "fetch id & passwd again at $count:id:${_serverId.text},passwd:${_serverPasswd.text}");
-      count++;
-    }
-    FFI.setByName("stop_service");
+    return model.isStart
+        ? PaddingCard(
+            child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextFormField(
+                readOnly: true,
+                style: TextStyle(
+                    fontSize: 25.0,
+                    fontWeight: FontWeight.bold,
+                    color: MyTheme.accent),
+                controller: model.serverId,
+                decoration: InputDecoration(
+                  icon: const Icon(Icons.perm_identity),
+                  labelText: translate("ID"),
+                  labelStyle: TextStyle(
+                      fontWeight: FontWeight.bold, color: MyTheme.accent50),
+                ),
+                onSaved: (String? value) {},
+              ),
+              TextFormField(
+                readOnly: true,
+                obscureText: !_passwdShow,
+                style: TextStyle(
+                    fontSize: 25.0,
+                    fontWeight: FontWeight.bold,
+                    color: MyTheme.accent),
+                controller: model.serverPasswd,
+                decoration: InputDecoration(
+                    icon: const Icon(Icons.lock),
+                    labelText: translate("Password"),
+                    labelStyle: TextStyle(
+                        fontWeight: FontWeight.bold, color: MyTheme.accent50),
+                    suffix: IconButton(
+                        icon: Icon(Icons.visibility),
+                        onPressed: () {
+                          setState(() {
+                            _passwdShow = !_passwdShow;
+                          });
+                        })),
+                onSaved: (String? value) {},
+              ),
+            ],
+          ))
+        : PaddingCard(
+            child: Column(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Center(
+                  child: Row(
+                children: [
+                  Icon(Icons.warning_amber_sharp,
+                      color: Colors.redAccent, size: 24),
+                  SizedBox(width: 10),
+                  Text(
+                    "屏幕共享尚未开启",
+                    style: TextStyle(
+                      fontFamily: 'WorkSans',
+                      fontWeight: FontWeight.bold,
+                      fontSize: 18,
+                      color: MyTheme.accent80,
+                    ),
+                  )
+                ],
+              )),
+              SizedBox(height: 5),
+              Center(
+                  child: Text(
+                "点击[启动服务]或打开Screen Capture 开启共享手机屏幕",
+                style: TextStyle(fontSize: 12, color: MyTheme.darkGray),
+              ))
+            ],
+          ));
   }
 }
 
@@ -176,30 +157,35 @@ class _PermissionCheckerState extends State<PermissionChecker> {
   @override
   Widget build(BuildContext context) {
     final serverModel = Provider.of<ServerModel>(context);
-
-    return myCard(Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        cardTitle(translate("Configuration Permissions")),
-        PermissionRow(
-            translate("Media"), serverModel.mediaOk, _toAndroidInitService),
-        const Divider(height: 0),
-        PermissionRow(
-            translate("Input"), serverModel.inputOk, showInputWarnAlert),
-        const Divider(),
-        serverModel.mediaOk
-            ? ElevatedButton.icon(
-                style: ButtonStyle(
-                    backgroundColor: MaterialStateProperty.all(Colors.red)),
-                icon: Icon(Icons.stop),
-                onPressed: _toAndroidStopService,
-                label: Text(translate("Stop service")))
-            : ElevatedButton.icon(
-                icon: Icon(Icons.play_arrow),
-                onPressed: _toAndroidInitService,
-                label: Text(translate("Start Service"))),
-      ],
-    ));
+    final androidVersion = PlatformFFI.androidVersion ?? 0;
+    final hasAudioPermission = androidVersion>=33;
+    return PaddingCard(
+        title: translate("Configuration Permissions"),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            PermissionRow(translate("Screen Capture"), serverModel.mediaOk,
+                serverModel.startService),
+            PermissionRow(translate("Mouse Control"), serverModel.inputOk,
+                showInputWarnAlert),
+            PermissionRow(translate("File Transfer"), serverModel.fileOk,
+                serverModel.toggleFile),
+            hasAudioPermission?PermissionRow(translate("Audio Capture"), serverModel.inputOk,
+                showInputWarnAlert):Text("* 当前安卓版本不支持音频捕获",style: TextStyle(color: MyTheme.darkGray),),
+            SizedBox(height: 8),
+            serverModel.mediaOk
+                ? ElevatedButton.icon(
+                    style: ButtonStyle(
+                        backgroundColor: MaterialStateProperty.all(Colors.red)),
+                    icon: Icon(Icons.stop),
+                    onPressed: serverModel.stopService,
+                    label: Text(translate("Stop service")))
+                : ElevatedButton.icon(
+                    icon: Icon(Icons.play_arrow),
+                    onPressed: serverModel.startService,
+                    label: Text(translate("Start Service"))),
+          ],
+        ));
   }
 }
 
@@ -218,7 +204,7 @@ class PermissionRow extends StatelessWidget {
         Row(
           children: [
             SizedBox(
-                width: 70,
+                width: 140,
                 child: Text(name,
                     style: TextStyle(fontSize: 16.0, color: MyTheme.accent50))),
             SizedBox(
@@ -231,11 +217,12 @@ class PermissionRow extends StatelessWidget {
           ],
         ),
         TextButton(
-            onPressed: isOk ? null : onPressed,
+            onPressed: onPressed,
             child: Text(
-              translate("OPEN"),
+              translate(isOk ?"CLOSE":"OPEN"),
               style: TextStyle(fontWeight: FontWeight.bold),
             )),
+        const Divider(height: 0)
       ],
     );
   }
@@ -246,95 +233,86 @@ class ConnectionManager extends StatelessWidget {
   Widget build(BuildContext context) {
     final serverModel = Provider.of<ServerModel>(context);
     return Column(
-      children: serverModel.clients.map((client) =>
-          myCard(Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              cardTitle(translate("Connection")),
-              Padding(
-                padding: EdgeInsets.symmetric(vertical: 5.0),
-                child: clientInfo(client),
-              ),
-              ElevatedButton.icon(
-                  style: ButtonStyle(
-                      backgroundColor: MaterialStateProperty.all(Colors.red)),
-                  icon: Icon(Icons.close),
-                  onPressed: () {
-                    FFI.setByName("close_conn",client.id.toString());
-                  },
-                  label: Text(translate("Close")))
-            ],
-          ))
-      ).toList()
-    );
+        children: serverModel.clients
+            .map((client) => PaddingCard(
+                title: translate("Connection"),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Padding(
+                      padding: EdgeInsets.symmetric(vertical: 5.0),
+                      child: clientInfo(client),
+                    ),
+                    ElevatedButton.icon(
+                        style: ButtonStyle(
+                            backgroundColor:
+                                MaterialStateProperty.all(Colors.red)),
+                        icon: Icon(Icons.close),
+                        onPressed: () {
+                          FFI.setByName("close_conn", client.id.toString());
+                        },
+                        label: Text(translate("Close")))
+                  ],
+                )))
+            .toList());
   }
 }
 
-Widget cardTitle(String text) {
-  return Padding(
-      padding: EdgeInsets.symmetric(vertical: 5.0),
-      child: Text(
-        text,
-        style: TextStyle(
-          fontFamily: 'WorkSans',
-          fontWeight: FontWeight.bold,
-          fontSize: 22,
-          color: MyTheme.accent80,
-        ),
-      ));
-}
+class PaddingCard extends StatelessWidget {
+  PaddingCard({required this.child, this.title});
 
-Widget myCard(Widget child) {
-  return Container(
-      width: double.maxFinite,
-      child: Card(
-        margin: EdgeInsets.fromLTRB(15.0, 15.0, 15.0, 0),
-        child: Padding(
-          padding: EdgeInsets.symmetric(vertical: 15.0, horizontal: 30.0),
-          child: child,
-        ),
-      ));
+  final String? title;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final children = [child];
+    if (title != null) {
+      children.insert(
+          0,
+          Padding(
+              padding: EdgeInsets.symmetric(vertical: 5.0),
+              child: Text(
+                title!,
+                style: TextStyle(
+                  fontFamily: 'WorkSans',
+                  fontWeight: FontWeight.bold,
+                  fontSize: 22,
+                  color: MyTheme.accent80,
+                ),
+              )));
+    }
+    return Container(
+        width: double.maxFinite,
+        child: Card(
+          margin: EdgeInsets.fromLTRB(15.0, 15.0, 15.0, 0),
+          child: Padding(
+            padding: EdgeInsets.symmetric(vertical: 15.0, horizontal: 30.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: children,
+            ),
+          ),
+        ));
+  }
 }
 
 Widget clientInfo(Client client) {
-  return Row(
-    children: [
-      CircleAvatar(child: Text(client.name[0]), backgroundColor: MyTheme.border),
-      SizedBox(width: 12),
-      Text(client.name, style: TextStyle(color: MyTheme.idColor)),
-      SizedBox(width: 8),
-      Text(client.peerId, style: TextStyle(color: MyTheme.idColor))
-    ],
-  );
-}
-
-Future<Null> _toAndroidInitService() async {
-  bool res = await FFI.invokeMethod("init_service");
-  FFI.setByName("start_service");
-  debugPrint("_toAndroidInitService:$res");
-}
-
-// Future<Null> _toAndroidStartCapture() async {
-//   bool res = await FFI.invokeMethod("start_capture");
-//   debugPrint("_toAndroidStartCapture:$res");
-// }
-
-// Future<Null> _toAndroidStopCapture() async {
-//   bool res = await FFI.invokeMethod("stop_capture");
-//   debugPrint("_toAndroidStopCapture:$res");
-// }
-
-Future<Null> _toAndroidStopService() async {
-  FFI.serverModel.closeAll();
-
-  bool res = await FFI.invokeMethod("stop_service");
-  FFI.setByName("stop_service");
-  debugPrint("_toAndroidStopSer:$res");
-}
-
-Future<Null> _toAndroidInitInput() async {
-  bool res = await FFI.invokeMethod("init_input");
-  debugPrint("_toAndroidInitInput:$res");
+  return Column(
+  crossAxisAlignment: CrossAxisAlignment.start
+  ,children: [
+    Row(
+      children: [
+        CircleAvatar(
+            child: Text(client.name[0]), backgroundColor: MyTheme.border),
+        SizedBox(width: 12),
+        Text(client.name, style: TextStyle(color: MyTheme.idColor)),
+        SizedBox(width: 8),
+        Text(client.peerId, style: TextStyle(color: MyTheme.idColor))
+      ],
+    ),
+    Text("类型:${client.isFileTransfer?"管理文件":"屏幕控制"}" ,style: TextStyle(color: MyTheme.darkGray))
+  ]);
 }
 
 showInputWarnAlert() async {
@@ -347,7 +325,6 @@ showInputWarnAlert() async {
         DialogManager.register(alertContext);
         return AlertDialog(
           title: Text("获取输入权限引导"),
-          // content: Text("请在接下来的系统设置页面 \n进入 [服务] 配置页面\n将[RustDesk Input]服务开启"),
           content: Text.rich(TextSpan(style: TextStyle(), children: [
             TextSpan(text: "请在接下来的系统设置页\n进入"),
             TextSpan(text: " [服务] ", style: TextStyle(color: MyTheme.accent)),
@@ -366,7 +343,7 @@ showInputWarnAlert() async {
             ElevatedButton(
                 child: Text(translate("Go System Setting")),
                 onPressed: () {
-                  _toAndroidInitInput();
+                  FFI.serverModel.initInput();
                   DialogManager.reset();
                 }),
           ],
@@ -380,27 +357,12 @@ void toAndroidChannelInit() {
     debugPrint("flutter got android msg,$method,$arguments");
     try {
       switch (method) {
-        // case "try_start_without_auth":
-        //   {
-        //     FFI.serverModel.updateClientState();
-        //     debugPrint(
-        //         "pre show loginAlert:${FFI.serverModel.isFileTransfer.toString()}");
-        //     showLoginReqAlert(FFI.serverModel.peerID, FFI.serverModel.peerName);
-        //     debugPrint("from jvm:try_start_without_auth done");
-        //     break;
-        //   }
         case "start_capture":
           {
             DialogManager.reset();
             FFI.serverModel.updateClientState();
             break;
           }
-        // case "stop_capture":
-        //   {
-        //     DialogManager.reset();
-        //     FFI.serverModel.setPeer(false);
-        //     break;
-        //   }
         case "on_permission_changed":
           {
             var name = arguments["name"] as String;

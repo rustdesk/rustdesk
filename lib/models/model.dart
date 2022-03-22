@@ -129,8 +129,10 @@ class FfiModel with ChangeNotifier {
         Clipboard.setData(ClipboardData(text: evt['content']));
       } else if (name == 'permission') {
         FFI.ffiModel.updatePermission(evt);
-      } else if (name == 'chat') {
-        FFI.chatModel.receive(evt['text'] ?? "");
+      } else if (name == 'chat_client_mode') {
+        FFI.chatModel.receive(ChatModel.clientModeID,evt['text'] ?? "");
+      } else if (name == 'chat_server_mode') {
+        FFI.chatModel.receive(int.parse(evt['id'] as String),evt['text'] ?? "");
       } else if (name == 'file_dir') {
         FFI.fileModel.receiveFileDir(evt);
       } else if (name == 'job_progress') {

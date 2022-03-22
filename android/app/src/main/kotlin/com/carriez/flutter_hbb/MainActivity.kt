@@ -46,7 +46,9 @@ class MainActivity : FlutterActivity() {
                 when (call.method) {
                     "init_service" -> {
                         Log.d(logTag, "event from flutter,getPer")
-                        getMediaProjection()
+                        if(mainService?.isReady == false){
+                            getMediaProjection()
+                        }
                         result.success(true)
                     }
                     "start_capture" -> {

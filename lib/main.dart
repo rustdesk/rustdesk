@@ -28,6 +28,8 @@ class App extends StatelessWidget {
         ChangeNotifierProvider.value(value: FFI.imageModel),
         ChangeNotifierProvider.value(value: FFI.cursorModel),
         ChangeNotifierProvider.value(value: FFI.canvasModel),
+        ChangeNotifierProvider.value(value: FFI.serverModel),
+        ChangeNotifierProvider.value(value: FFI.chatModel),
         ChangeNotifierProvider.value(value: FFI.fileModel),
       ],
       child: MaterialApp(

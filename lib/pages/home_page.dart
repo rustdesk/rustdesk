@@ -57,6 +57,11 @@ class _HomePageState extends State<HomePage> {
             selectedItemColor: MyTheme.accent,
             unselectedItemColor: MyTheme.darkGray,
             onTap: (index) => setState(() {
+              // close chat overlay when go chat page
+              if(index == 1 && _selectedIndex!=index){
+                hideChatIconOverlay();
+                hideChatWindowOverlay();
+              }
               _selectedIndex = index;
             }),
           ),

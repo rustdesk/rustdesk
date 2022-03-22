@@ -456,7 +456,7 @@ class _RemotePageState extends State<RemotePage> {
     final keyboard = FFI.ffiModel.permissions['keyboard'] != false;
     var paints = <Widget>[ImagePaint()];
     if (keyboard ||
-        FFI.getByName('toggle-option', 'show-remote-cursor') == 'true') {
+        FFI.getByName('toggle_option', 'show-remote-cursor') == 'true') {
       paints.add(CursorPaint());
     }
     return MouseRegion(

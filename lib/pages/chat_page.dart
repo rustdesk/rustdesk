@@ -27,9 +27,7 @@ class ChatPage extends StatelessWidget implements PageShape {
 
   @override
   Widget build(BuildContext context) {
-    return ChangeNotifierProvider.value(
-        value: FFI.chatModel,
-        child: Container(
+    return Container(
             color: MyTheme.grayBg,
             child: Consumer<ChatModel>(builder: (context, chatModel, child) {
               return DashChat(
@@ -38,9 +36,9 @@ class ChatPage extends StatelessWidget implements PageShape {
                   chatModel.send(chatMsg);
                 },
                 user: chatModel.me,
-                messages: chatModel.messages,
+                messages: chatModel.messages[chatModel.currentID],
               );
-            })));
+            }));
   }
 }
 
