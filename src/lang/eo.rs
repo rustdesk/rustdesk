@@ -209,7 +209,9 @@ lazy_static::lazy_static! {
             ("Socks5 Proxy", "Socks5 prokura servilo"),
             ("Add to Favorites", "Aldoni al la favorataj"),
             ("Remove from Favorites", "Forigi el la favorataj"),
-            ("Unremember Password", "Forgesi pasvorton")
+            ("Unremember Password", "Forgesi pasvorton"),
+            ("No permission of file transfer", "Neniu permeso de dosiertransigo"),
+            ("Note", "Notu"),
         ].iter().cloned().collect();
     }
     

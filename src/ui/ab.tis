@@ -14,6 +14,7 @@ function getSessionsStyle(type) {
 }
 
 var searchPatterns = {};
+var current_menu_peer_id = '';
 
 class SearchBar: Reactor.Component {
     this var type = "";
@@ -177,7 +178,7 @@ class SessionList: Reactor.Component {
         }
         // https://sciter.com/forums/topic/replacecustomize-context-menu/
         var menu = this.$(menu#remote-context);
-        menu.attributes["remote-id"] = id;
+        current_menu_peer_id = id;
         var conn = this.$(menu #connect);
         if (conn) {
           var alias = me.parent.parent.$(#alias);
@@ -195,7 +196,7 @@ class SessionList: Reactor.Component {
 
     event click $(menu#remote-context li) (evt, me) {
         var action = me.id;
-        var id = me.parent.attributes["remote-id"];
+        var id = current_menu_peer_id;
         if (action == "connect") {
             createNewConnect(id, "connect");
         } else if (action == "transfer") {

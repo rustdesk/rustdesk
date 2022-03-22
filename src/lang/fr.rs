@@ -202,5 +202,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Download new version", "Télécharger la nouvelle version"),
         ("Touch mode", "Mode tactile"),
         ("Reset canvas", "Réinitialiser le canevas"),
+        ("No permission of file transfer", "Aucune autorisation de transfert de fichiers"),
+        ("Note", "Noter"),
     ].iter().cloned().collect();
 }

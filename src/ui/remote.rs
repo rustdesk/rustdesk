@@ -1164,6 +1164,14 @@ impl Handler {
     fn call(&self, func: &str, args: &[Value]) {
         let r = self.read().unwrap();
         if let Some(ref e) = r.element {
+            allow_err!(e.call_method(func, args));
+        }
+    }
+
+    #[inline]
+    fn call2(&self, func: &str, args: &[Value]) {
+        let r = self.read().unwrap();
+        if let Some(ref e) = r.element {
             allow_err!(e.call_method(func, &super::value_crash_workaround(args)[..]));
         }
     }
@@ -1712,7 +1720,7 @@ impl Remote {
                 Some(message::Union::video_frame(vf)) => {
                     if !self.first_frame {
                         self.first_frame = true;
-                        self.handler.call("closeSuccess", &make_args!());
+                        self.handler.call2("closeSuccess", &make_args!());
                         self.handler.call("adaptSize", &make_args!());
                     }
                     self.video_sender.send(MediaData::VideoFrame(vf)).ok();
@@ -1822,26 +1830,29 @@ impl Remote {
                                     SERVER_KEYBOARD_ENABLED = p.enabled;
                                 }
                                 self.handler
-                                    .call("setPermission", &make_args!("keyboard", p.enabled));
+                                    .call2("setPermission", &make_args!("keyboard", p.enabled));
                             }
                             Permission::Clipboard => {
                                 unsafe {
                                     SERVER_CLIPBOARD_ENABLED = p.enabled;
                                 }
                                 self.handler
-                                    .call("setPermission", &make_args!("clipboard", p.enabled));
+                                    .call2("setPermission", &make_args!("clipboard", p.enabled));
                             }
                             Permission::Audio => {
                                 self.handler
-                                    .call("setPermission", &make_args!("audio", p.enabled));
+                                    .call2("setPermission", &make_args!("audio", p.enabled));
                             }
                             Permission::File => {
                                 unsafe {
                                     SERVER_FILE_TRANSFER_ENABLED = p.enabled;
                                 }
+                                if !p.enabled && self.handler.is_file_transfer() {
+                                    return true;
+                                }
                                 self.check_clipboard_file_context();
                                 self.handler
-                                    .call("setPermission", &make_args!("file", p.enabled));
+                                    .call2("setPermission", &make_args!("file", p.enabled));
                             }
                         }
                     }
@@ -1945,7 +1956,7 @@ fn make_fd(id: i32, entries: &Vec<FileEntry>, only_count: bool) -> Value {
 impl Interface for Handler {
     fn msgbox(&self, msgtype: &str, title: &str, text: &str) {
         let retry = check_if_retry(msgtype, title, text);
-        self.call("msgbox_retry", &make_args!(msgtype, title, text, retry));
+        self.call2("msgbox_retry", &make_args!(msgtype, title, text, retry));
     }
 
     fn handle_login_error(&mut self, err: &str) -> bool {
@@ -2003,7 +2014,7 @@ impl Interface for Handler {
         self.lc.write().unwrap().handle_peer_info(username, pi);
         self.call("updatePi", &make_args!(pi_sciter));
         if self.is_file_transfer() {
-            self.call("closeSuccess", &make_args!());
+            self.call2("closeSuccess", &make_args!());
         } else if !self.is_port_forward() {
             self.msgbox("success", "Successful", "Connected, waiting for image...");
         }

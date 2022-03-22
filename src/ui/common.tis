@@ -247,7 +247,7 @@ function connecting() {
 
 handler.msgbox = function(type, title, text, hasRetry=false) {
     // crash somehow (when input wrong password), even with small time, for example, 1ms
-    self.timer(30ms, function() { msgbox(type, title, text, null, 180, 500, hasRetry); });
+    self.timer(60ms, function() { msgbox(type, title, text, null, 180, 500, hasRetry); });
 }
 
 var reconnectTimeout = 1000;

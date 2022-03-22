@@ -444,12 +444,14 @@ function self.closing() {
 }
 
 handler.setPermission = function(name, enabled) {
+    self.timer(60ms, function() {
     if (name == "keyboard") keyboard_enabled = enabled;
     if (name == "audio") audio_enabled = enabled;
     if (name == "file") file_enabled = enabled;
     if (name == "clipboard") clipboard_enabled = enabled;
     input_blocked = false;
     header.update();
+    });
 }
 
 handler.closeSuccess = function() {
