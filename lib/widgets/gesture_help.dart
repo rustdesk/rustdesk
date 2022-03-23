@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_hbb/common.dart';
 import 'package:toggle_switch/toggle_switch.dart';
 
+import '../models/model.dart';
+
 class GestureIcons {
   static const String _family = 'gestureicons';
 
@@ -35,9 +37,12 @@ class GestureIcons {
 typedef OnTouchModeChange = void Function(bool);
 
 class GestureHelp extends StatefulWidget {
-  GestureHelp({Key? key,required this.touchMode,required this.onTouchModeChange}) : super(key: key);
+  GestureHelp(
+      {Key? key, required this.touchMode, required this.onTouchModeChange})
+      : super(key: key);
   final bool touchMode;
   final OnTouchModeChange onTouchModeChange;
+
   @override
   State<StatefulWidget> createState() => _GestureHelpState();
 }
@@ -57,27 +62,24 @@ class _GestureHelpState extends State<GestureHelp> {
   Widget build(BuildContext context) {
     return Center(
         child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 10),
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
-              crossAxisAlignment: CrossAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: <Widget>[
                 ToggleSwitch(
                   initialLabelIndex: _selectedIndex,
                   inactiveBgColor: MyTheme.darkGray,
                   totalSwitches: 2,
-                  minWidth: 130,
+                  minWidth: 150,
                   fontSize: 15,
-                  iconSize: 20,
-                  labels: ["触摸板模式", "触屏模式"],
-                  icons: [
-                    Icons.mouse,
-                    Icons.touch_app
-                  ],
+                  iconSize: 18,
+                  labels: [translate("TouchPad mode"), translate("Touch mode")],
+                  icons: [Icons.mouse, Icons.touch_app],
                   onToggle: (index) {
                     debugPrint(index.toString());
                     setState(() {
-                      if (_selectedIndex != index){
+                      if (_selectedIndex != index) {
                         _selectedIndex = index ?? 0;
                         _touchMode = index == 0 ? false : true;
                         widget.onTouchModeChange(_touchMode);
@@ -86,39 +88,64 @@ class _GestureHelpState extends State<GestureHelp> {
                   },
                 ),
                 const SizedBox(height: 15),
-                Column(
+                Container(
+                    child: Column(
                   mainAxisAlignment: MainAxisAlignment.start,
                   crossAxisAlignment: CrossAxisAlignment.center,
                   children: _touchMode
-                      ? const [
+                      ? [
                           GestureInfo(
-                              GestureIcons.icon_Mobile_Touch, "单指轻触", "点击对应位置"),
-                          GestureInfo(GestureIcons.icon_gesture_press_hold,
-                              "单指长按", "鼠标右键"),
-                          GestureInfo(GestureIcons.icon_gesture_f_swipe_right,
-                              "单指移动", "鼠标选中拖动"),
-                          GestureInfo(GestureIcons.icon_gesture_f_drag_up_down_,
-                              "双指垂直滑动", "鼠标滚轮"),
+                              GestureIcons.icon_Mobile_Touch,
+                              translate("One-Finger Tap"),
+                              translate("Left Mouse")),
                           GestureInfo(
-                              GestureIcons.icon_gesture_f_drag, "双指移动", "移动画布"),
+                              GestureIcons.icon_gesture_press_hold,
+                              translate("One-Long Tap"),
+                              translate("Right Mouse")),
                           GestureInfo(
-                              GestureIcons.icon_gesture_pinch, "双指缩放", "缩放画布"),
+                              GestureIcons.icon_gesture_f_swipe_right,
+                              translate("One-Finger Move"),
+                              translate("Mouse Drag")),
+                          GestureInfo(
+                              GestureIcons.icon_gesture_f_drag_up_down_,
+                              translate("Two-Finger vertically"),
+                              translate("Mouse Wheel")),
+                          GestureInfo(
+                              GestureIcons.icon_gesture_f_drag,
+                              translate("Two-Finger Move"),
+                              translate("Canvas Move")),
+                          GestureInfo(
+                              GestureIcons.icon_gesture_pinch,
+                              translate("Pinch to Zoom"),
+                              translate("Canvas Zoom")),
                         ]
-                      : const [
+                      : [
                           GestureInfo(
-                              GestureIcons.icon_gesture_tap, "单指轻触", "鼠标左键"),
+                              GestureIcons.icon_Mobile_Touch,
+                              translate("One-Finger Tap"),
+                              translate("Left Mouse")),
                           GestureInfo(
-                              GestureIcons.icon_gesture_f_tap_, "双指轻触", "鼠标右键"),
-                          GestureInfo(GestureIcons.icon_gesture_f_swipe_right,
-                              "双击并移动", "鼠标选中拖动"),
-                          GestureInfo(GestureIcons.icon_gesture_f_drag_up_down_,
-                              "双指垂直滑动", "鼠标滚轮"),
+                              GestureIcons.icon_gesture_f_tap_,
+                              translate("Two-Finger Tap"),
+                              translate("Right Mouse")),
                           GestureInfo(
-                              GestureIcons.icon_gesture_f_drag, "双指移动", "移动画布"),
+                              GestureIcons.icon_gesture_f_swipe_right,
+                              translate("Double Tap & Move"),
+                              translate("Mouse Drag")),
                           GestureInfo(
-                              GestureIcons.icon_gesture_pinch, "双指缩放", "缩放画布"),
+                              GestureIcons.icon_gesture_f_drag_up_down_,
+                              translate("Two-Finger vertically"),
+                              translate("Mouse Wheel")),
+                          GestureInfo(
+                              GestureIcons.icon_gesture_f_drag,
+                              translate("Two-Finger Move"),
+                              translate("Canvas Move")),
+                          GestureInfo(
+                              GestureIcons.icon_gesture_pinch,
+                              translate("Pinch to Zoom"),
+                              translate("Canvas Zoom")),
                         ],
-                ),
+                )),
               ],
             )));
   }
@@ -132,41 +159,39 @@ class GestureInfo extends StatelessWidget {
   final String toText;
   final IconData icon;
 
-  final textSize = 15.0;
+  final textSize = 14.0;
   final textColor = MyTheme.accent80;
   final iconSize = 35.0;
   final iconColor = MyTheme.darkGray;
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-        width: 280,
-        child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 5),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.start,
-              crossAxisAlignment: CrossAxisAlignment.center,
+    return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 5),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 0),
+                child: Icon(
+                  icon,
+                  size: iconSize,
+                  color: iconColor,
+                )),
+            Row(
               children: [
+                Text(fromText,
+                    style: TextStyle(fontSize: textSize, color: textColor)),
                 Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 15),
-                    child: Icon(
-                      icon,
-                      size: iconSize,
-                      color: iconColor,
-                    )),
-                Row(
-                  children: [
-                    Text(fromText,
-                        style: TextStyle(fontSize: textSize, color: textColor)),
-                    Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 5),
-                        child: Icon(Icons.arrow_forward_rounded,
-                            size: 20, color: iconColor)),
-                    Text(toText,
-                        style: TextStyle(fontSize: textSize, color: textColor))
-                  ],
-                )
+                    padding: const EdgeInsets.symmetric(horizontal: 5),
+                    child: Icon(Icons.arrow_forward_rounded,
+                        size: 20, color: iconColor)),
+                Text(toText,
+                    style: TextStyle(fontSize: textSize, color: textColor))
               ],
-            )));
+            )
+          ],
+        ));
   }
 }

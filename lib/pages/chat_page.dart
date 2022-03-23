@@ -34,7 +34,7 @@ class ChatPage extends StatelessWidget implements PageShape {
               chatModel.send(chatMsg);
             },
             user: chatModel.me,
-            messages: chatModel.messages[chatModel.currentID],
+            messages: chatModel.messages[chatModel.currentID] ?? [],
           );
         }));
   }

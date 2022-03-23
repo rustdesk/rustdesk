@@ -281,7 +281,7 @@ class PaddingCard extends StatelessWidget {
                     style: TextStyle(
                       fontFamily: 'WorkSans',
                       fontWeight: FontWeight.bold,
-                      fontSize: 22,
+                      fontSize: 20,
                       color: MyTheme.accent80,
                     ),
                   )
