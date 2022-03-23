@@ -7,7 +7,7 @@ import 'home_page.dart';
 
 class SettingsPage extends StatelessWidget implements PageShape {
   @override
-  final title = "Settings";
+  final title = translate("Settings");
 
   @override
   final icon = Icon(Icons.settings);

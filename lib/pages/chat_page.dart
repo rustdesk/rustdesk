@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_hbb/common.dart';
 import 'package:flutter_hbb/models/chat_model.dart';
 import 'package:provider/provider.dart';
+import '../models/model.dart';
 import 'home_page.dart';
 
 OverlayEntry? iconOverlayEntry;
@@ -13,7 +14,7 @@ ChatPage chatPage = ChatPage();
 
 class ChatPage extends StatelessWidget implements PageShape {
   @override
-  final title = "Chat";
+  final title = translate("Chat");
 
   @override
   final icon = Icon(Icons.chat);
@@ -209,7 +210,7 @@ class _ChatWindowOverlayState extends State<ChatWindowOverlay> {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Padding(padding: EdgeInsets.symmetric(horizontal: 15),child: Text(
-                    "Chat",
+                    translate("Chat"),
                     style: TextStyle(
                         color: Colors.white,
                         fontFamily: 'WorkSans',

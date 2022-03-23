@@ -139,12 +139,12 @@ class _FileManagerPageState extends State<FileManagerPage> {
                       itemBuilder: (context) {
                         return [
                           PopupMenuItem(
-                            child: Text("删除"),
+                            child: Text(translate("Delete")),
                             value: "delete",
                           ),
                           PopupMenuItem(
-                            child: Text("详细信息"),
-                            value: "delete",
+                            child: Text(translate("Properties")),
+                            value: "properties",
                             enabled: false,
                           )
                         ];
@@ -255,14 +255,13 @@ class _FileManagerPageState extends State<FileManagerPage> {
           )),
           Row(
             children: [
-              // IconButton(onPressed: () {}, icon: Icon(Icons.sort)),
               PopupMenuButton<SortBy>(
                   icon: Icon(Icons.sort),
                   itemBuilder: (context) {
                     return SortBy.values
                         .map((e) => PopupMenuItem(
                               child: Text(
-                                  e.toString().split(".").last.toUpperCase()),
+                                  translate(e.toString().split(".").last)),
                               value: e,
                             ))
                         .toList();
@@ -277,7 +276,7 @@ class _FileManagerPageState extends State<FileManagerPage> {
                           children: [
                             Icon(Icons.refresh),
                             SizedBox(width: 5),
-                            Text("刷新")
+                            Text(translate("Refresh File"))
                           ],
                         ),
                         value: "refresh",
@@ -287,7 +286,7 @@ class _FileManagerPageState extends State<FileManagerPage> {
                           children: [
                             Icon(Icons.check),
                             SizedBox(width: 5),
-                            Text("多选")
+                            Text(translate("CheckBox"))
                           ],
                         ),
                         value: "select",
@@ -309,7 +308,7 @@ class _FileManagerPageState extends State<FileManagerPage> {
                                 ? Icons.check_box_outlined
                                 : Icons.check_box_outline_blank),
                             SizedBox(width: 5),
-                            Text(translate("Toggle Hidden"))
+                            Text(translate("Show Hidden Files"))
                           ],
                         ),
                         value: "hidden",
@@ -341,6 +340,10 @@ class _FileManagerPageState extends State<FileManagerPage> {
                               actions: [
                                 TextButton(
                                     style: flatButtonStyle,
+                                    onPressed: () => close(false),
+                                    child: Text(translate("Cancel"))),
+                                ElevatedButton(
+                                    style: flatButtonStyle,
                                     onPressed: () {
                                       if (name.value.text.isNotEmpty) {
                                         model.createDir(PathUtil.join(
@@ -350,11 +353,7 @@ class _FileManagerPageState extends State<FileManagerPage> {
                                         close();
                                       }
                                     },
-                                    child: Text(translate("OK"))),
-                                TextButton(
-                                    style: flatButtonStyle,
-                                    onPressed: () => close(false),
-                                    child: Text(translate("Cancel")))
+                                    child: Text(translate("OK")))
                               ]));
                     } else if (v == "hidden") {
                       model.toggleShowHidden();
@@ -381,8 +380,9 @@ class _FileManagerPageState extends State<FileManagerPage> {
         children: [
           Padding(
             padding: EdgeInsets.all(2),
+            // TODO
             child: Text(
-              "总计: ${model.currentDir.entries.length}个项目",
+              "${translate("Count")}: ${model.currentDir.entries.length}${translate("items")}",
               style: TextStyle(color: MyTheme.darkGray),
             ),
           )
@@ -394,17 +394,17 @@ class _FileManagerPageState extends State<FileManagerPage> {
   Widget? bottomSheet() {
     final state = model.jobState;
     final isOtherPage = _selectedItems.isOtherPage(model.isLocal);
-    final selectedItemsLength = "${_selectedItems.length} 个项目";
+    final selectedItemsLength = "${_selectedItems.length} ${translate("items")}"; // TODO t
     final local = _selectedItems.isLocal == null
         ? ""
-        : " [${_selectedItems.isLocal! ? '本地' : '远程'}]";
+        : " [${_selectedItems.isLocal! ? translate("Local") : translate("Remote")}]";
 
     if (model.selectMode) {
       if (_selectedItems.length == 0 || !isOtherPage) {
         // 选择模式 当前选择页面
         return BottomSheetBody(
             leading: Icon(Icons.check),
-            title: "已选择",
+            title: translate("Selected"),
             text: selectedItemsLength + local,
             onCanceled: () => model.toggleSelectMode(),
             actions: [
@@ -421,7 +421,7 @@ class _FileManagerPageState extends State<FileManagerPage> {
         // 选择模式 复制目标页面
         return BottomSheetBody(
             leading: Icon(Icons.input),
-            title: "粘贴到这里?",
+            title: translate("Paste here?"),
             text: selectedItemsLength + local,
             onCanceled: () => model.toggleSelectMode(),
             actions: [
@@ -440,21 +440,21 @@ class _FileManagerPageState extends State<FileManagerPage> {
       case JobState.inProgress:
         return BottomSheetBody(
           leading: CircularProgressIndicator(),
-          title: "正在发送文件...",
-          text: "速度:  ${readableFileSize(model.jobProgress.speed)}/s",
+          title: translate("Waiting"),
+          text: "${translate("Speed")}:  ${readableFileSize(model.jobProgress.speed)}/s",
           onCanceled: null,
         );
       case JobState.done:
         return BottomSheetBody(
           leading: Icon(Icons.check),
-          title: "操作成功!",
+          title: "${translate("Successful")}!",
           text: "",
           onCanceled: () => model.jobReset(),
         );
       case JobState.error:
         return BottomSheetBody(
           leading: Icon(Icons.error),
-          title: "错误!",
+          title: "${translate("Error")}!",
           text: "",
           onCanceled: () => model.jobReset(),
         );

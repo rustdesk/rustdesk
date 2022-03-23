@@ -1,4 +1,3 @@
-import 'package:device_info/device_info.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/models/model.dart';
 import 'package:provider/provider.dart';
@@ -11,7 +10,7 @@ import '../models/model.dart';
 
 class ServerPage extends StatelessWidget implements PageShape {
   @override
-  final title = "Share Screen";
+  final title = translate("Share Screen");
 
   @override
   final icon = Icon(Icons.mobile_screen_share);
@@ -27,7 +26,7 @@ class ServerPage extends StatelessWidget implements PageShape {
               enabled: false,
             ),
             PopupMenuItem(
-              child: Text("Set your own password"),
+              child: Text(translate("Set your own password")),
               value: "changePW",
               enabled: false,
             )
@@ -127,7 +126,7 @@ class _ServerInfoState extends State<ServerInfo> {
                       color: Colors.redAccent, size: 24),
                   SizedBox(width: 10),
                   Text(
-                    "屏幕共享尚未开启",
+                    translate("Service is not running"),
                     style: TextStyle(
                       fontFamily: 'WorkSans',
                       fontWeight: FontWeight.bold,
@@ -140,7 +139,7 @@ class _ServerInfoState extends State<ServerInfo> {
               SizedBox(height: 5),
               Center(
                   child: Text(
-                "点击[启动服务]或打开Screen Capture 开启共享手机屏幕",
+                translate("android_start_service_tip"),
                 style: TextStyle(fontSize: 12, color: MyTheme.darkGray),
               ))
             ],
@@ -170,19 +169,19 @@ class _PermissionCheckerState extends State<PermissionChecker> {
                 serverModel.toggleInput),
             PermissionRow(translate("File Transfer"), serverModel.fileOk,
                 serverModel.toggleFile),
-            hasAudioPermission?PermissionRow(translate("Audio Capture"), serverModel.inputOk,
-                serverModel.toggleAudio):Text("* 当前安卓版本不支持音频捕获",style: TextStyle(color: MyTheme.darkGray),),
+            hasAudioPermission?PermissionRow(translate("Audio Capture"), serverModel.audioOk,
+                serverModel.toggleAudio):Text("* ${translate("android_version_audio_tip")}",style: TextStyle(color: MyTheme.darkGray),),
             SizedBox(height: 8),
             serverModel.mediaOk
                 ? ElevatedButton.icon(
                     style: ButtonStyle(
                         backgroundColor: MaterialStateProperty.all(Colors.red)),
                     icon: Icon(Icons.stop),
-                    onPressed: serverModel.stopService,
+                    onPressed: serverModel.toggleService,
                     label: Text(translate("Stop service")))
                 : ElevatedButton.icon(
                     icon: Icon(Icons.play_arrow),
-                    onPressed: serverModel.startService,
+                    onPressed: serverModel.toggleService,
                     label: Text(translate("Start Service"))),
           ],
         ));
@@ -323,12 +322,6 @@ Widget clientInfo(Client client) {
         ])
       ],
     ),
-    // !client.isFileTransfer?Row(
-    //   children: [
-    //     client.audio?Icon(Icons.volume_up):SizedBox.shrink(),
-    //     client.keyboard?Icon(Icons.mouse):SizedBox.shrink(),
-    //   ],
-    // ):SizedBox.shrink()
   ]);
 }
 

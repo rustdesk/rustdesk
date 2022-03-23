@@ -9,7 +9,7 @@ import 'package:path/path.dart' as Path;
 
 import 'model.dart';
 
-enum SortBy { name, type, date, size }
+enum SortBy { Name, Type, Modified, Size }
 
 // enum FileType {
 //   Dir = 0,
@@ -42,7 +42,7 @@ class FileModel extends ChangeNotifier {
 
   JobState get jobState => _jobProgress.state;
 
-  SortBy _sortStyle = SortBy.name;
+  SortBy _sortStyle = SortBy.Name;
 
   SortBy get sortStyle => _sortStyle;
 
@@ -272,19 +272,19 @@ class FileModel extends ChangeNotifier {
       var content = "";
       late final List<Entry> entries;
       if (item.isFile) {
-        title = "是否永久删除文件";
+        title = translate("Are you sure you want to delete this file?");
         content = "${item.name}";
         entries = [item];
       } else if (item.isDirectory) {
-        title = "这不是一个空文件夹";
-        showLoading("正在读取...");
+        title = translate("Not a Empty Directory");
+        showLoading(translate("Waiting"));
         final fd = await _fileFetcher.fetchDirectoryRecursive(
             _jobId, item.path, items.isLocal!, true);
         fd.format(isWindows);
         EasyLoading.dismiss();
         // 空文件夹
         if (fd.entries.isEmpty) {
-          final confirm = await showRemoveDialog("是否删除空文件夹", item.name, false);
+          final confirm = await showRemoveDialog(translate("Are you sure you want to delete this empty directory?"), item.name, false);
           if (confirm == true) {
             sendRemoveEmptyDir(item.path, 0, items.isLocal!);
           }
@@ -296,9 +296,9 @@ class FileModel extends ChangeNotifier {
       }
 
       for (var i = 0; i < entries.length; i++) {
-        final dirShow = item.isDirectory ? "是否删除文件夹下的文件?\n" : "";
+        final dirShow = item.isDirectory ? "${translate("Are you sure you want to delete the file of this directory?")}\n" : "";
         final count =
-            entries.length > 1 ? "第 ${i + 1}/${entries.length} 项" : "";
+            entries.length > 1 ? "${i + 1}/${entries.length}" : "";
         content = dirShow + "$count \n${entries[i].path}";
         final confirm =
             await showRemoveDialog(title, content, item.isDirectory);
@@ -348,7 +348,7 @@ class FileModel extends ChangeNotifier {
                 children: [
                   Text(content),
                   SizedBox(height: 5),
-                  Text("此操作不可逆!",
+                  Text(translate("This is irreversible!"),
                       style: TextStyle(fontWeight: FontWeight.bold)),
                   showCheckbox
                       ? CheckboxListTile(
@@ -356,7 +356,7 @@ class FileModel extends ChangeNotifier {
                           dense: true,
                           controlAffinity: ListTileControlAffinity.leading,
                           title: Text(
-                            "应用于文件夹下所有文件",
+                            translate("Do this for all conflicts"),
                           ),
                           value: removeCheckboxRemember,
                           onChanged: (v) {
@@ -369,12 +369,12 @@ class FileModel extends ChangeNotifier {
             actions: [
               TextButton(
                   style: flatButtonStyle,
-                  onPressed: () => close(true),
-                  child: Text("Yes")),
+                  onPressed: () => close(false),
+                  child: Text(translate("Cancel"))),
               TextButton(
                   style: flatButtonStyle,
-                  onPressed: () => close(false),
-                  child: Text("No"))
+                  onPressed: () => close(true),
+                  child: Text(translate("OK"))),
             ]));
   }
 
@@ -675,7 +675,7 @@ class DirectoryOption {
 
 // code from file_manager pkg after edit
 List<Entry> _sortList(List<Entry> list, SortBy sortType) {
-  if (sortType == SortBy.name) {
+  if (sortType == SortBy.Name) {
     // making list of only folders.
     final dirs = list.where((element) => element.isDirectory).toList();
     // sorting folder list by name.
@@ -688,7 +688,7 @@ List<Entry> _sortList(List<Entry> list, SortBy sortType) {
 
     // first folders will go to list (if available) then files will go to list.
     return [...dirs, ...files];
-  } else if (sortType == SortBy.date) {
+  } else if (sortType == SortBy.Modified) {
     // making the list of Path & DateTime
     List<_PathStat> _pathStat = [];
     for (Entry e in list) {
@@ -703,7 +703,7 @@ List<Entry> _sortList(List<Entry> list, SortBy sortType) {
         .indexWhere((element) => element.path == a.name)
         .compareTo(_pathStat.indexWhere((element) => element.path == b.name)));
     return list;
-  } else if (sortType == SortBy.type) {
+  } else if (sortType == SortBy.Type) {
     // making list of only folders.
     final dirs = list.where((element) => element.isDirectory).toList();
 
@@ -720,7 +720,7 @@ List<Entry> _sortList(List<Entry> list, SortBy sortType) {
         .last
         .compareTo(b.name.toLowerCase().split('.').last));
     return [...dirs, ...files];
-  } else if (sortType == SortBy.size) {
+  } else if (sortType == SortBy.Size) {
     // create list of path and size
     Map<String, int> _sizeMap = {};
     for (Entry e in list) {

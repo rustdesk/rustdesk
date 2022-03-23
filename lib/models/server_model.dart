@@ -80,11 +80,11 @@ class ServerModel with ChangeNotifier {
   toggleService() async {
     if(_isStart){
       final res = await DialogManager.show<bool>((setState, close) => CustomAlertDialog(
-        title: Text("是否关闭"),
-        content: Text("关闭录屏服务将自动关闭所有已连接的控制"),
+        title: Text(translate("Warning")),
+        content: Text(translate("android_stop_service_tip")),
         actions: [
-          TextButton(onPressed: ()=>close(), child: Text("Cancel")),
-          ElevatedButton(onPressed: ()=>close(true), child: Text("Ok")),
+          TextButton(onPressed: ()=>close(), child: Text(translate("Cancel"))),
+          ElevatedButton(onPressed: ()=>close(true), child: Text(translate("OK"))),
         ],
       ));
       if(res == true){
@@ -92,11 +92,11 @@ class ServerModel with ChangeNotifier {
       }
     }else{
       final res = await DialogManager.show<bool>((setState, close) => CustomAlertDialog(
-        title: Text("是否开启录屏服务"),
-        content: Text("将自动开启监听服务"),
+        title: Text(translate("Warning")),
+        content: Text(translate("android_service_will_start_tip")),
         actions: [
-          TextButton(onPressed: ()=>close(), child: Text("Cancel")),
-          ElevatedButton(onPressed: ()=>close(true), child: Text("Ok")),
+          TextButton(onPressed: ()=>close(), child: Text(translate("Cancel"))),
+          ElevatedButton(onPressed: ()=>close(true), child: Text(translate("OK"))),
         ],
       ));
       if(res == true){
@@ -169,7 +169,6 @@ class ServerModel with ChangeNotifier {
     switch (name) {
       case "media":
         _mediaOk = value;
-        debugPrint("value $value,_isStart:$_isStart");
         if(value && !_isStart){
           startService();
         }
@@ -191,13 +190,11 @@ class ServerModel with ChangeNotifier {
 
   updateClientState() {
     var res = FFI.getByName("clients_state");
-    debugPrint("getByName clients_state string:$res");
     try {
       final List clientsJson = jsonDecode(res);
       _clients = clientsJson
           .map((clientJson) => Client.fromJson(jsonDecode(res)))
           .toList();
-      debugPrint("updateClientState:${_clients.toString()}");
       notifyListeners();
     } catch (e) {}
   }
@@ -217,7 +214,7 @@ class ServerModel with ChangeNotifier {
                   Text(translate("Do you accept?")),
                   SizedBox(height: 20),
                   clientInfo(client),
-                  Text(translate("It will be control your device!")),
+                  Text(translate("android_new_connection_tip")),
                 ],
               ),
               actions: [
@@ -321,27 +318,36 @@ showInputWarnAlert() async {
   await showDialog<bool>(
       context: globalKey.currentContext!,
       builder: (alertContext) {
-        // TODO t
         DialogManager.register(alertContext);
         return AlertDialog(
           title: Text("获取输入权限引导"),
-          content: Text.rich(TextSpan(style: TextStyle(), children: [
-            TextSpan(text: "请在接下来的系统设置页\n进入"),
-            TextSpan(text: " [服务] ", style: TextStyle(color: MyTheme.accent)),
-            TextSpan(text: "配置页面\n将"),
-            TextSpan(
-                text: " [RustDesk Input] ",
-                style: TextStyle(color: MyTheme.accent)),
-            TextSpan(text: "服务开启")
-          ])),
+          // content: Text.rich(TextSpan(style: TextStyle(), children: [
+          //   // [已安装的服务] : [Installed Services]
+          //   // 请在接下来的系统设置页面里，找到并进入[Installed Services]页面，将[RustDesk Input]服务开启。
+          //   TextSpan(text: "请在接下来的系统设置页\n进入"),
+          //   TextSpan(text: " [服务] ", style: TextStyle(color: MyTheme.accent)),
+          //   TextSpan(text: "配置页面\n将"),
+          //   TextSpan(
+          //       text: " [RustDesk Input] ",
+          //       style: TextStyle(color: MyTheme.accent)),
+          //   TextSpan(text: "服务开启")
+          // ])),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(translate(translate("android_input_permission_tip1"))),
+              SizedBox(height: 10),
+              Text(translate(translate("android_input_permission_tip2"))),
+            ],
+          ),
           actions: [
             TextButton(
-                child: Text(translate("Do nothing")),
+                child: Text(translate("Cancel")),
                 onPressed: () {
                   DialogManager.reset();
                 }),
             ElevatedButton(
-                child: Text(translate("Go System Setting")),
+                child: Text(translate("Open System Setting")),
                 onPressed: () {
                   FFI.serverModel.initInput();
                   DialogManager.reset();
