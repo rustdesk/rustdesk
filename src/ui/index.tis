@@ -279,8 +279,7 @@ class MyIdMenu: Reactor.Component {
                 <div>Version: " + handler.get_version() + " \
                 <div .link .custom-event url='http://rustdesk.com/privacy'>Privacy Statement</div> \
                 <div .link .custom-event url='http://rustdesk.com'>Website</div> \
-                <div style='background: #2c8cff; color: white; padding: 1em; margin-top: 1em;'>Copyright &copy; 2020 CarrieZ Studio \
-                <br /> Author: Carrie \
+                <div style='background: #2c8cff; color: white; padding: 1em; margin-top: 1em;'>Copyright &copy; 2022 Purslane Ltd.\
                 <p style='font-weight: bold'>Made with heart in this chaotic world!</p>\
                 </div>\
             </div>", function(el) {
