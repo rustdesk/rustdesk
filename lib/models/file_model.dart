@@ -261,7 +261,7 @@ class FileModel extends ChangeNotifier {
   removeAction(SelectedItems items) async {
     removeCheckboxRemember = false;
     if (items.isLocal == null) {
-      debugPrint("Failed to removeFile ,wrong path state");
+      debugPrint("Failed to removeFile, wrong path state");
       return;
     }
     final isWindows =
@@ -276,7 +276,7 @@ class FileModel extends ChangeNotifier {
         content = "${item.name}";
         entries = [item];
       } else if (item.isDirectory) {
-        title = translate("Not a Empty Directory");
+        title = translate("Not an empty directory");
         showLoading(translate("Waiting"));
         final fd = await _fileFetcher.fetchDirectoryRecursive(
             _jobId, item.path, items.isLocal!, true);
