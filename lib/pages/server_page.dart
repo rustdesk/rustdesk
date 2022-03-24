@@ -3,7 +3,6 @@ import 'package:flutter_hbb/models/model.dart';
 import 'package:provider/provider.dart';
 
 import '../common.dart';
-import '../models/native_model.dart';
 import '../models/server_model.dart';
 import 'home_page.dart';
 import '../models/model.dart';
@@ -156,7 +155,6 @@ class _PermissionCheckerState extends State<PermissionChecker> {
   @override
   Widget build(BuildContext context) {
     final serverModel = Provider.of<ServerModel>(context);
-    final androidVersion = PlatformFFI.androidVersion ?? 0;
     final hasAudioPermission = androidVersion>=30;
     return PaddingCard(
         title: translate("Configuration Permissions"),

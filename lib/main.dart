@@ -18,20 +18,26 @@ Future<Null> main() async {
 }
 
 class App extends StatelessWidget {
-
   @override
   Widget build(BuildContext context) {
     final analytics = FirebaseAnalytics();
-    return MultiProvider(
-      providers: [
-        ChangeNotifierProvider.value(value: FFI.ffiModel),
-        ChangeNotifierProvider.value(value: FFI.imageModel),
-        ChangeNotifierProvider.value(value: FFI.cursorModel),
-        ChangeNotifierProvider.value(value: FFI.canvasModel),
-        ChangeNotifierProvider.value(value: FFI.serverModel),
+    final providers = [
+      ChangeNotifierProvider.value(value: FFI.ffiModel),
+      ChangeNotifierProvider.value(value: FFI.imageModel),
+      ChangeNotifierProvider.value(value: FFI.cursorModel),
+      ChangeNotifierProvider.value(value: FFI.canvasModel),
+    ];
+    if (!isWeb) {
+      providers.addAll([
         ChangeNotifierProvider.value(value: FFI.chatModel),
         ChangeNotifierProvider.value(value: FFI.fileModel),
-      ],
+      ]);
+      if (isAndroid) {
+        providers.add(ChangeNotifierProvider.value(value: FFI.serverModel));
+      }
+    }
+    return MultiProvider(
+      providers: providers,
       child: MaterialApp(
         navigatorKey: globalKey,
         debugShowCheckedModeBanner: false,
@@ -40,7 +46,7 @@ class App extends StatelessWidget {
           primarySwatch: Colors.blue,
           visualDensity: VisualDensity.adaptivePlatformDensity,
         ),
-        home: HomePage(),
+        home: isWeb ? WebHomePage() : HomePage(),
         navigatorObservers: [
           FirebaseAnalyticsObserver(analytics: analytics),
         ],

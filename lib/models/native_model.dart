@@ -24,7 +24,6 @@ class PlatformFFI {
   static Pointer<RgbaFrame>? _lastRgbaFrame;
   static String _dir = '';
   static String _homeDir = '';
-  static int? _androidVersion;
   static F2? _getByName;
   static F3? _setByName;
   static F4? _freeRgba;
@@ -48,8 +47,6 @@ class PlatformFFI {
     PackageInfo packageInfo = await PackageInfo.fromPlatform();
     return packageInfo.version;
   }
-
-  static int? get androidVersion => _androidVersion;
 
   static String getByName(String name, [String arg = '']) {
     if (_getByName == null) return '';
@@ -97,7 +94,7 @@ class PlatformFFI {
         AndroidDeviceInfo androidInfo = await deviceInfo.androidInfo;
         name = '${androidInfo.brand}-${androidInfo.model}';
         id = androidInfo.id.hashCode.toString();
-        _androidVersion = androidInfo.version.sdkInt;
+        androidVersion = androidInfo.version.sdkInt;
       } else {
         IosDeviceInfo iosInfo = await deviceInfo.iosInfo;
         name = iosInfo.utsname.machine;

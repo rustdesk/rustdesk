@@ -20,12 +20,20 @@ class HomePage extends StatefulWidget {
 
 class _HomePageState extends State<HomePage> {
   var _selectedIndex = 0;
-  final List<PageShape> _pages = [
-    ConnectionPage(),
-    chatPage,
-    ServerPage(),
-    SettingsPage()
-  ];
+  final List<PageShape> _pages = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _pages.addAll([
+      ConnectionPage(),
+      chatPage,
+    ]);
+    if(isAndroid){
+      _pages.add(ServerPage());
+    }
+    _pages.add(SettingsPage());
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -58,7 +66,7 @@ class _HomePageState extends State<HomePage> {
             unselectedItemColor: MyTheme.darkGray,
             onTap: (index) => setState(() {
               // close chat overlay when go chat page
-              if(index == 1 && _selectedIndex!=index){
+              if (index == 1 && _selectedIndex != index) {
                 hideChatIconOverlay();
                 hideChatWindowOverlay();
               }
@@ -67,5 +75,22 @@ class _HomePageState extends State<HomePage> {
           ),
           body: _pages.elementAt(_selectedIndex),
         ));
+  }
+}
+
+class WebHomePage extends StatelessWidget {
+  final connectionPage = ConnectionPage();
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: MyTheme.grayBg,
+      appBar: AppBar(
+        centerTitle: true,
+        title: Text("RustDesk"),
+        actions: connectionPage.appBarActions,
+      ),
+      body: connectionPage,
+    );
   }
 }

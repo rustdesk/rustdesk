@@ -9,6 +9,7 @@ var isIOS = false;
 var isWeb = false;
 var isDesktop = false;
 var version = "";
+int androidVersion = 0;
 
 typedef F = String Function(String);
 typedef FMethod = String Function(String, dynamic);

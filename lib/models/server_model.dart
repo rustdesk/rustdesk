@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
-import 'package:flutter_hbb/models/native_model.dart';
 import '../common.dart';
 import '../pages/server_page.dart';
 import 'model.dart';
@@ -71,7 +70,7 @@ class ServerModel with ChangeNotifier {
 
   toggleInput(){
     if(_inputOk){
-      PlatformFFI.invokeMethod("stop_input");
+      FFI.invokeMethod("stop_input");
     }else{
       showInputWarnAlert();
     }

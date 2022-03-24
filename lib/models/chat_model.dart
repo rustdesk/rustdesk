@@ -5,7 +5,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_hbb/pages/chat_page.dart';
 
 import 'model.dart';
-import 'native_model.dart';
 
 class ChatModel with ChangeNotifier {
   // -1作为客户端模式的id，客户端模式下此id唯一
@@ -51,12 +50,12 @@ class ChatModel with ChangeNotifier {
     if (message.text != null && message.text!.isNotEmpty) {
       _messages[_currentID]?.add(message);
       if (_currentID == clientModeID) {
-        PlatformFFI.setByName("chat_client_mode", message.text!);
+        FFI.setByName("chat_client_mode", message.text!);
       } else {
         final msg = Map()
           ..["id"] = _currentID
           ..["text"] = message.text!;
-        PlatformFFI.setByName("chat_server_mode", jsonEncode(msg));
+        FFI.setByName("chat_server_mode", jsonEncode(msg));
       }
     }
     notifyListeners();
