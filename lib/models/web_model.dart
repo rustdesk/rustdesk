@@ -19,10 +19,6 @@ class PlatformFFI {
     return js.context.callMethod('getRgba');
   }
 
-  static Future<String> getVersion() async {
-    return getByName('version');
-  }
-
   static String getByName(String name, [String arg = '']) {
     return js.context.callMethod('getByName', [name, arg]);
   }
@@ -35,6 +31,7 @@ class PlatformFFI {
     isWeb = true;
     isDesktop = !js.context.callMethod('isMobile');
     js.context.callMethod('init');
+    version = getByName('version');
   }
 
   // MouseRegion onHover not work for mouse move when right button down
@@ -125,7 +122,8 @@ void handleKey(KeyboardEvent evt, bool down) {
       name = evt.code;
     } else {
       name = evt.key;
-      if (name!=null && name.toLowerCase() != name.toUpperCase() &&
+      if (name != null &&
+          name.toLowerCase() != name.toUpperCase() &&
           name == name.toUpperCase()) {
         if (!evt.shiftKey) out['shift'] = 'true';
       }

@@ -147,3 +147,40 @@ String? validate(value) {
   final res = FFI.getByName('test_if_valid_server', value);
   return res.isEmpty ? null : res;
 }
+
+void showAbout() {
+  DialogManager.show((setState, close) {
+    return CustomAlertDialog(
+      title: Text(translate('About') + ' RustDesk'),
+      content: Wrap(direction: Axis.vertical, spacing: 12, children: [
+        Text('Version: $version'),
+        InkWell(
+            onTap: () async {
+              const url = 'https://rustdesk.com/';
+              if (await canLaunch(url)) {
+                await launch(url);
+              }
+            },
+            child: Padding(
+              padding: EdgeInsets.symmetric(vertical: 8),
+              child: Text('Support',
+                  style: TextStyle(
+                    decoration: TextDecoration.underline,
+                  )),
+            )),
+      ]),
+      actions: [
+        TextButton(
+          style: flatButtonStyle,
+          onPressed: () {
+            close();
+          },
+          child: Text(translate('OK')),
+        )
+      ],
+      onWillPop: () async {
+        return true;
+      },
+    );
+  });
+}

@@ -7,6 +7,7 @@ import '../common.dart';
 import '../models/model.dart';
 import 'home_page.dart';
 import 'remote_page.dart';
+import 'settings_page.dart';
 
 class ConnectionPage extends StatefulWidget implements PageShape {
   ConnectionPage({Key? key}) : super(key: key);
@@ -18,7 +19,29 @@ class ConnectionPage extends StatefulWidget implements PageShape {
   final title = translate("Connection");
 
   @override
-  final appBarActions = [];
+  final appBarActions = isWeb
+      ? <Widget>[
+          PopupMenuButton<String>(itemBuilder: (context) {
+            return [
+              PopupMenuItem(
+                child: Text(translate('ID Server')),
+                value: "server",
+              ),
+              PopupMenuItem(
+                child: Text(translate('About') + ' RustDesk'),
+                value: "about",
+              )
+            ];
+          }, onSelected: (value) {
+            if (value == 'server') {
+              showServer();
+            }
+            if (value == 'about') {
+              showAbout();
+            }
+          }),
+        ]
+      : [];
 
   @override
   _ConnectionPageState createState() => _ConnectionPageState();
