@@ -71,21 +71,21 @@ void showServer() {
   var key = '';
   DialogManager.show((setState, close) {
     return CustomAlertDialog(
-        title: Text(translate('ID Server')),
-        content: Form(
-            key: formKey,
-            child: Column(mainAxisSize: MainAxisSize.min, children: <Widget>[
-              TextFormField(
-                initialValue: id0,
-                decoration: InputDecoration(
-                  labelText: translate('ID Server'),
-                ),
-                validator: validate,
-                onSaved: (String? value) {
-                  if (value != null) id = value.trim();
-                },
+      title: Text(translate('ID Server')),
+      content: Form(
+          key: formKey,
+          child: Column(mainAxisSize: MainAxisSize.min, children: <Widget>[
+            TextFormField(
+              initialValue: id0,
+              decoration: InputDecoration(
+                labelText: translate('ID Server'),
               ),
-              /*
+              validator: validate,
+              onSaved: (String? value) {
+                if (value != null) id = value.trim();
+              },
+            ),
+            /*
                   TextFormField(
                     initialValue: relay0,
                     decoration: InputDecoration(
@@ -97,46 +97,50 @@ void showServer() {
                     },
                   ),
                   */
-              TextFormField(
-                initialValue: key0,
-                decoration: InputDecoration(
-                  labelText: 'Key',
-                ),
-                validator: null,
-                onSaved: (String? value) {
-                  if (value != null) key = value.trim();
-                },
+            TextFormField(
+              initialValue: key0,
+              decoration: InputDecoration(
+                labelText: 'Key',
               ),
-            ])),
-        actions: [
-          TextButton(
-            style: flatButtonStyle,
-            onPressed: () {
+              validator: null,
+              onSaved: (String? value) {
+                if (value != null) key = value.trim();
+              },
+            ),
+          ])),
+      actions: [
+        TextButton(
+          style: flatButtonStyle,
+          onPressed: () {
+            close();
+          },
+          child: Text(translate('Cancel')),
+        ),
+        TextButton(
+          style: flatButtonStyle,
+          onPressed: () {
+            if (formKey.currentState != null &&
+                formKey.currentState!.validate()) {
+              formKey.currentState!.save();
+              if (id != id0)
+                FFI.setByName('option',
+                    '{"name": "custom-rendezvous-server", "value": "$id"}');
+              if (relay != relay0)
+                FFI.setByName(
+                    'option', '{"name": "relay-server", "value": "$relay"}');
+              if (key != key0)
+                FFI.setByName('option', '{"name": "key", "value": "$key"}');
               close();
-            },
-            child: Text(translate('Cancel')),
-          ),
-          TextButton(
-            style: flatButtonStyle,
-            onPressed: () {
-              if (formKey.currentState != null &&
-                  formKey.currentState!.validate()) {
-                formKey.currentState!.save();
-                if (id != id0)
-                  FFI.setByName('option',
-                      '{"name": "custom-rendezvous-server", "value": "$id"}');
-                if (relay != relay0)
-                  FFI.setByName(
-                      'option', '{"name": "relay-server", "value": "$relay"}');
-                if (key != key0)
-                  FFI.setByName('option', '{"name": "key", "value": "$key"}');
-                close();
-              }
-            },
-            child: Text(translate('OK')),
-          ),
-        ]);
-  });
+            }
+          },
+          child: Text(translate('OK')),
+        ),
+      ],
+      onWillPop: () async {
+        return true;
+      },
+    );
+  }, barrierDismissible: true);
 }
 
 String? validate(value) {
@@ -169,18 +173,10 @@ void showAbout() {
                   )),
             )),
       ]),
-      actions: [
-        TextButton(
-          style: flatButtonStyle,
-          onPressed: () {
-            close();
-          },
-          child: Text(translate('OK')),
-        )
-      ],
+      actions: [],
       onWillPop: () async {
         return true;
       },
     );
-  });
+  }, barrierDismissible: true);
 }
