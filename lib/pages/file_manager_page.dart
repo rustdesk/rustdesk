@@ -286,7 +286,7 @@ class _FileManagerPageState extends State<FileManagerPage> {
                           children: [
                             Icon(Icons.check),
                             SizedBox(width: 5),
-                            Text(translate("CheckBox"))
+                            Text(translate("Multi Select"))
                           ],
                         ),
                         value: "select",
@@ -382,7 +382,7 @@ class _FileManagerPageState extends State<FileManagerPage> {
             padding: EdgeInsets.all(2),
             // TODO
             child: Text(
-              "${translate("Count")}: ${model.currentDir.entries.length}${translate("items")}",
+              "${translate("Total")}: ${model.currentDir.entries.length}${translate("items")}",
               style: TextStyle(color: MyTheme.darkGray),
             ),
           )
