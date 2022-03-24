@@ -17,5 +17,12 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Wrong credentials", "Wrong username or password"),
         ("invalid_http", "must start with http:// or https://"),
         ("install_daemon_tip", "For starting on boot, you need to install system service."),
+        ("android_input_permission_tip1", "After obtaining the input permission, the remote device can control this Android device by mouse"),
+        ("android_input_permission_tip2", "Please go to the next system settings page,find and enter [Installed Services],turn [RustDesk Input] service ON"),
+        ("android_new_connection_tip", "New control request has been received,it want to control your current device."),
+        ("android_service_will_start_tip", "Turning on the Screen Capture will automatically start the service,allowing other devices to request a connection from this device."),
+        ("android_stop_service_tip", "Closing the service will automatically close all established connections."),
+        ("android_version_audio_tip", "The current Android version does not support audio capture, please upgrade to Android 10 or higher."),
+        ("android_start_service_tip", "Tap [Start Service] or OPEN [Screen Capture] permission to start the screen sharing service."),
     ].iter().cloned().collect();
 }
