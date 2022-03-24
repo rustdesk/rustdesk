@@ -24,7 +24,7 @@ class ConnectionPage extends StatefulWidget implements PageShape {
           PopupMenuButton<String>(itemBuilder: (context) {
             return [
               PopupMenuItem(
-                child: Text(translate('ID Server')),
+                child: Text(translate('ID/Relay Server')),
                 value: "server",
               ),
               PopupMenuItem(

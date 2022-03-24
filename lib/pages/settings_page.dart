@@ -25,7 +25,7 @@ class SettingsPage extends StatelessWidget implements PageShape {
           title: Text("Common"),
           tiles: [
             SettingsTile.navigation(
-              title: Text(translate('ID Server')),
+              title: Text(translate('ID/Relay Server')),
               leading: Icon(Icons.cloud),
               onPressed: (context) {
                 showServer();
@@ -71,43 +71,49 @@ void showServer() {
   var key = '';
   DialogManager.show((setState, close) {
     return CustomAlertDialog(
-      title: Text(translate('ID Server')),
+      title: Text(translate('ID/Relay Server')),
       content: Form(
           key: formKey,
-          child: Column(mainAxisSize: MainAxisSize.min, children: <Widget>[
-            TextFormField(
-              initialValue: id0,
-              decoration: InputDecoration(
-                labelText: translate('ID Server'),
-              ),
-              validator: validate,
-              onSaved: (String? value) {
-                if (value != null) id = value.trim();
-              },
-            ),
-            /*
-                  TextFormField(
-                    initialValue: relay0,
-                    decoration: InputDecoration(
-                      labelText: translate('Relay Server'),
+          child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: <Widget>[
+                    TextFormField(
+                      initialValue: id0,
+                      decoration: InputDecoration(
+                        labelText: translate('ID Server'),
+                      ),
+                      validator: validate,
+                      onSaved: (String? value) {
+                        if (value != null) id = value.trim();
+                      },
+                    )
+                  ] +
+                  (isAndroid
+                      ? [
+                          TextFormField(
+                            initialValue: relay0,
+                            decoration: InputDecoration(
+                              labelText: translate('Relay Server'),
+                            ),
+                            validator: validate,
+                            onSaved: (String? value) {
+                              if (value != null) relay = value.trim();
+                            },
+                          )
+                        ]
+                      : []) +
+                  [
+                    TextFormField(
+                      initialValue: key0,
+                      decoration: InputDecoration(
+                        labelText: 'Key',
+                      ),
+                      validator: null,
+                      onSaved: (String? value) {
+                        if (value != null) key = value.trim();
+                      },
                     ),
-                    validator: validate,
-                    onSaved: (String value) {
-                      relay = value.trim();
-                    },
-                  ),
-                  */
-            TextFormField(
-              initialValue: key0,
-              decoration: InputDecoration(
-                labelText: 'Key',
-              ),
-              validator: null,
-              onSaved: (String? value) {
-                if (value != null) key = value.trim();
-              },
-            ),
-          ])),
+                  ])),
       actions: [
         TextButton(
           style: flatButtonStyle,
