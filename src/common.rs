@@ -275,7 +275,7 @@ async fn test_nat_type_() -> ResultType<bool> {
         .await?;
         addr = socket.local_addr();
         socket.send(&msg_out).await?;
-        if let Some(Ok(bytes)) = socket.next_timeout(3000).await {
+        if let Some(Ok(bytes)) = socket.next_timeout(RENDEZVOUS_TIMEOUT).await {
             if let Ok(msg_in) = RendezvousMessage::parse_from_bytes(&bytes) {
                 if let Some(rendezvous_message::Union::test_nat_response(tnr)) = msg_in.union {
                     if i == 0 {
