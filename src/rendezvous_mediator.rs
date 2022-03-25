@@ -328,10 +328,7 @@ impl RendezvousMediator {
         let local_addr: SocketAddr =
             format!("{}:{}", local_addr.ip(), local_addr.port()).parse()?;
         let mut msg_out = Message::new();
-        let mut relay_server = Config::get_option("relay-server");
-        if relay_server.is_empty() {
-            relay_server = fla.relay_server;
-        }
+        let relay_server = self.get_relay_server(fla.relay_server);
         msg_out.set_local_addr(LocalAddr {
             id: Config::get_id(),
             socket_addr: AddrMangle::encode(peer_addr),
@@ -347,10 +344,7 @@ impl RendezvousMediator {
     }
 
     async fn handle_punch_hole(&self, ph: PunchHole, server: ServerPtr) -> ResultType<()> {
-        let mut relay_server = Config::get_option("relay-server");
-        if relay_server.is_empty() {
-            relay_server = ph.relay_server;
-        }
+        let relay_server = self.get_relay_server(ph.relay_server);
         if ph.nat_type.enum_value_or_default() == NatType::SYMMETRIC
             || Config::get_nat_type() == NatType::SYMMETRIC as i32
         {
@@ -454,6 +448,25 @@ impl RendezvousMediator {
         });
         socket.send(&msg_out, self.addr.to_owned()).await?;
         Ok(())
+    }
+
+    fn get_relay_server(&self, provided_by_rendzvous_server: String) -> String {
+        let mut relay_server = Config::get_option("relay-server");
+        if relay_server.is_empty() {
+            relay_server = provided_by_rendzvous_server;
+        }
+        if relay_server.is_empty() {
+            if self.host.contains(":") {
+                let tmp: Vec<&str> = self.host.split(":").collect();
+                if tmp.len() == 2 {
+                    let port: u16 = tmp[1].parse().unwrap_or(0);
+                    relay_server = format!("{}:{}", tmp[0], port + 1);
+                }
+            } else {
+                relay_server = self.host.clone();
+            }
+        }
+        relay_server
     }
 }
 
