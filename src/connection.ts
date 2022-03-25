@@ -98,6 +98,10 @@ export default class Connection {
     const phr = msg.punch_hole_response;
     const rr = msg.relay_response;
     if (phr) {
+      if (phr?.other_failure) {
+        this.msgbox("error", "Error", phr?.other_failure);
+        return;
+      }
       if (phr.failure != rendezvous.PunchHoleResponse_Failure.UNRECOGNIZED) {
         switch (phr?.failure) {
           case rendezvous.PunchHoleResponse_Failure.ID_NOT_EXIST:
@@ -109,13 +113,16 @@ export default class Connection {
           case rendezvous.PunchHoleResponse_Failure.LICENSE_MISMATCH:
             this.msgbox("error", "Error", "Key mismatch");
             break;
-          default:
-            if (phr?.other_failure) {
-              this.msgbox("error", "Error", phr?.other_failure);
-            }
+          case rendezvous.PunchHoleResponse_Failure.LICENSE_OVERUSE:
+            this.msgbox("error", "Error", "Key overuse");
+            break;
         }
       }
     } else if (rr) {
+      if (!rr.version) {
+        this.msgbox("error", "Error", "Remote version is low, not support web");
+        return;
+      }
       await this.connectRelay(rr);
     }
   }

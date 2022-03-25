@@ -9,6 +9,7 @@ def main():
    print('export const LANGS = {')
    for fn in glob.glob('../hbb/src/lang/*'):
       lang = os.path.basename(fn)[:-3]
+      if lang == 'template': continue
       print('  %s: {'%lang)
       for ln in open(fn):
          ln = ln.strip()

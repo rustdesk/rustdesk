@@ -110,7 +110,7 @@ export default class Websock {
       };
       this._websocket.onerror = (e: any) => {
         if (!this._status) {
-          reject("Failed to connect to " + this._uri);
+          reject("Failed to connect to " + (this._isRendezvous ? "rendezvous" : "relay") + " server");
           return;
         }
         this._status = e;
