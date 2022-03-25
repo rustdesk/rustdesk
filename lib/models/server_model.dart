@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'package:dash_chat/dash_chat.dart';
 import 'package:flutter/material.dart';
 import '../common.dart';
 import '../pages/server_page.dart';
@@ -17,7 +18,7 @@ class ServerModel with ChangeNotifier {
   final _serverId = TextEditingController(text: _emptyIdShow);
   final _serverPasswd = TextEditingController(text: "");
 
-  List<Client> _clients = [];
+  Map<int,Client> _clients = {};
 
   bool get isStart => _isStart;
 
@@ -33,7 +34,7 @@ class ServerModel with ChangeNotifier {
 
   TextEditingController get serverPasswd => _serverPasswd;
 
-  List<Client> get clients => _clients;
+  Map<int,Client> get clients => _clients;
 
   ServerModel() {
     ()async{
@@ -191,9 +192,11 @@ class ServerModel with ChangeNotifier {
     var res = FFI.getByName("clients_state");
     try {
       final List clientsJson = jsonDecode(res);
-      _clients = clientsJson
-          .map((clientJson) => Client.fromJson(jsonDecode(res)))
-          .toList();
+      for (var clientJson in clientsJson){
+        final client = Client.fromJson(jsonDecode(clientJson));
+        _clients[client.id] = client;
+      }
+
       notifyListeners();
     } catch (e) {}
   }
@@ -204,7 +207,7 @@ class ServerModel with ChangeNotifier {
       final Map<String, dynamic> response = Map();
       response["id"] = client.id;
       DialogManager.show((setState, close) => CustomAlertDialog(
-              title: Text(client.isFileTransfer?"File":"Screen" + "Control Request"),
+              title: Text(translate(client.isFileTransfer?"File Connection":"Screen Connection")),
               content: Column(
                 mainAxisSize: MainAxisSize.min,
                 mainAxisAlignment: MainAxisAlignment.center,
@@ -234,7 +237,7 @@ class ServerModel with ChangeNotifier {
                             "start_capture"); // to Android service
                         debugPrint("_toAndroidStartCapture:$res");
                       }
-                      _clients.add(client);
+                      _clients[client.id] = client;
                       notifyListeners();
                       close();
                     }),
@@ -246,7 +249,8 @@ class ServerModel with ChangeNotifier {
 
   void onClientAuthorized(Map<String, dynamic> evt) {
     try{
-      _clients.add(Client.fromJson(jsonDecode(evt['client'])));
+      final client = Client.fromJson(jsonDecode(evt['client']));
+      _clients[client.id] = client;
       notifyListeners();
     }catch(e){
 
@@ -256,8 +260,7 @@ class ServerModel with ChangeNotifier {
   void onClientRemove(Map<String, dynamic> evt) {
     try {
       final id = int.parse(evt['id'] as String);
-      Client client = _clients.singleWhere((c) => c.id == id);
-      _clients.remove(client);
+      _clients.remove(id);
       notifyListeners();
     } catch (e) {
       // singleWhere fail ,reset the login dialog
@@ -267,10 +270,10 @@ class ServerModel with ChangeNotifier {
   }
 
   closeAll() {
-    _clients.forEach((client) {
-      FFI.setByName("close_conn", client.id.toString());
+    _clients.forEach((id,client) {
+      FFI.setByName("close_conn", id.toString());
     });
-    _clients = [];
+    _clients.clear();
   }
 }
 
@@ -283,6 +286,7 @@ class Client {
   bool keyboard = false;
   bool clipboard = false;
   bool audio = false;
+  late ChatUser chatUser;
 
   Client(this.authorized, this.isFileTransfer, this.name, this.peerId,this.keyboard,this.clipboard,this.audio);
 
@@ -295,6 +299,10 @@ class Client {
     keyboard= json['keyboard'];
     clipboard= json['clipboard'];
     audio= json['audio'];
+    chatUser = ChatUser(
+        uid:peerId,
+        name: name,
+    );
   }
 
   Map<String, dynamic> toJson() {

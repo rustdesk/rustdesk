@@ -722,7 +722,7 @@ class FFI {
   }
 
   static void close() {
-    chatModel.release();
+    chatModel.close();
     if (FFI.imageModel.image != null && !isDesktop) {
       savePreference(id, cursorModel.x, cursorModel.y, canvasModel.x,
           canvasModel.y, canvasModel.scale, ffiModel.pi.currentDisplay);

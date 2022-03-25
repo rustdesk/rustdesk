@@ -17,14 +17,24 @@ class ChatModel with ChangeNotifier {
   final ChatUser me = ChatUser(
     uid:"",
     name: "me",
-    customProperties: Map()..["id"] = clientModeID
   );
+
+  final _scroller = ScrollController();
 
   var _currentID = clientModeID;
 
-  get messages => _messages;
+  ScrollController get scroller => _scroller;
 
-  get currentID => _currentID;
+  Map<int, List<ChatMessage>> get messages => _messages;
+
+  int get currentID => _currentID;
+
+  changeCurrentID(int id){
+    if(_messages.containsKey(id)){
+      _currentID = id;
+      notifyListeners();
+    }
+  }
 
   receive(int id, String text) {
     if (text.isEmpty) return;
@@ -32,18 +42,36 @@ class ChatModel with ChangeNotifier {
     if (iconOverlayEntry == null) {
       showChatIconOverlay();
     }
+    late final chatUser;
+    if(id == clientModeID){
+      chatUser = ChatUser(
+        name: FFI.ffiModel.pi.username,
+        uid: FFI.getId(),
+      );
+    }else{
+      chatUser = FFI.serverModel.clients[id]?.chatUser;
+    }
+    if(chatUser == null){
+      return debugPrint("Failed to receive msg,user doesn't exist");
+    }
     if(!_messages.containsKey(id)){
       _messages[id] = [];
     }
-    // TODO  peer info
-    _messages[id]?.add(ChatMessage(
+    _messages[id]!.add(ChatMessage(
         text: text,
-        user: ChatUser(
-          name: FFI.ffiModel.pi.username,
-          uid: FFI.getId(),
-        )));
+        user: chatUser));
     _currentID = id;
     notifyListeners();
+    scrollToBottom();
+  }
+
+  scrollToBottom(){
+    Future.delayed(Duration(milliseconds: 500), () {
+      _scroller.animateTo(
+          _scroller.position.maxScrollExtent,
+          duration: Duration(milliseconds: 200),
+          curve: Curves.fastLinearToSlowEaseIn);
+    });
   }
 
   send(ChatMessage message) {
@@ -59,13 +87,12 @@ class ChatModel with ChangeNotifier {
       }
     }
     notifyListeners();
+    scrollToBottom();
   }
 
-  release() {
+  close() {
     hideChatIconOverlay();
     hideChatWindowOverlay();
-    _messages.forEach((key, value) => value.clear());
-    _messages.clear();
     notifyListeners();
   }
 }

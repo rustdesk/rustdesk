@@ -20,23 +20,47 @@ class ChatPage extends StatelessWidget implements PageShape {
   final icon = Icon(Icons.chat);
 
   @override
-  final appBarActions = [];
+  final appBarActions = [
+    PopupMenuButton<int>(
+        icon: Icon(Icons.list_alt),
+        itemBuilder: (context) {
+          final chatModel = FFI.chatModel;
+          final serverModel = FFI.serverModel;
+          return chatModel.messages.entries.map((entry) {
+            final id = entry.key;
+            final user = serverModel.clients[id]?.chatUser ?? chatModel.me;
+            return PopupMenuItem<int>(
+              child: Text("${user.name} - ${user.uid}"),
+              value: id,
+            );
+          }).toList();
+        },
+        onSelected: (id) {
+          FFI.chatModel.changeCurrentID(id);
+        })
+  ];
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-        color: MyTheme.grayBg,
-        child: Consumer<ChatModel>(builder: (context, chatModel, child) {
-          return DashChat(
-            inputContainerStyle: BoxDecoration(color: Colors.white70),
-            sendOnEnter: false, // if true,reload keyboard everytime,need fix
-            onSend: (chatMsg) {
-              chatModel.send(chatMsg);
-            },
-            user: chatModel.me,
-            messages: chatModel.messages[chatModel.currentID] ?? [],
-          );
-        }));
+    return ChangeNotifierProvider.value(
+        value: FFI.chatModel,
+        child: Container(
+            color: MyTheme.grayBg,
+            child: Consumer<ChatModel>(builder: (context, chatModel, child) {
+              return DashChat(
+                inputContainerStyle: BoxDecoration(color: Colors.white70),
+                sendOnEnter: false,
+                // if true,reload keyboard everytime,need fix
+                onSend: (chatMsg) {
+                  chatModel.send(chatMsg);
+                },
+                user: chatModel.me,
+                messages: chatModel.messages[chatModel.currentID] ?? [],
+                // default scrollToBottom has bug https://github.com/fayeed/dash_chat/issues/53
+                scrollToBottom: false,
+                scrollController: chatModel.scroller,
+              );
+            })));
   }
 }
 
@@ -209,24 +233,30 @@ class _ChatWindowOverlayState extends State<ChatWindowOverlay> {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Padding(padding: EdgeInsets.symmetric(horizontal: 15),child: Text(
-                    translate("Chat"),
-                    style: TextStyle(
-                        color: Colors.white,
-                        fontFamily: 'WorkSans',
-                        fontWeight: FontWeight.bold,
-                        fontSize: 20),
-                  )),
+                  Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 15),
+                      child: Text(
+                        translate("Chat"),
+                        style: TextStyle(
+                            color: Colors.white,
+                            fontFamily: 'WorkSans',
+                            fontWeight: FontWeight.bold,
+                            fontSize: 20),
+                      )),
                   Row(
                     crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
-                      IconButton(onPressed: () {
-                        hideChatWindowOverlay();
-                      }, icon: Icon(Icons.keyboard_arrow_down)),
-                      IconButton(onPressed: () {
-                        hideChatWindowOverlay();
-                        hideChatIconOverlay();
-                      }, icon: Icon(Icons.close))
+                      IconButton(
+                          onPressed: () {
+                            hideChatWindowOverlay();
+                          },
+                          icon: Icon(Icons.keyboard_arrow_down)),
+                      IconButton(
+                          onPressed: () {
+                            hideChatWindowOverlay();
+                            hideChatIconOverlay();
+                          },
+                          icon: Icon(Icons.close))
                     ],
                   )
                 ],

@@ -37,20 +37,22 @@ class ServerPage extends StatelessWidget implements PageShape {
   @override
   Widget build(BuildContext context) {
     checkService();
-    return Consumer<ServerModel>(
-        builder: (context, serverModel, child) => SingleChildScrollView(
-              child: Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.start,
-                  children: [
-                    ServerInfo(),
-                    PermissionChecker(),
-                    ConnectionManager(),
-                    SizedBox.fromSize(size: Size(0, 15.0)), // Bottom padding
-                  ],
-                ),
-              ),
-            ));
+    return ChangeNotifierProvider.value(
+        value: FFI.serverModel,
+        child: Consumer<ServerModel>(
+            builder: (context, serverModel, child) => SingleChildScrollView(
+                  child: Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.start,
+                      children: [
+                        ServerInfo(),
+                        PermissionChecker(),
+                        ConnectionManager(),
+                        SizedBox.fromSize(size: Size(0, 15.0)),
+                      ],
+                    ),
+                  ),
+                )));
   }
 }
 
@@ -155,7 +157,7 @@ class _PermissionCheckerState extends State<PermissionChecker> {
   @override
   Widget build(BuildContext context) {
     final serverModel = Provider.of<ServerModel>(context);
-    final hasAudioPermission = androidVersion>=30;
+    final hasAudioPermission = androidVersion >= 30;
     return PaddingCard(
         title: translate("Configuration Permissions"),
         child: Column(
@@ -167,8 +169,13 @@ class _PermissionCheckerState extends State<PermissionChecker> {
                 serverModel.toggleInput),
             PermissionRow(translate("File Transfer"), serverModel.fileOk,
                 serverModel.toggleFile),
-            hasAudioPermission?PermissionRow(translate("Audio Capture"), serverModel.audioOk,
-                serverModel.toggleAudio):Text("* ${translate("android_version_audio_tip")}",style: TextStyle(color: MyTheme.darkGray),),
+            hasAudioPermission
+                ? PermissionRow(translate("Audio Capture"), serverModel.audioOk,
+                    serverModel.toggleAudio)
+                : Text(
+                    "* ${translate("android_version_audio_tip")}",
+                    style: TextStyle(color: MyTheme.darkGray),
+                  ),
             SizedBox(height: 8),
             serverModel.mediaOk
                 ? ElevatedButton.icon(
@@ -216,7 +223,7 @@ class PermissionRow extends StatelessWidget {
         TextButton(
             onPressed: onPressed,
             child: Text(
-              translate(isOk ?"CLOSE":"OPEN"),
+              translate(isOk ? "CLOSE" : "OPEN"),
               style: TextStyle(fontWeight: FontWeight.bold),
             )),
         const Divider(height: 0)
@@ -230,16 +237,20 @@ class ConnectionManager extends StatelessWidget {
   Widget build(BuildContext context) {
     final serverModel = Provider.of<ServerModel>(context);
     return Column(
-        children: serverModel.clients
-            .map((client) => PaddingCard(
-                title: translate(client.isFileTransfer?"File Connection":"Screen Connection"),
-                titleIcon: client.isFileTransfer?Icons.folder_outlined:Icons.mobile_screen_share,
+        children: serverModel.clients.entries
+            .map((entry) => PaddingCard(
+                title: translate(entry.value.isFileTransfer
+                    ? "File Connection"
+                    : "Screen Connection"),
+                titleIcon: entry.value.isFileTransfer
+                    ? Icons.folder_outlined
+                    : Icons.mobile_screen_share,
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Padding(
                       padding: EdgeInsets.symmetric(vertical: 5.0),
-                      child: clientInfo(client),
+                      child: clientInfo(entry.value),
                     ),
                     ElevatedButton.icon(
                         style: ButtonStyle(
@@ -247,7 +258,7 @@ class ConnectionManager extends StatelessWidget {
                                 MaterialStateProperty.all(Colors.red)),
                         icon: Icon(Icons.close),
                         onPressed: () {
-                          FFI.setByName("close_conn", client.id.toString());
+                          FFI.setByName("close_conn", entry.key.toString());
                         },
                         label: Text(translate("Close")))
                   ],
@@ -257,7 +268,7 @@ class ConnectionManager extends StatelessWidget {
 }
 
 class PaddingCard extends StatelessWidget {
-  PaddingCard({required this.child, this.title,this.titleIcon});
+  PaddingCard({required this.child, this.title, this.titleIcon});
 
   final String? title;
   final IconData? titleIcon;
@@ -273,7 +284,12 @@ class PaddingCard extends StatelessWidget {
               padding: EdgeInsets.symmetric(vertical: 5.0),
               child: Row(
                 children: [
-                  titleIcon !=null?Padding(padding: EdgeInsets.only(right: 10),child:Icon(titleIcon,color: MyTheme.accent80,size: 30)):SizedBox.shrink(),
+                  titleIcon != null
+                      ? Padding(
+                          padding: EdgeInsets.only(right: 10),
+                          child: Icon(titleIcon,
+                              color: MyTheme.accent80, size: 30))
+                      : SizedBox.shrink(),
                   Text(
                     title!,
                     style: TextStyle(
@@ -284,7 +300,7 @@ class PaddingCard extends StatelessWidget {
                     ),
                   )
                 ],
-              ) ));
+              )));
     }
     return Container(
         width: double.maxFinite,
@@ -302,27 +318,26 @@ class PaddingCard extends StatelessWidget {
 }
 
 Widget clientInfo(Client client) {
-  return Column(
-  crossAxisAlignment: CrossAxisAlignment.start
-  ,children: [
+  return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
     Row(
       children: [
         CircleAvatar(
             child: Text(client.name[0]), backgroundColor: MyTheme.border),
         SizedBox(width: 12),
         Column(
-  crossAxisAlignment: CrossAxisAlignment.start,
-  mainAxisAlignment: MainAxisAlignment.center
-  ,children: [
-          Text(client.name, style: TextStyle(color: MyTheme.idColor,fontSize: 20)),
-          SizedBox(width: 8),
-          Text(client.peerId, style: TextStyle(color: MyTheme.idColor,fontSize: 10))
-        ])
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text(client.name,
+                  style: TextStyle(color: MyTheme.idColor, fontSize: 20)),
+              SizedBox(width: 8),
+              Text(client.peerId,
+                  style: TextStyle(color: MyTheme.idColor, fontSize: 10))
+            ])
       ],
     ),
   ]);
 }
-
 
 void toAndroidChannelInit() {
   FFI.setMethodCallHandler((method, arguments) {

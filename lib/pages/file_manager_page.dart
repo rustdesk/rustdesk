@@ -45,8 +45,9 @@ class _FileManagerPageState extends State<FileManagerPage> {
   }
 
   @override
-  Widget build(BuildContext context) =>
-      Consumer<FileModel>(builder: (_context, _model, _child) {
+  Widget build(BuildContext context) => ChangeNotifierProvider.value(
+      value: FFI.fileModel,
+      child: Consumer<FileModel>(builder: (_context, _model, _child) {
         return WillPopScope(
             onWillPop: () async {
               if (model.selectMode) {
@@ -76,7 +77,7 @@ class _FileManagerPageState extends State<FileManagerPage> {
               body: body(),
               bottomSheet: bottomSheet(),
             ));
-      });
+      }));
 
   bool needShowCheckBox() {
     if (!model.selectMode) {
@@ -260,8 +261,8 @@ class _FileManagerPageState extends State<FileManagerPage> {
                   itemBuilder: (context) {
                     return SortBy.values
                         .map((e) => PopupMenuItem(
-                              child: Text(
-                                  translate(e.toString().split(".").last)),
+                              child:
+                                  Text(translate(e.toString().split(".").last)),
                               value: e,
                             ))
                         .toList();
@@ -380,7 +381,6 @@ class _FileManagerPageState extends State<FileManagerPage> {
         children: [
           Padding(
             padding: EdgeInsets.all(2),
-            // TODO
             child: Text(
               "${translate("Total")}: ${model.currentDir.entries.length}${translate("items")}",
               style: TextStyle(color: MyTheme.darkGray),
@@ -394,7 +394,7 @@ class _FileManagerPageState extends State<FileManagerPage> {
   Widget? bottomSheet() {
     final state = model.jobState;
     final isOtherPage = _selectedItems.isOtherPage(model.isLocal);
-    final selectedItemsLength = "${_selectedItems.length} ${translate("items")}"; // TODO t
+    final selectedItemsLen = "${_selectedItems.length} ${translate("items")}";
     final local = _selectedItems.isLocal == null
         ? ""
         : " [${_selectedItems.isLocal! ? translate("Local") : translate("Remote")}]";
@@ -405,7 +405,7 @@ class _FileManagerPageState extends State<FileManagerPage> {
         return BottomSheetBody(
             leading: Icon(Icons.check),
             title: translate("Selected"),
-            text: selectedItemsLength + local,
+            text: selectedItemsLen + local,
             onCanceled: () => model.toggleSelectMode(),
             actions: [
               IconButton(
@@ -422,7 +422,7 @@ class _FileManagerPageState extends State<FileManagerPage> {
         return BottomSheetBody(
             leading: Icon(Icons.input),
             title: translate("Paste here?"),
-            text: selectedItemsLength + local,
+            text: selectedItemsLen + local,
             onCanceled: () => model.toggleSelectMode(),
             actions: [
               IconButton(
@@ -441,7 +441,8 @@ class _FileManagerPageState extends State<FileManagerPage> {
         return BottomSheetBody(
           leading: CircularProgressIndicator(),
           title: translate("Waiting"),
-          text: "${translate("Speed")}:  ${readableFileSize(model.jobProgress.speed)}/s",
+          text:
+              "${translate("Speed")}:  ${readableFileSize(model.jobProgress.speed)}/s",
           onCanceled: null,
         );
       case JobState.done:
