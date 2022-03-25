@@ -175,15 +175,23 @@ impl ConnectionManager {
                     data,
                     compressed,
                 } => {
+                    let raw = if let Ok(bytes) = conn.next_raw().await {
+                        Some(bytes)
+                    } else {
+                        None
+                    };
                     if let Some(job) = fs::get_job(id, write_jobs) {
                         if let Err(err) = job
-                            .write(FileTransferBlock {
-                                id,
-                                file_num,
-                                data,
-                                compressed,
-                                ..Default::default()
-                            })
+                            .write(
+                                FileTransferBlock {
+                                    id,
+                                    file_num,
+                                    data,
+                                    compressed,
+                                    ..Default::default()
+                                },
+                                raw.as_ref().map(|x| &x[..]),
+                            )
                             .await
                         {
                             Self::send(fs::new_error(id, err, file_num), conn).await;

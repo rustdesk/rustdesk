@@ -302,7 +302,7 @@ impl TransferJob {
         }
     }
 
-    pub async fn write(&mut self, block: FileTransferBlock) -> ResultType<()> {
+    pub async fn write(&mut self, block: FileTransferBlock, raw: Option<&[u8]>) -> ResultType<()> {
         if block.id != self.id {
             bail!("Wrong id");
         }
@@ -324,15 +324,20 @@ impl TransferJob {
             let path = format!("{}.download", get_string(&path));
             self.file = Some(File::create(&path).await?);
         }
+        let data = if let Some(data) = raw {
+            data
+        } else {
+            &block.data
+        };
         if block.compressed {
-            let tmp = decompress(&block.data);
+            let tmp = decompress(data);
             self.file.as_mut().unwrap().write_all(&tmp).await?;
             self.finished_size += tmp.len() as u64;
         } else {
-            self.file.as_mut().unwrap().write_all(&block.data).await?;
-            self.finished_size += block.data.len() as u64;
+            self.file.as_mut().unwrap().write_all(data).await?;
+            self.finished_size += data.len() as u64;
         }
-        self.transferred += block.data.len() as u64;
+        self.transferred += data.len() as u64;
         Ok(())
     }
 

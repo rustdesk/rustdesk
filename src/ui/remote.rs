@@ -1797,7 +1797,7 @@ impl Remote {
                     }
                     Some(file_response::Union::block(block)) => {
                         if let Some(job) = fs::get_job(block.id, &mut self.write_jobs) {
-                            if let Err(_err) = job.write(block).await {
+                            if let Err(_err) = job.write(block, None).await {
                                 // to-do: add "skip" for writing job
                             }
                             self.update_jobs_status();

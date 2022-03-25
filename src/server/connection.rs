@@ -1157,7 +1157,15 @@ async fn start_ipc(
             res = rx_to_cm.recv() => {
                 match res {
                     Some(data) => {
-                        stream.send(&data).await?;
+                        if let Data::FS(ipc::FS::WriteBlock{id,
+                            file_num,
+                            data,
+                            compressed}) = data {
+                                stream.send(&Data::FS(ipc::FS::WriteBlock{id, file_num, data: Vec::new(), compressed})).await?;
+                                stream.send_raw(data).await?;
+                        } else {
+                            stream.send(&data).await?;
+                        }
                     }
                     None => {
                         bail!("expected");
