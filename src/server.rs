@@ -103,10 +103,12 @@ pub async fn create_tcp_connection(
         let (our_pk_b, our_sk_b) = box_::gen_keypair();
         msg_out.set_signed_id(SignedId {
             id: sign::sign(
-                &serde_json::to_vec(&hbb_common::IdPk {
+                &IdPk {
                     id: Config::get_id(),
-                    pk: our_pk_b.0,
-                })
+                    pk: our_pk_b.0.to_vec(),
+                    ..Default::default()
+                }
+                .write_to_bytes()
                 .unwrap_or_default(),
                 &sk,
             ),

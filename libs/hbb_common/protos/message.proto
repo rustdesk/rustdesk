@@ -25,6 +25,11 @@ message VideoFrame {
   }
 }
 
+message IdPk {
+  string id = 1;
+  bytes pk = 2;
+}
+
 message DisplayInfo {
   sint32 x = 1;
   sint32 y = 2;
