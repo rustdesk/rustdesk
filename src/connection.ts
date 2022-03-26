@@ -90,6 +90,7 @@ export default class Connection {
       licence_key: localStorage.getItem("key") || undefined,
       conn_type,
       nat_type,
+      token: localStorage.getItem("access_token") || undefined,
     });
     ws.sendRendezvous({ punch_hole_request });
     const msg = (await ws.next()) as rendezvous.RendezvousMessage;
@@ -131,7 +132,7 @@ export default class Connection {
     const pk = rr.pk;
     let uri = rr.relay_server;
     if (uri) {
-      uri = getrUriFromRs(uri, true);
+      uri = getrUriFromRs(uri, true, 2);
     } else {
       uri = getDefaultUri(true);
     }
@@ -155,7 +156,13 @@ export default class Connection {
     if (pk) {
       const RS_PK = "OeVuKk5nlHiXp+APNn0Y3pC1Iwpwn44JGqrQCsWqmBw=";
       try {
-        pk = await globals.verify(pk, RS_PK).catch();
+        pk = await globals.verify(pk, localStorage.getItem("key") || RS_PK);
+        if (pk) {
+          const idpk = message.IdPk.decode(pk);
+          if (idpk.id == this._id) {
+            pk = idpk.pk;
+          }
+        }
         if (pk?.length != 32) {
           pk = undefined;
         }
@@ -170,14 +177,16 @@ export default class Connection {
     }
     if (!pk) {
       // send an empty message out in case server is setting up secure and waiting for first message
-      this._ws?.sendMessage({});
+      const public_key = message.PublicKey.fromPartial({});
+      this._ws?.sendMessage({ public_key });
       return;
     }
     const msg = (await this._ws?.next()) as message.Message;
     let signedId: any = msg?.signed_id;
     if (!signedId) {
       console.error("Handshake failed: invalid message type");
-      this._ws?.sendMessage({});
+      const public_key = message.PublicKey.fromPartial({});
+      this._ws?.sendMessage({ public_key });
       return;
     }
     try {
@@ -190,21 +199,21 @@ export default class Connection {
       this._ws?.sendMessage({ public_key });
       return;
     }
-    signedId = new TextDecoder().decode(signedId!);
-    const tmp = signedId.split("\0");
-    const id = tmp[0];
-    let theirPk = tmp[1];
+    const idpk = message.IdPk.decode(signedId);
+    const id = idpk.id;
+    const theirPk = idpk.pk;
     if (id != this._id!) {
       console.error("Handshake failed: sign failure");
-      this._ws?.sendMessage({});
+      const public_key = message.PublicKey.fromPartial({});
+      this._ws?.sendMessage({ public_key });
       return;
     }
-    theirPk = globals.decodeBase64(theirPk);
     if (theirPk.length != 32) {
       console.error(
         "Handshake failed: invalid public box key length from peer"
       );
-      this._ws?.sendMessage({});
+      const public_key = message.PublicKey.fromPartial({});
+      this._ws?.sendMessage({ public_key });
       return;
     }
     const [mySk, asymmetric_value] = globals.genBoxKeyPair();
@@ -703,14 +712,18 @@ testDelay();
 
 function getDefaultUri(isRelay: Boolean = false): string {
   const host = localStorage.getItem("custom-rendezvous-server");
-  return SCHEMA + (host || HOST) + ":" + (PORT + (isRelay ? 3 : 2));
+  return getrUriFromRs(host || HOST, isRelay);
 }
 
-function getrUriFromRs(uri: string, isRelay: Boolean = false): string {
+function getrUriFromRs(
+  uri: string,
+  isRelay: Boolean = false,
+  roffset: number = 0
+): string {
   if (uri.indexOf(":") > 0) {
     const tmp = uri.split(":");
     const port = parseInt(tmp[1]);
-    uri = tmp[0] + ":" + (port + (isRelay ? 3 : 2));
+    uri = tmp[0] + ":" + (port + (isRelay ? roffset || 3 : 2));
   } else {
     uri += ":" + (PORT + (isRelay ? 3 : 2));
   }

@@ -615,6 +615,11 @@ export interface VideoFrame {
   yuv: YUV | undefined;
 }
 
+export interface IdPk {
+  id: string;
+  pk: Uint8Array;
+}
+
 export interface DisplayInfo {
   x: number;
   y: number;
@@ -657,6 +662,8 @@ export interface PeerInfo {
   current_display: number;
   sas_enabled: boolean;
   version: string;
+  conn_id: number;
+  home_dir: string;
 }
 
 export interface LoginResponse {
@@ -800,6 +807,67 @@ export interface FileDirCreate {
   path: string;
 }
 
+/** main logic from freeRDP */
+export interface CliprdrMonitorReady {
+  conn_id: number;
+}
+
+export interface CliprdrFormat {
+  conn_id: number;
+  id: number;
+  format: string;
+}
+
+export interface CliprdrServerFormatList {
+  conn_id: number;
+  formats: CliprdrFormat[];
+}
+
+export interface CliprdrServerFormatListResponse {
+  conn_id: number;
+  msg_flags: number;
+}
+
+export interface CliprdrServerFormatDataRequest {
+  conn_id: number;
+  requested_format_id: number;
+}
+
+export interface CliprdrServerFormatDataResponse {
+  conn_id: number;
+  msg_flags: number;
+  format_data: Uint8Array;
+}
+
+export interface CliprdrFileContentsRequest {
+  conn_id: number;
+  stream_id: number;
+  list_index: number;
+  dw_flags: number;
+  n_position_low: number;
+  n_position_high: number;
+  cb_requested: number;
+  have_clip_data_id: boolean;
+  clip_data_id: number;
+}
+
+export interface CliprdrFileContentsResponse {
+  conn_id: number;
+  msg_flags: number;
+  stream_id: number;
+  requested_data: Uint8Array;
+}
+
+export interface Cliprdr {
+  ready: CliprdrMonitorReady | undefined;
+  format_list: CliprdrServerFormatList | undefined;
+  format_list_response: CliprdrServerFormatListResponse | undefined;
+  format_data_request: CliprdrServerFormatDataRequest | undefined;
+  format_data_response: CliprdrServerFormatDataResponse | undefined;
+  file_contents_request: CliprdrFileContentsRequest | undefined;
+  file_contents_response: CliprdrFileContentsResponse | undefined;
+}
+
 export interface SwitchDisplay {
   display: number;
   x: number;
@@ -817,6 +885,7 @@ export enum PermissionInfo_Permission {
   Keyboard = 0,
   Clipboard = 2,
   Audio = 3,
+  File = 4,
   UNRECOGNIZED = -1,
 }
 
@@ -833,6 +902,9 @@ export function permissionInfo_PermissionFromJSON(
     case 3:
     case "Audio":
       return PermissionInfo_Permission.Audio;
+    case 4:
+    case "File":
+      return PermissionInfo_Permission.File;
     case -1:
     case "UNRECOGNIZED":
     default:
@@ -850,6 +922,8 @@ export function permissionInfo_PermissionToJSON(
       return "Clipboard";
     case PermissionInfo_Permission.Audio:
       return "Audio";
+    case PermissionInfo_Permission.File:
+      return "File";
     default:
       return "UNKNOWN";
   }
@@ -864,6 +938,7 @@ export interface OptionMessage {
   custom_image_quality: number;
   disable_audio: OptionMessage_BoolOption;
   disable_clipboard: OptionMessage_BoolOption;
+  enable_file_transfer: OptionMessage_BoolOption;
 }
 
 export enum OptionMessage_BoolOption {
@@ -966,6 +1041,7 @@ export interface Message {
   file_action: FileAction | undefined;
   file_response: FileResponse | undefined;
   misc: Misc | undefined;
+  cliprdr: Cliprdr | undefined;
 }
 
 function createBaseVP9(): VP9 {
@@ -1282,6 +1358,67 @@ export const VideoFrame = {
       object.yuv !== undefined && object.yuv !== null
         ? YUV.fromPartial(object.yuv)
         : undefined;
+    return message;
+  },
+};
+
+function createBaseIdPk(): IdPk {
+  return { id: "", pk: new Uint8Array() };
+}
+
+export const IdPk = {
+  encode(message: IdPk, writer: _m0.Writer = _m0.Writer.create()): _m0.Writer {
+    if (message.id !== "") {
+      writer.uint32(10).string(message.id);
+    }
+    if (message.pk.length !== 0) {
+      writer.uint32(18).bytes(message.pk);
+    }
+    return writer;
+  },
+
+  decode(input: _m0.Reader | Uint8Array, length?: number): IdPk {
+    const reader = input instanceof _m0.Reader ? input : new _m0.Reader(input);
+    let end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseIdPk();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1:
+          message.id = reader.string();
+          break;
+        case 2:
+          message.pk = reader.bytes();
+          break;
+        default:
+          reader.skipType(tag & 7);
+          break;
+      }
+    }
+    return message;
+  },
+
+  fromJSON(object: any): IdPk {
+    return {
+      id: isSet(object.id) ? String(object.id) : "",
+      pk: isSet(object.pk) ? bytesFromBase64(object.pk) : new Uint8Array(),
+    };
+  },
+
+  toJSON(message: IdPk): unknown {
+    const obj: any = {};
+    message.id !== undefined && (obj.id = message.id);
+    message.pk !== undefined &&
+      (obj.pk = base64FromBytes(
+        message.pk !== undefined ? message.pk : new Uint8Array()
+      ));
+    return obj;
+  },
+
+  fromPartial<I extends Exact<DeepPartial<IdPk>, I>>(object: I): IdPk {
+    const message = createBaseIdPk();
+    message.id = object.id ?? "";
+    message.pk = object.pk ?? new Uint8Array();
     return message;
   },
 };
@@ -1741,6 +1878,8 @@ function createBasePeerInfo(): PeerInfo {
     current_display: 0,
     sas_enabled: false,
     version: "",
+    conn_id: 0,
+    home_dir: "",
   };
 }
 
@@ -1769,6 +1908,12 @@ export const PeerInfo = {
     }
     if (message.version !== "") {
       writer.uint32(58).string(message.version);
+    }
+    if (message.conn_id !== 0) {
+      writer.uint32(64).int32(message.conn_id);
+    }
+    if (message.home_dir !== "") {
+      writer.uint32(74).string(message.home_dir);
     }
     return writer;
   },
@@ -1801,6 +1946,12 @@ export const PeerInfo = {
         case 7:
           message.version = reader.string();
           break;
+        case 8:
+          message.conn_id = reader.int32();
+          break;
+        case 9:
+          message.home_dir = reader.string();
+          break;
         default:
           reader.skipType(tag & 7);
           break;
@@ -1824,6 +1975,8 @@ export const PeerInfo = {
         ? Boolean(object.sas_enabled)
         : false,
       version: isSet(object.version) ? String(object.version) : "",
+      conn_id: isSet(object.conn_id) ? Number(object.conn_id) : 0,
+      home_dir: isSet(object.home_dir) ? String(object.home_dir) : "",
     };
   },
 
@@ -1844,6 +1997,9 @@ export const PeerInfo = {
     message.sas_enabled !== undefined &&
       (obj.sas_enabled = message.sas_enabled);
     message.version !== undefined && (obj.version = message.version);
+    message.conn_id !== undefined &&
+      (obj.conn_id = Math.round(message.conn_id));
+    message.home_dir !== undefined && (obj.home_dir = message.home_dir);
     return obj;
   },
 
@@ -1857,6 +2013,8 @@ export const PeerInfo = {
     message.current_display = object.current_display ?? 0;
     message.sas_enabled = object.sas_enabled ?? false;
     message.version = object.version ?? "";
+    message.conn_id = object.conn_id ?? 0;
+    message.home_dir = object.home_dir ?? "";
     return message;
   },
 };
@@ -3764,6 +3922,907 @@ export const FileDirCreate = {
   },
 };
 
+function createBaseCliprdrMonitorReady(): CliprdrMonitorReady {
+  return { conn_id: 0 };
+}
+
+export const CliprdrMonitorReady = {
+  encode(
+    message: CliprdrMonitorReady,
+    writer: _m0.Writer = _m0.Writer.create()
+  ): _m0.Writer {
+    if (message.conn_id !== 0) {
+      writer.uint32(8).int32(message.conn_id);
+    }
+    return writer;
+  },
+
+  decode(input: _m0.Reader | Uint8Array, length?: number): CliprdrMonitorReady {
+    const reader = input instanceof _m0.Reader ? input : new _m0.Reader(input);
+    let end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseCliprdrMonitorReady();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1:
+          message.conn_id = reader.int32();
+          break;
+        default:
+          reader.skipType(tag & 7);
+          break;
+      }
+    }
+    return message;
+  },
+
+  fromJSON(object: any): CliprdrMonitorReady {
+    return {
+      conn_id: isSet(object.conn_id) ? Number(object.conn_id) : 0,
+    };
+  },
+
+  toJSON(message: CliprdrMonitorReady): unknown {
+    const obj: any = {};
+    message.conn_id !== undefined &&
+      (obj.conn_id = Math.round(message.conn_id));
+    return obj;
+  },
+
+  fromPartial<I extends Exact<DeepPartial<CliprdrMonitorReady>, I>>(
+    object: I
+  ): CliprdrMonitorReady {
+    const message = createBaseCliprdrMonitorReady();
+    message.conn_id = object.conn_id ?? 0;
+    return message;
+  },
+};
+
+function createBaseCliprdrFormat(): CliprdrFormat {
+  return { conn_id: 0, id: 0, format: "" };
+}
+
+export const CliprdrFormat = {
+  encode(
+    message: CliprdrFormat,
+    writer: _m0.Writer = _m0.Writer.create()
+  ): _m0.Writer {
+    if (message.conn_id !== 0) {
+      writer.uint32(8).int32(message.conn_id);
+    }
+    if (message.id !== 0) {
+      writer.uint32(16).int32(message.id);
+    }
+    if (message.format !== "") {
+      writer.uint32(26).string(message.format);
+    }
+    return writer;
+  },
+
+  decode(input: _m0.Reader | Uint8Array, length?: number): CliprdrFormat {
+    const reader = input instanceof _m0.Reader ? input : new _m0.Reader(input);
+    let end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseCliprdrFormat();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1:
+          message.conn_id = reader.int32();
+          break;
+        case 2:
+          message.id = reader.int32();
+          break;
+        case 3:
+          message.format = reader.string();
+          break;
+        default:
+          reader.skipType(tag & 7);
+          break;
+      }
+    }
+    return message;
+  },
+
+  fromJSON(object: any): CliprdrFormat {
+    return {
+      conn_id: isSet(object.conn_id) ? Number(object.conn_id) : 0,
+      id: isSet(object.id) ? Number(object.id) : 0,
+      format: isSet(object.format) ? String(object.format) : "",
+    };
+  },
+
+  toJSON(message: CliprdrFormat): unknown {
+    const obj: any = {};
+    message.conn_id !== undefined &&
+      (obj.conn_id = Math.round(message.conn_id));
+    message.id !== undefined && (obj.id = Math.round(message.id));
+    message.format !== undefined && (obj.format = message.format);
+    return obj;
+  },
+
+  fromPartial<I extends Exact<DeepPartial<CliprdrFormat>, I>>(
+    object: I
+  ): CliprdrFormat {
+    const message = createBaseCliprdrFormat();
+    message.conn_id = object.conn_id ?? 0;
+    message.id = object.id ?? 0;
+    message.format = object.format ?? "";
+    return message;
+  },
+};
+
+function createBaseCliprdrServerFormatList(): CliprdrServerFormatList {
+  return { conn_id: 0, formats: [] };
+}
+
+export const CliprdrServerFormatList = {
+  encode(
+    message: CliprdrServerFormatList,
+    writer: _m0.Writer = _m0.Writer.create()
+  ): _m0.Writer {
+    if (message.conn_id !== 0) {
+      writer.uint32(8).int32(message.conn_id);
+    }
+    for (const v of message.formats) {
+      CliprdrFormat.encode(v!, writer.uint32(18).fork()).ldelim();
+    }
+    return writer;
+  },
+
+  decode(
+    input: _m0.Reader | Uint8Array,
+    length?: number
+  ): CliprdrServerFormatList {
+    const reader = input instanceof _m0.Reader ? input : new _m0.Reader(input);
+    let end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseCliprdrServerFormatList();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1:
+          message.conn_id = reader.int32();
+          break;
+        case 2:
+          message.formats.push(CliprdrFormat.decode(reader, reader.uint32()));
+          break;
+        default:
+          reader.skipType(tag & 7);
+          break;
+      }
+    }
+    return message;
+  },
+
+  fromJSON(object: any): CliprdrServerFormatList {
+    return {
+      conn_id: isSet(object.conn_id) ? Number(object.conn_id) : 0,
+      formats: Array.isArray(object?.formats)
+        ? object.formats.map((e: any) => CliprdrFormat.fromJSON(e))
+        : [],
+    };
+  },
+
+  toJSON(message: CliprdrServerFormatList): unknown {
+    const obj: any = {};
+    message.conn_id !== undefined &&
+      (obj.conn_id = Math.round(message.conn_id));
+    if (message.formats) {
+      obj.formats = message.formats.map((e) =>
+        e ? CliprdrFormat.toJSON(e) : undefined
+      );
+    } else {
+      obj.formats = [];
+    }
+    return obj;
+  },
+
+  fromPartial<I extends Exact<DeepPartial<CliprdrServerFormatList>, I>>(
+    object: I
+  ): CliprdrServerFormatList {
+    const message = createBaseCliprdrServerFormatList();
+    message.conn_id = object.conn_id ?? 0;
+    message.formats =
+      object.formats?.map((e) => CliprdrFormat.fromPartial(e)) || [];
+    return message;
+  },
+};
+
+function createBaseCliprdrServerFormatListResponse(): CliprdrServerFormatListResponse {
+  return { conn_id: 0, msg_flags: 0 };
+}
+
+export const CliprdrServerFormatListResponse = {
+  encode(
+    message: CliprdrServerFormatListResponse,
+    writer: _m0.Writer = _m0.Writer.create()
+  ): _m0.Writer {
+    if (message.conn_id !== 0) {
+      writer.uint32(8).int32(message.conn_id);
+    }
+    if (message.msg_flags !== 0) {
+      writer.uint32(16).int32(message.msg_flags);
+    }
+    return writer;
+  },
+
+  decode(
+    input: _m0.Reader | Uint8Array,
+    length?: number
+  ): CliprdrServerFormatListResponse {
+    const reader = input instanceof _m0.Reader ? input : new _m0.Reader(input);
+    let end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseCliprdrServerFormatListResponse();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1:
+          message.conn_id = reader.int32();
+          break;
+        case 2:
+          message.msg_flags = reader.int32();
+          break;
+        default:
+          reader.skipType(tag & 7);
+          break;
+      }
+    }
+    return message;
+  },
+
+  fromJSON(object: any): CliprdrServerFormatListResponse {
+    return {
+      conn_id: isSet(object.conn_id) ? Number(object.conn_id) : 0,
+      msg_flags: isSet(object.msg_flags) ? Number(object.msg_flags) : 0,
+    };
+  },
+
+  toJSON(message: CliprdrServerFormatListResponse): unknown {
+    const obj: any = {};
+    message.conn_id !== undefined &&
+      (obj.conn_id = Math.round(message.conn_id));
+    message.msg_flags !== undefined &&
+      (obj.msg_flags = Math.round(message.msg_flags));
+    return obj;
+  },
+
+  fromPartial<I extends Exact<DeepPartial<CliprdrServerFormatListResponse>, I>>(
+    object: I
+  ): CliprdrServerFormatListResponse {
+    const message = createBaseCliprdrServerFormatListResponse();
+    message.conn_id = object.conn_id ?? 0;
+    message.msg_flags = object.msg_flags ?? 0;
+    return message;
+  },
+};
+
+function createBaseCliprdrServerFormatDataRequest(): CliprdrServerFormatDataRequest {
+  return { conn_id: 0, requested_format_id: 0 };
+}
+
+export const CliprdrServerFormatDataRequest = {
+  encode(
+    message: CliprdrServerFormatDataRequest,
+    writer: _m0.Writer = _m0.Writer.create()
+  ): _m0.Writer {
+    if (message.conn_id !== 0) {
+      writer.uint32(8).int32(message.conn_id);
+    }
+    if (message.requested_format_id !== 0) {
+      writer.uint32(16).int32(message.requested_format_id);
+    }
+    return writer;
+  },
+
+  decode(
+    input: _m0.Reader | Uint8Array,
+    length?: number
+  ): CliprdrServerFormatDataRequest {
+    const reader = input instanceof _m0.Reader ? input : new _m0.Reader(input);
+    let end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseCliprdrServerFormatDataRequest();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1:
+          message.conn_id = reader.int32();
+          break;
+        case 2:
+          message.requested_format_id = reader.int32();
+          break;
+        default:
+          reader.skipType(tag & 7);
+          break;
+      }
+    }
+    return message;
+  },
+
+  fromJSON(object: any): CliprdrServerFormatDataRequest {
+    return {
+      conn_id: isSet(object.conn_id) ? Number(object.conn_id) : 0,
+      requested_format_id: isSet(object.requested_format_id)
+        ? Number(object.requested_format_id)
+        : 0,
+    };
+  },
+
+  toJSON(message: CliprdrServerFormatDataRequest): unknown {
+    const obj: any = {};
+    message.conn_id !== undefined &&
+      (obj.conn_id = Math.round(message.conn_id));
+    message.requested_format_id !== undefined &&
+      (obj.requested_format_id = Math.round(message.requested_format_id));
+    return obj;
+  },
+
+  fromPartial<I extends Exact<DeepPartial<CliprdrServerFormatDataRequest>, I>>(
+    object: I
+  ): CliprdrServerFormatDataRequest {
+    const message = createBaseCliprdrServerFormatDataRequest();
+    message.conn_id = object.conn_id ?? 0;
+    message.requested_format_id = object.requested_format_id ?? 0;
+    return message;
+  },
+};
+
+function createBaseCliprdrServerFormatDataResponse(): CliprdrServerFormatDataResponse {
+  return { conn_id: 0, msg_flags: 0, format_data: new Uint8Array() };
+}
+
+export const CliprdrServerFormatDataResponse = {
+  encode(
+    message: CliprdrServerFormatDataResponse,
+    writer: _m0.Writer = _m0.Writer.create()
+  ): _m0.Writer {
+    if (message.conn_id !== 0) {
+      writer.uint32(8).int32(message.conn_id);
+    }
+    if (message.msg_flags !== 0) {
+      writer.uint32(16).int32(message.msg_flags);
+    }
+    if (message.format_data.length !== 0) {
+      writer.uint32(26).bytes(message.format_data);
+    }
+    return writer;
+  },
+
+  decode(
+    input: _m0.Reader | Uint8Array,
+    length?: number
+  ): CliprdrServerFormatDataResponse {
+    const reader = input instanceof _m0.Reader ? input : new _m0.Reader(input);
+    let end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseCliprdrServerFormatDataResponse();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1:
+          message.conn_id = reader.int32();
+          break;
+        case 2:
+          message.msg_flags = reader.int32();
+          break;
+        case 3:
+          message.format_data = reader.bytes();
+          break;
+        default:
+          reader.skipType(tag & 7);
+          break;
+      }
+    }
+    return message;
+  },
+
+  fromJSON(object: any): CliprdrServerFormatDataResponse {
+    return {
+      conn_id: isSet(object.conn_id) ? Number(object.conn_id) : 0,
+      msg_flags: isSet(object.msg_flags) ? Number(object.msg_flags) : 0,
+      format_data: isSet(object.format_data)
+        ? bytesFromBase64(object.format_data)
+        : new Uint8Array(),
+    };
+  },
+
+  toJSON(message: CliprdrServerFormatDataResponse): unknown {
+    const obj: any = {};
+    message.conn_id !== undefined &&
+      (obj.conn_id = Math.round(message.conn_id));
+    message.msg_flags !== undefined &&
+      (obj.msg_flags = Math.round(message.msg_flags));
+    message.format_data !== undefined &&
+      (obj.format_data = base64FromBytes(
+        message.format_data !== undefined
+          ? message.format_data
+          : new Uint8Array()
+      ));
+    return obj;
+  },
+
+  fromPartial<I extends Exact<DeepPartial<CliprdrServerFormatDataResponse>, I>>(
+    object: I
+  ): CliprdrServerFormatDataResponse {
+    const message = createBaseCliprdrServerFormatDataResponse();
+    message.conn_id = object.conn_id ?? 0;
+    message.msg_flags = object.msg_flags ?? 0;
+    message.format_data = object.format_data ?? new Uint8Array();
+    return message;
+  },
+};
+
+function createBaseCliprdrFileContentsRequest(): CliprdrFileContentsRequest {
+  return {
+    conn_id: 0,
+    stream_id: 0,
+    list_index: 0,
+    dw_flags: 0,
+    n_position_low: 0,
+    n_position_high: 0,
+    cb_requested: 0,
+    have_clip_data_id: false,
+    clip_data_id: 0,
+  };
+}
+
+export const CliprdrFileContentsRequest = {
+  encode(
+    message: CliprdrFileContentsRequest,
+    writer: _m0.Writer = _m0.Writer.create()
+  ): _m0.Writer {
+    if (message.conn_id !== 0) {
+      writer.uint32(8).int32(message.conn_id);
+    }
+    if (message.stream_id !== 0) {
+      writer.uint32(16).int32(message.stream_id);
+    }
+    if (message.list_index !== 0) {
+      writer.uint32(24).int32(message.list_index);
+    }
+    if (message.dw_flags !== 0) {
+      writer.uint32(32).int32(message.dw_flags);
+    }
+    if (message.n_position_low !== 0) {
+      writer.uint32(40).int32(message.n_position_low);
+    }
+    if (message.n_position_high !== 0) {
+      writer.uint32(48).int32(message.n_position_high);
+    }
+    if (message.cb_requested !== 0) {
+      writer.uint32(56).int32(message.cb_requested);
+    }
+    if (message.have_clip_data_id === true) {
+      writer.uint32(64).bool(message.have_clip_data_id);
+    }
+    if (message.clip_data_id !== 0) {
+      writer.uint32(72).int32(message.clip_data_id);
+    }
+    return writer;
+  },
+
+  decode(
+    input: _m0.Reader | Uint8Array,
+    length?: number
+  ): CliprdrFileContentsRequest {
+    const reader = input instanceof _m0.Reader ? input : new _m0.Reader(input);
+    let end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseCliprdrFileContentsRequest();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1:
+          message.conn_id = reader.int32();
+          break;
+        case 2:
+          message.stream_id = reader.int32();
+          break;
+        case 3:
+          message.list_index = reader.int32();
+          break;
+        case 4:
+          message.dw_flags = reader.int32();
+          break;
+        case 5:
+          message.n_position_low = reader.int32();
+          break;
+        case 6:
+          message.n_position_high = reader.int32();
+          break;
+        case 7:
+          message.cb_requested = reader.int32();
+          break;
+        case 8:
+          message.have_clip_data_id = reader.bool();
+          break;
+        case 9:
+          message.clip_data_id = reader.int32();
+          break;
+        default:
+          reader.skipType(tag & 7);
+          break;
+      }
+    }
+    return message;
+  },
+
+  fromJSON(object: any): CliprdrFileContentsRequest {
+    return {
+      conn_id: isSet(object.conn_id) ? Number(object.conn_id) : 0,
+      stream_id: isSet(object.stream_id) ? Number(object.stream_id) : 0,
+      list_index: isSet(object.list_index) ? Number(object.list_index) : 0,
+      dw_flags: isSet(object.dw_flags) ? Number(object.dw_flags) : 0,
+      n_position_low: isSet(object.n_position_low)
+        ? Number(object.n_position_low)
+        : 0,
+      n_position_high: isSet(object.n_position_high)
+        ? Number(object.n_position_high)
+        : 0,
+      cb_requested: isSet(object.cb_requested)
+        ? Number(object.cb_requested)
+        : 0,
+      have_clip_data_id: isSet(object.have_clip_data_id)
+        ? Boolean(object.have_clip_data_id)
+        : false,
+      clip_data_id: isSet(object.clip_data_id)
+        ? Number(object.clip_data_id)
+        : 0,
+    };
+  },
+
+  toJSON(message: CliprdrFileContentsRequest): unknown {
+    const obj: any = {};
+    message.conn_id !== undefined &&
+      (obj.conn_id = Math.round(message.conn_id));
+    message.stream_id !== undefined &&
+      (obj.stream_id = Math.round(message.stream_id));
+    message.list_index !== undefined &&
+      (obj.list_index = Math.round(message.list_index));
+    message.dw_flags !== undefined &&
+      (obj.dw_flags = Math.round(message.dw_flags));
+    message.n_position_low !== undefined &&
+      (obj.n_position_low = Math.round(message.n_position_low));
+    message.n_position_high !== undefined &&
+      (obj.n_position_high = Math.round(message.n_position_high));
+    message.cb_requested !== undefined &&
+      (obj.cb_requested = Math.round(message.cb_requested));
+    message.have_clip_data_id !== undefined &&
+      (obj.have_clip_data_id = message.have_clip_data_id);
+    message.clip_data_id !== undefined &&
+      (obj.clip_data_id = Math.round(message.clip_data_id));
+    return obj;
+  },
+
+  fromPartial<I extends Exact<DeepPartial<CliprdrFileContentsRequest>, I>>(
+    object: I
+  ): CliprdrFileContentsRequest {
+    const message = createBaseCliprdrFileContentsRequest();
+    message.conn_id = object.conn_id ?? 0;
+    message.stream_id = object.stream_id ?? 0;
+    message.list_index = object.list_index ?? 0;
+    message.dw_flags = object.dw_flags ?? 0;
+    message.n_position_low = object.n_position_low ?? 0;
+    message.n_position_high = object.n_position_high ?? 0;
+    message.cb_requested = object.cb_requested ?? 0;
+    message.have_clip_data_id = object.have_clip_data_id ?? false;
+    message.clip_data_id = object.clip_data_id ?? 0;
+    return message;
+  },
+};
+
+function createBaseCliprdrFileContentsResponse(): CliprdrFileContentsResponse {
+  return {
+    conn_id: 0,
+    msg_flags: 0,
+    stream_id: 0,
+    requested_data: new Uint8Array(),
+  };
+}
+
+export const CliprdrFileContentsResponse = {
+  encode(
+    message: CliprdrFileContentsResponse,
+    writer: _m0.Writer = _m0.Writer.create()
+  ): _m0.Writer {
+    if (message.conn_id !== 0) {
+      writer.uint32(8).int32(message.conn_id);
+    }
+    if (message.msg_flags !== 0) {
+      writer.uint32(24).int32(message.msg_flags);
+    }
+    if (message.stream_id !== 0) {
+      writer.uint32(32).int32(message.stream_id);
+    }
+    if (message.requested_data.length !== 0) {
+      writer.uint32(42).bytes(message.requested_data);
+    }
+    return writer;
+  },
+
+  decode(
+    input: _m0.Reader | Uint8Array,
+    length?: number
+  ): CliprdrFileContentsResponse {
+    const reader = input instanceof _m0.Reader ? input : new _m0.Reader(input);
+    let end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseCliprdrFileContentsResponse();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1:
+          message.conn_id = reader.int32();
+          break;
+        case 3:
+          message.msg_flags = reader.int32();
+          break;
+        case 4:
+          message.stream_id = reader.int32();
+          break;
+        case 5:
+          message.requested_data = reader.bytes();
+          break;
+        default:
+          reader.skipType(tag & 7);
+          break;
+      }
+    }
+    return message;
+  },
+
+  fromJSON(object: any): CliprdrFileContentsResponse {
+    return {
+      conn_id: isSet(object.conn_id) ? Number(object.conn_id) : 0,
+      msg_flags: isSet(object.msg_flags) ? Number(object.msg_flags) : 0,
+      stream_id: isSet(object.stream_id) ? Number(object.stream_id) : 0,
+      requested_data: isSet(object.requested_data)
+        ? bytesFromBase64(object.requested_data)
+        : new Uint8Array(),
+    };
+  },
+
+  toJSON(message: CliprdrFileContentsResponse): unknown {
+    const obj: any = {};
+    message.conn_id !== undefined &&
+      (obj.conn_id = Math.round(message.conn_id));
+    message.msg_flags !== undefined &&
+      (obj.msg_flags = Math.round(message.msg_flags));
+    message.stream_id !== undefined &&
+      (obj.stream_id = Math.round(message.stream_id));
+    message.requested_data !== undefined &&
+      (obj.requested_data = base64FromBytes(
+        message.requested_data !== undefined
+          ? message.requested_data
+          : new Uint8Array()
+      ));
+    return obj;
+  },
+
+  fromPartial<I extends Exact<DeepPartial<CliprdrFileContentsResponse>, I>>(
+    object: I
+  ): CliprdrFileContentsResponse {
+    const message = createBaseCliprdrFileContentsResponse();
+    message.conn_id = object.conn_id ?? 0;
+    message.msg_flags = object.msg_flags ?? 0;
+    message.stream_id = object.stream_id ?? 0;
+    message.requested_data = object.requested_data ?? new Uint8Array();
+    return message;
+  },
+};
+
+function createBaseCliprdr(): Cliprdr {
+  return {
+    ready: undefined,
+    format_list: undefined,
+    format_list_response: undefined,
+    format_data_request: undefined,
+    format_data_response: undefined,
+    file_contents_request: undefined,
+    file_contents_response: undefined,
+  };
+}
+
+export const Cliprdr = {
+  encode(
+    message: Cliprdr,
+    writer: _m0.Writer = _m0.Writer.create()
+  ): _m0.Writer {
+    if (message.ready !== undefined) {
+      CliprdrMonitorReady.encode(
+        message.ready,
+        writer.uint32(10).fork()
+      ).ldelim();
+    }
+    if (message.format_list !== undefined) {
+      CliprdrServerFormatList.encode(
+        message.format_list,
+        writer.uint32(18).fork()
+      ).ldelim();
+    }
+    if (message.format_list_response !== undefined) {
+      CliprdrServerFormatListResponse.encode(
+        message.format_list_response,
+        writer.uint32(26).fork()
+      ).ldelim();
+    }
+    if (message.format_data_request !== undefined) {
+      CliprdrServerFormatDataRequest.encode(
+        message.format_data_request,
+        writer.uint32(34).fork()
+      ).ldelim();
+    }
+    if (message.format_data_response !== undefined) {
+      CliprdrServerFormatDataResponse.encode(
+        message.format_data_response,
+        writer.uint32(42).fork()
+      ).ldelim();
+    }
+    if (message.file_contents_request !== undefined) {
+      CliprdrFileContentsRequest.encode(
+        message.file_contents_request,
+        writer.uint32(50).fork()
+      ).ldelim();
+    }
+    if (message.file_contents_response !== undefined) {
+      CliprdrFileContentsResponse.encode(
+        message.file_contents_response,
+        writer.uint32(58).fork()
+      ).ldelim();
+    }
+    return writer;
+  },
+
+  decode(input: _m0.Reader | Uint8Array, length?: number): Cliprdr {
+    const reader = input instanceof _m0.Reader ? input : new _m0.Reader(input);
+    let end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseCliprdr();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1:
+          message.ready = CliprdrMonitorReady.decode(reader, reader.uint32());
+          break;
+        case 2:
+          message.format_list = CliprdrServerFormatList.decode(
+            reader,
+            reader.uint32()
+          );
+          break;
+        case 3:
+          message.format_list_response = CliprdrServerFormatListResponse.decode(
+            reader,
+            reader.uint32()
+          );
+          break;
+        case 4:
+          message.format_data_request = CliprdrServerFormatDataRequest.decode(
+            reader,
+            reader.uint32()
+          );
+          break;
+        case 5:
+          message.format_data_response = CliprdrServerFormatDataResponse.decode(
+            reader,
+            reader.uint32()
+          );
+          break;
+        case 6:
+          message.file_contents_request = CliprdrFileContentsRequest.decode(
+            reader,
+            reader.uint32()
+          );
+          break;
+        case 7:
+          message.file_contents_response = CliprdrFileContentsResponse.decode(
+            reader,
+            reader.uint32()
+          );
+          break;
+        default:
+          reader.skipType(tag & 7);
+          break;
+      }
+    }
+    return message;
+  },
+
+  fromJSON(object: any): Cliprdr {
+    return {
+      ready: isSet(object.ready)
+        ? CliprdrMonitorReady.fromJSON(object.ready)
+        : undefined,
+      format_list: isSet(object.format_list)
+        ? CliprdrServerFormatList.fromJSON(object.format_list)
+        : undefined,
+      format_list_response: isSet(object.format_list_response)
+        ? CliprdrServerFormatListResponse.fromJSON(object.format_list_response)
+        : undefined,
+      format_data_request: isSet(object.format_data_request)
+        ? CliprdrServerFormatDataRequest.fromJSON(object.format_data_request)
+        : undefined,
+      format_data_response: isSet(object.format_data_response)
+        ? CliprdrServerFormatDataResponse.fromJSON(object.format_data_response)
+        : undefined,
+      file_contents_request: isSet(object.file_contents_request)
+        ? CliprdrFileContentsRequest.fromJSON(object.file_contents_request)
+        : undefined,
+      file_contents_response: isSet(object.file_contents_response)
+        ? CliprdrFileContentsResponse.fromJSON(object.file_contents_response)
+        : undefined,
+    };
+  },
+
+  toJSON(message: Cliprdr): unknown {
+    const obj: any = {};
+    message.ready !== undefined &&
+      (obj.ready = message.ready
+        ? CliprdrMonitorReady.toJSON(message.ready)
+        : undefined);
+    message.format_list !== undefined &&
+      (obj.format_list = message.format_list
+        ? CliprdrServerFormatList.toJSON(message.format_list)
+        : undefined);
+    message.format_list_response !== undefined &&
+      (obj.format_list_response = message.format_list_response
+        ? CliprdrServerFormatListResponse.toJSON(message.format_list_response)
+        : undefined);
+    message.format_data_request !== undefined &&
+      (obj.format_data_request = message.format_data_request
+        ? CliprdrServerFormatDataRequest.toJSON(message.format_data_request)
+        : undefined);
+    message.format_data_response !== undefined &&
+      (obj.format_data_response = message.format_data_response
+        ? CliprdrServerFormatDataResponse.toJSON(message.format_data_response)
+        : undefined);
+    message.file_contents_request !== undefined &&
+      (obj.file_contents_request = message.file_contents_request
+        ? CliprdrFileContentsRequest.toJSON(message.file_contents_request)
+        : undefined);
+    message.file_contents_response !== undefined &&
+      (obj.file_contents_response = message.file_contents_response
+        ? CliprdrFileContentsResponse.toJSON(message.file_contents_response)
+        : undefined);
+    return obj;
+  },
+
+  fromPartial<I extends Exact<DeepPartial<Cliprdr>, I>>(object: I): Cliprdr {
+    const message = createBaseCliprdr();
+    message.ready =
+      object.ready !== undefined && object.ready !== null
+        ? CliprdrMonitorReady.fromPartial(object.ready)
+        : undefined;
+    message.format_list =
+      object.format_list !== undefined && object.format_list !== null
+        ? CliprdrServerFormatList.fromPartial(object.format_list)
+        : undefined;
+    message.format_list_response =
+      object.format_list_response !== undefined &&
+      object.format_list_response !== null
+        ? CliprdrServerFormatListResponse.fromPartial(
+            object.format_list_response
+          )
+        : undefined;
+    message.format_data_request =
+      object.format_data_request !== undefined &&
+      object.format_data_request !== null
+        ? CliprdrServerFormatDataRequest.fromPartial(object.format_data_request)
+        : undefined;
+    message.format_data_response =
+      object.format_data_response !== undefined &&
+      object.format_data_response !== null
+        ? CliprdrServerFormatDataResponse.fromPartial(
+            object.format_data_response
+          )
+        : undefined;
+    message.file_contents_request =
+      object.file_contents_request !== undefined &&
+      object.file_contents_request !== null
+        ? CliprdrFileContentsRequest.fromPartial(object.file_contents_request)
+        : undefined;
+    message.file_contents_response =
+      object.file_contents_response !== undefined &&
+      object.file_contents_response !== null
+        ? CliprdrFileContentsResponse.fromPartial(object.file_contents_response)
+        : undefined;
+    return message;
+  },
+};
+
 function createBaseSwitchDisplay(): SwitchDisplay {
   return { display: 0, x: 0, y: 0, width: 0, height: 0 };
 }
@@ -3931,6 +4990,7 @@ function createBaseOptionMessage(): OptionMessage {
     custom_image_quality: 0,
     disable_audio: 0,
     disable_clipboard: 0,
+    enable_file_transfer: 0,
   };
 }
 
@@ -3962,6 +5022,9 @@ export const OptionMessage = {
     }
     if (message.disable_clipboard !== 0) {
       writer.uint32(64).int32(message.disable_clipboard);
+    }
+    if (message.enable_file_transfer !== 0) {
+      writer.uint32(72).int32(message.enable_file_transfer);
     }
     return writer;
   },
@@ -3997,6 +5060,9 @@ export const OptionMessage = {
         case 8:
           message.disable_clipboard = reader.int32() as any;
           break;
+        case 9:
+          message.enable_file_transfer = reader.int32() as any;
+          break;
         default:
           reader.skipType(tag & 7);
           break;
@@ -4031,6 +5097,9 @@ export const OptionMessage = {
       disable_clipboard: isSet(object.disable_clipboard)
         ? optionMessage_BoolOptionFromJSON(object.disable_clipboard)
         : 0,
+      enable_file_transfer: isSet(object.enable_file_transfer)
+        ? optionMessage_BoolOptionFromJSON(object.enable_file_transfer)
+        : 0,
     };
   },
 
@@ -4060,6 +5129,10 @@ export const OptionMessage = {
       (obj.disable_clipboard = optionMessage_BoolOptionToJSON(
         message.disable_clipboard
       ));
+    message.enable_file_transfer !== undefined &&
+      (obj.enable_file_transfer = optionMessage_BoolOptionToJSON(
+        message.enable_file_transfer
+      ));
     return obj;
   },
 
@@ -4075,6 +5148,7 @@ export const OptionMessage = {
     message.custom_image_quality = object.custom_image_quality ?? 0;
     message.disable_audio = object.disable_audio ?? 0;
     message.disable_clipboard = object.disable_clipboard ?? 0;
+    message.enable_file_transfer = object.enable_file_transfer ?? 0;
     return message;
   },
 };
@@ -4702,6 +5776,7 @@ function createBaseMessage(): Message {
     file_action: undefined,
     file_response: undefined,
     misc: undefined,
+    cliprdr: undefined,
   };
 }
 
@@ -4776,6 +5851,9 @@ export const Message = {
     if (message.misc !== undefined) {
       Misc.encode(message.misc, writer.uint32(154).fork()).ldelim();
     }
+    if (message.cliprdr !== undefined) {
+      Cliprdr.encode(message.cliprdr, writer.uint32(162).fork()).ldelim();
+    }
     return writer;
   },
 
@@ -4843,6 +5921,9 @@ export const Message = {
         case 19:
           message.misc = Misc.decode(reader, reader.uint32());
           break;
+        case 20:
+          message.cliprdr = Cliprdr.decode(reader, reader.uint32());
+          break;
         default:
           reader.skipType(tag & 7);
           break;
@@ -4898,6 +5979,9 @@ export const Message = {
         ? FileResponse.fromJSON(object.file_response)
         : undefined,
       misc: isSet(object.misc) ? Misc.fromJSON(object.misc) : undefined,
+      cliprdr: isSet(object.cliprdr)
+        ? Cliprdr.fromJSON(object.cliprdr)
+        : undefined,
     };
   },
 
@@ -4965,6 +6049,10 @@ export const Message = {
         : undefined);
     message.misc !== undefined &&
       (obj.misc = message.misc ? Misc.toJSON(message.misc) : undefined);
+    message.cliprdr !== undefined &&
+      (obj.cliprdr = message.cliprdr
+        ? Cliprdr.toJSON(message.cliprdr)
+        : undefined);
     return obj;
   },
 
@@ -5034,6 +6122,10 @@ export const Message = {
     message.misc =
       object.misc !== undefined && object.misc !== null
         ? Misc.fromPartial(object.misc)
+        : undefined;
+    message.cliprdr =
+      object.cliprdr !== undefined && object.cliprdr !== null
+        ? Cliprdr.fromPartial(object.cliprdr)
         : undefined;
     return message;
   },

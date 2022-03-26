@@ -100,6 +100,7 @@ export interface PunchHoleRequest {
   nat_type: NatType;
   licence_key: string;
   conn_type: ConnType;
+  token: string;
 }
 
 export interface PunchHole {
@@ -275,6 +276,7 @@ export interface RequestRelay {
   secure: boolean;
   licence_key: string;
   conn_type: ConnType;
+  token: string;
 }
 
 export interface RelayResponse {
@@ -461,7 +463,7 @@ export const RegisterPeerResponse = {
 };
 
 function createBasePunchHoleRequest(): PunchHoleRequest {
-  return { id: "", nat_type: 0, licence_key: "", conn_type: 0 };
+  return { id: "", nat_type: 0, licence_key: "", conn_type: 0, token: "" };
 }
 
 export const PunchHoleRequest = {
@@ -480,6 +482,9 @@ export const PunchHoleRequest = {
     }
     if (message.conn_type !== 0) {
       writer.uint32(32).int32(message.conn_type);
+    }
+    if (message.token !== "") {
+      writer.uint32(42).string(message.token);
     }
     return writer;
   },
@@ -503,6 +508,9 @@ export const PunchHoleRequest = {
         case 4:
           message.conn_type = reader.int32() as any;
           break;
+        case 5:
+          message.token = reader.string();
+          break;
         default:
           reader.skipType(tag & 7);
           break;
@@ -519,6 +527,7 @@ export const PunchHoleRequest = {
       conn_type: isSet(object.conn_type)
         ? connTypeFromJSON(object.conn_type)
         : 0,
+      token: isSet(object.token) ? String(object.token) : "",
     };
   },
 
@@ -531,6 +540,7 @@ export const PunchHoleRequest = {
       (obj.licence_key = message.licence_key);
     message.conn_type !== undefined &&
       (obj.conn_type = connTypeToJSON(message.conn_type));
+    message.token !== undefined && (obj.token = message.token);
     return obj;
   },
 
@@ -542,6 +552,7 @@ export const PunchHoleRequest = {
     message.nat_type = object.nat_type ?? 0;
     message.licence_key = object.licence_key ?? "";
     message.conn_type = object.conn_type ?? 0;
+    message.token = object.token ?? "";
     return message;
   },
 };
@@ -1222,6 +1233,7 @@ function createBaseRequestRelay(): RequestRelay {
     secure: false,
     licence_key: "",
     conn_type: 0,
+    token: "",
   };
 }
 
@@ -1250,6 +1262,9 @@ export const RequestRelay = {
     }
     if (message.conn_type !== 0) {
       writer.uint32(56).int32(message.conn_type);
+    }
+    if (message.token !== "") {
+      writer.uint32(66).string(message.token);
     }
     return writer;
   },
@@ -1282,6 +1297,9 @@ export const RequestRelay = {
         case 7:
           message.conn_type = reader.int32() as any;
           break;
+        case 8:
+          message.token = reader.string();
+          break;
         default:
           reader.skipType(tag & 7);
           break;
@@ -1305,6 +1323,7 @@ export const RequestRelay = {
       conn_type: isSet(object.conn_type)
         ? connTypeFromJSON(object.conn_type)
         : 0,
+      token: isSet(object.token) ? String(object.token) : "",
     };
   },
 
@@ -1325,6 +1344,7 @@ export const RequestRelay = {
       (obj.licence_key = message.licence_key);
     message.conn_type !== undefined &&
       (obj.conn_type = connTypeToJSON(message.conn_type));
+    message.token !== undefined && (obj.token = message.token);
     return obj;
   },
 
@@ -1339,6 +1359,7 @@ export const RequestRelay = {
     message.secure = object.secure ?? false;
     message.licence_key = object.licence_key ?? "";
     message.conn_type = object.conn_type ?? 0;
+    message.token = object.token ?? "";
     return message;
   },
 };
