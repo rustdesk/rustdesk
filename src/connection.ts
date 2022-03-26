@@ -268,7 +268,12 @@ export default class Connection {
           if (!c) continue;
           cb.content = c;
         }
-        globals.pushEvent("clipboard", cb);
+        try {
+          await navigator.clipboard.writeText(new TextDecoder().decode(cb.content));
+        } catch (e) {
+          console.error(e);
+        }
+        // globals.pushEvent("clipboard", cb);
       } else if (msg?.cursor_data) {
         const cd = msg?.cursor_data;
         const c = await decompress(cd.colors);
