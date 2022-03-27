@@ -15,7 +15,7 @@ bool mouseIn = false;
 class PlatformFFI {
   static void clearRgbaFrame() {}
 
-  static Uint8List getRgba() {
+  static Uint8List? getRgba() {
     return js.context.callMethod('getRgba');
   }
 
