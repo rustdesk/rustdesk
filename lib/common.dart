@@ -43,7 +43,28 @@ final ButtonStyle flatButtonStyle = TextButton.styleFrom(
 void showLoading(String text) {
   DialogManager.reset();
   EasyLoading.dismiss();
-  EasyLoading.show(status: text, maskType: EasyLoadingMaskType.black);
+  EasyLoading.show(
+      indicator: Container(
+          constraints: BoxConstraints(maxWidth: 240),
+          child:
+              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Center(child: CircularProgressIndicator()),
+            SizedBox(height: 20),
+            Center(
+                child: Text(Translator.call(text),
+                    style: TextStyle(fontSize: 15))),
+            SizedBox(height: 20),
+            Center(
+                child: TextButton(
+                    style: flatButtonStyle,
+                    onPressed: () {
+                      EasyLoading.dismiss();
+                      backToHome();
+                    },
+                    child: Text(Translator.call('Cancel'),
+                        style: TextStyle(color: MyTheme.accent))))
+          ])),
+      maskType: EasyLoadingMaskType.black);
 }
 
 backToHome() {
