@@ -8,6 +8,7 @@ import 'common.dart';
 import 'models/model.dart';
 import 'pages/home_page.dart';
 import 'pages/server_page.dart';
+import 'pages/settings_page.dart';
 
 Future<Null> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -21,6 +22,7 @@ class App extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final analytics = FirebaseAnalytics();
+    refreshCurrentUser();
     return MultiProvider(
       providers: [
         ChangeNotifierProvider.value(value: FFI.ffiModel),

@@ -306,12 +306,16 @@ class _RemotePageState extends State<RemotePage> {
                             onPressed: changeTouchMode,
                           )
                         ]) +
-                  <Widget>[
-                    IconButton(
-                      color: Colors.white,
-                      icon: Icon(Icons.message),
-                      onPressed: toggleChatOverlay,
-                    ),
+                  (isWeb
+                      ? []
+                      : <Widget>[
+                          IconButton(
+                            color: Colors.white,
+                            icon: Icon(Icons.message),
+                            onPressed: toggleChatOverlay,
+                          )
+                        ]) +
+                  [
                     IconButton(
                       color: Colors.white,
                       icon: Icon(Icons.more_vert),
