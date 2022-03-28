@@ -33,10 +33,6 @@ dependencies:
   external_path: ^1.0.1
   provider: ^5.0.0
   flutter_easyloading: ^3.0.3
-#  flutter_easyloading: # not Null safety 2.2.0
-#    git:
-#      url: git://github.com/open-trade/flutter_easyloading
-#    #path: flutter_easyloading
   tuple: ^2.0.0
   wakelock: ^0.5.2
   device_info: ^2.0.2 

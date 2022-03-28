@@ -21,8 +21,6 @@ class _FileManagerPageState extends State<FileManagerPage> {
   final model = FFI.fileModel;
   final _selectedItems = SelectedItems();
   Timer? _interval;
-  Timer? _timer;
-  var _reconnects = 1;
   final _breadCrumbScroller = ScrollController();
 
   @override
@@ -30,9 +28,8 @@ class _FileManagerPageState extends State<FileManagerPage> {
     super.initState();
     showLoading(translate('Connecting...'));
     FFI.connect(widget.id, isFileTransfer: true);
-
-    _interval = Timer.periodic(Duration(milliseconds: 30),
-        (timer) => FFI.ffiModel.update(widget.id, handleMsgBox));
+    _interval = Timer.periodic(
+        Duration(milliseconds: 30), (timer) => FFI.ffiModel.update(widget.id));
   }
 
   @override
@@ -191,35 +188,6 @@ class _FileManagerPageState extends State<FileManagerPage> {
 
   goBack() {
     model.goToParentDirectory();
-  }
-
-  void handleMsgBox(Map<String, dynamic> evt, String id) {
-    var type = evt['type'];
-    var title = evt['title'];
-    var text = evt['text'];
-    if (type == 're-input-password') {
-      wrongPasswordDialog(id);
-    } else if (type == 'input-password') {
-      enterPasswordDialog(id);
-    } else {
-      var hasRetry = evt['hasRetry'] == 'true';
-      print(evt);
-      showMsgBox(type, title, text, hasRetry);
-    }
-  }
-
-  void showMsgBox(String type, String title, String text, bool hasRetry) {
-    msgBox(type, title, text);
-    if (hasRetry) {
-      _timer?.cancel();
-      _timer = Timer(Duration(seconds: _reconnects), () {
-        FFI.reconnect();
-        showLoading(translate('Connecting...'));
-      });
-      _reconnects *= 2;
-    } else {
-      _reconnects = 1;
-    }
   }
 
   breadCrumbScrollToEnd() {

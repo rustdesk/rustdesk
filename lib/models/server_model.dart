@@ -13,8 +13,8 @@ class ServerModel with ChangeNotifier {
   bool _isStart = false;
   bool _mediaOk = false;
   bool _inputOk = false;
-  late bool _audioOk;
-  late bool _fileOk;
+  bool _audioOk = false;
+  bool _fileOk = false;
   final _serverId = TextEditingController(text: _emptyIdShow);
   final _serverPasswd = TextEditingController(text: "");
 
@@ -48,6 +48,7 @@ class ServerModel with ChangeNotifier {
         ..["name"] = "enable-keyboard"
         ..["value"] = 'N';
       FFI.setByName('option', jsonEncode(res)); // input false by default
+      notifyListeners();
     }();
   }
 
@@ -110,7 +111,7 @@ class ServerModel with ChangeNotifier {
     notifyListeners();
     FFI.setByName("ensure_init_event_queue");
     _interval = Timer.periodic(Duration(milliseconds: 30), (timer) {
-      FFI.ffiModel.update("", (_, __) {});
+      FFI.ffiModel.update("");
     });
     await FFI.invokeMethod("init_service");
     FFI.setByName("start_service");

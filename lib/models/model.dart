@@ -12,6 +12,7 @@ import 'package:flutter/material.dart';
 import 'package:tuple/tuple.dart';
 import 'dart:async';
 import '../common.dart';
+import '../widgets/dialog.dart';
 import 'native_model.dart' if (dart.library.html) 'web_model.dart';
 
 typedef HandleMsgBox = void Function(Map<String, dynamic> evt, String id);
@@ -26,6 +27,8 @@ class FfiModel with ChangeNotifier {
   final _permissions = Map<String, bool>();
   bool? _secure;
   bool? _direct;
+  Timer? _timer;
+  var _reconnects = 1;
 
   get permissions => _permissions;
 
@@ -78,6 +81,8 @@ class FfiModel with ChangeNotifier {
     _secure = null;
     _direct = null;
     _inputBlocked = false;
+    _timer?.cancel();
+    _timer = null;
     clearPermissions();
   }
 
@@ -107,7 +112,7 @@ class FfiModel with ChangeNotifier {
     _permissions.clear();
   }
 
-  void update(String peerId, HandleMsgBox handleMsgBox) {
+  void update(String peerId) {
     var pos;
     for (;;) {
       var evt = FFI.popEvent();
@@ -191,6 +196,35 @@ class FfiModel with ChangeNotifier {
     if (old != _pi.currentDisplay)
       FFI.cursorModel.updateDisplayOrigin(_display.x, _display.y);
     notifyListeners();
+  }
+
+  void handleMsgBox(Map<String, dynamic> evt, String id) {
+    var type = evt['type'];
+    var title = evt['title'];
+    var text = evt['text'];
+    if (type == 're-input-password') {
+      wrongPasswordDialog(id);
+    } else if (type == 'input-password') {
+      enterPasswordDialog(id);
+    } else {
+      var hasRetry = evt['hasRetry'] == 'true';
+      print(evt);
+      showMsgBox(type, title, text, hasRetry);
+    }
+  }
+
+  void showMsgBox(String type, String title, String text, bool hasRetry) {
+    msgBox(type, title, text);
+    if (hasRetry) {
+      _timer?.cancel();
+      _timer = Timer(Duration(seconds: _reconnects), () {
+        FFI.reconnect();
+        showLoading(translate('Connecting...'));
+      });
+      _reconnects *= 2;
+    } else {
+      _reconnects = 1;
+    }
   }
 
   void handlePeerInfo(Map<String, dynamic> evt) {

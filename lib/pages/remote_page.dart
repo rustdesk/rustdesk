@@ -35,7 +35,6 @@ class _RemotePageState extends State<RemotePage> {
   var _fn = false;
   final FocusNode _focusNode = FocusNode();
   var _showEdit = false;
-  var _reconnects = 1;
   var _touchMode = false;
 
   @override
@@ -86,42 +85,13 @@ class _RemotePageState extends State<RemotePage> {
         }
       });
     }
-    FFI.ffiModel.update(widget.id, handleMsgBox);
+    FFI.ffiModel.update(widget.id);
   }
 
   void interval() {
     try {
       intervalUnsafe();
     } catch (e) {}
-  }
-
-  void handleMsgBox(Map<String, dynamic> evt, String id) {
-    var type = evt['type'];
-    var title = evt['title'];
-    var text = evt['text'];
-    if (type == 're-input-password') {
-      wrongPasswordDialog(id);
-    } else if (type == 'input-password') {
-      enterPasswordDialog(id);
-    } else {
-      var hasRetry = evt['hasRetry'] == 'true';
-      print(evt);
-      showMsgBox(type, title, text, hasRetry);
-    }
-  }
-
-  void showMsgBox(String type, String title, String text, bool hasRetry) {
-    msgBox(type, title, text);
-    if (hasRetry) {
-      _timer?.cancel();
-      _timer = Timer(Duration(seconds: _reconnects), () {
-        FFI.reconnect();
-        showLoading(translate('Connecting...'));
-      });
-      _reconnects *= 2;
-    } else {
-      _reconnects = 1;
-    }
   }
 
   void handleInput(String newValue) {
