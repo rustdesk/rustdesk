@@ -8,6 +8,7 @@ import 'common.dart';
 import 'models/model.dart';
 import 'pages/home_page.dart';
 import 'pages/server_page.dart';
+import 'pages/settings_page.dart';
 
 Future<Null> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -36,6 +37,7 @@ class App extends StatelessWidget {
         providers.add(ChangeNotifierProvider.value(value: FFI.serverModel));
       }
     }
+    refreshCurrentUser();
     return MultiProvider(
       providers: providers,
       child: MaterialApp(

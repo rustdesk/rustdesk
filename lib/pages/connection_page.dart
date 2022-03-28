@@ -19,29 +19,7 @@ class ConnectionPage extends StatefulWidget implements PageShape {
   final title = translate("Connection");
 
   @override
-  final appBarActions = isWeb
-      ? <Widget>[
-          PopupMenuButton<String>(itemBuilder: (context) {
-            return [
-              PopupMenuItem(
-                child: Text(translate('ID/Relay Server')),
-                value: "server",
-              ),
-              PopupMenuItem(
-                child: Text(translate('About') + ' RustDesk'),
-                value: "about",
-              )
-            ];
-          }, onSelected: (value) {
-            if (value == 'server') {
-              showServer();
-            }
-            if (value == 'about') {
-              showAbout();
-            }
-          }),
-        ]
-      : [];
+  final appBarActions = isWeb ? <Widget>[WebMenu()] : <Widget>[];
 
   @override
   _ConnectionPageState createState() => _ConnectionPageState();
@@ -276,11 +254,15 @@ class _ConnectionPageState extends State<ConnectionPage> {
       context: context,
       position: this._menuPos,
       items: [
-        PopupMenuItem<String>(
-            child: Text(translate('Remove')), value: 'remove'),
-        PopupMenuItem<String>(
-            child: Text(translate('File transfer')), value: 'file'),
-      ],
+            PopupMenuItem<String>(
+                child: Text(translate('Remove')), value: 'remove')
+          ] +
+          (isWeb
+              ? []
+              : [
+                  PopupMenuItem<String>(
+                      child: Text(translate('File transfer')), value: 'file')
+                ]),
       elevation: 8,
     );
     if (value == 'remove') {
@@ -291,5 +273,50 @@ class _ConnectionPageState extends State<ConnectionPage> {
     } else if (value == 'file') {
       connect(id, isFileTransfer: true);
     }
+  }
+}
+
+class WebMenu extends StatefulWidget {
+  @override
+  _WebMenuState createState() => _WebMenuState();
+}
+
+class _WebMenuState extends State<WebMenu> {
+  @override
+  Widget build(BuildContext context) {
+    Provider.of<FfiModel>(context);
+    final username = getUsername();
+    return PopupMenuButton<String>(itemBuilder: (context) {
+      return [
+        PopupMenuItem(
+          child: Text(translate('ID/Relay Server')),
+          value: "server",
+        ),
+        PopupMenuItem(
+          child: Text(username == null
+              ? translate("Login")
+              : translate("Logout") + ' ($username)'),
+          value: "login",
+        ),
+        PopupMenuItem(
+          child: Text(translate('About') + ' RustDesk'),
+          value: "about",
+        )
+      ];
+    }, onSelected: (value) {
+      if (value == 'server') {
+        showServer();
+      }
+      if (value == 'about') {
+        showAbout();
+      }
+      if (value == 'login') {
+        if (username == null) {
+          showLogin();
+        } else {
+          logout();
+        }
+      }
+    });
   }
 }

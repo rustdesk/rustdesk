@@ -65,6 +65,10 @@ class FfiModel with ChangeNotifier {
     notifyListeners();
   }
 
+  void updateUser() {
+    notifyListeners();
+  }
+
   bool keyboard() => _permissions['keyboard'] != false;
 
   void clear() {
@@ -103,7 +107,7 @@ class FfiModel with ChangeNotifier {
     _permissions.clear();
   }
 
-  void update(String peerId,HandleMsgBox handleMsgBox) {
+  void update(String peerId, HandleMsgBox handleMsgBox) {
     var pos;
     for (;;) {
       var evt = FFI.popEvent();
@@ -130,9 +134,10 @@ class FfiModel with ChangeNotifier {
       } else if (name == 'permission') {
         FFI.ffiModel.updatePermission(evt);
       } else if (name == 'chat_client_mode') {
-        FFI.chatModel.receive(ChatModel.clientModeID,evt['text'] ?? "");
+        FFI.chatModel.receive(ChatModel.clientModeID, evt['text'] ?? "");
       } else if (name == 'chat_server_mode') {
-        FFI.chatModel.receive(int.parse(evt['id'] as String),evt['text'] ?? "");
+        FFI.chatModel
+            .receive(int.parse(evt['id'] as String), evt['text'] ?? "");
       } else if (name == 'file_dir') {
         FFI.fileModel.receiveFileDir(evt);
       } else if (name == 'job_progress') {
