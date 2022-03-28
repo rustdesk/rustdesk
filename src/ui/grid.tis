@@ -45,11 +45,11 @@ class Grid: Behavior {
   }
 
   function resetCurrent() {
-      var prev = this.getCurrentRow();
-      if (prev)
-      {
-        prev.state.current = false; // drop state flag
-        prev.state.checked = false; // drop state flag
+      var rows = this.getCurrentRows();
+      for (var i = 0; i < rows.length; ++i) {
+        var row = rows[i];
+        row.state.current = false;
+        row.state.checked = false;
       }
   }
   

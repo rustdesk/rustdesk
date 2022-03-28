@@ -120,7 +120,8 @@ class JobTable: Reactor.Component {
                      is_remote: is_remote });
     this.job_map[id] = this.jobs[this.jobs.length - 1];
     handler.send_files(id, path, to, show_hidden, is_remote);
-    this.update();
+    var self = this;
+    self.timer(30ms, function() { self.update(); });
   }
 
   function addDelDir(path, is_remote) {
@@ -128,19 +129,70 @@ class JobTable: Reactor.Component {
     jobIdCounter += 1;
     this.jobs.push({ type: "del-dir", id: id, path: path, is_remote: is_remote });
     this.job_map[id] = this.jobs[this.jobs.length - 1];
-    handler.remove_dir_all(id, path, is_remote);
+    this.update();
+  }
+
+  function addDelFile(path, is_remote) {
+    var id = jobIdCounter;
+    jobIdCounter += 1;
+    this.jobs.push({ type: "del-file", id: id, path: path, is_remote: is_remote });
+    this.job_map[id] = this.jobs[this.jobs.length - 1];
+    this.update();
+  }
+
+  function confirmDeletePolling(is_remote) {
+    for(var i=0;i<this.jobs.length;++i){
+      var job = this.jobs[i];
+      if(job.confirmed){
+        continue;
+      }
+      if(job.type == "del-file"){
+        confirmDelete(job.id, job.path, job.is_remote);
+        job.confirmed = true;
+        return;
+      }else if (job.type == "del-dir"){
+        handler.remove_dir_all(job.id, job.path, job.is_remote);
+        job.confirmed = true;
+        return;
+      }
+    }
+    // polling finish 
+    if (is_remote) file_transfer.remote_folder_view.table.resetCurrent();
+    else file_transfer.local_folder_view.table.resetCurrent();
+  }
+
+  function cancelDeletePolling() {
+    for(var i=0;i<this.jobs.length;++i){
+      var job = this.jobs[i];
+      if(job.confirmed){
+        continue;
+      }
+      // set confirmed true, prevent other polling action
+      if(job.type == "del-file" || job.type == "del-dir"){
+        job.confirmed = true;
+        job.err = "cancel"
+      }
+    }
     this.update();
   }
 
   function getSvg(job) {
     if (job.type == "transfer") {
       return svg_send;
-    } else if (job.type == "del-dir") {
+    } else if (job.type == "del-dir" || job.type == "del-file") {
       return svg_trash;
     }
   }
 
   function getStatus(job) {
+    if (job.type == "del-file"){
+      if (job.err) {
+        if (job.err == "cancel") return translate("Cancel");
+      } else {
+        if (job.finished) return translate("Finished");
+        else return translate("Waiting");
+      }
+    }
     if (!job.entries) return translate("Waiting");
     var i = job.file_num + 1;
     var n = job.num_entries || job.entries.length;
@@ -167,6 +219,13 @@ class JobTable: Reactor.Component {
 
   function updateJobStatus(id, file_num = -1, err = null, speed = null, finished_size = 0) {
     var job = this.job_map[id];
+    if (job.type == "del-file"){
+      job.finished = true;
+      job.err = err;
+      refreshDir(job.is_remote);
+      this.updateJob(job);
+      return;
+    }
     if (!job) return;
     if (file_num < job.file_num) return;
     job.file_num = file_num;
@@ -422,14 +481,12 @@ class FolderView : Reactor.Component {
         }
         this.history = new_history;
         if (type == 1) {
-          delete_dirs.push(path);
+          file_transfer.job_table.addDelDir(path, this.is_remote);
         } else {
-          confirmDelete(path, this.is_remote);
+          file_transfer.job_table.addDelFile(path, this.is_remote);
         }
       }
-      for (var i = 0; i < delete_dirs.length; ++i) {
-        file_transfer.job_table.addDelDir(delete_dirs[i], this.is_remote);
-      }
+      file_transfer.job_table.confirmDeletePolling(this.is_remote);
     }
 
     event click $(.add-folder) () {
@@ -567,7 +624,7 @@ handler.jobProgress = function(id, file_num, speed, finished_size) {
 }
 
 handler.jobDone = function(id, file_num = -1) {
-  var job = deleting_single_file_jobs[id] || create_dir_jobs[id];
+  var job = create_dir_jobs[id];
   if (job) {
     refreshDir(job.is_remote);
     return;
@@ -600,17 +657,23 @@ function refreshDir(is_remote) {
 var deleting_single_file_jobs = {};
 var create_dir_jobs = {}
 
-function confirmDelete(path, is_remote) {
+function confirmDelete(id ,path, is_remote) {
   msgbox("custom-skip", "Confirm Delete", "<div .form> \
         <div>" + translate('Are you sure you want to delete this file?') + "</div> \
         <div.ellipsis style=\"font-weight: bold;\">" + path + "</div> \
     </div>", function(res=null) {
-      if (res) {
-        handler.remove_file(jobIdCounter, path, 0, is_remote);
+      if (!res) {
+        file_transfer.job_table.updateJobStatus(id, -1, "cancel");
+        file_transfer.job_table.cancelDeletePolling();
+      } else if (res.skip) {
+        file_transfer.job_table.updateJobStatus(id, -1, "cancel");
+        file_transfer.job_table.confirmDeletePolling(is_remote);
+      } else {
+        handler.remove_file(id, path, 0, is_remote);
         if (is_remote) file_transfer.remote_folder_view.table.resetCurrent();
         else file_transfer.local_folder_view.table.resetCurrent();
-        deleting_single_file_jobs[jobIdCounter] = { is_remote: is_remote, path: path };
-        jobIdCounter += 1;
+        deleting_single_file_jobs[id] = { is_remote: is_remote, path: path };
+        file_transfer.job_table.confirmDeletePolling(is_remote);
       }
     });
 }
@@ -626,18 +689,29 @@ handler.confirmDeleteFiles = function(id, i, name) {
   msgbox("custom-skip", "Confirm Delete", "<div .form> \
         <div>" + translate('Deleting') + " #" + (i + 1) + " / " + n + " " + translate('files') + ".</div> \
         <div>" + translate('Are you sure you want to delete this file?') + "</div> \
-        <div.ellipsis style=\"font-weight: bold;\" .text>" + name + "</div> \
+        <div.ellipsis style=\"font-weight: bold;\" .text>" + file_path + "</div> \
         <div><button|checkbox(remember) {ts}>" + translate('Do this for all conflicts') + "</button></div> \
     </div>", function(res=null) {
       if (!res) {
         jt.updateJobStatus(id, i - 1, "cancel");
+        file_transfer.job_table.cancelDeletePolling();
       } else if (res.skip) {
-        if (res.remember) jt.updateJobStatus(id, i, "cancel");
-        else handler.jobDone(id, i);
+        if (res.remember){
+          jt.updateJobStatus(id, i, "cancel");
+        } else{
+          handler.jobDone(id, i);
+        } 
+        file_transfer.job_table.confirmDeletePolling(job.is_remote);
       } else {
         job.no_confirm = res.remember;
-        if (job.no_confirm) handler.set_no_confirm(id);
+        if (job.no_confirm){ 
+          handler.set_no_confirm(id);
+          file_transfer.job_table.confirmDeletePolling(job.is_remote);
+        }
         handler.remove_file(id, file_path, i, job.is_remote);
+      }
+      if(i+1 >= n){
+        file_transfer.job_table.confirmDeletePolling(job.is_remote);
       }
     });
 }

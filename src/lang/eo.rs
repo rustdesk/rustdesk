@@ -62,7 +62,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Login Error", "Eraro de konektado"),
         ("Successful", "Sukceso"),
         ("Connected, waiting for image...", "Konektita, atendante bildon..."),
-        ("Name", "Nomo de dosiero"),
+        ("Name", "Nomo"),
         ("Type", ""),
         ("Modified", "Modifita"),
         ("Size", "Grandeco"),

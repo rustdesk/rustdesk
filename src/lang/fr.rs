@@ -62,7 +62,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Login Error", "Erreur de connexion"),
         ("Successful", "Succès"),
         ("Connected, waiting for image...", "Connecté, en attente de transmission d'image..."),
-        ("Name", "Nom du fichier"),
+        ("Name", "Nom"),
         ("Type", "Taper"),
         ("Modified", "Modifié"),
         ("Size", "Taille"),

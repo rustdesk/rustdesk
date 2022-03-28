@@ -62,7 +62,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Login Error", "登录错误"),
         ("Successful", "成功"),
         ("Connected, waiting for image...", "已连接，等待画面传输..."),
-        ("Name", "文件名"),
+        ("Name", "名称"),
         ("Type", "类型"),
         ("Modified", "修改时间"),
         ("Size", "大小"),

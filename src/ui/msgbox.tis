@@ -145,6 +145,7 @@ class MsgboxComponent: Reactor.Component {
         var values = this.getValues();
         values.skip = true;
         if (this.callback) this.callback(values);
+        if (this.close) this.close();
     }
     
     event click $(button#submit) {
@@ -164,7 +165,7 @@ class MsgboxComponent: Reactor.Component {
             var self = this;
             var err = this.callback(values, function(a=1, b='') { self.show_progress(a, b); });
             if (!err) {
-                this.close();
+                if (this.close) this.close();
                 return;
             }
             if (err && err.trim()) this.show_progress(false, err);
