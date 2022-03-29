@@ -261,11 +261,14 @@ class ServerModel with ChangeNotifier {
   void onClientRemove(Map<String, dynamic> evt) {
     try {
       final id = int.parse(evt['id'] as String);
-      _clients.remove(id);
+      if(_clients.containsKey(id)){
+        _clients.remove(id);
+      }else{
+        // reset the login dialog, to-do,it will close any showing dialog
+        DialogManager.reset();
+      }
       notifyListeners();
     } catch (e) {
-      // singleWhere fail ,reset the login dialog
-      DialogManager.reset();
       debugPrint("onClientRemove failed,error:$e");
     }
   }

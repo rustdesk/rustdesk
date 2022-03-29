@@ -30,11 +30,11 @@ class MainActivity : FlutterActivity() {
 
     @RequiresApi(Build.VERSION_CODES.M)
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
+        super.configureFlutterEngine(flutterEngine)
         Log.d(logTag, "MainActivity configureFlutterEngine,bind to main service")
         Intent(this, MainService::class.java).also {
             bindService(it, serviceConnection, Context.BIND_AUTO_CREATE)
         }
-        super.configureFlutterEngine(flutterEngine) // 必要 否则无法正确初始化flutter
         checkPermissions(this)
         updateMachineInfo()
         flutterMethodChannel = MethodChannel(
@@ -180,7 +180,6 @@ class MainActivity : FlutterActivity() {
                 w /= scale
                 h /= scale
             }
-            Log.d(logTag, "Real size - width:$w,height:$h")
 
             INFO.screenWidth = w
             INFO.screenHeight = h
@@ -188,6 +187,7 @@ class MainActivity : FlutterActivity() {
             INFO.username = "test"
             INFO.hostname = "hostname"
             // TODO  username hostname
+            Log.d(logTag, "INIT INFO:$INFO")
 
         } else {
             Log.e(logTag, "Got Screen Size Fail!")

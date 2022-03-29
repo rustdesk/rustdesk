@@ -1,5 +1,6 @@
 /**
- * video_service and audio_service
+ * Capture screen,get video and audio,send to rust.
+ * Handle notification
  */
 package com.carriez.flutter_hbb
 
@@ -96,7 +97,7 @@ class MainService : Service() {
         when (name) {
             "try_start_without_auth" -> {
                 // TODO notify
-
+                loginRequestActionNotification("test","name","id")
             }
             "start_capture" -> {
                 Log.d(logTag, "from rust:start_capture")
@@ -118,8 +119,7 @@ class MainService : Service() {
     // jvm call rust
     private external fun init(ctx: Context)
     private external fun startServer()
-    private external fun ready()
-    private external fun sendVp9(data: ByteArray)
+    // private external fun sendVp9(data: ByteArray)
 
     private val logTag = "LOG_SERVICE"
     private val useVP9 = false
@@ -157,7 +157,7 @@ class MainService : Service() {
     override fun onCreate() {
         super.onCreate()
         initNotification()
-        startServer() // 开启了rust服务但是没有设置可以接收连接 如果不开启 首次启动没法获得服务ID
+        startServer()
     }
 
     override fun onBind(intent: Intent): IBinder {
@@ -188,15 +188,14 @@ class MainService : Service() {
                 checkMediaPermission()
                 surface = createSurface()
                 init(this)
-                ready()
                 _isReady = true
             } ?: let {
                 Log.d(logTag, "获取mMediaProjection失败！")
             }
-        } else if (intent?.action == ACTION_LOGIN_REQ_NOTIFY) {
-            // TODO notify 重新适配多连接的情况
-            val notifyLoginRes = intent.getBooleanExtra(EXTRA_LOGIN_REQ_NOTIFY, false)
-            Log.d(logTag, "从通知栏点击了:$notifyLoginRes")
+//        } else if (intent?.action == ACTION_LOGIN_REQ_NOTIFY) {
+            // 暂时不开启通知从通知栏确认登录
+//            val notifyLoginRes = intent.getBooleanExtra(EXTRA_LOGIN_REQ_NOTIFY, false)
+//            Log.d(logTag, "从通知栏点击了:$notifyLoginRes")
         }
         return super.onStartCommand(intent, flags, startId)
     }
@@ -208,6 +207,7 @@ class MainService : Service() {
             // TODO
             null
         } else {
+            Log.d(logTag,"ImageReader.newInstance:INFO:$INFO")
             imageReader =
                 ImageReader.newInstance(
                     INFO.screenWidth,
@@ -361,7 +361,7 @@ class MainService : Service() {
                     // TODO 优化内存使用方式
                     val byteArray = ByteArray(buf.limit())
                     buf.get(byteArray)
-                    sendVp9(byteArray)
+                    // sendVp9(byteArray)
                     codec.releaseOutputBuffer(index, false)
                 }
             }
@@ -466,7 +466,7 @@ class MainService : Service() {
             val channelName = "RustDesk Service"
             val channel = NotificationChannel(
                 channelId,
-                channelName, NotificationManager.IMPORTANCE_DEFAULT
+                channelName, NotificationManager.IMPORTANCE_HIGH
             ).apply {
                 description = "RustDesk Service Channel"
             }
@@ -494,6 +494,8 @@ class MainService : Service() {
         val notification = notificationBuilder
             .setOngoing(true)
             .setSmallIcon(R.mipmap.ic_launcher)
+            .setDefaults(Notification.DEFAULT_ALL)
+            .setAutoCancel(true)
             .setPriority(NotificationCompat.PRIORITY_DEFAULT)
             .setContentTitle(DEFAULT_NOTIFY_TITLE)
             .setContentText(DEFAULT_NOTIFY_TEXT)
@@ -502,18 +504,25 @@ class MainService : Service() {
             .setColor(ContextCompat.getColor(this, R.color.primary))
             .setWhen(System.currentTimeMillis())
             .build()
+        // 这里满足前台服务首次启动时5s内设定好通知内容，这里使用startForeground，后续普通调用使用notificationManager即可
         startForeground(NOTIFY_ID, notification)
     }
 
     private fun loginRequestActionNotification(type: String, name: String, id: String) {
+        // notificationBuilder 第一次使用时状态已保存，再次生成时只需要调整需要修改的部分
         val notification = notificationBuilder
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setContentTitle("收到${type}连接请求")
-            .setContentText("来自:$name-$id 是否接受")
-            .setStyle(MediaStyle().setShowActionsInCompactView(0, 1))
-            .addAction(R.drawable.check_blue, "check", genLoginRequestPendingIntent(true))
-            .addAction(R.drawable.close_red, "close", genLoginRequestPendingIntent(false))
+            .setContentText("来自:$name-$id")
+
+            // 暂时不开启通知栏接受请求，防止用户误操作
+//            .setStyle(MediaStyle().setShowActionsInCompactView(0, 1))
+//            .addAction(R.drawable.check_blue, "check", genLoginRequestPendingIntent(true))
+//            .addAction(R.drawable.close_red, "close", genLoginRequestPendingIntent(false))
             .build()
-        notificationManager.notify(NOTIFY_ID, notification)
+        // TODO 为每个login req定义id ，notify id 不能是0 可以定义为client id + 100,如101,102,103
+        // 登录成功 取消notify时可以直接使用
+        notificationManager.notify(NOTIFY_ID + 1, notification)
     }
 
     private fun genLoginRequestPendingIntent(res: Boolean): PendingIntent {

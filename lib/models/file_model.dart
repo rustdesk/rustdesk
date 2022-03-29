@@ -328,6 +328,7 @@ class FileModel extends ChangeNotifier {
         } catch (e) {}
       }
     });
+    _selectMode = false;
     refresh();
   }
 
@@ -407,7 +408,9 @@ class FileModel extends ChangeNotifier {
     FFI.setByName("create_dir", jsonEncode(msg));
   }
 
-  cancelJob(int id) {}
+  cancelJob(int id) {
+    FFI.setByName("cancel_job",id.toString());
+  }
 
   changeSortStyle(SortBy sort) {
     _sortStyle = sort;

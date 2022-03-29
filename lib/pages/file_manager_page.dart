@@ -333,15 +333,6 @@ class _FileManagerPageState extends State<FileManagerPage> {
         ],
       ));
 
-  Widget emptyPage() {
-    return Column(
-      children: [
-        headTools(),
-        Expanded(child: Center(child: Text("Empty Directory")))
-      ],
-    );
-  }
-
   Widget listTail() {
     return Container(
       height: 100,
@@ -411,7 +402,7 @@ class _FileManagerPageState extends State<FileManagerPage> {
           title: translate("Waiting"),
           text:
               "${translate("Speed")}:  ${readableFileSize(model.jobProgress.speed)}/s",
-          onCanceled: null,
+          onCanceled: model.cancelJob(model.jobProgress.id),
         );
       case JobState.done:
         return BottomSheetBody(

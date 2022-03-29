@@ -1,5 +1,10 @@
 # RustDesk 安卓端被控文档记录
 
+### 开发环境注意
+
+- AS IDE Android 启动service时的闪退问题，开发安卓使用到service时，在Android IDE模式下用AS重新启动app前，如果已启动Service,需要确保已开启的app已经完全关闭，否则可能会出现下次启动service时闪退的怪问题。
+- 如果IDE时Flutter模式无此问题，flutter模式每次编译开启app的时间较长，推测flutter每次编译会重新安装一次apk包，而Android有热编译机制，启动Service时候，可能会带来闪退bug。
+
 ### 1.获取屏幕录像
 
 ##### 原理 流程
@@ -31,7 +36,7 @@ MediaProjectionManager -> MediaProjection
 - **注意**：安卓捕获到的数据是RGBA格式，暂无BRGA的输出，在rust端需要调用libyuv中相应的rgbatoi420方法
 - 捕获到的数据存入一个bytearray，等待rust端调用获取
 
-#####方案B 捕获原始数据传入rust进行编码 !等待完善！
+#####方案B 使用内置vp9编码器直接获取编码后的数据 传入rust进行编码 !暂不启用，等待完善！
 - **自带的编码器无法直接控制流量，默认情况输出的帧率比较高，会造成网络堵塞延迟**
 - 获取编码后的buf
     - 通过MediaCodec回调获取到可用的数据
@@ -241,19 +246,13 @@ Config::set_option("stop_service","Y")
 Config::set_option("stop_service","")
 
 
-### TODO 
-完善CM 当前连接的状态 控制音频和输入等开关 断开连接等功能
-横屏模式
-首次登录不显示id密码
-安卓前后分离的问题 通过IPC或者广播解耦
-
 ### 关于安卓的service和进程
 实际测试 安卓7和安卓11表现不同 同一个apk下若有多个activity或service
-安卓7 关闭activity后所有的服务都会强制关闭 可能是锤子手机特有
+安卓7 关闭activity后所有的服务都会强制关闭 可能是部分安卓厂商ROM手机特有
 
 安卓8.1 和7类似  且安卓8.1和7录屏权限比较宽松 只需要获取一次 不需要每次播放都要获取录屏权限
 
-*安卓7/8.1关闭activity 后就关闭service 可能是锤子OS的特质
+*安卓7/8.1关闭activity 后就关闭service 可能是部分安卓厂商ROM手机特有
 
 理论上 非bind启动的service可以脱离activity运行 就像三星安卓11上测试的情况
 
@@ -290,6 +289,14 @@ https://developer.android.com/about/versions/oreo/background?hl=zh-cn#services
 直接在activity onCreate时候进行绑定 onDestroy时解绑（注意判空），绑定的时候进行一些判断。如果已存在服务会话则恢复之前的情况。如果不存在不服务会话则等待需要的时候再启动前台服务
 
 <hr>
+
+### 安卓通知
+- 注册前台服务startForegroundService 首次注册需要在5s内正确设置前台服务的通知栏显示内容。
+- MainService初始化时注册一个notificationManager,后续除了上条“前台服务依赖的通知内容”外的正常通知，都可以使用notificationManager来激活。
+- notificationManager.notify(id,notification) 用于普通的激活通知，注意 第一个id如果存在是更新之前的通知，更新通知不会有震动提示，如需新通知也发出震动提示用另一个id。
+
+<hr>
+
 
 ### 开机自启动
 利用接收RECEIVE_BOOT_COMPLETED的系统广播
