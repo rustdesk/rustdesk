@@ -513,6 +513,7 @@ class MainService : Service() {
         notificationBuilder = NotificationCompat.Builder(this, notificationChannel)
     }
 
+    @SuppressLint("UnspecifiedImmutableFlag")
     private fun createForegroundNotification() {
         val intent = Intent(this, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED
@@ -520,10 +521,11 @@ class MainService : Service() {
             addCategory(Intent.CATEGORY_LAUNCHER)
             putExtra("type", type)
         }
-        val pendingIntent = PendingIntent.getActivity(
-            this, 0, intent,
-            FLAG_UPDATE_CURRENT
-        )
+        val pendingIntent = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            PendingIntent.getActivity(this, 0, intent, FLAG_IMMUTABLE)
+        } else {
+            PendingIntent.getActivity(this, 0, intent, FLAG_UPDATE_CURRENT)
+        }
         val notification = notificationBuilder
             .setOngoing(true)
             .setSmallIcon(R.mipmap.ic_launcher)
@@ -581,6 +583,7 @@ class MainService : Service() {
         notificationManager.cancel(getClientNotifyID(clientID))
     }
 
+    @SuppressLint("UnspecifiedImmutableFlag")
     private fun genLoginRequestPendingIntent(res: Boolean): PendingIntent {
         val intent = Intent(this, MainService::class.java).apply {
             action = ACTION_LOGIN_REQ_NOTIFY
@@ -589,7 +592,7 @@ class MainService : Service() {
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             PendingIntent.getService(this, 111, intent, FLAG_IMMUTABLE)
         } else {
-            PendingIntent.getService(this, 111, intent, 0)
+            PendingIntent.getService(this, 111, intent, FLAG_UPDATE_CURRENT)
         }
     }
 
