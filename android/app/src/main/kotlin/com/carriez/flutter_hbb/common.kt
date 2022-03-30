@@ -1,5 +1,6 @@
 package com.carriez.flutter_hbb
 
+import android.annotation.SuppressLint
 import android.app.*
 import android.app.PendingIntent.FLAG_UPDATE_CURRENT
 import android.content.Context
@@ -13,6 +14,10 @@ import androidx.annotation.RequiresApi
 import androidx.core.app.NotificationCompat
 import com.hjq.permissions.Permission
 import com.hjq.permissions.XXPermissions
+import java.util.*
+
+@SuppressLint("ConstantLocale")
+val LOCAL_NAME = Locale.getDefault().toString()
 
 val INFO = Info("", "", 0, 0)
 

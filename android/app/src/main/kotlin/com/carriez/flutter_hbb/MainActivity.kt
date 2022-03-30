@@ -15,6 +15,7 @@ import androidx.annotation.RequiresApi
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
+import java.lang.Exception
 
 const val MEDIA_REQUEST_CODE = 42
 
@@ -96,6 +97,13 @@ class MainActivity : FlutterActivity() {
                             "on_permission_changed",
                             mapOf("name" to "input", "value" to InputService.isOpen.toString())
                         )
+                    }
+                    "cancel_notification" -> {
+                        try {
+                            val id = call.arguments as Int
+                            Log.d(logTag,"cancel_notification id:$id")
+                            mainService?.cancelNotification(id)
+                        }finally { }
                     }
                     else -> {}
                 }

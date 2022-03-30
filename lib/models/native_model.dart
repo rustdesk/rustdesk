@@ -123,8 +123,8 @@ class PlatformFFI {
     });
   }
 
-  static invokeMethod(String method) async {
-    return await toAndroidChannel.invokeMethod(method);
+  static invokeMethod(String method,[ dynamic arguments ]) async {
+    return await toAndroidChannel.invokeMethod(method,arguments);
   }
 }
 

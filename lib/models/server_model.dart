@@ -81,7 +81,12 @@ class ServerModel with ChangeNotifier {
   toggleService() async {
     if(_isStart){
       final res = await DialogManager.show<bool>((setState, close) => CustomAlertDialog(
-        title: Text(translate("Warning")),
+        title: Row(children: [
+          Icon(Icons.warning_amber_sharp,
+              color: Colors.redAccent, size: 28),
+          SizedBox(width: 10),
+          Text(translate("Warning")),
+        ]),
         content: Text(translate("android_stop_service_tip")),
         actions: [
           TextButton(onPressed: ()=>close(), child: Text(translate("Cancel"))),
@@ -93,7 +98,12 @@ class ServerModel with ChangeNotifier {
       }
     }else{
       final res = await DialogManager.show<bool>((setState, close) => CustomAlertDialog(
-        title: Text(translate("Warning")),
+        title: Row(children: [
+          Icon(Icons.warning_amber_sharp,
+              color: Colors.redAccent, size: 28),
+          SizedBox(width: 10),
+          Text(translate("Warning")),
+        ]),
         content: Text(translate("android_service_will_start_tip")),
         actions: [
           TextButton(onPressed: ()=>close(), child: Text(translate("Cancel"))),
@@ -208,7 +218,12 @@ class ServerModel with ChangeNotifier {
       final Map<String, dynamic> response = Map();
       response["id"] = client.id;
       DialogManager.show((setState, close) => CustomAlertDialog(
-              title: Text(translate(client.isFileTransfer?"File Connection":"Screen Connection")),
+              title: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                Text(translate(client.isFileTransfer?"File Connection":"Screen Connection")),
+                IconButton(onPressed: close, icon: Icon(Icons.close))
+              ]),
               content: Column(
                 mainAxisSize: MainAxisSize.min,
                 mainAxisAlignment: MainAxisAlignment.center,
@@ -226,6 +241,7 @@ class ServerModel with ChangeNotifier {
                     onPressed: () {
                       response["res"] = false;
                       FFI.setByName("login_res", jsonEncode(response));
+                      FFI.invokeMethod("cancel_notification",client.id);
                       close();
                     }),
                 ElevatedButton(
@@ -234,10 +250,9 @@ class ServerModel with ChangeNotifier {
                       response["res"] = true;
                       FFI.setByName("login_res", jsonEncode(response));
                       if (!client.isFileTransfer) {
-                        bool res = await FFI.invokeMethod(
-                            "start_capture"); // to Android service
-                        debugPrint("_toAndroidStartCapture:$res");
+                        FFI.invokeMethod("start_capture");
                       }
+                      FFI.invokeMethod("cancel_notification",client.id);
                       _clients[client.id] = client;
                       notifyListeners();
                       close();
@@ -251,6 +266,8 @@ class ServerModel with ChangeNotifier {
   void onClientAuthorized(Map<String, dynamic> evt) {
     try{
       final client = Client.fromJson(jsonDecode(evt['client']));
+      // reset the login dialog, to-do,it will close any showing dialog
+      DialogManager.reset();
       _clients[client.id] = client;
       notifyListeners();
     }catch(e){
@@ -266,6 +283,7 @@ class ServerModel with ChangeNotifier {
       }else{
         // reset the login dialog, to-do,it will close any showing dialog
         DialogManager.reset();
+        FFI.invokeMethod("cancel_notification",id);
       }
       notifyListeners();
     } catch (e) {

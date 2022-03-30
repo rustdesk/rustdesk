@@ -30,7 +30,8 @@ import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import java.util.concurrent.Executors
 import kotlin.concurrent.thread
-import androidx.media.app.NotificationCompat.MediaStyle
+import org.json.JSONException
+import org.json.JSONObject
 
 const val EXTRA_MP_DATA = "mp_intent"
 const val INIT_SERVICE = "init_service"
@@ -38,8 +39,9 @@ const val ACTION_LOGIN_REQ_NOTIFY = "ACTION_LOGIN_REQ_NOTIFY"
 const val EXTRA_LOGIN_REQ_NOTIFY = "EXTRA_LOGIN_REQ_NOTIFY"
 
 const val DEFAULT_NOTIFY_TITLE = "RustDesk"
-const val DEFAULT_NOTIFY_TEXT = "Service is listening"
-const val NOTIFY_ID = 11
+const val DEFAULT_NOTIFY_TEXT = "Service is running"
+const val DEFAULT_NOTIFY_ID = 1
+const val NOTIFY_ID_OFFSET = 100 // 为每个客户端ID增加这个偏移量，而得到通知栏ID，避免使用0且防止和默认ID冲突
 
 const val NOTIFY_TYPE_START_CAPTURE = "NOTIFY_TYPE_START_CAPTURE"
 
@@ -96,17 +98,42 @@ class MainService : Service() {
     fun rustSetByName(name: String, arg1: String, arg2: String) {
         when (name) {
             "try_start_without_auth" -> {
-                // TODO notify
-                loginRequestActionNotification("test","name","id")
-            }
-            "start_capture" -> {
-                Log.d(logTag, "from rust:start_capture")
-                if (isStart) {
-                    Log.d(logTag, "正在录制")
-                    return
+                try {
+                    val jsonObject = JSONObject(arg1)
+                    val id = jsonObject["id"] as Int
+                    val username = jsonObject["name"] as String
+                    val peerId = jsonObject["peer_id"] as String
+                    val type = if (jsonObject["is_file_transfer"] as Boolean){
+                        translate("File Connection")
+                    }else{
+                        translate("Screen Connection")
+                    }
+                    loginRequestNotification(id,type,username,peerId)
+                }catch (e:JSONException){
+                    e.printStackTrace()
                 }
-                startCapture()
-                // TODO notify
+            }
+            "on_client_authorized" -> {
+                Log.d(logTag, "from rust:on_client_authorized")
+                try {
+                    val jsonObject = JSONObject(arg1)
+                    val id = jsonObject["id"] as Int
+                    val username = jsonObject["name"] as String
+                    val peerId = jsonObject["peer_id"] as String
+                    val isFileTransfer = jsonObject["is_file_transfer"] as Boolean
+                    val type = if (isFileTransfer){
+                        translate("File Connection")
+                    }else{
+                        translate("Screen Connection")
+                    }
+                    if(!isFileTransfer && !isStart){
+                        startCapture()
+                    }
+                    onClientAuthorizedNotification(id,type,username,peerId)
+                }catch (e:JSONException){
+                    e.printStackTrace()
+                }
+
             }
             "stop_capture" -> {
                 Log.d(logTag, "from rust:stop_capture")
@@ -119,7 +146,13 @@ class MainService : Service() {
     // jvm call rust
     private external fun init(ctx: Context)
     private external fun startServer()
+    private external fun translateLocale(localeName:String,input: String) : String
     // private external fun sendVp9(data: ByteArray)
+
+    private fun translate(input:String):String{
+        Log.d(logTag,"translate:$LOCAL_NAME")
+        return translateLocale(LOCAL_NAME,input)
+    }
 
     private val logTag = "LOG_SERVICE"
     private val useVP9 = false
@@ -498,31 +531,54 @@ class MainService : Service() {
             .setAutoCancel(true)
             .setPriority(NotificationCompat.PRIORITY_DEFAULT)
             .setContentTitle(DEFAULT_NOTIFY_TITLE)
-            .setContentText(DEFAULT_NOTIFY_TEXT)
+            .setContentText(translate(DEFAULT_NOTIFY_TEXT) + '!')
             .setOnlyAlertOnce(true)
             .setContentIntent(pendingIntent)
             .setColor(ContextCompat.getColor(this, R.color.primary))
             .setWhen(System.currentTimeMillis())
             .build()
         // 这里满足前台服务首次启动时5s内设定好通知内容，这里使用startForeground，后续普通调用使用notificationManager即可
-        startForeground(NOTIFY_ID, notification)
+        startForeground(DEFAULT_NOTIFY_ID, notification)
     }
 
-    private fun loginRequestActionNotification(type: String, name: String, id: String) {
+    private fun loginRequestNotification(clientID:Int, type: String, username: String, peerId: String) {
         // notificationBuilder 第一次使用时状态已保存，再次生成时只需要调整需要修改的部分
+        cancelNotification(clientID)
         val notification = notificationBuilder
+            .setOngoing(false)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
-            .setContentTitle("收到${type}连接请求")
-            .setContentText("来自:$name-$id")
-
-            // 暂时不开启通知栏接受请求，防止用户误操作
-//            .setStyle(MediaStyle().setShowActionsInCompactView(0, 1))
-//            .addAction(R.drawable.check_blue, "check", genLoginRequestPendingIntent(true))
-//            .addAction(R.drawable.close_red, "close", genLoginRequestPendingIntent(false))
+            .setContentTitle(translate("Do you accept?"))
+            .setContentText("$type:$username-$peerId")
+            // 暂时不开启通知栏接受请求
+            // .setStyle(MediaStyle().setShowActionsInCompactView(0, 1))
+            // .addAction(R.drawable.check_blue, "check", genLoginRequestPendingIntent(true))
+            // .addAction(R.drawable.close_red, "close", genLoginRequestPendingIntent(false))
             .build()
-        // TODO 为每个login req定义id ，notify id 不能是0 可以定义为client id + 100,如101,102,103
-        // 登录成功 取消notify时可以直接使用
-        notificationManager.notify(NOTIFY_ID + 1, notification)
+        notificationManager.notify(getClientNotifyID(clientID), notification)
+    }
+
+    private fun onClientAuthorizedNotification(clientID: Int, type: String, username: String, peerId: String) {
+        cancelNotification(clientID)
+        val notification = notificationBuilder
+            .setOngoing(false)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setContentTitle("$type ${translate("Established")}")
+            .setContentText("$username - $peerId")
+            .build()
+        notificationManager.notify(getClientNotifyID(clientID), notification)
+    }
+
+    private fun getClientNotifyID(clientID:Int):Int{
+        return clientID + NOTIFY_ID_OFFSET
+    }
+
+    /**
+     * 关闭通知的情况
+     * 1.UI端接受或拒绝
+     * 2.peer端通过密码建立了连接（在onClientAuthorizedNotification中已处理） 和 peer端手动取消了连接
+     */
+    fun cancelNotification(clientID:Int){
+        notificationManager.cancel(getClientNotifyID(clientID))
     }
 
     private fun genLoginRequestPendingIntent(res: Boolean): PendingIntent {
@@ -539,13 +595,13 @@ class MainService : Service() {
 
     private fun setTextNotification(_title: String?, _text: String?) {
         val title = _title ?: DEFAULT_NOTIFY_TITLE
-        val text = _text ?: DEFAULT_NOTIFY_TEXT
+        val text = _text ?: translate(DEFAULT_NOTIFY_TEXT) + '!'
         val notification = notificationBuilder
             .clearActions()
             .setStyle(null)
             .setContentTitle(title)
             .setContentText(text)
             .build()
-        notificationManager.notify(NOTIFY_ID, notification)
+        notificationManager.notify(DEFAULT_NOTIFY_ID, notification)
     }
 }
