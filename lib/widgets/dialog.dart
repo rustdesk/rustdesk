@@ -1,9 +1,107 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_easyloading/flutter_easyloading.dart';
 import '../common.dart';
 import '../models/model.dart';
 
 void clientClose() {
   msgBox('', 'Close', 'Are you sure to close the connection?');
+}
+
+const SEC1 = Duration(seconds: 1);
+void showSuccess({Duration duration = SEC1}){
+  EasyLoading.dismiss();
+  EasyLoading.showSuccess(translate("Successful"),
+      duration: duration,
+      dismissOnTap: true,
+      maskType: EasyLoadingMaskType.black);
+}
+
+void showError({Duration duration = SEC1}){
+  EasyLoading.dismiss();
+  EasyLoading.showError(translate("Error"),
+      duration: duration,
+      dismissOnTap: true,
+      maskType: EasyLoadingMaskType.black);
+}
+
+void updatePasswordDialog(){
+  final p0 = TextEditingController();
+  final p1 = TextEditingController();
+  var validateLength = false;
+  var validateSame = false;
+  DialogManager.show((setState, close) {
+    return CustomAlertDialog(
+      title: Text(translate('Set your own password')),
+      content: Form(
+          autovalidateMode: AutovalidateMode.onUserInteraction,
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            TextFormField(
+              autofocus: true,
+              obscureText: true,
+              keyboardType: TextInputType.visiblePassword,
+              decoration: InputDecoration(
+                labelText: translate('Password'),
+              ),
+              controller: p0,
+              validator: (v) {
+                if (v == null) return null;
+                final val = v.trim().length > 5;
+                if (validateLength != val) {
+                  // use delay to make setState success
+                  Future.delayed(Duration(microseconds: 1),
+                          () => setState(() => validateLength = val));
+                }
+                return val
+                    ? null
+                    : translate('Too short, at least 6 characters.');
+              },
+            ),
+            TextFormField(
+              obscureText: true,
+              keyboardType: TextInputType.visiblePassword,
+              decoration: InputDecoration(
+                labelText: translate('Confirmation'),
+              ),
+              controller: p1,
+              validator: (v) {
+                if (v == null) return null;
+                final val = p0.text == v;
+                if (validateSame != val) {
+                  Future.delayed(Duration(microseconds: 1),
+                          () => setState(() => validateSame = val));
+                }
+                return val
+                    ? null
+                    : translate('The confirmation is not identical.');
+              },
+            ),
+          ])),
+      actions: [
+        TextButton(
+          style: flatButtonStyle,
+          onPressed: () {
+            close();
+          },
+          child: Text(translate('Cancel')),
+        ),
+        TextButton(
+          style: flatButtonStyle,
+          onPressed: (validateLength && validateSame)
+              ? () async {
+            close();
+            showLoading(translate("Waiting"));
+            if(await FFI.serverModel.updatePassword(p0.text)){
+              showSuccess();
+            }else{
+              showError();
+            }
+          }
+              : null,
+          child: Text(translate('OK')),
+        ),
+      ],
+    );
+  });
 }
 
 void enterPasswordDialog(String id) {

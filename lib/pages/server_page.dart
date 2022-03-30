@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/models/model.dart';
+import 'package:flutter_hbb/widgets/dialog.dart';
 import 'package:provider/provider.dart';
 
 import '../common.dart';
@@ -16,22 +17,41 @@ class ServerPage extends StatelessWidget implements PageShape {
 
   @override
   final appBarActions = [
-    PopupMenuButton<String>(
-        itemBuilder: (context) {
-          return [
-            PopupMenuItem(
-              child: Text(translate("Change ID")),
-              value: "changeID",
-              enabled: false,
-            ),
-            PopupMenuItem(
-              child: Text(translate("Set your own password")),
-              value: "changePW",
-              enabled: false,
-            )
-          ];
-        },
-        onSelected: (value) => debugPrint("PopupMenuItem onSelected:$value"))
+    PopupMenuButton<String>(itemBuilder: (context) {
+      return [
+        PopupMenuItem(
+          child: Text(translate("Change ID")),
+          value: "changeID",
+          enabled: false,
+        ),
+        PopupMenuItem(
+          child: Text(translate("Set your own password")),
+          value: "changePW",
+          enabled: FFI.serverModel.isStart,
+        ),
+        PopupMenuItem(
+          child: Text(translate("Refresh random password")),
+          value: "refreshPW",
+          enabled: FFI.serverModel.isStart,
+        )
+      ];
+    }, onSelected: (value) {
+      if (value == "changeID") {
+        // TODO
+      } else if (value == "changePW") {
+        updatePasswordDialog();
+      } else if (value == "refreshPW") {
+        () async {
+          showLoading(translate("Waiting"));
+          if(await FFI.serverModel.updatePassword("")){
+            showSuccess();
+          }else{
+            showError();
+          }
+          debugPrint("end updatePassword");
+        }();
+      }
+    })
   ];
 
   @override

@@ -142,8 +142,30 @@ class ServerModel with ChangeNotifier {
     await FFI.invokeMethod("init_input");
   }
 
-  getIDPasswd() async {
-    if (_serverId.text != _emptyIdShow && _serverPasswd.text != "") {
+  Future<bool> updatePassword(String pw) async {
+    final oldPasswd = _serverPasswd.text;
+    FFI.setByName("update_password",pw);
+    await Future.delayed(Duration(milliseconds: 500));
+    await getIDPasswd(force: true);
+
+    // check result
+    if(pw == ""){
+      if(_serverPasswd.text.isNotEmpty && _serverPasswd.text!= oldPasswd){
+        return true;
+      }else{
+        return false;
+      }
+    }else{
+      if(_serverPasswd.text == pw){
+        return true;
+      }else{
+        return false;
+      }
+    }
+  }
+
+  getIDPasswd({bool force = false}) async {
+    if (!force && _serverId.text != _emptyIdShow && _serverPasswd.text != "") {
       return;
     }
     var count = 0;
