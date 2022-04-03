@@ -17,41 +17,44 @@ class ServerPage extends StatelessWidget implements PageShape {
 
   @override
   final appBarActions = [
-    PopupMenuButton<String>(itemBuilder: (context) {
-      return [
-        PopupMenuItem(
-          child: Text(translate("Change ID")),
-          value: "changeID",
-          enabled: false,
-        ),
-        PopupMenuItem(
-          child: Text(translate("Set your own password")),
-          value: "changePW",
-          enabled: FFI.serverModel.isStart,
-        ),
-        PopupMenuItem(
-          child: Text(translate("Refresh random password")),
-          value: "refreshPW",
-          enabled: FFI.serverModel.isStart,
-        )
-      ];
-    }, onSelected: (value) {
-      if (value == "changeID") {
-        // TODO
-      } else if (value == "changePW") {
-        updatePasswordDialog();
-      } else if (value == "refreshPW") {
-        () async {
-          showLoading(translate("Waiting"));
-          if(await FFI.serverModel.updatePassword("")){
-            showSuccess();
-          }else{
-            showError();
+    PopupMenuButton<String>(
+        icon: Icon(Icons.more_vert),
+        itemBuilder: (context) {
+          return [
+            PopupMenuItem(
+              child: Text(translate("Change ID")),
+              value: "changeID",
+              enabled: false,
+            ),
+            PopupMenuItem(
+              child: Text(translate("Set your own password")),
+              value: "changePW",
+              enabled: FFI.serverModel.isStart,
+            ),
+            PopupMenuItem(
+              child: Text(translate("Refresh random password")),
+              value: "refreshPW",
+              enabled: FFI.serverModel.isStart,
+            )
+          ];
+        },
+        onSelected: (value) {
+          if (value == "changeID") {
+            // TODO
+          } else if (value == "changePW") {
+            updatePasswordDialog();
+          } else if (value == "refreshPW") {
+            () async {
+              showLoading(translate("Waiting"));
+              if (await FFI.serverModel.updatePassword("")) {
+                showSuccess();
+              } else {
+                showError();
+              }
+              debugPrint("end updatePassword");
+            }();
           }
-          debugPrint("end updatePassword");
-        }();
-      }
-    })
+        })
   ];
 
   @override

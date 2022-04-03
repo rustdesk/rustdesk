@@ -83,7 +83,7 @@ class PlatformFFI {
 
   static void setMethodCallHandler(FMethod callback) {}
 
-  static Future<bool> invokeMethod(String method) async {
+  static Future<bool> invokeMethod(String method, [ dynamic arguments]) async {
     return true;
   }
 }
