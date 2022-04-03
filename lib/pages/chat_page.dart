@@ -177,7 +177,6 @@ class _ChatWindowOverlayState extends State<ChatWindowOverlay> {
   }
 
   checkScreenSize() {
-    // TODO 横屏处理
   }
 
   checkKeyboard() {

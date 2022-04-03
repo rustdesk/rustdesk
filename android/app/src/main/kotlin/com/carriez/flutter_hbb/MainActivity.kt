@@ -118,7 +118,6 @@ class MainActivity : FlutterActivity() {
         startActivityForResult(mIntent, MEDIA_REQUEST_CODE)
     }
 
-    // 在onActivityResult中成功获取到mediaProjection就开始就调用此函数，开始初始化监听服务
     private fun initService() {
         if (mediaProjectionResultIntent == null) {
             Log.w(logTag, "initService fail,mediaProjectionResultIntent is null")
@@ -170,8 +169,6 @@ class MainActivity : FlutterActivity() {
     }
 
     private fun updateMachineInfo() {
-        // 屏幕尺寸 控制最长边不超过1400 超过则减半并储存缩放比例 实际发送给手机端的尺寸为缩小后的尺寸
-        // input控制时再通过缩放比例恢复原始尺寸进行path入参
         val dm = DisplayMetrics()
         @Suppress("DEPRECATION")
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {

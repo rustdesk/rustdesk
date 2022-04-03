@@ -239,8 +239,8 @@ class HoldTapMoveGestureRecognizer extends GestureRecognizer {
 
   bool _isStart = false;
 
-  Timer? _firstTapUpTimer; // 第一次点击后的计时 超时未等到第二次操作则reject
-  Timer? _secondTapDownTimer; // 第二次点击后的计时 期间内有其他的操作则reject 超时则判定成功 drag update
+  Timer? _firstTapUpTimer; 
+  Timer? _secondTapDownTimer;
   _TapTracker? _firstTap;
   _TapTracker? _secondTap;
 
@@ -266,7 +266,6 @@ class HoldTapMoveGestureRecognizer extends GestureRecognizer {
 
   @override
   void addAllowedPointer(PointerDownEvent event) {
-    // 检测按下事件
     if (_firstTap != null) {
       if (!_firstTap!.isWithinGlobalTolerance(event, kDoubleTapSlop)) {
         // Ignore out-of-bounds second taps.
@@ -285,7 +284,7 @@ class HoldTapMoveGestureRecognizer extends GestureRecognizer {
                 localPosition: event.localPosition)));
       }
     }
-    _trackTap(event); // 捕捉第一次tap
+    _trackTap(event);
   }
 
   void _trackTap(PointerDownEvent event) {
@@ -301,14 +300,12 @@ class HoldTapMoveGestureRecognizer extends GestureRecognizer {
     tracker.startTrackingPointer(_handleEvent, event.transform);
   }
 
-  // 实际的逻辑应该是第二次down后一段时间没有抬起则表示start 刚好是双击取反
   void _handleEvent(PointerEvent event) {
     final _TapTracker tracker = _trackers[event.pointer]!;
     if (event is PointerUpEvent) {
       if (_firstTap == null && _secondTap == null) {
         _registerFirstTap(tracker);
       } else {
-        // 检测到其他的抬起事件则取消
         _reject(tracker);
       }
     } else if (event is PointerDownEvent) {
@@ -316,7 +313,6 @@ class HoldTapMoveGestureRecognizer extends GestureRecognizer {
         _registerSecondTap(tracker);
       }
     } else if (event is PointerMoveEvent) {
-      // 检测到first tap move 则取消，检测到second tap move且已经通过竞技场则update
       if (!tracker.isWithinGlobalTolerance(event, kDoubleTapTouchSlop)) {
         if (_firstTap != null && _firstTap!.pointer == event.pointer) {
           // first tap move
@@ -403,7 +399,6 @@ class HoldTapMoveGestureRecognizer extends GestureRecognizer {
         GestureBinding.instance!.gestureArena.release(tracker.pointer);
       }
     }
-    // TODO  正确的释放资源
     _firstTap = null;
     _secondTap = null;
     _clearTrackers();
@@ -420,7 +415,6 @@ class HoldTapMoveGestureRecognizer extends GestureRecognizer {
   }
 
   void _registerSecondTap(_TapTracker tracker) {
-    // 清除first tap的状态
     if (_firstTap != null) {
       _stopFirstTapUpTimer();
       _freezeTracker(_firstTap!);
@@ -489,7 +483,7 @@ class DoubleFinerTapGestureRecognizer extends GestureRecognizer {
   GestureTapDownCallback? onDoubleFinerTap;
   GestureTapCancelCallback? onDoubleFinerTapCancel;
 
-  Timer? _firstTapTimer; // 第一次点击后的计时 超时未等到第二次操作则reject
+  Timer? _firstTapTimer;
   _TapTracker? _firstTap;
 
   var _isStart = false;
@@ -518,7 +512,6 @@ class DoubleFinerTapGestureRecognizer extends GestureRecognizer {
 
   @override
   void addAllowedPointer(PointerDownEvent event) {
-    // 检测按下事件
     debugPrint("addAllowedPointer");
     if (_isStart) {
       // second
@@ -536,7 +529,7 @@ class DoubleFinerTapGestureRecognizer extends GestureRecognizer {
       _isStart = true;
       _startFirstTapDownTimer();
     }
-    _trackTap(event); // 捕捉tap
+    _trackTap(event);
   }
 
   void _trackTap(PointerDownEvent event) {
@@ -553,7 +546,6 @@ class DoubleFinerTapGestureRecognizer extends GestureRecognizer {
     _registerTap(tracker);
   }
 
-  // 实际的逻辑应该是第二次down后一段时间没有抬起则表示start 刚好是双击取反
   void _handleEvent(PointerEvent event) {
     final _TapTracker tracker = _trackers[event.pointer]!;
     if (event is PointerUpEvent) {
@@ -608,7 +600,6 @@ class DoubleFinerTapGestureRecognizer extends GestureRecognizer {
   void _reset() {
     _stopFirstTapUpTimer();
     _firstTap = null;
-    // TODO  正确的释放资源
     _clearTrackers();
   }
 

@@ -77,7 +77,6 @@ class ServerPage extends StatelessWidget implements PageShape {
 }
 
 void checkService() {
-  // 检测当前服务状态，若已存在服务则异步更新数据回来
   FFI.invokeMethod("check_service"); // jvm
 }
 

@@ -26,10 +26,6 @@ class FileModel extends ChangeNotifier {
   var _localOption = DirectoryOption();
   var _remoteOption = DirectoryOption();
 
-  /// 每一个选择的文件或文件夹占用一个 _jobId，file_num是文件夹中的单独文件id
-  /// 如
-  /// 发送单独一个文件  file_num = 0;
-  /// 发送一个文件夹，若文件夹下有3个文件  最后一个文件的 file_num = 2;
   var _jobId = 0;
 
   var _jobProgress = JobProgress(); // from rust update
@@ -119,7 +115,6 @@ class FileModel extends ChangeNotifier {
     _fileFetcher.tryCompleteTask(evt['value'], evt['is_local']);
   }
 
-  // job 类型 复制结束 删除结束
   jobDone(Map<String, dynamic> evt) {
     if (_jobResultListener.isListening) {
       _jobResultListener.complete(evt);
@@ -250,7 +245,7 @@ class FileModel extends ChangeNotifier {
         "path": from.path,
         "to": PathUtil.join(toPath, from.name, isWindows),
         "show_hidden": showHidden.toString(),
-        "is_remote": (!(items.isLocal!)).toString() // 指from的位置而不是to的位置
+        "is_remote": (!(items.isLocal!)).toString()
       };
       FFI.setByName("send_files", jsonEncode(msg));
     });
@@ -282,7 +277,6 @@ class FileModel extends ChangeNotifier {
             _jobId, item.path, items.isLocal!, true);
         fd.format(isWindows);
         EasyLoading.dismiss();
-        // 空文件夹
         if (fd.entries.isEmpty) {
           final confirm = await showRemoveDialog(translate("Are you sure you want to delete this empty directory?"), item.name, false);
           if (confirm == true) {
@@ -476,7 +470,7 @@ class FileFetcher {
 
     Timer(Duration(seconds: 2), () {
       tasks.remove(path);
-      if (c.isCompleted) return; // 计时器加入map
+      if (c.isCompleted) return;
       c.completeError("Failed to read dir,timeout");
     });
     return c.future;
@@ -492,7 +486,7 @@ class FileFetcher {
 
     Timer(Duration(seconds: 2), () {
       tasks.remove(id);
-      if (c.isCompleted) return; // 计时器加入map
+      if (c.isCompleted) return;
       c.completeError("Failed to read dir,timeout");
     });
     return c.future;

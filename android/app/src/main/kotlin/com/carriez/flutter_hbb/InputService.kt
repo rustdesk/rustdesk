@@ -29,7 +29,6 @@ class InputService : AccessibilityService() {
     @RequiresApi(Build.VERSION_CODES.N)
     fun rustMouseInput(mask: Int, _x: Int, _y: Int) {
 
-        // TODO 按键抬起按下时候 x y 都是0
         if (!(mask == 9 || mask == 10)) {
             mouseX = _x * INFO.scale
             mouseY = _y * INFO.scale
@@ -77,12 +76,10 @@ class InputService : AccessibilityService() {
         dispatchGesture(builder.build(), object : GestureResultCallback() {
             override fun onCompleted(gestureDescription: GestureDescription) {
                 super.onCompleted(gestureDescription)
-                Log.d(logTag, "滑动成功")
             }
 
             override fun onCancelled(gestureDescription: GestureDescription) {
                 super.onCancelled(gestureDescription)
-                Log.d(logTag, "滑动失败 ")
             }
         }, null)
     }

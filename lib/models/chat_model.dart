@@ -7,9 +7,6 @@ import 'package:flutter_hbb/pages/chat_page.dart';
 import 'model.dart';
 
 class ChatModel with ChangeNotifier {
-  // -1作为客户端模式的id，客户端模式下此id唯一
-  // 其它正整数的id，来自被控服务器模式下的其他客户端的id，每个客户端有不同的id
-  // 注意 此id和peer_id不同，服务端模式下的id等同于conn的顺序累加id
   static final clientModeID = -1;
 
   final Map<int, List<ChatMessage>> _messages = Map()..[clientModeID] = [];

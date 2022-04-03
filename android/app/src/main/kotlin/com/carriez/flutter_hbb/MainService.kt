@@ -41,14 +41,14 @@ const val EXTRA_LOGIN_REQ_NOTIFY = "EXTRA_LOGIN_REQ_NOTIFY"
 const val DEFAULT_NOTIFY_TITLE = "RustDesk"
 const val DEFAULT_NOTIFY_TEXT = "Service is running"
 const val DEFAULT_NOTIFY_ID = 1
-const val NOTIFY_ID_OFFSET = 100 // 为每个客户端ID增加这个偏移量，而得到通知栏ID，避免使用0且防止和默认ID冲突
+const val NOTIFY_ID_OFFSET = 100 
 
 const val NOTIFY_TYPE_START_CAPTURE = "NOTIFY_TYPE_START_CAPTURE"
 
 const val MIME_TYPE = MediaFormat.MIMETYPE_VIDEO_VP9
 
 // video const
-const val MAX_SCREEN_SIZE = 1200 // 内置编码器有上限 且实际使用中不需要过高的分辨率
+const val MAX_SCREEN_SIZE = 1200 
 
 const val VIDEO_KEY_BIT_RATE = 1024_000
 const val VIDEO_KEY_FRAME_RATE = 30
@@ -157,14 +157,13 @@ class MainService : Service() {
     private val logTag = "LOG_SERVICE"
     private val useVP9 = false
     private val binder = LocalBinder()
-    private var _isReady = false // 是否获取了录屏权限
-    private var _isStart = false // 是否正在进行录制
+    private var _isReady = false
+    private var _isStart = false 
     val isReady: Boolean
         get() = _isReady
     val isStart: Boolean
         get() = _isStart
 
-    // video 注意 这里imageReader要成为成员变量，防止被回收 https://www.cnblogs.com/yongdaimi/p/11004560.html
     private var mediaProjection: MediaProjection? = null
     private var surface: Surface? = null
     private val sendVP9Thread = Executors.newSingleThreadExecutor()
@@ -179,7 +178,7 @@ class MainService : Service() {
     private var audioData: FloatArray? = null
     private var minBufferSize = 0
     private var isNewData = false
-    private val audioZeroData: FloatArray = FloatArray(32)  // 必须是32位 如果只有8位进行ffi传输时会出错
+    private val audioZeroData: FloatArray = FloatArray(32)  
     private var audioRecordStat = false
 
     // notification
@@ -208,7 +207,6 @@ class MainService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         Log.d("whichService", "this service:${Thread.currentThread()}")
-        // 只有init的时候通过onStartCommand 且开启前台服务
         if (intent?.action == INIT_SERVICE) {
             Log.d(logTag, "service starting:${startId}:${Thread.currentThread()}")
             createForegroundNotification()
@@ -217,25 +215,20 @@ class MainService : Service() {
             intent.getParcelableExtra<Intent>(EXTRA_MP_DATA)?.let {
                 mediaProjection =
                     mMediaProjectionManager.getMediaProjection(Activity.RESULT_OK, it)
-                Log.d(logTag, "获取mMediaProjection成功$mediaProjection")
                 checkMediaPermission()
                 surface = createSurface()
                 init(this)
                 _isReady = true
             } ?: let {
-                Log.d(logTag, "获取mMediaProjection失败！")
             }
 //        } else if (intent?.action == ACTION_LOGIN_REQ_NOTIFY) {
-            // 暂时不开启通知从通知栏确认登录
 //            val notifyLoginRes = intent.getBooleanExtra(EXTRA_LOGIN_REQ_NOTIFY, false)
-//            Log.d(logTag, "从通知栏点击了:$notifyLoginRes")
         }
         return super.onStartCommand(intent, flags, startId)
     }
 
     @SuppressLint("WrongConstant")
     private fun createSurface(): Surface? {
-        // 暂时只使用原始数据的情况
         return if (useVP9) {
             // TODO
             null
@@ -246,7 +239,7 @@ class MainService : Service() {
                     INFO.screenWidth,
                     INFO.screenHeight,
                     PixelFormat.RGBA_8888,
-                    2 // maxImages 至少是2
+                    2
                 ).apply {
                     setOnImageAvailableListener({ imageReader: ImageReader ->
                         try {
@@ -292,7 +285,6 @@ class MainService : Service() {
             startRawVideoRecorder(mediaProjection!!)
         }
 
-        // 音频只支持安卓10以及以上
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             startAudioRecorder()
         }
@@ -363,7 +355,6 @@ class MainService : Service() {
 
     @SuppressLint("WrongConstant")
     private fun startVP9VideoRecorder(mp: MediaProjection) {
-        //使用内置编码器
         createMediaCodec()
         videoEncoder?.let {
             surface = it.createInputSurface()
@@ -391,7 +382,6 @@ class MainService : Service() {
         ) {
             codec.getOutputBuffer(index)?.let { buf ->
                 sendVP9Thread.execute {
-                    // TODO 优化内存使用方式
                     val byteArray = ByteArray(buf.limit())
                     buf.get(byteArray)
                     // sendVp9(byteArray)
@@ -411,7 +401,7 @@ class MainService : Service() {
         videoEncoder = MediaCodec.createEncoderByType(MIME_TYPE)
         val mFormat = MediaFormat.createVideoFormat(MIME_TYPE, INFO.screenWidth, INFO.screenHeight)
         mFormat.setInteger(MediaFormat.KEY_BIT_RATE, VIDEO_KEY_BIT_RATE)
-        mFormat.setInteger(MediaFormat.KEY_FRAME_RATE, VIDEO_KEY_FRAME_RATE) // codec的帧率设置无效
+        mFormat.setInteger(MediaFormat.KEY_FRAME_RATE, VIDEO_KEY_FRAME_RATE)
         mFormat.setInteger(
             MediaFormat.KEY_COLOR_FORMAT,
             MediaCodecInfo.CodecCapabilities.COLOR_FormatYUV420Flexible
@@ -433,7 +423,6 @@ class MainService : Service() {
             thread {
                 while (audioRecordStat) {
                     val res = audioRecorder!!.read(audioData!!, 0, minBufferSize, READ_BLOCKING)
-                    // 录制float 需要使用对应的read float[] 函数
                     if (res != AudioRecord.ERROR_INVALID_OPERATION) {
                         isNewData = true
                     }
@@ -493,7 +482,6 @@ class MainService : Service() {
 
     private fun initNotification() {
         notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        // 设置通知渠道 android8开始引入 老版本会被忽略 这个东西的作用相当于为通知分类 给用户选择通知消息的种类
         notificationChannel = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channelId = "RustDesk"
             val channelName = "RustDesk Service"
@@ -517,7 +505,7 @@ class MainService : Service() {
     private fun createForegroundNotification() {
         val intent = Intent(this, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED
-            action = Intent.ACTION_MAIN // 不设置会造成每次都重新启动一个新的Activity
+            action = Intent.ACTION_MAIN 
             addCategory(Intent.CATEGORY_LAUNCHER)
             putExtra("type", type)
         }
@@ -539,19 +527,16 @@ class MainService : Service() {
             .setColor(ContextCompat.getColor(this, R.color.primary))
             .setWhen(System.currentTimeMillis())
             .build()
-        // 这里满足前台服务首次启动时5s内设定好通知内容，这里使用startForeground，后续普通调用使用notificationManager即可
         startForeground(DEFAULT_NOTIFY_ID, notification)
     }
 
     private fun loginRequestNotification(clientID:Int, type: String, username: String, peerId: String) {
-        // notificationBuilder 第一次使用时状态已保存，再次生成时只需要调整需要修改的部分
         cancelNotification(clientID)
         val notification = notificationBuilder
             .setOngoing(false)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setContentTitle(translate("Do you accept?"))
             .setContentText("$type:$username-$peerId")
-            // 暂时不开启通知栏接受请求
             // .setStyle(MediaStyle().setShowActionsInCompactView(0, 1))
             // .addAction(R.drawable.check_blue, "check", genLoginRequestPendingIntent(true))
             // .addAction(R.drawable.close_red, "close", genLoginRequestPendingIntent(false))
@@ -574,11 +559,6 @@ class MainService : Service() {
         return clientID + NOTIFY_ID_OFFSET
     }
 
-    /**
-     * 关闭通知的情况
-     * 1.UI端接受或拒绝
-     * 2.peer端通过密码建立了连接（在onClientAuthorizedNotification中已处理） 和 peer端手动取消了连接
-     */
     fun cancelNotification(clientID:Int){
         notificationManager.cancel(getClientNotifyID(clientID))
     }

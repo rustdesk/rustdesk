@@ -28,7 +28,7 @@ data class Info(
 
 @RequiresApi(Build.VERSION_CODES.LOLLIPOP)
 fun testVP9Support(): Boolean {
-    return true  // 函数内部永远返回true 暂时只使用原始数据
+    return true  
     val res = MediaCodecList(MediaCodecList.ALL_CODECS)
         .findEncoderForFormat(
             MediaFormat.createVideoFormat(
@@ -46,7 +46,6 @@ fun checkPermissions(context: Context) {
         .permission(Permission.MANAGE_EXTERNAL_STORAGE)
         .request { permissions, all ->
             if (all) {
-                Log.d("loglog", "获取存储权限成功：$permissions")
             }
         }
 }

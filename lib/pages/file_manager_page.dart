@@ -360,7 +360,6 @@ class _FileManagerPageState extends State<FileManagerPage> {
 
     if (model.selectMode) {
       if (_selectedItems.length == 0 || !isOtherPage) {
-        // 选择模式 当前选择页面
         return BottomSheetBody(
             leading: Icon(Icons.check),
             title: translate("Selected"),
@@ -377,7 +376,6 @@ class _FileManagerPageState extends State<FileManagerPage> {
               )
             ]);
       } else {
-        // 选择模式 复制目标页面
         return BottomSheetBody(
             leading: Icon(Icons.input),
             title: translate("Paste here?"),
