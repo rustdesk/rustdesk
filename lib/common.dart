@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter_easyloading/flutter_easyloading.dart';
 
 final globalKey = GlobalKey<NavigatorState>();
+final navigationBarKey =  GlobalKey();
 
 var isAndroid = false;
 var isIOS = false;

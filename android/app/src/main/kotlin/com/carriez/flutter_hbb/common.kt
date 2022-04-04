@@ -1,17 +1,14 @@
 package com.carriez.flutter_hbb
 
 import android.annotation.SuppressLint
-import android.app.*
-import android.app.PendingIntent.FLAG_UPDATE_CURRENT
 import android.content.Context
-import android.content.Intent
-import android.graphics.Color
 import android.media.MediaCodecList
 import android.media.MediaFormat
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import android.util.Log
 import androidx.annotation.RequiresApi
-import androidx.core.app.NotificationCompat
 import com.hjq.permissions.Permission
 import com.hjq.permissions.XXPermissions
 import java.util.*
@@ -40,13 +37,44 @@ fun testVP9Support(): Boolean {
     return res != null
 }
 
-fun checkPermissions(context: Context) {
+fun requestPermission(context: Context,type: String){
+    val permission = when (type) {
+        "audio" -> {
+            Permission.RECORD_AUDIO
+        }
+        "file" -> {
+            Permission.MANAGE_EXTERNAL_STORAGE
+        }
+        else -> {
+            return
+        }
+    }
     XXPermissions.with(context)
-        .permission(Permission.RECORD_AUDIO)
-        .permission(Permission.MANAGE_EXTERNAL_STORAGE)
+        .permission(permission)
         .request { permissions, all ->
             if (all) {
-                Log.d("loglog", "获取存储权限成功：$permissions")
+                Log.d("checkPermissions", "获取存储权限成功：$permissions")
+                Handler(Looper.getMainLooper()).post {
+                    MainActivity.flutterMethodChannel.invokeMethod(
+                        "on_android_permission_result",
+                        mapOf("type" to type, "result" to all)
+                    )
+                }
             }
         }
+}
+
+fun checkPermission(context: Context,type: String): Boolean {
+    val permission = when (type) {
+        "audio" -> {
+            Permission.RECORD_AUDIO
+        }
+        "file" -> {
+            Permission.MANAGE_EXTERNAL_STORAGE
+        }
+        else -> {
+            return false
+        }
+    }
+    return XXPermissions.isGranted(context,permission)
 }

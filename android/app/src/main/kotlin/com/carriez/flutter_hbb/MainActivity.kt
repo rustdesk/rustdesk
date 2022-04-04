@@ -15,7 +15,6 @@ import androidx.annotation.RequiresApi
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
-import java.lang.Exception
 
 const val MEDIA_REQUEST_CODE = 42
 
@@ -36,7 +35,6 @@ class MainActivity : FlutterActivity() {
         Intent(this, MainService::class.java).also {
             bindService(it, serviceConnection, Context.BIND_AUTO_CREATE)
         }
-        checkPermissions(this)
         updateMachineInfo()
         flutterMethodChannel = MethodChannel(
             flutterEngine.dartExecutor.binaryMessenger,
@@ -67,6 +65,16 @@ class MainActivity : FlutterActivity() {
                             result.success(false)
                         }
                     }
+                    "check_permission" -> {
+                        if(call.arguments is String){
+                            result.success(checkPermission(context, call.arguments as String))
+                        }
+                    }
+                    "request_permission" -> {
+                        if(call.arguments is String){
+                            requestPermission(context, call.arguments as String)
+                        }
+                    }
                     "check_video_permission" -> {
                         mainService?.let {
                             result.success(it.checkMediaPermission())
@@ -76,11 +84,11 @@ class MainActivity : FlutterActivity() {
                     }
                     "check_service" -> {
                         flutterMethodChannel.invokeMethod(
-                            "on_permission_changed",
+                            "on_state_changed",
                             mapOf("name" to "input", "value" to InputService.isOpen.toString())
                         )
                         flutterMethodChannel.invokeMethod(
-                            "on_permission_changed",
+                            "on_state_changed",
                             mapOf("name" to "media", "value" to mainService?.isReady.toString())
                         )
                     }
@@ -94,7 +102,7 @@ class MainActivity : FlutterActivity() {
                         }
                         InputService.ctx = null
                         flutterMethodChannel.invokeMethod(
-                            "on_permission_changed",
+                            "on_state_changed",
                             mapOf("name" to "input", "value" to InputService.isOpen.toString())
                         )
                     }
@@ -154,7 +162,7 @@ class MainActivity : FlutterActivity() {
         Log.d(logTag, "onResume inputPer:$inputPer")
         activity.runOnUiThread {
             flutterMethodChannel.invokeMethod(
-                "on_permission_changed",
+                "on_state_changed",
                 mapOf("name" to "input", "value" to inputPer.toString())
             )
         }

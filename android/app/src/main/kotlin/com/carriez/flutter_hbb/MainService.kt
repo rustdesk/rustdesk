@@ -340,7 +340,7 @@ class MainService : Service() {
     fun checkMediaPermission(): Boolean {
         Handler(Looper.getMainLooper()).post {
             MainActivity.flutterMethodChannel.invokeMethod(
-                "on_permission_changed",
+                "on_state_changed",
                 mapOf("name" to "media", "value" to isReady.toString())
             )
         }

@@ -76,9 +76,13 @@ class ServerPage extends StatelessWidget implements PageShape {
   }
 }
 
-void checkService() {
-  // 检测当前服务状态，若已存在服务则异步更新数据回来
+void checkService() async {
   FFI.invokeMethod("check_service"); // jvm
+  // for Android 10/11,MANAGE_EXTERNAL_STORAGE permission from a system setting page
+  if(PermissionManager.isWaitingFile() && !FFI.serverModel.fileOk){
+    PermissionManager.complete("file",await PermissionManager.check("file"));
+    debugPrint("file permission finished");
+  }
 }
 
 class ServerInfo extends StatefulWidget {
@@ -268,9 +272,21 @@ class ConnectionManager extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Padding(
-                      padding: EdgeInsets.symmetric(vertical: 5.0),
-                      child: clientInfo(entry.value),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        clientInfo(entry.value),
+                        entry.value.isFileTransfer
+                            ?SizedBox.shrink()
+                            :IconButton(onPressed: (){
+                              FFI.chatModel.changeCurrentID(entry.value.id);
+                              final bar = navigationBarKey.currentWidget;
+                              if(bar!=null){
+                                bar as BottomNavigationBar;
+                                bar.onTap!(1);
+                              }
+                        }, icon: Icon(Icons.chat,color: MyTheme.accent80,))
+                      ],
                     ),
                     ElevatedButton.icon(
                         style: ButtonStyle(
@@ -338,7 +354,9 @@ class PaddingCard extends StatelessWidget {
 }
 
 Widget clientInfo(Client client) {
-  return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+  return Padding(
+      padding: EdgeInsets.symmetric(vertical: 8),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
     Row(
       children: [
         CircleAvatar(
@@ -356,7 +374,7 @@ Widget clientInfo(Client client) {
             ])
       ],
     ),
-  ]);
+  ]));
 }
 
 void toAndroidChannelInit() {
@@ -370,12 +388,19 @@ void toAndroidChannelInit() {
             FFI.serverModel.updateClientState();
             break;
           }
-        case "on_permission_changed":
+        case "on_state_changed":
           {
             var name = arguments["name"] as String;
             var value = arguments["value"] as String == "true";
-            debugPrint("from jvm:on_permission_changed,$name:$value");
+            debugPrint("from jvm:on_state_changed,$name:$value");
             FFI.serverModel.changeStatue(name, value);
+            break;
+          }
+        case "on_android_permission_result":
+          {
+            var type = arguments["type"] as String;
+            var result = arguments["result"] as bool;
+            PermissionManager.complete(type, result);
             break;
           }
       }

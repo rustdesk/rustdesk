@@ -56,6 +56,7 @@ class _HomePageState extends State<HomePage> {
             actions: _pages.elementAt(_selectedIndex).appBarActions,
           ),
           bottomNavigationBar: BottomNavigationBar(
+            key: navigationBarKey,
             items: _pages
                 .map((page) =>
                     BottomNavigationBarItem(icon: page.icon, label: page.title))

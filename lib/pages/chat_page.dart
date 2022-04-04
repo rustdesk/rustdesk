@@ -30,7 +30,7 @@ class ChatPage extends StatelessWidget implements PageShape {
             final id = entry.key;
             final user = serverModel.clients[id]?.chatUser ?? chatModel.me;
             return PopupMenuItem<int>(
-              child: Text("${user.name} - ${user.uid}"),
+              child: Text("${user.name}   ${user.uid}"),
               value: id,
             );
           }).toList();
@@ -47,18 +47,36 @@ class ChatPage extends StatelessWidget implements PageShape {
         child: Container(
             color: MyTheme.grayBg,
             child: Consumer<ChatModel>(builder: (context, chatModel, child) {
-              return DashChat(
-                inputContainerStyle: BoxDecoration(color: Colors.white70),
-                sendOnEnter: false,
-                // if true,reload keyboard everytime,need fix
-                onSend: (chatMsg) {
-                  chatModel.send(chatMsg);
-                },
-                user: chatModel.me,
-                messages: chatModel.messages[chatModel.currentID] ?? [],
-                // default scrollToBottom has bug https://github.com/fayeed/dash_chat/issues/53
-                scrollToBottom: false,
-                scrollController: chatModel.scroller,
+              final currentUser = chatModel.currentUser;
+              return Stack(
+                children: [
+                  DashChat(
+                    inputContainerStyle: BoxDecoration(color: Colors.white70),
+                    sendOnEnter: false,
+                    // if true,reload keyboard everytime,need fix
+                    onSend: (chatMsg) {
+                      chatModel.send(chatMsg);
+                    },
+                    user: chatModel.me,
+                    messages: chatModel.messages[chatModel.currentID] ?? [],
+                    // default scrollToBottom has bug https://github.com/fayeed/dash_chat/issues/53
+                    scrollToBottom: false,
+                    scrollController: chatModel.scroller,
+                  ),
+                  chatModel.currentID == ChatModel.clientModeID
+                      ? SizedBox.shrink()
+                      : Padding(
+                      padding: EdgeInsets.all(10),
+                      child: Row(
+                        children: [
+                          Icon(Icons.account_circle,
+                              color: MyTheme.accent80),
+                          SizedBox(width: 5),
+                          Text(
+                            "${currentUser.name ?? ""}   ${currentUser.uid ?? ""}",style: TextStyle(color: MyTheme.accent50),),
+                        ],
+                      )),
+                ],
               );
             })));
   }

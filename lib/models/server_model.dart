@@ -38,12 +38,40 @@ class ServerModel with ChangeNotifier {
 
   ServerModel() {
     ()async{
-      await Future.delayed(Duration(seconds: 2));
-      final audioOption = FFI.getByName('option', 'enable-audio');
-      _audioOk = audioOption.isEmpty;   // audio true by default
+      /**
+       * 1. check android permission
+       * 2. check config
+       * audio true by default (if permission on)
+       * file true by default (if permission on)
+       * input false by default (it need turning on manually everytime)
+       */
+      await Future.delayed(Duration(seconds: 1));
 
-      final fileOption = FFI.getByName('option', 'enable-file-transfer');
-      _fileOk = fileOption.isEmpty;
+      // audio
+      if(!await PermissionManager.check("audio")){
+        _audioOk = false;
+        FFI.setByName('option', jsonEncode(
+            Map()
+              ..["name"] = "enable-audio"
+              ..["value"] = "N"));
+      }else{
+        final audioOption = FFI.getByName('option', 'enable-audio');
+        _audioOk = audioOption.isEmpty;
+      }
+
+      // file
+      if(!await PermissionManager.check("file")) {
+        _fileOk = false;
+        FFI.setByName('option', jsonEncode(
+            Map()
+              ..["name"] = "enable-file-transfer"
+              ..["value"] = "N"));
+      } else{
+        final fileOption = FFI.getByName('option', 'enable-file-transfer');
+        _fileOk = fileOption.isEmpty;
+      }
+
+      // input (mouse control)
       Map<String, String> res = Map()
         ..["name"] = "enable-keyboard"
         ..["value"] = 'N';
@@ -52,7 +80,18 @@ class ServerModel with ChangeNotifier {
     }();
   }
 
-  toggleAudio(){
+  toggleAudio() async {
+    if(!_audioOk && !await PermissionManager.check("audio")){
+      debugPrint("toggleAudio 无权限 开始获取权限");
+      final res = await PermissionManager.request("audio");
+      debugPrint("权限请求结果：$res");
+
+      if(!res){
+        // TODO handle fail
+        return;
+      }
+    }
+
     _audioOk = !_audioOk;
     Map<String, String> res = Map()
       ..["name"] = "enable-audio"
@@ -61,7 +100,15 @@ class ServerModel with ChangeNotifier {
     notifyListeners();
   }
 
-  toggleFile() {
+  toggleFile() async {
+    if(!_fileOk && !await PermissionManager.check("file")){
+      final res = await PermissionManager.request("file");
+      if(!res){
+        // TODO handle fail
+        return;
+      }
+    }
+
     _fileOk = !_fileOk;
     Map<String, String> res = Map()
       ..["name"] = "enable-file-transfer"
@@ -128,7 +175,7 @@ class ServerModel with ChangeNotifier {
     getIDPasswd();
   }
 
-  Future<Null> stopService() async {
+    Future<Null> stopService() async {
     _isStart = false;
     _interval?.cancel();
     _interval = null;
@@ -407,4 +454,55 @@ showInputWarnAlert() async {
         );
       });
   DialogManager.drop();
+}
+
+class PermissionManager {
+  static Completer<bool>? _completer;
+  static Timer? _timer;
+  static var _current = "";
+
+  static final permissions = ["audio","file"];
+
+  static bool isWaitingFile(){
+    if(_completer != null){
+      return !_completer!.isCompleted && _current == "file";
+    }
+    return false;
+  }
+
+  static Future<bool> check(String type){
+    if(!permissions.contains(type))
+      return Future.error("Wrong permission!$type");
+    return FFI.invokeMethod("check_permission",type);
+  }
+
+  static Future<bool> request(String type){
+    if(!permissions.contains(type))
+      return Future.error("Wrong permission!$type");
+
+    _current = type;
+    _completer = Completer<bool>();
+    FFI.invokeMethod("request_permission",type);
+
+    // timeout
+    _timer?.cancel();
+    _timer = Timer(Duration(seconds: 60),(){
+      if(_completer == null) return;
+      if(!_completer!.isCompleted){
+        _completer!.complete(false);
+      }
+      _completer = null;
+      _current = "";
+    });
+    return _completer!.future;
+  }
+
+  static complete(String type,bool res){
+    if(type != _current){
+      res = false;
+    }
+    _timer?.cancel();
+    _completer?.complete(res);
+    _current = "";
+  }
 }

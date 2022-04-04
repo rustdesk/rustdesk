@@ -29,10 +29,21 @@ class ChatModel with ChangeNotifier {
 
   int get currentID => _currentID;
 
+  ChatUser get currentUser =>
+      FFI.serverModel.clients[_currentID]?.chatUser ?? me;
+
+
   changeCurrentID(int id){
     if(_messages.containsKey(id)){
       _currentID = id;
       notifyListeners();
+    } else {
+      final chatUser = FFI.serverModel.clients[id]?.chatUser;
+      if(chatUser == null){
+        return debugPrint("Failed to changeCurrentID,remote user doesn't exist");
+      }
+      _messages[id] = [];
+      _currentID = id;
     }
   }
 
