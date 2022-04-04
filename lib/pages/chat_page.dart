@@ -22,7 +22,7 @@ class ChatPage extends StatelessWidget implements PageShape {
   @override
   final appBarActions = [
     PopupMenuButton<int>(
-        icon: Icon(Icons.list_alt),
+        icon: Icon(Icons.more_vert),
         itemBuilder: (context) {
           final chatModel = FFI.chatModel;
           final serverModel = FFI.serverModel;
@@ -194,9 +194,7 @@ class _ChatWindowOverlayState extends State<ChatWindowOverlay> {
     });
   }
 
-  checkScreenSize() {
-    // TODO 横屏处理
-  }
+  checkScreenSize() {}
 
   checkKeyboard() {
     final bottomHeight = MediaQuery.of(context).viewInsets.bottom;

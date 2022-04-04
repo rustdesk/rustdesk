@@ -419,17 +419,6 @@ showInputWarnAlert() async {
         DialogManager.register(alertContext);
         return AlertDialog(
           title: Text(translate("How to get Android input permission?")),
-          // content: Text.rich(TextSpan(style: TextStyle(), children: [
-          //   // [已安装的服务] : [Installed Services]
-          //   // 请在接下来的系统设置页面里，找到并进入[Installed Services]页面，将[RustDesk Input]服务开启。
-          //   TextSpan(text: "请在接下来的系统设置页\n进入"),
-          //   TextSpan(text: " [服务] ", style: TextStyle(color: MyTheme.accent)),
-          //   TextSpan(text: "配置页面\n将"),
-          //   TextSpan(
-          //       text: " [RustDesk Input] ",
-          //       style: TextStyle(color: MyTheme.accent)),
-          //   TextSpan(text: "服务开启")
-          // ])),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [

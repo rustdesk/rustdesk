@@ -6,7 +6,6 @@ import android.content.Intent
 import android.os.Build
 import android.widget.Toast
 
-// 开机自启动 此功能暂不开启
 class BootReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         if ("android.intent.action.BOOT_COMPLETED" == intent.action){

@@ -286,37 +286,40 @@ class _WebMenuState extends State<WebMenu> {
   Widget build(BuildContext context) {
     Provider.of<FfiModel>(context);
     final username = getUsername();
-    return PopupMenuButton<String>(itemBuilder: (context) {
-      return [
-        PopupMenuItem(
-          child: Text(translate('ID/Relay Server')),
-          value: "server",
-        ),
-        PopupMenuItem(
-          child: Text(username == null
-              ? translate("Login")
-              : translate("Logout") + ' ($username)'),
-          value: "login",
-        ),
-        PopupMenuItem(
-          child: Text(translate('About') + ' RustDesk'),
-          value: "about",
-        )
-      ];
-    }, onSelected: (value) {
-      if (value == 'server') {
-        showServer();
-      }
-      if (value == 'about') {
-        showAbout();
-      }
-      if (value == 'login') {
-        if (username == null) {
-          showLogin();
-        } else {
-          logout();
-        }
-      }
-    });
+    return PopupMenuButton<String>(
+        icon: Icon(Icons.more_vert),
+        itemBuilder: (context) {
+          return [
+            PopupMenuItem(
+              child: Text(translate('ID/Relay Server')),
+              value: "server",
+            ),
+            PopupMenuItem(
+              child: Text(username == null
+                  ? translate("Login")
+                  : translate("Logout") + ' ($username)'),
+              value: "login",
+            ),
+            PopupMenuItem(
+              child: Text(translate('About') + ' RustDesk'),
+              value: "about",
+            )
+          ];
+        },
+        onSelected: (value) {
+          if (value == 'server') {
+            showServer();
+          }
+          if (value == 'about') {
+            showAbout();
+          }
+          if (value == 'login') {
+            if (username == null) {
+              showLogin();
+            } else {
+              logout();
+            }
+          }
+        });
   }
 }
