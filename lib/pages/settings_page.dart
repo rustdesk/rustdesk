@@ -32,9 +32,10 @@ class _SettingsState extends State<SettingsPage> {
     Provider.of<FfiModel>(context);
     final username = getUsername();
     return SettingsList(
+      contentPadding: EdgeInsets.symmetric(horizontal: 12),
       sections: [
         SettingsSection(
-          title: Text(""),
+          title: Text(translate("Account")),
           tiles: [
             SettingsTile.navigation(
               title: Text(username == null

@@ -12,8 +12,8 @@ class ChatModel with ChangeNotifier {
   final Map<int, List<ChatMessage>> _messages = Map()..[clientModeID] = [];
 
   final ChatUser me = ChatUser(
-    uid:"",
-    name: "me",
+    uid: "",
+    name: "Me",
   );
 
   final _scroller = ScrollController();
@@ -29,15 +29,15 @@ class ChatModel with ChangeNotifier {
   ChatUser get currentUser =>
       FFI.serverModel.clients[_currentID]?.chatUser ?? me;
 
-
-  changeCurrentID(int id){
-    if(_messages.containsKey(id)){
+  changeCurrentID(int id) {
+    if (_messages.containsKey(id)) {
       _currentID = id;
       notifyListeners();
     } else {
       final chatUser = FFI.serverModel.clients[id]?.chatUser;
-      if(chatUser == null){
-        return debugPrint("Failed to changeCurrentID,remote user doesn't exist");
+      if (chatUser == null) {
+        return debugPrint(
+            "Failed to changeCurrentID,remote user doesn't exist");
       }
       _messages[id] = [];
       _currentID = id;
@@ -51,32 +51,29 @@ class ChatModel with ChangeNotifier {
       showChatIconOverlay();
     }
     late final chatUser;
-    if(id == clientModeID){
+    if (id == clientModeID) {
       chatUser = ChatUser(
         name: FFI.ffiModel.pi.username,
         uid: FFI.getId(),
       );
-    }else{
+    } else {
       chatUser = FFI.serverModel.clients[id]?.chatUser;
     }
-    if(chatUser == null){
+    if (chatUser == null) {
       return debugPrint("Failed to receive msg,user doesn't exist");
     }
-    if(!_messages.containsKey(id)){
+    if (!_messages.containsKey(id)) {
       _messages[id] = [];
     }
-    _messages[id]!.add(ChatMessage(
-        text: text,
-        user: chatUser));
+    _messages[id]!.add(ChatMessage(text: text, user: chatUser));
     _currentID = id;
     notifyListeners();
     scrollToBottom();
   }
 
-  scrollToBottom(){
+  scrollToBottom() {
     Future.delayed(Duration(milliseconds: 500), () {
-      _scroller.animateTo(
-          _scroller.position.maxScrollExtent,
+      _scroller.animateTo(_scroller.position.maxScrollExtent,
           duration: Duration(milliseconds: 200),
           curve: Curves.fastLinearToSlowEaseIn);
     });

@@ -22,7 +22,7 @@ class ChatPage extends StatelessWidget implements PageShape {
   @override
   final appBarActions = [
     PopupMenuButton<int>(
-        icon: Icon(Icons.more_vert),
+        icon: Icon(Icons.group),
         itemBuilder: (context) {
           final chatModel = FFI.chatModel;
           final serverModel = FFI.serverModel;
@@ -66,16 +66,18 @@ class ChatPage extends StatelessWidget implements PageShape {
                   chatModel.currentID == ChatModel.clientModeID
                       ? SizedBox.shrink()
                       : Padding(
-                      padding: EdgeInsets.all(10),
-                      child: Row(
-                        children: [
-                          Icon(Icons.account_circle,
-                              color: MyTheme.accent80),
-                          SizedBox(width: 5),
-                          Text(
-                            "${currentUser.name ?? ""}   ${currentUser.uid ?? ""}",style: TextStyle(color: MyTheme.accent50),),
-                        ],
-                      )),
+                          padding: EdgeInsets.all(12),
+                          child: Row(
+                            children: [
+                              Icon(Icons.account_circle,
+                                  color: MyTheme.accent80),
+                              SizedBox(width: 5),
+                              Text(
+                                "${currentUser.name ?? ""}   ${currentUser.uid ?? ""}",
+                                style: TextStyle(color: MyTheme.accent50),
+                              ),
+                            ],
+                          )),
                 ],
               );
             })));
