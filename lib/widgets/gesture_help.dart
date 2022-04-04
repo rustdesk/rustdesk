@@ -60,12 +60,20 @@ class _GestureHelpState extends State<GestureHelp> {
 
   @override
   Widget build(BuildContext context) {
+    final size = MediaQuery.of(context).size;
+    final space = 12.0;
+    var width = size.width - 2 * space;
+    final minWidth = 90;
+    if (size.width > minWidth + 2 * space) {
+      final n = (size.width / (minWidth + 2 * space)).floor();
+      width = size.width / n - 2 * space;
+    }
     return Center(
         child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+            padding: const EdgeInsets.symmetric(vertical: 12.0),
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
-              crossAxisAlignment: CrossAxisAlignment.start,
+              crossAxisAlignment: CrossAxisAlignment.center,
               children: <Widget>[
                 ToggleSwitch(
                   initialLabelIndex: _selectedIndex,
@@ -77,7 +85,6 @@ class _GestureHelpState extends State<GestureHelp> {
                   labels: [translate("TouchPad mode"), translate("Touch mode")],
                   icons: [Icons.mouse, Icons.touch_app],
                   onToggle: (index) {
-                    debugPrint(index.toString());
                     setState(() {
                       if (_selectedIndex != index) {
                         _selectedIndex = index ?? 0;
@@ -87,60 +94,72 @@ class _GestureHelpState extends State<GestureHelp> {
                     });
                   },
                 ),
-                const SizedBox(height: 15),
+                const SizedBox(height: 30),
                 Container(
-                    child: Column(
-                  mainAxisAlignment: MainAxisAlignment.start,
-                  crossAxisAlignment: CrossAxisAlignment.center,
+                    child: Wrap(
+                  spacing: space,
+                  runSpacing: 2 * space,
                   children: _touchMode
                       ? [
                           GestureInfo(
+                              width,
                               GestureIcons.icon_Mobile_Touch,
                               translate("One-Finger Tap"),
                               translate("Left Mouse")),
                           GestureInfo(
+                              width,
                               GestureIcons.icon_gesture_press_hold,
                               translate("One-Long Tap"),
                               translate("Right Mouse")),
                           GestureInfo(
+                              width,
                               GestureIcons.icon_gesture_f_swipe_right,
                               translate("One-Finger Move"),
                               translate("Mouse Drag")),
                           GestureInfo(
+                              width,
                               GestureIcons.icon_gesture_f_drag_up_down_,
                               translate("Two-Finger vertically"),
                               translate("Mouse Wheel")),
                           GestureInfo(
+                              width,
                               GestureIcons.icon_gesture_f_drag,
                               translate("Two-Finger Move"),
                               translate("Canvas Move")),
                           GestureInfo(
+                              width,
                               GestureIcons.icon_gesture_pinch,
                               translate("Pinch to Zoom"),
                               translate("Canvas Zoom")),
                         ]
                       : [
                           GestureInfo(
+                              width,
                               GestureIcons.icon_Mobile_Touch,
                               translate("One-Finger Tap"),
                               translate("Left Mouse")),
                           GestureInfo(
+                              width,
                               GestureIcons.icon_gesture_f_tap_,
                               translate("Two-Finger Tap"),
                               translate("Right Mouse")),
                           GestureInfo(
+                              width,
                               GestureIcons.icon_gesture_f_swipe_right,
                               translate("Double Tap & Move"),
                               translate("Mouse Drag")),
                           GestureInfo(
+                              width,
                               GestureIcons.icon_gesture_f_drag_up_down_,
                               translate("Two-Finger vertically"),
                               translate("Mouse Wheel")),
                           GestureInfo(
+                              width,
                               GestureIcons.icon_gesture_f_drag,
                               translate("Two-Finger Move"),
                               translate("Canvas Move")),
                           GestureInfo(
+                              width,
                               GestureIcons.icon_gesture_pinch,
                               translate("Pinch to Zoom"),
                               translate("Canvas Zoom")),
@@ -152,45 +171,37 @@ class _GestureHelpState extends State<GestureHelp> {
 }
 
 class GestureInfo extends StatelessWidget {
-  const GestureInfo(this.icon, this.fromText, this.toText, {Key? key})
+  const GestureInfo(this.width, this.icon, this.fromText, this.toText,
+      {Key? key})
       : super(key: key);
 
   final String fromText;
   final String toText;
   final IconData icon;
+  final double width;
 
-  final textSize = 14.0;
-  final textColor = MyTheme.accent80;
   final iconSize = 35.0;
-  final iconColor = MyTheme.darkGray;
+  final iconColor = MyTheme.accent;
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-        padding: const EdgeInsets.symmetric(vertical: 5),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.start,
-          crossAxisAlignment: CrossAxisAlignment.center,
+    return Container(
+        width: this.width,
+        child: Column(
           children: [
-            Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 0),
-                child: Icon(
-                  icon,
-                  size: iconSize,
-                  color: iconColor,
-                )),
-            Row(
-              children: [
-                Text(fromText,
-                    style: TextStyle(fontSize: textSize, color: textColor)),
-                Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 5),
-                    child: Icon(Icons.arrow_forward_rounded,
-                        size: 20, color: iconColor)),
-                Text(toText,
-                    style: TextStyle(fontSize: textSize, color: textColor))
-              ],
-            )
+            Icon(
+              icon,
+              size: iconSize,
+              color: iconColor,
+            ),
+            SizedBox(height: 6),
+            Text(fromText,
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 10, color: Colors.grey)),
+            SizedBox(height: 3),
+            Text(toText,
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 12, color: Colors.black))
           ],
         ));
   }
