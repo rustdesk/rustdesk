@@ -16,7 +16,6 @@
         android:label="RustDesk"
         android:requestLegacyExternalStorage="true">
 
-        <!-- 暂时不开启接收开机广播的功能 enabled设置为false-->
         <receiver
             android:name=".BootReceiver"
             android:enabled="false"

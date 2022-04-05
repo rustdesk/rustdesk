@@ -24,6 +24,7 @@ import android.os.*
 import android.util.Log
 import android.view.Surface
 import android.view.Surface.FRAME_RATE_COMPATIBILITY_DEFAULT
+import androidx.annotation.Keep
 import androidx.annotation.RequiresApi
 import androidx.core.app.ActivityCompat
 import androidx.core.app.NotificationCompat
@@ -65,6 +66,7 @@ class MainService : Service() {
     }
 
     // rust call jvm
+    @Keep
     fun rustGetVideoRaw(): ByteArray {
         return if (videoData != null) {
             videoData!!
@@ -73,6 +75,7 @@ class MainService : Service() {
         }
     }
 
+    @Keep
     fun rustGetAudioRaw(): FloatArray {
         return if (isNewData && audioData != null) {
             isNewData = false
@@ -82,12 +85,14 @@ class MainService : Service() {
         }
     }
 
+    @Keep
     fun rustGetAudioRawLen(): Int {
         return if (isNewData && audioData != null && audioData!!.isNotEmpty()) {
             audioData!!.size
         } else 0
     }
 
+    @Keep
     fun rustGetByName(name: String): String {
         return when (name) {
             "screen_size" -> "${INFO.screenWidth}:${INFO.screenHeight}"
@@ -95,6 +100,7 @@ class MainService : Service() {
         }
     }
 
+    @Keep
     fun rustSetByName(name: String, arg1: String, arg2: String) {
         when (name) {
             "try_start_without_auth" -> {
