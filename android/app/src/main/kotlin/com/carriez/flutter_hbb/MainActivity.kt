@@ -31,22 +31,23 @@ class MainActivity : FlutterActivity() {
     @RequiresApi(Build.VERSION_CODES.M)
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
-        Log.d(logTag, "MainActivity configureFlutterEngine,bind to main service")
-        Intent(this, MainService::class.java).also {
-            bindService(it, serviceConnection, Context.BIND_AUTO_CREATE)
-        }
         updateMachineInfo()
         flutterMethodChannel = MethodChannel(
             flutterEngine.dartExecutor.binaryMessenger,
             channelTag
         ).apply {
+            // make sure result is set, otherwise flutter will await forever
             setMethodCallHandler { call, result ->
                 when (call.method) {
                     "init_service" -> {
-                        Log.d(logTag, "event from flutter,getPer")
-                        if(mainService?.isReady == false){
-                            getMediaProjection()
+                        Intent(activity, MainService::class.java).also {
+                            bindService(it, serviceConnection, Context.BIND_AUTO_CREATE)
                         }
+                        if(mainService?.isReady == true){
+                            result.success(false)
+                            return@setMethodCallHandler
+                        }
+                        getMediaProjection()
                         result.success(true)
                     }
                     "start_capture" -> {
@@ -68,11 +69,15 @@ class MainActivity : FlutterActivity() {
                     "check_permission" -> {
                         if(call.arguments is String){
                             result.success(checkPermission(context, call.arguments as String))
+                        } else {
+                            result.success(false)
                         }
                     }
                     "request_permission" -> {
                         if(call.arguments is String){
                             requestPermission(context, call.arguments as String)
+                        } else {
+                            result.success(false)
                         }
                     }
                     "check_video_permission" -> {
@@ -91,6 +96,7 @@ class MainActivity : FlutterActivity() {
                             "on_state_changed",
                             mapOf("name" to "media", "value" to mainService?.isReady.toString())
                         )
+                        result.success(true)
                     }
                     "init_input" -> {
                         initInput()
@@ -105,15 +111,20 @@ class MainActivity : FlutterActivity() {
                             "on_state_changed",
                             mapOf("name" to "input", "value" to InputService.isOpen.toString())
                         )
+                        result.success(true)
                     }
                     "cancel_notification" -> {
                         try {
                             val id = call.arguments as Int
                             Log.d(logTag,"cancel_notification id:$id")
                             mainService?.cancelNotification(id)
-                        }finally { }
+                        }finally {
+                            result.success(true)
+                        }
                     }
-                    else -> {}
+                    else -> {
+                        result.error("-1","No such method",null)
+                    }
                 }
             }
         }
