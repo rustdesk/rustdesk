@@ -265,5 +265,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("android_stop_service_tip", "Fechar o serviço irá automaticamente fechar todas as conexões estabelecidas."),
         ("android_version_audio_tip", "A versão atual do Android não suporta captura de áudio, por favor atualize para o Android 10 ou maior."),
         ("android_start_service_tip", "Toque [Iniciar Serviço] ou ABRA a permissão [Captura de Tela] para iniciar o serviço de compartilhamento de tela."),
+        ("Account", "Conta"),
     ].iter().cloned().collect();
 }

@@ -265,5 +265,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("android_stop_service_tip", ""),
         ("android_version_audio_tip", ""),
         ("android_start_service_tip", ""),
+        ("Account", ""),
     ].iter().cloned().collect();
 }

@@ -265,5 +265,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("android_stop_service_tip", "Закрытие службы автоматически закроет все установленные соединения."),
         ("android_version_audio_tip", "Текущая версия Android не поддерживает захват звука, обновите ее до Android 10 или выше."),
         ("android_start_service_tip", "Коснитесь [Запуск связанного сервера] или ОТКРЫТЬ разрешение [Скриншот], чтобы запустить службу демонстрации экрана."),
+        ("Account", "Аккаунт"),
     ].iter().cloned().collect();
 }

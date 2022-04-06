@@ -265,5 +265,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("android_stop_service_tip", "Durch das Schließen des Dienstes werden automatisch alle hergestellten Verbindungen geschlossen."),
         ("android_version_audio_tip", "Die aktuelle Android-Version unterstützt keine Audioaufnahme, bitte aktualisieren Sie auf Android 10 oder höher."),
         ("android_start_service_tip", "Tippen Sie auf [Dienst starten] oder ÖFFNEN Sie die Berechtigung [Bildschirmaufnahme], um den Bildschirmfreigabedienst zu starten."),
+        ("Account", "Konto"),
     ].iter().cloned().collect();
 }
