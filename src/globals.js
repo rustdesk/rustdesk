@@ -48,11 +48,12 @@ export function pushEvent(name, payload) {
   events.push(payload);
 }
 
-let yuvWorker = new Worker("./yuv.js");
-/*
+let yuvWorker;
 let yuvCanvas;
 let gl;
 let pixels;
+let flipPixels;
+let oldSize;
 if (YUVCanvas.WebGLFrameSink.isAvailable()) {
   var canvas = document.createElement('canvas');
   yuvCanvas = YUVCanvas.attach(canvas, { webGL: true });
@@ -60,21 +61,38 @@ if (YUVCanvas.WebGLFrameSink.isAvailable()) {
 } else {
   yuvWorker = new Worker("./yuv.js");
 }
-*/
+let testSpeed = [0, 0];
 
 export function draw(frame) {
   if (yuvWorker) {
     // frame's (y/u/v).bytes already detached, can not transferrable any more.
     yuvWorker.postMessage(frame);
   } else {
-    var now = new Date().getTime();
+    var tm0 = new Date().getTime();
     yuvCanvas.drawFrame(frame);
-    console.log(new Date().getTime() - now);
-    now = new Date().getTime();
-    if (!pixels) pixels = new Uint8Array(canvas.width * canvas.height * 4);
-    gl.readPixels(0, 0, canvas.width, canvas.height, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
-    console.log(new Date().getTime() - now);
+    var width = canvas.width;
+    var height = canvas.height;
+    var size = width * height * 4;
+    if (size != oldSize) {
+      pixels = new Uint8Array(size);
+      flipPixels = new Uint8Array(size);
+      oldSize = size;
+    }
+    gl.readPixels(0, 0, width, height, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
+    const row = width * 4;
+    const end = (height - 1) * row;
+    for (let i = 0; i < size; i += row) {
+      flipPixels.set(pixels.subarray(i, i + row), end - i);
+    }
+    currentFrame = flipPixels;
+    testSpeed[1] += new Date().getTime() - tm0;
+    testSpeed[0] += 1;
+    if (testSpeed[0] > 30) {
+      console.log('gl: ' + parseInt('' + testSpeed[1] / testSpeed[0]));
+      testSpeed = [0, 0];
+    }
   }
+  /*
   var testCanvas = document.getElementById("test-yuv-decoder-canvas");
   if (testCanvas && currentFrame) {
     var ctx = testCanvas.getContext("2d");
@@ -84,6 +102,7 @@ export function draw(frame) {
     img.data.set(currentFrame);
     ctx.putImageData(img, 0, 0);
   }
+  */
 }
 
 export function sendOffCanvas(c) {
