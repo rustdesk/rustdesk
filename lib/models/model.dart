@@ -169,9 +169,8 @@ class FfiModel with ChangeNotifier {
         }
         _decoding = true;
         final pid = FFI.id;
-        ui.decodeImageFromPixels(
-            rgba, _display.width, _display.height, ui.PixelFormat.bgra8888,
-            (image) {
+        ui.decodeImageFromPixels(rgba, _display.width, _display.height,
+            isWeb ? ui.PixelFormat.rgba8888 : ui.PixelFormat.bgra8888, (image) {
           PlatformFFI.clearRgbaFrame();
           _decoding = false;
           if (FFI.id != pid) return;
@@ -849,7 +848,7 @@ class FFI {
     PlatformFFI.setMethodCallHandler(callback);
   }
 
-  static Future<bool> invokeMethod(String method,[ dynamic arguments ]) async {
+  static Future<bool> invokeMethod(String method, [dynamic arguments]) async {
     return await PlatformFFI.invokeMethod(method, arguments);
   }
 }
