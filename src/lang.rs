@@ -38,6 +38,8 @@ pub fn translate_locale(name: String, locale: &str) -> String {
         "ru" => ru::T.deref(),
         "eo" => eo::T.deref(),
         "ptbr" => ptbr::T.deref(),
+        "br" => ptbr::T.deref(),
+        "pt" => ptbr::T.deref(),
         _ => en::T.deref(),
     };
     if let Some(v) = m.get(&name as &str) {
