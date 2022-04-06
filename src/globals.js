@@ -75,6 +75,15 @@ export function draw(frame) {
     gl.readPixels(0, 0, canvas.width, canvas.height, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
     console.log(new Date().getTime() - now);
   }
+  var testCanvas = document.getElementById("test-yuv-decoder-canvas");
+  if (testCanvas && currentFrame) {
+    var ctx = testCanvas.getContext("2d");
+    testCanvas.width = frame.format.displayWidth;
+    testCanvas.height = frame.format.displayHeight;
+    var img = ctx.createImageData(testCanvas.width, testCanvas.height);
+    img.data.set(currentFrame);
+    ctx.putImageData(img, 0, 0);
+  }
 }
 
 export function sendOffCanvas(c) {
