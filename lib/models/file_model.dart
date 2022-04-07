@@ -70,6 +70,9 @@ class FileModel extends ChangeNotifier {
   final _jobResultListener = JobResultListener<Map<String, dynamic>>();
 
   toggleSelectMode() {
+    if (jobState == JobState.inProgress) {
+      return;
+    }
     _selectMode = !_selectMode;
     notifyListeners();
   }
@@ -416,6 +419,7 @@ class FileModel extends ChangeNotifier {
 
   cancelJob(int id) {
     FFI.setByName("cancel_job", id.toString());
+    jobReset();
   }
 
   changeSortStyle(SortBy sort) {
@@ -670,7 +674,7 @@ class PathUtil {
     return pathUtil.split(path);
   }
 
-  static String dirname(String path, bool isWindows){
+  static String dirname(String path, bool isWindows) {
     final pathUtil = isWindows ? windowsContext : posixContext;
     return pathUtil.dirname(path);
   }

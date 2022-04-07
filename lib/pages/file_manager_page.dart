@@ -359,7 +359,7 @@ class _FileManagerPageState extends State<FileManagerPage> {
       child: Column(
         children: [
           Padding(
-            padding: EdgeInsets.fromLTRB(30,5,30,0),
+            padding: EdgeInsets.fromLTRB(30, 5, 30, 0),
             child: Text(
               model.currentDir.path,
               style: TextStyle(color: MyTheme.darkGray),
@@ -427,7 +427,7 @@ class _FileManagerPageState extends State<FileManagerPage> {
           title: translate("Waiting"),
           text:
               "${translate("Speed")}:  ${readableFileSize(model.jobProgress.speed)}/s",
-          onCanceled: model.cancelJob(model.jobProgress.id),
+          onCanceled: () => model.cancelJob(model.jobProgress.id),
         );
       case JobState.done:
         return BottomSheetBody(
