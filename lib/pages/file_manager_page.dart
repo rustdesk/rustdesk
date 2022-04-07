@@ -4,6 +4,7 @@ import 'package:flutter_easyloading/flutter_easyloading.dart';
 import 'package:flutter_hbb/models/file_model.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_breadcrumb/flutter_breadcrumb.dart';
+import 'package:toggle_switch/toggle_switch.dart';
 
 import '../common.dart';
 import '../models/model.dart';
@@ -58,18 +59,26 @@ class _FileManagerPageState extends State<FileManagerPage> {
               backgroundColor: MyTheme.grayBg,
               appBar: AppBar(
                 leading: Row(children: [
-                  IconButton(icon: Icon(Icons.arrow_back), onPressed: goBack),
                   IconButton(icon: Icon(Icons.close), onPressed: clientClose),
                 ]),
-                leadingWidth: 200,
                 centerTitle: true,
-                title: Text(translate(model.isLocal ? "Local" : "Remote")),
-                actions: [
-                  IconButton(
-                    icon: Icon(Icons.change_circle),
-                    onPressed: () => model.togglePage(),
-                  )
-                ],
+                title: ToggleSwitch(
+                  initialLabelIndex: model.isLocal ? 0 : 1,
+                  activeBgColor: [MyTheme.idColor],
+                  inactiveBgColor: MyTheme.grayBg,
+                  totalSwitches: 2,
+                  minWidth: 100,
+                  fontSize: 15,
+                  iconSize: 18,
+                  labels: [translate("Local"), translate("Remote")],
+                  icons: [Icons.phone_android_sharp, Icons.screen_share],
+                  onToggle: (index) {
+                    final current = model.isLocal ? 0 : 1;
+                    if (index != current) {
+                      model.togglePage();
+                    }
+                  },
+                ),
               ),
               body: body(),
               bottomSheet: bottomSheet(),
@@ -428,9 +437,17 @@ class _FileManagerPageState extends State<FileManagerPage> {
     final list = PathUtil.split(path, model.currentIsWindows);
     final breadCrumbList = [
       BreadCrumbItem(
-          content: IconButton(
-        icon: Icon(Icons.home_filled),
-        onPressed: onHome,
+          content: Row(
+        children: [
+          IconButton(
+            icon: Icon(Icons.arrow_upward),
+            onPressed: goBack,
+          ),
+          IconButton(
+            icon: Icon(Icons.home_filled),
+            onPressed: onHome,
+          )
+        ],
       ))
     ];
     breadCrumbList.addAll(list.asMap().entries.map((e) => BreadCrumbItem(
