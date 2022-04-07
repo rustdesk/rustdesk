@@ -3,7 +3,6 @@ import 'dart:convert';
 import 'package:flutter_easyloading/flutter_easyloading.dart';
 import 'package:flutter_hbb/common.dart';
 import 'package:flutter_hbb/pages/file_manager_page.dart';
-import 'package:path/path.dart' as p;
 import 'package:flutter/material.dart';
 import 'package:path/path.dart' as Path;
 
@@ -110,6 +109,7 @@ class FileModel extends ChangeNotifier {
         final fd = FileDirectory.fromJson(jsonDecode(evt['value']));
         fd.format(_remoteOption.isWindows, sort: _sortStyle);
         _remoteOption.home = fd.path;
+        debugPrint("init remote home:${fd.path}");
         _currentRemoteDir = fd;
         notifyListeners();
         return;
@@ -229,7 +229,10 @@ class FileModel extends ChangeNotifier {
   }
 
   goToParentDirectory() {
-    openDirectory(currentDir.parent);
+    final isWindows =
+      _isLocal ? _localOption.isWindows : _remoteOption.isWindows;
+    final parent = PathUtil.dirname(currentDir.path, isWindows);
+    openDirectory(parent);
   }
 
   sendFiles(SelectedItems items) {
@@ -574,8 +577,6 @@ class FileDirectory {
   int id = 0;
   String path = "";
 
-  String get parent => p.dirname(path);
-
   FileDirectory();
 
   FileDirectory.fromJson(Map<String, dynamic> json) {
@@ -669,6 +670,11 @@ class PathUtil {
   static List<String> split(String path, bool isWindows) {
     final pathUtil = isWindows ? windowsContext : posixContext;
     return pathUtil.split(path);
+  }
+
+  static String dirname(String path, bool isWindows){
+    final pathUtil = isWindows ? windowsContext : posixContext;
+    return pathUtil.dirname(path);
   }
 }
 
