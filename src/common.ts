@@ -32,8 +32,10 @@ export async function decompress(compressedArray: Uint8Array) {
   }
 }
 
+const LANG = getLang();
+
 export function translate(locale: string, text: string): string {
-  const lang = locale.substring(locale.length - 2).toLowerCase();
+  const lang = LANG || locale.substring(locale.length - 2).toLowerCase();
   let en = LANGS.en as any;
   let dict = (LANGS as any)[lang];
   if (!dict) dict = en;
@@ -62,4 +64,14 @@ export function mapKey(name: string, isDesktop: Boolean) {
 
 export async function sleep(ms: number) {
   await new Promise((r) => setTimeout(r, ms));
+}
+
+function getLang(): string {
+  try {
+    const queryString = window.location.search;
+    const urlParams = new URLSearchParams(queryString);
+    return urlParams.get("lang") || "";
+  } catch (e) {
+    return "";
+  }
 }

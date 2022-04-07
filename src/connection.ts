@@ -17,6 +17,7 @@ const SCHEMA = "ws://";
 
 type MsgboxCallback = (type: string, title: string, text: string) => void;
 type DrawCallback = (data: Uint8Array) => void;
+//const cursorCanvas = document.createElement("canvas");
 
 export default class Connection {
   _msgs: any[];
@@ -32,6 +33,7 @@ export default class Connection {
   _password: Uint8Array | undefined;
   _options: any;
   _videoTestSpeed: number[];
+  //_cursors: { [name: number]: any };
 
   constructor() {
     this._msgbox = globals.msgbox;
@@ -39,6 +41,7 @@ export default class Connection {
     this._msgs = [];
     this._id = "";
     this._videoTestSpeed = [0, 0];
+    //this._cursors = {};
   }
 
   async start(id: string) {
@@ -269,7 +272,7 @@ export default class Connection {
           cb.content = c;
         }
         try {
-          await navigator.clipboard.writeText(new TextDecoder().decode(cb.content));
+          globals.copyToClipboard(new TextDecoder().decode(cb.content));
         } catch (e) {
           console.error(e);
         }
@@ -280,6 +283,29 @@ export default class Connection {
         if (!c) continue;
         cd.colors = c;
         globals.pushEvent("cursor_data", cd);
+        /*
+        let ctx = cursorCanvas.getContext("2d");
+        cursorCanvas.width = cd.width;
+        cursorCanvas.height = cd.height;
+        let imgData = new ImageData(
+          new Uint8ClampedArray(c),
+          cd.width,
+          cd.height
+        );
+        ctx?.clearRect(0, 0, cd.width, cd.height);
+        ctx?.putImageData(imgData, 0, 0);
+        let url = cursorCanvas.toDataURL();
+        const img = document.createElement("img");
+        img.src = url;
+        this._cursors[cd.id] = img;
+        //cursorCanvas.width /= 2.;
+        //cursorCanvas.height /= 2.;
+        //ctx?.drawImage(img, cursorCanvas.width, cursorCanvas.height);
+        url = cursorCanvas.toDataURL();
+        document.body.style.cursor =
+          "url(" + url + ")" + cd.hotx + " " + cd.hoty + ", default";
+        console.log(document.body.style.cursor);
+        */
       } else if (msg?.cursor_id) {
         globals.pushEvent("cursor_id", { id: msg?.cursor_id });
       } else if (msg?.cursor_position) {
