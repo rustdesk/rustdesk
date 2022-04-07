@@ -969,6 +969,25 @@ impl LoginConfigHandler {
         self.save_config(config);
     }
 
+    fn get_remote_dir(&self) -> String {
+        serde_json::from_str::<HashMap<String, String>>(&self.get_option("remote_dir"))
+            .unwrap_or_default()
+            .remove(&self.info.username)
+            .unwrap_or_default()
+    }
+
+    pub fn get_all_remote_dir(&self, path: String) -> String {
+        let d = self.get_option("remote_dir");
+        let user = self.info.username.clone();
+        let mut x = serde_json::from_str::<HashMap<String, String>>(&d).unwrap_or_default();
+        if path.is_empty() {
+            x.remove(&user);
+        } else {
+            x.insert(user, path);
+        }
+        serde_json::to_string::<HashMap<String, String>>(&x).unwrap_or_default()
+    }
+
     fn create_login_msg(&self, password: Vec<u8>) -> Message {
         #[cfg(any(target_os = "android", target_os = "ios"))]
         let my_id = crate::common::MOBILE_INFO1.lock().unwrap().clone();
@@ -984,7 +1003,7 @@ impl LoginConfigHandler {
         };
         if self.is_file_transfer {
             lr.set_file_transfer(FileTransfer {
-                dir: self.get_option("remote_dir"),
+                dir: self.get_remote_dir(),
                 show_hidden: !self.get_option("remote_show_hidden").is_empty(),
                 ..Default::default()
             });

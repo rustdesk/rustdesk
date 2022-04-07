@@ -539,7 +539,10 @@ impl Handler {
         if self.is_file_transfer() {
             let close_state = self.read().unwrap().close_state.clone();
             let mut has_change = false;
-            for (k, v) in close_state {
+            for (k, mut v) in close_state {
+                if k == "remote_dir" {
+                    v = self.lc.read().unwrap().get_all_remote_dir(v);
+                }
                 let v2 = if v.is_empty() { None } else { Some(&v) };
                 if v2 != config.options.get(&k) {
                     has_change = true;
