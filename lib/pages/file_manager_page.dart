@@ -249,6 +249,10 @@ class _FileManagerPageState extends State<FileManagerPage> {
                             value: "delete",
                           ),
                           PopupMenuItem(
+                            child: Text(translate("Multi Select")),
+                            value: "multi_select",
+                          ),
+                          PopupMenuItem(
                             child: Text(translate("Properties")),
                             value: "properties",
                             enabled: false,
@@ -260,6 +264,9 @@ class _FileManagerPageState extends State<FileManagerPage> {
                           final items = SelectedItems();
                           items.add(isLocal, entries[index]);
                           model.removeAction(items);
+                        } else if (v == "multi_select") {
+                          _selectedItems.clear();
+                          model.toggleSelectMode();
                         }
                       }),
               onTap: () {
@@ -394,6 +401,10 @@ class _FileManagerPageState extends State<FileManagerPage> {
             onCanceled: () => model.toggleSelectMode(),
             actions: [
               IconButton(
+                icon: Icon(Icons.compare_arrows),
+                onPressed: model.togglePage,
+              ),
+              IconButton(
                 icon: Icon(Icons.delete_forever),
                 onPressed: () {
                   if (_selectedItems.length > 0) {
@@ -409,6 +420,10 @@ class _FileManagerPageState extends State<FileManagerPage> {
             text: selectedItemsLen + local,
             onCanceled: () => model.toggleSelectMode(),
             actions: [
+              IconButton(
+                icon: Icon(Icons.compare_arrows),
+                onPressed: model.togglePage,
+              ),
               IconButton(
                 icon: Icon(Icons.paste),
                 onPressed: () {
