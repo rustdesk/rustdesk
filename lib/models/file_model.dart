@@ -285,6 +285,9 @@ class FileModel extends ChangeNotifier {
         showLoading(translate("Waiting"));
         final fd = await _fileFetcher.fetchDirectoryRecursive(
             _jobId, item.path, items.isLocal!, true);
+        if (fd.path.isEmpty) {
+          fd.path = item.path;
+        }
         fd.format(isWindows);
         EasyLoading.dismiss();
         if (fd.entries.isEmpty) {

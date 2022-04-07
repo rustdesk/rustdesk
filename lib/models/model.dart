@@ -118,7 +118,6 @@ class FfiModel with ChangeNotifier {
       var evt = FFI.popEvent();
       if (evt == null) break;
       var name = evt['name'];
-      debugPrint("got message:$name");
       if (name == 'msgbox') {
         handleMsgBox(evt, peerId);
       } else if (name == 'peer_info') {
