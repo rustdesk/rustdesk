@@ -229,9 +229,7 @@ class FileModel extends ChangeNotifier {
   }
 
   goToParentDirectory() {
-    final isWindows =
-      _isLocal ? _localOption.isWindows : _remoteOption.isWindows;
-    final parent = PathUtil.dirname(currentDir.path, isWindows);
+    final parent = PathUtil.dirname(currentDir.path, currentIsWindows);
     openDirectory(parent);
   }
 
