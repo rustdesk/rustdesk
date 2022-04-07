@@ -76,6 +76,7 @@ class MainActivity : FlutterActivity() {
                     "request_permission" -> {
                         if(call.arguments is String){
                             requestPermission(context, call.arguments as String)
+                            result.success(true)
                         } else {
                             result.success(false)
                         }

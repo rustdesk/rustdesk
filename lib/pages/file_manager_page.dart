@@ -4,6 +4,7 @@ import 'package:flutter_easyloading/flutter_easyloading.dart';
 import 'package:flutter_hbb/models/file_model.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_breadcrumb/flutter_breadcrumb.dart';
+import 'package:toggle_switch/toggle_switch.dart';
 
 import '../common.dart';
 import '../models/model.dart';
@@ -58,17 +59,124 @@ class _FileManagerPageState extends State<FileManagerPage> {
               backgroundColor: MyTheme.grayBg,
               appBar: AppBar(
                 leading: Row(children: [
-                  IconButton(icon: Icon(Icons.arrow_back), onPressed: goBack),
                   IconButton(icon: Icon(Icons.close), onPressed: clientClose),
                 ]),
-                leadingWidth: 200,
                 centerTitle: true,
-                title: Text(translate(model.isLocal ? "Local" : "Remote")),
+                title: ToggleSwitch(
+                  initialLabelIndex: model.isLocal ? 0 : 1,
+                  activeBgColor: [MyTheme.idColor],
+                  inactiveBgColor: MyTheme.grayBg,
+                  inactiveFgColor: Colors.black54,
+                  totalSwitches: 2,
+                  minWidth: 100,
+                  fontSize: 15,
+                  iconSize: 18,
+                  labels: [translate("Local"), translate("Remote")],
+                  icons: [Icons.phone_android_sharp, Icons.screen_share],
+                  onToggle: (index) {
+                    final current = model.isLocal ? 0 : 1;
+                    if (index != current) {
+                      model.togglePage();
+                    }
+                  },
+                ),
                 actions: [
-                  IconButton(
-                    icon: Icon(Icons.change_circle),
-                    onPressed: () => model.togglePage(),
-                  )
+                  PopupMenuButton<String>(
+                      icon: Icon(Icons.more_vert),
+                      itemBuilder: (context) {
+                        return [
+                          PopupMenuItem(
+                            child: Row(
+                              children: [
+                                Icon(Icons.refresh, color: Colors.black),
+                                SizedBox(width: 5),
+                                Text(translate("Refresh File"))
+                              ],
+                            ),
+                            value: "refresh",
+                          ),
+                          PopupMenuItem(
+                            child: Row(
+                              children: [
+                                Icon(Icons.check, color: Colors.black),
+                                SizedBox(width: 5),
+                                Text(translate("Multi Select"))
+                              ],
+                            ),
+                            value: "select",
+                          ),
+                          PopupMenuItem(
+                            child: Row(
+                              children: [
+                                Icon(Icons.folder_outlined,
+                                    color: Colors.black),
+                                SizedBox(width: 5),
+                                Text(translate("Create Folder"))
+                              ],
+                            ),
+                            value: "folder",
+                          ),
+                          PopupMenuItem(
+                            child: Row(
+                              children: [
+                                Icon(
+                                    model.currentShowHidden
+                                        ? Icons.check_box_outlined
+                                        : Icons.check_box_outline_blank,
+                                    color: Colors.black),
+                                SizedBox(width: 5),
+                                Text(translate("Show Hidden Files"))
+                              ],
+                            ),
+                            value: "hidden",
+                          )
+                        ];
+                      },
+                      onSelected: (v) {
+                        if (v == "refresh") {
+                          model.refresh();
+                        } else if (v == "select") {
+                          _selectedItems.clear();
+                          model.toggleSelectMode();
+                        } else if (v == "folder") {
+                          final name = TextEditingController();
+                          DialogManager.show(
+                              (setState, close) => CustomAlertDialog(
+                                      title: Text(translate("Create Folder")),
+                                      content: Column(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          TextFormField(
+                                            decoration: InputDecoration(
+                                              labelText: translate(
+                                                  "Please enter the folder name"),
+                                            ),
+                                            controller: name,
+                                          ),
+                                        ],
+                                      ),
+                                      actions: [
+                                        TextButton(
+                                            style: flatButtonStyle,
+                                            onPressed: () => close(false),
+                                            child: Text(translate("Cancel"))),
+                                        ElevatedButton(
+                                            style: flatButtonStyle,
+                                            onPressed: () {
+                                              if (name.value.text.isNotEmpty) {
+                                                model.createDir(PathUtil.join(
+                                                    model.currentDir.path,
+                                                    name.value.text,
+                                                    model.currentIsWindows));
+                                                close();
+                                              }
+                                            },
+                                            child: Text(translate("OK")))
+                                      ]));
+                        } else if (v == "hidden") {
+                          model.toggleShowHidden();
+                        }
+                      }),
                 ],
               ),
               body: body(),
@@ -224,6 +332,10 @@ class _FileManagerPageState extends State<FileManagerPage> {
           )),
           Row(
             children: [
+              IconButton(
+                icon: Icon(Icons.arrow_upward),
+                onPressed: goBack,
+              ),
               PopupMenuButton<SortBy>(
                   icon: Icon(Icons.sort),
                   itemBuilder: (context) {
@@ -236,98 +348,6 @@ class _FileManagerPageState extends State<FileManagerPage> {
                         .toList();
                   },
                   onSelected: model.changeSortStyle),
-              PopupMenuButton<String>(
-                  icon: Icon(Icons.more_vert),
-                  itemBuilder: (context) {
-                    return [
-                      PopupMenuItem(
-                        child: Row(
-                          children: [
-                            Icon(Icons.refresh),
-                            SizedBox(width: 5),
-                            Text(translate("Refresh File"))
-                          ],
-                        ),
-                        value: "refresh",
-                      ),
-                      PopupMenuItem(
-                        child: Row(
-                          children: [
-                            Icon(Icons.check),
-                            SizedBox(width: 5),
-                            Text(translate("Multi Select"))
-                          ],
-                        ),
-                        value: "select",
-                      ),
-                      PopupMenuItem(
-                        child: Row(
-                          children: [
-                            Icon(Icons.folder_outlined),
-                            SizedBox(width: 5),
-                            Text(translate("Create Folder"))
-                          ],
-                        ),
-                        value: "folder",
-                      ),
-                      PopupMenuItem(
-                        child: Row(
-                          children: [
-                            Icon(model.currentShowHidden
-                                ? Icons.check_box_outlined
-                                : Icons.check_box_outline_blank),
-                            SizedBox(width: 5),
-                            Text(translate("Show Hidden Files"))
-                          ],
-                        ),
-                        value: "hidden",
-                      )
-                    ];
-                  },
-                  onSelected: (v) {
-                    if (v == "refresh") {
-                      model.refresh();
-                    } else if (v == "select") {
-                      _selectedItems.clear();
-                      model.toggleSelectMode();
-                    } else if (v == "folder") {
-                      final name = TextEditingController();
-                      DialogManager.show((setState, close) => CustomAlertDialog(
-                              title: Text(translate("Create Folder")),
-                              content: Column(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  TextFormField(
-                                    decoration: InputDecoration(
-                                      labelText: translate(
-                                          "Please enter the folder name"),
-                                    ),
-                                    controller: name,
-                                  ),
-                                ],
-                              ),
-                              actions: [
-                                TextButton(
-                                    style: flatButtonStyle,
-                                    onPressed: () => close(false),
-                                    child: Text(translate("Cancel"))),
-                                ElevatedButton(
-                                    style: flatButtonStyle,
-                                    onPressed: () {
-                                      if (name.value.text.isNotEmpty) {
-                                        model.createDir(PathUtil.join(
-                                            model.currentDir.path,
-                                            name.value.text,
-                                            model.currentIsWindows));
-                                        close();
-                                      }
-                                    },
-                                    child: Text(translate("OK")))
-                              ]));
-                    } else if (v == "hidden") {
-                      model.toggleShowHidden();
-                    }
-                  }),
             ],
           )
         ],
@@ -338,6 +358,13 @@ class _FileManagerPageState extends State<FileManagerPage> {
       height: 100,
       child: Column(
         children: [
+          Padding(
+            padding: EdgeInsets.fromLTRB(30,5,30,0),
+            child: Text(
+              model.currentDir.path,
+              style: TextStyle(color: MyTheme.darkGray),
+            ),
+          ),
           Padding(
             padding: EdgeInsets.all(2),
             child: Text(

@@ -235,7 +235,6 @@ class FfiModel with ChangeNotifier {
     _pi.platform = evt['platform'];
     _pi.sasEnabled = evt['sas_enabled'] == "true";
     _pi.currentDisplay = int.parse(evt['current_display']);
-    _pi.homeDir = evt['home_dir'];
 
     if (evt['is_file_transfer'] == "true") {
       FFI.fileModel.onReady();
@@ -878,7 +877,6 @@ class PeerInfo {
   String username = "";
   String hostname = "";
   String platform = "";
-  String homeDir = "";
   bool sasEnabled = false;
   int currentDisplay = 0;
   List<Display> displays = [];

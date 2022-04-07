@@ -3,21 +3,12 @@ import 'dart:convert';
 import 'package:flutter_easyloading/flutter_easyloading.dart';
 import 'package:flutter_hbb/common.dart';
 import 'package:flutter_hbb/pages/file_manager_page.dart';
-import 'package:path/path.dart' as p;
 import 'package:flutter/material.dart';
 import 'package:path/path.dart' as Path;
 
 import 'model.dart';
 
 enum SortBy { Name, Type, Modified, Size }
-
-// enum FileType {
-//   Dir = 0,
-//   DirLink = 2,
-//   DirDrive = 3,
-//   File = 4,
-//   FileLink = 5,
-// }
 
 class FileModel extends ChangeNotifier {
   var _isLocal = false;
@@ -55,15 +46,15 @@ class FileModel extends ChangeNotifier {
   String get currentHome => _isLocal ? _localOption.home : _remoteOption.home;
 
   String get currentShortPath {
-    if(currentDir.path.startsWith(currentHome)){
+    if (currentDir.path.startsWith(currentHome)) {
       var path = currentDir.path.replaceFirst(currentHome, "");
-      if(path.length ==0 ) return "";
-      if(path[0] == "/" || path[0] == "\\") {
+      if (path.length == 0) return "";
+      if (path[0] == "/" || path[0] == "\\") {
         // remove more '/' or '\'
         path = path.replaceFirst(path[0], "");
       }
       return path;
-    }else{
+    } else {
       return currentDir.path.replaceFirst(currentHome, "");
     }
   }
@@ -112,6 +103,18 @@ class FileModel extends ChangeNotifier {
   }
 
   receiveFileDir(Map<String, dynamic> evt) {
+    if (_remoteOption.home.isEmpty && evt['is_local'] == "false") {
+      // init remote home, the connection will automatic read remote home when established,
+      try {
+        final fd = FileDirectory.fromJson(jsonDecode(evt['value']));
+        fd.format(_remoteOption.isWindows, sort: _sortStyle);
+        _remoteOption.home = fd.path;
+        debugPrint("init remote home:${fd.path}");
+        _currentRemoteDir = fd;
+        notifyListeners();
+        return;
+      } finally {}
+    }
     _fileFetcher.tryCompleteTask(evt['value'], evt['is_local']);
   }
 
@@ -143,29 +146,30 @@ class FileModel extends ChangeNotifier {
     notifyListeners();
   }
 
-  onReady() {
-    _localOption = DirectoryOption(
-        home: FFI.getByName("get_home_dir"),
-        showHidden: FFI.getByName("peer_option", "local_show_hidden") != "");
-    _remoteOption = DirectoryOption(
-        home: FFI.ffiModel.pi.homeDir,
-        showHidden: FFI.getByName("peer_option", "remote_show_hidden") != "",
-        isWindows: FFI.ffiModel.pi.platform == "Windows");
+  onReady() async {
+    _localOption.home = FFI.getByName("get_home_dir");
+    _localOption.showHidden =
+        FFI.getByName("peer_option", "local_show_hidden").isNotEmpty;
+
+    _remoteOption.showHidden =
+        FFI.getByName("peer_option", "remote_show_hidden").isNotEmpty;
+    _remoteOption.isWindows = FFI.ffiModel.pi.platform == "Windows";
 
     debugPrint("remote platform: ${FFI.ffiModel.pi.platform}");
+
+    await Future.delayed(Duration(milliseconds: 100));
 
     final local = FFI.getByName("peer_option", "local_dir");
     final remote = FFI.getByName("peer_option", "remote_dir");
     openDirectory(local.isEmpty ? _localOption.home : local, isLocal: true);
     openDirectory(remote.isEmpty ? _remoteOption.home : remote, isLocal: false);
-    Timer(Duration(seconds: 2), () {
-      if (_currentLocalDir.path.isEmpty) {
-        openDirectory(_localOption.home, isLocal: true);
-      }
-      if (_currentRemoteDir.path.isEmpty) {
-        openDirectory(_remoteOption.home, isLocal: false);
-      }
-    });
+    await Future.delayed(Duration(seconds: 1));
+    if (_currentLocalDir.path.isEmpty) {
+      openDirectory(_localOption.home, isLocal: true);
+    }
+    if (_currentRemoteDir.path.isEmpty) {
+      openDirectory(_remoteOption.home, isLocal: false);
+    }
   }
 
   onClose() {
@@ -192,6 +196,8 @@ class FileModel extends ChangeNotifier {
     FFI.setByName('peer_option', jsonEncode(msg));
     _currentLocalDir.clear();
     _currentRemoteDir.clear();
+    _localOption.clear();
+    _remoteOption.clear();
   }
 
   refresh() {
@@ -223,7 +229,8 @@ class FileModel extends ChangeNotifier {
   }
 
   goToParentDirectory() {
-    openDirectory(currentDir.parent);
+    final parent = PathUtil.dirname(currentDir.path, currentIsWindows);
+    openDirectory(parent);
   }
 
   sendFiles(SelectedItems items) {
@@ -278,7 +285,11 @@ class FileModel extends ChangeNotifier {
         fd.format(isWindows);
         EasyLoading.dismiss();
         if (fd.entries.isEmpty) {
-          final confirm = await showRemoveDialog(translate("Are you sure you want to delete this empty directory?"), item.name, false);
+          final confirm = await showRemoveDialog(
+              translate(
+                  "Are you sure you want to delete this empty directory?"),
+              item.name,
+              false);
           if (confirm == true) {
             sendRemoveEmptyDir(item.path, 0, items.isLocal!);
           }
@@ -290,9 +301,10 @@ class FileModel extends ChangeNotifier {
       }
 
       for (var i = 0; i < entries.length; i++) {
-        final dirShow = item.isDirectory ? "${translate("Are you sure you want to delete the file of this directory?")}\n" : "";
-        final count =
-            entries.length > 1 ? "${i + 1}/${entries.length}" : "";
+        final dirShow = item.isDirectory
+            ? "${translate("Are you sure you want to delete the file of this directory?")}\n"
+            : "";
+        final count = entries.length > 1 ? "${i + 1}/${entries.length}" : "";
         content = dirShow + "$count \n${entries[i].path}";
         final confirm =
             await showRemoveDialog(title, content, item.isDirectory);
@@ -403,7 +415,7 @@ class FileModel extends ChangeNotifier {
   }
 
   cancelJob(int id) {
-    FFI.setByName("cancel_job",id.toString());
+    FFI.setByName("cancel_job", id.toString());
   }
 
   changeSortStyle(SortBy sort) {
@@ -563,8 +575,6 @@ class FileDirectory {
   int id = 0;
   String path = "";
 
-  String get parent => p.dirname(path);
-
   FileDirectory();
 
   FileDirectory.fromJson(Map<String, dynamic> json) {
@@ -659,6 +669,11 @@ class PathUtil {
     final pathUtil = isWindows ? windowsContext : posixContext;
     return pathUtil.split(path);
   }
+
+  static String dirname(String path, bool isWindows){
+    final pathUtil = isWindows ? windowsContext : posixContext;
+    return pathUtil.dirname(path);
+  }
 }
 
 class DirectoryOption {
@@ -668,6 +683,12 @@ class DirectoryOption {
 
   DirectoryOption(
       {this.home = "", this.showHidden = false, this.isWindows = false});
+
+  clear() {
+    home = "";
+    showHidden = false;
+    isWindows = false;
+  }
 }
 
 // code from file_manager pkg after edit
