@@ -82,7 +82,7 @@ class _GestureHelpState extends State<GestureHelp> {
                   minWidth: 150,
                   fontSize: 15,
                   iconSize: 18,
-                  labels: [translate("TouchPad mode"), translate("Touch mode")],
+                  labels: [translate("Mouse mode"), translate("Touch mode")],
                   icons: [Icons.mouse, Icons.touch_app],
                   onToggle: (index) {
                     setState(() {
@@ -197,7 +197,7 @@ class GestureInfo extends StatelessWidget {
             SizedBox(height: 6),
             Text(fromText,
                 textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 10, color: Colors.grey)),
+                style: TextStyle(fontSize: 9, color: Colors.grey)),
             SizedBox(height: 3),
             Text(toText,
                 textAlign: TextAlign.center,
