@@ -223,7 +223,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Are you sure to close the connection?", "Sei sicuro di chiudere la connessione?"),
         ("Download new version", "Scarica nuova versione"),
         ("Touch mode", "Modalità tocco"),
-        ("TouchPad mode", "Modalità TouchPad"),
+        ("Mouse mode", "Modalità mouse"),
         ("One-Finger Tap", "Tocca con un dito"),
         ("Left Mouse", "Mouse sinistro"),
         ("One-Long Tap", "Tocco lungo con un dito"),
