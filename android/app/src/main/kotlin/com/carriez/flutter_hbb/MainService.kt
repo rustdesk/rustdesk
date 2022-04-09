@@ -17,7 +17,6 @@ import android.graphics.PixelFormat
 import android.hardware.display.DisplayManager.VIRTUAL_DISPLAY_FLAG_PUBLIC
 import android.hardware.display.VirtualDisplay
 import android.media.*
-import android.media.AudioRecord.READ_BLOCKING
 import android.media.projection.MediaProjection
 import android.media.projection.MediaProjectionManager
 import android.os.*
@@ -33,6 +32,7 @@ import java.util.concurrent.Executors
 import kotlin.concurrent.thread
 import org.json.JSONException
 import org.json.JSONObject
+import java.nio.ByteBuffer
 
 const val EXTRA_MP_DATA = "mp_intent"
 const val INIT_SERVICE = "init_service"
@@ -42,14 +42,14 @@ const val EXTRA_LOGIN_REQ_NOTIFY = "EXTRA_LOGIN_REQ_NOTIFY"
 const val DEFAULT_NOTIFY_TITLE = "RustDesk"
 const val DEFAULT_NOTIFY_TEXT = "Service is running"
 const val DEFAULT_NOTIFY_ID = 1
-const val NOTIFY_ID_OFFSET = 100 
+const val NOTIFY_ID_OFFSET = 100
 
 const val NOTIFY_TYPE_START_CAPTURE = "NOTIFY_TYPE_START_CAPTURE"
 
 const val MIME_TYPE = MediaFormat.MIMETYPE_VIDEO_VP9
 
 // video const
-const val MAX_SCREEN_SIZE = 1200 
+const val MAX_SCREEN_SIZE = 1200
 
 const val VIDEO_KEY_BIT_RATE = 1024_000
 const val VIDEO_KEY_FRAME_RATE = 30
@@ -63,33 +63,6 @@ class MainService : Service() {
 
     init {
         System.loadLibrary("rustdesk")
-    }
-
-    // rust call jvm
-    @Keep
-    fun rustGetVideoRaw(): ByteArray {
-        return if (videoData != null) {
-            videoData!!
-        } else {
-            videoZeroData
-        }
-    }
-
-    @Keep
-    fun rustGetAudioRaw(): FloatArray {
-        return if (isNewData && audioData != null) {
-            isNewData = false
-            audioData!!
-        } else {
-            audioZeroData
-        }
-    }
-
-    @Keep
-    fun rustGetAudioRawLen(): Int {
-        return if (isNewData && audioData != null && audioData!!.isNotEmpty()) {
-            audioData!!.size
-        } else 0
     }
 
     @Keep
@@ -109,13 +82,13 @@ class MainService : Service() {
                     val id = jsonObject["id"] as Int
                     val username = jsonObject["name"] as String
                     val peerId = jsonObject["peer_id"] as String
-                    val type = if (jsonObject["is_file_transfer"] as Boolean){
+                    val type = if (jsonObject["is_file_transfer"] as Boolean) {
                         translate("File Connection")
-                    }else{
+                    } else {
                         translate("Screen Connection")
                     }
-                    loginRequestNotification(id,type,username,peerId)
-                }catch (e:JSONException){
+                    loginRequestNotification(id, type, username, peerId)
+                } catch (e: JSONException) {
                     e.printStackTrace()
                 }
             }
@@ -127,16 +100,16 @@ class MainService : Service() {
                     val username = jsonObject["name"] as String
                     val peerId = jsonObject["peer_id"] as String
                     val isFileTransfer = jsonObject["is_file_transfer"] as Boolean
-                    val type = if (isFileTransfer){
+                    val type = if (isFileTransfer) {
                         translate("File Connection")
-                    }else{
+                    } else {
                         translate("Screen Connection")
                     }
-                    if(!isFileTransfer && !isStart){
+                    if (!isFileTransfer && !isStart) {
                         startCapture()
                     }
-                    onClientAuthorizedNotification(id,type,username,peerId)
-                }catch (e:JSONException){
+                    onClientAuthorizedNotification(id, type, username, peerId)
+                } catch (e: JSONException) {
                     e.printStackTrace()
                 }
 
@@ -145,46 +118,46 @@ class MainService : Service() {
                 Log.d(logTag, "from rust:stop_capture")
                 stopCapture()
             }
-            else -> {}
+            else -> {
+            }
         }
     }
 
     // jvm call rust
     private external fun init(ctx: Context)
     private external fun startServer()
-    private external fun translateLocale(localeName:String,input: String) : String
+    private external fun onVideoFrameUpdate(buf: ByteBuffer)
+    private external fun onAudioFrameUpdate(buf: ByteBuffer)
+    private external fun translateLocale(localeName: String, input: String): String
     // private external fun sendVp9(data: ByteArray)
 
-    private fun translate(input:String):String{
-        Log.d(logTag,"translate:$LOCAL_NAME")
-        return translateLocale(LOCAL_NAME,input)
+    private fun translate(input: String): String {
+        Log.d(logTag, "translate:$LOCAL_NAME")
+        return translateLocale(LOCAL_NAME, input)
     }
 
     private val logTag = "LOG_SERVICE"
     private val useVP9 = false
     private val binder = LocalBinder()
     private var _isReady = false
-    private var _isStart = false 
+    private var _isStart = false
     val isReady: Boolean
         get() = _isReady
     val isStart: Boolean
         get() = _isStart
 
+    // video
     private var mediaProjection: MediaProjection? = null
     private var surface: Surface? = null
     private val sendVP9Thread = Executors.newSingleThreadExecutor()
     private var videoEncoder: MediaCodec? = null
-    private var videoData: ByteArray? = null
     private var imageReader: ImageReader? = null
-    private val videoZeroData = ByteArray(32)
     private var virtualDisplay: VirtualDisplay? = null
 
     // audio
     private var audioRecorder: AudioRecord? = null
-    private var audioData: FloatArray? = null
+    private var audioReader: AudioReader? = null
     private var minBufferSize = 0
-    private var isNewData = false
-    private val audioZeroData: FloatArray = FloatArray(32)  
     private var audioRecordStat = false
 
     // notification
@@ -239,13 +212,13 @@ class MainService : Service() {
             // TODO
             null
         } else {
-            Log.d(logTag,"ImageReader.newInstance:INFO:$INFO")
+            Log.d(logTag, "ImageReader.newInstance:INFO:$INFO")
             imageReader =
                 ImageReader.newInstance(
                     INFO.screenWidth,
                     INFO.screenHeight,
                     PixelFormat.RGBA_8888,
-                    2
+                    4
                 ).apply {
                     setOnImageAvailableListener({ imageReader: ImageReader ->
                         try {
@@ -254,19 +227,9 @@ class MainService : Service() {
                                 val planes = image.planes
                                 val buffer = planes[0].buffer
                                 buffer.rewind()
-                                // Be careful about OOM!
-                                if (videoData == null) {
-                                    videoData = ByteArray(buffer.capacity())
-                                    buffer.get(videoData!!)
-                                    Log.d(logTag, "init video ${videoData!!.size}")
-                                } else {
-                                    buffer.get(videoData!!)
-                                }
+                                onVideoFrameUpdate(buffer)
                             }
                         } catch (ignored: java.lang.Exception) {
-                        }
-                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-                            imageReader.discardFreeBuffers()
                         }
                     }, null)
                 }
@@ -276,7 +239,7 @@ class MainService : Service() {
     }
 
     fun startCapture(): Boolean {
-        if (isStart){
+        if (isStart) {
             return true
         }
         if (mediaProjection == null) {
@@ -311,7 +274,6 @@ class MainService : Service() {
         }
         virtualDisplay = null
         videoEncoder = null
-        videoData = null
 
         // release audio
         audioRecordStat = false
@@ -330,7 +292,7 @@ class MainService : Service() {
 
         mediaProjection = null
         checkMediaPermission()
-        stopService(Intent(this,InputService::class.java)) // close input service maybe not work
+        stopService(Intent(this, InputService::class.java)) // close input service maybe not work
         stopForeground(true)
         stopSelf()
     }
@@ -348,7 +310,7 @@ class MainService : Service() {
     @SuppressLint("WrongConstant")
     private fun startRawVideoRecorder(mp: MediaProjection) {
         Log.d(logTag, "startRawVideoRecorder,screen info:$INFO")
-        if(surface==null){
+        if (surface == null) {
             Log.d(logTag, "startRawVideoRecorder failed,surface is null")
             return
         }
@@ -370,7 +332,7 @@ class MainService : Service() {
             it.setCallback(cb)
             it.start()
             virtualDisplay = mp.createVirtualDisplay(
-                "rustdesk test",
+                "RustDeskVD",
                 INFO.screenWidth, INFO.screenHeight, 200, VIRTUAL_DISPLAY_FLAG_PUBLIC,
                 surface, null, null
             )
@@ -423,14 +385,13 @@ class MainService : Service() {
     @RequiresApi(Build.VERSION_CODES.M)
     private fun startAudioRecorder() {
         checkAudioRecorder()
-        if (audioData != null && audioRecorder != null && minBufferSize != 0) {
+        if (audioReader != null && audioRecorder != null && minBufferSize != 0) {
             audioRecorder!!.startRecording()
             audioRecordStat = true
             thread {
                 while (audioRecordStat) {
-                    val res = audioRecorder!!.read(audioData!!, 0, minBufferSize, READ_BLOCKING)
-                    if (res != AudioRecord.ERROR_INVALID_OPERATION) {
-                        isNewData = true
+                    audioReader!!.readSync(audioRecorder!!)?.let {
+                        onAudioFrameUpdate(it)
                     }
                 }
                 Log.d(logTag, "Exit audio thread")
@@ -442,10 +403,11 @@ class MainService : Service() {
 
     @RequiresApi(Build.VERSION_CODES.M)
     private fun checkAudioRecorder() {
-        if (audioData != null && audioRecorder != null && minBufferSize != 0) {
+        if (audioRecorder != null && audioRecorder != null && minBufferSize != 0) {
             return
         }
-        minBufferSize = 2 * AudioRecord.getMinBufferSize(
+        // read f32 to byte , length * 4
+        minBufferSize = 2 * 4 * AudioRecord.getMinBufferSize(
             AUDIO_SAMPLE_RATE,
             AUDIO_CHANNEL_MASK,
             AUDIO_ENCODING
@@ -454,8 +416,8 @@ class MainService : Service() {
             Log.d(logTag, "get min buffer size fail!")
             return
         }
-        audioData = FloatArray(minBufferSize)
-        Log.d(logTag, "init audioData len:${audioData!!.size}")
+        audioReader = AudioReader(minBufferSize, 4)
+        Log.d(logTag, "init audioData len:$minBufferSize")
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             mediaProjection?.let {
                 val apcc = AudioPlaybackCaptureConfiguration.Builder(it)
@@ -511,7 +473,7 @@ class MainService : Service() {
     private fun createForegroundNotification() {
         val intent = Intent(this, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED
-            action = Intent.ACTION_MAIN 
+            action = Intent.ACTION_MAIN
             addCategory(Intent.CATEGORY_LAUNCHER)
             putExtra("type", type)
         }
@@ -536,7 +498,12 @@ class MainService : Service() {
         startForeground(DEFAULT_NOTIFY_ID, notification)
     }
 
-    private fun loginRequestNotification(clientID:Int, type: String, username: String, peerId: String) {
+    private fun loginRequestNotification(
+        clientID: Int,
+        type: String,
+        username: String,
+        peerId: String
+    ) {
         cancelNotification(clientID)
         val notification = notificationBuilder
             .setOngoing(false)
@@ -550,7 +517,12 @@ class MainService : Service() {
         notificationManager.notify(getClientNotifyID(clientID), notification)
     }
 
-    private fun onClientAuthorizedNotification(clientID: Int, type: String, username: String, peerId: String) {
+    private fun onClientAuthorizedNotification(
+        clientID: Int,
+        type: String,
+        username: String,
+        peerId: String
+    ) {
         cancelNotification(clientID)
         val notification = notificationBuilder
             .setOngoing(false)
@@ -561,11 +533,11 @@ class MainService : Service() {
         notificationManager.notify(getClientNotifyID(clientID), notification)
     }
 
-    private fun getClientNotifyID(clientID:Int):Int{
+    private fun getClientNotifyID(clientID: Int): Int {
         return clientID + NOTIFY_ID_OFFSET
     }
 
-    fun cancelNotification(clientID:Int){
+    fun cancelNotification(clientID: Int) {
         notificationManager.cancel(getClientNotifyID(clientID))
     }
 

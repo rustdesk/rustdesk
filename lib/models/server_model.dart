@@ -41,14 +41,14 @@ class ServerModel with ChangeNotifier {
       /**
        * 1. check android permission
        * 2. check config
-       * audio true by default (if permission on)
+       * audio true by default (if permission on) (false default < Android 10)
        * file true by default (if permission on)
        * input false by default (it need turning on manually everytime)
        */
       await Future.delayed(Duration(seconds: 1));
 
       // audio
-      if(!await PermissionManager.check("audio")){
+      if(androidVersion<30 || !await PermissionManager.check("audio")){
         _audioOk = false;
         FFI.setByName('option', jsonEncode(
             Map()
