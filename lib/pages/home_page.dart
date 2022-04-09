@@ -29,7 +29,7 @@ class _HomePageState extends State<HomePage> {
       ConnectionPage(),
       chatPage,
     ]);
-    if(isAndroid){
+    if (isAndroid) {
       _pages.add(ServerPage());
     }
     _pages.add(SettingsPage());
@@ -88,7 +88,7 @@ class WebHomePage extends StatelessWidget {
       backgroundColor: MyTheme.grayBg,
       appBar: AppBar(
         centerTitle: true,
-        title: Text("RustDesk"),
+        title: Text("RustDesk" + (isWeb ? " (Beta) " : "")),
         actions: connectionPage.appBarActions,
       ),
       body: connectionPage,

@@ -262,7 +262,7 @@ class _RemotePageState extends State<RemotePage> {
                       },
                     )
                   ] +
-                  (isDesktop
+                  (false
                       ? []
                       : [
                           IconButton(
