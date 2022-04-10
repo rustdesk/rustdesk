@@ -5,10 +5,10 @@ use hbb_common::{
     config::{Config, APP_NAME},
     log, sleep, timeout, tokio,
 };
-use std::io::prelude::*;
 use std::{
     ffi::OsString,
-    io, mem,
+    io::{self, prelude::*},
+    mem,
     sync::{Arc, Mutex},
     time::{Duration, Instant},
 };

@@ -266,5 +266,14 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("android_version_audio_tip", "Текущая версия Android не поддерживает захват звука, обновите ее до Android 10 или выше."),
         ("android_start_service_tip", "Коснитесь [Запуск промежуточного сервера] или ОТКРЫТЬ разрешение [Скриншот], чтобы запустить службу демонстрации экрана."),
         ("Account", "Аккаунт"),
+        ("Failed", "Неуспешный"),
+        ("Succeeded", "Успешно"),
+        ("Someone turns on privacy mode, exit", "Кто-то включает режим конфиденциальности, выйдите"),
+        ("Unsupported", "Не поддерживается"),
+        ("Peer denied", "Отказано в пире"),
+        ("Please install plugins", "Пожалуйста, установите плагины"),
+        ("Peer exit", "Одноранговый выход"),
+        ("Failed off", "Не удалось отключить"),
+        ("Turned off", "Выключен"),
     ].iter().cloned().collect();
 }

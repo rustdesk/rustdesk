@@ -1,7 +1,7 @@
 use winapi;
 
 use self::winapi::ctypes::c_int;
-use self::winapi::shared::{minwindef::*, windef::*};
+use self::winapi::shared::{basetsd::ULONG_PTR, minwindef::*, windef::*};
 use self::winapi::um::winbase::*;
 use self::winapi::um::winuser::*;
 
@@ -18,6 +18,9 @@ extern "system" {
 pub struct Enigo;
 static mut LAYOUT: HKL = std::ptr::null_mut();
 
+/// The dwExtraInfo value in keyboard and mouse structure that used in SendInput()
+pub const ENIGO_INPUT_EXTRA_VALUE: ULONG_PTR = 100;
+
 fn mouse_event(flags: u32, data: u32, dx: i32, dy: i32) -> DWORD {
     let mut input = INPUT {
         type_: INPUT_MOUSE,
@@ -28,7 +31,7 @@ fn mouse_event(flags: u32, data: u32, dx: i32, dy: i32) -> DWORD {
                 mouseData: data,
                 dwFlags: flags,
                 time: 0,
-                dwExtraInfo: 0,
+                dwExtraInfo: ENIGO_INPUT_EXTRA_VALUE,
             })
         },
     };
@@ -56,7 +59,7 @@ fn keybd_event(flags: u32, vk: u16, scan: u16) -> DWORD {
                 wScan: scan,
                 dwFlags: flags,
                 time: 0,
-                dwExtraInfo: 0,
+                dwExtraInfo: ENIGO_INPUT_EXTRA_VALUE,
             })
         },
     };

@@ -746,11 +746,11 @@ impl LoginConfigHandler {
             })
             .into();
         } else if name == "privacy-mode" {
-            config.privacy_mode = !config.privacy_mode;
+            // try toggle privacy mode
             option.privacy_mode = (if config.privacy_mode {
-                BoolOption::Yes
-            } else {
                 BoolOption::No
+            } else {
+                BoolOption::Yes
             })
             .into();
         } else if name == "enable-file-transfer" {

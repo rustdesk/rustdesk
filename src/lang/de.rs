@@ -266,5 +266,14 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("android_version_audio_tip", "Die aktuelle Android-Version unterstützt keine Audioaufnahme, bitte aktualisieren Sie auf Android 10 oder höher."),
         ("android_start_service_tip", "Tippen Sie auf [Dienst starten] oder ÖFFNEN Sie die Berechtigung [Bildschirmaufnahme], um den Bildschirmfreigabedienst zu starten."),
         ("Account", "Konto"),
+        ("Failed", "Gescheitert"),
+        ("Succeeded", "Erfolgreich"),
+        ("Someone turns on privacy mode, exit", "Jemand aktiviert den Datenschutzmodus, beenden"),
+        ("Unsupported", "Nicht unterstützt"),
+        ("Peer denied", "Peer verweigert"),
+        ("Please install plugins", "Bitte installieren Sie Plugins"),
+        ("Peer exit", "Peer-Ausgang"),
+        ("Failed off", "Ausschalten fehlgeschlagen"),
+        ("Turned off", "Ausgeschaltet"),
     ].iter().cloned().collect();
 }

@@ -418,11 +418,6 @@ message OptionMessage {
   BoolOption enable_file_transfer = 9;
 }
 
-message OptionResponse {
-  OptionMessage opt = 1;
-  string error = 2;
-}
-
 message TestDelay {
   int64 time = 1;
   bool from_client = 2;
@@ -442,6 +437,44 @@ message AudioFormat {
 
 message AudioFrame { bytes data = 1; }
 
+message BackNotification {
+  // no need to consider block input by someone else
+  enum BlockInputState {
+    StateUnknown = 1;
+    OnSucceeded = 2;
+    OnFailed = 3;
+    OffSucceeded = 4;
+    OffFailed = 5;
+  }
+  enum PrivacyModeState {
+    StateUnknown = 1;
+    // Privacy mode on by someone else
+    OnByOther = 2;
+    // Privacy mode is not supported on the remote side
+    NotSupported = 3;
+    // Privacy mode on by self
+    OnSucceeded = 4;
+    // Privacy mode on by self, but denied
+    OnFailedDenied = 5;
+    // Some plugins are not found
+    OnFailedPlugin = 6;
+    // Privacy mode on by self, but failed
+    OnFailed = 7;
+    // Privacy mode off by self
+    OffSucceeded = 8;
+    // Ctrl + P
+    OffByPeer = 9;
+    // Privacy mode off by self, but failed
+    OffFailed = 10;
+    OffUnknown = 11;
+  }
+
+  oneof union {
+    PrivacyModeState privacy_mode_state = 1;
+    BlockInputState block_input_state = 2;
+  }
+}
+
 message Misc {
   oneof union {
     ChatMessage chat_message = 4;
@@ -451,8 +484,8 @@ message Misc {
     AudioFormat audio_format = 8;
     string close_reason = 9;
     bool refresh_video = 10;
-    OptionResponse option_response = 11;
     bool video_received = 12;
+    BackNotification back_notification = 13;
   }
 }
 

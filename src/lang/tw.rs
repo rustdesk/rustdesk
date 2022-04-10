@@ -266,5 +266,14 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("android_version_audio_tip", "當前安卓版本不支持音頻錄製，請升級至安卓10或更高。"),
         ("android_start_service_tip", "點擊 [啟動服務] 或打開 [屏幕錄製] 權限開啟手機屏幕共享服務。"),
         ("Account", "帳戶"),
+        ("Failed", "失敗"),
+        ("Succeeded", "成功"),
+        ("Someone turns on privacy mode, exit", "其他用戶開啟隱私模式，退出"),
+        ("Unsupported", "不支持"),
+        ("Peer denied", "被控端拒絕"),
+        ("Please install plugins", "請安裝插件"),
+        ("Peer exit", "被控端退出"),
+        ("Failed off", "退出失敗"),
+        ("Turned off", "退出"),
     ].iter().cloned().collect();
 }

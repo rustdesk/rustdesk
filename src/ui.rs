@@ -3,9 +3,9 @@ mod cm;
 mod inline;
 #[cfg(target_os = "macos")]
 mod macos;
+pub mod platform;
 mod remote;
-use crate::common::SOFTWARE_UPDATE_URL;
-use crate::ipc;
+use crate::{common::SOFTWARE_UPDATE_URL, ipc};
 use hbb_common::{
     allow_err,
     config::{self, Config, Fav, PeerConfig, APP_NAME, ICON},

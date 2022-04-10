@@ -3558,6 +3558,7 @@ dependencies = [
  "gstreamer",
  "gstreamer-app",
  "gstreamer-video",
+ "lazy_static",
  "libc",
  "num_cpus",
  "quest",
