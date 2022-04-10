@@ -82,10 +82,7 @@ class ServerModel with ChangeNotifier {
 
   toggleAudio() async {
     if(!_audioOk && !await PermissionManager.check("audio")){
-      debugPrint("toggleAudio 无权限 开始获取权限");
       final res = await PermissionManager.request("audio");
-      debugPrint("权限请求结果：$res");
-
       if(!res){
         // TODO handle fail
         return;

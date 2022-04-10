@@ -5,20 +5,24 @@ import android.accessibilityservice.GestureDescription
 import android.content.Context
 import android.graphics.Path
 import android.os.Build
-import android.os.Handler
-import android.os.Looper
 import android.util.Log
 import android.view.accessibility.AccessibilityEvent
 import androidx.annotation.RequiresApi
-import kotlin.concurrent.thread
 
 class InputService : AccessibilityService() {
 
-    companion object{
-        var ctx:InputService? = null
+    companion object {
+        var ctx: InputService? = null
         val isOpen: Boolean
-            get() = ctx!=null
+            get() = ctx != null
     }
+
+    private external fun init(ctx: Context)
+
+    init {
+        System.loadLibrary("rustdesk")
+    }
+
     private val logTag = "input service"
     private var leftIsDown = false
     private var mPath = Path()
@@ -28,10 +32,21 @@ class InputService : AccessibilityService() {
 
     @RequiresApi(Build.VERSION_CODES.N)
     fun rustMouseInput(mask: Int, _x: Int, _y: Int) {
+        val x = if (_x < 0) {
+            0
+        } else {
+            _x
+        }
+
+        val y = if (_y < 0) {
+            0
+        } else {
+            _y
+        }
 
         if (!(mask == 9 || mask == 10)) {
-            mouseX = _x * INFO.scale
-            mouseY = _y * INFO.scale
+            mouseX = x * INFO.scale
+            mouseY = y * INFO.scale
         }
 
         // left button down ,was up
@@ -41,7 +56,7 @@ class InputService : AccessibilityService() {
         }
 
         // left down ,was down
-        if (mask == 9) {
+        if (leftIsDown) {
             continueGesture(mouseX, mouseY)
         }
 
@@ -64,30 +79,24 @@ class InputService : AccessibilityService() {
 
     @RequiresApi(Build.VERSION_CODES.N)
     private fun endGesture(x: Int, y: Int) {
-        mPath.lineTo(x.toFloat(), y.toFloat())
-        val stroke = GestureDescription.StrokeDescription(
-            mPath,
-            0,
-            System.currentTimeMillis() - mLastGestureStartTime
-        )
-        val builder = GestureDescription.Builder()
-        builder.addStroke(stroke)
-        Log.d(logTag, "end gesture $x $y")
-        dispatchGesture(builder.build(), object : GestureResultCallback() {
-            override fun onCompleted(gestureDescription: GestureDescription) {
-                super.onCompleted(gestureDescription)
+        try {
+            mPath.lineTo(x.toFloat(), y.toFloat())
+            var duration = System.currentTimeMillis() - mLastGestureStartTime
+            if (duration <= 0) {
+                duration = 1
             }
-
-            override fun onCancelled(gestureDescription: GestureDescription) {
-                super.onCancelled(gestureDescription)
-            }
-        }, null)
-    }
-
-    private external fun init(ctx: Context)
-
-    init {
-        System.loadLibrary("rustdesk")
+            val stroke = GestureDescription.StrokeDescription(
+                mPath,
+                0,
+                duration
+            )
+            val builder = GestureDescription.Builder()
+            builder.addStroke(stroke)
+            Log.d(logTag, "end gesture x:$x y:$y time:$duration")
+            dispatchGesture(builder.build(), null, null)
+        } catch (e: Exception) {
+            Log.e(logTag, "endGesture error:$e")
+        }
     }
 
     @RequiresApi(Build.VERSION_CODES.O)
