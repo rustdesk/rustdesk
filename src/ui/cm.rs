@@ -370,6 +370,12 @@ async fn start_ipc(cm: ConnectionManager) {
     #[cfg(windows)]
     std::thread::spawn(move || start_clipboard_file(cm_clip, _rx_file));
 
+    #[cfg(windows)]
+    std::thread::spawn(move || {
+        log::info!("try create privacy mode window");
+        allow_err!(crate::ui::platform::win_privacy::start());
+    });
+
     match new_listener("_cm").await {
         Ok(mut incoming) => {
             while let Some(result) = incoming.next().await {

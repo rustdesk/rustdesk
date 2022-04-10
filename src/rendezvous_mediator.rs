@@ -63,10 +63,6 @@ impl RendezvousMediator {
                 allow_err!(lan_discovery());
             });
         }
-        #[cfg(windows)]
-        std::thread::spawn(move || {
-            allow_err!(crate::ui::platform::win_privacy::start());
-        });
         loop {
             Config::reset_online();
             if Config::get_option("stop-service").is_empty() {

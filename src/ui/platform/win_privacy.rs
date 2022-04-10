@@ -1,4 +1,7 @@
-use crate::ipc::{connect, Data, PrivacyModeState};
+use crate::{
+    ipc::{connect, Data, PrivacyModeState},
+    platform::windows::get_user_token,
+};
 use hbb_common::{allow_err, bail, lazy_static, log, tokio, ResultType};
 use std::{
     ffi::CString,
@@ -18,10 +21,10 @@ use winapi::{
         libloaderapi::{GetModuleHandleA, GetModuleHandleExA, GetProcAddress},
         memoryapi::{VirtualAllocEx, WriteProcessMemory},
         processthreadsapi::{
-            CreateProcessW, GetCurrentThreadId, QueueUserAPC, ResumeThread, PROCESS_INFORMATION,
-            STARTUPINFOW,
+            CreateProcessAsUserW, GetCurrentThreadId, QueueUserAPC, ResumeThread,
+            PROCESS_INFORMATION, STARTUPINFOW,
         },
-        winbase::CREATE_SUSPENDED,
+        winbase::{WTSGetActiveConsoleSessionId, CREATE_SUSPENDED, DETACHED_PROCESS},
         winnt::{MEM_COMMIT, PAGE_READWRITE},
         winuser::*,
     },
@@ -54,19 +57,49 @@ pub const LOAD_LIBRARY_OS_INTEGRITY_CONTINUITY: u32 = 32768;
 const WM_USER_EXIT_HOOK: u32 = WM_USER + 1;
 
 lazy_static::lazy_static! {
-    static ref NEED_NOTIFY: Mutex<bool> = Mutex::new(false);
+    static ref DLL_FOUND: Mutex<bool> = Mutex::new(false);
     static ref CONN_ID: Mutex<i32> = Mutex::new(0);
-    static ref PRIVACY_MODE_ID: Mutex<DWORD> = Mutex::new(0);
+    static ref CUR_THREAD_ID: Mutex<DWORD> = Mutex::new(0);
+    static ref WND_HANDLERS: Mutex<WindowHandlers> = Mutex::new(WindowHandlers{hthread: 0, hprocess: 0});
+}
+
+struct WindowHandlers {
+    hthread: u64,
+    hprocess: u64,
+}
+
+impl Drop for WindowHandlers {
+    fn drop(&mut self) {
+        unsafe {
+            if self.hthread != 0 {
+                CloseHandle(self.hthread as _);
+            }
+            self.hthread = 0;
+            if self.hprocess != 0 {
+                CloseHandle(self.hprocess as _);
+            }
+            self.hprocess = 0;
+        }
+    }
 }
 
 pub fn turn_on_privacy(conn_id: i32) -> ResultType<bool> {
     let exe_file = std::env::current_exe()?;
     if let Some(cur_dir) = exe_file.parent() {
         if !cur_dir.join("WindowInjection.dll").exists() {
-            return Ok(false)
+            return Ok(false);
         }
     } else {
-        bail!("Invalid exe parent for {}", exe_file.to_string_lossy().as_ref());
+        bail!(
+            "Invalid exe parent for {}",
+            exe_file.to_string_lossy().as_ref()
+        );
+    }
+
+    if !*DLL_FOUND.lock().unwrap() {
+        log::info!("turn_on_privacy, dll not found when started, try start");
+        start()?;
+        std::thread::sleep(std::time::Duration::from_millis(1_000));
     }
 
     let pre_conn_id = *CONN_ID.lock().unwrap();
@@ -115,6 +148,11 @@ pub fn turn_off_privacy(conn_id: i32, state: Option<PrivacyModeState>) -> Result
 }
 
 pub fn start() -> ResultType<()> {
+    let mut wnd_handlers = WND_HANDLERS.lock().unwrap();
+    if wnd_handlers.hprocess != 0 {
+        return Ok(());
+    }
+
     let exe_file = std::env::current_exe()?;
     if exe_file.parent().is_none() {
         bail!("Cannot get parent of current exe file");
@@ -129,6 +167,8 @@ pub fn start() -> ResultType<()> {
         );
     }
 
+    *DLL_FOUND.lock().unwrap() = true;
+
     let hwnd = wait_find_privacy_hwnd(1_000)?;
     if !hwnd.is_null() {
         log::info!("Privacy window is already created");
@@ -142,8 +182,7 @@ pub fn start() -> ResultType<()> {
         .to_string();
 
     unsafe {
-        let mut cmd_utf16: Vec<u16> = cmdline.encode_utf16().collect();
-        cmd_utf16.push(0);
+        let cmd_utf16: Vec<u16> = cmdline.encode_utf16().chain(Some(0).into_iter()).collect();
 
         let mut start_info = STARTUPINFOW {
             cb: 0,
@@ -172,18 +211,27 @@ pub fn start() -> ResultType<()> {
             dwThreadId: 0,
         };
 
-        if 0 == CreateProcessW(
+        let session_id = WTSGetActiveConsoleSessionId();
+        let token = get_user_token(session_id, true);
+        if token.is_null() {
+            bail!("Failed to get token of current user");
+        }
+
+        let create_res = CreateProcessAsUserW(
+            token,
             NULL as _,
             cmd_utf16.as_ptr() as _,
             NULL as _,
             NULL as _,
             FALSE,
-            CREATE_SUSPENDED,
+            CREATE_SUSPENDED | DETACHED_PROCESS,
             NULL,
             NULL as _,
             &mut start_info,
             &mut proc_info,
-        ) {
+        );
+        CloseHandle(token);
+        if 0 == create_res {
             bail!(
                 "Failed to create privacy window process {}, code {}",
                 cmdline,
@@ -196,6 +244,7 @@ pub fn start() -> ResultType<()> {
             proc_info.hThread,
             dll_file.to_string_lossy().as_ref(),
         )?;
+
         if 0xffffffff == ResumeThread(proc_info.hThread) {
             // CloseHandle
             CloseHandle(proc_info.hThread);
@@ -207,6 +256,9 @@ pub fn start() -> ResultType<()> {
             );
         }
 
+        wnd_handlers.hthread = proc_info.hThread as _;
+        wnd_handlers.hprocess = proc_info.hProcess as _;
+
         let hwnd = wait_find_privacy_hwnd(1_000)?;
         if hwnd.is_null() {
             bail!("Failed to get hwnd after started");
@@ -217,8 +269,7 @@ pub fn start() -> ResultType<()> {
 }
 
 unsafe fn inject_dll<'a>(hproc: HANDLE, hthread: HANDLE, dll_file: &'a str) -> ResultType<()> {
-    let mut dll_file_utf16: Vec<u16> = dll_file.encode_utf16().collect();
-    dll_file_utf16.push(0);
+    let dll_file_utf16: Vec<u16> = dll_file.encode_utf16().chain(Some(0).into_iter()).collect();
 
     let buf = VirtualAllocEx(
         hproc,
@@ -299,8 +350,8 @@ pub(super) mod privacy_hook {
     fn do_hook(tx: Sender<String>) -> ResultType<(HHOOK, HHOOK)> {
         let invalid_ret = (0 as HHOOK, 0 as HHOOK);
 
-        let mut privacy_mode_id = PRIVACY_MODE_ID.lock().unwrap();
-        if *privacy_mode_id != 0 {
+        let mut cur_thread_id = CUR_THREAD_ID.lock().unwrap();
+        if *cur_thread_id != 0 {
             // unreachable!
             tx.send("Already hooked".to_owned())?;
             return Ok(invalid_ret);
@@ -356,7 +407,7 @@ pub(super) mod privacy_hook {
                 return Ok(invalid_ret);
             }
 
-            *privacy_mode_id = GetCurrentThreadId();
+            *cur_thread_id = GetCurrentThreadId();
             tx.send("".to_owned())?;
             return Ok((hook_keyboard, hook_mouse));
         }
@@ -413,7 +464,7 @@ pub(super) mod privacy_hook {
                     log::error!("Failed UnhookWindowsHookEx mouse {}", GetLastError());
                 }
 
-                *PRIVACY_MODE_ID.lock().unwrap() = 0;
+                *CUR_THREAD_ID.lock().unwrap() = 0;
             }
         });
 
@@ -433,9 +484,9 @@ pub(super) mod privacy_hook {
 
     pub fn unhook() -> ResultType<()> {
         unsafe {
-            let privacy_mode_id = PRIVACY_MODE_ID.lock().unwrap();
-            if *privacy_mode_id != 0 {
-                if FALSE == PostThreadMessageA(*privacy_mode_id, WM_USER_EXIT_HOOK, 0, 0) {
+            let cur_thread_id = CUR_THREAD_ID.lock().unwrap();
+            if *cur_thread_id != 0 {
+                if FALSE == PostThreadMessageA(*cur_thread_id, WM_USER_EXIT_HOOK, 0, 0) {
                     bail!("Failed to post message to exit hook, {}", GetLastError());
                 }
             }

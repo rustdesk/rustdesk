@@ -397,6 +397,7 @@ const SERVICE_TYPE: ServiceType = ServiceType::OWN_PROCESS;
 
 extern "C" {
     fn LaunchProcessWin(cmd: *const u16, session_id: DWORD, as_user: BOOL) -> HANDLE;
+    fn GetSessionUserTokenWin(lphUserToken: LPHANDLE, dwSessionId: DWORD, as_user: BOOL) -> BOOL;
     fn selectInputDesktop() -> BOOL;
     fn inputDesktopSelected() -> BOOL;
     fn handleMask(
@@ -1023,6 +1024,23 @@ pub fn toggle_blank_screen(v: bool) {
 pub fn block_input(v: bool) -> bool {
     let v = if v { TRUE } else { FALSE };
     unsafe { BlockInput(v) == TRUE }
+}
+
+pub fn get_user_token(session_id: u32, as_user: bool) -> HANDLE {
+    let mut token = NULL as HANDLE;
+    unsafe {
+        if FALSE
+            == GetSessionUserTokenWin(
+                &mut token as _,
+                session_id,
+                if as_user { TRUE } else { FALSE },
+            )
+        {
+            NULL as _
+        } else {
+            token
+        }
+    }
 }
 
 pub fn add_recent_document(path: &str) {
