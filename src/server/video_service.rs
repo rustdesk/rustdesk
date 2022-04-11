@@ -49,9 +49,55 @@ lazy_static::lazy_static! {
     };
     static ref PRIVACY_MODE_CONN_ID: Mutex<i32> = Mutex::new(0);
     static ref IS_CAPTURER_MAGNIFIER_SUPPORTED: bool = is_capturer_mag_supported();
+    static ref MAG_INITIALIZER: Mutex<MagInitializer> = Mutex::new(MagInitializer::new());
+}
+
+struct MagInitializer {
+    is_succeeded: bool,
+}
+
+impl MagInitializer {
+    fn new() -> Self {
+        let mut m = MagInitializer {
+            is_succeeded: false,
+        };
+        #[cfg(windows)]
+        {
+            m.is_succeeded = if let Err(e) = scrap::CapturerMag::init() {
+                log::error!("Failed to initialize magnifier capturer, {}", e);
+                false
+            } else {
+                true
+            };
+        }
+        m
+    }
+
+    fn uninit(&mut self) -> ResultType<()> {
+        if self.is_succeeded {
+            #[cfg(windows)]
+            {
+                scrap::CapturerMag::uninit()?;
+            }
+        }
+        self.is_succeeded = false;
+        Ok(())
+    }
+}
+
+impl Drop for MagInitializer {
+    fn drop(&mut self) {
+        if let Err(e) = self.uninit() {
+            log::error!("Failed to uninitialize magnifier capturer, {}", e);
+        }
+    }
 }
 
 fn is_capturer_mag_supported() -> bool {
+    if !MAG_INITIALIZER.lock().unwrap().is_succeeded {
+        return false;
+    }
+
     #[cfg(windows)]
     return scrap::CapturerMag::is_supported();
     #[cfg(not(windows))]

@@ -112,12 +112,22 @@ impl Display {
     }
 }
 
+pub struct CapturerMagInitializer {}
+
 pub struct CapturerMag {
     inner: dxgi::mag::CapturerMag,
     data: Vec<u8>,
 }
 
 impl CapturerMag {
+    pub fn init() -> io::Result<()> {
+        dxgi::mag::CapturerMag::init()
+    }
+
+    pub fn uninit() -> io::Result<()> {
+        dxgi::mag::CapturerMag::uninit()
+    }
+
     pub fn is_supported() -> bool {
         dxgi::mag::CapturerMag::is_supported()
     }
