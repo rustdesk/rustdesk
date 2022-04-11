@@ -7,6 +7,7 @@ use hbb_common::{
     fs,
     futures::{SinkExt, StreamExt},
     message_proto::{option_message::BoolOption, permission_info::Permission},
+    protobuf::MessageField,
     sleep, timeout,
     tokio::{
         net::TcpStream,
@@ -569,6 +570,10 @@ impl Connection {
             platform: whoami::platform().to_string(),
             version: crate::VERSION.to_owned(),
             sas_enabled,
+            features: MessageField::some(Features {
+                privacy_mode: video_service::is_privacy_mode_supported(),
+                ..Default::default()
+            }),
             ..Default::default()
         };
         let mut sub_service = false;

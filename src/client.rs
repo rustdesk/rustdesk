@@ -323,7 +323,11 @@ impl Client {
         Ok((conn, direct))
     }
 
-    async fn secure_connection(peer_id: &str, signed_id_pk: Vec<u8>, conn: &mut Stream) -> ResultType<()> {
+    async fn secure_connection(
+        peer_id: &str,
+        signed_id_pk: Vec<u8>,
+        conn: &mut Stream,
+    ) -> ResultType<()> {
         let rs_pk = get_rs_pk("OeVuKk5nlHiXp+APNn0Y3pC1Iwpwn44JGqrQCsWqmBw=");
         let mut sign_pk = None;
         if !signed_id_pk.is_empty() && rs_pk.is_some() {
@@ -664,6 +668,7 @@ pub struct LoginConfigHandler {
     config: PeerConfig,
     pub port_forward: (String, i32),
     pub version: i64,
+    features: Option<Features>,
 }
 
 impl Deref for LoginConfigHandler {
@@ -872,6 +877,14 @@ impl LoginConfigHandler {
         }
     }
 
+    pub fn is_privacy_mode_supported(&self) -> bool {
+        if let Some(features) = &self.features {
+            features.privacy_mode
+        } else {
+            false
+        }
+    }
+
     pub fn refresh() -> Message {
         let mut misc = Misc::new();
         misc.set_refresh_video(true);
@@ -944,6 +957,7 @@ impl LoginConfigHandler {
         if !pi.version.is_empty() {
             self.version = hbb_common::get_version_number(&pi.version);
         }
+        self.features = pi.features.into_option();
         let serde = PeerInfoSerde {
             username,
             hostname: pi.hostname.clone(),

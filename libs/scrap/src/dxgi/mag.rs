@@ -103,6 +103,7 @@ pub type MagSetImageScalingCallbackFunc = ::std::option::Option<
 #[repr(C)]
 #[derive(Debug, Clone)]
 struct MagInterface {
+    init_succeeded: bool,
     lib_handle: HINSTANCE,
     pub mag_initialize_func: MagInitializeFunc,
     pub mag_uninitialize_func: MagUninitializeFunc,
@@ -111,9 +112,12 @@ struct MagInterface {
     pub set_image_scaling_callback_func: MagSetImageScalingCallbackFunc,
 }
 
+// NOTE: MagInitialize and MagUninitialize should not be called in global init and uninit.
+// If so, strange errors occur.
 impl MagInterface {
     fn new() -> Result<Self> {
         let mut s = MagInterface {
+            init_succeeded: false,
             lib_handle: NULL as _,
             mag_initialize_func: None,
             mag_uninitialize_func: None,
@@ -121,7 +125,7 @@ impl MagInterface {
             set_window_filter_list_func: None,
             set_image_scaling_callback_func: None,
         };
-
+        s.init_succeeded = false;
         unsafe {
             if GetSystemMetrics(SM_CMONITORS) != 1 {
                 // Do not try to use the magnifier in multi-screen setup (where the API
@@ -172,6 +176,23 @@ impl MagInterface {
                 s.lib_handle,
                 "MagSetImageScalingCallback",
             )?));
+
+            // MagInitialize
+            if let Some(init_func) = s.mag_initialize_func {
+                if FALSE == init_func() {
+                    return Err(Error::new(
+                        ErrorKind::Other,
+                        format!("Failed to MagInitialize, error: {}", GetLastError()),
+                    ));
+                } else {
+                    s.init_succeeded = true;
+                }
+            } else {
+                return Err(Error::new(
+                    ErrorKind::Other,
+                    "Unreachable, mag_initialize_func should not be none",
+                ));
+            }
         }
         Ok(s)
     }
@@ -193,14 +214,24 @@ impl MagInterface {
     }
 
     pub(super) fn uninit(&mut self) {
-        if !self.lib_handle.is_null() {
-            unsafe {
-                if FALSE == FreeLibrary(self.lib_handle) {
-                    println!("Failed FreeLibrary {}", GetLastError())
+        if self.init_succeeded {
+            if let Some(uninit_func) = self.mag_uninitialize_func {
+                unsafe {
+                    if FALSE == uninit_func() {
+                        println!("Failed MagUninitialize {}", GetLastError())
+                    }
                 }
             }
-            self.lib_handle = NULL as _;
+            if !self.lib_handle.is_null() {
+                unsafe {
+                    if FALSE == FreeLibrary(self.lib_handle) {
+                        println!("Failed FreeLibrary {}", GetLastError())
+                    }
+                }
+                self.lib_handle = NULL as _;
+            }
         }
+        self.init_succeeded = false;
     }
 }
 
@@ -236,45 +267,6 @@ impl Drop for CapturerMag {
 }
 
 impl CapturerMag {
-    pub(crate) fn init() -> Result<()> {
-        let mag_interface = MagInterface::new()?;
-        // MagInitialize
-        if let Some(init_func) = mag_interface.mag_initialize_func {
-            unsafe {
-                if FALSE == init_func() {
-                    return Err(Error::new(
-                        ErrorKind::Other,
-                        format!("Failed to MagInitialize, error: {}", GetLastError()),
-                    ));
-                }
-            }
-        } else {
-            return Err(Error::new(
-                ErrorKind::Other,
-                "Unreachable, mag_initialize_func should not be none",
-            ));
-        }
-        Ok(())
-    }
-
-    pub(crate) fn uninit() -> Result<()> {
-        let mag_interface = MagInterface::new()?;
-        // MagUninitialize
-        if let Some(uninit_func) = mag_interface.mag_uninitialize_func {
-            unsafe {
-                if FALSE == uninit_func() {
-                    println!("Failed MagUninitialize {}", GetLastError())
-                }
-            }
-        } else {
-            return Err(Error::new(
-                ErrorKind::Other,
-                "Unreachable, mag_uninitialize_func should not be none",
-            ));
-        }
-        Ok(())
-    }
-
     pub(crate) fn is_supported() -> bool {
         MagInterface::new().is_ok()
     }
@@ -455,7 +447,7 @@ impl CapturerMag {
                     return Err(Error::new(
                         ErrorKind::Other,
                         format!(
-                            "Failed MagSetWindowFilterList for cls {} title {}, err: {}",
+                            "Failed MagSetWindowFilterList for cls {} name {}, err: {}",
                             cls,
                             name,
                             GetLastError()

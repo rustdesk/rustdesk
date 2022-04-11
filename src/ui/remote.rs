@@ -208,6 +208,7 @@ impl sciter::EventHandler for Handler {
         fn save_custom_image_quality(i32, i32);
         fn refresh_video();
         fn get_toggle_option(String);
+        fn is_privacy_mode_supported();
         fn toggle_option(String);
         fn get_remember();
     }
@@ -499,6 +500,10 @@ impl Handler {
 
     fn get_toggle_option(&mut self, name: String) -> bool {
         self.lc.read().unwrap().get_toggle_option(&name)
+    }
+
+    fn is_privacy_mode_supported(&self) -> bool {
+        self.lc.read().unwrap().is_privacy_mode_supported()
     }
 
     fn refresh_video(&mut self) {
@@ -1964,8 +1969,11 @@ impl Remote {
     ) -> bool {
         match state {
             back_notification::PrivacyModeState::OnByOther => {
-                self.handler
-                    .msgbox("error", "Connecting...", "Someone turns on privacy mode, exit");
+                self.handler.msgbox(
+                    "error",
+                    "Connecting...",
+                    "Someone turns on privacy mode, exit",
+                );
                 return false;
             }
             back_notification::PrivacyModeState::NotSupported => {
@@ -1987,7 +1995,8 @@ impl Remote {
                 self.update_privacy_mode(false);
             }
             back_notification::PrivacyModeState::OnFailed => {
-                self.handler.msgbox("custom-error", "Privacy mode", "Failed");
+                self.handler
+                    .msgbox("custom-error", "Privacy mode", "Failed");
                 self.update_privacy_mode(false);
             }
             back_notification::PrivacyModeState::OffSucceeded => {
@@ -2003,7 +2012,8 @@ impl Remote {
                     .msgbox("custom-error", "Privacy mode", "Failed off");
             }
             back_notification::PrivacyModeState::OffUnknown => {
-                self.handler.msgbox("custom-error", "Privacy mode", "Turned off");
+                self.handler
+                    .msgbox("custom-error", "Privacy mode", "Turned off");
                 // log::error!("Privacy mode is turned off with unknown reason");
                 self.update_privacy_mode(false);
             }
@@ -2094,6 +2104,7 @@ impl Interface for Handler {
         } else if !self.is_port_forward() {
             if pi.displays.is_empty() {
                 self.lc.write().unwrap().handle_peer_info(username, pi);
+                self.call("updatePrivacyMode", &[]);
                 self.msgbox("error", "Remote Error", "No Display");
                 return;
             }
@@ -2128,6 +2139,7 @@ impl Interface for Handler {
             });
         }
         self.lc.write().unwrap().handle_peer_info(username, pi);
+        self.call("updatePrivacyMode", &[]);
         self.call("updatePi", &make_args!(pi_sciter));
         if self.is_file_transfer() {
             self.call2("closeSuccess", &make_args!());

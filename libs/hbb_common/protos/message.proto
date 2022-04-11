@@ -64,6 +64,10 @@ message LoginRequest {
 
 message ChatMessage { string text = 1; }
 
+message Features {
+  bool privacy_mode = 1;
+}
+
 message PeerInfo {
   string username = 1;
   string hostname = 2;
@@ -72,6 +76,7 @@ message PeerInfo {
   int32 current_display = 5;
   bool sas_enabled = 6;
   string version = 7;
+  Features features = 8;
 }
 
 message LoginResponse {

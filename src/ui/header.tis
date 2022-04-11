@@ -259,7 +259,7 @@ class Header: Reactor.Component {
         if (me.id == "custom") {
             handle_custom_image_quality();
         } else if (me.id == "privacy-mode") {
-            handler.toggle_option(me.id);
+            togglePrivacyMode(me.id);
         } else if (me.attributes.hasClass("toggle-option")) {
             handler.toggle_option(me.id);
             toggleMenuState();
@@ -345,15 +345,30 @@ handler.updatePi = function(v) {
 function updatePrivacyMode() {
     var el = $(li#privacy-mode);
     if (el) {
-        var value = handler.get_toggle_option("privacy-mode");
-        el.attributes.toggleClass("selected", value);
-        var el = $(li#block-input);
-        if (el) {
-            el.state.disabled = value;
+        var supported = handler.is_privacy_mode_supported();
+        if (!supported) {
+            // el.attributes.toggleClass("line-through", true);
+            el.style["display"]="none";
+        } else {
+            var value = handler.get_toggle_option("privacy-mode");
+            el.attributes.toggleClass("selected", value);
+            var el = $(li#block-input);
+            if (el) {
+                el.state.disabled = value;
+            }
         }
     }
 }
 handler.updatePrivacyMode = updatePrivacyMode;
+
+function togglePrivacyMode(privacy_id) {
+    var supported = handler.is_privacy_mode_supported();
+    if (!supported) {
+        msgbox("nocancel", translate("Privacy mode"), translate("Unsupported"), function() { });
+    } else {
+        handler.toggle_option(privacy_id);
+    }
+}
 
 handler.updateBlockInputState = function(input_blocked) {
     if (!input_blocked) {
