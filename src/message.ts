@@ -663,7 +663,6 @@ export interface PeerInfo {
   sas_enabled: boolean;
   version: string;
   conn_id: number;
-  home_dir: string;
 }
 
 export interface LoginResponse {
@@ -1879,7 +1878,6 @@ function createBasePeerInfo(): PeerInfo {
     sas_enabled: false,
     version: "",
     conn_id: 0,
-    home_dir: "",
   };
 }
 
@@ -1911,9 +1909,6 @@ export const PeerInfo = {
     }
     if (message.conn_id !== 0) {
       writer.uint32(64).int32(message.conn_id);
-    }
-    if (message.home_dir !== "") {
-      writer.uint32(74).string(message.home_dir);
     }
     return writer;
   },
@@ -1949,9 +1944,6 @@ export const PeerInfo = {
         case 8:
           message.conn_id = reader.int32();
           break;
-        case 9:
-          message.home_dir = reader.string();
-          break;
         default:
           reader.skipType(tag & 7);
           break;
@@ -1976,7 +1968,6 @@ export const PeerInfo = {
         : false,
       version: isSet(object.version) ? String(object.version) : "",
       conn_id: isSet(object.conn_id) ? Number(object.conn_id) : 0,
-      home_dir: isSet(object.home_dir) ? String(object.home_dir) : "",
     };
   },
 
@@ -1999,7 +1990,6 @@ export const PeerInfo = {
     message.version !== undefined && (obj.version = message.version);
     message.conn_id !== undefined &&
       (obj.conn_id = Math.round(message.conn_id));
-    message.home_dir !== undefined && (obj.home_dir = message.home_dir);
     return obj;
   },
 
@@ -2014,7 +2004,6 @@ export const PeerInfo = {
     message.sas_enabled = object.sas_enabled ?? false;
     message.version = object.version ?? "";
     message.conn_id = object.conn_id ?? 0;
-    message.home_dir = object.home_dir ?? "";
     return message;
   },
 };
