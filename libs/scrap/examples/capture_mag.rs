@@ -33,11 +33,11 @@ fn record(i: usize) {
             CapturerMag::new(display.origin(), display.width(), display.height(), false)
                 .expect("Couldn't begin capture.");
         let wnd_cls = "";
-        let wnd_title = "RustDeskPrivacyWindow";
-        if false == capture_mag.exclude(wnd_cls, wnd_title).unwrap() {
-            println!("No window found for cls {} title {}", wnd_cls, wnd_title);
+        let wnd_name = "RustDeskPrivacyWindow";
+        if false == capture_mag.exclude(wnd_cls, wnd_name).unwrap() {
+            println!("No window found for cls {} name {}", wnd_cls, wnd_name);
         } else {
-            println!("Filter window for cls {} title {}", wnd_cls, wnd_title);
+            println!("Filter window for cls {} name {}", wnd_cls, wnd_name);
         }
 
         let frame = capture_mag.frame(0).unwrap();

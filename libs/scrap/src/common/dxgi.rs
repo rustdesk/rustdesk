@@ -128,8 +128,8 @@ impl CapturerMag {
             data: Vec::new(),
         })
     }
-    pub fn exclude(&mut self, cls: &str, title: &str) -> io::Result<bool> {
-        self.inner.exclude(cls, title)
+    pub fn exclude(&mut self, cls: &str, name: &str) -> io::Result<bool> {
+        self.inner.exclude(cls, name)
     }
     // ((x, y), w, h)
     pub fn get_rect(&self) -> ((i32, i32), usize, usize) {

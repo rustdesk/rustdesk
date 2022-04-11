@@ -417,14 +417,14 @@ impl CapturerMag {
         Ok(s)
     }
 
-    pub(crate) fn exclude(&mut self, cls: &str, title: &str) -> Result<bool> {
-        let title_c = CString::new(title).unwrap();
+    pub(crate) fn exclude(&mut self, cls: &str, name: &str) -> Result<bool> {
+        let name_c = CString::new(name).unwrap();
         unsafe {
             let mut hwnd = if cls.len() == 0 {
-                FindWindowExA(NULL as _, NULL as _, NULL as _, title_c.as_ptr())
+                FindWindowExA(NULL as _, NULL as _, NULL as _, name_c.as_ptr())
             } else {
-                let cls_c = CString::new(title).unwrap();
-                FindWindowExA(NULL as _, NULL as _, cls_c.as_ptr(), title_c.as_ptr())
+                let cls_c = CString::new(cls).unwrap();
+                FindWindowExA(NULL as _, NULL as _, cls_c.as_ptr(), name_c.as_ptr())
             };
 
             if hwnd.is_null() {
@@ -445,9 +445,9 @@ impl CapturerMag {
                     return Err(Error::new(
                         ErrorKind::Other,
                         format!(
-                            "Failed MagSetWindowFilterList for cls {} title {}, err: {}",
+                            "Failed MagSetWindowFilterList for cls {} name {}, err: {}",
                             cls,
-                            title,
+                            name,
                             GetLastError()
                         ),
                     ));

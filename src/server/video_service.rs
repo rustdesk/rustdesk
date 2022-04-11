@@ -245,7 +245,7 @@ fn create_capturer(privacy_mode_id: i32, display: Display) -> ResultType<Box<dyn
                     let mut ok = false;
                     let check_begin = Instant::now();
                     while check_begin.elapsed().as_secs() < 5 {
-                        match c1.exclude("", PRIVACY_WINDOW_TITLE) {
+                        match c1.exclude("", PRIVACY_WINDOW_NAME) {
                             Ok(false) => {
                                 ok = false;
                                 std::thread::sleep(std::time::Duration::from_millis(500));
@@ -254,7 +254,7 @@ fn create_capturer(privacy_mode_id: i32, display: Display) -> ResultType<Box<dyn
                                 bail!(
                                     "Failed to exclude privacy window {} - {}, err: {}",
                                     "",
-                                    PRIVACY_WINDOW_TITLE,
+                                    PRIVACY_WINDOW_NAME,
                                     e
                                 );
                             }
@@ -268,7 +268,7 @@ fn create_capturer(privacy_mode_id: i32, display: Display) -> ResultType<Box<dyn
                         bail!(
                             "Failed to exclude privacy window {} - {} ",
                             "",
-                            PRIVACY_WINDOW_TITLE
+                            PRIVACY_WINDOW_NAME
                         );
                     }
                     c = Some(Box::new(c1));

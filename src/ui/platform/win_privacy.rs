@@ -30,36 +30,17 @@ use winapi::{
     },
 };
 
-pub const PRIVACY_WINDOW_CLASS_NAME: &'static str = "RustDeskPrivacyWindowClass";
 pub const PRIVACY_WINDOW_NAME: &'static str = "RustDeskPrivacyWindow";
-pub const PRIVACY_WINDOW_TITLE: &'static str = "RustDeskPrivacyWindow";
 
-pub const MW_FILTERMODE_EXCLUDE: u32 = 0;
-pub const MW_FILTERMODE_INCLUDE: u32 = 1;
-pub const GET_MODULE_HANDLE_EX_FLAG_PIN: u32 = 1;
 pub const GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT: u32 = 2;
 pub const GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS: u32 = 4;
-pub const LOAD_LIBRARY_AS_DATAFILE: u32 = 2;
-pub const LOAD_WITH_ALTERED_SEARCH_PATH: u32 = 8;
-pub const LOAD_IGNORE_CODE_AUTHZ_LEVEL: u32 = 16;
-pub const LOAD_LIBRARY_AS_IMAGE_RESOURCE: u32 = 32;
-pub const LOAD_LIBRARY_AS_DATAFILE_EXCLUSIVE: u32 = 64;
-pub const LOAD_LIBRARY_REQUIRE_SIGNED_TARGET: u32 = 128;
-pub const LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR: u32 = 256;
-pub const LOAD_LIBRARY_SEARCH_APPLICATION_DIR: u32 = 512;
-pub const LOAD_LIBRARY_SEARCH_USER_DIRS: u32 = 1024;
-pub const LOAD_LIBRARY_SEARCH_SYSTEM32: u32 = 2048;
-pub const LOAD_LIBRARY_SEARCH_DEFAULT_DIRS: u32 = 4096;
-pub const LOAD_LIBRARY_SAFE_CURRENT_DIRS: u32 = 8192;
-pub const LOAD_LIBRARY_SEARCH_SYSTEM32_NO_FORWARDER: u32 = 16384;
-pub const LOAD_LIBRARY_OS_INTEGRITY_CONTINUITY: u32 = 32768;
 
 const WM_USER_EXIT_HOOK: u32 = WM_USER + 1;
 
 lazy_static::lazy_static! {
     static ref DLL_FOUND: Mutex<bool> = Mutex::new(false);
     static ref CONN_ID: Mutex<i32> = Mutex::new(0);
-    static ref CUR_THREAD_ID: Mutex<DWORD> = Mutex::new(0);
+    static ref CUR_HOOK_THREAD_ID: Mutex<DWORD> = Mutex::new(0);
     static ref WND_HANDLERS: Mutex<WindowHandlers> = Mutex::new(WindowHandlers{hthread: 0, hprocess: 0});
 }
 
@@ -350,8 +331,8 @@ pub(super) mod privacy_hook {
     fn do_hook(tx: Sender<String>) -> ResultType<(HHOOK, HHOOK)> {
         let invalid_ret = (0 as HHOOK, 0 as HHOOK);
 
-        let mut cur_thread_id = CUR_THREAD_ID.lock().unwrap();
-        if *cur_thread_id != 0 {
+        let mut cur_hook_thread_id = CUR_HOOK_THREAD_ID.lock().unwrap();
+        if *cur_hook_thread_id != 0 {
             // unreachable!
             tx.send("Already hooked".to_owned())?;
             return Ok(invalid_ret);
@@ -407,7 +388,7 @@ pub(super) mod privacy_hook {
                 return Ok(invalid_ret);
             }
 
-            *cur_thread_id = GetCurrentThreadId();
+            *cur_hook_thread_id = GetCurrentThreadId();
             tx.send("".to_owned())?;
             return Ok((hook_keyboard, hook_mouse));
         }
@@ -464,7 +445,7 @@ pub(super) mod privacy_hook {
                     log::error!("Failed UnhookWindowsHookEx mouse {}", GetLastError());
                 }
 
-                *CUR_THREAD_ID.lock().unwrap() = 0;
+                *CUR_HOOK_THREAD_ID.lock().unwrap() = 0;
             }
         });
 
@@ -484,9 +465,9 @@ pub(super) mod privacy_hook {
 
     pub fn unhook() -> ResultType<()> {
         unsafe {
-            let cur_thread_id = CUR_THREAD_ID.lock().unwrap();
-            if *cur_thread_id != 0 {
-                if FALSE == PostThreadMessageA(*cur_thread_id, WM_USER_EXIT_HOOK, 0, 0) {
+            let cur_hook_thread_id = CUR_HOOK_THREAD_ID.lock().unwrap();
+            if *cur_hook_thread_id != 0 {
+                if FALSE == PostThreadMessageA(*cur_hook_thread_id, WM_USER_EXIT_HOOK, 0, 0) {
                     bail!("Failed to post message to exit hook, {}", GetLastError());
                 }
             }
