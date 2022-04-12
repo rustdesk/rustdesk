@@ -27,6 +27,6 @@ cfg_if! {
 pub mod codec;
 mod convert;
 pub use self::convert::*;
-pub const STRIDE_ALIGN: usize = 16; // commonly used in libvpx vpx_img_alloc caller
+pub const STRIDE_ALIGN: usize = 64; // commonly used in libvpx vpx_img_alloc caller
 
 mod vpx;
