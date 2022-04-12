@@ -84,7 +84,7 @@ rust-pulsectl = { git = "https://github.com/open-trade/pulsectl" }
 android_logger = "0.11"
 
 [workspace]
-members = ["libs/scrap", "libs/hbb_common", "libs/enigo", "libs/clipboard", "libs/virtual_display"]
+members = ["libs/scrap", "libs/hbb_common", "libs/enigo", "libs/clipboard", "libs/virtual_display", "libs/simple_rc"]
 
 [package.metadata.winres]
 LegalCopyright = "Copyright © 2020"
