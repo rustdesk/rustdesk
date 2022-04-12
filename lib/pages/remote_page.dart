@@ -209,7 +209,7 @@ class _RemotePageState extends State<RemotePage> {
                   mini: !hideKeyboard,
                   child: Icon(
                       hideKeyboard ? Icons.expand_more : Icons.expand_less),
-                  backgroundColor: MyTheme.accent50,
+                  backgroundColor: MyTheme.accent,
                   onPressed: () {
                     setState(() {
                       if (hideKeyboard) {
