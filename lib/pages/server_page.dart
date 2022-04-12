@@ -204,17 +204,36 @@ class _PermissionCheckerState extends State<PermissionChecker> {
                     style: TextStyle(color: MyTheme.darkGray),
                   ),
             SizedBox(height: 8),
-            serverModel.mediaOk
-                ? ElevatedButton.icon(
-                    style: ButtonStyle(
-                        backgroundColor: MaterialStateProperty.all(Colors.red)),
-                    icon: Icon(Icons.stop),
-                    onPressed: serverModel.toggleService,
-                    label: Text(translate("Stop service")))
-                : ElevatedButton.icon(
-                    icon: Icon(Icons.play_arrow),
-                    onPressed: serverModel.toggleService,
-                    label: Text(translate("Start Service"))),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                serverModel.mediaOk
+                    ? ElevatedButton.icon(
+                        style: ButtonStyle(
+                            backgroundColor:
+                                MaterialStateProperty.all(Colors.red)),
+                        icon: Icon(Icons.stop),
+                        onPressed: serverModel.toggleService,
+                        label: Text(translate("Stop service")))
+                    : ElevatedButton.icon(
+                        icon: Icon(Icons.play_arrow),
+                        onPressed: serverModel.toggleService,
+                        label: Text(translate("Start Service"))),
+                serverModel.mediaOk
+                    ? Row(
+                        children: [
+                          Padding(
+                              padding: EdgeInsets.only(left: 20, right: 5),
+                              child: Icon(Icons.circle,
+                                  color: Colors.greenAccent, size: 10)),
+                          Text(translate("Ready"),
+                              style: TextStyle(
+                                  fontSize: 16.0, color: MyTheme.accent50))
+                        ],
+                      )
+                    : SizedBox.shrink()
+              ],
+            ),
           ],
         ));
   }

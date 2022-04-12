@@ -3,7 +3,7 @@ import 'dart:async';
 import 'package:flutter_easyloading/flutter_easyloading.dart';
 
 final globalKey = GlobalKey<NavigatorState>();
-final navigationBarKey =  GlobalKey();
+final navigationBarKey = GlobalKey();
 
 var isAndroid = false;
 var isIOS = false;
@@ -49,6 +49,7 @@ void showLoading(String text) {
           constraints: BoxConstraints(maxWidth: 240),
           child:
               Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            SizedBox(height: 30),
             Center(child: CircularProgressIndicator()),
             SizedBox(height: 20),
             Center(
@@ -69,7 +70,6 @@ void showLoading(String text) {
 }
 
 backToHome() {
-  // use [popUntil()] to make sure pop action can't close the current MaterialApp context
   Navigator.popUntil(globalKey.currentContext!, ModalRoute.withName("/"));
 }
 

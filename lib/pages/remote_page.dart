@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_easyloading/flutter_easyloading.dart';
+import 'package:flutter_hbb/models/chat_model.dart';
 import 'package:flutter_hbb/widgets/gesture_help.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter/services.dart';
@@ -282,7 +283,11 @@ class _RemotePageState extends State<RemotePage> {
                           IconButton(
                             color: Colors.white,
                             icon: Icon(Icons.message),
-                            onPressed: toggleChatOverlay,
+                            onPressed: () {
+                              FFI.chatModel
+                                  .changeCurrentID(ChatModel.clientModeID);
+                              toggleChatOverlay();
+                            },
                           )
                         ]) +
                   [
