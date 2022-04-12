@@ -43,7 +43,7 @@ class MainActivity : FlutterActivity() {
                         Intent(activity, MainService::class.java).also {
                             bindService(it, serviceConnection, Context.BIND_AUTO_CREATE)
                         }
-                        if(mainService?.isReady == true){
+                        if (mainService?.isReady == true) {
                             result.success(false)
                             return@setMethodCallHandler
                         }
@@ -58,7 +58,7 @@ class MainActivity : FlutterActivity() {
                         }
                     }
                     "stop_service" -> {
-                        Log.d(logTag,"Stop service")
+                        Log.d(logTag, "Stop service")
                         mainService?.let {
                             it.destroy()
                             result.success(true)
@@ -67,14 +67,14 @@ class MainActivity : FlutterActivity() {
                         }
                     }
                     "check_permission" -> {
-                        if(call.arguments is String){
+                        if (call.arguments is String) {
                             result.success(checkPermission(context, call.arguments as String))
                         } else {
                             result.success(false)
                         }
                     }
                     "request_permission" -> {
-                        if(call.arguments is String){
+                        if (call.arguments is String) {
                             requestPermission(context, call.arguments as String)
                             result.success(true)
                         } else {
@@ -117,14 +117,13 @@ class MainActivity : FlutterActivity() {
                     "cancel_notification" -> {
                         try {
                             val id = call.arguments as Int
-                            Log.d(logTag,"cancel_notification id:$id")
                             mainService?.cancelNotification(id)
-                        }finally {
+                        } finally {
                             result.success(true)
                         }
                     }
                     else -> {
-                        result.error("-1","No such method",null)
+                        result.error("-1", "No such method", null)
                     }
                 }
             }
@@ -181,10 +180,13 @@ class MainActivity : FlutterActivity() {
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
-        if (requestCode == MEDIA_REQUEST_CODE && resultCode == Activity.RESULT_OK && data != null) {
-            Log.d(logTag, "got mediaProjectionResultIntent ok")
-            mediaProjectionResultIntent = data
-            initService()
+        if (requestCode == MEDIA_REQUEST_CODE) {
+            if (resultCode == Activity.RESULT_OK && data != null) {
+                mediaProjectionResultIntent = data
+                initService()
+            } else {
+                flutterMethodChannel.invokeMethod("on_media_projection_canceled", null)
+            }
         }
     }
 

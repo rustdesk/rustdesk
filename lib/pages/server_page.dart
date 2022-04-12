@@ -82,8 +82,8 @@ class ServerPage extends StatelessWidget implements PageShape {
 void checkService() async {
   FFI.invokeMethod("check_service"); // jvm
   // for Android 10/11,MANAGE_EXTERNAL_STORAGE permission from a system setting page
-  if(PermissionManager.isWaitingFile() && !FFI.serverModel.fileOk){
-    PermissionManager.complete("file",await PermissionManager.check("file"));
+  if (PermissionManager.isWaitingFile() && !FFI.serverModel.fileOk) {
+    PermissionManager.complete("file", await PermissionManager.check("file"));
     debugPrint("file permission finished");
   }
 }
@@ -280,15 +280,20 @@ class ConnectionManager extends StatelessWidget {
                       children: [
                         clientInfo(entry.value),
                         entry.value.isFileTransfer
-                            ?SizedBox.shrink()
-                            :IconButton(onPressed: (){
-                              FFI.chatModel.changeCurrentID(entry.value.id);
-                              final bar = navigationBarKey.currentWidget;
-                              if(bar!=null){
-                                bar as BottomNavigationBar;
-                                bar.onTap!(1);
-                              }
-                        }, icon: Icon(Icons.chat,color: MyTheme.accent80,))
+                            ? SizedBox.shrink()
+                            : IconButton(
+                                onPressed: () {
+                                  FFI.chatModel.changeCurrentID(entry.value.id);
+                                  final bar = navigationBarKey.currentWidget;
+                                  if (bar != null) {
+                                    bar as BottomNavigationBar;
+                                    bar.onTap!(1);
+                                  }
+                                },
+                                icon: Icon(
+                                  Icons.chat,
+                                  color: MyTheme.accent80,
+                                ))
                       ],
                     ),
                     ElevatedButton.icon(
@@ -360,24 +365,24 @@ Widget clientInfo(Client client) {
   return Padding(
       padding: EdgeInsets.symmetric(vertical: 8),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-    Row(
-      children: [
-        CircleAvatar(
-            child: Text(client.name[0]), backgroundColor: MyTheme.border),
-        SizedBox(width: 12),
-        Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Text(client.name,
-                  style: TextStyle(color: MyTheme.idColor, fontSize: 20)),
-              SizedBox(width: 8),
-              Text(client.peerId,
-                  style: TextStyle(color: MyTheme.idColor, fontSize: 10))
-            ])
-      ],
-    ),
-  ]));
+        Row(
+          children: [
+            CircleAvatar(
+                child: Text(client.name[0]), backgroundColor: MyTheme.border),
+            SizedBox(width: 12),
+            Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(client.name,
+                      style: TextStyle(color: MyTheme.idColor, fontSize: 20)),
+                  SizedBox(width: 8),
+                  Text(client.peerId,
+                      style: TextStyle(color: MyTheme.idColor, fontSize: 10))
+                ])
+          ],
+        ),
+      ]));
 }
 
 void toAndroidChannelInit() {
@@ -404,6 +409,11 @@ void toAndroidChannelInit() {
             var type = arguments["type"] as String;
             var result = arguments["result"] as bool;
             PermissionManager.complete(type, result);
+            break;
+          }
+        case "on_media_projection_canceled":
+          {
+            FFI.serverModel.stopService();
             break;
           }
       }
