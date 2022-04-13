@@ -58,12 +58,16 @@ class ServerPage extends StatelessWidget implements PageShape {
   ];
 
   @override
+  final scrollController = ScrollController();
+
+  @override
   Widget build(BuildContext context) {
     checkService();
     return ChangeNotifierProvider.value(
         value: FFI.serverModel,
         child: Consumer<ServerModel>(
             builder: (context, serverModel, child) => SingleChildScrollView(
+                  controller: scrollController,
                   child: Center(
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.start,

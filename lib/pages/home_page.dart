@@ -9,6 +9,7 @@ abstract class PageShape extends Widget {
   final String title = "";
   final Icon icon = Icon(null);
   final List<Widget> appBarActions = [];
+  final ScrollController? scrollController = null;
 }
 
 class HomePage extends StatefulWidget {
@@ -74,7 +75,20 @@ class _HomePageState extends State<HomePage> {
               _selectedIndex = index;
             }),
           ),
-          body: _pages.elementAt(_selectedIndex),
+          body: Listener(
+              onPointerMove: (evt) {
+                final page = _pages.elementAt(_selectedIndex);
+
+                /// Flutter can't not catch PointerMoveEvent when size is 1
+                /// This will happen in Android AccessibilityService Input
+                /// android can't init dispatching size yet ,see: https://stackoverflow.com/questions/59960451/android-accessibility-dispatchgesture-is-it-possible-to-specify-pressure-for-a
+                /// use this temporary solution until flutter or android fixes the bug
+                if (evt.size == 1 && page.scrollController != null) {
+                  final offset = page.scrollController!.offset.toDouble();
+                  page.scrollController!.jumpTo(offset - evt.delta.dy);
+                }
+              },
+              child: _pages.elementAt(_selectedIndex)),
         ));
   }
 }
