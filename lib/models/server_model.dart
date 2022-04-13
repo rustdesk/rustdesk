@@ -296,9 +296,8 @@ class ServerModel with ChangeNotifier {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(translate("Do you accept?")),
-                  SizedBox(height: 20),
                   clientInfo(client),
-                  Text(translate("android_new_connection_tip")),
+                  Text(translate("android_new_connection_tip"),style: TextStyle(color: Colors.black54),),
                 ],
               ),
               actions: [

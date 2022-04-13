@@ -7,6 +7,7 @@ import android.graphics.Path
 import android.os.Build
 import android.util.Log
 import android.view.accessibility.AccessibilityEvent
+import androidx.annotation.Keep
 import androidx.annotation.RequiresApi
 
 class InputService : AccessibilityService() {
@@ -30,6 +31,7 @@ class InputService : AccessibilityService() {
     private var mouseX = 0
     private var mouseY = 0
 
+    @Keep
     @RequiresApi(Build.VERSION_CODES.N)
     fun rustMouseInput(mask: Int, _x: Int, _y: Int) {
         val x = if (_x < 0) {
@@ -107,11 +109,7 @@ class InputService : AccessibilityService() {
         init(this)
     }
 
-    override fun onAccessibilityEvent(event: AccessibilityEvent?) {
-//        TODO("Not yet implemented")
-    }
+    override fun onAccessibilityEvent(event: AccessibilityEvent?) {}
 
-    override fun onInterrupt() {
-//        TODO("Not yet implemented")
-    }
+    override fun onInterrupt() {}
 }
