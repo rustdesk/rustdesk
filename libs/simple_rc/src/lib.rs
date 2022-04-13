@@ -3,24 +3,22 @@ use serde_derive::{Deserialize, Serialize};
 use std::{collections::HashMap, fs::File, io::prelude::*, path::Path};
 use walkdir::WalkDir;
 
-const CONF_FILE: &str = "simple_rc.toml";
-
 #[derive(Debug, Default, PartialEq, Serialize, Deserialize, Clone)]
 pub struct ConfigItem {
-    #[serde(default)]
+    // include directory or file
     pub inc: String,
-    #[serde(default)]
+    // exclude files
     pub exc: Vec<String>,
-    #[serde(default)]
+    // out_path = origin_path - suppressed_front
     pub suppressed_front: String,
 }
 
 #[derive(Debug, Default, PartialEq, Serialize, Deserialize, Clone)]
 pub struct Config {
-    #[serde(default)]
-    confs: Vec<ConfigItem>,
-    #[serde(default)]
-    outfile: String,
+    // output source file
+    pub outfile: String,
+    // config items
+    pub confs: Vec<ConfigItem>,
 }
 
 pub fn get_outin_files<'a>(item: &'a ConfigItem) -> ResultType<HashMap<String, String>> {
@@ -29,6 +27,26 @@ pub fn get_outin_files<'a>(item: &'a ConfigItem) -> ResultType<HashMap<String, S
     for entry in WalkDir::new(&item.inc).follow_links(true) {
         let path = entry?.into_path();
         if path.is_file() {
+            let mut exclude = false;
+            for excfile in item.exc.iter() {
+                if excfile.starts_with("*.") {
+                    if let Some(ext) = path.extension().and_then(|x| x.to_str()) {
+                        if excfile.ends_with(&format!(".{}", ext)) {
+                            exclude = true;
+                            break;
+                        }
+                    }
+                } else {
+                    if path.ends_with(Path::new(excfile)) {
+                        exclude = true;
+                        break;
+                    }
+                }
+            }
+            if exclude {
+                continue;
+            }
+
             let mut suppressed_front = item.suppressed_front.clone();
             if !suppressed_front.is_empty() && suppressed_front.ends_with('/') {
                 suppressed_front.push('/');
@@ -50,7 +68,9 @@ pub fn get_outin_files<'a>(item: &'a ConfigItem) -> ResultType<HashMap<String, S
                     None => {
                         bail!("Failed to convert {} to string", outpath.display());
                     }
-                    Some(s) => s.to_string(),
+                    // Simple replace \ to / here.
+                    // A better way is to use lib [path-slash](https://github.com/rhysd/path-slash)
+                    Some(s) => s.to_string().replace("\\", "/"),
                 }
             };
             let infile = match path.canonicalize()?.to_str() {
@@ -68,12 +88,17 @@ pub fn get_outin_files<'a>(item: &'a ConfigItem) -> ResultType<HashMap<String, S
     Ok(outin_filemap)
 }
 
-pub fn generate<'a>(conf: &'a Config) -> ResultType<()> {
+pub fn generate(conf_file: &str) -> ResultType<()> {
+    let conf = confy::load_path(conf_file)?;
+    generate_with_conf(&conf)?;
+    Ok(())
+}
+
+pub fn generate_with_conf<'a>(conf: &'a Config) -> ResultType<()> {
     let mut outfile = File::create(&conf.outfile)?;
 
     outfile.write(
-        br##"
-use hbb_common::{bail, ResultType};
+        br##"use hbb_common::{bail, ResultType};
 use std::{
     fs::{self, File},
     io::prelude::*,
@@ -83,6 +108,7 @@ use std::{
 "##,
     )?;
 
+    outfile.write(b"#[allow(dead_code)]\n")?;
     outfile.write(b"pub fn extract_resources() -> ResultType<()> {\n")?;
     outfile.write(b"    let mut resources: Vec<(&str, &[u8])> = Vec::new();\n")?;
 
@@ -133,6 +159,7 @@ use std::{
 
     outfile.write(
         br##"
+#[allow(dead_code)]
 fn do_extract(resources: Vec<(&str, &[u8])>) -> ResultType<()> {
     for (outfile, data) in resources {
         match Path::new(outfile).parent().and_then(|p| p.to_str()) {
@@ -155,33 +182,4 @@ fn do_extract(resources: Vec<(&str, &[u8])>) -> ResultType<()> {
     outfile.flush()?;
 
     Ok(())
-}
-
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn it_works() {
-        let result = 2 + 2;
-        assert_eq!(result, 4);
-    }
-
-    #[test]
-    fn test_generate() {
-        use super::*;
-        generate(&Config {
-            confs: vec![ConfigItem {
-                inc: "D:/aa.png".to_owned(),
-                exc: vec![],
-                suppressed_front: "".to_owned(),
-            }],
-            outfile: "src/aa.rs".to_owned(),
-        })
-        .unwrap();
-    }
-
-    // #[test]
-    // fn test_extract() {
-    //     use super::*;
-    //     aa::extract_resources().unwrap();
-    // }
 }

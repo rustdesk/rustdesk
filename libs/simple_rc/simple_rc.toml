@@ -1,0 +1,6 @@
+outfile = "src/rc.rs"
+
+[[confs]]
+inc = "D:/projects/windows/RustDeskTempTopMostWindow/x64/Release/xxx"
+exc = ["*.dll", "*.exe"]
+suppressed_front = "D:/projects/windows"
