@@ -36,7 +36,7 @@ dependencies:
   tuple: ^2.0.0
   wakelock: ^0.5.2
   device_info: ^2.0.2 
-  firebase_analytics: ^8.2.0
+  firebase_analytics: ^9.1.5
   package_info: ^2.0.2
   url_launcher: ^6.0.9
   shared_preferences: ^2.0.6
