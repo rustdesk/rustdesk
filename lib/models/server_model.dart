@@ -18,7 +18,7 @@ class ServerModel with ChangeNotifier {
   final _serverId = TextEditingController(text: _emptyIdShow);
   final _serverPasswd = TextEditingController(text: "");
 
-  Map<int,Client> _clients = {};
+  Map<int, Client> _clients = {};
 
   bool get isStart => _isStart;
 
@@ -34,10 +34,10 @@ class ServerModel with ChangeNotifier {
 
   TextEditingController get serverPasswd => _serverPasswd;
 
-  Map<int,Client> get clients => _clients;
+  Map<int, Client> get clients => _clients;
 
   ServerModel() {
-    ()async{
+    () async {
       /**
        * 1. check android permission
        * 2. check config
@@ -48,25 +48,27 @@ class ServerModel with ChangeNotifier {
       await Future.delayed(Duration(seconds: 1));
 
       // audio
-      if(androidVersion<30 || !await PermissionManager.check("audio")){
+      if (androidVersion < 30 || !await PermissionManager.check("audio")) {
         _audioOk = false;
-        FFI.setByName('option', jsonEncode(
-            Map()
+        FFI.setByName(
+            'option',
+            jsonEncode(Map()
               ..["name"] = "enable-audio"
               ..["value"] = "N"));
-      }else{
+      } else {
         final audioOption = FFI.getByName('option', 'enable-audio');
         _audioOk = audioOption.isEmpty;
       }
 
       // file
-      if(!await PermissionManager.check("file")) {
+      if (!await PermissionManager.check("file")) {
         _fileOk = false;
-        FFI.setByName('option', jsonEncode(
-            Map()
+        FFI.setByName(
+            'option',
+            jsonEncode(Map()
               ..["name"] = "enable-file-transfer"
               ..["value"] = "N"));
-      } else{
+      } else {
         final fileOption = FFI.getByName('option', 'enable-file-transfer');
         _fileOk = fileOption.isEmpty;
       }
@@ -81,9 +83,9 @@ class ServerModel with ChangeNotifier {
   }
 
   toggleAudio() async {
-    if(!_audioOk && !await PermissionManager.check("audio")){
+    if (!_audioOk && !await PermissionManager.check("audio")) {
       final res = await PermissionManager.request("audio");
-      if(!res){
+      if (!res) {
         // TODO handle fail
         return;
       }
@@ -98,9 +100,9 @@ class ServerModel with ChangeNotifier {
   }
 
   toggleFile() async {
-    if(!_fileOk && !await PermissionManager.check("file")){
+    if (!_fileOk && !await PermissionManager.check("file")) {
       final res = await PermissionManager.request("file");
-      if(!res){
+      if (!res) {
         // TODO handle fail
         return;
       }
@@ -114,47 +116,57 @@ class ServerModel with ChangeNotifier {
     notifyListeners();
   }
 
-  toggleInput(){
-    if(_inputOk){
+  toggleInput() {
+    if (_inputOk) {
       FFI.invokeMethod("stop_input");
-    }else{
+    } else {
       showInputWarnAlert();
     }
   }
 
   toggleService() async {
-    if(_isStart){
-      final res = await DialogManager.show<bool>((setState, close) => CustomAlertDialog(
-        title: Row(children: [
-          Icon(Icons.warning_amber_sharp,
-              color: Colors.redAccent, size: 28),
-          SizedBox(width: 10),
-          Text(translate("Warning")),
-        ]),
-        content: Text(translate("android_stop_service_tip")),
-        actions: [
-          TextButton(onPressed: ()=>close(), child: Text(translate("Cancel"))),
-          ElevatedButton(onPressed: ()=>close(true), child: Text(translate("OK"))),
-        ],
-      ));
-      if(res == true){
+    if (_isStart) {
+      final res =
+          await DialogManager.show<bool>((setState, close) => CustomAlertDialog(
+                title: Row(children: [
+                  Icon(Icons.warning_amber_sharp,
+                      color: Colors.redAccent, size: 28),
+                  SizedBox(width: 10),
+                  Text(translate("Warning")),
+                ]),
+                content: Text(translate("android_stop_service_tip")),
+                actions: [
+                  TextButton(
+                      onPressed: () => close(),
+                      child: Text(translate("Cancel"))),
+                  ElevatedButton(
+                      onPressed: () => close(true),
+                      child: Text(translate("OK"))),
+                ],
+              ));
+      if (res == true) {
         stopService();
       }
-    }else{
-      final res = await DialogManager.show<bool>((setState, close) => CustomAlertDialog(
-        title: Row(children: [
-          Icon(Icons.warning_amber_sharp,
-              color: Colors.redAccent, size: 28),
-          SizedBox(width: 10),
-          Text(translate("Warning")),
-        ]),
-        content: Text(translate("android_service_will_start_tip")),
-        actions: [
-          TextButton(onPressed: ()=>close(), child: Text(translate("Cancel"))),
-          ElevatedButton(onPressed: ()=>close(true), child: Text(translate("OK"))),
-        ],
-      ));
-      if(res == true){
+    } else {
+      final res =
+          await DialogManager.show<bool>((setState, close) => CustomAlertDialog(
+                title: Row(children: [
+                  Icon(Icons.warning_amber_sharp,
+                      color: Colors.redAccent, size: 28),
+                  SizedBox(width: 10),
+                  Text(translate("Warning")),
+                ]),
+                content: Text(translate("android_service_will_start_tip")),
+                actions: [
+                  TextButton(
+                      onPressed: () => close(),
+                      child: Text(translate("Cancel"))),
+                  ElevatedButton(
+                      onPressed: () => close(true),
+                      child: Text(translate("OK"))),
+                ],
+              ));
+      if (res == true) {
         startService();
       }
     }
@@ -172,7 +184,7 @@ class ServerModel with ChangeNotifier {
     getIDPasswd();
   }
 
-    Future<Null> stopService() async {
+  Future<Null> stopService() async {
     _isStart = false;
     _interval?.cancel();
     _interval = null;
@@ -188,21 +200,21 @@ class ServerModel with ChangeNotifier {
 
   Future<bool> updatePassword(String pw) async {
     final oldPasswd = _serverPasswd.text;
-    FFI.setByName("update_password",pw);
+    FFI.setByName("update_password", pw);
     await Future.delayed(Duration(milliseconds: 500));
     await getIDPasswd(force: true);
 
     // check result
-    if(pw == ""){
-      if(_serverPasswd.text.isNotEmpty && _serverPasswd.text!= oldPasswd){
+    if (pw == "") {
+      if (_serverPasswd.text.isNotEmpty && _serverPasswd.text != oldPasswd) {
         return true;
-      }else{
+      } else {
         return false;
       }
-    }else{
-      if(_serverPasswd.text == pw){
+    } else {
+      if (_serverPasswd.text == pw) {
         return true;
-      }else{
+      } else {
         return false;
       }
     }
@@ -240,18 +252,17 @@ class ServerModel with ChangeNotifier {
     notifyListeners();
   }
 
-
   changeStatue(String name, bool value) {
     debugPrint("changeStatue value $value");
     switch (name) {
       case "media":
         _mediaOk = value;
-        if(value && !_isStart){
+        if (value && !_isStart) {
           startService();
         }
         break;
       case "input":
-        if(_inputOk!= value){
+        if (_inputOk != value) {
           Map<String, String> res = Map()
             ..["name"] = "enable-keyboard"
             ..["value"] = value ? '' : 'N';
@@ -269,7 +280,7 @@ class ServerModel with ChangeNotifier {
     var res = FFI.getByName("clients_state");
     try {
       final List clientsJson = jsonDecode(res);
-      for (var clientJson in clientsJson){
+      for (var clientJson in clientsJson) {
         final client = Client.fromJson(jsonDecode(clientJson));
         _clients[client.id] = client;
       }
@@ -283,72 +294,79 @@ class ServerModel with ChangeNotifier {
       final client = Client.fromJson(jsonDecode(evt["client"]));
       final Map<String, dynamic> response = Map();
       response["id"] = client.id;
-      DialogManager.show((setState, close) => CustomAlertDialog(
-              title: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      DialogManager.show(
+          (setState, close) => CustomAlertDialog(
+                title: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(translate(client.isFileTransfer
+                          ? "File Connection"
+                          : "Screen Connection")),
+                      IconButton(onPressed: close, icon: Icon(Icons.close))
+                    ]),
+                content: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                Text(translate(client.isFileTransfer?"File Connection":"Screen Connection")),
-                IconButton(onPressed: close, icon: Icon(Icons.close))
-              ]),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                mainAxisAlignment: MainAxisAlignment.center,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(translate("Do you accept?")),
-                  clientInfo(client),
-                  Text(translate("android_new_connection_tip"),style: TextStyle(color: Colors.black54),),
+                    Text(translate("Do you accept?")),
+                    clientInfo(client),
+                    Text(
+                      translate("android_new_connection_tip"),
+                      style: TextStyle(color: Colors.black54),
+                    ),
+                  ],
+                ),
+                actions: [
+                  TextButton(
+                      child: Text(translate("Dismiss")),
+                      onPressed: () {
+                        response["res"] = false;
+                        FFI.setByName("login_res", jsonEncode(response));
+                        FFI.invokeMethod("cancel_notification", client.id);
+                        close();
+                      }),
+                  ElevatedButton(
+                      child: Text(translate("Accept")),
+                      onPressed: () async {
+                        response["res"] = true;
+                        FFI.setByName("login_res", jsonEncode(response));
+                        if (!client.isFileTransfer) {
+                          FFI.invokeMethod("start_capture");
+                        }
+                        FFI.invokeMethod("cancel_notification", client.id);
+                        _clients[client.id] = client;
+                        notifyListeners();
+                        close();
+                      }),
                 ],
+                onWillPop: () async => true,
               ),
-              actions: [
-                TextButton(
-                    child: Text(translate("Dismiss")),
-                    onPressed: () {
-                      response["res"] = false;
-                      FFI.setByName("login_res", jsonEncode(response));
-                      FFI.invokeMethod("cancel_notification",client.id);
-                      close();
-                    }),
-                ElevatedButton(
-                    child: Text(translate("Accept")),
-                    onPressed: () async {
-                      response["res"] = true;
-                      FFI.setByName("login_res", jsonEncode(response));
-                      if (!client.isFileTransfer) {
-                        FFI.invokeMethod("start_capture");
-                      }
-                      FFI.invokeMethod("cancel_notification",client.id);
-                      _clients[client.id] = client;
-                      notifyListeners();
-                      close();
-                    }),
-              ],onWillPop:  ()async=>true,),barrierDismissible: true);
+          barrierDismissible: true);
     } catch (e) {
       debugPrint("loginRequest failed,error:$e");
     }
   }
 
   void onClientAuthorized(Map<String, dynamic> evt) {
-    try{
+    try {
       final client = Client.fromJson(jsonDecode(evt['client']));
       // reset the login dialog, to-do,it will close any showing dialog
       DialogManager.reset();
       _clients[client.id] = client;
       notifyListeners();
-    }catch(e){
-
-    }
+    } catch (e) {}
   }
 
   void onClientRemove(Map<String, dynamic> evt) {
     try {
       final id = int.parse(evt['id'] as String);
-      if(_clients.containsKey(id)){
+      if (_clients.containsKey(id)) {
         _clients.remove(id);
-      }else{
+      } else {
         // reset the login dialog, to-do,it will close any showing dialog
         DialogManager.reset();
-        FFI.invokeMethod("cancel_notification",id);
+        FFI.invokeMethod("cancel_notification", id);
       }
       notifyListeners();
     } catch (e) {
@@ -357,7 +375,7 @@ class ServerModel with ChangeNotifier {
   }
 
   closeAll() {
-    _clients.forEach((id,client) {
+    _clients.forEach((id, client) {
       FFI.setByName("close_conn", id.toString());
     });
     _clients.clear();
@@ -375,7 +393,8 @@ class Client {
   bool audio = false;
   late ChatUser chatUser;
 
-  Client(this.authorized, this.isFileTransfer, this.name, this.peerId,this.keyboard,this.clipboard,this.audio);
+  Client(this.authorized, this.isFileTransfer, this.name, this.peerId,
+      this.keyboard, this.clipboard, this.audio);
 
   Client.fromJson(Map<String, dynamic> json) {
     id = json['id'];
@@ -383,12 +402,12 @@ class Client {
     isFileTransfer = json['is_file_transfer'];
     name = json['name'];
     peerId = json['peer_id'];
-    keyboard= json['keyboard'];
-    clipboard= json['clipboard'];
-    audio= json['audio'];
+    keyboard = json['keyboard'];
+    clipboard = json['clipboard'];
+    audio = json['audio'];
     chatUser = ChatUser(
-        uid:peerId,
-        name: name,
+      uid: peerId,
+      name: name,
     );
   }
 
@@ -446,34 +465,34 @@ class PermissionManager {
   static Timer? _timer;
   static var _current = "";
 
-  static final permissions = ["audio","file"];
+  static final permissions = ["audio", "file"];
 
-  static bool isWaitingFile(){
-    if(_completer != null){
+  static bool isWaitingFile() {
+    if (_completer != null) {
       return !_completer!.isCompleted && _current == "file";
     }
     return false;
   }
 
-  static Future<bool> check(String type){
-    if(!permissions.contains(type))
+  static Future<bool> check(String type) {
+    if (!permissions.contains(type))
       return Future.error("Wrong permission!$type");
-    return FFI.invokeMethod("check_permission",type);
+    return FFI.invokeMethod("check_permission", type);
   }
 
-  static Future<bool> request(String type){
-    if(!permissions.contains(type))
+  static Future<bool> request(String type) {
+    if (!permissions.contains(type))
       return Future.error("Wrong permission!$type");
 
     _current = type;
     _completer = Completer<bool>();
-    FFI.invokeMethod("request_permission",type);
+    FFI.invokeMethod("request_permission", type);
 
     // timeout
     _timer?.cancel();
-    _timer = Timer(Duration(seconds: 60),(){
-      if(_completer == null) return;
-      if(!_completer!.isCompleted){
+    _timer = Timer(Duration(seconds: 60), () {
+      if (_completer == null) return;
+      if (!_completer!.isCompleted) {
         _completer!.complete(false);
       }
       _completer = null;
@@ -482,8 +501,8 @@ class PermissionManager {
     return _completer!.future;
   }
 
-  static complete(String type,bool res){
-    if(type != _current){
+  static complete(String type, bool res) {
+    if (type != _current) {
       res = false;
     }
     _timer?.cancel();
