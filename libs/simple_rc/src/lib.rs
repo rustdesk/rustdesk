@@ -3,6 +3,8 @@ use serde_derive::{Deserialize, Serialize};
 use std::{collections::HashMap, fs::File, io::prelude::*, path::Path};
 use walkdir::WalkDir;
 
+//mod rc;
+
 #[derive(Debug, Default, PartialEq, Serialize, Deserialize, Clone)]
 pub struct ConfigItem {
     // include directory or file
@@ -109,7 +111,7 @@ use std::{
     )?;
 
     outfile.write(b"#[allow(dead_code)]\n")?;
-    outfile.write(b"pub fn extract_resources() -> ResultType<()> {\n")?;
+    outfile.write(b"pub fn extract_resources(root_path: &str) -> ResultType<()> {\n")?;
     outfile.write(b"    let mut resources: Vec<(&str, &[u8])> = Vec::new();\n")?;
 
     let mut outin_files = HashMap::new();
@@ -131,7 +133,7 @@ use std::{
         let var_outdata = format!("outdata_{}", count);
 
         write!(outfile, "    let {} = \"{}\";\n", var_outfile, o)?;
-        write!(outfile, "    let {} = [\n        ", var_outdata)?;
+        write!(outfile, "    let {}: &[u8] = &[\n        ", var_outdata)?;
 
         let mut line_num = 20;
         for v in buffer {
@@ -139,7 +141,7 @@ use std::{
                 write!(outfile, "\n        ")?;
                 line_num = 20;
             }
-            write!(outfile, "{:#04x}u8, ", v)?;
+            write!(outfile, "{:#04x}, ", v)?;
             line_num -= 1;
         }
         write!(outfile, "\n    ];\n")?;
@@ -153,22 +155,28 @@ use std::{
         count += 1;
     }
 
-    outfile.write(b"    do_extract(resources)?;\n")?;
+    outfile.write(b"    do_extract(root_path, resources)?;\n")?;
     outfile.write(b"    Ok(())\n")?;
     outfile.write(b"}\n")?;
 
     outfile.write(
         br##"
 #[allow(dead_code)]
-fn do_extract(resources: Vec<(&str, &[u8])>) -> ResultType<()> {
+fn do_extract(root_path: &str, resources: Vec<(&str, &[u8])>) -> ResultType<()> {
+    let mut root_path = root_path.replace("\\", "/");
+    if !root_path.ends_with('/') {
+        root_path.push('/');
+    }
+    let root_path = Path::new(&root_path);
     for (outfile, data) in resources {
-        match Path::new(outfile).parent().and_then(|p| p.to_str()) {
+        let outfile_path = root_path.join(outfile);
+        match outfile_path.parent().and_then(|p| p.to_str()) {
             None => {
-                bail!("Failed to get parent of {}", outfile);
+                bail!("Failed to get parent of {}", outfile_path.display());
             }
             Some(p) => {
                 fs::create_dir_all(p)?;
-                let mut of = File::create(outfile)?;
+                let mut of = File::create(outfile_path)?;
                 of.write_all(data)?;
                 of.flush()?;
             }
@@ -182,4 +190,19 @@ fn do_extract(resources: Vec<(&str, &[u8])>) -> ResultType<()> {
     outfile.flush()?;
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn it_works() {
+        let result = 2 + 2;
+        assert_eq!(result, 4);
+    }
+
+    // #[test]
+    // fn test_extract() {
+    //     use super::*;
+    //     rc::extract_resources("D:").unwrap();
+    // }
 }

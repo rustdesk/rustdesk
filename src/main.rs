@@ -74,6 +74,10 @@ fn main() {
                 hbb_common::allow_err!(platform::uninstall_me());
                 hbb_common::allow_err!(platform::install_me("desktopicon startmenu",));
                 return;
+            } else if args[0] == "--extract" {
+                #[cfg(feature = "with_rc")]
+                hbb_common::allow_err!(crate::rc::extract_resources(&args[1]));
+                return;
             }
         }
         if args[0] == "--remove" {

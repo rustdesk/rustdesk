@@ -9,6 +9,7 @@ description = "A remote control software."
 [features]
 inline = []
 cli = []
+with_rc = ["simple_rc"]
 use_samplerate = ["samplerate"]
 use_rubato = ["rubato"]
 use_dasp = ["dasp"]
@@ -98,6 +99,7 @@ winapi = { version = "0.3", features = [ "winnt" ] }
 [build-dependencies]
 cc = "1.0"
 hbb_common = { path = "libs/hbb_common" }
+simple_rc = { path = "libs/simple_rc", optional = true }
 
 [dev-dependencies]
 hound = "3.4"
