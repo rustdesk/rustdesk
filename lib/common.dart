@@ -1,3 +1,4 @@
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'dart:async';
 import 'package:flutter_easyloading/flutter_easyloading.dart';
@@ -215,5 +216,49 @@ String readableFileSize(double size) {
     return (size / M).toStringAsFixed(2) + " MB";
   } else {
     return (size / G).toStringAsFixed(2) + " GB";
+  }
+}
+
+/// Flutter can't not catch PointerMoveEvent when size is 1
+/// This will happen in Android AccessibilityService Input
+/// android can't init dispatching size yet ,see: https://stackoverflow.com/questions/59960451/android-accessibility-dispatchgesture-is-it-possible-to-specify-pressure-for-a
+/// use this temporary solution until flutter or android fixes the bug
+class AccessibilityListener extends StatelessWidget {
+  final Widget? child;
+  static final offset = 100;
+
+  AccessibilityListener({this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    return Listener(
+        onPointerDown: (evt) {
+          if (evt.size == 1 && GestureBinding.instance != null) {
+            GestureBinding.instance!.handlePointerEvent(PointerAddedEvent(
+                pointer: evt.pointer + offset, position: evt.position));
+            GestureBinding.instance!.handlePointerEvent(PointerDownEvent(
+                pointer: evt.pointer + offset,
+                size: 0.1,
+                position: evt.position));
+          }
+        },
+        onPointerUp: (evt) {
+          if (evt.size == 1 && GestureBinding.instance != null) {
+            GestureBinding.instance!.handlePointerEvent(PointerUpEvent(
+                pointer: evt.pointer + offset,
+                size: 0.1,
+                position: evt.position));
+          }
+        },
+        onPointerMove: (evt) {
+          if (evt.size == 1 && GestureBinding.instance != null) {
+            GestureBinding.instance!.handlePointerEvent(PointerMoveEvent(
+                pointer: evt.pointer + offset,
+                size: 0.1,
+                delta: evt.delta,
+                position: evt.position));
+          }
+        },
+        child: child);
   }
 }
