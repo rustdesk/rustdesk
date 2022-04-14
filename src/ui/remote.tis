@@ -21,6 +21,9 @@ handler.setDisplay = function(x, y, w, h) {
     adaptDisplay();
 }
 
+// in case toolbar not shown correclty
+view.windowMinSize = (scaleIt(500), scaleIt(300));
+
 function adaptDisplay() {
     var w = display_width;
     var h = display_height;
