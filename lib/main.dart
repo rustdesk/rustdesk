@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_easyloading/flutter_easyloading.dart';
 import 'package:provider/provider.dart';
 import 'package:firebase_analytics/firebase_analytics.dart';
-import 'package:firebase_analytics/observer.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'common.dart';
 import 'models/model.dart';
@@ -21,7 +20,7 @@ Future<Null> main() async {
 class App extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
-    final analytics = FirebaseAnalytics();
+    final analytics = FirebaseAnalytics.instance;
     refreshCurrentUser();
     return MultiProvider(
       providers: [
@@ -38,7 +37,7 @@ class App extends StatelessWidget {
           primarySwatch: Colors.blue,
           visualDensity: VisualDensity.adaptivePlatformDensity,
         ),
-        home: isWeb ? WebHomePage() : HomePage(),
+        home: !isAndroid ? WebHomePage() : HomePage(),
         navigatorObservers: [
           FirebaseAnalyticsObserver(analytics: analytics),
         ],
