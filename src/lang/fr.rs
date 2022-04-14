@@ -273,7 +273,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Peer denied", "Pair refusé"),
         ("Please install plugins", "Veuillez installer les plugins"),
         ("Peer exit", "Sortie des pairs"),
-        ("Failed off", "Échec de la désactivation"),
+        ("Failed to turn off", "Échec de la désactivation"),
         ("Turned off", "Éteindre"),
     ].iter().cloned().collect();
 }

@@ -2009,7 +2009,7 @@ impl Remote {
             }
             back_notification::PrivacyModeState::OffFailed => {
                 self.handler
-                    .msgbox("custom-error", "Privacy mode", "Failed off");
+                    .msgbox("custom-error", "Privacy mode", "Failed to turn off");
             }
             back_notification::PrivacyModeState::OffUnknown => {
                 self.handler
