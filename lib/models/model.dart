@@ -715,7 +715,9 @@ class FFI {
 
   static List<Peer> peers() {
     try {
-      List<dynamic> peers = json.decode(getByName('peers'));
+      var str = getByName('peers');
+      if (str == "") return [];
+      List<dynamic> peers = json.decode(str);
       return peers
           .map((s) => s as List<dynamic>)
           .map((s) =>

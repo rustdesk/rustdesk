@@ -45,6 +45,7 @@ dependencies:
   draggable_float_widget: ^0.0.2
   settings_ui: ^2.0.2
   flutter_breadcrumb: ^1.0.1
+  http: ^0.13.4
 
 dev_dependencies:
   flutter_launcher_icons: ^0.9.1
