@@ -2,7 +2,7 @@
 use virtual_display::win10::{idd, DRIVER_INSTALL_PATH};
 
 use std::{
-    ffi::{CStr, CString},
+    ffi::CStr,
     io::{self, Read},
     path::Path,
 };
@@ -59,19 +59,27 @@ unsafe fn plug_out(index: idd::UINT) {
 
 fn main() {
     let abs_path = Path::new(DRIVER_INSTALL_PATH).canonicalize().unwrap();
-    let full_inf_path = abs_path.to_str().unwrap();
 
     unsafe {
         let invalid_device = 0 as idd::HSWDEVICE;
         let mut h_sw_device = invalid_device;
-        let full_inf_path = CString::new(full_inf_path).unwrap().into_raw();
+
+        let full_inf_path: Vec<u16> = abs_path
+            .to_string_lossy()
+            .as_ref()
+            .encode_utf16()
+            .chain(Some(0).into_iter())
+            .collect();
+
         loop {
             match prompt_input() as char {
                 'x' => break,
                 'i' => {
-                    println!("Install or update driver begin");
+                    println!("Install or update driver begin, {}", abs_path.display());
                     let mut reboot_required = idd::FALSE;
-                    if idd::InstallUpdate(full_inf_path, &mut reboot_required) == idd::FALSE {
+                    if idd::InstallUpdate(full_inf_path.as_ptr() as _, &mut reboot_required)
+                        == idd::FALSE
+                    {
                         println!("{}", CStr::from_ptr(idd::GetLastMsg()).to_str().unwrap());
                     } else {
                         println!(
@@ -85,9 +93,11 @@ fn main() {
                     }
                 }
                 'u' => {
-                    println!("Uninstall driver begin");
+                    println!("Uninstall driver begin {}", abs_path.display());
                     let mut reboot_required = idd::FALSE;
-                    if idd::Uninstall(full_inf_path, &mut reboot_required) == idd::FALSE {
+                    if idd::Uninstall(full_inf_path.as_ptr() as _, &mut reboot_required)
+                        == idd::FALSE
+                    {
                         println!("{}", CStr::from_ptr(idd::GetLastMsg()).to_str().unwrap());
                     } else {
                         println!(
@@ -128,9 +138,6 @@ fn main() {
                 '6' => plug_out(2),
                 _ => {}
             }
-        }
-        if !full_inf_path.is_null() {
-            let _ = CString::from_raw(full_inf_path);
         }
 
         idd::DeviceClose(h_sw_device);
