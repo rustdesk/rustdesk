@@ -55,6 +55,7 @@ class InputService : AccessibilityService() {
         if (mask == 9) {
             leftIsDown = true
             startGesture(mouseX, mouseY)
+            return
         }
 
         // left down ,was down
@@ -66,6 +67,17 @@ class InputService : AccessibilityService() {
         if (mask == 10) {
             leftIsDown = false
             endGesture(mouseX, mouseY)
+            return
+        }
+
+        if (mask == 18) {
+            performGlobalAction(GLOBAL_ACTION_BACK)
+            return
+        }
+
+        if (mask == 34) {
+            performGlobalAction(GLOBAL_ACTION_HOME)
+            return
         }
     }
 
