@@ -41,7 +41,13 @@ class App extends StatelessWidget {
         navigatorObservers: [
           FirebaseAnalyticsObserver(analytics: analytics),
         ],
-        builder: EasyLoading.init(),
+        builder: isAndroid
+            ? (_, child) {
+                return AccessibilityListener(
+                  child: FlutterEasyLoading(child: child),
+                );
+              }
+            : EasyLoading.init(),
       ),
     );
   }
