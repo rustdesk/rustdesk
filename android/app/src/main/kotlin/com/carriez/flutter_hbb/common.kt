@@ -18,12 +18,10 @@ import java.util.*
 
 @SuppressLint("ConstantLocale")
 val LOCAL_NAME = Locale.getDefault().toString()
-
-val INFO = Info("", "", 0, 0)
+val SCREEN_INFO = Info(0, 0)
 
 data class Info(
-    var username: String, var hostname: String, var screenWidth: Int, var screenHeight: Int,
-    var scale: Int = 1
+    var width: Int, var height: Int, var scale: Int = 1
 )
 
 @RequiresApi(Build.VERSION_CODES.LOLLIPOP)
@@ -33,8 +31,8 @@ fun testVP9Support(): Boolean {
         .findEncoderForFormat(
             MediaFormat.createVideoFormat(
                 MediaFormat.MIMETYPE_VIDEO_VP9,
-                INFO.screenWidth,
-                INFO.screenWidth
+                SCREEN_INFO.width,
+                SCREEN_INFO.width
             )
         )
     return res != null

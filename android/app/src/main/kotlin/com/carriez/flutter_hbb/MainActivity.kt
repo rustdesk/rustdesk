@@ -9,7 +9,6 @@ import android.media.projection.MediaProjectionManager
 import android.os.Build
 import android.os.IBinder
 import android.provider.Settings
-import android.util.DisplayMetrics
 import android.util.Log
 import androidx.annotation.RequiresApi
 import io.flutter.embedding.android.FlutterActivity
@@ -31,7 +30,6 @@ class MainActivity : FlutterActivity() {
     @RequiresApi(Build.VERSION_CODES.M)
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
-        updateMachineInfo()
         flutterMethodChannel = MethodChannel(
             flutterEngine.dartExecutor.binaryMessenger,
             channelTag
@@ -187,37 +185,6 @@ class MainActivity : FlutterActivity() {
             } else {
                 flutterMethodChannel.invokeMethod("on_media_projection_canceled", null)
             }
-        }
-    }
-
-    private fun updateMachineInfo() {
-        val dm = DisplayMetrics()
-        @Suppress("DEPRECATION")
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            display?.getRealMetrics(dm)
-        } else {
-            windowManager.defaultDisplay.getRealMetrics(dm)
-        }
-        var w = dm.widthPixels
-        var h = dm.heightPixels
-        var scale = 1
-        if (w != 0 && h != 0) {
-            if (w > MAX_SCREEN_SIZE || h > MAX_SCREEN_SIZE) {
-                scale = 2
-                w /= scale
-                h /= scale
-            }
-
-            INFO.screenWidth = w
-            INFO.screenHeight = h
-            INFO.scale = scale
-            INFO.username = "test"
-            INFO.hostname = "hostname"
-            // TODO  username hostname
-            Log.d(logTag, "INIT INFO:$INFO")
-
-        } else {
-            Log.e(logTag, "Got Screen Size Fail!")
         }
     }
 
