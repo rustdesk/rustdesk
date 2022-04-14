@@ -192,7 +192,7 @@ class _ConnectionPageState extends State<ConnectionPage> {
     platform = platform.toLowerCase();
     if (platform == 'mac os')
       platform = 'mac';
-    else if (platform != 'linux') platform = 'win';
+    else if (platform != 'linux' && platform != 'android') platform = 'win';
     return Image.asset('assets/$platform.png', width: 24, height: 24);
   }
 
