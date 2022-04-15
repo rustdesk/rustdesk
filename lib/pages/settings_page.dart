@@ -9,6 +9,7 @@ import '../common.dart';
 import '../widgets/dialog.dart';
 import '../models/model.dart';
 import 'home_page.dart';
+import 'scan_page.dart';
 
 class SettingsPage extends StatefulWidget implements PageShape {
   @override
@@ -18,7 +19,7 @@ class SettingsPage extends StatefulWidget implements PageShape {
   final icon = Icon(Icons.settings);
 
   @override
-  final appBarActions = [];
+  final appBarActions = [ScanButton()];
 
   @override
   _SettingsState createState() => _SettingsState();
@@ -58,7 +59,7 @@ class _SettingsState extends State<SettingsPage> {
               title: Text(translate('ID/Relay Server')),
               leading: Icon(Icons.cloud),
               onPressed: (context) {
-                showServer();
+                showServerSettings();
               },
             ),
           ],
@@ -67,20 +68,18 @@ class _SettingsState extends State<SettingsPage> {
           title: Text(translate("About")),
           tiles: [
             SettingsTile.navigation(
+                onPressed: (context) async {
+                  if (await canLaunch(url)) {
+                    await launch(url);
+                  }
+                },
                 title: Text(translate("Version: ") + version),
-                value: InkWell(
-                  onTap: () async {
-                    if (await canLaunch(url)) {
-                      await launch(url);
-                    }
-                  },
-                  child: Padding(
-                    padding: EdgeInsets.symmetric(vertical: 8),
-                    child: Text('rustdesk.com',
-                        style: TextStyle(
-                          decoration: TextDecoration.underline,
-                        )),
-                  ),
+                value: Padding(
+                  padding: EdgeInsets.symmetric(vertical: 8),
+                  child: Text('rustdesk.com',
+                      style: TextStyle(
+                        decoration: TextDecoration.underline,
+                      )),
                 ),
                 leading: Icon(Icons.info)),
           ],
@@ -90,116 +89,12 @@ class _SettingsState extends State<SettingsPage> {
   }
 }
 
-void showServer() {
-  final formKey = GlobalKey<FormState>();
-  final id0 = FFI.getByName('option', 'custom-rendezvous-server');
-  final relay0 = FFI.getByName('option', 'relay-server');
-  final api0 = FFI.getByName('option', 'api-server');
-  final key0 = FFI.getByName('option', 'key');
-  var id = '';
-  var relay = '';
-  var key = '';
-  var api = '';
-  DialogManager.show((setState, close) {
-    return CustomAlertDialog(
-      title: Text(translate('ID/Relay Server')),
-      content: Form(
-          key: formKey,
-          child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: <Widget>[
-                    TextFormField(
-                      initialValue: id0,
-                      decoration: InputDecoration(
-                        labelText: translate('ID Server'),
-                      ),
-                      validator: validate,
-                      onSaved: (String? value) {
-                        if (value != null) id = value.trim();
-                      },
-                    )
-                  ] +
-                  (isAndroid
-                      ? [
-                          TextFormField(
-                            initialValue: relay0,
-                            decoration: InputDecoration(
-                              labelText: translate('Relay Server'),
-                            ),
-                            validator: validate,
-                            onSaved: (String? value) {
-                              if (value != null) relay = value.trim();
-                            },
-                          )
-                        ]
-                      : []) +
-                  [
-                    TextFormField(
-                      initialValue: api0,
-                      decoration: InputDecoration(
-                        labelText: translate('API Server'),
-                      ),
-                      validator: validate,
-                      onSaved: (String? value) {
-                        if (value != null) api = value.trim();
-                      },
-                    ),
-                    TextFormField(
-                      initialValue: key0,
-                      decoration: InputDecoration(
-                        labelText: 'Key',
-                      ),
-                      validator: null,
-                      onSaved: (String? value) {
-                        if (value != null) key = value.trim();
-                      },
-                    ),
-                  ])),
-      actions: [
-        TextButton(
-          style: flatButtonStyle,
-          onPressed: () {
-            close();
-          },
-          child: Text(translate('Cancel')),
-        ),
-        TextButton(
-          style: flatButtonStyle,
-          onPressed: () {
-            if (formKey.currentState != null &&
-                formKey.currentState!.validate()) {
-              formKey.currentState!.save();
-              if (id != id0)
-                FFI.setByName('option',
-                    '{"name": "custom-rendezvous-server", "value": "$id"}');
-              if (relay != relay0)
-                FFI.setByName(
-                    'option', '{"name": "relay-server", "value": "$relay"}');
-              if (key != key0)
-                FFI.setByName('option', '{"name": "key", "value": "$key"}');
-              if (api != api0)
-                FFI.setByName(
-                    'option', '{"name": "api-server", "value": "$api"}');
-              close();
-            }
-          },
-          child: Text(translate('OK')),
-        ),
-      ],
-      onWillPop: () async {
-        return true;
-      },
-    );
-  }, barrierDismissible: true);
-}
-
-String? validate(value) {
-  value = value.trim();
-  if (value.isEmpty) {
-    return null;
-  }
-  final res = FFI.getByName('test_if_valid_server', value);
-  return res.isEmpty ? null : res;
+void showServerSettings() {
+  final id = FFI.getByName('option', 'custom-rendezvous-server');
+  final relay = FFI.getByName('option', 'relay-server');
+  final api = FFI.getByName('option', 'api-server');
+  final key = FFI.getByName('option', 'key');
+  showServerSettingsWithValue(id, relay, key, api);
 }
 
 void showAbout() {
@@ -447,4 +342,21 @@ String? getUsername() {
     }
   }
   return username;
+}
+
+class ScanButton extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return IconButton(
+      icon: Icon(Icons.qr_code_scanner),
+      onPressed: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (BuildContext context) => ScanPage(),
+          ),
+        );
+      },
+    );
+  }
 }

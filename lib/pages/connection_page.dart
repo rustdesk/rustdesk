@@ -19,7 +19,7 @@ class ConnectionPage extends StatefulWidget implements PageShape {
   final title = translate("Connection");
 
   @override
-  final appBarActions = !isAndroid ? <Widget>[WebMenu()] : <Widget>[];
+  final appBarActions = isWeb ? <Widget>[WebMenu()] : <Widget>[];
 
   @override
   _ConnectionPageState createState() => _ConnectionPageState();
@@ -308,7 +308,7 @@ class _WebMenuState extends State<WebMenu> {
         },
         onSelected: (value) {
           if (value == 'server') {
-            showServer();
+            showServerSettings();
           }
           if (value == 'about') {
             showAbout();

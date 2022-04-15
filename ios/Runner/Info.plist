@@ -42,6 +42,12 @@
 	<key>UIViewControllerBasedStatusBarAppearance</key>
 	<false/>
 	<key>ITSAppUsesNonExemptEncryption</key>
-	<false/>
+  <false/>
+  <key>io.flutter.embedded_views_preview</key>
+  <true/>
+  <key>NSCameraUsageDescription</key>
+  <string>This app needs camera access to scan QR codes</string>
+  <key>NSPhotoLibraryUsageDescription</key>
+  <string>This app needs photo library access to get QR codes from image</string>
 </dict>
 </plist>

@@ -25,12 +25,9 @@ class _HomePageState extends State<HomePage> {
   @override
   void initState() {
     super.initState();
-    _pages.addAll([
-      ConnectionPage(),
-      chatPage,
-    ]);
+    _pages.add(ConnectionPage());
     if (isAndroid) {
-      _pages.add(ServerPage());
+      _pages.addAll([chatPage, ServerPage()]);
     }
     _pages.add(SettingsPage());
   }
