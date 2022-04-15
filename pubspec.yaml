@@ -46,6 +46,10 @@ dependencies:
   settings_ui: ^2.0.2
   flutter_breadcrumb: ^1.0.1
   http: ^0.13.4
+  qr_code_scanner: ^0.7.0
+  zxing2: ^0.1.0
+  image_picker: ^0.8.5
+  image: ^3.1.3
 
 dev_dependencies:
   flutter_launcher_icons: ^0.9.1

@@ -42,6 +42,11 @@ final ButtonStyle flatButtonStyle = TextButton.styleFrom(
   ),
 );
 
+void showToast(String text) {
+  EasyLoading.showToast(Translator.call(text),
+      maskType: EasyLoadingMaskType.black);
+}
+
 void showLoading(String text) {
   DialogManager.reset();
   EasyLoading.dismiss();
