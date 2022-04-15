@@ -248,6 +248,8 @@ class AccessibilityListener extends StatelessWidget {
                 pointer: evt.pointer + offset,
                 size: 0.1,
                 position: evt.position));
+            GestureBinding.instance!.handlePointerEvent(PointerRemovedEvent(
+                pointer: evt.pointer + offset, position: evt.position));
           }
         },
         onPointerMove: (evt) {
