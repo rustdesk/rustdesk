@@ -12,6 +12,7 @@ import android.app.PendingIntent.FLAG_UPDATE_CURRENT
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.content.res.Configuration
 import android.graphics.Color
 import android.graphics.PixelFormat
 import android.hardware.display.DisplayManager.VIRTUAL_DISPLAY_FLAG_PUBLIC
@@ -20,9 +21,11 @@ import android.media.*
 import android.media.projection.MediaProjection
 import android.media.projection.MediaProjectionManager
 import android.os.*
+import android.util.DisplayMetrics
 import android.util.Log
 import android.view.Surface
 import android.view.Surface.FRAME_RATE_COMPATIBILITY_DEFAULT
+import android.view.WindowManager
 import androidx.annotation.Keep
 import androidx.annotation.RequiresApi
 import androidx.core.app.ActivityCompat
@@ -68,7 +71,7 @@ class MainService : Service() {
     @Keep
     fun rustGetByName(name: String): String {
         return when (name) {
-            "screen_size" -> "${INFO.screenWidth}:${INFO.screenHeight}"
+            "screen_size" -> "${SCREEN_INFO.width}:${SCREEN_INFO.height}"
             else -> ""
         }
     }
@@ -127,8 +130,10 @@ class MainService : Service() {
     private external fun init(ctx: Context)
     private external fun startServer()
     private external fun onVideoFrameUpdate(buf: ByteBuffer)
+    private external fun releaseVideoFrame()
     private external fun onAudioFrameUpdate(buf: ByteBuffer)
     private external fun translateLocale(localeName: String, input: String): String
+    private external fun refreshScreen()
     // private external fun sendVp9(data: ByteArray)
 
     private fun translate(input: String): String {
@@ -167,8 +172,48 @@ class MainService : Service() {
 
     override fun onCreate() {
         super.onCreate()
+        updateScreenInfo()
         initNotification()
         startServer()
+    }
+
+    private fun updateScreenInfo() {
+        var w: Int
+        var h: Int
+        val windowManager = getSystemService(Context.WINDOW_SERVICE) as WindowManager
+
+        @Suppress("DEPRECATION")
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            val m = windowManager.maximumWindowMetrics
+            w = m.bounds.width()
+            h = m.bounds.height()
+        } else {
+            val dm = DisplayMetrics()
+            windowManager.defaultDisplay.getRealMetrics(dm)
+            w = dm.widthPixels
+            h = dm.heightPixels
+        }
+
+        var scale = 1
+        if (w != 0 && h != 0) {
+            if (w > MAX_SCREEN_SIZE || h > MAX_SCREEN_SIZE) {
+                scale = 2
+                w /= scale
+                h /= scale
+            }
+            if (SCREEN_INFO.width != w) {
+                SCREEN_INFO.width = w
+                SCREEN_INFO.height = h
+                SCREEN_INFO.scale = scale
+                if (isStart) {
+                    stopCapture()
+                    refreshScreen()
+                    startCapture()
+                }
+
+            }
+
+        }
     }
 
     override fun onBind(intent: Intent): IBinder {
@@ -195,7 +240,6 @@ class MainService : Service() {
                 mediaProjection =
                     mMediaProjectionManager.getMediaProjection(Activity.RESULT_OK, it)
                 checkMediaPermission()
-                surface = createSurface()
                 init(this)
                 _isReady = true
             } ?: let {
@@ -206,17 +250,22 @@ class MainService : Service() {
         return super.onStartCommand(intent, flags, startId)
     }
 
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        updateScreenInfo()
+    }
+
     @SuppressLint("WrongConstant")
     private fun createSurface(): Surface? {
         return if (useVP9) {
             // TODO
             null
         } else {
-            Log.d(logTag, "ImageReader.newInstance:INFO:$INFO")
+            Log.d(logTag, "ImageReader.newInstance:INFO:$SCREEN_INFO")
             imageReader =
                 ImageReader.newInstance(
-                    INFO.screenWidth,
-                    INFO.screenHeight,
+                    SCREEN_INFO.width,
+                    SCREEN_INFO.height,
                     PixelFormat.RGBA_8888,
                     4
                 ).apply {
@@ -247,6 +296,7 @@ class MainService : Service() {
             return false
         }
         Log.d(logTag, "Start Capture")
+        surface = createSurface()
 
         if (useVP9) {
             startVP9VideoRecorder(mediaProjection!!)
@@ -266,6 +316,9 @@ class MainService : Service() {
         Log.d(logTag, "Stop Capture")
         _isStart = false
         // release video
+        imageReader?.close()
+        releaseVideoFrame()
+        surface?.release()
         virtualDisplay?.release()
         videoEncoder?.let {
             it.signalEndOfInputStream()
@@ -309,14 +362,14 @@ class MainService : Service() {
 
     @SuppressLint("WrongConstant")
     private fun startRawVideoRecorder(mp: MediaProjection) {
-        Log.d(logTag, "startRawVideoRecorder,screen info:$INFO")
+        Log.d(logTag, "startRawVideoRecorder,screen info:$SCREEN_INFO")
         if (surface == null) {
             Log.d(logTag, "startRawVideoRecorder failed,surface is null")
             return
         }
         virtualDisplay = mp.createVirtualDisplay(
             "RustDesk",
-            INFO.screenWidth, INFO.screenHeight, 200, VIRTUAL_DISPLAY_FLAG_PUBLIC,
+            SCREEN_INFO.width, SCREEN_INFO.height, 200, VIRTUAL_DISPLAY_FLAG_PUBLIC,
             surface, null, null
         )
     }
@@ -333,7 +386,7 @@ class MainService : Service() {
             it.start()
             virtualDisplay = mp.createVirtualDisplay(
                 "RustDeskVD",
-                INFO.screenWidth, INFO.screenHeight, 200, VIRTUAL_DISPLAY_FLAG_PUBLIC,
+                SCREEN_INFO.width, SCREEN_INFO.height, 200, VIRTUAL_DISPLAY_FLAG_PUBLIC,
                 surface, null, null
             )
         }
@@ -367,7 +420,8 @@ class MainService : Service() {
     private fun createMediaCodec() {
         Log.d(logTag, "MediaFormat.MIMETYPE_VIDEO_VP9 :$MIME_TYPE")
         videoEncoder = MediaCodec.createEncoderByType(MIME_TYPE)
-        val mFormat = MediaFormat.createVideoFormat(MIME_TYPE, INFO.screenWidth, INFO.screenHeight)
+        val mFormat =
+            MediaFormat.createVideoFormat(MIME_TYPE, SCREEN_INFO.width, SCREEN_INFO.height)
         mFormat.setInteger(MediaFormat.KEY_BIT_RATE, VIDEO_KEY_BIT_RATE)
         mFormat.setInteger(MediaFormat.KEY_FRAME_RATE, VIDEO_KEY_FRAME_RATE)
         mFormat.setInteger(
