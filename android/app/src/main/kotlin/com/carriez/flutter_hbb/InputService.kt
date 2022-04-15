@@ -9,6 +9,20 @@ import android.util.Log
 import android.view.accessibility.AccessibilityEvent
 import androidx.annotation.Keep
 import androidx.annotation.RequiresApi
+import java.util.*
+
+const val LIFT_DOWN = 9
+const val LIFT_MOVE = 8
+const val LIFT_UP = 10
+const val RIGHT_UP = 18
+const val WHEEL_BUTTON_DOWN = 33
+const val WHEEL_BUTTON_UP = 34
+const val WHEEL_DOWN = 523331
+const val WHEEL_UP = 963
+
+const val WHEEL_STEP = 120
+const val WHEEL_DURATION = 50L
+const val LONG_TAP_DELAY = 200L
 
 class InputService : AccessibilityService() {
 
@@ -26,10 +40,15 @@ class InputService : AccessibilityService() {
 
     private val logTag = "input service"
     private var leftIsDown = false
-    private var mPath = Path()
-    private var mLastGestureStartTime = 0L
+    private var touchPath = Path()
+    private var lastTouchGestureStartTime = 0L
     private var mouseX = 0
     private var mouseY = 0
+    private var timer = Timer()
+    private var recentActionTask: TimerTask? = null
+
+    private val wheelActionsQueue = LinkedList<GestureDescription>()
+    private var isWheelActionsPolling = false
 
     @Keep
     @RequiresApi(Build.VERSION_CODES.N)
@@ -46,13 +65,13 @@ class InputService : AccessibilityService() {
             _y
         }
 
-        if (!(mask == 9 || mask == 10)) {
+        if (mask == 0 || mask == LIFT_MOVE) {
             mouseX = x * SCREEN_INFO.scale
             mouseY = y * SCREEN_INFO.scale
         }
 
         // left button down ,was up
-        if (mask == 9) {
+        if (mask == LIFT_DOWN) {
             leftIsDown = true
             startGesture(mouseX, mouseY)
             return
@@ -64,43 +83,118 @@ class InputService : AccessibilityService() {
         }
 
         // left up ,was down
-        if (mask == 10) {
+        if (mask == LIFT_UP) {
             leftIsDown = false
             endGesture(mouseX, mouseY)
             return
         }
 
-        if (mask == 18) {
+        if (mask == RIGHT_UP) {
             performGlobalAction(GLOBAL_ACTION_BACK)
             return
         }
 
-        if (mask == 34) {
-            performGlobalAction(GLOBAL_ACTION_HOME)
+        // long WHEEL_BUTTON_DOWN -> GLOBAL_ACTION_RECENTS
+        if (mask == WHEEL_BUTTON_DOWN) {
+            timer.purge()
+            recentActionTask = object : TimerTask() {
+                override fun run() {
+                    performGlobalAction(GLOBAL_ACTION_RECENTS)
+                    recentActionTask = null
+                }
+            }
+            timer.schedule(recentActionTask, LONG_TAP_DELAY)
+        }
+
+        // wheel button up
+        if (mask == WHEEL_BUTTON_UP) {
+            if (recentActionTask != null) {
+                recentActionTask!!.cancel()
+                performGlobalAction(GLOBAL_ACTION_HOME)
+            }
+            return
+        }
+
+        if (mask == WHEEL_DOWN) {
+            if (mouseY < WHEEL_STEP) {
+                return
+            }
+            val path = Path()
+            path.moveTo(mouseX.toFloat(), mouseY.toFloat())
+            path.lineTo(mouseX.toFloat(), (mouseY - WHEEL_STEP).toFloat())
+            val stroke = GestureDescription.StrokeDescription(
+                path,
+                0,
+                WHEEL_DURATION
+            )
+            val builder = GestureDescription.Builder()
+            builder.addStroke(stroke)
+            wheelActionsQueue.offer(builder.build())
+            consumeWheelActions()
+
+        }
+
+        if (mask == WHEEL_UP) {
+            if (mouseY < WHEEL_STEP) {
+                return
+            }
+            val path = Path()
+            path.moveTo(mouseX.toFloat(), mouseY.toFloat())
+            path.lineTo(mouseX.toFloat(), (mouseY + WHEEL_STEP).toFloat())
+            val stroke = GestureDescription.StrokeDescription(
+                path,
+                0,
+                WHEEL_DURATION
+            )
+            val builder = GestureDescription.Builder()
+            builder.addStroke(stroke)
+            wheelActionsQueue.offer(builder.build())
+            consumeWheelActions()
+        }
+    }
+
+    @RequiresApi(Build.VERSION_CODES.N)
+    private fun consumeWheelActions() {
+        if (isWheelActionsPolling) {
+            return
+        } else {
+            isWheelActionsPolling = true
+        }
+        wheelActionsQueue.poll()?.let {
+            dispatchGesture(it, null, null)
+            timer.purge()
+            timer.schedule(object : TimerTask() {
+                override fun run() {
+                    isWheelActionsPolling = false
+                    consumeWheelActions()
+                }
+            }, WHEEL_DURATION + 10)
+        } ?: let {
+            isWheelActionsPolling = false
             return
         }
     }
 
     private fun startGesture(x: Int, y: Int) {
-        mPath = Path()
-        mPath.moveTo(x.toFloat(), y.toFloat())
-        mLastGestureStartTime = System.currentTimeMillis()
+        touchPath = Path()
+        touchPath.moveTo(x.toFloat(), y.toFloat())
+        lastTouchGestureStartTime = System.currentTimeMillis()
     }
 
     private fun continueGesture(x: Int, y: Int) {
-        mPath.lineTo(x.toFloat(), y.toFloat())
+        touchPath.lineTo(x.toFloat(), y.toFloat())
     }
 
     @RequiresApi(Build.VERSION_CODES.N)
     private fun endGesture(x: Int, y: Int) {
         try {
-            mPath.lineTo(x.toFloat(), y.toFloat())
-            var duration = System.currentTimeMillis() - mLastGestureStartTime
+            touchPath.lineTo(x.toFloat(), y.toFloat())
+            var duration = System.currentTimeMillis() - lastTouchGestureStartTime
             if (duration <= 0) {
                 duration = 1
             }
             val stroke = GestureDescription.StrokeDescription(
-                mPath,
+                touchPath,
                 0,
                 duration
             )

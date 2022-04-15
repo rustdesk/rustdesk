@@ -30,6 +30,11 @@ class MainActivity : FlutterActivity() {
     @RequiresApi(Build.VERSION_CODES.M)
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+        if (MainService.isReady) {
+            Intent(activity, MainService::class.java).also {
+                bindService(it, serviceConnection, Context.BIND_AUTO_CREATE)
+            }
+        }
         flutterMethodChannel = MethodChannel(
             flutterEngine.dartExecutor.binaryMessenger,
             channelTag
@@ -41,7 +46,7 @@ class MainActivity : FlutterActivity() {
                         Intent(activity, MainService::class.java).also {
                             bindService(it, serviceConnection, Context.BIND_AUTO_CREATE)
                         }
-                        if (mainService?.isReady == true) {
+                        if (MainService.isReady) {
                             result.success(false)
                             return@setMethodCallHandler
                         }
@@ -93,7 +98,7 @@ class MainActivity : FlutterActivity() {
                         )
                         flutterMethodChannel.invokeMethod(
                             "on_state_changed",
-                            mapOf("name" to "media", "value" to mainService?.isReady.toString())
+                            mapOf("name" to "media", "value" to MainService.isReady.toString())
                         )
                         result.success(true)
                     }

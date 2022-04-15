@@ -182,6 +182,7 @@ class ServerModel with ChangeNotifier {
     await FFI.invokeMethod("init_service");
     FFI.setByName("start_service");
     getIDPasswd();
+    updateClientState();
   }
 
   Future<Null> stopService() async {
@@ -281,12 +282,13 @@ class ServerModel with ChangeNotifier {
     try {
       final List clientsJson = jsonDecode(res);
       for (var clientJson in clientsJson) {
-        final client = Client.fromJson(jsonDecode(clientJson));
+        final client = Client.fromJson(clientJson);
         _clients[client.id] = client;
       }
-
       notifyListeners();
-    } catch (e) {}
+    } catch (e) {
+      debugPrint("Failed to updateClientState:$e");
+    }
   }
 
   loginRequest(Map<String, dynamic> evt) {

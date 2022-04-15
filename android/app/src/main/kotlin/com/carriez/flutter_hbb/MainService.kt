@@ -47,8 +47,6 @@ const val DEFAULT_NOTIFY_TEXT = "Service is running"
 const val DEFAULT_NOTIFY_ID = 1
 const val NOTIFY_ID_OFFSET = 100
 
-const val NOTIFY_TYPE_START_CAPTURE = "NOTIFY_TYPE_START_CAPTURE"
-
 const val MIME_TYPE = MediaFormat.MIMETYPE_VIDEO_VP9
 
 // video const
@@ -141,15 +139,19 @@ class MainService : Service() {
         return translateLocale(LOCAL_NAME, input)
     }
 
+    companion object {
+        private var _isReady = false
+        private var _isStart = false
+        val isReady: Boolean
+            get() = _isReady
+        val isStart: Boolean
+            get() = _isStart
+    }
+
     private val logTag = "LOG_SERVICE"
     private val useVP9 = false
     private val binder = LocalBinder()
-    private var _isReady = false
-    private var _isStart = false
-    val isReady: Boolean
-        get() = _isReady
-    val isStart: Boolean
-        get() = _isStart
+
 
     // video
     private var mediaProjection: MediaProjection? = null
@@ -175,6 +177,15 @@ class MainService : Service() {
         updateScreenInfo()
         initNotification()
         startServer()
+    }
+
+    override fun onDestroy() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            InputService.ctx?.disableSelf()
+        }
+        InputService.ctx = null
+        checkMediaPermission()
+        super.onDestroy()
     }
 
     private fun updateScreenInfo() {
@@ -210,7 +221,6 @@ class MainService : Service() {
                     refreshScreen()
                     startCapture()
                 }
-
             }
 
         }
@@ -242,10 +252,7 @@ class MainService : Service() {
                 checkMediaPermission()
                 init(this)
                 _isReady = true
-            } ?: let {
             }
-//        } else if (intent?.action == ACTION_LOGIN_REQ_NOTIFY) {
-//            val notifyLoginRes = intent.getBooleanExtra(EXTRA_LOGIN_REQ_NOTIFY, false)
         }
         return super.onStartCommand(intent, flags, startId)
     }
@@ -345,7 +352,10 @@ class MainService : Service() {
 
         mediaProjection = null
         checkMediaPermission()
-        stopService(Intent(this, InputService::class.java)) // close input service maybe not work
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            InputService.ctx?.disableSelf()
+        }
+        InputService.ctx = null
         stopForeground(true)
         stopSelf()
     }
@@ -355,6 +365,12 @@ class MainService : Service() {
             MainActivity.flutterMethodChannel.invokeMethod(
                 "on_state_changed",
                 mapOf("name" to "media", "value" to isReady.toString())
+            )
+        }
+        Handler(Looper.getMainLooper()).post {
+            MainActivity.flutterMethodChannel.invokeMethod(
+                "on_state_changed",
+                mapOf("name" to "input", "value" to InputService.isOpen.toString())
             )
         }
         return isReady
