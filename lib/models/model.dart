@@ -22,7 +22,6 @@ class FfiModel with ChangeNotifier {
   Display _display = Display();
   var _decoding = false;
   bool _waitForImage = false;
-  bool _initialized = false;
   var _inputBlocked = false;
   final _permissions = Map<String, bool>();
   bool? _secure;
@@ -31,8 +30,6 @@ class FfiModel with ChangeNotifier {
   var _reconnects = 1;
 
   get permissions => _permissions;
-
-  get initialized => _initialized;
 
   get display => _display;
 
@@ -51,12 +48,10 @@ class FfiModel with ChangeNotifier {
   FfiModel() {
     Translator.call = translate;
     clear();
-    () async {
-      await PlatformFFI.init();
-      _initialized = true;
-      print("FFI initialized");
-      notifyListeners();
-    }();
+  }
+
+  Future<void> init() async {
+    await PlatformFFI.init();
   }
 
   void updatePermission(Map<String, dynamic> evt) {

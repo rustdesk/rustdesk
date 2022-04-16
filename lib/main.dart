@@ -11,7 +11,11 @@ import 'pages/settings_page.dart';
 
 Future<Null> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await Firebase.initializeApp();
+  var a = FFI.ffiModel.init();
+  var b = Firebase.initializeApp();
+  await a;
+  await b;
+  refreshCurrentUser();
   EasyLoading.instance.loadingStyle = EasyLoadingStyle.light;
   toAndroidChannelInit();
   runApp(App());
@@ -21,7 +25,6 @@ class App extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final analytics = FirebaseAnalytics.instance;
-    refreshCurrentUser();
     return MultiProvider(
       providers: [
         ChangeNotifierProvider.value(value: FFI.ffiModel),
@@ -37,7 +40,7 @@ class App extends StatelessWidget {
           primarySwatch: Colors.blue,
           visualDensity: VisualDensity.adaptivePlatformDensity,
         ),
-        home: !isAndroid ? WebHomePage() : HomePage(),
+        home: isWeb ? WebHomePage() : HomePage(),
         navigatorObservers: [
           FirebaseAnalyticsObserver(analytics: analytics),
         ],

@@ -113,9 +113,6 @@ class _ConnectionPageState extends State<ConnectionPage> {
   }
 
   Widget getSearchBarUI() {
-    if (!FFI.ffiModel.initialized) {
-      return Container();
-    }
     var w = Padding(
       padding: const EdgeInsets.fromLTRB(16.0, 8.0, 16.0, 0.0),
       child: Container(
@@ -197,9 +194,6 @@ class _ConnectionPageState extends State<ConnectionPage> {
   }
 
   Widget getPeers() {
-    if (!FFI.ffiModel.initialized) {
-      return Container();
-    }
     final size = MediaQuery.of(context).size;
     final space = 8.0;
     var width = size.width - 2 * space;
