@@ -188,7 +188,7 @@ impl Connection {
 
         loop {
             tokio::select! {
-                biased; // video has higher priority
+                // biased; // video has higher priority // causing test_delay_timer failed while transfering big file
 
                 Some(data) = rx_from_cm.recv() => {
                     match data {
