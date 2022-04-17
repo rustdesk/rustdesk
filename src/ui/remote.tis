@@ -22,7 +22,7 @@ handler.setDisplay = function(x, y, w, h) {
 }
 
 // in case toolbar not shown correclty
-view.windowMinSize = (scaleIt(500), scaleIt(300));
+view.windowMinSize = (500, 300);
 
 function adaptDisplay() {
     var w = display_width;
@@ -42,7 +42,7 @@ function adaptDisplay() {
                 view.windowState == View.WINDOW_SHOWN;
                 var (x, y) = view.box(#position, #border, #screen);
                 // extra for border
-                var extra = 2;
+                var extra = is_win ? 4 : 2;
                 view.move(x, y, w + extra, h + hh + extra);
             }
         }
@@ -86,6 +86,7 @@ if (!is_file_transfer && !is_port_forward) {
 
 var wait_window_toolbar = false;
 var last_mouse_mask;
+var is_left_down = false;
 var acc_wheel_delta_x = 0;
 var acc_wheel_delta_y = 0;
 var last_wheel_time = 0;
@@ -267,6 +268,11 @@ function handler.onMouse(evt)
         entered = false;
         stdout.println("leave");
         handler.leave();
+        if (is_left_down && handler.peer_platform() == "Android") {
+            is_left_down = false;
+            handler.send_mouse((1 << 3) | 2, 0, 0, evt.altKey,
+                evt.ctrlKey, evt.shiftKey, evt.commandKey);
+        }
         return keyboard_enabled;
       default:
         return false;
@@ -278,9 +284,6 @@ function handler.onMouse(evt)
         if (cur_x != x || cur_y != y) {
             return keyboard_enabled;
         }
-        // save bandwidth
-        x = 0;
-        y = 0;
     } else {
         cur_local_x = cur_x = x;
         cur_local_y = cur_y = y;
@@ -293,14 +296,21 @@ function handler.onMouse(evt)
     y = (y / display_scale).toInteger();
     // insert down between two up, osx has this behavior for triple click
     if (last_mouse_mask == 2 && mask == 2) {
-        handler.send_mouse((evt.buttons << 3) | 1, x + display_origin_x, y + display_origin_y, evt.altKey,
+        handler.send_mouse((evt.buttons << 3) | 1, 0, 0, evt.altKey,
                 evt.ctrlKey, evt.shiftKey, evt.commandKey);
     }
     last_mouse_mask = mask;
+    if (evt.buttons == 1) {
+        if (mask == 1) {
+            is_left_down = true;
+        } else if (mask == 2) {
+            is_left_down = false;
+        }
+    }
     // to-do: altKey, ctrlKey etc
     handler.send_mouse((evt.buttons << 3) | mask,
-                mask == 3 ? wheel_delta_x : x + display_origin_x,
-                mask == 3 ? wheel_delta_y : y + display_origin_y,
+                mask == 3 ? wheel_delta_x : (mask == 0 ? x + display_origin_x : 0),
+                mask == 3 ? wheel_delta_y : (mask == 0 ? y + display_origin_y : 0),
                 evt.altKey,
                 evt.ctrlKey, evt.shiftKey, evt.commandKey);
     return true;

@@ -210,6 +210,7 @@ impl sciter::EventHandler for Handler {
         fn get_toggle_option(String);
         fn toggle_option(String);
         fn get_remember();
+        fn peer_platform();
     }
 }
 
