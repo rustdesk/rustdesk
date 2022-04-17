@@ -6,15 +6,17 @@ import '../common.dart';
 import '../pages/server_page.dart';
 import 'model.dart';
 
-final _emptyIdShow = translate("connecting_status");
+final _emptyIdShow = translate("Generating ...");
 
 class ServerModel with ChangeNotifier {
   Timer? _interval;
-  bool _isStart = false;
+  bool _isStart = false; // Android MainService status
   bool _mediaOk = false;
   bool _inputOk = false;
   bool _audioOk = false;
   bool _fileOk = false;
+  int _connectStatus = 0; // Rendezvous Server status
+
   final _serverId = TextEditingController(text: _emptyIdShow);
   final _serverPasswd = TextEditingController(text: "");
 
@@ -29,6 +31,8 @@ class ServerModel with ChangeNotifier {
   bool get audioOk => _audioOk;
 
   bool get fileOk => _fileOk;
+
+  int get connectStatus => _connectStatus;
 
   TextEditingController get serverId => _serverId;
 
@@ -80,6 +84,17 @@ class ServerModel with ChangeNotifier {
       FFI.setByName('option', jsonEncode(res)); // input false by default
       notifyListeners();
     }();
+
+    Timer.periodic(Duration(seconds: 1), (timer) {
+      var status = int.tryParse(FFI.getByName('connect_statue')) ?? 0;
+      if (status > 0) {
+        status = 1;
+      }
+      if (status != _connectStatus) {
+        _connectStatus = status;
+        notifyListeners();
+      }
+    });
   }
 
   toggleAudio() async {

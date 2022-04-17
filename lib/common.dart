@@ -137,6 +137,7 @@ class CustomAlertDialog extends StatelessWidget {
     return WillPopScope(
         onWillPop: onWillPop ?? () async => false,
         child: AlertDialog(
+          scrollable: true,
           title: title,
           contentPadding: EdgeInsets.symmetric(
               horizontal: contentPadding ?? 25, vertical: 10),

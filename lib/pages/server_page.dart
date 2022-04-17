@@ -189,6 +189,14 @@ class _PermissionCheckerState extends State<PermissionChecker> {
   Widget build(BuildContext context) {
     final serverModel = Provider.of<ServerModel>(context);
     final hasAudioPermission = androidVersion >= 30;
+    final status;
+    if (serverModel.connectStatus == -1) {
+      status = 'not_ready_status';
+    } else if (serverModel.connectStatus == 0) {
+      status = 'connecting_status';
+    } else {
+      status = 'Ready';
+    }
     return PaddingCard(
         title: translate("Configuration Permissions"),
         child: Column(
@@ -211,31 +219,43 @@ class _PermissionCheckerState extends State<PermissionChecker> {
             Row(
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                serverModel.mediaOk
-                    ? ElevatedButton.icon(
-                        style: ButtonStyle(
-                            backgroundColor:
-                                MaterialStateProperty.all(Colors.red)),
-                        icon: Icon(Icons.stop),
-                        onPressed: serverModel.toggleService,
-                        label: Text(translate("Stop service")))
-                    : ElevatedButton.icon(
-                        icon: Icon(Icons.play_arrow),
-                        onPressed: serverModel.toggleService,
-                        label: Text(translate("Start Service"))),
-                serverModel.mediaOk
-                    ? Row(
-                        children: [
-                          Padding(
-                              padding: EdgeInsets.only(left: 20, right: 5),
-                              child: Icon(Icons.circle,
-                                  color: Colors.greenAccent, size: 10)),
-                          Text(translate("Ready"),
-                              style: TextStyle(
-                                  fontSize: 16.0, color: MyTheme.accent50))
-                        ],
-                      )
-                    : SizedBox.shrink()
+                Expanded(
+                    flex: 0,
+                    child: serverModel.mediaOk
+                        ? ElevatedButton.icon(
+                            style: ButtonStyle(
+                                backgroundColor:
+                                    MaterialStateProperty.all(Colors.red)),
+                            icon: Icon(Icons.stop),
+                            onPressed: serverModel.toggleService,
+                            label: Text(translate("Stop service")))
+                        : ElevatedButton.icon(
+                            icon: Icon(Icons.play_arrow),
+                            onPressed: serverModel.toggleService,
+                            label: Text(translate("Start Service")))),
+                Expanded(
+                    child: serverModel.mediaOk
+                        ? Row(
+                            children: [
+                              Expanded(
+                                  flex: 0,
+                                  child: Padding(
+                                      padding:
+                                          EdgeInsets.only(left: 20, right: 5),
+                                      child: Icon(Icons.circle,
+                                          color: serverModel.connectStatus > 0
+                                              ? Colors.greenAccent
+                                              : Colors.deepOrangeAccent,
+                                          size: 10))),
+                              Expanded(
+                                  child: Text(translate(status),
+                                      softWrap: true,
+                                      style: TextStyle(
+                                          fontSize: 14.0,
+                                          color: MyTheme.accent50)))
+                            ],
+                          )
+                        : SizedBox.shrink())
               ],
             ),
           ],
