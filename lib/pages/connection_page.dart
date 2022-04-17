@@ -8,6 +8,7 @@ import '../models/model.dart';
 import 'home_page.dart';
 import 'remote_page.dart';
 import 'settings_page.dart';
+import 'scan_page.dart';
 
 class ConnectionPage extends StatefulWidget implements PageShape {
   ConnectionPage({Key? key}) : super(key: key);
@@ -287,22 +288,36 @@ class _WebMenuState extends State<WebMenu> {
     return PopupMenuButton<String>(
         icon: Icon(Icons.more_vert),
         itemBuilder: (context) {
-          return [
-            PopupMenuItem(
-              child: Text(translate('ID/Relay Server')),
-              value: "server",
-            ),
-            PopupMenuItem(
-              child: Text(username == null
-                  ? translate("Login")
-                  : translate("Logout") + ' ($username)'),
-              value: "login",
-            ),
-            PopupMenuItem(
-              child: Text(translate('About') + ' RustDesk'),
-              value: "about",
-            )
-          ];
+          return (isIOS
+                  ? [
+                      PopupMenuItem(
+                        child: Icon(Icons.qr_code_scanner, color: Colors.black),
+                        value: "scan",
+                      )
+                    ]
+                  : <PopupMenuItem<String>>[]) +
+              [
+                PopupMenuItem(
+                  child: Text(translate('ID/Relay Server')),
+                  value: "server",
+                )
+              ] +
+              (getUrl().contains('admin.rustdesk.com')
+                  ? <PopupMenuItem<String>>[]
+                  : [
+                      PopupMenuItem(
+                        child: Text(username == null
+                            ? translate("Login")
+                            : translate("Logout") + ' ($username)'),
+                        value: "login",
+                      )
+                    ]) +
+              [
+                PopupMenuItem(
+                  child: Text(translate('About') + ' RustDesk'),
+                  value: "about",
+                )
+              ];
         },
         onSelected: (value) {
           if (value == 'server') {
@@ -317,6 +332,14 @@ class _WebMenuState extends State<WebMenu> {
             } else {
               logout();
             }
+          }
+          if (value == 'scan') {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (BuildContext context) => ScanPage(),
+              ),
+            );
           }
         });
   }

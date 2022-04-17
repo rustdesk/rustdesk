@@ -40,7 +40,7 @@ class App extends StatelessWidget {
           primarySwatch: Colors.blue,
           visualDensity: VisualDensity.adaptivePlatformDensity,
         ),
-        home: isWeb ? WebHomePage() : HomePage(),
+        home: !isAndroid ? WebHomePage() : HomePage(),
         navigatorObservers: [
           FirebaseAnalyticsObserver(analytics: analytics),
         ],

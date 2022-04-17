@@ -234,6 +234,7 @@ void showServerSettingsWithValue(
               if (api != api0)
                 FFI.setByName(
                     'option', '{"name": "api-server", "value": "$api"}');
+              FFI.ffiModel.updateUser();
               close();
             }
           },
