@@ -124,6 +124,9 @@ class MainService : Service() {
         }
     }
 
+    private var serviceLooper: Looper? = null
+    private var serviceHandler: Handler? = null
+
     // jvm call rust
     private external fun init(ctx: Context)
     private external fun startServer()
@@ -174,6 +177,11 @@ class MainService : Service() {
 
     override fun onCreate() {
         super.onCreate()
+        HandlerThread("Service", Process.THREAD_PRIORITY_BACKGROUND).apply {
+            start()
+            serviceLooper = looper
+            serviceHandler = Handler(looper)
+        }
         updateScreenInfo()
         initNotification()
         startServer()
@@ -287,7 +295,7 @@ class MainService : Service() {
                             }
                         } catch (ignored: java.lang.Exception) {
                         }
-                    }, null)
+                    }, serviceHandler)
                 }
             Log.d(logTag, "ImageReader.setOnImageAvailableListener done")
             imageReader?.surface

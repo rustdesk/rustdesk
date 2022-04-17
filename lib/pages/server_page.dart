@@ -346,6 +346,7 @@ class ConnectionManager extends StatelessWidget {
                         icon: Icon(Icons.close),
                         onPressed: () {
                           FFI.setByName("close_conn", entry.key.toString());
+                          FFI.invokeMethod("cancel_notification", entry.key);
                         },
                         label: Text(translate("Close")))
                   ],
