@@ -38,6 +38,8 @@ struct UI(
 struct UIHostHandler;
 
 pub fn start(args: &mut [String]) {
+    #[cfg(all(target_os = "linux", feature = "inline"))]
+    sciter::set_library("/usr/lib/rustdesk/libsciter-gtk.so").ok();
     // https://github.com/c-smile/sciter-sdk/blob/master/include/sciter-x-types.h
     // https://github.com/rustdesk/rustdesk/issues/132#issuecomment-886069737
     #[cfg(windows)]
