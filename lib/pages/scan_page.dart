@@ -4,6 +4,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:image/image.dart' as img;
 import 'package:zxing2/qrcode.dart';
 import 'dart:io';
+import 'dart:async';
 import 'dart:convert';
 import '../common.dart';
 import '../models/model.dart';
@@ -130,7 +131,7 @@ class _ScanPageState extends State<ScanPage> {
 
   void showServerSettingFromQr(String data) async {
     backToHome();
-    await controller!.stopCamera();
+    await controller?.pauseCamera();
     if (!data.startsWith('config=')) {
       showToast('Invalid QR code');
       return;
@@ -140,7 +141,9 @@ class _ScanPageState extends State<ScanPage> {
       var host = values['host'] != null ? values['host'] as String : '';
       var key = values['key'] != null ? values['key'] as String : '';
       var api = values['api'] != null ? values['api'] as String : '';
-      showServerSettingsWithValue(host, '', key, api);
+      Timer(Duration(milliseconds: 60), () {
+        showServerSettingsWithValue(host, '', key, api);
+      });
     } catch (e) {
       showToast('Invalid QR code');
     }

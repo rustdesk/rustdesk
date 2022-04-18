@@ -53,7 +53,7 @@ class PlatformFFI {
     var a = name.toNativeUtf8();
     var b = arg.toNativeUtf8();
     var p = _getByName!(a, b);
-    assert(p != nullptr && p != null);
+    assert(p != nullptr);
     var res = p.toDartString();
     calloc.free(p);
     calloc.free(a);
@@ -86,7 +86,11 @@ class PlatformFFI {
           .lookupFunction<Void Function(Pointer<RgbaFrame>), F4>('free_rgba');
       _getRgba = dylib.lookupFunction<F5, F5>('get_rgba');
       _dir = (await getApplicationDocumentsDirectory()).path;
-      _homeDir = (await ExternalPath.getExternalStorageDirectories())[0];
+      try {
+        _homeDir = (await ExternalPath.getExternalStorageDirectories())[0];
+      } catch (e) {
+        print(e);
+      }
       String id = 'NA';
       String name = 'Flutter';
       DeviceInfoPlugin deviceInfo = DeviceInfoPlugin();
@@ -123,9 +127,9 @@ class PlatformFFI {
     });
   }
 
-  static invokeMethod(String method,[ dynamic arguments ]) async {
+  static invokeMethod(String method, [dynamic arguments]) async {
     if (!isAndroid) return Future<bool>(() => false);
-    return await toAndroidChannel.invokeMethod(method,arguments);
+    return await toAndroidChannel.invokeMethod(method, arguments);
   }
 }
 
