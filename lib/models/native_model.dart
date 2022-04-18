@@ -124,6 +124,7 @@ class PlatformFFI {
   }
 
   static invokeMethod(String method,[ dynamic arguments ]) async {
+    if (!isAndroid) return Future<bool>(() => false);
     return await toAndroidChannel.invokeMethod(method,arguments);
   }
 }

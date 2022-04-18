@@ -244,48 +244,50 @@ class _ChatWindowOverlayState extends State<ChatWindowOverlay> {
         left: _o.dx,
         width: widget.windowWidth,
         height: widget.windowHeight,
-        child: Scaffold(
-          resizeToAvoidBottomInset: false,
-          appBar: CustomAppBar(
-            onPanUpdate: (d) => changeOffset(d.delta),
-            appBar: Container(
-              color: MyTheme.accent50,
-              height: 50,
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Padding(
-                      padding: EdgeInsets.symmetric(horizontal: 15),
-                      child: Text(
-                        translate("Chat"),
-                        style: TextStyle(
-                            color: Colors.white,
-                            fontFamily: 'WorkSans',
-                            fontWeight: FontWeight.bold,
-                            fontSize: 20),
-                      )),
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    children: [
-                      IconButton(
-                          onPressed: () {
-                            hideChatWindowOverlay();
-                          },
-                          icon: Icon(Icons.keyboard_arrow_down)),
-                      IconButton(
-                          onPressed: () {
-                            hideChatWindowOverlay();
-                            hideChatIconOverlay();
-                          },
-                          icon: Icon(Icons.close))
-                    ],
-                  )
-                ],
-              ),
-            ),
-          ),
-          body: chatPage,
-        ));
+        child: isIOS
+            ? chatPage
+            : Scaffold(
+                resizeToAvoidBottomInset: false,
+                appBar: CustomAppBar(
+                  onPanUpdate: (d) => changeOffset(d.delta),
+                  appBar: Container(
+                    color: MyTheme.accent50,
+                    height: 50,
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Padding(
+                            padding: EdgeInsets.symmetric(horizontal: 15),
+                            child: Text(
+                              translate("Chat"),
+                              style: TextStyle(
+                                  color: Colors.white,
+                                  fontFamily: 'WorkSans',
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 20),
+                            )),
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.center,
+                          children: [
+                            IconButton(
+                                onPressed: () {
+                                  hideChatWindowOverlay();
+                                },
+                                icon: Icon(Icons.keyboard_arrow_down)),
+                            IconButton(
+                                onPressed: () {
+                                  hideChatWindowOverlay();
+                                  hideChatIconOverlay();
+                                },
+                                icon: Icon(Icons.close))
+                          ],
+                        )
+                      ],
+                    ),
+                  ),
+                ),
+                body: chatPage,
+              ));
   }
 }
 

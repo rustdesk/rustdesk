@@ -20,7 +20,7 @@ class ConnectionPage extends StatefulWidget implements PageShape {
   final title = translate("Connection");
 
   @override
-  final appBarActions = isWeb ? <Widget>[WebMenu()] : <Widget>[];
+  final appBarActions = !isAndroid ? <Widget>[WebMenu()] : <Widget>[];
 
   @override
   final scrollController = ScrollController();
