@@ -157,6 +157,7 @@ Note: Some of interfaces needed by RustDesk cannot automatically connected by Sn
 ```sh
 # record system audio
 snap connect rustdesk:audio-record
+snap connect rustdesk:pulseaudio
 # observe loginctl session
 snap connect rustdesk:login-session-observe
 ```
