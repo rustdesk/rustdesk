@@ -158,7 +158,7 @@ Note: Some of interfaces needed by RustDesk cannot automatically connected by Sn
 # record system audio
 snap connect rustdesk:audio-record
 # observe loginctl session
-snap connect rustdesk:system-observe
+snap connect rustdesk:login-session-observe
 ```
 
 After steps above, RustDesk can be found in System App Menu.
