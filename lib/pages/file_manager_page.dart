@@ -4,6 +4,7 @@ import 'package:flutter_hbb/models/file_model.dart';
 import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_breadcrumb/flutter_breadcrumb.dart';
+import 'package:wakelock/wakelock.dart';
 import 'package:toggle_switch/toggle_switch.dart';
 
 import '../common.dart';
@@ -33,6 +34,7 @@ class _FileManagerPageState extends State<FileManagerPage> {
       _interval = Timer.periodic(
           Duration(milliseconds: 30), (timer) => FFI.ffiModel.update(widget.id));
     });
+    Wakelock.enable();
   }
 
   @override
@@ -41,6 +43,7 @@ class _FileManagerPageState extends State<FileManagerPage> {
     _interval?.cancel();
     FFI.close();
     SmartDialog.dismiss();
+    Wakelock.disable();
     super.dispose();
   }
 
