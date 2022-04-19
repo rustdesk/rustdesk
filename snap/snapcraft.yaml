@@ -124,7 +124,6 @@ apps:
     plugs:
       - network
       - audio-playback
-      - audio-record
       - home
       - x11
       - opengl
@@ -134,7 +133,27 @@ apps:
       - pulseaudio
       - gsettings
       - unity7
+      # must manually connect
+      - login-session-observe
+      # [option] manually connect
+      - audio-record
   rustdesk-service:
     command: bin/rustdesk --service
     daemon: simple
+    plugs:
+      - network
+      - audio-playback
+      - home
+      - x11
+      - opengl
+      - wayland
+      - desktop
+      - desktop-legacy
+      - pulseaudio
+      - gsettings
+      - unity7
+      # must manually connect
+      - login-session-observe
+      # [option] manually connect
+      - audio-record
 

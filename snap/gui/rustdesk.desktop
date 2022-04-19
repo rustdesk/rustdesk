@@ -1,0 +1,20 @@
+[Desktop Entry]
+Version=1.0
+Name=RustDesk
+GenericName=Remote Desktop
+Comment=Remote Desktop
+Exec=rustdesk %u
+Icon=${SNAP}/meta/gui/rustdesk.png
+Terminal=false
+Type=Application
+MimeType=text/html;text/xml;application/xhtml+xml;application/vnd.mozilla.xul+xml;text/mml;x-scheme-handler/http;x-scheme-handler/https;
+StartupNotify=true
+Categories=Other;
+Keywords=internet;
+Actions=new-window;
+
+X-Desktop-File-Install-Version=0.23
+
+[Desktop Action new-window]
+Name=Open a New Window
+

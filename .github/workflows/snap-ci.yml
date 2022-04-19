@@ -1,0 +1,30 @@
+name: Snap CI
+
+on:
+  push:
+    branches:
+      - master
+    paths-ignore:
+      - README.md
+    tags:
+      - '*'
+
+jobs:
+  build-snap-master-package:
+    runs-on: ubuntu-18.04
+
+    steps:
+      - name: Check out Git repository
+        uses: actions/checkout@v2
+      - name: Use Snapcraft
+        uses: snapcore/action-build@v1
+        id: build
+      - uses: actions/upload-artifact@v2
+        with:
+          name: rustdesk.snap
+          path: ${{ steps.build.outputs.snap }}
+      # - uses: snapcore/action-publish@v1
+      #   with:
+      #     store_login: ${{ secrets.SNAP_TOKEN }}
+      #     snap: ${{ steps.build.outputs.snap }}
+      #     release: edge
