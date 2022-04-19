@@ -44,7 +44,7 @@ parts:
     build-packages:
       - curl
     override-pull: |
-      curl "https://file.kingtous.cn/index.php?user/publicLink&fid=bf25NxrI-o-SK99uC4xe6DZYXrfpDl981YbdQY1C0DmSqUPlNjgWS6EgQLhgD_1zPPtTbMhNWXr0U1jUTpZP95kAjhg0DXH3bQde8_0mBf405Ondp06D&file_name=/libsciter-gtk.so" -o libsciter-gtk.so
+      curl "https://github.com/c-smile/sciter-sdk/raw/master/bin.lnx/x64/libsciter-gtk.so" -o libsciter-gtk.so
     override-build: |
       mkdir -p ${SNAPCRAFT_PART_INSTALL}/usr/lib/rustdesk/
       cp ${SNAPCRAFT_PART_SRC}/libsciter-gtk.so ${SNAPCRAFT_PART_INSTALL}/usr/lib/rustdesk/
@@ -55,6 +55,9 @@ parts:
     build-environment:
       - VCPKG_ROOT: ${SNAPCRAFT_PART_SRC}/../../vcpkg-packages/src/vcpkg
       - PATH: ${SNAPCRAFT_PART_SRC}/../../vcpkg-packages/src/vcpkg:$PATH
+    override-pull: |
+      snapcraftctl pull
+      python3 inline-sciter.py
     rust-features:
       - inline
     build-packages:
@@ -75,6 +78,7 @@ parts:
       - libasound2-dev 
       - libpulse-dev 
       - cmake
+      - python3
     stage-packages:
       - libssl1.1
       - libasound2
