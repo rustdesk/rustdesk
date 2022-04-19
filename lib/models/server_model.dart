@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:dash_chat/dash_chat.dart';
 import 'package:flutter/material.dart';
+import 'package:wakelock/wakelock.dart';
 import '../common.dart';
 import '../pages/server_page.dart';
 import 'model.dart';
@@ -208,6 +209,7 @@ class ServerModel with ChangeNotifier {
     FFI.setByName("start_service");
     getIDPasswd();
     updateClientState();
+    Wakelock.enable();
   }
 
   Future<Null> stopService() async {
@@ -218,6 +220,7 @@ class ServerModel with ChangeNotifier {
     await FFI.invokeMethod("stop_service");
     FFI.setByName("stop_service");
     notifyListeners();
+    Wakelock.disable();
   }
 
   Future<Null> initInput() async {
