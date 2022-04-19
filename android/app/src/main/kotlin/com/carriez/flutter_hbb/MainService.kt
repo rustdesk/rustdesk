@@ -262,7 +262,8 @@ class MainService : Service() {
                 _isReady = true
             }
         }
-        return super.onStartCommand(intent, flags, startId)
+        super.onStartCommand(intent, flags, startId)
+        return START_NOT_STICKY // don't use sticky (auto restart),the new service (from auto restart) will lose control
     }
 
     override fun onConfigurationChanged(newConfig: Configuration) {
@@ -464,15 +465,19 @@ class MainService : Service() {
     private fun startAudioRecorder() {
         checkAudioRecorder()
         if (audioReader != null && audioRecorder != null && minBufferSize != 0) {
-            audioRecorder!!.startRecording()
-            audioRecordStat = true
-            thread {
-                while (audioRecordStat) {
-                    audioReader!!.readSync(audioRecorder!!)?.let {
-                        onAudioFrameUpdate(it)
+            try {
+                audioRecorder!!.startRecording()
+                audioRecordStat = true
+                thread {
+                    while (audioRecordStat) {
+                        audioReader!!.readSync(audioRecorder!!)?.let {
+                            onAudioFrameUpdate(it)
+                        }
                     }
+                    Log.d(logTag, "Exit audio thread")
                 }
-                Log.d(logTag, "Exit audio thread")
+            } catch (e: Exception) {
+                Log.d(logTag, "startAudioRecorder fail:$e")
             }
         } else {
             Log.d(logTag, "startAudioRecorder fail")
@@ -555,11 +560,7 @@ class MainService : Service() {
             addCategory(Intent.CATEGORY_LAUNCHER)
             putExtra("type", type)
         }
-        val pendingIntent = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            PendingIntent.getActivity(this, 0, intent, FLAG_IMMUTABLE)
-        } else {
-            PendingIntent.getActivity(this, 0, intent, FLAG_UPDATE_CURRENT)
-        }
+        val pendingIntent = PendingIntent.getActivity(this, 0, intent, FLAG_UPDATE_CURRENT)
         val notification = notificationBuilder
             .setOngoing(true)
             .setSmallIcon(R.mipmap.ic_launcher)
@@ -584,7 +585,7 @@ class MainService : Service() {
     ) {
         val notification = notificationBuilder
             .setOngoing(false)
-            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setPriority(NotificationCompat.PRIORITY_MAX)
             .setContentTitle(translate("Do you accept?"))
             .setContentText("$type:$username-$peerId")
             // .setStyle(MediaStyle().setShowActionsInCompactView(0, 1))
@@ -603,7 +604,7 @@ class MainService : Service() {
         cancelNotification(clientID)
         val notification = notificationBuilder
             .setOngoing(false)
-            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setPriority(NotificationCompat.PRIORITY_MAX)
             .setContentTitle("$type ${translate("Established")}")
             .setContentText("$username - $peerId")
             .build()

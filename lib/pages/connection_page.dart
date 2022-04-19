@@ -23,9 +23,6 @@ class ConnectionPage extends StatefulWidget implements PageShape {
   final appBarActions = !isAndroid ? <Widget>[WebMenu()] : <Widget>[];
 
   @override
-  final scrollController = ScrollController();
-
-  @override
   _ConnectionPageState createState() => _ConnectionPageState();
 }
 
@@ -50,7 +47,6 @@ class _ConnectionPageState extends State<ConnectionPage> {
     Provider.of<FfiModel>(context);
     if (_idController.text.isEmpty) _idController.text = FFI.getId();
     return SingleChildScrollView(
-      controller: widget.scrollController,
       child: Column(
           mainAxisAlignment: MainAxisAlignment.start,
           mainAxisSize: MainAxisSize.max,

@@ -41,9 +41,6 @@ class ChatPage extends StatelessWidget implements PageShape {
   ];
 
   @override
-  final scrollController = FFI.chatModel.scroller;
-
-  @override
   Widget build(BuildContext context) {
     return ChangeNotifierProvider.value(
         value: FFI.chatModel,

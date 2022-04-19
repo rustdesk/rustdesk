@@ -21,9 +21,6 @@ class SettingsPage extends StatefulWidget implements PageShape {
   final appBarActions = [ScanButton()];
 
   @override
-  final scrollController = null;
-
-  @override
   _SettingsState createState() => _SettingsState();
 }
 

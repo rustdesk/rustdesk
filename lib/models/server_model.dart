@@ -192,6 +192,7 @@ class ServerModel with ChangeNotifier {
     _isStart = true;
     notifyListeners();
     FFI.setByName("ensure_init_event_queue");
+    _interval?.cancel();
     _interval = Timer.periodic(Duration(milliseconds: 30), (timer) {
       FFI.ffiModel.update("");
     });

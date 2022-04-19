@@ -44,8 +44,8 @@ final ButtonStyle flatButtonStyle = TextButton.styleFrom(
   ),
 );
 
-void showToast(String text,{Duration? duration}) {
-  SmartDialog.showToast(text,displayTime: duration);
+void showToast(String text, {Duration? duration}) {
+  SmartDialog.showToast(text, displayTime: duration);
 }
 
 void showLoading(String text, {bool clickMaskDismiss = false}) {
