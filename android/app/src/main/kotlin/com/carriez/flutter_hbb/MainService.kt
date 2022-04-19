@@ -582,7 +582,6 @@ class MainService : Service() {
         username: String,
         peerId: String
     ) {
-        cancelNotification(clientID)
         val notification = notificationBuilder
             .setOngoing(false)
             .setPriority(NotificationCompat.PRIORITY_HIGH)

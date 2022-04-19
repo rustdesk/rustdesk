@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/models/model.dart';
 import 'package:flutter_hbb/widgets/dialog.dart';
+import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
 import 'package:provider/provider.dart';
 
 import '../common.dart';
@@ -322,7 +323,7 @@ class ConnectionManager extends StatelessWidget {
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         clientInfo(entry.value),
-                        entry.value.isFileTransfer
+                        entry.value.isFileTransfer || !entry.value.authorized
                             ? SizedBox.shrink()
                             : IconButton(
                                 onPressed: () {
@@ -339,16 +340,33 @@ class ConnectionManager extends StatelessWidget {
                                 ))
                       ],
                     ),
-                    ElevatedButton.icon(
+                    entry.value.authorized?SizedBox.shrink():Text(
+                      translate("android_new_connection_tip"),
+                      style: TextStyle(color: Colors.black54),
+                    ),
+                    entry.value.authorized? ElevatedButton.icon(
                         style: ButtonStyle(
                             backgroundColor:
-                                MaterialStateProperty.all(Colors.red)),
+                            MaterialStateProperty.all(Colors.red)),
                         icon: Icon(Icons.close),
                         onPressed: () {
                           FFI.setByName("close_conn", entry.key.toString());
                           FFI.invokeMethod("cancel_notification", entry.key);
                         },
-                        label: Text(translate("Close")))
+                        label: Text(translate("Close"))):
+                    Row(children: [
+                      TextButton(
+                          child: Text(translate("Dismiss")),
+                          onPressed: () {
+                            serverModel.sendLoginResponse(entry.value,false);
+                          }),
+                      SizedBox(width: 20),
+                      ElevatedButton(
+                          child: Text(translate("Accept")),
+                          onPressed: () {
+                            serverModel.sendLoginResponse(entry.value,true);
+                          }),
+                    ]),
                   ],
                 )))
             .toList());
@@ -436,7 +454,7 @@ void toAndroidChannelInit() {
       switch (method) {
         case "start_capture":
           {
-            DialogManager.reset();
+            SmartDialog.dismiss();
             FFI.serverModel.updateClientState();
             break;
           }

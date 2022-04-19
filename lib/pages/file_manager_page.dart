@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:flutter_easyloading/flutter_easyloading.dart';
 import 'package:flutter_hbb/models/file_model.dart';
+import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_breadcrumb/flutter_breadcrumb.dart';
 import 'package:toggle_switch/toggle_switch.dart';
@@ -27,10 +27,12 @@ class _FileManagerPageState extends State<FileManagerPage> {
   @override
   void initState() {
     super.initState();
-    showLoading(translate('Connecting...'));
     FFI.connect(widget.id, isFileTransfer: true);
-    _interval = Timer.periodic(
-        Duration(milliseconds: 30), (timer) => FFI.ffiModel.update(widget.id));
+    WidgetsBinding.instance!.addPostFrameCallback((_) {
+      showLoading(translate('Connecting...'));
+      _interval = Timer.periodic(
+          Duration(milliseconds: 30), (timer) => FFI.ffiModel.update(widget.id));
+    });
   }
 
   @override
@@ -38,7 +40,7 @@ class _FileManagerPageState extends State<FileManagerPage> {
     model.onClose();
     _interval?.cancel();
     FFI.close();
-    EasyLoading.dismiss();
+    SmartDialog.dismiss();
     super.dispose();
   }
 

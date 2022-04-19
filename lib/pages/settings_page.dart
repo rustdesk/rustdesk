@@ -1,4 +1,3 @@
-import 'package:flutter_easyloading/flutter_easyloading.dart';
 import 'package:settings_ui/settings_ui.dart';
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -226,8 +225,7 @@ void logout() async {
         },
         body: json.encode(body));
   } catch (e) {
-    EasyLoading.showToast('Failed to access $url',
-        maskType: EasyLoadingMaskType.black);
+    showToast('Failed to access $url');
   }
   resetToken();
 }

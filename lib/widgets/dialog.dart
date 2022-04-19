@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_easyloading/flutter_easyloading.dart';
+import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
 import '../common.dart';
 import '../models/model.dart';
 
@@ -8,20 +8,14 @@ void clientClose() {
 }
 
 const SEC1 = Duration(seconds: 1);
-void showSuccess({Duration duration = SEC1}){
-  EasyLoading.dismiss();
-  EasyLoading.showSuccess(translate("Successful"),
-      duration: duration,
-      dismissOnTap: true,
-      maskType: EasyLoadingMaskType.black);
+void showSuccess({Duration duration = SEC1}) {
+  SmartDialog.dismiss();
+  showToast(translate("Successful"),duration:SEC1);
 }
 
 void showError({Duration duration = SEC1}){
-  EasyLoading.dismiss();
-  EasyLoading.showError(translate("Error"),
-      duration: duration,
-      dismissOnTap: true,
-      maskType: EasyLoadingMaskType.black);
+  SmartDialog.dismiss();
+  showToast(translate("Error"),duration:SEC1);
 }
 
 void updatePasswordDialog(){

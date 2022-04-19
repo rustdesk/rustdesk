@@ -202,13 +202,6 @@ packages:
       url: "https://pub.dartlang.org"
     source: hosted
     version: "1.0.1"
-  flutter_easyloading:
-    dependency: "direct main"
-    description:
-      name: flutter_easyloading
-      url: "https://pub.dartlang.org"
-    source: hosted
-    version: "3.0.3"
   flutter_launcher_icons:
     dependency: "direct dev"
     description:
@@ -230,13 +223,15 @@ packages:
       url: "https://pub.dartlang.org"
     source: hosted
     version: "2.0.5"
-  flutter_spinkit:
-    dependency: transitive
+  flutter_smart_dialog:
+    dependency: "direct main"
     description:
-      name: flutter_spinkit
-      url: "https://pub.dartlang.org"
-    source: hosted
-    version: "5.1.0"
+      path: "."
+      ref: HEAD
+      resolved-ref: "594530edbac758cde29c614046dcc107345ba791"
+      url: "https://github.com/Heap-Hop/flutter_smart_dialog.git"
+    source: git
+    version: "4.0.0"
   flutter_test:
     dependency: "direct dev"
     description: flutter

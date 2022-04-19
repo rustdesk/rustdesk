@@ -1,8 +1,8 @@
 import 'package:flutter/services.dart';
-import 'package:flutter_easyloading/flutter_easyloading.dart';
 import 'package:flutter_hbb/models/chat_model.dart';
 import 'package:flutter_hbb/models/file_model.dart';
 import 'package:flutter_hbb/models/server_model.dart';
+import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:math';
 import 'dart:convert';
@@ -159,7 +159,7 @@ class FfiModel with ChangeNotifier {
       if (rgba != null) {
         if (_waitForImage) {
           _waitForImage = false;
-          EasyLoading.dismiss();
+          SmartDialog.dismiss();
         }
         _decoding = true;
         final pid = FFI.id;
@@ -221,8 +221,7 @@ class FfiModel with ChangeNotifier {
   }
 
   void handlePeerInfo(Map<String, dynamic> evt) {
-    EasyLoading.dismiss();
-    DialogManager.reset();
+    SmartDialog.dismiss();
     _pi.version = evt['version'];
     _pi.username = evt['username'];
     _pi.hostname = evt['hostname'];
@@ -484,16 +483,11 @@ class CursorModel with ChangeNotifier {
   void updatePan(double dx, double dy, bool touchMode) {
     if (FFI.imageModel.image == null) return;
     if (touchMode) {
-      if (true) {
-        final scale = FFI.canvasModel.scale;
-        _x += dx / scale;
-        _y += dy / scale;
-        FFI.moveMouse(_x, _y);
-        notifyListeners();
-      } else {
-        FFI.canvasModel.panX(dx);
-        FFI.canvasModel.panY(dy);
-      }
+      final scale = FFI.canvasModel.scale;
+      _x += dx / scale;
+      _y += dy / scale;
+      FFI.moveMouse(_x, _y);
+      notifyListeners();
       return;
     }
     final scale = FFI.canvasModel.scale;

@@ -6,6 +6,7 @@ import '../common.dart';
 import '../pages/server_page.dart';
 import 'model.dart';
 
+const loginDialogTag = "LOGIN";
 final _emptyIdShow = translate("Generating ...");
 
 class ServerModel with ChangeNotifier {
@@ -306,70 +307,89 @@ class ServerModel with ChangeNotifier {
     }
   }
 
-  loginRequest(Map<String, dynamic> evt) {
+  void loginRequest(Map<String, dynamic> evt) {
     try {
       final client = Client.fromJson(jsonDecode(evt["client"]));
-      final Map<String, dynamic> response = Map();
-      response["id"] = client.id;
-      DialogManager.show(
-          (setState, close) => CustomAlertDialog(
-                title: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(translate(client.isFileTransfer
-                          ? "File Connection"
-                          : "Screen Connection")),
-                      IconButton(onPressed: close, icon: Icon(Icons.close))
-                    ]),
-                content: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(translate("Do you accept?")),
-                    clientInfo(client),
-                    Text(
-                      translate("android_new_connection_tip"),
-                      style: TextStyle(color: Colors.black54),
-                    ),
-                  ],
-                ),
-                actions: [
-                  TextButton(
-                      child: Text(translate("Dismiss")),
-                      onPressed: () {
-                        response["res"] = false;
-                        FFI.setByName("login_res", jsonEncode(response));
-                        FFI.invokeMethod("cancel_notification", client.id);
-                        close();
-                      }),
-                  ElevatedButton(
-                      child: Text(translate("Accept")),
-                      onPressed: () async {
-                        response["res"] = true;
-                        FFI.setByName("login_res", jsonEncode(response));
-                        if (!client.isFileTransfer) {
-                          FFI.invokeMethod("start_capture");
-                        }
-                        FFI.invokeMethod("cancel_notification", client.id);
-                        _clients[client.id] = client;
-                        notifyListeners();
-                        close();
-                      }),
-                ],
-                onWillPop: () async => true,
-              ),
-          barrierDismissible: true);
+      if (_clients.containsKey(client.id)) {
+        return;
+      }
+      _clients[client.id] = client;
+      notifyListeners();
+      showLoginDialog(client);
     } catch (e) {
-      debugPrint("loginRequest failed,error:$e");
+      debugPrint("Failed to call loginRequest,error:$e");
+    }
+  }
+
+  void showLoginDialog(Client client) {
+    DialogManager.show(
+        (setState, close) => CustomAlertDialog(
+              title: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(translate(client.isFileTransfer
+                        ? "File Connection"
+                        : "Screen Connection")),
+                    IconButton(
+                        onPressed: () {
+                          close();
+                        },
+                        icon: Icon(Icons.close))
+                  ]),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(translate("Do you accept?")),
+                  clientInfo(client),
+                  Text(
+                    translate("android_new_connection_tip"),
+                    style: TextStyle(color: Colors.black54),
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                    child: Text(translate("Dismiss")),
+                    onPressed: () {
+                      sendLoginResponse(client, false);
+                      close();
+                    }),
+                ElevatedButton(
+                    child: Text(translate("Accept")),
+                    onPressed: () {
+                      sendLoginResponse(client, true);
+                      close();
+                    }),
+              ],
+            ),
+        tag: getLoginDialogTag(client.id));
+  }
+
+  void sendLoginResponse(Client client, bool res) {
+    final Map<String, dynamic> response = Map();
+    response["id"] = client.id;
+    response["res"] = res;
+    if (res) {
+      FFI.setByName("login_res", jsonEncode(response));
+      if (!client.isFileTransfer) {
+        FFI.invokeMethod("start_capture");
+      }
+      FFI.invokeMethod("cancel_notification", client.id);
+      _clients[client.id]?.authorized = true;
+      notifyListeners();
+    } else {
+      FFI.setByName("login_res", jsonEncode(response));
+      FFI.invokeMethod("cancel_notification", client.id);
+      _clients.remove(client.id);
     }
   }
 
   void onClientAuthorized(Map<String, dynamic> evt) {
     try {
       final client = Client.fromJson(jsonDecode(evt['client']));
-      // reset the login dialog, to-do,it will close any showing dialog
-      DialogManager.reset();
+      DialogManager.dismissByTag(getLoginDialogTag(client.id));
       _clients[client.id] = client;
       notifyListeners();
     } catch (e) {}
@@ -380,9 +400,7 @@ class ServerModel with ChangeNotifier {
       final id = int.parse(evt['id'] as String);
       if (_clients.containsKey(id)) {
         _clients.remove(id);
-      } else {
-        // reset the login dialog, to-do,it will close any showing dialog
-        DialogManager.reset();
+        DialogManager.dismissByTag(getLoginDialogTag(id));
         FFI.invokeMethod("cancel_notification", id);
       }
       notifyListeners();
@@ -442,39 +460,31 @@ class Client {
   }
 }
 
-showInputWarnAlert() async {
-  if (globalKey.currentContext == null) return;
-  DialogManager.reset();
-  await showDialog<bool>(
-      context: globalKey.currentContext!,
-      builder: (alertContext) {
-        DialogManager.register(alertContext);
-        return AlertDialog(
-          title: Text(translate("How to get Android input permission?")),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(translate(translate("android_input_permission_tip1"))),
-              SizedBox(height: 10),
-              Text(translate(translate("android_input_permission_tip2"))),
-            ],
-          ),
-          actions: [
-            TextButton(
-                child: Text(translate("Cancel")),
-                onPressed: () {
-                  DialogManager.reset();
-                }),
-            ElevatedButton(
-                child: Text(translate("Open System Setting")),
-                onPressed: () {
-                  FFI.serverModel.initInput();
-                  DialogManager.reset();
-                }),
+String getLoginDialogTag(int id) {
+  return loginDialogTag + id.toString();
+}
+
+showInputWarnAlert() {
+  DialogManager.show((setState, close) => CustomAlertDialog(
+        title: Text(translate("How to get Android input permission?")),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(translate(translate("android_input_permission_tip1"))),
+            SizedBox(height: 10),
+            Text(translate(translate("android_input_permission_tip2"))),
           ],
-        );
-      });
-  DialogManager.drop();
+        ),
+        actions: [
+          TextButton(child: Text(translate("Cancel")), onPressed: close),
+          ElevatedButton(
+              child: Text(translate("Open System Setting")),
+              onPressed: () {
+                FFI.serverModel.initInput();
+                close();
+              }),
+        ],
+      ));
 }
 
 class PermissionManager {

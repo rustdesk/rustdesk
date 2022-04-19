@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_easyloading/flutter_easyloading.dart';
 import 'package:flutter_hbb/models/chat_model.dart';
 import 'package:flutter_hbb/widgets/gesture_help.dart';
+import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter/services.dart';
 import 'dart:ui' as ui;
@@ -58,7 +58,7 @@ class _RemotePageState extends State<RemotePage> {
     FFI.close();
     _interval?.cancel();
     _timer?.cancel();
-    EasyLoading.dismiss();
+    SmartDialog.dismiss();
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual,
         overlays: SystemUiOverlay.values);
     Wakelock.disable();
@@ -800,7 +800,7 @@ void showOptions() {
           onTap: () {
             if (i == cur) return;
             FFI.setByName('switch_display', i.toString());
-            DialogManager.reset();
+            SmartDialog.dismiss();
           },
           child: Ink(
               width: 40,

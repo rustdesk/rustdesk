@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_easyloading/flutter_easyloading.dart';
+import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
 import 'package:provider/provider.dart';
 import 'package:firebase_analytics/firebase_analytics.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -16,7 +16,7 @@ Future<Null> main() async {
   await a;
   await b;
   refreshCurrentUser();
-  EasyLoading.instance.loadingStyle = EasyLoadingStyle.light;
+  // EasyLoading.instance.loadingStyle = EasyLoadingStyle.light;
   toAndroidChannelInit();
   runApp(App());
 }
@@ -43,14 +43,15 @@ class App extends StatelessWidget {
         home: !isAndroid ? WebHomePage() : HomePage(),
         navigatorObservers: [
           FirebaseAnalyticsObserver(analytics: analytics),
+          FlutterSmartDialog.observer
         ],
         builder: isAndroid
             ? (_, child) {
                 return AccessibilityListener(
-                  child: FlutterEasyLoading(child: child),
+                  child: FlutterSmartDialog(child: child),
                 );
               }
-            : EasyLoading.init(),
+            : FlutterSmartDialog.init(),
       ),
     );
   }

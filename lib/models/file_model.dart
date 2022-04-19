@@ -1,9 +1,9 @@
 import 'dart:async';
 import 'dart:convert';
-import 'package:flutter_easyloading/flutter_easyloading.dart';
 import 'package:flutter_hbb/common.dart';
 import 'package:flutter_hbb/pages/file_manager_page.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
 import 'package:path/path.dart' as Path;
 
 import 'model.dart';
@@ -176,8 +176,7 @@ class FileModel extends ChangeNotifier {
   }
 
   onClose() {
-    DialogManager.reset();
-    EasyLoading.dismiss();
+    SmartDialog.dismiss();
 
     // save config
     Map<String, String> msg = Map();
@@ -289,7 +288,7 @@ class FileModel extends ChangeNotifier {
           fd.path = item.path;
         }
         fd.format(isWindows);
-        EasyLoading.dismiss();
+        SmartDialog.dismiss();
         if (fd.entries.isEmpty) {
           final confirm = await showRemoveDialog(
               translate(
@@ -346,49 +345,50 @@ class FileModel extends ChangeNotifier {
 
   Future<bool?> showRemoveDialog(
       String title, String content, bool showCheckbox) async {
-    return await DialogManager.show<bool>((setState, Function(bool v) close) =>
-        CustomAlertDialog(
-            title: Row(
-              children: [
-                Icon(Icons.warning, color: Colors.red),
-                SizedBox(width: 20),
-                Text(title)
-              ],
-            ),
-            content: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(content),
-                  SizedBox(height: 5),
-                  Text(translate("This is irreversible!"),
-                      style: TextStyle(fontWeight: FontWeight.bold)),
-                  showCheckbox
-                      ? CheckboxListTile(
-                          contentPadding: const EdgeInsets.all(0),
-                          dense: true,
-                          controlAffinity: ListTileControlAffinity.leading,
-                          title: Text(
-                            translate("Do this for all conflicts"),
-                          ),
-                          value: removeCheckboxRemember,
-                          onChanged: (v) {
-                            if (v == null) return;
-                            setState(() => removeCheckboxRemember = v);
-                          },
-                        )
-                      : SizedBox.shrink()
+    return await DialogManager.show<bool>(
+        (setState, Function(bool v) close) => CustomAlertDialog(
+                title: Row(
+                  children: [
+                    Icon(Icons.warning, color: Colors.red),
+                    SizedBox(width: 20),
+                    Text(title)
+                  ],
+                ),
+                content: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(content),
+                      SizedBox(height: 5),
+                      Text(translate("This is irreversible!"),
+                          style: TextStyle(fontWeight: FontWeight.bold)),
+                      showCheckbox
+                          ? CheckboxListTile(
+                              contentPadding: const EdgeInsets.all(0),
+                              dense: true,
+                              controlAffinity: ListTileControlAffinity.leading,
+                              title: Text(
+                                translate("Do this for all conflicts"),
+                              ),
+                              value: removeCheckboxRemember,
+                              onChanged: (v) {
+                                if (v == null) return;
+                                setState(() => removeCheckboxRemember = v);
+                              },
+                            )
+                          : SizedBox.shrink()
+                    ]),
+                actions: [
+                  TextButton(
+                      style: flatButtonStyle,
+                      onPressed: () => close(false),
+                      child: Text(translate("Cancel"))),
+                  TextButton(
+                      style: flatButtonStyle,
+                      onPressed: () => close(true),
+                      child: Text(translate("OK"))),
                 ]),
-            actions: [
-              TextButton(
-                  style: flatButtonStyle,
-                  onPressed: () => close(false),
-                  child: Text(translate("Cancel"))),
-              TextButton(
-                  style: flatButtonStyle,
-                  onPressed: () => close(true),
-                  child: Text(translate("OK"))),
-            ]));
+        useAnimation: false);
   }
 
   sendRemoveFile(String path, int fileNum, bool isLocal) {
@@ -526,7 +526,7 @@ class FileFetcher {
       final fd = FileDirectory.fromJson(jsonDecode(msg));
       if (fd.id > 0) {
         // fd.id > 0 is result for read recursive
-        // TODO later,will be better if every fetch use ID,so that there will only one task map for read and recursive read
+        // to-do later,will be better if every fetch use ID,so that there will only one task map for read and recursive read
         tasks = readRecursiveTasks;
         final completer = tasks.remove(fd.id);
         completer?.complete(fd);

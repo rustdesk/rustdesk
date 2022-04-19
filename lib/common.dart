@@ -1,7 +1,9 @@
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'dart:async';
-import 'package:flutter_easyloading/flutter_easyloading.dart';
+import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
+
+import 'models/model.dart';
 
 final globalKey = GlobalKey<NavigatorState>();
 final navigationBarKey = GlobalKey();
@@ -42,37 +44,40 @@ final ButtonStyle flatButtonStyle = TextButton.styleFrom(
   ),
 );
 
-void showToast(String text) {
-  EasyLoading.showToast(Translator.call(text),
-      maskType: EasyLoadingMaskType.black);
+void showToast(String text,{Duration? duration}) {
+  SmartDialog.showToast(text,displayTime: duration);
 }
 
-void showLoading(String text) {
-  DialogManager.reset();
-  EasyLoading.dismiss();
-  EasyLoading.show(
-      indicator: Container(
-          constraints: BoxConstraints(maxWidth: 240),
-          child:
-              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            SizedBox(height: 30),
-            Center(child: CircularProgressIndicator()),
-            SizedBox(height: 20),
-            Center(
-                child: Text(Translator.call(text),
-                    style: TextStyle(fontSize: 15))),
-            SizedBox(height: 20),
-            Center(
-                child: TextButton(
-                    style: flatButtonStyle,
-                    onPressed: () {
-                      EasyLoading.dismiss();
-                      backToHome();
-                    },
-                    child: Text(Translator.call('Cancel'),
-                        style: TextStyle(color: MyTheme.accent))))
-          ])),
-      maskType: EasyLoadingMaskType.black);
+void showLoading(String text, {bool clickMaskDismiss = false}) {
+  SmartDialog.dismiss();
+  SmartDialog.showLoading(
+      clickMaskDismiss: false,
+      builder: (context) {
+        return Container(
+            color: MyTheme.white,
+            constraints: BoxConstraints(maxWidth: 240),
+            child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  SizedBox(height: 30),
+                  Center(child: CircularProgressIndicator()),
+                  SizedBox(height: 20),
+                  Center(
+                      child: Text(Translator.call(text),
+                          style: TextStyle(fontSize: 15))),
+                  SizedBox(height: 20),
+                  Center(
+                      child: TextButton(
+                          style: flatButtonStyle,
+                          onPressed: () {
+                            SmartDialog.dismiss();
+                            backToHome();
+                          },
+                          child: Text(Translator.call('Cancel'),
+                              style: TextStyle(color: MyTheme.accent))))
+                ]));
+      });
 }
 
 backToHome() {
@@ -80,40 +85,36 @@ backToHome() {
 }
 
 typedef DialogBuilder = CustomAlertDialog Function(
-    StateSetter setState, Function([dynamic]) close);
+    StateSetter setState, void Function([dynamic]) close);
 
 class DialogManager {
-  static BuildContext? _dialogContext;
+  static int _tag = 0;
 
-  static void reset([result]) {
-    if (_dialogContext != null) {
-      Navigator.pop(_dialogContext!, result);
-    }
-    _dialogContext = null;
-  }
-
-  static void register(BuildContext dialogContext) {
-    _dialogContext = dialogContext;
-  }
-
-  static void drop() {
-    _dialogContext = null;
+  static dismissByTag(String tag, [result]) {
+    SmartDialog.dismiss(tag: tag, result: result);
   }
 
   static Future<T?> show<T>(DialogBuilder builder,
-      {bool barrierDismissible = false}) async {
-    if (globalKey.currentContext == null) return null;
-    EasyLoading.dismiss();
-    DialogManager.reset();
-    final res = await showDialog<T>(
-        context: globalKey.currentContext!,
-        barrierDismissible: barrierDismissible,
-        builder: (context) {
-          DialogManager.register(context);
-          return StatefulBuilder(
-              builder: (_, setState) => builder(setState, DialogManager.reset));
-        });
-    DialogManager.drop();
+      {bool barrierDismissible = false,
+      String? tag,
+      bool useAnimation = true}) async {
+    final t;
+    if (tag != null) {
+      t = tag;
+    } else {
+      _tag += 1;
+      t = _tag.toString();
+    }
+    SmartDialog.dismiss(status: SmartStatus.allToast);
+    SmartDialog.dismiss(status: SmartStatus.loading);
+    final close = ([res]) {
+      SmartDialog.dismiss(tag: t, result: res);
+    };
+    final res = await SmartDialog.show<T>(
+        tag: t,
+        useAnimation: useAnimation,
+        builder: (_) => StatefulBuilder(
+            builder: (_, setState) => builder(setState, close)));
     return res;
   }
 }
@@ -147,7 +148,6 @@ class CustomAlertDialog extends StatelessWidget {
   }
 }
 
-// EasyLoading
 void msgBox(String type, String title, String text, {bool? hasCancel}) {
   var wrap = (String text, void Function() onPressed) => ButtonTheme(
       padding: EdgeInsets.symmetric(horizontal: 20, vertical: 10),
@@ -162,12 +162,10 @@ void msgBox(String type, String title, String text, {bool? hasCancel}) {
           child: Text(Translator.call(text),
               style: TextStyle(color: MyTheme.accent))));
 
-  EasyLoading.dismiss();
-  DialogManager.reset();
+  SmartDialog.dismiss();
   final buttons = [
-    Expanded(child: Container()),
     wrap(Translator.call('OK'), () {
-      EasyLoading.dismiss();
+      SmartDialog.dismiss();
       backToHome();
     })
   ];
@@ -176,28 +174,15 @@ void msgBox(String type, String title, String text, {bool? hasCancel}) {
   }
   if (hasCancel) {
     buttons.insert(
-        1,
+        0,
         wrap(Translator.call('Cancel'), () {
-          EasyLoading.dismiss();
+          SmartDialog.dismiss();
         }));
   }
-  EasyLoading.show(
-      status: "",
-      maskType: EasyLoadingMaskType.black,
-      indicator: Container(
-          constraints: BoxConstraints(maxWidth: 300),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(Translator.call(title), style: TextStyle(fontSize: 21)),
-              SizedBox(height: 20),
-              Text(Translator.call(text), style: TextStyle(fontSize: 15)),
-              SizedBox(height: 20),
-              Row(
-                children: buttons,
-              )
-            ],
-          )));
+  DialogManager.show((setState, close) => CustomAlertDialog(
+      title: Text(translate(title), style: TextStyle(fontSize: 21)),
+      content: Text(Translator.call(text), style: TextStyle(fontSize: 15)),
+      actions: buttons));
 }
 
 Color str2color(String str, [alpha = 0xFF]) {
