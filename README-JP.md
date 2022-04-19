@@ -13,7 +13,7 @@ Chat with us: [Discord](https://discord.gg/nDceKgxnkV) | [Reddit](https://www.re
 
 [![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/I2I04VU09)
 
-Rustで書かれた、設定不要ですぐに使えるリモートデスクトップソフトウェアです。自分のデータを完全にコントロールでき、セキュリティの心配もありません。私たちのランデブー/リレーサーバを使うことも、[自分で設定する](https://rustdesk.com/blog/id-relay-set/) ことも、 [自分でランデブー/リレーサーバを書くこともできます。](https://github.com/rustdesk/rustdesk-server-demo).
+Rustで書かれた、設定不要ですぐに使えるリモートデスクトップソフトウェアです。自分のデータを完全にコントロールでき、セキュリティの心配もありません。私たちのランデブー/リレーサーバを使うことも、[自分で設定する](https://rustdesk.com/server) ことも、 [自分でランデブー/リレーサーバを書くこともできます。](https://github.com/rustdesk/rustdesk-server-demo).
 
 RustDeskは誰からの貢献も歓迎します。 貢献するには [`CONTRIBUTING.md`](CONTRIBUTING.md) を参照してください。
 

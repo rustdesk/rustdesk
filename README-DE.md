@@ -13,7 +13,7 @@ Rede mit uns: [Discord](https://discord.gg/nDceKgxnkV) | [Reddit](https://www.re
 
 [![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/I2I04VU09)
 
-Das hier ist ein Programm was, man nutzen kann, um einen Computer fernzusteuern, es wurde in Rust geschrieben. Es funktioniert ohne Konfiguration oder ähnliches, man kann es einfach direkt nutzen. Du hast volle Kontrolle über deine Daten und brauchst dir daher auch keine Sorgen um die Sicherheit dieser Daten zu machen. Du kannst unseren Rendezvous/Relay Server nutzen, [einen eigenen Server eröffnen](https://rustdesk.com/blog/id-relay-set/) oder [einen neuen eigenen Server programmieren](https://github.com/rustdesk/rustdesk-server-demo).
+Das hier ist ein Programm was, man nutzen kann, um einen Computer fernzusteuern, es wurde in Rust geschrieben. Es funktioniert ohne Konfiguration oder ähnliches, man kann es einfach direkt nutzen. Du hast volle Kontrolle über deine Daten und brauchst dir daher auch keine Sorgen um die Sicherheit dieser Daten zu machen. Du kannst unseren Rendezvous/Relay Server nutzen, [einen eigenen Server eröffnen](https://rustdesk.com/server) oder [einen neuen eigenen Server programmieren](https://github.com/rustdesk/rustdesk-server-demo).
 
 RustDesk heißt jegliche Mitarbeit willkommen. Schau dir [`CONTRIBUTING.md`](CONTRIBUTING.md) an, wenn du Hilfe brauchst für den Start.
 

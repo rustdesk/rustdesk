@@ -13,7 +13,7 @@ Porozmawiaj z nami na: [Discord](https://discord.gg/nDceKgxnkV) | [Reddit](https
 
 [![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/I2I04VU09)
 
-Kolejny program do zdalnego pulpitu, napisany w Rust. Działa od samego początku, nie wymaga konfiguracji. Masz pełną kontrolę nad swoimi danymi, bez obaw o bezpieczeństwo. Możesz skorzystać z naszego darmowego serwera publicznego , [skonfigurować własny](https://rustdesk.com/blog/id-relay-set/), lub [napisać własny serwer rendezvous/relay server](https://github.com/rustdesk/rustdesk-server-demo).
+Kolejny program do zdalnego pulpitu, napisany w Rust. Działa od samego początku, nie wymaga konfiguracji. Masz pełną kontrolę nad swoimi danymi, bez obaw o bezpieczeństwo. Możesz skorzystać z naszego darmowego serwera publicznego , [skonfigurować własny](https://rustdesk.com/server), lub [napisać własny serwer rendezvous/relay server](https://github.com/rustdesk/rustdesk-server-demo).
 
 RustDesk zaprasza do współpracy każdego. Zobacz [`CONTRIBUTING.md`](CONTRIBUTING.md) pomoc w uruchomieniu programu.
 
