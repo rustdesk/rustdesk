@@ -65,6 +65,7 @@ class ServerPage extends StatelessWidget implements PageShape {
         value: FFI.serverModel,
         child: Consumer<ServerModel>(
             builder: (context, serverModel, child) => SingleChildScrollView(
+                  controller: FFI.serverModel.controller,
                   child: Center(
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.start,
@@ -336,33 +337,39 @@ class ConnectionManager extends StatelessWidget {
                                 ))
                       ],
                     ),
-                    entry.value.authorized?SizedBox.shrink():Text(
-                      translate("android_new_connection_tip"),
-                      style: TextStyle(color: Colors.black54),
-                    ),
-                    entry.value.authorized? ElevatedButton.icon(
-                        style: ButtonStyle(
-                            backgroundColor:
-                            MaterialStateProperty.all(Colors.red)),
-                        icon: Icon(Icons.close),
-                        onPressed: () {
-                          FFI.setByName("close_conn", entry.key.toString());
-                          FFI.invokeMethod("cancel_notification", entry.key);
-                        },
-                        label: Text(translate("Close"))):
-                    Row(children: [
-                      TextButton(
-                          child: Text(translate("Dismiss")),
-                          onPressed: () {
-                            serverModel.sendLoginResponse(entry.value,false);
-                          }),
-                      SizedBox(width: 20),
-                      ElevatedButton(
-                          child: Text(translate("Accept")),
-                          onPressed: () {
-                            serverModel.sendLoginResponse(entry.value,true);
-                          }),
-                    ]),
+                    entry.value.authorized
+                        ? SizedBox.shrink()
+                        : Text(
+                            translate("android_new_connection_tip"),
+                            style: TextStyle(color: Colors.black54),
+                          ),
+                    entry.value.authorized
+                        ? ElevatedButton.icon(
+                            style: ButtonStyle(
+                                backgroundColor:
+                                    MaterialStateProperty.all(Colors.red)),
+                            icon: Icon(Icons.close),
+                            onPressed: () {
+                              FFI.setByName("close_conn", entry.key.toString());
+                              FFI.invokeMethod(
+                                  "cancel_notification", entry.key);
+                            },
+                            label: Text(translate("Close")))
+                        : Row(children: [
+                            TextButton(
+                                child: Text(translate("Dismiss")),
+                                onPressed: () {
+                                  serverModel.sendLoginResponse(
+                                      entry.value, false);
+                                }),
+                            SizedBox(width: 20),
+                            ElevatedButton(
+                                child: Text(translate("Accept")),
+                                onPressed: () {
+                                  serverModel.sendLoginResponse(
+                                      entry.value, true);
+                                }),
+                          ]),
                   ],
                 )))
             .toList());

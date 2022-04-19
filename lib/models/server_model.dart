@@ -41,6 +41,8 @@ class ServerModel with ChangeNotifier {
 
   Map<int, Client> get clients => _clients;
 
+  final controller = ScrollController();
+
   ServerModel() {
     () async {
       /**
@@ -94,6 +96,12 @@ class ServerModel with ChangeNotifier {
       if (status != _connectStatus) {
         _connectStatus = status;
         notifyListeners();
+      }
+      final res =
+          FFI.getByName('check_clients_length', _clients.length.toString());
+      if (res.isNotEmpty) {
+        debugPrint("clients not match!");
+        updateClientState(res);
       }
     });
   }
@@ -294,8 +302,8 @@ class ServerModel with ChangeNotifier {
     notifyListeners();
   }
 
-  updateClientState() {
-    var res = FFI.getByName("clients_state");
+  updateClientState([String? json]) {
+    var res = json ?? FFI.getByName("clients_state");
     try {
       final List clientsJson = jsonDecode(res);
       for (var clientJson in clientsJson) {
@@ -315,6 +323,7 @@ class ServerModel with ChangeNotifier {
         return;
       }
       _clients[client.id] = client;
+      scrollToBottom();
       notifyListeners();
       showLoginDialog(client);
     } catch (e) {
@@ -368,6 +377,14 @@ class ServerModel with ChangeNotifier {
         tag: getLoginDialogTag(client.id));
   }
 
+  scrollToBottom() {
+    Future.delayed(Duration(milliseconds: 200), () {
+      controller.animateTo(controller.position.maxScrollExtent,
+          duration: Duration(milliseconds: 200),
+          curve: Curves.fastLinearToSlowEaseIn);
+    });
+  }
+
   void sendLoginResponse(Client client, bool res) {
     final Map<String, dynamic> response = Map();
     response["id"] = client.id;
@@ -392,6 +409,7 @@ class ServerModel with ChangeNotifier {
       final client = Client.fromJson(jsonDecode(evt['client']));
       DialogManager.dismissByTag(getLoginDialogTag(client.id));
       _clients[client.id] = client;
+      scrollToBottom();
       notifyListeners();
     } catch (e) {}
   }
