@@ -139,6 +139,31 @@ target/release/rustdesk
 
 Please ensure that you are running these commands from the root of the RustDesk repository, otherwise the application may be unable to find the required resources. Also note that other cargo subcommands such as `install` or `run` are not currently supported via this method as they would install or run the program inside the container instead of the host.
 
+## How to build and run with Snap
+
+Begin by cloning the repository and make sure snapcraft is installed in your Linux.
+
+```sh
+git clone https://github.com/rustdesk/rustdesk
+# if snapcraft is installed, please skip this
+sudo snap install snapcraft --classic
+# build rustdesk snap package
+snapcraft --use-lxd
+# install rustdesk snap package, `--dangerous` flag must exists if u manually build and install rustdesk
+sudo snap install rustdesk_xxx.snap --dangerous
+```
+
+Note: Some of interfaces needed by RustDesk cannot automatically connected by Snap. Please **manually** connect them by executing:
+```sh
+# record system audio
+snap connect rustdesk:audio-record
+snap connect rustdesk:pulseaudio
+# observe loginctl session
+snap connect rustdesk:login-session-observe
+```
+
+After steps above, RustDesk can be found in System App Menu.
+
 ## File Structure
 
 - **[libs/hbb_common](https://github.com/rustdesk/rustdesk/tree/master/libs/hbb_common)**: video codec, config, tcp/udp wrapper, protobuf, fs functions for file transfer, and some other utility functions
