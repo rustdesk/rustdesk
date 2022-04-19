@@ -44,7 +44,7 @@ parts:
     build-packages:
       - curl
     override-pull: |
-      curl "https://github.com/c-smile/sciter-sdk/raw/master/bin.lnx/x64/libsciter-gtk.so" -o libsciter-gtk.so
+      curl "https://raw.githubusercontent.com/c-smile/sciter-sdk/master/bin.lnx/x64/libsciter-gtk.so" -o libsciter-gtk.so
     override-build: |
       mkdir -p ${SNAPCRAFT_PART_INSTALL}/usr/lib/rustdesk/
       cp ${SNAPCRAFT_PART_SRC}/libsciter-gtk.so ${SNAPCRAFT_PART_INSTALL}/usr/lib/rustdesk/
