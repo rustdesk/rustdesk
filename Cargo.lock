@@ -3383,7 +3383,7 @@ checksum = "08d43f7aa6b08d49f382cde6a7982047c3426db949b1424bc4b7ec9ae12c6ce2"
 
 [[package]]
 name = "rustdesk"
-version = "1.1.8"
+version = "1.1.9"
 dependencies = [
  "android_logger",
  "arboard",
