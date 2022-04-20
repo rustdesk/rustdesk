@@ -65,10 +65,15 @@ class _ConnectionPageState extends State<ConnectionPage> {
     connect(id);
   }
 
-  void connect(String id, {bool isFileTransfer = false}) {
+  void connect(String id, {bool isFileTransfer = false}) async {
     if (id == '') return;
     id = id.replaceAll(' ', '');
     if (isFileTransfer) {
+      if (!await PermissionManager.check("file")) {
+        if (!await PermissionManager.request("file")) {
+          return;
+        }
+      }
       Navigator.push(
         context,
         MaterialPageRoute(
