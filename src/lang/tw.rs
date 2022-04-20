@@ -135,7 +135,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Installation Path", "安裝路徑"),
         ("Create start menu shortcuts", "建立開始選單捷徑"),
         ("Create desktop icon", "建立桌面圖示"),
-        ("agreement_tip", ""),
+        ("agreement_tip", "開始安裝即表示接受許可協議"),
         ("Accept and Install", "接受並安裝"),
         ("End-user license agreement", "使用者授權合約"),
         ("Generating ...", "正在產生 ..."),
