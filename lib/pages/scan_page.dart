@@ -248,7 +248,7 @@ void showServerSettingsWithValue(
         return true;
       },
     );
-  }, barrierDismissible: true);
+  }, clickMaskDismiss: true);
 }
 
 String? validate(value) {

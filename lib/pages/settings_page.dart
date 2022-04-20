@@ -122,7 +122,7 @@ void showAbout() {
         return true;
       },
     );
-  }, barrierDismissible: true);
+  }, clickMaskDismiss: true);
 }
 
 Future<String> login(String name, String pass) async {

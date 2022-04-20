@@ -95,7 +95,7 @@ class DialogManager {
   }
 
   static Future<T?> show<T>(DialogBuilder builder,
-      {bool barrierDismissible = false,
+      {bool clickMaskDismiss = false,
       String? tag,
       bool useAnimation = true}) async {
     final t;
@@ -112,6 +112,7 @@ class DialogManager {
     };
     final res = await SmartDialog.show<T>(
         tag: t,
+        clickMaskDismiss: clickMaskDismiss,
         useAnimation: useAnimation,
         builder: (_) => StatefulBuilder(
             builder: (_, setState) => builder(setState, close)));
