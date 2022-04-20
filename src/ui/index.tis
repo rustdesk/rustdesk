@@ -516,7 +516,7 @@ class SystemError: Reactor.Component {
 class TrustMe: Reactor.Component {
     function render() {
         return <div .trust-me>
-            <div>{translate('Configuration Permissions')}</div>
+            <div>{translate('Permissions')}</div>
             <div>{translate('config_acc')}</div>
             <div #trust-me .link>{translate('Configure')}</div>
         </div>;
@@ -531,7 +531,7 @@ class TrustMe: Reactor.Component {
 class CanScreenRecording: Reactor.Component {
     function render() {
         return <div .trust-me>
-            <div>{translate('Configuration Permissions')}</div>
+            <div>{translate('Permissions')}</div>
             <div>{translate('config_screen')}</div>
             <div #screen-recording .link>{translate('Configure')}</div>
         </div>;
