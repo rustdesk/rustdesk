@@ -206,17 +206,13 @@ class _ConnectionPageState extends State<ConnectionPage> {
           width: width,
           child: Card(
               child: GestureDetector(
-                  onTap: () => {
-                        if (!isDesktop) {connect('${p.id}')}
-                      },
-                  onDoubleTap: () => {
-                        if (isDesktop) {connect('${p.id}')}
-                      },
+                  onTap: !isDesktop ? () => connect('${p.id}') : null,
+                  onDoubleTap: isDesktop ? () => connect('${p.id}') : null,
                   onLongPressStart: (details) {
-                    var x = details.globalPosition.dx;
-                    var y = details.globalPosition.dy;
-                    this._menuPos = RelativeRect.fromLTRB(x, y, x, y);
-                    this.showPeerMenu(context, p.id);
+                    final x = details.globalPosition.dx;
+                    final y = details.globalPosition.dy;
+                    _menuPos = RelativeRect.fromLTRB(x, y, x, y);
+                    showPeerMenu(context, p.id);
                   },
                   child: ListTile(
                     contentPadding: const EdgeInsets.only(left: 12),
@@ -231,11 +227,10 @@ class _ConnectionPageState extends State<ConnectionPage> {
                             padding: const EdgeInsets.all(12),
                             child: Icon(Icons.more_vert)),
                         onTapDown: (e) {
-                          var x = e.globalPosition.dx;
-                          var y = e.globalPosition.dy;
-                          this._menuPos = RelativeRect.fromLTRB(x, y, x, y);
+                          final x = e.globalPosition.dx;
+                          final y = e.globalPosition.dy;
+                          _menuPos = RelativeRect.fromLTRB(x, y, x, y);
                         },
-                        onDoubleTap: () {},
                         onTap: () {
                           showPeerMenu(context, p.id);
                         }),

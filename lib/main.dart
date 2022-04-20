@@ -16,7 +16,6 @@ Future<Null> main() async {
   await a;
   await b;
   refreshCurrentUser();
-  // EasyLoading.instance.loadingStyle = EasyLoadingStyle.light;
   toAndroidChannelInit();
   runApp(App());
 }
@@ -33,26 +32,24 @@ class App extends StatelessWidget {
         ChangeNotifierProvider.value(value: FFI.canvasModel),
       ],
       child: MaterialApp(
-        navigatorKey: globalKey,
-        debugShowCheckedModeBanner: false,
-        title: 'RustDesk',
-        theme: ThemeData(
-          primarySwatch: Colors.blue,
-          visualDensity: VisualDensity.adaptivePlatformDensity,
-        ),
-        home: !isAndroid ? WebHomePage() : HomePage(),
-        navigatorObservers: [
-          FirebaseAnalyticsObserver(analytics: analytics),
-          FlutterSmartDialog.observer
-        ],
-        builder: isAndroid
-            ? (_, child) {
-                return AccessibilityListener(
-                  child: FlutterSmartDialog(child: child),
-                );
-              }
-            : FlutterSmartDialog.init(),
-      ),
+          navigatorKey: globalKey,
+          debugShowCheckedModeBanner: false,
+          title: 'RustDesk',
+          theme: ThemeData(
+            primarySwatch: Colors.blue,
+            visualDensity: VisualDensity.adaptivePlatformDensity,
+          ),
+          home: !isAndroid ? WebHomePage() : HomePage(),
+          navigatorObservers: [
+            FirebaseAnalyticsObserver(analytics: analytics),
+            FlutterSmartDialog.observer
+          ],
+          builder: FlutterSmartDialog.init(
+              builder: isAndroid
+                  ? (_, child) => AccessibilityListener(
+                        child: child,
+                      )
+                  : null)),
     );
   }
 }
