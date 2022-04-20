@@ -196,13 +196,13 @@ class _PermissionCheckerState extends State<PermissionChecker> {
       status = 'Ready';
     }
     return PaddingCard(
-        title: translate("Configuration Permissions"),
+        title: translate("Permissions"),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             PermissionRow(translate("Screen Capture"), serverModel.mediaOk,
                 serverModel.toggleService),
-            PermissionRow(translate("Mouse Control"), serverModel.inputOk,
+            PermissionRow(translate("Input Control"), serverModel.inputOk,
                 serverModel.toggleInput),
             PermissionRow(translate("File Transfer"), serverModel.fileOk,
                 serverModel.toggleFile),
