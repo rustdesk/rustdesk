@@ -76,7 +76,7 @@ flutter {
 dependencies {
     implementation "androidx.media:media:1.4.3"
     implementation 'com.github.getActivity:XXPermissions:13.2'
-    implementation "org.jetbrains.kotlin:kotlin-stdlib-jdk7:$kotlin_version"
+    implementation("org.jetbrains.kotlin:kotlin-stdlib") { version { strictly("$kotlin_version") } }
 }
 
 apply plugin: 'com.google.gms.google-services'
