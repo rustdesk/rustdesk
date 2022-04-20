@@ -228,7 +228,7 @@ packages:
     description:
       path: "."
       ref: HEAD
-      resolved-ref: "594530edbac758cde29c614046dcc107345ba791"
+      resolved-ref: d04ceaa243e7a7883065a41b1008627ceeafc0ff
       url: "https://github.com/Heap-Hop/flutter_smart_dialog.git"
     source: git
     version: "4.0.0"

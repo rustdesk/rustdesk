@@ -31,8 +31,8 @@ class _FileManagerPageState extends State<FileManagerPage> {
     FFI.connect(widget.id, isFileTransfer: true);
     WidgetsBinding.instance!.addPostFrameCallback((_) {
       showLoading(translate('Connecting...'));
-      _interval = Timer.periodic(
-          Duration(milliseconds: 30), (timer) => FFI.ffiModel.update(widget.id));
+      _interval = Timer.periodic(Duration(milliseconds: 30),
+          (timer) => FFI.ffiModel.update(widget.id));
     });
     Wakelock.enable();
   }
@@ -380,7 +380,7 @@ class _FileManagerPageState extends State<FileManagerPage> {
           Padding(
             padding: EdgeInsets.all(2),
             child: Text(
-              "${translate("Total")}: ${model.currentDir.entries.length}${translate("items")}",
+              "${translate("Total")}: ${model.currentDir.entries.length} ${translate("items")}",
               style: TextStyle(color: MyTheme.darkGray),
             ),
           )
