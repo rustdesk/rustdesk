@@ -492,9 +492,9 @@ showInputWarnAlert() {
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text(translate(translate("android_input_permission_tip1"))),
+            Text(translate("android_input_permission_tip1")),
             SizedBox(height: 10),
-            Text(translate(translate("android_input_permission_tip2"))),
+            Text(translate("android_input_permission_tip2")),
           ],
         ),
         actions: [
