@@ -41,7 +41,7 @@ rubato = { version = "0.12", optional = true }
 samplerate = { version = "0.2", optional = true }
 async-trait = "0.1"
 crc32fast = "1.3"
-uuid = { version = "0.8", features = ["v4"] }
+uuid = { version = "1.0.0", features = ["v4"] }
 clap = "3.0"
 rpassword = "6.0"
 base64 = "0.13"

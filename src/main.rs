@@ -16,6 +16,8 @@ fn main() {
 
 #[cfg(not(any(target_os = "android", target_os = "ios", feature = "cli")))]
 fn main() {
+    // https://docs.rs/flexi_logger/latest/flexi_logger/error_info/index.html#write
+    let mut _async_logger_holder: Option<flexi_logger::LoggerHandle> = None;
     let mut args = Vec::new();
     let mut i = 0;
     for arg in std::env::args() {
@@ -43,19 +45,19 @@ fn main() {
             }
         }
         use flexi_logger::*;
-        Logger::try_with_env_or_str("debug")
-            .map(|x| {
-                x.log_to_file(FileSpec::default().directory(path))
-                    .format(opt_format)
-                    .rotate(
-                        Criterion::Age(Age::Day),
-                        Naming::Timestamps,
-                        Cleanup::KeepLogFiles(6),
-                    )
-                    .start()
-                    .ok();
-            })
-            .ok();
+        if let Ok(x) = Logger::try_with_env_or_str("debug") {
+            _async_logger_holder = x
+                .log_to_file(FileSpec::default().directory(path))
+                .write_mode(WriteMode::Async)
+                .format(opt_format)
+                .rotate(
+                    Criterion::Age(Age::Day),
+                    Naming::Timestamps,
+                    Cleanup::KeepLogFiles(6),
+                )
+                .start()
+                .ok();
+        }
     }
     if args.is_empty() {
         std::thread::spawn(move || start_server(false, false));
