@@ -21,7 +21,7 @@ use std::{
         atomic::{AtomicBool, Ordering},
         Arc, Mutex,
     },
-    time::{Instant, SystemTime},
+    time::Instant,
 };
 use uuid::Uuid;
 
@@ -113,24 +113,23 @@ impl RendezvousMediator {
 
         const TIMER_OUT: Duration = Duration::from_secs(1);
         let mut timer = interval(TIMER_OUT);
-        let mut last_timer = SystemTime::UNIX_EPOCH;
+        let mut last_timer: Option<Instant> = None;
         const REG_TIMEOUT: i64 = 3_000;
         const MAX_FAILS1: i64 = 3;
         const MAX_FAILS2: i64 = 6;
         const DNS_INTERVAL: i64 = 60_000;
         let mut fails = 0;
-        let mut last_register_resp = SystemTime::UNIX_EPOCH;
-        let mut last_register_sent = SystemTime::UNIX_EPOCH;
-        let mut last_dns_check = SystemTime::UNIX_EPOCH;
+        let mut last_register_resp: Option<Instant> = None;
+        let mut last_register_sent: Option<Instant> = None;
+        let mut last_dns_check = Instant::now();
         let mut old_latency = 0;
         let mut ema_latency = 0;
         loop {
             let mut update_latency = || {
-                last_register_resp = SystemTime::now();
+                last_register_resp = Some(Instant::now());
                 fails = 0;
-                let mut latency = last_register_resp
-                    .duration_since(last_register_sent)
-                    .map(|d| d.as_micros() as i64)
+                let mut latency = last_register_sent
+                    .map(|x| x.elapsed().as_micros() as i64)
                     .unwrap_or(0);
                 if latency < 0 || latency > 1_000_000 {
                     return;
@@ -224,14 +223,14 @@ impl RendezvousMediator {
                     if SHOULD_EXIT.load(Ordering::SeqCst) {
                         break;
                     }
-                    let now = SystemTime::now();
-                    if now.duration_since(last_timer).map(|d| d < TIMER_OUT).unwrap_or(false) {
+                    let now = Some(Instant::now());
+                    if last_timer.map(|x| x.elapsed() < TIMER_OUT).unwrap_or(false) {
                         // a workaround of tokio timer bug
                         continue;
                     }
                     last_timer = now;
-                    let elapsed_resp = now.duration_since(last_register_resp).map(|d| d.as_millis() as i64).unwrap_or(REG_INTERVAL);
-                    let timeout = last_register_sent.duration_since(last_register_resp).map(|d| d.as_millis() as i64).unwrap_or(0) >= REG_TIMEOUT;
+                    let elapsed_resp = last_register_resp.map(|x| x.elapsed().as_millis() as i64).unwrap_or(REG_INTERVAL);
+                    let timeout = (last_register_sent.map(|x| x.elapsed().as_millis() as i64).unwrap_or(REG_INTERVAL) - elapsed_resp) > REG_TIMEOUT;
                     if timeout || elapsed_resp >= REG_INTERVAL {
                         allow_err!(rz.register_peer(&mut socket).await);
                         last_register_sent = now;
@@ -240,14 +239,14 @@ impl RendezvousMediator {
                             if fails > MAX_FAILS2 {
                                 Config::update_latency(&host, -1);
                                 old_latency = 0;
-                                if now.duration_since(last_dns_check).map(|d| d.as_millis() as i64).unwrap_or(0) > DNS_INTERVAL {
+                                if last_dns_check.elapsed().as_millis() as i64 > DNS_INTERVAL {
                                     rz.addr = socket_client::get_target_addr(&crate::check_port(&host, RENDEZVOUS_PORT))?;
                                     // in some case of network reconnect (dial IP network),
                                     // old UDP socket not work any more after network recover
                                     if let Some(s) = socket_client::rebind_udp(any_addr).await? {
                                         socket = s;
                                     }
-                                    last_dns_check = now;
+                                    last_dns_check = Instant::now();
                                 }
                             } else if fails > MAX_FAILS1 {
                                 Config::update_latency(&host, 0);
