@@ -244,11 +244,8 @@ void showServerSettingsWithValue(
           child: Text(translate('OK')),
         ),
       ],
-      onWillPop: () async {
-        return true;
-      },
     );
-  }, clickMaskDismiss: true);
+  });
 }
 
 String? validate(value) {

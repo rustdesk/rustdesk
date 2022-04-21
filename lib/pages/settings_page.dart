@@ -118,11 +118,8 @@ void showAbout() {
             )),
       ]),
       actions: [],
-      onWillPop: () async {
-        return true;
-      },
     );
-  }, clickMaskDismiss: true);
+  }, clickMaskDismiss: true, backDismiss: true);
 }
 
 Future<String> login(String name, String pass) async {

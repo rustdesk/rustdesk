@@ -877,10 +877,9 @@ void showOptions() {
               ] +
               more),
       actions: [],
-      onWillPop: () async => true,
       contentPadding: 0,
     );
-  }, clickMaskDismiss: true);
+  }, clickMaskDismiss: true, backDismiss: true);
 }
 
 void showSetOSPassword(bool login) {

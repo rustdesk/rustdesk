@@ -96,6 +96,7 @@ class DialogManager {
 
   static Future<T?> show<T>(DialogBuilder builder,
       {bool clickMaskDismiss = false,
+      bool backDismiss = false,
       String? tag,
       bool useAnimation = true}) async {
     final t;
@@ -113,6 +114,7 @@ class DialogManager {
     final res = await SmartDialog.show<T>(
         tag: t,
         clickMaskDismiss: clickMaskDismiss,
+        backDismiss: backDismiss,
         useAnimation: useAnimation,
         builder: (_) => StatefulBuilder(
             builder: (_, setState) => builder(setState, close)));
@@ -125,27 +127,23 @@ class CustomAlertDialog extends StatelessWidget {
       {required this.title,
       required this.content,
       required this.actions,
-      this.onWillPop,
       this.contentPadding});
 
   final Widget title;
   final Widget content;
   final List<Widget> actions;
-  final WillPopCallback? onWillPop;
   final double? contentPadding;
 
   @override
   Widget build(BuildContext context) {
-    return WillPopScope(
-        onWillPop: onWillPop ?? () async => false,
-        child: AlertDialog(
-          scrollable: true,
-          title: title,
-          contentPadding: EdgeInsets.symmetric(
-              horizontal: contentPadding ?? 25, vertical: 10),
-          content: content,
-          actions: actions,
-        ));
+    return AlertDialog(
+      scrollable: true,
+      title: title,
+      contentPadding:
+          EdgeInsets.symmetric(horizontal: contentPadding ?? 25, vertical: 10),
+      content: content,
+      actions: actions,
+    );
   }
 }
 
