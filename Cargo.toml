@@ -33,14 +33,13 @@ sha2 = "0.10"
 repng = "0.2"
 libc = "0.2"
 parity-tokio-ipc = { git = "https://github.com/open-trade/parity-tokio-ipc" }
-flexi_logger = "0.22"
+flexi_logger = { version = "0.22", features = ["async", "use_chrono_for_offset"] }
 runas = "0.2"
 magnum-opus = { git = "https://github.com/open-trade/magnum-opus" }
 dasp = { version = "0.11", features = ["signal", "interpolate-linear", "interpolate"], optional = true }
 rubato = { version = "0.12", optional = true }
 samplerate = { version = "0.2", optional = true }
 async-trait = "0.1"
-crc32fast = "1.3"
 uuid = { version = "1.0.0", features = ["v4"] }
 clap = "3.0"
 rpassword = "6.0"
