@@ -11,7 +11,7 @@ enum CustomTouchGestureState {
   twoFingerPan
 }
 
-const kScaleSlop = kPrecisePointerPanSlop / 10;
+const kScaleSlop = kPrecisePointerPanSlop / 15;
 
 class CustomTouchGestureRecognizer extends ScaleGestureRecognizer {
   CustomTouchGestureRecognizer({
@@ -239,7 +239,7 @@ class HoldTapMoveGestureRecognizer extends GestureRecognizer {
 
   bool _isStart = false;
 
-  Timer? _firstTapUpTimer; 
+  Timer? _firstTapUpTimer;
   Timer? _secondTapDownTimer;
   _TapTracker? _firstTap;
   _TapTracker? _secondTap;
