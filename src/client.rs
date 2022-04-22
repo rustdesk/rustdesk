@@ -498,13 +498,14 @@ impl AudioHandler {
         if !spec.is_valid() {
             bail!("Invalid audio format");
         }
+        use hbb_common::config::APP_NAME;
 
         self.simple = Some(Simple::new(
             None,                   // Use the default server
-            &crate::get_app_name(), // Our application’s name
+            APP_NAME,               // Our application’s name
             Direction::Playback,    // We want a playback stream
             None,                   // Use the default device
-            &crate::get_app_name(), // Description of our stream
+            "playback",             // Description of our stream
             &spec,                  // Our sample format
             None,                   // Use default channel map
             None,                   // Use default buffering attributes

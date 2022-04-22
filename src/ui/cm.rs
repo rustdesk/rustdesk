@@ -465,7 +465,7 @@ async fn start_pa() {
                                 APP_NAME,                         // Our application’s name
                                 pulse::stream::Direction::Record, // We want a record stream
                                 Some(&device),                    // Use the default device
-                                APP_NAME,                         // Description of our stream
+                                "record",                         // Description of our stream
                                 &spec,                            // Our sample format
                                 None,                             // Use default channel map
                                 None, // Use default buffering attributes
