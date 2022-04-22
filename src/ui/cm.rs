@@ -429,8 +429,6 @@ async fn start_ipc(cm: ConnectionManager) {
 async fn start_pa() {
     use crate::audio_service::AUDIO_DATA_SIZE_U8;
     use hbb_common::config::APP_NAME;
-    use libpulse_binding as pulse;
-    use libpulse_simple_binding as psimple;
 
     match new_listener("_pa").await {
         Ok(mut incoming) => {

@@ -1,5 +1,5 @@
 pub use async_trait::async_trait;
-#[cfg(not(any(target_os = "android")))]
+#[cfg(not(any(target_os = "android", target_os = "linux")))]
 use cpal::{
     traits::{DeviceTrait, HostTrait, StreamTrait},
     Device, Host, StreamConfig,
@@ -26,7 +26,7 @@ use std::{
     collections::HashMap,
     net::SocketAddr,
     ops::Deref,
-    sync::{mpsc, Arc, Mutex, RwLock},
+    sync::{mpsc, Arc, RwLock},
 };
 use uuid::Uuid;
 
@@ -36,7 +36,7 @@ pub struct Client;
 
 pub use super::lang::*;
 
-#[cfg(not(any(target_os = "android")))]
+#[cfg(not(any(target_os = "android", target_os = "linux")))]
 lazy_static::lazy_static! {
 static ref AUDIO_HOST: Host = cpal::default_host();
 }
@@ -45,7 +45,6 @@ cfg_if::cfg_if! {
     if #[cfg(target_os = "android")] {
 
 use libc::{c_float, c_int, c_void};
-use std::cell::RefCell;
 type Oboe = *mut c_void;
 extern "C" {
     fn create_oboe_player(channels: c_int, sample_rate: c_int) -> Oboe;
@@ -472,24 +471,59 @@ impl Client {
 #[derive(Default)]
 pub struct AudioHandler {
     audio_decoder: Option<(AudioDecoder, Vec<f32>)>,
-    #[cfg(any(target_os = "android"))]
-    oboe: RefCell<OboePlayer>,
-    #[cfg(not(any(target_os = "android")))]
-    audio_buffer: Arc<Mutex<std::collections::vec_deque::VecDeque<f32>>>,
+    #[cfg(target_os = "android")]
+    oboe: Option<OboePlayer>,
+    #[cfg(target_os = "linux")]
+    simple: Option<psimple::Simple>,
+    #[cfg(not(any(target_os = "android", target_os = "linux")))]
+    audio_buffer: Arc<std::sync::Mutex<std::collections::vec_deque::VecDeque<f32>>>,
     sample_rate: (u32, u32),
-    #[cfg(not(any(target_os = "android")))]
+    #[cfg(not(any(target_os = "android", target_os = "linux")))]
     audio_stream: Option<Box<dyn StreamTrait>>,
     channels: u16,
 }
 
 impl AudioHandler {
-    #[cfg(any(target_os = "android"))]
+    #[cfg(target_os = "linux")]
     fn start_audio(&mut self, format0: AudioFormat) -> ResultType<()> {
+        use psimple::Simple;
+        use pulse::sample::{Format, Spec};
+        use pulse::stream::Direction;
+
+        let spec = Spec {
+            format: Format::F32le,
+            channels: format0.channels as _,
+            rate: format0.sample_rate as _,
+        };
+        if !spec.is_valid() {
+            bail!("Invalid audio format");
+        }
+
+        self.simple = Some(Simple::new(
+            None,                   // Use the default server
+            &crate::get_app_name(), // Our application’s name
+            Direction::Playback,    // We want a playback stream
+            None,                   // Use the default device
+            &crate::get_app_name(), // Description of our stream
+            &spec,                  // Our sample format
+            None,                   // Use default channel map
+            None,                   // Use default buffering attributes
+        )?);
         self.sample_rate = (format0.sample_rate, format0.sample_rate);
         Ok(())
     }
 
-    #[cfg(not(any(target_os = "android")))]
+    #[cfg(target_os = "android")]
+    fn start_audio(&mut self, format0: AudioFormat) -> ResultType<()> {
+        self.oboe = Some(OboePlayer::new(
+            format0.channels as _,
+            format0.sample_rate as _,
+        ));
+        self.sample_rate = (format0.sample_rate, format0.sample_rate);
+        Ok(())
+    }
+
+    #[cfg(not(any(target_os = "android", target_os = "linux")))]
     fn start_audio(&mut self, format0: AudioFormat) -> ResultType<()> {
         let device = AUDIO_HOST
             .default_output_device()
@@ -528,35 +562,31 @@ impl AudioHandler {
     }
 
     pub fn handle_frame(&mut self, frame: AudioFrame) {
-        #[cfg(not(any(target_os = "android")))]
+        #[cfg(not(any(target_os = "android", target_os = "linux")))]
         if self.audio_stream.is_none() {
             return;
         }
-        let sample_rate0 = self.sample_rate.0;
-        let sample_rate = self.sample_rate.1;
-        let channels = self.channels;
-        cfg_if::cfg_if! {
-        if #[cfg(not(target_os = "android"))] {
-        let audio_buffer = self.audio_buffer.clone();
-        // avoiding memory overflow if audio_buffer consumer side has problem
-        if audio_buffer.lock().unwrap().len() as u32 > sample_rate * 120 {
-            *audio_buffer.lock().unwrap() = Default::default();
+        #[cfg(target_os = "linux")]
+        if self.simple.is_none() {
+            return;
         }
-        } else {
-        if self.oboe.borrow().is_null() {
-            self.oboe = RefCell::new(OboePlayer::new(
-                channels as _,
-                sample_rate0 as _,
-            ));
-        }
-        let mut oboe = self.oboe.borrow_mut();
-        }
+        #[cfg(target_os = "android")]
+        if self.oboe.is_none() {
+            return;
         }
         self.audio_decoder.as_mut().map(|(d, buffer)| {
             if let Ok(n) = d.decode_float(&frame.data, buffer, false) {
+                let channels = self.channels;
                 let n = n * (channels as usize);
-                #[cfg(not(any(target_os = "android")))]
+                #[cfg(not(any(target_os = "android", target_os = "linux")))]
                 {
+                    let sample_rate0 = self.sample_rate.0;
+                    let sample_rate = self.sample_rate.1;
+                    let audio_buffer = self.audio_buffer.clone();
+                    // avoiding memory overflow if audio_buffer consumer side has problem
+                    if audio_buffer.lock().unwrap().len() as u32 > sample_rate * 120 {
+                        *audio_buffer.lock().unwrap() = Default::default();
+                    }
                     if sample_rate != sample_rate0 {
                         let buffer = crate::resample_channels(
                             &buffer[0..n],
@@ -572,15 +602,21 @@ impl AudioHandler {
                             .extend(buffer[0..n].iter().cloned());
                     }
                 }
-                #[cfg(any(target_os = "android"))]
+                #[cfg(target_os = "android")]
                 {
-                    oboe.push(&buffer[0..n]);
+                    self.oboe.as_mut().map(|x| x.push(&buffer[0..n]));
+                }
+                #[cfg(target_os = "linux")]
+                {
+                    let data_u8 =
+                        unsafe { std::slice::from_raw_parts::<u8>(buffer.as_ptr() as _, n * 4) };
+                    self.simple.as_mut().map(|x| x.write(data_u8));
                 }
             }
         });
     }
 
-    #[cfg(not(any(target_os = "android")))]
+    #[cfg(not(any(target_os = "android", target_os = "linux")))]
     fn build_output_stream<T: cpal::Sample>(
         &mut self,
         config: &StreamConfig,

@@ -47,8 +47,8 @@ base64 = "0.13"
 sysinfo = "0.23"
 num_cpus = "1.13"
 
-[target.'cfg(not(any(target_os = "android")))'.dependencies]
-cpal = { git = "https://github.com/open-trade/cpal" }
+[target.'cfg(not(any(target_os = "android", target_os = "linux")))'.dependencies]
+cpal = "0.13.5"
 
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
 machine-uid = "0.2"
@@ -75,8 +75,8 @@ core-graphics = "0.22"
 notify = "4.0.17"
 include_dir = "0.7.2"
 [target.'cfg(target_os = "linux")'.dependencies]
-libpulse-simple-binding = "2.24"
-libpulse-binding = "2.25"
+psimple = { package = "libpulse-simple-binding", version = "2.25" }
+pulse = { package = "libpulse-binding", version = "2.26" }
 rust-pulsectl = { git = "https://github.com/open-trade/pulsectl" }
 
 [target.'cfg(target_os = "android")'.dependencies]
