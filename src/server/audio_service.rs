@@ -337,8 +337,6 @@ mod tests {
     #[cfg(target_os = "linux")]
     #[test]
     fn test_pulse() {
-        use libpulse_binding as pulse;
-        use libpulse_simple_binding as psimple;
         let spec = pulse::sample::Spec {
             format: pulse::sample::SAMPLE_FLOAT32NE,
             channels: 2,
