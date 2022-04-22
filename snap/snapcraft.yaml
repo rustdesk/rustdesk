@@ -114,7 +114,7 @@ parts:
   python3-deps:
     plugin: python
     python-packages:
-      - pynput
+      - pynput == 1.7.6
       
 layout:
   /usr/share/rustdesk:
