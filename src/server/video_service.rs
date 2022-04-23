@@ -34,7 +34,6 @@ use std::{
 };
 use virtual_display;
 
-const WAIT_BASE: i32 = 17;
 pub const NAME: &'static str = "video";
 
 lazy_static::lazy_static! {
@@ -172,6 +171,7 @@ fn run(sp: GenericService) -> ResultType<()> {
     }
 
     let fps = 30;
+    let wait = 1000 / fps;
     let spf = time::Duration::from_secs_f32(1. / (fps as f32));
     let (ndisplay, current, display) = get_current_display()?;
     let (origin, width, height) = (display.origin(), display.width(), display.height());
@@ -189,7 +189,6 @@ fn run(sp: GenericService) -> ResultType<()> {
     let q = get_image_quality();
     let (bitrate, rc_min_quantizer, rc_max_quantizer, speed) = get_quality(width, height, q);
     log::info!("bitrate={}, rc_min_quantizer={}", bitrate, rc_min_quantizer);
-    let mut wait = WAIT_BASE;
     let cfg = Config {
         width: width as _,
         height: height as _,
@@ -225,7 +224,6 @@ fn run(sp: GenericService) -> ResultType<()> {
 
     let mut frame_controller = VideoFrameController::new();
 
-    let mut crc = (0, 0);
     let start = time::Instant::now();
     let mut last_check_displays = time::Instant::now();
     #[cfg(windows)]
@@ -266,7 +264,7 @@ fn run(sp: GenericService) -> ResultType<()> {
             Ok(frame) => {
                 let time = now - start;
                 let ms = (time.as_secs() * 1000 + time.subsec_millis() as u64) as i64;
-                let send_conn_ids = handle_one_frame(&sp, &frame, ms, &mut crc, &mut vpx)?;
+                let send_conn_ids = handle_one_frame(&sp, &frame, ms, &mut vpx)?;
                 frame_controller.set_send(now, send_conn_ids);
                 #[cfg(windows)]
                 {
@@ -274,11 +272,6 @@ fn run(sp: GenericService) -> ResultType<()> {
                 }
             }
             Err(ref e) if e.kind() == WouldBlock => {
-                // https://github.com/NVIDIA/video-sdk-samples/tree/master/nvEncDXGIOutputDuplicationSample
-                wait = WAIT_BASE - now.elapsed().as_millis() as i32;
-                if wait < 0 {
-                    wait = 0
-                }
                 #[cfg(windows)]
                 if try_gdi > 0 && !c.is_gdi() {
                     if try_gdi > 3 {
@@ -288,7 +281,6 @@ fn run(sp: GenericService) -> ResultType<()> {
                     }
                     try_gdi += 1;
                 }
-                continue;
             }
             Err(err) => {
                 if check_display_changed(ndisplay, current, width, height) {
@@ -342,7 +334,6 @@ fn handle_one_frame(
     sp: &GenericService,
     frame: &[u8],
     ms: i64,
-    _crc: &mut (u32, u32),
     vpx: &mut Encoder,
 ) -> ResultType<HashSet<i32>> {
     sp.snapshot(|sps| {
@@ -353,41 +344,21 @@ fn handle_one_frame(
         Ok(())
     })?;
 
-    /*
-    // crc runs faster on my i7-4790, around 0.5ms for 720p picture,
-    // but it is super slow on my Linux (in virtualbox) on the same machine, 720ms consumed.
-    // crc do save band width for static scenario (especially for gdi),
-    // Disable it since its uncertainty, who know what will happen on the other machines.
-    let mut hasher = crc32fast::Hasher::new();
-    hasher.update(frame);
-    let checksum = hasher.finalize();
-    if checksum != crc.0 {
-        crc.0 = checksum;
-        crc.1 = 0;
-    } else {
-        crc.1 += 1;
-    }
-    let encode = crc.1 <= 180 && crc.1 % 5 == 0;
-    */
-    let encode = true;
-
     let mut send_conn_ids: HashSet<i32> = Default::default();
-    if encode {
-        let mut frames = Vec::new();
-        for ref frame in vpx
-            .encode(ms, frame, STRIDE_ALIGN)
-            .with_context(|| "Failed to encode")?
-        {
-            frames.push(create_frame(frame));
-        }
-        for ref frame in vpx.flush().with_context(|| "Failed to flush")? {
-            frames.push(create_frame(frame));
-        }
+    let mut frames = Vec::new();
+    for ref frame in vpx
+        .encode(ms, frame, STRIDE_ALIGN)
+        .with_context(|| "Failed to encode")?
+    {
+        frames.push(create_frame(frame));
+    }
+    for ref frame in vpx.flush().with_context(|| "Failed to flush")? {
+        frames.push(create_frame(frame));
+    }
 
-        // to-do: flush periodically, e.g. 1 second
-        if frames.len() > 0 {
-            send_conn_ids = sp.send_video_frame(create_msg(frames));
-        }
+    // to-do: flush periodically, e.g. 1 second
+    if frames.len() > 0 {
+        send_conn_ids = sp.send_video_frame(create_msg(frames));
     }
     Ok(send_conn_ids)
 }
