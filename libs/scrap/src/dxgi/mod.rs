@@ -49,6 +49,7 @@ pub struct Capturer {
     rotated: Vec<u8>,
     gdi_capturer: Option<CapturerGDI>,
     gdi_buffer: Vec<u8>,
+    saved_raw_data: Vec<u128>, // for faster compare and copy
 }
 
 impl Capturer {
@@ -150,6 +151,7 @@ impl Capturer {
             rotated: Vec::new(),
             gdi_capturer,
             gdi_buffer: Vec::new(),
+            saved_raw_data: Vec::new(),
         })
     }
 
@@ -233,7 +235,13 @@ impl Capturer {
             let result = {
                 if let Some(gdi_capturer) = &self.gdi_capturer {
                     match gdi_capturer.frame(&mut self.gdi_buffer) {
-                        Ok(_) => &self.gdi_buffer,
+                        Ok(_) => {
+                            crate::would_block_if_equal(
+                                &mut self.saved_raw_data,
+                                &self.gdi_buffer,
+                            )?;
+                            &self.gdi_buffer
+                        }
                         Err(err) => {
                             return Err(io::Error::new(io::ErrorKind::Other, err.to_string()));
                         }

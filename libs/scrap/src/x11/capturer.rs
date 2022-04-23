@@ -14,6 +14,7 @@ pub struct Capturer {
     size: usize,
     use_yuv: bool,
     yuv: Vec<u8>,
+    saved_raw_data: Vec<u128>, // for faster compare and copy
 }
 
 impl Capturer {
@@ -68,6 +69,7 @@ impl Capturer {
             size,
             use_yuv,
             yuv: Vec::new(),
+            saved_raw_data: Vec::new(),
         };
         Ok(c)
     }
@@ -97,15 +99,16 @@ impl Capturer {
         }
     }
 
-    pub fn frame<'b>(&'b mut self) -> &'b [u8] {
+    pub fn frame<'b>(&'b mut self) -> std::io::Result<&'b [u8]> {
         self.get_image();
         let result = unsafe { slice::from_raw_parts(self.buffer, self.size) };
-        if self.use_yuv {
+        crate::would_block_if_equal(&mut self.saved_raw_data, result)?;
+        Ok(if self.use_yuv {
             crate::common::bgra_to_i420(self.display.w(), self.display.h(), &result, &mut self.yuv);
             &self.yuv[..]
         } else {
             result
-        }
+        })
     }
 }
 

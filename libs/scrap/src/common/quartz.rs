@@ -8,6 +8,7 @@ pub struct Capturer {
     frame: Arc<Mutex<Option<quartz::Frame>>>,
     use_yuv: bool,
     i420: Vec<u8>,
+    saved_raw_data: Vec<u128>, // for faster compare and copy
 }
 
 impl Capturer {
@@ -38,6 +39,7 @@ impl Capturer {
             frame,
             use_yuv,
             i420: Vec::new(),
+            saved_raw_data: Vec::new(),
         })
     }
 
@@ -57,6 +59,7 @@ impl Capturer {
 
                 match frame {
                     Some(mut frame) => {
+                        crate::would_block_if_equal(&mut self.saved_raw_data, frame.inner())?;
                         if self.use_yuv {
                             frame.nv12_to_i420(self.width(), self.height(), &mut self.i420);
                         }

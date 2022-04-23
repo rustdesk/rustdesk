@@ -29,10 +29,12 @@ impl Frame {
         }
     }
 
+    #[inline]
+    pub fn inner(&self) -> &[u8] {
+        self.inner
+    }
+
     pub fn nv12_to_i420<'a>(&'a mut self, w: usize, h: usize, i420: &'a mut Vec<u8>) {
-        if self.inner.is_empty() {
-            return;
-        }
         unsafe {
             let plane0 = IOSurfaceGetBaseAddressOfPlane(self.surface, 0);
             let stride0 = IOSurfaceGetBytesPerRowOfPlane(self.surface, 0);

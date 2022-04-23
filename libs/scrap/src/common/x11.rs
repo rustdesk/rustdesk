@@ -17,7 +17,7 @@ impl Capturer {
     }
 
     pub fn frame<'a>(&'a mut self, _timeout_ms: u32) -> io::Result<Frame<'a>> {
-        Ok(Frame(self.0.frame()))
+        Ok(Frame(self.0.frame()?))
     }
 }
 
