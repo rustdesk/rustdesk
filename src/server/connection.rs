@@ -1071,8 +1071,7 @@ impl Connection {
         }
         log::info!("#{} Connection closed: {}", self.inner.id(), reason);
         if lock && self.lock_after_session_end && self.keyboard {
-            crate::platform::lock_screen();
-            super::video_service::switch_to_primary();
+            lock_screen();
         }
         self.tx_to_cm.send(ipc::Data::Close).ok();
         self.port_forward_socket.take();
