@@ -24,8 +24,8 @@ use clipboard::{
 };
 use enigo::{self, Enigo, KeyboardControllable};
 use hbb_common::fs::{
-    can_enable_overwrite_detection, get_string, new_send_confirm,
-    DigestCheckResult, RemoveJobMeta, get_job,
+    can_enable_overwrite_detection, get_job, get_string, new_send_confirm, DigestCheckResult,
+    RemoveJobMeta,
 };
 use hbb_common::{
     allow_err,
@@ -48,7 +48,7 @@ use hbb_common::{config::TransferSerde, fs::TransferJobMeta};
 use crate::clipboard_file::*;
 use crate::{
     client::*,
-    common::{self, check_clipboard, update_clipboard, ClipboardContext, CLIPBOARD_INTERVAL}
+    common::{self, check_clipboard, update_clipboard, ClipboardContext, CLIPBOARD_INTERVAL},
 };
 
 type Video = AssetPtr<video_destination>;
@@ -267,7 +267,8 @@ impl Handler {
             std::env::set_var("KEYBOARD_ONLY", "y"); // pass to rdev
             use rdev::{EventType::*, *};
             let func = move |evt: Event| {
-                if !IS_IN.load(Ordering::SeqCst) || !SERVER_KEYBOARD_ENABLED.load(Ordering::SeqCst) {
+                if !IS_IN.load(Ordering::SeqCst) || !SERVER_KEYBOARD_ENABLED.load(Ordering::SeqCst)
+                {
                     return;
                 }
                 let (key, down) = match evt.event_type {
@@ -1660,7 +1661,12 @@ impl Remote {
             Data::AddJob((id, path, to, file_num, include_hidden, is_remote)) => {
                 let od = can_enable_overwrite_detection(self.handler.lc.read().unwrap().version);
                 if is_remote {
-                    log::debug!("new write waiting job {}, write to {} from remote {}", id, to, path);
+                    log::debug!(
+                        "new write waiting job {}, write to {} from remote {}",
+                        id,
+                        to,
+                        path
+                    );
                     let mut job = fs::TransferJob::new_write(
                         id,
                         path.clone(),
@@ -1708,15 +1714,27 @@ impl Remote {
                     if let Some(job) = get_job(id, &mut self.write_jobs) {
                         job.is_last_job = false;
                         allow_err!(
-                            peer.send(&fs::new_send(id, job.remote.clone(), job.file_num, job.show_hidden))
+                            peer.send(&fs::new_send(
+                                id,
+                                job.remote.clone(),
+                                job.file_num,
+                                job.show_hidden
+                            ))
                             .await
                         );
                     }
                 } else {
                     if let Some(job) = get_job(id, &mut self.read_jobs) {
                         job.is_last_job = false;
-                        allow_err!(peer.send(&fs::new_receive(id, job.path.to_string_lossy().to_string(),
-                         job.file_num, job.files.clone())).await);
+                        allow_err!(
+                            peer.send(&fs::new_receive(
+                                id,
+                                job.path.to_string_lossy().to_string(),
+                                job.file_num,
+                                job.files.clone()
+                            ))
+                            .await
+                        );
                     }
                 }
             }
@@ -2024,6 +2042,9 @@ impl Remote {
                 Some(message::Union::file_response(fr)) => {
                     match fr.union {
                         Some(file_response::Union::dir(fd)) => {
+                            #[cfg(windows)]
+                            let entries = fd.entries.to_vec();
+                            #[cfg(not(windows))]
                             let mut entries = fd.entries.to_vec();
                             #[cfg(not(windows))]
                             {

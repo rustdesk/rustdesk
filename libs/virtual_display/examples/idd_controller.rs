@@ -1,12 +1,14 @@
 #[cfg(windows)]
 use virtual_display::win10::{idd, DRIVER_INSTALL_PATH};
 
+#[cfg(windows)]
 use std::{
     ffi::CStr,
     io::{self, Read},
     path::Path,
 };
 
+#[cfg(windows)]
 fn prompt_input() -> u8 {
     println!("Press  key                  execute:");
     println!("       1. 'x'               1. exit");
@@ -24,6 +26,7 @@ fn prompt_input() -> u8 {
         .unwrap_or(0)
 }
 
+#[cfg(windows)]
 unsafe fn plug_in(index: idd::UINT, edid: idd::UINT) {
     println!("Plug in monitor begin");
     if idd::FALSE == idd::MonitorPlugIn(index, edid, 25) {
@@ -48,6 +51,7 @@ unsafe fn plug_in(index: idd::UINT, edid: idd::UINT) {
     }
 }
 
+#[cfg(windows)]
 unsafe fn plug_out(index: idd::UINT) {
     println!("Plug out monitor begin");
     if idd::FALSE == idd::MonitorPlugOut(index) {
@@ -58,88 +62,91 @@ unsafe fn plug_out(index: idd::UINT) {
 }
 
 fn main() {
-    let abs_path = Path::new(DRIVER_INSTALL_PATH).canonicalize().unwrap();
+    #[cfg(windows)]
+    {
+        let abs_path = Path::new(DRIVER_INSTALL_PATH).canonicalize().unwrap();
 
-    unsafe {
-        let invalid_device = 0 as idd::HSWDEVICE;
-        let mut h_sw_device = invalid_device;
+        unsafe {
+            let invalid_device = 0 as idd::HSWDEVICE;
+            let mut h_sw_device = invalid_device;
 
-        let full_inf_path: Vec<u16> = abs_path
-            .to_string_lossy()
-            .as_ref()
-            .encode_utf16()
-            .chain(Some(0).into_iter())
-            .collect();
+            let full_inf_path: Vec<u16> = abs_path
+                .to_string_lossy()
+                .as_ref()
+                .encode_utf16()
+                .chain(Some(0).into_iter())
+                .collect();
 
-        loop {
-            match prompt_input() as char {
-                'x' => break,
-                'i' => {
-                    println!("Install or update driver begin, {}", abs_path.display());
-                    let mut reboot_required = idd::FALSE;
-                    if idd::InstallUpdate(full_inf_path.as_ptr() as _, &mut reboot_required)
-                        == idd::FALSE
-                    {
-                        println!("{}", CStr::from_ptr(idd::GetLastMsg()).to_str().unwrap());
-                    } else {
-                        println!(
-                            "Install or update driver done, reboot is {} required",
-                            if reboot_required == idd::FALSE {
-                                "not"
-                            } else {
-                                ""
-                            }
-                        );
+            loop {
+                match prompt_input() as char {
+                    'x' => break,
+                    'i' => {
+                        println!("Install or update driver begin, {}", abs_path.display());
+                        let mut reboot_required = idd::FALSE;
+                        if idd::InstallUpdate(full_inf_path.as_ptr() as _, &mut reboot_required)
+                            == idd::FALSE
+                        {
+                            println!("{}", CStr::from_ptr(idd::GetLastMsg()).to_str().unwrap());
+                        } else {
+                            println!(
+                                "Install or update driver done, reboot is {} required",
+                                if reboot_required == idd::FALSE {
+                                    "not"
+                                } else {
+                                    ""
+                                }
+                            );
+                        }
                     }
-                }
-                'u' => {
-                    println!("Uninstall driver begin {}", abs_path.display());
-                    let mut reboot_required = idd::FALSE;
-                    if idd::Uninstall(full_inf_path.as_ptr() as _, &mut reboot_required)
-                        == idd::FALSE
-                    {
-                        println!("{}", CStr::from_ptr(idd::GetLastMsg()).to_str().unwrap());
-                    } else {
-                        println!(
-                            "Uninstall driver done, reboot is {} required",
-                            if reboot_required == idd::FALSE {
-                                "not"
-                            } else {
-                                ""
-                            }
-                        );
+                    'u' => {
+                        println!("Uninstall driver begin {}", abs_path.display());
+                        let mut reboot_required = idd::FALSE;
+                        if idd::Uninstall(full_inf_path.as_ptr() as _, &mut reboot_required)
+                            == idd::FALSE
+                        {
+                            println!("{}", CStr::from_ptr(idd::GetLastMsg()).to_str().unwrap());
+                        } else {
+                            println!(
+                                "Uninstall driver done, reboot is {} required",
+                                if reboot_required == idd::FALSE {
+                                    "not"
+                                } else {
+                                    ""
+                                }
+                            );
+                        }
                     }
-                }
-                'c' => {
-                    println!("Create device begin");
-                    if h_sw_device != invalid_device {
-                        println!("Device created before");
-                        continue;
+                    'c' => {
+                        println!("Create device begin");
+                        if h_sw_device != invalid_device {
+                            println!("Device created before");
+                            continue;
+                        }
+                        if idd::FALSE == idd::DeviceCreate(&mut h_sw_device) {
+                            println!("{}", CStr::from_ptr(idd::GetLastMsg()).to_str().unwrap());
+                            idd::DeviceClose(h_sw_device);
+                            h_sw_device = invalid_device;
+                        } else {
+                            println!("Create device done");
+                        }
                     }
-                    if idd::FALSE == idd::DeviceCreate(&mut h_sw_device) {
-                        println!("{}", CStr::from_ptr(idd::GetLastMsg()).to_str().unwrap());
+                    'd' => {
+                        println!("Close device begin");
                         idd::DeviceClose(h_sw_device);
                         h_sw_device = invalid_device;
-                    } else {
-                        println!("Create device done");
+                        println!("Close device done");
                     }
+                    '1' => plug_in(0, 0),
+                    '2' => plug_in(1, 0),
+                    '3' => plug_in(2, 0),
+                    '4' => plug_out(0),
+                    '5' => plug_out(1),
+                    '6' => plug_out(2),
+                    _ => {}
                 }
-                'd' => {
-                    println!("Close device begin");
-                    idd::DeviceClose(h_sw_device);
-                    h_sw_device = invalid_device;
-                    println!("Close device done");
-                }
-                '1' => plug_in(0, 0),
-                '2' => plug_in(1, 0),
-                '3' => plug_in(2, 0),
-                '4' => plug_out(0),
-                '5' => plug_out(1),
-                '6' => plug_out(2),
-                _ => {}
             }
-        }
 
-        idd::DeviceClose(h_sw_device);
+            idd::DeviceClose(h_sw_device);
+        }
     }
 }

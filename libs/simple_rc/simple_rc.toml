@@ -1,0 +1,12 @@
+# The output source file
+outfile = "src/rc.rs"
+
+# The resource config list.
+[[confs]]
+# The file or director to integrate.
+inc = "D:/projects/windows/RustDeskTempTopMostWindow/x64/Release/xxx"
+# The exclusions.
+exc = ["*.dll", "*.exe"]
+# The front path that will ignore for extracting.
+# The following config will make base output path to be "RustDeskTempTopMostWindow/x64/Release/xxx".
+suppressed_front = "D:/projects/windows"

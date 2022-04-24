@@ -1,6 +1,6 @@
 // Specify the Windows subsystem to eliminate console window.
 // Requires Rust 1.18.
-//#![windows_subsystem = "windows"]
+#![windows_subsystem = "windows"]
 
 use hbb_common::log;
 use librustdesk::*;
@@ -103,6 +103,10 @@ fn main() {
                     "desktopicon startmenu",
                     "".to_owned()
                 ));
+                return;
+            } else if args[0] == "--extract" {
+                #[cfg(feature = "with_rc")]
+                hbb_common::allow_err!(crate::rc::extract_resources(&args[1]));
                 return;
             }
         }

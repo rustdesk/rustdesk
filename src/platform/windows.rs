@@ -10,7 +10,6 @@ use std::io::prelude::*;
 use std::{
     ffi::OsString,
     fs, io, mem,
-    path::Path,
     sync::{Arc, Mutex},
     time::{Duration, Instant},
 };
@@ -856,7 +855,7 @@ fn get_install_info_with_subkey(subkey: String) -> (String, String, String, Stri
 }
 
 pub fn update_me() -> ResultType<()> {
-    let (_, _, _, exe) = get_install_info();
+    let (_, path, _, exe) = get_install_info();
     let src_exe = std::env::current_exe()?.to_str().unwrap_or("").to_owned();
     let cmds = format!(
         "
@@ -865,12 +864,14 @@ pub fn update_me() -> ResultType<()> {
         taskkill /F /IM {broker_exe}
         taskkill /F /IM {app_name}.exe
         copy /Y \"{src_exe}\" \"{exe}\"
+        \"{src_exe}\" --extract \"{path}\"
         sc start {app_name}
         {lic}
     ",
         src_exe = src_exe,
         exe = exe,
         broker_exe = crate::ui::win_privacy::INJECTED_PROCESS_EXE,
+        path = path,
         app_name = crate::get_app_name(),
         lic = register_licence(),
     );
@@ -1023,6 +1024,7 @@ chcp 65001
 md \"{path}\"
 copy /Y \"{src_exe}\" \"{exe}\"
 copy /Y \"{ORIGIN_PROCESS_EXE}\" \"{path}\\{broker_exe}\"
+\"{src_exe}\" --extract \"{path}\"
 reg add {subkey} /f
 reg add {subkey} /f /v DisplayIcon /t REG_SZ /d \"{exe}\"
 reg add {subkey} /f /v DisplayName /t REG_SZ /d \"{app_name}\"
