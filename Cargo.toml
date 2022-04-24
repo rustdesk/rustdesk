@@ -9,6 +9,7 @@ description = "A remote control software."
 [features]
 inline = []
 cli = []
+with_rc = ["simple_rc"]
 use_samplerate = ["samplerate"]
 use_rubato = ["rubato"]
 use_dasp = ["dasp"]
@@ -83,7 +84,7 @@ rust-pulsectl = { git = "https://github.com/open-trade/pulsectl" }
 android_logger = "0.11"
 
 [workspace]
-members = ["libs/scrap", "libs/hbb_common", "libs/enigo", "libs/clipboard", "libs/virtual_display"]
+members = ["libs/scrap", "libs/hbb_common", "libs/enigo", "libs/clipboard", "libs/virtual_display", "libs/simple_rc"]
 
 [package.metadata.winres]
 LegalCopyright = "Copyright © 2020"
@@ -97,6 +98,7 @@ winapi = { version = "0.3", features = [ "winnt" ] }
 [build-dependencies]
 cc = "1.0"
 hbb_common = { path = "libs/hbb_common" }
+simple_rc = { path = "libs/simple_rc", optional = true }
 
 [dev-dependencies]
 hound = "3.4"
