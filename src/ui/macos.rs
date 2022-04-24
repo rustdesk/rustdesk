@@ -140,18 +140,18 @@ pub fn make_menubar(host: Rc<Host>) {
         menubar.addItem_(app_menu_item);
         let app_menu = NSMenu::new(nil).autorelease();
 
-        let about_item = make_menu_item("About", "a", SHOW_ABOUT_TAG);
-        app_menu.addItem_(about_item);
-        let separator = NSMenuItem::separatorItem(nil).autorelease();
-        app_menu.addItem_(separator);
-        let settings_item = make_menu_item("Settings", "s", SHOW_SETTINGS_TAG);
-        app_menu.addItem_(settings_item);
-
         if std::env::args().len() > 1 {
             let new_item = make_menu_item("New Window", "n", RUN_ME_TAG);
             app_menu.addItem_(new_item);
+        } else {
+            // When app launched without argument, is the main panel.
+            let about_item = make_menu_item("About", "a", SHOW_ABOUT_TAG);
+            app_menu.addItem_(about_item);
+            let separator = NSMenuItem::separatorItem(nil).autorelease();
+            app_menu.addItem_(separator);
+            let settings_item = make_menu_item("Settings", "s", SHOW_SETTINGS_TAG);
+            app_menu.addItem_(settings_item);
         }
-
         let separator = NSMenuItem::separatorItem(nil).autorelease();
         app_menu.addItem_(separator);
         let quit_item = make_menu_item(
