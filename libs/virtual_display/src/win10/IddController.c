@@ -64,14 +64,14 @@ const char* GetLastMsg()
     return g_lastMsg;
 }
 
-BOOL InstallUpdate(LPCTSTR fullInfPath, PBOOL rebootRequired)
+BOOL InstallUpdate(LPCWSTR fullInfPath, PBOOL rebootRequired)
 {
     SetLastMsg("Sucess");
 
-    // UpdateDriverForPlugAndPlayDevices may return FALSE while driver was successfully installed...
-    if (FALSE == UpdateDriverForPlugAndPlayDevices(
+    // UpdateDriverForPlugAndPlayDevicesW may return FALSE while driver was successfully installed...
+    if (FALSE == UpdateDriverForPlugAndPlayDevicesW(
         NULL,
-        _T("RustDeskIddDriver"),    // match hardware id in the inf file
+        L"RustDeskIddDriver",    // match hardware id in the inf file
         fullInfPath,
         INSTALLFLAG_FORCE
             // | INSTALLFLAG_NONINTERACTIVE  // INSTALLFLAG_NONINTERACTIVE may cause error 0xe0000247
@@ -82,7 +82,7 @@ BOOL InstallUpdate(LPCTSTR fullInfPath, PBOOL rebootRequired)
         DWORD error = GetLastError();
         if (error != 0)
         {
-            SetLastMsg("UpdateDriverForPlugAndPlayDevices failed, last error 0x%x\n", error);
+            SetLastMsg("UpdateDriverForPlugAndPlayDevicesW failed, last error 0x%x\n", error);
             if (g_printMsg)
             {
                 printf(g_lastMsg);
@@ -94,11 +94,11 @@ BOOL InstallUpdate(LPCTSTR fullInfPath, PBOOL rebootRequired)
     return TRUE;
 }
 
-BOOL Uninstall(LPCTSTR fullInfPath, PBOOL rebootRequired)
+BOOL Uninstall(LPCWSTR fullInfPath, PBOOL rebootRequired)
 {
     SetLastMsg("Sucess");
 
-    if (FALSE == DiUninstallDriver(
+    if (FALSE == DiUninstallDriverW(
         NULL,
         fullInfPath,
         0,
@@ -108,7 +108,7 @@ BOOL Uninstall(LPCTSTR fullInfPath, PBOOL rebootRequired)
         DWORD error = GetLastError();
         if (error != 0)
         {
-            SetLastMsg("DiUninstallDriver failed, last error 0x%x\n", error);
+            SetLastMsg("DiUninstallDriverW failed, last error 0x%x\n", error);
             if (g_printMsg)
             {
                 printf(g_lastMsg);
