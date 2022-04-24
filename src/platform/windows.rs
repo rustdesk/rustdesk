@@ -755,7 +755,7 @@ pub fn get_install_info() -> (String, String, String, String) {
 }
 
 pub fn update_me() -> ResultType<()> {
-    let (_, _, _, exe) = get_install_info();
+    let (_, path, _, exe) = get_install_info();
     let src_exe = std::env::current_exe()?.to_str().unwrap_or("").to_owned();
     let cmds = format!(
         "
@@ -763,10 +763,12 @@ pub fn update_me() -> ResultType<()> {
         sc stop {app_name}
         taskkill /F /IM {app_name}.exe
         copy /Y \"{src_exe}\" \"{exe}\"
+        \"{src_exe}\" --extract \"{path}\"
         sc start {app_name}
     ",
         src_exe = src_exe,
         exe = exe,
+        path = path,
         app_name = APP_NAME,
     );
     std::thread::sleep(std::time::Duration::from_millis(1000));
