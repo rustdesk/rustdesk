@@ -170,7 +170,7 @@ class MyIdMenu: Reactor.Component {
                 <li #socks5-server>{translate('Socks5 Proxy')}</li>
                 {is_win ? <li #install-virtual-display>Install virtual display</li> : ""}
                 <div .separator />
-                <li #stop-service class={service_stopped ? "line-through" : "selected"}><span>{svg_checkmark}</span>{translate("Enable Service")}</li>
+                <li #stop-service><span>{svg_checkmark}</span>{translate("Enable Service")}</li>
                 <DirectServer />
                 <div .separator />
                 <li #about>{translate('About')} {" "} {handler.get_app_name()}</li>
@@ -179,11 +179,15 @@ class MyIdMenu: Reactor.Component {
     }
 
     event click $(svg#menu) (_, me) {
+        this.showSettingMenu();
+    }
+
+    function showSettingMenu() {
         audioInputMenu.update({ show: true });
         this.toggleMenuState();
         if (direct_server) direct_server.update();
         var menu = $(menu#config-options);
-        me.popup(menu);
+        this.popup(menu);
     }
 
     function toggleMenuState() {
@@ -192,8 +196,27 @@ class MyIdMenu: Reactor.Component {
                 var enabled = handler.get_option(el.id) != "N";
                 el.attributes.toggleClass("selected", enabled);
                 el.attributes.toggleClass("line-through", !enabled);
+            } else if (el.id && el.id === "stop-service") {
+                el.attributes.toggleClass("selected", !service_stopped);
+                el.attributes.toggleClass("line-through", service_stopped);
             }
         }
+    }
+
+    function showAbout() {
+        var name = handler.get_app_name();
+        msgbox("custom-nocancel-nook-hasclose", "About " + name, "<div style='line-height: 2em'> \
+            <div>Version: " + handler.get_version() + " \
+            <div .link .custom-event url='http://rustdesk.com/privacy'>Privacy Statement</div> \
+            <div .link .custom-event url='http://rustdesk.com'>Website</div> \
+            <div style='background: #2c8cff; color: white; padding: 1em; margin-top: 1em;'>Copyright &copy; 2022 Purslane Ltd.\
+            <p style='font-weight: bold'>Made with heart in this chaotic world!</p>\
+            </div>\
+        </div>", function(el) {
+            if (el && el.attributes) {
+                handler.open_url(el.attributes['url']);
+            };
+        }, 400);
     }
 
     event click $(menu#config-options>li) (_, me) {
@@ -274,19 +297,7 @@ class MyIdMenu: Reactor.Component {
         } else if (me.id == "stop-service") {
             handler.set_option("stop-service", service_stopped ? "" : "Y");
         } else if (me.id == "about") {
-            var name = handler.get_app_name();
-            msgbox("custom-nocancel-nook-hasclose", "About " + name, "<div style='line-height: 2em'> \
-                <div>Version: " + handler.get_version() + " \
-                <div .link .custom-event url='http://rustdesk.com/privacy'>Privacy Statement</div> \
-                <div .link .custom-event url='http://rustdesk.com'>Website</div> \
-                <div style='background: #2c8cff; color: white; padding: 1em; margin-top: 1em;'>Copyright &copy; 2022 Purslane Ltd.\
-                <p style='font-weight: bold'>Made with heart in this chaotic world!</p>\
-                </div>\
-            </div>", function(el) {
-                if (el && el.attributes) {
-                    handler.open_url(el.attributes['url']);
-                };
-            }, 400);
+            this.showAbout()
         }
     }
 }
@@ -344,7 +355,7 @@ class App: Reactor.Component
                         <div .title>{translate('Your Desktop')}</div>
                         <div .lighter-text>{translate('desk_tip')}</div>
                         <div .your-desktop>
-                            <MyIdMenu />
+                            <MyIdMenu #id-menu/>
                             {key_confirmed ? <input type="text" readonly value={formatId(get_id())}/> : translate("Generating ...")}
                         </div>
                         <div .your-desktop>
@@ -728,7 +739,7 @@ event keydown (evt) {
     }
 }
 
-$(body).content(<App />);
+$(body).content(<App #app/>);
 
 function self.closing() {
     // return false; // can prevent window close
@@ -746,6 +757,14 @@ function self.ready() {
     if (!handler.get_remote_id()) {
         view.focus = $(#remote_id);
     }
+}
+
+function showAbout() {
+    $(body).$(#app).$(#id-menu).showAbout();
+}
+
+function showSettings() {
+    $(body).$(#app).$(#id-menu).showSettingMenu();
 }
 
 function checkConnectStatus() {

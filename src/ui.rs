@@ -71,7 +71,7 @@ pub fn start(args: &mut [String]) {
     allow_err!(sciter::set_options(sciter::RuntimeOptions::UxTheming(true)));
     frame.set_title(APP_NAME);
     #[cfg(target_os = "macos")]
-    macos::make_menubar();
+    macos::make_menubar(frame.get_host());
     let page;
     if args.len() > 1 && args[0] == "--play" {
         args[0] = "--connect".to_owned();

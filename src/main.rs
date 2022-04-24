@@ -18,14 +18,7 @@ fn main() {
 fn main() {
     // https://docs.rs/flexi_logger/latest/flexi_logger/error_info/index.html#write
     let mut _async_logger_holder: Option<flexi_logger::LoggerHandle> = None;
-    let mut args = Vec::new();
-    let mut i = 0;
-    for arg in std::env::args() {
-        if i > 0 {
-            args.push(arg);
-        }
-        i += 1;
-    }
+    let mut args: Vec<String> = std::env::args().skip(1).collect();
     if args.len() > 0 && args[0] == "--version" {
         println!("{}", crate::VERSION);
         return;
