@@ -186,8 +186,8 @@ class MyIdMenu: Reactor.Component {
         audioInputMenu.update({ show: true });
         this.toggleMenuState();
         if (direct_server) direct_server.update();
-        var menu = $(menu#config-options);
-        this.popup(menu);
+        var menu = this.$(menu#config-options);
+        this.$(svg#menu).popup(menu);
     }
 
     function toggleMenuState() {
@@ -355,7 +355,7 @@ class App: Reactor.Component
                         <div .title>{translate('Your Desktop')}</div>
                         <div .lighter-text>{translate('desk_tip')}</div>
                         <div .your-desktop>
-                            <MyIdMenu #id-menu/>
+                            <MyIdMenu />
                             {key_confirmed ? <input type="text" readonly value={formatId(get_id())}/> : translate("Generating ...")}
                         </div>
                         <div .your-desktop>
@@ -739,7 +739,7 @@ event keydown (evt) {
     }
 }
 
-$(body).content(<App #app/>);
+$(body).content(<App />);
 
 function self.closing() {
     // return false; // can prevent window close
@@ -760,11 +760,11 @@ function self.ready() {
 }
 
 function showAbout() {
-    $(body).$(#app).$(#id-menu).showAbout();
+    myIdMenu.showAbout();
 }
 
 function showSettings() {
-    $(body).$(#app).$(#id-menu).showSettingMenu();
+    myIdMenu.showSettingMenu();
 }
 
 function checkConnectStatus() {

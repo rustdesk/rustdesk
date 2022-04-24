@@ -352,11 +352,11 @@ div.trust-me > div:nth-child(3) {
     font-weight: bold;
 }
 
-#id-menu {
+div#myid {
     position: relative;
 }
 
-#id-menu svg#menu {
+div#myid svg#menu {
     position: absolute;
     right: -1em;
 }
