@@ -401,6 +401,11 @@ handler.setCursorPosition = function(x, y) {
 }
 
 function self.ready() {
+    // https://sciter.com/forums/topic/focus_lost-and-focus_got-events/
+    // not got a good way to detect focus/blur in Sciter
+    // below not work until I click on toolbar on Mac
+    self.on("focus", "*", function() { stdout.println(this,"got focus") });
+    self.on("blur", "*", function() { stdout.println(this,"lost focus") });
     var w = 960;
     var h = 640;
     if (is_file_transfer || is_port_forward) {
