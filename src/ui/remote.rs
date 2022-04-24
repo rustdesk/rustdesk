@@ -930,7 +930,12 @@ impl Handler {
     }
 
     fn set_cursor_data(&mut self, cd: CursorData) {
-        let colors = hbb_common::compress::decompress(&cd.colors);
+        let mut colors = hbb_common::compress::decompress(&cd.colors);
+        if colors.iter().filter(|x| **x != 0).next().is_none() {
+            log::info!("Fix transparent");
+            // somehow all 0 images shows black rect, here is a workaround
+            colors[3] = 1;
+        }
         let mut png = Vec::new();
         if let Ok(()) = repng::encode(&mut png, cd.width as _, cd.height as _, &colors) {
             self.call(
