@@ -40,7 +40,8 @@ header #secure svg {
 }
 
 header .remote-id {
-  width: *;
+  width: 80px;
+  @ELLIPSIS;
   padding-left: 30px;
   padding-right: 4em;
   margin: * 0;
