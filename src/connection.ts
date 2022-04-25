@@ -563,13 +563,13 @@ export default class Connection {
   ) {
     const key_event = mapKey(name, globals.isDesktop());
     if (!key_event) return;
-    if (alt && (name == "Alt" || name == "RAlt")) {
+    if (alt && (name == "VK_MENU" || name == "RAlt")) {
       alt = false;
     }
-    if (ctrl && (name == "Control" || name == "RControl")) {
+    if (ctrl && (name == "VK_CONTROL" || name == "RControl")) {
       ctrl = false;
     }
-    if (shift && (name == "Shift" || name == "RShift")) {
+    if (shift && (name == "VK_SHIFT" || name == "RShift")) {
       shift = false;
     }
     if (command && (name == "Meta" || name == "RWin")) {

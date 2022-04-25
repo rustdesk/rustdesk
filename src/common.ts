@@ -55,9 +55,9 @@ export function mapKey(name: string, isDesktop: Boolean) {
       return KeyEvent.fromPartial({ unicode: chr });
     else return KeyEvent.fromPartial({ chr });
   }
-  const control_key = controlKeyFromJSON(name);
+  const control_key = controlKeyFromJSON(tmp);
   if (control_key == ControlKey.UNRECOGNIZED) {
-    console.error("Unknown control key " + name);
+    console.error("Unknown control key " + tmp);
   }
   return KeyEvent.fromPartial({ control_key });
 }
