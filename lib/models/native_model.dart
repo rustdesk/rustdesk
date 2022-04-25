@@ -115,8 +115,7 @@ class PlatformFFI {
     version = await getVersion();
   }
 
-  static void startDesktopWebListener(
-      Function(Map<String, dynamic>) handleMouse) {}
+  static void startDesktopWebListener() {}
 
   static void stopDesktopWebListener() {}
 

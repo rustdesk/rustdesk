@@ -1,6 +1,5 @@
 import 'dart:typed_data';
 import 'dart:js' as js;
-import 'package:flutter/cupertino.dart';
 import 'dart:convert';
 
 import '../common.dart';
@@ -35,38 +34,37 @@ class PlatformFFI {
   }
 
   // MouseRegion onHover not work for mouse move when right button down
-  static void startDesktopWebListener(
-      Function(Map<String, dynamic>) handleMouse) {
+  static void startDesktopWebListener() {
     mouseIn = true;
-    lastMouseDownButtons = 0;
-    // document.body.getElementsByTagName('flt-glass-pane')[0].style.cursor = 'none';
-    mouseListeners
-        .add(window.document.onMouseEnter.listen((evt) => mouseIn = true));
-    mouseListeners
-        .add(window.document.onMouseLeave.listen((evt) => mouseIn = false));
-    mouseListeners.add(window.document.onMouseMove
-        .listen((evt) => handleMouse(getEvent(evt))));
-    mouseListeners.add(window.document.onMouseDown
-        .listen((evt) => handleMouse(getEvent(evt))));
-    mouseListeners.add(
-        window.document.onMouseUp.listen((evt) => handleMouse(getEvent(evt))));
-    mouseListeners.add(window.document.onMouseWheel.listen((evt) {
-      var dx = evt.deltaX;
-      var dy = evt.deltaY;
-      if (dx > 0)
-        dx = -1;
-      else if (dx < 0) dx = 1;
-      if (dy > 0)
-        dy = -1;
-      else if (dy < 0) dy = 1;
-      setByName('send_mouse', '{"type": "wheel", "x": "$dx", "y": "$dy"}');
-    }));
+    // lastMouseDownButtons = 0;
+    // // document.body.getElementsByTagName('flt-glass-pane')[0].style.cursor = 'none';
+    // mouseListeners
+    //     .add(window.document.onMouseEnter.listen((evt) => mouseIn = true));
+    // mouseListeners
+    //     .add(window.document.onMouseLeave.listen((evt) => mouseIn = false));
+    // mouseListeners.add(window.document.onMouseMove
+    //     .listen((evt) => handleMouse(getEvent(evt))));
+    // mouseListeners.add(window.document.onMouseDown
+    //     .listen((evt) => handleMouse(getEvent(evt))));
+    // mouseListeners.add(
+    //     window.document.onMouseUp.listen((evt) => handleMouse(getEvent(evt))));
+    // mouseListeners.add(window.document.onMouseWheel.listen((evt) {
+    //   var dx = evt.deltaX;
+    //   var dy = evt.deltaY;
+    //   if (dx > 0)
+    //     dx = -1;
+    //   else if (dx < 0) dx = 1;
+    //   if (dy > 0)
+    //     dy = -1;
+    //   else if (dy < 0) dy = 1;
+    //   setByName('send_mouse', '{"type": "wheel", "x": "$dx", "y": "$dy"}');
+    // }));
     mouseListeners.add(
         window.document.onContextMenu.listen((evt) => evt.preventDefault()));
-    keyListeners
-        .add(window.document.onKeyDown.listen((evt) => handleKey(evt, true)));
-    keyListeners
-        .add(window.document.onKeyUp.listen((evt) => handleKey(evt, false)));
+    // keyListeners
+    //     .add(window.document.onKeyDown.listen((evt) => handleKey(evt, true)));
+    // keyListeners
+    //     .add(window.document.onKeyUp.listen((evt) => handleKey(evt, false)));
   }
 
   static void stopDesktopWebListener() {
@@ -83,7 +81,7 @@ class PlatformFFI {
 
   static void setMethodCallHandler(FMethod callback) {}
 
-  static Future<bool> invokeMethod(String method, [ dynamic arguments]) async {
+  static Future<bool> invokeMethod(String method, [dynamic arguments]) async {
     return true;
   }
 }

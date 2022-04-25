@@ -689,10 +689,15 @@ class FFI {
         json.encode(modify({'type': type, 'buttons': button.value})));
   }
 
-  static void inputKey(String name) {
+  static void inputKey(String name, [bool? down]) {
     if (!ffiModel.keyboard()) return;
     setByName(
-        'input_key', json.encode(modify({'name': name, 'press': 'true'})));
+        'input_key',
+        json.encode(modify({
+          'name': name,
+          'down': (down ?? false).toString(),
+          'press': 'true'
+        })));
   }
 
   static void moveMouse(double x, double y) {
@@ -807,8 +812,8 @@ class FFI {
       x = 0;
       y = 0;
     }
-    evt['x'] = '$x';
-    evt['y'] = '$y';
+    evt['x'] = '${x.round()}';
+    evt['y'] = '${y.round()}';
     var buttons = '';
     switch (evt['buttons']) {
       case 1:
@@ -827,7 +832,7 @@ class FFI {
 
   static listenToMouse(bool yesOrNo) {
     if (yesOrNo) {
-      PlatformFFI.startDesktopWebListener(handleMouse);
+      PlatformFFI.startDesktopWebListener();
     } else {
       PlatformFFI.stopDesktopWebListener();
     }
