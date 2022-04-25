@@ -3,6 +3,8 @@ mod cm;
 mod inline;
 #[cfg(target_os = "macos")]
 mod macos;
+#[cfg(target_os = "windows")]
+pub mod win_privacy;
 pub mod remote;
 use crate::common::SOFTWARE_UPDATE_URL;
 use crate::ipc;

@@ -111,3 +111,32 @@ impl Display {
         self.origin() == (0, 0)
     }
 }
+
+pub struct CapturerMag {
+    inner: dxgi::mag::CapturerMag,
+    data: Vec<u8>,
+}
+
+impl CapturerMag {
+    pub fn is_supported() -> bool {
+        dxgi::mag::CapturerMag::is_supported()
+    }
+
+    pub fn new(origin: (i32, i32), width: usize, height: usize, use_yuv: bool) -> io::Result<Self> {
+        Ok(CapturerMag {
+            inner: dxgi::mag::CapturerMag::new(origin, width, height, use_yuv)?,
+            data: Vec::new(),
+        })
+    }
+    pub fn exclude(&mut self, cls: &str, name: &str) -> io::Result<bool> {
+        self.inner.exclude(cls, name)
+    }
+    // ((x, y), w, h)
+    pub fn get_rect(&self) -> ((i32, i32), usize, usize) {
+        self.inner.get_rect()
+    }
+    pub fn frame<'a>(&'a mut self, _timeout_ms: u32) -> io::Result<Frame<'a>> {
+        self.inner.frame(&mut self.data)?;
+        Ok(Frame(&self.data))
+    }
+}

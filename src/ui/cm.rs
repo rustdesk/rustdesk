@@ -399,6 +399,13 @@ impl ConnectionManager {
         }
     }
 
+    fn send_data(&self, id: i32, data: Data) {
+        let lock = self.read().unwrap();
+        if let Some(s) = lock.senders.get(&id) {
+            allow_err!(s.send(data));
+        }
+    }
+
     fn authorize(&self, id: i32) {
         let lock = self.read().unwrap();
         if let Some(s) = lock.senders.get(&id) {
@@ -442,6 +449,21 @@ async fn start_ipc(cm: ConnectionManager) {
     #[cfg(windows)]
     std::thread::spawn(move || start_clipboard_file(cm_clip, _rx_file));
 
+    #[cfg(windows)]
+    std::thread::spawn(move || {
+        log::info!("try create privacy mode window");
+        #[cfg(windows)]
+        {
+            if let Err(e) = crate::platform::windows::check_update_broker_process() {
+                log::warn!(
+                    "Failed to check update broker process. Privacy mode may not work properly. {}",
+                    e
+                );
+            }
+        }
+        allow_err!(crate::ui::win_privacy::start());
+    });
+
     match new_listener("_cm").await {
         Ok(mut incoming) => {
             while let Some(result) = incoming.next().await {
@@ -452,6 +474,8 @@ async fn start_ipc(cm: ConnectionManager) {
                         let cm = cm.clone();
                         let tx_file = tx_file.clone();
                         tokio::spawn(async move {
+                            // for tmp use, without real conn id
+                            let conn_id_tmp = -1;
                             let mut conn_id: i32 = 0;
                             let (tx, mut rx) = mpsc::unbounded_channel::<Data>();
                             let mut write_jobs: Vec<fs::TransferJob> = Vec::new();
@@ -476,6 +500,10 @@ async fn start_ipc(cm: ConnectionManager) {
                                                         log::info!("cm ipc connection closed from connection request");
                                                         break;
                                                     }
+                                                    Data::PrivacyModeState((id, _)) => {
+                                                        conn_id = conn_id_tmp;
+                                                        cm.send_data(id, data)
+                                                    }
                                                     _ => {
                                                         cm.handle_data(conn_id, data, &tx_file, &mut write_jobs, &mut stream).await;
                                                     }
@@ -491,7 +519,9 @@ async fn start_ipc(cm: ConnectionManager) {
                                     }
                                 }
                             }
-                            cm.remove_connection(conn_id);
+                            if conn_id != conn_id_tmp {
+                                cm.remove_connection(conn_id);
+                            }
                         });
                     }
                     Err(err) => {

@@ -148,6 +148,16 @@ impl<T: Subscriber + From<ConnInner>> ServiceTmpl<T> {
         }
     }
 
+    pub fn send_to_others(&self, msg: Message, id: i32) {
+        let msg = Arc::new(msg);
+        let mut lock = self.0.write().unwrap();
+        for (sid, s) in lock.subscribes.iter_mut() {
+            if *sid != id {
+                s.send(msg.clone());
+            }
+        }
+    }
+
     pub fn send_shared(&self, msg: Arc<Message>) {
         let mut lock = self.0.write().unwrap();
         for s in lock.subscribes.values_mut() {

@@ -26,10 +26,10 @@ use hbb_common::tokio::{
         Mutex as TokioMutex,
     },
 };
-use scrap::{Capturer, Config, Display, EncodeFrame, Encoder, VideoCodecId, STRIDE_ALIGN};
+use scrap::{Capturer, Config, Display, EncodeFrame, Encoder, Frame, VideoCodecId, STRIDE_ALIGN};
 use std::{
     collections::HashSet,
-    io::ErrorKind::WouldBlock,
+    io::{ErrorKind::WouldBlock, Result},
     time::{self, Duration, Instant},
 };
 
@@ -45,10 +45,34 @@ lazy_static::lazy_static! {
         let (tx, rx) = unbounded_channel();
         (tx, Arc::new(TokioMutex::new(rx)))
     };
+    static ref PRIVACY_MODE_CONN_ID: Mutex<i32> = Mutex::new(0);
+    static ref IS_CAPTURER_MAGNIFIER_SUPPORTED: bool = is_capturer_mag_supported();
+}
+
+fn is_capturer_mag_supported() -> bool {
+    #[cfg(windows)]
+    return scrap::CapturerMag::is_supported();
+    #[cfg(not(windows))]
+    false
 }
 
 pub fn notify_video_frame_feched(conn_id: i32, frame_tm: Option<Instant>) {
     FRAME_FETCHED_NOTIFIER.0.send((conn_id, frame_tm)).unwrap()
+}
+
+pub fn set_privacy_mode_conn_id(conn_id: i32) {
+    *PRIVACY_MODE_CONN_ID.lock().unwrap() = conn_id
+}
+
+pub fn get_privacy_mode_conn_id() -> i32 {
+    *PRIVACY_MODE_CONN_ID.lock().unwrap()
+}
+
+pub fn is_privacy_mode_supported() -> bool {
+    #[cfg(windows)]
+    return *IS_CAPTURER_MAGNIFIER_SUPPORTED;
+    #[cfg(not(windows))]
+    return false;
 }
 
 struct VideoFrameController {
@@ -120,6 +144,46 @@ impl VideoFrameController {
     }
 }
 
+trait TraitCapturer {
+    fn frame<'a>(&'a mut self, timeout_ms: u32) -> Result<Frame<'a>>;
+
+    #[cfg(windows)]
+    fn is_gdi(&self) -> bool;
+    #[cfg(windows)]
+    fn set_gdi(&mut self) -> bool;
+}
+
+impl TraitCapturer for Capturer {
+    fn frame<'a>(&'a mut self, timeout_ms: u32) -> Result<Frame<'a>> {
+        self.frame(timeout_ms)
+    }
+
+    #[cfg(windows)]
+    fn is_gdi(&self) -> bool {
+        self.is_gdi()
+    }
+
+    #[cfg(windows)]
+    fn set_gdi(&mut self) -> bool {
+        self.set_gdi()
+    }
+}
+
+#[cfg(windows)]
+impl TraitCapturer for scrap::CapturerMag {
+    fn frame<'a>(&'a mut self, _timeout_ms: u32) -> Result<Frame<'a>> {
+        self.frame(_timeout_ms)
+    }
+
+    fn is_gdi(&self) -> bool {
+        false
+    }
+
+    fn set_gdi(&mut self) -> bool {
+        false
+    }
+}
+
 pub fn new() -> GenericService {
     let sp = GenericService::new(NAME, true);
     sp.run(run);
@@ -156,6 +220,76 @@ fn check_display_changed(
     return false;
 }
 
+// Capturer object is expensive, avoiding to create it frequently.
+fn create_capturer(privacy_mode_id: i32, display: Display) -> ResultType<Box<dyn TraitCapturer>> {
+    let use_yuv = true;
+
+    #[cfg(not(windows))]
+    let c: Option<Box<dyn TraitCapturer>> = None;
+    #[cfg(windows)]
+    let mut c: Option<Box<dyn TraitCapturer>> = None;
+    if privacy_mode_id > 0 {
+        #[cfg(windows)]
+        {
+            use crate::ui::win_privacy::*;
+
+            match scrap::CapturerMag::new(
+                display.origin(),
+                display.width(),
+                display.height(),
+                use_yuv,
+            ) {
+                Ok(mut c1) => {
+                    let mut ok = false;
+                    let check_begin = Instant::now();
+                    while check_begin.elapsed().as_secs() < 5 {
+                        match c1.exclude("", PRIVACY_WINDOW_NAME) {
+                            Ok(false) => {
+                                ok = false;
+                                std::thread::sleep(std::time::Duration::from_millis(500));
+                            }
+                            Err(e) => {
+                                bail!(
+                                    "Failed to exclude privacy window {} - {}, err: {}",
+                                    "",
+                                    PRIVACY_WINDOW_NAME,
+                                    e
+                                );
+                            }
+                            _ => {
+                                ok = true;
+                                break;
+                            }
+                        }
+                    }
+                    if !ok {
+                        bail!(
+                            "Failed to exclude privacy window {} - {} ",
+                            "",
+                            PRIVACY_WINDOW_NAME
+                        );
+                    }
+                    c = Some(Box::new(c1));
+                }
+                Err(e) => {
+                    bail!(format!("Failed to create magnifier capture {}", e));
+                }
+            }
+        }
+    }
+
+    let c = match c {
+        Some(c1) => c1,
+        None => {
+            let c1 =
+                Capturer::new(display, use_yuv).with_context(|| "Failed to create capturer")?;
+            Box::new(c1)
+        }
+    };
+
+    Ok(c)
+}
+
 fn run(sp: GenericService) -> ResultType<()> {
     let fps = 30;
     let wait = 1000 / fps;
@@ -172,8 +306,9 @@ fn run(sp: GenericService) -> ResultType<()> {
         num_cpus::get_physical(),
         num_cpus::get(),
     );
-    // Capturer object is expensive, avoiding to create it frequently.
-    let mut c = Capturer::new(display, true).with_context(|| "Failed to create capturer")?;
+
+    let privacy_mode_id = *PRIVACY_MODE_CONN_ID.lock().unwrap();
+    let mut c = create_capturer(privacy_mode_id, display)?;
 
     let q = get_image_quality();
     let (bitrate, rc_min_quantizer, rc_max_quantizer, speed) = get_quality(width, height, q);
@@ -227,6 +362,7 @@ fn run(sp: GenericService) -> ResultType<()> {
             *SWITCH.lock().unwrap() = true;
             bail!("SWITCH");
         }
+        check_privacy_mode_changed(&sp, privacy_mode_id)?;
         if get_image_quality() != q {
             bail!("SWITCH");
         }
@@ -250,7 +386,7 @@ fn run(sp: GenericService) -> ResultType<()> {
         frame_controller.reset();
 
         #[cfg(any(target_os = "android", target_os = "ios"))]
-        let res = match c.frame(wait as _) {
+        let res = match (*c).frame(wait as _) {
             Ok(frame) => {
                 let time = now - start;
                 let ms = (time.as_secs() * 1000 + time.subsec_millis() as u64) as i64;
@@ -273,7 +409,7 @@ fn run(sp: GenericService) -> ResultType<()> {
         };
 
         #[cfg(not(any(target_os = "android", target_os = "ios")))]
-        let res = match c.frame(wait as _) {
+        let res = match (*c).frame(wait as _) {
             Ok(frame) => {
                 let time = now - start;
                 let ms = (time.as_secs() * 1000 + time.subsec_millis() as u64) as i64;
@@ -329,6 +465,21 @@ fn run(sp: GenericService) -> ResultType<()> {
         if elapsed < spf {
             std::thread::sleep(spf - elapsed);
         }
+    }
+    Ok(())
+}
+
+#[inline]
+fn check_privacy_mode_changed(sp: &GenericService, privacy_mode_id: i32) -> ResultType<()> {
+    let privacy_mode_id_2 = *PRIVACY_MODE_CONN_ID.lock().unwrap();
+    if privacy_mode_id != privacy_mode_id_2 {
+        if privacy_mode_id_2 != 0 {
+            let msg_out = crate::common::make_privacy_mode_msg(
+                back_notification::PrivacyModeState::OnByOther,
+            );
+            sp.send_to_others(msg_out, privacy_mode_id_2);
+        }
+        bail!("SWITCH");
     }
     Ok(())
 }

@@ -126,6 +126,7 @@ class Header: Reactor.Component {
         updateWindowToolbarPosition();
         var style = "flow:horizontal;";
         if (is_osx) style += "margin:*";
+        self.timer(1ms, updatePrivacyMode);
         self.timer(1ms, toggleMenuState);
         return <div style={style}>
             {is_osx || is_xfce ? "" : <span #fullscreen>{svg_fullscreen}</span>}
@@ -162,7 +163,7 @@ class Header: Reactor.Component {
                 {is_win && pi.platform == 'Windows' && file_enabled ? <li #enable-file-transfer .toggle-option><span>{svg_checkmark}</span>{translate('File transfer')}</li> : ""}
                 {keyboard_enabled && clipboard_enabled ? <li #disable-clipboard .toggle-option><span>{svg_checkmark}</span>{translate('Disable clipboard')}</li> : ""} 
                 {keyboard_enabled ? <li #lock-after-session-end .toggle-option><span>{svg_checkmark}</span>{translate('Lock after session end')}</li> : ""} 
-                {false && keyboard_enabled && pi.platform == "Windows" ? <li #privacy-mode .toggle-option><span>{svg_checkmark}</span>{translate('Privacy mode')}</li> : ""}
+                {keyboard_enabled && pi.platform == "Windows" ? <li #privacy-mode><span>{svg_checkmark}</span>{translate('Privacy mode')}</li> : ""}
             </menu>
         </popup>;
     }
@@ -312,6 +313,8 @@ class Header: Reactor.Component {
     event click $(menu#display-options>li) (_, me) {
         if (me.id == "custom") {
             handle_custom_image_quality();
+        } else if (me.id == "privacy-mode") {
+            togglePrivacyMode(me.id);
         } else if (me.attributes.hasClass("toggle-option")) {
             handler.toggle_option(me.id);
             toggleMenuState();
@@ -354,17 +357,11 @@ function toggleMenuState() {
     for (var el in $$(menu#display-options>li)) {
         el.attributes.toggleClass("selected", values.indexOf(el.id) >= 0);
     }
-    for (var id in ["show-remote-cursor", "disable-audio", "enable-file-transfer", "disable-clipboard", "lock-after-session-end", "privacy-mode"]) {
+    for (var id in ["show-remote-cursor", "disable-audio", "enable-file-transfer", "disable-clipboard", "lock-after-session-end"]) {
         var el = self.select('#' + id);
         if (el) {
             var value = handler.get_toggle_option(id);
             el.attributes.toggleClass("selected", value);
-            if (id == "privacy-mode") {
-                var el = $(li#block-input);
-                if (el) {
-                    el.state.disabled = value;
-                }
-            }
         }
     }
 }
@@ -397,6 +394,46 @@ handler.updatePi = function(v) {
     header.update();
     if (is_port_forward) {
         view.windowState = View.WINDOW_MINIMIZED;
+    }
+}
+
+function updatePrivacyMode() {
+    var el = $(li#privacy-mode);
+    if (el) {
+        var supported = handler.is_privacy_mode_supported();
+        if (!supported) {
+            // el.attributes.toggleClass("line-through", true);
+            el.style["display"]="none";
+        } else {
+            var value = handler.get_toggle_option("privacy-mode");
+            el.attributes.toggleClass("selected", value);
+            var el = $(li#block-input);
+            if (el) {
+                el.state.disabled = value;
+            }
+        }
+    }
+}
+handler.updatePrivacyMode = updatePrivacyMode;
+
+function togglePrivacyMode(privacy_id) {
+    var supported = handler.is_privacy_mode_supported();
+    if (!supported) {
+        msgbox("nocancel", translate("Privacy mode"), translate("Unsupported"), function() { });
+    } else {
+        handler.toggle_option(privacy_id);
+    }
+}
+
+handler.updateBlockInputState = function(input_blocked) {
+    if (!input_blocked) {
+        handler.toggle_option("block-input");
+        input_blocked = true;
+        $(#block-input).text = translate("Unblock user input");
+    } else {
+        handler.toggle_option("unblock-input");
+        input_blocked = false;
+        $(#block-input).text = translate("Block user input");
     }
 }
 

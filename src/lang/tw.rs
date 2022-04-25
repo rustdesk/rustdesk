@@ -270,5 +270,15 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("This file exists, skip or overwrite this file?", "此檔案/資料夾已存在，要跳過或是覆寫此檔案嗎？"),
         ("doc_mac_permission", "https://rustdesk.com/docs/zh-tw/manual/mac/#啟用權限"),
         ("Help", "幫助"),
+        ("Account", "帳戶"),
+        ("Failed", "失敗"),
+        ("Succeeded", "成功"),
+        ("Someone turns on privacy mode, exit", "其他用戶開啟隱私模式，退出"),
+        ("Unsupported", "不支持"),
+        ("Peer denied", "被控端拒絕"),
+        ("Please install plugins", "請安裝插件"),
+        ("Peer exit", "被控端退出"),
+        ("Failed to turn off", "退出失敗"),
+        ("Turned off", "退出"),
     ].iter().cloned().collect();
 }

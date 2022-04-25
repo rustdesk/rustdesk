@@ -594,3 +594,14 @@ pub async fn post_request(url: String, body: String, header: &str) -> ResultType
 pub async fn post_request_sync(url: String, body: String, header: &str) -> ResultType<String> {
     post_request(url, body, header).await
 }
+
+#[inline]
+pub fn make_privacy_mode_msg(state: back_notification::PrivacyModeState) -> Message {
+    let mut misc = Misc::new();
+    let mut back_notification = BackNotification::new();
+    back_notification.set_privacy_mode_state(state);
+    misc.set_back_notification(back_notification);
+    let mut msg_out = Message::new();
+    msg_out.set_misc(misc);
+    msg_out
+}
