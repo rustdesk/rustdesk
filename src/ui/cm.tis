@@ -215,6 +215,9 @@ event click $(div.chaticon) {
     checkClickTime(function() {
         show_chat = !show_chat;
         adaptSizeForChat();
+        if (show_chat) {
+            view.focus = $(.outline-focus);
+        }
     });
 }
 
