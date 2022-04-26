@@ -1020,7 +1020,9 @@ impl Connection {
         if let Ok(q) = o.enable_file_transfer.enum_value() {
             if q != BoolOption::NotSet {
                 self.enable_file_transfer = q == BoolOption::Yes;
-                self.send_to_cm(ipc::Data::ClipboardFileEnabled(self.file_transfer_enabled()));
+                self.send_to_cm(ipc::Data::ClipboardFileEnabled(
+                    self.file_transfer_enabled(),
+                ));
             }
         }
         if let Ok(q) = o.disable_clipboard.enum_value() {

@@ -679,6 +679,7 @@ function confirmDelete(id ,path, is_remote) {
 }
 
 handler.confirmDeleteFiles = function(id, i, name) {
+  stdout.println("id=" + id +", i=" +",name="+name);
   var jt = file_transfer.job_table;
   var job = jt.job_map[id];
   if (!job) return;
@@ -712,6 +713,28 @@ handler.confirmDeleteFiles = function(id, i, name) {
       }
       if(i+1 >= n){
         file_transfer.job_table.confirmDeletePolling(job.is_remote);
+      }
+    });
+}
+
+handler.overrideFileConfirm = function(id, file_num, to) {
+  var jt = file_transfer.job_table;
+  var job = jt.job_map[id];
+  stdout.println("job type: " + job.type);
+  stdout.println(id + path + to);
+  stdout.println(JSON.stringify(job));
+  msgbox("custom-skip", "Confirm Write Strategy", "<div .form> \
+        <div>" + translate('Overwrite') + translate('files') + ".</div> \
+        <div>" + translate('This file exists in your computer, skip or overwrite this file?') + "</div> \
+        <div.ellipsis style=\"font-weight: bold;\" .text>" + to + "</div> \
+        <div><button|checkbox(remember) {ts}>" + translate('Do this for all conflicts') + "</button></div> \
+    </div>", function(res=null) {
+      if (!res) {
+        jt.updateJobStatus(id, -1, "cancel");
+      } else if (res.skip) {
+        handler.set_write_override(id,file_num,false,true); //
+      } else {
+        handler.set_write_override(id,file_num,true,false); //
       }
     });
 }

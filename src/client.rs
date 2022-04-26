@@ -322,7 +322,11 @@ impl Client {
         Ok((conn, direct))
     }
 
-    async fn secure_connection(peer_id: &str, signed_id_pk: Vec<u8>, conn: &mut Stream) -> ResultType<()> {
+    async fn secure_connection(
+        peer_id: &str,
+        signed_id_pk: Vec<u8>,
+        conn: &mut Stream,
+    ) -> ResultType<()> {
         let rs_pk = get_rs_pk("OeVuKk5nlHiXp+APNn0Y3pC1Iwpwn44JGqrQCsWqmBw=");
         let mut sign_pk = None;
         if !signed_id_pk.is_empty() && rs_pk.is_some() {
@@ -1200,6 +1204,8 @@ pub enum Data {
     AddPortForward((i32, String, i32)),
     ToggleClipboardFile,
     NewRDP,
+    // ConfirmOverrideFile((i32, String, String, bool, bool)),
+    SetConfirmOverrideFile((i32, i32, bool, bool)),
 }
 
 #[derive(Clone)]
@@ -1207,6 +1213,12 @@ pub enum Key {
     ControlKey(ControlKey),
     Chr(u32),
     _Raw(u32),
+}
+
+#[derive(Clone)]
+pub enum OverrideStrategy {
+    Skip,
+    Overwrite,
 }
 
 lazy_static::lazy_static! {
