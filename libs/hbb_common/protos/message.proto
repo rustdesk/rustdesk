@@ -245,6 +245,7 @@ message FileAction {
   oneof union {
     ReadDir read_dir = 1;
     FileTransferSendRequest send = 2;
+    FileTransferSendConfirmRequest send_confirm = 9;
     FileTransferReceiveRequest receive = 3;
     FileDirCreate create = 4;
     FileRemoveDir remove_dir = 5;
@@ -262,7 +263,15 @@ message FileResponse {
     FileTransferBlock block = 2;
     FileTransferError error = 3;
     FileTransferDone done = 4;
+    FileTransferDigest digest = 5;
   }
+}
+
+message FileTransferDigest {
+  int32 id = 1;
+  sint32 file_num = 2;
+  uint64 last_edit_timestamp = 3;
+  uint64 file_size = 4;
 }
 
 message FileTransferBlock {
@@ -270,6 +279,7 @@ message FileTransferBlock {
   sint32 file_num = 2;
   bytes data = 3;
   bool compressed = 4;
+  uint32 blk_id = 5;
 }
 
 message FileTransferError {
@@ -282,6 +292,15 @@ message FileTransferSendRequest {
   int32 id = 1;
   string path = 2;
   bool include_hidden = 3;
+}
+
+message FileTransferSendConfirmRequest {
+  int32 id = 1;
+  sint32 file_num = 2;
+  oneof union {
+    bool skip = 3;
+    uint32 offset_blk = 4;
+  }
 }
 
 message FileTransferDone {

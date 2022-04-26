@@ -1323,6 +1323,8 @@ pub enum Data {
     AddPortForward((i32, String, i32)),
     ToggleClipboardFile,
     NewRDP,
+    // ConfirmOverrideFile((i32, String, String, bool, bool)),
+    SetConfirmOverrideFile((i32, i32, bool, bool)),
 }
 
 #[derive(Clone)]
@@ -1330,6 +1332,12 @@ pub enum Key {
     ControlKey(ControlKey),
     Chr(u32),
     _Raw(u32),
+}
+
+#[derive(Clone)]
+pub enum OverrideStrategy {
+    Skip,
+    Overwrite,
 }
 
 lazy_static::lazy_static! {

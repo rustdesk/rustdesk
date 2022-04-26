@@ -5,8 +5,10 @@ use crate::{
     compress::{compress, decompress},
     config::{Config, COMPRESS_LEVEL},
 };
+use log::log;
 #[cfg(windows)]
 use std::os::windows::prelude::*;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tokio::{fs::File, io::*};
 
 pub fn read_dir(path: &PathBuf, include_hidden: bool) -> ResultType<FileDirectory> {
@@ -184,6 +186,11 @@ pub fn get_recursive_files(path: &str, include_hidden: bool) -> ResultType<Vec<F
     read_dir_recursive(&get_path(path), &get_path(""), include_hidden)
 }
 
+#[inline]
+pub fn is_file_exists(file_path: &str) -> bool {
+    return Path::new(file_path).exists();
+}
+
 #[derive(Default)]
 pub struct TransferJob {
     id: i32,
@@ -194,6 +201,7 @@ pub struct TransferJob {
     total_size: u64,
     finished_size: u64,
     transferred: u64,
+    default_overwrite_strategy: Option<bool>,
 }
 
 #[inline]
@@ -220,6 +228,7 @@ fn is_compressed_file(name: &str) -> bool {
 
 impl TransferJob {
     pub fn new_write(id: i32, path: String, files: Vec<FileEntry>) -> Self {
+        println!("new write {}", path);
         let total_size = files.iter().map(|x| x.size as u64).sum();
         Self {
             id,
@@ -231,6 +240,7 @@ impl TransferJob {
     }
 
     pub fn new_read(id: i32, path: String, include_hidden: bool) -> ResultType<Self> {
+        println!("new read {}", path);
         let files = get_recursive_files(&path, include_hidden)?;
         let total_size = files.iter().map(|x| x.size as u64).sum();
         Ok(Self {
@@ -342,7 +352,7 @@ impl TransferJob {
     }
 
     #[inline]
-    fn join(&self, name: &str) -> PathBuf {
+    pub fn join(&self, name: &str) -> PathBuf {
         if name.is_empty() {
             self.path.clone()
         } else {
@@ -413,6 +423,13 @@ impl TransferJob {
             ..Default::default()
         }))
     }
+    pub fn set_overwrite_strategy(&mut self, overwrite_strategy: Option<bool>) {
+        self.default_overwrite_strategy = overwrite_strategy;
+    }
+
+    pub fn default_overwrite_strategy(&self) -> Option<bool> {
+        self.default_overwrite_strategy
+    }
 }
 
 #[inline]
@@ -468,6 +485,7 @@ pub fn new_receive(id: i32, path: String, files: Vec<FileEntry>) -> Message {
 
 #[inline]
 pub fn new_send(id: i32, path: String, include_hidden: bool) -> Message {
+    println!("new send: {},id : {}", path, id);
     let mut action = FileAction::new();
     action.set_send(FileTransferSendRequest {
         id,
@@ -557,4 +575,28 @@ pub fn remove_file(file: &str) -> ResultType<()> {
 pub fn create_dir(dir: &str) -> ResultType<()> {
     std::fs::create_dir_all(get_path(dir))?;
     Ok(())
+}
+
+#[inline]
+pub fn is_write_need_confirmation(
+    file_path: &str,
+    digest: &FileTransferDigest,
+) -> ResultType<bool> {
+    let path = Path::new(file_path);
+    if path.exists() && path.is_file() {
+        let metadata = std::fs::metadata(path)?;
+        let modified_time = metadata.modified()?;
+        let remote_mt = Duration::from_millis(digest.last_edit_timestamp);
+        let local_mt = modified_time.duration_since(UNIX_EPOCH)?;
+        // if
+        // is_recv && remote_mt >= local_mt) || (!is_recv && remote_mt <= local_mt) ||
+        if remote_mt == local_mt && digest.file_size == metadata.len() {
+            // I'm recving or sending an newer modified file!
+            // or a
+            return Ok(false);
+        }
+        Ok(true)
+    } else {
+        Ok(false)
+    }
 }

@@ -3,6 +3,7 @@ use crate::clipboard_file::*;
 use crate::{
     client::*,
     common::{self, check_clipboard, update_clipboard, ClipboardContext, CLIPBOARD_INTERVAL},
+    VERSION,
 };
 #[cfg(windows)]
 use clipboard::{
@@ -10,10 +11,11 @@ use clipboard::{
     get_rx_clip_client, server_clip_file,
 };
 use enigo::{self, Enigo, KeyboardControllable};
+use hbb_common::fs::{get_string, is_file_exists};
 use hbb_common::{
     allow_err,
-    config::{Config, LocalConfig, PeerConfig},
-    fs, log,
+    config::{self, Config, LocalConfig, PeerConfig},
+    fs, get_version_number, log,
     message_proto::{permission_info::Permission, *},
     protobuf::Message as _,
     rendezvous_proto::ConnType,
@@ -216,6 +218,7 @@ impl sciter::EventHandler for Handler {
         fn toggle_option(String);
         fn get_remember();
         fn peer_platform();
+        fn set_write_override(i32,i32, bool,bool); // ,
     }
 }
 
@@ -534,6 +537,22 @@ impl Handler {
 
     fn get_remember(&mut self) -> bool {
         self.lc.read().unwrap().remember
+    }
+
+    fn set_write_override(
+        &mut self,
+        job_id: i32,
+        file_num: i32,
+        is_override: bool,
+        remember: bool,
+    ) -> bool {
+        self.send(Data::SetConfirmOverrideFile((
+            job_id,
+            file_num,
+            is_override,
+            remember,
+        )));
+        true
     }
 
     fn t(&self, name: String) -> String {
@@ -1498,6 +1517,7 @@ impl Remote {
     }
 
     async fn handle_msg_from_ui(&mut self, data: Data, peer: &mut Stream) -> bool {
+        println!("new msg from ui");
         match data {
             Data::Close => {
                 return false;
@@ -1514,8 +1534,9 @@ impl Remote {
                 allow_err!(peer.send(&msg).await);
             }
             Data::SendFiles((id, path, to, include_hidden, is_remote)) => {
+                println!("send files, is remote {}", is_remote);
                 if is_remote {
-                    log::debug!("New job {}, write to {} from remote {}", id, to, path);
+                    println!("New job {}, write to {} from remote {}", id, to, path);
                     self.write_jobs
                         .push(fs::TransferJob::new_write(id, to, Vec::new()));
                     allow_err!(peer.send(&fs::new_send(id, path, include_hidden)).await);
@@ -1525,7 +1546,7 @@ impl Remote {
                             self.handle_job_status(id, -1, Some(err.to_string()));
                         }
                         Ok(job) => {
-                            log::debug!(
+                            println!(
                                 "New job {}, read {} to remote {}, {} files",
                                 id,
                                 path,
@@ -1556,6 +1577,27 @@ impl Remote {
                             &make_args!(id, file_num, job.files[i].name.clone()),
                         );
                     }
+                }
+            }
+            Data::SetConfirmOverrideFile((id, file_num, need_override, remember)) => {
+                if let Some(job) = fs::get_job(id, &mut self.write_jobs) {
+                    if remember {
+                        job.set_overwrite_strategy(Some(need_override));
+                    }
+                    let mut msg = Message::new();
+                    let mut file_action = FileAction::new();
+                    file_action.set_send_confirm(FileTransferSendConfirmRequest {
+                        id,
+                        file_num,
+                        union: if need_override {
+                            Some(file_transfer_send_confirm_request::Union::offset_blk(0))
+                        } else {
+                            Some(file_transfer_send_confirm_request::Union::skip(true))
+                        },
+                        ..Default::default()
+                    });
+                    msg.set_file_action(file_action);
+                    allow_err!(peer.send(&msg).await);
                 }
             }
             Data::RemoveDirAll((id, path, is_remote)) => {
@@ -1784,7 +1826,11 @@ impl Remote {
                 }
                 Some(message::Union::file_response(fr)) => match fr.union {
                     Some(file_response::Union::dir(fd)) => {
+                        println!("file_response is dir: {}", fd.path);
                         let entries = fd.entries.to_vec();
+                        for entry in &entries {
+                            println!("dir file: {}", entry.name);
+                        }
                         let mut m = make_fd(fd.id, &entries, fd.id > 0);
                         if fd.id <= 0 {
                             m.set_item("path", fd.path);
@@ -1796,15 +1842,77 @@ impl Remote {
                             job.files = entries;
                         }
                     }
+                    Some(file_response::Union::digest(digest)) => {
+                        if let Some(job) = fs::get_job(digest.id, &mut self.write_jobs) {
+                            if let Some(file) = job.files().get(digest.file_num as usize) {
+                                let write_path = get_string(&job.join(&file.name));
+                                let overwrite_strategy = job.default_overwrite_strategy();
+                                match fs::is_write_need_confirmation(&write_path, &digest) {
+                                    Ok(res) => {
+                                        if res {
+                                            // need confirm
+                                            if overwrite_strategy.is_none() {
+                                                self.handler.call(
+                                                    "overrideFileConfirm",
+                                                    &make_args!(
+                                                        digest.id,
+                                                        digest.file_num,
+                                                        write_path
+                                                    ),
+                                                );
+                                            } else {
+                                                let mut msg = Message::new();
+                                                let mut file_action = FileAction::new();
+                                                file_action
+                                                    .set_send_confirm(FileTransferSendConfirmRequest {
+                                                        id: digest.id,
+                                                        file_num: digest.file_num,
+                                                        union: Some(
+                                                            if overwrite_strategy.unwrap() {
+                                                                file_transfer_send_confirm_request::Union::offset_blk(0)
+                                                            } else {
+                                                                file_transfer_send_confirm_request::Union::skip(true)
+                                                            },
+                                                        ),
+                                                        ..Default::default()
+                                                    });
+                                                msg.set_file_action(file_action);
+                                                allow_err!(peer.send(&msg).await);
+                                            }
+                                        } else {
+                                            // file with digest need send
+                                            let mut msg = Message::new();
+                                            let mut file_action = FileAction::new();
+                                            file_action
+                                                .set_send_confirm(FileTransferSendConfirmRequest {
+                                                id: digest.id,
+                                                file_num: digest.file_num,
+                                                union: Some(file_transfer_send_confirm_request::Union::offset_blk(0)),
+                                                ..Default::default()
+                                            });
+                                            msg.set_file_action(file_action);
+                                            allow_err!(peer.send(&msg).await);
+                                        }
+                                    }
+                                    Err(err) => {
+                                        println!("error recving digest: {}", err);
+                                    }
+                                }
+                            }
+                        }
+                    }
                     Some(file_response::Union::block(block)) => {
+                        println!("file response block, file num: {}", block.file_num);
                         if let Some(job) = fs::get_job(block.id, &mut self.write_jobs) {
                             if let Err(_err) = job.write(block, None).await {
                                 // to-do: add "skip" for writing job
+                                println!("error: {}", _err);
                             }
                             self.update_jobs_status();
                         }
                     }
                     Some(file_response::Union::done(d)) => {
+                        println!("file response done");
                         if let Some(job) = fs::get_job(d.id, &mut self.write_jobs) {
                             job.modify_time();
                             fs::remove_job(d.id, &mut self.write_jobs);
