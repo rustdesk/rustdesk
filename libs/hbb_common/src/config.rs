@@ -22,10 +22,7 @@ const SERIAL: i32 = 1;
 #[cfg(target_os = "macos")] // 128x128 on 160x160 canvas, then shrink to 128, mac looks better with padding
 pub const ICON: &str = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAIAAAACACAMAAAD04JH5AAAAyVBMVEUAAAAAcf8Acf8Acf8Acv8Acf8Acf8Acf8Acf8AcP8Acf8Ab/8AcP8Acf////8AaP/z+f/o8v/k7v/5/v/T5f8AYP/u9v/X6f+hx/+Kuv95pP8Aef/B1/+TwP9xoP8BdP/g6P+Irv9ZmP8Bgf/E3f98q/9sn/+01f+Es/9nm/9Jif8hhv8off/M4P+syP+avP86iP/c7f+xy/9yqf9Om/9hk/9Rjv+60P99tv9fpf88lv8yjf8Tgf8deP+kvP8BiP8NeP8hkP80gP8oj2VLAAAADXRSTlMA7o7qLvnaxZ1FOxYPjH9HWgAABHJJREFUeNrtm+tW4jAQgBfwuu7MtIUWsOUiCCioIIgLiqvr+z/UHq/LJKVkmwTcc/r9E2nzlU4mSTP9lpGRkZGR8VX5cZjfL+yCEXYL+/nDH//U/Pd8DgyTy39Xbv7oIAcWyB0cqbW/sweW2NtRaj8H1sgpGOwUIAH7Bkd7YJW9dXFwAJY5WNP/cmCZQnJvzIN18on5LwfWySXlxEPYAIcad8D6PdiHDbCfIFCADVBIENiFDbCbIACKPPXrZ+cP8E6/0znvP4EymgIEravIRcTxu8HxNSJ60a8W0AYECKrlAN+YwAthCd9wm1Ug6wKzIn5SgRduXfwkqDasCjx0XFzi9PV6zwNcIuhcWBOg+ikySq8C9UD4dEKWBCoOcspvAuLHTo9sCDQiFPHotRM48j8G5gVur1FdAN2uaYEuiz7xFsgEJ2RUoMUakXuBTHHoGxQYOBhHjeUBAefEnMAowFhaLBOKuOemBBbxLRQrH2PBCgMvNCPQGMeevTb9zLrPxz2Mo+QbEaijzPUcOOHMQZkKGRAIPem39+bypREMPTkQW/oCfk866zAkiIFG4yIKRE/aAnfiSd0WrORY6pFdXQEqi9mvAQm0RIOSnoCcZ8vJoz3diCnjRk+g8VP4/fuQDJ2Lxr6WwG0gXs9aTpDzW0vgDBlVUpixR8gYk44AD8FrUKHr8JQJGgIDnoDqoALxmWPQSi9AVVzm8gKUuEPGr/QCvptwJkbSYT/TC4S8C96DGjTj86aHtAI0x2WaBIq0eSYYpRa4EsdWVVwWu9O0Aj6f6dyBMnwEraeOgSYu0wZlauzA47QCbT7DgAQSE+hZWoEBF/BBmWOewNMK3BsSqKUW4MGcWqCSVmDkbvkXGKQOwg6PAUO9oL3xXhA20yaiCjuwYygRVQlUOTWTCf2SuNJTxeFjgaHByGuAIvd8ItdPLTDhS7IuqEE1YSKVOgbayLhSFQhMzYh8hwfBs1r7c505YVIQYEdNoKwxK06MJiyrpUFHiF0NAfCQUVHoiRclIXJIR6C2fqG37pBHvcWpgwzvAtYwkR5UGV2e42UISdBJETl3mg8ouo54Rcnti1/vaT+iuUQBt500Cgo4U10BeHSkk57FB0JjWkKRMWgLUA0lLodtImAQdaMiiri3+gIAPZQoutHNsgKF1aaDMhMyIdBf8Th+Bh8MTjGWCpl5Wv43tDmnF+IUVMrcZgRoiAxhtrloYizNkZaAnF5leglbNhj0wYCAbCDvGb0mP4nib7O7ZlcYQ2m1gPtIZgVgGNNMeaVAaWR+57TrqgtUnm3sHQ+kYeE6fufUubG1ez50FXbPnWgBlgSABmN3TTcsRl2yWkHRrwbiunvk/W2+Mg1hPZplPDeXRbZzStFH15s1QIVd3UImP5z/bHpeeQLvRJ7XLFUffQIlCvqlXETQbgN9/rlYABGosv+Vi9m2Xs639YLGrZd0br+odetlvdsvbN56abfd4vbCzv9Q3v/ygoOV21A4OPpfXvH4Ai+5ZGRkZGRkbJA/t/I0QMzoMiEAAAAASUVORK5CYII=
 ";
-#[cfg(windows)] // windows, 32x32, bigger very ugly after shrink
-pub const ICON: &str = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAMAAABEpIrGAAAAolBMVEUAAAAAcf8Acf8Acf8AcP8Acf8Acf8Acf8AcP8Acf/////9/v/7/f+gyv9wr/8Ld/8GdP/A3P+nzv+Qwf9mqv8lhv8UfP+Kvv88k/8zjv/x+P/Y6f/U5//J4f/F3/+x1P+pz/+izP+Cuv9Zov9Qnv9FmP8gg//f7f+42P96tv9fpv8ui//1+f/q8//o8v/Q5f+ax/+Zxv+VxP+Fu/9rrf8rif+x1o3FAAAACXRSTlMAv/RPTPKHioRsIqhAAAABNklEQVQ4y4WT6XaCQAyFB7S2GUD2RaxSKGDV7sv7v1on4djEluL9Ncn5biaZk1FKzSwbRmVbM2V0DRNaGD9Maq6sacBS9jRwpUTw1Ww7SEOvkwQDaeVofQeJ1nrXjgD3pTaqCDCg/xs4OBrlwUGTHvxzoHAx69Y9+Hk5oGdAsCNXSoHfEN1JYEme4KcfvO9WAmtMBNx6jIaCgSPGLbAyvKRhAEcrAxAKTSZiACu+gNSbyWwZeKdQKj91yRXWIOWZTMgATun6EtjgczNQaKMEWD0+xJ6B4AnvECVqdKwYoJ50hIPyw25AANkzpsLB00cYOIUEoHU0uVaQVcMxBwlgVZJ3Orz+3ahH6gP2tBgfYzsZmdo1fGIzRx5Irn2WxKaHeJnKtb/4cS5/PbWACd0oo/n/39/4vwGFYSxtSYV4OAAAAABJRU5ErkJggg==
-";
-#[cfg(target_os = "linux")] // 128x128 no padding
+#[cfg(not(target_os = "macos"))] // 128x128 no padding
 pub const ICON: &str = "data:image/png;base64,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
 ";
 #[cfg(target_os = "macos")]
@@ -36,6 +33,7 @@ type Size = (i32, i32, i32, i32);
 lazy_static::lazy_static! {
     static ref CONFIG: Arc<RwLock<Config>> = Arc::new(RwLock::new(Config::load()));
     static ref CONFIG2: Arc<RwLock<Config2>> = Arc::new(RwLock::new(Config2::load()));
+    static ref LOCAL_CONFIG: Arc<RwLock<LocalConfig>> = Arc::new(RwLock::new(LocalConfig::load()));
     pub static ref ONLINE: Arc<Mutex<HashMap<String, i64>>> = Default::default();
 }
 #[cfg(any(target_os = "android", target_os = "ios"))]
@@ -61,7 +59,7 @@ pub enum NetworkType {
     ProxySocks,
 }
 
-#[derive(Debug, Default, Serialize, Deserialize, Clone)]
+#[derive(Debug, Default, Serialize, Deserialize, Clone, PartialEq)]
 pub struct Config {
     #[serde(default)]
     id: String,
@@ -88,12 +86,8 @@ pub struct Socks5Server {
 }
 
 // more variable configs
-#[derive(Debug, Default, Serialize, Deserialize, Clone)]
+#[derive(Debug, Default, Serialize, Deserialize, Clone, PartialEq)]
 pub struct Config2 {
-    #[serde(default)]
-    remote_id: String, // latest used one
-    #[serde(default)]
-    size: Size,
     #[serde(default)]
     rendezvous_server: String,
     #[serde(default)]
@@ -193,13 +187,22 @@ impl Config2 {
         Config::load_::<Config2>("2")
     }
 
-    fn reload(&mut self) {
-        let new_config = Config2::load();
-        *self = new_config;
+    pub fn file() -> PathBuf {
+        Config::file_("2")
     }
 
     fn store(&self) {
         Config::store_(self, "2");
+    }
+
+    pub fn get() -> Config2 {
+        return CONFIG2.read().unwrap().clone();
+    }
+
+    pub fn set(cfg: Config2) {
+        let mut lock = CONFIG2.write().unwrap();
+        *lock = cfg;
+        lock.store();
     }
 }
 
@@ -220,11 +223,6 @@ impl Config {
             log::debug!("{:?}", cfg);
         }
         cfg
-    }
-
-    fn reload(&mut self) {
-        let new_config = Config::load();
-        *self = new_config;
     }
 
     fn store_<T: serde::Serialize>(config: &T, suffix: &str) {
@@ -623,33 +621,6 @@ impl Config {
         salt
     }
 
-    pub fn get_size() -> Size {
-        CONFIG2.read().unwrap().size
-    }
-
-    pub fn set_size(x: i32, y: i32, w: i32, h: i32) {
-        let mut config = CONFIG2.write().unwrap();
-        let size = (x, y, w, h);
-        if size == config.size || size.2 < 300 || size.3 < 300 {
-            return;
-        }
-        config.size = size;
-        config.store();
-    }
-
-    pub fn set_remote_id(remote_id: &str) {
-        let mut config = CONFIG2.write().unwrap();
-        if remote_id == config.remote_id {
-            return;
-        }
-        config.remote_id = remote_id.into();
-        config.store();
-    }
-
-    pub fn get_remote_id() -> String {
-        CONFIG2.read().unwrap().remote_id.clone()
-    }
-
     pub fn set_socks(socks: Option<Socks5Server>) {
         let mut config = CONFIG2.write().unwrap();
         if config.socks == socks {
@@ -670,91 +641,14 @@ impl Config {
         }
     }
 
-    pub fn sync_config_to_user<P: AsRef<Path>>(target_username: String, to_dir: P) -> bool {
-        let config1_root_file_path = Config::file_("");
-        let config1_filename = config1_root_file_path.file_name();
-
-        let config2_root_file_path = Config::file_("2");
-        let config2_filename = config2_root_file_path.file_name();
-
-        let config1_to_file_path = to_dir
-            .as_ref()
-            .join(PathBuf::from(&config1_filename.unwrap()));
-        let config2_to_file_path = to_dir
-            .as_ref()
-            .join(PathBuf::from(&config2_filename.unwrap()));
-
-        log::info!(
-            "config1_root_path:{}",
-            &config1_root_file_path.as_path().to_str().unwrap()
-        );
-        log::info!(
-            "config2_root_path:{}",
-            &config2_root_file_path.as_path().to_str().unwrap()
-        );
-        log::info!(
-            "config1_to_path:{}",
-            &config1_to_file_path.as_path().to_str().unwrap()
-        );
-        log::info!(
-            "config2_to_path:{}",
-            &config2_to_file_path.as_path().to_str().unwrap()
-        );
-
-        match std::fs::copy(&config1_root_file_path, &config1_to_file_path) {
-            Err(e) => log::error!(
-                "copy config {} to user failed: {}",
-                config1_filename.unwrap().to_str().unwrap(),
-                e
-            ),
-            _ => {}
-        }
-
-        match std::fs::copy(&config2_root_file_path, &config2_to_file_path) {
-            Err(e) => log::error!(
-                "copy config {} to user failed: {}",
-                config2_filename.unwrap().to_str().unwrap(),
-                e
-            ),
-            _ => {}
-        }
-
-        let success = std::process::Command::new("chown")
-            .arg(&target_username.to_string())
-            .arg(&config1_to_file_path.to_str().unwrap().to_string())
-            .arg(&config2_to_file_path.to_str().unwrap().to_string())
-            .spawn()
-            .is_ok();
-
-        if success {
-            CONFIG.write().unwrap().reload();
-            CONFIG2.write().unwrap().reload();
-        }
-
-        return success;
+    pub fn get() -> Config {
+        return CONFIG.read().unwrap().clone();
     }
 
-    pub fn sync_config_to_root<P: AsRef<Path>>(from_file_path: P) -> bool {
-        if let Some(filename) = from_file_path.as_ref().file_name() {
-            let to = Config::path(filename);
-            return match std::fs::copy(from_file_path, &to) {
-                Ok(count) => {
-                    if count > 0 {
-                        return std::process::Command::new("chown")
-                            .arg("root")
-                            .arg(&to.to_str().unwrap().to_string())
-                            .spawn()
-                            .is_ok();
-                    }
-                    false
-                }
-                Err(e) => {
-                    log::error!("sync_config_to_root failed: {}", e);
-                    false
-                }
-            };
-        }
-        false
+    pub fn set(cfg: Config) {
+        let mut lock = CONFIG.write().unwrap();
+        *lock = cfg;
+        lock.store();
     }
 }
 
@@ -801,9 +695,7 @@ impl PeerConfig {
                             && p.extension().map(|p| p.to_str().unwrap_or("")) == Some("toml")
                     })
                     .map(|p| {
-                        let t = fs::metadata(p)
-                            .map(|m| m.modified().unwrap_or(SystemTime::UNIX_EPOCH))
-                            .unwrap_or(SystemTime::UNIX_EPOCH);
+                        let t = crate::get_modified_time(&p);
                         let id = p
                             .file_stem()
                             .map(|p| p.to_str().unwrap_or(""))
@@ -826,27 +718,84 @@ impl PeerConfig {
 }
 
 #[derive(Debug, Default, Serialize, Deserialize, Clone)]
-pub struct Fav {
+pub struct LocalConfig {
     #[serde(default)]
-    pub peers: Vec<String>,
+    remote_id: String, // latest used one
+    #[serde(default)]
+    size: Size,
+    #[serde(default)]
+    pub fav: Vec<String>,
+    #[serde(default)]
+    options: HashMap<String, String>,
 }
 
-impl Fav {
-    pub fn load() -> Fav {
-        let _ = CONFIG.read().unwrap(); // for lock
-        match confy::load_path(&Config::file_("_fav")) {
-            Ok(fav) => fav,
-            Err(err) => {
-                log::error!("Failed to load fav: {}", err);
-                Default::default()
-            }
+impl LocalConfig {
+    fn load() -> LocalConfig {
+        Config::load_::<LocalConfig>("_local")
+    }
+
+    fn store(&self) {
+        Config::store_(self, "_local");
+    }
+
+    pub fn get_size() -> Size {
+        LOCAL_CONFIG.read().unwrap().size
+    }
+
+    pub fn set_size(x: i32, y: i32, w: i32, h: i32) {
+        let mut config = LOCAL_CONFIG.write().unwrap();
+        let size = (x, y, w, h);
+        if size == config.size || size.2 < 300 || size.3 < 300 {
+            return;
+        }
+        config.size = size;
+        config.store();
+    }
+
+    pub fn set_remote_id(remote_id: &str) {
+        let mut config = LOCAL_CONFIG.write().unwrap();
+        if remote_id == config.remote_id {
+            return;
+        }
+        config.remote_id = remote_id.into();
+        config.store();
+    }
+
+    pub fn get_remote_id() -> String {
+        LOCAL_CONFIG.read().unwrap().remote_id.clone()
+    }
+
+    pub fn set_fav(fav: Vec<String>) {
+        let mut lock = LOCAL_CONFIG.write().unwrap();
+        if lock.fav == fav {
+            return;
+        }
+        lock.fav = fav;
+        lock.store();
+    }
+
+    pub fn get_fav() -> Vec<String> {
+        LOCAL_CONFIG.read().unwrap().fav.clone()
+    }
+
+    pub fn get_option(k: &str) -> String {
+        if let Some(v) = LOCAL_CONFIG.read().unwrap().options.get(k) {
+            v.clone()
+        } else {
+            "".to_owned()
         }
     }
 
-    pub fn store(peers: Vec<String>) {
-        let f = Fav { peers };
-        if let Err(err) = confy::store_path(Config::file_("_fav"), f) {
-            log::error!("Failed to store fav: {}", err);
+    pub fn set_option(k: String, v: String) {
+        let mut config = LOCAL_CONFIG.write().unwrap();
+        let v2 = if v.is_empty() { None } else { Some(&v) };
+        if v2 != config.options.get(&k) {
+            if v2.is_none() {
+                config.options.remove(&k);
+            } else {
+                config.options.insert(k, v);
+            }
+            config.store();
         }
     }
 }

@@ -3,7 +3,7 @@ pub use clipboard::ClipbaordFile;
 use hbb_common::{
     allow_err, bail, bytes,
     bytes_codec::BytesCodec,
-    config::{self, Config},
+    config::{self, Config, Config2},
     futures::StreamExt as _,
     futures_util::sink::SinkExt,
     log, timeout, tokio,
@@ -96,15 +96,8 @@ pub enum Data {
     Socks(Option<config::Socks5Server>),
     FS(FS),
     Test,
-    SyncConfigToRootReq {
-        from: String,
-    },
-    SyncConfigToRootResp(bool),
-    SyncConfigToUserReq {
-        username: String,
-        to: String,
-    },
-    SyncConfigToUserResp(bool),
+    SyncConfig(Option<(Config, Config2)>),
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
     ClipbaordFile(ClipbaordFile),
     ClipboardFileEnabled(bool),
 }
@@ -169,6 +162,30 @@ pub async fn new_listener(postfix: &str) -> ResultType<Incoming> {
                 err
             );
             Err(err.into())
+        }
+    }
+}
+
+pub struct CheckIfRestart(String, Vec<String>, String);
+
+impl CheckIfRestart {
+    pub fn new() -> CheckIfRestart {
+        CheckIfRestart(
+            Config::get_option("stop-service"),
+            Config::get_rendezvous_servers(),
+            Config::get_option("audio-input"),
+        )
+    }
+}
+impl Drop for CheckIfRestart {
+    fn drop(&mut self) {
+        if self.0 != Config::get_option("stop-service")
+            || self.1 != Config::get_rendezvous_servers()
+        {
+            RendezvousMediator::restart();
+        }
+        if self.2 != Config::get_option("audio-input") {
+            crate::audio_service::restart();
         }
     }
 }
@@ -280,21 +297,15 @@ async fn handle(data: Data, stream: &mut Connection) {
             let t = Config::get_nat_type();
             allow_err!(stream.send(&Data::NatType(Some(t))).await);
         }
-        Data::SyncConfigToRootReq { from } => {
-            allow_err!(
-                stream
-                    .send(&Data::SyncConfigToRootResp(Config::sync_config_to_root(
-                        from
-                    )))
-                    .await
-            );
+        Data::SyncConfig(Some((config, config2))) => {
+            Config::set(config);
+            Config2::set(config2);
+            allow_err!(stream.send(&Data::SyncConfig(None)).await);
         }
-        Data::SyncConfigToUserReq { username, to } => {
+        Data::SyncConfig(None) => {
             allow_err!(
                 stream
-                    .send(&Data::SyncConfigToUserResp(Config::sync_config_to_user(
-                        username, to
-                    )))
+                    .send(&Data::SyncConfig(Some((Config::get(), Config2::get()))))
                     .await
             );
         }

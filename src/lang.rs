@@ -1,4 +1,4 @@
-use hbb_common::{config::Config, log};
+use hbb_common::{config::LocalConfig, log};
 use std::ops::Deref;
 
 mod cn;
@@ -19,7 +19,7 @@ pub fn translate(name: String) -> String {
 }
 
 pub fn translate_locale(name: String, locale: &str) -> String {
-    let mut lang = Config::get_option("lang");
+    let mut lang = LocalConfig::get_option("lang");
     if lang.is_empty() {
         lang = locale
             .split("-")

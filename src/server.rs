@@ -1,12 +1,10 @@
-#[cfg(target_os = "macos")]
-use crate::ipc::ConnectionTmpl;
 use crate::ipc::Data;
-use connection::{ConnInner, Connection};
+pub use connection::*;
 use hbb_common::{
     allow_err,
     anyhow::{anyhow, Context},
     bail,
-    config::{Config, CONNECT_TIMEOUT, RELAY_PORT},
+    config::{Config, Config2, CONNECT_TIMEOUT, RELAY_PORT},
     log,
     message_proto::*,
     protobuf::{Message as _, ProtobufEnum},
@@ -15,10 +13,6 @@ use hbb_common::{
     sodiumoxide::crypto::{box_, secretbox, sign},
     timeout, tokio, ResultType, Stream,
 };
-#[cfg(target_os = "macos")]
-use notify::{watcher, RecursiveMode, Watcher};
-#[cfg(target_os = "macos")]
-use parity_tokio_ipc::ConnectionClient;
 use service::{GenericService, Service, ServiceTmpl, Subscriber};
 use std::{
     collections::HashMap,
@@ -339,101 +333,46 @@ async fn sync_and_watch_config_dir() {
         return;
     }
 
-    match crate::ipc::connect(1000, "_service").await {
-        Ok(mut conn) => {
-            match sync_config_to_user(&mut conn).await {
-                Err(e) => log::error!("sync config to user failed:{}", e),
-                _ => {}
-            }
+    for i in 1..=6 {
+        sleep(i as f32 * 0.3).await;
+        match crate::ipc::connect(1000, "_service").await {
+            Ok(mut conn) => {
+                if conn.send(&Data::SyncConfig(None)).await.is_ok() {
+                    if let Ok(Some(data)) = conn.next_timeout(1000).await {
+                        match data {
+                            Data::SyncConfig(Some((config, config2))) => {
+                                let _chk = crate::ipc::CheckIfRestart::new();
+                                Config::set(config);
+                                Config2::set(config2);
+                                log::info!("sync config from root");
+                            }
+                            _ => {}
+                        };
+                    };
+                }
 
-            tokio::spawn(async move {
-                log::info!(
-                    "watching config dir: {}",
-                    Config::path("").to_str().unwrap().to_string()
-                );
-
-                let (tx, rx) = std::sync::mpsc::channel();
-                let mut watcher = watcher(tx, Duration::from_secs(2)).unwrap();
-                watcher
-                    .watch(Config::path("").as_path(), RecursiveMode::Recursive)
-                    .unwrap();
-
+                let mut cfg0 = (Config::get(), Config2::get());
                 loop {
-                    let ev = rx.recv();
-                    match ev {
-                        Ok(event) => match event {
-                            notify::DebouncedEvent::Write(path) => {
-                                log::info!(
-                                    "config file changed, call ipc_service to sync: {}",
-                                    path.to_str().unwrap().to_string()
-                                );
-
-                                match sync_config_to_root(&mut conn, path).await {
-                                    Err(e) => log::error!("sync config to root failed: {}", e),
-                                    _ => {}
-                                }
+                    sleep(0.3).await;
+                    let cfg = (Config::get(), Config2::get());
+                    if cfg != cfg0 {
+                        cfg0 = cfg;
+                        log::info!("config updated, sync to root");
+                        match conn.send(&Data::SyncConfig(Some(cfg0.clone()))).await {
+                            Err(e) => {
+                                log::error!("sync config to root failed: {}", e);
                             }
-                            x => {
-                                log::debug!("another {:?}", x)
+                            _ => {
+                                conn.next_timeout(1000).await.ok();
                             }
-                        },
-                        Err(e) => println!("watch error: {:?}", e),
+                        }
                     }
                 }
-            });
-        }
-        Err(_) => {
-            log::info!("connect ipc_service failed, skip config sync");
-            return;
+            }
+            Err(_) => {
+                log::info!("#{} try: failed to connect to ipc_service", i);
+            }
         }
     }
-}
-
-#[cfg(target_os = "macos")]
-async fn sync_config_to_user(conn: &mut ConnectionTmpl<ConnectionClient>) -> ResultType<()> {
-    allow_err!(
-        conn.send(&Data::SyncConfigToUserReq {
-            username: crate::username(),
-            to: Config::path("").to_str().unwrap().to_string(),
-        })
-        .await
-    );
-
-    if let Some(data) = conn.next_timeout(2000).await? {
-        match data {
-            Data::SyncConfigToUserResp(success) => {
-                log::info!("copy and reload config dir success: {:?}", success);
-            }
-            _ => {}
-        };
-    };
-
-    Ok(())
-}
-
-#[cfg(target_os = "macos")]
-async fn sync_config_to_root(
-    conn: &mut ConnectionTmpl<ConnectionClient>,
-    from: std::path::PathBuf,
-) -> ResultType<()> {
-    allow_err!(
-        conn.send(&Data::SyncConfigToRootReq {
-            from: from.to_str().unwrap().to_string()
-        })
-        .await
-    );
-
-    // todo: this code will block outer loop, resolve it later.
-    // if let Some(data) = conn.next_timeout(2000).await? {
-    //     match data {
-    //         Data::SyncConfigToRootResp(success) => {
-    //             log::info!("copy config to root dir success: {:?}", success);
-    //         }
-    //         x => {
-    //             log::info!("receive another {:?}", x)
-    //         }
-    //     };
-    // };
-
-    Ok(())
+    log::error!("skipped config sync");
 }

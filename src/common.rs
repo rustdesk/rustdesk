@@ -465,3 +465,8 @@ pub fn is_ip(id: &str) -> bool {
         .unwrap()
         .is_match(id)
 }
+
+#[inline]
+pub fn get_app_name() -> &'static str {
+    hbb_common::config::APP_NAME
+}

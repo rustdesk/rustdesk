@@ -8,7 +8,7 @@ use crate::common::SOFTWARE_UPDATE_URL;
 use crate::ipc;
 use hbb_common::{
     allow_err,
-    config::{self, Config, Fav, PeerConfig, APP_NAME, ICON},
+    config::{self, Config, LocalConfig, PeerConfig, APP_NAME, ICON},
     log, sleep,
     tokio::{self, time},
 };
@@ -221,11 +221,11 @@ impl UI {
     }
 
     fn get_remote_id(&mut self) -> String {
-        Config::get_remote_id()
+        LocalConfig::get_remote_id()
     }
 
     fn set_remote_id(&mut self, id: String) {
-        Config::set_remote_id(&id);
+        LocalConfig::set_remote_id(&id);
     }
 
     fn goto_install(&mut self) {
@@ -275,7 +275,11 @@ impl UI {
     }
 
     fn get_local_option(&self, key: String) -> String {
-        Config::get_option(&key)
+        LocalConfig::get_option(&key)
+    }
+
+    fn set_local_option(&self, key: String, value: String) {
+        LocalConfig::set_option(key, value);
     }
 
     fn peer_has_password(&self, id: String) -> bool {
@@ -353,6 +357,13 @@ impl UI {
     }
 
     fn set_option(&self, key: String, value: String) {
+        #[cfg(target_os = "macos")]
+        if &key == "stop-service" {
+            let is_stop = value == "Y";
+            if is_stop && crate::platform::macos::uninstall() {
+                return;
+            }
+        }
         let mut options = self.2.lock().unwrap();
         if value.is_empty() {
             options.remove(&key);
@@ -360,11 +371,6 @@ impl UI {
             options.insert(key.clone(), value.clone());
         }
         ipc::set_options(options.clone()).ok();
-
-        #[cfg(target_os = "macos")]
-        if &key == "stop-service" {
-            crate::platform::macos::launch(value != "Y");
-        }
     }
 
     // TODO: ui prompt
@@ -431,11 +437,11 @@ impl UI {
 
     fn save_size(&mut self, x: i32, y: i32, w: i32, h: i32) {
         crate::server::input_service::fix_key_down_timeout_at_exit();
-        Config::set_size(x, y, w, h);
+        LocalConfig::set_size(x, y, w, h);
     }
 
     fn get_size(&mut self) -> Value {
-        let s = Config::get_size();
+        let s = LocalConfig::get_size();
         let mut v = Value::array(0);
         v.push(s.0);
         v.push(s.1);
@@ -470,7 +476,7 @@ impl UI {
     }
 
     fn get_fav(&self) -> Value {
-        Value::from_iter(Fav::load().peers)
+        Value::from_iter(LocalConfig::get_fav())
     }
 
     fn store_fav(&self, fav: Value) {
@@ -482,10 +488,11 @@ impl UI {
                 }
             }
         });
-        Fav::store(tmp);
+        LocalConfig::set_fav(tmp);
     }
 
     fn get_recent_sessions(&mut self) -> Value {
+        // to-do: limit number of recent sessions, and remove old peer file
         let peers: Vec<Value> = PeerConfig::peers()
             .drain(..)
             .map(|p| Self::get_peer_value(p.0, p.2))
@@ -701,6 +708,7 @@ impl sciter::EventHandler for UI {
         fn get_options();
         fn get_option(String);
         fn get_local_option(String);
+        fn set_local_option(String, String);
         fn get_peer_option(String, String);
         fn peer_has_password(String);
         fn forget_password(String);
@@ -830,7 +838,7 @@ fn check_connect_status(
     reconnect: bool,
 ) -> (Arc<Mutex<(i32, bool)>>, Arc<Mutex<HashMap<String, String>>>) {
     let status = Arc::new(Mutex::new((0, false)));
-    let options = Arc::new(Mutex::new(HashMap::new()));
+    let options = Arc::new(Mutex::new(Config::get_options()));
     let cloned = status.clone();
     let cloned_options = options.clone();
     std::thread::spawn(move || check_connect_status_(reconnect, cloned, cloned_options));

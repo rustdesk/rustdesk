@@ -104,11 +104,12 @@ pub fn is_can_screen_recording(prompt: bool) -> bool {
 pub fn is_installed_daemon(prompt: bool) -> bool {
     let daemon = format!("{}_service.plist", crate::get_full_name());
     let agent = format!("{}_server.plist", crate::get_full_name());
+    let agent_plist_file = format!("/Library/LaunchAgents/{}", agent);
     if !prompt {
         if !std::path::Path::new(&format!("/Library/LaunchDaemons/{}", daemon)).exists() {
             return false;
         }
-        if !std::path::Path::new(&format!("/Library/LaunchAgents/{}", agent)).exists() {
+        if !std::path::Path::new(&agent_plist_file).exists() {
             return false;
         }
         return true;
@@ -123,43 +124,92 @@ pub fn is_installed_daemon(prompt: bool) -> bool {
     let agent_plist = PRIVILEGES_SCRIPTS_DIR.get_file(&agent).unwrap();
     let agent_plist_body = agent_plist.contents_utf8().unwrap();
 
-    match std::process::Command::new("osascript")
-        .arg("-e")
-        .arg(install_script_body)
-        .arg(daemon_plist_body)
-        .arg(agent_plist_body)
-        .arg(&get_active_username())
-        .spawn()
-    {
-        Ok(_) => {
-            std::process::exit(0);
+    std::thread::spawn(move || {
+        match std::process::Command::new("osascript")
+            .arg("-e")
+            .arg(install_script_body)
+            .arg(daemon_plist_body)
+            .arg(agent_plist_body)
+            .arg(&get_active_username())
+            .output()
+        {
+            Err(e) => {
+                log::error!("run osascript failed: {}", e);
+            }
+            _ => {
+                if std::path::Path::new(&agent_plist_file).exists() {
+                    std::process::Command::new("osascript")
+                        .arg("-e")
+                        .arg(
+                            PRIVILEGES_SCRIPTS_DIR
+                                .get_file("run.scpt")
+                                .unwrap()
+                                .contents_utf8()
+                                .unwrap(),
+                        )
+                        .arg(&format!(
+                            "sleep 0.5; launchctl load -w {}; sleep 0.5; open /Applications/{}.app",
+                            agent_plist_file,
+                            crate::get_app_name()
+                        ))
+                        .spawn()
+                        .ok();
+                    std::thread::sleep(std::time::Duration::from_millis(100)); // avoid exit crash
+                    std::process::exit(0);
+                }
+            }
         }
-        Err(e) => {
-            log::error!("run osascript failed: {}", e);
-            false
-        }
-    }
+    });
+    false
 }
 
-pub fn launch(load: bool) {
+pub fn uninstall() -> bool {
     // to-do: do together with win/linux about refactory start/stop service
-    if !is_installed() || !is_installed_daemon(false) {
-        return;
-    }
-    let mut script_filename = "load.scpt";
-    if !load {
-        script_filename = "unload.scpt";
+    if !is_installed_daemon(false) {
+        return false;
     }
 
-    let script_file = PRIVILEGES_SCRIPTS_DIR.get_file(script_filename).unwrap();
+    let script_file = PRIVILEGES_SCRIPTS_DIR.get_file("uninstall.scpt").unwrap();
     let script_body = script_file.contents_utf8().unwrap();
 
-    std::process::Command::new("osascript")
-        .arg("-e")
-        .arg(script_body)
-        .arg(&get_active_username())
-        .spawn()
-        .ok();
+    std::thread::spawn(move || {
+        match std::process::Command::new("osascript")
+            .arg("-e")
+            .arg(script_body)
+            .arg(&get_active_username())
+            .output()
+        {
+            Err(e) => {
+                log::error!("run osascript failed: {}", e);
+            }
+            _ => {
+                let agent = format!("{}_server.plist", crate::get_full_name());
+                let agent_plist_file = format!("/Library/LaunchAgents/{}", agent);
+                if !std::path::Path::new(&agent_plist_file).exists() {
+                    crate::ipc::set_option("stop-service", "Y");
+                    std::process::Command::new("osascript")
+                        .arg("-e")
+                        .arg(
+                            PRIVILEGES_SCRIPTS_DIR
+                                .get_file("run.scpt")
+                                .unwrap()
+                                .contents_utf8()
+                                .unwrap(),
+                        )
+                        .arg(&format!(
+                            "sleep 0.5; launchctl remove {}_server; sleep 0.5; open /Applications/{}.app",
+                            crate::get_full_name(),
+                            crate::get_app_name()
+                        ))
+                        .spawn()
+                        .ok();
+                    std::thread::sleep(std::time::Duration::from_millis(100)); // avoid exit crash
+                    std::process::exit(0);
+                }
+            }
+        }
+    });
+    true
 }
 
 pub fn get_cursor_pos() -> Option<(i32, i32)> {
@@ -352,6 +402,24 @@ pub fn lock_screen() {
 
 pub fn start_os_service() {
     log::info!("{}", crate::username());
+
+    std::thread::spawn(move || loop {
+        let exe = std::env::current_exe().unwrap_or_default();
+        let tm0 = hbb_common::get_modified_time(&exe);
+
+        loop {
+            std::thread::sleep(std::time::Duration::from_millis(300));
+            if hbb_common::get_modified_time(&exe) != tm0 {
+                log::info!("{:?} updated, will restart", exe);
+                std::process::Command::new("pkill")
+                    .args(&["-f", exe.to_str().unwrap_or("")])
+                    .output()
+                    .ok();
+                std::process::exit(0); // self not killed by above pkill
+            }
+        }
+    });
+
     if let Err(err) = crate::ipc::start("_service") {
         log::error!("Failed to start ipc_service: {}", err);
     }
@@ -425,7 +493,7 @@ pub fn is_installed() -> bool {
     if let Ok(p) = std::env::current_exe() {
         return p.to_str().unwrap_or_default().contains(&format!(
             "/Applications/{}.app",
-            hbb_common::config::APP_NAME
+            crate::get_app_name(), 
         ));
     }
     false

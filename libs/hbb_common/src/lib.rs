@@ -187,6 +187,12 @@ pub fn get_version_number(v: &str) -> i64 {
     n
 }
 
+pub fn get_modified_time(path: &std::path::Path) -> SystemTime {
+    std::fs::metadata(&path)
+        .map(|m| m.modified().unwrap_or(UNIX_EPOCH))
+        .unwrap_or(UNIX_EPOCH)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -7,7 +7,7 @@ view.windowMinSize = (500, 300);
 var app;
 var tmp = handler.get_connect_status();
 var connect_status = tmp[0];
-var service_stopped = false;
+var service_stopped = handler.get_option("stop-service") == "Y";
 var software_update_url = "";
 var key_confirmed = tmp[1];
 var system_error = "";
@@ -368,7 +368,7 @@ class App: Reactor.Component
                     {is_win && handler.is_installed() && !software_update_url && handler.is_installed_lower_version() ? <UpgradeMe /> : ""}
                     {is_can_screen_recording ? "": <CanScreenRecording />}
                     {is_can_screen_recording && !handler.is_process_trusted(false) ? <TrustMe /> : ""}
-                    {is_can_screen_recording && handler.is_process_trusted(false) && handler.is_installed() && !handler.is_installed_daemon(false) ? <InstallDaemon /> : ""}
+                    {!service_stopped && is_can_screen_recording && handler.is_process_trusted(false) && handler.is_installed() && !handler.is_installed_daemon(false) ? <InstallDaemon /> : ""}
                     {system_error ? <SystemError /> : ""}
                     {!system_error && handler.is_login_wayland() && !handler.current_is_wayland() ? <FixWayland /> : ""}
                     {!system_error && handler.current_is_wayland() ? <ModifyDefaultLogin /> : ""}
@@ -772,8 +772,7 @@ function checkConnectStatus() {
         var tmp = !!handler.get_option("stop-service");
         if (tmp != service_stopped) {
             service_stopped = tmp;
-            app.connect_status.update();
-            myIdMenu.update();
+            app.update();
         }
         tmp = handler.get_connect_status();
         if (tmp[0] != connect_status) {

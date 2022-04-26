@@ -66,7 +66,7 @@ class SessionStyle: Reactor.Component {
     event click $(span.inactive) {
         var option = getSessionsStyleOption(this.type);
         var sessionsStyle = getSessionsStyle(this.type);
-        handler.set_option(option, sessionsStyle == "tile" ? "list" : "tile");
+        handler.set_local_option(option, sessionsStyle == "tile" ? "list" : "tile");
         app.multipleSessions.update();
     }
 }
@@ -294,7 +294,7 @@ class MultipleSessions: Reactor.Component {
         if (el.id == "lan") {
             discover();
         }
-        handler.set_option('show-sessions-type', el.id || "");
+        handler.set_local_option('show-sessions-type', el.id || "");
         this.stupidUpdate();
     }
 
