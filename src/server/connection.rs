@@ -2,6 +2,7 @@ use super::{input_service::*, *};
 #[cfg(windows)]
 use crate::clipboard_file::*;
 use crate::{common::update_clipboard, ipc};
+use hbb_common::log::debug;
 use hbb_common::message_proto::file_transfer_send_confirm_request::Union;
 use hbb_common::{
     config::Config,
@@ -923,8 +924,33 @@ impl Connection {
                                 fs::remove_job(c.id, &mut self.read_jobs);
                             }
                             Some(file_action::Union::send_confirm(r)) => {
-                                //
+                                let job_it = self
+                                    .read_jobs
+                                    .iter_mut()
+                                    .filter(|job| job.id() == r.id)
+                                    .next();
                                 println!("recv send confirm request");
+                                if let Some(job) = job_it {
+                                    if job.file_num() != r.file_num {
+                                        debug!("file num truncated, ignoring");
+                                    } else {
+                                        match r.union {
+                                            Some(file_transfer_send_confirm_request::Union::skip(s)) => {
+                                                if s {
+                                                    println!("skip current file");
+                                                    job.skip_current_file();
+                                                } else {
+                                                    job.set_file_confirmed(true);
+                                                }
+                                            }
+                                            Some(file_transfer_send_confirm_request::Union::offset_blk(offset)) => {
+                                                println!("file confirmed");
+                                                job.set_file_confirmed(true);
+                                            },
+                                            _ => {}
+                                        }
+                                    }
+                                }
                             }
                             _ => {}
                         }
