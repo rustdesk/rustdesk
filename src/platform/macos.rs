@@ -424,10 +424,12 @@ pub fn start_os_service() {
         log::error!("Failed to start ipc_service: {}", err);
     }
 
-    /* // somehow, below works fine if user logged in, but mouse/keyboard not work under prelogin.
-       // one solution to run --server as agent in prelogin,
-       // and run --server under --service via run_as_user if not in prelogin
-       // so that no multiple --server if multiple logged-in users
+    /* // mouse/keyboard works in prelogin now with launchctl asuser.
+       // below can avoid multi-users logged in problem, but having its own below problem.
+       // Not find a good way to start --cm without root privilege (affect file transfer).
+       // one way is to start with `launchctl asuser <uid> open -n -a /Applications/RustDesk.app/ --args --cm`,
+       // this way --cm is started with the user privilege, but we will have problem to start another RustDesk.app
+       // with open in explorer.
         use std::sync::{
             atomic::{AtomicBool, Ordering},
             Arc,
