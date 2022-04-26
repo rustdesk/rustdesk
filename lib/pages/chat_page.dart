@@ -148,6 +148,7 @@ hideChatWindowOverlay() {
 
 toggleChatOverlay() {
   if (iconOverlayEntry == null || windowOverlayEntry == null) {
+    FFI.invokeMethod("enable_soft_keyboard", true);
     showChatIconOverlay();
     showChatWindowOverlay();
   } else {

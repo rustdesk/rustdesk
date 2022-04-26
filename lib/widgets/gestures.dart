@@ -236,6 +236,7 @@ class HoldTapMoveGestureRecognizer extends GestureRecognizer {
   GestureDragUpdateCallback? onHoldDragUpdate;
   GestureDragDownCallback? onHoldDragDown;
   GestureDragCancelCallback? onHoldDragCancel;
+  GestureDragEndCallback? onHoldDragEnd;
 
   bool _isStart = false;
 
@@ -253,7 +254,8 @@ class HoldTapMoveGestureRecognizer extends GestureRecognizer {
         case kPrimaryButton:
           if (onHoldDragStart == null &&
               onHoldDragUpdate == null &&
-              onHoldDragCancel == null) {
+              onHoldDragCancel == null &&
+              onHoldDragEnd == null) {
             return false;
           }
           break;
@@ -305,6 +307,10 @@ class HoldTapMoveGestureRecognizer extends GestureRecognizer {
     if (event is PointerUpEvent) {
       if (_firstTap == null && _secondTap == null) {
         _registerFirstTap(tracker);
+      } else if (_secondTap != null) {
+        if (event.pointer == _secondTap!.pointer) {
+          if (onHoldDragEnd != null) onHoldDragEnd!(DragEndDetails());
+        }
       } else {
         _reject(tracker);
       }
@@ -739,6 +745,7 @@ RawGestureDetector getMixinGestureDetector({
   GestureDragStartCallback? onHoldDragStart,
   GestureDragUpdateCallback? onHoldDragUpdate,
   GestureDragCancelCallback? onHoldDragCancel,
+  GestureDragEndCallback? onHoldDragEnd,
   GestureTapDownCallback? onDoubleFinerTap,
   GestureDragStartCallback? onOneFingerPanStart,
   GestureDragUpdateCallback? onOneFingerPanUpdate,
@@ -782,6 +789,7 @@ RawGestureDetector getMixinGestureDetector({
                         ..onHoldDragStart = onHoldDragStart
                         ..onHoldDragUpdate = onHoldDragUpdate
                         ..onHoldDragCancel = onHoldDragCancel
+                        ..onHoldDragEnd = onHoldDragEnd
                     }),
         DoubleFinerTapGestureRecognizer: GestureRecognizerFactoryWithHandlers<
                 DoubleFinerTapGestureRecognizer>(

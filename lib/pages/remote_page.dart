@@ -60,6 +60,7 @@ class _RemotePageState extends State<RemotePage> {
   @override
   void dispose() {
     FFI.listenToMouse(false);
+    FFI.invokeMethod("enable_soft_keyboard", true);
     _mobileFocusNode.dispose();
     _physicalFocusNode.dispose();
     FFI.close();
@@ -90,6 +91,7 @@ class _RemotePageState extends State<RemotePage> {
         if (v < 100) {
           SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual,
               overlays: []);
+          FFI.invokeMethod("enable_soft_keyboard", false);
         }
       });
     }
@@ -181,6 +183,7 @@ class _RemotePageState extends State<RemotePage> {
   }
 
   void openKeyboard() {
+    FFI.invokeMethod("enable_soft_keyboard", true);
     // destroy first, so that our _value trick can work
     _value = initText;
     setState(() => _showEdit = false);
@@ -193,7 +196,6 @@ class _RemotePageState extends State<RemotePage> {
       _timer = Timer(Duration(milliseconds: 30), () {
         SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual,
             overlays: SystemUiOverlay.values);
-        SystemChannels.textInput.invokeMethod('TextInput.show');
         _mobileFocusNode.requestFocus();
       });
     });
@@ -211,48 +213,59 @@ class _RemotePageState extends State<RemotePage> {
     final pi = Provider.of<FfiModel>(context).pi;
     final hideKeyboard = isKeyboardShown() && _showEdit;
     final showActionButton = !_showBar || hideKeyboard;
+    final keyboard = FFI.ffiModel.permissions['keyboard'] != false;
+
     return WillPopScope(
       onWillPop: () async {
         clientClose();
         return false;
       },
-      child: Scaffold(
-          // resizeToAvoidBottomInset: true,
-          floatingActionButton: !showActionButton
-              ? null
-              : FloatingActionButton(
-                  mini: !hideKeyboard,
-                  child: Icon(
-                      hideKeyboard ? Icons.expand_more : Icons.expand_less),
-                  backgroundColor: MyTheme.accent,
-                  onPressed: () {
-                    setState(() {
-                      if (hideKeyboard) {
-                        _showEdit = false;
-                        _mobileFocusNode.unfocus();
-                        SystemChannels.textInput.invokeMethod('TextInput.hide');
-                        _physicalFocusNode.requestFocus();
-                      } else {
-                        _showBar = !_showBar;
-                      }
-                    });
-                  }),
-          bottomNavigationBar:
-              _showBar && pi.displays != null ? getBottomAppBar() : null,
-          body: Overlay(
-            initialEntries: [
-              OverlayEntry(builder: (context) {
-                final keyboard = FFI.ffiModel.permissions['keyboard'] != false;
-                return Container(
-                    color: Colors.black,
-                    child: getRawPointerAndKeyBody(keyboard));
-              })
-            ],
-          )),
+      child: getRawPointerAndKeyBody(
+          keyboard,
+          Scaffold(
+              // resizeToAvoidBottomInset: true,
+              floatingActionButton: !showActionButton
+                  ? null
+                  : FloatingActionButton(
+                      mini: !hideKeyboard,
+                      child: Icon(
+                          hideKeyboard ? Icons.expand_more : Icons.expand_less),
+                      backgroundColor: MyTheme.accent,
+                      onPressed: () {
+                        setState(() {
+                          if (hideKeyboard) {
+                            _showEdit = false;
+                            FFI.invokeMethod("enable_soft_keyboard", false);
+                            _mobileFocusNode.unfocus();
+                            _physicalFocusNode.requestFocus();
+                          } else {
+                            _showBar = !_showBar;
+                          }
+                        });
+                      }),
+              bottomNavigationBar:
+                  _showBar && pi.displays != null ? getBottomAppBar() : null,
+              body: Overlay(
+                initialEntries: [
+                  OverlayEntry(builder: (context) {
+                    return Container(
+                        color: Colors.black,
+                        // child: getRawPointerAndKeyBody(keyboard));
+                        child: isDesktop
+                            ? getBodyForDesktopWithListener(keyboard)
+                            : SafeArea(
+                                child: Container(
+                                    color: MyTheme.canvasColor,
+                                    child: _isPhysicalKeyboard
+                                        ? getBodyForMobile()
+                                        : getBodyForMobileWithGesture())));
+                  })
+                ],
+              ))),
     );
   }
 
-  Widget getRawPointerAndKeyBody(bool keyboard) {
+  Widget getRawPointerAndKeyBody(bool keyboard, Widget child) {
     return Listener(
         onPointerHover: (e) {
           if (e.kind != ui.PointerDeviceKind.mouse) return;
@@ -351,14 +364,7 @@ class _RemotePageState extends State<RemotePage> {
                       }
                       return KeyEventResult.handled;
                     },
-                    child: isDesktop
-                        ? getBodyForDesktopWithListener(keyboard)
-                        : SafeArea(
-                            child: Container(
-                                color: MyTheme.canvasColor,
-                                child: _isPhysicalKeyboard
-                                    ? getBodyForMobile()
-                                    : getBodyForMobileWithGesture()))))));
+                    child: child))));
   }
 
   Widget getBottomAppBar() {
@@ -490,7 +496,7 @@ class _RemotePageState extends State<RemotePage> {
             FFI.cursorModel.updatePan(d.delta.dx, d.delta.dy, _touchMode);
           }
         },
-        onHoldDragCancel: () {
+        onHoldDragEnd: (_) {
           if (!_touchMode) {
             FFI.sendMouse('up', MouseButtons.left);
           }
@@ -499,8 +505,6 @@ class _RemotePageState extends State<RemotePage> {
           if (_touchMode) {
             FFI.cursorModel.move(d.localPosition.dx, d.localPosition.dy);
             FFI.sendMouse('down', MouseButtons.left);
-          } else {
-            FFI.sendMouse('up', MouseButtons.left);
           }
         },
         onOneFingerPanUpdate: (d) {
@@ -543,6 +547,7 @@ class _RemotePageState extends State<RemotePage> {
                     textInputAction: TextInputAction.newline,
                     autocorrect: false,
                     enableSuggestions: false,
+                    autofocus: true,
                     focusNode: _mobileFocusNode,
                     maxLines: null,
                     initialValue: _value,

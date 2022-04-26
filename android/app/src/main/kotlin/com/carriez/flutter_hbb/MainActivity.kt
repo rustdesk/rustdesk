@@ -10,6 +10,7 @@ import android.os.Build
 import android.os.IBinder
 import android.provider.Settings
 import android.util.Log
+import android.view.WindowManager
 import androidx.annotation.RequiresApi
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
@@ -121,6 +122,18 @@ class MainActivity : FlutterActivity() {
                         try {
                             val id = call.arguments as Int
                             mainService?.cancelNotification(id)
+                        } finally {
+                            result.success(true)
+                        }
+                    }
+                    "enable_soft_keyboard" -> {
+                        // https://blog.csdn.net/hanye2020/article/details/105553780
+                        try {
+                            if (call.arguments as Boolean) {
+                                window.clearFlags(WindowManager.LayoutParams.FLAG_ALT_FOCUSABLE_IM)
+                            } else {
+                                window.addFlags(WindowManager.LayoutParams.FLAG_ALT_FOCUSABLE_IM)
+                            }
                         } finally {
                             result.success(true)
                         }

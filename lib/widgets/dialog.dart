@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
 import '../common.dart';
@@ -10,15 +12,15 @@ void clientClose() {
 const SEC1 = Duration(seconds: 1);
 void showSuccess({Duration duration = SEC1}) {
   SmartDialog.dismiss();
-  showToast(translate("Successful"),duration:SEC1);
+  showToast(translate("Successful"), duration: SEC1);
 }
 
-void showError({Duration duration = SEC1}){
+void showError({Duration duration = SEC1}) {
   SmartDialog.dismiss();
-  showToast(translate("Error"),duration:SEC1);
+  showToast(translate("Error"), duration: SEC1);
 }
 
-void updatePasswordDialog(){
+void updatePasswordDialog() {
   final p0 = TextEditingController();
   final p1 = TextEditingController();
   var validateLength = false;
@@ -43,7 +45,7 @@ void updatePasswordDialog(){
                 if (validateLength != val) {
                   // use delay to make setState success
                   Future.delayed(Duration(microseconds: 1),
-                          () => setState(() => validateLength = val));
+                      () => setState(() => validateLength = val));
                 }
                 return val
                     ? null
@@ -62,7 +64,7 @@ void updatePasswordDialog(){
                 final val = p0.text == v;
                 if (validateSame != val) {
                   Future.delayed(Duration(microseconds: 1),
-                          () => setState(() => validateSame = val));
+                      () => setState(() => validateSame = val));
                 }
                 return val
                     ? null
@@ -82,14 +84,14 @@ void updatePasswordDialog(){
           style: flatButtonStyle,
           onPressed: (validateLength && validateSame)
               ? () async {
-            close();
-            showLoading(translate("Waiting"));
-            if(await FFI.serverModel.updatePassword(p0.text)){
-              showSuccess();
-            }else{
-              showError();
-            }
-          }
+                  close();
+                  showLoading(translate("Waiting"));
+                  if (await FFI.serverModel.updatePassword(p0.text)) {
+                    showSuccess();
+                  } else {
+                    showError();
+                  }
+                }
               : null,
           child: Text(translate('OK')),
         ),
@@ -115,7 +117,6 @@ void enterPasswordDialog(String id) {
           ),
           value: remember,
           onChanged: (v) {
-            debugPrint("onChanged");
             if (v != null) {
               setState(() => remember = v);
             }
@@ -181,11 +182,25 @@ class PasswordWidget extends StatefulWidget {
 
 class _PasswordWidgetState extends State<PasswordWidget> {
   bool _passwordVisible = false;
+  final _focusNode = FocusNode();
+
+  @override
+  void initState() {
+    super.initState();
+    Timer(Duration(milliseconds: 50), () => _focusNode.requestFocus());
+  }
+
+  @override
+  void dispose() {
+    _focusNode.unfocus();
+    _focusNode.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     return TextField(
-      autofocus: true,
+      focusNode: _focusNode,
       controller: widget.controller,
       obscureText: !_passwordVisible,
       //This will obscure text dynamically

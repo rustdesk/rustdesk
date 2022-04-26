@@ -249,6 +249,7 @@ class FfiModel with ChangeNotifier {
       if (displays.length > 0) {
         showLoading(translate('Connected, waiting for image...'));
         _waitForImage = true;
+        _reconnects = 1;
       }
     }
     notifyListeners();
