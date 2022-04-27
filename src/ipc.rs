@@ -59,6 +59,12 @@ pub enum FS {
         id: i32,
         file_num: i32,
     },
+    CheckDigest {
+        id: i32,
+        file_num: i32,
+        file_size: u64,
+        modified_time: u64,
+    },
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]

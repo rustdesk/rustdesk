@@ -21,6 +21,7 @@ use hbb_common::{
     },
     tokio_util::codec::{BytesCodec, Framed},
 };
+use libc::{printf, send};
 #[cfg(any(target_os = "android", target_os = "ios"))]
 use scrap::android::call_input_service_mouse_input;
 use serde_json::{json, value::Value};
@@ -273,7 +274,7 @@ impl Connection {
                             }
                         }
                         ipc::Data::RawMessage(bytes) => {
-                            allow_err!(conn.stream.send_raw(bytes).await);
+                            conn.stream.send_raw(bytes).await;
                         }
                         #[cfg(windows)]
                         ipc::Data::ClipbaordFile(_clip) => {
@@ -892,6 +893,7 @@ impl Connection {
                 }
             }
         } else if self.authorized {
+            // println!("on_message: {:?}", msg);
             match msg.union {
                 Some(message::Union::mouse_event(me)) => {
                     #[cfg(any(target_os = "android", target_os = "ios"))]
@@ -953,6 +955,7 @@ impl Connection {
                     }
                 }
                 Some(message::Union::file_action(fa)) => {
+                    println!("recv file_action, {:?}", fa);
                     if self.file_transfer.is_some() {
                         match fa.union {
                             Some(file_action::Union::read_dir(rd)) => {
@@ -985,6 +988,7 @@ impl Connection {
                                 }
                             }
                             Some(file_action::Union::receive(r)) => {
+                                println!("[connection.rs:891] recv FileTransferReceiveRequest");
                                 self.send_fs(ipc::FS::NewWrite {
                                     path: r.path,
                                     id: r.id,
@@ -1021,32 +1025,9 @@ impl Connection {
                                 fs::remove_job(c.id, &mut self.read_jobs);
                             }
                             Some(file_action::Union::send_confirm(r)) => {
-                                let job_it = self
-                                    .read_jobs
-                                    .iter_mut()
-                                    .filter(|job| job.id() == r.id)
-                                    .next();
                                 println!("recv send confirm request");
-                                if let Some(job) = job_it {
-                                    if job.file_num() != r.file_num {
-                                        debug!("file num truncated, ignoring");
-                                    } else {
-                                        match r.union {
-                                            Some(file_transfer_send_confirm_request::Union::skip(s)) => {
-                                                if s {
-                                                    println!("skip current file");
-                                                    job.skip_current_file();
-                                                } else {
-                                                    job.set_file_confirmed(true);
-                                                }
-                                            }
-                                            Some(file_transfer_send_confirm_request::Union::offset_blk(offset)) => {
-                                                println!("file confirmed");
-                                                job.set_file_confirmed(true);
-                                            },
-                                            _ => {}
-                                        }
-                                    }
+                                if let Some(job) = fs::get_job(r.id, &mut self.read_jobs) {
+                                    job.confirm(&r);
                                 }
                             }
                             _ => {}
@@ -1068,6 +1049,12 @@ impl Connection {
                             file_num: d.file_num,
                         });
                     }
+                    Some(file_response::Union::digest(d)) => self.send_fs(ipc::FS::CheckDigest {
+                        id: d.id,
+                        file_num: d.file_num,
+                        file_size: d.file_size,
+                        modified_time: d.last_edit_timestamp,
+                    }),
                     _ => {}
                 },
                 Some(message::Union::misc(misc)) => match misc.union {
@@ -1209,6 +1196,7 @@ impl Connection {
     }
 
     fn read_dir(&mut self, dir: &str, include_hidden: bool) {
+        // println!("[connection.rs:1130] read_dir");
         let dir = dir.to_string();
         self.send_fs(ipc::FS::ReadDir {
             dir,

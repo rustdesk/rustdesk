@@ -12,6 +12,7 @@ use clipboard::{
 };
 use enigo::{self, Enigo, KeyboardControllable};
 use hbb_common::fs::{get_string, is_file_exists};
+use hbb_common::log::log;
 use hbb_common::{
     allow_err,
     config::{self, Config, LocalConfig, PeerConfig},
@@ -1517,7 +1518,7 @@ impl Remote {
     }
 
     async fn handle_msg_from_ui(&mut self, data: Data, peer: &mut Stream) -> bool {
-        println!("new msg from ui");
+        // log::info!("new msg from ui, {}",data);
         match data {
             Data::Close => {
                 return false;
@@ -1759,6 +1760,7 @@ impl Remote {
 
     async fn handle_msg_from_peer(&mut self, data: &[u8], peer: &mut Stream) -> bool {
         if let Ok(msg_in) = Message::parse_from_bytes(&data) {
+            println!("recved msg from peer, decoded: {:?}", msg_in);
             match msg_in.union {
                 Some(message::Union::video_frame(vf)) => {
                     if !self.first_frame {
@@ -1826,11 +1828,7 @@ impl Remote {
                 }
                 Some(message::Union::file_response(fr)) => match fr.union {
                     Some(file_response::Union::dir(fd)) => {
-                        println!("file_response is dir: {}", fd.path);
                         let entries = fd.entries.to_vec();
-                        for entry in &entries {
-                            println!("dir file: {}", entry.name);
-                        }
                         let mut m = make_fd(fd.id, &entries, fd.id > 0);
                         if fd.id <= 0 {
                             m.set_item("path", fd.path);
@@ -1843,6 +1841,7 @@ impl Remote {
                         }
                     }
                     Some(file_response::Union::digest(digest)) => {
+                        log::info!("recv file transfer digest");
                         if let Some(job) = fs::get_job(digest.id, &mut self.write_jobs) {
                             if let Some(file) = job.files().get(digest.file_num as usize) {
                                 let write_path = get_string(&job.join(&file.name));
@@ -1902,7 +1901,7 @@ impl Remote {
                         }
                     }
                     Some(file_response::Union::block(block)) => {
-                        println!("file response block, file num: {}", block.file_num);
+                        log::info!("file response block, file num: {}", block.file_num);
                         if let Some(job) = fs::get_job(block.id, &mut self.write_jobs) {
                             if let Err(_err) = job.write(block, None).await {
                                 // to-do: add "skip" for writing job
@@ -1912,7 +1911,7 @@ impl Remote {
                         }
                     }
                     Some(file_response::Union::done(d)) => {
-                        println!("file response done");
+                        log::info!("file response done");
                         if let Some(job) = fs::get_job(d.id, &mut self.write_jobs) {
                             job.modify_time();
                             fs::remove_job(d.id, &mut self.write_jobs);
@@ -1999,6 +1998,14 @@ impl Remote {
                         self.audio_sender.send(MediaData::AudioFrame(frame)).ok();
                     }
                 }
+                Some(message::Union::file_action(action)) => match action.union {
+                    Some(file_action::Union::send_confirm(c)) => {
+                        if let Some(job) = fs::get_job(c.id, &mut self.read_jobs) {
+                            job.confirm(&c);
+                        }
+                    }
+                    _ => {}
+                },
                 _ => {}
             }
         }

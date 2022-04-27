@@ -198,11 +198,11 @@ pub struct TransferJob {
     files: Vec<FileEntry>,
     file_num: i32,
     file: Option<File>,
-    file_confirmed: bool,
-    file_is_waiting: bool,
     total_size: u64,
     finished_size: u64,
     transferred: u64,
+    file_confirmed: bool,
+    file_is_waiting: bool,
     default_overwrite_strategy: Option<bool>,
 }
 
@@ -315,6 +315,7 @@ impl TransferJob {
     }
 
     pub async fn write(&mut self, block: FileTransferBlock, raw: Option<&[u8]>) -> ResultType<()> {
+        println!("write file transfer blk[{},{}]", block.id, block.file_num);
         if block.id != self.id {
             bail!("Wrong id");
         }
@@ -386,25 +387,8 @@ impl TransferJob {
         }
         if !self.file_confirmed() {
             if !self.file_is_waiting() {
-                let mut msg = Message::new();
-                let mut resp = FileResponse::new();
-                let meta = self.file.as_ref().unwrap().metadata().await?;
-                let last_modified = meta
-                    .modified()?
-                    .duration_since(SystemTime::UNIX_EPOCH)?
-                    .as_secs();
-                resp.set_digest(FileTransferDigest {
-                    id: self.id,
-                    file_num: self.file_num,
-                    last_edit_timestamp: last_modified,
-                    file_size: meta.len(),
-                    unknown_fields: Default::default(),
-                    cached_size: Default::default(),
-                });
+                self.send_current_digest(stream).await?;
                 self.set_file_is_waiting(true);
-                msg.set_file_response(resp);
-                stream.send(&msg);
-                println!("digest message is sent. waiting for confirm.");
             }
             return Ok(None);
         }
@@ -457,6 +441,32 @@ impl TransferJob {
             ..Default::default()
         }))
     }
+
+    async fn send_current_digest(&mut self, stream: &mut Stream) -> ResultType<()> {
+        let mut msg = Message::new();
+        let mut resp = FileResponse::new();
+        let meta = self.file.as_ref().unwrap().metadata().await?;
+        let last_modified = meta
+            .modified()?
+            .duration_since(SystemTime::UNIX_EPOCH)?
+            .as_secs();
+        resp.set_digest(FileTransferDigest {
+            id: self.id,
+            file_num: self.file_num,
+            last_edit_timestamp: last_modified,
+            file_size: meta.len(),
+            unknown_fields: Default::default(),
+            cached_size: Default::default(),
+        });
+        msg.set_file_response(resp);
+        stream.send(&msg).await?;
+        println!(
+            "id: {}, file_num:{}, digest message is sent. waiting for confirm. msg: {:?}",
+            self.id, self.file_num, msg
+        );
+        Ok(())
+    }
+
     pub fn set_overwrite_strategy(&mut self, overwrite_strategy: Option<bool>) {
         self.default_overwrite_strategy = overwrite_strategy;
     }
@@ -488,6 +498,29 @@ impl TransferJob {
         self.file_num += 1;
         true
     }
+
+    pub fn confirm(&mut self, r: &FileTransferSendConfirmRequest) -> bool {
+        if self.file_num() != r.file_num {
+            log::debug!("file num truncated, ignoring");
+        } else {
+            match r.union {
+                Some(file_transfer_send_confirm_request::Union::skip(s)) => {
+                    if s {
+                        log::debug!("skip current file");
+                        self.skip_current_file();
+                    } else {
+                        self.set_file_confirmed(true);
+                    }
+                }
+                Some(file_transfer_send_confirm_request::Union::offset_blk(offset)) => {
+                    println!("file confirmed");
+                    self.set_file_confirmed(true);
+                }
+                _ => {}
+            }
+        }
+        true
+    }
 }
 
 #[inline]
@@ -506,6 +539,7 @@ pub fn new_error<T: std::string::ToString>(id: i32, err: T, file_num: i32) -> Me
 
 #[inline]
 pub fn new_dir(id: i32, path: String, files: Vec<FileEntry>) -> Message {
+    println!("[fs.rs:510] create new dir");
     let mut resp = FileResponse::new();
     resp.set_dir(FileDirectory {
         id,
@@ -585,6 +619,7 @@ pub async fn handle_read_jobs(
 ) -> ResultType<()> {
     let mut finished = Vec::new();
     for job in jobs.iter_mut() {
+        // println!("[fs.rs:588] handle_read_jobs. {:?}", job.id);
         match job.read(stream).await {
             Err(err) => {
                 stream
@@ -598,6 +633,8 @@ pub async fn handle_read_jobs(
                 if !job.file_confirmed && !job.file_is_waiting {
                     finished.push(job.id());
                     stream.send(&new_done(job.id(), job.file_num())).await?;
+                } else {
+                    log::info!("waiting confirmation.");
                 }
             }
         }
@@ -646,8 +683,16 @@ pub fn is_write_need_confirmation(
     if path.exists() && path.is_file() {
         let metadata = std::fs::metadata(path)?;
         let modified_time = metadata.modified()?;
-        let remote_mt = Duration::from_millis(digest.last_edit_timestamp);
+        let remote_mt = Duration::from_secs(digest.last_edit_timestamp);
         let local_mt = modified_time.duration_since(UNIX_EPOCH)?;
+        println!(
+            "{:?}:rm:{},lm:{},rf:{},lf:{}",
+            path,
+            remote_mt.as_secs(),
+            local_mt.as_secs(),
+            digest.file_size,
+            metadata.len()
+        );
         // if
         // is_recv && remote_mt >= local_mt) || (!is_recv && remote_mt <= local_mt) ||
         if remote_mt == local_mt && digest.file_size == metadata.len() {

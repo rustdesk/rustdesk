@@ -133,6 +133,7 @@ impl ConnectionManager {
                     dir,
                     include_hidden,
                 } => {
+                    // println!("[cm.rs:126] ipc::FS::ReadDir recved");
                     Self::read_dir(&dir, include_hidden, conn).await;
                 }
                 ipc::FS::RemoveDir {
@@ -153,6 +154,7 @@ impl ConnectionManager {
                     id,
                     mut files,
                 } => {
+                    println!("new write in ipc::FS::NewWrite");
                     write_jobs.push(fs::TransferJob::new_write(
                         id,
                         path,
@@ -177,6 +179,30 @@ impl ConnectionManager {
                         job.modify_time();
                         Self::send(fs::new_done(id, file_num), conn).await;
                         fs::remove_job(id, write_jobs);
+                    }
+                }
+                ipc::FS::CheckDigest {
+                    id,
+                    file_num,
+                    file_size,
+                    modified_time,
+                } => {
+                    if let Some(job) = fs::get_job(id, write_jobs) {
+                        // TODO
+                        let mut msg_out = Message::new();
+                        let mut file_action = FileAction::new();
+                        file_action.set_send_confirm(FileTransferSendConfirmRequest {
+                            id,
+                            file_num,
+                            union: Some(file_transfer_send_confirm_request::Union::offset_blk(0)),
+                            ..Default::default()
+                        });
+                        msg_out.set_file_action(file_action);
+                        println!(
+                            "[CHECK DIGEST] dig dest recved. confirmed. msg: {:?}",
+                            msg_out
+                        );
+                        Self::send(msg_out, conn).await;
                     }
                 }
                 ipc::FS::WriteBlock {
@@ -238,6 +264,7 @@ impl ConnectionManager {
             let mut file_response = FileResponse::new();
             file_response.set_dir(fd);
             msg_out.set_file_response(file_response);
+            // println!("[cm.rs:229] set dir");
             Self::send(msg_out, conn).await;
         }
     }
@@ -300,6 +327,7 @@ impl ConnectionManager {
     }
 
     async fn send(msg: Message, conn: &mut Connection) {
+        println!("send msg: {:?}", msg);
         match msg.write_to_bytes() {
             Ok(bytes) => allow_err!(conn.send(&Data::RawMessage(bytes)).await),
             err => allow_err!(err),
