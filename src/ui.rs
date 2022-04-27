@@ -153,8 +153,6 @@ pub fn start(args: &mut [String]) {
         page
     ));
     if is_server {
-        #[cfg(target_os = "macos")]
-        macos::ignore_first_time_awake();
         frame.collapse(true);
         frame.run_loop();
     } else {

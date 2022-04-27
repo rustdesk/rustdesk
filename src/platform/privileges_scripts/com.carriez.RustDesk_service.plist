@@ -15,5 +15,9 @@
         <true/>
         <key>WorkingDirectory</key>
         <string>/Applications/RustDesk.app/Contents/MacOS/</string>
+        <key>StandardErrorPath</key>
+        <string>/tmp/rustdesk_service.err</string>
+        <key>StandardOutPath</key>
+        <string>/tmp/rustdesk_service.out</string>
     </dict>
 </plist>

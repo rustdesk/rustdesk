@@ -131,7 +131,7 @@ pub fn is_installed_daemon(prompt: bool) -> bool {
             .arg(daemon_plist_body)
             .arg(agent_plist_body)
             .arg(&get_active_username())
-            .output()
+            .status()
         {
             Err(e) => {
                 log::error!("run osascript failed: {}", e);
@@ -148,9 +148,8 @@ pub fn is_installed_daemon(prompt: bool) -> bool {
                                 .unwrap(),
                         )
                         .arg(&format!(
-                            "sleep 0.5; launchctl load -w {}; sleep 0.5; open /Applications/{}.app",
+                            "sleep 0.5; launchctl load -w {};",
                             agent_plist_file,
-                            crate::get_app_name()
                         ))
                         .spawn()
                         .ok();
@@ -177,7 +176,7 @@ pub fn uninstall() -> bool {
             .arg("-e")
             .arg(script_body)
             .arg(&get_active_username())
-            .output()
+            .status()
         {
             Err(e) => {
                 log::error!("run osascript failed: {}", e);
@@ -401,21 +400,40 @@ pub fn lock_screen() {
 }
 
 pub fn start_os_service() {
+    let exe = std::env::current_exe().unwrap_or_default();
+    let tm0 = hbb_common::get_modified_time(&exe);
     log::info!("{}", crate::username());
 
     std::thread::spawn(move || loop {
-        let exe = std::env::current_exe().unwrap_or_default();
-        let tm0 = hbb_common::get_modified_time(&exe);
-
         loop {
             std::thread::sleep(std::time::Duration::from_millis(300));
-            if hbb_common::get_modified_time(&exe) != tm0 {
-                log::info!("{:?} updated, will restart", exe);
+            let now = hbb_common::get_modified_time(&exe);
+            if now != tm0 && now != std::time::UNIX_EPOCH {
+                // sleep a while to wait for resources file ready
+                std::thread::sleep(std::time::Duration::from_millis(300));
+                println!("{:?} updated, will restart", exe);
+                // this won't kill myself
                 std::process::Command::new("pkill")
-                    .args(&["-f", exe.to_str().unwrap_or("")])
-                    .output()
+                    .args(&["-f", &crate::get_app_name()])
+                    .status()
                     .ok();
-                std::process::exit(0); // self not killed by above pkill
+                println!("The others killed");
+                // launchctl load/unload/start agent not work in daemon, show not priviledged.
+                // sudo launchctl asuser 501 open -n also not allowed.
+                std::process::Command::new("launchctl")
+                    .args(&[
+                        "asuser",
+                        &get_active_userid(),
+                        "open",
+                        "-a",
+                        &exe.to_str().unwrap_or(""),
+                        "--args",
+                        "--server",
+                    ])
+                    .status()
+                    .ok();
+                // if above spawn, we may need sleep for a while here.
+                std::process::exit(0);
             }
         }
     });
@@ -493,10 +511,10 @@ pub fn block_input(_v: bool) -> bool {
 
 pub fn is_installed() -> bool {
     if let Ok(p) = std::env::current_exe() {
-        return p.to_str().unwrap_or_default().contains(&format!(
-            "/Applications/{}.app",
-            crate::get_app_name(), 
-        ));
+        return p
+            .to_str()
+            .unwrap_or_default()
+            .contains(&format!("/Applications/{}.app", crate::get_app_name()));
     }
     false
 }

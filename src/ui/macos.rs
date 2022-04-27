@@ -42,12 +42,8 @@ impl DelegateState {
     }
 }
 
-static mut IGNORE_FIRST_TIME: bool = false;
-
-pub fn ignore_first_time_awake() {
-    unsafe {
-        IGNORE_FIRST_TIME = true;
-    }
+lazy_static::lazy_static! {
+    static ref START_TM: std::sync::Mutex<std::time::Instant> = std::sync::Mutex::new(std::time::Instant::now());
 }
 
 impl AppHandler for Rc<Host> {
@@ -59,11 +55,9 @@ impl AppHandler for Rc<Host> {
             let _ = self.call_function("awake", &make_args![]);
             let _ = self.call_function("showSettings", &make_args![]);
         } else if cmd == AWAKE {
-            unsafe {
-                if IGNORE_FIRST_TIME {
-                    IGNORE_FIRST_TIME = false;
-                    return;
-                }
+            if START_TM.lock().unwrap().elapsed().as_millis() < 1000 {
+                hbb_common::log::debug!("First click on docker icon {:?}", START_TM.lock().unwrap().elapsed());
+                return;
             }
             let _ = self.call_function("awake", &make_args![]);
         }
@@ -72,6 +66,7 @@ impl AppHandler for Rc<Host> {
 
 // https://github.com/xi-editor/druid/blob/master/druid-shell/src/platform/mac/application.rs
 unsafe fn set_delegate(handler: Option<Box<dyn AppHandler>>) {
+    *START_TM.lock().unwrap() = std::time::Instant::now();
     let mut decl =
         ClassDecl::new("AppDelegate", class!(NSObject)).expect("App Delegate definition failed");
     decl.add_ivar::<*mut c_void>(APP_HANDLER_IVAR);

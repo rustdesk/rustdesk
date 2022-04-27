@@ -333,36 +333,41 @@ async fn sync_and_watch_config_dir() {
         return;
     }
 
-    for i in 1..=6 {
+    let mut cfg0 = (Config::get(), Config2::get());
+    let mut synced = false;
+    for i in 1..=30 {
         sleep(i as f32 * 0.3).await;
         match crate::ipc::connect(1000, "_service").await {
             Ok(mut conn) => {
-                if conn.send(&Data::SyncConfig(None)).await.is_ok() {
-                    if let Ok(Some(data)) = conn.next_timeout(1000).await {
-                        match data {
-                            Data::SyncConfig(Some((config, config2))) => {
-                                let _chk = crate::ipc::CheckIfRestart::new();
-                                Config::set(config);
-                                Config2::set(config2);
-                                log::info!("sync config from root");
-                            }
-                            _ => {}
+                if !synced {
+                    if conn.send(&Data::SyncConfig(None)).await.is_ok() {
+                        if let Ok(Some(data)) = conn.next_timeout(1000).await {
+                            match data {
+                                Data::SyncConfig(Some((config, config2))) => {
+                                    let _chk = crate::ipc::CheckIfRestart::new();
+                                    Config::set(config);
+                                    Config2::set(config2);
+                                    log::info!("sync config from root");
+                                    synced = true;
+                                }
+                                _ => {}
+                            };
                         };
-                    };
+                    }
                 }
 
-                let mut cfg0 = (Config::get(), Config2::get());
                 loop {
                     sleep(0.3).await;
                     let cfg = (Config::get(), Config2::get());
                     if cfg != cfg0 {
-                        cfg0 = cfg;
                         log::info!("config updated, sync to root");
                         match conn.send(&Data::SyncConfig(Some(cfg0.clone()))).await {
                             Err(e) => {
                                 log::error!("sync config to root failed: {}", e);
+                                break;
                             }
                             _ => {
+                                cfg0 = cfg;
                                 conn.next_timeout(1000).await.ok();
                             }
                         }
