@@ -137,23 +137,14 @@ pub fn is_installed_daemon(prompt: bool) -> bool {
                 log::error!("run osascript failed: {}", e);
             }
             _ => {
-                if std::path::Path::new(&agent_plist_file).exists() {
-                    std::process::Command::new("osascript")
-                        .arg("-e")
-                        .arg(
-                            PRIVILEGES_SCRIPTS_DIR
-                                .get_file("run.scpt")
-                                .unwrap()
-                                .contents_utf8()
-                                .unwrap(),
-                        )
-                        .arg(&format!(
-                            "sleep 0.5; launchctl load -w {};",
-                            agent_plist_file,
-                        ))
-                        .spawn()
+                let installed = std::path::Path::new(&agent_plist_file).exists();
+                log::info!("Agent file {} installed: {}", agent_plist_file, installed);
+                if installed {
+                    log::info!("launch server");
+                    std::process::Command::new("launchctl")
+                        .args(&["load", "-w", &agent_plist_file])
+                        .status()
                         .ok();
-                    std::thread::sleep(std::time::Duration::from_millis(100)); // avoid exit crash
                     std::process::exit(0);
                 }
             }
@@ -184,8 +175,18 @@ pub fn uninstall() -> bool {
             _ => {
                 let agent = format!("{}_server.plist", crate::get_full_name());
                 let agent_plist_file = format!("/Library/LaunchAgents/{}", agent);
-                if !std::path::Path::new(&agent_plist_file).exists() {
+                let uninstalled = !std::path::Path::new(&agent_plist_file).exists();
+                log::info!(
+                    "Agent file {} uninstalled: {}",
+                    agent_plist_file,
+                    uninstalled
+                );
+                if uninstalled {
                     crate::ipc::set_option("stop-service", "Y");
+                    std::process::Command::new("launchctl")
+                        .args(&["remove", &format!("{}_server", crate::get_full_name())])
+                        .status()
+                        .ok();
                     std::process::Command::new("osascript")
                         .arg("-e")
                         .arg(
@@ -196,13 +197,11 @@ pub fn uninstall() -> bool {
                                 .unwrap(),
                         )
                         .arg(&format!(
-                            "sleep 0.5; launchctl remove {}_server; sleep 0.5; open /Applications/{}.app",
+                            "sleep 0.5; open /Applications/{}.app",
                             crate::get_full_name(),
-                            crate::get_app_name()
                         ))
                         .spawn()
                         .ok();
-                    std::thread::sleep(std::time::Duration::from_millis(100)); // avoid exit crash
                     std::process::exit(0);
                 }
             }
@@ -514,7 +513,7 @@ pub fn is_installed() -> bool {
         return p
             .to_str()
             .unwrap_or_default()
-            .contains(&format!("/Applications/{}.app", crate::get_app_name()));
+            .starts_with(&format!("/Applications/{}.app", crate::get_app_name()));
     }
     false
 }

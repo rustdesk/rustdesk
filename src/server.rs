@@ -335,7 +335,14 @@ async fn sync_and_watch_config_dir() {
 
     let mut cfg0 = (Config::get(), Config2::get());
     let mut synced = false;
-    for i in 1..=30 {
+    let tries =
+        if std::env::args().len() == 2 && std::env::args().nth(1) == Some("--server".to_owned()) {
+            30
+        } else {
+            1
+        };
+    log::debug!("#tries of ipc service connection: {}", tries);
+    for i in 1..=tries {
         sleep(i as f32 * 0.3).await;
         match crate::ipc::connect(1000, "_service").await {
             Ok(mut conn) => {
