@@ -12,11 +12,7 @@ use objc::{
     sel, sel_impl,
 };
 use sciter::{make_args, Host};
-use std::{
-    ffi::c_void,
-    rc::Rc,
-    sync::{Arc, Mutex},
-};
+use std::{ffi::c_void, rc::Rc};
 
 static APP_HANDLER_IVAR: &str = "GoDeskAppHandler";
 
@@ -24,10 +20,7 @@ const TERMINATE_TAG: u32 = 0;
 const SHOW_ABOUT_TAG: u32 = 1;
 const SHOW_SETTINGS_TAG: u32 = 2;
 const RUN_ME_TAG: u32 = 3;
-
-lazy_static::lazy_static! {
-    pub static ref SHOULD_OPEN_UNTITLED_FILE_CALLBACK: Arc<Mutex<Option<Box<dyn Fn() + Send>>>> = Default::default();
-}
+const AWAKE: u32 = 4;
 
 trait AppHandler {
     fn command(&mut self, cmd: u32);
@@ -49,12 +42,30 @@ impl DelegateState {
     }
 }
 
+static mut IGNORE_FIRST_TIME: bool = false;
+
+pub fn ignore_first_time_awake() {
+    unsafe {
+        IGNORE_FIRST_TIME = true;
+    }
+}
+
 impl AppHandler for Rc<Host> {
     fn command(&mut self, cmd: u32) {
         if cmd == SHOW_ABOUT_TAG {
+            let _ = self.call_function("awake", &make_args![]);
             let _ = self.call_function("showAbout", &make_args![]);
         } else if cmd == SHOW_SETTINGS_TAG {
+            let _ = self.call_function("awake", &make_args![]);
             let _ = self.call_function("showSettings", &make_args![]);
+        } else if cmd == AWAKE {
+            unsafe {
+                if IGNORE_FIRST_TIME {
+                    IGNORE_FIRST_TIME = false;
+                    return;
+                }
+            }
+            let _ = self.call_function("awake", &make_args![]);
         }
     }
 }
@@ -95,12 +106,14 @@ extern "C" fn application_did_finish_launching(_this: &mut Object, _: Sel, _noti
 }
 
 extern "C" fn application_should_handle_open_untitled_file(
-    _this: &mut Object,
+    this: &mut Object,
     _: Sel,
     _sender: id,
 ) -> BOOL {
-    if let Some(callback) = SHOULD_OPEN_UNTITLED_FILE_CALLBACK.lock().unwrap().as_ref() {
-        callback();
+    unsafe {
+        let inner: *mut c_void = *this.get_ivar(APP_HANDLER_IVAR);
+        let inner = &mut *(inner as *mut DelegateState);
+        (*inner).command(AWAKE);
     }
     YES
 }
@@ -131,7 +144,7 @@ unsafe fn make_menu_item(title: &str, key: &str, tag: u32) -> *mut Object {
     object
 }
 
-pub fn make_menubar(host: Rc<Host>) {
+pub fn make_menubar(host: Rc<Host>, is_index: bool) {
     unsafe {
         let _pool = NSAutoreleasePool::new(nil);
         set_delegate(Some(Box::new(host)));
@@ -140,7 +153,7 @@ pub fn make_menubar(host: Rc<Host>) {
         menubar.addItem_(app_menu_item);
         let app_menu = NSMenu::new(nil).autorelease();
 
-        if std::env::args().len() > 1 {
+        if !is_index {
             let new_item = make_menu_item("New Window", "n", RUN_ME_TAG);
             app_menu.addItem_(new_item);
         } else {
@@ -155,7 +168,7 @@ pub fn make_menubar(host: Rc<Host>) {
         let separator = NSMenuItem::separatorItem(nil).autorelease();
         app_menu.addItem_(separator);
         let quit_item = make_menu_item(
-            &format!("Quit {}", hbb_common::config::APP_NAME),
+            &format!("Quit {}", crate::get_app_name()),
             "q",
             TERMINATE_TAG,
         );

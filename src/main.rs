@@ -84,8 +84,15 @@ fn main() {
             return;
         } else if args[0] == "--server" {
             log::info!("start --server");
-            start_server(true, true);
-            return;
+            #[cfg(not(target_os = "macos"))]
+            {
+                start_server(true, true);
+                return;
+            }
+            #[cfg(target_os = "macos")]
+            {
+                std::thread::spawn(move || start_server(true, true));
+            }
         } else if args[0] == "--import-config" {
             if args.len() == 2 {
                 hbb_common::config::Config::import(&args[1]);

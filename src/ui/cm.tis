@@ -317,11 +317,6 @@ handler.newMessage = function(id, text) {
     update();
 }
 
-handler.awake = function() {
-    view.windowState = View.WINDOW_SHOWN;
-    view.focus = self;
-}
-
 view << event statechange {
     adjustBorder();
 }

@@ -38,6 +38,17 @@ struct UI(
 struct UIHostHandler;
 
 pub fn start(args: &mut [String]) {
+    let is_server = args.len() == 1 && args[0] == "--server";
+    let is_index = args.is_empty() || is_server;
+    if is_server {
+        // wait a moment for server's ipc check to avoid sciter crash
+        std::thread::sleep(std::time::Duration::from_millis(300));
+        if crate::platform::is_prelogin() {
+            loop {
+                std::thread::sleep(std::time::Duration::from_secs(3));
+            }
+        }
+    }
     #[cfg(all(target_os = "linux", feature = "inline"))]
     sciter::set_library("/usr/lib/rustdesk/libsciter-gtk.so").ok();
     // https://github.com/c-smile/sciter-sdk/blob/master/include/sciter-x-types.h
@@ -71,7 +82,7 @@ pub fn start(args: &mut [String]) {
     allow_err!(sciter::set_options(sciter::RuntimeOptions::UxTheming(true)));
     frame.set_title(APP_NAME);
     #[cfg(target_os = "macos")]
-    macos::make_menubar(frame.get_host());
+    macos::make_menubar(frame.get_host(), is_index);
     let page;
     if args.len() > 1 && args[0] == "--play" {
         args[0] = "--connect".to_owned();
@@ -83,7 +94,7 @@ pub fn start(args: &mut [String]) {
             .to_owned();
         args[1] = id;
     }
-    if args.is_empty() {
+    if is_index {
         let childs: Childs = Default::default();
         let cloned = childs.clone();
         std::thread::spawn(move || check_zombie(cloned));
@@ -141,7 +152,14 @@ pub fn start(args: &mut [String]) {
             .unwrap_or("".to_owned()),
         page
     ));
-    frame.run_app();
+    if is_server {
+        #[cfg(target_os = "macos")]
+        macos::ignore_first_time_awake();
+        frame.collapse(true);
+        frame.run_loop();
+    } else {
+        frame.run_app();
+    }
 }
 
 #[cfg(windows)]

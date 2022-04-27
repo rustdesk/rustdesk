@@ -43,15 +43,6 @@ impl ConnectionManager {
             senders: HashMap::new(),
         };
         let cm = Self(Arc::new(RwLock::new(inner)));
-        #[cfg(target_os = "macos")]
-        {
-            let cloned = cm.clone();
-            *super::macos::SHOULD_OPEN_UNTITLED_FILE_CALLBACK
-                .lock()
-                .unwrap() = Some(Box::new(move || {
-                cloned.call("awake", &make_args!());
-            }));
-        }
         let cloned = cm.clone();
         std::thread::spawn(move || start_ipc(cloned));
         cm

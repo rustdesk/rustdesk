@@ -367,3 +367,8 @@ function isReasonableSize(r) {
     return !(x < -3200 || x > 3200 || y < -3200 || y > 3200);
 }
 
+function awake() {
+    view.windowState = View.WINDOW_SHOWN;
+    view.focus = self;
+}
+

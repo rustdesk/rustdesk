@@ -329,7 +329,7 @@ pub async fn start_server(is_server: bool, _tray: bool) {
 
 #[cfg(target_os = "macos")]
 async fn sync_and_watch_config_dir() {
-    if crate::username() == "root" {
+    if crate::platform::is_root() {
         return;
     }
 

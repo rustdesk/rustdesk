@@ -745,6 +745,10 @@ function self.closing() {
     // return false; // can prevent window close
     var (x, y, w, h) = view.box(#rectw, #border, #screen);
     handler.save_size(x, y, w, h);
+    if (is_osx) {
+        view.windowState = View.WINDOW_HIDDEN;
+        return false;
+    }
 }
 
 function self.ready() {
