@@ -265,5 +265,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("android_version_audio_tip", "當前安卓版本不支持音頻錄製，請升級至安卓10或更高。"),
         ("android_start_service_tip", "點擊 [啟動服務] 或打開 [屏幕錄製] 權限開啟手機屏幕共享服務。"),
         ("Account", "帳戶"),
+        ("Quit", "退出"),
     ].iter().cloned().collect();
 }

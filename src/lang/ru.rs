@@ -265,5 +265,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("android_version_audio_tip", "Текущая версия Android не поддерживает захват звука, обновите ее до Android 10 или выше."),
         ("android_start_service_tip", "Коснитесь [Запуск промежуточного сервера] или ОТКРЫТЬ разрешение [Скриншот], чтобы запустить службу демонстрации экрана."),
         ("Account", "Аккаунт"),
+        ("Quit", "Выйти"),
     ].iter().cloned().collect();
 }

@@ -1,6 +1,6 @@
 #[cfg(target_os = "macos")]
 use cocoa::{
-    appkit::{NSApp, NSApplication, NSMenu, NSMenuItem},
+    appkit::{NSApp, NSApplication, NSApplicationActivationPolicy::*, NSMenu, NSMenuItem},
     base::{id, nil, YES},
     foundation::{NSAutoreleasePool, NSString},
 };
@@ -56,7 +56,10 @@ impl AppHandler for Rc<Host> {
             let _ = self.call_function("showSettings", &make_args![]);
         } else if cmd == AWAKE {
             if START_TM.lock().unwrap().elapsed().as_millis() < 1000 {
-                hbb_common::log::debug!("First click on docker icon {:?}", START_TM.lock().unwrap().elapsed());
+                hbb_common::log::debug!(
+                    "First click on docker icon {:?}",
+                    START_TM.lock().unwrap().elapsed()
+                );
                 return;
             }
             let _ = self.call_function("awake", &make_args![]);
@@ -79,6 +82,26 @@ unsafe fn set_delegate(handler: Option<Box<dyn AppHandler>>) {
     decl.add_method(
         sel!(applicationShouldOpenUntitledFile:),
         application_should_handle_open_untitled_file as extern "C" fn(&mut Object, Sel, id) -> BOOL,
+    );
+
+    decl.add_method(
+        sel!(applicationDidBecomeActive:),
+        application_did_become_active as extern "C" fn(&mut Object, Sel, id) -> BOOL,
+    );
+
+    decl.add_method(
+        sel!(applicationDidUnhide:),
+        application_did_become_unhide as extern "C" fn(&mut Object, Sel, id) -> BOOL,
+    );
+
+    decl.add_method(
+        sel!(applicationShouldHandleReopen:),
+        application_should_handle_reopen as extern "C" fn(&mut Object, Sel, id) -> BOOL,
+    );
+
+    decl.add_method(
+        sel!(applicationWillTerminate:),
+        application_will_terminate as extern "C" fn(&mut Object, Sel, id) -> BOOL,
     );
 
     decl.add_method(
@@ -109,6 +132,40 @@ extern "C" fn application_should_handle_open_untitled_file(
         let inner: *mut c_void = *this.get_ivar(APP_HANDLER_IVAR);
         let inner = &mut *(inner as *mut DelegateState);
         (*inner).command(AWAKE);
+    }
+    YES
+}
+
+extern "C" fn application_should_handle_reopen(
+    _this: &mut Object,
+    _: Sel,
+    _sender: id,
+) -> BOOL {
+    hbb_common::log::debug!("reopen");
+    YES
+}
+
+extern "C" fn application_did_become_active (
+    _this: &mut Object,
+    _: Sel,
+    _sender: id,
+) -> BOOL {
+    hbb_common::log::debug!("active");
+    YES
+}
+
+extern "C" fn application_did_become_unhide (
+    _this: &mut Object,
+    _: Sel,
+    _sender: id,
+) -> BOOL {
+    hbb_common::log::debug!("unhide");
+    YES
+}
+
+extern "C" fn application_will_terminate(_this: &mut Object, _: Sel, _sender: id) -> BOOL {
+    if std::env::args().len() == 1 || std::env::args().nth(1) == Some("--server".to_owned()) {
+        hide_dock();
     }
     YES
 }
@@ -180,5 +237,32 @@ pub fn make_menubar(host: Rc<Host>, is_index: bool) {
         */
         app_menu.addItem_(quit_item);
         NSApp().setMainMenu_(menubar);
+    }
+}
+
+pub fn hide_dock() {
+    unsafe {
+        NSApp().setActivationPolicy_(NSApplicationActivationPolicyAccessory);
+    }
+}
+
+pub fn make_tray() {
+    hide_dock();
+    use tray_item::TrayItem;
+    if let Ok(mut tray) = TrayItem::new(&crate::get_app_name(), "mac-tray.png") {
+        tray.add_label(&format!(
+            "{} {}",
+            crate::get_app_name(),
+            crate::lang::translate("Service is running".to_owned())
+        ))
+        .ok();
+
+        let inner = tray.inner_mut();
+        inner.add_quit_item(&crate::lang::translate("Quit".to_owned()));
+        inner.display();
+    } else {
+        loop {
+            std::thread::sleep(std::time::Duration::from_secs(3));
+        }
     }
 }

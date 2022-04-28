@@ -39,6 +39,10 @@ struct UIHostHandler;
 
 pub fn start(args: &mut [String]) {
     let is_server = args.len() == 1 && args[0] == "--server";
+    if is_server && LocalConfig::get_option("service-as-tray") == "Y" {
+        macos::make_tray();
+        return;
+    }
     let is_index = args.is_empty() || is_server;
     if is_server {
         // wait a moment for server's ipc check to avoid sciter crash
@@ -451,7 +455,7 @@ impl UI {
         }
     }
 
-    fn save_size(&mut self, x: i32, y: i32, w: i32, h: i32) {
+    fn closing(&mut self, x: i32, y: i32, w: i32, h: i32) {
         crate::server::input_service::fix_key_down_timeout_at_exit();
         LocalConfig::set_size(x, y, w, h);
     }
@@ -695,7 +699,7 @@ impl sciter::EventHandler for UI {
         fn update_password(String);
         fn get_remote_id();
         fn set_remote_id(String);
-        fn save_size(i32, i32, i32, i32);
+        fn closing(i32, i32, i32, i32);
         fn get_size();
         fn new_remote(String, bool);
         fn remove_peer(String);
