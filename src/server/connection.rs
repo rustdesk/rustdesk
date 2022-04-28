@@ -861,7 +861,7 @@ impl Connection {
                     }
                 }
                 Some(message::Union::file_action(fa)) => {
-                    println!("recv file_action, {:?}", fa);
+                    log::info!("recv file_action, {:?}", fa);
                     if self.file_transfer.is_some() {
                         match fa.union {
                             Some(file_action::Union::read_dir(rd)) => {
@@ -891,7 +891,6 @@ impl Connection {
                                 }
                             }
                             Some(file_action::Union::receive(r)) => {
-                                println!("[connection.rs:891] recv FileTransferReceiveRequest");
                                 self.send_fs(ipc::FS::NewWrite {
                                     path: r.path,
                                     id: r.id,
@@ -928,7 +927,6 @@ impl Connection {
                                 fs::remove_job(c.id, &mut self.read_jobs);
                             }
                             Some(file_action::Union::send_confirm(r)) => {
-                                println!("recv send confirm request");
                                 if let Some(job) = fs::get_job(r.id, &mut self.read_jobs) {
                                     job.confirm(&r);
                                 }
