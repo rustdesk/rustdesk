@@ -219,7 +219,7 @@ impl sciter::EventHandler for Handler {
         fn toggle_option(String);
         fn get_remember();
         fn peer_platform();
-        fn set_write_override(i32,i32, bool,bool,bool); // ,
+        fn set_write_override(i32, i32, bool, bool, bool);
     }
 }
 
