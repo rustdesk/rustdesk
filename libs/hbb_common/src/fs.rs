@@ -506,7 +506,7 @@ impl TransferJob {
             match r.union {
                 Some(file_transfer_send_confirm_request::Union::skip(s)) => {
                     if s {
-                        log::debug!("skip current file");
+                        println!("skip current file");
                         self.skip_current_file();
                     } else {
                         self.set_file_confirmed(true);
@@ -558,6 +558,15 @@ pub fn new_block(block: FileTransferBlock) -> Message {
     resp.set_block(block);
     let mut msg_out = Message::new();
     msg_out.set_file_response(resp);
+    msg_out
+}
+
+#[inline]
+pub fn new_send_confirm(r: FileTransferSendConfirmRequest) -> Message {
+    let mut msg_out = Message::new();
+    let mut action = FileAction::new();
+    action.set_send_confirm(r);
+    msg_out.set_file_action(action);
     msg_out
 }
 
@@ -678,14 +687,14 @@ pub fn create_dir(dir: &str) -> ResultType<()> {
 pub fn is_write_need_confirmation(
     file_path: &str,
     digest: &FileTransferDigest,
-) -> ResultType<bool> {
+) -> ResultType<Option<FileTransferDigest>> {
     let path = Path::new(file_path);
     if path.exists() && path.is_file() {
         let metadata = std::fs::metadata(path)?;
         let modified_time = metadata.modified()?;
         let remote_mt = Duration::from_secs(digest.last_edit_timestamp);
         let local_mt = modified_time.duration_since(UNIX_EPOCH)?;
-        println!(
+        log::info!(
             "{:?}:rm:{},lm:{},rf:{},lf:{}",
             path,
             remote_mt.as_secs(),
@@ -693,15 +702,17 @@ pub fn is_write_need_confirmation(
             digest.file_size,
             metadata.len()
         );
-        // if
-        // is_recv && remote_mt >= local_mt) || (!is_recv && remote_mt <= local_mt) ||
         if remote_mt == local_mt && digest.file_size == metadata.len() {
-            // I'm recving or sending an newer modified file!
-            // or a
-            return Ok(false);
+            return Ok(None);
         }
-        Ok(true)
+        Ok(Some(FileTransferDigest {
+            id: digest.id,
+            file_num: digest.file_num,
+            last_edit_timestamp: local_mt.as_secs(),
+            file_size: metadata.len(),
+            ..Default::default()
+        }))
     } else {
-        Ok(false)
+        Ok(None)
     }
 }

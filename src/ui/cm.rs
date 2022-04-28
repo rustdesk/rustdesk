@@ -3,6 +3,8 @@ use crate::ipc::{self, new_listener, Connection, Data};
 use clipboard::{
     create_cliprdr_context, empty_clipboard, get_rx_clip_client, server_clip_file, set_conn_enabled,
 };
+use hbb_common::fs::{get_string, is_write_need_confirmation, new_send_confirm};
+use hbb_common::log::log;
 use hbb_common::{
     allow_err,
     config::Config,
@@ -10,6 +12,7 @@ use hbb_common::{
     message_proto::*,
     protobuf::Message as _,
     tokio::{self, sync::mpsc, task::spawn_blocking},
+    ResultType,
 };
 use sciter::{make_args, Element, Value, HELEMENT};
 use std::{
@@ -188,21 +191,45 @@ impl ConnectionManager {
                     modified_time,
                 } => {
                     if let Some(job) = fs::get_job(id, write_jobs) {
-                        // TODO
-                        let mut msg_out = Message::new();
-                        let mut file_action = FileAction::new();
-                        file_action.set_send_confirm(FileTransferSendConfirmRequest {
+                        let mut req = FileTransferSendConfirmRequest {
                             id,
                             file_num,
                             union: Some(file_transfer_send_confirm_request::Union::offset_blk(0)),
                             ..Default::default()
-                        });
-                        msg_out.set_file_action(file_action);
-                        println!(
-                            "[CHECK DIGEST] dig dest recved. confirmed. msg: {:?}",
-                            msg_out
-                        );
-                        Self::send(msg_out, conn).await;
+                        };
+                        let digest = FileTransferDigest {
+                            id,
+                            file_num,
+                            last_edit_timestamp: modified_time,
+                            file_size,
+                            ..Default::default()
+                        };
+                        if let Some(file) = job.files().get(file_num as usize) {
+                            let path = get_string(&job.join(&file.name));
+                            match is_write_need_confirmation(&path, &digest) {
+                                Ok(digest) => {
+                                    if digest.is_none() {
+                                        log::info!("skip job {}, file_num {}", id, file_num);
+                                        req.set_skip(true);
+                                        let msg_out = new_send_confirm(req);
+                                        Self::send(msg_out, conn).await;
+                                    } else {
+                                        // upload to server, but server has the same file, request
+                                        println!(
+                                            "server has the same file, send server digest to local"
+                                        );
+                                        let mut msg_out = Message::new();
+                                        let mut fr = FileResponse::new();
+                                        fr.set_digest(digest.unwrap());
+                                        msg_out.set_file_response(fr);
+                                        Self::send(msg_out, conn).await;
+                                    }
+                                }
+                                Err(err) => {
+                                    Self::send(fs::new_error(id, err, file_num), conn).await;
+                                }
+                            }
+                        }
                     }
                 }
                 ipc::FS::WriteBlock {
