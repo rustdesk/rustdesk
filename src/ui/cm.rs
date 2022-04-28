@@ -6,6 +6,7 @@ use clipboard::{
 };
 use hbb_common::fs::{
     can_enable_overwrite_detection, get_string, is_write_need_confirmation, new_send_confirm,
+    DigestCheckResult,
 };
 use hbb_common::log::log;
 use hbb_common::{
@@ -211,23 +212,29 @@ impl ConnectionManager {
                         if let Some(file) = job.files().get(file_num as usize) {
                             let path = get_string(&job.join(&file.name));
                             match is_write_need_confirmation(&path, &digest) {
-                                Ok(digest) => {
-                                    if let Some(mut digest) = digest {
-                                        // upload to server, but server has the same file, request
-                                        digest.is_upload = is_upload;
-                                        log::info!(
+                                Ok(digest_result) => {
+                                    match digest_result {
+                                        DigestCheckResult::IsSame => {
+                                            req.set_skip(true);
+                                            let msg_out = new_send_confirm(req);
+                                            Self::send(msg_out, conn).await;
+                                        }
+                                        DigestCheckResult::NeedConfirm(mut digest) => {
+                                            // upload to server, but server has the same file, request
+                                            digest.is_upload = is_upload;
+                                            log::info!(
                                             "server has the same file, send server digest to local"
                                         );
-                                        let mut msg_out = Message::new();
-                                        let mut fr = FileResponse::new();
-                                        fr.set_digest(digest);
-                                        msg_out.set_file_response(fr);
-                                        Self::send(msg_out, conn).await;
-                                    } else {
-                                        log::info!("skip job {}, file_num {}", id, file_num);
-                                        req.set_skip(true);
-                                        let msg_out = new_send_confirm(req);
-                                        Self::send(msg_out, conn).await;
+                                            let mut msg_out = Message::new();
+                                            let mut fr = FileResponse::new();
+                                            fr.set_digest(digest);
+                                            msg_out.set_file_response(fr);
+                                            Self::send(msg_out, conn).await;
+                                        }
+                                        DigestCheckResult::NoSuchFile => {
+                                            let msg_out = new_send_confirm(req);
+                                            Self::send(msg_out, conn).await;
+                                        }
                                     }
                                 }
                                 Err(err) => {

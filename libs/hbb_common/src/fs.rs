@@ -191,6 +191,7 @@ pub fn is_file_exists(file_path: &str) -> bool {
     return Path::new(file_path).exists();
 }
 
+#[inline]
 pub fn can_enable_overwrite_detection(version: i64) -> bool {
     version >= get_version_number("1.2.0")
 }
@@ -525,14 +526,14 @@ impl TransferJob {
             match r.union {
                 Some(file_transfer_send_confirm_request::Union::skip(s)) => {
                     if s {
-                        log::info!("skip file id:{}, file_num:{}", r.id, r.file_num);
+                        log::debug!("skip file id:{}, file_num:{}", r.id, r.file_num);
                         self.skip_current_file();
                     } else {
                         self.set_file_confirmed(true);
                     }
                 }
                 Some(file_transfer_send_confirm_request::Union::offset_blk(offset)) => {
-                    log::info!("file confirmed");
+                    log::debug!("file confirmed");
                     self.set_file_confirmed(true);
                 }
                 _ => {}
@@ -702,11 +703,17 @@ pub fn create_dir(dir: &str) -> ResultType<()> {
     Ok(())
 }
 
+pub enum DigestCheckResult {
+    IsSame,
+    NeedConfirm(FileTransferDigest),
+    NoSuchFile,
+}
+
 #[inline]
 pub fn is_write_need_confirmation(
     file_path: &str,
     digest: &FileTransferDigest,
-) -> ResultType<Option<FileTransferDigest>> {
+) -> ResultType<DigestCheckResult> {
     let path = Path::new(file_path);
     if path.exists() && path.is_file() {
         let metadata = std::fs::metadata(path)?;
@@ -722,9 +729,9 @@ pub fn is_write_need_confirmation(
             metadata.len()
         );
         if remote_mt == local_mt && digest.file_size == metadata.len() {
-            return Ok(None);
+            return Ok(DigestCheckResult::IsSame);
         }
-        Ok(Some(FileTransferDigest {
+        Ok(DigestCheckResult::NeedConfirm(FileTransferDigest {
             id: digest.id,
             file_num: digest.file_num,
             last_edit_timestamp: local_mt.as_secs(),
@@ -732,6 +739,6 @@ pub fn is_write_need_confirmation(
             ..Default::default()
         }))
     } else {
-        Ok(None)
+        Ok(DigestCheckResult::NoSuchFile)
     }
 }
