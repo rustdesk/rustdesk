@@ -145,7 +145,7 @@ pub fn is_installed_daemon(prompt: bool) -> bool {
                         .args(&["load", "-w", &agent_plist_file])
                         .status()
                         .ok();
-                    std::process::exit(0);
+                    quit_gui();
                 }
             }
         }
@@ -183,6 +183,8 @@ pub fn uninstall() -> bool {
                 );
                 if uninstalled {
                     crate::ipc::set_option("stop-service", "Y");
+                    // leave ipc a little time
+                    std::thread::sleep(std::time::Duration::from_millis(300));
                     std::process::Command::new("launchctl")
                         .args(&["remove", &format!("{}_server", crate::get_full_name())])
                         .status()
@@ -202,7 +204,7 @@ pub fn uninstall() -> bool {
                         ))
                         .spawn()
                         .ok();
-                    std::process::exit(0);
+                    quit_gui();
                 }
             }
         }
@@ -516,4 +518,11 @@ pub fn is_installed() -> bool {
             .starts_with(&format!("/Applications/{}.app", crate::get_app_name()));
     }
     false
+}
+
+fn quit_gui() {
+    use cocoa::appkit::NSApp;
+    unsafe {
+        let () = msg_send!(NSApp(), terminate: nil);
+    };
 }

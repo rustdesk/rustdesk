@@ -339,7 +339,7 @@ async fn sync_and_watch_config_dir() {
         if std::env::args().len() == 2 && std::env::args().nth(1) == Some("--server".to_owned()) {
             30
         } else {
-            1
+            3
         };
     log::debug!("#tries of ipc service connection: {}", tries);
     for i in 1..=tries {
