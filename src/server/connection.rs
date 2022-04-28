@@ -255,7 +255,7 @@ impl Connection {
                             }
                         }
                         ipc::Data::RawMessage(bytes) => {
-                            conn.stream.send_raw(bytes).await;
+                            allow_err!(conn.stream.send_raw(bytes).await);
                         }
                         ipc::Data::ClipbaordFile(_clip) => {
                             if conn.file_transfer_enabled() {
