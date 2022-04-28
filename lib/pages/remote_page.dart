@@ -12,7 +12,7 @@ import '../common.dart';
 import '../widgets/gestures.dart';
 import '../models/model.dart';
 import '../widgets/dialog.dart';
-import 'chat_page.dart';
+import '../widgets/overlay.dart';
 
 final initText = '\1' * 1024;
 
@@ -38,7 +38,6 @@ class _RemotePageState extends State<RemotePage> {
   final FocusNode _mobileFocusNode = FocusNode();
   final FocusNode _physicalFocusNode = FocusNode();
   var _showEdit = false;
-  var _touchMode = false;
   var _isPhysicalKeyboard = false;
 
   @override
@@ -52,13 +51,13 @@ class _RemotePageState extends State<RemotePage> {
           Timer.periodic(Duration(milliseconds: 30), (timer) => interval());
     });
     Wakelock.enable();
-    _touchMode = FFI.getByName('peer_option', "touch-mode") != '';
     _physicalFocusNode.requestFocus();
     FFI.listenToMouse(true);
   }
 
   @override
   void dispose() {
+    hideMobileActionsOverlay();
     FFI.listenToMouse(false);
     FFI.invokeMethod("enable_soft_keyboard", true);
     _mobileFocusNode.dispose();
@@ -91,7 +90,9 @@ class _RemotePageState extends State<RemotePage> {
         if (v < 100) {
           SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual,
               overlays: []);
-          FFI.invokeMethod("enable_soft_keyboard", false);
+          if (chatWindowOverlayEntry == null) {
+            FFI.invokeMethod("enable_soft_keyboard", false);
+          }
         }
       });
     }
@@ -243,14 +244,14 @@ class _RemotePageState extends State<RemotePage> {
                           }
                         });
                       }),
-              bottomNavigationBar:
-                  _showBar && pi.displays != null ? getBottomAppBar() : null,
+              bottomNavigationBar: _showBar && pi.displays.length > 0
+                  ? getBottomAppBar(keyboard)
+                  : null,
               body: Overlay(
                 initialEntries: [
                   OverlayEntry(builder: (context) {
                     return Container(
                         color: Colors.black,
-                        // child: getRawPointerAndKeyBody(keyboard));
                         child: isDesktop
                             ? getBodyForDesktopWithListener(keyboard)
                             : SafeArea(
@@ -367,7 +368,7 @@ class _RemotePageState extends State<RemotePage> {
                     child: child))));
   }
 
-  Widget getBottomAppBar() {
+  Widget getBottomAppBar(bool keyboard) {
     return BottomAppBar(
       elevation: 10,
       color: MyTheme.accent,
@@ -402,12 +403,27 @@ class _RemotePageState extends State<RemotePage> {
                               color: Colors.white,
                               icon: Icon(Icons.keyboard),
                               onPressed: openKeyboard),
-                          IconButton(
-                            color: Colors.white,
-                            icon: Icon(
-                                _touchMode ? Icons.touch_app : Icons.mouse),
-                            onPressed: changeTouchMode,
-                          )
+                          FFI.ffiModel.isPeerAndroid
+                              ? (keyboard
+                                  ? IconButton(
+                                      color: Colors.white,
+                                      icon: Icon(Icons.build),
+                                      onPressed: () {
+                                        if (mobileActionsOverlayEntry == null) {
+                                          showMobileActionsOverlay();
+                                        } else {
+                                          hideMobileActionsOverlay();
+                                        }
+                                      },
+                                    )
+                                  : SizedBox.shrink())
+                              : IconButton(
+                                  color: Colors.white,
+                                  icon: Icon(FFI.ffiModel.touchMode
+                                      ? Icons.touch_app
+                                      : Icons.mouse),
+                                  onPressed: changeTouchMode,
+                                )
                         ]) +
                   (isWeb
                       ? []
@@ -454,10 +470,11 @@ class _RemotePageState extends State<RemotePage> {
   ///   HoldDrag -> left drag
 
   Widget getBodyForMobileWithGesture() {
+    final touchMode = FFI.ffiModel.touchMode;
     return getMixinGestureDetector(
         child: getBodyForMobile(),
         onTapUp: (d) {
-          if (_touchMode) {
+          if (touchMode) {
             FFI.cursorModel.touch(
                 d.localPosition.dx, d.localPosition.dy, MouseButtons.left);
           } else {
@@ -465,7 +482,7 @@ class _RemotePageState extends State<RemotePage> {
           }
         },
         onDoubleTapDown: (d) {
-          if (_touchMode) {
+          if (touchMode) {
             FFI.cursorModel.move(d.localPosition.dx, d.localPosition.dy);
           }
         },
@@ -474,7 +491,7 @@ class _RemotePageState extends State<RemotePage> {
           FFI.tap(MouseButtons.left);
         },
         onLongPressDown: (d) {
-          if (_touchMode) {
+          if (touchMode) {
             FFI.cursorModel.move(d.localPosition.dx, d.localPosition.dy);
           }
         },
@@ -482,36 +499,36 @@ class _RemotePageState extends State<RemotePage> {
           FFI.tap(MouseButtons.right);
         },
         onDoubleFinerTap: (d) {
-          if (!_touchMode) {
+          if (!touchMode) {
             FFI.tap(MouseButtons.right);
           }
         },
         onHoldDragStart: (d) {
-          if (!_touchMode) {
+          if (!touchMode) {
             FFI.sendMouse('down', MouseButtons.left);
           }
         },
         onHoldDragUpdate: (d) {
-          if (!_touchMode) {
-            FFI.cursorModel.updatePan(d.delta.dx, d.delta.dy, _touchMode);
+          if (!touchMode) {
+            FFI.cursorModel.updatePan(d.delta.dx, d.delta.dy, touchMode);
           }
         },
         onHoldDragEnd: (_) {
-          if (!_touchMode) {
+          if (!touchMode) {
             FFI.sendMouse('up', MouseButtons.left);
           }
         },
         onOneFingerPanStart: (d) {
-          if (_touchMode) {
+          if (touchMode) {
             FFI.cursorModel.move(d.localPosition.dx, d.localPosition.dy);
             FFI.sendMouse('down', MouseButtons.left);
           }
         },
         onOneFingerPanUpdate: (d) {
-          FFI.cursorModel.updatePan(d.delta.dx, d.delta.dy, _touchMode);
+          FFI.cursorModel.updatePan(d.delta.dx, d.delta.dy, touchMode);
         },
         onOneFingerPanEnd: (d) {
-          if (_touchMode) {
+          if (touchMode) {
             FFI.sendMouse('up', MouseButtons.left);
           }
         },
@@ -689,10 +706,10 @@ class _RemotePageState extends State<RemotePage> {
               return SingleChildScrollView(
                   padding: EdgeInsets.symmetric(vertical: 10),
                   child: GestureHelp(
-                      touchMode: _touchMode,
+                      touchMode: FFI.ffiModel.touchMode,
                       onTouchModeChange: (t) {
-                        setState(() => _touchMode = t);
-                        final v = _touchMode ? 'Y' : '';
+                        FFI.ffiModel.toggleTouchMode();
+                        final v = FFI.ffiModel.touchMode ? 'Y' : '';
                         FFI.setByName('peer_option',
                             '{"name": "touch-mode", "value": "$v"}');
                       }));

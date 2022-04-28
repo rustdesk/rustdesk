@@ -3,6 +3,7 @@ import 'package:flutter_hbb/pages/chat_page.dart';
 import 'package:flutter_hbb/pages/server_page.dart';
 import 'package:flutter_hbb/pages/settings_page.dart';
 import '../common.dart';
+import '../widgets/overlay.dart';
 import 'connection_page.dart';
 
 abstract class PageShape extends Widget {

@@ -319,22 +319,27 @@ class ConnectionManager extends StatelessWidget {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        clientInfo(entry.value),
-                        entry.value.isFileTransfer || !entry.value.authorized
-                            ? SizedBox.shrink()
-                            : IconButton(
-                                onPressed: () {
-                                  FFI.chatModel.changeCurrentID(entry.value.id);
-                                  final bar = navigationBarKey.currentWidget;
-                                  if (bar != null) {
-                                    bar as BottomNavigationBar;
-                                    bar.onTap!(1);
-                                  }
-                                },
-                                icon: Icon(
-                                  Icons.chat,
-                                  color: MyTheme.accent80,
-                                ))
+                        Expanded(child: clientInfo(entry.value)),
+                        Expanded(
+                            flex: -1,
+                            child: entry.value.isFileTransfer ||
+                                    !entry.value.authorized
+                                ? SizedBox.shrink()
+                                : IconButton(
+                                    onPressed: () {
+                                      FFI.chatModel
+                                          .changeCurrentID(entry.value.id);
+                                      final bar =
+                                          navigationBarKey.currentWidget;
+                                      if (bar != null) {
+                                        bar as BottomNavigationBar;
+                                        bar.onTap!(1);
+                                      }
+                                    },
+                                    icon: Icon(
+                                      Icons.chat,
+                                      color: MyTheme.accent80,
+                                    )))
                       ],
                     ),
                     entry.value.authorized
@@ -432,19 +437,24 @@ Widget clientInfo(Client client) {
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Row(
           children: [
-            CircleAvatar(
-                child: Text(client.name[0]), backgroundColor: MyTheme.border),
-            SizedBox(width: 12),
-            Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
+            Expanded(
+                flex: -1,
+                child: Padding(
+                    padding: EdgeInsets.only(right: 12),
+                    child: CircleAvatar(
+                        child: Text(client.name[0]),
+                        backgroundColor: MyTheme.border))),
+            Expanded(
+                child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
                   Text(client.name,
-                      style: TextStyle(color: MyTheme.idColor, fontSize: 20)),
+                      style: TextStyle(color: MyTheme.idColor, fontSize: 18)),
                   SizedBox(width: 8),
                   Text(client.peerId,
                       style: TextStyle(color: MyTheme.idColor, fontSize: 10))
-                ])
+                ]))
           ],
         ),
       ]));

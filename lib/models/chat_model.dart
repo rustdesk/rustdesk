@@ -2,8 +2,8 @@ import 'dart:convert';
 
 import 'package:dash_chat/dash_chat.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_hbb/pages/chat_page.dart';
 
+import '../widgets/overlay.dart';
 import 'model.dart';
 
 class ChatModel with ChangeNotifier {
@@ -47,7 +47,7 @@ class ChatModel with ChangeNotifier {
   receive(int id, String text) {
     if (text.isEmpty) return;
     // first message show overlay icon
-    if (iconOverlayEntry == null) {
+    if (chatIconOverlayEntry == null) {
       showChatIconOverlay();
     }
     late final chatUser;

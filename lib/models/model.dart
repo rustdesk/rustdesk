@@ -13,6 +13,7 @@ import 'package:tuple/tuple.dart';
 import 'dart:async';
 import '../common.dart';
 import '../widgets/dialog.dart';
+import '../widgets/overlay.dart';
 import 'native_model.dart' if (dart.library.html) 'web_model.dart';
 
 typedef HandleMsgBox = void Function(Map<String, dynamic> evt, String id);
@@ -26,20 +27,25 @@ class FfiModel with ChangeNotifier {
   final _permissions = Map<String, bool>();
   bool? _secure;
   bool? _direct;
+  bool _touchMode = false;
   Timer? _timer;
   var _reconnects = 1;
 
-  get permissions => _permissions;
+  Map<String, bool> get permissions => _permissions;
 
-  get display => _display;
+  Display get display => _display;
 
-  get secure => _secure;
+  bool? get secure => _secure;
 
-  get direct => _direct;
+  bool? get direct => _direct;
 
-  get pi => _pi;
+  PeerInfo get pi => _pi;
 
-  get inputBlocked => _inputBlocked;
+  bool get inputBlocked => _inputBlocked;
+
+  bool get touchMode => _touchMode;
+
+  bool get isPeerAndroid => _pi.platform == "Android";
 
   set inputBlocked(v) {
     _inputBlocked = v;
@@ -52,6 +58,13 @@ class FfiModel with ChangeNotifier {
 
   Future<void> init() async {
     await PlatformFFI.init();
+  }
+
+  void toggleTouchMode() {
+    if (!isPeerAndroid) {
+      _touchMode = !_touchMode;
+      notifyListeners();
+    }
   }
 
   void updatePermission(Map<String, dynamic> evt) {
@@ -228,6 +241,17 @@ class FfiModel with ChangeNotifier {
     _pi.platform = evt['platform'];
     _pi.sasEnabled = evt['sas_enabled'] == "true";
     _pi.currentDisplay = int.parse(evt['current_display']);
+
+    if (isPeerAndroid) {
+      _touchMode = true;
+      FFI.setByName('peer_option', '{"name": "view-style", "value": "shrink"}');
+      FFI.canvasModel.updateViewStyle();
+      if (FFI.ffiModel.permissions['keyboard'] != false) {
+        showMobileActionsOverlay();
+      }
+    } else {
+      _touchMode = FFI.getByName('peer_option', "touch-mode") != '';
+    }
 
     if (evt['is_file_transfer'] == "true") {
       FFI.fileModel.onReady();
