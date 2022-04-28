@@ -694,7 +694,7 @@ handler.confirmDeleteFiles = function(id, i, name) {
     </div>", function(res=null) {
       if (!res) {
         jt.updateJobStatus(id, i - 1, "cancel");
-        file_transfer.job_table.confirmDeletePolling();
+        file_transfer.job_table.cancelDeletePolling();
       } else if (res.skip) {
         if (res.remember){
           jt.updateJobStatus(id, i, "cancel");
