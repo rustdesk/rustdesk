@@ -679,7 +679,6 @@ function confirmDelete(id ,path, is_remote) {
 }
 
 handler.confirmDeleteFiles = function(id, i, name) {
-  stdout.println("id=" + id +", i=" +",name="+name);
   var jt = file_transfer.job_table;
   var job = jt.job_map[id];
   if (!job) return;
@@ -695,6 +694,7 @@ handler.confirmDeleteFiles = function(id, i, name) {
     </div>", function(res=null) {
       if (!res) {
         jt.updateJobStatus(id, i - 1, "cancel");
+        file_transfer.job_table.confirmDeletePolling();
       } else if (res.skip) {
         if (res.remember){
           jt.updateJobStatus(id, i, "cancel");
@@ -718,9 +718,6 @@ handler.confirmDeleteFiles = function(id, i, name) {
 
 handler.overrideFileConfirm = function(id, file_num, to, is_upload) {
   var jt = file_transfer.job_table;
-  var job = jt.job_map[id];
-  stdout.println("job type: " + job.type);
-  stdout.println(JSON.stringify(job));
   msgbox("custom-skip", "Confirm Write Strategy", "<div .form> \
         <div>" + translate('Overwrite') + translate('files') + ".</div> \
         <div>" + translate('This file exists, skip or overwrite this file?') + "</div> \

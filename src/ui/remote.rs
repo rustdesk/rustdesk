@@ -11,7 +11,9 @@ use clipboard::{
     get_rx_clip_client, server_clip_file,
 };
 use enigo::{self, Enigo, KeyboardControllable};
-use hbb_common::fs::{get_string, is_file_exists, new_send_confirm};
+use hbb_common::fs::{
+    can_enable_overwrite_detection, get_string, is_file_exists, new_send_confirm,
+};
 use hbb_common::log::log;
 use hbb_common::{
     allow_err,
@@ -716,7 +718,6 @@ impl Handler {
     }
 
     fn read_remote_dir(&mut self, path: String, include_hidden: bool) {
-        // println!("remote.rs: read_remote_dir()");
         let mut msg_out = Message::new();
         let mut file_action = FileAction::new();
         file_action.set_read_dir(ReadDir {
@@ -1546,25 +1547,27 @@ impl Remote {
                 allow_err!(peer.send(&msg).await);
             }
             Data::SendFiles((id, path, to, include_hidden, is_remote)) => {
-                println!("send files, is remote {}", is_remote);
+                log::info!("send files, is remote {}", is_remote);
+                let od = can_enable_overwrite_detection(self.handler.lc.read().unwrap().version);
                 if is_remote {
-                    println!("New job {}, write to {} from remote {}", id, to, path);
+                    log::debug!("New job {}, write to {} from remote {}", id, to, path);
                     self.write_jobs
-                        .push(fs::TransferJob::new_write(id, to, Vec::new()));
+                        .push(fs::TransferJob::new_write(id, to, Vec::new(), od));
                     allow_err!(peer.send(&fs::new_send(id, path, include_hidden)).await);
                 } else {
-                    match fs::TransferJob::new_read(id, path.clone(), include_hidden) {
+                    match fs::TransferJob::new_read(id, path.clone(), include_hidden, od) {
                         Err(err) => {
                             self.handle_job_status(id, -1, Some(err.to_string()));
                         }
                         Ok(job) => {
-                            println!(
+                            log::debug!(
                                 "New job {}, read {} to remote {}, {} files",
                                 id,
                                 path,
                                 to,
                                 job.files().len()
                             );
+                            let config = self.handler.lc.read().unwrap().version;
                             let m = make_fd(job.id(), job.files(), true);
                             self.handler.call("updateFolderFiles", &make_args!(m));
                             let files = job.files().clone();
@@ -1789,7 +1792,6 @@ impl Remote {
 
     async fn handle_msg_from_peer(&mut self, data: &[u8], peer: &mut Stream) -> bool {
         if let Ok(msg_in) = Message::parse_from_bytes(&data) {
-            // println!("recved msg from peer, decoded: {:?}", msg_in);
             match msg_in.union {
                 Some(message::Union::video_frame(vf)) => {
                     if !self.first_frame {
@@ -1937,13 +1939,11 @@ impl Remote {
                         if let Some(job) = fs::get_job(block.id, &mut self.write_jobs) {
                             if let Err(_err) = job.write(block, None).await {
                                 // to-do: add "skip" for writing job
-                                println!("error: {}", _err);
                             }
                             self.update_jobs_status();
                         }
                     }
                     Some(file_response::Union::done(d)) => {
-                        log::info!("file response done");
                         if let Some(job) = fs::get_job(d.id, &mut self.write_jobs) {
                             job.modify_time();
                             fs::remove_job(d.id, &mut self.write_jobs);

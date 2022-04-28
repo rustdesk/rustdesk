@@ -1,13 +1,15 @@
 use super::{input_service::*, *};
 #[cfg(windows)]
 use crate::clipboard_file::*;
-use crate::{common::update_clipboard, ipc};
+use crate::{common::update_clipboard, ipc, VERSION};
+use hbb_common::fs::can_enable_overwrite_detection;
 use hbb_common::log::debug;
 use hbb_common::message_proto::file_transfer_send_confirm_request::Union;
 use hbb_common::{
     config::Config,
     fs,
     futures::{SinkExt, StreamExt},
+    get_version_number,
     message_proto::{option_message::BoolOption, permission_info::Permission},
     sleep, timeout,
     tokio::{
@@ -815,7 +817,6 @@ impl Connection {
                 }
             }
         } else if self.authorized {
-            // println!("on_message: {:?}", msg);
             match msg.union {
                 Some(message::Union::mouse_event(me)) => {
                     if self.keyboard {
@@ -879,7 +880,9 @@ impl Connection {
                             }
                             Some(file_action::Union::send(s)) => {
                                 let id = s.id;
-                                match fs::TransferJob::new_read(id, s.path, s.include_hidden) {
+                                let od =
+                                    can_enable_overwrite_detection(get_version_number(VERSION));
+                                match fs::TransferJob::new_read(id, s.path, s.include_hidden, od) {
                                     Err(err) => {
                                         self.send(fs::new_error(id, err, 0)).await;
                                     }
@@ -1097,7 +1100,6 @@ impl Connection {
     }
 
     fn read_dir(&mut self, dir: &str, include_hidden: bool) {
-        // println!("[connection.rs:1130] read_dir");
         let dir = dir.to_string();
         self.send_fs(ipc::FS::ReadDir {
             dir,

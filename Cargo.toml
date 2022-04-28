@@ -114,7 +114,6 @@ resources = ["mac-tray.png"]
 #!!! rembember call "strip target/release/rustdesk"
 # which reduce binary size a lot
 [profile.release]
-debug = true
 #lto = true
 #codegen-units = 1
 #panic = 'abort'
