@@ -1,4 +1,4 @@
-use crate::{bail, message_proto::*, ResultType, Stream};
+use crate::{bail, get_version_number, message_proto::*, ResultType, Stream};
 use std::path::{Path, PathBuf};
 // https://doc.rust-lang.org/std/os/windows/fs/trait.MetadataExt.html
 use crate::{
@@ -191,6 +191,10 @@ pub fn is_file_exists(file_path: &str) -> bool {
     return Path::new(file_path).exists();
 }
 
+pub fn can_enable_overwrite_detection(version: i64) -> bool {
+    version >= get_version_number("1.1.9")
+}
+
 #[derive(Default)]
 pub struct TransferJob {
     id: i32,
@@ -201,6 +205,7 @@ pub struct TransferJob {
     total_size: u64,
     finished_size: u64,
     transferred: u64,
+    enable_overwrite_detection: bool,
     file_confirmed: bool,
     file_is_waiting: bool,
     default_overwrite_strategy: Option<bool>,
@@ -229,20 +234,31 @@ fn is_compressed_file(name: &str) -> bool {
 }
 
 impl TransferJob {
-    pub fn new_write(id: i32, path: String, files: Vec<FileEntry>) -> Self {
-        println!("new write {}", path);
+    pub fn new_write(
+        id: i32,
+        path: String,
+        files: Vec<FileEntry>,
+        enable_override_detection: bool,
+    ) -> Self {
+        log::info!("new write {}", path);
         let total_size = files.iter().map(|x| x.size as u64).sum();
         Self {
             id,
             path: get_path(&path),
             files,
             total_size,
+            enable_overwrite_detection: enable_override_detection,
             ..Default::default()
         }
     }
 
-    pub fn new_read(id: i32, path: String, include_hidden: bool) -> ResultType<Self> {
-        println!("new read {}", path);
+    pub fn new_read(
+        id: i32,
+        path: String,
+        include_hidden: bool,
+        enable_override_detection: bool,
+    ) -> ResultType<Self> {
+        log::info!("new read {}", path);
         let files = get_recursive_files(&path, include_hidden)?;
         let total_size = files.iter().map(|x| x.size as u64).sum();
         Ok(Self {
@@ -250,6 +266,7 @@ impl TransferJob {
             path: get_path(&path),
             files,
             total_size,
+            enable_overwrite_detection: enable_override_detection,
             ..Default::default()
         })
     }
@@ -315,7 +332,6 @@ impl TransferJob {
     }
 
     pub async fn write(&mut self, block: FileTransferBlock, raw: Option<&[u8]>) -> ResultType<()> {
-        println!("write file transfer blk[{},{}]", block.id, block.file_num);
         if block.id != self.id {
             bail!("Wrong id");
         }
@@ -385,12 +401,14 @@ impl TransferJob {
                 }
             }
         }
-        if !self.file_confirmed() {
-            if !self.file_is_waiting() {
-                self.send_current_digest(stream).await?;
-                self.set_file_is_waiting(true);
+        if self.enable_overwrite_detection {
+            if !self.file_confirmed() {
+                if !self.file_is_waiting() {
+                    self.send_current_digest(stream).await?;
+                    self.set_file_is_waiting(true);
+                }
+                return Ok(None);
             }
-            return Ok(None);
         }
         const BUF_SIZE: usize = 128 * 1024;
         let mut buf: Vec<u8> = Vec::with_capacity(BUF_SIZE);
@@ -459,9 +477,11 @@ impl TransferJob {
         });
         msg.set_file_response(resp);
         stream.send(&msg).await?;
-        println!(
+        log::info!(
             "id: {}, file_num:{}, digest message is sent. waiting for confirm. msg: {:?}",
-            self.id, self.file_num, msg
+            self.id,
+            self.file_num,
+            msg
         );
         Ok(())
     }
@@ -500,19 +520,19 @@ impl TransferJob {
 
     pub fn confirm(&mut self, r: &FileTransferSendConfirmRequest) -> bool {
         if self.file_num() != r.file_num {
-            log::debug!("file num truncated, ignoring");
+            log::info!("file num truncated, ignoring");
         } else {
             match r.union {
                 Some(file_transfer_send_confirm_request::Union::skip(s)) => {
                     if s {
-                        println!("skip current file");
+                        log::info!("skip file id:{}, file_num:{}", r.id, r.file_num);
                         self.skip_current_file();
                     } else {
                         self.set_file_confirmed(true);
                     }
                 }
                 Some(file_transfer_send_confirm_request::Union::offset_blk(offset)) => {
-                    println!("file confirmed");
+                    log::info!("file confirmed");
                     self.set_file_confirmed(true);
                 }
                 _ => {}
@@ -538,7 +558,6 @@ pub fn new_error<T: std::string::ToString>(id: i32, err: T, file_num: i32) -> Me
 
 #[inline]
 pub fn new_dir(id: i32, path: String, files: Vec<FileEntry>) -> Message {
-    println!("[fs.rs:510] create new dir");
     let mut resp = FileResponse::new();
     resp.set_dir(FileDirectory {
         id,
@@ -585,7 +604,7 @@ pub fn new_receive(id: i32, path: String, files: Vec<FileEntry>) -> Message {
 
 #[inline]
 pub fn new_send(id: i32, path: String, include_hidden: bool) -> Message {
-    println!("new send: {},id : {}", path, id);
+    log::info!("new send: {},id : {}", path, id);
     let mut action = FileAction::new();
     action.set_send(FileTransferSendRequest {
         id,
@@ -638,7 +657,8 @@ pub async fn handle_read_jobs(
                 stream.send(&new_block(block)).await?;
             }
             Ok(None) => {
-                if !job.file_confirmed && !job.file_is_waiting {
+                if !job.enable_overwrite_detection || (!job.file_confirmed && !job.file_is_waiting)
+                {
                     finished.push(job.id());
                     stream.send(&new_done(job.id(), job.file_num())).await?;
                 } else {

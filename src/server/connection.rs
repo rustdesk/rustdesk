@@ -12,6 +12,7 @@ use hbb_common::{
     config::Config,
     fs,
     futures::{SinkExt, StreamExt},
+    get_version_number,
     message_proto::{option_message::BoolOption, permission_info::Permission},
     sleep, timeout,
     tokio::{
@@ -893,7 +894,6 @@ impl Connection {
                 }
             }
         } else if self.authorized {
-            // println!("on_message: {:?}", msg);
             match msg.union {
                 Some(message::Union::mouse_event(me)) => {
                     #[cfg(any(target_os = "android", target_os = "ios"))]
@@ -973,9 +973,9 @@ impl Connection {
                             }
                             Some(file_action::Union::send(s)) => {
                                 let id = s.id;
-                                let path = s.path;
-                                match fs::TransferJob::new_read(id, path.clone(), s.include_hidden)
-                                {
+                                let od =
+                                    can_enable_overwrite_detection(get_version_number(VERSION));
+                                match fs::TransferJob::new_read(id, s.path.clone(), s.include_hidden) {
                                     Err(err) => {
                                         self.send(fs::new_error(id, err, 0)).await;
                                     }
@@ -1195,7 +1195,6 @@ impl Connection {
     }
 
     fn read_dir(&mut self, dir: &str, include_hidden: bool) {
-        // println!("[connection.rs:1130] read_dir");
         let dir = dir.to_string();
         self.send_fs(ipc::FS::ReadDir {
             dir,

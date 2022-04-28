@@ -1,14 +1,17 @@
 use crate::ipc::{self, new_listener, Connection, Data};
+use crate::VERSION;
 #[cfg(windows)]
 use clipboard::{
     create_cliprdr_context, empty_clipboard, get_rx_clip_client, server_clip_file, set_conn_enabled,
 };
-use hbb_common::fs::{get_string, is_write_need_confirmation, new_send_confirm};
+use hbb_common::fs::{
+    can_enable_overwrite_detection, get_string, is_write_need_confirmation, new_send_confirm,
+};
 use hbb_common::log::log;
 use hbb_common::{
     allow_err,
     config::Config,
-    fs, log,
+    fs, get_version_number, log,
     message_proto::*,
     protobuf::Message as _,
     tokio::{self, sync::mpsc, task::spawn_blocking},
@@ -156,6 +159,7 @@ impl ConnectionManager {
                     id,
                     mut files,
                 } => {
+                    let od = can_enable_overwrite_detection(get_version_number(VERSION));
                     write_jobs.push(fs::TransferJob::new_write(
                         id,
                         path,
@@ -167,6 +171,7 @@ impl ConnectionManager {
                                 ..Default::default()
                             })
                             .collect(),
+                        od,
                     ));
                 }
                 ipc::FS::CancelWrite { id } => {
@@ -210,7 +215,7 @@ impl ConnectionManager {
                                     if let Some(mut digest) = digest {
                                         // upload to server, but server has the same file, request
                                         digest.is_upload = is_upload;
-                                        println!(
+                                        log::info!(
                                             "server has the same file, send server digest to local"
                                         );
                                         let mut msg_out = Message::new();
