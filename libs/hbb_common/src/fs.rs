@@ -192,7 +192,7 @@ pub fn is_file_exists(file_path: &str) -> bool {
 }
 
 pub fn can_enable_overwrite_detection(version: i64) -> bool {
-    version >= get_version_number("1.1.9")
+    version >= get_version_number("1.2.0")
 }
 
 #[derive(Default)]
