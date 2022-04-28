@@ -717,7 +717,7 @@ handler.confirmDeleteFiles = function(id, i, name) {
     });
 }
 
-handler.overrideFileConfirm = function(id, file_num, to) {
+handler.overrideFileConfirm = function(id, file_num, to, is_upload) {
   var jt = file_transfer.job_table;
   var job = jt.job_map[id];
   stdout.println("job type: " + job.type);
@@ -732,15 +732,15 @@ handler.overrideFileConfirm = function(id, file_num, to) {
         jt.updateJobStatus(id, -1, "cancel");
       } else if (res.skip) {
         if (res.remember){
-          handler.set_write_override(id,file_num,false,true); //
+          handler.set_write_override(id,file_num,false,true, is_upload); //
         } else {
-          handler.set_write_override(id,file_num,false,false); //
+          handler.set_write_override(id,file_num,false,false,is_upload); //
         }
       } else {
         if (res.remember){
-          handler.set_write_override(id,file_num,true,true); //
+          handler.set_write_override(id,file_num,true,true,is_upload); //
         } else {
-          handler.set_write_override(id,file_num,true,false); //
+          handler.set_write_override(id,file_num,true,false,is_upload); //
         }
       }
     });

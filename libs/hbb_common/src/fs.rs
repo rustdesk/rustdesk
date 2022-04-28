@@ -455,8 +455,7 @@ impl TransferJob {
             file_num: self.file_num,
             last_edit_timestamp: last_modified,
             file_size: meta.len(),
-            unknown_fields: Default::default(),
-            cached_size: Default::default(),
+            ..Default::default()
         });
         msg.set_file_response(resp);
         stream.send(&msg).await?;

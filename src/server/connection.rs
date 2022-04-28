@@ -1052,6 +1052,7 @@ impl Connection {
                         file_num: d.file_num,
                         file_size: d.file_size,
                         modified_time: d.last_edit_timestamp,
+                        is_upload: true,
                     }),
                     _ => {}
                 },

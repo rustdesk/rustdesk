@@ -64,6 +64,7 @@ pub enum FS {
         file_num: i32,
         file_size: u64,
         modified_time: u64,
+        is_upload: bool,
     },
 }
 

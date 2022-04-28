@@ -245,13 +245,13 @@ message FileAction {
   oneof union {
     ReadDir read_dir = 1;
     FileTransferSendRequest send = 2;
-    FileTransferSendConfirmRequest send_confirm = 9;
     FileTransferReceiveRequest receive = 3;
     FileDirCreate create = 4;
     FileRemoveDir remove_dir = 5;
     FileRemoveFile remove_file = 6;
     ReadAllFiles all_files = 7;
     FileTransferCancel cancel = 8;
+    FileTransferSendConfirmRequest send_confirm = 9;
   }
 }
 
@@ -272,6 +272,7 @@ message FileTransferDigest {
   sint32 file_num = 2;
   uint64 last_edit_timestamp = 3;
   uint64 file_size = 4;
+  bool is_upload = 5;
 }
 
 message FileTransferBlock {

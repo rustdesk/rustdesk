@@ -189,6 +189,7 @@ impl ConnectionManager {
                     file_num,
                     file_size,
                     modified_time,
+                    is_upload,
                 } => {
                     if let Some(job) = fs::get_job(id, write_jobs) {
                         let mut req = FileTransferSendConfirmRequest {
@@ -208,20 +209,21 @@ impl ConnectionManager {
                             let path = get_string(&job.join(&file.name));
                             match is_write_need_confirmation(&path, &digest) {
                                 Ok(digest) => {
-                                    if digest.is_none() {
-                                        log::info!("skip job {}, file_num {}", id, file_num);
-                                        req.set_skip(true);
-                                        let msg_out = new_send_confirm(req);
-                                        Self::send(msg_out, conn).await;
-                                    } else {
+                                    if let Some(mut digest) = digest {
                                         // upload to server, but server has the same file, request
+                                        digest.is_upload = is_upload;
                                         println!(
                                             "server has the same file, send server digest to local"
                                         );
                                         let mut msg_out = Message::new();
                                         let mut fr = FileResponse::new();
-                                        fr.set_digest(digest.unwrap());
+                                        fr.set_digest(digest);
                                         msg_out.set_file_response(fr);
+                                        Self::send(msg_out, conn).await;
+                                    } else {
+                                        log::info!("skip job {}, file_num {}", id, file_num);
+                                        req.set_skip(true);
+                                        let msg_out = new_send_confirm(req);
                                         Self::send(msg_out, conn).await;
                                     }
                                 }

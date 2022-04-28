@@ -533,14 +533,14 @@ impl AudioHandler {
         }
 
         self.simple = Some(Simple::new(
-            None,                   // Use the default server
-            &crate::get_app_name(), // Our application’s name
-            Direction::Playback,    // We want a playback stream
-            None,                   // Use the default device
-            "playback",             // Description of our stream
-            &spec,                  // Our sample format
-            None,                   // Use default channel map
-            None,                   // Use default buffering attributes
+            None,                // Use the default server
+            &crate::get_app_name(),            // Our application’s name
+            Direction::Playback, // We want a playback stream
+            None,                // Use the default device
+            "playback",          // Description of our stream
+            &spec,               // Our sample format
+            None,                // Use default channel map
+            None,                // Use default buffering attributes
         )?);
         self.sample_rate = (format0.sample_rate, format0.sample_rate);
         Ok(())
@@ -1323,7 +1323,7 @@ pub enum Data {
     AddPortForward((i32, String, i32)),
     ToggleClipboardFile,
     NewRDP,
-    SetConfirmOverrideFile((i32, i32, bool, bool)),
+    SetConfirmOverrideFile((i32, i32, bool, bool, bool)),
 }
 
 #[derive(Clone)]
