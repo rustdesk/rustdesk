@@ -39,6 +39,7 @@ struct UIHostHandler;
 
 pub fn start(args: &mut [String]) {
     let is_server = args.len() == 1 && args[0] == "--server";
+    #[cfg(target_os = "macos")]
     if is_server && LocalConfig::get_option("service-as-tray") == "Y" {
         macos::make_tray();
         return;
