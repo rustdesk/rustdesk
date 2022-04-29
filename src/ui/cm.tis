@@ -13,7 +13,10 @@ class Body: Reactor.Component
     }
 
     function render() {
-        if (connections.length == 0) return <div />;
+        if (connections.length == 0)
+          return <div style="size:*; margin: * 0; text-align: center;">
+                Waiting for new connection ...
+                </div>;
         var c = connections[this.cur];
         this.connection = c;
         this.cid = c.id;
@@ -360,7 +363,10 @@ function updateTime() {
 
 updateTime();
 
+var tm0 = getTime();
+
 function self.closing() {
+    if (connections.length == 0 && getTime() - tm0 > 30000) return true;
     view.windowState = View.WINDOW_HIDDEN;
     return false;
 }
