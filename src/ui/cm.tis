@@ -290,6 +290,7 @@ handler.removeConnection = function(id) {
     connections.map(function(c, idx) {
         if (c.id == id) i = idx;
     });
+    if (i < 0) return;
     connections.splice(i, 1);
     if (connections.length == 0) {
         handler.exit();

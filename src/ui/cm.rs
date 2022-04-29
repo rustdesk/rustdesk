@@ -359,6 +359,7 @@ async fn start_ipc(cm: ConnectionManager) {
             while let Some(result) = incoming.next().await {
                 match result {
                     Ok(stream) => {
+                        log::debug!("Got new connection");
                         let mut stream = Connection::new(stream);
                         let cm = cm.clone();
                         let tx_file = tx_file.clone();
@@ -377,6 +378,7 @@ async fn start_ipc(cm: ConnectionManager) {
                                             Ok(Some(data)) => {
                                                 match data {
                                                     Data::Login{id, is_file_transfer, port_forward, peer_id, name, authorized, keyboard, clipboard, audio, file, file_transfer_enabled} => {
+                                                        log::debug!("conn_id: {}", id);
                                                         conn_id = id;
                                                         tx_file.send(ClipboardFileData::Enable((id, file_transfer_enabled))).ok();
                                                         cm.add_connection(id, is_file_transfer, port_forward, peer_id, name, authorized, keyboard, clipboard, audio, file, tx.clone());
@@ -395,7 +397,9 @@ async fn start_ipc(cm: ConnectionManager) {
                                         }
                                     }
                                     Some(data) = rx.recv() => {
-                                        allow_err!(stream.send(&data).await);
+                                        if stream.send(&data).await.is_err() {
+                                            break;
+                                        }
                                     }
                                 }
                             }
