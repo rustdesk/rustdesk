@@ -42,9 +42,7 @@ impl DelegateState {
     }
 }
 
-lazy_static::lazy_static! {
-    static ref START_TM: std::sync::Mutex<std::time::Instant> = std::sync::Mutex::new(std::time::Instant::now());
-}
+static mut FIRST_TIME: bool = true;
 
 impl AppHandler for Rc<Host> {
     fn command(&mut self, cmd: u32) {
@@ -55,12 +53,11 @@ impl AppHandler for Rc<Host> {
             let _ = self.call_function("awake", &make_args![]);
             let _ = self.call_function("showSettings", &make_args![]);
         } else if cmd == AWAKE {
-            if START_TM.lock().unwrap().elapsed().as_millis() < 1000 {
-                hbb_common::log::debug!(
-                    "First click on docker icon {:?}",
-                    START_TM.lock().unwrap().elapsed()
-                );
-                return;
+            unsafe {
+                if std::env::args().nth(1) == Some("--server".to_owned()) && FIRST_TIME {
+                    FIRST_TIME = false;
+                    return;
+                }
             }
             let _ = self.call_function("awake", &make_args![]);
         }
@@ -69,7 +66,6 @@ impl AppHandler for Rc<Host> {
 
 // https://github.com/xi-editor/druid/blob/master/druid-shell/src/platform/mac/application.rs
 unsafe fn set_delegate(handler: Option<Box<dyn AppHandler>>) {
-    *START_TM.lock().unwrap() = std::time::Instant::now();
     let mut decl =
         ClassDecl::new("AppDelegate", class!(NSObject)).expect("App Delegate definition failed");
     decl.add_ivar::<*mut c_void>(APP_HANDLER_IVAR);
@@ -136,37 +132,22 @@ extern "C" fn application_should_handle_open_untitled_file(
     YES
 }
 
-extern "C" fn application_should_handle_reopen(
-    _this: &mut Object,
-    _: Sel,
-    _sender: id,
-) -> BOOL {
+extern "C" fn application_should_handle_reopen(_this: &mut Object, _: Sel, _sender: id) -> BOOL {
     hbb_common::log::debug!("reopen");
     YES
 }
 
-extern "C" fn application_did_become_active (
-    _this: &mut Object,
-    _: Sel,
-    _sender: id,
-) -> BOOL {
+extern "C" fn application_did_become_active(_this: &mut Object, _: Sel, _sender: id) -> BOOL {
     hbb_common::log::debug!("active");
     YES
 }
 
-extern "C" fn application_did_become_unhide (
-    _this: &mut Object,
-    _: Sel,
-    _sender: id,
-) -> BOOL {
+extern "C" fn application_did_become_unhide(_this: &mut Object, _: Sel, _sender: id) -> BOOL {
     hbb_common::log::debug!("unhide");
     YES
 }
 
 extern "C" fn application_will_terminate(_this: &mut Object, _: Sel, _sender: id) -> BOOL {
-    if std::env::args().len() == 1 || std::env::args().nth(1) == Some("--server".to_owned()) {
-        hide_dock();
-    }
     YES
 }
 
