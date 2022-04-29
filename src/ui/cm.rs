@@ -192,7 +192,7 @@ impl ConnectionManager {
                     id,
                     file_num,
                     file_size,
-                    modified_time,
+                    last_modified,
                     is_upload,
                 } => {
                     if let Some(job) = fs::get_job(id, write_jobs) {
@@ -205,7 +205,7 @@ impl ConnectionManager {
                         let digest = FileTransferDigest {
                             id,
                             file_num,
-                            last_edit_timestamp: modified_time,
+                            last_modified,
                             file_size,
                             ..Default::default()
                         };
@@ -222,9 +222,6 @@ impl ConnectionManager {
                                         DigestCheckResult::NeedConfirm(mut digest) => {
                                             // upload to server, but server has the same file, request
                                             digest.is_upload = is_upload;
-                                            log::info!(
-                                            "server has the same file, send server digest to local"
-                                        );
                                             let mut msg_out = Message::new();
                                             let mut fr = FileResponse::new();
                                             fr.set_digest(digest);
@@ -365,6 +362,7 @@ impl ConnectionManager {
     }
 
     async fn send(msg: Message, conn: &mut Connection) {
+        println!("send msg: {:?}", msg);
         match msg.write_to_bytes() {
             Ok(bytes) => allow_err!(conn.send(&Data::RawMessage(bytes)).await),
             err => allow_err!(err),

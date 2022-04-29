@@ -768,6 +768,7 @@ impl Handler {
     }
 
     fn reconnect(&mut self) {
+        println!("reconnecting");
         let cloned = self.clone();
         let mut lock = self.write().unwrap();
         lock.thread.take().map(|t| t.join());
@@ -1559,7 +1560,6 @@ impl Remote {
                                 to,
                                 job.files().len()
                             );
-                            let config = self.handler.lc.read().unwrap().version;
                             let m = make_fd(job.id(), job.files(), true);
                             self.handler.call("updateFolderFiles", &make_args!(m));
                             let files = job.files().clone();

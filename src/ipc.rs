@@ -63,7 +63,7 @@ pub enum FS {
         id: i32,
         file_num: i32,
         file_size: u64,
-        modified_time: u64,
+        last_modified: u64,
         is_upload: bool,
     },
 }

@@ -955,7 +955,6 @@ impl Connection {
                     }
                 }
                 Some(message::Union::file_action(fa)) => {
-                    log::info!("recv file_action, {:?}", fa);
                     if self.file_transfer.is_some() {
                         match fa.union {
                             Some(file_action::Union::read_dir(rd)) => {
@@ -1051,7 +1050,7 @@ impl Connection {
                         id: d.id,
                         file_num: d.file_num,
                         file_size: d.file_size,
-                        modified_time: d.last_edit_timestamp,
+                        last_modified: d.last_modified,
                         is_upload: true,
                     }),
                     _ => {}

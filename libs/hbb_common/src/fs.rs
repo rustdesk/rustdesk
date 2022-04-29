@@ -5,7 +5,6 @@ use crate::{
     compress::{compress, decompress},
     config::{Config, COMPRESS_LEVEL},
 };
-use log::log;
 #[cfg(windows)]
 use std::os::windows::prelude::*;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
@@ -472,7 +471,7 @@ impl TransferJob {
         resp.set_digest(FileTransferDigest {
             id: self.id,
             file_num: self.file_num,
-            last_edit_timestamp: last_modified,
+            last_modified,
             file_size: meta.len(),
             ..Default::default()
         });
@@ -647,7 +646,6 @@ pub async fn handle_read_jobs(
 ) -> ResultType<()> {
     let mut finished = Vec::new();
     for job in jobs.iter_mut() {
-        // println!("[fs.rs:588] handle_read_jobs. {:?}", job.id);
         match job.read(stream).await {
             Err(err) => {
                 stream
@@ -663,7 +661,7 @@ pub async fn handle_read_jobs(
                     finished.push(job.id());
                     stream.send(&new_done(job.id(), job.file_num())).await?;
                 } else {
-                    log::info!("waiting confirmation.");
+                    // waiting confirmation.
                 }
             }
         }
@@ -718,23 +716,15 @@ pub fn is_write_need_confirmation(
     if path.exists() && path.is_file() {
         let metadata = std::fs::metadata(path)?;
         let modified_time = metadata.modified()?;
-        let remote_mt = Duration::from_secs(digest.last_edit_timestamp);
+        let remote_mt = Duration::from_secs(digest.last_modified);
         let local_mt = modified_time.duration_since(UNIX_EPOCH)?;
-        log::info!(
-            "{:?}:rm:{},lm:{},rf:{},lf:{}",
-            path,
-            remote_mt.as_secs(),
-            local_mt.as_secs(),
-            digest.file_size,
-            metadata.len()
-        );
         if remote_mt == local_mt && digest.file_size == metadata.len() {
             return Ok(DigestCheckResult::IsSame);
         }
         Ok(DigestCheckResult::NeedConfirm(FileTransferDigest {
             id: digest.id,
             file_num: digest.file_num,
-            last_edit_timestamp: local_mt.as_secs(),
+            last_modified: local_mt.as_secs(),
             file_size: metadata.len(),
             ..Default::default()
         }))

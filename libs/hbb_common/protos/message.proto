@@ -270,7 +270,7 @@ message FileResponse {
 message FileTransferDigest {
   int32 id = 1;
   sint32 file_num = 2;
-  uint64 last_edit_timestamp = 3;
+  uint64 last_modified = 3;
   uint64 file_size = 4;
   bool is_upload = 5;
 }
