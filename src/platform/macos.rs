@@ -145,6 +145,14 @@ pub fn is_installed_daemon(prompt: bool) -> bool {
                         .args(&["load", "-w", &agent_plist_file])
                         .status()
                         .ok();
+                    std::process::Command::new("sh")
+                        .arg("-c")
+                        .arg(&format!(
+                            "sleep 0.5; open -n /Applications/{}.app",
+                            crate::get_app_name(),
+                        ))
+                        .spawn()
+                        .ok();
                     quit_gui();
                 }
             }
@@ -166,7 +174,6 @@ pub fn uninstall() -> bool {
         match std::process::Command::new("osascript")
             .arg("-e")
             .arg(script_body)
-            .arg(&get_active_username())
             .status()
         {
             Err(e) => {
@@ -189,18 +196,11 @@ pub fn uninstall() -> bool {
                         .args(&["remove", &format!("{}_server", crate::get_full_name())])
                         .status()
                         .ok();
-                    std::process::Command::new("osascript")
-                        .arg("-e")
-                        .arg(
-                            PRIVILEGES_SCRIPTS_DIR
-                                .get_file("run.scpt")
-                                .unwrap()
-                                .contents_utf8()
-                                .unwrap(),
-                        )
+                    std::process::Command::new("sh")
+                        .arg("-c")
                         .arg(&format!(
                             "sleep 0.5; open /Applications/{}.app",
-                            crate::get_full_name(),
+                            crate::get_app_name(),
                         ))
                         .spawn()
                         .ok();
@@ -433,7 +433,6 @@ pub fn start_os_service() {
                     ])
                     .status()
                     .ok();
-                // if above spawn, we may need sleep for a while here.
                 std::process::exit(0);
             }
         }

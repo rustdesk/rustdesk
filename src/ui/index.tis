@@ -745,10 +745,6 @@ function self.closing() {
     // return false; // can prevent window close
     var (x, y, w, h) = view.box(#rectw, #border, #screen);
     handler.closing(x, y, w, h);
-    if (is_osx && handler.get_local_option("service-as-tray") != "Y") {
-        view.windowState = View.WINDOW_HIDDEN;
-        return false;
-    }
     return true;
 }
 

@@ -42,7 +42,7 @@ impl DelegateState {
     }
 }
 
-static mut FIRST_TIME: bool = true;
+static mut LAUCHED: bool = false;
 
 impl AppHandler for Rc<Host> {
     fn command(&mut self, cmd: u32) {
@@ -53,12 +53,6 @@ impl AppHandler for Rc<Host> {
             let _ = self.call_function("awake", &make_args![]);
             let _ = self.call_function("showSettings", &make_args![]);
         } else if cmd == AWAKE {
-            unsafe {
-                if std::env::args().nth(1) == Some("--server".to_owned()) && FIRST_TIME {
-                    FIRST_TIME = false;
-                    return;
-                }
-            }
             let _ = self.call_function("awake", &make_args![]);
         }
     }
@@ -115,6 +109,9 @@ unsafe fn set_delegate(handler: Option<Box<dyn AppHandler>>) {
 
 extern "C" fn application_did_finish_launching(_this: &mut Object, _: Sel, _notification: id) {
     unsafe {
+        LAUCHED = true;
+    }
+    unsafe {
         let () = msg_send![NSApp(), activateIgnoringOtherApps: YES];
     }
 }
@@ -125,6 +122,13 @@ extern "C" fn application_should_handle_open_untitled_file(
     _sender: id,
 ) -> BOOL {
     unsafe {
+        if !LAUCHED {
+            return YES;
+        }
+        hbb_common::log::debug!("icon clicked on finder");
+        if std::env::args().nth(1) == Some("--server".to_owned()) {
+            check_main_window();
+        }
         let inner: *mut c_void = *this.get_ivar(APP_HANDLER_IVAR);
         let inner = &mut *(inner as *mut DelegateState);
         (*inner).command(AWAKE);
@@ -133,17 +137,14 @@ extern "C" fn application_should_handle_open_untitled_file(
 }
 
 extern "C" fn application_should_handle_reopen(_this: &mut Object, _: Sel, _sender: id) -> BOOL {
-    hbb_common::log::debug!("reopen");
     YES
 }
 
 extern "C" fn application_did_become_active(_this: &mut Object, _: Sel, _sender: id) -> BOOL {
-    hbb_common::log::debug!("active");
     YES
 }
 
 extern "C" fn application_did_become_unhide(_this: &mut Object, _: Sel, _sender: id) -> BOOL {
-    hbb_common::log::debug!("unhide");
     YES
 }
 
@@ -221,14 +222,16 @@ pub fn make_menubar(host: Rc<Host>, is_index: bool) {
     }
 }
 
-pub fn hide_dock() {
+pub fn show_dock() {
     unsafe {
-        NSApp().setActivationPolicy_(NSApplicationActivationPolicyAccessory);
+        NSApp().setActivationPolicy_(NSApplicationActivationPolicyRegular);
     }
 }
 
 pub fn make_tray() {
-    hide_dock();
+    unsafe {
+        set_delegate(None);
+    }
     use tray_item::TrayItem;
     if let Ok(mut tray) = TrayItem::new(&crate::get_app_name(), "mac-tray.png") {
         tray.add_label(&format!(
@@ -246,4 +249,24 @@ pub fn make_tray() {
             std::thread::sleep(std::time::Duration::from_secs(3));
         }
     }
+}
+
+pub fn check_main_window() {
+    use sysinfo::{ProcessExt, System, SystemExt};
+    let mut sys = System::new();
+    sys.refresh_processes();
+    let app = format!("/Applications/{}.app", crate::get_app_name());
+    let my_uid = sys
+        .process((std::process::id() as i32).into())
+        .map(|x| x.uid)
+        .unwrap_or_default();
+    for (_, p) in sys.processes().iter() {
+        if p.cmd().len() == 1 && p.uid == my_uid && p.cmd()[0].contains(&app) {
+            return;
+        }
+    }
+    std::process::Command::new("open")
+        .args(["-n", &app])
+        .status()
+        .ok();
 }

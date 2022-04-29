@@ -33,11 +33,6 @@ def main():
     os.system('python3 inline-sciter.py')
     if os.path.isfile('/usr/bin/pacman'):
         os.system('git checkout src/ui/common.tis')
-    txt = open('Cargo.toml').read()
-    with open('Cargo.toml', 'wt') as fh:
-        fh.write(txt.replace('#lto', 'lto')
-                 .replace('#codegen', 'codegen')
-                 .replace('#panic', 'panic'))
     version = get_version()
     if windows:
         os.system('cargo build --release --features inline')

@@ -38,21 +38,12 @@ struct UI(
 struct UIHostHandler;
 
 pub fn start(args: &mut [String]) {
-    let is_server = args.len() == 1 && args[0] == "--server";
     #[cfg(target_os = "macos")]
-    if is_server && LocalConfig::get_option("service-as-tray") == "Y" {
+    if args.len() == 1 && args[0] == "--server" {
         macos::make_tray();
         return;
-    }
-    let is_index = args.is_empty() || is_server;
-    if is_server {
-        // wait a moment for server's ipc check to avoid sciter crash
-        std::thread::sleep(std::time::Duration::from_millis(300));
-        if crate::platform::is_prelogin() {
-            loop {
-                std::thread::sleep(std::time::Duration::from_secs(3));
-            }
-        }
+    } else {
+        macos::show_dock();
     }
     #[cfg(all(target_os = "linux", feature = "inline"))]
     sciter::set_library("/usr/lib/rustdesk/libsciter-gtk.so").ok();
@@ -85,9 +76,9 @@ pub fn start(args: &mut [String]) {
     let mut frame = sciter::WindowBuilder::main_window().create();
     #[cfg(windows)]
     allow_err!(sciter::set_options(sciter::RuntimeOptions::UxTheming(true)));
-    frame.set_title(APP_NAME);
+    frame.set_title(&crate::get_app_name());
     #[cfg(target_os = "macos")]
-    macos::make_menubar(frame.get_host(), is_index);
+    macos::make_menubar(frame.get_host(), args.is_empty());
     let page;
     if args.len() > 1 && args[0] == "--play" {
         args[0] = "--connect".to_owned();
@@ -99,7 +90,7 @@ pub fn start(args: &mut [String]) {
             .to_owned();
         args[1] = id;
     }
-    if is_index {
+    if args.is_empty() {
         let childs: Childs = Default::default();
         let cloned = childs.clone();
         std::thread::spawn(move || check_zombie(cloned));
@@ -157,12 +148,7 @@ pub fn start(args: &mut [String]) {
             .unwrap_or("".to_owned()),
         page
     ));
-    if is_server {
-        frame.collapse(true);
-        frame.run_loop();
-    } else {
-        frame.run_app();
-    }
+    frame.run_app();
 }
 
 #[cfg(windows)]
