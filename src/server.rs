@@ -353,9 +353,16 @@ async fn sync_and_watch_config_dir() {
                             match data {
                                 Data::SyncConfig(Some((config, config2))) => {
                                     let _chk = crate::ipc::CheckIfRestart::new();
-                                    Config::set(config);
-                                    Config2::set(config2);
-                                    log::info!("sync config from root");
+                                    if cfg0.0 != config {
+                                        cfg0.0 = config.clone();
+                                        Config::set(config);
+                                        log::info!("sync config from root");
+                                    }
+                                    if cfg0.1 != config2 {
+                                        cfg0.1 = config2.clone();
+                                        Config2::set(config2);
+                                        log::info!("sync config2 from root");
+                                    }
                                     synced = true;
                                 }
                                 _ => {}
@@ -369,7 +376,7 @@ async fn sync_and_watch_config_dir() {
                     let cfg = (Config::get(), Config2::get());
                     if cfg != cfg0 {
                         log::info!("config updated, sync to root");
-                        match conn.send(&Data::SyncConfig(Some(cfg0.clone()))).await {
+                        match conn.send(&Data::SyncConfig(Some(cfg.clone()))).await {
                             Err(e) => {
                                 log::error!("sync config to root failed: {}", e);
                                 break;
