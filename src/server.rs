@@ -4,7 +4,7 @@ use hbb_common::{
     allow_err,
     anyhow::{anyhow, Context},
     bail,
-    config::{Config, Config2, CONNECT_TIMEOUT, RELAY_PORT},
+    config::{Config, CONNECT_TIMEOUT, RELAY_PORT},
     log,
     message_proto::*,
     protobuf::{Message as _, ProtobufEnum},
@@ -333,6 +333,7 @@ async fn sync_and_watch_config_dir() {
         return;
     }
 
+    use hbb_common::config::Config2;
     let mut cfg0 = (Config::get(), Config2::get());
     let mut synced = false;
     let tries =
