@@ -26,7 +26,8 @@ class Body: Reactor.Component
             me.sendMsg(msg);
         };
         var right_style = show_chat ? "" : "display: none";
-        return <div .content>
+       // below size:* is work around for Linux, it alreayd set in css, but not work, shit sciter
+        return <div .content style="size:*">
             <div .left-panel>
                 <div .icon-and-id>
                     <div .icon style={"background: " + string2RGB(c.name, 1)}>
