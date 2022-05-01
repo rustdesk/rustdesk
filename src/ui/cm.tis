@@ -296,9 +296,7 @@ handler.removeConnection = function(id) {
     });
     if (i < 0) return;
     connections.splice(i, 1);
-    if (connections.length == 0) {
-        handler.exit();
-    } else {
+    if (connections.length > 0) {
         if (body.cur >= i && body.cur > 0) body.cur -= 1;
         update();
     }

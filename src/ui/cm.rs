@@ -94,6 +94,9 @@ impl ConnectionManager {
 
     fn remove_connection(&self, id: i32) {
         self.write().unwrap().senders.remove(&id);
+        if self.read().unwrap().senders.len() == 0 {
+            std::process::exit(0);
+        }
         self.call("removeConnection", &make_args!(id));
     }
 
@@ -315,10 +318,6 @@ impl ConnectionManager {
         }
     }
 
-    fn exit(&self) {
-        std::process::exit(0);
-    }
-
     fn t(&self, name: String) -> String {
         crate::client::translate(name)
     }
@@ -336,7 +335,6 @@ impl sciter::EventHandler for ConnectionManager {
         fn authorize(i32);
         fn switch_permission(i32, String, bool);
         fn send_msg(i32, String);
-        fn exit();
     }
 }
 
