@@ -64,20 +64,20 @@ def main():
             if pa:
               os.system('''
 #not use rcodesign here because rcodesign will sign executable as mach-o
-#rcodesign sign --p12-file ~/.p12/rustdesk-developer-id.p12 --p12-password-file ~/.p12/.cert-pass --code-signature-flags runtime ./rustdesk-%(v).dmg
+#rcodesign sign --p12-file ~/.p12/rustdesk-developer-id.p12 --p12-password-file ~/.p12/.cert-pass --code-signature-flags runtime ./rustdesk.dmg
 # goto "Keychain Access" -> "My Certificates" for below id which starts with "Developer ID Application:"
-codesign -s "Developer ID Application: %(id)" --force --options runtime  ./target/release/bundle/osx/RustDesk.app/Contents/MacOS/*
-codesign -s "Developer ID Application: %(id)" --force --options runtime  ./target/release/bundle/osx/RustDesk.app
-'''%{"id": pa})
+codesign -s "Developer ID Application: {0}" --force --options runtime  ./target/release/bundle/osx/RustDesk.app/Contents/MacOS/*
+codesign -s "Developer ID Application: {0}" --force --options runtime  ./target/release/bundle/osx/RustDesk.app
+'''.format(pa))
             os.system('create-dmg target/release/bundle/osx/RustDesk.app')
             os.rename('RustDesk %s.dmg'%version, 'rustdesk-%s.dmg'%version)
             if pa:
               os.system('''
-codesign -s "Developer ID Application: %(id)" --force --options runtime ./rustdesk-%(v).dmg
+codesign -s "Developer ID Application: {0}" --force --options runtime ./rustdesk-{1}.dmg
 # https://pyoxidizer.readthedocs.io/en/latest/apple_codesign_rcodesign.html
-rcodesign notarize --api-issuer 69a6de7d-2907-47e3-e053-5b8c7c11a4d1 --api-key 9JBRHG3JHT --staple ./rustdesk-%(v).dmg
+rcodesign notarize --api-issuer 69a6de7d-2907-47e3-e053-5b8c7c11a4d1 --api-key 9JBRHG3JHT --staple ./rustdesk-{1}.dmg
 # verify:  spctl -a -t exec -v /Applications/RustDesk.app
-'''%{"v": version, "id": pa})
+'''.format(pa, version))
             else:
               print('Not signed')
         else:
