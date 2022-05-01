@@ -63,8 +63,10 @@ def main():
             pa = os.environ.get('P')
             if pa:
               os.system('''
-#not use rcodesign here because rcodesign will sign executable as mach-o
-#rcodesign sign --p12-file ~/.p12/rustdesk-developer-id.p12 --p12-password-file ~/.p12/.cert-pass --code-signature-flags runtime ./rustdesk.dmg
+# buggy: rcodesign sign ... path/*, have to sign one by one
+#rcodesign sign --p12-file ~/.p12/rustdesk-developer-id.p12 --p12-password-file ~/.p12/.cert-pass --code-signature-flags runtime ./target/release/bundle/osx/RustDesk.app/Contents/MacOS/rustdesk
+#rcodesign sign --p12-file ~/.p12/rustdesk-developer-id.p12 --p12-password-file ~/.p12/.cert-pass --code-signature-flags runtime ./target/release/bundle/osx/RustDesk.app/Contents/MacOS/libsciter.dylib
+#rcodesign sign --p12-file ~/.p12/rustdesk-developer-id.p12 --p12-password-file ~/.p12/.cert-pass --code-signature-flags runtime ./target/release/bundle/osx/RustDesk.app
 # goto "Keychain Access" -> "My Certificates" for below id which starts with "Developer ID Application:"
 codesign -s "Developer ID Application: {0}" --force --options runtime  ./target/release/bundle/osx/RustDesk.app/Contents/MacOS/*
 codesign -s "Developer ID Application: {0}" --force --options runtime  ./target/release/bundle/osx/RustDesk.app
@@ -73,6 +75,7 @@ codesign -s "Developer ID Application: {0}" --force --options runtime  ./target/
             os.rename('RustDesk %s.dmg'%version, 'rustdesk-%s.dmg'%version)
             if pa:
               os.system('''
+#rcodesign sign --p12-file ~/.p12/rustdesk-developer-id.p12 --p12-password-file ~/.p12/.cert-pass --code-signature-flags runtime ./rustdesk-{1}.dmg
 codesign -s "Developer ID Application: {0}" --force --options runtime ./rustdesk-{1}.dmg
 # https://pyoxidizer.readthedocs.io/en/latest/apple_codesign_rcodesign.html
 rcodesign notarize --api-issuer 69a6de7d-2907-47e3-e053-5b8c7c11a4d1 --api-key 9JBRHG3JHT --staple ./rustdesk-{1}.dmg
