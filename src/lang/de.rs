@@ -266,5 +266,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("android_start_service_tip", "Tippen Sie auf [Dienst starten] oder ÖFFNEN Sie die Berechtigung [Bildschirmaufnahme], um den Bildschirmfreigabedienst zu starten."),
         ("Account", "Konto"),
         ("Quit", "Ausgang"),
+        ("Help", "Hilfe"),
     ].iter().cloned().collect();
 }

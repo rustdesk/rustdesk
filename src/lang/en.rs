@@ -24,5 +24,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("android_stop_service_tip", "Closing the service will automatically close all established connections."),
         ("android_version_audio_tip", "The current Android version does not support audio capture, please upgrade to Android 10 or higher."),
         ("android_start_service_tip", "Tap [Start Service] or OPEN [Screen Capture] permission to start the screen sharing service."),
+        ("doc_mac_permission", "https://rustdesk.com/docs/en/manual/mac/#enable-permissions"),
     ].iter().cloned().collect();
 }

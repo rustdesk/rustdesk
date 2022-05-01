@@ -266,5 +266,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("android_start_service_tip", "Toque [Iniciar Serviço] ou ABRA a permissão [Captura de Tela] para iniciar o serviço de compartilhamento de tela."),
         ("Account", "Conta"),
         ("Quit", "Saída"),
+        ("Help", "Ajuda"),
     ].iter().cloned().collect();
 }

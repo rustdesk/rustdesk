@@ -266,5 +266,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("android_start_service_tip", "Toccare [Avvia servizio] o APRI l'autorizzazione [Cattura schermo] per avviare il servizio di condivisione dello schermo."),
         ("Account", "Account"),
         ("Quit", "Esci"),
+        ("Help", "Aiuto"),
     ].iter().cloned().collect();
 }

@@ -526,10 +526,11 @@ class SystemError: Reactor.Component {
 
 class TrustMe: Reactor.Component {
     function render() {
-        return <div .trust-me>
+        return <div .trust-me #trust-me-box>
             <div>{translate('Permissions')}</div>
             <div>{translate('config_acc')}</div>
             <div #trust-me .link>{translate('Configure')}</div>
+            <div #help-me .link>{translate('Help')}</div>
         </div>;
     }
 
@@ -537,20 +538,29 @@ class TrustMe: Reactor.Component {
         handler.is_process_trusted(true);
         watch_trust();
     }
+    
+    event click $(#help-me) {
+        handler.open_url(translate("doc_mac_permission"));
+    }
 }
 
 class CanScreenRecording: Reactor.Component {
     function render() {
-        return <div .trust-me>
+        return <div .trust-me #screen-recording-box>
             <div>{translate('Permissions')}</div>
             <div>{translate('config_screen')}</div>
             <div #screen-recording .link>{translate('Configure')}</div>
+            <div #help-me .link>{translate('Help')}</div>
         </div>;
     }
 
     event click $(#screen-recording) {
         handler.is_can_screen_recording(true);
-        watch_trust();
+        watch_screen_recording();
+    }
+    
+    event click $(#help-me) {
+        handler.open_url(translate("doc_mac_permission"));
     }
 }
 
@@ -574,7 +584,7 @@ class FixWayland: Reactor.Component {
             <div>{translate('Warning')}</div>
             <div>{translate('Login screen using Wayland is not supported')}</div>
             <div #fix-wayland .link>{translate('Fix it')}</div>
-            <div style="text-align: center">({translate('Reboot required')})</div>
+            <div>({translate('Reboot required')})</div>
         </div>;
     }
 
@@ -590,7 +600,7 @@ class ModifyDefaultLogin: Reactor.Component {
             <div>{translate('Warning')}</div>
             <div>{translate('Current Wayland display server is not supported')}</div>
             <div #modify-default-login .link>{translate('Fix it')}</div>
-            <div style="text-align: center">({translate('Reboot required')})</div>
+            <div>({translate('Reboot required')})</div>
         </div>;
     }
 
@@ -605,7 +615,7 @@ class ModifyDefaultLogin: Reactor.Component {
 function watch_trust() {
     // not use TrustMe::update, because it is buggy
     var trusted = handler.is_process_trusted(false);
-    var el = $(div.trust-me);
+    var el = $(div#trust-me-box);
     if (el) {
         el.style.set {
             display: trusted ? "none" : "block",
@@ -616,6 +626,21 @@ function watch_trust() {
         return;
     }
     self.timer(1s, watch_trust);
+}
+
+function watch_screen_recording() {
+    var trusted = handler.is_can_screen_recording(false);
+    var el = $(div#screen-recording-box);
+    if (el) {
+        el.style.set {
+            display: trusted ? "none" : "block",
+        };
+    }
+    if (trusted) {
+        app.update();
+        return;
+    }
+    self.timer(1s, watch_screen_recording);
 }
 
 class PasswordEyeArea : Reactor.Component {

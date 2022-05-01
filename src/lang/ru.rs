@@ -266,5 +266,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("android_start_service_tip", "Коснитесь [Запуск промежуточного сервера] или ОТКРЫТЬ разрешение [Скриншот], чтобы запустить службу демонстрации экрана."),
         ("Account", "Аккаунт"),
         ("Quit", "Выйти"),
+        ("Help", "Помощь"),
     ].iter().cloned().collect();
 }
