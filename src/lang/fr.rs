@@ -254,7 +254,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Audio Capture", "Capture audio"),
         ("File Connection", "Connexion de fichier"),
         ("Screen Connection", "Connexion de l'écran"),
-        ("Do you accept?", "Do you accept?"),
+        ("Do you accept?", "Accepter vous ?"),
         ("Open System Setting", "Ouvrir les paramètres système"),
         ("How to get Android input permission?", "Comment obtenir l'autorisation d'entrée Android ?"),
         ("android_input_permission_tip1", "Pour qu'un appareil distant puisse contrôler votre appareil Android via la souris ou le toucher, vous devez autoriser RustDesk à utiliser le service \"Accessibilité\"."),
