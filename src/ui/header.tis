@@ -142,7 +142,6 @@ class Header: Reactor.Component {
                 <li #tunnel>{translate('TCP Tunneling')}</li> 
                 <div .separator />
                 {keyboard_enabled && (pi.platform == "Linux" || pi.sas_enabled) ? <li #ctrl-alt-del>{translate('Insert')} Ctrl + Alt + Del</li> : ""}
-                <div .separator />
                 {keyboard_enabled ? <li #lock-screen>{translate('Insert Lock')}</li> : ""}
                 {keyboard_enabled && pi.platform == "Windows" && pi.sas_enabled ? <li #block-input>{translate("Block user input")}</li> : ""}
                 <li #refresh>{translate('Refresh')}</li>
