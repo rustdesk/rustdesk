@@ -16,5 +16,6 @@ RUN chmod +x rustup.sh
 RUN ./rustup.sh -y
 
 USER root
+ENV HOME=/home/user
 COPY ./entrypoint /
 ENTRYPOINT ["/entrypoint"]
