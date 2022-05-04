@@ -510,6 +510,7 @@ fn start_pynput_service(rx: mpsc::Receiver<(PyMsg, bool)>) {
                 }
                 status = std::process::Command::new("sudo")
                     .args(vec![
+                        "-E",
                         &format!("XDG_RUNTIME_DIR=/run/user/{}", userid) as &str,
                         "-u",
                         &username,

@@ -533,8 +533,10 @@ pub fn is_root() -> bool {
 pub fn run_as_user(arg: &str) -> ResultType<Option<std::process::Child>> {
     let uid = get_active_userid();
     let cmd = std::env::current_exe()?;
+    // -E required for opensuse
     let task = std::process::Command::new("sudo")
         .args(vec![
+            "-E", 
             &format!("XDG_RUNTIME_DIR=/run/user/{}", uid) as &str,
             "-u",
             &get_active_username(),
