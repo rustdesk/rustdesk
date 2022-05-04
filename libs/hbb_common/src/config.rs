@@ -62,13 +62,13 @@ pub enum NetworkType {
 #[derive(Debug, Default, Serialize, Deserialize, Clone, PartialEq)]
 pub struct Config {
     #[serde(default)]
-    id: String,
+    pub id: String,
     #[serde(default)]
     password: String,
     #[serde(default)]
     salt: String,
     #[serde(default)]
-    key_pair: (Vec<u8>, Vec<u8>), // sk, pk
+    pub key_pair: (Vec<u8>, Vec<u8>), // sk, pk
     #[serde(default)]
     key_confirmed: bool,
     #[serde(default)]
@@ -199,11 +199,28 @@ impl Config2 {
         return CONFIG2.read().unwrap().clone();
     }
 
-    pub fn set(cfg: Config2) {
+    pub fn set(cfg: Config2) -> bool {
         let mut lock = CONFIG2.write().unwrap();
+        if *lock == cfg {
+            return false;
+        }
         *lock = cfg;
         lock.store();
+        true
     }
+}
+
+pub fn load_path<T: serde::Serialize + serde::de::DeserializeOwned + Default + std::fmt::Debug>(
+    file: PathBuf,
+) -> T {
+    let cfg = match confy::load_path(&file) {
+        Ok(config) => config,
+        Err(err) => {
+            log::error!("Failed to load config: {}", err);
+            T::default()
+        }
+    };
+    cfg
 }
 
 impl Config {
@@ -212,13 +229,7 @@ impl Config {
     ) -> T {
         let file = Self::file_(suffix);
         log::debug!("Configuration path: {}", file.display());
-        let cfg = match confy::load_path(&file) {
-            Ok(config) => config,
-            Err(err) => {
-                log::error!("Failed to load config: {}", err);
-                T::default()
-            }
-        };
+        let cfg = load_path(file);
         if suffix.is_empty() {
             log::debug!("{:?}", cfg);
         }
@@ -242,28 +253,6 @@ impl Config {
 
     pub fn file() -> PathBuf {
         Self::file_("")
-    }
-
-    pub fn import(from: &str) {
-        log::info!("import {}", from);
-        // load first to create path
-        Self::load();
-        crate::allow_err!(std::fs::copy(from, Self::file()));
-        crate::allow_err!(std::fs::copy(
-            from.replace(".toml", "2.toml"),
-            Self::file_("2")
-        ));
-    }
-
-    pub fn save_tmp() -> String {
-        let _lock = CONFIG.read().unwrap(); // do not use let _, which will be dropped immediately
-        let path = Self::file_("2").to_str().unwrap_or("").to_owned();
-        let path2 = format!("{}_tmp", path);
-        crate::allow_err!(std::fs::copy(&path, &path2));
-        let path = Self::file().to_str().unwrap_or("").to_owned();
-        let path2 = format!("{}_tmp", path);
-        crate::allow_err!(std::fs::copy(&path, &path2));
-        path2
     }
 
     fn file_(suffix: &str) -> PathBuf {
@@ -645,10 +634,14 @@ impl Config {
         return CONFIG.read().unwrap().clone();
     }
 
-    pub fn set(cfg: Config) {
+    pub fn set(cfg: Config) -> bool {
         let mut lock = CONFIG.write().unwrap();
+        if *lock == cfg {
+            return false;
+        }
         *lock = cfg;
         lock.store();
+        true
     }
 }
 

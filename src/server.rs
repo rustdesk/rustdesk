@@ -4,7 +4,7 @@ use hbb_common::{
     allow_err,
     anyhow::{anyhow, Context},
     bail,
-    config::{Config, CONNECT_TIMEOUT, RELAY_PORT},
+    config::{Config, Config2, CONNECT_TIMEOUT, RELAY_PORT},
     log,
     message_proto::*,
     protobuf::{Message as _, ProtobufEnum},
@@ -289,32 +289,18 @@ pub async fn start_server(is_server: bool, _tray: bool) {
     } else {
         match crate::ipc::connect(1000, "").await {
             Ok(mut conn) => {
-                allow_err!(conn.send(&Data::SystemInfo(None)).await);
-                if let Ok(Some(data)) = conn.next_timeout(1000).await {
-                    log::info!("server info: {:?}", data);
-                }
-                // sync key pair
-                let mut n = 0;
-                loop {
-                    if Config::get_key_confirmed() {
-                        // check ipc::get_id(), key_confirmed may change, so give some chance to correct
-                        n += 1;
-                        if n > 3 {
-                            break;
-                        } else {
-                            sleep(1.).await;
-                        }
-                    } else {
-                        allow_err!(conn.send(&Data::ConfirmedKey(None)).await);
-                        if let Ok(Some(Data::ConfirmedKey(Some(pair)))) =
-                            conn.next_timeout(1000).await
-                        {
-                            Config::set_key_pair(pair);
-                            Config::set_key_confirmed(true);
-                            log::info!("key pair synced");
-                            break;
-                        } else {
-                            sleep(1.).await;
+                if conn.send(&Data::SyncConfig(None)).await.is_ok() {
+                    if let Ok(Some(data)) = conn.next_timeout(1000).await {
+                        match data {
+                            Data::SyncConfig(Some((config, config2))) => {
+                                if Config::set(config) {
+                                    log::info!("config synced");
+                                }
+                                if Config2::set(config2) {
+                                    log::info!("config2 synced");
+                                }
+                            }
+                            _ => {}
                         }
                     }
                 }
@@ -333,7 +319,6 @@ async fn sync_and_watch_config_dir() {
         return;
     }
 
-    use hbb_common::config::Config2;
     let mut cfg0 = (Config::get(), Config2::get());
     let mut synced = false;
     let tries =

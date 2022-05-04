@@ -278,18 +278,8 @@ async fn handle(data: Data, stream: &mut Connection) {
                 allow_err!(stream.send(&Data::Options(Some(v))).await);
             }
             Some(value) => {
-                let v0 = Config::get_option("stop-service");
-                let v1 = Config::get_rendezvous_servers();
-                let v2 = Config::get_option("audio-input");
+                let _chk = CheckIfRestart::new();
                 Config::set_options(value);
-                if v0 != Config::get_option("stop-service")
-                    || v1 != Config::get_rendezvous_servers()
-                {
-                    RendezvousMediator::restart();
-                }
-                if v2 != Config::get_option("audio-input") {
-                    crate::audio_service::restart();
-                }
                 allow_err!(stream.send(&Data::Options(None)).await);
             }
         },
@@ -298,6 +288,7 @@ async fn handle(data: Data, stream: &mut Connection) {
             allow_err!(stream.send(&Data::NatType(Some(t))).await);
         }
         Data::SyncConfig(Some((config, config2))) => {
+            let _chk = CheckIfRestart::new();
             Config::set(config);
             Config2::set(config2);
             allow_err!(stream.send(&Data::SyncConfig(None)).await);

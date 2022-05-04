@@ -95,7 +95,7 @@ fn main() {
             }
         } else if args[0] == "--import-config" {
             if args.len() == 2 {
-                hbb_common::config::Config::import(&args[1]);
+                import_config(&args[1]);
             }
             return;
         } else if args[0] == "--password" {
@@ -106,6 +106,31 @@ fn main() {
         }
     }
     ui::start(&mut args[..]);
+    _async_logger_holder.map(|x| x.flush());
+}
+
+fn import_config(path: &str) {
+    use hbb_common::{config::*, get_modified_time};
+    let path2 = path.replace(".toml", "2.toml");
+    let path2 = std::path::Path::new(&path2);
+    let path = std::path::Path::new(path);
+    log::info!("import config from {:?} and {:?}", path, path2);
+    let config: Config = load_path(path.into());
+    if config.id.is_empty() || config.key_pair.0.is_empty() {
+        log::info!("Empty source config, skipped");
+        return;
+    }
+    if get_modified_time(&path) > get_modified_time(&Config::file()) {
+        if Config::set(config) {
+            log::info!("config written");
+        }
+    }
+    let config2: Config2 = load_path(path2.into());
+    if get_modified_time(&path2) > get_modified_time(&Config2::file()) {
+        if Config2::set(config2) {
+            log::info!("config2 written");
+        }
+    }
 }
 
 #[cfg(feature = "cli")]

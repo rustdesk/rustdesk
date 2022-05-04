@@ -879,8 +879,6 @@ copy /Y \"{tmp_path}\\Uninstall {app_name}.lnk\" \"{start_menu}\\\"
 
     let meta = std::fs::symlink_metadata(std::env::current_exe()?)?;
     let size = meta.len() / 1024;
-    // save_tmp is for ensuring not copying file while writing
-    let config_path = Config::save_tmp();
     let ext = APP_NAME.to_lowercase();
     // https://docs.microsoft.com/zh-cn/windows/win32/msi/uninstall-registry-key?redirectedfrom=MSDNa
     // https://www.windowscentral.com/how-edit-registry-using-command-prompt-windows-10
@@ -927,8 +925,6 @@ sc stop {app_name}
 sc delete {app_name}
 sc create {app_name} binpath= \"\\\"{exe}\\\" --service\" start= auto DisplayName= \"{app_name} Service\"
 netsh advfirewall firewall add rule name=\"{app_name} Service\" dir=in action=allow program=\"{exe}\" enable=yes
-del /f \"{config_path}\"
-del /f \"{config2_path}\"
 sc start {app_name}
     ",
         path=path,
@@ -946,8 +942,7 @@ sc start {app_name}
         tray_shortcut=tray_shortcut,
         tmp_path=tmp_path,
         shortcuts=shortcuts,
-        config_path=config_path,
-        config2_path=config_path.replace(".toml", "2.toml"),
+        config_path=Config::file().to_str().unwrap_or(""),
         ext=ext,
     );
     run_cmds(cmds, false)?;
