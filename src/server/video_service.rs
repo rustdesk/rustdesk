@@ -288,6 +288,13 @@ fn run(sp: GenericService) -> ResultType<()> {
                     *SWITCH.lock().unwrap() = true;
                     bail!("SWITCH");
                 }
+                
+                #[cfg(windows)]
+                if !c.is_gdi() {
+                    c.set_gdi();
+                    log::info!("dxgi error, fall back to gdi: {:?}", err);
+                    continue;
+                }
 
                 return Err(err.into());
             }
