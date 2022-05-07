@@ -18,10 +18,10 @@ import java.util.*
 
 @SuppressLint("ConstantLocale")
 val LOCAL_NAME = Locale.getDefault().toString()
-val SCREEN_INFO = Info(0, 0)
+val SCREEN_INFO = Info(0, 0, 1, 200)
 
 data class Info(
-    var width: Int, var height: Int, var scale: Int = 1
+    var width: Int, var height: Int, var scale: Int, var dpi: Int
 )
 
 @RequiresApi(Build.VERSION_CODES.LOLLIPOP)
@@ -54,7 +54,6 @@ fun requestPermission(context: Context, type: String) {
         .permission(permission)
         .request { permissions, all ->
             if (all) {
-                Log.d("checkPermissions", "获取存储权限成功：$permissions")
                 Handler(Looper.getMainLooper()).post {
                     MainActivity.flutterMethodChannel.invokeMethod(
                         "on_android_permission_result",

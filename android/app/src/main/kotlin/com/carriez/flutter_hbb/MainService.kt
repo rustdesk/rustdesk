@@ -15,6 +15,7 @@ import android.content.pm.PackageManager
 import android.content.res.Configuration
 import android.graphics.Color
 import android.graphics.PixelFormat
+import android.hardware.display.DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR
 import android.hardware.display.DisplayManager.VIRTUAL_DISPLAY_FLAG_PUBLIC
 import android.hardware.display.VirtualDisplay
 import android.media.*
@@ -199,6 +200,7 @@ class MainService : Service() {
     private fun updateScreenInfo() {
         var w: Int
         var h: Int
+        var dpi: Int
         val windowManager = getSystemService(Context.WINDOW_SERVICE) as WindowManager
 
         @Suppress("DEPRECATION")
@@ -206,11 +208,13 @@ class MainService : Service() {
             val m = windowManager.maximumWindowMetrics
             w = m.bounds.width()
             h = m.bounds.height()
+            dpi = resources.configuration.densityDpi
         } else {
             val dm = DisplayMetrics()
             windowManager.defaultDisplay.getRealMetrics(dm)
             w = dm.widthPixels
             h = dm.heightPixels
+            dpi = dm.densityDpi
         }
 
         var scale = 1
@@ -219,11 +223,13 @@ class MainService : Service() {
                 scale = 2
                 w /= scale
                 h /= scale
+                dpi /= scale
             }
             if (SCREEN_INFO.width != w) {
                 SCREEN_INFO.width = w
                 SCREEN_INFO.height = h
                 SCREEN_INFO.scale = scale
+                SCREEN_INFO.dpi = dpi
                 if (isStart) {
                     stopCapture()
                     refreshScreen()
@@ -249,6 +255,7 @@ class MainService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         Log.d("whichService", "this service:${Thread.currentThread()}")
+        super.onStartCommand(intent, flags, startId)
         if (intent?.action == INIT_SERVICE) {
             Log.d(logTag, "service starting:${startId}:${Thread.currentThread()}")
             createForegroundNotification()
@@ -262,7 +269,6 @@ class MainService : Service() {
                 _isReady = true
             }
         }
-        super.onStartCommand(intent, flags, startId)
         return START_NOT_STICKY // don't use sticky (auto restart),the new service (from auto restart) will lose control
     }
 
@@ -385,7 +391,6 @@ class MainService : Service() {
         return isReady
     }
 
-    @SuppressLint("WrongConstant")
     private fun startRawVideoRecorder(mp: MediaProjection) {
         Log.d(logTag, "startRawVideoRecorder,screen info:$SCREEN_INFO")
         if (surface == null) {
@@ -393,13 +398,12 @@ class MainService : Service() {
             return
         }
         virtualDisplay = mp.createVirtualDisplay(
-            "RustDesk",
-            SCREEN_INFO.width, SCREEN_INFO.height, 200, VIRTUAL_DISPLAY_FLAG_PUBLIC,
+            "RustDeskVD",
+            SCREEN_INFO.width, SCREEN_INFO.height, SCREEN_INFO.dpi, VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR,
             surface, null, null
         )
     }
 
-    @SuppressLint("WrongConstant")
     private fun startVP9VideoRecorder(mp: MediaProjection) {
         createMediaCodec()
         videoEncoder?.let {
@@ -411,7 +415,7 @@ class MainService : Service() {
             it.start()
             virtualDisplay = mp.createVirtualDisplay(
                 "RustDeskVD",
-                SCREEN_INFO.width, SCREEN_INFO.height, 200, VIRTUAL_DISPLAY_FLAG_PUBLIC,
+                SCREEN_INFO.width, SCREEN_INFO.height, SCREEN_INFO.dpi, VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR,
                 surface, null, null
             )
         }
