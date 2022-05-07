@@ -207,7 +207,7 @@ class _RemotePageState extends State<RemotePage> {
     final label = _logicalKeyMap[e.logicalKey.keyId] ??
         _physicalKeyMap[e.physicalKey.usbHidUsage] ??
         e.logicalKey.keyLabel;
-    FFI.inputKey(label, down: down, press: false);
+    FFI.inputKey(label, down: down, press: press ?? false);
   }
 
   @override
