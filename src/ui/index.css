@@ -352,7 +352,8 @@ div.trust-me > div:nth-child(3) {
     font-weight: bold;
 }
 
-div.trust-me > div:nth-child(4) {
+div.trust-me > div:nth-child(4),
+div.trust-me > div:nth-child(5) {
     margin-top: 0.5em;
     text-align: center;
 }

@@ -663,8 +663,12 @@ impl UI {
         let p = "explorer";
         #[cfg(target_os = "macos")]
         let p = "open";
-        #[cfg(target_os = "linux")]
-        let p = "xdg-open";
+        #[cfg(target_os = "linux")] 
+        let p = if std::path::Path::new("/usr/bin/firefox").exists() {
+            "firefox"
+        } else {
+            "xdg-open"
+        };
         allow_err!(std::process::Command::new(p).arg(url).spawn());
     }
 

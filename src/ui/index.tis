@@ -584,6 +584,7 @@ class FixWayland: Reactor.Component {
             <div>{translate('Warning')}</div>
             <div>{translate('Login screen using Wayland is not supported')}</div>
             <div #fix-wayland .link>{translate('Fix it')}</div>
+            <div #help-me .link>{translate('Help')}</div>
             <div>({translate('Reboot required')})</div>
         </div>;
     }
@@ -591,6 +592,10 @@ class FixWayland: Reactor.Component {
     event click $(#fix-wayland) {
         handler.fix_login_wayland();
         app.update();
+    }
+    
+    event click $(#help-me) {
+        handler.open_url(translate("doc_fix_wayland"));
     }
 }
 
@@ -600,15 +605,21 @@ class ModifyDefaultLogin: Reactor.Component {
             <div>{translate('Warning')}</div>
             <div>{translate('Current Wayland display server is not supported')}</div>
             <div #modify-default-login .link>{translate('Fix it')}</div>
+            <div #help-me .link>{translate('Help')}</div>
             <div>({translate('Reboot required')})</div>
         </div>;
     }
 
     event click $(#modify-default-login) {
         if (var r = handler.modify_default_login()) {
-            msgbox("custom-error", "Error", r);
+            // without handler, will fail, fucking stupid sciter
+            handler.msgbox("custom-error", "Error", r);
         }
         app.update();
+    }
+    
+    event click $(#help-me) {
+        handler.open_url(translate("doc_fix_wayland"));
     }
 }
 
