@@ -714,14 +714,14 @@ class FFI {
         json.encode(modify({'type': type, 'buttons': button.value})));
   }
 
-  static void inputKey(String name, [bool? down]) {
+  static void inputKey(String name, {bool? down, bool? press}) {
     if (!ffiModel.keyboard()) return;
     setByName(
         'input_key',
         json.encode(modify({
           'name': name,
           'down': (down ?? false).toString(),
-          'press': 'true'
+          'press': (press ?? true).toString()
         })));
   }
 

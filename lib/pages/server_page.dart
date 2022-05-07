@@ -213,6 +213,10 @@ class _PermissionCheckerState extends State<PermissionChecker> {
                     "* ${translate("android_version_audio_tip")}",
                     style: TextStyle(color: MyTheme.darkGray),
                   ),
+            Text(
+              "DEBUG:VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR",
+              style: TextStyle(color: MyTheme.darkGray),
+            ),
             SizedBox(height: 8),
             Row(
               crossAxisAlignment: CrossAxisAlignment.center,
