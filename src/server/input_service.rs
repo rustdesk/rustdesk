@@ -684,11 +684,22 @@ fn handle_key_(evt: &KeyEvent) {
         }
         Some(key_event::Union::chr(chr)) => {
             if evt.down {
-                allow_err!(en.key_down(get_layout(chr)));
-                KEYS_DOWN
-                    .lock()
-                    .unwrap()
-                    .insert(chr as u64 + KEY_CHAR_START, Instant::now());
+                if en.key_down(get_layout(chr)).is_ok() {
+                    KEYS_DOWN
+                        .lock()
+                        .unwrap()
+                        .insert(chr as u64 + KEY_CHAR_START, Instant::now());
+                } else {
+                    if let Ok(chr) = char::try_from(chr) {
+                        let mut x = chr.to_string();
+                        if get_modifier_state(Key::Shift, &mut en)
+                            || get_modifier_state(Key::CapsLock, &mut en)
+                        {
+                            x = x.to_uppercase();
+                        }
+                        en.key_sequence(&x);
+                    }
+                }
             } else {
                 en.key_up(get_layout(chr));
                 KEYS_DOWN

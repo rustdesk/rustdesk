@@ -354,9 +354,13 @@ impl KeyboardControllable for Enigo {
     }
 
     fn key_down(&mut self, key: Key) -> crate::ResultType {
+        let code = self.key_to_keycode(key);
+        if code == 0 {
+            return Err("".into()); 
+        }
         if let Some(src) = self.event_source.as_ref() {
             if let Ok(event) =
-                CGEvent::new_keyboard_event(src.clone(), self.key_to_keycode(key), true)
+                CGEvent::new_keyboard_event(src.clone(), code, true)
             {
                 self.post(event);
             }
