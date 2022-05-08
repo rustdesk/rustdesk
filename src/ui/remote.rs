@@ -1,18 +1,29 @@
-#[cfg(windows)]
-use crate::clipboard_file::*;
-use crate::{
-    client::*,
-    common::{self, check_clipboard, update_clipboard, ClipboardContext, CLIPBOARD_INTERVAL},
-    VERSION,
+use std::{
+    collections::HashMap,
+    ops::Deref,
+    sync::{Arc, Mutex, RwLock},
 };
+
+use sciter::{
+    dom::{
+        event::{EventReason, BEHAVIOR_EVENTS, EVENT_GROUPS, PHASE_MASK},
+        Element, HELEMENT,
+    },
+    make_args,
+    video::{video_destination, AssetPtr, COLOR_SPACE},
+    Value,
+};
+
 #[cfg(windows)]
 use clipboard::{
     cliprdr::CliprdrClientContext, create_cliprdr_context as create_clipboard_file_context,
     get_rx_clip_client, server_clip_file,
 };
 use enigo::{self, Enigo, KeyboardControllable};
+use hbb_common::config::TransferSerde;
 use hbb_common::fs::{
-    can_enable_overwrite_detection, get_string, is_file_exists, new_send_confirm, DigestCheckResult,
+    can_enable_overwrite_detection, get_string, is_file_exists, new_send_confirm,
+    DigestCheckResult, RemoveJobMeta,
 };
 use hbb_common::log::log;
 use hbb_common::{
@@ -30,19 +41,13 @@ use hbb_common::{
     },
     Stream,
 };
-use sciter::{
-    dom::{
-        event::{EventReason, BEHAVIOR_EVENTS, EVENT_GROUPS, PHASE_MASK},
-        Element, HELEMENT,
-    },
-    make_args,
-    video::{video_destination, AssetPtr, COLOR_SPACE},
-    Value,
-};
-use std::{
-    collections::HashMap,
-    ops::Deref,
-    sync::{Arc, Mutex, RwLock},
+
+#[cfg(windows)]
+use crate::clipboard_file::*;
+use crate::{
+    client::*,
+    common::{self, check_clipboard, update_clipboard, ClipboardContext, CLIPBOARD_INTERVAL},
+    VERSION,
 };
 
 type Video = AssetPtr<video_destination>;
@@ -1314,6 +1319,7 @@ async fn io_loop(handler: Handler) {
         clipboard_file_context: None,
     };
     remote.io_loop(&key, &token).await;
+    remote.sync_jobs_status_to_local();
 }
 
 struct RemoveJob {
@@ -1334,6 +1340,14 @@ impl RemoveJob {
             is_remote,
             no_confirm: false,
             last_update_job_status: Instant::now(),
+        }
+    }
+
+    pub fn gen_meta(&self) -> RemoveJobMeta {
+        RemoveJobMeta {
+            path: self.path.clone(),
+            is_remote: self.is_remote,
+            no_confirm: self.no_confirm,
         }
     }
 }
@@ -1438,6 +1452,7 @@ impl Remote {
                         }
                     }
                 }
+                self.sync_jobs_status_to_local();
                 log::debug!("Exit io_loop of id={}", self.handler.id);
             }
             Err(err) => {
@@ -1780,6 +1795,23 @@ impl Remote {
             }
             self.last_update_jobs_status.0 = Instant::now();
         }
+    }
+
+    async fn sync_jobs_status_to_local(&mut self) -> bool {
+        let mut config: PeerConfig = self.handler.load_config();
+        let mut transfer_metas = TransferSerde::default();
+        for job in self.read_jobs.iter() {
+            transfer_metas.read_jobs.push(job.gen_meta());
+        }
+        for job in self.write_jobs.iter() {
+            transfer_metas.write_jobs.push(job.gen_meta());
+        }
+        for job in self.remove_jobs.values() {
+            transfer_metas.remove_jobs.push(job.gen_meta());
+        }
+        config.transfer = transfer_metas;
+        self.handler.save_config(config);
+        true
     }
 
     async fn handle_msg_from_peer(&mut self, data: &[u8], peer: &mut Stream) -> bool {

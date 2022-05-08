@@ -304,6 +304,14 @@ message FileTransferSendConfirmRequest {
   }
 }
 
+message FileTransferDirOffsetRequest {
+  int32 id = 1;
+  // start from file_num
+  sint32 file_num = 2;
+  // current file blk offset
+  uint32 offset_blk = 3;
+}
+
 message FileTransferDone {
   int32 id = 1;
   sint32 file_num = 2;

@@ -1,8 +1,3 @@
-use crate::log;
-use directories_next::ProjectDirs;
-use rand::Rng;
-use serde_derive::{Deserialize, Serialize};
-use sodiumoxide::crypto::sign;
 use std::{
     collections::HashMap,
     fs,
@@ -145,6 +140,8 @@ pub struct PeerConfig {
     pub options: HashMap<String, String>,
     #[serde(default)]
     pub info: PeerInfoSerde,
+    #[serde(default)]
+    pub transfer: TransferSerde,
 }
 
 #[derive(Debug, PartialEq, Default, Serialize, Deserialize, Clone)]
@@ -155,6 +152,16 @@ pub struct PeerInfoSerde {
     pub hostname: String,
     #[serde(default)]
     pub platform: String,
+}
+
+#[derive(Debug, Default, Serialize, Deserialize, Clone)]
+pub struct TransferSerde {
+    #[serde(default)]
+    pub write_jobs: Vec<TransferJobMeta>,
+    #[serde(default)]
+    pub read_jobs: Vec<TransferJobMeta>,
+    #[serde(default)]
+    pub remove_jobs: Vec<RemoveJobMeta>,
 }
 
 fn patch(path: PathBuf) -> PathBuf {
@@ -864,6 +871,7 @@ impl LanPeers {
 #[cfg(test)]
 mod tests {
     use super::*;
+
     #[test]
     fn test_serialize() {
         let cfg: Config = Default::default();

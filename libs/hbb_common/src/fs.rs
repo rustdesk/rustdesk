@@ -1,14 +1,17 @@
-use crate::{bail, get_version_number, message_proto::*, ResultType, Stream};
+#[cfg(windows)]
+use std::os::windows::prelude::*;
 use std::path::{Path, PathBuf};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
+
+use serde_derive::{Deserialize, Serialize};
+use tokio::{fs::File, io::*};
+
+use crate::{bail, get_version_number, message_proto::*, ResultType, Stream};
 // https://doc.rust-lang.org/std/os/windows/fs/trait.MetadataExt.html
 use crate::{
     compress::{compress, decompress},
     config::{Config, COMPRESS_LEVEL},
 };
-#[cfg(windows)]
-use std::os::windows::prelude::*;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
-use tokio::{fs::File, io::*};
 
 pub fn read_dir(path: &PathBuf, include_hidden: bool) -> ResultType<FileDirectory> {
     let mut dir = FileDirectory {
@@ -209,6 +212,20 @@ pub struct TransferJob {
     file_confirmed: bool,
     file_is_waiting: bool,
     default_overwrite_strategy: Option<bool>,
+}
+
+#[derive(Debug, Default, Serialize, Deserialize, Clone)]
+pub struct TransferJobMeta {
+    pub id: i32,
+    pub path: PathBuf,
+    pub file_num: i32,
+}
+
+#[derive(Debug, Default, Serialize, Deserialize, Clone)]
+pub struct RemoveJobMeta {
+    pub path: String,
+    pub is_remote: bool,
+    pub no_confirm: bool,
 }
 
 #[inline]
@@ -539,6 +556,14 @@ impl TransferJob {
             }
         }
         true
+    }
+
+    pub fn gen_meta(&self) -> TransferJobMeta {
+        TransferJobMeta {
+            id: self.id,
+            path: self.path.clone(),
+            file_num: self.file_num,
+        }
     }
 }
 

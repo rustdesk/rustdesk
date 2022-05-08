@@ -1,9 +1,20 @@
+use std::{
+    collections::HashMap,
+    net::SocketAddr,
+    ops::Deref,
+    sync::{mpsc, Arc, RwLock},
+};
+
 pub use async_trait::async_trait;
 #[cfg(not(any(target_os = "android", target_os = "linux")))]
 use cpal::{
     traits::{DeviceTrait, HostTrait, StreamTrait},
     Device, Host, StreamConfig,
 };
+use magnum_opus::{Channels::*, Decoder as AudioDecoder};
+use sha2::{Digest, Sha256};
+use uuid::Uuid;
+
 use hbb_common::{
     allow_err,
     anyhow::{anyhow, Context},
@@ -19,23 +30,14 @@ use hbb_common::{
     tokio::time::Duration,
     AddrMangle, ResultType, Stream,
 };
-use magnum_opus::{Channels::*, Decoder as AudioDecoder};
 use scrap::{Decoder, Image, VideoCodecId};
-use sha2::{Digest, Sha256};
-use std::{
-    collections::HashMap,
-    net::SocketAddr,
-    ops::Deref,
-    sync::{mpsc, Arc, RwLock},
-};
-use uuid::Uuid;
+
+pub use super::lang::*;
 pub mod file_trait;
 pub use file_trait::FileManager;
 pub const SEC30: Duration = Duration::from_secs(30);
 
 pub struct Client;
-
-pub use super::lang::*;
 
 #[cfg(not(any(target_os = "android", target_os = "linux")))]
 lazy_static::lazy_static! {
@@ -1324,6 +1326,7 @@ pub enum Data {
     ToggleClipboardFile,
     NewRDP,
     SetConfirmOverrideFile((i32, i32, bool, bool, bool)),
+    ResumeTransfer,
 }
 
 #[derive(Clone)]
