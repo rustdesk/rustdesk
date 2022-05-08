@@ -266,6 +266,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("android_start_service_tip", "點擊 [啟動服務] 或打開 [屏幕錄製] 權限開啟手機屏幕共享服務。"),
         ("Account", "帳戶"),
         ("Quit", "退出"),
+        ("Overwrite", "覆蓋"),
+        ("This file exists, skip or overwrite this file?", "這個文件/文件夾已存在，跳過/覆蓋？")
         ("doc_mac_permission", "https://rustdesk.com/docs/zh-tw/manual/mac/#啟用權限"),
         ("Help", "幫助"),
     ].iter().cloned().collect();
