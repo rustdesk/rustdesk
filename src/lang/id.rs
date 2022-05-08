@@ -1,0 +1,30 @@
+lazy_static::lazy_static! {
+pub static ref T: std::collections::HashMap<&'static str, &'static str> =
+    [
+        ("desk_tip", "Desktop Anda dapat diakses dengan ID dan kata sandi ini."),
+        ("connecting_status", "Menghubungkan ke jaringan RustDesk..."),
+        ("not_ready_status", "Belum siap. Silakan periksa koneksi Anda"),
+        ("id_change_tip", "Hanya karakter a-z, A-Z, 0-9 dan _ (underscore) yang diperbolehkan. Huruf pertama harus a-z, A-Z. Panjang antara 6 dan 16."),
+        ("install_tip", "Karena UAC, RustDesk tidak dapat bekerja dengan baik sebagai sisi remote dalam beberapa kasus. Untuk menghindari UAC, silakan klik tombol di bawah ini untuk menginstal RustDesk ke sistem."),
+        ("config_acc", "Untuk mengontrol Desktop Anda dari jarak jauh, Anda perlu memberikan izin \"Aksesibilitas\" RustDesk."),
+        ("config_screen", "Untuk mengakses Desktop Anda dari jarak jauh, Anda perlu memberikan izin \"Perekaman Layar\" RustDesk."),
+        ("agreement_tip", "Dengan memulai instalasi, Anda menerima perjanjian lisensi."),
+        ("not_close_tcp_tip", "Jangan tutup jendela ini saat menggunakan tunnel"),
+        ("setup_server_tip", "Untuk koneksi yang lebih cepat, silakan atur server Anda sendiri"),
+        ("Auto Login", "Auto Login (Hanya valid jika Anda menyetel \"Kunci setelah sesi berakhir\")"),
+        ("whitelist_tip", "Hanya whitelisted IP yang dapat mengakses saya"),
+        ("whitelist_sep", "Dipisahkan dengan koma, titik koma, spasi, atau baris baru"),
+        ("Wrong credentials", "Username atau password salah"),
+        ("invalid_http", "harus dimulai dengan http:// atau https://"),
+        ("install_daemon_tip", "Untuk memulai saat boot, Anda perlu menginstal system service."),
+        ("android_input_permission_tip1", "Agar perangkat jarak jauh dapat mengontrol perangkat Android Anda melalui mouse atau sentuhan, Anda harus mengizinkan RustDesk untuk menggunakan layanan \"Aksesibilitas\"."),
+        ("android_input_permission_tip2", "Silakan buka halaman pengaturan sistem berikutnya, temukan dan masuk ke [Layanan Terinstal], aktifkan layanan [Input RustDesk]."),
+        ("android_new_connection_tip", "Permintaan kontrol baru telah diterima, yang ingin mengontrol perangkat Anda saat ini."),
+        ("android_service_will_start_tip", "Mengaktifkan \"Tangkapan Layar\" akan memulai layanan secara otomatis, memungkinkan perangkat lain untuk meminta sambungan ke perangkat Anda."),
+        ("android_stop_service_tip", "Menutup layanan akan secara otomatis menutup semua koneksi yang dibuat."),
+        ("android_version_audio_tip", "Versi Android saat ini tidak mendukung pengambilan audio, harap tingkatkan ke Android 10 atau lebih tinggi."),
+        ("android_start_service_tip", "Ketuk izin [Mulai Layanan] atau BUKA [Tangkapan Layar] untuk memulai layanan berbagi layar."),
+        ("doc_mac_permission", "https://rustdesk.com/docs/en/manual/mac/#enable-permissions"),
+        ("doc_fix_wayland", "https://rustdesk.com/docs/en/manual/linux/#x11-required"),
+    ].iter().cloned().collect();
+}
