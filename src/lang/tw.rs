@@ -267,7 +267,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Account", "帳戶"),
         ("Quit", "退出"),
         ("Overwrite", "覆蓋"),
-        ("This file exists, skip or overwrite this file?", "這個文件/文件夾已存在，跳過/覆蓋？")
+        ("This file exists, skip or overwrite this file?", "這個文件/文件夾已存在，跳過/覆蓋？"),
         ("doc_mac_permission", "https://rustdesk.com/docs/zh-tw/manual/mac/#啟用權限"),
         ("Help", "幫助"),
     ].iter().cloned().collect();
