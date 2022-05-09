@@ -642,3 +642,12 @@ fn get_env(name: &str, uid: &str) -> String {
         "".to_owned()
     }
 }
+
+#[link(name = "gtk-3")]
+extern "C" {
+    fn gtk_main_quit();
+}
+
+pub fn quit_gui() {
+    unsafe { gtk_main_quit() };
+}

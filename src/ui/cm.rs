@@ -95,7 +95,7 @@ impl ConnectionManager {
     fn remove_connection(&self, id: i32) {
         self.write().unwrap().senders.remove(&id);
         if self.read().unwrap().senders.len() == 0 {
-            std::process::exit(0);
+            crate::platform::quit_gui();
         }
         self.call("removeConnection", &make_args!(id));
     }
@@ -414,7 +414,7 @@ async fn start_ipc(cm: ConnectionManager) {
             log::error!("Failed to start cm ipc server: {}", err);
         }
     }
-    std::process::exit(-1);
+    crate::platform::quit_gui();
 }
 
 #[cfg(target_os = "linux")]

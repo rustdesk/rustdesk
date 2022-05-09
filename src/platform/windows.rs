@@ -1091,3 +1091,7 @@ oLink.Save
     allow_err!(std::fs::remove_file(shortcut));
     Ok(())
 }
+
+pub fn quit_gui() {
+    unsafe { PostQuitMessage(0) };
+}
