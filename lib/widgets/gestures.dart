@@ -155,21 +155,22 @@ class CustomTouchGestureRecognizer extends ScaleGestureRecognizer {
     _sumHorizontal += d.focalPointDelta.dx;
     _sumVertical += d.focalPointDelta.dy;
     // start
-    if (_sumScale.abs() > kScaleSlop) {
+    if (onTwoFingerVerticalDragUpdate != null &&
+        _sumVertical.abs() > kPrecisePointerPanSlop &&
+        _sumHorizontal.abs() < kPrecisePointerPanSlop) {
+      debugPrint("start Vertical");
+      if (onTwoFingerVerticalDragStart != null) {
+        onTwoFingerVerticalDragStart!(_getDragStartDetails(d));
+      }
+      _currentState = CustomTouchGestureState.twoFingerVerticalDrag;
+      _reset();
+    } else if (onTwoFingerScaleUpdate != null && _sumScale.abs() > kScaleSlop) {
       debugPrint("start Scale");
       _currentState = CustomTouchGestureState.twoFingerScale;
       if (onTwoFingerScaleStart != null) {
         onTwoFingerScaleStart!(ScaleStartDetails(
             localFocalPoint: d.localFocalPoint, focalPoint: d.focalPoint));
       }
-      _reset();
-    } else if (_sumVertical.abs() > kPrecisePointerPanSlop &&
-        _sumHorizontal.abs() < kPrecisePointerHitSlop) {
-      debugPrint("start Vertical");
-      if (onTwoFingerVerticalDragStart != null) {
-        _getDragStartDetails(d);
-      }
-      _currentState = CustomTouchGestureState.twoFingerVerticalDrag;
       _reset();
     }
   }

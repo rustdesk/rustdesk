@@ -244,8 +244,6 @@ class FfiModel with ChangeNotifier {
 
     if (isPeerAndroid) {
       _touchMode = true;
-      FFI.setByName('peer_option', '{"name": "view-style", "value": "shrink"}');
-      FFI.canvasModel.updateViewStyle();
       if (FFI.ffiModel.permissions['keyboard'] != false) {
         showMobileActionsOverlay();
       }
@@ -296,6 +294,13 @@ class ImageModel with ChangeNotifier {
         FFI.canvasModel.scale = max(xscale, yscale);
       }
       initializeCursorAndCanvas();
+      Future.delayed(Duration(milliseconds: 1), () {
+        if (FFI.ffiModel.isPeerAndroid) {
+          FFI.setByName(
+              'peer_option', '{"name": "view-style", "value": "shrink"}');
+          FFI.canvasModel.updateViewStyle();
+        }
+      });
     }
     _image = image;
     if (image != null) notifyListeners();

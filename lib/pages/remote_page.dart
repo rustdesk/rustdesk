@@ -536,10 +536,15 @@ class _RemotePageState extends State<RemotePage> {
           FFI.canvasModel.panX(d.focalPointDelta.dx);
           FFI.canvasModel.panY(d.focalPointDelta.dy);
         },
-        onTwoFingerScaleEnd: (d) => _scale = 1,
-        onTwoFingerVerticalDragUpdate: (d) {
-          FFI.scroll(d.delta.dy / 2);
-        });
+        onTwoFingerScaleEnd: (d) {
+          _scale = 1;
+          FFI.setByName('peer_option', '{"name": "view-style", "value": ""}');
+        },
+        onTwoFingerVerticalDragUpdate: FFI.ffiModel.isPeerAndroid
+            ? null
+            : (d) {
+                FFI.scroll(d.delta.dy / 2);
+              });
   }
 
   Widget getBodyForMobile() {
@@ -933,7 +938,6 @@ void showOptions() {
   String quality = FFI.getByName('image_quality');
   if (quality == '') quality = 'balanced';
   String viewStyle = FFI.getByName('peer_option', 'view-style');
-  if (viewStyle == '') viewStyle = 'original';
   var displays = <Widget>[];
   final pi = FFI.ffiModel.pi;
   final image = FFI.ffiModel.getConnectionImage();
