@@ -529,6 +529,7 @@ class _RemotePageState extends State<RemotePage> {
             FFI.sendMouse('up', MouseButtons.left);
           }
         },
+        // scale + pan event
         onTwoFingerScaleUpdate: (d) {
           FFI.canvasModel.updateScale(d.scale / _scale);
           _scale = d.scale;
@@ -538,10 +539,6 @@ class _RemotePageState extends State<RemotePage> {
         onTwoFingerScaleEnd: (d) => _scale = 1,
         onTwoFingerVerticalDragUpdate: (d) {
           FFI.scroll(d.delta.dy / 2);
-        },
-        onTwoFingerPanUpdate: (d) {
-          FFI.canvasModel.panX(d.delta.dx);
-          FFI.canvasModel.panY(d.delta.dy);
         });
   }
 

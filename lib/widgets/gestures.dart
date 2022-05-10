@@ -8,7 +8,6 @@ enum CustomTouchGestureState {
   twoFingerScale,
   twoFingerVerticalDrag,
   twoFingerHorizontalDrag,
-  twoFingerPan
 }
 
 const kScaleSlop = kPrecisePointerPanSlop / 15;
@@ -29,7 +28,7 @@ class CustomTouchGestureRecognizer extends ScaleGestureRecognizer {
   GestureDragUpdateCallback? onOneFingerPanUpdate;
   GestureDragEndCallback? onOneFingerPanEnd;
 
-  // twoFingerScale
+  // twoFingerScale : scale + pan event
   GestureScaleStartCallback? onTwoFingerScaleStart;
   GestureScaleUpdateCallback? onTwoFingerScaleUpdate;
   GestureScaleEndCallback? onTwoFingerScaleEnd;
@@ -43,11 +42,6 @@ class CustomTouchGestureRecognizer extends ScaleGestureRecognizer {
   GestureDragStartCallback? onTwoFingerHorizontalDragStart;
   GestureDragUpdateCallback? onTwoFingerHorizontalDragUpdate;
   GestureDragEndCallback? onTwoFingerHorizontalDragEnd;
-
-  // twoFingerPan
-  GestureDragStartCallback? onTwoFingerPanStart;
-  GestureDragUpdateCallback? onTwoFingerPanUpdate;
-  GestureDragEndCallback? onTwoFingerPanEnd;
 
   void _init() {
     debugPrint("CustomTouchGestureRecognizer init");
@@ -94,11 +88,6 @@ class CustomTouchGestureRecognizer extends ScaleGestureRecognizer {
               onTwoFingerVerticalDragUpdate!(_getDragUpdateDetails(d));
             }
             break;
-          case CustomTouchGestureState.twoFingerPan:
-            if (onTwoFingerPanUpdate != null) {
-              onTwoFingerPanUpdate!(_getDragUpdateDetails(d));
-            }
-            break;
           default:
             break;
         }
@@ -131,12 +120,6 @@ class CustomTouchGestureRecognizer extends ScaleGestureRecognizer {
           debugPrint("TwoFingerState.vertical onEnd");
           if (onTwoFingerVerticalDragEnd != null) {
             onTwoFingerVerticalDragEnd!(_getDragEndDetails(d));
-          }
-          break;
-        case CustomTouchGestureState.twoFingerPan:
-          debugPrint("TwoFingerState.twoFingerPan onEnd");
-          if (onTwoFingerPanEnd != null) {
-            onTwoFingerPanEnd!(_getDragEndDetails(d));
           }
           break;
         default:
@@ -187,14 +170,6 @@ class CustomTouchGestureRecognizer extends ScaleGestureRecognizer {
         _getDragStartDetails(d);
       }
       _currentState = CustomTouchGestureState.twoFingerVerticalDrag;
-      _reset();
-    } else if ((_sumHorizontal.abs() + _sumVertical.abs()) >
-        kPrecisePointerPanSlop) {
-      debugPrint("start TwoFingerPan");
-      _currentState = CustomTouchGestureState.twoFingerPan;
-      if (onTwoFingerPanStart != null) {
-        onTwoFingerPanStart!(_getDragStartDetails(d));
-      }
       _reset();
     }
   }
@@ -806,9 +781,7 @@ RawGestureDetector getMixinGestureDetector({
             ..onTwoFingerScaleUpdate = onTwoFingerScaleUpdate
             ..onTwoFingerScaleEnd = onTwoFingerScaleEnd
             ..onTwoFingerHorizontalDragUpdate = onTwoFingerHorizontalDragUpdate
-            ..onTwoFingerVerticalDragUpdate = onTwoFingerVerticalDragUpdate
-            ..onTwoFingerPanStart = onTwoFingerPanStart
-            ..onTwoFingerPanUpdate = onTwoFingerPanUpdate;
+            ..onTwoFingerVerticalDragUpdate = onTwoFingerVerticalDragUpdate;
         })
       });
 }
