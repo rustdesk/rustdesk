@@ -528,8 +528,9 @@ class CursorModel with ChangeNotifier {
     var cy = r.center.dy;
     var tryMoveCanvasX = false;
     if (dx > 0) {
-      final maxCanvasCanMove =
-          _displayOriginX + FFI.imageModel.image!.width - r.right;
+      final maxCanvasCanMove = _displayOriginX +
+          FFI.imageModel.image!.width -
+          r.right.roundToDouble();
       tryMoveCanvasX = _x + dx > cx && maxCanvasCanMove > 0;
       if (tryMoveCanvasX) {
         dx = min(dx, maxCanvasCanMove);
@@ -538,7 +539,7 @@ class CursorModel with ChangeNotifier {
         dx = min(dx, maxCursorCanMove);
       }
     } else if (dx < 0) {
-      final maxCanvasCanMove = _displayOriginX - r.left;
+      final maxCanvasCanMove = _displayOriginX - r.left.roundToDouble();
       tryMoveCanvasX = _x + dx < cx && maxCanvasCanMove < 0;
       if (tryMoveCanvasX) {
         dx = max(dx, maxCanvasCanMove);
@@ -549,8 +550,9 @@ class CursorModel with ChangeNotifier {
     }
     var tryMoveCanvasY = false;
     if (dy > 0) {
-      final mayCanvasCanMove =
-          _displayOriginY + FFI.imageModel.image!.height - r.bottom;
+      final mayCanvasCanMove = _displayOriginY +
+          FFI.imageModel.image!.height -
+          r.bottom.roundToDouble();
       tryMoveCanvasY = _y + dy > cy && mayCanvasCanMove > 0;
       if (tryMoveCanvasY) {
         dy = min(dy, mayCanvasCanMove);
@@ -559,7 +561,7 @@ class CursorModel with ChangeNotifier {
         dy = min(dy, mayCursorCanMove);
       }
     } else if (dy < 0) {
-      final mayCanvasCanMove = _displayOriginY - r.top;
+      final mayCanvasCanMove = _displayOriginY - r.top.roundToDouble();
       tryMoveCanvasY = _y + dy < cy && mayCanvasCanMove < 0;
       if (tryMoveCanvasY) {
         dy = max(dy, mayCanvasCanMove);
