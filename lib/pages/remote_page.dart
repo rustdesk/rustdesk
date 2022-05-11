@@ -37,8 +37,8 @@ class _RemotePageState extends State<RemotePage> {
   var _fn = false;
   final FocusNode _mobileFocusNode = FocusNode();
   final FocusNode _physicalFocusNode = FocusNode();
-  var _showEdit = false;
-  var _isPhysicalKeyboard = false;
+  var _showEdit = false; // use soft keyboard
+  var _isPhysicalMouse = false;
 
   @override
   void initState() {
@@ -258,7 +258,7 @@ class _RemotePageState extends State<RemotePage> {
                             : SafeArea(
                                 child: Container(
                                     color: MyTheme.canvasColor,
-                                    child: _isPhysicalKeyboard
+                                    child: _isPhysicalMouse
                                         ? getBodyForMobile()
                                         : getBodyForMobileWithGesture())));
                   })
@@ -271,36 +271,36 @@ class _RemotePageState extends State<RemotePage> {
     return Listener(
         onPointerHover: (e) {
           if (e.kind != ui.PointerDeviceKind.mouse) return;
-          if (!_isPhysicalKeyboard) {
+          if (!_isPhysicalMouse) {
             setState(() {
-              _isPhysicalKeyboard = true;
+              _isPhysicalMouse = true;
             });
           }
-          if (_isPhysicalKeyboard) {
+          if (_isPhysicalMouse) {
             FFI.handleMouse(getEvent(e, 'mousemove'));
           }
         },
         onPointerDown: (e) {
           if (e.kind != ui.PointerDeviceKind.mouse) {
-            if (_isPhysicalKeyboard) {
+            if (_isPhysicalMouse) {
               setState(() {
-                _isPhysicalKeyboard = false;
+                _isPhysicalMouse = false;
               });
             }
           }
-          if (_isPhysicalKeyboard) {
+          if (_isPhysicalMouse) {
             FFI.handleMouse(getEvent(e, 'mousedown'));
           }
         },
         onPointerUp: (e) {
           if (e.kind != ui.PointerDeviceKind.mouse) return;
-          if (_isPhysicalKeyboard) {
+          if (_isPhysicalMouse) {
             FFI.handleMouse(getEvent(e, 'mouseup'));
           }
         },
         onPointerMove: (e) {
           if (e.kind != ui.PointerDeviceKind.mouse) return;
-          if (_isPhysicalKeyboard) {
+          if (_isPhysicalMouse) {
             FFI.handleMouse(getEvent(e, 'mousemove'));
           }
         },
@@ -344,7 +344,8 @@ class _RemotePageState extends State<RemotePage> {
                           sendRawKey(e, down: true);
                         }
                       }
-                      if (e is RawKeyUpEvent) {
+                      // [!_showEdit] workaround for soft-keyboard's control_key like Backspace / Enter
+                      if (!_showEdit && e is RawKeyUpEvent) {
                         if (key == LogicalKeyboardKey.altLeft ||
                             key == LogicalKeyboardKey.altRight) {
                           FFI.alt = false;
