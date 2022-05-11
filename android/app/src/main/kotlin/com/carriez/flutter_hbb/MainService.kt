@@ -13,10 +13,10 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.content.res.Configuration
+import android.content.res.Configuration.ORIENTATION_LANDSCAPE
 import android.graphics.Color
 import android.graphics.PixelFormat
 import android.hardware.display.DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR
-import android.hardware.display.DisplayManager.VIRTUAL_DISPLAY_FLAG_PUBLIC
 import android.hardware.display.VirtualDisplay
 import android.media.*
 import android.media.projection.MediaProjection
@@ -37,6 +37,8 @@ import kotlin.concurrent.thread
 import org.json.JSONException
 import org.json.JSONObject
 import java.nio.ByteBuffer
+import kotlin.math.max
+import kotlin.math.min
 
 const val EXTRA_MP_DATA = "mp_intent"
 const val INIT_SERVICE = "init_service"
@@ -132,10 +134,10 @@ class MainService : Service() {
     private external fun init(ctx: Context)
     private external fun startServer()
     private external fun onVideoFrameUpdate(buf: ByteBuffer)
-    private external fun releaseVideoFrame()
     private external fun onAudioFrameUpdate(buf: ByteBuffer)
     private external fun translateLocale(localeName: String, input: String): String
     private external fun refreshScreen()
+    private external fun setFrameRawEnable(name: String, value: Boolean)
     // private external fun sendVp9(data: ByteArray)
 
     private fun translate(input: String): String {
@@ -144,8 +146,8 @@ class MainService : Service() {
     }
 
     companion object {
-        private var _isReady = false
-        private var _isStart = false
+        private var _isReady = false // media permission ready status
+        private var _isStart = false // screen capture start status
         val isReady: Boolean
             get() = _isReady
         val isStart: Boolean
@@ -183,7 +185,7 @@ class MainService : Service() {
             serviceLooper = looper
             serviceHandler = Handler(looper)
         }
-        updateScreenInfo()
+        updateScreenInfo(resources.configuration.orientation)
         initNotification()
         startServer()
     }
@@ -197,7 +199,7 @@ class MainService : Service() {
         super.onDestroy()
     }
 
-    private fun updateScreenInfo() {
+    private fun updateScreenInfo(orientation: Int) {
         var w: Int
         var h: Int
         var dpi: Int
@@ -217,6 +219,16 @@ class MainService : Service() {
             dpi = dm.densityDpi
         }
 
+        val max = max(w,h)
+        val min = min(w,h)
+        if (orientation == ORIENTATION_LANDSCAPE) {
+            w = max
+            h = min
+        } else {
+            w = min
+            h = max
+        }
+        Log.d(logTag,"updateScreenInfo:w:$w,h:$h")
         var scale = 1
         if (w != 0 && h != 0) {
             if (w > MAX_SCREEN_SIZE || h > MAX_SCREEN_SIZE) {
@@ -274,7 +286,7 @@ class MainService : Service() {
 
     override fun onConfigurationChanged(newConfig: Configuration) {
         super.onConfigurationChanged(newConfig)
-        updateScreenInfo()
+        updateScreenInfo(newConfig.orientation)
     }
 
     @SuppressLint("WrongConstant")
@@ -317,6 +329,7 @@ class MainService : Service() {
             Log.w(logTag, "startCapture fail,mediaProjection is null")
             return false
         }
+        updateScreenInfo(resources.configuration.orientation)
         Log.d(logTag, "Start Capture")
         surface = createSurface()
 
@@ -331,17 +344,20 @@ class MainService : Service() {
         }
         checkMediaPermission()
         _isStart = true
+        setFrameRawEnable("video",true)
+        setFrameRawEnable("audio",true)
         return true
     }
 
     fun stopCapture() {
         Log.d(logTag, "Stop Capture")
+        setFrameRawEnable("video",false)
+        setFrameRawEnable("audio",false)
         _isStart = false
         // release video
-        imageReader?.close()
-        releaseVideoFrame()
-        surface?.release()
         virtualDisplay?.release()
+        surface?.release()
+        imageReader?.close()
         videoEncoder?.let {
             it.signalEndOfInputStream()
             it.stop()
