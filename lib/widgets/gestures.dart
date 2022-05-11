@@ -10,7 +10,8 @@ enum CustomTouchGestureState {
   twoFingerHorizontalDrag,
 }
 
-const kScaleSlop = kPrecisePointerPanSlop / 15;
+// Adjust Carefully! balance vertical and pan
+const kScaleSlop = kPrecisePointerPanSlop / 28;
 
 class CustomTouchGestureRecognizer extends ScaleGestureRecognizer {
   CustomTouchGestureRecognizer({
@@ -154,8 +155,16 @@ class CustomTouchGestureRecognizer extends ScaleGestureRecognizer {
     _sumScale += d.scale - 1;
     _sumHorizontal += d.focalPointDelta.dx;
     _sumVertical += d.focalPointDelta.dy;
-    // start
-    if (onTwoFingerVerticalDragUpdate != null &&
+    // start , order is important
+    if (onTwoFingerScaleUpdate != null && _sumScale.abs() > kScaleSlop) {
+      debugPrint("start Scale");
+      _currentState = CustomTouchGestureState.twoFingerScale;
+      if (onTwoFingerScaleStart != null) {
+        onTwoFingerScaleStart!(ScaleStartDetails(
+            localFocalPoint: d.localFocalPoint, focalPoint: d.focalPoint));
+      }
+      _reset();
+    } else if (onTwoFingerVerticalDragUpdate != null &&
         _sumVertical.abs() > kPrecisePointerPanSlop &&
         _sumHorizontal.abs() < kPrecisePointerPanSlop) {
       debugPrint("start Vertical");
@@ -163,14 +172,6 @@ class CustomTouchGestureRecognizer extends ScaleGestureRecognizer {
         onTwoFingerVerticalDragStart!(_getDragStartDetails(d));
       }
       _currentState = CustomTouchGestureState.twoFingerVerticalDrag;
-      _reset();
-    } else if (onTwoFingerScaleUpdate != null && _sumScale.abs() > kScaleSlop) {
-      debugPrint("start Scale");
-      _currentState = CustomTouchGestureState.twoFingerScale;
-      if (onTwoFingerScaleStart != null) {
-        onTwoFingerScaleStart!(ScaleStartDetails(
-            localFocalPoint: d.localFocalPoint, focalPoint: d.focalPoint));
-      }
       _reset();
     }
   }
