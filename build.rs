@@ -40,7 +40,7 @@ fn install_oboe() {
     } else {
         target_arch = "arm".to_owned();
     }
-    let target = format!("{}-android-static", target_arch);
+    let target = format!("{}-android", target_arch);
     let vcpkg_root = std::env::var("VCPKG_ROOT").unwrap();
     let mut path: std::path::PathBuf = vcpkg_root.into();
     path.push("installed");
@@ -63,12 +63,17 @@ fn install_oboe() {
 }
 
 fn main() {
+    hbb_common::gen_version();
+    install_oboe();
+    // there is problem with cfg(target_os) in build.rs, so use our workaround
+    let target_os = std::env::var("CARGO_CFG_TARGET_OS").unwrap();
+    if target_os == "android" || target_os == "ios" {
+        return;
+    }
     #[cfg(all(windows, feature = "inline"))]
     build_manifest();
     #[cfg(windows)]
     build_windows();
     #[cfg(target_os = "macos")]
     println!("cargo:rustc-link-lib=framework=ApplicationServices");
-    hbb_common::gen_version();
-    install_oboe();
 }
