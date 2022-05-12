@@ -231,7 +231,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("One-Finger Move", "Движение одним пальцем"),
         ("Double Tap & Move", "Двойное нажатие и перемещение"),
         ("Mouse Drag", "Перетаскивание мышью"),
-        ("Two-Finger vertically", "Двумя пальцами по вертикали"),
+        ("Three-Finger vertically", "Три пальца по вертикали"),
         ("Mouse Wheel", "Колесико мыши"),
         ("Two-Finger Move", "Движение двумя пальцами"),
         ("Canvas Move", "Перемещение холста"),
@@ -266,6 +266,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("android_start_service_tip", "Коснитесь [Запуск промежуточного сервера] или ОТКРЫТЬ разрешение [Скриншот], чтобы запустить службу демонстрации экрана."),
         ("Account", "Аккаунт"),
         ("Quit", "Выйти"),
+        ("doc_mac_permission", "https://rustdesk.com/docs/en/manual/mac/#enable-permissions"),
         ("Help", "Помощь"),
     ].iter().cloned().collect();
 }

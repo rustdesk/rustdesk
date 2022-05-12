@@ -231,7 +231,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("One-Finger Move", ""),
         ("Double Tap & Move", ""),
         ("Mouse Drag", ""),
-        ("Two-Finger vertically", ""),
+        ("Three-Finger vertically", ""),
         ("Mouse Wheel", ""),
         ("Two-Finger Move", ""),
         ("Canvas Move", ""),
@@ -265,5 +265,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("android_version_audio_tip", ""),
         ("android_start_service_tip", ""),
         ("Account", ""),
+        ("Quit", ""),
+        ("doc_mac_permission", "https://rustdesk.com/docs/en/manual/mac/#enable-permissions"),
+        ("Help", ""),
     ].iter().cloned().collect();
 }
