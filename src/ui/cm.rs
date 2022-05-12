@@ -270,6 +270,11 @@ impl ConnectionManager {
                         }
                     }
                 }
+                ipc::FS::WriteOffset {
+                    id,file_num,offset_blk
+                } => {
+                    
+                }
             },
             #[cfg(windows)]
             Data::ClipbaordFile(_clip) => {
