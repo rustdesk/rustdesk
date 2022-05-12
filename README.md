@@ -36,6 +36,8 @@ Desktop versions use [sciter](https://sciter.com/) for GUI, please download scit
 [Linux](https://raw.githubusercontent.com/c-smile/sciter-sdk/master/bin.lnx/x64/libsciter-gtk.so) |
 [MacOS](https://raw.githubusercontent.com/c-smile/sciter-sdk/master/bin.osx/libsciter.dylib)
 
+Mobile versions use Flutter. We will migrate desktop version from Sciter to Flutter.
+
 ## Raw steps to build
 
 - Prepare your Rust development env and C++ build env
@@ -151,6 +153,8 @@ Please ensure that you are running these commands from the root of the RustDesk 
 - **[src/client.rs](https://github.com/rustdesk/rustdesk/tree/master/src/client.rs)**: start a peer connection
 - **[src/rendezvous_mediator.rs](https://github.com/rustdesk/rustdesk/tree/master/src/rendezvous_mediator.rs)**: Communicate with [rustdesk-server](https://github.com/rustdesk/rustdesk-server), wait for remote direct (TCP hole punching) or relayed connection
 - **[src/platform](https://github.com/rustdesk/rustdesk/tree/master/src/platform)**: platform specific code
+- **[src/flutter](https://github.com/rustdesk/rustdesk/tree/master/src/flutter)**: Flutter code for mobile
+- **[src/flutter/web/js](https://github.com/rustdesk/rustdesk/tree/master/src/flutter/web/js)**: Javascript for Flutter web client
 
 ## Snapshot
 
