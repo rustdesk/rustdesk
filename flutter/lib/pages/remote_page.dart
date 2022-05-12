@@ -32,6 +32,7 @@ class _RemotePageState extends State<RemotePage> {
   double _bottom = 0;
   String _value = '';
   double _scale = 1;
+  double _mouseScrollIntegral = 0; // mouse scroll speed controller
 
   var _more = true;
   var _fn = false;
@@ -544,7 +545,14 @@ class _RemotePageState extends State<RemotePage> {
         onThreeFingerVerticalDragUpdate: FFI.ffiModel.isPeerAndroid
             ? null
             : (d) {
-                FFI.scroll(d.delta.dy / 2);
+                _mouseScrollIntegral += d.delta.dy / 4;
+                if (_mouseScrollIntegral > 1) {
+                  FFI.scroll(1);
+                  _mouseScrollIntegral = 0;
+                } else if (_mouseScrollIntegral < -1) {
+                  FFI.scroll(-1);
+                  _mouseScrollIntegral = 0;
+                }
               });
   }
 

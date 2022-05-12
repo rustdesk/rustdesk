@@ -691,11 +691,9 @@ class FFI {
     sendMouse('up', button);
   }
 
-  static void scroll(double y) {
-    var y2 = y.round();
-    if (y2 == 0) return;
+  static void scroll(int y) {
     setByName('send_mouse',
-        json.encode(modify({'type': 'wheel', 'y': y2.toString()})));
+        json.encode(modify({'type': 'wheel', 'y': y.toString()})));
   }
 
   static void reconnect() {
