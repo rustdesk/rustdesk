@@ -1542,6 +1542,7 @@ impl Remote {
     }
 
     async fn load_last_jobs(&mut self) {
+        println!("start load last jobs");
         self.handler.call("clearAllJobs",&make_args!());
         let pc = self.handler.load_config();
         if pc.transfer.write_jobs.is_empty() && pc.transfer.read_jobs.is_empty() {
@@ -1845,6 +1846,7 @@ impl Remote {
             transfer_metas.remove_jobs.push(job.gen_meta());
         }
         config.transfer = transfer_metas;
+        println!("{:?}", config.transfer);
         self.handler.save_config(config);
         true
     }

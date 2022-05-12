@@ -219,17 +219,25 @@ pub struct TransferJob {
 
 #[derive(Debug, Default, Serialize, Deserialize, Clone)]
 pub struct TransferJobMeta {
+    #[serde(default)]
     pub id: i32,
+    #[serde(default)]
     pub remote: String,
+    #[serde(default)]
     pub to: String,
+    #[serde(default)]
     pub show_hidden: bool,
+    #[serde(default)]
     pub file_num: i32,
 }
 
 #[derive(Debug, Default, Serialize, Deserialize, Clone)]
 pub struct RemoveJobMeta {
+    #[serde(default)]
     pub path: String,
+    #[serde(default)]
     pub is_remote: bool,
+    #[serde(default)]
     pub no_confirm: bool,
 }
 
