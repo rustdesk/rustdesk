@@ -231,7 +231,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("One-Finger Move", "Eine Fingerbewegung"),
         ("Double Tap & Move", "Doppeltippen und verschieben"),
         ("Mouse Drag", "Maus ziehen"),
-        ("Two-Finger vertically", "Zwei Finger vertikal"),
+        ("Three-Finger vertically", "Drei Finger vertikal"),
         ("Mouse Wheel", "Mausrad"),
         ("Two-Finger Move", "Zwei Finger Bewegung"),
         ("Canvas Move", "Leinwand bewegen"),
@@ -266,6 +266,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("android_start_service_tip", "Tippen Sie auf [Dienst starten] oder ÖFFNEN Sie die Berechtigung [Bildschirmaufnahme], um den Bildschirmfreigabedienst zu starten."),
         ("Account", "Konto"),
         ("Quit", "Ausgang"),
+        ("doc_mac_permission", "https://rustdesk.com/docs/en/manual/mac/#enable-permissions"),
         ("Help", "Hilfe"),
     ].iter().cloned().collect();
 }

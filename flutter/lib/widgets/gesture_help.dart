@@ -32,6 +32,8 @@ class GestureIcons {
       IconData(0xe68f, fontFamily: _family);
   static const IconData icon_gesture_f_double_tap =
       IconData(0xe691, fontFamily: _family);
+  static const IconData icon_gesture_f_three_fingers =
+      IconData(0xe687, fontFamily: _family);
 }
 
 typedef OnTouchModeChange = void Function(bool);
@@ -118,8 +120,8 @@ class _GestureHelpState extends State<GestureHelp> {
                               translate("Mouse Drag")),
                           GestureInfo(
                               width,
-                              GestureIcons.icon_gesture_f_drag_up_down_,
-                              translate("Two-Finger vertically"),
+                              GestureIcons.icon_gesture_f_three_fingers,
+                              translate("Three-Finger vertically"),
                               translate("Mouse Wheel")),
                           GestureInfo(
                               width,
@@ -140,8 +142,8 @@ class _GestureHelpState extends State<GestureHelp> {
                               translate("Left Mouse")),
                           GestureInfo(
                               width,
-                              GestureIcons.icon_gesture_f_tap_,
-                              translate("Two-Finger Tap"),
+                              GestureIcons.icon_gesture_press_hold,
+                              translate("One-Long Tap"),
                               translate("Right Mouse")),
                           GestureInfo(
                               width,
@@ -150,8 +152,8 @@ class _GestureHelpState extends State<GestureHelp> {
                               translate("Mouse Drag")),
                           GestureInfo(
                               width,
-                              GestureIcons.icon_gesture_f_drag_up_down_,
-                              translate("Two-Finger vertically"),
+                              GestureIcons.icon_gesture_f_three_fingers,
+                              translate("Three-Finger vertically"),
                               translate("Mouse Wheel")),
                           GestureInfo(
                               width,

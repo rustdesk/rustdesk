@@ -231,7 +231,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("One-Finger Move", "Gerakan Satu Jari"),
         ("Double Tap & Move", "Ketuk Dua Kali & Pindah"),
         ("Mouse Drag", "Geser Mouse"),
-        ("Two-Finger vertically", "Dua Jari secara vertikal"),
+        ("Three-Finger vertically", "Tiga Jari secara vertikal"),
         ("Mouse Wheel", "Roda mouse"),
         ("Two-Finger Move", "Gerakan Dua Jari"),
         ("Canvas Move", "Gerakan Kanvas"),
@@ -264,10 +264,9 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("android_stop_service_tip", "Menutup layanan akan secara otomatis menutup semua koneksi yang dibuat."),
         ("android_version_audio_tip", "Versi Android saat ini tidak mendukung pengambilan audio, harap tingkatkan ke Android 10 atau lebih tinggi."),
         ("android_start_service_tip", "Ketuk izin [Mulai Layanan] atau BUKA [Tangkapan Layar] untuk memulai layanan berbagi layar."),
-        ("doc_mac_permission", "https://rustdesk.com/docs/en/manual/mac/#enable-permissions"),
-        ("doc_fix_wayland", "https://rustdesk.com/docs/en/manual/linux/#x11-required"),
         ("Account", "Akun"),
         ("Quit", "Keluar"),
+        ("doc_mac_permission", "https://rustdesk.com/docs/en/manual/mac/#enable-permissions"),
         ("Help", "Bantuan"),
     ].iter().cloned().collect();
 }
