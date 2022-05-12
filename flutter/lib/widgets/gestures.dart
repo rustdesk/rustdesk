@@ -6,12 +6,8 @@ enum CustomTouchGestureState {
   none,
   oneFingerPan,
   twoFingerScale,
-  twoFingerVerticalDrag,
-  twoFingerHorizontalDrag,
+  threeFingerVerticalDrag
 }
-
-// Adjust Carefully! balance vertical and pan
-const kScaleSlop = kPrecisePointerPanSlop / 28;
 
 class CustomTouchGestureRecognizer extends ScaleGestureRecognizer {
   CustomTouchGestureRecognizer({
@@ -34,39 +30,56 @@ class CustomTouchGestureRecognizer extends ScaleGestureRecognizer {
   GestureScaleUpdateCallback? onTwoFingerScaleUpdate;
   GestureScaleEndCallback? onTwoFingerScaleEnd;
 
-  // twoFingerVerticalDrag
-  GestureDragStartCallback? onTwoFingerVerticalDragStart;
-  GestureDragUpdateCallback? onTwoFingerVerticalDragUpdate;
-  GestureDragEndCallback? onTwoFingerVerticalDragEnd;
+  // threeFingerVerticalDrag
+  GestureDragStartCallback? onThreeFingerVerticalDragStart;
+  GestureDragUpdateCallback? onThreeFingerVerticalDragUpdate;
+  GestureDragEndCallback? onThreeFingerVerticalDragEnd;
 
-  // twoFingerHorizontalDrag
-  GestureDragStartCallback? onTwoFingerHorizontalDragStart;
-  GestureDragUpdateCallback? onTwoFingerHorizontalDragUpdate;
-  GestureDragEndCallback? onTwoFingerHorizontalDragEnd;
+  var _currentState = CustomTouchGestureState.none;
+  Timer? _startEventDebounceTimer;
 
   void _init() {
     debugPrint("CustomTouchGestureRecognizer init");
     onStart = (d) {
+      _startEventDebounceTimer?.cancel();
       if (d.pointerCount == 1) {
         _currentState = CustomTouchGestureState.oneFingerPan;
         if (onOneFingerPanStart != null) {
           onOneFingerPanStart!(DragStartDetails(
               localPosition: d.localFocalPoint, globalPosition: d.focalPoint));
         }
-        debugPrint("start pan");
+        debugPrint("start oneFingerPan");
       } else if (d.pointerCount == 2) {
-        _currentState = CustomTouchGestureState.none;
-        startWatchTimer();
-      } else {
-        _currentState = CustomTouchGestureState.none;
-        _reset();
+        if (_currentState == CustomTouchGestureState.threeFingerVerticalDrag) {
+          // 3 -> 2 debounce
+          _startEventDebounceTimer = Timer(Duration(milliseconds: 200), () {
+            _currentState = CustomTouchGestureState.twoFingerScale;
+            if (onTwoFingerScaleStart != null) {
+              onTwoFingerScaleStart!(ScaleStartDetails(
+                  localFocalPoint: d.localFocalPoint,
+                  focalPoint: d.focalPoint));
+            }
+            debugPrint("debounce start twoFingerScale success");
+          });
+        }
+        _currentState = CustomTouchGestureState.twoFingerScale;
+        // startWatchTimer();
+        if (onTwoFingerScaleStart != null) {
+          onTwoFingerScaleStart!(ScaleStartDetails(
+              localFocalPoint: d.localFocalPoint, focalPoint: d.focalPoint));
+        }
+        debugPrint("start twoFingerScale");
+      } else if (d.pointerCount == 3) {
+        _currentState = CustomTouchGestureState.threeFingerVerticalDrag;
+        if (onThreeFingerVerticalDragStart != null) {
+          onThreeFingerVerticalDragStart!(
+              DragStartDetails(globalPosition: d.localFocalPoint));
+        }
+        debugPrint("start threeFingerScale");
+        // _reset();
       }
     };
     onUpdate = (d) {
-      if (_isWatch) {
-        _updateCompute(d);
-        return;
-      }
       if (_currentState != CustomTouchGestureState.none) {
         switch (_currentState) {
           case CustomTouchGestureState.oneFingerPan:
@@ -79,14 +92,9 @@ class CustomTouchGestureRecognizer extends ScaleGestureRecognizer {
               onTwoFingerScaleUpdate!(d);
             }
             break;
-          case CustomTouchGestureState.twoFingerHorizontalDrag:
-            if (onTwoFingerHorizontalDragUpdate != null) {
-              onTwoFingerHorizontalDragUpdate!(_getDragUpdateDetails(d));
-            }
-            break;
-          case CustomTouchGestureState.twoFingerVerticalDrag:
-            if (onTwoFingerVerticalDragUpdate != null) {
-              onTwoFingerVerticalDragUpdate!(_getDragUpdateDetails(d));
+          case CustomTouchGestureState.threeFingerVerticalDrag:
+            if (onThreeFingerVerticalDragUpdate != null) {
+              onThreeFingerVerticalDragUpdate!(_getDragUpdateDetails(d));
             }
             break;
           default:
@@ -111,84 +119,18 @@ class CustomTouchGestureRecognizer extends ScaleGestureRecognizer {
             onTwoFingerScaleEnd!(d);
           }
           break;
-        case CustomTouchGestureState.twoFingerHorizontalDrag:
-          debugPrint("TwoFingerState.horizontal onEnd");
-          if (onTwoFingerHorizontalDragEnd != null) {
-            onTwoFingerHorizontalDragEnd!(_getDragEndDetails(d));
-          }
-          break;
-        case CustomTouchGestureState.twoFingerVerticalDrag:
-          debugPrint("TwoFingerState.vertical onEnd");
-          if (onTwoFingerVerticalDragEnd != null) {
-            onTwoFingerVerticalDragEnd!(_getDragEndDetails(d));
+        case CustomTouchGestureState.threeFingerVerticalDrag:
+          debugPrint("ThreeFingerState.vertical onEnd");
+          if (onThreeFingerVerticalDragEnd != null) {
+            onThreeFingerVerticalDragEnd!(_getDragEndDetails(d));
           }
           break;
         default:
           break;
       }
       _currentState = CustomTouchGestureState.none;
-      _reset();
     };
   }
-
-  var _currentState = CustomTouchGestureState.none;
-  var _isWatch = false;
-
-  Timer? _timer;
-  double _sumScale = 0;
-  double _sumVertical = 0;
-  double _sumHorizontal = 0;
-
-  void _clearSum() {
-    _sumScale = 0;
-    _sumVertical = 0;
-    _sumHorizontal = 0;
-  }
-
-  void _reset() {
-    _isWatch = false;
-    _clearSum();
-    if (_timer != null) _timer!.cancel();
-  }
-
-  void _updateCompute(ScaleUpdateDetails d) {
-    _sumScale += d.scale - 1;
-    _sumHorizontal += d.focalPointDelta.dx;
-    _sumVertical += d.focalPointDelta.dy;
-    // start , order is important
-    if (onTwoFingerScaleUpdate != null && _sumScale.abs() > kScaleSlop) {
-      debugPrint("start Scale");
-      _currentState = CustomTouchGestureState.twoFingerScale;
-      if (onTwoFingerScaleStart != null) {
-        onTwoFingerScaleStart!(ScaleStartDetails(
-            localFocalPoint: d.localFocalPoint, focalPoint: d.focalPoint));
-      }
-      _reset();
-    } else if (onTwoFingerVerticalDragUpdate != null &&
-        _sumVertical.abs() > kPrecisePointerPanSlop &&
-        _sumHorizontal.abs() < kPrecisePointerPanSlop) {
-      debugPrint("start Vertical");
-      if (onTwoFingerVerticalDragStart != null) {
-        onTwoFingerVerticalDragStart!(_getDragStartDetails(d));
-      }
-      _currentState = CustomTouchGestureState.twoFingerVerticalDrag;
-      _reset();
-    }
-  }
-
-  void startWatchTimer() {
-    debugPrint("startWatchTimer");
-    _isWatch = true;
-    _clearSum();
-    if (_timer != null) _timer!.cancel();
-    _timer = Timer(const Duration(milliseconds: 200), _reset);
-  }
-
-  DragStartDetails _getDragStartDetails(ScaleUpdateDetails d) =>
-      DragStartDetails(
-        globalPosition: d.focalPoint,
-        localPosition: d.localFocalPoint,
-      );
 
   DragUpdateDetails _getDragUpdateDetails(ScaleUpdateDetails d) =>
       DragUpdateDetails(
@@ -344,13 +286,16 @@ class HoldTapMoveGestureRecognizer extends GestureRecognizer {
   }
 
   void _reject(_TapTracker tracker) {
-    _checkCancel();
-
-    _isStart = false;
-    _trackers.remove(tracker.pointer);
-    tracker.entry.resolve(GestureDisposition.rejected);
-    _freezeTracker(tracker);
-    _reset();
+    try {
+      _checkCancel();
+      _isStart = false;
+      _trackers.remove(tracker.pointer);
+      tracker.entry.resolve(GestureDisposition.rejected);
+      _freezeTracker(tracker);
+      _reset();
+    } catch (e) {
+      debugPrint("Failed to _reject:$e");
+    }
   }
 
   @override
@@ -729,10 +674,7 @@ RawGestureDetector getMixinGestureDetector({
   GestureDragEndCallback? onOneFingerPanEnd,
   GestureScaleUpdateCallback? onTwoFingerScaleUpdate,
   GestureScaleEndCallback? onTwoFingerScaleEnd,
-  GestureDragUpdateCallback? onTwoFingerHorizontalDragUpdate,
-  GestureDragUpdateCallback? onTwoFingerVerticalDragUpdate,
-  GestureDragStartCallback? onTwoFingerPanStart,
-  GestureDragUpdateCallback? onTwoFingerPanUpdate,
+  GestureDragUpdateCallback? onThreeFingerVerticalDragUpdate,
 }) {
   return RawGestureDetector(
       child: child,
@@ -782,8 +724,7 @@ RawGestureDetector getMixinGestureDetector({
             ..onOneFingerPanEnd = onOneFingerPanEnd
             ..onTwoFingerScaleUpdate = onTwoFingerScaleUpdate
             ..onTwoFingerScaleEnd = onTwoFingerScaleEnd
-            ..onTwoFingerHorizontalDragUpdate = onTwoFingerHorizontalDragUpdate
-            ..onTwoFingerVerticalDragUpdate = onTwoFingerVerticalDragUpdate;
-        })
+            ..onThreeFingerVerticalDragUpdate = onThreeFingerVerticalDragUpdate;
+        }),
       });
 }

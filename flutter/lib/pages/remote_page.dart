@@ -541,7 +541,7 @@ class _RemotePageState extends State<RemotePage> {
           _scale = 1;
           FFI.setByName('peer_option', '{"name": "view-style", "value": ""}');
         },
-        onTwoFingerVerticalDragUpdate: FFI.ffiModel.isPeerAndroid
+        onThreeFingerVerticalDragUpdate: FFI.ffiModel.isPeerAndroid
             ? null
             : (d) {
                 FFI.scroll(d.delta.dy / 2);
