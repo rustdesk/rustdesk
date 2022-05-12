@@ -1,13 +1,16 @@
 if (is_osx) view.windowBlurbehind = #light;
 stdout.println("current platform:", OS);
+stdout.println("is_xfce: ", is_xfce);
 
 // html min-width, min-height not working on mac, below works for all
-view.windowMinSize = (500, 300);
+view.windowMinSize = (scaleIt(500), scaleIt(300));
 
 var app;
 var tmp = handler.get_connect_status();
 var connect_status = tmp[0];
 var service_stopped = handler.get_option("stop-service") == "Y";
+var rendezvous_service_stopped = false;
+var using_public_server = handler.using_public_server();
 var software_update_url = "";
 var key_confirmed = tmp[1];
 var system_error = "";
@@ -42,11 +45,16 @@ class ConnectStatus: Reactor.Component {
         } else if (connect_status == 0) {
             return translate('connecting_status');
         }
-        return translate("Ready");
+        if (!handler.using_public_server()) return translate('Ready');
+        return <span>{translate("Ready")}, <span .link #setup-server>{translate("setup_server_tip")}</span></span>;
     }
 
     event click $(#start-service) () {
         handler.set_option("stop-service", "");
+    }
+
+    event click $(#setup-server) () {
+        handler.open_url("https://rustdesk.com/blog/id-relay-set/");
     }
 }
 
@@ -60,6 +68,19 @@ function createNewConnect(id, type) {
     }
     handler.set_remote_id(id);
     handler.new_remote(id, type);
+}
+
+class ShareRdp: Reactor.Component {
+    function render() {
+        var rdp_shared_string = translate("Enable RDP session sharing");
+        var cls = handler.is_share_rdp()  ? "selected" : "line-through";
+        return <li class={cls}><span>{svg_checkmark}</span>{rdp_shared_string}</li>;
+    }
+    
+    function onClick() {
+        handler.set_share_rdp(!handler.is_share_rdp());
+        this.update();
+    }
 }
 
 var direct_server;
@@ -144,6 +165,13 @@ class AudioInputs: Reactor.Component {
     }
 }
 
+function getUserName() {
+    try {
+        return JSON.parse(handler.get_local_option("user_info")).name;
+    } catch(e) {}
+    return '';
+}
+
 class MyIdMenu: Reactor.Component {
     function this() {
         myIdMenu = this;
@@ -152,11 +180,12 @@ class MyIdMenu: Reactor.Component {
     function render() {
         return <div #myid>
             {this.renderPop()}
-            {translate("ID")}{svg_menu}
+            ID{svg_menu}
         </div>;
     }
 
     function renderPop() {
+        var username = handler.get_local_option("access_token") ? getUserName() : '';
         return <popup>
             <menu.context #config-options>
                 <li #enable-keyboard><span>{svg_checkmark}</span>{translate('Enable Keyboard/Mouse')}</li>
@@ -164,16 +193,24 @@ class MyIdMenu: Reactor.Component {
                 <li #enable-file-transfer><span>{svg_checkmark}</span>{translate('Enable File Transfer')}</li> 
                 <li #enable-tunnel><span>{svg_checkmark}</span>{translate('Enable TCP Tunneling')}</li>
                 <AudioInputs />
+                <li #allow-remote-config-modification><span>{svg_checkmark}</span>{translate('Enable remote configuration modification')}</li>
                 <div .separator />
                 <li #custom-server>{translate('ID/Relay Server')}</li>
                 <li #whitelist title={translate('whitelist_tip')}>{translate('IP Whitelisting')}</li>
                 <li #socks5-server>{translate('Socks5 Proxy')}</li>
-                {is_win ? <li #install-virtual-display>Install virtual display</li> : ""}
                 <div .separator />
-                <li #stop-service><span>{svg_checkmark}</span>{translate("Enable Service")}</li>
+                <li #stop-service class={service_stopped ? "line-through" : "selected"}><span>{svg_checkmark}</span>{translate("Enable Service")}</li>
+                {handler.is_rdp_service_open() ? <ShareRdp /> : ""}
                 <DirectServer />
+                {false && handler.using_public_server() && <li #allow-always-relay><span>{svg_checkmark}</span>{translate('Always connected via relay')}</li>}
+                {handler.has_rendezvous_service() ? <li #stop-rendezvous-service>{translate(rendezvous_service_stopped ? "Start ID/relay service" : "Stop ID/relay service")}</li> : ""}
+                {handler.is_ok_change_id() ? <div .separator /> : ""}
+                {username ? 
+                <li #logout>{translate('Logout')} ({username})</li> :
+                <li #login>{translate('Login')}</li>}
+                {handler.is_ok_change_id() && key_confirmed ? <li #change-id>{translate('Change ID')}</li> : ""}
                 <div .separator />
-                <li #about>{translate('About')} {" "} {handler.get_app_name()}</li>
+                <li #about>{translate('About')} {" "}{handler.get_app_name()}</li>
             </menu>
         </popup>;
     }
@@ -190,15 +227,25 @@ class MyIdMenu: Reactor.Component {
         this.$(svg#menu).popup(menu);
     }
 
+    event click $(li#login) () {
+        login();
+    }
+
+    event click $(li#logout) () {
+        logout();
+    }
+
     function toggleMenuState() {
         for (var el in $$(menu#config-options>li)) {
             if (el.id && el.id.indexOf("enable-") == 0) {
                 var enabled = handler.get_option(el.id) != "N";
                 el.attributes.toggleClass("selected", enabled);
                 el.attributes.toggleClass("line-through", !enabled);
-            } else if (el.id && el.id === "stop-service") {
-                el.attributes.toggleClass("selected", !service_stopped);
-                el.attributes.toggleClass("line-through", service_stopped);
+            }
+            if (el.id && el.id.indexOf("allow-") == 0) {
+                var enabled = handler.get_option(el.id) == "Y";
+                el.attributes.toggleClass("selected", enabled);
+                el.attributes.toggleClass("line-through", !enabled);
             }
         }
     }
@@ -207,9 +254,10 @@ class MyIdMenu: Reactor.Component {
         var name = handler.get_app_name();
         msgbox("custom-nocancel-nook-hasclose", "About " + name, "<div style='line-height: 2em'> \
             <div>Version: " + handler.get_version() + " \
-            <div .link .custom-event url='http://rustdesk.com/privacy'>Privacy Statement</div> \
-            <div .link .custom-event url='http://rustdesk.com'>Website</div> \
+            <div .link .custom-event url='https://rustdesk.com/privacy'>Privacy Statement</div> \
+            <div .link .custom-event url='https://rustdesk.com'>Website</div> \
             <div style='background: #2c8cff; color: white; padding: 1em; margin-top: 1em;'>Copyright &copy; 2022 Purslane Ltd.\
+            <br />" + handler.get_license() + " \
             <p style='font-weight: bold'>Made with heart in this chaotic world!</p>\
             </div>\
         </div>", function(el) {
@@ -223,11 +271,14 @@ class MyIdMenu: Reactor.Component {
         if (me.id && me.id.indexOf("enable-") == 0) {
             handler.set_option(me.id, handler.get_option(me.id) == "N" ? "" : "N");
         }
+        if (me.id && me.id.indexOf("allow-") == 0) {
+            handler.set_option(me.id, handler.get_option(me.id) == "Y" ? "" : "Y");
+        }
         if (me.id == "whitelist") {
             var old_value = handler.get_option("whitelist").split(",").join("\n");
             msgbox("custom-whitelist", translate("IP Whitelisting"), "<div .form> \
             <div>" + translate("whitelist_sep") + "</div> \
-            <textarea spellcheck=\"false\" name=\"text\" novalue=\"0.0.0.0\" style=\"overflow: scroll-indicator; width:*; height: 140px; font-size: 1.2em; padding: 0.5em;\">" + old_value + "</textarea>\
+            <textarea .outline-focus spellcheck=\"false\" name=\"text\" novalue=\"0.0.0.0\" style=\"overflow: scroll-indicator; width:*; height: 140px; font-size: 1.2em; padding: 0.5em;\">" + old_value + "</textarea>\
             </div> \
             ", function(res=null) {
                 if (!res) return;
@@ -248,16 +299,22 @@ class MyIdMenu: Reactor.Component {
         } else if (me.id == "custom-server") {
             var configOptions = handler.get_options();
             var old_relay = configOptions["relay-server"] || "";
+            var old_api = configOptions["api-server"] || "";
             var old_id = configOptions["custom-rendezvous-server"] || "";
+            var old_key = configOptions["key"] || "";
             msgbox("custom-server", "ID/Relay Server", "<div .form .set-password> \
             <div><span>" + translate("ID Server") + ": </span><input .outline-focus name='id' value='" + old_id + "' /></div> \
             <div><span>" + translate("Relay Server") + ": </span><input name='relay' value='" + old_relay + "' /></div> \
+            <div><span>" + translate("API Server") + ": </span><input name='api' value='" + old_api + "' /></div> \
+            <div><span>" + translate("Key") + ": </span><input name='key' value='" + old_key + "' /></div> \
             </div> \
             ", function(res=null) {
                 if (!res) return;
                 var id = (res.id || "").trim();
                 var relay = (res.relay || "").trim();
-                if (id == old_id && relay == old_relay) return;
+                var api = (res.api || "").trim().toLowerCase();
+                var key = (res.key || "").trim();
+                if (id == old_id && relay == old_relay && key == old_key && api == old_api) return;
                 if (id) {
                     var err = handler.test_if_valid_server(id);
                     if (err) return translate("ID Server") + ": " + err;
@@ -266,10 +323,17 @@ class MyIdMenu: Reactor.Component {
                     var err = handler.test_if_valid_server(relay);
                     if (err) return translate("Relay Server") + ": " + err;
                 }
+                if (api) {
+                    if (0 != api.indexOf("https://") && 0 != api.indexOf("http://")) {
+                        return  translate("API Server") + ": " + translate("invalid_http");
+                    }
+                }
                 configOptions["custom-rendezvous-server"] = id;
                 configOptions["relay-server"] = relay;
+                configOptions["api-server"] = api;
+                configOptions["key"] = key;
                 handler.set_options(configOptions);
-            }, 240);
+            }, 260);
         } else if (me.id == "socks5-server") {
             var socks5 = handler.get_socks() || {};
             var old_proxy = socks5[0] || "";
@@ -292,10 +356,33 @@ class MyIdMenu: Reactor.Component {
                 }
                 handler.set_socks(proxy, username, password);
             }, 240);
-        } else if (me.id == "install-virtual-display") {
-            handler.install_virtual_display();
         } else if (me.id == "stop-service") {
             handler.set_option("stop-service", service_stopped ? "" : "Y");
+        } else if (me.id == "stop-rendezvous-service") {
+            handler.set_option("stop-rendezvous-service",  rendezvous_service_stopped ? "" : "Y");
+        } else if (me.id == "change-id") {
+            msgbox("custom-id", translate("Change ID"), "<div .form> \
+            <div>" + translate('id_change_tip') + " </div> \
+            <div><span style='width: 100px; display:inline-block'>ID: </span><input .outline-focus style='width: 250px' name='id' /></div> \
+            </div> \
+            ", function(res=null, show_progress) {
+                if (!res) return;
+                show_progress();
+                var id = (res.id || "").trim();
+                if (!id) return;
+                if (id == my_id) return;
+                handler.change_id(id);
+                function check_status() {
+                    var status = handler.get_async_job_status();
+                    if (status == " ") self.timer(0.1s, check_status);
+                    else {
+                        if (status) show_progress(false, translate(status));
+                        else show_progress(-1);
+                    }
+                }
+                check_status();
+                return " ";
+            });
         } else if (me.id == "about") {
             this.showAbout()
         }
@@ -387,6 +474,7 @@ class App: Reactor.Component
                     </div>
                     <ConnectStatus @{this.connect_status} />
                 </div>
+                <div #overlay style="position: absolute;size:*;background:black;opacity:0.5;display:none" />
                 <div #msgbox />
             </div>;
     }
@@ -418,48 +506,28 @@ class InstallMe: Reactor.Component {
     }
 }
 
-const http = function() { 
-  
-  function makeRequest(httpverb) {
-    return function( params ) {
-      params.type = httpverb;
-      view.request(params);
-    };
-  }
-  
-  function download(from, to, args..) 
-  {
-      var rqp = { type:#get, url: from, toFile: to };
-      var fn = 0;
-      var on = 0;
-      for( var p in args )
-        if( p instanceof Function )
-        {
-          switch(++fn) {
-            case 1: rqp.success = p; break;
-            case 2: rqp.error = p; break;
-            case 3: rqp.progress = p; break;
-          }
-        } else if( p instanceof Object )
-        {
-          switch(++on) {
-            case 1: rqp.params = p; break;
-            case 2: rqp.headers = p; break;
-          }
+function download(from, to, args..) {
+    var rqp = { type:#get, url: from, toFile: to };
+    var fn = 0;
+    var on = 0;
+    for( var p in args ) {
+        if( p instanceof Function ) {
+            switch(++fn) {
+                case 1: rqp.success = p; break;
+                case 2: rqp.error = p; break;
+                case 3: rqp.progress = p; break;
+            }
+        } else if( p instanceof Object ) {
+            switch(++on) {
+                case 1: rqp.params = p; break;
+                case 2: rqp.headers = p; break;
+            }
         }  
-      view.request(rqp);
-  }
-  
-  return {
-    get:  makeRequest(#get),
-    post: makeRequest(#post),
-    put:  makeRequest(#put),
-    del:  makeRequest(#delete),
-    download: download
-  };
+    }
+    view.request(rqp);
+}
 
-}();
-
+// current running version is higher than installed
 class UpgradeMe: Reactor.Component {
     function render() {
         var update_or_download = is_osx ? "download" : "update";
@@ -509,7 +577,7 @@ class UpdateMe: Reactor.Component {
             el.content("Downloading %" + (loaded * 100 / total));
         };
         stdout.println("Downloading " + url + " to " + path);
-        http.download(
+        download(
             url,
             self.url(path),
             onsuccess, onerror, onprogress);
@@ -778,7 +846,6 @@ event keydown (evt) {
 $(body).content(<App />);
 
 function self.closing() {
-    // return false; // can prevent window close
     var (x, y, w, h) = view.box(#rectw, #border, #screen);
     handler.closing(x, y, w, h);
     return true;
@@ -787,13 +854,19 @@ function self.closing() {
 function self.ready() {
     var r = handler.get_size();
     if (isReasonableSize(r) && r[2] > 0) {
-        view.move(r[0], r[1], r[2], r[3]);
+        var (sx, sy, sw, sh) = view.screenBox(#workarea, #rectw);
+        if (r[2] >= sw && r[3] >= sh) {
+            self.timer(1ms, function() { view.windowState = View.WINDOW_MAXIMIZED; });
+        } else {
+            view.move(r[0], r[1], r[2], r[3]);
+        }
     } else {
-        centerize(800, 600);
+        centerize(scaleIt(800), scaleIt(600));
     }
     if (!handler.get_remote_id()) {
         view.focus = $(#remote_id);
     }
+    refreshCurrentUser();
 }
 
 function showAbout() {
@@ -801,6 +874,7 @@ function showAbout() {
 }
 
 function showSettings() {
+    if ($(#overlay).style#display == 'block') return;
     myIdMenu.showSettingMenu();
 }
 
@@ -810,6 +884,16 @@ function checkConnectStatus() {
         if (tmp != service_stopped) {
             service_stopped = tmp;
             app.update();
+        }
+        tmp = !!handler.get_option("stop-rendezvous-service");
+        if (tmp != rendezvous_service_stopped) {
+            rendezvous_service_stopped = tmp;
+            myIdMenu.update();
+        }
+        tmp = handler.using_public_server();
+        if (tmp != using_public_server) {
+            using_public_server = tmp;
+            app.connect_status.update();
         }
         tmp = handler.get_connect_status();
         if (tmp[0] != connect_status) {
@@ -836,10 +920,126 @@ function checkConnectStatus() {
         }
         if (handler.recent_sessions_updated()) {
             stdout.println("recent sessions updated");
+            updateAbPeer();
             app.update();
         }
-        checkConnectStatus();
-    });
+        check_if_overlay();
+        checkConnectStatus();    
+    });                          
+}                                
+                                 
+var enter = false;               
+function self.onMouse(evt) {     
+    switch(evt.type) {           
+    case Event.MOUSE_ENTER:    
+        enter = true;
+        check_if_overlay();
+        break;
+    case Event.MOUSE_LEAVE:
+        $(#overlay).style#display = 'none';
+        enter = false;
+        break;
+    }
+}
+
+function check_if_overlay() {
+    if (!handler.get_option('allow-remote-config-modification')) {
+        var time0 = getTime();
+        handler.check_mouse_time();
+        self.timer(120ms, function() {
+            if (!enter) return;
+            var d = time0 - handler.get_mouse_time();
+            if (d < 120) $(#overlay).style#display = 'block';
+        });
+    }
 }
 
 checkConnectStatus();
+
+function login() {
+    var name0 = getUserName();
+    var pass0 = '';
+    msgbox("custom-login", translate('Login'), <div .form .set-password> 
+            <div><span>{translate('Username')}:</span><input|text name="username" value={name0} .outline-focus /></div> 
+            <div><span>{translate('Password')}:</span><PasswordComponent value={pass0} /></div> 
+        </div>, function(res=null, show_progress) {
+        if (!res) return;
+        show_progress();
+        var name = (res.username || '').trim();
+        if (!name) {
+            show_progress(false, translate("Username missed"));
+            return " ";
+        }
+        var pass = (res.password || '').trim();
+        if (!pass) {
+            show_progress(false, translate("Password missed"));
+            return " ";
+        }
+        abLoading = true;
+        var url = handler.get_api_server();
+        httpRequest(url + "/api/login", #post, {username: name, password: pass, id: my_id, uuid: handler.get_uuid()}, function(data) {
+            if (data.error) {
+                abLoading = false;
+                var err = translate(data.error);
+                show_progress(false, err);
+                return;
+            }
+            handler.set_local_option("access_token", data.access_token);
+            handler.set_local_option("user_info", JSON.stringify(data.user));
+            show_progress(-1);
+            myIdMenu.update();
+            getAb();
+        }, function(err, status) {
+            abLoading = false;
+            err = translate(err);
+            if (url.indexOf('rustdesk') < 0) err = url + ', ' + err;
+            show_progress(false, err);
+        });
+        return " ";
+      });
+}
+
+function reset_token() {
+    handler.set_local_option("access_token", "");
+    handler.set_local_option("user_info", "");
+    handler.set_local_option("selected-tags", "");
+    myIdMenu.update();
+    resetAb();
+    if (abComponent) {
+        abComponent.update();
+    }
+}
+
+function logout() {
+    var url = handler.get_api_server();
+    httpRequest(url + "/api/logout", #post, {id: my_id, uuid: handler.get_uuid()}, function(data) {
+    }, function(err, status) {
+        msgbox("custom-error", translate('Error'), err);
+    }, getHttpHeaders());
+    reset_token();
+}
+
+function refreshCurrentUser() {
+    if (!handler.get_local_option("access_token")) return;
+    abLoading = true;
+    abError = "";
+    app.update();
+    httpRequest(handler.get_api_server() + "/api/currentUser", #post, {id: my_id, uuid: handler.get_uuid()}, function(data) {
+        if (data.error) {
+            handleAbError(data.error);
+            return;
+        }
+        handler.set_local_option("user_info", JSON.stringify(data));
+        myIdMenu.update();
+        getAb();
+    }, function(err, status) {
+        if (status == 401 || status == 400) {
+            reset_token();
+        }
+        handleAbError(err);
+    }, getHttpHeaders());
+} 
+
+function getHttpHeaders() {
+    return "Authorization: Bearer " + handler.get_local_option("access_token");
+}

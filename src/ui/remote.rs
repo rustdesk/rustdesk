@@ -12,7 +12,7 @@ use clipboard::{
 use enigo::{self, Enigo, KeyboardControllable};
 use hbb_common::{
     allow_err,
-    config::{self, Config, PeerConfig},
+    config::{Config, LocalConfig, PeerConfig},
     fs, log,
     message_proto::{permission_info::Permission, *},
     protobuf::Message as _,
@@ -88,6 +88,8 @@ impl Deref for Handler {
     }
 }
 
+impl FileManager for Handler {}
+
 impl sciter::EventHandler for Handler {
     fn get_subscription(&mut self) -> Option<EVENT_GROUPS> {
         Some(EVENT_GROUPS::HANDLE_BEHAVIOR_EVENT)
@@ -155,12 +157,15 @@ impl sciter::EventHandler for Handler {
     }
 
     sciter::dispatch_script_call! {
+        fn get_audit_server();
+        fn send_note(String);
         fn is_xfce();
         fn get_id();
         fn get_default_pi();
         fn get_option(String);
         fn t(String);
         fn set_option(String, String);
+        fn input_os_password(String, bool);
         fn save_close_state(String, String);
         fn is_file_transfer();
         fn is_port_forward();
@@ -243,6 +248,8 @@ impl Handler {
         let mut me = self.clone();
         let peer = self.peer_platform();
         let is_win = peer == "Windows";
+        #[cfg(windows)]
+        crate::platform::windows::enable_lowlevel_keyboard(std::ptr::null_mut() as _);
         std::thread::spawn(move || {
             // This will block.
             std::env::set_var("KEYBOARD_ONLY", "y"); // pass to rdev
@@ -276,6 +283,9 @@ impl Handler {
                 #[cfg(not(windows))]
                 let ctrl = get_key_state(enigo::Key::Control);
                 let shift = get_key_state(enigo::Key::Shift);
+                #[cfg(windows)]
+                let command = crate::platform::windows::get_win_key_state();
+                #[cfg(not(windows))]
                 let command = get_key_state(enigo::Key::Meta);
                 let control_key = match key {
                     Key::Alt => Some(ControlKey::Alt),
@@ -530,6 +540,27 @@ impl Handler {
         crate::client::translate(name)
     }
 
+    fn get_audit_server(&self) -> String {
+        if self.lc.read().unwrap().conn_id <= 0
+            || LocalConfig::get_option("access_token").is_empty()
+        {
+            return "".to_owned();
+        }
+        crate::get_audit_server(
+            Config::get_option("api-server"),
+            Config::get_option("custom-rendezvous-server"),
+        )
+    }
+
+    fn send_note(&self, note: String) {
+        let url = self.get_audit_server();
+        let id = self.id.clone();
+        let conn_id = self.lc.read().unwrap().conn_id;
+        std::thread::spawn(move || {
+            send_note(url, id, conn_id, note);
+        });
+    }
+
     fn is_xfce(&self) -> bool {
         crate::platform::is_xfce()
     }
@@ -659,6 +690,10 @@ impl Handler {
         self.lc.write().unwrap().set_option(k, v);
     }
 
+    fn input_os_password(&mut self, pass: String, activate: bool) {
+        input_os_password(pass, activate, self.clone());
+    }
+
     fn save_close_state(&self, k: String, v: String) {
         self.write().unwrap().close_state.insert(k, v);
     }
@@ -671,38 +706,7 @@ impl Handler {
     }
 
     fn get_icon(&mut self) -> String {
-        config::ICON.to_owned()
-    }
-
-    fn get_home_dir(&mut self) -> String {
-        fs::get_home_as_string()
-    }
-
-    fn read_dir(&mut self, path: String, include_hidden: bool) -> Value {
-        match fs::read_dir(&fs::get_path(&path), include_hidden) {
-            Err(_) => Value::null(),
-            Ok(fd) => {
-                let mut m = make_fd(0, &fd.entries.to_vec(), false);
-                m.set_item("path", path);
-                m
-            }
-        }
-    }
-
-    fn cancel_job(&mut self, id: i32) {
-        self.send(Data::CancelJob(id));
-    }
-
-    fn read_remote_dir(&mut self, path: String, include_hidden: bool) {
-        let mut msg_out = Message::new();
-        let mut file_action = FileAction::new();
-        file_action.set_read_dir(ReadDir {
-            path,
-            include_hidden,
-            ..Default::default()
-        });
-        msg_out.set_file_action(file_action);
-        self.send(Data::Message(msg_out));
+        crate::get_icon()
     }
 
     fn send_chat(&mut self, text: String) {
@@ -725,45 +729,6 @@ impl Handler {
         let mut msg_out = Message::new();
         msg_out.set_misc(misc);
         self.send(Data::Message(msg_out));
-    }
-
-    fn remove_file(&mut self, id: i32, path: String, file_num: i32, is_remote: bool) {
-        self.send(Data::RemoveFile((id, path, file_num, is_remote)));
-    }
-
-    fn remove_dir_all(&mut self, id: i32, path: String, is_remote: bool) {
-        self.send(Data::RemoveDirAll((id, path, is_remote)));
-    }
-
-    fn confirm_delete_files(&mut self, id: i32, file_num: i32) {
-        self.send(Data::ConfirmDeleteFiles((id, file_num)));
-    }
-
-    fn set_no_confirm(&mut self, id: i32) {
-        self.send(Data::SetNoConfirm(id));
-    }
-
-    fn remove_dir(&mut self, id: i32, path: String, is_remote: bool) {
-        if is_remote {
-            self.send(Data::RemoveDir((id, path)));
-        } else {
-            fs::remove_all_empty_dir(&fs::get_path(&path)).ok();
-        }
-    }
-
-    fn create_dir(&mut self, id: i32, path: String, is_remote: bool) {
-        self.send(Data::CreateDir((id, path, is_remote)));
-    }
-
-    fn send_files(
-        &mut self,
-        id: i32,
-        path: String,
-        to: String,
-        include_hidden: bool,
-        is_remote: bool,
-    ) {
-        self.send(Data::SendFiles((id, path, to, include_hidden, is_remote)));
     }
 
     fn is_file_transfer(&self) -> bool {
@@ -859,13 +824,6 @@ impl Handler {
         fs::get_string(&path)
     }
 
-    #[inline]
-    fn send(&mut self, data: Data) {
-        if let Some(ref sender) = self.read().unwrap().sender {
-            sender.send(data).ok();
-        }
-    }
-
     fn login(&mut self, password: String, remember: bool) {
         self.send(Data::Login((password, remember)));
     }
@@ -875,12 +833,16 @@ impl Handler {
     }
 
     fn enter(&mut self) {
+        #[cfg(windows)]
+        crate::platform::windows::stop_system_key_propagate(true);
         unsafe {
             IS_IN = true;
         }
     }
 
     fn leave(&mut self) {
+        #[cfg(windows)]
+        crate::platform::windows::stop_system_key_propagate(false);
         unsafe {
             IS_IN = false;
         }
@@ -896,28 +858,17 @@ impl Handler {
         shift: bool,
         command: bool,
     ) {
-        let mut msg_out = Message::new();
-        let mut mouse_event = MouseEvent {
-            mask,
-            x,
-            y,
-            ..Default::default()
-        };
-        if alt {
-            mouse_event.modifiers.push(ControlKey::Alt.into());
+        #[allow(unused_mut)]
+        let mut command = command;
+        #[cfg(windows)]
+        {
+            if !command && crate::platform::windows::get_win_key_state() {
+                command = true;
+            }
         }
-        if shift {
-            mouse_event.modifiers.push(ControlKey::Shift.into());
-        }
-        if ctrl {
-            mouse_event.modifiers.push(ControlKey::Control.into());
-        }
-        if command {
-            mouse_event.modifiers.push(ControlKey::Meta.into());
-        }
-        msg_out.set_mouse_event(mouse_event);
-        self.send(Data::Message(msg_out));
-        // on macos, ctrl + left = right, up wont emit, so we need to
+
+        send_mouse(mask, x, y, alt, ctrl, shift, command, self);
+        // on macos, ctrl + left button down = right button down, up won't emit, so we need to
         // emit up myself if peer is not macos
         // to-do: how about ctrl + left from win to macos
         if cfg!(target_os = "macos") {
@@ -1199,10 +1150,19 @@ async fn start_one_port_forward(
     remote_host: String,
     remote_port: i32,
     receiver: mpsc::UnboundedReceiver<Data>,
+    key: &str,
+    token: &str,
 ) {
     handler.lc.write().unwrap().port_forward = (remote_host, remote_port);
-    if let Err(err) =
-        crate::port_forward::listen(handler.id.clone(), port, handler.clone(), receiver).await
+    if let Err(err) = crate::port_forward::listen(
+        handler.id.clone(),
+        port,
+        handler.clone(),
+        receiver,
+        key,
+        token,
+    )
+    .await
     {
         handler.on_error(&format!("Failed to listen on {}: {}", port, err));
     }
@@ -1213,9 +1173,28 @@ async fn start_one_port_forward(
 async fn io_loop(handler: Handler) {
     let (sender, mut receiver) = mpsc::unbounded_channel::<Data>();
     handler.write().unwrap().sender = Some(sender.clone());
+    let mut options = crate::ipc::get_options_async().await;
+    let mut key = options.remove("key").unwrap_or("".to_owned());
+    let token = LocalConfig::get_option("access_token");
+    if key.is_empty() {
+        key = crate::platform::get_license_key();
+    }
     if handler.is_port_forward() {
         if handler.is_rdp() {
-            start_one_port_forward(handler, 0, "".to_owned(), 3389, receiver).await;
+            let port = handler
+                .get_option("rdp_port".to_owned())
+                .parse::<i32>()
+                .unwrap_or(3389);
+            std::env::set_var(
+                "rdp_username",
+                handler.get_option("rdp_username".to_owned()),
+            );
+            std::env::set_var(
+                "rdp_password",
+                handler.get_option("rdp_password".to_owned()),
+            );
+            log::info!("Remote rdp port: {}", port);
+            start_one_port_forward(handler, 0, "".to_owned(), port, receiver, &key, &token).await;
         } else if handler.args.len() == 0 {
             let pfs = handler.lc.read().unwrap().port_forwards.clone();
             let mut queues = HashMap::<i32, mpsc::UnboundedSender<Data>>::new();
@@ -1231,6 +1210,8 @@ async fn io_loop(handler: Handler) {
                         let (sender, receiver) = mpsc::unbounded_channel::<Data>();
                         queues.insert(port, sender);
                         let handler = handler.clone();
+                        let key = key.clone();
+                        let token = token.clone();
                         tokio::spawn(async move {
                             start_one_port_forward(
                                 handler,
@@ -1238,6 +1219,8 @@ async fn io_loop(handler: Handler) {
                                 remote_host,
                                 remote_port,
                                 receiver,
+                                &key,
+                                &token,
                             )
                             .await;
                         });
@@ -1268,7 +1251,16 @@ async fn io_loop(handler: Handler) {
             }
             let remote_host = handler.args[1].clone();
             let remote_port = handler.args[2].parse::<i32>().unwrap_or(0);
-            start_one_port_forward(handler, port, remote_host, remote_port, receiver).await;
+            start_one_port_forward(
+                handler,
+                port,
+                remote_host,
+                remote_port,
+                receiver,
+                &key,
+                &token,
+            )
+            .await;
         }
         return;
     }
@@ -1296,7 +1288,7 @@ async fn io_loop(handler: Handler) {
         #[cfg(windows)]
         clipboard_file_context: None,
     };
-    remote.io_loop().await;
+    remote.io_loop(&key, &token).await;
 }
 
 struct RemoveJob {
@@ -1339,7 +1331,7 @@ struct Remote {
 }
 
 impl Remote {
-    async fn io_loop(&mut self) {
+    async fn io_loop(&mut self, key: &str, token: &str) {
         let stop_clipboard = self.start_clipboard();
         let mut last_recv_time = Instant::now();
         let conn_type = if self.handler.is_file_transfer() {
@@ -1347,7 +1339,7 @@ impl Remote {
         } else {
             ConnType::default()
         };
-        match Client::start(&self.handler.id, conn_type).await {
+        match Client::start(&self.handler.id, key, token, conn_type).await {
             Ok((mut peer, direct)) => {
                 unsafe {
                     SERVER_KEYBOARD_ENABLED = true;
@@ -1934,7 +1926,7 @@ impl Remote {
     }
 }
 
-fn make_fd(id: i32, entries: &Vec<FileEntry>, only_count: bool) -> Value {
+pub fn make_fd(id: i32, entries: &Vec<FileEntry>, only_count: bool) -> Value {
     let mut m = Value::map();
     m.set_item("id", id);
     let mut a = Value::array(0);
@@ -1963,6 +1955,12 @@ fn make_fd(id: i32, entries: &Vec<FileEntry>, only_count: bool) -> Value {
 
 #[async_trait]
 impl Interface for Handler {
+    fn send(&self, data: Data) {
+        if let Some(ref sender) = self.read().unwrap().sender {
+            sender.send(data).ok();
+        }
+    }
+
     fn msgbox(&self, msgtype: &str, title: &str, text: &str) {
         let retry = check_if_retry(msgtype, title, text);
         self.call2("msgbox_retry", &make_args!(msgtype, title, text, retry));
@@ -2019,6 +2017,10 @@ impl Interface for Handler {
                 );
                 log::info!("[video] initialized: {:?}", ok);
             });
+            let p = self.lc.read().unwrap().should_auto_login();
+            if !p.is_empty() {
+                input_os_password(p, true, self.clone());
+            }
         }
         self.lc.write().unwrap().handle_peer_info(username, pi);
         self.call("updatePi", &make_args!(pi_sciter));
@@ -2031,7 +2033,7 @@ impl Interface for Handler {
         {
             let mut path = std::env::temp_dir();
             path.push(&self.id);
-            let path = path.with_extension(config::APP_NAME.to_lowercase());
+            let path = path.with_extension(crate::get_app_name().to_lowercase());
             std::fs::File::create(&path).ok();
             if let Some(path) = path.to_str() {
                 crate::platform::windows::add_recent_document(&path);
@@ -2057,4 +2059,10 @@ impl Handler {
     fn on_error(&self, err: &str) {
         self.msgbox("error", "Error", err);
     }
+}
+
+#[tokio::main(flavor = "current_thread")]
+async fn send_note(url: String, id: String, conn_id: i32, note: String) {
+    let body = serde_json::json!({ "id": id, "Id": conn_id, "note": note });
+    allow_err!(crate::post_request(url, body.to_string(), "").await);
 }

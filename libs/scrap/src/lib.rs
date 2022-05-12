@@ -20,4 +20,7 @@ pub mod wayland;
 #[cfg(dxgi)]
 pub mod dxgi;
 
+#[cfg(android)]
+pub mod android;
+
 mod common;

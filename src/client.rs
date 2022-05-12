@@ -29,7 +29,8 @@ use std::{
     sync::{mpsc, Arc, RwLock},
 };
 use uuid::Uuid;
-
+pub mod file_trait;
+pub use file_trait::FileManager;
 pub const SEC30: Duration = Duration::from_secs(30);
 
 pub struct Client;
@@ -101,8 +102,13 @@ impl Drop for OboePlayer {
 }
 
 impl Client {
-    pub async fn start(peer: &str, conn_type: ConnType) -> ResultType<(Stream, bool)> {
-        match Self::_start(peer, conn_type).await {
+    pub async fn start(
+        peer: &str,
+        key: &str,
+        token: &str,
+        conn_type: ConnType,
+    ) -> ResultType<(Stream, bool)> {
+        match Self::_start(peer, key, token, conn_type).await {
             Err(err) => {
                 let err_str = err.to_string();
                 if err_str.starts_with("Failed") {
@@ -115,7 +121,12 @@ impl Client {
         }
     }
 
-    async fn _start(peer: &str, conn_type: ConnType) -> ResultType<(Stream, bool)> {
+    async fn _start(
+        peer: &str,
+        key: &str,
+        token: &str,
+        conn_type: ConnType,
+    ) -> ResultType<(Stream, bool)> {
         // to-do: remember the port for each peer, so that we can retry easier
         let any_addr = Config::get_any_listen_addr();
         if crate::is_ip(peer) {
@@ -150,7 +161,9 @@ impl Client {
             let nat_type = NatType::from_i32(my_nat_type).unwrap_or(NatType::UNKNOWN_NAT);
             msg_out.set_punch_hole_request(PunchHoleRequest {
                 id: peer.to_owned(),
+                token: token.to_owned(),
                 nat_type: nat_type.into(),
+                licence_key: key.to_owned(),
                 conn_type: conn_type.into(),
                 ..Default::default()
             });
@@ -195,9 +208,9 @@ impl Client {
                             );
                             signed_id_pk = rr.get_pk().into();
                             let mut conn =
-                                Self::create_relay(peer, rr.uuid, rr.relay_server, conn_type)
+                                Self::create_relay(peer, rr.uuid, rr.relay_server, key, conn_type)
                                     .await?;
-                            Self::secure_connection(peer, signed_id_pk, &mut conn).await?;
+                            Self::secure_connection(peer, signed_id_pk, key, &mut conn).await?;
                             return Ok((conn, false));
                         }
                         _ => {
@@ -235,6 +248,8 @@ impl Client {
             peer_nat_type,
             my_nat_type,
             is_local,
+            key,
+            token,
             conn_type,
         )
         .await
@@ -251,6 +266,8 @@ impl Client {
         peer_nat_type: NatType,
         my_nat_type: i32,
         is_local: bool,
+        key: &str,
+        token: &str,
         conn_type: ConnType,
     ) -> ResultType<(Stream, bool)> {
         let direct_failures = PeerConfig::load(peer_id).direct_failures;
@@ -297,6 +314,8 @@ impl Client {
                     relay_server.to_owned(),
                     rendezvous_server,
                     !signed_id_pk.is_empty(),
+                    key,
+                    token,
                     conn_type,
                 )
                 .await;
@@ -318,12 +337,21 @@ impl Client {
         }
         let mut conn = conn?;
         log::info!("{:?} used to establish connection", start.elapsed());
-        Self::secure_connection(peer_id, signed_id_pk, &mut conn).await?;
+        Self::secure_connection(peer_id, signed_id_pk, key, &mut conn).await?;
         Ok((conn, direct))
     }
 
-    async fn secure_connection(peer_id: &str, signed_id_pk: Vec<u8>, conn: &mut Stream) -> ResultType<()> {
-        let rs_pk = get_rs_pk("OeVuKk5nlHiXp+APNn0Y3pC1Iwpwn44JGqrQCsWqmBw=");
+    async fn secure_connection(
+        peer_id: &str,
+        signed_id_pk: Vec<u8>,
+        key: &str,
+        conn: &mut Stream,
+    ) -> ResultType<()> {
+        let rs_pk = get_rs_pk(if key.is_empty() {
+            "OeVuKk5nlHiXp+APNn0Y3pC1Iwpwn44JGqrQCsWqmBw="
+        } else {
+            key
+        });
         let mut sign_pk = None;
         if !signed_id_pk.is_empty() && rs_pk.is_some() {
             if let Ok((id, pk)) = decode_id_pk(&signed_id_pk, &rs_pk.unwrap()) {
@@ -395,6 +423,8 @@ impl Client {
         relay_server: String,
         rendezvous_server: &str,
         secure: bool,
+        key: &str,
+        token: &str,
         conn_type: ConnType,
     ) -> ResultType<Stream> {
         let any_addr = Config::get_any_listen_addr();
@@ -419,6 +449,7 @@ impl Client {
             );
             msg_out.set_request_relay(RequestRelay {
                 id: peer.to_owned(),
+                token: token.to_owned(),
                 uuid: uuid.clone(),
                 relay_server: relay_server.clone(),
                 secure,
@@ -440,13 +471,14 @@ impl Client {
         if !succeed {
             bail!("Timeout");
         }
-        Self::create_relay(peer, uuid, relay_server, conn_type).await
+        Self::create_relay(peer, uuid, relay_server, key, conn_type).await
     }
 
     async fn create_relay(
         peer: &str,
         uuid: String,
         relay_server: String,
+        key: &str,
         conn_type: ConnType,
     ) -> ResultType<Stream> {
         let mut conn = socket_client::connect_tcp(
@@ -458,6 +490,7 @@ impl Client {
         .with_context(|| "Failed to connect to relay server")?;
         let mut msg_out = RendezvousMessage::new();
         msg_out.set_request_relay(RequestRelay {
+            licence_key: key.to_owned(),
             id: peer.to_owned(),
             uuid,
             conn_type: conn_type.into(),
@@ -498,11 +531,10 @@ impl AudioHandler {
         if !spec.is_valid() {
             bail!("Invalid audio format");
         }
-        use hbb_common::config::APP_NAME;
 
         self.simple = Some(Simple::new(
             None,                   // Use the default server
-            APP_NAME,               // Our application’s name
+            &crate::get_app_name(), // Our application’s name
             Direction::Playback,    // We want a playback stream
             None,                   // Use the default device
             "playback",             // Description of our stream
@@ -693,7 +725,7 @@ impl VideoHandler {
 #[derive(Default)]
 pub struct LoginConfigHandler {
     id: String,
-    is_file_transfer: bool,
+    pub is_file_transfer: bool,
     is_port_forward: bool,
     hash: Hash,
     password: Vec<u8>, // remember password for reconnect
@@ -701,6 +733,7 @@ pub struct LoginConfigHandler {
     config: PeerConfig,
     pub port_forward: (String, i32),
     pub version: i64,
+    pub conn_id: i32,
 }
 
 impl Deref for LoginConfigHandler {
@@ -724,6 +757,17 @@ impl LoginConfigHandler {
         let config = self.load_config();
         self.remember = !config.password.is_empty();
         self.config = config;
+    }
+
+    pub fn should_auto_login(&self) -> String {
+        let l = self.lock_after_session_end;
+        let a = !self.get_option("auto-login").is_empty();
+        let p = self.get_option("os-password");
+        if !p.is_empty() && l && a {
+            p
+        } else {
+            "".to_owned()
+        }
     }
 
     fn load_config(&self) -> PeerConfig {
@@ -1002,11 +1046,12 @@ impl LoginConfigHandler {
                 log::debug!("remove password of {}", self.id);
             }
         }
+        self.conn_id = pi.conn_id;
         // no matter if change, for update file time
         self.save_config(config);
     }
 
-    fn get_remote_dir(&self) -> String {
+    pub fn get_remote_dir(&self) -> String {
         serde_json::from_str::<HashMap<String, String>>(&self.get_option("remote_dir"))
             .unwrap_or_default()
             .remove(&self.info.username)
@@ -1027,7 +1072,7 @@ impl LoginConfigHandler {
 
     fn create_login_msg(&self, password: Vec<u8>) -> Message {
         #[cfg(any(target_os = "android", target_os = "ios"))]
-        let my_id = crate::common::MOBILE_INFO1.lock().unwrap().clone();
+        let my_id = Config::get_id_or(crate::common::MOBILE_INFO1.lock().unwrap().clone());
         #[cfg(not(any(target_os = "android", target_os = "ios")))]
         let my_id = Config::get_id();
         let mut lr = LoginRequest {
@@ -1127,6 +1172,83 @@ pub async fn handle_test_delay(t: TestDelay, peer: &mut Stream) {
     }
 }
 
+// mask = buttons << 3 | type
+// type, 1: down, 2: up, 3: wheel
+// buttons, 1: left, 2: right, 4: middle
+#[inline]
+pub fn send_mouse(
+    mask: i32,
+    x: i32,
+    y: i32,
+    alt: bool,
+    ctrl: bool,
+    shift: bool,
+    command: bool,
+    interface: &impl Interface,
+) {
+    let mut msg_out = Message::new();
+    let mut mouse_event = MouseEvent {
+        mask,
+        x,
+        y,
+        ..Default::default()
+    };
+    if alt {
+        mouse_event.modifiers.push(ControlKey::Alt.into());
+    }
+    if shift {
+        mouse_event.modifiers.push(ControlKey::Shift.into());
+    }
+    if ctrl {
+        mouse_event.modifiers.push(ControlKey::Control.into());
+    }
+    if command {
+        mouse_event.modifiers.push(ControlKey::Meta.into());
+    }
+    msg_out.set_mouse_event(mouse_event);
+    interface.send(Data::Message(msg_out));
+}
+
+fn activate_os(interface: &impl Interface) {
+    send_mouse(0, 0, 0, false, false, false, false, interface);
+    std::thread::sleep(Duration::from_millis(50));
+    send_mouse(0, 3, 3, false, false, false, false, interface);
+    std::thread::sleep(Duration::from_millis(50));
+    send_mouse(1 | 1 << 3, 0, 0, false, false, false, false, interface);
+    send_mouse(2 | 1 << 3, 0, 0, false, false, false, false, interface);
+    /*
+    let mut key_event = KeyEvent::new();
+    // do not use Esc, which has problem with Linux
+    key_event.set_control_key(ControlKey::RightArrow);
+    key_event.press = true;
+    let mut msg_out = Message::new();
+    msg_out.set_key_event(key_event.clone());
+    interface.send(Data::Message(msg_out.clone()));
+    */
+}
+
+pub fn input_os_password(p: String, activate: bool, interface: impl Interface) {
+    std::thread::spawn(move || {
+        _input_os_password(p, activate, interface);
+    });
+}
+
+fn _input_os_password(p: String, activate: bool, interface: impl Interface) {
+    if activate {
+        activate_os(&interface);
+        std::thread::sleep(Duration::from_millis(1200));
+    }
+    let mut key_event = KeyEvent::new();
+    key_event.press = true;
+    let mut msg_out = Message::new();
+    key_event.set_seq(p);
+    msg_out.set_key_event(key_event.clone());
+    interface.send(Data::Message(msg_out.clone()));
+    key_event.set_control_key(ControlKey::Return);
+    msg_out.set_key_event(key_event);
+    interface.send(Data::Message(msg_out));
+}
+
 pub async fn handle_hash(
     lc: Arc<RwLock<LoginConfigHandler>>,
     hash: Hash,
@@ -1175,6 +1297,7 @@ pub async fn handle_login_from_ui(
 
 #[async_trait]
 pub trait Interface: Send + Clone + 'static + Sized {
+    fn send(&self, data: Data);
     fn msgbox(&self, msgtype: &str, title: &str, text: &str);
     fn handle_login_error(&mut self, err: &str) -> bool;
     fn handle_peer_info(&mut self, pi: PeerInfo);

@@ -27,7 +27,7 @@ pub use anyhow::{self, bail};
 pub use futures_util;
 pub mod config;
 pub mod fs;
-pub use lazy_static;
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub use mac_address;
 pub use rand;
 pub use regex;
@@ -35,6 +35,7 @@ pub use sodiumoxide;
 pub use tokio_socks;
 pub use tokio_socks::IntoTargetAddr;
 pub use tokio_socks::TargetAddr;
+pub use lazy_static;
 
 #[cfg(feature = "quic")]
 pub type Stream = quic::Connection;
@@ -177,6 +178,12 @@ where
 {
     let file = File::open(filename)?;
     Ok(io::BufReader::new(file).lines())
+}
+
+pub fn is_valid_custom_id(id: &str) -> bool {
+    regex::Regex::new(r"^[a-zA-Z]\w{5,15}$")
+        .unwrap()
+        .is_match(id)
 }
 
 pub fn get_version_number(v: &str) -> i64 {

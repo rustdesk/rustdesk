@@ -14,6 +14,26 @@ use hbb_common::{
 };
 
 fn run_rdp(port: u16) {
+    std::process::Command::new("cmdkey")
+        .arg("/delete:localhost")
+        .output()
+        .ok();
+    let username = std::env::var("rdp_username").unwrap_or_default();
+    let password = std::env::var("rdp_password").unwrap_or_default();
+    if !username.is_empty() || !password.is_empty() {
+        let mut args = vec!["/generic:localhost".to_owned()];
+        if !username.is_empty() {
+            args.push(format!("/user:{}", username));
+        }
+        if !password.is_empty() {
+            args.push(format!("/pass:{}", password));
+        }
+        println!("{:?}", args);
+        std::process::Command::new("cmdkey")
+            .args(&args)
+            .output()
+            .ok();
+    }
     std::process::Command::new("mstsc")
         .arg(format!("/v:localhost:{}", port))
         .spawn()
@@ -25,6 +45,8 @@ pub async fn listen(
     port: i32,
     interface: impl Interface,
     ui_receiver: mpsc::UnboundedReceiver<Data>,
+    key: &str,
+    token: &str,
 ) -> ResultType<()> {
     let listener = tcp::new_listener(format!("0.0.0.0:{}", port), true).await?;
     let addr = listener.local_addr()?;
@@ -40,7 +62,7 @@ pub async fn listen(
                 log::info!("new connection from {:?}", addr);
                 let id = id.clone();
                 let mut forward = Framed::new(forward, BytesCodec::new());
-                match connect_and_login(&id, &mut ui_receiver, interface.clone(), &mut forward, is_rdp).await {
+                match connect_and_login(&id, &mut ui_receiver, interface.clone(), &mut forward, key, token, is_rdp).await {
                     Ok(Some(stream)) => {
                         let interface = interface.clone();
                         tokio::spawn(async move {
@@ -77,6 +99,8 @@ async fn connect_and_login(
     ui_receiver: &mut mpsc::UnboundedReceiver<Data>,
     interface: impl Interface,
     forward: &mut Framed<TcpStream, BytesCodec>,
+    key: &str,
+    token: &str,
     is_rdp: bool,
 ) -> ResultType<Option<Stream>> {
     let conn_type = if is_rdp {
@@ -84,7 +108,7 @@ async fn connect_and_login(
     } else {
         ConnType::PORT_FORWARD
     };
-    let (mut stream, _) = Client::start(id, conn_type).await?;
+    let (mut stream, _) = Client::start(id, key, token, conn_type).await?;
     let mut interface = interface;
     let mut buffer = Vec::new();
     loop {

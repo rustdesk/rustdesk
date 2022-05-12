@@ -8,6 +8,7 @@
 #include <memory>
 #include <shlobj.h> // NOLINT(build/include_order)
 #include <userenv.h>
+#include <versionhelpers.h>
 
 void flog(char const *fmt, ...)
 {
@@ -66,9 +67,12 @@ BOOL GetSessionUserTokenWin(OUT LPHANDLE lphUserToken, DWORD dwSessionId, BOOL a
     return bResult;
 }
 
-// START the app as system
 extern "C"
 {
+    bool is_windows_server()
+    {
+        return IsWindowsServer();
+    }
     HANDLE LaunchProcessWin(LPCWSTR cmd, DWORD dwSessionId, BOOL as_user)
     {
         HANDLE hProcess = NULL;
@@ -89,7 +93,7 @@ extern "C"
 
                 CreateEnvironmentBlock(&lpEnvironment, // Environment block
                                        hToken,         // New token
-                                       TRUE);          // Inheritance
+                                       TRUE);          // Inheritence
             }
             if (lpEnvironment)
             {
@@ -259,13 +263,16 @@ extern "C"
                     auto n = 4 * 3;
                     auto p = out - (width + 2) * 4 - 4;
                     // Outline above...
-                    if (p >= out0 && p + n <= out0_end) memset(p, 0xff, n);
+                    if (p >= out0 && p + n <= out0_end)
+                        memset(p, 0xff, n);
                     // ...besides...
                     p = out - 4;
-                    if (p + n <= out0_end) memset(p, 0xff, n);
+                    if (p + n <= out0_end)
+                        memset(p, 0xff, n);
                     // ...and above
                     p = out + (width + 2) * 4 - 4;
-                    if (p + n <= out0_end) memset(p, 0xff, n);
+                    if (p + n <= out0_end)
+                        memset(p, 0xff, n);
                 }
                 in += 4;
                 out += 4;
@@ -373,20 +380,210 @@ extern "C"
         SHAddToRecentDocs(SHARD_PATHW, path);
     }
 
-    uint32_t get_active_user(PWSTR bufin, uint32_t nin)    
-    {    
-        uint32_t nout = 0;    
-        auto id = WTSGetActiveConsoleSessionId();    
-        PWSTR buf = NULL;    
-        DWORD n = 0;    
-        if (WTSQuerySessionInformationW(NULL, id, WTSUserName, &buf, &n))    
-        {    
-            if (buf) {    
-                nout = min(nin, n);    
-                memcpy(bufin, buf, nout);    
-                WTSFreeMemory(buf);    
-            }    
-        }    
-        return nout;    
-    }  
+    DWORD get_current_session(BOOL include_rdp)
+    {
+        auto rdp_or_console = WTSGetActiveConsoleSessionId();
+        if (!include_rdp)
+            return rdp_or_console;
+        PWTS_SESSION_INFOA pInfos;
+        DWORD count;
+        auto rdp = "rdp";
+        auto nrdp = strlen(rdp);
+        if (WTSEnumerateSessionsA(WTS_CURRENT_SERVER_HANDLE, NULL, 1, &pInfos, &count))
+        {
+            for (DWORD i = 0; i < count; i++)
+            {
+                auto info = pInfos[i];
+                if (info.State == WTSActive)
+                {
+                    if (info.pWinStationName == NULL)
+                        continue;
+                    if (!stricmp(info.pWinStationName, "console"))
+                    {
+                        return info.SessionId;
+                    }
+                    if (!strnicmp(info.pWinStationName, rdp, nrdp))
+                    {
+                        rdp_or_console = info.SessionId;
+                    }
+                }
+            }
+            WTSFreeMemory(pInfos);
+        }
+        return rdp_or_console;
+    }
+
+    uint32_t get_active_user(PWSTR bufin, uint32_t nin, BOOL rdp)
+    {
+        uint32_t nout = 0;
+        auto id = get_current_session(rdp);
+        PWSTR buf = NULL;
+        DWORD n = 0;
+        if (WTSQuerySessionInformationW(WTS_CURRENT_SERVER_HANDLE, id, WTSUserName, &buf, &n))
+        {
+            if (buf)
+            {
+                nout = min(nin, n);
+                memcpy(bufin, buf, nout);
+                WTSFreeMemory(buf);
+            }
+        }
+        return nout;
+    }
+
+    BOOL has_rdp_service()
+    {
+        PWTS_SESSION_INFOA pInfos;
+        DWORD count;
+        auto rdp = "rdp";
+        auto nrdp = strlen(rdp);
+        auto rdp_or_console = WTSGetActiveConsoleSessionId();
+        if (WTSEnumerateSessionsA(WTS_CURRENT_SERVER_HANDLE, NULL, 1, &pInfos, &count))
+        {
+            for (DWORD i = 0; i < count; i++)
+            {
+                auto info = pInfos[i];
+                if (!strnicmp(info.pWinStationName, rdp, nrdp))
+                {
+                    return TRUE;
+                }
+            }
+            WTSFreeMemory(pInfos);
+        }
+        return FALSE;
+    }
+} // end of extern "C"
+
+// below copied from https://github.com/TigerVNC/tigervnc/blob/master/vncviewer/win32.c
+extern "C"
+{
+    static HANDLE thread;
+    static DWORD thread_id;
+
+    static HHOOK hook = 0;
+    static HWND target_wnd = 0;
+    static HWND default_hook_wnd = 0;
+    static bool win_down = false;
+    static bool stop_system_key_propagate = false;
+
+    bool is_win_down()
+    {
+        return win_down;
+    }
+
+#define ARRAY_SIZE(a) (sizeof(a) / sizeof(*a))
+
+    static int is_system_hotkey(int vkCode, WPARAM wParam)
+    {
+        switch (vkCode)
+        {
+        case VK_LWIN:
+        case VK_RWIN:
+            win_down = wParam == WM_KEYDOWN;
+        case VK_SNAPSHOT:
+            return 1;
+        case VK_TAB:
+            if (GetAsyncKeyState(VK_MENU) & 0x8000)
+                return 1;
+        case VK_ESCAPE:
+            if (GetAsyncKeyState(VK_MENU) & 0x8000)
+                return 1;
+            if (GetAsyncKeyState(VK_CONTROL) & 0x8000)
+                return 1;
+        }
+        return 0;
+    }
+
+    static LRESULT CALLBACK keyboard_hook(int nCode, WPARAM wParam, LPARAM lParam)
+    {
+        if (nCode >= 0)
+        {
+            KBDLLHOOKSTRUCT *msgInfo = (KBDLLHOOKSTRUCT *)lParam;
+
+            // Grabbing everything seems to mess up some keyboard state that
+            // FLTK relies on, so just grab the keys that we normally cannot.
+            if (stop_system_key_propagate && is_system_hotkey(msgInfo->vkCode, wParam))
+            {
+                PostMessage(target_wnd, wParam, msgInfo->vkCode,
+                            (msgInfo->scanCode & 0xff) << 16 |
+                                (msgInfo->flags & 0xff) << 24);
+                return 1;
+            }
+        }
+
+        return CallNextHookEx(hook, nCode, wParam, lParam);
+    }
+
+    static DWORD WINAPI keyboard_thread(LPVOID data)
+    {
+        MSG msg;
+
+        target_wnd = (HWND)data;
+
+        // Make sure a message queue is created
+        PeekMessage(&msg, NULL, 0, 0, PM_NOREMOVE | PM_NOYIELD);
+
+        hook = SetWindowsHookEx(WH_KEYBOARD_LL, keyboard_hook, GetModuleHandle(0), 0);
+        // If something goes wrong then there is not much we can do.
+        // Just sit around and wait for WM_QUIT...
+
+        while (GetMessage(&msg, NULL, 0, 0))
+            ;
+
+        if (hook)
+            UnhookWindowsHookEx(hook);
+
+        target_wnd = 0;
+
+        return 0;
+    }
+
+    int win32_enable_lowlevel_keyboard(HWND hwnd)
+    {
+        if (!default_hook_wnd)
+        {
+            default_hook_wnd = hwnd;
+        }
+        if (!hwnd)
+        {
+            hwnd = default_hook_wnd;
+        }
+        // Only one target at a time for now
+        if (thread != NULL)
+        {
+            if (hwnd == target_wnd)
+                return 0;
+
+            return 1;
+        }
+
+        // We create a separate thread as it is crucial that hooks are processed
+        // in a timely manner.
+        thread = CreateThread(NULL, 0, keyboard_thread, hwnd, 0, &thread_id);
+        if (thread == NULL)
+            return 1;
+
+        return 0;
+    }
+
+    void win32_disable_lowlevel_keyboard(HWND hwnd)
+    {
+        if (!hwnd)
+        {
+            hwnd = default_hook_wnd;
+        }
+        if (hwnd != target_wnd)
+            return;
+
+        PostThreadMessage(thread_id, WM_QUIT, 0, 0);
+
+        CloseHandle(thread);
+        thread = NULL;
+    }
+
+    void win_stop_system_key_propagate(bool v)
+    {
+        stop_system_key_propagate = v;
+    }
+
 } // end of extern "C"

@@ -60,7 +60,39 @@ function stateChanged() {
 var header;
 var old_window_state = View.WINDOW_SHOWN;
 
+var is_edit_os_password;
+class EditOsPassword: Reactor.Component {
+    function render() {
+        return <span style="margin-left: 12px; padding: 0 6px; display: inline-block;" .link>{svg_edit}</span>;
+    }
+
+    function onMouse(evt) {
+        if (evt.type == Event.MOUSE_DOWN) {
+            is_edit_os_password = true;
+            editOSPassword();
+        }
+    }
+}
+
+function editOSPassword(login=false) {
+    var p0 = handler.get_option('os-password');
+    msgbox("custom-os-password", 'OS Password', p0, function(res=null) {
+        if (!res) return;
+        var a0 = handler.get_option('auto-login') != '';
+        var p = (res.password || '').trim();
+        var a = res.auto_login || false;
+        if (p == p0 && a == a0) return;
+        if (p != p0) handler.set_option('os-password', p);
+        if (a != a0) handler.set_option('auto-login', a ? 'Y' : '');
+        if (p && login) {
+            handler.input_os_password(p, true);
+        }
+      });
+}
+
 class Header: Reactor.Component {
+    this var conn_note = "";
+    
     function this() {
         header = this;
     }
@@ -138,8 +170,10 @@ class Header: Reactor.Component {
     function renderActionPop() {
         return <popup>
             <menu.context #action-options>
+                {keyboard_enabled ? <li #os-password>{translate('OS Password')}<EditOsPassword /></li> : ""}
                 <li #transfer-file>{translate('Transfer File')}</li> 
                 <li #tunnel>{translate('TCP Tunneling')}</li> 
+                {handler.get_audit_server() && <li #note>{translate('Note')}</li>}
                 <div .separator />
                 {keyboard_enabled && (pi.platform == "Linux" || pi.sas_enabled) ? <li #ctrl-alt-del>{translate('Insert')} Ctrl + Alt + Del</li> : ""}
                 {keyboard_enabled ? <li #lock-screen>{translate('Insert Lock')}</li> : ""}
@@ -224,9 +258,31 @@ class Header: Reactor.Component {
     event click $(#transfer-file) {
         handler.transfer_file();
     }
+    
+    event click $(#os-password) (evt) {
+        if (is_edit_os_password) {
+            is_edit_os_password = false;
+            return;
+        }
+        var p = handler.get_option('os-password');
+        if (!p) editOSPassword(true);
+        else handler.input_os_password(p, true);
+    }
 
     event click $(#tunnel) {
         handler.tunnel();
+    }
+
+    event click $(#note) {
+        var self = this;
+        msgbox("custom", "Note", <div .form>
+         <textarea .outline-focus spellcheck="false" name="text" novalue="input note here" style="overflow: scroll-indicator; width:*; height: 140px; font-size: 1.2em; padding: 0.5em;">{self.conn_note}</textarea>
+          </div>, function(res=null) {
+            if (!res) return;
+            if (!res.text) return;
+            self.conn_note = res.text;
+            handler.send_note(res.text);
+          }, 280);
     }
 
     event click $(#ctrl-alt-del) {
@@ -355,7 +411,7 @@ function updateWindowToolbarPosition() {
         var el = $(div.window-toolbar);
         var w1 = el.box(#width, #border);
         var w2 = $(header).box(#width, #border);
-        var x = (w2 - w1) / 2;
+        var x = (w2 - w1) / 2 / scaleFactor;
         el.style.set {
             left: x + "px",
             display: "block",
@@ -391,10 +447,10 @@ function startChat() {
     }
     var icon = handler.get_icon();
     var (sx, sy, sw, sh) = view.screenBox(#workarea, #rectw);
-    var w = 300;
-    var h = 400;
+    var w = scaleIt(300);
+    var h = scaleIt(400);
     var x = (sx + sw - w) / 2;
-    var y = sy + 80;
+    var y = sy + scaleIt(80);
     var params = {
         type: View.FRAME_WINDOW,
         x: x,

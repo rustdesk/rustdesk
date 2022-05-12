@@ -22,7 +22,7 @@ handler.setDisplay = function(x, y, w, h) {
 }
 
 // in case toolbar not shown correclty
-view.windowMinSize = (500, 300);
+view.windowMinSize = (scaleIt(500), scaleIt(300));
 
 function adaptDisplay() {
     var w = display_width;
@@ -43,7 +43,7 @@ function adaptDisplay() {
                 var (x, y) = view.box(#position, #border, #screen);
                 // extra for border
                 var extra = is_win ? 4 : 2;
-                view.move(x, y, w + extra, h + hh + extra);
+                view.move(x, y, (w + extra).toInteger(), (h + hh + extra).toInteger());
             }
         }
     }
@@ -67,8 +67,8 @@ function adaptDisplay() {
         }
     }
     handler.style.set {
-        width: w + "px",
-        height: h + "px",
+        width: w / scaleFactor + "px",
+        height: h / scaleFactor + "px",
     };
 }
 
@@ -389,8 +389,8 @@ handler.setCursorPosition = function(x, y) {
     cur_y = y - display_origin_y;
     var x = cur_x - cur_hotx;
     var y = cur_y - cur_hoty;
-    x *= display_scale;
-    y *= display_scale;
+    x *= display_scale / scaleFactor;
+    y *= display_scale / scaleFactor;
     cursor_img.style.set {
         left: x + "px",
         top: y + "px",
@@ -401,13 +401,8 @@ handler.setCursorPosition = function(x, y) {
 }
 
 function self.ready() {
-    // https://sciter.com/forums/topic/focus_lost-and-focus_got-events/
-    // not got a good way to detect focus/blur in Sciter
-    // below not work until I click on toolbar on Mac
-    self.on("focus", "*", function() { stdout.println(this,"got focus") });
-    self.on("blur", "*", function() { stdout.println(this,"lost focus") });
-    var w = 960;
-    var h = 640;
+    var w = scaleIt(960);
+    var h = scaleIt(640);
     if (is_file_transfer || is_port_forward) {
         var r = handler.get_size();
         if (isReasonableSize(r) && r[2] > 0) {

@@ -1,4 +1,5 @@
 use crate::rendezvous_mediator::RendezvousMediator;
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub use clipboard::ClipbaordFile;
 use hbb_common::{
     allow_err, bail, bytes,
@@ -15,7 +16,7 @@ use parity_tokio_ipc::{
     Connection as Conn, ConnectionClient as ConnClient, Endpoint, Incoming, SecurityAttributes,
 };
 use serde_derive::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::{collections::HashMap, sync::atomic::Ordering};
 #[cfg(not(windows))]
 use std::{fs::File, io::prelude::*};
 
@@ -84,6 +85,8 @@ pub enum Data {
         enabled: bool,
     },
     SystemInfo(Option<String>),
+    ClickTime(i64),
+    MouseMoveTime(i64),
     Authorize,
     Close,
     SAS,
@@ -201,8 +204,17 @@ async fn handle(data: Data, stream: &mut Connection) {
             );
             allow_err!(stream.send(&Data::SystemInfo(Some(info))).await);
         }
+        Data::ClickTime(_) => {
+            let t = crate::server::CLICK_TIME.load(Ordering::SeqCst);
+            allow_err!(stream.send(&Data::ClickTime(t)).await);
+        }
+        Data::MouseMoveTime(_) => {
+            let t = crate::server::MOUSE_MOVE_TIME.load(Ordering::SeqCst);
+            allow_err!(stream.send(&Data::MouseMoveTime(t)).await);
+        }
         Data::Close => {
             log::info!("Receive close message");
+            #[cfg(not(target_os = "android"))]
             crate::server::input_service::fix_key_down_timeout_at_exit();
             std::process::exit(0);
         }
@@ -442,11 +454,15 @@ async fn get_config_async(name: &str, ms_timeout: u64) -> ResultType<Option<Stri
     return Ok(None);
 }
 
-#[tokio::main(flavor = "current_thread")]
-async fn set_config(name: &str, value: String) -> ResultType<()> {
+pub async fn set_config_async(name: &str, value: String) -> ResultType<()> {
     let mut c = connect(1000, "").await?;
     c.send_config(name, value).await?;
     Ok(())
+}
+
+#[tokio::main(flavor = "current_thread")]
+pub async fn set_config(name: &str, value: String) -> ResultType<()> {
+    set_config_async(name, value).await
 }
 
 pub fn set_password(v: String) -> ResultType<()> {
@@ -498,13 +514,17 @@ async fn get_options_(ms_timeout: u64) -> ResultType<HashMap<String, String>> {
     }
 }
 
-#[tokio::main(flavor = "current_thread")]
-pub async fn get_options() -> HashMap<String, String> {
+pub async fn get_options_async() -> HashMap<String, String> {
     get_options_(1000).await.unwrap_or(Config::get_options())
 }
 
-pub fn get_option(key: &str) -> String {
-    if let Some(v) = get_options().get(key) {
+#[tokio::main(flavor = "current_thread")]
+pub async fn get_options() -> HashMap<String, String> {
+    get_options_async().await
+}
+
+pub async fn get_option_async(key: &str) -> String {
+    if let Some(v) = get_options_async().await.get(key) {
         v.clone()
     } else {
         "".to_owned()
@@ -550,6 +570,13 @@ pub async fn get_nat_type(ms_timeout: u64) -> i32 {
         .unwrap_or(Config::get_nat_type())
 }
 
+pub async fn get_rendezvous_servers(ms_timeout: u64) -> Vec<String> {
+    if let Ok(Some(v)) = get_config_async("rendezvous_servers", ms_timeout).await {
+        return v.split(',').map(|x| x.to_owned()).collect();
+    }
+    return Config::get_rendezvous_servers();
+}
+
 #[inline]
 async fn get_socks_(ms_timeout: u64) -> ResultType<Option<config::Socks5Server>> {
     let mut c = connect(ms_timeout, "").await?;
@@ -584,63 +611,3 @@ pub async fn set_socks(value: config::Socks5Server) -> ResultType<()> {
         .await?;
     Ok(())
 }
-
-/*
-static mut SHARED_MEMORY: *mut i64 = std::ptr::null_mut();
-
-pub fn initialize_shared_memory(create: bool) {
-    let mut shmem_flink = "shared-memory".to_owned();
-    if cfg!(windows) {
-        let df = "C:\\ProgramData";
-        let df = if std::path::Path::new(df).exists() {
-            df.to_owned()
-        } else {
-            std::env::var("TEMP").unwrap_or("C:\\Windows\\TEMP".to_owned())
-        };
-        let df = format!("{}\\{}", df, *hbb_common::config::APP_NAME.read().unwrap());
-        std::fs::create_dir(&df).ok();
-        shmem_flink = format!("{}\\{}", df, shmem_flink);
-    } else {
-        shmem_flink = Config::ipc_path("").replace("ipc", "") + &shmem_flink;
-    }
-    use shared_memory::*;
-    let shmem = if create {
-        match ShmemConf::new()
-            .force_create_flink()
-            .size(16)
-            .flink(&shmem_flink)
-            .create()
-        {
-            Err(ShmemError::LinkExists) => ShmemConf::new().flink(&shmem_flink).open(),
-            Ok(m) => Ok(m),
-            Err(e) => Err(e),
-        }
-    } else {
-        ShmemConf::new().flink(&shmem_flink).open()
-    };
-    if create {
-        set_all_perm(&shmem_flink);
-    }
-    match shmem {
-        Ok(shmem) => unsafe {
-            SHARED_MEMORY = shmem.as_ptr() as *mut i64;
-            std::mem::forget(shmem);
-        },
-        Err(err) => {
-            log::error!(
-                "Unable to create or open shmem flink {} : {}",
-                shmem_flink,
-                err
-            );
-        }
-    }
-}
-
-fn set_all_perm(p: &str) {
-    #[cfg(not(windows))]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        std::fs::set_permissions(p, std::fs::Permissions::from_mode(0o0777)).ok();
-    }
-}
-*/

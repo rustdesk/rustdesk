@@ -3,14 +3,19 @@ mod cm;
 mod inline;
 #[cfg(target_os = "macos")]
 mod macos;
-mod remote;
+pub mod remote;
 use crate::common::SOFTWARE_UPDATE_URL;
 use crate::ipc;
 use hbb_common::{
     allow_err,
-    config::{self, Config, LocalConfig, PeerConfig, APP_NAME, ICON},
-    log, sleep,
-    tokio::{self, time},
+    config::{self, Config, LocalConfig, PeerConfig, RENDEZVOUS_PORT, RENDEZVOUS_TIMEOUT},
+    futures::future::join_all,
+    log,
+    protobuf::Message as _,
+    rendezvous_proto::*,
+    sleep,
+    tcp::FramedStream,
+    tokio::{self, sync::mpsc, time},
 };
 use sciter::Value;
 use std::{
@@ -19,20 +24,23 @@ use std::{
     process::Child,
     sync::{Arc, Mutex},
 };
-use virtual_display;
+
+type Message = RendezvousMessage;
 
 pub type Childs = Arc<Mutex<(bool, HashMap<(String, String), Child>)>>;
+type Status = (i32, bool, i64, String);
 
 lazy_static::lazy_static! {
     // stupid workaround for https://sciter.com/forums/topic/crash-on-latest-tis-mac-sdk-sometimes/
     static ref STUPID_VALUES: Mutex<Vec<Arc<Vec<Value>>>> = Default::default();
 }
 
-#[derive(Default)]
 struct UI(
     Childs,
-    Arc<Mutex<(i32, bool)>>,
+    Arc<Mutex<Status>>,
     Arc<Mutex<HashMap<String, String>>>,
+    Arc<Mutex<String>>,
+    mpsc::UnboundedSender<ipc::Data>,
 );
 
 struct UIHostHandler;
@@ -53,20 +61,14 @@ pub fn start(args: &mut [String]) {
     allow_err!(sciter::set_options(sciter::RuntimeOptions::GfxLayer(
         sciter::GFX_LAYER::WARP
     )));
+    #[cfg(all(windows, not(feature = "inline")))]
+    unsafe {
+        winapi::um::shellscalingapi::SetProcessDpiAwareness(2);
+    }
     #[cfg(windows)]
     if args.len() > 0 && args[0] == "--tray" {
-        let mut res;
-        // while switching from prelogin to user screen, start_tray may fails,
-        // so we try more times
-        loop {
-            res = start_tray();
-            if res.is_ok() {
-                log::info!("tray started with username {}", crate::username());
-                break;
-            }
-            std::thread::sleep(std::time::Duration::from_secs(1));
-        }
-        allow_err!(res);
+        let options = check_connect_status(false).1;
+        crate::tray::start_tray(options);
         return;
     }
     use sciter::SCRIPT_RUNTIME_FEATURES::*;
@@ -114,6 +116,11 @@ pub fn start(args: &mut [String]) {
         || args[0] == "--rdp")
         && args.len() > 1
     {
+        #[cfg(windows)]
+        {
+            let hw = frame.get_host().get_hwnd();
+            crate::platform::windows::enable_lowlevel_keyboard(hw as _);
+        }
         let mut iter = args.iter();
         let cmd = iter.next().unwrap().clone();
         let id = iter.next().unwrap().clone();
@@ -151,54 +158,10 @@ pub fn start(args: &mut [String]) {
     frame.run_app();
 }
 
-#[cfg(windows)]
-fn start_tray() -> hbb_common::ResultType<()> {
-    let mut app = systray::Application::new()?;
-    let icon = include_bytes!("./tray-icon.ico");
-    app.set_icon_from_buffer(icon, 32, 32).unwrap();
-    app.add_menu_item("Open Window", |_| {
-        crate::run_me(Vec::<&str>::new()).ok();
-        Ok::<_, systray::Error>(())
-    })?;
-    let options = check_connect_status(false).1;
-    let idx_stopped = Arc::new(Mutex::new((0, 0)));
-    app.set_timer(std::time::Duration::from_millis(1000), move |app| {
-        let stopped = if let Some(v) = options.lock().unwrap().get("stop-service") {
-            !v.is_empty()
-        } else {
-            false
-        };
-        let stopped = if stopped { 2 } else { 1 };
-        let mut old = *idx_stopped.lock().unwrap();
-        if stopped != old.1 {
-            if old.0 > 0 {
-                app.remove_menu_item(old.0)
-            }
-            if stopped == 1 {
-                old.0 = app.add_menu_item("Stop Service", |_| {
-                    ipc::set_option("stop-service", "Y");
-                    Ok::<_, systray::Error>(())
-                })?;
-            } else {
-                old.0 = app.add_menu_item("Start Service", |_| {
-                    ipc::set_option("stop-service", "");
-                    Ok::<_, systray::Error>(())
-                })?;
-            }
-            old.1 = stopped;
-            *idx_stopped.lock().unwrap() = old;
-        }
-        Ok::<_, systray::Error>(())
-    })?;
-    allow_err!(app.wait_for_message());
-
-    Ok(())
-}
-
 impl UI {
     fn new(childs: Childs) -> Self {
         let res = check_connect_status(true);
-        Self(childs, res.0, res.1)
+        Self(childs, res.0, res.1, Default::default(), res.2)
     }
 
     fn recent_sessions_updated(&mut self) -> bool {
@@ -211,7 +174,7 @@ impl UI {
         }
     }
 
-    fn get_id(&mut self) -> String {
+    fn get_id(&self) -> String {
         ipc::get_id()
     }
 
@@ -239,10 +202,10 @@ impl UI {
         allow_err!(crate::run_me(vec!["--install"]));
     }
 
-    fn install_me(&mut self, _options: String) {
+    fn install_me(&mut self, _options: String, _path: String) {
         #[cfg(windows)]
         std::thread::spawn(move || {
-            allow_err!(crate::platform::windows::install_me(&_options));
+            allow_err!(crate::platform::windows::install_me(&_options, _path));
             std::process::exit(0);
         });
     }
@@ -273,8 +236,45 @@ impl UI {
         }
     }
 
+    fn run_without_install(&self) {
+        crate::run_me(vec!["--noinstall"]).ok();
+        std::process::exit(0);
+    }
+
+    fn show_run_without_install(&self) -> bool {
+        let mut it = std::env::args();
+        if let Some(tmp) = it.next() {
+            if crate::is_setup(&tmp) {
+                return it.next() == None;
+            }
+        }
+        false
+    }
+
+    fn has_rendezvous_service(&self) -> bool {
+        #[cfg(all(windows, feature = "hbbs"))]
+        return crate::platform::is_win_server()
+            && crate::platform::windows::get_license().is_some();
+        return false;
+    }
+
+    fn get_license(&self) -> String {
+        #[cfg(windows)]
+        if let Some(lic) = crate::platform::windows::get_license() {
+            return format!(
+                "<br /> Key: {} <br /> Host: {} Api: {}",
+                lic.key, lic.host, lic.api
+            );
+        }
+        Default::default()
+    }
+
     fn get_option(&self, key: String) -> String {
-        if let Some(v) = self.2.lock().unwrap().get(&key) {
+        self.get_option_(&key)
+    }
+
+    fn get_option_(&self, key: &str) -> String {
+        if let Some(v) = self.2.lock().unwrap().get(key) {
             v.to_owned()
         } else {
             "".to_owned()
@@ -312,6 +312,10 @@ impl UI {
             c.options.insert(name, value);
         }
         c.store(&id);
+    }
+
+    fn using_public_server(&self) -> bool {
+        crate::get_custom_rendezvous_server(self.get_option_("custom-rendezvous-server")).is_empty()
     }
 
     fn get_options(&self) -> Value {
@@ -380,22 +384,6 @@ impl UI {
         ipc::set_options(options.clone()).ok();
     }
 
-    // TODO: ui prompt
-    fn install_virtual_display(&self) {
-        let mut reboot_required = false;
-        match virtual_display::install_update_driver(&mut reboot_required) {
-            Ok(_) => {
-                log::info!(
-                    "Virtual Display: install virtual display done, reboot is {} required",
-                    if reboot_required { "" } else { "not" }
-                );
-            }
-            Err(e) => {
-                log::error!("Virtual Display: install virtual display failed {}", e);
-            }
-        }
-    }
-
     fn install_path(&mut self) -> String {
         #[cfg(windows)]
         return crate::platform::windows::get_install_info().1;
@@ -426,8 +414,27 @@ impl UI {
         .ok();
     }
 
-    fn is_installed(&mut self) -> bool {
+    fn is_installed(&self) -> bool {
         crate::platform::is_installed()
+    }
+
+    fn is_rdp_service_open(&self) -> bool {
+        #[cfg(windows)]
+        return self.is_installed() && crate::platform::windows::is_rdp_service_open();
+        #[cfg(not(windows))]
+        return false;
+    }
+
+    fn is_share_rdp(&self) -> bool {
+        #[cfg(windows)]
+        return crate::platform::windows::is_share_rdp();
+        #[cfg(not(windows))]
+        return false;
+    }
+
+    fn set_share_rdp(&self, _enable: bool) {
+        #[cfg(windows)]
+        crate::platform::windows::set_share_rdp(_enable);
     }
 
     fn is_installed_lower_version(&self) -> bool {
@@ -457,11 +464,20 @@ impl UI {
         v
     }
 
+    fn get_mouse_time(&self) -> f64 {
+        self.1.lock().unwrap().2 as _
+    }
+
+    fn check_mouse_time(&self) {
+        allow_err!(self.4.send(ipc::Data::MouseMoveTime(0)));
+    }
+
     fn get_connect_status(&mut self) -> Value {
         let mut v = Value::array(0);
-        let x = *self.1.lock().unwrap();
+        let x = self.1.lock().unwrap().clone();
         v.push(x.0);
         v.push(x.1);
+        v.push(x.3);
         v
     }
 
@@ -508,7 +524,7 @@ impl UI {
     }
 
     fn get_icon(&mut self) -> String {
-        ICON.to_owned()
+        crate::get_icon()
     }
 
     fn remove_peer(&mut self, id: String) {
@@ -572,7 +588,12 @@ impl UI {
                 return "".to_owned();
             }
             if dtype != "x11" {
-                return format!("Unsupported display server type {}, x11 expected!", dtype);
+                return format!(
+                    "{} {}, {}",
+                    self.t("Unsupported display server ".to_owned()),
+                    dtype,
+                    self.t("x11 expected".to_owned()),
+                );
             }
         }
         return "".to_owned();
@@ -587,7 +608,7 @@ impl UI {
 
     fn fix_login_wayland(&mut self) {
         #[cfg(target_os = "linux")]
-        return crate::platform::linux::fix_login_wayland();
+        crate::platform::linux::fix_login_wayland();
     }
 
     fn current_is_wayland(&mut self) -> bool {
@@ -617,7 +638,7 @@ impl UI {
     }
 
     fn get_app_name(&self) -> String {
-        APP_NAME.to_owned()
+        crate::get_app_name()
     }
 
     fn get_software_ext(&self) -> String {
@@ -638,7 +659,7 @@ impl UI {
             .split("/")
             .last()
             .map(|x| x.to_owned())
-            .unwrap_or(APP_NAME.to_owned());
+            .unwrap_or(crate::get_app_name());
         p.push(name);
         format!("{}.{}", p.to_string_lossy(), self.get_software_ext())
     }
@@ -658,6 +679,10 @@ impl UI {
         config::LanPeers::load().peers
     }
 
+    fn get_uuid(&self) -> String {
+        base64::encode(crate::get_uuid())
+    }
+
     fn open_url(&self, url: String) {
         #[cfg(windows)]
         let p = "explorer";
@@ -672,6 +697,34 @@ impl UI {
         allow_err!(std::process::Command::new(p).arg(url).spawn());
     }
 
+    fn change_id(&self, id: String) {
+        let status = self.3.clone();
+        *status.lock().unwrap() = " ".to_owned();
+        let old_id = self.get_id();
+        std::thread::spawn(move || {
+            *status.lock().unwrap() = change_id(id, old_id).to_owned();
+        });
+    }
+
+    fn post_request(&self, url: String, body: String, header: String) {
+        let status = self.3.clone();
+        *status.lock().unwrap() = " ".to_owned();
+        std::thread::spawn(move || {
+            *status.lock().unwrap() = match crate::post_request_sync(url, body, &header) {
+                Err(err) => err.to_string(),
+                Ok(text) => text,
+            };
+        });
+    }
+
+    fn is_ok_change_id(&self) -> bool {
+        machine_uid::get().is_ok()
+    }
+
+    fn get_async_job_status(&self) -> String {
+        self.3.clone().lock().unwrap().clone()
+    }
+
     fn t(&self, name: String) -> String {
         crate::client::translate(name)
     }
@@ -679,12 +732,21 @@ impl UI {
     fn is_xfce(&self) -> bool {
         crate::platform::is_xfce()
     }
+
+    fn get_api_server(&self) -> String {
+        crate::get_api_server(
+            self.get_option_("api-server"),
+            self.get_option_("custom-rendezvous-server"),
+        )
+    }
 }
 
 impl sciter::EventHandler for UI {
     sciter::dispatch_script_call! {
         fn t(String);
+        fn get_api_server();
         fn is_xfce();
+        fn using_public_server();
         fn get_id();
         fn get_password();
         fn update_password(String);
@@ -695,16 +757,21 @@ impl sciter::EventHandler for UI {
         fn new_remote(String, bool);
         fn remove_peer(String);
         fn get_connect_status();
+        fn get_mouse_time();
+        fn check_mouse_time();
         fn get_recent_sessions();
         fn get_peer(String);
         fn get_fav();
         fn store_fav(Value);
         fn recent_sessions_updated();
         fn get_icon();
-        fn install_me(String);
+        fn install_me(String, String);
         fn is_installed();
         fn set_socks(String, String, String);
         fn get_socks();
+        fn is_rdp_service_open();
+        fn is_share_rdp();
+        fn set_share_rdp(bool);
         fn is_installed_lower_version();
         fn install_path();
         fn goto_install();
@@ -724,22 +791,30 @@ impl sciter::EventHandler for UI {
         fn peer_has_password(String);
         fn forget_password(String);
         fn set_peer_option(String, String, String);
+        fn has_rendezvous_service();
+        fn get_license();
         fn test_if_valid_server(String);
         fn get_sound_inputs();
         fn set_options(Value);
         fn set_option(String, String);
-        fn install_virtual_display();
         fn get_software_update_url();
         fn get_new_version();
         fn get_version();
         fn update_me(String);
+        fn show_run_without_install();
+        fn run_without_install();
         fn get_app_name();
         fn get_software_store_path();
         fn get_software_ext();
         fn open_url(String);
+        fn change_id(String);
+        fn get_async_job_status();
+        fn post_request(String, String, String);
+        fn is_ok_change_id();
         fn create_shortcut(String);
         fn discover();
         fn get_lan_peers();
+        fn get_uuid();
     }
 }
 
@@ -771,15 +846,19 @@ pub fn check_zombie(childs: Childs) {
     }
 }
 
-// notice: avoiding create ipc connection repeatedly,
+// notice: avoiding create ipc connecton repeatly,
 // because windows named pipe has serious memory leak issue.
 #[tokio::main(flavor = "current_thread")]
 async fn check_connect_status_(
     reconnect: bool,
-    status: Arc<Mutex<(i32, bool)>>,
+    status: Arc<Mutex<Status>>,
     options: Arc<Mutex<HashMap<String, String>>>,
+    rx: mpsc::UnboundedReceiver<ipc::Data>,
 ) {
     let mut key_confirmed = false;
+    let mut rx = rx;
+    let mut mouse_time = 0;
+    let mut id = "".to_owned();
     loop {
         if let Ok(mut c) = ipc::connect(1000, "").await {
             let mut timer = time::interval(time::Duration::from_secs(1));
@@ -791,30 +870,47 @@ async fn check_connect_status_(
                                 log::error!("ipc connection closed: {}", err);
                                 break;
                             }
+                            Ok(Some(ipc::Data::MouseMoveTime(v))) => {
+                                mouse_time = v;
+                                status.lock().unwrap().2 = v;
+                            }
                             Ok(Some(ipc::Data::Options(Some(v)))) => {
                                 *options.lock().unwrap() = v
+                            }
+                            Ok(Some(ipc::Data::Config((name, Some(value))))) => {
+                                if name == "id" {
+                                    id = value;
+                                }
                             }
                             Ok(Some(ipc::Data::OnlineStatus(Some((mut x, c))))) => {
                                 if x > 0 {
                                     x = 1
                                 }
                                 key_confirmed = c;
-                                *status.lock().unwrap() = (x as _, key_confirmed);
+                                *status.lock().unwrap() = (x as _, key_confirmed, mouse_time, id.clone());
                             }
                             _ => {}
                         }
                     }
+                    Some(data) = rx.recv() => {
+                        allow_err!(c.send(&data).await);
+                    }
                     _ = timer.tick() => {
                         c.send(&ipc::Data::OnlineStatus(None)).await.ok();
                         c.send(&ipc::Data::Options(None)).await.ok();
+                        c.send(&ipc::Data::Config(("id".to_owned(), None))).await.ok();
                     }
                 }
             }
         }
         if !reconnect {
-            std::process::exit(0);
+            options
+                .lock()
+                .unwrap()
+                .insert("ipc-closed".to_owned(), "Y".to_owned());
+            break;
         }
-        *status.lock().unwrap() = (-1, key_confirmed);
+        *status.lock().unwrap() = (-1, key_confirmed, mouse_time, id.clone());
         sleep(1.).await;
     }
 }
@@ -847,13 +943,113 @@ fn get_sound_inputs() -> Vec<String> {
 
 fn check_connect_status(
     reconnect: bool,
-) -> (Arc<Mutex<(i32, bool)>>, Arc<Mutex<HashMap<String, String>>>) {
-    let status = Arc::new(Mutex::new((0, false)));
+) -> (
+    Arc<Mutex<Status>>,
+    Arc<Mutex<HashMap<String, String>>>,
+    mpsc::UnboundedSender<ipc::Data>,
+) {
+    let status = Arc::new(Mutex::new((0, false, 0, "".to_owned())));
     let options = Arc::new(Mutex::new(Config::get_options()));
     let cloned = status.clone();
     let cloned_options = options.clone();
-    std::thread::spawn(move || check_connect_status_(reconnect, cloned, cloned_options));
-    (status, options)
+    let (tx, rx) = mpsc::unbounded_channel::<ipc::Data>();
+    std::thread::spawn(move || check_connect_status_(reconnect, cloned, cloned_options, rx));
+    (status, options, tx)
+}
+
+const INVALID_FORMAT: &'static str = "Invalid format";
+const UNKNOWN_ERROR: &'static str = "Unknown error";
+
+#[tokio::main(flavor = "current_thread")]
+async fn change_id(id: String, old_id: String) -> &'static str {
+    if !hbb_common::is_valid_custom_id(&id) {
+        return INVALID_FORMAT;
+    }
+    let uuid = machine_uid::get().unwrap_or("".to_owned());
+    if uuid.is_empty() {
+        return UNKNOWN_ERROR;
+    }
+    let rendezvous_servers = crate::ipc::get_rendezvous_servers(1_000).await;
+    let mut futs = Vec::new();
+    let err: Arc<Mutex<&str>> = Default::default();
+    for rendezvous_server in rendezvous_servers {
+        let err = err.clone();
+        let id = id.to_owned();
+        let uuid = uuid.clone();
+        let old_id = old_id.clone();
+        futs.push(tokio::spawn(async move {
+            let tmp = check_id(rendezvous_server, old_id, id, uuid).await;
+            if !tmp.is_empty() {
+                *err.lock().unwrap() = tmp;
+            }
+        }));
+    }
+    join_all(futs).await;
+    let err = *err.lock().unwrap();
+    if err.is_empty() {
+        crate::ipc::set_config_async("id", id.to_owned()).await.ok();
+    }
+    err
+}
+
+async fn check_id(
+    rendezvous_server: String,
+    old_id: String,
+    id: String,
+    uuid: String,
+) -> &'static str {
+    let any_addr = Config::get_any_listen_addr();
+    if let Ok(mut socket) = FramedStream::new(
+        crate::check_port(rendezvous_server, RENDEZVOUS_PORT),
+        any_addr,
+        RENDEZVOUS_TIMEOUT,
+    )
+    .await
+    {
+        let mut msg_out = Message::new();
+        msg_out.set_register_pk(RegisterPk {
+            old_id,
+            id,
+            uuid: uuid.into(),
+            ..Default::default()
+        });
+        let mut ok = false;
+        if socket.send(&msg_out).await.is_ok() {
+            if let Some(Ok(bytes)) = socket.next_timeout(3_000).await {
+                if let Ok(msg_in) = RendezvousMessage::parse_from_bytes(&bytes) {
+                    match msg_in.union {
+                        Some(rendezvous_message::Union::register_pk_response(rpr)) => {
+                            match rpr.result.enum_value_or_default() {
+                                register_pk_response::Result::OK => {
+                                    ok = true;
+                                }
+                                register_pk_response::Result::ID_EXISTS => {
+                                    return "Not available";
+                                }
+                                register_pk_response::Result::TOO_FREQUENT => {
+                                    return "Too frequent";
+                                }
+                                register_pk_response::Result::NOT_SUPPORT => {
+                                    return "This function is turned off by the server";
+                                }
+                                register_pk_response::Result::INVALID_ID_FORMAT => {
+                                    return INVALID_FORMAT;
+                                }
+                                _ => {}
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+            }
+        }
+        if !ok {
+            return UNKNOWN_ERROR;
+        }
+    } else {
+        return "Failed to connect to rendezvous server";
+    }
+    ""
 }
 
 // sacrifice some memory

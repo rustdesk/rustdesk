@@ -1,4 +1,3 @@
-use hbb_common::{config::LocalConfig, log};
 use std::ops::Deref;
 
 mod cn;
@@ -15,12 +14,17 @@ mod id;
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub fn translate(name: String) -> String {
     let locale = sys_locale::get_locale().unwrap_or_default().to_lowercase();
-    log::trace!("The current locale is {}", locale);
     translate_locale(name, &locale)
 }
 
 pub fn translate_locale(name: String, locale: &str) -> String {
-    let mut lang = LocalConfig::get_option("lang");
+    let mut lang = hbb_common::config::LocalConfig::get_option("lang").to_lowercase();
+    if lang.is_empty() {
+        // zh_CN on Linux, zh-Hans-CN on mac, zh_CN_#Hans on Android
+        if locale.starts_with("zh") && (locale.ends_with("CN") || locale.ends_with("SG") || locale.ends_with("Hans")) {
+            lang = "cn".to_owned();
+        }
+    }
     if lang.is_empty() {
         lang = locale
             .split("-")
@@ -38,10 +42,10 @@ pub fn translate_locale(name: String, locale: &str) -> String {
         "de" => de::T.deref(),
         "ru" => ru::T.deref(),
         "eo" => eo::T.deref(),
+        "id" => id::T.deref(),
         "ptbr" => ptbr::T.deref(),
         "br" => ptbr::T.deref(),
         "pt" => ptbr::T.deref(),
-        "id" => id::T.deref(),
         _ => en::T.deref(),
     };
     if let Some(v) = m.get(&name as &str) {

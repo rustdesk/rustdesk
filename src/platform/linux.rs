@@ -536,7 +536,7 @@ pub fn run_as_user(arg: &str) -> ResultType<Option<std::process::Child>> {
     // -E required for opensuse
     let task = std::process::Command::new("sudo")
         .args(vec![
-            "-E", 
+            "-E",
             &format!("XDG_RUNTIME_DIR=/run/user/{}", uid) as &str,
             "-u",
             &get_active_username(),
@@ -587,7 +587,10 @@ pub fn get_pa_sources() -> Vec<(String, String)> {
 }
 
 pub fn lock_screen() {
-    std::process::Command::new("xdg-screensaver").arg("lock").spawn().ok();
+    std::process::Command::new("xdg-screensaver")
+        .arg("lock")
+        .spawn()
+        .ok();
 }
 
 pub fn toggle_blank_screen(_v: bool) {
@@ -604,11 +607,7 @@ pub fn is_installed() -> bool {
 
 fn run_cmds(cmds: String) -> ResultType<Option<String>> {
     let mut tmp = std::env::temp_dir();
-    tmp.push(format!(
-        "{}_{}",
-        hbb_common::config::APP_NAME,
-        crate::get_time()
-    ));
+    tmp.push(format!("{}_{}", crate::get_app_name(), crate::get_time()));
     let mut file = std::fs::File::create(&tmp)?;
     file.write_all(cmds.as_bytes())?;
     file.sync_all()?;

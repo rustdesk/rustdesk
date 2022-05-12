@@ -12,7 +12,6 @@ use std::{
     time::SystemTime,
 };
 
-pub const APP_NAME: &str = "RustDesk";
 pub const RENDEZVOUS_TIMEOUT: u64 = 12_000;
 pub const CONNECT_TIMEOUT: u64 = 18_000;
 pub const REG_INTERVAL: i64 = 12_000;
@@ -26,7 +25,9 @@ pub const ICON: &str = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAIAAAACACA
 pub const ICON: &str = "data:image/png;base64,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
 ";
 #[cfg(target_os = "macos")]
-pub const ORG: &str = "com.carriez";
+lazy_static::lazy_static! {
+    pub static ref ORG: Arc<RwLock<String>> = Arc::new(RwLock::new("com.carriez".to_owned()));
+}
 
 type Size = (i32, i32, i32, i32);
 
@@ -35,10 +36,13 @@ lazy_static::lazy_static! {
     static ref CONFIG2: Arc<RwLock<Config2>> = Arc::new(RwLock::new(Config2::load()));
     static ref LOCAL_CONFIG: Arc<RwLock<LocalConfig>> = Arc::new(RwLock::new(LocalConfig::load()));
     pub static ref ONLINE: Arc<Mutex<HashMap<String, i64>>> = Default::default();
+    pub static ref PROD_RENDEZVOUS_SERVER: Arc<RwLock<String>> = Default::default();
+    pub static ref APP_NAME: Arc<RwLock<String>> = Arc::new(RwLock::new("RustDesk".to_owned()));
 }
 #[cfg(any(target_os = "android", target_os = "ios"))]
 lazy_static::lazy_static! {
     pub static ref APP_DIR: Arc<RwLock<String>> = Default::default();
+    pub static ref APP_HOME_DIR: Arc<RwLock<String>> = Default::default();
 }
 const CHARS: &'static [char] = &[
     '2', '3', '4', '5', '6', '7', '8', '9', 'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k',
@@ -256,13 +260,13 @@ impl Config {
     }
 
     fn file_(suffix: &str) -> PathBuf {
-        let name = format!("{}{}", APP_NAME, suffix);
+        let name = format!("{}{}", *APP_NAME.read().unwrap(), suffix);
         Self::path(name).with_extension("toml")
     }
 
     pub fn get_home() -> PathBuf {
         #[cfg(any(target_os = "android", target_os = "ios"))]
-        return Self::path("");
+        return Self::path(APP_HOME_DIR.read().unwrap().as_str());
         if let Some(path) = dirs_next::home_dir() {
             patch(path)
         } else if let Ok(path) = std::env::current_dir() {
@@ -282,9 +286,9 @@ impl Config {
         #[cfg(not(target_os = "macos"))]
         let org = "";
         #[cfg(target_os = "macos")]
-        let org = ORG;
+        let org = ORG.read().unwrap().clone();
         // /var/root for root
-        if let Some(project) = ProjectDirs::from("", org, APP_NAME) {
+        if let Some(project) = ProjectDirs::from("", &org, &*APP_NAME.read().unwrap()) {
             let mut path = patch(project.config_dir().to_path_buf());
             path.push(p);
             return path;
@@ -297,14 +301,14 @@ impl Config {
         #[cfg(target_os = "macos")]
         {
             if let Some(path) = dirs_next::home_dir().as_mut() {
-                path.push(format!("Library/Logs/{}", APP_NAME));
+                path.push(format!("Library/Logs/{}", *APP_NAME.read().unwrap()));
                 return path.clone();
             }
         }
         #[cfg(target_os = "linux")]
         {
             let mut path = Self::get_home();
-            path.push(format!(".local/share/logs/{}", APP_NAME));
+            path.push(format!(".local/share/logs/{}", *APP_NAME.read().unwrap()));
             std::fs::create_dir_all(&path).ok();
             return path;
         }
@@ -322,12 +326,20 @@ impl Config {
             // \\ServerName\pipe\PipeName
             // where ServerName is either the name of a remote computer or a period, to specify the local computer.
             // https://docs.microsoft.com/en-us/windows/win32/ipc/pipe-names
-            format!("\\\\.\\pipe\\{}\\query{}", APP_NAME, postfix)
+            format!(
+                "\\\\.\\pipe\\{}\\query{}",
+                *APP_NAME.read().unwrap(),
+                postfix
+            )
         }
         #[cfg(not(windows))]
         {
             use std::os::unix::fs::PermissionsExt;
-            let mut path: PathBuf = format!("/tmp/{}", APP_NAME).into();
+            #[cfg(target_os = "android")]
+            let mut path: PathBuf =
+                format!("{}/{}", *APP_DIR.read().unwrap(), *APP_NAME.read().unwrap()).into();
+            #[cfg(not(target_os = "android"))]
+            let mut path: PathBuf = format!("/tmp/{}", *APP_NAME.read().unwrap()).into();
             fs::create_dir(&path).ok();
             fs::set_permissions(&path, fs::Permissions::from_mode(0o0777)).ok();
             path.push(format!("ipc{}", postfix));
@@ -351,7 +363,10 @@ impl Config {
     pub fn get_rendezvous_server() -> String {
         let mut rendezvous_server = Self::get_option("custom-rendezvous-server");
         if rendezvous_server.is_empty() {
-            rendezvous_server = CONFIG2.write().unwrap().rendezvous_server.clone();
+            rendezvous_server = PROD_RENDEZVOUS_SERVER.read().unwrap().clone();
+        }
+        if rendezvous_server.is_empty() {
+            rendezvous_server = CONFIG2.read().unwrap().rendezvous_server.clone();
         }
         if rendezvous_server.is_empty() {
             rendezvous_server = Self::get_rendezvous_servers()
@@ -367,6 +382,10 @@ impl Config {
 
     pub fn get_rendezvous_servers() -> Vec<String> {
         let s = Self::get_option("custom-rendezvous-server");
+        if !s.is_empty() {
+            return vec![s];
+        }
+        let s = PROD_RENDEZVOUS_SERVER.read().unwrap().clone();
         if !s.is_empty() {
             return vec![s];
         }
@@ -446,7 +465,13 @@ impl Config {
 
     fn get_auto_id() -> Option<String> {
         #[cfg(any(target_os = "android", target_os = "ios"))]
-        return None;
+        {
+            return Some(
+                rand::thread_rng()
+                    .gen_range(1_000_000_000..2_000_000_000)
+                    .to_string(),
+            );
+        }
         let mut id = 0u32;
         #[cfg(not(any(target_os = "android", target_os = "ios")))]
         if let Ok(Some(ma)) = mac_address::get_mac_address() {
@@ -529,6 +554,15 @@ impl Config {
             }
         }
         id
+    }
+
+    pub fn get_id_or(b: String) -> String {
+        let a = CONFIG.read().unwrap().id.clone();
+        if a.is_empty() {
+            b
+        } else {
+            a
+        }
     }
 
     pub fn get_options() -> HashMap<String, String> {

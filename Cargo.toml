@@ -5,9 +5,19 @@ authors = ["rustdesk <info@rustdesk.com>"]
 edition = "2021"
 build= "build.rs"
 description = "A remote control software."
+default-run = "rustdesk"
+
+[lib]
+name = "librustdesk"
+crate-type = ["cdylib", "staticlib", "rlib"] 
+
+[[bin]]
+name = "lic"
+path = "src/lic_main.rs"
 
 [features]
 inline = []
+hbbs = []
 cli = []
 use_samplerate = ["samplerate"]
 use_rubato = ["rubato"]
@@ -40,12 +50,15 @@ dasp = { version = "0.11", features = ["signal", "interpolate-linear", "interpol
 rubato = { version = "0.12", optional = true }
 samplerate = { version = "0.2", optional = true }
 async-trait = "0.1"
-uuid = { version = "1.0.0", features = ["v4"] }
+uuid = { version = "1.0", features = ["v4"] }
 clap = "3.0"
 rpassword = "6.0"
 base64 = "0.13"
 sysinfo = "0.23"
 num_cpus = "1.13"
+
+[target.'cfg(not(target_os = "linux"))'.dependencies]
+reqwest = { version = "0.11", features = ["json"] }
 
 [target.'cfg(not(any(target_os = "android", target_os = "linux")))'.dependencies]
 cpal = "0.13.5"
@@ -54,14 +67,19 @@ cpal = "0.13.5"
 machine-uid = "0.2"
 mac_address = "1.1"
 sciter-rs = { git = "https://github.com/open-trade/rust-sciter", branch = "dyn" }
+sys-locale = "0.2"
+enigo = { path = "libs/enigo" }
+clipboard = { path = "libs/clipboard" }
+rdev = { git = "https://github.com/open-trade/rdev" }
 ctrlc = "3.2"
 arboard = "2.0"
-clipboard-master = "3.1"
-#rdev = { path = "../rdev" }
-rdev = { git = "https://github.com/open-trade/rdev" }
+#minreq = { version = "2.4", features = ["punycode", "https-native"] }
 
 [target.'cfg(target_os = "windows")'.dependencies]
-systray = { git = "https://github.com/liyue201/systray-rs" }
+#systray = { git = "https://github.com/open-trade/systray-rs" }
+trayicon = { version = "0.1", features = ["winit"] }
+# > 0.25 not work with trayicon
+winit = "0.25"
 winapi = { version = "0.3", features = ["winuser"] }
 winreg = "0.10"
 windows-service = "0.4"
@@ -79,15 +97,17 @@ tray-item = "0.7" # looks better than trayicon
 psimple = { package = "libpulse-simple-binding", version = "2.25" }
 pulse = { package = "libpulse-binding", version = "2.26" }
 rust-pulsectl = { git = "https://github.com/open-trade/pulsectl" }
+async-process = "1.3"
 
 [target.'cfg(target_os = "android")'.dependencies]
 android_logger = "0.11"
+jni = "0.19.0"
 
 [workspace]
 members = ["libs/scrap", "libs/hbb_common", "libs/enigo", "libs/clipboard", "libs/virtual_display"]
 
 [package.metadata.winres]
-LegalCopyright = "Copyright © 2020"
+LegalCopyright = "Copyright © 2022 Purslane, Inc."
 # this FileDescription overrides package.description
 FileDescription = "RustDesk"
 
@@ -106,7 +126,7 @@ hound = "3.4"
 name = "RustDesk"
 identifier = "com.carriez.rustdesk"
 icon = ["32x32.png", "128x128.png", "128x128@2x.png"]
-deb_depends = ["libgtk-3-0", "libxcb-randr0", "libxdo3", "libxfixes3", "libxcb-shape0", "libxcb-xfixes0", "libasound2", "libsystemd0", "pulseaudio"]
+deb_depends = ["libgtk-3-0", "libxcb-randr0", "libxdo3", "libxfixes3", "libxcb-shape0", "libxcb-xfixes0", "libasound2", "libsystemd0", "pulseaudio", "python3-pip", "curl"]
 osx_minimum_system_version = "10.14"
 resources = ["mac-tray.png"]
 
@@ -114,7 +134,7 @@ resources = ["mac-tray.png"]
 #!!! rembember call "strip target/release/rustdesk"
 # which reduce binary size a lot
 [profile.release]
-#lto = true
-#codegen-units = 1
-#panic = 'abort'
+lto = true
+codegen-units = 1
+panic = 'abort'
 #opt-level = 'z' # only have smaller size after strip

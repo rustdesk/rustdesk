@@ -32,7 +32,6 @@ use std::{
     io::ErrorKind::WouldBlock,
     time::{self, Duration, Instant},
 };
-use virtual_display;
 
 pub const NAME: &'static str = "video";
 
@@ -133,7 +132,7 @@ fn check_display_changed(
     last_width: usize,
     last_hegiht: usize,
 ) -> bool {
-    let displays = match try_get_displays() {
+    let displays = match Display::all() {
         Ok(d) => d,
         _ => return false,
     };
@@ -158,30 +157,20 @@ fn check_display_changed(
 }
 
 fn run(sp: GenericService) -> ResultType<()> {
-    let num_displays = Display::all()?.len();
-    if num_displays == 0 {
-        // Device may sometimes be uninstalled by user in "Device Manager" Window.
-        // Closing device will clear the instance data.
-        virtual_display::close_device();
-    } else if num_displays > 1 {
-        // Try close device, if display device changed.
-        if virtual_display::is_device_created() {
-            virtual_display::close_device();
-        }
-    }
-
     let fps = 30;
     let wait = 1000 / fps;
     let spf = time::Duration::from_secs_f32(1. / (fps as f32));
     let (ndisplay, current, display) = get_current_display()?;
     let (origin, width, height) = (display.origin(), display.width(), display.height());
     log::debug!(
-        "#displays={}, current={}, origin: {:?}, width={}, height={}",
+        "#displays={}, current={}, origin: {:?}, width={}, height={}, cpus={}/{}",
         ndisplay,
         current,
         &origin,
         width,
-        height
+        height,
+        num_cpus::get_physical(),
+        num_cpus::get(),
     );
     // Capturer object is expensive, avoiding to create it frequently.
     let mut c = Capturer::new(display, true).with_context(|| "Failed to create capturer")?;
@@ -260,7 +249,31 @@ fn run(sp: GenericService) -> ResultType<()> {
 
         frame_controller.reset();
 
-        match c.frame(wait as _) {
+        #[cfg(any(target_os = "android", target_os = "ios"))]
+        let res = match c.frame(wait as _) {
+            Ok(frame) => {
+                let time = now - start;
+                let ms = (time.as_secs() * 1000 + time.subsec_millis() as u64) as i64;
+                match frame {
+                    scrap::Frame::VP9(data) => {
+                        let send_conn_ids = handle_one_frame_encoded(&sp, data, ms)?;
+                        frame_controller.set_send(now, send_conn_ids);
+                    }
+                    scrap::Frame::RAW(data) => {
+                        if (data.len() != 0) {
+                            let send_conn_ids = handle_one_frame(&sp, data, ms, &mut vpx)?;
+                            frame_controller.set_send(now, send_conn_ids);
+                        }
+                    }
+                    _ => {}
+                };
+                Ok(())
+            }
+            Err(err) => Err(err),
+        };
+
+        #[cfg(not(any(target_os = "android", target_os = "ios")))]
+        let res = match c.frame(wait as _) {
             Ok(frame) => {
                 let time = now - start;
                 let ms = (time.as_secs() * 1000 + time.subsec_millis() as u64) as i64;
@@ -270,8 +283,14 @@ fn run(sp: GenericService) -> ResultType<()> {
                 {
                     try_gdi = 0;
                 }
+                Ok(())
             }
-            Err(ref e) if e.kind() == WouldBlock => {
+            Err(err) => Err(err),
+        };
+
+        match res {
+            Err(ref e) if e.kind() == WouldBlock =>
+            {
                 #[cfg(windows)]
                 if try_gdi > 0 && !c.is_gdi() {
                     if try_gdi > 3 {
@@ -298,6 +317,7 @@ fn run(sp: GenericService) -> ResultType<()> {
 
                 return Err(err.into());
             }
+            _ => {}
         }
 
         // i love 3, 6, 8
@@ -310,7 +330,6 @@ fn run(sp: GenericService) -> ResultType<()> {
             std::thread::sleep(spf - elapsed);
         }
     }
-
     Ok(())
 }
 
@@ -370,8 +389,33 @@ fn handle_one_frame(
     Ok(send_conn_ids)
 }
 
+#[inline]
+#[cfg(any(target_os = "android", target_os = "ios"))]
+pub fn handle_one_frame_encoded(
+    sp: &GenericService,
+    frame: &[u8],
+    ms: i64,
+) -> ResultType<HashSet<i32>> {
+    sp.snapshot(|sps| {
+        // so that new sub and old sub share the same encoder after switch
+        if sps.has_subscribes() {
+            bail!("SWITCH");
+        }
+        Ok(())
+    })?;
+    let mut send_conn_ids: HashSet<i32> = Default::default();
+    let vp9_frame = VP9 {
+        data: frame.to_vec(),
+        key: true,
+        pts: ms,
+        ..Default::default()
+    };
+    send_conn_ids = sp.send_video_frame(create_msg(vec![vp9_frame]));
+    Ok(send_conn_ids)
+}
+
 fn get_display_num() -> usize {
-    if let Ok(d) = try_get_displays() {
+    if let Ok(d) = Display::all() {
         d.len()
     } else {
         0
@@ -385,7 +429,7 @@ pub fn get_displays() -> ResultType<(usize, Vec<DisplayInfo>)> {
     }
     let mut displays = Vec::new();
     let mut primary = 0;
-    for (i, d) in try_get_displays()?.iter().enumerate() {
+    for (i, d) in Display::all()?.iter().enumerate() {
         if d.is_primary() {
             primary = i;
         }
@@ -416,11 +460,13 @@ pub fn switch_display(i: i32) {
 }
 
 pub fn refresh() {
+    #[cfg(target_os = "android")]
+    Display::refresh_size();
     *SWITCH.lock().unwrap() = true;
 }
 
 fn get_primary() -> usize {
-    if let Ok(all) = try_get_displays() {
+    if let Ok(all) = Display::all() {
         for (i, d) in all.iter().enumerate() {
             if d.is_primary() {
                 return i;
@@ -434,42 +480,12 @@ pub fn switch_to_primary() {
     switch_display(get_primary() as _);
 }
 
-fn try_get_displays() -> ResultType<Vec<Display>> {
-    let mut displays = Display::all()?;
-    if displays.len() == 0 {
-        log::debug!("no displays, create virtual display");
-        // Try plugin monitor
-        if !virtual_display::is_device_created() {
-            if let Err(e) = virtual_display::create_device() {
-                log::debug!("Create device failed {}", e);
-            }
-        }
-        if virtual_display::is_device_created() {
-            if let Err(e) = virtual_display::plug_in_monitor() {
-                log::debug!("Plug in monitor failed {}", e);
-            } else {
-                if let Err(e) = virtual_display::update_monitor_modes() {
-                    log::debug!("Update monitor modes failed {}", e);
-                }
-            }
-        }
-        displays = Display::all()?;
-    } else if displays.len() > 1 {
-        // If more than one displays exists, close RustDeskVirtualDisplay
-        if virtual_display::is_device_created() {
-            virtual_display::close_device()
-        }
-    }
-    Ok(displays)
-}
-
 fn get_current_display() -> ResultType<(usize, usize, Display)> {
     let mut current = *CURRENT_DISPLAY.lock().unwrap() as usize;
-    let mut displays = try_get_displays()?;
+    let mut displays = Display::all()?;
     if displays.len() == 0 {
         bail!("No displays");
     }
-
     let n = displays.len();
     if current >= n {
         current = 0;

@@ -16,6 +16,19 @@ function isEnterKey(evt) {
               (is_linux && evt.keyCode == 65421));
 }
 
+function getScaleFactor() {
+    if (!is_win) return 1;
+    return self.toPixels(10000dip) / 10000.;
+}
+var scaleFactor = getScaleFactor();
+view << event resolutionchange {
+    scaleFactor = getScaleFactor();
+}
+function scaleIt(x) {
+    return (x * scaleFactor).toInteger();
+}
+stdout.println("scaleFactor", scaleFactor);
+
 function translate(name) {
     try {
         return handler.t(name);
@@ -226,6 +239,8 @@ function msgbox(type, title, content, callback=null, height=180, width=500, hasR
     }
     var remember = false;
     try { remember = handler.get_remember(); } catch(e) {}
+    var auto_login = false;
+    try { auto_login = handler.get_option("auto-login") != ''; } catch(e) {}
     width += is_xfce ? 50 : 0;
     height += is_xfce ? 50 : 0;
 
@@ -248,7 +263,7 @@ function msgbox(type, title, content, callback=null, height=180, width=500, hasR
     } else if (type.indexOf("custom") < 0 && !is_port_forward && !callback) {
         callback = function() { view.close(); }
     }
-    $(#msgbox).content(<MsgboxComponent width={width} height={height} type={type} title={title} content={content} remember={remember} callback={callback} contentStyle={contentStyle} hasRetry={hasRetry} />);
+    $(#msgbox).content(<MsgboxComponent width={width} height={height} auto_login={auto_login} type={type} title={title} content={content} remember={remember} callback={callback} contentStyle={contentStyle} hasRetry={hasRetry} />);
 }
 
 function connecting() {
@@ -361,10 +376,32 @@ class PasswordComponent: Reactor.Component {
     }
 }
 
+// type: #post, #get, #delete, #put
+function httpRequest(url, type, params, _onSuccess, _onError, headers="") {
+    if (type != #post) {
+        stderr.println("only post ok");
+    }
+    handler.post_request(url, JSON.stringify(params), headers);
+    function check_status() {
+        var status = handler.get_async_job_status();
+        if (status == " ") self.timer(0.1s, check_status);
+        else {
+            try {
+                var data = JSON.parse(status);
+                _onSuccess(data);
+            } catch (e) {
+                _onError(status, 0);
+            }
+        }
+    }
+    check_status();
+}
+
 function isReasonableSize(r) {
     var x = r[0];
     var y = r[1];
-    return !(x < -3200 || x > 3200 || y < -3200 || y > 3200);
+    var n = scaleIt(3200);
+    return !(x < -n || x > n || y < -n || y > n);
 }
 
 function awake() {

@@ -1,7 +1,11 @@
 use super::{input_service::*, *};
 #[cfg(windows)]
 use crate::clipboard_file::*;
-use crate::{common::update_clipboard, ipc};
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+use crate::common::update_clipboard;
+use crate::ipc;
+#[cfg(any(target_os = "android", target_os = "ios"))]
+use crate::{common::MOBILE_INFO2, mobile::connection_manager::start_channel};
 use hbb_common::{
     config::Config,
     fs,
@@ -15,14 +19,22 @@ use hbb_common::{
     },
     tokio_util::codec::{BytesCodec, Framed},
 };
+#[cfg(any(target_os = "android", target_os = "ios"))]
+use scrap::android::call_input_service_mouse_input;
+use serde_json::{json, value::Value};
 use sha2::{Digest, Sha256};
-use std::sync::mpsc as std_mpsc;
+use std::sync::{
+    atomic::{AtomicI64, Ordering},
+    mpsc as std_mpsc,
+};
 
 pub type Sender = mpsc::UnboundedSender<(Instant, Arc<Message>)>;
 
 lazy_static::lazy_static! {
     static ref LOGIN_FAILURES: Arc::<Mutex<HashMap<String, (i32, i32, i32)>>> = Default::default();
 }
+pub static CLICK_TIME: AtomicI64 = AtomicI64::new(0);
+pub static MOUSE_MOVE_TIME: AtomicI64 = AtomicI64::new(0);
 
 #[derive(Clone, Default)]
 pub struct ConnInner {
@@ -67,6 +79,8 @@ pub struct Connection {
     enable_file_transfer: bool,               // by peer
     tx_input: std_mpsc::Sender<MessageInput>, // handle input messages
     video_ack_required: bool,
+    peer_info: (String, String),
+    api_server: String,
 }
 
 impl Subscriber for ConnInner {
@@ -151,12 +165,18 @@ impl Connection {
             disable_clipboard: false,
             tx_input,
             video_ack_required: false,
+            peer_info: Default::default(),
+            api_server: "".to_owned(),
         };
+        #[cfg(not(any(target_os = "android", target_os = "ios")))]
         tokio::spawn(async move {
             if let Err(err) = start_ipc(rx_to_cm, tx_from_cm).await {
                 log::error!("ipc to connection manager exit: {}", err);
             }
         });
+        #[cfg(target_os = "android")]
+        start_channel(rx_to_cm, tx_from_cm);
+
         if !conn.on_open(addr).await {
             return;
         }
@@ -184,6 +204,7 @@ impl Connection {
             },
         );
 
+        #[cfg(not(any(target_os = "android", target_os = "ios")))]
         std::thread::spawn(move || Self::handle_input(rx_input, tx_cloned));
 
         loop {
@@ -252,9 +273,9 @@ impl Connection {
                         ipc::Data::RawMessage(bytes) => {
                             allow_err!(conn.stream.send_raw(bytes).await);
                         }
+                        #[cfg(windows)]
                         ipc::Data::ClipbaordFile(_clip) => {
                             if conn.file_transfer_enabled() {
-                                #[cfg(windows)]
                                 allow_err!(conn.stream.send(&clip_2_msg(_clip)).await);
                             }
                         }
@@ -291,6 +312,7 @@ impl Connection {
                     } else {
                         conn.timer = time::interval_at(Instant::now() + SEC30, SEC30);
                     }
+                    conn.post_audit(json!({})); // heartbeat
                 },
                 Some((instant, value)) = rx_video.recv() => {
                     if !conn.video_ack_required {
@@ -345,9 +367,13 @@ impl Connection {
             conn.on_close(&err.to_string(), false);
         }
 
+        conn.post_audit(json!({
+            "action": "close",
+        }));
         log::info!("#{} connection loop exited", id);
     }
 
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
     fn handle_input(receiver: std_mpsc::Receiver<MessageInput>, tx: Sender) {
         let mut block_input_mode = false;
         let (tx_blank, rx_blank) = std_mpsc::channel();
@@ -398,6 +424,7 @@ impl Connection {
                     }
                 },
                 Err(err) => {
+                    #[cfg(not(any(target_os = "android", target_os = "ios")))]
                     if block_input_mode {
                         let _ = crate::platform::block_input(true);
                     }
@@ -410,6 +437,7 @@ impl Connection {
         log::info!("Input thread exited");
     }
 
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
     fn handle_blank(receiver: std_mpsc::Receiver<MessageInput>) {
         let mut last_privacy = false;
         loop {
@@ -443,7 +471,7 @@ impl Connection {
         rx_from_cm: &mut mpsc::UnboundedReceiver<Data>,
     ) -> ResultType<()> {
         let mut last_recv_time = Instant::now();
-        if let Some(forward) = self.port_forward_socket.as_mut() {
+        if let Some(mut forward) = self.port_forward_socket.take() {
             log::info!("Running port forwarding loop");
             self.stream.set_raw();
             loop {
@@ -476,6 +504,7 @@ impl Connection {
                         if last_recv_time.elapsed() >= H1 {
                             bail!("Timeout");
                         }
+                        self.post_audit(json!({})); // heartbeat
                     }
                 }
             }
@@ -523,25 +552,78 @@ impl Connection {
         let mut msg_out = Message::new();
         msg_out.set_hash(self.hash.clone());
         self.send(msg_out).await;
+        self.get_api_server();
+        self.post_audit(json!({
+            "ip": addr.ip(),
+            "action": "new",
+        }));
         true
+    }
+
+    fn get_api_server(&mut self) {
+        self.api_server = crate::get_audit_server(
+            Config::get_option("api-server"),
+            Config::get_option("custom-rendezvous-server"),
+        );
+    }
+
+    fn post_audit(&self, v: Value) {
+        if self.api_server.is_empty() {
+            return;
+        }
+        let url = self.api_server.clone();
+        let mut v = v;
+        v["id"] = json!(Config::get_id());
+        v["uuid"] = json!(base64::encode(crate::get_uuid()));
+        v["Id"] = json!(self.inner.id);
+        tokio::spawn(async move {
+            allow_err!(Self::post_audit_async(url, v).await);
+        });
+    }
+
+    #[inline]
+    async fn post_audit_async(url: String, v: Value) -> ResultType<()> {
+        crate::post_request(url, v.to_string(), "").await?;
+        Ok(())
     }
 
     async fn send_logon_response(&mut self) {
         if self.authorized {
             return;
         }
+        let conn_type = if self.file_transfer.is_some() {
+            1
+        } else if self.port_forward_socket.is_some() {
+            2
+        } else {
+            0
+        };
+        self.post_audit(json!({"peer": self.peer_info, "Type": conn_type}));
         #[allow(unused_mut)]
         let mut username = crate::platform::get_active_username();
         let mut res = LoginResponse::new();
+
+        let mut pi = PeerInfo {
+            username: username.clone(),
+            conn_id: self.inner.id,
+            version: crate::VERSION.to_owned(),
+            ..Default::default()
+        };
+
+        #[cfg(not(target_os = "android"))]
+        {
+            pi.hostname = whoami::hostname();
+            pi.platform = whoami::platform().to_string();
+        }
+        #[cfg(target_os = "android")]
+        {
+            pi.hostname = MOBILE_INFO2.lock().unwrap().clone();
+            pi.platform = "Android".into();
+        }
+
         if self.port_forward_socket.is_some() {
             let mut msg_out = Message::new();
-            res.set_peer_info(PeerInfo {
-                hostname: whoami::hostname(),
-                username,
-                platform: whoami::platform().to_string(),
-                version: crate::VERSION.to_owned(),
-                ..Default::default()
-            });
+            res.set_peer_info(pi);
             msg_out.set_login_response(res);
             self.send(msg_out).await;
             return;
@@ -566,20 +648,15 @@ impl Connection {
         if crate::platform::is_root() {
             sas_enabled = true;
         }
+        #[cfg(not(any(target_os = "android", target_os = "ios")))]
         if self.file_transfer.is_some() {
             if crate::platform::is_prelogin() || self.tx_to_cm.send(ipc::Data::Test).is_err() {
                 username = "".to_owned();
             }
         }
         self.authorized = true;
-        let mut pi = PeerInfo {
-            hostname: whoami::hostname(),
-            username,
-            platform: whoami::platform().to_string(),
-            version: crate::VERSION.to_owned(),
-            sas_enabled,
-            ..Default::default()
-        };
+        pi.username = username;
+        pi.sas_enabled = sas_enabled;
         let mut sub_service = false;
         if self.file_transfer.is_some() {
             res.set_peer_info(pi);
@@ -641,7 +718,8 @@ impl Connection {
         self.file && self.enable_file_transfer
     }
 
-    async fn try_start_cm(&mut self, peer_id: String, name: String, authorized: bool) {
+    fn try_start_cm(&mut self, peer_id: String, name: String, authorized: bool) {
+        self.peer_info = (peer_id.clone(), name.clone());
         self.send_to_cm(ipc::Data::Login {
             id: self.inner.id(),
             is_file_transfer: self.file_transfer.is_some(),
@@ -753,7 +831,7 @@ impl Connection {
             if !crate::is_ip(&lr.username) && lr.username != Config::get_id() {
                 self.send_login_error("Offline").await;
             } else if lr.password.is_empty() {
-                self.try_start_cm(lr.my_id, lr.my_name, false).await;
+                self.try_start_cm(lr.my_id, lr.my_name, false);
             } else {
                 let mut hasher = Sha256::new();
                 hasher.update(&Config::get_password());
@@ -787,13 +865,13 @@ impl Connection {
                         .unwrap()
                         .insert(self.ip.clone(), failure);
                     self.send_login_error("Wrong Password").await;
-                    self.try_start_cm(lr.my_id, lr.my_name, false).await;
+                    self.try_start_cm(lr.my_id, lr.my_name, false);
                 } else {
                     if failure.0 != 0 {
                         LOGIN_FAILURES.lock().unwrap().remove(&self.ip);
                     }
+                    self.try_start_cm(lr.my_id, lr.my_name, true);
                     self.send_logon_response().await;
-                    self.try_start_cm(lr.my_id, lr.my_name, true).await;
                     if self.port_forward_socket.is_some() {
                         return false;
                     }
@@ -814,12 +892,26 @@ impl Connection {
         } else if self.authorized {
             match msg.union {
                 Some(message::Union::mouse_event(me)) => {
+                    #[cfg(any(target_os = "android", target_os = "ios"))]
+                    if let Err(e) = call_input_service_mouse_input(me.mask, me.x, me.y) {
+                        log::debug!("call_input_service_mouse_input fail:{}", e);
+                    }
+                    #[cfg(not(any(target_os = "android", target_os = "ios")))]
                     if self.keyboard {
+                        if is_left_up(&me) {
+                            CLICK_TIME.store(crate::get_time(), Ordering::SeqCst);
+                        } else {
+                            MOUSE_MOVE_TIME.store(crate::get_time(), Ordering::SeqCst);
+                        }
                         self.input_mouse(me, self.inner.id());
                     }
                 }
                 Some(message::Union::key_event(me)) => {
+                    #[cfg(not(any(target_os = "android", target_os = "ios")))]
                     if self.keyboard {
+                        if is_enter(&me) {
+                            CLICK_TIME.store(crate::get_time(), Ordering::SeqCst);
+                        }
                         // handle all down as press
                         // fix unexpected repeating key on remote linux, seems also fix abnormal alt/shift, which
                         // make sure all key are released
@@ -843,7 +935,9 @@ impl Connection {
                         }
                     }
                 }
-                Some(message::Union::clipboard(cb)) => {
+                Some(message::Union::clipboard(cb)) =>
+                {
+                    #[cfg(not(any(target_os = "android", target_os = "ios")))]
                     if self.clipboard {
                         update_clipboard(cb, None);
                     }
@@ -868,18 +962,21 @@ impl Connection {
                                         self.send(fs::new_error(f.id, err, -1)).await;
                                     }
                                     Ok(files) => {
-                                        self.send(fs::new_dir(f.id, files)).await;
+                                        self.send(fs::new_dir(f.id, f.path, files)).await;
                                     }
                                 }
                             }
                             Some(file_action::Union::send(s)) => {
                                 let id = s.id;
-                                match fs::TransferJob::new_read(id, s.path, s.include_hidden) {
+                                let path = s.path;
+                                match fs::TransferJob::new_read(id, path.clone(), s.include_hidden)
+                                {
                                     Err(err) => {
                                         self.send(fs::new_error(id, err, 0)).await;
                                     }
                                     Ok(job) => {
-                                        self.send(fs::new_dir(id, job.files().to_vec())).await;
+                                        self.send(fs::new_dir(id, path, job.files().to_vec()))
+                                            .await;
                                         self.read_jobs.push(job);
                                         self.timer = time::interval(MILLI1);
                                     }
@@ -1020,7 +1117,9 @@ impl Connection {
         if let Ok(q) = o.enable_file_transfer.enum_value() {
             if q != BoolOption::NotSet {
                 self.enable_file_transfer = q == BoolOption::Yes;
-                self.send_to_cm(ipc::Data::ClipboardFileEnabled(self.file_transfer_enabled()));
+                self.send_to_cm(ipc::Data::ClipboardFileEnabled(
+                    self.file_transfer_enabled(),
+                ));
             }
         }
         if let Ok(q) = o.disable_clipboard.enum_value() {
@@ -1071,6 +1170,7 @@ impl Connection {
         }
         log::info!("#{} Connection closed: {}", self.inner.id(), reason);
         if lock && self.lock_after_session_end && self.keyboard {
+            #[cfg(not(any(target_os = "android", target_os = "ios")))]
             lock_screen();
         }
         self.tx_to_cm.send(ipc::Data::Close).ok();
@@ -1091,6 +1191,7 @@ impl Connection {
     }
 }
 
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 async fn start_ipc(
     mut rx_to_cm: mpsc::UnboundedReceiver<ipc::Data>,
     tx_from_cm: mpsc::UnboundedSender<ipc::Data>,
@@ -1148,7 +1249,16 @@ async fn start_ipc(
                         return Err(err.into());
                     }
                     Ok(Some(data)) => {
-                        tx_from_cm.send(data)?;
+                        match data {
+                            ipc::Data::ClickTime(_)=> {
+                                let ct = CLICK_TIME.load(Ordering::SeqCst);
+                                let data = ipc::Data::ClickTime(ct);
+                                stream.send(&data).await?;
+                            }
+                            _ => {
+                                tx_from_cm.send(data)?;
+                            }
+                        }
                     }
                     _ => {}
                 }

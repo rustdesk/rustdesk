@@ -3,7 +3,7 @@
 //#![windows_subsystem = "windows"]
 
 use hbb_common::log;
-use rustdesk::*;
+use librustdesk::*;
 
 #[cfg(any(target_os = "android", target_os = "ios"))]
 fn main() {
@@ -11,24 +11,40 @@ fn main() {
     common::test_nat_type();
     #[cfg(target_os = "android")]
     crate::common::check_software_update();
-    mobile::Session::start("");
 }
 
 #[cfg(not(any(target_os = "android", target_os = "ios", feature = "cli")))]
 fn main() {
     // https://docs.rs/flexi_logger/latest/flexi_logger/error_info/index.html#write
     let mut _async_logger_holder: Option<flexi_logger::LoggerHandle> = None;
-    let mut args: Vec<String> = std::env::args().skip(1).collect();
+    let mut args = Vec::new();
+    let mut i = 0;
+    let mut is_setup = false;
+    for arg in std::env::args() {
+        if i == 0 && common::is_setup(&arg) {
+            is_setup = true;
+        } else if i > 0 {
+            args.push(arg);
+        }
+        i += 1;
+    }
+    if is_setup {
+        if args.is_empty() {
+            args.push("--install".to_owned());
+        } else if args[0] == "--noinstall" {
+            args.clear();
+        }
+    }
     if args.len() > 0 && args[0] == "--version" {
         println!("{}", crate::VERSION);
         return;
     }
-    #[cfg(not(feature = "inline"))]
+    #[cfg(feature = "inline")]
     {
         use hbb_common::env_logger::*;
         init_from_env(Env::default().filter_or(DEFAULT_FILTER_ENV, "info"));
     }
-    #[cfg(feature = "inline")]
+    #[cfg(not(feature = "inline"))]
     {
         let mut path = hbb_common::config::Config::log_path();
         if args.len() > 0 && args[0].starts_with("--") {
@@ -53,7 +69,7 @@ fn main() {
         }
     }
     if args.is_empty() {
-        std::thread::spawn(move || start_server(false, false));
+        std::thread::spawn(move || start_server(false));
     } else {
         #[cfg(windows)]
         {
@@ -62,12 +78,31 @@ fn main() {
                     log::error!("Failed to uninstall: {}", err);
                 }
                 return;
+            } else if args[0] == "--after-install" {
+                if let Err(err) = platform::run_after_install() {
+                    log::error!("Failed to after-install: {}", err);
+                }
+                return;
+            } else if args[0] == "--before-uninstall" {
+                if let Err(err) = platform::run_before_uninstall() {
+                    log::error!("Failed to before-uninstall: {}", err);
+                }
+                return;
             } else if args[0] == "--update" {
                 hbb_common::allow_err!(platform::update_me());
                 return;
             } else if args[0] == "--reinstall" {
                 hbb_common::allow_err!(platform::uninstall_me());
-                hbb_common::allow_err!(platform::install_me("desktopicon startmenu",));
+                hbb_common::allow_err!(platform::install_me(
+                    "desktopicon startmenu",
+                    "".to_owned()
+                ));
+                return;
+            } else if args[0] == "--silent-install" {
+                hbb_common::allow_err!(platform::install_me(
+                    "desktopicon startmenu",
+                    "".to_owned()
+                ));
                 return;
             }
         }
@@ -86,12 +121,12 @@ fn main() {
             log::info!("start --server");
             #[cfg(not(target_os = "macos"))]
             {
-                start_server(true, true);
+                start_server(true);
                 return;
             }
             #[cfg(target_os = "macos")]
             {
-                std::thread::spawn(move || start_server(true, true));
+                std::thread::spawn(move || start_server(true));
             }
         } else if args[0] == "--import-config" {
             if args.len() == 2 {
@@ -138,6 +173,7 @@ fn main() {
     use clap::App;
     let args = format!(
         "-p, --port-forward=[PORT-FORWARD-OPTIONS] 'Format: remote-id:local-port:remote-port[:remote-host]'
+        -k, --key=[KEY] ''
        -s, --server... 'Start server'",
     );
     let matches = App::new("rustdesk")
@@ -172,6 +208,7 @@ fn main() {
         if options.len() > 3 {
             remote_host = options[3].clone();
         }
-        cli::start_one_port_forward(options[0].clone(), port, remote_host, remote_port);
+        let key = matches.value_of("key").unwrap_or("").to_owned();
+        cli::start_one_port_forward(options[0].clone(), port, remote_host, remote_port, key);
     }
 }

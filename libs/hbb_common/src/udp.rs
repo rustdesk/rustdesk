@@ -14,7 +14,7 @@ pub enum FramedSocket {
     ProxySocks(Socks5UdpFramed),
 }
 
-fn new_socket(addr: SocketAddr, reuse: bool) -> Result<Socket, std::io::Error> {
+fn new_socket(addr: SocketAddr, reuse: bool, buf_size: usize) -> Result<Socket, std::io::Error> {
     let socket = match addr {
         SocketAddr::V4(..) => Socket::new(Domain::ipv4(), Type::dgram(), None),
         SocketAddr::V6(..) => Socket::new(Domain::ipv6(), Type::dgram(), None),
@@ -27,6 +27,14 @@ fn new_socket(addr: SocketAddr, reuse: bool) -> Result<Socket, std::io::Error> {
         socket.set_reuse_port(true)?;
         socket.set_reuse_address(true)?;
     }
+    if buf_size > 0 {
+        socket.set_recv_buffer_size(buf_size).ok();
+    }
+    log::info!(
+        "Receive buf size of udp {}: {:?}",
+        addr,
+        socket.recv_buffer_size()
+    );
     socket.bind(&addr.into())?;
     Ok(socket)
 }
@@ -40,9 +48,22 @@ impl FramedSocket {
     #[allow(clippy::never_loop)]
     pub async fn new_reuse<T: std::net::ToSocketAddrs>(addr: T) -> ResultType<Self> {
         for addr in addr.to_socket_addrs()? {
-            let socket = new_socket(addr, true)?.into_udp_socket();
+            let socket = new_socket(addr, true, 0)?.into_udp_socket();
             return Ok(Self::Direct(UdpFramed::new(
                 UdpSocket::from_std(socket)?,
+                BytesCodec::new(),
+            )));
+        }
+        bail!("could not resolve to any address");
+    }
+
+    pub async fn new_with_buf_size<T: std::net::ToSocketAddrs>(
+        addr: T,
+        buf_size: usize,
+    ) -> ResultType<Self> {
+        for addr in addr.to_socket_addrs()? {
+            return Ok(Self::Direct(UdpFramed::new(
+                UdpSocket::from_std(new_socket(addr, false, buf_size)?.into_udp_socket())?,
                 BytesCodec::new(),
             )));
         }

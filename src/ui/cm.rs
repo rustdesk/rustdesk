@@ -5,7 +5,7 @@ use clipboard::{
 };
 use hbb_common::{
     allow_err,
-    config::{Config, ICON},
+    config::Config,
     fs, log,
     message_proto::*,
     protobuf::Message as _,
@@ -21,6 +21,7 @@ use std::{
 pub struct ConnectionManagerInner {
     root: Option<Element>,
     senders: HashMap<i32, mpsc::UnboundedSender<Data>>,
+    click_time: i64,
 }
 
 #[derive(Clone)]
@@ -41,6 +42,7 @@ impl ConnectionManager {
         let inner = ConnectionManagerInner {
             root: None,
             senders: HashMap::new(),
+            click_time: Default::default(),
         };
         let cm = Self(Arc::new(RwLock::new(inner)));
         let cloned = cm.clone();
@@ -49,7 +51,18 @@ impl ConnectionManager {
     }
 
     fn get_icon(&mut self) -> String {
-        ICON.to_owned()
+        crate::get_icon()
+    }
+
+    fn check_click_time(&mut self, id: i32) {
+        let lock = self.read().unwrap();
+        if let Some(s) = lock.senders.get(&id) {
+            allow_err!(s.send(Data::ClickTime(0)));
+        }
+    }
+
+    fn get_click_time(&self) -> f64 {
+        self.read().unwrap().click_time as _
     }
 
     #[inline]
@@ -111,6 +124,9 @@ impl ConnectionManager {
         match data {
             Data::ChatMessage { text } => {
                 self.call("newMessage", &make_args!(id, text));
+            }
+            Data::ClickTime(ms) => {
+                self.write().unwrap().click_time = ms;
             }
             Data::FS(v) => match v {
                 ipc::FS::ReadDir {
@@ -330,6 +346,8 @@ impl sciter::EventHandler for ConnectionManager {
 
     sciter::dispatch_script_call! {
         fn t(String);
+        fn check_click_time(i32);
+        fn get_click_time();
         fn get_icon();
         fn close(i32);
         fn authorize(i32);
@@ -421,7 +439,6 @@ async fn start_ipc(cm: ConnectionManager) {
 #[tokio::main(flavor = "current_thread")]
 async fn start_pa() {
     use crate::audio_service::AUDIO_DATA_SIZE_U8;
-    use hbb_common::config::APP_NAME;
 
     match new_listener("_pa").await {
         Ok(mut incoming) => {
@@ -448,14 +465,14 @@ async fn start_pa() {
                             let spec = pulse::sample::Spec {
                                 format: pulse::sample::Format::F32le,
                                 channels: 2,
-                                rate: crate::platform::linux::PA_SAMPLE_RATE,
+                                rate: crate::platform::PA_SAMPLE_RATE,
                             };
                             log::info!("pa monitor: {:?}", device);
                             // systemctl --user status pulseaudio.service
                             let mut buf: Vec<u8> = vec![0; AUDIO_DATA_SIZE_U8];
                             match psimple::Simple::new(
                                 None,                             // Use the default server
-                                APP_NAME,                         // Our application’s name
+                                &crate::get_app_name(),           // Our application’s name
                                 pulse::stream::Direction::Record, // We want a record stream
                                 Some(&device),                    // Use the default device
                                 "record",                         // Description of our stream

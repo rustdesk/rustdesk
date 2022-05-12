@@ -19,7 +19,10 @@ cfg_if! {
     } else if #[cfg(dxgi)] {
         mod dxgi;
         pub use self::dxgi::*;
-    } else {
+    } else if #[cfg(android)] {
+        mod android;
+        pub use self::android::*;
+    }else {
         //TODO: Fallback implementation.
     }
 }

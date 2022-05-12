@@ -25,6 +25,7 @@ class MsgboxComponent: Reactor.Component {
         this.remember = params.remember;
         this.callback = params.callback;
         this.hasRetry = params.hasRetry;
+        this.auto_login = params.auto_login;
         this.contentStyle = params.contentStyle;
         try { this.content = translate_text(this.content); } catch (e) {}
     }
@@ -58,11 +59,18 @@ class MsgboxComponent: Reactor.Component {
         if (this.type == "input-password") {
             return this.getInputPasswordContent();
         }
+        if (this.type == "custom-os-password") {
+            var ts = this.auto_login ? { checked: true } : {};
+            return <div .form>
+              <PasswordComponent value={this.content} />
+              <div><button|checkbox(auto_login) {ts}>{translate('Auto Login')}</button></div>
+              </div>;
+        }
         return this.content;
     }
 
     function getColor() {
-        if (this.type == "input-password") {
+        if (this.type == "input-password"  || this.type == "custom-os-password") {
             return "#AD448E";
         }
         if (this.type == "success") {

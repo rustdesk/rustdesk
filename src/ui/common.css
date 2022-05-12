@@ -324,6 +324,33 @@ menu li.line-through {
   color: red;
 }
 
+#tags {
+    border: color(border) 1px solid;
+    size: *;
+    padding: 0.5em;
+    overflow-y: scroll-indicator;
+    border-spacing: 0.5em;
+    flow: horizontal-flow;
+}
+
+#tags span {
+    display: inline-block;
+    border: color(border) 1px solid;
+    border-radius: 6px;
+    padding: 3px 0.5em;
+    word-wrap: normal;
+}
+
+#tags span.active {
+    background: color(button);
+    border-color: color(button);
+    color: white;
+}
+
+#tags span:hover {
+    border-color: color(hover-border);
+}
+
 div#msgbox .msgbox-icon svg {
   size: 80px;
   background: white;

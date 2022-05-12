@@ -1,9 +1,10 @@
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub use arboard::Clipboard as ClipboardContext;
 use hbb_common::{
     allow_err,
     anyhow::bail,
     compress::{compress as compress_func, decompress},
-    config::{Config, COMPRESS_LEVEL, RENDEZVOUS_TIMEOUT},
+    config::{self, Config, COMPRESS_LEVEL, RENDEZVOUS_TIMEOUT},
     get_version_number, log,
     message_proto::*,
     protobuf::Message as _,
@@ -54,6 +55,7 @@ pub fn create_clipboard_msg(content: String) -> Message {
     msg
 }
 
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub fn check_clipboard(
     ctx: &mut ClipboardContext,
     old: Option<&Arc<Mutex<String>>>,
@@ -73,6 +75,7 @@ pub fn check_clipboard(
     None
 }
 
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub fn update_clipboard(clipboard: Clipboard, old: Option<&Arc<Mutex<String>>>) {
     let content = if clipboard.compress {
         decompress(&clipboard.content)
@@ -80,15 +83,16 @@ pub fn update_clipboard(clipboard: Clipboard, old: Option<&Arc<Mutex<String>>>) 
         clipboard.content
     };
     if let Ok(content) = String::from_utf8(content) {
+        if content.is_empty() {
+            // ctx.set_text may crash if content is empty
+            return;
+        }
         match ClipboardContext::new() {
             Ok(mut ctx) => {
                 let side = if old.is_none() { "host" } else { "client" };
                 let old = if let Some(old) = old { old } else { &CONTENT };
                 *old.lock().unwrap() = content.clone();
-                if !content.is_empty() {
-                    // empty content make ctx.set_text crash
-                    allow_err!(ctx.set_text(content));
-                }
+                allow_err!(ctx.set_text(content));
                 log::debug!("{} updated on {}", CLIPBOARD_NAME, side);
             }
             Err(err) => {
@@ -234,7 +238,10 @@ pub fn test_nat_type() {
 #[tokio::main(flavor = "current_thread")]
 async fn test_nat_type_() -> ResultType<bool> {
     log::info!("Testing nat ...");
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
     let is_direct = crate::ipc::get_socks_async(1_000).await.is_none(); // sync socks BTW
+    #[cfg(any(target_os = "android", target_os = "ios"))]
+    let is_direct = Config::get_socks().is_none(); // sync socks BTW
     if !is_direct {
         Config::set_nat_type(NatType::SYMMETRIC as _);
         return Ok(true);
@@ -451,12 +458,21 @@ async fn _check_software_update() -> hbb_common::ResultType<()> {
     Ok(())
 }
 
+#[cfg(not(any(target_os = "android", target_os = "ios", feature = "cli")))]
+pub fn get_icon() -> String {
+    hbb_common::config::ICON.to_owned()
+}
+
+pub fn get_app_name() -> String {
+    hbb_common::config::APP_NAME.read().unwrap().clone()
+}
+
 #[cfg(target_os = "macos")]
 pub fn get_full_name() -> String {
     format!(
         "{}.{}",
-        hbb_common::config::ORG,
-        hbb_common::config::APP_NAME,
+        hbb_common::config::ORG.read().unwrap(),
+        hbb_common::config::APP_NAME.read().unwrap(),
     )
 }
 
@@ -466,7 +482,115 @@ pub fn is_ip(id: &str) -> bool {
         .is_match(id)
 }
 
-#[inline]
-pub fn get_app_name() -> &'static str {
-    hbb_common::config::APP_NAME
+pub fn is_setup(name: &str) -> bool {
+    name.to_lowercase().ends_with("putes.exe") || name.to_lowercase().ends_with("安装.exe")
+}
+
+pub fn get_uuid() -> Vec<u8> {
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    if let Ok(id) = machine_uid::get() {
+        return id.into();
+    }
+    Config::get_key_pair().1
+}
+
+pub fn get_custom_rendezvous_server(custom: String) -> String {
+    if !custom.is_empty() {
+        return custom;
+    }
+    #[cfg(windows)]
+    if let Some(lic) = crate::platform::windows::get_license() {
+        if !lic.host.is_empty() {
+            return lic.host.clone();
+        }
+    }
+    if !config::PROD_RENDEZVOUS_SERVER.read().unwrap().is_empty() {
+        return config::PROD_RENDEZVOUS_SERVER.read().unwrap().clone();
+    }
+    "".to_owned()
+}
+
+pub fn get_api_server(api: String, custom: String) -> String {
+    if !api.is_empty() {
+        return api.to_owned();
+    }
+    #[cfg(windows)]
+    if let Some(lic) = crate::platform::windows::get_license() {
+        if !lic.api.is_empty() {
+            return lic.api.clone();
+        }
+    }
+    let s = get_custom_rendezvous_server(custom);
+    if !s.is_empty() {
+        if s.contains(':') {
+            let tmp: Vec<&str> = s.split(":").collect();
+            if tmp.len() == 2 {
+                let port: u16 = tmp[1].parse().unwrap_or(0);
+                if port > 2 {
+                    return format!("http://{}:{}", tmp[0], port - 2);
+                }
+            }
+        } else {
+            return format!("http://{}:{}", s, config::RENDEZVOUS_PORT - 2);
+        }
+    }
+    "https://admin.rustdesk.com".to_owned()
+}
+
+pub fn get_audit_server(api: String, custom: String) -> String {
+    let url = get_api_server(api, custom);
+    if url.is_empty() || url.contains("rustdesk.com") {
+        return "".to_owned();
+    }
+    format!("{}/api/audit", url)
+}
+
+pub async fn post_request(url: String, body: String, header: &str) -> ResultType<String> {
+    #[cfg(not(target_os = "linux"))]
+    {
+        let mut req = reqwest::Client::new().post(url);
+        if !header.is_empty() {
+            let tmp: Vec<&str> = header.split(": ").collect();
+            if tmp.len() == 2 {
+                req = req.header(tmp[0], tmp[1]);
+            }
+        }
+        req = req.header("Content-Type", "application/json");
+        let to = std::time::Duration::from_secs(12);
+        Ok(req.body(body).timeout(to).send().await?.text().await?)
+    }
+    #[cfg(target_os = "linux")]
+    {
+        let mut data = vec![
+            "curl",
+            "-sS",
+            "-X",
+            "POST",
+            &url,
+            "-H",
+            "Content-Type: application/json",
+            "-d",
+            &body,
+            "--connect-timeout",
+            "12",
+        ];
+        if !header.is_empty() {
+            data.push("-H");
+            data.push(header);
+        }
+        let output = async_process::Command::new("curl")
+            .args(&data)
+            .output()
+            .await?;
+        let res = String::from_utf8_lossy(&output.stdout).to_string();
+        if !res.is_empty() {
+            return Ok(res);
+        }
+        bail!(String::from_utf8_lossy(&output.stderr).to_string());
+    }
+}
+
+#[tokio::main(flavor = "current_thread")]
+pub async fn post_request_sync(url: String, body: String, header: &str) -> ResultType<String> {
+    post_request(url, body, header).await
 }

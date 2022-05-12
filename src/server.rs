@@ -9,7 +9,7 @@ use hbb_common::{
     message_proto::*,
     protobuf::{Message as _, ProtobufEnum},
     rendezvous_proto::*,
-    sleep, socket_client,
+    socket_client,
     sodiumoxide::crypto::{box_, secretbox, sign},
     timeout, tokio, ResultType, Stream,
 };
@@ -20,13 +20,25 @@ use std::{
     sync::{Arc, Mutex, RwLock, Weak},
     time::Duration,
 };
-
 pub mod audio_service;
+cfg_if::cfg_if! {
+if #[cfg(not(any(target_os = "android", target_os = "ios")))] {
 mod clipboard_service;
-mod connection;
 pub mod input_service;
+} else {
+mod clipboard_service {
+pub const NAME: &'static str = "";
+}
+pub mod input_service {
+pub const NAME_CURSOR: &'static str = "";
+pub const NAME_POS: &'static str = "";
+}
+}
+}
+
+mod connection;
 mod service;
-mod video_service;
+pub mod video_service;
 
 use hbb_common::tcp::new_listener;
 
@@ -54,9 +66,12 @@ pub fn new() -> ServerPtr {
     };
     server.add_service(Box::new(audio_service::new()));
     server.add_service(Box::new(video_service::new()));
-    server.add_service(Box::new(clipboard_service::new()));
-    server.add_service(Box::new(input_service::new_cursor()));
-    server.add_service(Box::new(input_service::new_pos()));
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    {
+        server.add_service(Box::new(clipboard_service::new()));
+        server.add_service(Box::new(input_service::new_cursor()));
+        server.add_service(Box::new(input_service::new_pos()));
+    }
     Arc::new(RwLock::new(server))
 }
 
@@ -197,7 +212,12 @@ async fn create_relay_connection_(
     )
     .await?;
     let mut msg_out = RendezvousMessage::new();
+    let mut licence_key = Config::get_option("key");
+    if licence_key.is_empty() {
+        licence_key = crate::platform::get_license_key();
+    }
     msg_out.set_request_relay(RequestRelay {
+        licence_key,
         uuid,
         ..Default::default()
     });
@@ -267,8 +287,15 @@ pub fn check_zombie() {
     });
 }
 
+#[cfg(any(target_os = "android", target_os = "ios"))]
 #[tokio::main]
-pub async fn start_server(is_server: bool, _tray: bool) {
+pub async fn start_server(is_server: bool) {
+    crate::RendezvousMediator::start_all().await;
+}
+
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[tokio::main]
+pub async fn start_server(is_server: bool) {
     #[cfg(target_os = "linux")]
     {
         log::info!("DISPLAY={:?}", std::env::var("DISPLAY"));
@@ -282,6 +309,8 @@ pub async fn start_server(is_server: bool, _tray: bool) {
                 std::process::exit(-1);
             }
         });
+        #[cfg(windows)]
+        crate::platform::windows::bootstrap();
         input_service::fix_key_down_timeout_loop();
         #[cfg(target_os = "macos")]
         tokio::spawn(async { sync_and_watch_config_dir().await });
@@ -307,7 +336,7 @@ pub async fn start_server(is_server: bool, _tray: bool) {
             }
             Err(err) => {
                 log::info!("server not started (will try to start): {}", err);
-                std::thread::spawn(|| start_server(true, false));
+                std::thread::spawn(|| start_server(true));
             }
         }
     }
@@ -328,6 +357,7 @@ async fn sync_and_watch_config_dir() {
             3
         };
     log::debug!("#tries of ipc service connection: {}", tries);
+    use hbb_common::sleep;
     for i in 1..=tries {
         sleep(i as f32 * 0.3).await;
         match crate::ipc::connect(1000, "_service").await {

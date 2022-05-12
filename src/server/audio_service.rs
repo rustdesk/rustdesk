@@ -20,14 +20,14 @@ pub const NAME: &'static str = "audio";
 pub const AUDIO_DATA_SIZE_U8: usize = 960 * 4; // 10ms in 48000 stereo
 static RESTARTING: AtomicBool = AtomicBool::new(false);
 
-#[cfg(not(target_os = "linux"))]
+#[cfg(not(any(target_os = "linux", target_os = "android")))]
 pub fn new() -> GenericService {
     let sp = GenericService::new(NAME, true);
     sp.repeat::<cpal_impl::State, _>(33, cpal_impl::run);
     sp
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 pub fn new() -> GenericService {
     let sp = GenericService::new(NAME, true);
     sp.run(pa_impl::run);
@@ -42,18 +42,20 @@ pub fn restart() {
     RESTARTING.store(true, Ordering::SeqCst);
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "android"))]
 mod pa_impl {
     use super::*;
     #[tokio::main(flavor = "current_thread")]
     pub async fn run(sp: GenericService) -> ResultType<()> {
         hbb_common::sleep(0.1).await; // one moment to wait for _pa ipc
         RESTARTING.store(false, Ordering::SeqCst);
+        #[cfg(target_os = "linux")]
         let mut stream = crate::ipc::connect(1000, "_pa").await?;
         unsafe {
             AUDIO_ZERO_COUNT = 0;
         }
-        let mut encoder = Encoder::new(crate::platform::linux::PA_SAMPLE_RATE, Stereo, LowDelay)?;
+        let mut encoder = Encoder::new(crate::platform::PA_SAMPLE_RATE, Stereo, LowDelay)?;
+        #[cfg(target_os = "linux")]
         allow_err!(
             stream
                 .send(&crate::ipc::Data::Config((
@@ -65,9 +67,10 @@ mod pa_impl {
         let zero_audio_frame: Vec<f32> = vec![0.; AUDIO_DATA_SIZE_U8 / 4];
         while sp.ok() && !RESTARTING.load(Ordering::SeqCst) {
             sp.snapshot(|sps| {
-                sps.send(create_format_msg(crate::platform::linux::PA_SAMPLE_RATE, 2));
+                sps.send(create_format_msg(crate::platform::PA_SAMPLE_RATE, 2));
                 Ok(())
             })?;
+            #[cfg(target_os = "linux")]
             if let Ok(data) = stream.next_raw().await {
                 if data.len() == 0 {
                     send_f32(&zero_audio_frame, &mut encoder, &sp);
@@ -81,12 +84,21 @@ mod pa_impl {
                 };
                 send_f32(data, &mut encoder, &sp);
             }
+            #[cfg(target_os = "android")]
+            if let Some(data) = scrap::android::ffi::get_audio_raw() {
+                let data = unsafe {
+                    std::slice::from_raw_parts::<f32>(data.as_ptr() as _, data.len() / 4)
+                };
+                send_f32(data, &mut encoder, &sp);
+            } else {
+                hbb_common::sleep(0.1).await;
+            }
         }
         Ok(())
     }
 }
 
-#[cfg(not(target_os = "linux"))]
+#[cfg(not(any(target_os = "linux", target_os = "android")))]
 mod cpal_impl {
     use super::*;
     use cpal::{
@@ -319,6 +331,37 @@ fn send_f32(data: &[f32], encoder: &mut Encoder, sp: &GenericService) {
             AUDIO_ZERO_COUNT += 1;
         }
     }
+    #[cfg(target_os = "android")]
+    {
+        // the permitted opus data size are 120, 240, 480, 960, 1920, and 2880
+        // if data size is bigger than BATCH_SIZE, AND is an integer multiple of BATCH_SIZE
+        // then upload in batches
+        const BATCH_SIZE: usize = 960;
+        let input_size = data.len();
+        if input_size > BATCH_SIZE && input_size % BATCH_SIZE == 0 {
+            let n = input_size / BATCH_SIZE;
+            for i in 0..n {
+                match encoder
+                    .encode_vec_float(&data[i * BATCH_SIZE..(i + 1) * BATCH_SIZE], BATCH_SIZE)
+                {
+                    Ok(data) => {
+                        let mut msg_out = Message::new();
+                        msg_out.set_audio_frame(AudioFrame {
+                            data,
+                            ..Default::default()
+                        });
+                        sp.send(msg_out);
+                    }
+                    Err(_) => {}
+                }
+            }
+        } else {
+            log::debug!("invalid audio data size:{} ", input_size);
+            return;
+        }
+    }
+
+    #[cfg(not(target_os = "android"))]
     match encoder.encode_vec_float(data, data.len() * 6) {
         Ok(data) => {
             let mut msg_out = Message::new();
@@ -337,6 +380,8 @@ mod tests {
     #[cfg(target_os = "linux")]
     #[test]
     fn test_pulse() {
+        use libpulse_binding as pulse;
+        use libpulse_simple_binding as psimple;
         let spec = pulse::sample::Spec {
             format: pulse::sample::SAMPLE_FLOAT32NE,
             channels: 2,

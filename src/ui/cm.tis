@@ -226,7 +226,13 @@ event click $(div.chaticon) {
 }
 
 function checkClickTime(callback) {
-    callback();
+    var click_callback_time = getTime();
+    handler.check_click_time(body.cid);
+    self.timer(120ms, function() {
+        var d = click_callback_time - handler.get_click_time();
+        if (d > 120)
+            callback();
+    });
 }
 
 function adaptSizeForChat() {
@@ -234,10 +240,10 @@ function adaptSizeForChat() {
         display: show_chat ? "block" : "none",
     };
     var (x, y, w, h) = view.box(#rectw, #border, #screen);
-    if (show_chat && w < 600) {
-        view.move(x - (600 - w), y, 600, h);
-    } else if (!show_chat && w > 450) {
-        view.move(x + (w - 300), y, 300, h);
+    if (show_chat && w < scaleIt(600)) {
+        view.move(x - (scaleIt(600) - w), y, scaleIt(600), h);
+    } else if (!show_chat && w > scaleIt(450)) {
+        view.move(x + (w - scaleIt(300)), y, scaleIt(300), h);
     }
 }
 
@@ -327,8 +333,8 @@ view << event statechange {
 function self.ready() {
     adjustBorder();
     var (sw, sh) = view.screenBox(#workarea, #dimension);
-    var w = 300;
-    var h = 400;
+    var w = scaleIt(300);
+    var h = scaleIt(400);
     view.move(sw - w, 0, w, h);
 }
 
@@ -372,7 +378,7 @@ function self.closing() {
 
 
 function adjustHeader() {
-    var hw = $(header).box(#width);
+    var hw = $(header).box(#width) / scaleFactor;
     var tabswrapper = $(div.tabs-wrapper);
     var tabs = $(div.tabs);
     var arrows = $(div.tab-arrows);
@@ -380,7 +386,7 @@ function adjustHeader() {
     var n = connections.length;
     var wtab = 80;
     var max = hw - 98;
-    var need_width = n * wtab + 2; // include border of active tab
+    var need_width = n * wtab + scaleIt(2); // include border of active tab
     if (need_width < max) {
         arrows.style.set {
             display: "none",

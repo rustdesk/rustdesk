@@ -79,14 +79,20 @@ impl Interface for Session {
 }
 
 #[tokio::main(flavor = "current_thread")]
-pub async fn start_one_port_forward(id: String, port: i32, remote_host: String, remote_port: i32) {
+pub async fn start_one_port_forward(
+    id: String,
+    port: i32,
+    remote_host: String,
+    remote_port: i32,
+    key: String,
+) {
     crate::common::test_rendezvous_server();
     crate::common::test_nat_type();
     let (sender, mut receiver) = mpsc::unbounded_channel::<Data>();
     let handler = Session::new(&id, sender);
     handler.lc.write().unwrap().port_forward = (remote_host, remote_port);
     if let Err(err) =
-        crate::port_forward::listen(handler.id.clone(), port, handler.clone(), receiver).await
+        crate::port_forward::listen(handler.id.clone(), port, handler.clone(), receiver, &key).await
     {
         log::error!("Failed to listen on {}: {}", port, err);
     }

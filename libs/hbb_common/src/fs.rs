@@ -430,10 +430,11 @@ pub fn new_error<T: std::string::ToString>(id: i32, err: T, file_num: i32) -> Me
 }
 
 #[inline]
-pub fn new_dir(id: i32, files: Vec<FileEntry>) -> Message {
+pub fn new_dir(id: i32, path: String, files: Vec<FileEntry>) -> Message {
     let mut resp = FileResponse::new();
     resp.set_dir(FileDirectory {
         id,
+        path,
         entries: files.into(),
         ..Default::default()
     });

@@ -58,6 +58,7 @@ impl RendezvousMediator {
         tokio::spawn(async move {
             direct_server(server_cloned).await;
         });
+        #[cfg(not(any(target_os = "android", target_os = "ios")))]
         if crate::platform::is_installed() {
             std::thread::spawn(move || {
                 allow_err!(lan_discovery());
@@ -385,12 +386,7 @@ impl RendezvousMediator {
     async fn register_pk(&mut self, socket: &mut FramedSocket) -> ResultType<()> {
         let mut msg_out = Message::new();
         let pk = Config::get_key_pair().1;
-        let uuid = if let Ok(id) = machine_uid::get() {
-            log::info!("machine uid: {}", id);
-            id.into()
-        } else {
-            pk.clone()
-        };
+        let uuid = crate::get_uuid();
         let id = Config::get_id();
         self.last_id_pk_registry = id.clone();
         msg_out.set_register_pk(RegisterPk {
@@ -548,11 +544,14 @@ pub fn get_broadcast_port() -> u16 {
 }
 
 pub fn get_mac() -> String {
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
     if let Ok(Some(mac)) = mac_address::get_mac_address() {
         mac.to_string()
     } else {
         "".to_owned()
     }
+    #[cfg(any(target_os = "android", target_os = "ios"))]
+    "".to_owned()
 }
 
 fn lan_discovery() -> ResultType<()> {

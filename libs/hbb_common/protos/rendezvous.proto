@@ -18,7 +18,9 @@ message RegisterPeerResponse { bool request_pk = 2; }
 message PunchHoleRequest { 
   string id = 1; 
   NatType nat_type = 2;
+  string licence_key = 3;
   ConnType conn_type = 4;
+  string token = 5;
 }
 
 message PunchHole { 
@@ -55,6 +57,7 @@ message RegisterPk {
   string id = 1;
   bytes uuid = 2;
   bytes pk = 3;
+  string old_id = 4;
 }
 
 message RegisterPkResponse {
@@ -99,7 +102,9 @@ message RequestRelay {
   bytes socket_addr = 3;
   string relay_server = 4;
   bool secure = 5;
+  string licence_key = 6;
   ConnType conn_type = 7;
+  string token = 8;
 }
 
 message RelayResponse {

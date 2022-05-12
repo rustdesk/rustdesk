@@ -1,7 +1,7 @@
 [package]
 name = "hbb_common"
 version = "0.1.0"
-authors = ["rustdesk<info@rustdesk.com>"]
+authors = ["open-trade <info@opentradesolutions.com>"]
 edition = "2018"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
@@ -35,7 +35,7 @@ tokio-socks = { git = "https://github.com/open-trade/tokio-socks" }
 mac_address = "1.1"
 
 [features]
-quic = ["quinn"]
+quic = []
 
 [build-dependencies]
 protobuf-codegen-pure = "3.0.0-alpha.2"

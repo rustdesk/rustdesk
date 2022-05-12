@@ -1,18 +1,18 @@
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(not(any(target_os = "ios")))]
 pub mod platform;
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub use platform::{get_cursor, get_cursor_data, get_cursor_pos, start_os_service};
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(not(any(target_os = "ios")))]
 mod server;
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(not(any(target_os = "ios")))]
 pub use self::server::*;
 mod client;
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(not(any(target_os = "ios")))]
 mod rendezvous_mediator;
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(not(any(target_os = "ios")))]
 pub use self::rendezvous_mediator::*;
 pub mod common;
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(not(any( target_os = "ios")))]
 pub mod ipc;
 #[cfg(not(any(target_os = "android", target_os = "ios", feature = "cli")))]
 pub mod ui;
@@ -27,6 +27,12 @@ use common::*;
 pub mod cli;
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 mod port_forward;
+#[cfg(all(windows, feature = "hbbs"))]
+mod hbbs;
+#[cfg(windows)]
+mod license;
+#[cfg(windows)]
+mod tray;
 mod lang;
 
 #[cfg(windows)]
