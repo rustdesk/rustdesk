@@ -59,6 +59,11 @@ pub enum FS {
         id: i32,
         file_num: i32,
     },
+    WriteOffset {
+        id: i32,
+        file_num: i32,
+        offset_blk: u32
+    },
     CheckDigest {
         id: i32,
         file_num: i32,

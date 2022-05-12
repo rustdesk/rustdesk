@@ -1319,7 +1319,7 @@ async fn io_loop(handler: Handler) {
         clipboard_file_context: None,
     };
     remote.io_loop(&key, &token).await;
-    remote.sync_jobs_status_to_local();
+    remote.sync_jobs_status_to_local().await;
 }
 
 struct RemoveJob {
@@ -1452,7 +1452,7 @@ impl Remote {
                         }
                     }
                 }
-                self.sync_jobs_status_to_local();
+                self.sync_jobs_status_to_local().await;
                 log::debug!("Exit io_loop of id={}", self.handler.id);
             }
             Err(err) => {
@@ -1798,6 +1798,7 @@ impl Remote {
     }
 
     async fn sync_jobs_status_to_local(&mut self) -> bool {
+        println!("sync job status");
         let mut config: PeerConfig = self.handler.load_config();
         let mut transfer_metas = TransferSerde::default();
         for job in self.read_jobs.iter() {
@@ -1895,6 +1896,10 @@ impl Remote {
                             } else if let Some(job) = self.remove_jobs.get_mut(&fd.id) {
                                 job.files = entries;
                             }
+                        }
+                        Some(file_response::Union::offset(offset)) => {
+                            // TODO: offset
+                            // upload
                         }
                         Some(file_response::Union::digest(digest)) => {
                             if digest.is_upload {

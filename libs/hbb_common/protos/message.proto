@@ -264,6 +264,7 @@ message FileResponse {
     FileTransferError error = 3;
     FileTransferDone done = 4;
     FileTransferDigest digest = 5;
+    FileTransferDirOffsetRequest offset = 6;
   }
 }
 
