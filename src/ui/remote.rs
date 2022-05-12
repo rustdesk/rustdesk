@@ -1387,6 +1387,10 @@ impl Remote {
                 }
                 self.handler
                     .call("setConnectionType", &make_args!(peer.is_secured(), direct));
+                
+                if conn_type == ConnType::FILE_TRANSFER {
+                    self.load_last_jobs().await;
+                }
 
                 // just build for now
                 #[cfg(not(windows))]
@@ -1537,6 +1541,36 @@ impl Remote {
         Some(tx)
     }
 
+    async fn load_last_jobs(&mut self) {
+        self.handler.call("clearAllJobs",&make_args!());
+        let pc = self.handler.load_config();
+        if pc.transfer.write_jobs.is_empty() && pc.transfer.read_jobs.is_empty() {
+            // no last jobs
+            return;
+        }
+        // TODO: can add a confirm dialog
+        let mut cnt = 0;
+        for job in pc.transfer.read_jobs.iter() {
+            self.handler.call("addJob",&make_args!(
+                cnt,job.remote.clone(),job.to.clone(),job.file_num,job.show_hidden, false
+            ));
+            self.handler.send_files(cnt, job.remote.clone(),
+            job.to.clone(), job.show_hidden, false);
+            cnt += 1;
+            println!("restore read_job: {:?}",job);
+        }
+        for job in pc.transfer.write_jobs.iter() {
+            self.handler.call("addJob",&make_args!(
+                cnt,job.remote.clone(),job.to.clone(),job.file_num,job.show_hidden, true
+            ));
+            self.handler.send_files(cnt, job.remote.clone(),
+            job.to.clone(), job.show_hidden, true);
+            cnt += 1;
+            println!("restore write_job: {:?}",job);
+        }
+        self.handler.call("updateTransferList", &make_args!());
+    }
+
     async fn handle_msg_from_ui(&mut self, data: Data, peer: &mut Stream) -> bool {
         // log::info!("new msg from ui, {}",data);
         match data {
@@ -1560,10 +1594,10 @@ impl Remote {
                 if is_remote {
                     log::debug!("New job {}, write to {} from remote {}", id, to, path);
                     self.write_jobs
-                        .push(fs::TransferJob::new_write(id, to, Vec::new(), od));
+                        .push(fs::TransferJob::new_write(id, path.clone(),to,include_hidden,is_remote, Vec::new(), od));
                     allow_err!(peer.send(&fs::new_send(id, path, include_hidden)).await);
                 } else {
-                    match fs::TransferJob::new_read(id, path.clone(), include_hidden, od) {
+                    match fs::TransferJob::new_read(id, path.clone(),to.clone(),include_hidden,is_remote, include_hidden, od) {
                         Err(err) => {
                             self.handle_job_status(id, -1, Some(err.to_string()));
                         }

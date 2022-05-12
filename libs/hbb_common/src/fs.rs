@@ -201,7 +201,10 @@ pub fn can_enable_overwrite_detection(version: i64) -> bool {
 #[derive(Default)]
 pub struct TransferJob {
     id: i32,
+    remote: String,
     path: PathBuf,
+    show_hidden: bool,
+    is_remote: bool,
     files: Vec<FileEntry>,
     file_num: i32,
     file: Option<File>,
@@ -217,7 +220,9 @@ pub struct TransferJob {
 #[derive(Debug, Default, Serialize, Deserialize, Clone)]
 pub struct TransferJobMeta {
     pub id: i32,
-    pub path: PathBuf,
+    pub remote: String,
+    pub to: String,
+    pub show_hidden: bool,
     pub file_num: i32,
 }
 
@@ -253,7 +258,10 @@ fn is_compressed_file(name: &str) -> bool {
 impl TransferJob {
     pub fn new_write(
         id: i32,
+        remote: String,
         path: String,
+        show_hidden: bool,
+        is_remote: bool,
         files: Vec<FileEntry>,
         enable_override_detection: bool,
     ) -> Self {
@@ -261,7 +269,10 @@ impl TransferJob {
         let total_size = files.iter().map(|x| x.size as u64).sum();
         Self {
             id,
+            remote,
             path: get_path(&path),
+            show_hidden,
+            is_remote,
             files,
             total_size,
             enable_overwrite_detection: enable_override_detection,
@@ -271,7 +282,10 @@ impl TransferJob {
 
     pub fn new_read(
         id: i32,
+        remote: String,
         path: String,
+        show_hidden: bool,
+        is_remote: bool,
         include_hidden: bool,
         enable_override_detection: bool,
     ) -> ResultType<Self> {
@@ -280,7 +294,10 @@ impl TransferJob {
         let total_size = files.iter().map(|x| x.size as u64).sum();
         Ok(Self {
             id,
+            remote,
             path: get_path(&path),
+            show_hidden,
+            is_remote,
             files,
             total_size,
             enable_overwrite_detection: enable_override_detection,
@@ -561,8 +578,10 @@ impl TransferJob {
     pub fn gen_meta(&self) -> TransferJobMeta {
         TransferJobMeta {
             id: self.id,
-            path: self.path.clone(),
+            remote: self.remote.to_string(),
+            to: self.path.to_string_lossy().to_string(),
             file_num: self.file_num,
+            show_hidden: self.show_hidden
         }
     }
 }

@@ -974,7 +974,7 @@ impl Connection {
                                 let id = s.id;
                                 let od =
                                     can_enable_overwrite_detection(get_version_number(VERSION));
-                                match fs::TransferJob::new_read(id, s.path.clone(), s.include_hidden) {
+                                match fs::TransferJob::new_read(id, s.path.clone(), s.include_hidden, od) {
                                     Err(err) => {
                                         self.send(fs::new_error(id, err, 0)).await;
                                     }

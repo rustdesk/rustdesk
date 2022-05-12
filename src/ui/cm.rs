@@ -161,9 +161,13 @@ impl ConnectionManager {
                     mut files,
                 } => {
                     let od = can_enable_overwrite_detection(get_version_number(VERSION));
+                    // cm has no show_hidden context
                     write_jobs.push(fs::TransferJob::new_write(
                         id,
+                        "".to_string(),
                         path,
+                        false,
+                        false,
                         files
                             .drain(..)
                             .map(|f| FileEntry {
@@ -172,7 +176,7 @@ impl ConnectionManager {
                                 ..Default::default()
                             })
                             .collect(),
-                        od,
+                            od,
                     ));
                 }
                 ipc::FS::CancelWrite { id } => {

@@ -100,6 +100,12 @@ class JobTable: Reactor.Component {
     refreshDir(is_remote);
   }
 
+  function clearAllJobs() {
+    this.jobs = [];
+    this.job_map = {};
+    this.update();
+  }
+
   function send(path, is_remote) {
     var to;
     var show_hidden;
@@ -122,6 +128,14 @@ class JobTable: Reactor.Component {
     handler.send_files(id, path, to, show_hidden, is_remote);
     var self = this;
     self.timer(30ms, function() { self.update(); });
+  }
+
+  function addJob(id, path, to, show_hidden, is_remote) {
+    this.jobs.push({ type: "transfer",
+                     id: id, path: path, to: to,
+                     include_hidden: show_hidden,
+                     is_remote: is_remote });
+    this.job_map[id] = this.jobs[this.jobs.length - 1];
   }
 
   function addDelDir(path, is_remote) {
@@ -647,6 +661,18 @@ handler.jobError = function(id, err, file_num = -1) {
     handler.msgbox("custom-error", "Failed", err);
   }
   file_transfer.job_table.updateJobStatus(id, file_num, err);
+}
+
+handler.clearAllJobs = function() {
+  file_transfer.job_table.clearAllJobs();
+}
+
+handler.addJob = function (id, path, to, file_num, show_hidden, is_remote) {
+  file_transfer.job_table.addJob(id,path,to,file_num,show_hidden,is_remote);
+}
+
+handler.updateTransferList = function () {
+  file_transfer.job_table.update();
 }
 
 function refreshDir(is_remote) {
