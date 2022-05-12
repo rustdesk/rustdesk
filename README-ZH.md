@@ -36,6 +36,8 @@ Chat with us: [知乎](https://www.zhihu.com/people/rustdesk) | [Discord](https:
 [Linux](https://raw.githubusercontent.com/c-smile/sciter-sdk/master/bin.lnx/x64/libsciter-gtk.so) |
 [macOS](https://raw.githubusercontent.com/c-smile/sciter-sdk/master/bin.osx/libsciter.dylib)
 
+移动版本使用Flutter，未来会将桌面版本从Sciter迁移到Flutter。
+
 ## 基本构建步骤
 
 - 请准备好 Rust 开发环境和 C++编译环境
@@ -46,6 +48,8 @@ Chat with us: [知乎](https://www.zhihu.com/people/rustdesk) | [Discord](https:
   - Linux/Osx: vcpkg install libvpx libyuv opus
 
 - 运行 `cargo run`
+
+## [构建](https://rustdesk.com/docs/en/dev/build/)
 
 ## 在 Linux 上编译
 
@@ -202,6 +206,8 @@ target/release/rustdesk
 - **[src/client.rs](https://github.com/rustdesk/rustdesk/tree/master/src/client.rs)**: 控制端
 - **[src/rendezvous_mediator.rs](https://github.com/rustdesk/rustdesk/tree/master/src/rendezvous_mediator.rs)**: 与[rustdesk-server](https://github.com/rustdesk/rustdesk-server)保持 UDP 通讯, 等待远程连接（通过打洞直连或者中继）
 - **[src/platform](https://github.com/rustdesk/rustdesk/tree/master/src/platform)**: 平台服务相关代码
+- **[flutter](https://github.com/rustdesk/rustdesk/tree/master/flutter)**: 移动版本的Flutter代码 
+- **[flutter/web/js](https://github.com/rustdesk/rustdesk/tree/master/flutter/web/js)**: Flutter Web版本中的Javascript代码
 
 ## 截图
 

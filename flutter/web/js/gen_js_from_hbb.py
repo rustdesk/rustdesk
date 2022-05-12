@@ -7,7 +7,7 @@ from tabnanny import check
 
 def main():
    print('export const LANGS = {')
-   for fn in glob.glob('../hbb/src/lang/*'):
+   for fn in glob.glob('../../../src/lang/*'):
       lang = os.path.basename(fn)[:-3]
       if lang == 'template': continue
       print('  %s: {'%lang)
@@ -55,7 +55,7 @@ def main():
    print('export const KEY_MAP: any = {')
    print(KEY_MAP[0])
    print('}')
-   for ln in open('../hbb/Cargo.toml'):
+   for ln in open('../../../Cargo.toml'):
       if ln.startswith('version ='):
          print('export const ' + ln)
       
