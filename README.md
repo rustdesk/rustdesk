@@ -47,7 +47,7 @@ Desktop versions use [sciter](https://sciter.com/) for GUI, please download scit
 
 - run `cargo run`
 
-## [Build on Windows](https://rustdesk.com/docs/en/dev/build/)
+## [Build](https://rustdesk.com/docs/en/dev/build/)
 
 ## How to build on Linux
 

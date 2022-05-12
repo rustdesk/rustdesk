@@ -39,12 +39,12 @@ fn main() {
         println!("{}", crate::VERSION);
         return;
     }
-    #[cfg(feature = "inline")]
+    #[cfg(not(feature = "inline"))]
     {
         use hbb_common::env_logger::*;
         init_from_env(Env::default().filter_or(DEFAULT_FILTER_ENV, "info"));
     }
-    #[cfg(not(feature = "inline"))]
+    #[cfg(feature = "inline")]
     {
         let mut path = hbb_common::config::Config::log_path();
         if args.len() > 0 && args[0].starts_with("--") {
