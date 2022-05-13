@@ -12,8 +12,8 @@ name = "librustdesk"
 crate-type = ["cdylib", "staticlib", "rlib"] 
 
 [[bin]]
-name = "lic"
-path = "src/lic_main.rs"
+name = "naming"
+path = "src/naming.rs"
 
 [features]
 inline = []
