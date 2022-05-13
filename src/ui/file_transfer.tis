@@ -621,7 +621,7 @@ function initializeFileTransfer()
 }
 
 handler.updateFolderFiles = function(fd) {
-  stdout.println("update folder files: " + JSON.stringify(fd));
+  // stdout.println("update folder files: " + JSON.stringify(fd));
   fd.entries = fd.entries || [];
   if (fd.id > 0) {
     var jt = file_transfer.job_table;

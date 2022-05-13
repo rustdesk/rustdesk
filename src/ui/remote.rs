@@ -1319,6 +1319,7 @@ async fn io_loop(handler: Handler) {
         clipboard_file_context: None,
     };
     remote.io_loop(&key, &token).await;
+    remote.sync_jobs_status_to_local().await;
 }
 
 struct RemoveJob {
@@ -1451,7 +1452,6 @@ impl Remote {
                         }
                     }
                 }
-                self.sync_jobs_status_to_local().await;
                 log::debug!("Exit io_loop of id={}", self.handler.id);
             }
             Err(err) => {
@@ -1876,6 +1876,7 @@ impl Remote {
             let json_str = serde_json::to_string(&job.gen_meta()).unwrap();
             transfer_metas.write_jobs.push(json_str);
         }
+        log::info!("meta: {:?}",transfer_metas);
         config.transfer = transfer_metas;
         self.handler.save_config(config);
         true
