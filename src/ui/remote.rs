@@ -20,7 +20,6 @@ use clipboard::{
     get_rx_clip_client, server_clip_file,
 };
 use enigo::{self, Enigo, KeyboardControllable};
-use hbb_common::{config::TransferSerde, fs::TransferJobMeta};
 use hbb_common::fs::{
     can_enable_overwrite_detection, get_string, is_file_exists, new_send_confirm,
     DigestCheckResult, RemoveJobMeta,
@@ -41,6 +40,7 @@ use hbb_common::{
     },
     Stream,
 };
+use hbb_common::{config::TransferSerde, fs::TransferJobMeta};
 
 #[cfg(windows)]
 use crate::clipboard_file::*;
@@ -1538,7 +1538,7 @@ impl Remote {
 
     async fn load_last_jobs(&mut self) {
         log::info!("start load last jobs");
-        self.handler.call("clearAllJobs",&make_args!());
+        self.handler.call("clearAllJobs", &make_args!());
         let pc = self.handler.load_config();
         if pc.transfer.write_jobs.is_empty() && pc.transfer.read_jobs.is_empty() {
             // no last jobs
@@ -1549,21 +1549,37 @@ impl Remote {
         for job_str in pc.transfer.read_jobs.iter() {
             let job: Result<TransferJobMeta, serde_json::Error> = serde_json::from_str(&job_str);
             if let Ok(job) = job {
-                self.handler.call("addJob",&make_args!(
-                    cnt,job.to.clone(),job.remote.clone(),job.file_num,job.show_hidden, false
-                ));
+                self.handler.call(
+                    "addJob",
+                    &make_args!(
+                        cnt,
+                        job.to.clone(),
+                        job.remote.clone(),
+                        job.file_num,
+                        job.show_hidden,
+                        false
+                    ),
+                );
                 cnt += 1;
-                println!("restore read_job: {:?}",job);
+                println!("restore read_job: {:?}", job);
             }
         }
         for job_str in pc.transfer.write_jobs.iter() {
             let job: Result<TransferJobMeta, serde_json::Error> = serde_json::from_str(&job_str);
             if let Ok(job) = job {
-                self.handler.call("addJob",&make_args!(
-                    cnt,job.remote.clone(),job.to.clone(),job.file_num,job.show_hidden, true
-                ));
+                self.handler.call(
+                    "addJob",
+                    &make_args!(
+                        cnt,
+                        job.remote.clone(),
+                        job.to.clone(),
+                        job.file_num,
+                        job.show_hidden,
+                        true
+                    ),
+                );
                 cnt += 1;
-                println!("restore write_job: {:?}",job);
+                println!("restore write_job: {:?}", job);
             }
         }
         self.handler.call("updateTransferList", &make_args!());
@@ -1586,16 +1602,35 @@ impl Remote {
             Data::Message(msg) => {
                 allow_err!(peer.send(&msg).await);
             }
-            Data::SendFiles((id, path, to,file_num, include_hidden, is_remote)) => {
+            Data::SendFiles((id, path, to, file_num, include_hidden, is_remote)) => {
                 log::info!("send files, is remote {}", is_remote);
                 let od = can_enable_overwrite_detection(self.handler.lc.read().unwrap().version);
                 if is_remote {
                     log::debug!("New job {}, write to {} from remote {}", id, to, path);
-                    self.write_jobs
-                        .push(fs::TransferJob::new_write(id, path.clone(),to,file_num, include_hidden, is_remote, Vec::new(), od));
-                    allow_err!(peer.send(&fs::new_send(id, path,file_num, include_hidden)).await);
+                    self.write_jobs.push(fs::TransferJob::new_write(
+                        id,
+                        path.clone(),
+                        to,
+                        file_num,
+                        include_hidden,
+                        is_remote,
+                        Vec::new(),
+                        od,
+                    ));
+                    allow_err!(
+                        peer.send(&fs::new_send(id, path, file_num, include_hidden))
+                            .await
+                    );
                 } else {
-                    match fs::TransferJob::new_read(id, to.clone(), path.clone(), file_num,include_hidden,is_remote, include_hidden, od) {
+                    match fs::TransferJob::new_read(
+                        id,
+                        to.clone(),
+                        path.clone(),
+                        file_num,
+                        include_hidden,
+                        is_remote,
+                        od,
+                    ) {
                         Err(err) => {
                             self.handle_job_status(id, -1, Some(err.to_string()));
                         }
@@ -1927,7 +1962,7 @@ impl Remote {
                             }
                             self.handler.call("updateFolderFiles", &make_args!(m));
                             if let Some(job) = fs::get_job(fd.id, &mut self.write_jobs) {
-                                log::info!("job set_files: {:?}",entries);
+                                log::info!("job set_files: {:?}", entries);
                                 job.set_files(entries);
                             } else if let Some(job) = self.remove_jobs.get_mut(&fd.id) {
                                 job.files = entries;
@@ -2032,7 +2067,11 @@ impl Remote {
                             }
                         }
                         Some(file_response::Union::block(block)) => {
-                            log::info!("file response block, file id:{}, file num: {}",block.id, block.file_num);
+                            log::info!(
+                                "file response block, file id:{}, file num: {}",
+                                block.id,
+                                block.file_num
+                            );
                             if let Some(job) = fs::get_job(block.id, &mut self.write_jobs) {
                                 if let Err(_err) = job.write(block, None).await {
                                     // to-do: add "skip" for writing job

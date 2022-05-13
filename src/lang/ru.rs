@@ -267,7 +267,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Account", "Аккаунт"),
         ("Quit", "Выйти"),
         ("Overwrite", "крышка"),
-        ("This file exists, skip or overwrite this file?", "Этот файл существует, пропустить или перезаписать этот файл?")
+        ("This file exists, skip or overwrite this file?", "Этот файл существует, пропустить или перезаписать этот файл?"),
         ("doc_mac_permission", "https://rustdesk.com/docs/en/manual/mac/#enable-permissions"),
         ("Help", "Помощь"),
     ].iter().cloned().collect();

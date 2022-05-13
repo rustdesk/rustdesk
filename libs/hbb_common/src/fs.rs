@@ -230,7 +230,7 @@ pub struct TransferJobMeta {
     #[serde(default)]
     pub file_num: i32,
     #[serde(default)]
-    pub is_remote: bool
+    pub is_remote: bool,
 }
 
 #[derive(Debug, Default, Serialize, Deserialize, Clone)]
@@ -299,11 +299,10 @@ impl TransferJob {
         file_num: i32,
         show_hidden: bool,
         is_remote: bool,
-        include_hidden: bool,
         enable_override_detection: bool,
     ) -> ResultType<Self> {
         log::info!("new read {}", path);
-        let files = get_recursive_files(&path, include_hidden)?;
+        let files = get_recursive_files(&path, show_hidden)?;
         let total_size = files.iter().map(|x| x.size as u64).sum();
         Ok(Self {
             id,
@@ -597,7 +596,7 @@ impl TransferJob {
             to: self.path.to_string_lossy().to_string(),
             file_num: self.file_num,
             show_hidden: self.show_hidden,
-            is_remote: self.is_remote
+            is_remote: self.is_remote,
         }
     }
 }
