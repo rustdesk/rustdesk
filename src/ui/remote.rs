@@ -1550,7 +1550,7 @@ impl Remote {
             let job: Result<TransferJobMeta, serde_json::Error> = serde_json::from_str(&job_str);
             if let Ok(job) = job {
                 self.handler.call("addJob",&make_args!(
-                    cnt,job.remote.clone(),job.to.clone(),job.file_num,job.show_hidden, false
+                    cnt,job.to.clone(),job.remote.clone(),job.file_num,job.show_hidden, false
                 ));
                 cnt += 1;
                 println!("restore read_job: {:?}",job);
@@ -1595,7 +1595,7 @@ impl Remote {
                         .push(fs::TransferJob::new_write(id, path.clone(),to,file_num, include_hidden, is_remote, Vec::new(), od));
                     allow_err!(peer.send(&fs::new_send(id, path,file_num, include_hidden)).await);
                 } else {
-                    match fs::TransferJob::new_read(id, path.clone(),to.clone(), file_num,include_hidden,is_remote, include_hidden, od) {
+                    match fs::TransferJob::new_read(id, to.clone(), path.clone(), file_num,include_hidden,is_remote, include_hidden, od) {
                         Err(err) => {
                             self.handle_job_status(id, -1, Some(err.to_string()));
                         }
@@ -1830,7 +1830,7 @@ impl Remote {
     }
 
     async fn sync_jobs_status_to_local(&mut self) -> bool {
-        println!("sync job status");
+        log::info!("sync transfer job status");
         let mut config: PeerConfig = self.handler.load_config();
         let mut transfer_metas = TransferSerde::default();
         for job in self.read_jobs.iter() {
@@ -1842,7 +1842,6 @@ impl Remote {
             transfer_metas.write_jobs.push(json_str);
         }
         config.transfer = transfer_metas;
-        println!("{:?}", config.transfer);
         self.handler.save_config(config);
         true
     }
@@ -1933,10 +1932,6 @@ impl Remote {
                             } else if let Some(job) = self.remove_jobs.get_mut(&fd.id) {
                                 job.files = entries;
                             }
-                        }
-                        Some(file_response::Union::offset(offset)) => {
-                            // TODO: offset
-                            // upload
                         }
                         Some(file_response::Union::digest(digest)) => {
                             if digest.is_upload {

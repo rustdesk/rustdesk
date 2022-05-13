@@ -264,7 +264,6 @@ message FileResponse {
     FileTransferError error = 3;
     FileTransferDone done = 4;
     FileTransferDigest digest = 5;
-    FileTransferDirOffsetRequest offset = 6;
   }
 }
 
@@ -304,14 +303,6 @@ message FileTransferSendConfirmRequest {
     bool skip = 3;
     uint32 offset_blk = 4;
   }
-}
-
-message FileTransferDirOffsetRequest {
-  int32 id = 1;
-  // start from file_num
-  sint32 file_num = 2;
-  // current file blk offset
-  uint32 offset_blk = 3;
 }
 
 message FileTransferDone {

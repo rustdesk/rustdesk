@@ -1054,14 +1054,6 @@ impl Connection {
                         last_modified: d.last_modified,
                         is_upload: true,
                     }),
-                    Some(file_response::Union::offset(offset)) => {
-                        // TODO: i32
-                        // self.send_fs(ipc::FS::WriteOffset {
-                        //     id: offset.id,
-                        //     file_num: offset.file_num,
-                        //     offset_blk: offset.offset_blk,
-                        // });
-                    }
                     _ => {}
                 },
                 Some(message::Union::misc(misc)) => match misc.union {
