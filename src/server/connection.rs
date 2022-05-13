@@ -974,7 +974,7 @@ impl Connection {
                                 let id = s.id;
                                 let od =
                                     can_enable_overwrite_detection(get_version_number(VERSION));
-                                match fs::TransferJob::new_read(id, s.path.clone(), s.include_hidden, od) {
+                                match fs::TransferJob::new_read(id, s.path.clone(), s.file_num, s.include_hidden, od) {
                                     Err(err) => {
                                         self.send(fs::new_error(id, err, 0)).await;
                                     }
@@ -990,6 +990,7 @@ impl Connection {
                                 self.send_fs(ipc::FS::NewWrite {
                                     path: r.path,
                                     id: r.id,
+                                    file_num: r.file_num,
                                     files: r
                                         .files
                                         .to_vec()

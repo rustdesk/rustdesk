@@ -44,6 +44,7 @@ pub enum FS {
     NewWrite {
         path: String,
         id: i32,
+        file_num: i32,
         files: Vec<(String, u64)>,
     },
     CancelWrite {

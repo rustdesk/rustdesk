@@ -158,14 +158,17 @@ impl ConnectionManager {
                 ipc::FS::NewWrite {
                     path,
                     id,
+                    file_num,
                     mut files,
                 } => {
                     let od = can_enable_overwrite_detection(get_version_number(VERSION));
                     // cm has no show_hidden context
+                    // dummy remote, show_hidden, is_remote
                     write_jobs.push(fs::TransferJob::new_write(
                         id,
                         "".to_string(),
                         path,
+                        file_num,
                         false,
                         false,
                         files

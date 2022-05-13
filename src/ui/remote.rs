@@ -204,7 +204,7 @@ impl sciter::EventHandler for Handler {
         fn confirm_delete_files(i32, i32);
         fn set_no_confirm(i32);
         fn cancel_job(i32);
-        fn send_files(i32, String, String, bool, bool);
+        fn send_files(i32, String, String, i32, bool, bool);
         fn get_platform(bool);
         fn get_path_sep(bool);
         fn get_icon_path(i32, String);
@@ -1586,16 +1586,16 @@ impl Remote {
             Data::Message(msg) => {
                 allow_err!(peer.send(&msg).await);
             }
-            Data::SendFiles((id, path, to, include_hidden, is_remote)) => {
+            Data::SendFiles((id, path, to,file_num, include_hidden, is_remote)) => {
                 log::info!("send files, is remote {}", is_remote);
                 let od = can_enable_overwrite_detection(self.handler.lc.read().unwrap().version);
                 if is_remote {
                     log::debug!("New job {}, write to {} from remote {}", id, to, path);
                     self.write_jobs
-                        .push(fs::TransferJob::new_write(id, path.clone(),to,include_hidden, is_remote, Vec::new(), od));
-                    allow_err!(peer.send(&fs::new_send(id, path, include_hidden)).await);
+                        .push(fs::TransferJob::new_write(id, path.clone(),to,file_num, include_hidden, is_remote, Vec::new(), od));
+                    allow_err!(peer.send(&fs::new_send(id, path,file_num, include_hidden)).await);
                 } else {
-                    match fs::TransferJob::new_read(id, path.clone(),to.clone(),include_hidden,is_remote, include_hidden, od) {
+                    match fs::TransferJob::new_read(id, path.clone(),to.clone(), file_num,include_hidden,is_remote, include_hidden, od) {
                         Err(err) => {
                             self.handle_job_status(id, -1, Some(err.to_string()));
                         }
@@ -1612,7 +1612,7 @@ impl Remote {
                             let files = job.files().clone();
                             self.read_jobs.push(job);
                             self.timer = time::interval(MILLI1);
-                            allow_err!(peer.send(&fs::new_receive(id, to, files)).await);
+                            allow_err!(peer.send(&fs::new_receive(id, to, file_num, files)).await);
                         }
                     }
                 }

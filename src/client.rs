@@ -1313,7 +1313,7 @@ pub enum Data {
     Close,
     Login((String, bool)),
     Message(Message),
-    SendFiles((i32, String, String, bool, bool)),
+    SendFiles((i32, String, String, i32, bool, bool)),
     RemoveDirAll((i32, String, bool)),
     ConfirmDeleteFiles((i32, i32)),
     SetNoConfirm(i32),

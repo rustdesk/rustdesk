@@ -270,6 +270,7 @@ impl TransferJob {
         id: i32,
         remote: String,
         path: String,
+        file_num: i32,
         show_hidden: bool,
         is_remote: bool,
         files: Vec<FileEntry>,
@@ -281,6 +282,7 @@ impl TransferJob {
             id,
             remote,
             path: get_path(&path),
+            file_num,
             show_hidden,
             is_remote,
             files,
@@ -294,6 +296,7 @@ impl TransferJob {
         id: i32,
         remote: String,
         path: String,
+        file_num: i32,
         show_hidden: bool,
         is_remote: bool,
         include_hidden: bool,
@@ -306,6 +309,7 @@ impl TransferJob {
             id,
             remote,
             path: get_path(&path),
+            file_num,
             show_hidden,
             is_remote,
             files,
@@ -645,12 +649,13 @@ pub fn new_send_confirm(r: FileTransferSendConfirmRequest) -> Message {
 }
 
 #[inline]
-pub fn new_receive(id: i32, path: String, files: Vec<FileEntry>) -> Message {
+pub fn new_receive(id: i32, path: String, file_num: i32, files: Vec<FileEntry>) -> Message {
     let mut action = FileAction::new();
     action.set_receive(FileTransferReceiveRequest {
         id,
         path,
         files: files.into(),
+        file_num,
         ..Default::default()
     });
     let mut msg_out = Message::new();
@@ -659,13 +664,14 @@ pub fn new_receive(id: i32, path: String, files: Vec<FileEntry>) -> Message {
 }
 
 #[inline]
-pub fn new_send(id: i32, path: String, include_hidden: bool) -> Message {
+pub fn new_send(id: i32, path: String, file_num: i32, include_hidden: bool) -> Message {
     log::info!("new send: {},id : {}", path, id);
     let mut action = FileAction::new();
     action.set_send(FileTransferSendRequest {
         id,
         path,
         include_hidden,
+        file_num,
         ..Default::default()
     });
     let mut msg_out = Message::new();

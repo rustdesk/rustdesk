@@ -294,6 +294,7 @@ message FileTransferSendRequest {
   int32 id = 1;
   string path = 2;
   bool include_hidden = 3;
+  int32 file_num = 4;
 }
 
 message FileTransferSendConfirmRequest {
@@ -322,6 +323,7 @@ message FileTransferReceiveRequest {
   int32 id = 1;
   string path = 2; // path written to
   repeated FileEntry files = 3;
+  int32 file_num = 4;
 }
 
 message FileRemoveDir {

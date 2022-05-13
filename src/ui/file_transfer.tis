@@ -125,7 +125,7 @@ class JobTable: Reactor.Component {
                      include_hidden: show_hidden,
                      is_remote: is_remote });
     this.job_map[id] = this.jobs[this.jobs.length - 1];
-    handler.send_files(id, path, to, show_hidden, is_remote);
+    handler.send_files(id, path, to, 0, show_hidden, is_remote);
     var self = this;
     self.timer(30ms, function() { self.update(); });
   }
@@ -138,7 +138,7 @@ class JobTable: Reactor.Component {
     this.jobs.push(job);
     this.job_map[id] = this.jobs[this.jobs.length - 1];
     jobIdCounter = id + 1;
-    handler.send_files(id, path, to, show_hidden, is_remote);
+    handler.send_files(id, path, to, file_num, show_hidden, is_remote);
     stdout.println(JSON.stringify(job));
   }
 
