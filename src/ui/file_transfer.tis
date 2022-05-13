@@ -130,12 +130,16 @@ class JobTable: Reactor.Component {
     self.timer(30ms, function() { self.update(); });
   }
 
-  function addJob(id, path, to, show_hidden, is_remote) {
-    this.jobs.push({ type: "transfer",
-                     id: id, path: path, to: to,
-                     include_hidden: show_hidden,
-                     is_remote: is_remote });
+  function addJob(id, path, to, file_num, show_hidden, is_remote) {
+    var job = { type: "transfer",
+    id: id, path: path, to: to,
+    include_hidden: show_hidden,
+    is_remote: is_remote };
+    this.jobs.push(job);
     this.job_map[id] = this.jobs[this.jobs.length - 1];
+    jobIdCounter = id + 1;
+    handler.send_files(id, path, to, show_hidden, is_remote);
+    stdout.println(JSON.stringify(job));
   }
 
   function addDelDir(path, is_remote) {
@@ -617,6 +621,7 @@ function initializeFileTransfer()
 }
 
 handler.updateFolderFiles = function(fd) {
+  stdout.println("update folder files: " + JSON.stringify(fd));
   fd.entries = fd.entries || [];
   if (fd.id > 0) {
     var jt = file_transfer.job_table;
@@ -668,6 +673,7 @@ handler.clearAllJobs = function() {
 }
 
 handler.addJob = function (id, path, to, file_num, show_hidden, is_remote) {
+  stdout.println("restore job: " + is_remote);
   file_transfer.job_table.addJob(id,path,to,file_num,show_hidden,is_remote);
 }
 

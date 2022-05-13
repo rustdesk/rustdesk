@@ -1386,10 +1386,6 @@ impl Remote {
                 }
                 self.handler
                     .call("setConnectionType", &make_args!(peer.is_secured(), direct));
-                
-                if conn_type == ConnType::FILE_TRANSFER {
-                    self.load_last_jobs().await;
-                }
 
                 // just build for now
                 #[cfg(not(windows))]
@@ -1541,7 +1537,7 @@ impl Remote {
     }
 
     async fn load_last_jobs(&mut self) {
-        println!("start load last jobs");
+        log::info!("start load last jobs");
         self.handler.call("clearAllJobs",&make_args!());
         let pc = self.handler.load_config();
         if pc.transfer.write_jobs.is_empty() && pc.transfer.read_jobs.is_empty() {
@@ -1549,15 +1545,13 @@ impl Remote {
             return;
         }
         // TODO: can add a confirm dialog
-        let mut cnt = 0;
+        let mut cnt = 1;
         for job_str in pc.transfer.read_jobs.iter() {
             let job: Result<TransferJobMeta, serde_json::Error> = serde_json::from_str(&job_str);
             if let Ok(job) = job {
                 self.handler.call("addJob",&make_args!(
                     cnt,job.remote.clone(),job.to.clone(),job.file_num,job.show_hidden, false
                 ));
-                self.handler.send_files(cnt, job.remote.clone(),
-                job.to.clone(), job.show_hidden, false);
                 cnt += 1;
                 println!("restore read_job: {:?}",job);
             }
@@ -1568,8 +1562,6 @@ impl Remote {
                 self.handler.call("addJob",&make_args!(
                     cnt,job.remote.clone(),job.to.clone(),job.file_num,job.show_hidden, true
                 ));
-                self.handler.send_files(cnt, job.remote.clone(),
-                job.to.clone(), job.show_hidden, true);
                 cnt += 1;
                 println!("restore write_job: {:?}",job);
             }
@@ -1895,6 +1887,10 @@ impl Remote {
                                 });
                             }
                         }
+
+                        if self.handler.is_file_transfer() {
+                            self.load_last_jobs().await;
+                        }
                     }
                     _ => {}
                 },
@@ -1932,6 +1928,7 @@ impl Remote {
                             }
                             self.handler.call("updateFolderFiles", &make_args!(m));
                             if let Some(job) = fs::get_job(fd.id, &mut self.write_jobs) {
+                                log::info!("job set_files: {:?}",entries);
                                 job.set_files(entries);
                             } else if let Some(job) = self.remove_jobs.get_mut(&fd.id) {
                                 job.files = entries;
@@ -2040,7 +2037,7 @@ impl Remote {
                             }
                         }
                         Some(file_response::Union::block(block)) => {
-                            log::info!("file response block, file num: {}", block.file_num);
+                            log::info!("file response block, file id:{}, file num: {}",block.id, block.file_num);
                             if let Some(job) = fs::get_job(block.id, &mut self.write_jobs) {
                                 if let Err(_err) = job.write(block, None).await {
                                     // to-do: add "skip" for writing job
