@@ -781,13 +781,9 @@ fn get_default_install_info() -> (String, String, String, String) {
 
 fn get_default_install_path() -> String {
     let mut pf = "C:\\Program Files".to_owned();
-    if let Ok(output) = std::process::Command::new("echo")
-        .arg("%ProgramFiles%")
-        .output()
-    {
-        let tmp = String::from_utf8_lossy(&output.stdout);
-        if !tmp.starts_with("%") {
-            pf = tmp.to_string();
+    if let Ok(x) = std::env::var("ProgramFiles") {
+        if std::path::Path::new(&x).exists() {
+            pf = x;
         }
     }
     #[cfg(target_pointer_width = "32")]
