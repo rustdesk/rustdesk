@@ -20,7 +20,7 @@ use clipboard::{
     get_rx_clip_client, server_clip_file,
 };
 use enigo::{self, Enigo, KeyboardControllable};
-use hbb_common::config::TransferSerde;
+use hbb_common::{config::TransferSerde, fs::TransferJobMeta};
 use hbb_common::fs::{
     can_enable_overwrite_detection, get_string, is_file_exists, new_send_confirm,
     DigestCheckResult, RemoveJobMeta,
@@ -1319,7 +1319,6 @@ async fn io_loop(handler: Handler) {
         clipboard_file_context: None,
     };
     remote.io_loop(&key, &token).await;
-    remote.sync_jobs_status_to_local().await;
 }
 
 struct RemoveJob {
@@ -1551,23 +1550,29 @@ impl Remote {
         }
         // TODO: can add a confirm dialog
         let mut cnt = 0;
-        for job in pc.transfer.read_jobs.iter() {
-            self.handler.call("addJob",&make_args!(
-                cnt,job.remote.clone(),job.to.clone(),job.file_num,job.show_hidden, false
-            ));
-            self.handler.send_files(cnt, job.remote.clone(),
-            job.to.clone(), job.show_hidden, false);
-            cnt += 1;
-            println!("restore read_job: {:?}",job);
+        for job_str in pc.transfer.read_jobs.iter() {
+            let job: Result<TransferJobMeta, serde_json::Error> = serde_json::from_str(&job_str);
+            if let Ok(job) = job {
+                self.handler.call("addJob",&make_args!(
+                    cnt,job.remote.clone(),job.to.clone(),job.file_num,job.show_hidden, false
+                ));
+                self.handler.send_files(cnt, job.remote.clone(),
+                job.to.clone(), job.show_hidden, false);
+                cnt += 1;
+                println!("restore read_job: {:?}",job);
+            }
         }
-        for job in pc.transfer.write_jobs.iter() {
-            self.handler.call("addJob",&make_args!(
-                cnt,job.remote.clone(),job.to.clone(),job.file_num,job.show_hidden, true
-            ));
-            self.handler.send_files(cnt, job.remote.clone(),
-            job.to.clone(), job.show_hidden, true);
-            cnt += 1;
-            println!("restore write_job: {:?}",job);
+        for job_str in pc.transfer.write_jobs.iter() {
+            let job: Result<TransferJobMeta, serde_json::Error> = serde_json::from_str(&job_str);
+            if let Ok(job) = job {
+                self.handler.call("addJob",&make_args!(
+                    cnt,job.remote.clone(),job.to.clone(),job.file_num,job.show_hidden, true
+                ));
+                self.handler.send_files(cnt, job.remote.clone(),
+                job.to.clone(), job.show_hidden, true);
+                cnt += 1;
+                println!("restore write_job: {:?}",job);
+            }
         }
         self.handler.call("updateTransferList", &make_args!());
     }
@@ -1595,7 +1600,7 @@ impl Remote {
                 if is_remote {
                     log::debug!("New job {}, write to {} from remote {}", id, to, path);
                     self.write_jobs
-                        .push(fs::TransferJob::new_write(id, path.clone(),to,include_hidden,is_remote, Vec::new(), od));
+                        .push(fs::TransferJob::new_write(id, path.clone(),to,include_hidden, is_remote, Vec::new(), od));
                     allow_err!(peer.send(&fs::new_send(id, path, include_hidden)).await);
                 } else {
                     match fs::TransferJob::new_read(id, path.clone(),to.clone(),include_hidden,is_remote, include_hidden, od) {
@@ -1837,13 +1842,12 @@ impl Remote {
         let mut config: PeerConfig = self.handler.load_config();
         let mut transfer_metas = TransferSerde::default();
         for job in self.read_jobs.iter() {
-            transfer_metas.read_jobs.push(job.gen_meta());
+            let json_str = serde_json::to_string(&job.gen_meta()).unwrap();
+            transfer_metas.read_jobs.push(json_str);
         }
         for job in self.write_jobs.iter() {
-            transfer_metas.write_jobs.push(job.gen_meta());
-        }
-        for job in self.remove_jobs.values() {
-            transfer_metas.remove_jobs.push(job.gen_meta());
+            let json_str = serde_json::to_string(&job.gen_meta()).unwrap();
+            transfer_metas.write_jobs.push(json_str);
         }
         config.transfer = transfer_metas;
         println!("{:?}", config.transfer);

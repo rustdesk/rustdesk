@@ -229,6 +229,8 @@ pub struct TransferJobMeta {
     pub show_hidden: bool,
     #[serde(default)]
     pub file_num: i32,
+    #[serde(default)]
+    pub is_remote: bool
 }
 
 #[derive(Debug, Default, Serialize, Deserialize, Clone)]
@@ -583,13 +585,15 @@ impl TransferJob {
         true
     }
 
+    #[inline]
     pub fn gen_meta(&self) -> TransferJobMeta {
         TransferJobMeta {
             id: self.id,
             remote: self.remote.to_string(),
             to: self.path.to_string_lossy().to_string(),
             file_num: self.file_num,
-            show_hidden: self.show_hidden
+            show_hidden: self.show_hidden,
+            is_remote: self.is_remote
         }
     }
 }

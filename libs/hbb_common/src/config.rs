@@ -157,11 +157,9 @@ pub struct PeerInfoSerde {
 #[derive(Debug, Default, Serialize, Deserialize, Clone)]
 pub struct TransferSerde {
     #[serde(default)]
-    pub write_jobs: Vec<TransferJobMeta>,
+    pub write_jobs: Vec<String>,
     #[serde(default)]
-    pub read_jobs: Vec<TransferJobMeta>,
-    #[serde(default)]
-    pub remove_jobs: Vec<RemoveJobMeta>,
+    pub read_jobs: Vec<String>,
 }
 
 fn patch(path: PathBuf) -> PathBuf {

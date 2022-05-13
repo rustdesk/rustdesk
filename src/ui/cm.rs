@@ -371,7 +371,6 @@ impl ConnectionManager {
     }
 
     async fn send(msg: Message, conn: &mut Connection) {
-        println!("send msg: {:?}", msg);
         match msg.write_to_bytes() {
             Ok(bytes) => allow_err!(conn.send(&Data::RawMessage(bytes)).await),
             err => allow_err!(err),
