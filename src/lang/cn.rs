@@ -42,7 +42,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Invalid IP", "无效IP"),
         ("id_change_tip", "只可以使用字母a-z, A-Z, 0-9, _ (下划线)。首字母必须是a-z, A-Z。长度在6与16之间。"),
         ("Invalid format", "无效格式"),
-        ("This function is turned off by the server", "服务器关闭了此功能"),
+        ("server_not_support", "服务器暂不支持"),
         ("Not available", "已被占用"),
         ("Too frequent", "修改太频繁，请稍后再试"),
         ("Cancel", "取消"),

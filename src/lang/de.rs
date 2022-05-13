@@ -42,7 +42,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Invalid IP", "Ungültige IP-Adresse"),
         ("id_change_tip", "Nur die Zeichen a-z, A-Z, 0-9 und _ (Unterstrich) sind erlaubt. Der erste Buchstabe muss a-z, A-Z sein. Länge zwischen 6 und 16."),
         ("Invalid format", "Ungültiges Format"),
-        ("This function is turned off by the server", "Diese Funktion wird vom Server nicht bereitgestellt"),
+        ("server_not_support", "Noch nicht vom Server unterstützt"),
         ("Not available", "Nicht verfügbar"),
         ("Too frequent", "Zu häufig"),
         ("Cancel", "Abbrechen"),

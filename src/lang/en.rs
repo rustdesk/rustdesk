@@ -26,5 +26,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("android_start_service_tip", "Tap [Start Service] or OPEN [Screen Capture] permission to start the screen sharing service."),
         ("doc_mac_permission", "https://rustdesk.com/docs/en/manual/mac/#enable-permissions"),
         ("doc_fix_wayland", "https://rustdesk.com/docs/en/manual/linux/#x11-required"),
+        ("server_not_support", "Not yet supported by the server"),
     ].iter().cloned().collect();
 }

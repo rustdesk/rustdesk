@@ -42,7 +42,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Invalid IP", "IP tidak valid"),
         ("id_change_tip", "Hanya karakter a-z, A-Z, 0-9 dan _ (underscore) yang diperbolehkan. Huruf pertama harus a-z, A-Z. Panjang antara 6 dan 16."),
         ("Invalid format", "Format tidak valid"),
-        ("This function is turned off by the server", "Fungsi ini dimatikan oleh server"),
+        ("server_not_support", "Belum didukung oleh server"),
         ("Not available", "Tidak tersedia"),
         ("Too frequent", "Terlalu sering"),
         ("Cancel", "Batal"),

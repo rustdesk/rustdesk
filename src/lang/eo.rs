@@ -42,7 +42,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Invalid IP", "IP nevalida"),
         ("id_change_tip", "Nur la signoj a-z, A-Z, 0-9, _ (substreko) povas esti uzataj. La unua litero povas esti inter a-z, A-Z. La longeco devas esti inter 6 kaj 16."),
         ("Invalid format", "Formato nevalida"),
-        ("This function is turned off by the server", "Tiu funkcio estas malebligata de la servilo"),
         ("Not available", "Nedisponebla"),
         ("Too frequent", "Tro ofte ŝanĝita, bonvolu reprovi poste"),
         ("Cancel", "Nuligi"),

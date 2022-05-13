@@ -1030,7 +1030,7 @@ async fn check_id(
                                     return "Too frequent";
                                 }
                                 register_pk_response::Result::NOT_SUPPORT => {
-                                    return "This function is turned off by the server";
+                                    return "server_not_support";
                                 }
                                 register_pk_response::Result::INVALID_ID_FORMAT => {
                                     return INVALID_FORMAT;
