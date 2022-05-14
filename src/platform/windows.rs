@@ -1204,7 +1204,7 @@ fn get_reg_of(subkey: &str, name: &str) -> String {
 
 fn get_license_from_exe_name() -> ResultType<License> {
     let exe = std::env::current_exe()?.to_str().unwrap_or("").to_owned();
-    get_license_from_string(exe)
+    get_license_from_string(&exe)
 }
 
 #[inline]
