@@ -1326,7 +1326,8 @@ pub enum Data {
     ToggleClipboardFile,
     NewRDP,
     SetConfirmOverrideFile((i32, i32, bool, bool, bool)),
-    ResumeTransfer,
+    AddJob((i32, String, String, i32, bool, bool)),
+    ResumeJob((i32, bool)),
 }
 
 #[derive(Clone)]

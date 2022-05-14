@@ -22,7 +22,7 @@ use clipboard::{
 use enigo::{self, Enigo, KeyboardControllable};
 use hbb_common::fs::{
     can_enable_overwrite_detection, get_string, is_file_exists, new_send_confirm,
-    DigestCheckResult, RemoveJobMeta,
+    DigestCheckResult, RemoveJobMeta, get_job,
 };
 use hbb_common::log::log;
 use hbb_common::{
@@ -205,6 +205,8 @@ impl sciter::EventHandler for Handler {
         fn set_no_confirm(i32);
         fn cancel_job(i32);
         fn send_files(i32, String, String, i32, bool, bool);
+        fn add_job(i32, String, String, i32, bool, bool);
+        fn resume_job(i32, bool);
         fn get_platform(bool);
         fn get_path_sep(bool);
         fn get_icon_path(i32, String);
@@ -1649,6 +1651,69 @@ impl Remote {
                             self.timer = time::interval(MILLI1);
                             allow_err!(peer.send(&fs::new_receive(id, to, file_num, files)).await);
                         }
+                    }
+                }
+            }
+            Data::AddJob((id, path, to, file_num, include_hidden, is_remote)) => {
+                let od = can_enable_overwrite_detection(self.handler.lc.read().unwrap().version);
+                if is_remote {
+                    log::debug!("new write waiting job {}, write to {} from remote {}", id, to, path);
+                    let mut job = fs::TransferJob::new_write(
+                        id,
+                        path.clone(),
+                        to,
+                        file_num,
+                        include_hidden,
+                        is_remote,
+                        Vec::new(),
+                        od,
+                    );
+                    job.is_last_job = true;
+                    self.write_jobs.push(job);
+                } else {
+                    match fs::TransferJob::new_read(
+                        id,
+                        to.clone(),
+                        path.clone(),
+                        file_num,
+                        include_hidden,
+                        is_remote,
+                        od,
+                    ) {
+                        Err(err) => {
+                            self.handle_job_status(id, -1, Some(err.to_string()));
+                        }
+                        Ok(mut job) => {
+                            log::debug!(
+                                "new read waiting job {}, read {} to remote {}, {} files",
+                                id,
+                                path,
+                                to,
+                                job.files().len()
+                            );
+                            let m = make_fd(job.id(), job.files(), true);
+                            self.handler.call("updateFolderFiles", &make_args!(m));
+                            job.is_last_job = true;
+                            self.read_jobs.push(job);
+                            self.timer = time::interval(MILLI1);
+                        }
+                    }
+                }
+            }
+            Data::ResumeJob((id, is_remote)) => {
+                if is_remote {
+                    if let Some(job) = get_job(id, &mut self.write_jobs) {
+                        job.is_last_job = false;
+                        allow_err!(
+                            peer.send(&fs::new_send(id, job.remote.clone(), job.file_num, job.show_hidden))
+                                .await
+                        );
+                    }
+                } else {
+                    if let Some(job) = get_job(id, &mut self.read_jobs) {
+                        job.is_last_job = false;
+                        allow_err!(peer.send(&fs::new_receive(id, job.path.to_string_lossy().to_string(),
+                         job.file_num, job.files.clone())).await);
                     }
                 }
             }

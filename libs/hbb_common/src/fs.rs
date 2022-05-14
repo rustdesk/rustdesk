@@ -200,13 +200,15 @@ pub fn can_enable_overwrite_detection(version: i64) -> bool {
 
 #[derive(Default)]
 pub struct TransferJob {
-    id: i32,
-    remote: String,
-    path: PathBuf,
-    show_hidden: bool,
-    is_remote: bool,
-    files: Vec<FileEntry>,
-    file_num: i32,
+    pub id: i32,
+    pub remote: String,
+    pub path: PathBuf,
+    pub show_hidden: bool,
+    pub is_remote: bool,
+    pub is_last_job: bool,
+    pub file_num: i32,
+    pub files: Vec<FileEntry>,
+
     file: Option<File>,
     total_size: u64,
     finished_size: u64,
@@ -707,6 +709,9 @@ pub async fn handle_read_jobs(
 ) -> ResultType<()> {
     let mut finished = Vec::new();
     for job in jobs.iter_mut() {
+        if job.is_last_job {
+            continue;
+        }
         match job.read(stream).await {
             Err(err) => {
                 stream
