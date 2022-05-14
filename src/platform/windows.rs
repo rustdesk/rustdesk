@@ -1204,14 +1204,7 @@ fn get_reg_of(subkey: &str, name: &str) -> String {
 
 fn get_license_from_exe_name() -> ResultType<License> {
     let exe = std::env::current_exe()?.to_str().unwrap_or("").to_owned();
-    let tmp: Vec<&str> = exe.split("-licensed-").collect();
-    if let Some(tmp) = tmp.last() {
-        let tmp: Vec<&str> = tmp.split(".").collect();
-        if let Some(tmp) = tmp.first() {
-            return get_license_from_string(tmp);
-        }
-    }
-    Ok(Default::default())
+    get_license_from_string(exe)
 }
 
 #[inline]
