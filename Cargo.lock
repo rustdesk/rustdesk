@@ -4007,7 +4007,6 @@ dependencies = [
  "tray-item",
  "trayicon",
  "uuid",
- "virtual_display",
  "whoami",
  "winapi 0.3.9",
  "windows-service",

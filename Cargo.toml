@@ -30,10 +30,6 @@ default = ["use_dasp"]
 whoami = "1.2"
 scrap = { path = "libs/scrap" }
 hbb_common = { path = "libs/hbb_common" }
-enigo = { path = "libs/enigo" }
-clipboard = { path = "libs/clipboard" }
-virtual_display = { path = "libs/virtual_display" }
-sys-locale = "0.2"
 serde_derive = "1.0"
 serde = "1.0"
 serde_json = "1.0"

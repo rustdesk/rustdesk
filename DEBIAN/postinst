@@ -10,7 +10,11 @@ if [ "$1" = configure ]; then
 		if [ -e /etc/systemd/system/rustdesk.service ]; then
 			rm /etc/systemd/system/rustdesk.service
 		fi
-    sudo -H pip3 install pynput
+		version=$(python3 -V 2>&1 | grep -Po '(?<=Python )(.+)')
+		parsedVersion=$(echo "${version//./}")
+		if [[ "$parsedVersion" -gt "360" ]]; then
+			sudo -H pip3 install pynput
+		fi
 		cp /usr/share/rustdesk/files/systemd/rustdesk.service /etc/systemd/system/rustdesk.service
 		systemctl daemon-reload
 		systemctl enable rustdesk

@@ -7,5 +7,15 @@ extractor
 __pycache__
 src/version.rs
 *dmg
+*exe
+*tgz
+*lib
+cert.pfx
+flutter_hbb
+*.bak
+*png
+*svg
+*jpg
+web_hbb
 sciter.dll
 **pdb
