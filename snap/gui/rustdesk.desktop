@@ -7,7 +7,6 @@ Exec=rustdesk %u
 Icon=${SNAP}/meta/gui/rustdesk.png
 Terminal=false
 Type=Application
-MimeType=text/html;text/xml;application/xhtml+xml;application/vnd.mozilla.xul+xml;text/mml;x-scheme-handler/http;x-scheme-handler/https;
 StartupNotify=true
 Categories=Other;
 Keywords=internet;
