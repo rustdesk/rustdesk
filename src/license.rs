@@ -45,7 +45,7 @@ pub fn get_license_from_string(s: &str) -> ResultType<License> {
                 host = strs2[0];
                 key = strs2[1];
             } else {
-                host = strs[0];
+                host = strs[1];
             }
             return Ok(License {
                 host: host.to_owned(),
