@@ -97,6 +97,12 @@ showChatIconOverlay({Offset offset = const Offset(200, 50)}) {
   }
   if (globalKey.currentState == null || globalKey.currentState!.overlay == null)
     return;
+  final bar = navigationBarKey.currentWidget;
+  if (bar != null) {
+    if ((bar as BottomNavigationBar).currentIndex == 1) {
+      return;
+    }
+  }
   final globalOverlayState = globalKey.currentState!.overlay!;
 
   final overlay = OverlayEntry(builder: (context) {
@@ -118,7 +124,6 @@ showChatIconOverlay({Offset offset = const Offset(200, 50)}) {
   });
   globalOverlayState.insert(overlay);
   chatIconOverlayEntry = overlay;
-  debugPrint("created");
 }
 
 hideChatIconOverlay() {
@@ -140,7 +145,6 @@ showChatWindowOverlay() {
   });
   globalOverlayState.insert(overlay);
   chatWindowOverlayEntry = overlay;
-  debugPrint("chatEntry created");
 }
 
 hideChatWindowOverlay() {
@@ -237,8 +241,7 @@ showMobileActionsOverlay() {
   final double overlayW = 200;
   final double overlayH = 45;
   final left = (screenW - overlayW) / 2;
-  final top = screenH - overlayH - 60;
-  debugPrint("left top : $left,$top");
+  final top = screenH - overlayH - 80;
 
   final overlay = OverlayEntry(builder: (context) {
     return DraggableMobileActions(
@@ -256,7 +259,6 @@ showMobileActionsOverlay() {
   });
   globalOverlayState.insert(overlay);
   mobileActionsOverlayEntry = overlay;
-  debugPrint("mobileActionsOverlay created");
 }
 
 hideMobileActionsOverlay() {

@@ -221,8 +221,8 @@ class FfiModel with ChangeNotifier {
 
   void showMsgBox(String type, String title, String text, bool hasRetry) {
     msgBox(type, title, text);
+    _timer?.cancel();
     if (hasRetry) {
-      _timer?.cancel();
       _timer = Timer(Duration(seconds: _reconnects), () {
         FFI.reconnect();
         showLoading(translate('Connecting...'));
@@ -245,7 +245,7 @@ class FfiModel with ChangeNotifier {
     if (isPeerAndroid) {
       _touchMode = true;
       if (FFI.ffiModel.permissions['keyboard'] != false) {
-        showMobileActionsOverlay();
+        Timer(Duration(milliseconds: 100), showMobileActionsOverlay);
       }
     } else {
       _touchMode = FFI.getByName('peer_option', "touch-mode") != '';
@@ -757,6 +757,7 @@ class FFI {
     if (isFileTransfer) {
       setByName('connect_file_transfer', id);
     } else {
+      FFI.chatModel.resetClientMode();
       setByName('connect', id);
     }
     FFI.id = id;

@@ -6,15 +6,30 @@ import 'package:flutter/material.dart';
 import '../widgets/overlay.dart';
 import 'model.dart';
 
+class MessageBody {
+  ChatUser chatUser;
+  List<ChatMessage> chatMessages;
+  MessageBody(this.chatUser, this.chatMessages);
+
+  void add(ChatMessage cm) {
+    this.chatMessages.add(cm);
+  }
+
+  void clear() {
+    this.chatMessages.clear();
+  }
+}
+
 class ChatModel with ChangeNotifier {
   static final clientModeID = -1;
-
-  final Map<int, List<ChatMessage>> _messages = Map()..[clientModeID] = [];
 
   final ChatUser me = ChatUser(
     uid: "",
     name: "Me",
   );
+
+  late final Map<int, MessageBody> _messages = Map()
+    ..[clientModeID] = MessageBody(me, []);
 
   final _scroller = ScrollController();
 
@@ -22,25 +37,37 @@ class ChatModel with ChangeNotifier {
 
   ScrollController get scroller => _scroller;
 
-  Map<int, List<ChatMessage>> get messages => _messages;
+  Map<int, MessageBody> get messages => _messages;
 
   int get currentID => _currentID;
 
-  ChatUser get currentUser =>
-      FFI.serverModel.clients[_currentID]?.chatUser ?? me;
+  ChatUser get currentUser {
+    final user = messages[currentID]?.chatUser;
+    if (user == null) {
+      _currentID = clientModeID;
+      return me;
+    } else {
+      return user;
+    }
+  }
 
   changeCurrentID(int id) {
     if (_messages.containsKey(id)) {
       _currentID = id;
       notifyListeners();
     } else {
-      final chatUser = FFI.serverModel.clients[id]?.chatUser;
-      if (chatUser == null) {
+      final client = FFI.serverModel.clients[id];
+      if (client == null) {
         return debugPrint(
             "Failed to changeCurrentID,remote user doesn't exist");
       }
-      _messages[id] = [];
+      final chatUser = ChatUser(
+        uid: client.peerId,
+        name: client.name,
+      );
+      _messages[id] = MessageBody(chatUser, []);
       _currentID = id;
+      notifyListeners();
     }
   }
 
@@ -57,13 +84,15 @@ class ChatModel with ChangeNotifier {
         uid: FFI.getId(),
       );
     } else {
-      chatUser = FFI.serverModel.clients[id]?.chatUser;
+      final client = FFI.serverModel.clients[id];
+      if (client == null) {
+        return debugPrint("Failed to receive msg,user doesn't exist");
+      }
+      chatUser = ChatUser(uid: client.peerId, name: client.name);
     }
-    if (chatUser == null) {
-      return debugPrint("Failed to receive msg,user doesn't exist");
-    }
+
     if (!_messages.containsKey(id)) {
-      _messages[id] = [];
+      _messages[id] = MessageBody(chatUser, []);
     }
     _messages[id]!.add(ChatMessage(text: text, user: chatUser));
     _currentID = id;
@@ -99,5 +128,9 @@ class ChatModel with ChangeNotifier {
     hideChatIconOverlay();
     hideChatWindowOverlay();
     notifyListeners();
+  }
+
+  resetClientMode() {
+    _messages[clientModeID]?.clear();
   }
 }

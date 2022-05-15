@@ -21,10 +21,9 @@ class ChatPage extends StatelessWidget implements PageShape {
         icon: Icon(Icons.group),
         itemBuilder: (context) {
           final chatModel = FFI.chatModel;
-          final serverModel = FFI.serverModel;
           return chatModel.messages.entries.map((entry) {
             final id = entry.key;
-            final user = serverModel.clients[id]?.chatUser ?? chatModel.me;
+            final user = entry.value.chatUser;
             return PopupMenuItem<int>(
               child: Text("${user.name}   ${user.uid}"),
               value: id,
@@ -54,7 +53,9 @@ class ChatPage extends StatelessWidget implements PageShape {
                       chatModel.send(chatMsg);
                     },
                     user: chatModel.me,
-                    messages: chatModel.messages[chatModel.currentID] ?? [],
+                    messages:
+                        chatModel.messages[chatModel.currentID]?.chatMessages ??
+                            [],
                     // default scrollToBottom has bug https://github.com/fayeed/dash_chat/issues/53
                     scrollToBottom: false,
                     scrollController: chatModel.scroller,

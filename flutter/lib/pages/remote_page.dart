@@ -91,7 +91,9 @@ class _RemotePageState extends State<RemotePage> {
         if (v < 100) {
           SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual,
               overlays: []);
-          if (chatWindowOverlayEntry == null) {
+          // [pi.version.isNotEmpty] -> check ready or not,avoid login without soft-keyboard
+          if (chatWindowOverlayEntry == null &&
+              FFI.ffiModel.pi.version.isNotEmpty) {
             FFI.invokeMethod("enable_soft_keyboard", false);
           }
         }
@@ -397,33 +399,33 @@ class _RemotePageState extends State<RemotePage> {
                   ] +
                   (isDesktop
                       ? []
-                      : [
-                          IconButton(
-                              color: Colors.white,
-                              icon: Icon(Icons.keyboard),
-                              onPressed: openKeyboard),
-                          FFI.ffiModel.isPeerAndroid
-                              ? (keyboard
-                                  ? IconButton(
-                                      color: Colors.white,
-                                      icon: Icon(Icons.build),
-                                      onPressed: () {
-                                        if (mobileActionsOverlayEntry == null) {
-                                          showMobileActionsOverlay();
-                                        } else {
-                                          hideMobileActionsOverlay();
-                                        }
-                                      },
-                                    )
-                                  : SizedBox.shrink())
-                              : IconButton(
+                      : FFI.ffiModel.isPeerAndroid
+                          ? [
+                              IconButton(
+                                color: Colors.white,
+                                icon: Icon(Icons.build),
+                                onPressed: () {
+                                  if (mobileActionsOverlayEntry == null) {
+                                    showMobileActionsOverlay();
+                                  } else {
+                                    hideMobileActionsOverlay();
+                                  }
+                                },
+                              )
+                            ]
+                          : [
+                              IconButton(
                                   color: Colors.white,
-                                  icon: Icon(FFI.ffiModel.touchMode
-                                      ? Icons.touch_app
-                                      : Icons.mouse),
-                                  onPressed: changeTouchMode,
-                                )
-                        ]) +
+                                  icon: Icon(Icons.keyboard),
+                                  onPressed: openKeyboard),
+                              IconButton(
+                                color: Colors.white,
+                                icon: Icon(FFI.ffiModel.touchMode
+                                    ? Icons.touch_app
+                                    : Icons.mouse),
+                                onPressed: changeTouchMode,
+                              ),
+                            ]) +
                   (isWeb
                       ? []
                       : <Widget>[

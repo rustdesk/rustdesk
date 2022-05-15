@@ -448,7 +448,6 @@ class Client {
   bool keyboard = false;
   bool clipboard = false;
   bool audio = false;
-  late ChatUser chatUser;
 
   Client(this.authorized, this.isFileTransfer, this.name, this.peerId,
       this.keyboard, this.clipboard, this.audio);
@@ -462,10 +461,6 @@ class Client {
     keyboard = json['keyboard'];
     clipboard = json['clipboard'];
     audio = json['audio'];
-    chatUser = ChatUser(
-      uid: peerId,
-      name: name,
-    );
   }
 
   Map<String, dynamic> toJson() {
