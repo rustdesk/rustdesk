@@ -489,7 +489,10 @@ fn start_pynput_service(rx: mpsc::Receiver<(PyMsg, bool)>) {
     if !std::path::Path::new(&py).exists() {
         py = "/usr/share/rustdesk/files/pynput_service.py".to_owned();
         if !std::path::Path::new(&py).exists() {
-            log::error!("{} not exits", py);
+            py = "/usr/lib/rustdesk/pynput_service.py".to_owned();
+            if !std::path::Path::new(&py).exists() {
+                log::error!("{} not exits", py);
+            }
         }
     }
     log::info!("pynput service: {}", py);
