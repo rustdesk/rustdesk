@@ -5,6 +5,7 @@ use hbb_common::{
     compress::decompress,
     config::{Config, LocalConfig},
     fs, log,
+    fs::can_enable_overwrite_detection,
     message_proto::*,
     protobuf::Message as _,
     rendezvous_proto::ConnType,
@@ -14,6 +15,7 @@ use hbb_common::{
         time::{self, Duration, Instant, Interval},
     },
     Stream,
+    get_version_number
 };
 use std::{
     collections::{HashMap, VecDeque},
@@ -192,9 +194,9 @@ impl Session {
         Self::send_msg_static(msg_out);
     }
 
-    pub fn send_files(id: i32, path: String, to: String, include_hidden: bool, is_remote: bool) {
+    pub fn send_files(id: i32, path: String, to: String, file_num: i32, include_hidden: bool, is_remote: bool) {
         if let Some(session) = SESSION.write().unwrap().as_mut() {
-            session.send_files(id, path, to, include_hidden, is_remote);
+            session.send_files(id, path, to, file_num, include_hidden, is_remote);
         }
     }
 
@@ -732,14 +734,29 @@ impl Connection {
             Data::Message(msg) => {
                 allow_err!(peer.send(&msg).await);
             }
-            Data::SendFiles((id, path, to, include_hidden, is_remote)) => {
+            Data::SendFiles((id, path, to, file_num, include_hidden, is_remote)) => {
+                // in mobile, can_enable_override_detection is always true
+                let od = true;
                 if is_remote {
                     log::debug!("New job {}, write to {} from remote {}", id, to, path);
                     self.write_jobs
-                        .push(fs::TransferJob::new_write(id, to, Vec::new()));
-                    allow_err!(peer.send(&fs::new_send(id, path, include_hidden)).await);
+                        .push(fs::TransferJob::new_write(id,
+                            path.clone(),
+                            to,
+                            file_num,
+                            include_hidden,
+                            is_remote,
+                            Vec::new(),
+                            true));
+                    allow_err!(peer.send(&fs::new_send(id, path, file_num, include_hidden)).await);
                 } else {
-                    match fs::TransferJob::new_read(id, path.clone(), include_hidden) {
+                    match fs::TransferJob::new_read(id,
+                        to.clone(),
+                        path.clone(),
+                        file_num,
+                        include_hidden,
+                        is_remote,
+                        true) {
                         Err(err) => {
                             self.handle_job_status(id, -1, Some(err.to_string()));
                         }
@@ -754,7 +771,7 @@ impl Connection {
                             let files = job.files().clone();
                             self.read_jobs.push(job);
                             self.timer = time::interval(MILLI1);
-                            allow_err!(peer.send(&fs::new_receive(id, to, files)).await);
+                            allow_err!(peer.send(&fs::new_receive(id, to, file_num, files)).await);
                         }
                     }
                 }
@@ -1180,11 +1197,18 @@ pub mod connection_manager {
             ipc::FS::NewWrite {
                 path,
                 id,
+                file_num,
                 mut files,
             } => {
+                // in mobile, can_enable_override_detection is always true
+                let od = true;
                 WRITE_JOBS.lock().unwrap().push(fs::TransferJob::new_write(
                     id,
+                    "".to_string(),
                     path,
+                    file_num,
+                    false,
+                    false,
                     files
                         .drain(..)
                         .map(|f| FileEntry {
@@ -1193,6 +1217,7 @@ pub mod connection_manager {
                             ..Default::default()
                         })
                         .collect(),
+                    true
                 ));
             }
             ipc::FS::CancelWrite { id } => {

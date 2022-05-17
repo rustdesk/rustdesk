@@ -324,12 +324,14 @@ unsafe extern "C" fn set_by_name(name: *const c_char, value: *const c_char) {
                             Some(id),
                             Some(path),
                             Some(to),
+                            Some(file_num),
                             Some(show_hidden),
                             Some(is_remote),
                         ) = (
                             m.get("id"),
                             m.get("path"),
                             m.get("to"),
+                            m.get("file_num"),
                             m.get("show_hidden"),
                             m.get("is_remote"),
                         ) {
@@ -337,6 +339,7 @@ unsafe extern "C" fn set_by_name(name: *const c_char, value: *const c_char) {
                                 id.parse().unwrap_or(0),
                                 path.to_owned(),
                                 to.to_owned(),
+                                file_num.parse().unwrap_or(0),
                                 show_hidden.eq("true"),
                                 is_remote.eq("true"),
                             );
