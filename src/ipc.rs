@@ -44,6 +44,7 @@ pub enum FS {
     NewWrite {
         path: String,
         id: i32,
+        file_num: i32,
         files: Vec<(String, u64)>,
     },
     CancelWrite {
@@ -58,6 +59,18 @@ pub enum FS {
     WriteDone {
         id: i32,
         file_num: i32,
+    },
+    WriteOffset {
+        id: i32,
+        file_num: i32,
+        offset_blk: u32
+    },
+    CheckDigest {
+        id: i32,
+        file_num: i32,
+        file_size: u64,
+        last_modified: u64,
+        is_upload: bool,
     },
 }
 

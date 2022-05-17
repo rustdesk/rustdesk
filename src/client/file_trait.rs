@@ -80,9 +80,26 @@ pub trait FileManager: Interface {
         id: i32,
         path: String,
         to: String,
+        file_num: i32,
         include_hidden: bool,
         is_remote: bool,
     ) {
-        self.send(Data::SendFiles((id, path, to, include_hidden, is_remote)));
+        self.send(Data::SendFiles((id, path, to, file_num, include_hidden, is_remote)));
+    }
+
+    fn add_job(
+        &mut self,
+        id: i32,
+        path: String,
+        to: String,
+        file_num: i32,
+        include_hidden: bool,
+        is_remote: bool,
+    ) {
+        self.send(Data::AddJob((id, path, to, file_num, include_hidden, is_remote)));
+    }
+
+    fn resume_job(&mut self, id: i32, is_remote: bool){
+        self.send(Data::ResumeJob((id,is_remote)));
     }
 }

@@ -251,6 +251,7 @@ message FileAction {
     FileRemoveFile remove_file = 6;
     ReadAllFiles all_files = 7;
     FileTransferCancel cancel = 8;
+    FileTransferSendConfirmRequest send_confirm = 9;
   }
 }
 
@@ -262,7 +263,16 @@ message FileResponse {
     FileTransferBlock block = 2;
     FileTransferError error = 3;
     FileTransferDone done = 4;
+    FileTransferDigest digest = 5;
   }
+}
+
+message FileTransferDigest {
+  int32 id = 1;
+  sint32 file_num = 2;
+  uint64 last_modified = 3;
+  uint64 file_size = 4;
+  bool is_upload = 5;
 }
 
 message FileTransferBlock {
@@ -270,6 +280,7 @@ message FileTransferBlock {
   sint32 file_num = 2;
   bytes data = 3;
   bool compressed = 4;
+  uint32 blk_id = 5;
 }
 
 message FileTransferError {
@@ -282,6 +293,16 @@ message FileTransferSendRequest {
   int32 id = 1;
   string path = 2;
   bool include_hidden = 3;
+  int32 file_num = 4;
+}
+
+message FileTransferSendConfirmRequest {
+  int32 id = 1;
+  sint32 file_num = 2;
+  oneof union {
+    bool skip = 3;
+    uint32 offset_blk = 4;
+  }
 }
 
 message FileTransferDone {
@@ -293,6 +314,7 @@ message FileTransferReceiveRequest {
   int32 id = 1;
   string path = 2; // path written to
   repeated FileEntry files = 3;
+  int32 file_num = 4;
 }
 
 message FileRemoveDir {

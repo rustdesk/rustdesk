@@ -3,13 +3,17 @@ use super::{input_service::*, *};
 use crate::clipboard_file::*;
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use crate::common::update_clipboard;
-use crate::ipc;
 #[cfg(any(target_os = "android", target_os = "ios"))]
 use crate::{common::MOBILE_INFO2, mobile::connection_manager::start_channel};
+use crate::{ipc, VERSION};
+use hbb_common::fs::can_enable_overwrite_detection;
+use hbb_common::log::debug;
+use hbb_common::message_proto::file_transfer_send_confirm_request::Union;
 use hbb_common::{
     config::Config,
     fs,
     futures::{SinkExt, StreamExt},
+    get_version_number,
     message_proto::{option_message::BoolOption, permission_info::Permission},
     sleep, timeout,
     tokio::{
@@ -19,6 +23,7 @@ use hbb_common::{
     },
     tokio_util::codec::{BytesCodec, Framed},
 };
+use libc::{printf, send};
 #[cfg(any(target_os = "android", target_os = "ios"))]
 use scrap::android::call_input_service_mouse_input;
 use serde_json::{json, value::Value};
@@ -968,9 +973,18 @@ impl Connection {
                             }
                             Some(file_action::Union::send(s)) => {
                                 let id = s.id;
-                                let path = s.path;
-                                match fs::TransferJob::new_read(id, path.clone(), s.include_hidden)
-                                {
+                                let od =
+                                    can_enable_overwrite_detection(get_version_number(VERSION));
+                                let path = s.path.clone();
+                                match fs::TransferJob::new_read(
+                                    id,
+                                    "".to_string(),
+                                    path.clone(),
+                                    s.file_num,
+                                    s.include_hidden,
+                                    false,
+                                    od,
+                                ) {
                                     Err(err) => {
                                         self.send(fs::new_error(id, err, 0)).await;
                                     }
@@ -986,6 +1000,7 @@ impl Connection {
                                 self.send_fs(ipc::FS::NewWrite {
                                     path: r.path,
                                     id: r.id,
+                                    file_num: r.file_num,
                                     files: r
                                         .files
                                         .to_vec()
@@ -1018,6 +1033,11 @@ impl Connection {
                                 self.send_fs(ipc::FS::CancelWrite { id: c.id });
                                 fs::remove_job(c.id, &mut self.read_jobs);
                             }
+                            Some(file_action::Union::send_confirm(r)) => {
+                                if let Some(job) = fs::get_job(r.id, &mut self.read_jobs) {
+                                    job.confirm(&r);
+                                }
+                            }
                             _ => {}
                         }
                     }
@@ -1037,6 +1057,13 @@ impl Connection {
                             file_num: d.file_num,
                         });
                     }
+                    Some(file_response::Union::digest(d)) => self.send_fs(ipc::FS::CheckDigest {
+                        id: d.id,
+                        file_num: d.file_num,
+                        file_size: d.file_size,
+                        last_modified: d.last_modified,
+                        is_upload: true,
+                    }),
                     _ => {}
                 },
                 Some(message::Union::misc(misc)) => match misc.union {

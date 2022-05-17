@@ -1,19 +1,34 @@
-#[cfg(windows)]
-use crate::clipboard_file::*;
-use crate::{
-    client::*,
-    common::{self, check_clipboard, update_clipboard, ClipboardContext, CLIPBOARD_INTERVAL},
+use std::{
+    collections::HashMap,
+    ops::Deref,
+    sync::{Arc, Mutex, RwLock},
 };
+
+use sciter::{
+    dom::{
+        event::{EventReason, BEHAVIOR_EVENTS, EVENT_GROUPS, PHASE_MASK},
+        Element, HELEMENT,
+    },
+    make_args,
+    video::{video_destination, AssetPtr, COLOR_SPACE},
+    Value,
+};
+
 #[cfg(windows)]
 use clipboard::{
     cliprdr::CliprdrClientContext, create_cliprdr_context as create_clipboard_file_context,
     get_rx_clip_client, server_clip_file,
 };
 use enigo::{self, Enigo, KeyboardControllable};
+use hbb_common::fs::{
+    can_enable_overwrite_detection, get_string, is_file_exists, new_send_confirm,
+    DigestCheckResult, RemoveJobMeta, get_job,
+};
+use hbb_common::log::log;
 use hbb_common::{
     allow_err,
-    config::{Config, LocalConfig, PeerConfig},
-    fs, log,
+    config::{self, Config, LocalConfig, PeerConfig},
+    fs, get_version_number, log,
     message_proto::{permission_info::Permission, *},
     protobuf::Message as _,
     rendezvous_proto::ConnType,
@@ -25,19 +40,14 @@ use hbb_common::{
     },
     Stream,
 };
-use sciter::{
-    dom::{
-        event::{EventReason, BEHAVIOR_EVENTS, EVENT_GROUPS, PHASE_MASK},
-        Element, HELEMENT,
-    },
-    make_args,
-    video::{video_destination, AssetPtr, COLOR_SPACE},
-    Value,
-};
-use std::{
-    collections::HashMap,
-    ops::Deref,
-    sync::{Arc, Mutex, RwLock},
+use hbb_common::{config::TransferSerde, fs::TransferJobMeta};
+
+#[cfg(windows)]
+use crate::clipboard_file::*;
+use crate::{
+    client::*,
+    common::{self, check_clipboard, update_clipboard, ClipboardContext, CLIPBOARD_INTERVAL},
+    VERSION,
 };
 
 type Video = AssetPtr<video_destination>;
@@ -194,7 +204,9 @@ impl sciter::EventHandler for Handler {
         fn confirm_delete_files(i32, i32);
         fn set_no_confirm(i32);
         fn cancel_job(i32);
-        fn send_files(i32, String, String, bool, bool);
+        fn send_files(i32, String, String, i32, bool, bool);
+        fn add_job(i32, String, String, i32, bool, bool);
+        fn resume_job(i32, bool);
         fn get_platform(bool);
         fn get_path_sep(bool);
         fn get_icon_path(i32, String);
@@ -216,6 +228,7 @@ impl sciter::EventHandler for Handler {
         fn toggle_option(String);
         fn get_remember();
         fn peer_platform();
+        fn set_write_override(i32, i32, bool, bool, bool);
     }
 }
 
@@ -536,6 +549,24 @@ impl Handler {
         self.lc.read().unwrap().remember
     }
 
+    fn set_write_override(
+        &mut self,
+        job_id: i32,
+        file_num: i32,
+        is_override: bool,
+        remember: bool,
+        is_upload: bool,
+    ) -> bool {
+        self.send(Data::SetConfirmOverrideFile((
+            job_id,
+            file_num,
+            is_override,
+            remember,
+            is_upload,
+        )));
+        true
+    }
+
     fn t(&self, name: String) -> String {
         crate::client::translate(name)
     }
@@ -744,6 +775,7 @@ impl Handler {
     }
 
     fn reconnect(&mut self) {
+        println!("reconnecting");
         let cloned = self.clone();
         let mut lock = self.write().unwrap();
         lock.thread.take().map(|t| t.join());
@@ -1289,6 +1321,7 @@ async fn io_loop(handler: Handler) {
         clipboard_file_context: None,
     };
     remote.io_loop(&key, &token).await;
+    remote.sync_jobs_status_to_local().await;
 }
 
 struct RemoveJob {
@@ -1309,6 +1342,14 @@ impl RemoveJob {
             is_remote,
             no_confirm: false,
             last_update_job_status: Instant::now(),
+        }
+    }
+
+    pub fn gen_meta(&self) -> RemoveJobMeta {
+        RemoveJobMeta {
+            path: self.path.clone(),
+            is_remote: self.is_remote,
+            no_confirm: self.no_confirm,
         }
     }
 }
@@ -1497,7 +1538,57 @@ impl Remote {
         Some(tx)
     }
 
+    async fn load_last_jobs(&mut self) {
+        log::info!("start load last jobs");
+        self.handler.call("clearAllJobs", &make_args!());
+        let pc = self.handler.load_config();
+        if pc.transfer.write_jobs.is_empty() && pc.transfer.read_jobs.is_empty() {
+            // no last jobs
+            return;
+        }
+        // TODO: can add a confirm dialog
+        let mut cnt = 1;
+        for job_str in pc.transfer.read_jobs.iter() {
+            let job: Result<TransferJobMeta, serde_json::Error> = serde_json::from_str(&job_str);
+            if let Ok(job) = job {
+                self.handler.call(
+                    "addJob",
+                    &make_args!(
+                        cnt,
+                        job.to.clone(),
+                        job.remote.clone(),
+                        job.file_num,
+                        job.show_hidden,
+                        false
+                    ),
+                );
+                cnt += 1;
+                println!("restore read_job: {:?}", job);
+            }
+        }
+        for job_str in pc.transfer.write_jobs.iter() {
+            let job: Result<TransferJobMeta, serde_json::Error> = serde_json::from_str(&job_str);
+            if let Ok(job) = job {
+                self.handler.call(
+                    "addJob",
+                    &make_args!(
+                        cnt,
+                        job.remote.clone(),
+                        job.to.clone(),
+                        job.file_num,
+                        job.show_hidden,
+                        true
+                    ),
+                );
+                cnt += 1;
+                println!("restore write_job: {:?}", job);
+            }
+        }
+        self.handler.call("updateTransferList", &make_args!());
+    }
+
     async fn handle_msg_from_ui(&mut self, data: Data, peer: &mut Stream) -> bool {
+        // log::info!("new msg from ui, {}",data);
         match data {
             Data::Close => {
                 return false;
@@ -1513,14 +1604,35 @@ impl Remote {
             Data::Message(msg) => {
                 allow_err!(peer.send(&msg).await);
             }
-            Data::SendFiles((id, path, to, include_hidden, is_remote)) => {
+            Data::SendFiles((id, path, to, file_num, include_hidden, is_remote)) => {
+                log::info!("send files, is remote {}", is_remote);
+                let od = can_enable_overwrite_detection(self.handler.lc.read().unwrap().version);
                 if is_remote {
                     log::debug!("New job {}, write to {} from remote {}", id, to, path);
-                    self.write_jobs
-                        .push(fs::TransferJob::new_write(id, to, Vec::new()));
-                    allow_err!(peer.send(&fs::new_send(id, path, include_hidden)).await);
+                    self.write_jobs.push(fs::TransferJob::new_write(
+                        id,
+                        path.clone(),
+                        to,
+                        file_num,
+                        include_hidden,
+                        is_remote,
+                        Vec::new(),
+                        od,
+                    ));
+                    allow_err!(
+                        peer.send(&fs::new_send(id, path, file_num, include_hidden))
+                            .await
+                    );
                 } else {
-                    match fs::TransferJob::new_read(id, path.clone(), include_hidden) {
+                    match fs::TransferJob::new_read(
+                        id,
+                        to.clone(),
+                        path.clone(),
+                        file_num,
+                        include_hidden,
+                        is_remote,
+                        od,
+                    ) {
                         Err(err) => {
                             self.handle_job_status(id, -1, Some(err.to_string()));
                         }
@@ -1537,8 +1649,71 @@ impl Remote {
                             let files = job.files().clone();
                             self.read_jobs.push(job);
                             self.timer = time::interval(MILLI1);
-                            allow_err!(peer.send(&fs::new_receive(id, to, files)).await);
+                            allow_err!(peer.send(&fs::new_receive(id, to, file_num, files)).await);
                         }
+                    }
+                }
+            }
+            Data::AddJob((id, path, to, file_num, include_hidden, is_remote)) => {
+                let od = can_enable_overwrite_detection(self.handler.lc.read().unwrap().version);
+                if is_remote {
+                    log::debug!("new write waiting job {}, write to {} from remote {}", id, to, path);
+                    let mut job = fs::TransferJob::new_write(
+                        id,
+                        path.clone(),
+                        to,
+                        file_num,
+                        include_hidden,
+                        is_remote,
+                        Vec::new(),
+                        od,
+                    );
+                    job.is_last_job = true;
+                    self.write_jobs.push(job);
+                } else {
+                    match fs::TransferJob::new_read(
+                        id,
+                        to.clone(),
+                        path.clone(),
+                        file_num,
+                        include_hidden,
+                        is_remote,
+                        od,
+                    ) {
+                        Err(err) => {
+                            self.handle_job_status(id, -1, Some(err.to_string()));
+                        }
+                        Ok(mut job) => {
+                            log::debug!(
+                                "new read waiting job {}, read {} to remote {}, {} files",
+                                id,
+                                path,
+                                to,
+                                job.files().len()
+                            );
+                            let m = make_fd(job.id(), job.files(), true);
+                            self.handler.call("updateFolderFiles", &make_args!(m));
+                            job.is_last_job = true;
+                            self.read_jobs.push(job);
+                            self.timer = time::interval(MILLI1);
+                        }
+                    }
+                }
+            }
+            Data::ResumeJob((id, is_remote)) => {
+                if is_remote {
+                    if let Some(job) = get_job(id, &mut self.write_jobs) {
+                        job.is_last_job = false;
+                        allow_err!(
+                            peer.send(&fs::new_send(id, job.remote.clone(), job.file_num, job.show_hidden))
+                                .await
+                        );
+                    }
+                } else {
+                    if let Some(job) = get_job(id, &mut self.read_jobs) {
+                        job.is_last_job = false;
+                        allow_err!(peer.send(&fs::new_receive(id, job.path.to_string_lossy().to_string(),
+                         job.file_num, job.files.clone())).await);
                     }
                 }
             }
@@ -1555,6 +1730,45 @@ impl Remote {
                             "confirmDeleteFiles",
                             &make_args!(id, file_num, job.files[i].name.clone()),
                         );
+                    }
+                }
+            }
+            Data::SetConfirmOverrideFile((id, file_num, need_override, remember, is_upload)) => {
+                if is_upload {
+                    if let Some(job) = fs::get_job(id, &mut self.read_jobs) {
+                        if remember {
+                            job.set_overwrite_strategy(Some(need_override));
+                        }
+                        job.confirm(&FileTransferSendConfirmRequest {
+                            id,
+                            file_num,
+                            union: if need_override {
+                                Some(file_transfer_send_confirm_request::Union::offset_blk(0))
+                            } else {
+                                Some(file_transfer_send_confirm_request::Union::skip(true))
+                            },
+                            ..Default::default()
+                        });
+                    }
+                } else {
+                    if let Some(job) = fs::get_job(id, &mut self.write_jobs) {
+                        if remember {
+                            job.set_overwrite_strategy(Some(need_override));
+                        }
+                        let mut msg = Message::new();
+                        let mut file_action = FileAction::new();
+                        file_action.set_send_confirm(FileTransferSendConfirmRequest {
+                            id,
+                            file_num,
+                            union: if need_override {
+                                Some(file_transfer_send_confirm_request::Union::offset_blk(0))
+                            } else {
+                                Some(file_transfer_send_confirm_request::Union::skip(true))
+                            },
+                            ..Default::default()
+                        });
+                        msg.set_file_action(file_action);
+                        allow_err!(peer.send(&msg).await);
                     }
                 }
             }
@@ -1715,6 +1929,24 @@ impl Remote {
         }
     }
 
+    async fn sync_jobs_status_to_local(&mut self) -> bool {
+        log::info!("sync transfer job status");
+        let mut config: PeerConfig = self.handler.load_config();
+        let mut transfer_metas = TransferSerde::default();
+        for job in self.read_jobs.iter() {
+            let json_str = serde_json::to_string(&job.gen_meta()).unwrap();
+            transfer_metas.read_jobs.push(json_str);
+        }
+        for job in self.write_jobs.iter() {
+            let json_str = serde_json::to_string(&job.gen_meta()).unwrap();
+            transfer_metas.write_jobs.push(json_str);
+        }
+        log::info!("meta: {:?}",transfer_metas);
+        config.transfer = transfer_metas;
+        self.handler.save_config(config);
+        true
+    }
+
     async fn handle_msg_from_peer(&mut self, data: &[u8], peer: &mut Stream) -> bool {
         if let Ok(msg_in) = Message::parse_from_bytes(&data) {
             match msg_in.union {
@@ -1755,6 +1987,10 @@ impl Remote {
                                 });
                             }
                         }
+
+                        if self.handler.is_file_transfer() {
+                            self.load_last_jobs().await;
+                        }
                     }
                     _ => {}
                 },
@@ -1782,40 +2018,146 @@ impl Remote {
                         }
                     }
                 }
-                Some(message::Union::file_response(fr)) => match fr.union {
-                    Some(file_response::Union::dir(fd)) => {
-                        let entries = fd.entries.to_vec();
-                        let mut m = make_fd(fd.id, &entries, fd.id > 0);
-                        if fd.id <= 0 {
-                            m.set_item("path", fd.path);
-                        }
-                        self.handler.call("updateFolderFiles", &make_args!(m));
-                        if let Some(job) = fs::get_job(fd.id, &mut self.write_jobs) {
-                            job.set_files(entries);
-                        } else if let Some(job) = self.remove_jobs.get_mut(&fd.id) {
-                            job.files = entries;
-                        }
-                    }
-                    Some(file_response::Union::block(block)) => {
-                        if let Some(job) = fs::get_job(block.id, &mut self.write_jobs) {
-                            if let Err(_err) = job.write(block, None).await {
-                                // to-do: add "skip" for writing job
+                Some(message::Union::file_response(fr)) => {
+                    match fr.union {
+                        Some(file_response::Union::dir(fd)) => {
+                            let entries = fd.entries.to_vec();
+                            let mut m = make_fd(fd.id, &entries, fd.id > 0);
+                            if fd.id <= 0 {
+                                m.set_item("path", fd.path);
                             }
-                            self.update_jobs_status();
+                            self.handler.call("updateFolderFiles", &make_args!(m));
+                            if let Some(job) = fs::get_job(fd.id, &mut self.write_jobs) {
+                                log::info!("job set_files: {:?}", entries);
+                                job.set_files(entries);
+                            } else if let Some(job) = self.remove_jobs.get_mut(&fd.id) {
+                                job.files = entries;
+                            }
                         }
-                    }
-                    Some(file_response::Union::done(d)) => {
-                        if let Some(job) = fs::get_job(d.id, &mut self.write_jobs) {
-                            job.modify_time();
-                            fs::remove_job(d.id, &mut self.write_jobs);
+                        Some(file_response::Union::digest(digest)) => {
+                            if digest.is_upload {
+                                if let Some(job) = fs::get_job(digest.id, &mut self.read_jobs) {
+                                    if let Some(file) = job.files().get(digest.file_num as usize) {
+                                        let read_path = get_string(&job.join(&file.name));
+                                        let overwrite_strategy = job.default_overwrite_strategy();
+                                        if let Some(overwrite) = overwrite_strategy {
+                                            let req = FileTransferSendConfirmRequest {
+                                                id: digest.id,
+                                                file_num: digest.file_num,
+                                                union: Some(if overwrite {
+                                                    file_transfer_send_confirm_request::Union::offset_blk(0)
+                                                } else {
+                                                    file_transfer_send_confirm_request::Union::skip(
+                                                        true,
+                                                    )
+                                                }),
+                                                ..Default::default()
+                                            };
+                                            job.confirm(&req);
+                                            let msg = new_send_confirm(req);
+                                            allow_err!(peer.send(&msg).await);
+                                        } else {
+                                            self.handler.call(
+                                                "overrideFileConfirm",
+                                                &make_args!(
+                                                    digest.id,
+                                                    digest.file_num,
+                                                    read_path,
+                                                    true
+                                                ),
+                                            );
+                                        }
+                                    }
+                                }
+                            } else {
+                                if let Some(job) = fs::get_job(digest.id, &mut self.write_jobs) {
+                                    if let Some(file) = job.files().get(digest.file_num as usize) {
+                                        let write_path = get_string(&job.join(&file.name));
+                                        let overwrite_strategy = job.default_overwrite_strategy();
+                                        match fs::is_write_need_confirmation(&write_path, &digest) {
+                                            Ok(res) => match res {
+                                                DigestCheckResult::IsSame => {
+                                                    let msg= new_send_confirm(FileTransferSendConfirmRequest {
+                                                        id: digest.id,
+                                                        file_num: digest.file_num,
+                                                        union: Some(file_transfer_send_confirm_request::Union::skip(true)),
+                                                        ..Default::default()
+                                                    });
+                                                    allow_err!(peer.send(&msg).await);
+                                                }
+                                                DigestCheckResult::NeedConfirm(digest) => {
+                                                    if let Some(overwrite) = overwrite_strategy {
+                                                        let msg = new_send_confirm(
+                                                            FileTransferSendConfirmRequest {
+                                                                id: digest.id,
+                                                                file_num: digest.file_num,
+                                                                union: Some(if overwrite {
+                                                                    file_transfer_send_confirm_request::Union::offset_blk(0)
+                                                                } else {
+                                                                    file_transfer_send_confirm_request::Union::skip(true)
+                                                                }),
+                                                                ..Default::default()
+                                                            },
+                                                        );
+                                                        allow_err!(peer.send(&msg).await);
+                                                    } else {
+                                                        self.handler.call(
+                                                            "overrideFileConfirm",
+                                                            &make_args!(
+                                                                digest.id,
+                                                                digest.file_num,
+                                                                write_path,
+                                                                false
+                                                            ),
+                                                        );
+                                                    }
+                                                }
+                                                DigestCheckResult::NoSuchFile => {
+                                                    let msg = new_send_confirm(
+                                                    FileTransferSendConfirmRequest {
+                                                        id: digest.id,
+                                                        file_num: digest.file_num,
+                                                        union: Some(file_transfer_send_confirm_request::Union::offset_blk(0)),
+                                                        ..Default::default()
+                                                    },
+                                                );
+                                                    allow_err!(peer.send(&msg).await);
+                                                }
+                                            },
+                                            Err(err) => {
+                                                println!("error recving digest: {}", err);
+                                            }
+                                        }
+                                    }
+                                }
+                            }
                         }
-                        self.handle_job_status(d.id, d.file_num, None);
+                        Some(file_response::Union::block(block)) => {
+                            log::info!(
+                                "file response block, file id:{}, file num: {}",
+                                block.id,
+                                block.file_num
+                            );
+                            if let Some(job) = fs::get_job(block.id, &mut self.write_jobs) {
+                                if let Err(_err) = job.write(block, None).await {
+                                    // to-do: add "skip" for writing job
+                                }
+                                self.update_jobs_status();
+                            }
+                        }
+                        Some(file_response::Union::done(d)) => {
+                            if let Some(job) = fs::get_job(d.id, &mut self.write_jobs) {
+                                job.modify_time();
+                                fs::remove_job(d.id, &mut self.write_jobs);
+                            }
+                            self.handle_job_status(d.id, d.file_num, None);
+                        }
+                        Some(file_response::Union::error(e)) => {
+                            self.handle_job_status(e.id, e.file_num, Some(e.error));
+                        }
+                        _ => {}
                     }
-                    Some(file_response::Union::error(e)) => {
-                        self.handle_job_status(e.id, e.file_num, Some(e.error));
-                    }
-                    _ => {}
-                },
+                }
                 Some(message::Union::misc(misc)) => match misc.union {
                     Some(misc::Union::audio_format(f)) => {
                         self.audio_sender.send(MediaData::AudioFormat(f)).ok();
@@ -1891,6 +2233,14 @@ impl Remote {
                         self.audio_sender.send(MediaData::AudioFrame(frame)).ok();
                     }
                 }
+                Some(message::Union::file_action(action)) => match action.union {
+                    Some(file_action::Union::send_confirm(c)) => {
+                        if let Some(job) = fs::get_job(c.id, &mut self.read_jobs) {
+                            job.confirm(&c);
+                        }
+                    }
+                    _ => {}
+                },
                 _ => {}
             }
         }

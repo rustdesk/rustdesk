@@ -220,6 +220,10 @@ table.job-table tr.is_remote svg {
   transform: scale(-1, 1); 
 }
 
+table.job-table tr.is_remote div.svg_continue svg {
+  transform: scale(1, 1); 
+}
+
 table.job-table tr td div.text {
   width: *;
   overflow-x: hidden;

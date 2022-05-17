@@ -1,15 +1,22 @@
 use crate::ipc::{self, new_listener, Connection, Data};
+use crate::VERSION;
 #[cfg(windows)]
 use clipboard::{
     create_cliprdr_context, empty_clipboard, get_rx_clip_client, server_clip_file, set_conn_enabled,
 };
+use hbb_common::fs::{
+    can_enable_overwrite_detection, get_string, is_write_need_confirmation, new_send_confirm,
+    DigestCheckResult,
+};
+use hbb_common::log::log;
 use hbb_common::{
     allow_err,
     config::Config,
-    fs, log,
+    fs, get_version_number, log,
     message_proto::*,
     protobuf::Message as _,
     tokio::{self, sync::mpsc, task::spawn_blocking},
+    ResultType,
 };
 use sciter::{make_args, Element, Value, HELEMENT};
 use std::{
@@ -151,11 +158,19 @@ impl ConnectionManager {
                 ipc::FS::NewWrite {
                     path,
                     id,
+                    file_num,
                     mut files,
                 } => {
+                    let od = can_enable_overwrite_detection(get_version_number(VERSION));
+                    // cm has no show_hidden context
+                    // dummy remote, show_hidden, is_remote
                     write_jobs.push(fs::TransferJob::new_write(
                         id,
+                        "".to_string(),
                         path,
+                        file_num,
+                        false,
+                        false,
                         files
                             .drain(..)
                             .map(|f| FileEntry {
@@ -164,6 +179,7 @@ impl ConnectionManager {
                                 ..Default::default()
                             })
                             .collect(),
+                        od,
                     ));
                 }
                 ipc::FS::CancelWrite { id } => {
@@ -177,6 +193,59 @@ impl ConnectionManager {
                         job.modify_time();
                         Self::send(fs::new_done(id, file_num), conn).await;
                         fs::remove_job(id, write_jobs);
+                    }
+                }
+                ipc::FS::CheckDigest {
+                    id,
+                    file_num,
+                    file_size,
+                    last_modified,
+                    is_upload,
+                } => {
+                    if let Some(job) = fs::get_job(id, write_jobs) {
+                        let mut req = FileTransferSendConfirmRequest {
+                            id,
+                            file_num,
+                            union: Some(file_transfer_send_confirm_request::Union::offset_blk(0)),
+                            ..Default::default()
+                        };
+                        let digest = FileTransferDigest {
+                            id,
+                            file_num,
+                            last_modified,
+                            file_size,
+                            ..Default::default()
+                        };
+                        if let Some(file) = job.files().get(file_num as usize) {
+                            let path = get_string(&job.join(&file.name));
+                            match is_write_need_confirmation(&path, &digest) {
+                                Ok(digest_result) => {
+                                    match digest_result {
+                                        DigestCheckResult::IsSame => {
+                                            req.set_skip(true);
+                                            let msg_out = new_send_confirm(req);
+                                            Self::send(msg_out, conn).await;
+                                        }
+                                        DigestCheckResult::NeedConfirm(mut digest) => {
+                                            // upload to server, but server has the same file, request
+                                            digest.is_upload = is_upload;
+                                            let mut msg_out = Message::new();
+                                            let mut fr = FileResponse::new();
+                                            fr.set_digest(digest);
+                                            msg_out.set_file_response(fr);
+                                            Self::send(msg_out, conn).await;
+                                        }
+                                        DigestCheckResult::NoSuchFile => {
+                                            let msg_out = new_send_confirm(req);
+                                            Self::send(msg_out, conn).await;
+                                        }
+                                    }
+                                }
+                                Err(err) => {
+                                    Self::send(fs::new_error(id, err, file_num), conn).await;
+                                }
+                            }
+                        }
                     }
                 }
                 ipc::FS::WriteBlock {
@@ -208,6 +277,11 @@ impl ConnectionManager {
                         }
                     }
                 }
+                ipc::FS::WriteOffset {
+                    id,
+                    file_num,
+                    offset_blk,
+                } => {}
             },
             #[cfg(windows)]
             Data::ClipbaordFile(_clip) => {

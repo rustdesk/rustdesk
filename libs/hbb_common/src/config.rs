@@ -145,6 +145,8 @@ pub struct PeerConfig {
     pub options: HashMap<String, String>,
     #[serde(default)]
     pub info: PeerInfoSerde,
+    #[serde(default)]
+    pub transfer: TransferSerde,
 }
 
 #[derive(Debug, PartialEq, Default, Serialize, Deserialize, Clone)]
@@ -155,6 +157,14 @@ pub struct PeerInfoSerde {
     pub hostname: String,
     #[serde(default)]
     pub platform: String,
+}
+
+#[derive(Debug, Default, Serialize, Deserialize, Clone)]
+pub struct TransferSerde {
+    #[serde(default)]
+    pub write_jobs: Vec<String>,
+    #[serde(default)]
+    pub read_jobs: Vec<String>,
 }
 
 fn patch(path: PathBuf) -> PathBuf {
@@ -864,6 +874,7 @@ impl LanPeers {
 #[cfg(test)]
 mod tests {
     use super::*;
+
     #[test]
     fn test_serialize() {
         let cfg: Config = Default::default();
