@@ -1132,7 +1132,7 @@ pub mod connection_manager {
     use hbb_common::{
         allow_err,
         config::Config,
-        fs, log,
+        fs::{self, new_send_confirm, DigestCheckResult, get_string}, log,
         message_proto::*,
         protobuf::Message as _,
         tokio::{
