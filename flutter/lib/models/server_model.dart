@@ -198,7 +198,6 @@ class ServerModel with ChangeNotifier {
   Future<Null> startService() async {
     _isStart = true;
     notifyListeners();
-    FFI.setByName("ensure_init_event_queue");
     FFI.ffiModel.updateEventListener("");
     await FFI.invokeMethod("init_service");
     FFI.setByName("start_service");

@@ -51,13 +51,6 @@ impl Session {
         });
     }
 
-    pub fn ensure_init_event_queue() {
-        let mut s = SESSION.write().unwrap();
-        if s.is_none() {
-            s.replace(Session::default());
-        }
-    }
-
     pub fn get() -> Arc<RwLock<Option<Session>>> {
         SESSION.clone()
     }

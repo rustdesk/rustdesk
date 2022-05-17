@@ -423,9 +423,6 @@ unsafe extern "C" fn set_by_name(name: *const c_char, value: *const c_char) {
                     }
                 }
                 // Server Side
-                "ensure_init_event_queue" => {
-                    Session::ensure_init_event_queue();
-                }
                 "update_password" => {
                     if value.is_empty() {
                         Config::set_password(&Config::get_auto_password());
