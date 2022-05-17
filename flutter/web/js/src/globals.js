@@ -7,7 +7,6 @@ import { initZstd, translate } from "./common";
 import PCMPlayer from "pcm-player";
 
 var currentFrame = undefined;
-var events = [];
 
 window.curConn = undefined;
 window.getRgba = () => {
@@ -25,11 +24,10 @@ export function isDesktop() {
 }
 
 export function msgbox(type, title, text) {
-  if (!events) return;
   if (!type || (type == 'error' && !text)) return;
   const text2 = text.toLowerCase();
   var hasRetry = checkIfRetry(type, title, text) ? 'true' : '';
-  events.push({ name: 'msgbox', type, title, text, hasRetry });
+  onGlobalEvent(JSON.stringify({ name: 'msgbox', type, title, text, hasRetry }));
 }
 
 function jsonfyForDart(payload) {
@@ -42,10 +40,9 @@ function jsonfyForDart(payload) {
 }
 
 export function pushEvent(name, payload) {
-  if (!events) return;
   payload = jsonfyForDart(payload);
   payload.name = name;
-  events.push(payload);
+  onGlobalEvent(JSON.stringify(payload));
 }
 
 let yuvWorker;
@@ -120,7 +117,6 @@ export function getConn() {
 
 export async function startConn(id) {
   currentFrame = undefined;
-  events = [];
   setByName('remote_id', id);
   await curConn.start(id);
 }
@@ -129,7 +125,6 @@ export function close() {
   getConn()?.close();
   setConn(undefined);
   currentFrame = undefined;
-  events = undefined;
 }
 
 export function newConn() {
@@ -310,13 +305,6 @@ function _getByName(name, arg) {
       return localStorage.getItem('remote-id');
     case 'remember':
       return curConn.getRemember();
-    case 'event':
-      if (events && events.length) {
-        const e = events[0];
-        events.splice(0, 1);
-        return JSON.stringify(e);
-      }
-      break;
     case 'toggle_option':
       return curConn.getOption(arg) || false;
     case 'option':

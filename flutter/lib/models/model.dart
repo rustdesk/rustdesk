@@ -120,11 +120,9 @@ class FfiModel with ChangeNotifier {
     _permissions.clear();
   }
 
-  void update(String peerId) {
-    var pos;
-    for (;;) {
-      var evt = FFI.popEvent();
-      if (evt == null) break;
+  void updateEventListener(String peerId) {
+    final void Function(Map<String, dynamic>) cb = (evt) {
+      var pos;
       var name = evt['name'];
       if (name == 'msgbox') {
         handleMsgBox(evt, peerId);
@@ -165,31 +163,33 @@ class FfiModel with ChangeNotifier {
       } else if (name == 'on_client_remove') {
         FFI.serverModel.onClientRemove(evt);
       }
-    }
-    if (pos != null) FFI.cursorModel.updateCursorPosition(pos);
-    if (!_decoding) {
-      var rgba = PlatformFFI.getRgba();
-      if (rgba != null) {
-        if (_waitForImage) {
-          _waitForImage = false;
-          SmartDialog.dismiss();
-        }
-        _decoding = true;
-        final pid = FFI.id;
-        ui.decodeImageFromPixels(rgba, _display.width, _display.height,
-            isWeb ? ui.PixelFormat.rgba8888 : ui.PixelFormat.bgra8888, (image) {
-          PlatformFFI.clearRgbaFrame();
-          _decoding = false;
-          if (FFI.id != pid) return;
-          try {
-            // my throw exception, because the listener maybe already dispose
-            FFI.imageModel.update(image);
-          } catch (e) {
-            print('update image: $e');
+      if (pos != null) FFI.cursorModel.updateCursorPosition(pos);
+      if (!_decoding) {
+        var rgba = PlatformFFI.getRgba();
+        if (rgba != null) {
+          if (_waitForImage) {
+            _waitForImage = false;
+            SmartDialog.dismiss();
           }
-        });
+          _decoding = true;
+          final pid = FFI.id;
+          ui.decodeImageFromPixels(rgba, _display.width, _display.height,
+              isWeb ? ui.PixelFormat.rgba8888 : ui.PixelFormat.bgra8888,
+              (image) {
+            PlatformFFI.clearRgbaFrame();
+            _decoding = false;
+            if (FFI.id != pid) return;
+            try {
+              // my throw exception, because the listener maybe already dispose
+              FFI.imageModel.update(image);
+            } catch (e) {
+              print('update image: $e');
+            }
+          });
+        }
       }
-    }
+    };
+    PlatformFFI.setEventCallback(cb);
   }
 
   void handleSwitchDisplay(Map<String, dynamic> evt) {
@@ -214,7 +214,6 @@ class FfiModel with ChangeNotifier {
       enterPasswordDialog(id);
     } else {
       var hasRetry = evt['hasRetry'] == 'true';
-      print(evt);
       showMsgBox(type, title, text, hasRetry);
     }
   }

@@ -1,4 +1,5 @@
 use crate::client::*;
+use flutter_rust_bridge::StreamSink;
 use hbb_common::{
     allow_err,
     compress::decompress,
@@ -21,6 +22,7 @@ use std::{
 
 lazy_static::lazy_static! {
     static ref SESSION: Arc<RwLock<Option<Session>>> = Default::default();
+    pub static ref EVENT_STREAM: RwLock<Option<StreamSink<String>>> = Default::default(); // rust to dart channel
 }
 
 #[derive(Clone, Default)]
@@ -214,10 +216,10 @@ impl Session {
         let mut h: HashMap<&str, &str> = event.iter().cloned().collect();
         assert!(h.get("name").is_none());
         h.insert("name", name);
-        self.events2ui
-            .write()
-            .unwrap()
-            .push_back(serde_json::ser::to_string(&h).unwrap_or("".to_owned()));
+
+        if let Some(s) = EVENT_STREAM.read().unwrap().as_ref() {
+            s.add(serde_json::ser::to_string(&h).unwrap_or("".to_owned()));
+        };
     }
 
     #[inline]
@@ -255,7 +257,15 @@ impl Session {
         }
     }
 
-    pub fn input_key(name: &str, down: bool, press: bool, alt: bool, ctrl: bool, shift: bool, command: bool) {
+    pub fn input_key(
+        name: &str,
+        down: bool,
+        press: bool,
+        alt: bool,
+        ctrl: bool,
+        shift: bool,
+        command: bool,
+    ) {
         if let Some(session) = SESSION.read().unwrap().as_ref() {
             let chars: Vec<char> = name.chars().collect();
             if chars.len() == 1 {
@@ -277,7 +287,16 @@ impl Session {
         Self::send_msg_static(msg_out);
     }
 
-    fn _input_key(&self, key: Key, down: bool, press: bool, alt: bool, ctrl: bool, shift: bool, command: bool) {
+    fn _input_key(
+        &self,
+        key: Key,
+        down: bool,
+        press: bool,
+        alt: bool,
+        ctrl: bool,
+        shift: bool,
+        command: bool,
+    ) {
         let v = if press {
             3
         } else if down {
@@ -946,16 +965,21 @@ pub fn make_fd_to_json(fd: FileDirectory) -> String {
 #[cfg(target_os = "android")]
 pub mod connection_manager {
     use std::{
+        collections::HashMap,
         iter::FromIterator,
         rc::{Rc, Weak},
+        sync::{Mutex, RwLock},
     };
 
-    use super::*;
     use crate::ipc;
     use crate::ipc::Data;
     use crate::server::Connection as Conn;
     use hbb_common::{
-        allow_err, log,
+        allow_err,
+        config::Config,
+        fs, log,
+        message_proto::*,
+        protobuf::Message as _,
         tokio::{
             self,
             sync::mpsc::{UnboundedReceiver, UnboundedSender},
@@ -964,6 +988,8 @@ pub mod connection_manager {
     };
     use scrap::android::call_main_service_set_by_name;
     use serde_derive::Serialize;
+
+    use super::EVENT_STREAM;
 
     #[derive(Debug, Serialize, Clone)]
     struct Client {
@@ -1030,10 +1056,7 @@ pub mod connection_manager {
                             log::debug!("call_service_set_by_name fail,{}", e);
                         }
                         // send to UI,refresh widget
-                        if let Some(session) = Session::get().read().unwrap().as_ref() {
-                            session
-                                .push_event("on_client_authorized", vec![("client", &client_json)]);
-                        };
+                        push_event("on_client_authorized", vec![("client", &client_json)]);
                     } else {
                         let client_json = serde_json::to_string(&client).unwrap_or("".into());
                         // send to Android service,active notification no matter UI is shown or not.
@@ -1045,12 +1068,7 @@ pub mod connection_manager {
                             log::debug!("call_service_set_by_name fail,{}", e);
                         }
                         // send to UI,refresh widget
-                        if let Some(session) = Session::get().read().unwrap().as_ref() {
-                            session.push_event(
-                                "try_start_without_auth",
-                                vec![("client", &client_json)],
-                            );
-                        };
+                        push_event("try_start_without_auth", vec![("client", &client_json)]);
                     }
                     CLIENTS.write().unwrap().insert(id, client);
                 }
@@ -1070,6 +1088,16 @@ pub mod connection_manager {
             }
         }
         remove_connection(current_id);
+    }
+
+    fn push_event(name: &str, event: Vec<(&str, &str)>) {
+        let mut h: HashMap<&str, &str> = event.iter().cloned().collect();
+        assert!(h.get("name").is_none());
+        h.insert("name", name);
+
+        if let Some(s) = EVENT_STREAM.read().unwrap().as_ref() {
+            s.add(serde_json::ser::to_string(&h).unwrap_or("".to_owned()));
+        };
     }
 
     pub fn get_clients_state() -> String {
@@ -1115,19 +1143,15 @@ pub mod connection_manager {
             }
         }
 
-        if let Some(session) = Session::get().read().unwrap().as_ref() {
-            session.push_event("on_client_remove", vec![("id", &id.to_string())]);
-        };
+        push_event("on_client_remove", vec![("id", &id.to_string())]);
     }
 
     // server mode handle chat from other peers
     fn handle_chat(id: i32, text: String) {
-        if let Some(session) = Session::get().read().unwrap().as_ref() {
-            session.push_event(
-                "chat_server_mode",
-                vec![("id", &id.to_string()), ("text", &text)],
-            );
-        };
+        push_event(
+            "chat_server_mode",
+            vec![("id", &id.to_string()), ("text", &text)],
+        );
     }
 
     // server mode send chat to peer

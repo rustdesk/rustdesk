@@ -22,25 +22,19 @@ class FileManagerPage extends StatefulWidget {
 class _FileManagerPageState extends State<FileManagerPage> {
   final model = FFI.fileModel;
   final _selectedItems = SelectedItems();
-  Timer? _interval;
   final _breadCrumbScroller = ScrollController();
 
   @override
   void initState() {
     super.initState();
     FFI.connect(widget.id, isFileTransfer: true);
-    WidgetsBinding.instance!.addPostFrameCallback((_) {
-      showLoading(translate('Connecting...'));
-      _interval = Timer.periodic(Duration(milliseconds: 30),
-          (timer) => FFI.ffiModel.update(widget.id));
-    });
+    FFI.ffiModel.updateEventListener(widget.id);
     Wakelock.enable();
   }
 
   @override
   void dispose() {
     model.onClose();
-    _interval?.cancel();
     FFI.close();
     SmartDialog.dismiss();
     Wakelock.disable();

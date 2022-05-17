@@ -62,12 +62,29 @@ fn install_oboe() {
     //cc::Build::new().file("oboe.cc").include(include).compile("oboe_wrapper");
 }
 
+fn gen_flutter_rust_bridge() {
+    // Tell Cargo that if the given file changes, to rerun this build script.
+    println!("cargo:rerun-if-changed=src/mobile_ffi.rs");
+    // settings for fbr_codegen
+    let opts = lib_flutter_rust_bridge_codegen::Opts {
+        // Path of input Rust code
+        rust_input: "src/mobile_ffi.rs".to_string(),
+        // Path of output generated Dart code
+        dart_output: "flutter/lib/generated_bridge.dart".to_string(),
+        // for other options lets use default
+        ..Default::default()
+    };
+    // run fbr_codegen
+    lib_flutter_rust_bridge_codegen::frb_codegen(opts).unwrap();
+}
+
 fn main() {
     hbb_common::gen_version();
     install_oboe();
     // there is problem with cfg(target_os) in build.rs, so use our workaround
     let target_os = std::env::var("CARGO_CFG_TARGET_OS").unwrap();
     if target_os == "android" || target_os == "ios" {
+        gen_flutter_rust_bridge();
         return;
     }
     #[cfg(all(windows, feature = "inline"))]

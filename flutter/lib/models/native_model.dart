@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 import 'dart:ffi';
@@ -7,6 +8,7 @@ import 'package:device_info/device_info.dart';
 import 'package:package_info/package_info.dart';
 import 'package:external_path/external_path.dart';
 import 'package:flutter/services.dart';
+import '../generated_bridge.dart';
 import '../common.dart';
 
 class RgbaFrame extends Struct {
@@ -28,6 +30,7 @@ class PlatformFFI {
   static F3? _setByName;
   static F4? _freeRgba;
   static F5? _getRgba;
+  static void Function(Map<String, dynamic>)? _eventCallback;
 
   static void clearRgbaFrame() {
     if (_lastRgbaFrame != null &&
@@ -86,6 +89,7 @@ class PlatformFFI {
           .lookupFunction<Void Function(Pointer<RgbaFrame>), F4>('free_rgba');
       _getRgba = dylib.lookupFunction<F5, F5>('get_rgba');
       _dir = (await getApplicationDocumentsDirectory()).path;
+      _startListenEvent(RustdeskImpl(dylib));
       try {
         _homeDir = (await ExternalPath.getExternalStorageDirectories())[0];
       } catch (e) {
@@ -113,6 +117,23 @@ class PlatformFFI {
       print(e);
     }
     version = await getVersion();
+  }
+
+  static void _startListenEvent(RustdeskImpl rustdeskImpl) async {
+    await for (final message in rustdeskImpl.startEventStream()) {
+      if (_eventCallback != null) {
+        try {
+          Map<String, dynamic> event = json.decode(message);
+          _eventCallback!(event);
+        } catch (e) {
+          print('json.decode fail(): $e');
+        }
+      }
+    }
+  }
+
+  static void setEventCallback(void Function(Map<String, dynamic>) fun) async {
+    _eventCallback = fun;
   }
 
   static void startDesktopWebListener() {}
