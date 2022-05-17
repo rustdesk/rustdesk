@@ -2,8 +2,7 @@ assets
 js/src/gen_js_from_hbb.ts
 js/src/message.ts
 js/src/rendezvous.ts
-ogvjs-1.8.6
+ogvjs*
 libopus.js
 libopus.wasm
-yuv-canvas-1.2.6.js
-.yarn
+yuv-canvas*

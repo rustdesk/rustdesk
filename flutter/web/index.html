@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html>
+
 <head>
   <!--
     If you are serving your web app in a path other than the root, change the
@@ -31,12 +32,12 @@
 
   <title>RustDesk</title>
   <link rel="manifest" href="manifest.json">
-  <script src="ogvjs-1.8.6/ogv.js"></script>
-  <script src="yuv.js"></script>
+  <script src="libs/ogvjs-1.8.6/ogv.js"></script>
+  <script src="libs/yuv.js"></script>
   <script type="module" crossorigin src="js/dist/index.js"></script>
   <link rel="modulepreload" href="js/dist/vendor.js">
-  <script src="yuv-canvas-1.2.6.js"></script>
-	<style>
+  <script src="libs/yuv-canvas-1.2.6.js"></script>
+  <style>
     .loading {
       display: flex;
       justify-content: center;
@@ -48,11 +49,11 @@
       -ms-transform: translate(-50%, -50%);
       transform: translate(-50%, -50%);
     }
-    
+
     .loader {
       border: 16px solid #f3f3f3;
       border-radius: 50%;
-      border: 15px solid ;
+      border: 15px solid;
       border-top: 16px solid #024eff;
       border-right: 16px solid white;
       border-bottom: 16px solid #024eff;
@@ -62,20 +63,22 @@
       -webkit-animation: spin 2s linear infinite;
       animation: spin 2s linear infinite;
     }
-    
+
     @-webkit-keyframes spin {
       0% {
         -webkit-transform: rotate(0deg);
       }
+
       100% {
         -webkit-transform: rotate(360deg);
       }
     }
-    
+
     @keyframes spin {
       0% {
         transform: rotate(0deg);
       }
+
       100% {
         transform: rotate(360deg);
       }
@@ -83,10 +86,11 @@
   </style>
 
 </head>
+
 <body>
-<div class="loading">
-  <div class="loader"></div>
-</div>
+  <div class="loading">
+    <div class="loader"></div>
+  </div>
   <!-- This script installs service_worker.js to provide PWA functionality to
        application. For more information, see:
        https://developers.google.com/web/fundamentals/primers/service-workers -->
@@ -154,26 +158,27 @@
       loadMainDartJs();
     }
   </script>
-  <script src="assets/firebase-app.js?8.10.1"></script>
-  <script src="assets/firebase-analytics.js?8.10.1"></script>
+  <script src="libs/firebase-app.js?8.10.1"></script>
+  <script src="libs/firebase-analytics.js?8.10.1"></script>
 
-<script>
-  // Your web app's Firebase configuration
-  // For Firebase JS SDK v7.20.0 and later, measurementId is optional
-  const firebaseConfig = {
-    apiKey: "AIzaSyCgehIZk1aFP0E7wZtYRRqrfvNiNAF39-A",
-    authDomain: "rustdesk.firebaseapp.com",
-    databaseURL: "https://rustdesk.firebaseio.com",
-    projectId: "rustdesk",
-    storageBucket: "rustdesk.appspot.com",
-    messagingSenderId: "768133699366",
-    appId: "1:768133699366:web:d50faf0792cb208d7993e7",
-    measurementId: "G-9PEH85N6ZQ"
-  };
+  <script>
+    // Your web app's Firebase configuration
+    // For Firebase JS SDK v7.20.0 and later, measurementId is optional
+    const firebaseConfig = {
+      apiKey: "AIzaSyCgehIZk1aFP0E7wZtYRRqrfvNiNAF39-A",
+      authDomain: "rustdesk.firebaseapp.com",
+      databaseURL: "https://rustdesk.firebaseio.com",
+      projectId: "rustdesk",
+      storageBucket: "rustdesk.appspot.com",
+      messagingSenderId: "768133699366",
+      appId: "1:768133699366:web:d50faf0792cb208d7993e7",
+      measurementId: "G-9PEH85N6ZQ"
+    };
 
-  // Initialize Firebase
-  firebase.initializeApp(firebaseConfig);
-  firebase.analytics();
-</script>
+    // Initialize Firebase
+    firebase.initializeApp(firebaseConfig);
+    firebase.analytics();
+  </script>
 </body>
+
 </html>
