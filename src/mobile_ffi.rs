@@ -1,9 +1,10 @@
 use crate::client::file_trait::FileManager;
-#[cfg(target_os = "android")]
 use crate::mobile::connection_manager::{self, get_clients_length, get_clients_state};
-use crate::mobile::{make_fd_to_json, Session};
+use crate::mobile::{self, make_fd_to_json, Session};
+use flutter_rust_bridge::StreamSink;
+use hbb_common::ResultType;
 use hbb_common::{
-    config::{self, Config, PeerConfig, ONLINE, LocalConfig},
+    config::{self, Config, LocalConfig, PeerConfig, ONLINE},
     fs, log,
 };
 use serde_json::{Number, Value};
@@ -32,6 +33,11 @@ fn initialize(app_dir: &str) {
     crate::common::test_nat_type();
     #[cfg(target_os = "android")]
     crate::common::check_software_update();
+}
+
+pub fn start_event_stream(s: StreamSink<String>) -> ResultType<()> {
+    let _ = mobile::EVENT_STREAM.write().unwrap().insert(s);
+    Ok(())
 }
 
 #[no_mangle]
@@ -417,9 +423,6 @@ unsafe extern "C" fn set_by_name(name: *const c_char, value: *const c_char) {
                     }
                 }
                 // Server Side
-                "ensure_init_event_queue" => {
-                    Session::ensure_init_event_queue();
-                }
                 "update_password" => {
                     if value.is_empty() {
                         Config::set_password(&Config::get_auto_password());

@@ -53,6 +53,7 @@ class _RemotePageState extends State<RemotePage> {
     });
     Wakelock.enable();
     _physicalFocusNode.requestFocus();
+    FFI.ffiModel.updateEventListener(widget.id);
     FFI.listenToMouse(true);
   }
 
@@ -99,7 +100,6 @@ class _RemotePageState extends State<RemotePage> {
         }
       });
     }
-    FFI.ffiModel.update(widget.id);
   }
 
   void interval() {

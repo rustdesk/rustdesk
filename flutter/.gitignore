@@ -42,3 +42,6 @@ app.*.map.json
 jniLibs
 
 .vscode
+
+# flutter rust bridge
+lib/generated_bridge.dart

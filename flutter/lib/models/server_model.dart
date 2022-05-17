@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:convert';
-import 'package:dash_chat/dash_chat.dart';
 import 'package:flutter/material.dart';
 import 'package:wakelock/wakelock.dart';
 import '../common.dart';
@@ -11,7 +10,6 @@ const loginDialogTag = "LOGIN";
 final _emptyIdShow = translate("Generating ...");
 
 class ServerModel with ChangeNotifier {
-  Timer? _interval;
   bool _isStart = false; // Android MainService status
   bool _mediaOk = false;
   bool _inputOk = false;
@@ -200,11 +198,7 @@ class ServerModel with ChangeNotifier {
   Future<Null> startService() async {
     _isStart = true;
     notifyListeners();
-    FFI.setByName("ensure_init_event_queue");
-    _interval?.cancel();
-    _interval = Timer.periodic(Duration(milliseconds: 30), (timer) {
-      FFI.ffiModel.update("");
-    });
+    FFI.ffiModel.updateEventListener("");
     await FFI.invokeMethod("init_service");
     FFI.setByName("start_service");
     getIDPasswd();
@@ -214,8 +208,6 @@ class ServerModel with ChangeNotifier {
 
   Future<Null> stopService() async {
     _isStart = false;
-    _interval?.cancel();
-    _interval = null;
     FFI.serverModel.closeAll();
     await FFI.invokeMethod("stop_service");
     FFI.setByName("stop_service");

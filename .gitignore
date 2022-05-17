@@ -19,3 +19,4 @@ flutter_hbb
 web_hbb
 sciter.dll
 **pdb
+src/bridge_generated.rs
