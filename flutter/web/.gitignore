@@ -6,3 +6,4 @@ ogvjs*
 libopus.js
 libopus.wasm
 yuv-canvas*
+node_modules
