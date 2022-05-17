@@ -253,6 +253,7 @@ class FileModel extends ChangeNotifier {
         "id": _jobId.toString(),
         "path": from.path,
         "to": PathUtil.join(toPath, from.name, isWindows),
+        "file_num": "0",
         "show_hidden": showHidden.toString(),
         "is_remote": (!(items.isLocal!)).toString()
       };
