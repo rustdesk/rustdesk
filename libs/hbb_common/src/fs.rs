@@ -544,6 +544,7 @@ impl TransferJob {
     }
 
     pub fn set_file_confirmed(&mut self, file_confirmed: bool) {
+        log::info!("id: {}, file_confirmed: {}", self.id, file_confirmed);
         self.file_confirmed = file_confirmed;
     }
 
@@ -581,7 +582,6 @@ impl TransferJob {
                     }
                 }
                 Some(file_transfer_send_confirm_request::Union::offset_blk(offset)) => {
-                    log::debug!("file confirmed");
                     self.set_file_confirmed(true);
                 }
                 _ => {}

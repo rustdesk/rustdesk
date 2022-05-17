@@ -156,6 +156,8 @@ class FfiModel with ChangeNotifier {
         FFI.fileModel.jobDone(evt);
       } else if (name == 'job_error') {
         FFI.fileModel.jobError(evt);
+      } else if (name == 'override_file_confirm') {
+        FFI.fileModel.overrideFileConfirm(evt);
       } else if (name == 'try_start_without_auth') {
         FFI.serverModel.loginRequest(evt);
       } else if (name == 'on_client_authorized') {

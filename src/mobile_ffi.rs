@@ -346,6 +346,31 @@ unsafe extern "C" fn set_by_name(name: *const c_char, value: *const c_char) {
                         }
                     }
                 }
+                "set_confirm_override_file" => {
+                    if let Ok(m) = serde_json::from_str::<HashMap<String, String>>(value) {
+                        if let (
+                            Some(id),
+                            Some(file_num),
+                            Some(need_override),
+                            Some(remember),
+                            Some(is_upload),
+                        ) = (
+                            m.get("id"),
+                            m.get("file_num"),
+                            m.get("need_override"),
+                            m.get("remember"),
+                            m.get("is_upload")
+                        ) {
+                            Session::set_confirm_override_file(
+                                id.parse().unwrap_or(0),
+                                file_num.parse().unwrap_or(0),
+                                need_override.eq("true"),
+                                remember.eq("true"),
+                                is_upload.eq("true"),
+                            );
+                        }
+                    }
+                }
                 "remove_file" => {
                     if let Ok(m) = serde_json::from_str::<HashMap<String, String>>(value) {
                         if let (
