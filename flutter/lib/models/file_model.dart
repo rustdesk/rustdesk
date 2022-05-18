@@ -144,7 +144,7 @@ class FileModel extends ChangeNotifier {
     notifyListeners();
   }
 
-  overrideFileConfirm(Map<String,dynamic> evt) async {
+  overrideFileConfirm(Map<String, dynamic> evt) async {
     final resp = await showFileConfirmDialog(
         translate("Overwrite"), "${evt['read_path']}", true);
     if (false == resp) {
@@ -418,53 +418,56 @@ class FileModel extends ChangeNotifier {
 
   Future<bool?> showFileConfirmDialog(
       String title, String content, bool showCheckbox) async {
+    fileConfirmCheckboxRemember = false;
     return await DialogManager.show<bool?>(
-            (setState, Function(bool? v) close) => CustomAlertDialog(
-            title: Row(
-              children: [
-                Icon(Icons.warning, color: Colors.red),
-                SizedBox(width: 20),
-                Text(title)
-              ],
-            ),
-            content: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(translate("This file exists, skip or overwrite this file?"),
-                      style: TextStyle(fontWeight: FontWeight.bold)),
-                  SizedBox(height: 5),
-                  Text(content),
-                  showCheckbox
-                      ? CheckboxListTile(
-                    contentPadding: const EdgeInsets.all(0),
-                    dense: true,
-                    controlAffinity: ListTileControlAffinity.leading,
-                    title: Text(
-                      translate("Do this for all conflicts"),
-                    ),
-                    value: fileConfirmCheckboxRemember,
-                    onChanged: (v) {
-                      if (v == null) return;
-                      setState(() => fileConfirmCheckboxRemember = v);
-                    },
-                  )
-                      : SizedBox.shrink()
+        (setState, Function(bool? v) close) => CustomAlertDialog(
+                title: Row(
+                  children: [
+                    Icon(Icons.warning, color: Colors.red),
+                    SizedBox(width: 20),
+                    Text(title)
+                  ],
+                ),
+                content: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                          translate(
+                              "This file exists, skip or overwrite this file?"),
+                          style: TextStyle(fontWeight: FontWeight.bold)),
+                      SizedBox(height: 5),
+                      Text(content),
+                      showCheckbox
+                          ? CheckboxListTile(
+                              contentPadding: const EdgeInsets.all(0),
+                              dense: true,
+                              controlAffinity: ListTileControlAffinity.leading,
+                              title: Text(
+                                translate("Do this for all conflicts"),
+                              ),
+                              value: fileConfirmCheckboxRemember,
+                              onChanged: (v) {
+                                if (v == null) return;
+                                setState(() => fileConfirmCheckboxRemember = v);
+                              },
+                            )
+                          : SizedBox.shrink()
+                    ]),
+                actions: [
+                  TextButton(
+                      style: flatButtonStyle,
+                      onPressed: () => close(false),
+                      child: Text(translate("Cancel"))),
+                  TextButton(
+                      style: flatButtonStyle,
+                      onPressed: () => close(null),
+                      child: Text(translate("Skip"))),
+                  TextButton(
+                      style: flatButtonStyle,
+                      onPressed: () => close(true),
+                      child: Text(translate("OK"))),
                 ]),
-            actions: [
-              TextButton(
-                  style: flatButtonStyle,
-                  onPressed: () => close(false),
-                  child: Text(translate("Cancel"))),
-              TextButton(
-                  style: flatButtonStyle,
-                  onPressed: () => close(null),
-                  child: Text(translate("Skip"))),
-              TextButton(
-                  style: flatButtonStyle,
-                  onPressed: () => close(true),
-                  child: Text(translate("OK"))),
-            ]),
         useAnimation: false);
   }
 
