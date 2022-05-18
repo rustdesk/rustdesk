@@ -8,15 +8,13 @@ use hbb_common::fs::{
     can_enable_overwrite_detection, get_string, is_write_need_confirmation, new_send_confirm,
     DigestCheckResult,
 };
-use hbb_common::log::log;
 use hbb_common::{
     allow_err,
     config::Config,
     fs, get_version_number, log,
     message_proto::*,
     protobuf::Message as _,
-    tokio::{self, sync::mpsc, task::spawn_blocking},
-    ResultType,
+    tokio::{self, sync::mpsc, task::spawn_blocking}
 };
 use sciter::{make_args, Element, Value, HELEMENT};
 use std::{
@@ -278,9 +276,9 @@ impl ConnectionManager {
                     }
                 }
                 ipc::FS::WriteOffset {
-                    id,
-                    file_num,
-                    offset_blk,
+                    id: _,
+                    file_num: _,
+                    offset_blk: _,
                 } => {}
             },
             #[cfg(windows)]

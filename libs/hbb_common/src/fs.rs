@@ -581,7 +581,7 @@ impl TransferJob {
                         self.set_file_confirmed(true);
                     }
                 }
-                Some(file_transfer_send_confirm_request::Union::offset_blk(offset)) => {
+                Some(file_transfer_send_confirm_request::Union::offset_blk(_offset)) => {
                     self.set_file_confirmed(true);
                 }
                 _ => {}

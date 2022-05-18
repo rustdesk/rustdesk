@@ -7,8 +7,6 @@ use crate::common::update_clipboard;
 use crate::{common::MOBILE_INFO2, mobile::connection_manager::start_channel};
 use crate::{ipc, VERSION};
 use hbb_common::fs::can_enable_overwrite_detection;
-use hbb_common::log::debug;
-use hbb_common::message_proto::file_transfer_send_confirm_request::Union;
 use hbb_common::{
     config::Config,
     fs,
@@ -23,7 +21,6 @@ use hbb_common::{
     },
     tokio_util::codec::{BytesCodec, Framed},
 };
-use libc::{printf, send};
 #[cfg(any(target_os = "android", target_os = "ios"))]
 use scrap::android::call_input_service_mouse_input;
 use serde_json::{json, value::Value};
