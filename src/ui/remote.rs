@@ -21,14 +21,13 @@ use clipboard::{
 };
 use enigo::{self, Enigo, KeyboardControllable};
 use hbb_common::fs::{
-    can_enable_overwrite_detection, get_string, is_file_exists, new_send_confirm,
+    can_enable_overwrite_detection, get_string, new_send_confirm,
     DigestCheckResult, RemoveJobMeta, get_job,
 };
-use hbb_common::log::log;
 use hbb_common::{
     allow_err,
-    config::{self, Config, LocalConfig, PeerConfig},
-    fs, get_version_number, log,
+    config::{Config, LocalConfig, PeerConfig},
+    fs, log,
     message_proto::{permission_info::Permission, *},
     protobuf::Message as _,
     rendezvous_proto::ConnType,
@@ -46,8 +45,7 @@ use hbb_common::{config::TransferSerde, fs::TransferJobMeta};
 use crate::clipboard_file::*;
 use crate::{
     client::*,
-    common::{self, check_clipboard, update_clipboard, ClipboardContext, CLIPBOARD_INTERVAL},
-    VERSION,
+    common::{self, check_clipboard, update_clipboard, ClipboardContext, CLIPBOARD_INTERVAL}
 };
 
 type Video = AssetPtr<video_destination>;
@@ -1345,7 +1343,7 @@ impl RemoveJob {
         }
     }
 
-    pub fn gen_meta(&self) -> RemoveJobMeta {
+    pub fn _gen_meta(&self) -> RemoveJobMeta {
         RemoveJobMeta {
             path: self.path.clone(),
             is_remote: self.is_remote,

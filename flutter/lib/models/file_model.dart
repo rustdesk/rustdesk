@@ -144,6 +144,28 @@ class FileModel extends ChangeNotifier {
     notifyListeners();
   }
 
+  overrideFileConfirm(Map<String, dynamic> evt) async {
+    final resp = await showFileConfirmDialog(
+        translate("Overwrite"), "${evt['read_path']}", true);
+    if (false == resp) {
+      cancelJob(int.tryParse(evt['id']) ?? 0);
+    } else {
+      var msg = Map()
+        ..['id'] = evt['id']
+        ..['file_num'] = evt['file_num']
+        ..['is_upload'] = evt['is_upload']
+        ..['remember'] = fileConfirmCheckboxRemember.toString();
+      if (resp == null) {
+        // skip
+        msg['need_override'] = 'false';
+      } else {
+        // overwrite
+        msg['need_override'] = 'true';
+      }
+      FFI.setByName("set_confirm_override_file", jsonEncode(msg));
+    }
+  }
+
   jobReset() {
     _jobProgress.clear();
     notifyListeners();
@@ -253,6 +275,7 @@ class FileModel extends ChangeNotifier {
         "id": _jobId.toString(),
         "path": from.path,
         "to": PathUtil.join(toPath, from.name, isWindows),
+        "file_num": "0",
         "show_hidden": showHidden.toString(),
         "is_remote": (!(items.isLocal!)).toString()
       };
@@ -383,6 +406,63 @@ class FileModel extends ChangeNotifier {
                       style: flatButtonStyle,
                       onPressed: () => close(false),
                       child: Text(translate("Cancel"))),
+                  TextButton(
+                      style: flatButtonStyle,
+                      onPressed: () => close(true),
+                      child: Text(translate("OK"))),
+                ]),
+        useAnimation: false);
+  }
+
+  bool fileConfirmCheckboxRemember = false;
+
+  Future<bool?> showFileConfirmDialog(
+      String title, String content, bool showCheckbox) async {
+    fileConfirmCheckboxRemember = false;
+    return await DialogManager.show<bool?>(
+        (setState, Function(bool? v) close) => CustomAlertDialog(
+                title: Row(
+                  children: [
+                    Icon(Icons.warning, color: Colors.red),
+                    SizedBox(width: 20),
+                    Text(title)
+                  ],
+                ),
+                content: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                          translate(
+                              "This file exists, skip or overwrite this file?"),
+                          style: TextStyle(fontWeight: FontWeight.bold)),
+                      SizedBox(height: 5),
+                      Text(content),
+                      showCheckbox
+                          ? CheckboxListTile(
+                              contentPadding: const EdgeInsets.all(0),
+                              dense: true,
+                              controlAffinity: ListTileControlAffinity.leading,
+                              title: Text(
+                                translate("Do this for all conflicts"),
+                              ),
+                              value: fileConfirmCheckboxRemember,
+                              onChanged: (v) {
+                                if (v == null) return;
+                                setState(() => fileConfirmCheckboxRemember = v);
+                              },
+                            )
+                          : SizedBox.shrink()
+                    ]),
+                actions: [
+                  TextButton(
+                      style: flatButtonStyle,
+                      onPressed: () => close(false),
+                      child: Text(translate("Cancel"))),
+                  TextButton(
+                      style: flatButtonStyle,
+                      onPressed: () => close(null),
+                      child: Text(translate("Skip"))),
                   TextButton(
                       style: flatButtonStyle,
                       onPressed: () => close(true),
