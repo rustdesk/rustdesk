@@ -1322,5 +1322,6 @@ pub fn get_win_key_state() -> bool {
 }
 
 pub fn quit_gui() {
-    unsafe { PostQuitMessage(0) };
+    std::process::exit(0);
+    // unsafe { PostQuitMessage(0) }; // some how not work
 }
