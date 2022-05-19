@@ -2,7 +2,7 @@ use std::{
     collections::HashMap,
     net::SocketAddr,
     ops::Deref,
-    sync::{mpsc, Arc, RwLock},
+    sync::{mpsc, Arc, Mutex, RwLock},
 };
 
 pub use async_trait::async_trait;
@@ -32,6 +32,8 @@ use hbb_common::{
 };
 use scrap::{Decoder, Image, VideoCodecId};
 
+use crate::common::get_time;
+
 pub use super::lang::*;
 pub mod file_trait;
 pub use file_trait::FileManager;
@@ -44,6 +46,44 @@ lazy_static::lazy_static! {
 static ref AUDIO_HOST: Host = cpal::default_host();
 }
 
+const MAX_LATENCY: i64 = 800;
+const MIN_LATENCY: i64 = 100;
+
+#[derive(Debug, Default)]
+struct LatencyController {
+    last_video_remote_ts: i64,
+    update_local_ts: i64,
+    allow_audio: bool,
+}
+
+impl LatencyController {
+    fn update_video(&mut self, timestamp: i64) {
+        self.last_video_remote_ts = timestamp;
+        self.update_local_ts = get_time();
+    }
+
+    fn check_audio(&mut self, timestamp: i64) -> bool {
+        let expected = get_time() - self.update_local_ts + self.last_video_remote_ts;
+        let latency = expected - timestamp;
+
+        if self.allow_audio {
+            if latency > MAX_LATENCY {
+                log::debug!("LATENCY > {}ms cut off,latency:{}", MAX_LATENCY, latency);
+                self.allow_audio = false;
+            }
+        } else {
+            if latency < MIN_LATENCY {
+                log::debug!("LATENCY < {}ms resume,latency:{}", MIN_LATENCY, latency);
+                self.allow_audio = true;
+            }
+        }
+        self.allow_audio
+    }
+}
+
+lazy_static::lazy_static! {
+    static ref LATENCY_CONTROLLER : Mutex<LatencyController> = Default::default();
+}
 cfg_if::cfg_if! {
     if #[cfg(target_os = "android")] {
 
@@ -1127,6 +1167,10 @@ where
             if let Ok(data) = video_receiver.recv() {
                 match data {
                     MediaData::VideoFrame(vf) => {
+                        LATENCY_CONTROLLER
+                            .lock()
+                            .unwrap()
+                            .update_video(vf.timestamp);
                         if let Some(video_frame::Union::vp9s(vp9s)) = &vf.union {
                             if let Ok(true) = video_handler.handle_vp9s(vp9s) {
                                 video_callback(&video_handler.rgb);
@@ -1150,7 +1194,9 @@ where
             if let Ok(data) = audio_receiver.recv() {
                 match data {
                     MediaData::AudioFrame(af) => {
-                        audio_handler.handle_frame(af);
+                        if LATENCY_CONTROLLER.lock().unwrap().check_audio(af.timestamp) {
+                            audio_handler.handle_frame(af);
+                        }
                     }
                     MediaData::AudioFormat(f) => {
                         audio_handler.handle_format(f);

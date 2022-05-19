@@ -23,6 +23,7 @@ message VideoFrame {
     RGB rgb = 7;
     YUV yuv = 8;
   }
+  int64 timestamp = 9;
 }
 
 message IdPk {
@@ -463,7 +464,10 @@ message AudioFormat {
   uint32 channels = 2;
 }
 
-message AudioFrame { bytes data = 1; }
+message AudioFrame { 
+  bytes data = 1; 
+  int64 timestamp = 2;
+}
 
 message Misc {
   oneof union {

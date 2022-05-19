@@ -307,7 +307,7 @@ fn run(sp: GenericService) -> ResultType<()> {
                     *SWITCH.lock().unwrap() = true;
                     bail!("SWITCH");
                 }
-                
+
                 #[cfg(windows)]
                 if !c.is_gdi() {
                     c.set_gdi();
@@ -341,6 +341,7 @@ fn create_msg(vp9s: Vec<VP9>) -> Message {
         frames: vp9s.into(),
         ..Default::default()
     });
+    vf.timestamp = crate::common::get_time();
     msg_out.set_video_frame(vf);
     msg_out
 }
