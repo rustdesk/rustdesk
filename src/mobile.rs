@@ -1,5 +1,5 @@
 use crate::client::*;
-use flutter_rust_bridge::StreamSink;
+use flutter_rust_bridge::{StreamSink, ZeroCopyBuffer};
 use hbb_common::{
     allow_err,
     compress::decompress,
@@ -24,7 +24,8 @@ use std::{
 
 lazy_static::lazy_static! {
     static ref SESSION: Arc<RwLock<Option<Session>>> = Default::default();
-    pub static ref EVENT_STREAM: RwLock<Option<StreamSink<String>>> = Default::default(); // rust to dart channel
+    pub static ref EVENT_STREAM: RwLock<Option<StreamSink<String>>> = Default::default(); // rust to dart event channel
+    pub static ref RGBA_STREAM: RwLock<Option<StreamSink<ZeroCopyBuffer<Vec<u8>>>>> = Default::default(); // rust to dart rgba (big u8 list) channel
 }
 
 #[derive(Clone, Default)]
@@ -33,7 +34,6 @@ pub struct Session {
     sender: Arc<RwLock<Option<mpsc::UnboundedSender<Data>>>>,
     lc: Arc<RwLock<LoginConfigHandler>>,
     events2ui: Arc<RwLock<VecDeque<String>>>,
-    rgba: Arc<RwLock<Option<Vec<u8>>>>,
 }
 
 impl Session {
@@ -86,14 +86,6 @@ impl Session {
     fn send(data: Data) {
         if let Some(session) = SESSION.read().unwrap().as_ref() {
             session.send(data);
-        }
-    }
-
-    pub fn rgba() -> Option<Vec<u8>> {
-        if let Some(session) = SESSION.read().unwrap().as_ref() {
-            session.rgba.write().unwrap().take()
-        } else {
-            None
         }
     }
 
@@ -607,8 +599,11 @@ impl Connection {
                     if !self.first_frame {
                         self.first_frame = true;
                     }
-                    if let Ok(true) = self.video_handler.handle_frame(vf) {
-                        *self.session.rgba.write().unwrap() = Some(self.video_handler.rgb.clone());
+                    if let (Ok(true), Some(s)) = (
+                        self.video_handler.handle_frame(vf),
+                        RGBA_STREAM.read().unwrap().as_ref(),
+                    ) {
+                        s.add(ZeroCopyBuffer(self.video_handler.rgb.clone()));
                     }
                 }
                 Some(message::Union::hash(hash)) => {

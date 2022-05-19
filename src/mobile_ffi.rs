@@ -1,7 +1,7 @@
 use crate::client::file_trait::FileManager;
 use crate::mobile::connection_manager::{self, get_clients_length, get_clients_state};
 use crate::mobile::{self, make_fd_to_json, Session};
-use flutter_rust_bridge::StreamSink;
+use flutter_rust_bridge::{StreamSink, ZeroCopyBuffer};
 use hbb_common::ResultType;
 use hbb_common::{
     config::{self, Config, LocalConfig, PeerConfig, ONLINE},
@@ -37,6 +37,11 @@ fn initialize(app_dir: &str) {
 
 pub fn start_event_stream(s: StreamSink<String>) -> ResultType<()> {
     let _ = mobile::EVENT_STREAM.write().unwrap().insert(s);
+    Ok(())
+}
+
+pub fn start_rgba_stream(s: StreamSink<ZeroCopyBuffer<Vec<u8>>>) -> ResultType<()> {
+    let _ = mobile::RGBA_STREAM.write().unwrap().insert(s);
     Ok(())
 }
 
@@ -359,7 +364,7 @@ unsafe extern "C" fn set_by_name(name: *const c_char, value: *const c_char) {
                             m.get("file_num"),
                             m.get("need_override"),
                             m.get("remember"),
-                            m.get("is_upload")
+                            m.get("is_upload"),
                         ) {
                             Session::set_confirm_override_file(
                                 id.parse().unwrap_or(0),
@@ -504,44 +509,6 @@ unsafe extern "C" fn set_by_name(name: *const c_char, value: *const c_char) {
                 }
             }
         }
-    }
-}
-
-#[repr(C)]
-struct RgbaFrame {
-    len: u32,
-    data: *mut u8,
-}
-
-#[no_mangle]
-unsafe extern "C" fn get_rgba() -> *mut RgbaFrame {
-    if let Some(mut vec) = Session::rgba() {
-        if vec.is_empty() {
-            return std::ptr::null_mut();
-        }
-        assert!(vec.len() == vec.capacity());
-        vec.shrink_to_fit();
-        let data = vec.as_mut_ptr();
-        let len = vec.len();
-        std::mem::forget(vec);
-        Box::into_raw(Box::new(RgbaFrame {
-            len: len as _,
-            data,
-        }))
-    } else {
-        std::ptr::null_mut()
-    }
-}
-
-#[no_mangle]
-extern "C" fn free_rgba(f: *mut RgbaFrame) {
-    if f.is_null() {
-        return;
-    }
-    unsafe {
-        let len = (*f).len as usize;
-        drop(Vec::from_raw_parts((*f).data, len, len));
-        Box::from_raw(f);
     }
 }
 

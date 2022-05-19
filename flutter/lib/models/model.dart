@@ -17,12 +17,11 @@ import '../widgets/overlay.dart';
 import 'native_model.dart' if (dart.library.html) 'web_model.dart';
 
 typedef HandleMsgBox = void Function(Map<String, dynamic> evt, String id);
+bool _waitForImage = false;
 
 class FfiModel with ChangeNotifier {
   PeerInfo _pi = PeerInfo();
   Display _display = Display();
-  var _decoding = false;
-  bool _waitForImage = false;
   var _inputBlocked = false;
   final _permissions = Map<String, bool>();
   bool? _secure;
@@ -122,7 +121,6 @@ class FfiModel with ChangeNotifier {
 
   void updateEventListener(String peerId) {
     final void Function(Map<String, dynamic>) cb = (evt) {
-      var pos;
       var name = evt['name'];
       if (name == 'msgbox') {
         handleMsgBox(evt, peerId);
@@ -138,7 +136,7 @@ class FfiModel with ChangeNotifier {
       } else if (name == 'cursor_id') {
         FFI.cursorModel.updateCursorId(evt);
       } else if (name == 'cursor_position') {
-        pos = evt;
+        FFI.cursorModel.updateCursorPosition(evt);
       } else if (name == 'clipboard') {
         Clipboard.setData(ClipboardData(text: evt['content']));
       } else if (name == 'permission') {
@@ -164,31 +162,6 @@ class FfiModel with ChangeNotifier {
         FFI.serverModel.onClientAuthorized(evt);
       } else if (name == 'on_client_remove') {
         FFI.serverModel.onClientRemove(evt);
-      }
-      if (pos != null) FFI.cursorModel.updateCursorPosition(pos);
-      if (!_decoding) {
-        var rgba = PlatformFFI.getRgba();
-        if (rgba != null) {
-          if (_waitForImage) {
-            _waitForImage = false;
-            SmartDialog.dismiss();
-          }
-          _decoding = true;
-          final pid = FFI.id;
-          ui.decodeImageFromPixels(rgba, _display.width, _display.height,
-              isWeb ? ui.PixelFormat.rgba8888 : ui.PixelFormat.bgra8888,
-              (image) {
-            PlatformFFI.clearRgbaFrame();
-            _decoding = false;
-            if (FFI.id != pid) return;
-            try {
-              // my throw exception, because the listener maybe already dispose
-              FFI.imageModel.update(image);
-            } catch (e) {
-              print('update image: $e');
-            }
-          });
-        }
       }
     };
     PlatformFFI.setEventCallback(cb);
@@ -283,6 +256,29 @@ class ImageModel with ChangeNotifier {
   ui.Image? _image;
 
   ui.Image? get image => _image;
+
+  ImageModel() {
+    PlatformFFI.setRgbaCallback((rgba) {
+      if (_waitForImage) {
+        _waitForImage = false;
+        SmartDialog.dismiss();
+      }
+      final pid = FFI.id;
+      ui.decodeImageFromPixels(
+          rgba,
+          FFI.ffiModel.display.width,
+          FFI.ffiModel.display.height,
+          isWeb ? ui.PixelFormat.rgba8888 : ui.PixelFormat.bgra8888, (image) {
+        if (FFI.id != pid) return;
+        try {
+          // my throw exception, because the listener maybe already dispose
+          FFI.imageModel.update(image);
+        } catch (e) {
+          print('update image: $e');
+        }
+      });
+    });
+  }
 
   void update(ui.Image? image) {
     if (_image == null && image != null) {
