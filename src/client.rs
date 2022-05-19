@@ -35,8 +35,8 @@ use scrap::{Decoder, Image, VideoCodecId};
 pub use super::lang::*;
 pub mod file_trait;
 pub use file_trait::FileManager;
-pub mod controller;
-pub use controller::LatencyController;
+pub mod helper;
+pub use helper::LatencyController;
 pub const SEC30: Duration = Duration::from_secs(30);
 
 pub struct Client;
