@@ -4,8 +4,9 @@ use hbb_common::{
     allow_err,
     compress::decompress,
     config::{Config, LocalConfig},
-    fs, log,
-    fs::{can_enable_overwrite_detection, new_send_confirm, DigestCheckResult, get_string},
+    fs,
+    fs::{can_enable_overwrite_detection, get_string, new_send_confirm, DigestCheckResult},
+    get_version_number, log,
     message_proto::*,
     protobuf::Message as _,
     rendezvous_proto::ConnType,
@@ -15,7 +16,6 @@ use hbb_common::{
         time::{self, Duration, Instant, Interval},
     },
     Stream,
-    get_version_number
 };
 use std::{
     collections::{HashMap, VecDeque},
@@ -194,17 +194,42 @@ impl Session {
         Self::send_msg_static(msg_out);
     }
 
-    pub fn send_files(id: i32, path: String, to: String, file_num: i32, include_hidden: bool, is_remote: bool) {
+    pub fn send_files(
+        id: i32,
+        path: String,
+        to: String,
+        file_num: i32,
+        include_hidden: bool,
+        is_remote: bool,
+    ) {
         if let Some(session) = SESSION.write().unwrap().as_mut() {
             session.send_files(id, path, to, file_num, include_hidden, is_remote);
         }
     }
 
-    pub fn set_confirm_override_file(id: i32, file_num: i32, need_override: bool, remember: bool, is_upload: bool) {
+    pub fn set_confirm_override_file(
+        id: i32,
+        file_num: i32,
+        need_override: bool,
+        remember: bool,
+        is_upload: bool,
+    ) {
         if let Some(session) = SESSION.read().unwrap().as_ref() {
             if let Some(sender) = session.sender.read().unwrap().as_ref() {
-                log::info!("confirm file transfer, job: {}, need_override: {}", id, need_override);
-                sender.send(Data::SetConfirmOverrideFile((id, file_num, need_override, remember, is_upload))).ok();
+                log::info!(
+                    "confirm file transfer, job: {}, need_override: {}",
+                    id,
+                    need_override
+                );
+                sender
+                    .send(Data::SetConfirmOverrideFile((
+                        id,
+                        file_num,
+                        need_override,
+                        remember,
+                        is_upload,
+                    )))
+                    .ok();
             }
         }
     }
@@ -494,10 +519,12 @@ impl Connection {
         } else {
             ConnType::DEFAULT_CONN
         };
+        let latency_controller = LatencyController::new();
+        let latency_controller_cl = latency_controller.clone();
 
         let mut conn = Connection {
-            video_handler: VideoHandler::new(),
-            audio_handler: Default::default(),
+            video_handler: VideoHandler::new(latency_controller),
+            audio_handler: AudioHandler::new(latency_controller_cl),
             session: session.clone(),
             first_frame: false,
             read_jobs: Vec::new(),
@@ -580,11 +607,8 @@ impl Connection {
                     if !self.first_frame {
                         self.first_frame = true;
                     }
-                    if let Some(video_frame::Union::vp9s(vp9s)) = &vf.union {
-                        if let Ok(true) = self.video_handler.handle_vp9s(vp9s) {
-                            *self.session.rgba.write().unwrap() =
-                                Some(self.video_handler.rgb.clone());
-                        }
+                    if let Ok(true) = self.video_handler.handle_frame(vf) {
+                        *self.session.rgba.write().unwrap() = Some(self.video_handler.rgb.clone());
                     }
                 }
                 Some(message::Union::hash(hash)) => {
@@ -694,7 +718,12 @@ impl Connection {
                                         let msg = new_send_confirm(req);
                                         allow_err!(peer.send(&msg).await);
                                     } else {
-                                        self.handle_override_file_confirm(digest.id, digest.file_num, read_path, true);
+                                        self.handle_override_file_confirm(
+                                            digest.id,
+                                            digest.file_num,
+                                            read_path,
+                                            true,
+                                        );
                                     }
                                 }
                             }
@@ -730,7 +759,12 @@ impl Connection {
                                                     );
                                                     self.session.send_msg(msg);
                                                 } else {
-                                                    self.handle_override_file_confirm(digest.id, digest.file_num, write_path.to_string(), false);
+                                                    self.handle_override_file_confirm(
+                                                        digest.id,
+                                                        digest.file_num,
+                                                        write_path.to_string(),
+                                                        false,
+                                                    );
                                                 }
                                             }
                                             DigestCheckResult::NoSuchFile => {
@@ -757,7 +791,7 @@ impl Connection {
                 },
                 Some(message::Union::misc(misc)) => match misc.union {
                     Some(misc::Union::audio_format(f)) => {
-                        self.audio_handler.handle_format(f);
+                        self.audio_handler.handle_format(f); //
                     }
                     Some(misc::Union::chat_message(c)) => {
                         self.session
@@ -838,24 +872,30 @@ impl Connection {
                 let od = true;
                 if is_remote {
                     log::debug!("New job {}, write to {} from remote {}", id, to, path);
-                    self.write_jobs
-                        .push(fs::TransferJob::new_write(id,
-                            path.clone(),
-                            to,
-                            file_num,
-                            include_hidden,
-                            is_remote,
-                            Vec::new(),
-                            true));
-                    allow_err!(peer.send(&fs::new_send(id, path, file_num, include_hidden)).await);
+                    self.write_jobs.push(fs::TransferJob::new_write(
+                        id,
+                        path.clone(),
+                        to,
+                        file_num,
+                        include_hidden,
+                        is_remote,
+                        Vec::new(),
+                        true,
+                    ));
+                    allow_err!(
+                        peer.send(&fs::new_send(id, path, file_num, include_hidden))
+                            .await
+                    );
                 } else {
-                    match fs::TransferJob::new_read(id,
+                    match fs::TransferJob::new_read(
+                        id,
                         to.clone(),
                         path.clone(),
                         file_num,
                         include_hidden,
                         is_remote,
-                        true) {
+                        true,
+                    ) {
                         Err(err) => {
                             self.handle_job_status(id, -1, Some(err.to_string()));
                         }
@@ -1088,10 +1128,21 @@ impl Connection {
         }
     }
 
-    fn handle_override_file_confirm(&mut self, id: i32, file_num: i32, read_path: String, is_upload: bool) {
+    fn handle_override_file_confirm(
+        &mut self,
+        id: i32,
+        file_num: i32,
+        read_path: String,
+        is_upload: bool,
+    ) {
         self.session.push_event(
             "override_file_confirm",
-            vec![("id", &id.to_string()), ("file_num", &file_num.to_string()), ("read_path", &read_path), ("is_upload", &is_upload.to_string())]
+            vec![
+                ("id", &id.to_string()),
+                ("file_num", &file_num.to_string()),
+                ("read_path", &read_path),
+                ("is_upload", &is_upload.to_string()),
+            ],
         );
     }
 }
@@ -1132,14 +1183,16 @@ pub mod connection_manager {
     use hbb_common::{
         allow_err,
         config::Config,
-        fs::{self, new_send_confirm, DigestCheckResult, get_string}, log,
+        fs::is_write_need_confirmation,
+        fs::{self, get_string, new_send_confirm, DigestCheckResult},
+        log,
         message_proto::*,
         protobuf::Message as _,
         tokio::{
             self,
             sync::mpsc::{UnboundedReceiver, UnboundedSender},
             task::spawn_blocking,
-        }, fs::is_write_need_confirmation,
+        },
     };
     use scrap::android::call_main_service_set_by_name;
     use serde_derive::Serialize;
@@ -1362,7 +1415,7 @@ pub mod connection_manager {
                             ..Default::default()
                         })
                         .collect(),
-                    true
+                    true,
                 ));
             }
             ipc::FS::CancelWrite { id } => {

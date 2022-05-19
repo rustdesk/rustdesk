@@ -1,8 +1,8 @@
 use std::{
     collections::HashMap,
     net::SocketAddr,
-    ops::Deref,
-    sync::{mpsc, Arc, RwLock},
+    ops::{Deref, Not},
+    sync::{mpsc, Arc, Mutex, RwLock},
 };
 
 pub use async_trait::async_trait;
@@ -35,6 +35,8 @@ use scrap::{Decoder, Image, VideoCodecId};
 pub use super::lang::*;
 pub mod file_trait;
 pub use file_trait::FileManager;
+pub mod controller;
+pub use controller::LatencyController;
 pub const SEC30: Duration = Duration::from_secs(30);
 
 pub struct Client;
@@ -516,9 +518,17 @@ pub struct AudioHandler {
     #[cfg(not(any(target_os = "android", target_os = "linux")))]
     audio_stream: Option<Box<dyn StreamTrait>>,
     channels: u16,
+    latency_controller: Arc<Mutex<LatencyController>>,
 }
 
 impl AudioHandler {
+    pub fn new(latency_controller: Arc<Mutex<LatencyController>>) -> Self {
+        AudioHandler {
+            latency_controller,
+            ..Default::default()
+        }
+    }
+
     #[cfg(target_os = "linux")]
     fn start_audio(&mut self, format0: AudioFormat) -> ResultType<()> {
         use psimple::Simple;
@@ -597,6 +607,18 @@ impl AudioHandler {
     }
 
     pub fn handle_frame(&mut self, frame: AudioFrame) {
+        if frame.timestamp != 0 {
+            if self
+                .latency_controller
+                .lock()
+                .unwrap()
+                .check_audio(frame.timestamp)
+                .not()
+            {
+                return;
+            }
+        }
+
         #[cfg(not(any(target_os = "android", target_os = "linux")))]
         if self.audio_stream.is_none() {
             return;
@@ -688,14 +710,29 @@ impl AudioHandler {
 
 pub struct VideoHandler {
     decoder: Decoder,
+    latency_controller: Arc<Mutex<LatencyController>>,
     pub rgb: Vec<u8>,
 }
 
 impl VideoHandler {
-    pub fn new() -> Self {
+    pub fn new(latency_controller: Arc<Mutex<LatencyController>>) -> Self {
         VideoHandler {
             decoder: Decoder::new(VideoCodecId::VP9, (num_cpus::get() / 2) as _).unwrap(),
+            latency_controller,
             rgb: Default::default(),
+        }
+    }
+
+    pub fn handle_frame(&mut self, vf: VideoFrame) -> ResultType<bool> {
+        if vf.timestamp != 0 {
+            self.latency_controller
+                .lock()
+                .unwrap()
+                .update_video(vf.timestamp);
+        }
+        match &vf.union {
+            Some(video_frame::Union::vp9s(vp9s)) => self.handle_vp9s(vp9s),
+            _ => Ok(false),
         }
     }
 
@@ -1121,16 +1158,17 @@ where
     let (audio_sender, audio_receiver) = mpsc::channel::<MediaData>();
     let mut video_callback = video_callback;
 
+    let latency_controller = LatencyController::new();
+    let latency_controller_cl = latency_controller.clone();
+
     std::thread::spawn(move || {
-        let mut video_handler = VideoHandler::new();
+        let mut video_handler = VideoHandler::new(latency_controller);
         loop {
             if let Ok(data) = video_receiver.recv() {
                 match data {
                     MediaData::VideoFrame(vf) => {
-                        if let Some(video_frame::Union::vp9s(vp9s)) = &vf.union {
-                            if let Ok(true) = video_handler.handle_vp9s(vp9s) {
-                                video_callback(&video_handler.rgb);
-                            }
+                        if let Ok(true) = video_handler.handle_frame(vf) {
+                            video_callback(&video_handler.rgb);
                         }
                     }
                     MediaData::Reset => {
@@ -1145,7 +1183,7 @@ where
         log::info!("Video decoder loop exits");
     });
     std::thread::spawn(move || {
-        let mut audio_handler = AudioHandler::default();
+        let mut audio_handler = AudioHandler::new(latency_controller_cl);
         loop {
             if let Ok(data) = audio_receiver.recv() {
                 match data {
