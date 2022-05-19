@@ -41,8 +41,7 @@ impl LatencyController {
     // second, compute audio latency
     // set MAX and MIN, avoid fixing too frequently.
     pub fn check_audio(&mut self, timestamp: i64) -> bool {
-        let expected =
-            (Instant::now() - self.update_time).as_millis() as i64 + self.last_video_remote_ts;
+        let expected = self.update_time.elapsed().as_millis() as i64 + self.last_video_remote_ts;
         let latency = expected - timestamp;
         if self.allow_audio {
             if latency.abs() > MAX_LATENCY {
