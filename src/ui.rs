@@ -61,10 +61,7 @@ pub fn start(args: &mut [String]) {
     allow_err!(sciter::set_options(sciter::RuntimeOptions::GfxLayer(
         sciter::GFX_LAYER::WARP
     )));
-    #[cfg(all(windows, not(feature = "inline")))]
-    unsafe {
-        winapi::um::shellscalingapi::SetProcessDpiAwareness(2);
-    }
+
     #[cfg(windows)]
     if args.len() > 0 && args[0] == "--tray" {
         let options = check_connect_status(false).1;
