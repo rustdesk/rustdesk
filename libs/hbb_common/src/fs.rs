@@ -767,6 +767,13 @@ pub fn create_dir(dir: &str) -> ResultType<()> {
     Ok(())
 }
 
+#[inline]
+pub fn transform_windows_path(entries: &mut Vec<FileEntry>) {
+    for entry in entries {
+        entry.name = entry.name.replace("\\", "/");
+    }
+}
+
 pub enum DigestCheckResult {
     IsSame,
     NeedConfirm(FileTransferDigest),

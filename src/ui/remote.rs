@@ -2019,7 +2019,13 @@ impl Remote {
                 Some(message::Union::file_response(fr)) => {
                     match fr.union {
                         Some(file_response::Union::dir(fd)) => {
-                            let entries = fd.entries.to_vec();
+                            let mut entries = fd.entries.to_vec();
+                            #[cfg(not(windows))]
+                            {
+                                if self.handler.peer_platform() == "Windows" {
+                                    fs::transform_windows_path(&mut entries);
+                                }
+                            }  
                             let mut m = make_fd(fd.id, &entries, fd.id > 0);
                             if fd.id <= 0 {
                                 m.set_item("path", fd.path);

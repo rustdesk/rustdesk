@@ -4,9 +4,8 @@ use hbb_common::{
     allow_err,
     compress::decompress,
     config::{Config, LocalConfig},
-    fs,
-    fs::{can_enable_overwrite_detection, get_string, new_send_confirm, DigestCheckResult},
-    get_version_number, log,
+    fs, log,
+    fs::{can_enable_overwrite_detection, new_send_confirm, DigestCheckResult, get_string, transform_windows_path},
     message_proto::*,
     protobuf::Message as _,
     rendezvous_proto::ConnType,
@@ -662,7 +661,10 @@ impl Connection {
                 }
                 Some(message::Union::file_response(fr)) => match fr.union {
                     Some(file_response::Union::dir(fd)) => {
-                        let entries = fd.entries.to_vec();
+                        let mut entries = fd.entries.to_vec();
+                        if self.session.peer_platform() == "Windows" {
+                            fs::transform_windows_path(&mut entries);
+                        }
                         let id = fd.id;
                         self.session.push_event(
                             "file_dir",
