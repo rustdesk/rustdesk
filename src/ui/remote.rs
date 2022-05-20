@@ -1644,7 +1644,15 @@ impl Remote {
                             );
                             let m = make_fd(job.id(), job.files(), true);
                             self.handler.call("updateFolderFiles", &make_args!(m));
+                            #[cfg(not(windows))]
                             let files = job.files().clone();
+                            #[cfg(windows)]
+                            let mut files = job.files().clone();
+                            #[cfg(windows)]
+                            if self.handler.peer_platform() != "Windows" {
+                                // peer is not windows, need transform \ to /
+                                fs::transform_windows_path(&mut files);
+                            }
                             self.read_jobs.push(job);
                             self.timer = time::interval(MILLI1);
                             allow_err!(peer.send(&fs::new_receive(id, to, file_num, files)).await);
