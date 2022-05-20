@@ -10,12 +10,6 @@ final List<StreamSubscription<MouseEvent>> mouseListeners = [];
 final List<StreamSubscription<KeyboardEvent>> keyListeners = [];
 
 class PlatformFFI {
-  static void clearRgbaFrame() {}
-
-  static Uint8List? getRgba() {
-    return context.callMethod('getRgba');
-  }
-
   static String getByName(String name, [String arg = '']) {
     return context.callMethod('getByName', [name, arg]);
   }
@@ -31,13 +25,21 @@ class PlatformFFI {
     version = getByName('version');
   }
 
-  static void setEventCallback(void Function(Map<String, dynamic>) fun) async {
+  static void setEventCallback(void Function(Map<String, dynamic>) fun) {
     context["onGlobalEvent"] = (String message) {
       try {
         Map<String, dynamic> event = json.decode(message);
         fun(event);
       } catch (e) {
         print('json.decode fail(): $e');
+      }
+    };
+  }
+
+  static void setRgbaCallback(void Function(Uint8List) fun) {
+    context["onRgba"] = (Uint8List? rgba) {
+      if (rgba != null) {
+        fun(rgba);
       }
     };
   }

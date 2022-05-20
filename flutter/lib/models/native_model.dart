@@ -19,8 +19,6 @@ class RgbaFrame extends Struct {
 
 typedef F2 = Pointer<Utf8> Function(Pointer<Utf8>, Pointer<Utf8>);
 typedef F3 = void Function(Pointer<Utf8>, Pointer<Utf8>);
-typedef F4 = void Function(Pointer<RgbaFrame>);
-typedef F5 = Pointer<RgbaFrame> Function();
 
 class PlatformFFI {
   static Pointer<RgbaFrame>? _lastRgbaFrame;
@@ -28,23 +26,8 @@ class PlatformFFI {
   static String _homeDir = '';
   static F2? _getByName;
   static F3? _setByName;
-  static F4? _freeRgba;
-  static F5? _getRgba;
   static void Function(Map<String, dynamic>)? _eventCallback;
-
-  static void clearRgbaFrame() {
-    if (_lastRgbaFrame != null &&
-        _lastRgbaFrame != nullptr &&
-        _freeRgba != null) _freeRgba!(_lastRgbaFrame!);
-  }
-
-  static Uint8List? getRgba() {
-    if (_getRgba == null) return null;
-    _lastRgbaFrame = _getRgba!();
-    if (_lastRgbaFrame == null || _lastRgbaFrame == nullptr) return null;
-    final ref = _lastRgbaFrame!.ref;
-    return Uint8List.sublistView(ref.data.asTypedList(ref.len));
-  }
+  static void Function(Uint8List)? _rgbaCallback;
 
   static Future<String> getVersion() async {
     PackageInfo packageInfo = await PackageInfo.fromPlatform();
@@ -85,9 +68,6 @@ class PlatformFFI {
       _setByName =
           dylib.lookupFunction<Void Function(Pointer<Utf8>, Pointer<Utf8>), F3>(
               'set_by_name');
-      _freeRgba = dylib
-          .lookupFunction<Void Function(Pointer<RgbaFrame>), F4>('free_rgba');
-      _getRgba = dylib.lookupFunction<F5, F5>('get_rgba');
       _dir = (await getApplicationDocumentsDirectory()).path;
       _startListenEvent(RustdeskImpl(dylib));
       try {
@@ -119,21 +99,36 @@ class PlatformFFI {
     version = await getVersion();
   }
 
-  static void _startListenEvent(RustdeskImpl rustdeskImpl) async {
-    await for (final message in rustdeskImpl.startEventStream()) {
-      if (_eventCallback != null) {
-        try {
-          Map<String, dynamic> event = json.decode(message);
-          _eventCallback!(event);
-        } catch (e) {
-          print('json.decode fail(): $e');
+  static void _startListenEvent(RustdeskImpl rustdeskImpl) {
+    () async {
+      await for (final message in rustdeskImpl.startEventStream()) {
+        if (_eventCallback != null) {
+          try {
+            Map<String, dynamic> event = json.decode(message);
+            _eventCallback!(event);
+          } catch (e) {
+            print('json.decode fail(): $e');
+          }
         }
       }
-    }
+    }();
+    () async {
+      await for (final rgba in rustdeskImpl.startRgbaStream()) {
+        if (_rgbaCallback != null) {
+          _rgbaCallback!(rgba);
+        } else {
+          rgba.clear();
+        }
+      }
+    }();
   }
 
   static void setEventCallback(void Function(Map<String, dynamic>) fun) async {
     _eventCallback = fun;
+  }
+
+  static void setRgbaCallback(void Function(Uint8List) fun) async {
+    _rgbaCallback = fun;
   }
 
   static void startDesktopWebListener() {}
