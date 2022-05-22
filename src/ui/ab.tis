@@ -471,7 +471,7 @@ class SessionList: Reactor.Component {
                 }
             }
             msgbox("custom-rename", "Rename", "<div .form> \
-                <div><input name='name' .outline-focus style='width: *; height: 23px', value='" + old_name + "' /></div> \
+                <div><input|text name='name' .outline-focus style='width: *; height: 23px', value='" + old_name + "' /></div> \
                 </div> \
                 ", function(res=null) {
                     if (!res) return;

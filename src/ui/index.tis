@@ -172,6 +172,17 @@ function getUserName() {
     return '';
 }
 
+function updateTheme() {
+    var root_element = self;
+    if (handler.get_option("allow-darktheme") == "Y") {
+        // enable dark theme
+        root_element.attributes.toggleClass("darktheme", true);
+    } else {
+        // disable dark theme
+        root_element.attributes.toggleClass("darktheme", false);
+    }
+}
+
 class MyIdMenu: Reactor.Component {
     function this() {
         myIdMenu = this;
@@ -209,6 +220,8 @@ class MyIdMenu: Reactor.Component {
                 <li #logout>{translate('Logout')} ({username})</li> :
                 <li #login>{translate('Login')}</li>}
                 {handler.is_ok_change_id() && key_confirmed ? <li #change-id>{translate('Change ID')}</li> : ""}
+                <div .separator />
+                <li #allow-darktheme><span>{svg_checkmark}</span>{translate('Dark Theme')}</li>
                 <div .separator />
                 <li #about>{translate('About')} {" "}{handler.get_app_name()}</li>
             </menu>
@@ -303,10 +316,10 @@ class MyIdMenu: Reactor.Component {
             var old_id = configOptions["custom-rendezvous-server"] || "";
             var old_key = configOptions["key"] || "";
             msgbox("custom-server", "ID/Relay Server", "<div .form .set-password> \
-            <div><span>" + translate("ID Server") + ": </span><input .outline-focus name='id' value='" + old_id + "' /></div> \
-            <div><span>" + translate("Relay Server") + ": </span><input name='relay' value='" + old_relay + "' /></div> \
-            <div><span>" + translate("API Server") + ": </span><input name='api' value='" + old_api + "' /></div> \
-            <div><span>" + translate("Key") + ": </span><input name='key' value='" + old_key + "' /></div> \
+            <div><span>" + translate("ID Server") + ": </span><input|text .outline-focus name='id' value='" + old_id + "' /></div> \
+            <div><span>" + translate("Relay Server") + ": </span><input|text name='relay' value='" + old_relay + "' /></div> \
+            <div><span>" + translate("API Server") + ": </span><input|text name='api' value='" + old_api + "' /></div> \
+            <div><span>" + translate("Key") + ": </span><input|text name='key' value='" + old_key + "' /></div> \
             </div> \
             ", function(res=null) {
                 if (!res) return;
@@ -340,8 +353,8 @@ class MyIdMenu: Reactor.Component {
             var old_username = socks5[1] || "";
             var old_password = socks5[2] || "";
             msgbox("custom-server", "Socks5 Proxy", <div .form .set-password> 
-            <div><span>{translate("Hostname")}:</span><input .outline-focus name='proxy' value={old_proxy} /></div>
-            <div><span>{translate("Username")}:</span><input name='username' value={old_username} /></div>
+            <div><span>{translate("Hostname")}:</span><input|text .outline-focus name='proxy' value={old_proxy} /></div>
+            <div><span>{translate("Username")}:</span><input|text name='username' value={old_username} /></div>
             <div><span>{translate("Password")}:</span><PasswordComponent value={old_password} /></div>
             </div>
             , function(res=null) {
@@ -361,9 +374,9 @@ class MyIdMenu: Reactor.Component {
         } else if (me.id == "stop-rendezvous-service") {
             handler.set_option("stop-rendezvous-service",  rendezvous_service_stopped ? "" : "Y");
         } else if (me.id == "change-id") {
-            msgbox("custom-id", translate("Change ID"), "<div .form> \
+            msgbox("custom-id", translate("Change ID"), "<div .form .set-password> \
             <div>" + translate('id_change_tip') + " </div> \
-            <div><span style='width: 100px; display:inline-block'>ID: </span><input .outline-focus style='width: 250px' name='id' /></div> \
+            <div><span style='width: 100px; display:inline-block'>ID: </span><input|text .outline-focus style='width: 250px' name='id' /></div> \
             </div> \
             ", function(res=null, show_progress) {
                 if (!res) return;
@@ -383,6 +396,8 @@ class MyIdMenu: Reactor.Component {
                 check_status();
                 return " ";
             });
+        } else if (me.id == "allow-darktheme") {
+            updateTheme();
         } else if (me.id == "about") {
             this.showAbout()
         }
@@ -867,6 +882,7 @@ function self.ready() {
         view.focus = $(#remote_id);
     }
     refreshCurrentUser();
+    updateTheme();
 }
 
 function showAbout() {

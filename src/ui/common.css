@@ -9,6 +9,7 @@ html {
     var(placeholder): #aaa;
     var(lighter-text): #888;
     var(light-text): #666;
+    var(menu-hover): #D7E4F2;
     var(dark-red): #A72145;
     var(dark-yellow): #FBC732;
     var(dark-blue): #2E2459;
@@ -18,6 +19,18 @@ html {
     var(light-green): #D4EAB7;
     var(dark-green): #5CB85C;
     var(blood-red): #F82600;
+}
+
+html.darktheme {
+    var(bg): #252525;
+    var(gray-bg): #141414;
+    var(menu-hover): #2D3033;
+    var(border): #555;
+
+    var(text): white;
+    var(light-text): #999;
+    var(lighter-text): #777;
+    var(placeholder): #555;
 }
 
 body {
@@ -62,8 +75,9 @@ input[type=text], input[type=password], input[type=number] {
     font-size: 1.5em;
     border-color: color(border);
     border-radius: 0;
-    color: black;
+    color: color(text);
     padding-left: 0.5em;
+    background: color(bg);
 }
 
 input:empty {
@@ -72,6 +86,15 @@ input:empty {
 
 input.outline-focus:focus {
     outline: color(button) solid 3px;
+}
+
+textarea {
+    background: color(bg);
+    color: color(text);
+}
+
+textarea:empty {
+    color: color(placeholder);
 }
 
 @set my-scrollbar
@@ -287,6 +310,10 @@ progress {
     background: transparent;
 }
 
+menu {
+  background: color(bg);
+}
+
 menu div.separator {
   height: 1px;
   width: *;
@@ -296,6 +323,7 @@ menu div.separator {
 }
 
 menu li {
+  color: color(text);
   position: relative;
 }
 
@@ -319,7 +347,12 @@ menu li.selected span:nth-child(1) {
   opacity: 0.5;
 }
 
-menu li.line-through {
+menu li:hover {
+  background: color(menu-hover);
+  color: color(text);
+}
+
+menu li.line-through, menu li.line-through :hover {
   text-decoration-line: line-through;
   color: red;
 }
@@ -366,7 +399,7 @@ div#msgbox .caption {
   height: 2em;
   line-height: 2em;
   text-align: center;
-  color: white; 
+  color: color(bg);
   font-weight: bold;
 }
 
