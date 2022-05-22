@@ -9,13 +9,13 @@
   <b>Нам нужна ваша помощь для перевода этого README и <a href="https://github.com/rustdesk/rustdesk/tree/master/src/rustdesk/tree/master/src/lang">RustDesk UI</a> на ваш родной язык</B>
 </p>
 
-Общение с нами: [Discord](https://discord.gg/nDceKgxnkV) | [Reddit](https://www.reddit.com/r/rustdesk)
+Общение с нами: [Discord](https://discord.gg/nDceKgxnkV) | [Twitter](https://twitter.com/rustdesk) | [Reddit](https://www.reddit.com/r/rustdesk)
 
 [![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/I2I04VU09)
 
 Еще одно программное обеспечение для удаленного рабочего стола, написанное на Rust. Работает из коробки, не требует настройки. Вы полностью контролируете свои данные, не беспокоясь о безопасности. Вы можете использовать наш сервер ретрансляции, [настроить свой собственный](https://rustdesk.com/server), или [написать свой собственный сервер ретрансляции](https://github.com/rustdesk/rustdesk-server-demo).
 
-RustDesk приветствует вклад каждого. Смотри [`CONTRIBUTING.md`](CONTRIBUTING.md) для помощи в начале работы.
+RustDesk приветствует вклад каждого. Смотрите [`CONTRIBUTING.md`](CONTRIBUTING.md) для помощи в начале работы.
 
 [**СКАЧАТЬ ПРИЛОЖЕНИЕ**](https://github.com/rustdesk/rustdesk/releases)
 
@@ -36,7 +36,9 @@ RustDesk приветствует вклад каждого. Смотри [`CONT
 [Linux](https://raw.githubusercontent.com/c-smile/sciter-sdk/master/bin.lnx/x64/libsciter-gtk.so) |
 [MacOS](https://raw.githubusercontent.com/c-smile/sciter-sdk/master/bin.osx/libsciter.dylib)
 
-## Необработанные шаги для сборки
+Мобильные версии используют Flutter. В будущем мы перенесем настольную версию со Sciter на Flutter.
+
+## Первичные шаги для сборки
 
 - Подготовьте среду разработки Rust и среду сборки C++.
 
@@ -45,9 +47,9 @@ RustDesk приветствует вклад каждого. Смотри [`CONT
   - Windows: vcpkg install libvpx:x64-windows-static libyuv:x64-windows-static opus:x64-windows-static
   - Linux/MacOS: vcpkg install libvpx libyuv opus
 
-- Запустите`cargo run`
+- Запустите `cargo run`
 
-## Как собрать в Linux 
+## Как собрать на Linux 
 
 ### Ubuntu 18 (Debian 10)
 
@@ -79,7 +81,7 @@ export VCPKG_ROOT=$HOME/vcpkg
 vcpkg/vcpkg install libvpx libyuv opus
 ```
 
-### Исправления libvpx (Для Fedora)
+### Исправление libvpx (Для Fedora)
 
 ```sh
 cd vcpkg/buildtrees/libvpx/src
@@ -109,9 +111,9 @@ VCPKG_ROOT=$HOME/vcpkg cargo run
 
 RustDesk не поддерживает Wayland. Смотрите [этот документ](https://docs.fedoraproject.org/en-US/quick-docs/configuring-xorg-as-default-gnome-session/) для настройки Xorg в качестве сеанса GNOME по умолчанию.
 
-## Как собрать используя Docker
+## Как собрать с помощью Docker
 
-Начните с клонирования репозитория и создания docker контейнера:
+Начните с клонирования репозитория и создания docker-контейнера:
 
 ```sh
 git clone https://github.com/rustdesk/rustdesk
@@ -119,13 +121,13 @@ cd rustdesk
 docker build -t "rustdesk-builder" .
 ```
 
-Затем каждый раз, когда вам нужно собрать приложение, запустите следующую команду:
+Затем каждый раз, когда вам нужно собрать приложение, запускайте следующую команду:
 
 ```sh
 docker run --rm -it -v $PWD:/home/user/rustdesk -v rustdesk-git-cache:/home/user/.cargo/git -v rustdesk-registry-cache:/home/user/.cargo/registry -e PUID="$(id -u)" -e PGID="$(id -g)" rustdesk-builder
 ```
 
-Обратите внимание, что первая сборка может занять больше времени но последующие сборки будут выполняться быстрее. Кроме того, если вам нужно указать другие аргументы для команды сборки, вы можете сделать это в конце команды в переменной `<OPTIONAL-ARGS>`. Например, если вы хотите создать оптимизированную версию, вы должны запустить приведенную выше команду и в хвосте строки добавить `---release`. Полученный исполняемый файл будет доступен в целевой папке вашей системы и может быть запущен с помощью:
+Обратите внимание, что первая сборка может занять больше времени, прежде чем зависимости будут кэшированы, но последующие сборки будут выполняться быстрее. Кроме того, если вам нужно указать другие аргументы для команды сборки, вы можете сделать это в конце команды в переменной `<OPTIONAL-ARGS>`. Например, если вы хотите создать оптимизированную версию, вы должны запустить приведенную выше команду и в конце строки добавить `---release`. Полученный исполняемый файл будет доступен в целевой папке вашей системы и может быть запущен с помощью:
 
 ```sh
 target/debug/rustdesk
