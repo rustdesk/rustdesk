@@ -80,8 +80,8 @@ div.sessions-tab svg {
 div.sessions-tab span.active {
     cursor: default;
     border-radius: 3px;
-    background: white;
-    color: black;
+    background: color(bg);
+    color: color(text);
 }
 
 div.search-id {
@@ -256,7 +256,7 @@ div.remote-session .platform svg {
 }
 
 div.remote-session-list {
-    background: white;
+    background: color(bg);
     width: 220px;
     flow: horizontal;
 }
@@ -290,7 +290,7 @@ div.remote-session-list .name .username {
 }
 
 div.remote-session .text {
-    background: white;
+    background: color(bg);
     position: absolute;
     height: 3em;
     width: 100%;
@@ -318,13 +318,13 @@ svg#menu {
 }
 
 svg#menu:hover {
-    color: black;
+    color: color(text);
     border-radius: 1em;
     background: color(gray-bg);
 }
 
 svg#edit:hover {
-    color: black;
+    color: color(text);
 }
 
 svg#edit {
@@ -401,4 +401,5 @@ div.remote-session svg#menu {
     border-color: white;
     border: 1px;
     background: none;
+    color: white;
 }
