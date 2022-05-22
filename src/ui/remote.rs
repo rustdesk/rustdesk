@@ -1,7 +1,10 @@
 use std::{
     collections::HashMap,
     ops::Deref,
-    sync::{Arc, Mutex, RwLock},
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc, Mutex, RwLock,
+    },
 };
 
 use sciter::{
@@ -64,7 +67,7 @@ fn get_key_state(key: enigo::Key) -> bool {
 }
 
 static mut IS_IN: bool = false;
-static mut KEYBOARD_HOOKED: bool = false;
+static KEYBOARD_HOOKED: AtomicBool = AtomicBool::new(false);
 static mut SERVER_KEYBOARD_ENABLED: bool = true;
 static mut SERVER_FILE_TRANSFER_ENABLED: bool = true;
 static mut SERVER_CLIPBOARD_ENABLED: bool = true;
@@ -249,11 +252,8 @@ impl Handler {
         if self.is_port_forward() || self.is_file_transfer() {
             return;
         }
-        if unsafe { KEYBOARD_HOOKED } {
+        if KEYBOARD_HOOKED.swap(true, Ordering::SeqCst) {
             return;
-        }
-        unsafe {
-            KEYBOARD_HOOKED = true;
         }
         log::info!("keyboard hooked");
         let mut me = self.clone();
