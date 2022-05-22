@@ -1,112 +1,141 @@
-﻿Unicode true
+//This installation package automatically recognizes the X86, X64 environment
+//The material comes from the Internet, I have searched many search engines, I hope it can help you
+#define MyAppName "RustDesk"
+#define MyAppVersion "1.1.9"
+#define MyAppPublisher "Purslane Ltd"
+#define MyAppURL "https://rustdesk.com/"
+#define MyAppExeName "RustDesk.exe"
 
-####################################################################
-# Includes
+[Setup]
+AppId={{0799C57F-1BB1-4238-A74E-8ECF83CF2E09}
+AppName={#MyAppName}
+AppVersion={#MyAppVersion}
+AppPublisher={#MyAppPublisher}
+AppPublisherURL={#MyAppURL}
+AppSupportURL={#MyAppURL}
+AppUpdatesURL={#MyAppURL}
+DefaultDirName={pf}{#MyAppName}
+DisableProgramGroupPage=yes
+DefaultGroupName={#MyAppName}
+OutputBaseFilename=RustDesk_1.1.9_x86_x64
+//custom pack icon
+SetupIconFile=D:\NAS\RustDesk\42550.ico
+Compression=lzma
+SolidCompression=yes
+UninstallDisplayIcon={app}{#MyAppExeName}
+ArchitecturesInstallIn64BitMode=x64
+//file path
+InfoBeforeFile=D:\NAS\RustDesk\Notice.txt
 
-!include nsDialogs.nsh
-!include MUI2.nsh
-!include x64.nsh
-!include LogicLib.nsh
+//Please modify it into your own language
+[Languages]
+Name: "chinesesimp"; MessagesFile: "compiler:Default.isl"
 
-####################################################################
-# File Info
+[Tasks]
+Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: checkablealone
 
-!define PRODUCT_NAME "RustDesk"
-!define PRODUCT_DESCRIPTION "Installer for ${PRODUCT_NAME}"
-!define COPYRIGHT "Copyright © 2021"
-!define VERSION "1.1.6"
+[Files]
+//This item is your own rustdesk file path, modify it according to the actual situation
+Source: "D:\NAS\RustDesk\x86\1.1.9\RustDesk.exe"; DestDir: "{app}"; Flags: ignoreversion; check: not IsWin64
+Source: "D:\NAS\RustDesk\x64\1.1.9\RustDesk.exe"; DestDir: "{app}"; Flags: ignoreversion; check: IsWin64;
+//The purpose of setting RustDesk2.toml is to preset the address and encryption information of the server in advance. After the installation is completed, you can use it without entering the software to configure the connection parameters and key parameters.
+//This item is your own rustdesk file path, modify it according to the actual situation
+Source: "D:\NAS\RustDesk\rust\RustDesk.toml"; DestDir: "C:\Windows\ServiceProfiles\LocalService\AppData\Roaming\RustDesk\config"; Flags: onlyifdoesntexist uninsneveruninstall
+//This item is your own rustdesk file path, modify it according to the actual situation
+Source: "D:\NAS\RustDesk\rust\RustDesk2.toml"; DestDir: "C:\Windows\ServiceProfiles\LocalService\AppData\Roaming\RustDesk\config"; Flags: ignoreversion
+//The purpose of setting RustDesk2.toml is to preset the address and encryption information of the server in advance. After the installation is completed, you can use it without entering the software to configure the connection parameters and key parameters.
+//This item is your own rustdesk file path, modify it according to the actual situation
+Source: "D:\NAS\RustDesk\rust\RustDesk.toml"; DestDir: "{userdocs}..\AppData\Roaming\RustDesk\config"; Flags: onlyifdoesntexist uninsneveruninstall
+//This item is your own rustdesk file path, modify it according to the actual situation
+Source: "D:\NAS\RustDesk\rust\RustDesk2.toml"; DestDir: "{userdocs}..\AppData\Roaming\RustDesk\config"; Flags: ignoreversion
+Source: compiler:psvince.dll;Flags: dontcopy noencryption
 
-VIProductVersion "${VERSION}.0"
-VIAddVersionKey "ProductName" "${PRODUCT_NAME}"
-VIAddVersionKey "ProductVersion" "${VERSION}"
-VIAddVersionKey "FileDescription" "${PRODUCT_DESCRIPTION}"
-VIAddVersionKey "LegalCopyright" "${COPYRIGHT}"
-VIAddVersionKey "FileVersion" "${VERSION}.0"
+[code]
+// function IsModuleLoaded to call at install time
+// added also setuponly flag
+function IsModuleLoaded(modulename: String ): Boolean;
+external 'IsModuleLoaded@files:psvince.dll stdcall setuponly';
 
-####################################################################
-# Installer Attributes
+//;Check if a process exists
+function IsAppRunning(const FileName : string): Boolean;
+var
+FSWbemLocator: Variant;
+FWMIService : Variant;
+FWbemObjectSet: Variant;
+begin
+Result := false;
+try
+FSWbemLocator := CreateOleObject('WBEMScripting.SWBEMLocator');
+FWMIService := FSWbemLocator.ConnectServer('', 'root\CIMV2', '', '');
+FWbemObjectSet := FWMIService.ExecQuery(Format('SELECT Name FROM Win32_Process Where Name="%s"',[FileName]));
+Result := (FWbemObjectSet.Count > 0);
+FWbemObjectSet := Unassigned;
+FWMIService := Unassigned;
+FSWbemLocator := Unassigned;
+except
+if (IsModuleLoaded(FileName)) then
+begin
+Result := false;
+end
+else
+begin
+Result := true;
+end
+end;
+end;
 
-Name "${PRODUCT_NAME}"
-Outfile "rustdesk-${VERSION}-setup.exe"
-Caption "Setup - ${PRODUCT_NAME}"
-BrandingText "${PRODUCT_NAME}"
+//;Terminate process by name
+procedure TaskKillProcessByName(AppName: String);
+var
+WbemLocator : Variant;
+WMIService : Variant;
+WbemObjectSet: Variant;
+WbemObject : Variant;
+begin;
+WbemLocator := CreateOleObject('WbemScripting.SWbemLocator');
+WMIService := WbemLocator.ConnectServer('localhost', 'root\CIMV2');
+WbemObjectSet := WMIService.ExecQuery('SELECT * FROM Win32_Process Where Name="' + AppName + '"');
+if not VarIsNull(WbemObjectSet) and (WbemObjectSet.Count > 0) then
+begin
+WbemObject := WbemObjectSet.ItemIndex(0);
+if not VarIsNull(WbemObject) then
+begin
+WbemObject.Terminate();
+WbemObject := Unassigned;
+end;
+end;
+end;
 
-ShowInstDetails show
-RequestExecutionLevel admin
-SetOverwrite on
- 
-InstallDir "$PROGRAMFILES64\${PRODUCT_NAME}"
+//;When installing, it is judged whether the process exists, and if it exists, it will prompt whether to end the process first.
+function InitializeSetup(): Boolean;
+begin
+Result := true;
+if IsAppRunning('{#MyAppExeName}') then
+begin
+if MsgBox('Installer detected {#MyAppName} running！'#13''#13'Click the "Yes" button to close the program and continue with the installation；'#13''#13'Click the "No" button to exit the installation！', mbConfirmation, MB_YESNO) = IDYES then
+begin
+TaskKillProcessByName('{#MyAppExeName}');
+TaskKillProcessByName('{#MyAppExeName}');
+Result:= true;
+end
+else
+Result:= false;
+end;
+end;
 
-####################################################################
-# Pages
+[Icons]
+Name: "{group}\RustDesk"; Filename: "{app}{#MyAppExeName}"; Check: not IsWin64
+Name: "{group}\RustDesk"; Filename: "{app}{#MyAppExeName}"; Check: IsWin64
+Name: "{commondesktop}\RustDesk"; Filename: "{app}{#MyAppExeName}"; Tasks: desktopicon; Check: not IsWin64
+Name: "{commondesktop}\RustDesk"; Filename: "{app}{#MyAppExeName}"; Tasks: desktopicon; Check: IsWin64
 
-!define MUI_ICON "src\tray-icon.ico"
-!define MUI_ABORTWARNING
-!define MUI_LANGDLL_ALLLANGUAGES
-!define MUI_FINISHPAGE_SHOWREADME ""
-!define MUI_FINISHPAGE_SHOWREADME_NOTCHECKED
-!define MUI_FINISHPAGE_SHOWREADME_TEXT "Create Desktop Shortcut"
-!define MUI_FINISHPAGE_SHOWREADME_FUNCTION CreateDesktopShortcut
-!define MUI_FINISHPAGE_RUN "$INSTDIR\${PRODUCT_NAME}.exe"
+[Run]
+Filename: "sc.exe"; Parameters: "create {#MyAppName} start= auto DisplayName= ""{#MyAppName} Service"" binPath= """"{app}{#MyAppExeName}"" --service"""; Flags: runhidden
+Filename: "netsh.exe"; Parameters: "advfirewall firewall add rule name=""{#MyAppName} Service"" dir=in action=allow program=""{app}{#MyAppExeName}"" enable=yes"; Flags: runhidden
+Filename: "sc.exe"; Parameters: "start {#MyAppName}" ; Flags: runhidden
+Filename: "{app}{#MyAppExeName}"; Description:"Please tick Run now";Flags: postinstall nowait skipifsilent
 
-!insertmacro MUI_PAGE_DIRECTORY
-!insertmacro MUI_PAGE_INSTFILES
-!insertmacro MUI_PAGE_FINISH
-
-####################################################################
-# Language
-
-!insertmacro MUI_LANGUAGE "English"
-!insertmacro MUI_LANGUAGE "SimpChinese"
-
-####################################################################
-# Sections
-
-Section "Install"
-  SetOutPath $INSTDIR
-
-  # Regkeys
-  WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${PRODUCT_NAME}" "DisplayIcon" "$INSTDIR\${PRODUCT_NAME}.exe"
-  WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${PRODUCT_NAME}" "DisplayName" "${PRODUCT_NAME} (x64)"
-  WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${PRODUCT_NAME}" "DisplayVersion" "${VERSION}"
-  WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${PRODUCT_NAME}" "UninstallString" '"$INSTDIR\${PRODUCT_NAME}.exe" --uninstall'
-  WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${PRODUCT_NAME}" "InstallLocation" "$INSTDIR"
-  WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${PRODUCT_NAME}" "Publisher" "Carriez, Inc."
-  WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${PRODUCT_NAME}" "HelpLink" "https://www.rustdesk.com/"
-  WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${PRODUCT_NAME}" "URLInfoAbout" "https://www.rustdesk.com/"
-  WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${PRODUCT_NAME}" "URLUpdateInfo" "https://www.rustdesk.com/"
-
-  nsExec::Exec "taskkill /F /IM ${PRODUCT_NAME}.exe"
-  Sleep 500 ; Give time for process to be completely killed
-  File "${PRODUCT_NAME}.exe"
-
-  SetShellVarContext all
-  CreateShortCut "$INSTDIR\Uninstall ${PRODUCT_NAME}.lnk" "$INSTDIR\${PRODUCT_NAME}.exe" "--uninstall" "msiexec.exe"
-  CreateDirectory "$SMPROGRAMS\${PRODUCT_NAME}"
-  CreateShortCut "$SMPROGRAMS\${PRODUCT_NAME}\${PRODUCT_NAME}.lnk" "$INSTDIR\${PRODUCT_NAME}.exe"
-  CreateShortCut "$SMPROGRAMS\${PRODUCT_NAME}\Uninstall ${PRODUCT_NAME}.lnk" "$INSTDIR\${PRODUCT_NAME}.exe" "--uninstall" "msiexec.exe"
-  CreateShortCut "$SMSTARTUP\${PRODUCT_NAME} Tray.lnk" "$INSTDIR\${PRODUCT_NAME}.exe" "--tray"
-  
-  nsExec::Exec 'sc create ${PRODUCT_NAME} start=auto DisplayName="${PRODUCT_NAME} Service" binPath= "\"$INSTDIR\${PRODUCT_NAME}.exe\" --service"'
-  nsExec::Exec 'netsh advfirewall firewall add rule name="${PRODUCT_NAME} Service" dir=in action=allow program="$INSTDIR\${PRODUCT_NAME}.exe" enable=yes'
-  nsExec::Exec 'sc start ${PRODUCT_NAME}'
-SectionEnd
-
-####################################################################
-# Functions
-
-Function .onInit
-  # RustDesk is 64-bit only
-  ${IfNot} ${RunningX64}
-    MessageBox MB_ICONSTOP "${PRODUCT_NAME} is 64-bit only!"
-    Quit
-  ${EndIf}
-  ${DisableX64FSRedirection}
-  SetRegView 64
-
-  !insertmacro MUI_LANGDLL_DISPLAY
-FunctionEnd
-
-Function CreateDesktopShortcut
-  CreateShortCut "$DESKTOP\${PRODUCT_NAME}.lnk" "$INSTDIR\${PRODUCT_NAME}.exe"
-FunctionEnd
+[UninstallRun]
+Filename: "sc.exe"; Parameters: "stop {#MyAppName}" ; Flags: runhidden
+Filename: "sc.exe"; Parameters: "delete {#MyAppName}" ; Flags: runhidden
+Filename: "netsh.exe"; Parameters: "advfirewall firewall delete rule name=""{#MyAppName} Service"""; Flags: runhidden
