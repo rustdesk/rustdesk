@@ -9,7 +9,6 @@ src/version.rs
 *dmg
 *exe
 *tgz
-*lib
 cert.pfx
 flutter_hbb
 *.bak
