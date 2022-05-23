@@ -11,6 +11,7 @@ final navigationBarKey = GlobalKey();
 var isAndroid = false;
 var isIOS = false;
 var isWeb = false;
+var isWebDesktop = false;
 var isDesktop = false;
 var version = "";
 int androidVersion = 0;

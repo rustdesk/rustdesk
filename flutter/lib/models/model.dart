@@ -282,7 +282,7 @@ class ImageModel with ChangeNotifier {
 
   void update(ui.Image? image) {
     if (_image == null && image != null) {
-      if (isDesktop) {
+      if (isWebDesktop) {
         FFI.canvasModel.updateViewStyle();
       } else {
         final size = MediaQueryData.fromWindow(ui.window).size;
@@ -394,7 +394,7 @@ class CanvasModel with ChangeNotifier {
   }
 
   void resetOffset() {
-    if (isDesktop) {
+    if (isWebDesktop) {
       updateViewStyle();
     } else {
       _x = 0;
@@ -783,7 +783,7 @@ class FFI {
 
   static void close() {
     chatModel.close();
-    if (FFI.imageModel.image != null && !isDesktop) {
+    if (FFI.imageModel.image != null && !isWebDesktop) {
       savePreference(id, cursorModel.x, cursorModel.y, canvasModel.x,
           canvasModel.y, canvasModel.scale, ffiModel.pi.currentDisplay);
     }
@@ -919,7 +919,7 @@ void savePreference(String id, double xCursor, double yCursor, double xCanvas,
 }
 
 Future<Map<String, dynamic>?> getPreference(String id) async {
-  if (!isDesktop) return null;
+  if (!isWebDesktop) return null;
   SharedPreferences prefs = await SharedPreferences.getInstance();
   var p = prefs.getString('peer' + id);
   if (p == null) return null;

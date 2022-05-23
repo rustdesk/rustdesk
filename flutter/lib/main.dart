@@ -1,4 +1,7 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
+import 'package:flutter_hbb/pages/desktop_home_page.dart';
 import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
 import 'package:provider/provider.dart';
 import 'package:firebase_analytics/firebase_analytics.dart';
@@ -11,19 +14,19 @@ import 'pages/settings_page.dart';
 
 Future<Null> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  var a = FFI.ffiModel.init();
-  var b = Firebase.initializeApp();
-  await a;
-  await b;
+  await FFI.ffiModel.init();
+  // await Firebase.initializeApp();
+  if (isAndroid) {
+    toAndroidChannelInit();
+  }
   refreshCurrentUser();
-  toAndroidChannelInit();
   runApp(App());
 }
 
 class App extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
-    final analytics = FirebaseAnalytics.instance;
+    // final analytics = FirebaseAnalytics.instance;
     return MultiProvider(
       providers: [
         ChangeNotifierProvider.value(value: FFI.ffiModel),
@@ -39,9 +42,13 @@ class App extends StatelessWidget {
             primarySwatch: Colors.blue,
             visualDensity: VisualDensity.adaptivePlatformDensity,
           ),
-          home: !isAndroid ? WebHomePage() : HomePage(),
+          home: isDesktop
+              ? DesktopHomePage()
+              : !isAndroid
+                  ? WebHomePage()
+                  : HomePage(),
           navigatorObservers: [
-            FirebaseAnalyticsObserver(analytics: analytics),
+            // FirebaseAnalyticsObserver(analytics: analytics),
             FlutterSmartDialog.observer
           ],
           builder: FlutterSmartDialog.init(

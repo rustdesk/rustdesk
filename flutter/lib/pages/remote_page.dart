@@ -28,7 +28,7 @@ class RemotePage extends StatefulWidget {
 class _RemotePageState extends State<RemotePage> {
   Timer? _interval;
   Timer? _timer;
-  bool _showBar = !isDesktop;
+  bool _showBar = !isWebDesktop;
   double _bottom = 0;
   String _value = '';
   double _scale = 1;
@@ -256,7 +256,7 @@ class _RemotePageState extends State<RemotePage> {
                   OverlayEntry(builder: (context) {
                     return Container(
                         color: Colors.black,
-                        child: isDesktop
+                        child: isWebDesktop
                             ? getBodyForDesktopWithListener(keyboard)
                             : SafeArea(
                                 child: Container(
@@ -397,7 +397,7 @@ class _RemotePageState extends State<RemotePage> {
                       },
                     )
                   ] +
-                  (isDesktop
+                  (isWebDesktop
                       ? []
                       : FFI.ffiModel.isPeerAndroid
                           ? [
@@ -641,7 +641,7 @@ class _RemotePageState extends State<RemotePage> {
           )
         ])),
         value: 'enter_os_password'));
-    if (!isDesktop) {
+    if (!isWebDesktop) {
       if (perms['keyboard'] != false && perms['clipboard'] != false) {
         more.add(PopupMenuItem<String>(
             child: Text(translate('Paste')), value: 'paste'));
