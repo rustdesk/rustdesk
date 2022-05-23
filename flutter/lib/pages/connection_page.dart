@@ -211,8 +211,8 @@ class _ConnectionPageState extends State<ConnectionPage> {
           width: width,
           child: Card(
               child: GestureDetector(
-                  onTap: !isDesktop ? () => connect('${p.id}') : null,
-                  onDoubleTap: isDesktop ? () => connect('${p.id}') : null,
+                  onTap: !isWebDesktop ? () => connect('${p.id}') : null,
+                  onDoubleTap: isWebDesktop ? () => connect('${p.id}') : null,
                   onLongPressStart: (details) {
                     final x = details.globalPosition.dx;
                     final y = details.globalPosition.dy;

@@ -20,7 +20,7 @@ class PlatformFFI {
 
   static Future<Null> init() async {
     isWeb = true;
-    isDesktop = !context.callMethod('isMobile');
+    isWebDesktop = !context.callMethod('isMobile');
     context.callMethod('init');
     version = getByName('version');
   }

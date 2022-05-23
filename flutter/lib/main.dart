@@ -1,4 +1,7 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
+import 'package:flutter_hbb/pages/desktop_home_page.dart';
 import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
 import 'package:provider/provider.dart';
 import 'package:firebase_analytics/firebase_analytics.dart';
@@ -16,7 +19,9 @@ Future<Null> main() async {
   await a;
   await b;
   refreshCurrentUser();
-  toAndroidChannelInit();
+  if (Platform.isAndroid) {
+    toAndroidChannelInit();
+  }
   runApp(App());
 }
 
@@ -39,7 +44,11 @@ class App extends StatelessWidget {
             primarySwatch: Colors.blue,
             visualDensity: VisualDensity.adaptivePlatformDensity,
           ),
-          home: !isAndroid ? WebHomePage() : HomePage(),
+          home: isDesktop
+              ? DesktopHomePage()
+              : !isAndroid
+                  ? WebHomePage()
+                  : HomePage(),
           navigatorObservers: [
             FirebaseAnalyticsObserver(analytics: analytics),
             FlutterSmartDialog.observer

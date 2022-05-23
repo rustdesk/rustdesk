@@ -59,6 +59,11 @@ class PlatformFFI {
   static Future<Null> init() async {
     isIOS = Platform.isIOS;
     isAndroid = Platform.isAndroid;
+    isDesktop = Platform.isWindows || Platform.isMacOS || Platform.isLinux;
+    if (isDesktop) {
+      // TODO
+      return;
+    }
     final dylib = Platform.isAndroid
         ? DynamicLibrary.open('librustdesk.so')
         : DynamicLibrary.process();
