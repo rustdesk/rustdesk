@@ -14,21 +14,19 @@ import 'pages/settings_page.dart';
 
 Future<Null> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  var a = FFI.ffiModel.init();
-  var b = Firebase.initializeApp();
-  await a;
-  await b;
-  refreshCurrentUser();
-  if (Platform.isAndroid) {
+  await FFI.ffiModel.init();
+  // await Firebase.initializeApp();
+  if (isAndroid) {
     toAndroidChannelInit();
   }
+  refreshCurrentUser();
   runApp(App());
 }
 
 class App extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
-    final analytics = FirebaseAnalytics.instance;
+    // final analytics = FirebaseAnalytics.instance;
     return MultiProvider(
       providers: [
         ChangeNotifierProvider.value(value: FFI.ffiModel),
@@ -50,7 +48,7 @@ class App extends StatelessWidget {
                   ? WebHomePage()
                   : HomePage(),
           navigatorObservers: [
-            FirebaseAnalyticsObserver(analytics: analytics),
+            // FirebaseAnalyticsObserver(analytics: analytics),
             FlutterSmartDialog.observer
           ],
           builder: FlutterSmartDialog.init(
