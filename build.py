@@ -44,6 +44,30 @@ def main():
         else:
           print('Not signed')
         os.system('cp -rf target/release/RustDesk.exe rustdesk-%s-putes.exe'%version)
+    elif os.path.isfile('/usr/bin/pacman'):
+        os.system('cargo build --release --features inline')
+        os.system('git checkout src/ui/common.tis')
+        os.system('strip target/release/rustdesk')
+        os.system("sed -i 's/pkgver=.*/pkgver=%s/g' PKGBUILD"%version)
+        # pacman -S -needed base-devel
+        os.system('HBB=`pwd` makepkg -f')
+        os.system('mv rustdesk-%s-0-x86_64.pkg.tar.zst rustdesk-%s-manjaro-arch.pkg.tar.zst'%(version, version))
+        # pacman -U ./rustdesk.pkg.tar.zst
+    elif os.path.isfile('/usr/bin/yum'):
+        os.system('cargo build --release --features inline')
+        os.system('strip target/release/rustdesk')
+        os.system("sed -i 's/Version:    .*/Version:    %s/g' rpm.spec"%version)
+        os.system('HBB=`pwd` rpmbuild -ba rpm.spec')
+        os.system('mv $HOME/rpmbuild/RPMS/x86_64/rustdesk-%s-0.x86_64.rpm ./rustdesk-%s-fedora28-centos8.rpm'%(version, version))
+        # yum localinstall rustdesk.rpm
+    elif os.path.isfile('/usr/bin/zypper'):
+        os.system('cargo build --release --features inline')
+        os.system('strip target/release/rustdesk')
+        os.system("sed -i 's/Version:    .*/Version:    %s/g' rpm-suse.spec"%version)
+        os.system('HBB=`pwd` rpmbuild -ba rpm-suse.spec')
+        os.system('mv $HOME/rpmbuild/RPMS/x86_64/rustdesk-%s-0.x86_64.rpm ./rustdesk-%s-suse.rpm'%(version, version))
+        # yum localinstall rustdesk.rpm
+
     else:
         os.system('cargo bundle --release --features inline')
         if osx:

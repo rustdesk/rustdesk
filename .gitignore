@@ -20,3 +20,5 @@ web_hbb
 sciter.dll
 **pdb
 src/bridge_generated.rs
+*deb
+rustdesk
