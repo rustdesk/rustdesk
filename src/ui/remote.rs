@@ -70,7 +70,7 @@ static mut IS_IN: bool = false;
 static KEYBOARD_HOOKED: AtomicBool = AtomicBool::new(false);
 static mut SERVER_KEYBOARD_ENABLED: bool = true;
 static mut SERVER_FILE_TRANSFER_ENABLED: bool = true;
-static mut SERVER_CLIPBOARD_ENABLED: bool = true;
+static SERVER_CLIPBOARD_ENABLED: AtomicBool = AtomicBool::new(true);
 #[cfg(windows)]
 static mut IS_ALT_GR: bool = false;
 
@@ -1382,7 +1382,7 @@ impl Remote {
             Ok((mut peer, direct)) => {
                 unsafe {
                     SERVER_KEYBOARD_ENABLED = true;
-                    SERVER_CLIPBOARD_ENABLED = true;
+                    SERVER_CLIPBOARD_ENABLED.store(true, Ordering::SeqCst);
                     SERVER_FILE_TRANSFER_ENABLED = true;
                 }
                 self.handler
@@ -1464,7 +1464,7 @@ impl Remote {
         }
         unsafe {
             SERVER_KEYBOARD_ENABLED = false;
-            SERVER_CLIPBOARD_ENABLED = false;
+            SERVER_CLIPBOARD_ENABLED.store(false, Ordering::SeqCst);
             SERVER_FILE_TRANSFER_ENABLED = false;
         }
     }
@@ -1518,7 +1518,7 @@ impl Remote {
                         }
                         _ => {}
                     }
-                    if !unsafe { SERVER_CLIPBOARD_ENABLED }
+                    if !SERVER_CLIPBOARD_ENABLED.load(Ordering::SeqCst)
                         || !unsafe { SERVER_KEYBOARD_ENABLED }
                         || lc.read().unwrap().disable_clipboard
                     {
@@ -1712,7 +1712,7 @@ impl Remote {
                         job.is_last_job = false;
                         allow_err!(
                             peer.send(&fs::new_send(id, job.remote.clone(), job.file_num, job.show_hidden))
-                                .await
+                            .await
                         );
                     }
                 } else {
@@ -1947,7 +1947,7 @@ impl Remote {
             let json_str = serde_json::to_string(&job.gen_meta()).unwrap();
             transfer_metas.write_jobs.push(json_str);
         }
-        log::info!("meta: {:?}",transfer_metas);
+        log::info!("meta: {:?}", transfer_metas);
         config.transfer = transfer_metas;
         self.handler.save_config(config);
         true
@@ -1978,7 +1978,7 @@ impl Remote {
                         self.check_clipboard_file_context();
                         if !(self.handler.is_file_transfer()
                             || self.handler.is_port_forward()
-                            || !unsafe { SERVER_CLIPBOARD_ENABLED }
+                            || !SERVER_CLIPBOARD_ENABLED.load(Ordering::SeqCst)
                             || !unsafe { SERVER_KEYBOARD_ENABLED }
                             || self.handler.lc.read().unwrap().disable_clipboard)
                         {
@@ -2033,7 +2033,7 @@ impl Remote {
                                 if self.handler.peer_platform() == "Windows" {
                                     fs::transform_windows_path(&mut entries);
                                 }
-                            }  
+                            }
                             let mut m = make_fd(fd.id, &entries, fd.id > 0);
                             if fd.id <= 0 {
                                 m.set_item("path", fd.path);
@@ -2188,9 +2188,7 @@ impl Remote {
                                     .call2("setPermission", &make_args!("keyboard", p.enabled));
                             }
                             Permission::Clipboard => {
-                                unsafe {
-                                    SERVER_CLIPBOARD_ENABLED = p.enabled;
-                                }
+                                SERVER_CLIPBOARD_ENABLED.store(p.enabled, Ordering::SeqCst);
                                 self.handler
                                     .call2("setPermission", &make_args!("clipboard", p.enabled));
                             }
