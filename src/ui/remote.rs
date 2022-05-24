@@ -66,7 +66,7 @@ fn get_key_state(key: enigo::Key) -> bool {
     ENIGO.lock().unwrap().get_key_state(key)
 }
 
-static mut IS_IN: bool = false;
+static IS_IN: AtomicBool = AtomicBool::new(false);
 static KEYBOARD_HOOKED: AtomicBool = AtomicBool::new(false);
 static SERVER_KEYBOARD_ENABLED: AtomicBool = AtomicBool::new(true);
 static SERVER_FILE_TRANSFER_ENABLED: AtomicBool = AtomicBool::new(true);
@@ -266,7 +266,7 @@ impl Handler {
             std::env::set_var("KEYBOARD_ONLY", "y"); // pass to rdev
             use rdev::{EventType::*, *};
             let func = move |evt: Event| {
-                if unsafe { !IS_IN || !SERVER_KEYBOARD_ENABLED.load(Ordering::SeqCst) } {
+                if !IS_IN.load(Ordering::SeqCst) || !SERVER_KEYBOARD_ENABLED.load(Ordering::SeqCst) {
                     return;
                 }
                 let (key, down) = match evt.event_type {
@@ -865,17 +865,13 @@ impl Handler {
     fn enter(&mut self) {
         #[cfg(windows)]
         crate::platform::windows::stop_system_key_propagate(true);
-        unsafe {
-            IS_IN = true;
-        }
+        IS_IN.store(true, Ordering::SeqCst);
     }
 
     fn leave(&mut self) {
         #[cfg(windows)]
         crate::platform::windows::stop_system_key_propagate(false);
-        unsafe {
-            IS_IN = false;
-        }
+        IS_IN.store(false, Ordering::SeqCst);
     }
 
     fn send_mouse(
