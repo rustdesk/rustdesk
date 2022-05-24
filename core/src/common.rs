@@ -12,7 +12,7 @@ use hbb_common::{
     rendezvous_proto::*,
     sleep, socket_client, tokio, ResultType,
 };
-#[cfg(any(target_os = "android", target_os = "ios", feature = "cli"))]
+// #[cfg(any(target_os = "android", target_os = "ios", feature = "cli"))]
 use hbb_common::{config::RENDEZVOUS_PORT, futures::future::join_all};
 use std::sync::{Arc, Mutex};
 
@@ -336,7 +336,7 @@ pub async fn get_nat_type(ms_timeout: u64) -> i32 {
     crate::ipc::get_nat_type(ms_timeout).await
 }
 
-#[cfg(any(target_os = "android", target_os = "ios", feature = "cli"))]
+// #[cfg(any(target_os = "android", target_os = "ios", feature = "cli"))]
 #[tokio::main(flavor = "current_thread")]
 async fn test_rendezvous_server_() {
     let servers = Config::get_rendezvous_servers();
@@ -363,7 +363,7 @@ async fn test_rendezvous_server_() {
     join_all(futs).await;
 }
 
-#[cfg(any(target_os = "android", target_os = "ios", feature = "cli"))]
+// #[cfg(any(target_os = "android", target_os = "ios", feature = "cli"))]
 pub fn test_rendezvous_server() {
     std::thread::spawn(test_rendezvous_server_);
 }
