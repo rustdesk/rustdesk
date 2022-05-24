@@ -1,15 +1,17 @@
 import 'dart:convert';
+import 'dart:ffi';
 import 'dart:io';
 import 'dart:typed_data';
-import 'dart:ffi';
-import 'package:ffi/ffi.dart';
-import 'package:path_provider/path_provider.dart';
+
 import 'package:device_info/device_info.dart';
-import 'package:package_info/package_info.dart';
 import 'package:external_path/external_path.dart';
+import 'package:ffi/ffi.dart';
 import 'package:flutter/services.dart';
-import '../generated_bridge.dart';
+import 'package:package_info_plus/package_info_plus.dart';
+import 'package:path_provider/path_provider.dart';
+
 import '../common.dart';
+import '../generated_bridge.dart';
 
 class RgbaFrame extends Struct {
   @Uint32()
@@ -60,13 +62,19 @@ class PlatformFFI {
     isIOS = Platform.isIOS;
     isAndroid = Platform.isAndroid;
     isDesktop = Platform.isWindows || Platform.isMacOS || Platform.isLinux;
-    if (isDesktop) {
-      // TODO
-      return;
-    }
+    // if (isDesktop) {
+    //   // TODO
+    //   return;
+    // }
     final dylib = Platform.isAndroid
         ? DynamicLibrary.open('librustdesk.so')
-        : DynamicLibrary.process();
+        : Platform.isLinux
+            ? DynamicLibrary.open("/usr/lib/rustdesk/librustdesk.so")
+            : Platform.isWindows
+                ? DynamicLibrary.open("librustdesk.dll")
+                : Platform.isMacOS
+                    ? DynamicLibrary.open("librustdesk.dylib")
+                    : DynamicLibrary.process();
     print('initializing FFI');
     try {
       _getByName = dylib.lookupFunction<F2, F2>('get_by_name');

@@ -1165,7 +1165,7 @@ pub fn make_fd_to_json(fd: FileDirectory) -> String {
 
 // Server Side
 // TODO connection_manager need use struct and trait,impl default method
-#[cfg(target_os = "android")]
+#[cfg(not(any(target_os = "ios")))]
 pub mod connection_manager {
     use std::{
         collections::HashMap,
@@ -1191,6 +1191,7 @@ pub mod connection_manager {
             task::spawn_blocking,
         },
     };
+    #[cfg(any(target_os = "android"))]
     use scrap::android::call_main_service_set_by_name;
     use serde_derive::Serialize;
 
@@ -1253,6 +1254,7 @@ pub mod connection_manager {
                         client.authorized = true;
                         let client_json = serde_json::to_string(&client).unwrap_or("".into());
                         // send to Android service,active notification no matter UI is shown or not.
+                        #[cfg(any(target_os = "android"))]
                         if let Err(e) = call_main_service_set_by_name(
                             "on_client_authorized",
                             Some(&client_json),
@@ -1265,6 +1267,7 @@ pub mod connection_manager {
                     } else {
                         let client_json = serde_json::to_string(&client).unwrap_or("".into());
                         // send to Android service,active notification no matter UI is shown or not.
+                        #[cfg(any(target_os = "android"))]
                         if let Err(e) = call_main_service_set_by_name(
                             "try_start_without_auth",
                             Some(&client_json),
@@ -1343,6 +1346,7 @@ pub mod connection_manager {
             .next()
             .is_none()
         {
+            #[cfg(any(target_os = "android"))]
             if let Err(e) = call_main_service_set_by_name("stop_capture", None, None) {
                 log::debug!("stop_capture err:{}", e);
             }
