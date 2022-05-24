@@ -1,16 +1,16 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
-import 'package:flutter_hbb/pages/desktop_home_page.dart';
+import 'package:flutter_hbb/desktop/pages/desktop_home_page.dart';
 import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
 import 'package:provider/provider.dart';
 import 'package:firebase_analytics/firebase_analytics.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'common.dart';
 import 'models/model.dart';
-import 'pages/home_page.dart';
-import 'pages/server_page.dart';
-import 'pages/settings_page.dart';
+import 'mobile/pages/home_page.dart';
+import 'mobile/pages/server_page.dart';
+import 'mobile/pages/settings_page.dart';
 
 Future<Null> main() async {
   WidgetsFlutterBinding.ensureInitialized();

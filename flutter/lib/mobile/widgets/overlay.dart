@@ -2,7 +2,7 @@ import 'package:draggable_float_widget/draggable_float_widget.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/common.dart';
 
-import '../models/model.dart';
+import '../../models/model.dart';
 import '../pages/chat_page.dart';
 
 OverlayEntry? chatIconOverlayEntry;

@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_hbb/common.dart';
 import 'package:flutter_hbb/models/chat_model.dart';
 import 'package:provider/provider.dart';
-import '../models/model.dart';
+import '../../models/model.dart';
 import 'home_page.dart';
 
 ChatPage chatPage = ChatPage();
