@@ -1,13 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/models/model.dart';
-import 'package:flutter_hbb/widgets/dialog.dart';
+import 'package:flutter_hbb/mobile/widgets/dialog.dart';
 import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
 import 'package:provider/provider.dart';
 
-import '../common.dart';
-import '../models/server_model.dart';
+import '../../common.dart';
+import '../../models/server_model.dart';
 import 'home_page.dart';
-import '../models/model.dart';
+import '../../models/model.dart';
 
 class ServerPage extends StatelessWidget implements PageShape {
   @override

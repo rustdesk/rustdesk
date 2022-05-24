@@ -6,8 +6,8 @@ import 'package:zxing2/qrcode.dart';
 import 'dart:io';
 import 'dart:async';
 import 'dart:convert';
-import '../common.dart';
-import '../models/model.dart';
+import '../../common.dart';
+import '../../models/model.dart';
 
 class ScanPage extends StatefulWidget {
   @override

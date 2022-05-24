@@ -3,7 +3,7 @@ import 'dart:convert';
 import 'package:dash_chat/dash_chat.dart';
 import 'package:flutter/material.dart';
 
-import '../widgets/overlay.dart';
+import '../../mobile/widgets/overlay.dart';
 import 'model.dart';
 
 class MessageBody {

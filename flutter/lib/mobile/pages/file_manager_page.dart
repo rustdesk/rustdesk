@@ -7,8 +7,8 @@ import 'package:flutter_breadcrumb/flutter_breadcrumb.dart';
 import 'package:wakelock/wakelock.dart';
 import 'package:toggle_switch/toggle_switch.dart';
 
-import '../common.dart';
-import '../models/model.dart';
+import '../../common.dart';
+import '../../models/model.dart';
 import '../widgets/dialog.dart';
 
 class FileManagerPage extends StatefulWidget {

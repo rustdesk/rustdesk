@@ -2,8 +2,8 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
-import '../common.dart';
-import '../models/model.dart';
+import '../../common.dart';
+import '../../models/model.dart';
 
 void clientClose() {
   msgBox('', 'Close', 'Are you sure to close the connection?');

@@ -12,8 +12,8 @@ import 'package:flutter/material.dart';
 import 'package:tuple/tuple.dart';
 import 'dart:async';
 import '../common.dart';
-import '../widgets/dialog.dart';
-import '../widgets/overlay.dart';
+import '../mobile/widgets/dialog.dart';
+import '../mobile/widgets/overlay.dart';
 import 'native_model.dart' if (dart.library.html) 'web_model.dart';
 
 typedef HandleMsgBox = void Function(Map<String, dynamic> evt, String id);

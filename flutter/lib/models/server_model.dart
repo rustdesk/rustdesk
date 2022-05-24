@@ -3,7 +3,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:wakelock/wakelock.dart';
 import '../common.dart';
-import '../pages/server_page.dart';
+import '../mobile/pages/server_page.dart';
 import 'model.dart';
 
 const loginDialogTag = "LOGIN";
