@@ -149,7 +149,7 @@ pub fn start(args: &mut [String]) {
     }
     #[cfg(not(feature = "inline"))]
     frame.load_file(&format!(
-        "file://{}/src/ui/{}",
+        "file://{}/core/src/ui/{}",
         std::env::current_dir()
             .map(|c| c.display().to_string())
             .unwrap_or("".to_owned()),
@@ -688,7 +688,7 @@ impl UI {
         let p = "explorer";
         #[cfg(target_os = "macos")]
         let p = "open";
-        #[cfg(target_os = "linux")] 
+        #[cfg(target_os = "linux")]
         let p = if std::path::Path::new("/usr/bin/firefox").exists() {
             "firefox"
         } else {

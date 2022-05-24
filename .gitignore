@@ -2,10 +2,10 @@
 .vscode
 .idea
 .DS_Store
-src/ui/inline.rs
+core/src/ui/inline.rs
 extractor
 __pycache__
-src/version.rs
+core/src/version.rs
 *dmg
 *exe
 *tgz
@@ -18,6 +18,6 @@ flutter_hbb
 web_hbb
 sciter.dll
 **pdb
-src/bridge_generated.rs
+core/src/bridge_generated.rs
 *deb
 rustdesk
