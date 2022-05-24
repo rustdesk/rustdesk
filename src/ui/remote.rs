@@ -68,7 +68,7 @@ fn get_key_state(key: enigo::Key) -> bool {
 
 static mut IS_IN: bool = false;
 static KEYBOARD_HOOKED: AtomicBool = AtomicBool::new(false);
-static mut SERVER_KEYBOARD_ENABLED: bool = true;
+static SERVER_KEYBOARD_ENABLED: AtomicBool = AtomicBool::new(true);
 static mut SERVER_FILE_TRANSFER_ENABLED: bool = true;
 static SERVER_CLIPBOARD_ENABLED: AtomicBool = AtomicBool::new(true);
 #[cfg(windows)]
@@ -266,7 +266,7 @@ impl Handler {
             std::env::set_var("KEYBOARD_ONLY", "y"); // pass to rdev
             use rdev::{EventType::*, *};
             let func = move |evt: Event| {
-                if unsafe { !IS_IN || !SERVER_KEYBOARD_ENABLED } {
+                if unsafe { !IS_IN || !SERVER_KEYBOARD_ENABLED.load(Ordering::SeqCst) } {
                     return;
                 }
                 let (key, down) = match evt.event_type {
@@ -1381,7 +1381,7 @@ impl Remote {
         match Client::start(&self.handler.id, key, token, conn_type).await {
             Ok((mut peer, direct)) => {
                 unsafe {
-                    SERVER_KEYBOARD_ENABLED = true;
+                    SERVER_KEYBOARD_ENABLED.store(true, Ordering::SeqCst);
                     SERVER_CLIPBOARD_ENABLED.store(true, Ordering::SeqCst);
                     SERVER_FILE_TRANSFER_ENABLED = true;
                 }
@@ -1463,7 +1463,7 @@ impl Remote {
             stop.send(()).ok();
         }
         unsafe {
-            SERVER_KEYBOARD_ENABLED = false;
+            SERVER_KEYBOARD_ENABLED.store(false, Ordering::SeqCst);
             SERVER_CLIPBOARD_ENABLED.store(false, Ordering::SeqCst);
             SERVER_FILE_TRANSFER_ENABLED = false;
         }
@@ -1519,7 +1519,7 @@ impl Remote {
                         _ => {}
                     }
                     if !SERVER_CLIPBOARD_ENABLED.load(Ordering::SeqCst)
-                        || !unsafe { SERVER_KEYBOARD_ENABLED }
+                        || !SERVER_KEYBOARD_ENABLED.load(Ordering::SeqCst)
                         || lc.read().unwrap().disable_clipboard
                     {
                         continue;
@@ -1979,7 +1979,7 @@ impl Remote {
                         if !(self.handler.is_file_transfer()
                             || self.handler.is_port_forward()
                             || !SERVER_CLIPBOARD_ENABLED.load(Ordering::SeqCst)
-                            || !unsafe { SERVER_KEYBOARD_ENABLED }
+                            || !SERVER_KEYBOARD_ENABLED.load(Ordering::SeqCst)
                             || self.handler.lc.read().unwrap().disable_clipboard)
                         {
                             let txt = self.old_clipboard.lock().unwrap().clone();
@@ -2181,9 +2181,7 @@ impl Remote {
                         log::info!("Change permission {:?} -> {}", p.permission, p.enabled);
                         match p.permission.enum_value_or_default() {
                             Permission::Keyboard => {
-                                unsafe {
-                                    SERVER_KEYBOARD_ENABLED = p.enabled;
-                                }
+                                SERVER_KEYBOARD_ENABLED.store(p.enabled, Ordering::SeqCst);
                                 self.handler
                                     .call2("setPermission", &make_args!("keyboard", p.enabled));
                             }
