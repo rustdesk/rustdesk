@@ -1,5 +1,5 @@
 # Project-level configuration.
-cmake_minimum_required(VERSION 3.10)
+cmake_minimum_required(VERSION 3.12)
 project(runner LANGUAGES CXX)
 
 # The name of the executable created for the application. Change this to change
@@ -56,6 +56,24 @@ pkg_check_modules(GTK REQUIRED IMPORTED_TARGET gtk+-3.0)
 
 add_definitions(-DAPPLICATION_ID="${APPLICATION_ID}")
 
+# flutter_rust_bridge
+find_package(Corrosion REQUIRED)
+
+corrosion_import_crate(MANIFEST_PATH ../../Cargo.toml
+        # Equivalent to --all-features passed to cargo build
+#        [ALL_FEATURES]
+        # Equivalent to --no-default-features passed to cargo build
+#        [NO_DEFAULT_FEATURES]
+        # Disable linking of standard libraries (required for no_std crates).
+#        [NO_STD]
+        # Specify  cargo build profile (e.g. release or a custom profile)
+#        [PROFILE <cargo-profile>]
+        # Only import the specified crates from a workspace
+#        [CRATES <crate1> ... <crateN>]
+        # Enable the specified features
+#        [FEATURES <feature1> ... <featureN>]
+)
+
 # Define the application target. To change its name, change BINARY_NAME above,
 # not the value here, or `flutter run` will no longer work.
 #
@@ -73,6 +91,8 @@ apply_standard_settings(${BINARY_NAME})
 # Add dependency libraries. Add any application-specific dependencies here.
 target_link_libraries(${BINARY_NAME} PRIVATE flutter)
 target_link_libraries(${BINARY_NAME} PRIVATE PkgConfig::GTK)
+
+target_link_libraries(${BINARY_NAME} PRIVATE librustdesk)
 
 # Run the Flutter tool portions of the build. This must not be removed.
 add_dependencies(${BINARY_NAME} flutter_assemble)
