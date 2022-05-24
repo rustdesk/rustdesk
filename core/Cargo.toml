@@ -28,8 +28,8 @@ default = ["use_dasp"]
 
 [dependencies]
 whoami = "1.2"
-scrap = { path = "libs/scrap" }
-hbb_common = { path = "libs/hbb_common" }
+scrap = { path = "../libs/scrap" }
+hbb_common = { path = "../libs/hbb_common" }
 serde_derive = "1.0"
 serde = "1.0"
 serde_json = "1.0"
@@ -64,8 +64,8 @@ machine-uid = "0.2"
 mac_address = "1.1"
 sciter-rs = { git = "https://github.com/open-trade/rust-sciter", branch = "dyn" }
 sys-locale = "0.2"
-enigo = { path = "libs/enigo" }
-clipboard = { path = "libs/clipboard" }
+enigo = { path = "../libs/enigo" }
+clipboard = { path = "../libs/clipboard" }
 rdev = { git = "https://github.com/open-trade/rdev" }
 ctrlc = "3.2"
 arboard = "2.0"
@@ -102,9 +102,6 @@ jni = "0.19.0"
 [target.'cfg(any(target_os = "android", target_os = "ios", target_os = "linux"))'.dependencies]
 flutter_rust_bridge = "1.30.0"
 
-[workspace]
-members = ["libs/scrap", "libs/hbb_common", "libs/enigo", "libs/clipboard", "libs/virtual_display"]
-
 [package.metadata.winres]
 LegalCopyright = "Copyright © 2022 Purslane, Inc."
 # this FileDescription overrides package.description
@@ -116,7 +113,7 @@ winapi = { version = "0.3", features = [ "winnt" ] }
 
 [build-dependencies]
 cc = "1.0"
-hbb_common = { path = "libs/hbb_common" }
+hbb_common = { path = "../libs/hbb_common" }
 flutter_rust_bridge_codegen = "1.30.0"
 
 [dev-dependencies]
