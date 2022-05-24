@@ -1,0 +1,14 @@
+[workspace]
+
+members = [
+  "core",
+  "desktop",
+  "desktop-sciter",
+  "mobile",
+  
+  "libs/scrap",
+  "libs/hbb_common",
+  "libs/enigo",
+  "libs/clipboard",
+  "libs/virtual_display"
+]
