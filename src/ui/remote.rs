@@ -69,7 +69,7 @@ fn get_key_state(key: enigo::Key) -> bool {
 static mut IS_IN: bool = false;
 static KEYBOARD_HOOKED: AtomicBool = AtomicBool::new(false);
 static SERVER_KEYBOARD_ENABLED: AtomicBool = AtomicBool::new(true);
-static mut SERVER_FILE_TRANSFER_ENABLED: bool = true;
+static SERVER_FILE_TRANSFER_ENABLED: AtomicBool = AtomicBool::new(true);
 static SERVER_CLIPBOARD_ENABLED: AtomicBool = AtomicBool::new(true);
 #[cfg(windows)]
 static mut IS_ALT_GR: bool = false;
@@ -1380,11 +1380,9 @@ impl Remote {
         };
         match Client::start(&self.handler.id, key, token, conn_type).await {
             Ok((mut peer, direct)) => {
-                unsafe {
-                    SERVER_KEYBOARD_ENABLED.store(true, Ordering::SeqCst);
-                    SERVER_CLIPBOARD_ENABLED.store(true, Ordering::SeqCst);
-                    SERVER_FILE_TRANSFER_ENABLED = true;
-                }
+                SERVER_KEYBOARD_ENABLED.store(true, Ordering::SeqCst);
+                SERVER_CLIPBOARD_ENABLED.store(true, Ordering::SeqCst);
+                SERVER_FILE_TRANSFER_ENABLED.store(true, Ordering::SeqCst);
                 self.handler
                     .call("setConnectionType", &make_args!(peer.is_secured(), direct));
 
@@ -1462,11 +1460,9 @@ impl Remote {
         if let Some(stop) = stop_clipboard {
             stop.send(()).ok();
         }
-        unsafe {
-            SERVER_KEYBOARD_ENABLED.store(false, Ordering::SeqCst);
-            SERVER_CLIPBOARD_ENABLED.store(false, Ordering::SeqCst);
-            SERVER_FILE_TRANSFER_ENABLED = false;
-        }
+        SERVER_KEYBOARD_ENABLED.store(false, Ordering::SeqCst);
+        SERVER_CLIPBOARD_ENABLED.store(false, Ordering::SeqCst);
+        SERVER_FILE_TRANSFER_ENABLED.store(false, Ordering::SeqCst);
     }
 
     fn handle_job_status(&mut self, id: i32, file_num: i32, err: Option<String>) {
@@ -2195,9 +2191,7 @@ impl Remote {
                                     .call2("setPermission", &make_args!("audio", p.enabled));
                             }
                             Permission::File => {
-                                unsafe {
-                                    SERVER_FILE_TRANSFER_ENABLED = p.enabled;
-                                }
+                                SERVER_FILE_TRANSFER_ENABLED.store(p.enabled, Ordering::SeqCst);
                                 if !p.enabled && self.handler.is_file_transfer() {
                                     return true;
                                 }
@@ -2258,7 +2252,7 @@ impl Remote {
     fn check_clipboard_file_context(&mut self) {
         #[cfg(windows)]
         {
-            let enabled = unsafe { SERVER_FILE_TRANSFER_ENABLED }
+            let enabled = SERVER_FILE_TRANSFER_ENABLED.load(Ordering::SeqCst)
                 && self.handler.lc.read().unwrap().enable_file_transfer;
             if enabled == self.clipboard_file_context.is_none() {
                 self.clipboard_file_context = if enabled {
