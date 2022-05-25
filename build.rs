@@ -64,11 +64,11 @@ fn install_oboe() {
 
 fn gen_flutter_rust_bridge() {
     // Tell Cargo that if the given file changes, to rerun this build script.
-    println!("cargo:rerun-if-changed=src/mobile_ffi.rs");
+    println!("cargo:rerun-if-changed=src/flutter_ffi.rs");
     // settings for fbr_codegen
     let opts = lib_flutter_rust_bridge_codegen::Opts {
         // Path of input Rust code
-        rust_input: "src/mobile_ffi.rs".to_string(),
+        rust_input: "src/flutter_ffi.rs".to_string(),
         // Path of output generated Dart code
         dart_output: "flutter/lib/generated_bridge.dart".to_string(),
         // for other options lets use default
