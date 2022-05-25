@@ -1,6 +1,6 @@
 use crate::client::file_trait::FileManager;
-use crate::mobile::connection_manager::{self, get_clients_length, get_clients_state};
-use crate::mobile::{self, make_fd_to_json, Session};
+use crate::flutter::connection_manager::{self, get_clients_length, get_clients_state};
+use crate::flutter::{self, make_fd_to_json, Session};
 use flutter_rust_bridge::{StreamSink, ZeroCopyBuffer};
 use hbb_common::ResultType;
 use hbb_common::{
@@ -37,12 +37,12 @@ fn initialize(app_dir: &str) {
 }
 
 pub fn start_event_stream(s: StreamSink<String>) -> ResultType<()> {
-    let _ = mobile::EVENT_STREAM.write().unwrap().insert(s);
+    let _ = flutter::EVENT_STREAM.write().unwrap().insert(s);
     Ok(())
 }
 
 pub fn start_rgba_stream(s: StreamSink<ZeroCopyBuffer<Vec<u8>>>) -> ResultType<()> {
-    let _ = mobile::RGBA_STREAM.write().unwrap().insert(s);
+    let _ = flutter::RGBA_STREAM.write().unwrap().insert(s);
     Ok(())
 }
 
