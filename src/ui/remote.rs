@@ -1,7 +1,10 @@
 use std::{
     collections::HashMap,
     ops::Deref,
-    sync::{Arc, Mutex, RwLock},
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc, Mutex, RwLock,
+    },
 };
 
 use sciter::{
@@ -63,11 +66,11 @@ fn get_key_state(key: enigo::Key) -> bool {
     ENIGO.lock().unwrap().get_key_state(key)
 }
 
-static mut IS_IN: bool = false;
-static mut KEYBOARD_HOOKED: bool = false;
-static mut SERVER_KEYBOARD_ENABLED: bool = true;
-static mut SERVER_FILE_TRANSFER_ENABLED: bool = true;
-static mut SERVER_CLIPBOARD_ENABLED: bool = true;
+static IS_IN: AtomicBool = AtomicBool::new(false);
+static KEYBOARD_HOOKED: AtomicBool = AtomicBool::new(false);
+static SERVER_KEYBOARD_ENABLED: AtomicBool = AtomicBool::new(true);
+static SERVER_FILE_TRANSFER_ENABLED: AtomicBool = AtomicBool::new(true);
+static SERVER_CLIPBOARD_ENABLED: AtomicBool = AtomicBool::new(true);
 #[cfg(windows)]
 static mut IS_ALT_GR: bool = false;
 
@@ -249,11 +252,8 @@ impl Handler {
         if self.is_port_forward() || self.is_file_transfer() {
             return;
         }
-        if unsafe { KEYBOARD_HOOKED } {
+        if KEYBOARD_HOOKED.swap(true, Ordering::SeqCst) {
             return;
-        }
-        unsafe {
-            KEYBOARD_HOOKED = true;
         }
         log::info!("keyboard hooked");
         let mut me = self.clone();
@@ -266,7 +266,7 @@ impl Handler {
             std::env::set_var("KEYBOARD_ONLY", "y"); // pass to rdev
             use rdev::{EventType::*, *};
             let func = move |evt: Event| {
-                if unsafe { !IS_IN || !SERVER_KEYBOARD_ENABLED } {
+                if !IS_IN.load(Ordering::SeqCst) || !SERVER_KEYBOARD_ENABLED.load(Ordering::SeqCst) {
                     return;
                 }
                 let (key, down) = match evt.event_type {
@@ -865,17 +865,13 @@ impl Handler {
     fn enter(&mut self) {
         #[cfg(windows)]
         crate::platform::windows::stop_system_key_propagate(true);
-        unsafe {
-            IS_IN = true;
-        }
+        IS_IN.store(true, Ordering::SeqCst);
     }
 
     fn leave(&mut self) {
         #[cfg(windows)]
         crate::platform::windows::stop_system_key_propagate(false);
-        unsafe {
-            IS_IN = false;
-        }
+        IS_IN.store(false, Ordering::SeqCst);
     }
 
     fn send_mouse(
@@ -1380,11 +1376,9 @@ impl Remote {
         };
         match Client::start(&self.handler.id, key, token, conn_type).await {
             Ok((mut peer, direct)) => {
-                unsafe {
-                    SERVER_KEYBOARD_ENABLED = true;
-                    SERVER_CLIPBOARD_ENABLED = true;
-                    SERVER_FILE_TRANSFER_ENABLED = true;
-                }
+                SERVER_KEYBOARD_ENABLED.store(true, Ordering::SeqCst);
+                SERVER_CLIPBOARD_ENABLED.store(true, Ordering::SeqCst);
+                SERVER_FILE_TRANSFER_ENABLED.store(true, Ordering::SeqCst);
                 self.handler
                     .call("setConnectionType", &make_args!(peer.is_secured(), direct));
 
@@ -1462,11 +1456,9 @@ impl Remote {
         if let Some(stop) = stop_clipboard {
             stop.send(()).ok();
         }
-        unsafe {
-            SERVER_KEYBOARD_ENABLED = false;
-            SERVER_CLIPBOARD_ENABLED = false;
-            SERVER_FILE_TRANSFER_ENABLED = false;
-        }
+        SERVER_KEYBOARD_ENABLED.store(false, Ordering::SeqCst);
+        SERVER_CLIPBOARD_ENABLED.store(false, Ordering::SeqCst);
+        SERVER_FILE_TRANSFER_ENABLED.store(false, Ordering::SeqCst);
     }
 
     fn handle_job_status(&mut self, id: i32, file_num: i32, err: Option<String>) {
@@ -1518,8 +1510,8 @@ impl Remote {
                         }
                         _ => {}
                     }
-                    if !unsafe { SERVER_CLIPBOARD_ENABLED }
-                        || !unsafe { SERVER_KEYBOARD_ENABLED }
+                    if !SERVER_CLIPBOARD_ENABLED.load(Ordering::SeqCst)
+                        || !SERVER_KEYBOARD_ENABLED.load(Ordering::SeqCst)
                         || lc.read().unwrap().disable_clipboard
                     {
                         continue;
@@ -1712,7 +1704,7 @@ impl Remote {
                         job.is_last_job = false;
                         allow_err!(
                             peer.send(&fs::new_send(id, job.remote.clone(), job.file_num, job.show_hidden))
-                                .await
+                            .await
                         );
                     }
                 } else {
@@ -1947,7 +1939,7 @@ impl Remote {
             let json_str = serde_json::to_string(&job.gen_meta()).unwrap();
             transfer_metas.write_jobs.push(json_str);
         }
-        log::info!("meta: {:?}",transfer_metas);
+        log::info!("meta: {:?}", transfer_metas);
         config.transfer = transfer_metas;
         self.handler.save_config(config);
         true
@@ -1978,8 +1970,8 @@ impl Remote {
                         self.check_clipboard_file_context();
                         if !(self.handler.is_file_transfer()
                             || self.handler.is_port_forward()
-                            || !unsafe { SERVER_CLIPBOARD_ENABLED }
-                            || !unsafe { SERVER_KEYBOARD_ENABLED }
+                            || !SERVER_CLIPBOARD_ENABLED.load(Ordering::SeqCst)
+                            || !SERVER_KEYBOARD_ENABLED.load(Ordering::SeqCst)
                             || self.handler.lc.read().unwrap().disable_clipboard)
                         {
                             let txt = self.old_clipboard.lock().unwrap().clone();
@@ -2033,7 +2025,7 @@ impl Remote {
                                 if self.handler.peer_platform() == "Windows" {
                                     fs::transform_windows_path(&mut entries);
                                 }
-                            }  
+                            }
                             let mut m = make_fd(fd.id, &entries, fd.id > 0);
                             if fd.id <= 0 {
                                 m.set_item("path", fd.path);
@@ -2181,16 +2173,12 @@ impl Remote {
                         log::info!("Change permission {:?} -> {}", p.permission, p.enabled);
                         match p.permission.enum_value_or_default() {
                             Permission::Keyboard => {
-                                unsafe {
-                                    SERVER_KEYBOARD_ENABLED = p.enabled;
-                                }
+                                SERVER_KEYBOARD_ENABLED.store(p.enabled, Ordering::SeqCst);
                                 self.handler
                                     .call2("setPermission", &make_args!("keyboard", p.enabled));
                             }
                             Permission::Clipboard => {
-                                unsafe {
-                                    SERVER_CLIPBOARD_ENABLED = p.enabled;
-                                }
+                                SERVER_CLIPBOARD_ENABLED.store(p.enabled, Ordering::SeqCst);
                                 self.handler
                                     .call2("setPermission", &make_args!("clipboard", p.enabled));
                             }
@@ -2199,9 +2187,7 @@ impl Remote {
                                     .call2("setPermission", &make_args!("audio", p.enabled));
                             }
                             Permission::File => {
-                                unsafe {
-                                    SERVER_FILE_TRANSFER_ENABLED = p.enabled;
-                                }
+                                SERVER_FILE_TRANSFER_ENABLED.store(p.enabled, Ordering::SeqCst);
                                 if !p.enabled && self.handler.is_file_transfer() {
                                     return true;
                                 }
@@ -2262,7 +2248,7 @@ impl Remote {
     fn check_clipboard_file_context(&mut self) {
         #[cfg(windows)]
         {
-            let enabled = unsafe { SERVER_FILE_TRANSFER_ENABLED }
+            let enabled = SERVER_FILE_TRANSFER_ENABLED.load(Ordering::SeqCst)
                 && self.handler.lc.read().unwrap().enable_file_transfer;
             if enabled == self.clipboard_file_context.is_none() {
                 self.clipboard_file_context = if enabled {
