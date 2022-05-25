@@ -1,8 +1,8 @@
 import 'dart:async';
 import 'dart:convert';
 import 'package:flutter_hbb/common.dart';
-import 'package:flutter_hbb/pages/file_manager_page.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_hbb/mobile/pages/file_manager_page.dart';
 import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
 import 'package:path/path.dart' as Path;
 

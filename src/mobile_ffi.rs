@@ -29,6 +29,7 @@ fn initialize(app_dir: &str) {
         use hbb_common::env_logger::*;
         init_from_env(Env::default().filter_or(DEFAULT_FILTER_ENV, "debug"));
     }
+    #[cfg(any(target_os = "android", target_os = "ios", feature = "cli"))]
     crate::common::test_rendezvous_server();
     crate::common::test_nat_type();
     #[cfg(target_os = "android")]
@@ -182,9 +183,11 @@ unsafe extern "C" fn set_by_name(name: *const c_char, value: *const c_char) {
                 "init" => {
                     initialize(value);
                 }
+                #[cfg(any(target_os = "android", target_os = "ios"))]
                 "info1" => {
                     *crate::common::MOBILE_INFO1.lock().unwrap() = value.to_owned();
                 }
+                #[cfg(any(target_os = "android", target_os = "ios"))]
                 "info2" => {
                     *crate::common::MOBILE_INFO2.lock().unwrap() = value.to_owned();
                 }
@@ -293,6 +296,7 @@ unsafe extern "C" fn set_by_name(name: *const c_char, value: *const c_char) {
                                 if name == "custom-rendezvous-server" {
                                     #[cfg(target_os = "android")]
                                     crate::rendezvous_mediator::RendezvousMediator::restart();
+                                    #[cfg(any(target_os = "android", target_os = "ios", feature = "cli"))]
                                     crate::common::test_rendezvous_server();
                                 }
                             }

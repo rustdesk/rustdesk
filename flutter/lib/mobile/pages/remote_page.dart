@@ -1,16 +1,16 @@
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/models/chat_model.dart';
-import 'package:flutter_hbb/widgets/gesture_help.dart';
+import 'package:flutter_hbb/mobile/widgets/gesture_help.dart';
 import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter/services.dart';
 import 'dart:ui' as ui;
 import 'dart:async';
 import 'package:wakelock/wakelock.dart';
-import '../common.dart';
+import '../../common.dart';
 import '../widgets/gestures.dart';
-import '../models/model.dart';
+import '../../models/model.dart';
 import '../widgets/dialog.dart';
 import '../widgets/overlay.dart';
 

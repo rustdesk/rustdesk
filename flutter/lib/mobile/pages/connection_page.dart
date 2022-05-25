@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_hbb/pages/file_manager_page.dart';
+import 'package:flutter_hbb/mobile/pages/file_manager_page.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'dart:async';
-import '../common.dart';
-import '../models/model.dart';
+import '../../common.dart';
+import '../../models/model.dart';
 import 'home_page.dart';
 import 'remote_page.dart';
 import 'settings_page.dart';

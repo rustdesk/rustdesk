@@ -1,9 +1,12 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:wakelock/wakelock.dart';
+
 import '../common.dart';
-import '../pages/server_page.dart';
+import '../mobile/pages/server_page.dart';
 import 'model.dart';
 
 const loginDialogTag = "LOGIN";
@@ -203,7 +206,10 @@ class ServerModel with ChangeNotifier {
     FFI.setByName("start_service");
     getIDPasswd();
     updateClientState();
-    Wakelock.enable();
+    if (!Platform.isLinux) {
+      // current linux is not supported
+      Wakelock.enable();
+    }
   }
 
   Future<Null> stopService() async {
@@ -212,7 +218,10 @@ class ServerModel with ChangeNotifier {
     await FFI.invokeMethod("stop_service");
     FFI.setByName("stop_service");
     notifyListeners();
-    Wakelock.disable();
+    if (!Platform.isLinux) {
+      // current linux is not supported
+      Wakelock.disable();
+    }
   }
 
   Future<Null> initInput() async {

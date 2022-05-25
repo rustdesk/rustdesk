@@ -4,9 +4,9 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:provider/provider.dart';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
-import '../common.dart';
+import '../../common.dart';
 import '../widgets/dialog.dart';
-import '../models/model.dart';
+import '../../models/model.dart';
 import 'home_page.dart';
 import 'scan_page.dart';
 
