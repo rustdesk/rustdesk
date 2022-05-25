@@ -24,7 +24,7 @@ pub trait FileManager: Interface {
 
     #[cfg(any(target_os = "android", target_os = "ios"))]
     fn read_dir(&self,path: &str, include_hidden: bool) -> String {
-        use crate::mobile::make_fd_to_json;
+        use crate::flutter::make_fd_to_json;
         match fs::read_dir(&fs::get_path(path), include_hidden){
             Ok(fd) => make_fd_to_json(fd),
             Err(_)=>"".into()
