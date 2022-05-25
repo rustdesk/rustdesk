@@ -1,6 +1,7 @@
 use crate::client::file_trait::FileManager;
 use crate::flutter::connection_manager::{self, get_clients_length, get_clients_state};
 use crate::flutter::{self, make_fd_to_json, Session};
+use crate::ui;
 use flutter_rust_bridge::{StreamSink, ZeroCopyBuffer};
 use hbb_common::ResultType;
 use hbb_common::{
@@ -115,7 +116,7 @@ unsafe extern "C" fn get_by_name(name: *const c_char, arg: *const c_char) -> *co
                 }
             }
             "server_id" => {
-                res = Config::get_id();
+                res = ui::get_id();
             }
             "server_password" => {
                 res = Config::get_password();
@@ -296,7 +297,11 @@ unsafe extern "C" fn set_by_name(name: *const c_char, value: *const c_char) {
                                 if name == "custom-rendezvous-server" {
                                     #[cfg(target_os = "android")]
                                     crate::rendezvous_mediator::RendezvousMediator::restart();
-                                    #[cfg(any(target_os = "android", target_os = "ios", feature = "cli"))]
+                                    #[cfg(any(
+                                        target_os = "android",
+                                        target_os = "ios",
+                                        feature = "cli"
+                                    ))]
                                     crate::common::test_rendezvous_server();
                                 }
                             }
