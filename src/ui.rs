@@ -142,7 +142,11 @@ pub fn get_license() -> String {
     Default::default()
 }
 
-pub fn get_option(key: &str) -> String {
+pub fn get_option(key: String) -> String {
+    get_option_(&key)
+}
+
+fn get_option_(key: &str) -> String {
     let ui_data = UI_DATA.lock().unwrap();
     let map = ui_data.2.lock().unwrap();
     if let Some(v) = map.get(key) {
@@ -186,7 +190,7 @@ pub fn set_peer_option(id: String, name: String, value: String) {
 }
 
 pub fn using_public_server() -> bool {
-    crate::get_custom_rendezvous_server(get_option("custom-rendezvous-server")).is_empty()
+    crate::get_custom_rendezvous_server(get_option_("custom-rendezvous-server")).is_empty()
 }
 
 pub fn get_options() -> HashMap<String, String> {
@@ -601,8 +605,8 @@ pub fn is_xfce() -> bool {
 
 pub fn get_api_server() -> String {
     crate::get_api_server(
-        get_option("api-server"),
-        get_option("custom-rendezvous-server"),
+        get_option_("api-server"),
+        get_option_("custom-rendezvous-server"),
     )
 }
 
@@ -791,7 +795,7 @@ impl UI {
     }
 
     fn get_option(&self, key: String) -> String {
-        get_option(&key)
+        get_option(key)
     }
 
     fn get_local_option(&self, key: String) -> String {
