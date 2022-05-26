@@ -40,5 +40,7 @@ mod port_forward;
 #[cfg(windows)]
 mod tray;
 
+mod ui_interface;
+
 #[cfg(windows)]
 pub mod clipboard_file;
