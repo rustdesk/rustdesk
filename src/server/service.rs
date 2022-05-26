@@ -89,7 +89,12 @@ impl<T: Subscriber + From<ConnInner>> Service for ServiceTmpl<T> {
 
     fn join(&self) {
         self.0.write().unwrap().active = false;
-        self.0.write().unwrap().handle.take().map(JoinHandle::join);
+        let handle = self.0.write().unwrap().handle.take();
+        if let Some(handle) = handle {
+            if let Err(e) = handle.join() {
+                log::error!("Failed to join thread for service {}, {:?}", self.name(), e);
+            }
+        }
     }
 }
 
