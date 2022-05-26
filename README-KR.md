@@ -130,7 +130,7 @@ docker build -t "rustdesk-builder" .
 docker run --rm -it -v $PWD:/home/user/rustdesk -v rustdesk-git-cache:/home/user/.cargo/git -v rustdesk-registry-cache:/home/user/.cargo/registry -e PUID="$(id -u)" -e PGID="$(id -g)" rustdesk-builder
 ```
 
-첫 빌드에서는 의존관계가 캐시될 때까지 시간이 거릴 수 있습니다만, 이후의 빌드때는 빨라집니다. 더불어 빌드 커맨드에 다른 인수를 지정할 필요가 있다면, 커맨드 끝에 있는 `<OPTIONAL-ARGS>` 에 지정할 수 있습니다. 예를 들어 최적화된 출시 버전을 빌드하고 싶다면 이렇게 상기한 커맨드 뒤에 `---release` 를 붙여 실행합니다. 성공했다면 실행파일은 시스템 타겟 폴더에 담겨지고, 다음 커맨드로 실행할 수 있습니다.
+첫 빌드에서는 의존관계가 캐시될 때까지 시간이 거릴 수 있습니다만, 이후의 빌드때는 빨라집니다. 더불어 빌드 커맨드에 다른 인수를 지정할 필요가 있다면, 커맨드 끝에 있는 `<OPTIONAL-ARGS>` 에 지정할 수 있습니다. 예를 들어 최적화된 출시 버전을 빌드하고 싶다면 이렇게 상기한 커맨드 뒤에 `--release` 를 붙여 실행합니다. 성공했다면 실행파일은 시스템 타겟 폴더에 담겨지고, 다음 커맨드로 실행할 수 있습니다.
 
 ```sh
 target/debug/rustdesk
