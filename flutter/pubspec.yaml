@@ -19,7 +19,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 version: 1.1.10+27
 
 environment:
-  sdk: ">=2.16.1 <3.0.0"
+  sdk: ">=2.16.1"
 
 dependencies:
   flutter:
@@ -46,13 +46,14 @@ dependencies:
   settings_ui: ^2.0.2
   flutter_breadcrumb: ^1.0.1
   http: ^0.13.4
-  qr_code_scanner: ^0.7.0
+  qr_code_scanner:
+    git:
+      url: https://github.com/Heap-Hop/qr_code_scanner.git
+      ref: fix_break_changes_platform
   zxing2: ^0.1.0
   image_picker: ^0.8.5
   image: ^3.1.3
-  flutter_smart_dialog:
-    git:
-      url: https://github.com/Heap-Hop/flutter_smart_dialog.git
+  flutter_smart_dialog: ^4.3.1
   flutter_rust_bridge: ^1.30.0
 
 dev_dependencies:

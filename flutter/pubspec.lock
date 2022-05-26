@@ -233,12 +233,10 @@ packages:
   flutter_smart_dialog:
     dependency: "direct main"
     description:
-      path: "."
-      ref: HEAD
-      resolved-ref: c89ce60664cbc206cb98c1f407e86b8a766f4c0e
-      url: "https://github.com/Heap-Hop/flutter_smart_dialog.git"
-    source: git
-    version: "4.0.0"
+      name: flutter_smart_dialog
+      url: "https://pub.dartlang.org"
+    source: hosted
+    version: "4.3.1"
   flutter_test:
     dependency: "direct dev"
     description: flutter
@@ -455,9 +453,11 @@ packages:
   qr_code_scanner:
     dependency: "direct main"
     description:
-      name: qr_code_scanner
-      url: "https://pub.dartlang.org"
-    source: hosted
+      path: "."
+      ref: fix_break_changes_platform
+      resolved-ref: "0feca6f15042c279ff575c559a3430df917b623d"
+      url: "https://github.com/Heap-Hop/qr_code_scanner.git"
+    source: git
     version: "0.7.0"
   quiver:
     dependency: transitive
@@ -745,5 +745,5 @@ packages:
     source: hosted
     version: "0.1.0"
 sdks:
-  dart: ">=2.16.1 <3.0.0"
-  flutter: ">=2.10.0"
+  dart: ">=2.17.0-0 <3.0.0"
+  flutter: ">=3.0.0"
