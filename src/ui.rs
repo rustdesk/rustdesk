@@ -613,26 +613,6 @@ pub fn get_api_server() -> String {
     )
 }
 
-// pub struct UIData(
-//     Status,                           // 1
-//     HashMap<String, String>,          // 2 options
-//     String,                           // 3
-//     mpsc::UnboundedSender<ipc::Data>, // 4
-// );
-// pub struct UIData {
-//     status: Status,                       // 1 arc
-//     options: HashMap<String, String>,     // 2 arc options
-//     _3: String,                           // 3 arc async_job_status
-//     _4: mpsc::UnboundedSender<ipc::Data>, // 4
-// }
-
-// impl UIData {
-//     fn new(childs: Childs) -> Self {
-//         let res = check_connect_status(true);
-//         Self(childs, res.0, res.1, Default::default(), res.2)
-//     }
-// }
-
 struct UIHostHandler;
 
 pub fn start(args: &mut [String]) {
