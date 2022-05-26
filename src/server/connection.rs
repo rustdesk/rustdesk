@@ -4,7 +4,7 @@ use crate::clipboard_file::*;
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use crate::common::update_clipboard;
 #[cfg(any(target_os = "android", target_os = "ios"))]
-use crate::{common::MOBILE_INFO2, mobile::connection_manager::start_channel};
+use crate::{common::MOBILE_INFO2, flutter::connection_manager::start_channel};
 use crate::{ipc, VERSION};
 use hbb_common::fs::can_enable_overwrite_detection;
 use hbb_common::{

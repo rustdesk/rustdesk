@@ -1,7 +1,7 @@
 use crate::client::file_trait::FileManager;
 use crate::flutter::connection_manager::{self, get_clients_length, get_clients_state};
 use crate::flutter::{self, make_fd_to_json, Session};
-use crate::ui;
+use crate::ui_interface;
 use flutter_rust_bridge::{StreamSink, ZeroCopyBuffer};
 use hbb_common::ResultType;
 use hbb_common::{
@@ -116,7 +116,7 @@ unsafe extern "C" fn get_by_name(name: *const c_char, arg: *const c_char) -> *co
                 }
             }
             "server_id" => {
-                res = ui::get_id();
+                res = ui_interface::get_id();
             }
             "server_password" => {
                 res = Config::get_password();
