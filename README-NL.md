@@ -125,7 +125,7 @@ Voer vervolgens de volgende commando's uit iedere keer dat je de applicatie opni
 docker run --rm -it -v $PWD:/home/user/rustdesk -v rustdesk-git-cache:/home/user/.cargo/git -v rustdesk-registry-cache:/home/user/.cargo/registry -e PUID="$(id -u)" -e PGID="$(id -g)" rustdesk-builder
 ```
 
-Let op dat de eerste build langer kan duren omdat de dependencies nog niet zijn gecached; latere builds zullen sneller zijn. Als je extra command line arguments wilt toevoegen aan het build-commando, dan kun je dat doen aan het einde van de opdrachtregel in plaats van `<OPTIONAL-ARGS>`. Bijvoorbeeld: als je een geoptimaliseerde releaseversie wilt bouwen, draai dan het bovenstaande commando gevolgd door `---release`.
+Let op dat de eerste build langer kan duren omdat de dependencies nog niet zijn gecached; latere builds zullen sneller zijn. Als je extra command line arguments wilt toevoegen aan het build-commando, dan kun je dat doen aan het einde van de opdrachtregel in plaats van `<OPTIONAL-ARGS>`. Bijvoorbeeld: als je een geoptimaliseerde releaseversie wilt bouwen, draai dan het bovenstaande commando gevolgd door `--release`.
 
 Het uitvoerbare bestand, in debug-modus, zal verschijnen in de target-map, en kan als volgt worden uitgevoerd:
 

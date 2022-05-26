@@ -125,7 +125,7 @@ Kemudian, setiap kali Anda perlu build aplikasi, jalankan perintah berikut:
 docker run --rm -it -v $PWD:/home/user/rustdesk -v rustdesk-git-cache:/home/user/.cargo/git -v rustdesk-registry-cache:/home/user/.cargo/registry -e PUID="$(id -u)" -e PGID="$(id -g)" rustdesk-builder
 ```
 
-Perhatikan bahwa build pertama mungkin memerlukan waktu lebih lama sebelum dependensi di-cache, build berikutnya akan lebih cepat. Selain itu, jika Anda perlu menentukan argumen yang berbeda untuk perintah build, Anda dapat melakukannya di akhir perintah di posisi `<OPTIONAL-ARGS>`. Misalnya, jika Anda ingin membangun versi rilis yang dioptimalkan, Anda akan menjalankan perintah di atas diikuti oleh `---release`. Hasil eksekusi akan tersedia pada target folder di sistem anda, dan dapat dijalankan dengan:
+Perhatikan bahwa build pertama mungkin memerlukan waktu lebih lama sebelum dependensi di-cache, build berikutnya akan lebih cepat. Selain itu, jika Anda perlu menentukan argumen yang berbeda untuk perintah build, Anda dapat melakukannya di akhir perintah di posisi `<OPTIONAL-ARGS>`. Misalnya, jika Anda ingin membangun versi rilis yang dioptimalkan, Anda akan menjalankan perintah di atas diikuti oleh `--release`. Hasil eksekusi akan tersedia pada target folder di sistem anda, dan dapat dijalankan dengan:
 
 ```sh
 target/debug/rustdesk
