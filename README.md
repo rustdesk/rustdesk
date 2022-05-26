@@ -18,6 +18,8 @@ Yet another remote desktop software, written in Rust. Works out of the box, no c
 
 RustDesk welcomes contribution from everyone. See [`CONTRIBUTING.md`](CONTRIBUTING.md) for help getting started.
 
+[**How does RustDesk work?**](https://github.com/rustdesk/rustdesk/wiki/How-does-RustDesk-work%3F)
+
 [**BINARY DOWNLOAD**](https://github.com/rustdesk/rustdesk/releases)
 
 ## Free Public Servers
