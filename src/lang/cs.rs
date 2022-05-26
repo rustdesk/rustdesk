@@ -266,7 +266,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("android_start_service_tip", "Službu pro sdílení obrazovky spustíte klepnutím na [Spustit službu] nebo UDĚLTE pověření pro [Zachytávání obsahu obrazovky]."),
         ("Account", "Účet"),
         ("Overwrite", "Přepsat"),
-        ("This file exists, skip or overwrite this file?", "Tento soubor existuje – přeskočit ho nebo přepsat?")
+        ("This file exists, skip or overwrite this file?", "Tento soubor existuje – přeskočit ho nebo přepsat?"),
         ("Quit", "Ukončit"),
         ("doc_mac_permission", "https://rustdesk.com/docs/en/manual/mac/#enable-permissions"),
         ("Help", "Nápověda"),
