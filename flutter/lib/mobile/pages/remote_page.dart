@@ -45,7 +45,7 @@ class _RemotePageState extends State<RemotePage> {
   void initState() {
     super.initState();
     FFI.connect(widget.id);
-    WidgetsBinding.instance!.addPostFrameCallback((_) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
       SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual, overlays: []);
       showLoading(translate('Connecting...'));
       _interval =

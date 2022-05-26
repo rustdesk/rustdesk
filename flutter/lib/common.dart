@@ -224,10 +224,10 @@ class AccessibilityListener extends StatelessWidget {
   Widget build(BuildContext context) {
     return Listener(
         onPointerDown: (evt) {
-          if (evt.size == 1 && GestureBinding.instance != null) {
-            GestureBinding.instance!.handlePointerEvent(PointerAddedEvent(
+          if (evt.size == 1) {
+            GestureBinding.instance.handlePointerEvent(PointerAddedEvent(
                 pointer: evt.pointer + offset, position: evt.position));
-            GestureBinding.instance!.handlePointerEvent(PointerDownEvent(
+            GestureBinding.instance.handlePointerEvent(PointerDownEvent(
                 pointer: evt.pointer + offset,
                 size: 0.1,
                 position: evt.position));
@@ -235,17 +235,17 @@ class AccessibilityListener extends StatelessWidget {
         },
         onPointerUp: (evt) {
           if (evt.size == 1 && GestureBinding.instance != null) {
-            GestureBinding.instance!.handlePointerEvent(PointerUpEvent(
+            GestureBinding.instance.handlePointerEvent(PointerUpEvent(
                 pointer: evt.pointer + offset,
                 size: 0.1,
                 position: evt.position));
-            GestureBinding.instance!.handlePointerEvent(PointerRemovedEvent(
+            GestureBinding.instance.handlePointerEvent(PointerRemovedEvent(
                 pointer: evt.pointer + offset, position: evt.position));
           }
         },
         onPointerMove: (evt) {
           if (evt.size == 1 && GestureBinding.instance != null) {
-            GestureBinding.instance!.handlePointerEvent(PointerMoveEvent(
+            GestureBinding.instance.handlePointerEvent(PointerMoveEvent(
                 pointer: evt.pointer + offset,
                 size: 0.1,
                 delta: evt.delta,
