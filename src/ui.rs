@@ -321,7 +321,7 @@ pub fn is_installed() -> bool {
 
 pub fn is_rdp_service_open() -> bool {
     #[cfg(windows)]
-    return self.is_installed() && crate::platform::windows::is_rdp_service_open();
+    return is_installed() && crate::platform::windows::is_rdp_service_open();
     #[cfg(not(windows))]
     return false;
 }
@@ -657,7 +657,7 @@ pub fn start(args: &mut [String]) {
     }
     #[cfg(windows)]
     if args.len() > 0 && args[0] == "--tray" {
-        let options = check_connect_status(false).1;
+        let options = OPTIONS.clone();
         crate::tray::start_tray(options);
         return;
     }
