@@ -29,19 +29,30 @@ use std::{
 type Message = RendezvousMessage;
 
 pub type Childs = Arc<Mutex<(bool, HashMap<(String, String), Child>)>>;
-type Status = (i32, bool, i64, String);
+type Status = (i32, bool, i64, String); // (status_num, key_confirmed, mouse_time, id)
 
 lazy_static::lazy_static! {
     // stupid workaround for https://sciter.com/forums/topic/crash-on-latest-tis-mac-sdk-sometimes/
     static ref STUPID_VALUES: Mutex<Vec<Arc<Vec<Value>>>> = Default::default();
-    pub static ref UI_DATA: Mutex<UIData> = Mutex::new(UIData::new(Childs::default()));
+    pub static ref CHILDS : Childs = Default::default();
+    pub static ref UI_STATUS : Arc<Mutex<Status>> = Arc::new(Mutex::new((0, false, 0, "".to_owned())));
+    pub static ref OPTIONS : Arc<Mutex<HashMap<String, String>>> = Arc::new(Mutex::new(Config::get_options()));
+    pub static ref ASYNC_JOB_STATUS : Arc<Mutex<String>> = Default::default();
+    pub static ref SENDER : Mutex<mpsc::UnboundedSender<ipc::Data>> = Mutex::new(check_connect_status(true));
 }
 
+// struct UI(
+//     Childs,
+//     Arc<Mutex<Status>>,
+//     Arc<Mutex<HashMap<String, String>>>, options
+//     Arc<Mutex<String>>, async_job_status
+//     mpsc::UnboundedSender<ipc::Data>, Sender
+// );
+
 pub fn recent_sessions_updated() -> bool {
-    let ui_data = UI_DATA.lock().unwrap();
-    let mut lock = ui_data.0.lock().unwrap();
-    if lock.0 {
-        lock.0 = false;
+    let mut childs = CHILDS.lock().unwrap();
+    if childs.0 {
+        childs.0 = false;
         true
     } else {
         false
@@ -147,8 +158,7 @@ pub fn get_option(key: String) -> String {
 }
 
 fn get_option_(key: &str) -> String {
-    let ui_data = UI_DATA.lock().unwrap();
-    let map = ui_data.2.lock().unwrap();
+    let map = OPTIONS.lock().unwrap();
     if let Some(v) = map.get(key) {
         v.to_owned()
     } else {
@@ -194,9 +204,10 @@ pub fn using_public_server() -> bool {
 }
 
 pub fn get_options() -> HashMap<String, String> {
-    let ui_data = UI_DATA.lock().unwrap();
+    // TODO Vec<(String,String)>
+    let options = OPTIONS.lock().unwrap();
     let mut m = HashMap::new();
-    for (k, v) in ui_data.2.lock().unwrap().iter() {
+    for (k, v) in options.iter() {
         m.insert(k.into(), v.into());
     }
     m
@@ -253,13 +264,12 @@ pub fn get_sound_inputs() -> Vec<String> {
 }
 
 pub fn set_options(m: HashMap<String, String>) {
-    let ui_data = UI_DATA.lock().unwrap();
-    *ui_data.2.lock().unwrap() = m.clone();
+    *OPTIONS.lock().unwrap() = m.clone();
     ipc::set_options(m).ok();
 }
 
 pub fn set_option(key: String, value: String) {
-    let ui_data = UI_DATA.lock().unwrap();
+    let mut options = OPTIONS.lock().unwrap();
     #[cfg(target_os = "macos")]
     if &key == "stop-service" {
         let is_stop = value == "Y";
@@ -267,7 +277,6 @@ pub fn set_option(key: String, value: String) {
             return;
         }
     }
-    let mut options = ui_data.2.lock().unwrap();
     if value.is_empty() {
         options.remove(&key);
     } else {
@@ -357,19 +366,19 @@ pub fn get_size() -> Vec<i32> {
 }
 
 pub fn get_mouse_time() -> f64 {
-    let ui_data = UI_DATA.lock().unwrap();
-    let res = ui_data.1.lock().unwrap().2 as f64;
+    let ui_status = UI_STATUS.lock().unwrap();
+    let res = ui_status.2 as f64;
     return res;
 }
 
 pub fn check_mouse_time() {
-    let ui_data = UI_DATA.lock().unwrap();
-    allow_err!(ui_data.4.send(ipc::Data::MouseMoveTime(0)));
+    let sender = SENDER.lock().unwrap();
+    allow_err!(sender.send(ipc::Data::MouseMoveTime(0)));
 }
 
 pub fn get_connect_status() -> Status {
-    let ui_data = UI_DATA.lock().unwrap();
-    let res = ui_data.1.lock().unwrap().clone();
+    let ui_statue = UI_STATUS.lock().unwrap();
+    let res = ui_statue.clone();
     res
 }
 
@@ -398,8 +407,7 @@ pub fn remove_peer(id: String) {
 }
 
 pub fn new_remote(id: String, remote_type: String) {
-    let ui_data = UI_DATA.lock().unwrap();
-    let mut lock = ui_data.0.lock().unwrap();
+    let mut lock = CHILDS.lock().unwrap();
     let args = vec![format!("--{}", remote_type), id.clone()];
     let key = (id.clone(), remote_type.clone());
     if let Some(c) = lock.1.get_mut(&key) {
@@ -565,21 +573,17 @@ pub fn open_url(url: String) {
 }
 
 pub fn change_id(id: String) {
-    let ui_data = UI_DATA.lock().unwrap();
-    let status = ui_data.3.clone();
-    *status.lock().unwrap() = " ".to_owned();
+    *ASYNC_JOB_STATUS.lock().unwrap() = " ".to_owned();
     let old_id = get_id();
     std::thread::spawn(move || {
-        *status.lock().unwrap() = change_id_(id, old_id).to_owned();
+        *ASYNC_JOB_STATUS.lock().unwrap() = change_id_(id, old_id).to_owned();
     });
 }
 
 pub fn post_request(url: String, body: String, header: String) {
-    let ui_data = UI_DATA.lock().unwrap();
-    let status = ui_data.3.clone();
-    *status.lock().unwrap() = " ".to_owned();
+    *ASYNC_JOB_STATUS.lock().unwrap() = " ".to_owned();
     std::thread::spawn(move || {
-        *status.lock().unwrap() = match crate::post_request_sync(url, body, &header) {
+        *ASYNC_JOB_STATUS.lock().unwrap() = match crate::post_request_sync(url, body, &header) {
             Err(err) => err.to_string(),
             Ok(text) => text,
         };
@@ -591,8 +595,7 @@ pub fn is_ok_change_id() -> bool {
 }
 
 pub fn get_async_job_status() -> String {
-    let ui_data = UI_DATA.lock().unwrap();
-    ui_data.3.clone().lock().unwrap().clone()
+    ASYNC_JOB_STATUS.lock().unwrap().clone()
 }
 
 pub fn t(name: String) -> String {
@@ -610,20 +613,25 @@ pub fn get_api_server() -> String {
     )
 }
 
-pub struct UIData(
-    Childs,
-    Arc<Mutex<Status>>,
-    Arc<Mutex<HashMap<String, String>>>,
-    Arc<Mutex<String>>,
-    mpsc::UnboundedSender<ipc::Data>,
-);
+// pub struct UIData(
+//     Status,                           // 1
+//     HashMap<String, String>,          // 2 options
+//     String,                           // 3
+//     mpsc::UnboundedSender<ipc::Data>, // 4
+// );
+// pub struct UIData {
+//     status: Status,                       // 1 arc
+//     options: HashMap<String, String>,     // 2 arc options
+//     _3: String,                           // 3 arc async_job_status
+//     _4: mpsc::UnboundedSender<ipc::Data>, // 4
+// }
 
-impl UIData {
-    fn new(childs: Childs) -> Self {
-        let res = check_connect_status(true);
-        Self(childs, res.0, res.1, Default::default(), res.2)
-    }
-}
+// impl UIData {
+//     fn new(childs: Childs) -> Self {
+//         let res = check_connect_status(true);
+//         Self(childs, res.0, res.1, Default::default(), res.2)
+//     }
+// }
 
 struct UIHostHandler;
 
@@ -675,8 +683,7 @@ pub fn start(args: &mut [String]) {
         args[1] = id;
     }
     if args.is_empty() {
-        let ui_data = UI_DATA.lock().unwrap();
-        let cloned = ui_data.0.clone();
+        let cloned = CHILDS.clone();
         std::thread::spawn(move || check_zombie(cloned));
         crate::common::check_software_update();
         frame.event_handler(UI {});
@@ -1185,12 +1192,7 @@ pub fn check_zombie(childs: Childs) {
 // notice: avoiding create ipc connecton repeatly,
 // because windows named pipe has serious memory leak issue.
 #[tokio::main(flavor = "current_thread")]
-async fn check_connect_status_(
-    reconnect: bool,
-    status: Arc<Mutex<Status>>,
-    options: Arc<Mutex<HashMap<String, String>>>,
-    rx: mpsc::UnboundedReceiver<ipc::Data>,
-) {
+async fn check_connect_status_(reconnect: bool, rx: mpsc::UnboundedReceiver<ipc::Data>) {
     let mut key_confirmed = false;
     let mut rx = rx;
     let mut mouse_time = 0;
@@ -1208,10 +1210,10 @@ async fn check_connect_status_(
                             }
                             Ok(Some(ipc::Data::MouseMoveTime(v))) => {
                                 mouse_time = v;
-                                status.lock().unwrap().2 = v;
+                                UI_STATUS.lock().unwrap().2 = v;
                             }
                             Ok(Some(ipc::Data::Options(Some(v)))) => {
-                                *options.lock().unwrap() = v
+                                *OPTIONS.lock().unwrap() = v
                             }
                             Ok(Some(ipc::Data::Config((name, Some(value))))) => {
                                 if name == "id" {
@@ -1223,7 +1225,7 @@ async fn check_connect_status_(
                                     x = 1
                                 }
                                 key_confirmed = c;
-                                *status.lock().unwrap() = (x as _, key_confirmed, mouse_time, id.clone());
+                                *UI_STATUS.lock().unwrap() = (x as _, key_confirmed, mouse_time, id.clone());
                             }
                             _ => {}
                         }
@@ -1240,31 +1242,21 @@ async fn check_connect_status_(
             }
         }
         if !reconnect {
-            options
+            OPTIONS
                 .lock()
                 .unwrap()
                 .insert("ipc-closed".to_owned(), "Y".to_owned());
             break;
         }
-        *status.lock().unwrap() = (-1, key_confirmed, mouse_time, id.clone());
+        *UI_STATUS.lock().unwrap() = (-1, key_confirmed, mouse_time, id.clone());
         sleep(1.).await;
     }
 }
 
-fn check_connect_status(
-    reconnect: bool,
-) -> (
-    Arc<Mutex<Status>>,
-    Arc<Mutex<HashMap<String, String>>>,
-    mpsc::UnboundedSender<ipc::Data>,
-) {
-    let status = Arc::new(Mutex::new((0, false, 0, "".to_owned())));
-    let options = Arc::new(Mutex::new(Config::get_options()));
-    let cloned = status.clone();
-    let cloned_options = options.clone();
+fn check_connect_status(reconnect: bool) -> mpsc::UnboundedSender<ipc::Data> {
     let (tx, rx) = mpsc::unbounded_channel::<ipc::Data>();
-    std::thread::spawn(move || check_connect_status_(reconnect, cloned, cloned_options, rx));
-    (status, options, tx)
+    std::thread::spawn(move || check_connect_status_(reconnect, rx));
+    tx
 }
 
 const INVALID_FORMAT: &'static str = "Invalid format";
