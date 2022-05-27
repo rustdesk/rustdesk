@@ -42,7 +42,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Invalid IP", ""),
         ("id_change_tip", ""),
         ("Invalid format", ""),
-        ("This function is turned off by the server", ""),
+        ("server_not_support", ""),
         ("Not available", ""),
         ("Too frequent", ""),
         ("Cancel", ""),

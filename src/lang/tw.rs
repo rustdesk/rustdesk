@@ -184,7 +184,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("x11 expected", "預期 x11"),
         ("Port", "連接埠"),
         ("Settings", "設定"),
-        ("Username", " 使用者名稱"),
+        ("Username", "使用者名稱"),
         ("Invalid port", "連接埠無效"),
         ("Closed manually by the peer", "由對方手動關閉"),
         ("Enable remote configuration modification", "啟用遠端更改設定"),
