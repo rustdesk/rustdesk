@@ -42,7 +42,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Invalid IP", "Geçersiz IP adresi"),
         ("id_change_tip", "Yalnızca a-z, A-Z, 0-9 ve _ (alt çizgi) karakterlerini kullanabilirsiniz. İlk karakter a-z veya A-Z olmalıdır. Uzunluk 6 ile 16 karakter arasında olmalıdır."),
         ("Invalid format", "Hatalı Format"),
-        ("This function is turned off by the server", "Bu özellik sunucu tarafından kapatıldı"),
+        ("server_not_support", "Henüz sunucu tarafından desteklenmiyor"),
         ("Not available", "Erişilebilir değil"),
         ("Too frequent", "Çok sık"),
         ("Cancel", "İptal"),

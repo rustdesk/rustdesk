@@ -42,7 +42,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Invalid IP", "Neplatná IP adresa"),
         ("id_change_tip", "Použít je mozné pouze znaky a-z, A-Z, 0-9 a _ (podtržítko). Dále je třeba aby začínalo na písmeno a-z, A-Z. Délka mezi 6 a 16 znaky."),
         ("Invalid format", "Neplatný formát"),
-        ("This function is turned off by the server", "Tato funkce je vypnuta serverem"),
+        ("server_not_support", "Server zatím nepodporuje"),
         ("Not available", "Není k dispozici"),
         ("Too frequent", "Příliš časté"),
         ("Cancel", "Storno"),
