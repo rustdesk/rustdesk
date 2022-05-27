@@ -119,6 +119,7 @@ class FfiModel with ChangeNotifier {
     _permissions.clear();
   }
 
+  /// Bind the event listener to receive events from the Rust core.
   void updateEventListener(String peerId) {
     final void Function(Map<String, dynamic>) cb = (evt) {
       var name = evt['name'];
@@ -179,6 +180,7 @@ class FfiModel with ChangeNotifier {
     notifyListeners();
   }
 
+  /// Handle the message box event based on [evt] and [id].
   void handleMsgBox(Map<String, dynamic> evt, String id) {
     var type = evt['type'];
     var title = evt['title'];
@@ -193,6 +195,7 @@ class FfiModel with ChangeNotifier {
     }
   }
 
+  /// Show a message box with [type], [title] and [text].
   void showMsgBox(String type, String title, String text, bool hasRetry) {
     msgBox(type, title, text);
     _timer?.cancel();
@@ -207,6 +210,7 @@ class FfiModel with ChangeNotifier {
     }
   }
 
+  /// Handle the peer info event based on [evt].
   void handlePeerInfo(Map<String, dynamic> evt) {
     SmartDialog.dismiss();
     _pi.version = evt['version'];
@@ -649,6 +653,7 @@ class CursorModel with ChangeNotifier {
   }
 }
 
+/// Mouse button enum.
 enum MouseButtons { left, right, wheel }
 
 extension ToString on MouseButtons {
@@ -664,6 +669,7 @@ extension ToString on MouseButtons {
   }
 }
 
+/// FFI class for communicating with the Rust core.
 class FFI {
   static var id = "";
   static var shift = false;
@@ -679,29 +685,35 @@ class FFI {
   static final chatModel = ChatModel();
   static final fileModel = FileModel();
 
+  /// Get the remote id for current client.
   static String getId() {
     return getByName('remote_id');
   }
 
+  /// Send a mouse tap event(down and up).
   static void tap(MouseButtons button) {
     sendMouse('down', button);
     sendMouse('up', button);
   }
 
+  /// Send scroll event with scroll distance [y].
   static void scroll(int y) {
     setByName('send_mouse',
         json.encode(modify({'type': 'wheel', 'y': y.toString()})));
   }
 
+  /// Reconnect to the remote peer.
   static void reconnect() {
     setByName('reconnect');
     FFI.ffiModel.clearPermissions();
   }
 
+  /// Reset key modifiers to false, including [shift], [ctrl], [alt] and [command].
   static void resetModifiers() {
     shift = ctrl = alt = command = false;
   }
 
+  /// Modify the given modifier map [evt] based on current modifier key status.
   static Map<String, String> modify(Map<String, String> evt) {
     if (ctrl) evt['ctrl'] = 'true';
     if (shift) evt['shift'] = 'true';
@@ -710,12 +722,16 @@ class FFI {
     return evt;
   }
 
+  /// Send mouse press event.
   static void sendMouse(String type, MouseButtons button) {
     if (!ffiModel.keyboard()) return;
     setByName('send_mouse',
         json.encode(modify({'type': type, 'buttons': button.value})));
   }
 
+  /// Send key stroke event.
+  /// [down] indicates the key's state(down or up).
+  /// [press] indicates a click event(down and up).
   static void inputKey(String name, {bool? down, bool? press}) {
     if (!ffiModel.keyboard()) return;
     setByName(
@@ -727,6 +743,7 @@ class FFI {
         })));
   }
 
+  /// Send mouse movement event with distance in [x] and [y].
   static void moveMouse(double x, double y) {
     if (!ffiModel.keyboard()) return;
     var x2 = x.toInt();
@@ -734,6 +751,7 @@ class FFI {
     setByName('send_mouse', json.encode(modify({'x': '$x2', 'y': '$y2'})));
   }
 
+  /// List the saved peers.
   static List<Peer> peers() {
     try {
       var str = getByName('peers');
@@ -750,6 +768,7 @@ class FFI {
     return [];
   }
 
+  /// Connect with the given [id]. Only transfer file if [isFileTransfer].
   static void connect(String id, {bool isFileTransfer = false}) {
     if (isFileTransfer) {
       setByName('connect_file_transfer', id);
@@ -772,6 +791,7 @@ class FFI {
     return null;
   }
 
+  /// Login with [password], choose if the client should [remember] it.
   static void login(String password, bool remember) {
     setByName(
         'login',
@@ -781,6 +801,7 @@ class FFI {
         }));
   }
 
+  /// Close the remote session.
   static void close() {
     chatModel.close();
     if (FFI.imageModel.image != null && !isWebDesktop) {
@@ -796,10 +817,13 @@ class FFI {
     resetModifiers();
   }
 
+  /// Send **get** command to the Rust core based on [name] and [arg].
+  /// Return the result as a string.
   static String getByName(String name, [String arg = '']) {
     return PlatformFFI.getByName(name, arg);
   }
 
+  /// Send **set** command to the Rust core based on [name] and [value].
   static void setByName(String name, [String value = '']) {
     PlatformFFI.setByName(name, value);
   }
@@ -953,6 +977,7 @@ void initializeCursorAndCanvas() async {
   FFI.canvasModel.update(xCanvas, yCanvas, scale);
 }
 
+/// Translate text based on the pre-defined dictionary.
 String translate(String name) {
   if (name.startsWith('Failed to') && name.contains(': ')) {
     return name.split(': ').map((x) => translate(x)).join(': ');

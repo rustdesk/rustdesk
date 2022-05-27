@@ -10,6 +10,7 @@ import 'remote_page.dart';
 import 'settings_page.dart';
 import 'scan_page.dart';
 
+/// Connection page for connecting to a remote peer.
 class ConnectionPage extends StatefulWidget implements PageShape {
   ConnectionPage({Key? key}) : super(key: key);
 
@@ -26,8 +27,12 @@ class ConnectionPage extends StatefulWidget implements PageShape {
   _ConnectionPageState createState() => _ConnectionPageState();
 }
 
+/// State for the connection page.
 class _ConnectionPageState extends State<ConnectionPage> {
+  /// Controller for the id input bar.
   final _idController = TextEditingController();
+
+  /// Update url. If it's not null, means an update is available.
   var _updateUrl = '';
   var _menuPos;
 
@@ -60,11 +65,15 @@ class _ConnectionPageState extends State<ConnectionPage> {
     );
   }
 
+  /// Callback for the connect button.
+  /// Connects to the selected peer.
   void onConnect() {
     var id = _idController.text.trim();
     connect(id);
   }
 
+  /// Connect to a peer with [id].
+  /// If [isFileTransfer], starts a session only for file transfer.
   void connect(String id, {bool isFileTransfer = false}) async {
     if (id == '') return;
     id = id.replaceAll(' ', '');
@@ -94,6 +103,8 @@ class _ConnectionPageState extends State<ConnectionPage> {
     }
   }
 
+  /// UI for software update.
+  /// If [_updateUrl] is not empty, shows a button to update the software.
   Widget getUpdateUI() {
     return _updateUrl.isEmpty
         ? SizedBox(height: 0)
@@ -114,6 +125,8 @@ class _ConnectionPageState extends State<ConnectionPage> {
                         color: Colors.white, fontWeight: FontWeight.bold))));
   }
 
+  /// UI for the search bar.
+  /// Search for a peer and connect to it if the id exists.
   Widget getSearchBarUI() {
     var w = Padding(
       padding: const EdgeInsets.fromLTRB(16.0, 8.0, 16.0, 0.0),
@@ -187,6 +200,7 @@ class _ConnectionPageState extends State<ConnectionPage> {
     super.dispose();
   }
 
+  /// Get the image for the current [platform].
   Widget getPlatformImage(String platform) {
     platform = platform.toLowerCase();
     if (platform == 'mac os')
@@ -195,6 +209,7 @@ class _ConnectionPageState extends State<ConnectionPage> {
     return Image.asset('assets/$platform.png', width: 24, height: 24);
   }
 
+  /// Get all the saved peers.
   Widget getPeers() {
     final size = MediaQuery.of(context).size;
     final space = 8.0;
@@ -244,6 +259,8 @@ class _ConnectionPageState extends State<ConnectionPage> {
     return Wrap(children: cards, spacing: space, runSpacing: space);
   }
 
+  /// Show the peer menu and handle user's choice.
+  /// User might remove the peer or send a file to the peer.
   void showPeerMenu(BuildContext context, String id) async {
     var value = await showMenu(
       context: context,
