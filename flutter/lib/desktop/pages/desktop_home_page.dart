@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/common.dart';
+import 'package:flutter_hbb/mobile/pages/connection_page.dart';
 import 'package:flutter_hbb/models/model.dart';
 import 'package:provider/provider.dart';
 
@@ -42,7 +43,7 @@ class _DesktopHomePageState extends State<DesktopHomePage> {
 
   buildServerBoard(BuildContext context) {
     return Center(
-      child: Text("waiting implementation"),
+      child: ConnectionPage(key: null),
     );
   }
 
