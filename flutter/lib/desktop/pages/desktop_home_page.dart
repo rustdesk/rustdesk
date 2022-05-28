@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/common.dart';
-import 'package:flutter_hbb/mobile/pages/connection_page.dart';
+import 'package:flutter_hbb/desktop/pages/connection_page.dart';
 import 'package:flutter_hbb/models/model.dart';
 import 'package:provider/provider.dart';
 
@@ -76,6 +76,14 @@ class _DesktopHomePageState extends State<DesktopHomePage> {
                     TextFormField(
                       controller: model.serverId,
                     ),
+                    Text(
+                      translate("Password"),
+                      style:
+                          TextStyle(fontSize: 18, fontWeight: FontWeight.w500),
+                    ),
+                    TextField(
+                      controller: model.serverPasswd,
+                    )
                   ],
                 ),
               ),

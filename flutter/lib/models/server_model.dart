@@ -150,6 +150,7 @@ class ServerModel with ChangeNotifier {
     }
   }
 
+  /// Toggle the screen sharing service.
   toggleService() async {
     if (_isStart) {
       final res =
@@ -198,6 +199,7 @@ class ServerModel with ChangeNotifier {
     }
   }
 
+  /// Start the screen sharing service.
   Future<Null> startService() async {
     _isStart = true;
     notifyListeners();
@@ -212,6 +214,7 @@ class ServerModel with ChangeNotifier {
     }
   }
 
+  /// Stop the screen sharing service.
   Future<Null> stopService() async {
     _isStart = false;
     FFI.serverModel.closeAll();
