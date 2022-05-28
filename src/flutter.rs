@@ -4,8 +4,12 @@ use hbb_common::{
     allow_err,
     compress::decompress,
     config::{Config, LocalConfig},
-    fs, log,
-    fs::{can_enable_overwrite_detection, new_send_confirm, DigestCheckResult, get_string, transform_windows_path},
+    fs,
+    fs::{
+        can_enable_overwrite_detection, get_string, new_send_confirm, transform_windows_path,
+        DigestCheckResult,
+    },
+    log,
     message_proto::*,
     protobuf::Message as _,
     rendezvous_proto::ConnType,
@@ -36,6 +40,12 @@ pub struct Session {
 }
 
 impl Session {
+    /// Create a new remote session with the given id.
+    ///
+    /// # Arguments
+    ///
+    /// * `id` - The id of the remote session.
+    /// * `is_file_transfer` - If the session is used for file transfer.
     pub fn start(id: &str, is_file_transfer: bool) {
         LocalConfig::set_remote_id(id);
         Self::close();
@@ -52,10 +62,16 @@ impl Session {
         });
     }
 
+    /// Get the current session instance.
     pub fn get() -> Arc<RwLock<Option<Session>>> {
         SESSION.clone()
     }
 
+    /// Get the option of the current session.
+    ///
+    /// # Arguments
+    ///
+    /// * `name` - The name of the option to get. Currently only `remote_dir` is supported.
     pub fn get_option(name: &str) -> String {
         if let Some(session) = SESSION.read().unwrap().as_ref() {
             if name == "remote_dir" {
@@ -66,6 +82,12 @@ impl Session {
         "".to_owned()
     }
 
+    /// Set the option of the current session.
+    ///
+    /// # Arguments
+    ///
+    /// * `name` - The name of the option to set. Currently only `remote_dir` is supported.
+    /// * `value` - The value of the option to set.
     pub fn set_option(name: String, value: String) {
         if let Some(session) = SESSION.read().unwrap().as_ref() {
             let mut value = value;
@@ -76,18 +98,25 @@ impl Session {
         }
     }
 
+    /// Input the OS password.
     pub fn input_os_password(pass: String, activate: bool) {
         if let Some(session) = SESSION.read().unwrap().as_ref() {
             input_os_password(pass, activate, session.clone());
         }
     }
 
+    /// Send message to the remote session.
+    ///
+    /// # Arguments
+    ///
+    /// * `data` - The data to send. See [`Data`] for more details.
     fn send(data: Data) {
         if let Some(session) = SESSION.read().unwrap().as_ref() {
             session.send(data);
         }
     }
 
+    /// Pop a event from the event queue.
     pub fn pop_event() -> Option<String> {
         if let Some(session) = SESSION.read().unwrap().as_ref() {
             session.events2ui.write().unwrap().pop_front()
@@ -96,6 +125,7 @@ impl Session {
         }
     }
 
+    /// Toggle an option.
     pub fn toggle_option(name: &str) {
         if let Some(session) = SESSION.read().unwrap().as_ref() {
             let msg = session.lc.write().unwrap().toggle_option(name.to_owned());
@@ -105,10 +135,12 @@ impl Session {
         }
     }
 
+    /// Send a refresh command.
     pub fn refresh() {
         Self::send(Data::Message(LoginConfigHandler::refresh()));
     }
 
+    /// Get image quality.
     pub fn get_image_quality() -> String {
         if let Some(session) = SESSION.read().unwrap().as_ref() {
             session.lc.read().unwrap().image_quality.clone()
@@ -117,6 +149,7 @@ impl Session {
         }
     }
 
+    /// Set image quality.
     pub fn set_image_quality(value: &str) {
         if let Some(session) = SESSION.read().unwrap().as_ref() {
             let msg = session
@@ -130,6 +163,12 @@ impl Session {
         }
     }
 
+    /// Get the status of a toggle option.
+    /// Return `None` if the option is not found.
+    ///
+    /// # Arguments
+    ///
+    /// * `name` - The name of the option to get.
     pub fn get_toggle_option(name: &str) -> Option<bool> {
         if let Some(session) = SESSION.read().unwrap().as_ref() {
             Some(session.lc.write().unwrap().get_toggle_option(name))
@@ -138,15 +177,23 @@ impl Session {
         }
     }
 
+    /// Login.
+    ///
+    /// # Arguments
+    ///
+    /// * `password` - The password to login.
+    /// * `remember` - If the password should be remembered.
     pub fn login(password: &str, remember: bool) {
         Session::send(Data::Login((password.to_owned(), remember)));
     }
 
+    /// Close the session.
     pub fn close() {
         Session::send(Data::Close);
         SESSION.write().unwrap().take();
     }
 
+    /// Reconnect to the current session.
     pub fn reconnect() {
         if let Some(session) = SESSION.read().unwrap().as_ref() {
             if let Some(sender) = session.sender.read().unwrap().as_ref() {
@@ -159,6 +206,7 @@ impl Session {
         }
     }
 
+    /// Get `remember` flag in [`LoginConfigHandler`].
     pub fn get_remember() -> bool {
         if let Some(session) = SESSION.read().unwrap().as_ref() {
             session.lc.read().unwrap().remember
@@ -167,6 +215,11 @@ impl Session {
         }
     }
 
+    /// Send message over the current session.
+    ///
+    /// # Arguments
+    ///
+    /// * `msg` - The message to send.
     #[inline]
     pub fn send_msg(&self, msg: Message) {
         if let Some(sender) = self.sender.read().unwrap().as_ref() {
@@ -174,6 +227,11 @@ impl Session {
         }
     }
 
+    /// Send chat message over the current session.
+    ///
+    /// # Arguments
+    ///
+    /// * `text` - The message to send.
     pub fn send_chat(text: String) {
         let mut misc = Misc::new();
         misc.set_chat_message(ChatMessage {
@@ -185,6 +243,7 @@ impl Session {
         Self::send_msg_static(msg_out);
     }
 
+    /// Send file over the current session.
     pub fn send_files(
         id: i32,
         path: String,
@@ -198,6 +257,7 @@ impl Session {
         }
     }
 
+    /// Confirm file override.
     pub fn set_confirm_override_file(
         id: i32,
         file_num: i32,
@@ -225,6 +285,11 @@ impl Session {
         }
     }
 
+    /// Static method to send message over the current session.
+    ///
+    /// # Arguments
+    ///
+    /// * `msg` - The message to send.
     #[inline]
     pub fn send_msg_static(msg: Message) {
         if let Some(session) = SESSION.read().unwrap().as_ref() {
@@ -232,6 +297,13 @@ impl Session {
         }
     }
 
+    /// Push an event to the event queue.
+    /// An event is stored as json in the event queue.
+    ///
+    /// # Arguments
+    ///
+    /// * `name` - The name of the event.
+    /// * `event` - Fields of the event content.
     fn push_event(&self, name: &str, event: Vec<(&str, &str)>) {
         let mut h: HashMap<&str, &str> = event.iter().cloned().collect();
         assert!(h.get("name").is_none());
@@ -242,11 +314,13 @@ impl Session {
         };
     }
 
+    /// Get platform of peer.
     #[inline]
     fn peer_platform(&self) -> String {
         self.lc.read().unwrap().info.platform.clone()
     }
 
+    /// Quick method for sending a ctrl_alt_del command.
     pub fn ctrl_alt_del() {
         if let Some(session) = SESSION.read().unwrap().as_ref() {
             if session.peer_platform() == "Windows" {
@@ -259,6 +333,11 @@ impl Session {
         }
     }
 
+    /// Switch the display.
+    ///
+    /// # Arguments
+    ///
+    /// * `display` - The display to switch to.
     pub fn switch_display(display: i32) {
         let mut misc = Misc::new();
         misc.set_switch_display(SwitchDisplay {
@@ -270,6 +349,7 @@ impl Session {
         Self::send_msg_static(msg_out);
     }
 
+    /// Send lock screen command.
     pub fn lock_screen() {
         if let Some(session) = SESSION.read().unwrap().as_ref() {
             let k = Key::ControlKey(ControlKey::LockScreen);
@@ -277,6 +357,17 @@ impl Session {
         }
     }
 
+    /// Send key input command.
+    ///
+    /// # Arguments
+    ///
+    /// * `name` - The name of the key.
+    /// * `down` - Whether the key is down or up.
+    /// * `press` - If the key is simply being pressed(Down+Up).
+    /// * `alt` - If the alt key is also pressed.
+    /// * `ctrl` - If the ctrl key is also pressed.
+    /// * `shift` - If the shift key is also pressed.
+    /// * `command` - If the command key is also pressed.
     pub fn input_key(
         name: &str,
         down: bool,
@@ -299,6 +390,12 @@ impl Session {
         }
     }
 
+    /// Input a string of text.
+    /// String is parsed into individual key presses.
+    ///
+    /// # Arguments
+    ///
+    /// * `value` - The text to input.
     pub fn input_string(value: &str) {
         let mut key_event = KeyEvent::new();
         key_event.set_seq(value.to_owned());
@@ -499,6 +596,12 @@ struct Connection {
 }
 
 impl Connection {
+    /// Create a new connection.
+    ///
+    /// # Arguments
+    ///
+    /// * `session` - The session to create a new connection for.
+    /// * `is_file_transfer` - Whether the connection is for file transfer.
     #[tokio::main(flavor = "current_thread")]
     async fn start(session: Session, is_file_transfer: bool) {
         let mut last_recv_time = Instant::now();
@@ -591,6 +694,10 @@ impl Connection {
         }
     }
 
+    /// Handle message from peer.
+    /// Return false if the connection should be closed.
+    ///
+    /// The message is handled by [`Message`], see [`message::Union`] for possible types.
     async fn handle_msg_from_peer(&mut self, data: &[u8], peer: &mut Stream) -> bool {
         if let Ok(msg_in) = Message::parse_from_bytes(&data) {
             match msg_in.union {
@@ -1144,6 +1251,7 @@ impl Connection {
     }
 }
 
+/// Parse [`FileDirectory`] to json.
 pub fn make_fd_to_json(fd: FileDirectory) -> String {
     use serde_json::json;
     let mut fd_json = serde_json::Map::new();

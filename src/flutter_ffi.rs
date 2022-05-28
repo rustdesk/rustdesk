@@ -47,6 +47,13 @@ pub fn start_rgba_stream(s: StreamSink<ZeroCopyBuffer<Vec<u8>>>) -> ResultType<(
     Ok(())
 }
 
+/// FFI for **get** commands which are idempotent.
+/// Return result in c string.
+/// 
+/// # Arguments
+///
+/// * `name` - name of the command
+/// * `arg` - argument of the command
 #[no_mangle]
 unsafe extern "C" fn get_by_name(name: *const c_char, arg: *const c_char) -> *const c_char {
     let mut res = "".to_owned();
@@ -174,6 +181,12 @@ unsafe extern "C" fn get_by_name(name: *const c_char, arg: *const c_char) -> *co
     CString::from_vec_unchecked(res.into_bytes()).into_raw()
 }
 
+/// FFI for **set** commands which are not idempotent.
+///
+/// # Arguments
+///
+/// * `name` - name of the command
+/// * `arg` - argument of the command
 #[no_mangle]
 unsafe extern "C" fn set_by_name(name: *const c_char, value: *const c_char) {
     let value: &CStr = CStr::from_ptr(value);

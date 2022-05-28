@@ -22,6 +22,8 @@ class RgbaFrame extends Struct {
 typedef F2 = Pointer<Utf8> Function(Pointer<Utf8>, Pointer<Utf8>);
 typedef F3 = void Function(Pointer<Utf8>, Pointer<Utf8>);
 
+/// FFI wrapper around the native Rust core.
+/// Hides the platform differences.
 class PlatformFFI {
   static Pointer<RgbaFrame>? _lastRgbaFrame;
   static String _dir = '';
@@ -36,6 +38,8 @@ class PlatformFFI {
     return packageInfo.version;
   }
 
+  /// Send **get** command to the Rust core based on [name] and [arg].
+  /// Return the result as a string.
   static String getByName(String name, [String arg = '']) {
     if (_getByName == null) return '';
     var a = name.toNativeUtf8();
@@ -49,6 +53,7 @@ class PlatformFFI {
     return res;
   }
 
+  /// Send **set** command to the Rust core based on [name] and [value].
   static void setByName(String name, [String value = '']) {
     if (_setByName == null) return;
     var a = name.toNativeUtf8();
@@ -58,6 +63,7 @@ class PlatformFFI {
     calloc.free(b);
   }
 
+  /// Init the FFI class, loads the native Rust core library.
   static Future<Null> init() async {
     isIOS = Platform.isIOS;
     isAndroid = Platform.isAndroid;
@@ -112,6 +118,7 @@ class PlatformFFI {
     version = await getVersion();
   }
 
+  /// Start listening to the Rust core's events and frames.
   static void _startListenEvent(RustdeskImpl rustdeskImpl) {
     () async {
       await for (final message in rustdeskImpl.startEventStream()) {
