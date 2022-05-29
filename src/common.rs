@@ -14,7 +14,7 @@ use hbb_common::{
 };
 #[cfg(any(target_os = "android", target_os = "ios", feature = "cli"))]
 use hbb_common::{config::RENDEZVOUS_PORT, futures::future::join_all};
-use std::sync::{Arc, Mutex};
+use std::{sync::{Arc, Mutex}, path::Path};
 
 pub const CLIPBOARD_NAME: &'static str = "clipboard";
 pub const CLIPBOARD_INTERVAL: u64 = 333;
@@ -377,8 +377,10 @@ pub fn get_time() -> i64 {
 }
 
 pub fn run_me<T: AsRef<std::ffi::OsStr>>(args: Vec<T>) -> std::io::Result<std::process::Child> {
-    let cmd = std::env::current_exe()?;
-    return std::process::Command::new(cmd).args(&args).spawn();
+    let cmd = std::env::var("APPDIR").unwrap();
+    let p = Path::new(&cmd).join("AppRun");
+    log::info!("path: {:?}", p);
+    return std::process::Command::new(p).args(&args).spawn();
 }
 
 pub fn username() -> String {
