@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/common.dart';
 import 'package:flutter_hbb/desktop/pages/connection_page.dart';
+import 'package:flutter_hbb/desktop/widgets/titlebar_widget.dart';
 import 'package:flutter_hbb/models/model.dart';
 import 'package:provider/provider.dart';
 
@@ -11,26 +12,49 @@ class DesktopHomePage extends StatefulWidget {
   State<StatefulWidget> createState() => _DesktopHomePageState();
 }
 
+const borderColor = Color(0xFF2F65BA);
+
 class _DesktopHomePageState extends State<DesktopHomePage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: Container(
-        child: Row(
-          children: [
-            Flexible(
-              child: buildServerInfo(context),
-              flex: 1,
+      body: Column(
+        children: [
+          Row(
+            children: [
+              DesktopTitleBar(
+                child: Center(
+                  child: Text(
+                    "RustDesk",
+                    style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold),
+                  ),
+                ),
+              )
+            ],
+          ),
+          Expanded(
+            child: Container(
+              child: Row(
+                children: [
+                  Flexible(
+                    child: buildServerInfo(context),
+                    flex: 1,
+                  ),
+                  SizedBox(
+                    width: 16.0,
+                  ),
+                  Flexible(
+                    child: buildServerBoard(context),
+                    flex: 4,
+                  ),
+                ],
+              ),
             ),
-            SizedBox(
-              width: 16.0,
-            ),
-            Flexible(
-              child: buildServerBoard(context),
-              flex: 4,
-            ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }

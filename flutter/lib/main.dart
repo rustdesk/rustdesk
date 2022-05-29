@@ -1,12 +1,12 @@
 import 'dart:convert';
 
+import 'package:bitsdojo_window/bitsdojo_window.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/desktop/pages/desktop_home_page.dart';
 import 'package:flutter_hbb/desktop/screen/desktop_remote_screen.dart';
 import 'package:flutter_hbb/utils/multi_window_manager.dart';
 import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
 import 'package:provider/provider.dart';
-import 'package:window_manager/window_manager.dart';
 
 import 'common.dart';
 import 'mobile/pages/home_page.dart';
@@ -50,22 +50,28 @@ void runRustDeskApp(List<String> args) async {
     }
   } else {
     // main window
-    await windowManager.ensureInitialized();
+    // await windowManager.ensureInitialized();
     // start service
     FFI.serverModel.startService();
-    WindowOptions windowOptions = WindowOptions(
-      size: Size(1280, 720),
-      center: true,
-      backgroundColor: Colors.transparent,
-      skipTaskbar: false,
-      titleBarStyle: TitleBarStyle.normal,
-    );
-    windowManager.waitUntilReadyToShow(windowOptions, () async {
-      await windowManager.show();
-      await windowManager.focus();
-    });
-
+    // WindowOptions windowOptions = WindowOptions(
+    //   size: Size(1280, 720),
+    //   center: true,
+    //   backgroundColor: Colors.transparent,
+    //   skipTaskbar: false,
+    //   titleBarStyle: TitleBarStyle.normal,
+    // );
+    // windowManager.waitUntilReadyToShow(windowOptions, () async {
+    //   await windowManager.show();
+    //   await windowManager.focus();
+    // });
     runApp(App());
+    doWhenWindowReady(() {
+      const initialSize = Size(1280, 720);
+      appWindow.minSize = initialSize;
+      appWindow.size = initialSize;
+      appWindow.alignment = Alignment.center;
+      appWindow.show();
+    });
   }
 }
 

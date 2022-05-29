@@ -57,6 +57,7 @@ dependencies:
   flutter_rust_bridge: ^1.30.0
   window_manager: ^0.2.3
   desktop_multi_window: ^0.0.2
+  bitsdojo_window: ^0.1.2
 
 dev_dependencies:
   flutter_launcher_icons: ^0.9.1
