@@ -26,7 +26,11 @@ use hbb_common::tokio::{
         Mutex as TokioMutex,
     },
 };
-use scrap::{Capturer, Config, Display, EncodeFrame, Encoder, VideoCodecId, STRIDE_ALIGN};
+use scrap::{
+    codec::{VpxEncoderConfig, VpxVideoCodecId},
+    coder::{Encoder, EncoderCfg, HwEncoderConfig},
+    Capturer, Display,
+};
 use std::{
     collections::HashSet,
     io::ErrorKind::WouldBlock,
@@ -172,27 +176,39 @@ fn run(sp: GenericService) -> ResultType<()> {
         num_cpus::get_physical(),
         num_cpus::get(),
     );
-    // Capturer object is expensive, avoiding to create it frequently.
-    let mut c = Capturer::new(display, true).with_context(|| "Failed to create capturer")?;
 
     let q = get_image_quality();
     let (bitrate, rc_min_quantizer, rc_max_quantizer, speed) = get_quality(width, height, q);
     log::info!("bitrate={}, rc_min_quantizer={}", bitrate, rc_min_quantizer);
-    let cfg = Config {
-        width: width as _,
-        height: height as _,
-        timebase: [1, 1000], // Output timestamp precision
-        bitrate,
-        codec: VideoCodecId::VP9,
-        rc_min_quantizer,
-        rc_max_quantizer,
-        speed,
+
+    let encoder_cfg = match Encoder::current_hw_encoder_name() {
+        Some(codec_name) => EncoderCfg::HW(HwEncoderConfig {
+            codec_name,
+            fps,
+            width,
+            height,
+        }),
+        None => EncoderCfg::VPX(VpxEncoderConfig {
+            width: width as _,
+            height: height as _,
+            timebase: [1, 1000], // Output timestamp precision
+            bitrate,
+            codec: VpxVideoCodecId::VP9,
+            rc_min_quantizer,
+            rc_max_quantizer,
+            speed,
+            num_threads: (num_cpus::get() / 2) as _,
+        }),
     };
-    let mut vpx;
-    match Encoder::new(&cfg, (num_cpus::get() / 2) as _) {
-        Ok(x) => vpx = x,
+
+    let mut encoder;
+    match Encoder::new(encoder_cfg) {
+        Ok(x) => encoder = x,
         Err(err) => bail!("Failed to create encoder: {}", err),
     }
+    // Capturer object is expensive, avoiding to create it frequently.
+    let mut c =
+        Capturer::new(display, encoder.use_yuv()).with_context(|| "Failed to create capturer")?;
 
     if *SWITCH.lock().unwrap() {
         log::debug!("Broadcasting display switch");
@@ -277,7 +293,7 @@ fn run(sp: GenericService) -> ResultType<()> {
             Ok(frame) => {
                 let time = now - start;
                 let ms = (time.as_secs() * 1000 + time.subsec_millis() as u64) as i64;
-                let send_conn_ids = handle_one_frame(&sp, &frame, ms, &mut vpx)?;
+                let send_conn_ids = handle_one_frame(&sp, &frame, ms, &mut encoder)?;
                 frame_controller.set_send(now, send_conn_ids);
                 #[cfg(windows)]
                 {
@@ -334,34 +350,11 @@ fn run(sp: GenericService) -> ResultType<()> {
 }
 
 #[inline]
-fn create_msg(vp9s: Vec<VP9>) -> Message {
-    let mut msg_out = Message::new();
-    let mut vf = VideoFrame::new();
-    vf.set_vp9s(VP9s {
-        frames: vp9s.into(),
-        ..Default::default()
-    });
-    vf.timestamp = crate::common::get_time();
-    msg_out.set_video_frame(vf);
-    msg_out
-}
-
-#[inline]
-fn create_frame(frame: &EncodeFrame) -> VP9 {
-    VP9 {
-        data: frame.data.to_vec(),
-        key: frame.key,
-        pts: frame.pts,
-        ..Default::default()
-    }
-}
-
-#[inline]
 fn handle_one_frame(
     sp: &GenericService,
     frame: &[u8],
     ms: i64,
-    vpx: &mut Encoder,
+    encoder: &mut Encoder,
 ) -> ResultType<HashSet<i32>> {
     sp.snapshot(|sps| {
         // so that new sub and old sub share the same encoder after switch
@@ -372,20 +365,8 @@ fn handle_one_frame(
     })?;
 
     let mut send_conn_ids: HashSet<i32> = Default::default();
-    let mut frames = Vec::new();
-    for ref frame in vpx
-        .encode(ms, frame, STRIDE_ALIGN)
-        .with_context(|| "Failed to encode")?
-    {
-        frames.push(create_frame(frame));
-    }
-    for ref frame in vpx.flush().with_context(|| "Failed to flush")? {
-        frames.push(create_frame(frame));
-    }
-
-    // to-do: flush periodically, e.g. 1 second
-    if frames.len() > 0 {
-        send_conn_ids = sp.send_video_frame(create_msg(frames));
+    if let Ok(msg) = encoder.encode_to_message(frame, ms) {
+        send_conn_ids = sp.send_video_frame(msg);
     }
     Ok(send_conn_ids)
 }

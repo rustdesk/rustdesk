@@ -12,6 +12,11 @@ use cpal::{
     Device, Host, StreamConfig,
 };
 use magnum_opus::{Channels::*, Decoder as AudioDecoder};
+use scrap::{
+    coder::{Decoder, DecoderCfg},
+    VpxDecoderConfig, VpxVideoCodecId,
+};
+
 use sha2::{Digest, Sha256};
 use uuid::Uuid;
 
@@ -30,7 +35,6 @@ use hbb_common::{
     tokio::time::Duration,
     AddrMangle, ResultType, Stream,
 };
-use scrap::{Decoder, Image, VideoCodecId};
 
 pub use super::lang::*;
 pub mod file_trait;
@@ -717,7 +721,12 @@ pub struct VideoHandler {
 impl VideoHandler {
     pub fn new(latency_controller: Arc<Mutex<LatencyController>>) -> Self {
         VideoHandler {
-            decoder: Decoder::new(VideoCodecId::VP9, (num_cpus::get() / 2) as _).unwrap(),
+            decoder: Decoder::new(DecoderCfg {
+                vpx: VpxDecoderConfig {
+                    codec: VpxVideoCodecId::VP9,
+                    num_threads: (num_cpus::get() / 2) as _,
+                },
+            }),
             latency_controller,
             rgb: Default::default(),
         }
@@ -731,33 +740,18 @@ impl VideoHandler {
                 .update_video(vf.timestamp);
         }
         match &vf.union {
-            Some(video_frame::Union::vp9s(vp9s)) => self.handle_vp9s(vp9s),
+            Some(frame) => self.decoder.handle_video_frame(frame, &mut self.rgb),
             _ => Ok(false),
         }
     }
 
-    pub fn handle_vp9s(&mut self, vp9s: &VP9s) -> ResultType<bool> {
-        let mut last_frame = Image::new();
-        for vp9 in vp9s.frames.iter() {
-            for frame in self.decoder.decode(&vp9.data)? {
-                drop(last_frame);
-                last_frame = frame;
-            }
-        }
-        for frame in self.decoder.flush()? {
-            drop(last_frame);
-            last_frame = frame;
-        }
-        if last_frame.is_null() {
-            Ok(false)
-        } else {
-            last_frame.rgb(1, true, &mut self.rgb);
-            Ok(true)
-        }
-    }
-
     pub fn reset(&mut self) {
-        self.decoder = Decoder::new(VideoCodecId::VP9, 1).unwrap();
+        self.decoder = Decoder::new(DecoderCfg {
+            vpx: VpxDecoderConfig {
+                codec: VpxVideoCodecId::VP9,
+                num_threads: 1,
+            },
+        });
     }
 }
 
@@ -951,6 +945,11 @@ impl LoginConfigHandler {
             msg.disable_clipboard = BoolOption::Yes.into();
             n += 1;
         }
+        // TODO: add option
+        let state = Decoder::video_codec_state();
+        msg.video_codec_state = hbb_common::protobuf::MessageField::some(state);
+        n += 1;
+
         if n > 0 {
             Some(msg)
         } else {

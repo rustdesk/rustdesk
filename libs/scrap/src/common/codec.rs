@@ -2,29 +2,36 @@
 // https://github.com/astraw/env-libvpx-sys
 // https://github.com/rust-av/vpx-rs/blob/master/src/decoder.rs
 
+use hbb_common::anyhow::{anyhow, Context};
+use hbb_common::message_proto::{Message, VP9s, VideoFrame, VP9};
+use hbb_common::ResultType;
+
+use crate::coder::EncoderApi;
+use crate::STRIDE_ALIGN;
+
 use super::vpx::{vp8e_enc_control_id::*, vpx_codec_err_t::*, *};
 use std::os::raw::{c_int, c_uint};
 use std::{ptr, slice};
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
-pub enum VideoCodecId {
+pub enum VpxVideoCodecId {
     VP8,
     VP9,
 }
 
-impl Default for VideoCodecId {
-    fn default() -> VideoCodecId {
-        VideoCodecId::VP9
+impl Default for VpxVideoCodecId {
+    fn default() -> VpxVideoCodecId {
+        VpxVideoCodecId::VP9
     }
 }
 
-pub struct Encoder {
+pub struct VpxEncoder {
     ctx: vpx_codec_ctx_t,
     width: usize,
     height: usize,
 }
 
-pub struct Decoder {
+pub struct VpxDecoder {
     ctx: vpx_codec_ctx_t,
 }
 
@@ -82,118 +89,152 @@ macro_rules! call_vpx_ptr {
     }};
 }
 
-impl Encoder {
-    pub fn new(config: &Config, num_threads: u32) -> Result<Self> {
-        let i;
-        if cfg!(feature = "VP8") {
-            i = match config.codec {
-                VideoCodecId::VP8 => call_vpx_ptr!(vpx_codec_vp8_cx()),
-                VideoCodecId::VP9 => call_vpx_ptr!(vpx_codec_vp9_cx()),
-            };
-        } else {
-            i = call_vpx_ptr!(vpx_codec_vp9_cx());
+impl EncoderApi for VpxEncoder {
+    fn new(cfg: crate::coder::EncoderCfg) -> ResultType<Self>
+    where
+        Self: Sized,
+    {
+        match cfg {
+            crate::coder::EncoderCfg::VPX(config) => {
+                let i;
+                if cfg!(feature = "VP8") {
+                    i = match config.codec {
+                        VpxVideoCodecId::VP8 => call_vpx_ptr!(vpx_codec_vp8_cx()),
+                        VpxVideoCodecId::VP9 => call_vpx_ptr!(vpx_codec_vp9_cx()),
+                    };
+                } else {
+                    i = call_vpx_ptr!(vpx_codec_vp9_cx());
+                }
+                let mut c = unsafe { std::mem::MaybeUninit::zeroed().assume_init() };
+                call_vpx!(vpx_codec_enc_config_default(i, &mut c, 0));
+
+                // https://www.webmproject.org/docs/encoder-parameters/
+                // default: c.rc_min_quantizer = 0, c.rc_max_quantizer = 63
+                // try rc_resize_allowed later
+
+                c.g_w = config.width;
+                c.g_h = config.height;
+                c.g_timebase.num = config.timebase[0];
+                c.g_timebase.den = config.timebase[1];
+                c.rc_target_bitrate = config.bitrate;
+                c.rc_undershoot_pct = 95;
+                c.rc_dropframe_thresh = 25;
+                if config.rc_min_quantizer > 0 {
+                    c.rc_min_quantizer = config.rc_min_quantizer;
+                }
+                if config.rc_max_quantizer > 0 {
+                    c.rc_max_quantizer = config.rc_max_quantizer;
+                }
+                let mut speed = config.speed;
+                if speed <= 0 {
+                    speed = 6;
+                }
+
+                c.g_threads = if config.num_threads == 0 {
+                    num_cpus::get() as _
+                } else {
+                    config.num_threads
+                };
+                c.g_error_resilient = VPX_ERROR_RESILIENT_DEFAULT;
+                // https://developers.google.com/media/vp9/bitrate-modes/
+                // Constant Bitrate mode (CBR) is recommended for live streaming with VP9.
+                c.rc_end_usage = vpx_rc_mode::VPX_CBR;
+                // c.kf_min_dist = 0;
+                // c.kf_max_dist = 999999;
+                c.kf_mode = vpx_kf_mode::VPX_KF_DISABLED; // reduce bandwidth a lot
+
+                /*
+                VPX encoder支持two-pass encode，这是为了rate control的。
+                对于两遍编码，就是需要整个编码过程做两次，第一次会得到一些新的控制参数来进行第二遍的编码，
+                这样可以在相同的bitrate下得到最好的PSNR
+                */
+
+                let mut ctx = Default::default();
+                call_vpx!(vpx_codec_enc_init_ver(
+                    &mut ctx,
+                    i,
+                    &c,
+                    0,
+                    VPX_ENCODER_ABI_VERSION as _
+                ));
+
+                if config.codec == VpxVideoCodecId::VP9 {
+                    // set encoder internal speed settings
+                    // in ffmpeg, it is --speed option
+                    /*
+                    set to 0 or a positive value 1-16, the codec will try to adapt its
+                    complexity depending on the time it spends encoding. Increasing this
+                    number will make the speed go up and the quality go down.
+                    Negative values mean strict enforcement of this
+                    while positive values are adaptive
+                    */
+                    /* https://developers.google.com/media/vp9/live-encoding
+                    Speed 5 to 8 should be used for live / real-time encoding.
+                    Lower numbers (5 or 6) are higher quality but require more CPU power.
+                    Higher numbers (7 or 8) will be lower quality but more manageable for lower latency
+                    use cases and also for lower CPU power devices such as mobile.
+                    */
+                    call_vpx!(vpx_codec_control_(&mut ctx, VP8E_SET_CPUUSED as _, speed,));
+                    // set row level multi-threading
+                    /*
+                    as some people in comments and below have already commented,
+                    more recent versions of libvpx support -row-mt 1 to enable tile row
+                    multi-threading. This can increase the number of tiles by up to 4x in VP9
+                    (since the max number of tile rows is 4, regardless of video height).
+                    To enable this, use -tile-rows N where N is the number of tile rows in
+                    log2 units (so -tile-rows 1 means 2 tile rows and -tile-rows 2 means 4 tile
+                    rows). The total number of active threads will then be equal to
+                    $tile_rows * $tile_columns
+                    */
+                    call_vpx!(vpx_codec_control_(
+                        &mut ctx,
+                        VP9E_SET_ROW_MT as _,
+                        1 as c_int
+                    ));
+
+                    call_vpx!(vpx_codec_control_(
+                        &mut ctx,
+                        VP9E_SET_TILE_COLUMNS as _,
+                        4 as c_int
+                    ));
+                }
+
+                Ok(Self {
+                    ctx,
+                    width: config.width as _,
+                    height: config.height as _,
+                })
+            }
+            _ => Err(anyhow!("encoder type mismatch")),
         }
-        let mut c = unsafe { std::mem::MaybeUninit::zeroed().assume_init() };
-        call_vpx!(vpx_codec_enc_config_default(i, &mut c, 0));
-
-        // https://www.webmproject.org/docs/encoder-parameters/
-        // default: c.rc_min_quantizer = 0, c.rc_max_quantizer = 63
-        // try rc_resize_allowed later
-
-        c.g_w = config.width;
-        c.g_h = config.height;
-        c.g_timebase.num = config.timebase[0];
-        c.g_timebase.den = config.timebase[1];
-        c.rc_target_bitrate = config.bitrate;
-        c.rc_undershoot_pct = 95;
-        c.rc_dropframe_thresh = 25;
-        if config.rc_min_quantizer > 0 {
-            c.rc_min_quantizer = config.rc_min_quantizer;
-        }
-        if config.rc_max_quantizer > 0 {
-            c.rc_max_quantizer = config.rc_max_quantizer;
-        }
-        let mut speed = config.speed;
-        if speed <= 0 {
-            speed = 6;
-        }
-
-        c.g_threads = if num_threads == 0 {
-            num_cpus::get() as _
-        } else {
-            num_threads
-        };
-        c.g_error_resilient = VPX_ERROR_RESILIENT_DEFAULT;
-        // https://developers.google.com/media/vp9/bitrate-modes/
-        // Constant Bitrate mode (CBR) is recommended for live streaming with VP9.
-        c.rc_end_usage = vpx_rc_mode::VPX_CBR;
-        // c.kf_min_dist = 0;
-        // c.kf_max_dist = 999999;
-        c.kf_mode = vpx_kf_mode::VPX_KF_DISABLED; // reduce bandwidth a lot
-
-        /*
-        VPX encoder支持two-pass encode，这是为了rate control的。
-        对于两遍编码，就是需要整个编码过程做两次，第一次会得到一些新的控制参数来进行第二遍的编码，
-        这样可以在相同的bitrate下得到最好的PSNR
-        */
-
-        let mut ctx = Default::default();
-        call_vpx!(vpx_codec_enc_init_ver(
-            &mut ctx,
-            i,
-            &c,
-            0,
-            VPX_ENCODER_ABI_VERSION as _
-        ));
-
-        if config.codec == VideoCodecId::VP9 {
-            // set encoder internal speed settings
-            // in ffmpeg, it is --speed option
-            /*
-            set to 0 or a positive value 1-16, the codec will try to adapt its
-            complexity depending on the time it spends encoding. Increasing this
-            number will make the speed go up and the quality go down.
-            Negative values mean strict enforcement of this
-            while positive values are adaptive
-            */
-            /* https://developers.google.com/media/vp9/live-encoding
-            Speed 5 to 8 should be used for live / real-time encoding.
-            Lower numbers (5 or 6) are higher quality but require more CPU power.
-            Higher numbers (7 or 8) will be lower quality but more manageable for lower latency
-            use cases and also for lower CPU power devices such as mobile.
-            */
-            call_vpx!(vpx_codec_control_(&mut ctx, VP8E_SET_CPUUSED as _, speed,));
-            // set row level multi-threading
-            /*
-            as some people in comments and below have already commented,
-            more recent versions of libvpx support -row-mt 1 to enable tile row
-            multi-threading. This can increase the number of tiles by up to 4x in VP9
-            (since the max number of tile rows is 4, regardless of video height).
-            To enable this, use -tile-rows N where N is the number of tile rows in
-            log2 units (so -tile-rows 1 means 2 tile rows and -tile-rows 2 means 4 tile
-            rows). The total number of active threads will then be equal to
-            $tile_rows * $tile_columns
-            */
-            call_vpx!(vpx_codec_control_(
-                &mut ctx,
-                VP9E_SET_ROW_MT as _,
-                1 as c_int
-            ));
-
-            call_vpx!(vpx_codec_control_(
-                &mut ctx,
-                VP9E_SET_TILE_COLUMNS as _,
-                4 as c_int
-            ));
-        }
-
-        Ok(Self {
-            ctx,
-            width: config.width as _,
-            height: config.height as _,
-        })
     }
 
+    fn encode_to_message(&mut self, frame: &[u8], ms: i64) -> ResultType<Message> {
+        let mut frames = Vec::new();
+        for ref frame in self
+            .encode(ms, frame, STRIDE_ALIGN)
+            .with_context(|| "Failed to encode")?
+        {
+            frames.push(VpxEncoder::create_frame(frame));
+        }
+        for ref frame in self.flush().with_context(|| "Failed to flush")? {
+            frames.push(VpxEncoder::create_frame(frame));
+        }
+
+        // to-do: flush periodically, e.g. 1 second
+        if frames.len() > 0 {
+            Ok(VpxEncoder::create_msg(frames))
+        } else {
+            Err(anyhow!("no valid frame"))
+        }
+    }
+
+    fn use_yuv(&self) -> bool {
+        true
+    }
+}
+
+impl VpxEncoder {
     pub fn encode(&mut self, pts: i64, data: &[u8], stride_align: usize) -> Result<EncodeFrames> {
         assert!(2 * data.len() >= 3 * self.width * self.height);
 
@@ -238,9 +279,31 @@ impl Encoder {
             iter: ptr::null(),
         })
     }
+
+    #[inline]
+    fn create_msg(vp9s: Vec<VP9>) -> Message {
+        let mut msg_out = Message::new();
+        let mut vf = VideoFrame::new();
+        vf.set_vp9s(VP9s {
+            frames: vp9s.into(),
+            ..Default::default()
+        });
+        msg_out.set_video_frame(vf);
+        msg_out
+    }
+
+    #[inline]
+    fn create_frame(frame: &EncodeFrame) -> VP9 {
+        VP9 {
+            data: frame.data.to_vec(),
+            key: frame.key,
+            pts: frame.pts,
+            ..Default::default()
+        }
+    }
 }
 
-impl Drop for Encoder {
+impl Drop for VpxEncoder {
     fn drop(&mut self) {
         unsafe {
             let result = vpx_codec_destroy(&mut self.ctx);
@@ -262,7 +325,7 @@ pub struct EncodeFrame<'a> {
 }
 
 #[derive(Clone, Copy, Debug)]
-pub struct Config {
+pub struct VpxEncoderConfig {
     /// The width (in pixels).
     pub width: c_uint,
     /// The height (in pixels).
@@ -272,10 +335,17 @@ pub struct Config {
     /// The target bitrate (in kilobits per second).
     pub bitrate: c_uint,
     /// The codec
-    pub codec: VideoCodecId,
+    pub codec: VpxVideoCodecId,
     pub rc_min_quantizer: u32,
     pub rc_max_quantizer: u32,
     pub speed: i32,
+    pub num_threads: u32,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct VpxDecoderConfig {
+    pub codec: VpxVideoCodecId,
+    pub num_threads: u32,
 }
 
 pub struct EncodeFrames<'a> {
@@ -306,31 +376,31 @@ impl<'a> Iterator for EncodeFrames<'a> {
     }
 }
 
-impl Decoder {
+impl VpxDecoder {
     /// Create a new decoder
     ///
     /// # Errors
     ///
     /// The function may fail if the underlying libvpx does not provide
     /// the VP9 decoder.
-    pub fn new(codec: VideoCodecId, num_threads: u32) -> Result<Self> {
+    pub fn new(config: VpxDecoderConfig) -> Result<Self> {
         // This is sound because `vpx_codec_ctx` is a repr(C) struct without any field that can
         // cause UB if uninitialized.
         let i;
         if cfg!(feature = "VP8") {
-            i = match codec {
-                VideoCodecId::VP8 => call_vpx_ptr!(vpx_codec_vp8_dx()),
-                VideoCodecId::VP9 => call_vpx_ptr!(vpx_codec_vp9_dx()),
+            i = match config.codec {
+                VpxVideoCodecId::VP8 => call_vpx_ptr!(vpx_codec_vp8_dx()),
+                VpxVideoCodecId::VP9 => call_vpx_ptr!(vpx_codec_vp9_dx()),
             };
         } else {
             i = call_vpx_ptr!(vpx_codec_vp9_dx());
         }
         let mut ctx = Default::default();
         let cfg = vpx_codec_dec_cfg_t {
-            threads: if num_threads == 0 {
+            threads: if config.num_threads == 0 {
                 num_cpus::get() as _
             } else {
-                num_threads
+                config.num_threads
             },
             w: 0,
             h: 0,
@@ -405,7 +475,7 @@ impl Decoder {
     }
 }
 
-impl Drop for Decoder {
+impl Drop for VpxDecoder {
     fn drop(&mut self) {
         unsafe {
             let result = vpx_codec_destroy(&mut self.ctx);

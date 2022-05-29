@@ -49,6 +49,17 @@ extern "C" {
         height: c_int,
     ) -> c_int;
 
+    pub fn ARGBToNV12(
+        src_bgra: *const u8,
+        src_stride_bgra: c_int,
+        dst_y: *mut u8,
+        dst_stride_y: c_int,
+        dst_uv: *mut u8,
+        dst_stride_uv: c_int,
+        width: c_int,
+        height: c_int,
+    ) -> c_int;
+
     pub fn NV12ToI420(
         src_y: *const u8,
         src_stride_y: c_int,
@@ -86,6 +97,17 @@ extern "C" {
         src_stride_u: c_int,
         src_v: *const u8,
         src_stride_v: c_int,
+        dst_rgba: *mut u8,
+        dst_stride_rgba: c_int,
+        width: c_int,
+        height: c_int,
+    ) -> c_int;
+
+    pub fn NV12ToARGB(
+        src_y: *const u8,
+        src_stride_y: c_int,
+        src_uv: *const u8,
+        src_stride_uv: c_int,
         dst_rgba: *mut u8,
         dst_stride_rgba: c_int,
         width: c_int,
@@ -219,4 +241,193 @@ pub unsafe fn nv12_to_i420(
         width as _,
         height as _,
     );
+}
+
+#[cfg(feature = "hwcodec")]
+pub mod hw {
+    use hbb_common::{anyhow::anyhow, ResultType};
+    use hwcodec::{ffmpeg::ffmpeg_linesize_offset_length, AVPixelFormat};
+
+    pub fn hw_bgra_to_i420(
+        width: usize,
+        height: usize,
+        stride: &[i32],
+        offset: &[i32],
+        length: i32,
+        src: &[u8],
+        dst: &mut Vec<u8>,
+    ) {
+        let stride_y = stride[0] as usize;
+        let stride_u = stride[1] as usize;
+        let stride_v = stride[2] as usize;
+        let offset_u = offset[0] as usize;
+        let offset_v = offset[1] as usize;
+
+        dst.resize(length as _, 0);
+        let dst_y = dst.as_mut_ptr();
+        let dst_u = dst[offset_u..].as_mut_ptr();
+        let dst_v = dst[offset_v..].as_mut_ptr();
+        unsafe {
+            super::ARGBToI420(
+                src.as_ptr(),
+                (src.len() / height) as _,
+                dst_y,
+                stride_y as _,
+                dst_u,
+                stride_u as _,
+                dst_v,
+                stride_v as _,
+                width as _,
+                height as _,
+            );
+        }
+    }
+
+    pub fn hw_bgra_to_nv12(
+        width: usize,
+        height: usize,
+        stride: &[i32],
+        offset: &[i32],
+        length: i32,
+        src: &[u8],
+        dst: &mut Vec<u8>,
+    ) {
+        let stride_y = stride[0] as usize;
+        let stride_uv = stride[1] as usize;
+        let offset_uv = offset[0] as usize;
+
+        dst.resize(length as _, 0);
+        let dst_y = dst.as_mut_ptr();
+        let dst_uv = dst[offset_uv..].as_mut_ptr();
+        unsafe {
+            super::ARGBToNV12(
+                src.as_ptr(),
+                (src.len() / height) as _,
+                dst_y,
+                stride_y as _,
+                dst_uv,
+                stride_uv as _,
+                width as _,
+                height as _,
+            );
+        }
+    }
+
+    #[cfg(target_os = "windows")]
+    pub fn hw_nv12_to_bgra(
+        width: usize,
+        height: usize,
+        src_y: &[u8],
+        src_uv: &[u8],
+        src_stride_y: usize,
+        src_stride_uv: usize,
+        dst: &mut Vec<u8>,
+        i420: &mut Vec<u8>,
+        align: usize,
+    ) -> ResultType<()> {
+        let nv12_stride_y = src_stride_y;
+        let nv12_stride_uv = src_stride_uv;
+        if let Ok((linesize_i420, offset_i420, i420_len)) =
+            ffmpeg_linesize_offset_length(AVPixelFormat::AV_PIX_FMT_YUV420P, width, height, align)
+        {
+            dst.resize(width * height * 4, 0);
+            let i420_stride_y = linesize_i420[0];
+            let i420_stride_u = linesize_i420[1];
+            let i420_stride_v = linesize_i420[2];
+            i420.resize(i420_len as _, 0);
+
+            unsafe {
+                let i420_offset_y = i420.as_ptr().add(0) as _;
+                let i420_offset_u = i420.as_ptr().add(offset_i420[0] as _) as _;
+                let i420_offset_v = i420.as_ptr().add(offset_i420[1] as _) as _;
+                super::NV12ToI420(
+                    src_y.as_ptr(),
+                    nv12_stride_y as _,
+                    src_uv.as_ptr(),
+                    nv12_stride_uv as _,
+                    i420_offset_y,
+                    i420_stride_y,
+                    i420_offset_u,
+                    i420_stride_u,
+                    i420_offset_v,
+                    i420_stride_v,
+                    width as _,
+                    height as _,
+                );
+                super::I420ToARGB(
+                    i420_offset_y,
+                    i420_stride_y,
+                    i420_offset_u,
+                    i420_stride_u,
+                    i420_offset_v,
+                    i420_stride_v,
+                    dst.as_mut_ptr(),
+                    (width * 4) as _,
+                    width as _,
+                    height as _,
+                );
+                return Ok(());
+            };
+        }
+        return Err(anyhow!("get linesize offset failed"));
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    pub fn hw_nv12_to_bgra(
+        width: usize,
+        height: usize,
+        src_y: &[u8],
+        src_uv: &[u8],
+        src_stride_y: usize,
+        src_stride_uv: usize,
+        dst: &mut Vec<u8>,
+    ) -> ResultType<()> {
+        dst.resize(width * height * 4, 0);
+        unsafe {
+            match super::NV12ToARGB(
+                src_y.as_ptr(),
+                src_stride_y as _,
+                src_uv.as_ptr(),
+                src_stride_uv as _,
+                dst.as_mut_ptr(),
+                (width * 4) as _,
+                width as _,
+                height as _,
+            ) {
+                0 => Ok(()),
+                _ => Err(anyhow!("NV12ToARGB failed")),
+            }
+        }
+    }
+
+    pub fn hw_i420_to_bgra(
+        width: usize,
+        height: usize,
+        src_y: &[u8],
+        src_u: &[u8],
+        src_v: &[u8],
+        src_stride_y: usize,
+        src_stride_u: usize,
+        src_stride_v: usize,
+        dst: &mut Vec<u8>,
+    ) {
+        let src_y = src_y.as_ptr();
+        let src_u = src_u.as_ptr();
+        let src_v = src_v.as_ptr();
+        dst.resize(width * height * 4, 0);
+        unsafe {
+            super::I420ToARGB(
+                src_y,
+                src_stride_y as _,
+                src_u,
+                src_stride_u as _,
+                src_v,
+                src_stride_v as _,
+                dst.as_mut_ptr(),
+                (width * 4) as _,
+                width as _,
+                height as _,
+            );
+        };
+    }
 }
