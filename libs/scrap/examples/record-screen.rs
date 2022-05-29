@@ -17,7 +17,7 @@ use scrap::coder::{EncoderApi, EncoderCfg};
 use webm::mux;
 use webm::mux::Track;
 
-use scrap::codec as vpx_encode;
+use scrap::vpxcodec as vpx_encode;
 use scrap::{Capturer, Display, STRIDE_ALIGN};
 
 const USAGE: &'static str = "

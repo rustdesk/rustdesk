@@ -27,8 +27,8 @@ use hbb_common::tokio::{
     },
 };
 use scrap::{
-    codec::{VpxEncoderConfig, VpxVideoCodecId},
     coder::{Encoder, EncoderCfg, HwEncoderConfig},
+    vpxcodec::{VpxEncoderConfig, VpxVideoCodecId},
     Capturer, Display,
 };
 use std::{

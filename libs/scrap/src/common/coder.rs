@@ -5,9 +5,9 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-use crate::codec::*;
 #[cfg(feature = "hwcodec")]
 use crate::hwcodec::*;
+use crate::vpxcodec::*;
 
 use hbb_common::{
     anyhow::anyhow,
