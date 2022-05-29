@@ -1,15 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/mobile/pages/file_manager_page.dart';
+import 'package:flutter_hbb/utils/multi_window_manager.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'dart:async';
+
 import '../../common.dart';
-import '../../models/model.dart';
 import '../../mobile/pages/home_page.dart';
-import '../../mobile/pages/remote_page.dart';
-import '../../mobile/pages/settings_page.dart';
 import '../../mobile/pages/scan_page.dart';
-import '../../models/server_model.dart';
+import '../../mobile/pages/settings_page.dart';
+import '../../models/model.dart';
 
 /// Connection page for connecting to a remote peer.
 class ConnectionPage extends StatefulWidget implements PageShape {
@@ -46,7 +45,6 @@ class _ConnectionPageState extends State<ConnectionPage> {
   Widget build(BuildContext context) {
     Provider.of<FfiModel>(context);
     if (_idController.text.isEmpty) _idController.text = FFI.getId();
-    FFI.serverModel.startService();
     return SingleChildScrollView(
       child: Column(
           mainAxisAlignment: MainAxisAlignment.start,
@@ -55,7 +53,7 @@ class _ConnectionPageState extends State<ConnectionPage> {
           children: <Widget>[
             getUpdateUI(),
             getSearchBarUI(),
-            Container(height: 12),
+            SizedBox(height: 12),
             getPeers(),
           ]),
     );
@@ -86,12 +84,15 @@ class _ConnectionPageState extends State<ConnectionPage> {
         ),
       );
     } else {
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (BuildContext context) => RemotePage(id: id),
-        ),
-      );
+      // single window
+      // Navigator.push(
+      //   context,
+      //   MaterialPageRoute(
+      //     builder: (BuildContext context) => RemotePage(id: id),
+      //   ),
+      // );
+      // multi window
+      await rustDeskWinManager.new_remote_desktop(id);
     }
     FocusScopeNode currentFocus = FocusScope.of(context);
     if (!currentFocus.hasPrimaryFocus) {

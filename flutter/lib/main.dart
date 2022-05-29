@@ -1,7 +1,12 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/desktop/pages/desktop_home_page.dart';
+import 'package:flutter_hbb/desktop/screen/desktop_remote_screen.dart';
+import 'package:flutter_hbb/utils/multi_window_manager.dart';
 import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
 import 'package:provider/provider.dart';
+import 'package:window_manager/window_manager.dart';
 
 import 'common.dart';
 import 'mobile/pages/home_page.dart';
@@ -9,7 +14,9 @@ import 'mobile/pages/server_page.dart';
 import 'mobile/pages/settings_page.dart';
 import 'models/model.dart';
 
-Future<Null> main() async {
+int? windowId;
+
+Future<Null> main(List<String> args) async {
   WidgetsFlutterBinding.ensureInitialized();
   await FFI.ffiModel.init();
   // await Firebase.initializeApp();
@@ -17,11 +24,49 @@ Future<Null> main() async {
     toAndroidChannelInit();
   }
   refreshCurrentUser();
-  if (isDesktop) {
-    print("desktop mode: starting service");
-    FFI.serverModel.startService();
+  runRustDeskApp(args);
+}
+
+void runRustDeskApp(List<String> args) async {
+  if (!isDesktop) {
+    runApp(App());
+    return;
   }
-  runApp(App());
+  if (args.isNotEmpty && args.first == 'multi_window') {
+    windowId = int.parse(args[1]);
+    final argument = args[2].isEmpty
+        ? Map<String, dynamic>()
+        : jsonDecode(args[2]) as Map<String, dynamic>;
+    int type = argument['type'] ?? -1;
+    WindowType wType = type.windowType;
+    switch (wType) {
+      case WindowType.RemoteDesktop:
+        runApp(DesktopRemoteScreen(
+          params: argument,
+        ));
+        break;
+      default:
+        break;
+    }
+  } else {
+    // main window
+    await windowManager.ensureInitialized();
+    // start service
+    FFI.serverModel.startService();
+    WindowOptions windowOptions = WindowOptions(
+      size: Size(1280, 720),
+      center: true,
+      backgroundColor: Colors.transparent,
+      skipTaskbar: false,
+      titleBarStyle: TitleBarStyle.normal,
+    );
+    windowManager.waitUntilReadyToShow(windowOptions, () async {
+      await windowManager.show();
+      await windowManager.focus();
+    });
+
+    runApp(App());
+  }
 }
 
 class App extends StatelessWidget {
@@ -46,8 +91,8 @@ class App extends StatelessWidget {
           home: isDesktop
               ? DesktopHomePage()
               : !isAndroid
-                  ? WebHomePage()
-                  : HomePage(),
+              ? WebHomePage()
+              : HomePage(),
           navigatorObservers: [
             // FirebaseAnalyticsObserver(analytics: analytics),
             FlutterSmartDialog.observer
@@ -55,8 +100,8 @@ class App extends StatelessWidget {
           builder: FlutterSmartDialog.init(
               builder: isAndroid
                   ? (_, child) => AccessibilityListener(
-                        child: child,
-                      )
+                child: child,
+              )
                   : null)),
     );
   }

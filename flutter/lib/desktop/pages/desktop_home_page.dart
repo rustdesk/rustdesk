@@ -55,8 +55,8 @@ class _DesktopHomePageState extends State<DesktopHomePage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        buildControlPanel(context),
-        buildRecentSession(context),
+        // buildControlPanel(context),
+        // buildRecentSession(context),
         ConnectionPage()
       ],
     );
