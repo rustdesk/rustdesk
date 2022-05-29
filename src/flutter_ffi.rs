@@ -18,6 +18,14 @@ use std::{
 
 fn initialize(app_dir: &str) {
     *config::APP_DIR.write().unwrap() = app_dir.to_owned();
+    #[cfg(feature = "cli")]
+    {
+        #[cfg(any(target_os = "android", target_os = "ios"))]
+        {
+            crate::common::test_rendezvous_server();
+            crate::common::test_nat_type();
+        }
+    }
     #[cfg(target_os = "android")]
     {
         android_logger::init_once(
@@ -31,11 +39,15 @@ fn initialize(app_dir: &str) {
         use hbb_common::env_logger::*;
         init_from_env(Env::default().filter_or(DEFAULT_FILTER_ENV, "debug"));
     }
-    #[cfg(any(target_os = "android", target_os = "ios", feature = "cli"))]
-    crate::common::test_rendezvous_server();
-    crate::common::test_nat_type();
     #[cfg(target_os = "android")]
-    crate::common::check_software_update();
+    {
+        crate::common::check_software_update();
+    }
+    #[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
+    {
+        use hbb_common::env_logger::*;
+        init_from_env(Env::default().filter_or(DEFAULT_FILTER_ENV, "debug"));
+    }
 }
 
 pub fn start_event_stream(s: StreamSink<String>) -> ResultType<()> {
