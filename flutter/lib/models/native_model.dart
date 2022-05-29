@@ -102,7 +102,7 @@ class PlatformFFI {
         name = '${androidInfo.brand}-${androidInfo.model}';
         id = androidInfo.id.hashCode.toString();
         androidVersion = androidInfo.version.sdkInt;
-      } else {
+      } else if (Platform.isIOS) {
         IosDeviceInfo iosInfo = await deviceInfo.iosInfo;
         name = iosInfo.utsname.machine;
         id = iosInfo.identifierForVendor.hashCode.toString();

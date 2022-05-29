@@ -1,6 +1,7 @@
 use crate::client::file_trait::FileManager;
 use crate::flutter::connection_manager::{self, get_clients_length, get_clients_state};
 use crate::flutter::{self, make_fd_to_json, Session};
+use crate::start_server;
 use crate::ui_interface;
 use flutter_rust_bridge::{StreamSink, ZeroCopyBuffer};
 use hbb_common::ResultType;
@@ -49,7 +50,7 @@ pub fn start_rgba_stream(s: StreamSink<ZeroCopyBuffer<Vec<u8>>>) -> ResultType<(
 
 /// FFI for **get** commands which are idempotent.
 /// Return result in c string.
-/// 
+///
 /// # Arguments
 ///
 /// * `name` - name of the command
@@ -515,10 +516,9 @@ unsafe extern "C" fn set_by_name(name: *const c_char, value: *const c_char) {
                     Config::set_option("stop-service".into(), "Y".into());
                     crate::rendezvous_mediator::RendezvousMediator::restart();
                 }
-                #[cfg(target_os = "android")]
                 "start_service" => {
                     Config::set_option("stop-service".into(), "".into());
-                    crate::rendezvous_mediator::RendezvousMediator::restart();
+                    start_server(false);
                 }
                 #[cfg(target_os = "android")]
                 "close_conn" => {
