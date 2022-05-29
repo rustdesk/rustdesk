@@ -85,6 +85,13 @@ packages:
       url: "https://pub.dartlang.org"
     source: hosted
     version: "1.1.16"
+  desktop_multi_window:
+    dependency: "direct main"
+    description:
+      name: desktop_multi_window
+      url: "https://pub.dartlang.org"
+    source: hosted
+    version: "0.0.2"
   device_info:
     dependency: "direct main"
     description:
@@ -751,6 +758,13 @@ packages:
       url: "https://pub.dartlang.org"
     source: hosted
     version: "2.5.2"
+  window_manager:
+    dependency: "direct main"
+    description:
+      name: window_manager
+      url: "https://pub.dartlang.org"
+    source: hosted
+    version: "0.2.3"
   xdg_directories:
     dependency: transitive
     description:

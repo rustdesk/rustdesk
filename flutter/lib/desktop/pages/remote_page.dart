@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 import 'dart:ui' as ui;
 
 import 'package:flutter/gestures.dart';
@@ -9,12 +10,13 @@ import 'package:flutter_hbb/models/chat_model.dart';
 import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
 import 'package:provider/provider.dart';
 import 'package:wakelock/wakelock.dart';
+import 'package:window_manager/window_manager.dart';
 
 import '../../common.dart';
+import '../../mobile/widgets/dialog.dart';
+import '../../mobile/widgets/gestures.dart';
+import '../../mobile/widgets/overlay.dart';
 import '../../models/model.dart';
-import '../widgets/dialog.dart';
-import '../widgets/gestures.dart';
-import '../widgets/overlay.dart';
 
 final initText = '\1' * 1024;
 
@@ -27,7 +29,7 @@ class RemotePage extends StatefulWidget {
   _RemotePageState createState() => _RemotePageState();
 }
 
-class _RemotePageState extends State<RemotePage> {
+class _RemotePageState extends State<RemotePage> with WindowListener {
   Timer? _interval;
   Timer? _timer;
   bool _showBar = !isWebDesktop;
@@ -53,14 +55,18 @@ class _RemotePageState extends State<RemotePage> {
       _interval =
           Timer.periodic(Duration(milliseconds: 30), (timer) => interval());
     });
-    Wakelock.enable();
+    if (!Platform.isLinux) {
+      Wakelock.enable();
+    }
     _physicalFocusNode.requestFocus();
     FFI.ffiModel.updateEventListener(widget.id);
     FFI.listenToMouse(true);
+    WindowManager.instance.addListener(this);
   }
 
   @override
   void dispose() {
+    print("remote page dispose");
     hideMobileActionsOverlay();
     FFI.listenToMouse(false);
     FFI.invokeMethod("enable_soft_keyboard", true);
@@ -72,7 +78,10 @@ class _RemotePageState extends State<RemotePage> {
     SmartDialog.dismiss();
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual,
         overlays: SystemUiOverlay.values);
-    Wakelock.disable();
+    if (!Platform.isLinux) {
+      Wakelock.disable();
+    }
+    WindowManager.instance.removeListener(this);
     super.dispose();
   }
 
@@ -124,10 +133,10 @@ class _RemotePageState extends State<RemotePage> {
       oldValue = oldValue.substring(j + 1);
       var common = 0;
       for (;
-      common < oldValue.length &&
-          common < newValue.length &&
-          newValue[common] == oldValue[common];
-      ++common);
+          common < oldValue.length &&
+              common < newValue.length &&
+              newValue[common] == oldValue[common];
+          ++common);
       for (i = 0; i < oldValue.length - common; ++i) {
         FFI.inputKey('VK_BACK');
       }
@@ -230,26 +239,26 @@ class _RemotePageState extends State<RemotePage> {
       child: getRawPointerAndKeyBody(
           keyboard,
           Scaffold(
-            // resizeToAvoidBottomInset: true,
+              // resizeToAvoidBottomInset: true,
               floatingActionButton: !showActionButton
                   ? null
                   : FloatingActionButton(
-                  mini: !hideKeyboard,
-                  child: Icon(
-                      hideKeyboard ? Icons.expand_more : Icons.expand_less),
-                  backgroundColor: MyTheme.accent,
-                  onPressed: () {
-                    setState(() {
-                      if (hideKeyboard) {
-                        _showEdit = false;
-                        FFI.invokeMethod("enable_soft_keyboard", false);
-                        _mobileFocusNode.unfocus();
-                        _physicalFocusNode.requestFocus();
-                      } else {
-                        _showBar = !_showBar;
-                      }
-                    });
-                  }),
+                      mini: !hideKeyboard,
+                      child: Icon(
+                          hideKeyboard ? Icons.expand_more : Icons.expand_less),
+                      backgroundColor: MyTheme.accent,
+                      onPressed: () {
+                        setState(() {
+                          if (hideKeyboard) {
+                            _showEdit = false;
+                            FFI.invokeMethod("enable_soft_keyboard", false);
+                            _mobileFocusNode.unfocus();
+                            _physicalFocusNode.requestFocus();
+                          } else {
+                            _showBar = !_showBar;
+                          }
+                        });
+                      }),
               bottomNavigationBar: _showBar && pi.displays.length > 0
                   ? getBottomAppBar(keyboard)
                   : null,
@@ -261,11 +270,11 @@ class _RemotePageState extends State<RemotePage> {
                         child: isWebDesktop
                             ? getBodyForDesktopWithListener(keyboard)
                             : SafeArea(
-                            child: Container(
-                                color: MyTheme.canvasColor,
-                                child: _isPhysicalMouse
-                                    ? getBodyForMobile()
-                                    : getBodyForMobileWithGesture())));
+                                child: Container(
+                                    color: MyTheme.canvasColor,
+                                    child: _isPhysicalMouse
+                                        ? getBodyForMobile()
+                                        : getBodyForMobileWithGesture())));
                   })
                 ],
               ))),
@@ -381,14 +390,14 @@ class _RemotePageState extends State<RemotePage> {
         children: <Widget>[
           Row(
               children: <Widget>[
-                IconButton(
-                  color: Colors.white,
-                  icon: Icon(Icons.clear),
-                  onPressed: () {
-                    clientClose();
-                  },
-                )
-              ] +
+                    IconButton(
+                      color: Colors.white,
+                      icon: Icon(Icons.clear),
+                      onPressed: () {
+                        clientClose();
+                      },
+                    )
+                  ] +
                   <Widget>[
                     IconButton(
                       color: Colors.white,
@@ -402,45 +411,45 @@ class _RemotePageState extends State<RemotePage> {
                   (isWebDesktop
                       ? []
                       : FFI.ffiModel.isPeerAndroid
-                      ? [
-                    IconButton(
-                      color: Colors.white,
-                      icon: Icon(Icons.build),
-                      onPressed: () {
-                        if (mobileActionsOverlayEntry == null) {
-                          showMobileActionsOverlay();
-                        } else {
-                          hideMobileActionsOverlay();
-                        }
-                      },
-                    )
-                  ]
-                      : [
-                    IconButton(
-                        color: Colors.white,
-                        icon: Icon(Icons.keyboard),
-                        onPressed: openKeyboard),
-                    IconButton(
-                      color: Colors.white,
-                      icon: Icon(FFI.ffiModel.touchMode
-                          ? Icons.touch_app
-                          : Icons.mouse),
-                      onPressed: changeTouchMode,
-                    ),
-                  ]) +
+                          ? [
+                              IconButton(
+                                color: Colors.white,
+                                icon: Icon(Icons.build),
+                                onPressed: () {
+                                  if (mobileActionsOverlayEntry == null) {
+                                    showMobileActionsOverlay();
+                                  } else {
+                                    hideMobileActionsOverlay();
+                                  }
+                                },
+                              )
+                            ]
+                          : [
+                              IconButton(
+                                  color: Colors.white,
+                                  icon: Icon(Icons.keyboard),
+                                  onPressed: openKeyboard),
+                              IconButton(
+                                color: Colors.white,
+                                icon: Icon(FFI.ffiModel.touchMode
+                                    ? Icons.touch_app
+                                    : Icons.mouse),
+                                onPressed: changeTouchMode,
+                              ),
+                            ]) +
                   (isWeb
                       ? []
                       : <Widget>[
-                    IconButton(
-                      color: Colors.white,
-                      icon: Icon(Icons.message),
-                      onPressed: () {
-                        FFI.chatModel
-                            .changeCurrentID(ChatModel.clientModeID);
-                        toggleChatOverlay();
-                      },
-                    )
-                  ]) +
+                          IconButton(
+                            color: Colors.white,
+                            icon: Icon(Icons.message),
+                            onPressed: () {
+                              FFI.chatModel
+                                  .changeCurrentID(ChatModel.clientModeID);
+                              toggleChatOverlay();
+                            },
+                          )
+                        ]) +
                   [
                     IconButton(
                       color: Colors.white,
@@ -549,15 +558,15 @@ class _RemotePageState extends State<RemotePage> {
         onThreeFingerVerticalDragUpdate: FFI.ffiModel.isPeerAndroid
             ? null
             : (d) {
-          _mouseScrollIntegral += d.delta.dy / 4;
-          if (_mouseScrollIntegral > 1) {
-            FFI.scroll(1);
-            _mouseScrollIntegral = 0;
-          } else if (_mouseScrollIntegral < -1) {
-            FFI.scroll(-1);
-            _mouseScrollIntegral = 0;
-          }
-        });
+                _mouseScrollIntegral += d.delta.dy / 4;
+                if (_mouseScrollIntegral > 1) {
+                  FFI.scroll(1);
+                  _mouseScrollIntegral = 0;
+                } else if (_mouseScrollIntegral < -1) {
+                  FFI.scroll(-1);
+                  _mouseScrollIntegral = 0;
+                }
+              });
   }
 
   Widget getBodyForMobile() {
@@ -573,17 +582,17 @@ class _RemotePageState extends State<RemotePage> {
             child: !_showEdit
                 ? Container()
                 : TextFormField(
-              textInputAction: TextInputAction.newline,
-              autocorrect: false,
-              enableSuggestions: false,
-              autofocus: true,
-              focusNode: _mobileFocusNode,
-              maxLines: null,
-              initialValue: _value,
-              // trick way to make backspace work always
-              keyboardType: TextInputType.multiline,
-              onChanged: handleInput,
-            ),
+                    textInputAction: TextInputAction.newline,
+                    autocorrect: false,
+                    enableSuggestions: false,
+                    autofocus: true,
+                    focusNode: _mobileFocusNode,
+                    maxLines: null,
+                    initialValue: _value,
+                    // trick way to make backspace work always
+                    keyboardType: TextInputType.multiline,
+                    onChanged: handleInput,
+                  ),
           ),
         ]));
   }
@@ -633,16 +642,16 @@ class _RemotePageState extends State<RemotePage> {
     more.add(PopupMenuItem<String>(
         child: Row(
             children: ([
-              Container(width: 100.0, child: Text(translate('OS Password'))),
-              TextButton(
-                style: flatButtonStyle,
-                onPressed: () {
-                  Navigator.pop(context);
-                  showSetOSPassword(false);
-                },
-                child: Icon(Icons.edit, color: MyTheme.accent),
-              )
-            ])),
+          Container(width: 100.0, child: Text(translate('OS Password'))),
+          TextButton(
+            style: flatButtonStyle,
+            onPressed: () {
+              Navigator.pop(context);
+              showSetOSPassword(false);
+            },
+            child: Icon(Icons.edit, color: MyTheme.accent),
+          )
+        ])),
         value: 'enter_os_password'));
     if (!isWebDesktop) {
       if (perms['keyboard'] != false && perms['clipboard'] != false) {
@@ -668,7 +677,7 @@ class _RemotePageState extends State<RemotePage> {
             value: 'block-input'));
       }
     }
-        () async {
+    () async {
       var value = await showMenu(
         context: context,
         position: RelativeRect.fromLTRB(x, y, x, y),
@@ -686,7 +695,7 @@ class _RemotePageState extends State<RemotePage> {
       } else if (value == 'refresh') {
         FFI.setByName('refresh');
       } else if (value == 'paste') {
-            () async {
+        () async {
           ClipboardData? data = await Clipboard.getData(Clipboard.kTextPlain);
           if (data != null && data.text != null) {
             FFI.setByName('input_string', '${data.text}');
@@ -752,7 +761,7 @@ class _RemotePageState extends State<RemotePage> {
           child: icon != null
               ? Icon(icon, size: 17, color: Colors.white)
               : Text(translate(text),
-              style: TextStyle(color: Colors.white, fontSize: 11)),
+                  style: TextStyle(color: Colors.white, fontSize: 11)),
           onPressed: onPressed);
     };
     final pi = FFI.ffiModel.pi;
@@ -774,25 +783,25 @@ class _RemotePageState extends State<RemotePage> {
     final keys = <Widget>[
       wrap(
           ' Fn ',
-              () => setState(
+          () => setState(
                 () {
-              _fn = !_fn;
-              if (_fn) {
-                _more = false;
-              }
-            },
-          ),
+                  _fn = !_fn;
+                  if (_fn) {
+                    _more = false;
+                  }
+                },
+              ),
           _fn),
       wrap(
           ' ... ',
-              () => setState(
+          () => setState(
                 () {
-              _more = !_more;
-              if (_more) {
-                _fn = false;
-              }
-            },
-          ),
+                  _more = !_more;
+                  if (_more) {
+                    _fn = false;
+                  }
+                },
+              ),
           _more),
     ];
     final fn = <Widget>[
@@ -864,6 +873,21 @@ class _RemotePageState extends State<RemotePage> {
                   : modifiers),
         ));
   }
+
+  @override
+  void onWindowEvent(String eventName) {
+    print("window event: $eventName");
+    switch (eventName) {
+      case 'resize':
+        FFI.canvasModel.updateViewStyle();
+        break;
+      case 'maximize':
+        Future.delayed(Duration(milliseconds: 100), () {
+          FFI.canvasModel.updateViewStyle();
+        });
+        break;
+    }
+  }
 }
 
 class ImagePaint extends StatelessWidget {
@@ -923,7 +947,8 @@ class ImagePainter extends CustomPainter {
   }
 }
 
-CheckboxListTile getToggle(void Function(void Function()) setState, option, name) {
+CheckboxListTile getToggle(
+    void Function(void Function()) setState, option, name) {
   return CheckboxListTile(
       value: FFI.getByName('toggle_option', option) == 'true',
       onChanged: (v) {

@@ -1,16 +1,18 @@
+import 'dart:async';
+import 'dart:convert';
+import 'dart:math';
+import 'dart:typed_data';
+import 'dart:ui' as ui;
+
+import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_hbb/models/chat_model.dart';
 import 'package:flutter_hbb/models/file_model.dart';
 import 'package:flutter_hbb/models/server_model.dart';
 import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'dart:math';
-import 'dart:convert';
-import 'dart:typed_data';
-import 'dart:ui' as ui;
-import 'package:flutter/material.dart';
 import 'package:tuple/tuple.dart';
-import 'dart:async';
+
 import '../common.dart';
 import '../mobile/widgets/dialog.dart';
 import '../mobile/widgets/overlay.dart';
@@ -596,17 +598,17 @@ class CursorModel with ChangeNotifier {
     final rgba = Uint8List.fromList(colors.map((s) => s as int).toList());
     var pid = FFI.id;
     ui.decodeImageFromPixels(rgba, width, height, ui.PixelFormat.rgba8888,
-        (image) {
-      if (FFI.id != pid) return;
-      _image = image;
-      _images[id] = Tuple3(image, _hotx, _hoty);
-      try {
-        // my throw exception, because the listener maybe already dispose
-        notifyListeners();
-      } catch (e) {
-        print('notify cursor: $e');
-      }
-    });
+            (image) {
+          if (FFI.id != pid) return;
+          _image = image;
+          _images[id] = Tuple3(image, _hotx, _hoty);
+          try {
+            // my throw exception, because the listener maybe already dispose
+            notifyListeners();
+          } catch (e) {
+            print('notify cursor: $e');
+          }
+        });
   }
 
   void updateCursorId(Map<String, dynamic> evt) {
@@ -635,8 +637,7 @@ class CursorModel with ChangeNotifier {
     notifyListeners();
   }
 
-  void updateDisplayOriginWithCursor(
-      double x, double y, double xCursor, double yCursor) {
+  void updateDisplayOriginWithCursor(double x, double y, double xCursor, double yCursor) {
     _displayOriginX = x;
     _displayOriginY = y;
     _x = xCursor;
@@ -734,13 +735,17 @@ class FFI {
   /// [press] indicates a click event(down and up).
   static void inputKey(String name, {bool? down, bool? press}) {
     if (!ffiModel.keyboard()) return;
-    setByName(
-        'input_key',
-        json.encode(modify({
-          'name': name,
-          'down': (down ?? false).toString(),
-          'press': (press ?? true).toString()
-        })));
+    final Map<String, String> out = Map();
+    out['name'] = name;
+    // default: down = false
+    if (down == true) {
+      out['down'] = "true";
+    }
+    // default: press = true
+    if (press != false) {
+      out['press'] = "true";
+    }
+    setByName('input_key', json.encode(modify(out)));
   }
 
   /// Send mouse movement event with distance in [x] and [y].
@@ -760,7 +765,7 @@ class FFI {
       return peers
           .map((s) => s as List<dynamic>)
           .map((s) =>
-              Peer.fromJson(s[0] as String, s[1] as Map<String, dynamic>))
+          Peer.fromJson(s[0] as String, s[1] as Map<String, dynamic>))
           .toList();
     } catch (e) {
       print('peers(): $e');

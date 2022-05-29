@@ -55,6 +55,8 @@ dependencies:
   image: ^3.1.3
   flutter_smart_dialog: ^4.3.1
   flutter_rust_bridge: ^1.30.0
+  window_manager: ^0.2.3
+  desktop_multi_window: ^0.0.2
 
 dev_dependencies:
   flutter_launcher_icons: ^0.9.1
