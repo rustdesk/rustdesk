@@ -13,7 +13,7 @@ use cpal::{
 };
 use magnum_opus::{Channels::*, Decoder as AudioDecoder};
 use scrap::{
-    coder::{Decoder, DecoderCfg},
+    codec::{Decoder, DecoderCfg},
     VpxDecoderConfig, VpxVideoCodecId,
 };
 

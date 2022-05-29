@@ -6,7 +6,7 @@ use hbb_common::anyhow::{anyhow, Context};
 use hbb_common::message_proto::{Message, VP9s, VideoFrame, VP9};
 use hbb_common::ResultType;
 
-use crate::coder::EncoderApi;
+use crate::codec::EncoderApi;
 use crate::STRIDE_ALIGN;
 
 use super::vpx::{vp8e_enc_control_id::*, vpx_codec_err_t::*, *};
@@ -90,12 +90,12 @@ macro_rules! call_vpx_ptr {
 }
 
 impl EncoderApi for VpxEncoder {
-    fn new(cfg: crate::coder::EncoderCfg) -> ResultType<Self>
+    fn new(cfg: crate::codec::EncoderCfg) -> ResultType<Self>
     where
         Self: Sized,
     {
         match cfg {
-            crate::coder::EncoderCfg::VPX(config) => {
+            crate::codec::EncoderCfg::VPX(config) => {
                 let i;
                 if cfg!(feature = "VP8") {
                     i = match config.codec {

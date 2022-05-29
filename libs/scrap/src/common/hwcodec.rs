@@ -1,5 +1,5 @@
 use crate::{
-    coder::{EncoderApi, EncoderCfg},
+    codec::{EncoderApi, EncoderCfg},
     hw, HW_STRIDE_ALIGN,
 };
 use hbb_common::{

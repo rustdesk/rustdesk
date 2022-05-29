@@ -27,7 +27,7 @@ cfg_if! {
     }
 }
 
-pub mod coder;
+pub mod codec;
 mod convert;
 #[cfg(feature = "hwcodec")]
 pub mod hwcodec;

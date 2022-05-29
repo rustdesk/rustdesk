@@ -13,7 +13,7 @@ use std::time::{Duration, Instant};
 use std::{io, thread};
 
 use docopt::Docopt;
-use scrap::coder::{EncoderApi, EncoderCfg};
+use scrap::codec::{EncoderApi, EncoderCfg};
 use webm::mux;
 use webm::mux::Track;
 
