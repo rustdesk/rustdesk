@@ -364,6 +364,17 @@ impl CapturerMag {
                 ));
             }
 
+            let x = GetSystemMetrics(SM_XVIRTUALSCREEN);
+            let y = GetSystemMetrics(SM_YVIRTUALSCREEN);
+            let w = GetSystemMetrics(SM_CXVIRTUALSCREEN);
+            let h = GetSystemMetrics(SM_CYVIRTUALSCREEN);
+            s.rect = RECT {
+                left: x as _,
+                top: y as _,
+                right: (x + w) as _,
+                bottom: (y + h) as _,
+            };
+
             // Create the magnifier control.
             s.magnifier_window = CreateWindowExA(
                 0,
@@ -487,13 +498,26 @@ impl CapturerMag {
             let y = GetSystemMetrics(SM_YVIRTUALSCREEN);
             let w = GetSystemMetrics(SM_CXVIRTUALSCREEN);
             let h = GetSystemMetrics(SM_CYVIRTUALSCREEN);
-
-            self.rect = RECT {
-                left: x as _,
-                top: y as _,
-                right: (x + w) as _,
-                bottom: (y + h) as _,
-            };
+            if !(self.rect.left == x as _
+                && self.rect.top == y as _
+                && self.rect.right == (x + w) as _
+                && self.rect.bottom == (y + h) as _)
+            {
+                return Err(Error::new(
+                    ErrorKind::Other,
+                    format!(
+                        "Failed Check screen rect ({}, {}, {} , {}) to ({}, {}, {}, {})",
+                        self.rect.left,
+                        self.rect.top,
+                        self.rect.right,
+                        self.rect.bottom,
+                        x,
+                        y,
+                        x + w,
+                        y + h
+                    ),
+                ));
+            }
 
             if FALSE
                 == SetWindowPos(

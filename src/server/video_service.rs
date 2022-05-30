@@ -269,6 +269,7 @@ fn create_capturer(privacy_mode_id: i32, display: Display) -> ResultType<Box<dyn
                             PRIVACY_WINDOW_NAME
                         );
                     }
+                    log::info!("Create maginifier capture for {}", privacy_mode_id);
                     c = Some(Box::new(c1));
                 }
                 Err(e) => {
