@@ -171,11 +171,11 @@ unsafe extern "C" fn get_by_name(name: *const c_char, arg: *const c_char) -> *co
                 }
             }
             // Server Side
-            #[cfg(target_os = "android")]
+            #[cfg(not(any(target_os = "ios")))]
             "clients_state" => {
                 res = get_clients_state();
             }
-            #[cfg(target_os = "android")]
+            #[cfg(not(any(target_os = "ios")))]
             "check_clients_length" => {
                 if let Ok(value) = arg.to_str() {
                     if value.parse::<usize>().unwrap_or(usize::MAX) != get_clients_length() {

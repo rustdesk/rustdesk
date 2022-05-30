@@ -78,10 +78,11 @@ class _DesktopHomePageState extends State<DesktopHomePage> {
   buildServerBoard(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisAlignment: MainAxisAlignment.start,
       children: [
         // buildControlPanel(context),
         // buildRecentSession(context),
-        ConnectionPage()
+        Expanded(child: ConnectionPage())
       ],
     );
   }

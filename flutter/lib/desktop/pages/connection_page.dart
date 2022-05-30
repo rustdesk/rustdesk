@@ -52,7 +52,11 @@ class _ConnectionPageState extends State<ConnectionPage> {
           crossAxisAlignment: CrossAxisAlignment.center,
           children: <Widget>[
             getUpdateUI(),
-            getSearchBarUI(),
+            Row(
+              children: [
+                getSearchBarUI(),
+              ],
+            ),
             SizedBox(height: 12),
             getPeers(),
           ]),
@@ -61,9 +65,9 @@ class _ConnectionPageState extends State<ConnectionPage> {
 
   /// Callback for the connect button.
   /// Connects to the selected peer.
-  void onConnect() {
+  void onConnect({bool isFileTransfer = false}) {
     var id = _idController.text.trim();
-    connect(id);
+    connect(id, isFileTransfer: isFileTransfer);
   }
 
   /// Connect to a peer with [id].
@@ -72,9 +76,11 @@ class _ConnectionPageState extends State<ConnectionPage> {
     if (id == '') return;
     id = id.replaceAll(' ', '');
     if (isFileTransfer) {
-      if (!await PermissionManager.check("file")) {
-        if (!await PermissionManager.request("file")) {
-          return;
+      if (!isDesktop) {
+        if (!await PermissionManager.check("file")) {
+          if (!await PermissionManager.request("file")) {
+            return;
+          }
         }
       }
       Navigator.push(
@@ -126,61 +132,100 @@ class _ConnectionPageState extends State<ConnectionPage> {
   /// Search for a peer and connect to it if the id exists.
   Widget getSearchBarUI() {
     var w = Padding(
-      padding: const EdgeInsets.fromLTRB(16.0, 8.0, 16.0, 0.0),
+      padding: const EdgeInsets.fromLTRB(16.0, 16.0, 16.0, 16.0),
       child: Container(
-        height: 84,
         child: Padding(
-          padding: const EdgeInsets.only(top: 8, bottom: 8),
+          padding: const EdgeInsets.only(top: 16, bottom: 16),
           child: Ink(
             decoration: BoxDecoration(
               color: MyTheme.white,
               borderRadius: const BorderRadius.all(Radius.circular(13)),
             ),
-            child: Row(
-              children: <Widget>[
-                Expanded(
-                  child: Container(
-                    padding: const EdgeInsets.only(left: 16, right: 16),
-                    child: TextField(
-                      autocorrect: false,
-                      enableSuggestions: false,
-                      keyboardType: TextInputType.visiblePassword,
-                      // keyboardType: TextInputType.number,
-                      style: TextStyle(
-                        fontFamily: 'WorkSans',
-                        fontWeight: FontWeight.bold,
-                        fontSize: 30,
-                        color: MyTheme.idColor,
-                      ),
-                      decoration: InputDecoration(
-                        labelText: translate('Remote ID'),
-                        // hintText: 'Enter your remote ID',
-                        border: InputBorder.none,
-                        helperStyle: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 16,
-                          color: MyTheme.darkGray,
+            child: Column(
+              children: [
+                Row(
+                  children: <Widget>[
+                    Expanded(
+                      child: Container(
+                        padding: const EdgeInsets.only(left: 16, right: 16),
+                        child: TextField(
+                          autocorrect: false,
+                          enableSuggestions: false,
+                          keyboardType: TextInputType.visiblePassword,
+                          // keyboardType: TextInputType.number,
+                          style: TextStyle(
+                            fontFamily: 'WorkSans',
+                            fontWeight: FontWeight.bold,
+                            fontSize: 30,
+                            // color: MyTheme.idColor,
+                          ),
+                          decoration: InputDecoration(
+                            labelText: translate('Control Remote Desktop'),
+                            // hintText: 'Enter your remote ID',
+                            // border: InputBorder.,
+                            border: OutlineInputBorder(
+                                borderRadius: BorderRadius.zero),
+                            helperStyle: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 16,
+                              color: MyTheme.dark,
+                            ),
+                            labelStyle: TextStyle(
+                              fontWeight: FontWeight.w600,
+                              fontSize: 26,
+                              letterSpacing: 0.2,
+                              color: MyTheme.dark,
+                            ),
+                          ),
+                          controller: _idController,
                         ),
-                        labelStyle: TextStyle(
-                          fontWeight: FontWeight.w600,
-                          fontSize: 16,
-                          letterSpacing: 0.2,
-                          color: MyTheme.darkGray,
-                        ),
                       ),
-                      controller: _idController,
                     ),
-                  ),
+                  ],
                 ),
-                SizedBox(
-                  width: 60,
-                  height: 60,
-                  child: IconButton(
-                    icon: Icon(Icons.arrow_forward,
-                        color: MyTheme.darkGray, size: 45),
-                    onPressed: onConnect,
+                Padding(
+                  padding: const EdgeInsets.symmetric(
+                      vertical: 16.0, horizontal: 16.0),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      OutlinedButton(
+                        onPressed: () {
+                          onConnect(isFileTransfer: true);
+                        },
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                              vertical: 8.0, horizontal: 8.0),
+                          child: Text(
+                            translate(
+                              "File Transfer",
+                            ),
+                            style: TextStyle(color: MyTheme.dark),
+                          ),
+                        ),
+                      ),
+                      SizedBox(
+                        width: 30,
+                      ),
+                      OutlinedButton(
+                        onPressed: onConnect,
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                              vertical: 8.0, horizontal: 16.0),
+                          child: Text(
+                            translate(
+                              "Connection",
+                            ),
+                            style: TextStyle(color: MyTheme.white),
+                          ),
+                        ),
+                        style: OutlinedButton.styleFrom(
+                          backgroundColor: Colors.blueAccent,
+                        ),
+                      ),
+                    ],
                   ),
-                ),
+                )
               ],
             ),
           ),
