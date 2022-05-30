@@ -46,7 +46,9 @@ fn initialize(app_dir: &str) {
     #[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
     {
         use hbb_common::env_logger::*;
-        init_from_env(Env::default().filter_or(DEFAULT_FILTER_ENV, "debug"));
+        if let Err(e) = try_init_from_env(Env::default().filter_or(DEFAULT_FILTER_ENV, "debug")) {
+            log::debug!("{}", e);
+        }
     }
 }
 
