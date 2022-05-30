@@ -28,6 +28,11 @@ pub mod flutter;
 #[cfg(any(target_os = "android", target_os = "ios", feature = "flutter"))]
 pub mod flutter_ffi;
 use common::*;
+#[cfg(all(
+    not(any(target_os = "android", target_os = "ios")),
+    feature = "flutter"
+))]
+pub mod core_main;
 #[cfg(feature = "cli")]
 pub mod cli;
 #[cfg(all(windows, feature = "hbbs"))]
