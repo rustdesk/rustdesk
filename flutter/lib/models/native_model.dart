@@ -3,7 +3,7 @@ import 'dart:ffi';
 import 'dart:io';
 import 'dart:typed_data';
 
-import 'package:device_info/device_info.dart';
+import 'package:device_info_plus/device_info_plus.dart';
 import 'package:external_path/external_path.dart';
 import 'package:ffi/ffi.dart';
 import 'package:flutter/services.dart';
@@ -101,11 +101,23 @@ class PlatformFFI {
         AndroidDeviceInfo androidInfo = await deviceInfo.androidInfo;
         name = '${androidInfo.brand}-${androidInfo.model}';
         id = androidInfo.id.hashCode.toString();
-        androidVersion = androidInfo.version.sdkInt;
+        androidVersion = androidInfo.version.sdkInt ?? 0;
       } else if (Platform.isIOS) {
         IosDeviceInfo iosInfo = await deviceInfo.iosInfo;
-        name = iosInfo.utsname.machine;
+        name = iosInfo.utsname.machine ?? "";
         id = iosInfo.identifierForVendor.hashCode.toString();
+      } else if (Platform.isLinux) {
+        LinuxDeviceInfo linuxInfo = await deviceInfo.linuxInfo;
+        name = linuxInfo.name;
+        id = linuxInfo.machineId ?? linuxInfo.id;
+      } else if (Platform.isWindows) {
+        WindowsDeviceInfo winInfo = await deviceInfo.windowsInfo;
+        name = winInfo.computerName;
+        id = winInfo.computerName;
+      } else if (Platform.isMacOS) {
+        MacOsDeviceInfo macOsInfo = await deviceInfo.macOsInfo;
+        name = macOsInfo.computerName;
+        id = macOsInfo.systemGUID ?? "";
       }
       print("info1-id:$id,info2-name:$name,dir:$_dir,homeDir:$_homeDir");
       setByName('info1', id);

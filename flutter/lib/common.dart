@@ -1,6 +1,7 @@
+import 'dart:async';
+
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
-import 'dart:async';
 import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
 
 import 'models/model.dart';
@@ -35,6 +36,7 @@ class MyTheme {
   static const Color border = Color(0xFFCCCCCC);
   static const Color idColor = Color(0xFF00B6F0);
   static const Color darkGray = Color(0xFFB9BABC);
+  static const Color dark = Colors.black87;
 }
 
 final ButtonStyle flatButtonStyle = TextButton.styleFrom(
@@ -97,9 +99,9 @@ class DialogManager {
 
   static Future<T?> show<T>(DialogBuilder builder,
       {bool clickMaskDismiss = false,
-      bool backDismiss = false,
-      String? tag,
-      bool useAnimation = true}) async {
+        bool backDismiss = false,
+        String? tag,
+        bool useAnimation = true}) async {
     final t;
     if (tag != null) {
       t = tag;
@@ -124,11 +126,10 @@ class DialogManager {
 }
 
 class CustomAlertDialog extends StatelessWidget {
-  CustomAlertDialog(
-      {required this.title,
-      required this.content,
-      required this.actions,
-      this.contentPadding});
+  CustomAlertDialog({required this.title,
+    required this.content,
+    required this.actions,
+    this.contentPadding});
 
   final Widget title;
   final Widget content;
@@ -141,7 +142,7 @@ class CustomAlertDialog extends StatelessWidget {
       scrollable: true,
       title: title,
       contentPadding:
-          EdgeInsets.symmetric(horizontal: contentPadding ?? 25, vertical: 10),
+      EdgeInsets.symmetric(horizontal: contentPadding ?? 25, vertical: 10),
       content: content,
       actions: actions,
     );
