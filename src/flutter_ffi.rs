@@ -52,6 +52,13 @@ fn initialize(app_dir: &str) {
     }
 }
 
+/// FFI for rustdesk core's main entry.
+/// Return true if the app should continue running with UI(possibly Flutter), false if the app should exit.
+#[no_mangle]
+pub extern "C" fn rustdesk_core_main() -> bool {
+    crate::core_main::core_main()
+}
+
 pub fn start_event_stream(s: StreamSink<String>) -> ResultType<()> {
     let _ = flutter::EVENT_STREAM.write().unwrap().insert(s);
     Ok(())
