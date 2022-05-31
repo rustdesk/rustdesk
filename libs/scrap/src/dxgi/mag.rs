@@ -277,6 +277,29 @@ impl CapturerMag {
         height: usize,
         use_yuv: bool,
     ) -> Result<Self> {
+        unsafe {
+            let x = GetSystemMetrics(SM_XVIRTUALSCREEN);
+            let y = GetSystemMetrics(SM_YVIRTUALSCREEN);
+            let w = GetSystemMetrics(SM_CXVIRTUALSCREEN);
+            let h = GetSystemMetrics(SM_CYVIRTUALSCREEN);
+            if !(origin.0 == x as _ && origin.1 == y as _ && width == w as _ && height == h as _) {
+                return Err(Error::new(
+                    ErrorKind::Other,
+                    format!(
+                        "Failed Check screen rect ({}, {}, {} , {}) to ({}, {}, {}, {})",
+                        origin.0,
+                        origin.1,
+                        origin.0 + width as i32,
+                        origin.1 + height as i32,
+                        x,
+                        y,
+                        x + w,
+                        y + h
+                    ),
+                ));
+            }
+        }
+
         let mut s = Self {
             mag_interface: MagInterface::new()?,
             host_window: 0 as _,
@@ -363,17 +386,6 @@ impl CapturerMag {
                     ),
                 ));
             }
-
-            let x = GetSystemMetrics(SM_XVIRTUALSCREEN);
-            let y = GetSystemMetrics(SM_YVIRTUALSCREEN);
-            let w = GetSystemMetrics(SM_CXVIRTUALSCREEN);
-            let h = GetSystemMetrics(SM_CYVIRTUALSCREEN);
-            s.rect = RECT {
-                left: x as _,
-                top: y as _,
-                right: (x + w) as _,
-                bottom: (y + h) as _,
-            };
 
             // Create the magnifier control.
             s.magnifier_window = CreateWindowExA(

@@ -154,7 +154,7 @@ pub fn start() -> ResultType<()> {
 
     let hwnd = wait_find_privacy_hwnd(1_000)?;
     if !hwnd.is_null() {
-        log::info!("Privacy window is already created");
+        log::info!("Privacy window is ready");
         return Ok(());
     }
 
@@ -320,9 +320,7 @@ async fn set_privacy_mode_state(
     state: PrivacyModeState,
     ms_timeout: u64,
 ) -> ResultType<()> {
-    println!("set_privacy_mode_state begin");
     let mut c = connect(ms_timeout, "_cm").await?;
-    println!("set_privacy_mode_state connect done");
     c.send(&Data::PrivacyModeState((conn_id, state))).await
 }
 

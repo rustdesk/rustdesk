@@ -386,9 +386,12 @@ impl Connection {
             }
         }
 
-        if video_service::get_privacy_mode_conn_id() == id {
+        let video_privacy_conn_id = video_service::get_privacy_mode_conn_id();
+        if video_privacy_conn_id == id {
             video_service::set_privacy_mode_conn_id(0);
-            let _ = privacy_mode::turn_off_privacy(id).await;
+            let _ = privacy_mode::turn_off_privacy(id);
+        } else if video_privacy_conn_id == 0 {
+            let _ = privacy_mode::turn_off_privacy(0);
         }
         video_service::notify_video_frame_feched(id, None);
         video_service::update_test_latency(id, 0);
@@ -657,7 +660,8 @@ impl Connection {
             features: Some(Features {
                 privacy_mode: video_service::is_privacy_mode_supported(),
                 ..Default::default()
-            }).into(),
+            })
+            .into(),
             ..Default::default()
         };
         let mut sub_service = false;
@@ -1170,18 +1174,30 @@ impl Connection {
                         } else {
                             match privacy_mode::turn_on_privacy(self.inner.id) {
                                 Ok(true) => {
-                                    video_service::set_privacy_mode_conn_id(self.inner.id);
-                                    crate::common::make_privacy_mode_msg(
-                                        back_notification::PrivacyModeState::OnSucceeded,
-                                    )
+                                    if video_service::test_create_capturer(self.inner.id, 5_000) {
+                                        video_service::set_privacy_mode_conn_id(self.inner.id);
+                                        crate::common::make_privacy_mode_msg(
+                                            back_notification::PrivacyModeState::OnSucceeded,
+                                        )
+                                    } else {
+                                        log::error!(
+                                            "Wait privacy mode timeout, turn off privacy mode"
+                                        );
+                                        video_service::set_privacy_mode_conn_id(0);
+                                        let _ = privacy_mode::turn_off_privacy(self.inner.id);
+                                        crate::common::make_privacy_mode_msg(
+                                            back_notification::PrivacyModeState::OnFailed,
+                                        )
+                                    }
                                 }
-                                Ok(false) => {
-                                    crate::common::make_privacy_mode_msg(
-                                        back_notification::PrivacyModeState::OnFailedPlugin,
-                                    )
-                                }
+                                Ok(false) => crate::common::make_privacy_mode_msg(
+                                    back_notification::PrivacyModeState::OnFailedPlugin,
+                                ),
                                 Err(e) => {
                                     log::error!("Failed to turn on privacy mode. {}", e);
+                                    if video_service::get_privacy_mode_conn_id() == 0 {
+                                        let _ = privacy_mode::turn_off_privacy(0);
+                                    }
                                     crate::common::make_privacy_mode_msg(
                                         back_notification::PrivacyModeState::OnFailed,
                                     )
@@ -1197,7 +1213,7 @@ impl Connection {
                             )
                         } else {
                             video_service::set_privacy_mode_conn_id(0);
-                            privacy_mode::turn_off_privacy(self.inner.id).await
+                            privacy_mode::turn_off_privacy(self.inner.id)
                         };
                         self.send(msg_out).await;
                     }
@@ -1354,7 +1370,7 @@ fn try_activate_screen() {
 mod privacy_mode {
     use super::*;
 
-    pub(super) async fn turn_off_privacy(_conn_id: i32) -> Message {
+    pub(super) fn turn_off_privacy(_conn_id: i32) -> Message {
         #[cfg(windows)]
         {
             use crate::ui::win_privacy::*;

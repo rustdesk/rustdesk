@@ -19,12 +19,9 @@
 // https://slhck.info/video/2017/03/01/rate-control.html
 
 use super::*;
-use hbb_common::tokio::{
-    runtime::Runtime,
-    sync::{
-        mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender},
-        Mutex as TokioMutex,
-    },
+use hbb_common::tokio::sync::{
+    mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender},
+    Mutex as TokioMutex,
 };
 use scrap::{Capturer, Config, Display, EncodeFrame, Encoder, Frame, VideoCodecId, STRIDE_ALIGN};
 use std::{
@@ -80,7 +77,6 @@ pub fn is_privacy_mode_supported() -> bool {
 struct VideoFrameController {
     cur: Instant,
     send_conn_ids: HashSet<i32>,
-    rt: Runtime,
 }
 
 impl VideoFrameController {
@@ -88,7 +84,6 @@ impl VideoFrameController {
         Self {
             cur: Instant::now(),
             send_conn_ids: HashSet::new(),
-            rt: Runtime::new().unwrap(),
         }
     }
 
@@ -103,46 +98,29 @@ impl VideoFrameController {
         }
     }
 
-    fn blocking_wait_next(&mut self, timeout_millis: u128) {
+    #[tokio::main(flavor = "current_thread")]
+    async fn try_wait_next(&mut self, fetched_conn_ids: &mut HashSet<i32>, timeout_millis: u64) {
         if self.send_conn_ids.is_empty() {
             return;
         }
 
-        let send_conn_ids = self.send_conn_ids.clone();
-        self.rt.block_on(async move {
-            let mut fetched_conn_ids = HashSet::new();
-            let begin = Instant::now();
-            while begin.elapsed().as_millis() < timeout_millis {
-                let timeout_dur =
-                    Duration::from_millis((timeout_millis - begin.elapsed().as_millis()) as u64);
-                match tokio::time::timeout(
-                    timeout_dur,
-                    FRAME_FETCHED_NOTIFIER.1.lock().await.recv(),
-                )
-                .await
-                {
-                    Err(_) => {
-                        // break if timeout
-                        // log::error!("blocking wait frame receiving timeout {}", timeout_millis);
-                        break;
-                    }
-                    Ok(Some((id, instant))) => {
-                        if let Some(tm) = instant {
-                            log::trace!("Channel recv latency: {}", tm.elapsed().as_secs_f32());
-                        }
-                        fetched_conn_ids.insert(id);
-
-                        // break if all connections have received current frame
-                        if fetched_conn_ids.len() >= send_conn_ids.len() {
-                            break;
-                        }
-                    }
-                    Ok(None) => {
-                        // this branch would nerver be reached
-                    }
-                }
+        let timeout_dur = Duration::from_millis(timeout_millis as u64);
+        match tokio::time::timeout(timeout_dur, FRAME_FETCHED_NOTIFIER.1.lock().await.recv()).await
+        {
+            Err(_) => {
+                // break if timeout
+                // log::error!("blocking wait frame receiving timeout {}", timeout_millis);
             }
-        });
+            Ok(Some((id, instant))) => {
+                if let Some(tm) = instant {
+                    log::trace!("Channel recv latency: {}", tm.elapsed().as_secs_f32());
+                }
+                fetched_conn_ids.insert(id);
+            }
+            Ok(None) => {
+                // this branch would nerver be reached
+            }
+        }
     }
 }
 
@@ -271,7 +249,7 @@ fn create_capturer(privacy_mode_id: i32, display: Display) -> ResultType<Box<dyn
                             PRIVACY_WINDOW_NAME
                         );
                     }
-                    log::info!("Create maginifier capture for {}", privacy_mode_id);
+                    log::debug!("Create maginifier capture for {}", privacy_mode_id);
                     c = Some(Box::new(c1));
                 }
                 Err(e) => {
@@ -286,6 +264,7 @@ fn create_capturer(privacy_mode_id: i32, display: Display) -> ResultType<Box<dyn
         None => {
             let c1 =
                 Capturer::new(display, use_yuv).with_context(|| "Failed to create capturer")?;
+            log::debug!("Create capturer dxgi|gdi");
             Box::new(c1)
         }
     };
@@ -309,6 +288,19 @@ fn ensure_close_virtual_device() -> ResultType<()> {
     Ok(())
 }
 
+pub fn test_create_capturer(privacy_mode_id: i32, timeout_millis: u64) -> bool {
+    let test_begin = Instant::now();
+    while test_begin.elapsed().as_millis() < timeout_millis as _ {
+        if let Ok((_, _, display)) = get_current_display() {
+            if let Ok(_) = create_capturer(privacy_mode_id, display) {
+                return true;
+            }
+        }
+        std::thread::sleep(Duration::from_millis(300));
+    }
+    false
+}
+
 fn run(sp: GenericService) -> ResultType<()> {
     #[cfg(windows)]
     ensure_close_virtual_device()?;
@@ -330,6 +322,10 @@ fn run(sp: GenericService) -> ResultType<()> {
     );
 
     let privacy_mode_id = *PRIVACY_MODE_CONN_ID.lock().unwrap();
+    log::debug!(
+        "Try create capturer with privacy mode id {}",
+        privacy_mode_id,
+    );
     let mut c = create_capturer(privacy_mode_id, display)?;
 
     let q = get_image_quality();
@@ -403,6 +399,7 @@ fn run(sp: GenericService) -> ResultType<()> {
                 bail!("SWITCH");
             }
         }
+
         *LAST_ACTIVE.lock().unwrap() = now;
 
         frame_controller.reset();
@@ -478,8 +475,17 @@ fn run(sp: GenericService) -> ResultType<()> {
             _ => {}
         }
 
-        // i love 3, 6, 8
-        frame_controller.blocking_wait_next(3_000);
+        let mut fetched_conn_ids = HashSet::new();
+        let timeout_millis = 3_000u64;
+        let wait_begin = Instant::now();
+        while wait_begin.elapsed().as_millis() < timeout_millis as _ {
+            check_privacy_mode_changed(&sp, privacy_mode_id)?;
+            frame_controller.try_wait_next(&mut fetched_conn_ids, 300);
+            // break if all connections have received current frame
+            if fetched_conn_ids.len() >= frame_controller.send_conn_ids.len() {
+                break;
+            }
+        }
 
         let elapsed = now.elapsed();
         // may need to enable frame(timeout)
