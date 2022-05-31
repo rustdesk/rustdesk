@@ -143,7 +143,7 @@ class _RemotePageState extends State<RemotePage> with WindowListener {
       if (newValue.length > common) {
         var s = newValue.substring(common);
         if (s.length > 1) {
-          FFI.setByName('input_string', s);
+          FFI.bind.sessionInputString(id: widget.id, value: s);
         } else {
           inputChar(s);
         }
@@ -177,11 +177,11 @@ class _RemotePageState extends State<RemotePage> with WindowListener {
                 content == '（）' ||
                 content == '【】')) {
           // can not only input content[0], because when input ], [ are also auo insert, which cause ] never be input
-          FFI.setByName('input_string', content);
+          FFI.bind.sessionInputString(id: widget.id, value: content);
           openKeyboard();
           return;
         }
-        FFI.setByName('input_string', content);
+        FFI.bind.sessionInputString(id: widget.id, value: content);
       } else {
         inputChar(content);
       }
@@ -328,8 +328,8 @@ class _RemotePageState extends State<RemotePage> with WindowListener {
             if (dy > 0)
               dy = -1;
             else if (dy < 0) dy = 1;
-            FFI.setByName(
-                'send_mouse', '{"type": "wheel", "x": "$dx", "y": "$dy"}');
+            FFI.setByName('send_mouse',
+                '{"id": "${widget.id}", "type": "wheel", "x": "$dx", "y": "$dy"}');
           }
         },
         child: MouseRegion(
@@ -456,7 +456,7 @@ class _RemotePageState extends State<RemotePage> with WindowListener {
                       icon: Icon(Icons.more_vert),
                       onPressed: () {
                         setState(() => _showEdit = false);
-                        showActions();
+                        showActions(widget.id);
                       },
                     ),
                   ]),
@@ -553,7 +553,8 @@ class _RemotePageState extends State<RemotePage> with WindowListener {
         },
         onTwoFingerScaleEnd: (d) {
           _scale = 1;
-          FFI.setByName('peer_option', '{"name": "view-style", "value": ""}');
+          FFI.bind
+              .sessionPeerOption(id: widget.id, name: "view-style", value: "");
         },
         onThreeFingerVerticalDragUpdate: FFI.ffiModel.isPeerAndroid
             ? null
@@ -599,18 +600,12 @@ class _RemotePageState extends State<RemotePage> with WindowListener {
 
   Widget getBodyForDesktopWithListener(bool keyboard) {
     var paints = <Widget>[ImagePaint()];
-    final cursor = await;
-    if (keyboard ||
-        FFI.getByName('toggle_option', 'show-remote-cursor') == 'true') {
+    final cursor = FFI.bind.getSessionToggleOptionSync(
+            id: widget.id, arg: 'show-remote-cursor')[0] ==
+        1;
+    if (keyboard || cursor) {
       paints.add(CursorPaint());
     }
-    return FutureBuilder(
-      future: FFI.rustdeskImpl
-          .getSessionToggleOption(id: widget.id, arg: 'show-remote-cursor'),
-      builder: (ctx, snapshot) {
-        if(snapshot)
-      },
-    );
     return Container(
         color: MyTheme.canvasColor, child: Stack(children: paints));
   }
@@ -636,7 +631,7 @@ class _RemotePageState extends State<RemotePage> with WindowListener {
     return out;
   }
 
-  void showActions() {
+  void showActions(String id) async {
     final size = MediaQuery.of(context).size;
     final x = 120.0;
     final y = size.height;
@@ -655,7 +650,7 @@ class _RemotePageState extends State<RemotePage> with WindowListener {
             style: flatButtonStyle,
             onPressed: () {
               Navigator.pop(context);
-              showSetOSPassword(false);
+              showSetOSPassword(widget.id, false);
             },
             child: Icon(Icons.edit, color: MyTheme.accent),
           )
@@ -678,7 +673,8 @@ class _RemotePageState extends State<RemotePage> with WindowListener {
       more.add(PopupMenuItem<String>(
           child: Text(translate('Insert Lock')), value: 'lock'));
       if (pi.platform == 'Windows' &&
-          FFI.getByName('toggle_option', 'privacy-mode') != 'true') {
+          await FFI.bind.getSessionToggleOption(id: id, arg: 'privacy-mode') !=
+              true) {
         more.add(PopupMenuItem<String>(
             child: Text(translate(
                 (FFI.ffiModel.inputBlocked ? 'Unb' : 'B') + 'lock user input')),
@@ -693,28 +689,30 @@ class _RemotePageState extends State<RemotePage> with WindowListener {
         elevation: 8,
       );
       if (value == 'cad') {
-        FFI.setByName('ctrl_alt_del');
+        FFI.bind.sessionCtrlAltDel(id: widget.id);
       } else if (value == 'lock') {
-        FFI.setByName('lock_screen');
+        FFI.bind.sessionLockScreen(id: widget.id);
       } else if (value == 'block-input') {
-        FFI.setByName('toggle_option',
-            (FFI.ffiModel.inputBlocked ? 'un' : '') + 'block-input');
+        FFI.bind.sessionToggleOption(
+            id: widget.id,
+            value: (FFI.ffiModel.inputBlocked ? 'un' : '') + 'block-input');
         FFI.ffiModel.inputBlocked = !FFI.ffiModel.inputBlocked;
       } else if (value == 'refresh') {
-        FFI.setByName('refresh');
+        FFI.bind.sessionRefresh(id: widget.id);
       } else if (value == 'paste') {
         () async {
           ClipboardData? data = await Clipboard.getData(Clipboard.kTextPlain);
           if (data != null && data.text != null) {
-            FFI.setByName('input_string', '${data.text}');
+            FFI.bind.sessionInputString(id: widget.id, value: data.text ?? "");
           }
         }();
       } else if (value == 'enter_os_password') {
-        var password = FFI.getByName('peer_option', "os-password");
-        if (password != "") {
-          FFI.setByName('input_os_password', password);
+        var password =
+            await FFI.bind.getSessionOption(id: id, arg: "os-password");
+        if (password != null) {
+          FFI.bind.sessionInputOsPassword(id: widget.id, value: password);
         } else {
-          showSetOSPassword(true);
+          showSetOSPassword(widget.id, true);
         }
       } else if (value == 'reset_canvas') {
         FFI.cursorModel.reset();
@@ -740,8 +738,8 @@ class _RemotePageState extends State<RemotePage> with WindowListener {
                       onTouchModeChange: (t) {
                         FFI.ffiModel.toggleTouchMode();
                         final v = FFI.ffiModel.touchMode ? 'Y' : '';
-                        FFI.setByName('peer_option',
-                            '{"name": "touch-mode", "value": "$v"}');
+                        FFI.bind.sessionPeerOption(
+                            id: widget.id, name: "touch-mode", value: v);
                       }));
             }));
   }
@@ -956,12 +954,13 @@ class ImagePainter extends CustomPainter {
 }
 
 CheckboxListTile getToggle(
-    void Function(void Function()) setState, option, name) {
+    String id, void Function(void Function()) setState, option, name) {
+  final opt = FFI.bind.getSessionToggleOptionSync(id: id, arg: option)[0] == 1;
   return CheckboxListTile(
-      value: FFI.getByName('toggle_option', option) == 'true',
+      value: opt,
       onChanged: (v) {
         setState(() {
-          FFI.setByName('toggle_option', option);
+          FFI.bind.sessionToggleOption(id: id, value: option);
         });
       },
       dense: true,
@@ -981,12 +980,10 @@ RadioListTile<String> getRadio(String name, String toValue, String curValue,
 }
 
 void showOptions(String id) async {
-  // String quality = FFI.getByName('image_quality');
-  String quality =
-      await FFI.rustdeskImpl.getSessionImageQuality(id: id) ?? 'balanced';
+  String quality = await FFI.bind.getSessionImageQuality(id: id) ?? 'balanced';
   if (quality == '') quality = 'balanced';
   String viewStyle =
-      await FFI.rustdeskImpl.getSessionOption(id: id, arg: 'view-style') ?? '';
+      await FFI.bind.getSessionOption(id: id, arg: 'view-style') ?? '';
   var displays = <Widget>[];
   final pi = FFI.ffiModel.pi;
   final image = FFI.ffiModel.getConnectionImage();
@@ -999,7 +996,7 @@ void showOptions(String id) async {
       children.add(InkWell(
           onTap: () {
             if (i == cur) return;
-            FFI.setByName('switch_display', i.toString());
+            FFI.bind.sessionSwitchDisplay(id: id, value: i);
             SmartDialog.dismiss();
           },
           child: Ink(
@@ -1028,30 +1025,30 @@ void showOptions(String id) async {
   DialogManager.show((setState, close) {
     final more = <Widget>[];
     if (perms['audio'] != false) {
-      more.add(getToggle(setState, 'disable-audio', 'Mute'));
+      more.add(getToggle(id, setState, 'disable-audio', 'Mute'));
     }
     if (perms['keyboard'] != false) {
       if (perms['clipboard'] != false)
-        more.add(getToggle(setState, 'disable-clipboard', 'Disable clipboard'));
+        more.add(
+            getToggle(id, setState, 'disable-clipboard', 'Disable clipboard'));
       more.add(getToggle(
-          setState, 'lock-after-session-end', 'Lock after session end'));
+          id, setState, 'lock-after-session-end', 'Lock after session end'));
       if (pi.platform == 'Windows') {
-        more.add(getToggle(setState, 'privacy-mode', 'Privacy mode'));
+        more.add(getToggle(id, setState, 'privacy-mode', 'Privacy mode'));
       }
     }
     var setQuality = (String? value) {
       if (value == null) return;
       setState(() {
         quality = value;
-        FFI.setByName('image_quality', value);
+        FFI.bind.sessionSetImageQuality(id: id, value: value);
       });
     };
     var setViewStyle = (String? value) {
       if (value == null) return;
       setState(() {
         viewStyle = value;
-        FFI.setByName(
-            'peer_option', '{"name": "view-style", "value": "$value"}');
+        FFI.bind.sessionPeerOption(id: id, name: "view-style", value: value);
         FFI.canvasModel.updateViewStyle();
       });
     };
@@ -1069,7 +1066,8 @@ void showOptions(String id) async {
                 getRadio('Balanced', 'balanced', quality, setQuality),
                 getRadio('Optimize reaction time', 'low', quality, setQuality),
                 Divider(color: MyTheme.border),
-                getToggle(setState, 'show-remote-cursor', 'Show remote cursor'),
+                getToggle(
+                    id, setState, 'show-remote-cursor', 'Show remote cursor'),
               ] +
               more),
       actions: [],
@@ -1078,10 +1076,12 @@ void showOptions(String id) async {
   }, clickMaskDismiss: true, backDismiss: true);
 }
 
-void showSetOSPassword(bool login) {
+void showSetOSPassword(String id, bool login) async {
   final controller = TextEditingController();
-  var password = FFI.getByName('peer_option', "os-password");
-  var autoLogin = FFI.getByName('peer_option', "auto-login") != "";
+  var password =
+      await FFI.bind.getSessionOption(id: id, arg: "os-password") ?? "";
+  var autoLogin =
+      await FFI.bind.getSessionOption(id: id, arg: "auto-login") != "";
   controller.text = password;
   DialogManager.show((setState, close) {
     return CustomAlertDialog(
@@ -1114,12 +1114,12 @@ void showSetOSPassword(bool login) {
             style: flatButtonStyle,
             onPressed: () {
               var text = controller.text.trim();
-              FFI.setByName(
-                  'peer_option', '{"name": "os-password", "value": "$text"}');
-              FFI.setByName('peer_option',
-                  '{"name": "auto-login", "value": "${autoLogin ? 'Y' : ''}"}');
+              FFI.bind
+                  .sessionPeerOption(id: id, name: "os-password", value: text);
+              FFI.bind.sessionPeerOption(
+                  id: id, name: "auto-login", value: autoLogin ? 'Y' : '');
               if (text != "" && login) {
-                FFI.setByName('input_os_password', text);
+                FFI.bind.sessionInputOsPassword(id: id, value: text);
               }
               close();
             },

@@ -28,7 +28,7 @@ pub trait FileManager: Interface {
         }
     }
 
-    fn cancel_job(&mut self, id: i32) {
+    fn cancel_job(&self, id: i32) {
         self.send(Data::CancelJob(id));
     }
 
@@ -44,23 +44,23 @@ pub trait FileManager: Interface {
         self.send(Data::Message(msg_out));
     }
 
-    fn remove_file(&mut self, id: i32, path: String, file_num: i32, is_remote: bool) {
+    fn remove_file(&self, id: i32, path: String, file_num: i32, is_remote: bool) {
         self.send(Data::RemoveFile((id, path, file_num, is_remote)));
     }
 
-    fn remove_dir_all(&mut self, id: i32, path: String, is_remote: bool) {
+    fn remove_dir_all(&self, id: i32, path: String, is_remote: bool) {
         self.send(Data::RemoveDirAll((id, path, is_remote)));
     }
 
-    fn confirm_delete_files(&mut self, id: i32, file_num: i32) {
+    fn confirm_delete_files(&self, id: i32, file_num: i32) {
         self.send(Data::ConfirmDeleteFiles((id, file_num)));
     }
 
-    fn set_no_confirm(&mut self, id: i32) {
+    fn set_no_confirm(&self, id: i32) {
         self.send(Data::SetNoConfirm(id));
     }
 
-    fn remove_dir(&mut self, id: i32, path: String, is_remote: bool) {
+    fn remove_dir(&self, id: i32, path: String, is_remote: bool) {
         if is_remote {
             self.send(Data::RemoveDir((id, path)));
         } else {
@@ -68,7 +68,7 @@ pub trait FileManager: Interface {
         }
     }
 
-    fn create_dir(&mut self, id: i32, path: String, is_remote: bool) {
+    fn create_dir(&self, id: i32, path: String, is_remote: bool) {
         self.send(Data::CreateDir((id, path, is_remote)));
     }
 

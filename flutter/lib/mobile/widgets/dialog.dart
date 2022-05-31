@@ -137,7 +137,7 @@ void enterPasswordDialog(String id) {
           onPressed: () {
             var text = controller.text.trim();
             if (text == '') return;
-            FFI.login(text, remember);
+            FFI.login(id, text, remember);
             close();
             showLoading(translate('Logging in...'));
           },

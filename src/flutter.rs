@@ -1,4 +1,4 @@
-use crate::client::*;
+use crate::{client::*, flutter_ffi::EventToUI};
 use flutter_rust_bridge::{StreamSink, ZeroCopyBuffer};
 use hbb_common::{
     allow_err,
@@ -28,8 +28,7 @@ use std::{
 lazy_static::lazy_static! {
     // static ref SESSION: Arc<RwLock<Option<Session>>> = Default::default();
     pub static ref SESSIONS: RwLock<HashMap<String,Session>> = Default::default();
-    pub static ref EVENT_STREAM: RwLock<Option<StreamSink<String>>> = Default::default(); // rust to dart event channel
-    pub static ref RGBA_STREAM: RwLock<Option<StreamSink<ZeroCopyBuffer<Vec<u8>>>>> = Default::default(); // rust to dart rgba (big u8 list) channel
+    pub static ref GLOBAL_EVENT_STREAM: RwLock<Option<StreamSink<String>>> = Default::default(); // rust to dart event channel
 }
 
 // pub fn get_session<'a>(id: &str) -> Option<&'a Session> {
@@ -41,7 +40,7 @@ pub struct Session {
     id: String,
     sender: Arc<RwLock<Option<mpsc::UnboundedSender<Data>>>>, // UI to rust
     lc: Arc<RwLock<LoginConfigHandler>>,
-    events2ui: Arc<RwLock<StreamSink<String>>>,
+    events2ui: Arc<RwLock<StreamSink<EventToUI>>>,
 }
 
 impl Session {
@@ -51,7 +50,7 @@ impl Session {
     ///
     /// * `id` - The id of the remote session.
     /// * `is_file_transfer` - If the session is used for file transfer.
-    pub fn start(id: &str, is_file_transfer: bool, events2ui: StreamSink<String>) {
+    pub fn start(id: &str, is_file_transfer: bool, events2ui: StreamSink<EventToUI>) {
         LocalConfig::set_remote_id(&id);
         // TODO check same id
         // TODO close
@@ -284,11 +283,8 @@ impl Session {
         let mut h: HashMap<&str, &str> = event.iter().cloned().collect();
         assert!(h.get("name").is_none());
         h.insert("name", name);
-
-        self.events2ui
-            .read()
-            .unwrap()
-            .add(serde_json::ser::to_string(&h).unwrap_or("".to_owned()));
+        let out = serde_json::ser::to_string(&h).unwrap_or("".to_owned());
+        self.events2ui.read().unwrap().add(EventToUI::Event(out));
     }
 
     /// Get platform of peer.
@@ -676,11 +672,11 @@ impl Connection {
                     if !self.first_frame {
                         self.first_frame = true;
                     }
-                    if let (Ok(true), Some(s)) = (
-                        self.video_handler.handle_frame(vf),
-                        RGBA_STREAM.read().unwrap().as_ref(),
-                    ) {
-                        s.add(ZeroCopyBuffer(self.video_handler.rgb.clone()));
+                    if let Ok(true) = self.video_handler.handle_frame(vf) {
+                        let stream = self.session.events2ui.read().unwrap();
+                        stream.add(EventToUI::Rgba(ZeroCopyBuffer(
+                            self.video_handler.rgb.clone(),
+                        )));
                     }
                 }
                 Some(message::Union::hash(hash)) => {
@@ -1274,7 +1270,7 @@ pub mod connection_manager {
     use scrap::android::call_main_service_set_by_name;
     use serde_derive::Serialize;
 
-    use super::EVENT_STREAM;
+    use super::GLOBAL_EVENT_STREAM;
 
     #[derive(Debug, Serialize, Clone)]
     struct Client {
@@ -1382,7 +1378,7 @@ pub mod connection_manager {
         assert!(h.get("name").is_none());
         h.insert("name", name);
 
-        if let Some(s) = EVENT_STREAM.read().unwrap().as_ref() {
+        if let Some(s) = GLOBAL_EVENT_STREAM.read().unwrap().as_ref() {
             s.add(serde_json::ser::to_string(&h).unwrap_or("".to_owned()));
         };
     }

@@ -59,18 +59,18 @@ pub extern "C" fn rustdesk_core_main() -> bool {
     crate::core_main::core_main()
 }
 
-pub fn start_event_stream(s: StreamSink<String>) -> ResultType<()> {
-    let _ = flutter::EVENT_STREAM.write().unwrap().insert(s);
-    Ok(())
+pub enum EventToUI {
+    Event(String),
+    Rgba(ZeroCopyBuffer<Vec<u8>>),
 }
 
-pub fn start_rgba_stream(s: StreamSink<ZeroCopyBuffer<Vec<u8>>>) -> ResultType<()> {
-    let _ = flutter::RGBA_STREAM.write().unwrap().insert(s);
+pub fn start_global_event_stream(s: StreamSink<String>) -> ResultType<()> {
+    let _ = flutter::GLOBAL_EVENT_STREAM.write().unwrap().insert(s);
     Ok(())
 }
 
 pub fn session_connect(
-    events2ui: StreamSink<String>,
+    events2ui: StreamSink<EventToUI>,
     id: String,
     is_file_transfer: bool,
 ) -> ResultType<()> {
@@ -86,6 +86,7 @@ pub fn get_session_remember(id: String) -> Option<bool> {
     }
 }
 
+// TODO sync
 pub fn get_session_toggle_option(id: String, arg: String) -> Option<bool> {
     if let Some(session) = SESSIONS.read().unwrap().get(&id) {
         Some(session.get_toggle_option(&arg))
@@ -94,11 +95,20 @@ pub fn get_session_toggle_option(id: String, arg: String) -> Option<bool> {
     }
 }
 
-pub fn get_session_image_quality(id: String) -> SyncReturn<Option<String>> {
-    if let Some(session) = SESSIONS.read().unwrap().get(&id) {
-        SyncReturn(Some(session.get_image_quality()))
+pub fn get_session_toggle_option_sync(id: String, arg: String) -> SyncReturn<Vec<u8>> {
+    let res = if get_session_toggle_option(id, arg) == Some(true) {
+        1
     } else {
-        SyncReturn(None)
+        0
+    };
+    SyncReturn(vec![res])
+}
+
+pub fn get_session_image_quality(id: String) -> Option<String> {
+    if let Some(session) = SESSIONS.read().unwrap().get(&id) {
+        Some(session.get_image_quality())
+    } else {
+        None
     }
 }
 
@@ -517,40 +527,49 @@ unsafe extern "C" fn set_by_name(name: *const c_char, value: *const c_char) {
                 // "chat_client_mode" => {
                 //     Session::send_chat(value.to_owned());
                 // }
-                // "send_mouse" => {
-                //     if let Ok(m) = serde_json::from_str::<HashMap<String, String>>(value) {
-                //         let alt = m.get("alt").is_some();
-                //         let ctrl = m.get("ctrl").is_some();
-                //         let shift = m.get("shift").is_some();
-                //         let command = m.get("command").is_some();
-                //         let x = m
-                //             .get("x")
-                //             .map(|x| x.parse::<i32>().unwrap_or(0))
-                //             .unwrap_or(0);
-                //         let y = m
-                //             .get("y")
-                //             .map(|x| x.parse::<i32>().unwrap_or(0))
-                //             .unwrap_or(0);
-                //         let mut mask = 0;
-                //         if let Some(_type) = m.get("type") {
-                //             mask = match _type.as_str() {
-                //                 "down" => 1,
-                //                 "up" => 2,
-                //                 "wheel" => 3,
-                //                 _ => 0,
-                //             };
-                //         }
-                //         if let Some(buttons) = m.get("buttons") {
-                //             mask |= match buttons.as_str() {
-                //                 "left" => 1,
-                //                 "right" => 2,
-                //                 "wheel" => 4,
-                //                 _ => 0,
-                //             } << 3;
-                //         }
-                //         Session::send_mouse(mask, x, y, alt, ctrl, shift, command);
-                //     }
-                // }
+
+                // TODO
+                "send_mouse" => {
+                    if let Ok(m) = serde_json::from_str::<HashMap<String, String>>(value) {
+                        let id = m.get("id");
+                        if id.is_none() {
+                            return;
+                        }
+                        let id = id.unwrap();
+                        let alt = m.get("alt").is_some();
+                        let ctrl = m.get("ctrl").is_some();
+                        let shift = m.get("shift").is_some();
+                        let command = m.get("command").is_some();
+                        let x = m
+                            .get("x")
+                            .map(|x| x.parse::<i32>().unwrap_or(0))
+                            .unwrap_or(0);
+                        let y = m
+                            .get("y")
+                            .map(|x| x.parse::<i32>().unwrap_or(0))
+                            .unwrap_or(0);
+                        let mut mask = 0;
+                        if let Some(_type) = m.get("type") {
+                            mask = match _type.as_str() {
+                                "down" => 1,
+                                "up" => 2,
+                                "wheel" => 3,
+                                _ => 0,
+                            };
+                        }
+                        if let Some(buttons) = m.get("buttons") {
+                            mask |= match buttons.as_str() {
+                                "left" => 1,
+                                "right" => 2,
+                                "wheel" => 4,
+                                _ => 0,
+                            } << 3;
+                        }
+                        if let Some(session) = SESSIONS.read().unwrap().get(id) {
+                            session.send_mouse(mask, x, y, alt, ctrl, shift, command);
+                        }
+                    }
+                }
                 "option" => {
                     if let Ok(m) = serde_json::from_str::<HashMap<String, String>>(value) {
                         if let Some(name) = m.get("name") {
