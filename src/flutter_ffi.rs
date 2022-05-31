@@ -1,6 +1,6 @@
 use crate::client::file_trait::FileManager;
 use crate::flutter::connection_manager::{self, get_clients_length, get_clients_state};
-use crate::flutter::{self, make_fd_to_json, Session};
+use crate::flutter::{self, get_session, make_fd_to_json, Session};
 use crate::start_server;
 use crate::ui_interface;
 use flutter_rust_bridge::{StreamSink, ZeroCopyBuffer};
@@ -69,6 +69,15 @@ pub fn start_rgba_stream(s: StreamSink<ZeroCopyBuffer<Vec<u8>>>) -> ResultType<(
     Ok(())
 }
 
+pub fn connect(id: String, is_file_transfer: bool, events2ui: StreamSink<String>) {
+    Session::start(&id, is_file_transfer, events2ui);
+}
+
+pub fn get_image_quality(id: String) -> Option<String> {
+    let session = get_session(&id)?;
+    Some(session.get_image_quality())
+}
+
 /// FFI for **get** commands which are idempotent.
 /// Return result in c string.
 ///
@@ -99,11 +108,6 @@ unsafe extern "C" fn get_by_name(name: *const c_char, arg: *const c_char) -> *co
             }
             "remember" => {
                 res = Session::get_remember().to_string();
-            }
-            "event" => {
-                if let Some(e) = Session::pop_event() {
-                    res = e;
-                }
             }
             "toggle_option" => {
                 if let Ok(arg) = arg.to_str() {

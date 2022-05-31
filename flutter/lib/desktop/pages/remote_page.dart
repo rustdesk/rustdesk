@@ -404,7 +404,7 @@ class _RemotePageState extends State<RemotePage> with WindowListener {
                       icon: Icon(Icons.tv),
                       onPressed: () {
                         setState(() => _showEdit = false);
-                        showOptions();
+                        showOptions(widget.id);
                       },
                     )
                   ] +
@@ -972,8 +972,9 @@ RadioListTile<String> getRadio(String name, String toValue, String curValue,
   );
 }
 
-void showOptions() {
-  String quality = FFI.getByName('image_quality');
+void showOptions(String id) async {
+  // String quality = FFI.getByName('image_quality');
+  String quality = await FFI.rustdeskImpl.getImageQuality(id: id) ?? 'balanced';
   if (quality == '') quality = 'balanced';
   String viewStyle = FFI.getByName('peer_option', 'view-style');
   var displays = <Widget>[];

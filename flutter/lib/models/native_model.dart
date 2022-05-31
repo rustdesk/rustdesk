@@ -30,8 +30,11 @@ class PlatformFFI {
   static String _homeDir = '';
   static F2? _getByName;
   static F3? _setByName;
+  static late RustdeskImpl _rustdeskImpl;
   static void Function(Map<String, dynamic>)? _eventCallback;
   static void Function(Uint8List)? _rgbaCallback;
+
+  static RustdeskImpl get rustdeskImpl => _rustdeskImpl;
 
   static Future<String> getVersion() async {
     PackageInfo packageInfo = await PackageInfo.fromPlatform();
@@ -88,7 +91,8 @@ class PlatformFFI {
           dylib.lookupFunction<Void Function(Pointer<Utf8>, Pointer<Utf8>), F3>(
               'set_by_name');
       _dir = (await getApplicationDocumentsDirectory()).path;
-      _startListenEvent(RustdeskImpl(dylib));
+      _rustdeskImpl = RustdeskImpl(dylib);
+      _startListenEvent(_rustdeskImpl); // global event
       try {
         _homeDir = (await ExternalPath.getExternalStorageDirectories())[0];
       } catch (e) {

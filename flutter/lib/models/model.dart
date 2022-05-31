@@ -6,6 +6,7 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_hbb/generated_bridge.dart';
 import 'package:flutter_hbb/models/chat_model.dart';
 import 'package:flutter_hbb/models/file_model.dart';
 import 'package:flutter_hbb/models/server_model.dart';
@@ -598,17 +599,17 @@ class CursorModel with ChangeNotifier {
     final rgba = Uint8List.fromList(colors.map((s) => s as int).toList());
     var pid = FFI.id;
     ui.decodeImageFromPixels(rgba, width, height, ui.PixelFormat.rgba8888,
-            (image) {
-          if (FFI.id != pid) return;
-          _image = image;
-          _images[id] = Tuple3(image, _hotx, _hoty);
-          try {
-            // my throw exception, because the listener maybe already dispose
-            notifyListeners();
-          } catch (e) {
-            print('notify cursor: $e');
-          }
-        });
+        (image) {
+      if (FFI.id != pid) return;
+      _image = image;
+      _images[id] = Tuple3(image, _hotx, _hoty);
+      try {
+        // my throw exception, because the listener maybe already dispose
+        notifyListeners();
+      } catch (e) {
+        print('notify cursor: $e');
+      }
+    });
   }
 
   void updateCursorId(Map<String, dynamic> evt) {
@@ -637,7 +638,8 @@ class CursorModel with ChangeNotifier {
     notifyListeners();
   }
 
-  void updateDisplayOriginWithCursor(double x, double y, double xCursor, double yCursor) {
+  void updateDisplayOriginWithCursor(
+      double x, double y, double xCursor, double yCursor) {
     _displayOriginX = x;
     _displayOriginY = y;
     _x = xCursor;
@@ -765,7 +767,7 @@ class FFI {
       return peers
           .map((s) => s as List<dynamic>)
           .map((s) =>
-          Peer.fromJson(s[0] as String, s[1] as Map<String, dynamic>))
+              Peer.fromJson(s[0] as String, s[1] as Map<String, dynamic>))
           .toList();
     } catch (e) {
       print('peers(): $e');
@@ -779,7 +781,11 @@ class FFI {
       setByName('connect_file_transfer', id);
     } else {
       FFI.chatModel.resetClientMode();
-      setByName('connect', id);
+      // setByName('connect', id);
+      final stream =
+          FFI.rustdeskImpl.connect(id: id, isFileTransfer: isFileTransfer);
+      // listen stream ...
+      // every instance will bind a stream
     }
     FFI.id = id;
   }
@@ -832,6 +838,8 @@ class FFI {
   static void setByName(String name, [String value = '']) {
     PlatformFFI.setByName(name, value);
   }
+
+  static RustdeskImpl get rustdeskImpl => PlatformFFI.rustdeskImpl;
 
   static handleMouse(Map<String, dynamic> evt) {
     var type = '';
