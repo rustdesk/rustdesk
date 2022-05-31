@@ -1,8 +1,9 @@
 import 'dart:convert';
+import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/desktop/pages/remote_page.dart';
-import 'package:flutter_hbb/models/model.dart';
+import 'package:flutter_hbb/desktop/widgets/titlebar_widget.dart';
 import 'package:flutter_hbb/utils/multi_window_manager.dart';
 
 class ConnectionTabPage extends StatefulWidget {
@@ -18,11 +19,13 @@ class _ConnectionTabPageState extends State<ConnectionTabPage>
     with SingleTickerProviderStateMixin {
   // refactor List<int> when using multi-tab
   // this singleton is only for test
-  late String connectionId;
-  late TabController tabController;
+  List<String> connectionIds = List.empty(growable: true);
+  var initialIndex = 0;
 
   _ConnectionTabPageState(Map<String, dynamic> params) {
-    connectionId = params['id'] ?? "";
+    if (params['id'] != null) {
+      connectionIds.add(params['id']);
+    }
   }
 
   @override
@@ -34,33 +37,88 @@ class _ConnectionTabPageState extends State<ConnectionTabPage>
       // for simplify, just replace connectionId
       if (call.method == "new_remote_desktop") {
         setState(() {
-          FFI.close();
-          connectionId = jsonDecode(call.arguments)["id"];
+          final args = jsonDecode(call.arguments);
+          final id = args['id'];
+          final indexOf = connectionIds.indexOf(id);
+          if (indexOf >= 0) {
+            setState(() {
+              initialIndex = indexOf;
+            });
+          } else {
+            connectionIds.add(id);
+            setState(() {
+              initialIndex = connectionIds.length - 1;
+            });
+          }
         });
       }
     });
-    tabController = TabController(length: 1, vsync: this);
   }
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      children: [
-        TabBar(
-            controller: tabController,
-            isScrollable: true,
-            labelColor: Colors.black87,
-            physics: NeverScrollableScrollPhysics(),
-            tabs: [
-              Tab(
-                text: connectionId,
+    return Scaffold(
+      body: DefaultTabController(
+        initialIndex: initialIndex,
+        length: connectionIds.length,
+        animationDuration: Duration.zero,
+        child: Column(
+          children: [
+            SizedBox(
+              height: 50,
+              child: DesktopTitleBar(
+                child: TabBar(
+                    isScrollable: true,
+                    labelColor: Colors.white,
+                    physics: NeverScrollableScrollPhysics(),
+                    indicatorColor: Colors.white,
+                    tabs: connectionIds
+                        .map((e) => Tab(
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                crossAxisAlignment: CrossAxisAlignment.center,
+                                children: [
+                                  Text(e),
+                                  SizedBox(
+                                    width: 4,
+                                  ),
+                                  InkWell(
+                                      onTap: () {
+                                        onRemoveId(e);
+                                      },
+                                      child: Icon(
+                                        Icons.highlight_remove,
+                                        size: 20,
+                                      ))
+                                ],
+                              ),
+                            ))
+                        .toList()),
               ),
-            ]),
-        Expanded(
-            child: TabBarView(controller: tabController, children: [
-          RemotePage(key: ValueKey(connectionId), id: connectionId)
-        ]))
-      ],
+            ),
+            Expanded(
+              child: TabBarView(
+                  children: connectionIds
+                      .map((e) => Container(
+                          child: RemotePage(
+                              key: ValueKey(e),
+                              id: e))) //RemotePage(key: ValueKey(e), id: e))
+                      .toList()),
+            )
+          ],
+        ),
+      ),
     );
+  }
+
+  void onRemoveId(String id) {
+    final indexOf = connectionIds.indexOf(id);
+    if (indexOf == -1) {
+      return;
+    }
+    setState(() {
+      connectionIds.removeAt(indexOf);
+      initialIndex = max(0, initialIndex - 1);
+    });
   }
 }
