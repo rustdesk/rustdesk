@@ -2349,6 +2349,8 @@ impl Remote {
                 self.update_privacy_mode(false);
             }
             back_notification::PrivacyModeState::OnSucceeded => {
+                self.handler
+                    .msgbox("custom-nocancel", "Privacy mode", "In privacy mode");
                 self.update_privacy_mode(true);
             }
             back_notification::PrivacyModeState::OnFailedDenied => {
@@ -2367,6 +2369,8 @@ impl Remote {
                 self.update_privacy_mode(false);
             }
             back_notification::PrivacyModeState::OffSucceeded => {
+                self.handler
+                .msgbox("custom-nocancel", "Privacy mode", "Out privacy mode");
                 self.update_privacy_mode(false);
             }
             back_notification::PrivacyModeState::OffByPeer => {

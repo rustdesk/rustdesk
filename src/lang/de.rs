@@ -279,5 +279,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Peer exit", "Peer-Ausgang"),
         ("Failed to turn off", "Ausschalten fehlgeschlagen"),
         ("Turned off", "Ausgeschaltet"),
+        ("In privacy mode", "im Datenschutzmodus"),
+        ("Out privacy mode", "Datenschutzmodus aus"),
     ].iter().cloned().collect();
 }

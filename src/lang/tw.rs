@@ -280,5 +280,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Peer exit", "被控端退出"),
         ("Failed to turn off", "退出失敗"),
         ("Turned off", "退出"),
+        ("In privacy mode", "開啟隱私模式"),
+        ("Out privacy mode", "退出隱私模式"),
     ].iter().cloned().collect();
 }
