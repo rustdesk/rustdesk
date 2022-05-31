@@ -53,6 +53,7 @@ class _ConnectionPageState extends State<ConnectionPage> {
           children: <Widget>[
             getUpdateUI(),
             Row(
+              mainAxisAlignment: MainAxisAlignment.start,
               children: [
                 getSearchBarUI(),
               ],
