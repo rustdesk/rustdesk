@@ -45,6 +45,7 @@ jniLibs
 
 # flutter rust bridge
 lib/generated_bridge.dart
+lib/generated_bridge.freezed.dart
 
 # Flutter Generated Files
 linux/flutter/generated_plugin_registrant.cc
