@@ -59,7 +59,7 @@ class _RemotePageState extends State<RemotePage> with WindowListener {
       Wakelock.enable();
     }
     _physicalFocusNode.requestFocus();
-    FFI.ffiModel.updateEventListener(widget.id);
+    // FFI.ffiModel.updateEventListener(widget.id);
     FFI.listenToMouse(true);
     WindowManager.instance.addListener(this);
   }
@@ -599,10 +599,18 @@ class _RemotePageState extends State<RemotePage> with WindowListener {
 
   Widget getBodyForDesktopWithListener(bool keyboard) {
     var paints = <Widget>[ImagePaint()];
+    final cursor = await;
     if (keyboard ||
         FFI.getByName('toggle_option', 'show-remote-cursor') == 'true') {
       paints.add(CursorPaint());
     }
+    return FutureBuilder(
+      future: FFI.rustdeskImpl
+          .getSessionToggleOption(id: widget.id, arg: 'show-remote-cursor'),
+      builder: (ctx, snapshot) {
+        if(snapshot)
+      },
+    );
     return Container(
         color: MyTheme.canvasColor, child: Stack(children: paints));
   }
@@ -974,9 +982,11 @@ RadioListTile<String> getRadio(String name, String toValue, String curValue,
 
 void showOptions(String id) async {
   // String quality = FFI.getByName('image_quality');
-  String quality = await FFI.rustdeskImpl.getImageQuality(id: id) ?? 'balanced';
+  String quality =
+      await FFI.rustdeskImpl.getSessionImageQuality(id: id) ?? 'balanced';
   if (quality == '') quality = 'balanced';
-  String viewStyle = FFI.getByName('peer_option', 'view-style');
+  String viewStyle =
+      await FFI.rustdeskImpl.getSessionOption(id: id, arg: 'view-style') ?? '';
   var displays = <Widget>[];
   final pi = FFI.ffiModel.pi;
   final image = FFI.ffiModel.getConnectionImage();

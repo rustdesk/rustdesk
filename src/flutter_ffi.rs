@@ -1,9 +1,9 @@
 use crate::client::file_trait::FileManager;
 use crate::flutter::connection_manager::{self, get_clients_length, get_clients_state};
-use crate::flutter::{self, get_session, make_fd_to_json, Session};
+use crate::flutter::{self, make_fd_to_json, Session, SESSIONS};
 use crate::start_server;
 use crate::ui_interface;
-use flutter_rust_bridge::{StreamSink, ZeroCopyBuffer};
+use flutter_rust_bridge::{StreamSink, SyncReturn, ZeroCopyBuffer};
 use hbb_common::ResultType;
 use hbb_common::{
     config::{self, Config, LocalConfig, PeerConfig, ONLINE},
@@ -69,13 +69,236 @@ pub fn start_rgba_stream(s: StreamSink<ZeroCopyBuffer<Vec<u8>>>) -> ResultType<(
     Ok(())
 }
 
-pub fn connect(id: String, is_file_transfer: bool, events2ui: StreamSink<String>) {
+pub fn session_connect(
+    events2ui: StreamSink<String>,
+    id: String,
+    is_file_transfer: bool,
+) -> ResultType<()> {
     Session::start(&id, is_file_transfer, events2ui);
+    Ok(())
 }
 
-pub fn get_image_quality(id: String) -> Option<String> {
-    let session = get_session(&id)?;
-    Some(session.get_image_quality())
+pub fn get_session_remember(id: String) -> Option<bool> {
+    if let Some(session) = SESSIONS.read().unwrap().get(&id) {
+        Some(session.get_remember())
+    } else {
+        None
+    }
+}
+
+pub fn get_session_toggle_option(id: String, arg: String) -> Option<bool> {
+    if let Some(session) = SESSIONS.read().unwrap().get(&id) {
+        Some(session.get_toggle_option(&arg))
+    } else {
+        None
+    }
+}
+
+pub fn get_session_image_quality(id: String) -> SyncReturn<Option<String>> {
+    if let Some(session) = SESSIONS.read().unwrap().get(&id) {
+        SyncReturn(Some(session.get_image_quality()))
+    } else {
+        SyncReturn(None)
+    }
+}
+
+pub fn get_session_option(id: String, arg: String) -> Option<String> {
+    if let Some(session) = SESSIONS.read().unwrap().get(&id) {
+        Some(session.get_option(&arg))
+    } else {
+        None
+    }
+}
+
+// void
+pub fn session_login(id: String, password: String, remember: bool) {
+    if let Some(session) = SESSIONS.read().unwrap().get(&id) {
+        session.login(&password, remember);
+    }
+}
+
+pub fn session_close(id: String) {
+    if let Some(session) = SESSIONS.read().unwrap().get(&id) {
+        session.close();
+    }
+}
+
+pub fn session_refresh(id: String) {
+    if let Some(session) = SESSIONS.read().unwrap().get(&id) {
+        session.refresh();
+    }
+}
+
+pub fn session_reconnect(id: String) {
+    if let Some(session) = SESSIONS.read().unwrap().get(&id) {
+        session.reconnect();
+    }
+}
+
+pub fn session_toggle_option(id: String, value: String) {
+    if let Some(session) = SESSIONS.read().unwrap().get(&id) {
+        session.toggle_option(&value);
+    }
+}
+
+pub fn session_set_image_quality(id: String, value: String) {
+    if let Some(session) = SESSIONS.read().unwrap().get(&id) {
+        session.set_image_quality(&value);
+    }
+}
+
+pub fn session_lock_screen(id: String) {
+    if let Some(session) = SESSIONS.read().unwrap().get(&id) {
+        session.lock_screen();
+    }
+}
+
+pub fn session_ctrl_alt_del(id: String) {
+    if let Some(session) = SESSIONS.read().unwrap().get(&id) {
+        session.ctrl_alt_del();
+    }
+}
+
+pub fn session_switch_display(id: String, value: i32) {
+    if let Some(session) = SESSIONS.read().unwrap().get(&id) {
+        session.switch_display(value);
+    }
+}
+
+pub fn session_input_key(
+    id: String,
+    name: String,
+    down: bool,
+    press: bool,
+    alt: bool,
+    ctrl: bool,
+    shift: bool,
+    command: bool,
+) {
+    if let Some(session) = SESSIONS.read().unwrap().get(&id) {
+        session.input_key(&name, down, press, alt, ctrl, shift, command);
+    }
+}
+
+pub fn session_input_string(id: String, value: String) {
+    if let Some(session) = SESSIONS.read().unwrap().get(&id) {
+        session.input_string(&value);
+    }
+}
+
+// chat_client_mode
+pub fn session_send_chat(id: String, text: String) {
+    if let Some(session) = SESSIONS.read().unwrap().get(&id) {
+        session.send_chat(text);
+    }
+}
+
+// if let Some(_type) = m.get("type") {
+//             mask = match _type.as_str() {
+//                 "down" => 1,
+//                 "up" => 2,
+//                 "wheel" => 3,
+//                 _ => 0,
+//             };
+//         }
+// if let Some(buttons) = m.get("buttons") {
+//             mask |= match buttons.as_str() {
+//                 "left" => 1,
+//                 "right" => 2,
+//                 "wheel" => 4,
+//                 _ => 0,
+//             } << 3;
+//         }
+// TODO
+pub fn session_send_mouse(
+    id: String,
+    mask: i32,
+    x: i32,
+    y: i32,
+    alt: bool,
+    ctrl: bool,
+    shift: bool,
+    command: bool,
+) {
+    if let Some(session) = SESSIONS.read().unwrap().get(&id) {
+        session.send_mouse(mask, x, y, alt, ctrl, shift, command);
+    }
+}
+
+pub fn session_peer_option(id: String, name: String, value: String) {
+    if let Some(session) = SESSIONS.read().unwrap().get(&id) {
+        session.set_option(name, value);
+    }
+}
+
+pub fn session_input_os_password(id: String, value: String) {
+    if let Some(session) = SESSIONS.read().unwrap().get(&id) {
+        session.input_os_password(value, true);
+    }
+}
+
+// File Action
+pub fn session_read_remote_dir(id: String, path: String, include_hidden: bool) {
+    if let Some(session) = SESSIONS.read().unwrap().get(&id) {
+        session.read_remote_dir(path, include_hidden);
+    }
+}
+
+pub fn session_send_files(
+    id: String,
+    act_id: i32,
+    path: String,
+    to: String,
+    file_num: i32,
+    include_hidden: bool,
+    is_remote: bool,
+) {
+    if let Some(session) = SESSIONS.read().unwrap().get(&id) {
+        session.send_files(act_id, path, to, file_num, include_hidden, is_remote);
+    }
+}
+
+pub fn session_set_confirm_override_file(
+    id: String,
+    act_id: i32,
+    file_num: i32,
+    need_override: bool,
+    remember: bool,
+    is_upload: bool,
+) {
+    if let Some(session) = SESSIONS.read().unwrap().get(&id) {
+        session.set_confirm_override_file(act_id, file_num, need_override, remember, is_upload);
+    }
+}
+
+pub fn session_remove_file(id: String, act_id: i32, path: String, file_num: i32, is_remote: bool) {
+    if let Some(session) = SESSIONS.read().unwrap().get(&id) {
+        session.remove_file(act_id, path, file_num, is_remote);
+    }
+}
+
+pub fn session_read_dir_recursive(id: String, act_id: i32, path: String, is_remote: bool) {
+    if let Some(session) = SESSIONS.read().unwrap().get(&id) {
+        session.remove_dir_all(act_id, path, is_remote);
+    }
+}
+
+pub fn session_remove_all_empty_dirs(id: String, act_id: i32, path: String, is_remote: bool) {
+    if let Some(session) = SESSIONS.read().unwrap().get(&id) {
+        session.remove_dir(act_id, path, is_remote);
+    }
+}
+
+pub fn session_cancel_job(id: String, act_id: i32) {
+    if let Some(session) = SESSIONS.read().unwrap().get(&id) {
+        session.cancel_job(act_id);
+    }
+}
+
+pub fn session_create_dir(id: String, act_id: i32, path: String, is_remote: bool) {
+    if let Some(session) = SESSIONS.read().unwrap().get(&id) {
+        session.create_dir(act_id, path, is_remote);
+    }
 }
 
 /// FFI for **get** commands which are idempotent.
@@ -106,16 +329,16 @@ unsafe extern "C" fn get_by_name(name: *const c_char, arg: *const c_char) -> *co
                     res = LocalConfig::get_remote_id();
                 }
             }
-            "remember" => {
-                res = Session::get_remember().to_string();
-            }
-            "toggle_option" => {
-                if let Ok(arg) = arg.to_str() {
-                    if let Some(v) = Session::get_toggle_option(arg) {
-                        res = v.to_string();
-                    }
-                }
-            }
+            // "remember" => {
+            //     res = Session::get_remember().to_string();
+            // }
+            // "toggle_option" => {
+            //     if let Ok(arg) = arg.to_str() {
+            //         if let Some(v) = Session::get_toggle_option(arg) {
+            //             res = v.to_string();
+            //         }
+            //     }
+            // }
             "test_if_valid_server" => {
                 if let Ok(arg) = arg.to_str() {
                     res = hbb_common::socket_client::test_if_valid_server(arg);
@@ -126,9 +349,9 @@ unsafe extern "C" fn get_by_name(name: *const c_char, arg: *const c_char) -> *co
                     res = Config::get_option(arg);
                 }
             }
-            "image_quality" => {
-                res = Session::get_image_quality();
-            }
+            // "image_quality" => {
+            //     res = Session::get_image_quality();
+            // }
             "software_update_url" => {
                 res = crate::common::SOFTWARE_UPDATE_URL.lock().unwrap().clone()
             }
@@ -143,11 +366,11 @@ unsafe extern "C" fn get_by_name(name: *const c_char, arg: *const c_char) -> *co
                     }
                 }
             }
-            "peer_option" => {
-                if let Ok(arg) = arg.to_str() {
-                    res = Session::get_option(arg);
-                }
-            }
+            // "peer_option" => {
+            //     if let Ok(arg) = arg.to_str() {
+            //         res = Session::get_option(arg);
+            //     }
+            // }
             "server_id" => {
                 res = ui_interface::get_id();
             }
@@ -231,103 +454,103 @@ unsafe extern "C" fn set_by_name(name: *const c_char, value: *const c_char) {
                 "info2" => {
                     *crate::common::MOBILE_INFO2.lock().unwrap() = value.to_owned();
                 }
-                "connect" => {
-                    Session::start(value, false);
-                }
-                "connect_file_transfer" => {
-                    Session::start(value, true);
-                }
-                "login" => {
-                    if let Ok(m) = serde_json::from_str::<HashMap<String, String>>(value) {
-                        if let Some(password) = m.get("password") {
-                            if let Some(remember) = m.get("remember") {
-                                Session::login(password, remember == "true");
-                            }
-                        }
-                    }
-                }
-                "close" => {
-                    Session::close();
-                }
-                "refresh" => {
-                    Session::refresh();
-                }
-                "reconnect" => {
-                    Session::reconnect();
-                }
-                "toggle_option" => {
-                    Session::toggle_option(value);
-                }
-                "image_quality" => {
-                    Session::set_image_quality(value);
-                }
-                "lock_screen" => {
-                    Session::lock_screen();
-                }
-                "ctrl_alt_del" => {
-                    Session::ctrl_alt_del();
-                }
-                "switch_display" => {
-                    if let Ok(v) = value.parse::<i32>() {
-                        Session::switch_display(v);
-                    }
-                }
+                // "connect" => {
+                //     Session::start(value, false);
+                // }
+                // "connect_file_transfer" => {
+                //     Session::start(value, true);
+                // }
+                // "login" => {
+                //     if let Ok(m) = serde_json::from_str::<HashMap<String, String>>(value) {
+                //         if let Some(password) = m.get("password") {
+                //             if let Some(remember) = m.get("remember") {
+                //                 Session::login(password, remember == "true");
+                //             }
+                //         }
+                //     }
+                // }
+                // "close" => {
+                //     Session::close();
+                // }
+                // "refresh" => {
+                //     Session::refresh();
+                // }
+                // "reconnect" => {
+                //     Session::reconnect();
+                // }
+                // "toggle_option" => {
+                //     Session::toggle_option(value);
+                // }
+                // "image_quality" => {
+                //     Session::set_image_quality(value);
+                // }
+                // "lock_screen" => {
+                //     Session::lock_screen();
+                // }
+                // "ctrl_alt_del" => {
+                //     Session::ctrl_alt_del();
+                // }
+                // "switch_display" => {
+                //     if let Ok(v) = value.parse::<i32>() {
+                //         Session::switch_display(v);
+                //     }
+                // }
                 "remove" => {
                     PeerConfig::remove(value);
                 }
-                "input_key" => {
-                    if let Ok(m) = serde_json::from_str::<HashMap<String, String>>(value) {
-                        let alt = m.get("alt").is_some();
-                        let ctrl = m.get("ctrl").is_some();
-                        let shift = m.get("shift").is_some();
-                        let command = m.get("command").is_some();
-                        let down = m.get("down").is_some();
-                        let press = m.get("press").is_some();
-                        if let Some(name) = m.get("name") {
-                            Session::input_key(name, down, press, alt, ctrl, shift, command);
-                        }
-                    }
-                }
-                "input_string" => {
-                    Session::input_string(value);
-                }
-                "chat_client_mode" => {
-                    Session::send_chat(value.to_owned());
-                }
-                "send_mouse" => {
-                    if let Ok(m) = serde_json::from_str::<HashMap<String, String>>(value) {
-                        let alt = m.get("alt").is_some();
-                        let ctrl = m.get("ctrl").is_some();
-                        let shift = m.get("shift").is_some();
-                        let command = m.get("command").is_some();
-                        let x = m
-                            .get("x")
-                            .map(|x| x.parse::<i32>().unwrap_or(0))
-                            .unwrap_or(0);
-                        let y = m
-                            .get("y")
-                            .map(|x| x.parse::<i32>().unwrap_or(0))
-                            .unwrap_or(0);
-                        let mut mask = 0;
-                        if let Some(_type) = m.get("type") {
-                            mask = match _type.as_str() {
-                                "down" => 1,
-                                "up" => 2,
-                                "wheel" => 3,
-                                _ => 0,
-                            };
-                        }
-                        if let Some(buttons) = m.get("buttons") {
-                            mask |= match buttons.as_str() {
-                                "left" => 1,
-                                "right" => 2,
-                                "wheel" => 4,
-                                _ => 0,
-                            } << 3;
-                        }
-                        Session::send_mouse(mask, x, y, alt, ctrl, shift, command);
-                    }
-                }
+                // "input_key" => {
+                //     if let Ok(m) = serde_json::from_str::<HashMap<String, String>>(value) {
+                //         let alt = m.get("alt").is_some();
+                //         let ctrl = m.get("ctrl").is_some();
+                //         let shift = m.get("shift").is_some();
+                //         let command = m.get("command").is_some();
+                //         let down = m.get("down").is_some();
+                //         let press = m.get("press").is_some();
+                //         if let Some(name) = m.get("name") {
+                //             Session::input_key(name, down, press, alt, ctrl, shift, command);
+                //         }
+                //     }
+                // }
+                // "input_string" => {
+                //     Session::input_string(value);
+                // }
+                // "chat_client_mode" => {
+                //     Session::send_chat(value.to_owned());
+                // }
+                // "send_mouse" => {
+                //     if let Ok(m) = serde_json::from_str::<HashMap<String, String>>(value) {
+                //         let alt = m.get("alt").is_some();
+                //         let ctrl = m.get("ctrl").is_some();
+                //         let shift = m.get("shift").is_some();
+                //         let command = m.get("command").is_some();
+                //         let x = m
+                //             .get("x")
+                //             .map(|x| x.parse::<i32>().unwrap_or(0))
+                //             .unwrap_or(0);
+                //         let y = m
+                //             .get("y")
+                //             .map(|x| x.parse::<i32>().unwrap_or(0))
+                //             .unwrap_or(0);
+                //         let mut mask = 0;
+                //         if let Some(_type) = m.get("type") {
+                //             mask = match _type.as_str() {
+                //                 "down" => 1,
+                //                 "up" => 2,
+                //                 "wheel" => 3,
+                //                 _ => 0,
+                //             };
+                //         }
+                //         if let Some(buttons) = m.get("buttons") {
+                //             mask |= match buttons.as_str() {
+                //                 "left" => 1,
+                //                 "right" => 2,
+                //                 "wheel" => 4,
+                //                 _ => 0,
+                //             } << 3;
+                //         }
+                //         Session::send_mouse(mask, x, y, alt, ctrl, shift, command);
+                //     }
+                // }
                 "option" => {
                     if let Ok(m) = serde_json::from_str::<HashMap<String, String>>(value) {
                         if let Some(name) = m.get("name") {
@@ -347,162 +570,163 @@ unsafe extern "C" fn set_by_name(name: *const c_char, value: *const c_char) {
                         }
                     }
                 }
-                "peer_option" => {
-                    if let Ok(m) = serde_json::from_str::<HashMap<String, String>>(value) {
-                        if let Some(name) = m.get("name") {
-                            if let Some(value) = m.get("value") {
-                                Session::set_option(name.to_owned(), value.to_owned());
-                            }
-                        }
-                    }
-                }
-                "input_os_password" => {
-                    Session::input_os_password(value.to_owned(), true);
-                }
-                // File Action
-                "read_remote_dir" => {
-                    if let Ok(m) = serde_json::from_str::<HashMap<String, String>>(value) {
-                        if let (Some(path), Some(show_hidden), Some(session)) = (
-                            m.get("path"),
-                            m.get("show_hidden"),
-                            Session::get().read().unwrap().as_ref(),
-                        ) {
-                            session.read_remote_dir(path.to_owned(), show_hidden.eq("true"));
-                        }
-                    }
-                }
-                "send_files" => {
-                    if let Ok(m) = serde_json::from_str::<HashMap<String, String>>(value) {
-                        if let (
-                            Some(id),
-                            Some(path),
-                            Some(to),
-                            Some(file_num),
-                            Some(show_hidden),
-                            Some(is_remote),
-                        ) = (
-                            m.get("id"),
-                            m.get("path"),
-                            m.get("to"),
-                            m.get("file_num"),
-                            m.get("show_hidden"),
-                            m.get("is_remote"),
-                        ) {
-                            Session::send_files(
-                                id.parse().unwrap_or(0),
-                                path.to_owned(),
-                                to.to_owned(),
-                                file_num.parse().unwrap_or(0),
-                                show_hidden.eq("true"),
-                                is_remote.eq("true"),
-                            );
-                        }
-                    }
-                }
-                "set_confirm_override_file" => {
-                    if let Ok(m) = serde_json::from_str::<HashMap<String, String>>(value) {
-                        if let (
-                            Some(id),
-                            Some(file_num),
-                            Some(need_override),
-                            Some(remember),
-                            Some(is_upload),
-                        ) = (
-                            m.get("id"),
-                            m.get("file_num"),
-                            m.get("need_override"),
-                            m.get("remember"),
-                            m.get("is_upload"),
-                        ) {
-                            Session::set_confirm_override_file(
-                                id.parse().unwrap_or(0),
-                                file_num.parse().unwrap_or(0),
-                                need_override.eq("true"),
-                                remember.eq("true"),
-                                is_upload.eq("true"),
-                            );
-                        }
-                    }
-                }
-                "remove_file" => {
-                    if let Ok(m) = serde_json::from_str::<HashMap<String, String>>(value) {
-                        if let (
-                            Some(id),
-                            Some(path),
-                            Some(file_num),
-                            Some(is_remote),
-                            Some(session),
-                        ) = (
-                            m.get("id"),
-                            m.get("path"),
-                            m.get("file_num"),
-                            m.get("is_remote"),
-                            Session::get().write().unwrap().as_mut(),
-                        ) {
-                            session.remove_file(
-                                id.parse().unwrap_or(0),
-                                path.to_owned(),
-                                file_num.parse().unwrap_or(0),
-                                is_remote.eq("true"),
-                            );
-                        }
-                    }
-                }
-                "read_dir_recursive" => {
-                    if let Ok(m) = serde_json::from_str::<HashMap<String, String>>(value) {
-                        if let (Some(id), Some(path), Some(is_remote), Some(session)) = (
-                            m.get("id"),
-                            m.get("path"),
-                            m.get("is_remote"),
-                            Session::get().write().unwrap().as_mut(),
-                        ) {
-                            session.remove_dir_all(
-                                id.parse().unwrap_or(0),
-                                path.to_owned(),
-                                is_remote.eq("true"),
-                            );
-                        }
-                    }
-                }
-                "remove_all_empty_dirs" => {
-                    if let Ok(m) = serde_json::from_str::<HashMap<String, String>>(value) {
-                        if let (Some(id), Some(path), Some(is_remote), Some(session)) = (
-                            m.get("id"),
-                            m.get("path"),
-                            m.get("is_remote"),
-                            Session::get().write().unwrap().as_mut(),
-                        ) {
-                            session.remove_dir(
-                                id.parse().unwrap_or(0),
-                                path.to_owned(),
-                                is_remote.eq("true"),
-                            );
-                        }
-                    }
-                }
-                "cancel_job" => {
-                    if let (Ok(id), Some(session)) =
-                        (value.parse(), Session::get().write().unwrap().as_mut())
-                    {
-                        session.cancel_job(id);
-                    }
-                }
-                "create_dir" => {
-                    if let Ok(m) = serde_json::from_str::<HashMap<String, String>>(value) {
-                        if let (Some(id), Some(path), Some(is_remote), Some(session)) = (
-                            m.get("id"),
-                            m.get("path"),
-                            m.get("is_remote"),
-                            Session::get().write().unwrap().as_mut(),
-                        ) {
-                            session.create_dir(
-                                id.parse().unwrap_or(0),
-                                path.to_owned(),
-                                is_remote.eq("true"),
-                            );
-                        }
-                    }
-                }
+                // "peer_option" => {
+                //     if let Ok(m) = serde_json::from_str::<HashMap<String, String>>(value) {
+                //         if let Some(name) = m.get("name") {
+                //             if let Some(value) = m.get("value") {
+                //                 Session::set_option(name.to_owned(), value.to_owned());
+                //             }
+                //         }
+                //     }
+                // }
+                // "input_os_password" => {
+                //     Session::input_os_password(value.to_owned(), true);
+                // }
+                // // File Action
+                // "read_remote_dir" => {
+                //     if let Ok(m) = serde_json::from_str::<HashMap<String, String>>(value) {
+                //         if let (Some(path), Some(show_hidden), Some(session)) = (
+                //             m.get("path"),
+                //             m.get("show_hidden"),
+                //             Session::get().read().unwrap().as_ref(),
+                //         ) {
+                //             session.read_remote_dir(path.to_owned(), show_hidden.eq("true"));
+                //         }
+                //     }
+                // }
+                // "send_files" => {
+                //     if let Ok(m) = serde_json::from_str::<HashMap<String, String>>(value) {
+                //         if let (
+                //             Some(id),
+                //             Some(path),
+                //             Some(to),
+                //             Some(file_num),
+                //             Some(show_hidden),
+                //             Some(is_remote),
+                //         ) = (
+                //             m.get("id"),
+                //             m.get("path"),
+                //             m.get("to"),
+                //             m.get("file_num"),
+                //             m.get("show_hidden"),
+                //             m.get("is_remote"),
+                //         ) {
+                //             Session::send_files(
+                //                 id.parse().unwrap_or(0),
+                //                 path.to_owned(),
+                //                 to.to_owned(),
+                //                 file_num.parse().unwrap_or(0),
+                //                 show_hidden.eq("true"),
+                //                 is_remote.eq("true"),
+                //             );
+                //         }
+                //     }
+                // }
+                // "set_confirm_override_file" => {
+                //     if let Ok(m) = serde_json::from_str::<HashMap<String, String>>(value) {
+                //         if let (
+                //             Some(id),
+                //             Some(file_num),
+                //             Some(need_override),
+                //             Some(remember),
+                //             Some(is_upload),
+                //         ) = (
+                //             m.get("id"),
+                //             m.get("file_num"),
+                //             m.get("need_override"),
+                //             m.get("remember"),
+                //             m.get("is_upload"),
+                //         ) {
+                //             Session::set_confirm_override_file(
+                //                 id.parse().unwrap_or(0),
+                //                 file_num.parse().unwrap_or(0),
+                //                 need_override.eq("true"),
+                //                 remember.eq("true"),
+                //                 is_upload.eq("true"),
+                //             );
+                //         }
+                //     }
+                // }
+                // ** TODO ** continue
+                // "remove_file" => {
+                //     if let Ok(m) = serde_json::from_str::<HashMap<String, String>>(value) {
+                //         if let (
+                //             Some(id),
+                //             Some(path),
+                //             Some(file_num),
+                //             Some(is_remote),
+                //             Some(session),
+                //         ) = (
+                //             m.get("id"),
+                //             m.get("path"),
+                //             m.get("file_num"),
+                //             m.get("is_remote"),
+                //             Session::get().write().unwrap().as_mut(),
+                //         ) {
+                //             session.remove_file(
+                //                 id.parse().unwrap_or(0),
+                //                 path.to_owned(),
+                //                 file_num.parse().unwrap_or(0),
+                //                 is_remote.eq("true"),
+                //             );
+                //         }
+                //     }
+                // }
+                // "read_dir_recursive" => {
+                //     if let Ok(m) = serde_json::from_str::<HashMap<String, String>>(value) {
+                //         if let (Some(id), Some(path), Some(is_remote), Some(session)) = (
+                //             m.get("id"),
+                //             m.get("path"),
+                //             m.get("is_remote"),
+                //             Session::get().write().unwrap().as_mut(),
+                //         ) {
+                //             session.remove_dir_all(
+                //                 id.parse().unwrap_or(0),
+                //                 path.to_owned(),
+                //                 is_remote.eq("true"),
+                //             );
+                //         }
+                //     }
+                // }
+                // "remove_all_empty_dirs" => {
+                //     if let Ok(m) = serde_json::from_str::<HashMap<String, String>>(value) {
+                //         if let (Some(id), Some(path), Some(is_remote), Some(session)) = (
+                //             m.get("id"),
+                //             m.get("path"),
+                //             m.get("is_remote"),
+                //             Session::get().write().unwrap().as_mut(),
+                //         ) {
+                //             session.remove_dir(
+                //                 id.parse().unwrap_or(0),
+                //                 path.to_owned(),
+                //                 is_remote.eq("true"),
+                //             );
+                //         }
+                //     }
+                // }
+                // "cancel_job" => {
+                //     if let (Ok(id), Some(session)) =
+                //         (value.parse(), Session::get().write().unwrap().as_mut())
+                //     {
+                //         session.cancel_job(id);
+                //     }
+                // }
+                // "create_dir" => {
+                //     if let Ok(m) = serde_json::from_str::<HashMap<String, String>>(value) {
+                //         if let (Some(id), Some(path), Some(is_remote), Some(session)) = (
+                //             m.get("id"),
+                //             m.get("path"),
+                //             m.get("is_remote"),
+                //             Session::get().write().unwrap().as_mut(),
+                //         ) {
+                //             session.create_dir(
+                //                 id.parse().unwrap_or(0),
+                //                 path.to_owned(),
+                //                 is_remote.eq("true"),
+                //             );
+                //         }
+                //     }
+                // }
                 // Server Side
                 "update_password" => {
                     if value.is_empty() {

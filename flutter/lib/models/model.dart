@@ -122,6 +122,53 @@ class FfiModel with ChangeNotifier {
     _permissions.clear();
   }
 
+  void Function(Map<String, dynamic>) startEventListener(String peerId) {
+    return (evt) {
+      var name = evt['name'];
+      if (name == 'msgbox') {
+        handleMsgBox(evt, peerId);
+      } else if (name == 'peer_info') {
+        handlePeerInfo(evt);
+      } else if (name == 'connection_ready') {
+        FFI.ffiModel.setConnectionType(
+            evt['secure'] == 'true', evt['direct'] == 'true');
+      } else if (name == 'switch_display') {
+        handleSwitchDisplay(evt);
+      } else if (name == 'cursor_data') {
+        FFI.cursorModel.updateCursorData(evt);
+      } else if (name == 'cursor_id') {
+        FFI.cursorModel.updateCursorId(evt);
+      } else if (name == 'cursor_position') {
+        FFI.cursorModel.updateCursorPosition(evt);
+      } else if (name == 'clipboard') {
+        Clipboard.setData(ClipboardData(text: evt['content']));
+      } else if (name == 'permission') {
+        FFI.ffiModel.updatePermission(evt);
+      } else if (name == 'chat_client_mode') {
+        FFI.chatModel.receive(ChatModel.clientModeID, evt['text'] ?? "");
+      } else if (name == 'chat_server_mode') {
+        FFI.chatModel
+            .receive(int.parse(evt['id'] as String), evt['text'] ?? "");
+      } else if (name == 'file_dir') {
+        FFI.fileModel.receiveFileDir(evt);
+      } else if (name == 'job_progress') {
+        FFI.fileModel.tryUpdateJobProgress(evt);
+      } else if (name == 'job_done') {
+        FFI.fileModel.jobDone(evt);
+      } else if (name == 'job_error') {
+        FFI.fileModel.jobError(evt);
+      } else if (name == 'override_file_confirm') {
+        FFI.fileModel.overrideFileConfirm(evt);
+      } else if (name == 'try_start_without_auth') {
+        FFI.serverModel.loginRequest(evt);
+      } else if (name == 'on_client_authorized') {
+        FFI.serverModel.onClientAuthorized(evt);
+      } else if (name == 'on_client_remove') {
+        FFI.serverModel.onClientRemove(evt);
+      }
+    };
+  }
+
   /// Bind the event listener to receive events from the Rust core.
   void updateEventListener(String peerId) {
     final void Function(Map<String, dynamic>) cb = (evt) {
@@ -782,9 +829,19 @@ class FFI {
     } else {
       FFI.chatModel.resetClientMode();
       // setByName('connect', id);
-      final stream =
-          FFI.rustdeskImpl.connect(id: id, isFileTransfer: isFileTransfer);
-      // listen stream ...
+      final event_stream = FFI.rustdeskImpl
+          .sessionConnect(id: id, isFileTransfer: isFileTransfer);
+      final cb = FFI.ffiModel.startEventListener(id);
+      () async {
+        await for (final message in event_stream) {
+          try {
+            Map<String, dynamic> event = json.decode(message);
+            cb(event);
+          } catch (e) {
+            print('json.decode fail(): $e');
+          }
+        }
+      }();
       // every instance will bind a stream
     }
     FFI.id = id;

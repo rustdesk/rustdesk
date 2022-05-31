@@ -27,14 +27,14 @@ use std::{
 
 lazy_static::lazy_static! {
     // static ref SESSION: Arc<RwLock<Option<Session>>> = Default::default();
-    static ref SESSIONS: RwLock<HashMap<String,Session>> = Default::default();
+    pub static ref SESSIONS: RwLock<HashMap<String,Session>> = Default::default();
     pub static ref EVENT_STREAM: RwLock<Option<StreamSink<String>>> = Default::default(); // rust to dart event channel
     pub static ref RGBA_STREAM: RwLock<Option<StreamSink<ZeroCopyBuffer<Vec<u8>>>>> = Default::default(); // rust to dart rgba (big u8 list) channel
 }
 
-pub fn get_session(id: &str) -> Option<&Session> {
-    SESSIONS.read().unwrap().get(id)
-}
+// pub fn get_session<'a>(id: &str) -> Option<&'a Session> {
+//     SESSIONS.read().unwrap().get(id)
+// }
 
 #[derive(Clone)]
 pub struct Session {
@@ -102,7 +102,7 @@ impl Session {
     /// * `value` - The value of the option to set.
     pub fn set_option(&self, name: String, value: String) {
         let mut value = value;
-        let lc = self.lc.write().unwrap();
+        let mut lc = self.lc.write().unwrap();
         if name == "remote_dir" {
             value = lc.get_all_remote_dir(value);
         }
@@ -367,7 +367,7 @@ impl Session {
     ///
     /// # Arguments
     ///
-    /// * `value` - The text to input.
+    /// * `value` - The text to input. TODO &str -> String
     pub fn input_string(&self, value: &str) {
         let mut key_event = KeyEvent::new();
         key_event.set_seq(value.to_owned());
