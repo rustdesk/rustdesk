@@ -1168,7 +1168,6 @@ impl Connection {
                                 back_notification::PrivacyModeState::NotSupported,
                             )
                         } else {
-                            video_service::set_privacy_mode_conn_id(0);
                             match privacy_mode::turn_on_privacy(self.inner.id) {
                                 Ok(true) => {
                                     video_service::set_privacy_mode_conn_id(self.inner.id);
@@ -1366,7 +1365,7 @@ mod privacy_mode {
                     back_notification::PrivacyModeState::OffSucceeded,
                 ),
                 Err(e) => {
-                    log::error!("Failed to turn off privacy mode{}", e);
+                    log::error!("Failed to turn off privacy mode {}", e);
                     crate::common::make_privacy_mode_msg(
                         back_notification::PrivacyModeState::OffFailed,
                     )
