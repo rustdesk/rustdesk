@@ -1477,6 +1477,7 @@ dependencies = [
 [[package]]
 name = "flutter_rust_bridge_codegen"
 version = "1.32.0"
+source = "git+https://github.com/SoLongAndThanksForAllThePizza/flutter_rust_bridge#827fc60143988dfc3759f7e8ce16a20d80edd710"
 dependencies = [
  "anyhow",
  "cargo_metadata",
