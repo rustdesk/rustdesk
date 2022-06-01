@@ -314,7 +314,7 @@ class ImageModel with ChangeNotifier {
 
   ui.Image? get image => _image;
 
-  String id = ""; // TODO multi image model
+  String _id = "";
 
   void onRgba(Uint8List rgba) {
     if (_waitForImage) {
@@ -351,7 +351,7 @@ class ImageModel with ChangeNotifier {
       Future.delayed(Duration(milliseconds: 1), () {
         if (FFI.ffiModel.isPeerAndroid) {
           FFI.bind
-              .sessionPeerOption(id: id, name: "view-style", value: "shrink");
+              .sessionPeerOption(id: _id, name: "view-style", value: "shrink");
           FFI.canvasModel.updateViewStyle();
         }
       });
@@ -850,7 +850,7 @@ class FFI {
       // setByName('connect', id);
       // TODO multi model instances
       FFI.canvasModel.id = id;
-      FFI.imageModel.id = id;
+      FFI.imageModel._id = id;
       FFI.cursorModel.id = id;
       final stream =
           FFI.bind.sessionConnect(id: id, isFileTransfer: isFileTransfer);

@@ -95,13 +95,9 @@ pub fn get_session_toggle_option(id: String, arg: String) -> Option<bool> {
     }
 }
 
-pub fn get_session_toggle_option_sync(id: String, arg: String) -> SyncReturn<Vec<u8>> {
-    let res = if get_session_toggle_option(id, arg) == Some(true) {
-        1
-    } else {
-        0
-    };
-    SyncReturn(vec![res])
+pub fn get_session_toggle_option_sync(id: String, arg: String) -> SyncReturn<bool> {
+    let res = get_session_toggle_option(id, arg) == Some(true);
+    SyncReturn(res)
 }
 
 pub fn get_session_image_quality(id: String) -> Option<String> {

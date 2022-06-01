@@ -600,9 +600,8 @@ class _RemotePageState extends State<RemotePage> with WindowListener {
 
   Widget getBodyForDesktopWithListener(bool keyboard) {
     var paints = <Widget>[ImagePaint()];
-    final cursor = FFI.bind.getSessionToggleOptionSync(
-            id: widget.id, arg: 'show-remote-cursor')[0] ==
-        1;
+    final cursor = FFI.bind
+        .getSessionToggleOptionSync(id: widget.id, arg: 'show-remote-cursor');
     if (keyboard || cursor) {
       paints.add(CursorPaint());
     }
@@ -955,7 +954,7 @@ class ImagePainter extends CustomPainter {
 
 CheckboxListTile getToggle(
     String id, void Function(void Function()) setState, option, name) {
-  final opt = FFI.bind.getSessionToggleOptionSync(id: id, arg: option)[0] == 1;
+  final opt = FFI.bind.getSessionToggleOptionSync(id: id, arg: option);
   return CheckboxListTile(
       value: opt,
       onChanged: (v) {

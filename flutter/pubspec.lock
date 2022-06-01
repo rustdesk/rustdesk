@@ -396,9 +396,11 @@ packages:
   flutter_rust_bridge:
     dependency: "direct main"
     description:
-      name: flutter_rust_bridge
-      url: "https://pub.dartlang.org"
-    source: hosted
+      path: frb_dart
+      ref: master
+      resolved-ref: e5adce55eea0b74d3680e66a2c5252edf17b07e1
+      url: "https://github.com/SoLongAndThanksForAllThePizza/flutter_rust_bridge"
+    source: git
     version: "1.32.0"
   flutter_smart_dialog:
     dependency: "direct main"
