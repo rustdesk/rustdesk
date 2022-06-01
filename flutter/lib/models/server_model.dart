@@ -49,7 +49,6 @@ class ServerModel with ChangeNotifier {
        * 2. check config
        * audio true by default (if permission on) (false default < Android 10)
        * file true by default (if permission on)
-       * input false by default (it need turning on manually everytime)
        */
       await Future.delayed(Duration(seconds: 1));
 
@@ -79,11 +78,6 @@ class ServerModel with ChangeNotifier {
         _fileOk = fileOption.isEmpty;
       }
 
-      // input (mouse control)
-      Map<String, String> res = Map()
-        ..["name"] = "enable-keyboard"
-        ..["value"] = 'N';
-      FFI.setByName('option', jsonEncode(res)); // input false by default
       notifyListeners();
     }();
 

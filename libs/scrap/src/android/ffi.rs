@@ -17,7 +17,6 @@ use std::time::{Duration, Instant};
 lazy_static! {
     static ref JVM: RwLock<Option<JavaVM>> = RwLock::new(None);
     static ref MAIN_SERVICE_CTX: RwLock<Option<GlobalRef>> = RwLock::new(None); // MainService -> video service / audio service / info
-    static ref INPUT_CTX: RwLock<Option<GlobalRef>> = RwLock::new(None);
     static ref VIDEO_RAW: Mutex<FrameRaw> = Mutex::new(FrameRaw::new("video", MAX_VIDEO_FRAME_TIMEOUT));
     static ref AUDIO_RAW: Mutex<FrameRaw> = Mutex::new(FrameRaw::new("audio", MAX_AUDIO_FRAME_TIMEOUT));
 }
@@ -148,25 +147,10 @@ pub extern "system" fn Java_com_carriez_flutter_1hbb_MainService_init(
     *MAIN_SERVICE_CTX.write().unwrap() = Some(context);
 }
 
-#[no_mangle]
-pub extern "system" fn Java_com_carriez_flutter_1hbb_InputService_init(
-    env: JNIEnv,
-    _class: JClass,
-    ctx: JObject,
-) {
-    log::debug!("InputService init from java");
-    let jvm = env.get_java_vm().unwrap();
-
-    *JVM.write().unwrap() = Some(jvm);
-
-    let context = env.new_global_ref(ctx).unwrap();
-    *INPUT_CTX.write().unwrap() = Some(context);
-}
-
-pub fn call_input_service_mouse_input(mask: i32, x: i32, y: i32) -> JniResult<()> {
+pub fn call_main_service_mouse_input(mask: i32, x: i32, y: i32) -> JniResult<()> {
     if let (Some(jvm), Some(ctx)) = (
         JVM.read().unwrap().as_ref(),
-        INPUT_CTX.read().unwrap().as_ref(),
+        MAIN_SERVICE_CTX.read().unwrap().as_ref(),
     ) {
         let env = jvm.attach_current_thread_as_daemon()?;
         env.call_method(
