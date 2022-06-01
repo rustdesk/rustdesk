@@ -72,7 +72,13 @@ class MainService : Service() {
     @Keep
     fun rustGetByName(name: String): String {
         return when (name) {
-            "screen_size" -> "${SCREEN_INFO.width}:${SCREEN_INFO.height}"
+            "screen_size" -> {
+                JSONObject().apply {
+                    put("width",SCREEN_INFO.width)
+                    put("height",SCREEN_INFO.height)
+                    put("scale",SCREEN_INFO.scale)
+                }.toString()
+            }
             else -> ""
         }
     }

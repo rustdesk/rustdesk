@@ -28,6 +28,7 @@ android_logger = "0.10"
 jni = "0.19"
 lazy_static = "1.4"
 log = "0.4"
+serde_json = "1.0"
 
 [target.'cfg(not(target_os = "android"))'.dev-dependencies]
 repng = "0.2"

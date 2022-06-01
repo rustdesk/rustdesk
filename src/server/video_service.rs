@@ -567,5 +567,15 @@ fn get_quality(w: usize, h: usize, q: i32) -> (u32, u32, u32, i32) {
     let bitrate = q >> 8 & 0xFF;
     let quantizer = q & 0xFF;
     let b = ((w * h) / 1000) as u32;
+
+    #[cfg(target_os = "android")]
+    {
+        // fix when andorid screen shrinks
+        let fix = Display::fix_quality() as u32;
+        log::debug!("Android screen, fix quality:{}", fix);
+        let b = b * fix;
+        return (bitrate as u32 * b / 100, quantizer as _, 56, 7);
+    }
+
     (bitrate as u32 * b / 100, quantizer as _, 56, 7)
 }

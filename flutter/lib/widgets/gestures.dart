@@ -213,7 +213,7 @@ class HoldTapMoveGestureRecognizer extends GestureRecognizer {
     _stopSecondTapDownTimer();
     final _TapTracker tracker = _TapTracker(
       event: event,
-      entry: GestureBinding.instance!.gestureArena.add(event.pointer, this),
+      entry: GestureBinding.instance.gestureArena.add(event.pointer, this),
       doubleTapMinTime: kDoubleTapMinTime,
       gestureSettings: gestureSettings,
     );
@@ -318,13 +318,13 @@ class HoldTapMoveGestureRecognizer extends GestureRecognizer {
       final _TapTracker tracker = _firstTap!;
       _firstTap = null;
       _reject(tracker);
-      GestureBinding.instance!.gestureArena.release(tracker.pointer);
+      GestureBinding.instance.gestureArena.release(tracker.pointer);
 
       if (_secondTap != null) {
         final _TapTracker tracker = _secondTap!;
         _secondTap = null;
         _reject(tracker);
-        GestureBinding.instance!.gestureArena.release(tracker.pointer);
+        GestureBinding.instance.gestureArena.release(tracker.pointer);
       }
     }
     _firstTap = null;
@@ -334,7 +334,7 @@ class HoldTapMoveGestureRecognizer extends GestureRecognizer {
 
   void _registerFirstTap(_TapTracker tracker) {
     _startFirstTapUpTimer();
-    GestureBinding.instance!.gestureArena.hold(tracker.pointer);
+    GestureBinding.instance.gestureArena.hold(tracker.pointer);
     // Note, order is important below in order for the clear -> reject logic to
     // work properly.
     _freezeTracker(tracker);
@@ -350,7 +350,7 @@ class HoldTapMoveGestureRecognizer extends GestureRecognizer {
     }
 
     _startSecondTapDownTimer();
-    GestureBinding.instance!.gestureArena.hold(tracker.pointer);
+    GestureBinding.instance.gestureArena.hold(tracker.pointer);
 
     _secondTap = tracker;
 
@@ -463,7 +463,7 @@ class DoubleFinerTapGestureRecognizer extends GestureRecognizer {
   void _trackTap(PointerDownEvent event) {
     final _TapTracker tracker = _TapTracker(
       event: event,
-      entry: GestureBinding.instance!.gestureArena.add(event.pointer, this),
+      entry: GestureBinding.instance.gestureArena.add(event.pointer, this),
       doubleTapMinTime: kDoubleTapMinTime,
       gestureSettings: gestureSettings,
     );
@@ -532,7 +532,7 @@ class DoubleFinerTapGestureRecognizer extends GestureRecognizer {
   }
 
   void _registerTap(_TapTracker tracker) {
-    GestureBinding.instance!.gestureArena.hold(tracker.pointer);
+    GestureBinding.instance.gestureArena.hold(tracker.pointer);
     // Note, order is important below in order for the clear -> reject logic to
     // work properly.
   }
@@ -615,15 +615,14 @@ class _TapTracker {
   void startTrackingPointer(PointerRoute route, Matrix4? transform) {
     if (!_isTrackingPointer) {
       _isTrackingPointer = true;
-      GestureBinding.instance!.pointerRouter
-          .addRoute(pointer, route, transform);
+      GestureBinding.instance.pointerRouter.addRoute(pointer, route, transform);
     }
   }
 
   void stopTrackingPointer(PointerRoute route) {
     if (_isTrackingPointer) {
       _isTrackingPointer = false;
-      GestureBinding.instance!.pointerRouter.removeRoute(pointer, route);
+      GestureBinding.instance.pointerRouter.removeRoute(pointer, route);
     }
   }
 
