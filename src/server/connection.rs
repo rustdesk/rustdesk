@@ -22,7 +22,7 @@ use hbb_common::{
     tokio_util::codec::{BytesCodec, Framed},
 };
 #[cfg(any(target_os = "android", target_os = "ios"))]
-use scrap::android::call_input_service_mouse_input;
+use scrap::android::call_main_service_mouse_input;
 use serde_json::{json, value::Value};
 use sha2::{Digest, Sha256};
 use std::sync::{
@@ -895,8 +895,8 @@ impl Connection {
             match msg.union {
                 Some(message::Union::mouse_event(me)) => {
                     #[cfg(any(target_os = "android", target_os = "ios"))]
-                    if let Err(e) = call_input_service_mouse_input(me.mask, me.x, me.y) {
-                        log::debug!("call_input_service_mouse_input fail:{}", e);
+                    if let Err(e) = call_main_service_mouse_input(me.mask, me.x, me.y) {
+                        log::debug!("call_main_service_mouse_input fail:{}", e);
                     }
                     #[cfg(not(any(target_os = "android", target_os = "ios")))]
                     if self.keyboard {

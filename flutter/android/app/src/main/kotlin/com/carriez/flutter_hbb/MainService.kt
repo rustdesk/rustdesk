@@ -70,6 +70,12 @@ class MainService : Service() {
     }
 
     @Keep
+    @RequiresApi(Build.VERSION_CODES.N)
+    fun rustMouseInput(mask: Int, x: Int, y: Int) {
+        InputService.ctx?.onMouseInput(mask,x,y)
+    }
+
+    @Keep
     fun rustGetByName(name: String): String {
         return when (name) {
             "screen_size" -> {
@@ -197,10 +203,6 @@ class MainService : Service() {
     }
 
     override fun onDestroy() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-            InputService.ctx?.disableSelf()
-        }
-        InputService.ctx = null
         checkMediaPermission()
         super.onDestroy()
     }
@@ -389,10 +391,6 @@ class MainService : Service() {
 
         mediaProjection = null
         checkMediaPermission()
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-            InputService.ctx?.disableSelf()
-        }
-        InputService.ctx = null
         stopForeground(true)
         stopSelf()
     }
