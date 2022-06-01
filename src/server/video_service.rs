@@ -19,6 +19,8 @@
 // https://slhck.info/video/2017/03/01/rate-control.html
 
 use super::*;
+#[cfg(windows)]
+use crate::ui::win_privacy::win_event_hook;
 use hbb_common::tokio::sync::{
     mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender},
     Mutex as TokioMutex,
@@ -301,6 +303,24 @@ pub fn test_create_capturer(privacy_mode_id: i32, timeout_millis: u64) -> bool {
     false
 }
 
+#[cfg(windows)]
+fn check_uac_switch(privacy_mode_id: i32, captuerer_privacy_mode_id: i32) -> ResultType<()> {
+    if captuerer_privacy_mode_id != 0 {
+        if privacy_mode_id != captuerer_privacy_mode_id {
+            if !win_event_hook::is_process_consent_running()? {
+                bail!("consent.exe is running");
+            }
+        }
+        //if win_event_hook::is_desktop_switched() {
+        if win_event_hook::is_process_consent_running()? {
+            //        win_event_hook::reset_desktop_switch();
+            bail!("consent.exe is running");
+        }
+        //}
+    }
+    Ok(())
+}
+
 fn run(sp: GenericService) -> ResultType<()> {
     #[cfg(windows)]
     ensure_close_virtual_device()?;
@@ -322,11 +342,24 @@ fn run(sp: GenericService) -> ResultType<()> {
     );
 
     let privacy_mode_id = *PRIVACY_MODE_CONN_ID.lock().unwrap();
+    #[cfg(not(windows))]
+    let captuerer_privacy_mode_id = privacy_mode_id;
+    #[cfg(windows)]
+    let mut captuerer_privacy_mode_id = privacy_mode_id;
+    #[cfg(windows)]
+    if win_event_hook::is_process_consent_running()? {
+        captuerer_privacy_mode_id = 0;
+    }
     log::debug!(
-        "Try create capturer with privacy mode id {}",
-        privacy_mode_id,
+        "Try create capturer with captuerer privacy mode id {}",
+        captuerer_privacy_mode_id,
     );
-    let mut c = create_capturer(privacy_mode_id, display)?;
+    if privacy_mode_id != captuerer_privacy_mode_id {
+        log::info!("In privacy mode, but show UAC prompt window for now");
+    } else {
+        log::info!("In privacy mode, the peer side cannot watch the screen");
+    }
+    let mut c = create_capturer(captuerer_privacy_mode_id, display)?;
 
     let q = get_image_quality();
     let (bitrate, rc_min_quantizer, rc_max_quantizer, speed) = get_quality(width, height, q);
@@ -373,6 +406,9 @@ fn run(sp: GenericService) -> ResultType<()> {
     #[cfg(windows)]
     log::info!("gdi: {}", c.is_gdi());
     while sp.ok() {
+        #[cfg(windows)]
+        check_uac_switch(privacy_mode_id, captuerer_privacy_mode_id)?;
+
         if *SWITCH.lock().unwrap() {
             bail!("SWITCH");
         }
@@ -480,6 +516,8 @@ fn run(sp: GenericService) -> ResultType<()> {
         let wait_begin = Instant::now();
         while wait_begin.elapsed().as_millis() < timeout_millis as _ {
             check_privacy_mode_changed(&sp, privacy_mode_id)?;
+            #[cfg(windows)]
+            check_uac_switch(privacy_mode_id, captuerer_privacy_mode_id)?;
             frame_controller.try_wait_next(&mut fetched_conn_ids, 300);
             // break if all connections have received current frame
             if fetched_conn_ids.len() >= frame_controller.send_conn_ids.len() {

@@ -552,6 +552,95 @@ pub(super) mod privacy_hook {
     }
 }
 
+pub mod win_event_hook {
+    use hbb_common::{bail, lazy_static, ResultType};
+    use std::sync::Mutex;
+    use winapi::{
+        shared::{
+            minwindef::DWORD,
+            ntdef::{LONG, NULL},
+            windef::{HWINEVENTHOOK, HWND},
+            winerror::RPC_E_CHANGED_MODE,
+        },
+        um::{
+            combaseapi::{CoInitializeEx, CoUninitialize},
+            objbase::COINIT_MULTITHREADED,
+            winuser::{
+                SetWinEventHook, UnhookWinEvent, EVENT_SYSTEM_DESKTOPSWITCH, WINEVENT_OUTOFCONTEXT,
+                WINEVENT_SKIPOWNPROCESS,
+            },
+        },
+    };
+
+    lazy_static::lazy_static! {
+        static ref DESKTOP_SWITCH: Mutex<bool> = Mutex::new(false);
+    }
+
+    pub fn is_desktop_switched() -> bool {
+        *DESKTOP_SWITCH.lock().unwrap()
+    }
+
+    pub fn reset_desktop_switch() {
+        *DESKTOP_SWITCH.lock().unwrap() = false;
+    }
+
+    pub struct WinEventHook {
+        hook: HWINEVENTHOOK,
+    }
+
+    impl WinEventHook {
+        fn create() -> ResultType<Self> {
+            unsafe {
+                if RPC_E_CHANGED_MODE == CoInitializeEx(NULL, COINIT_MULTITHREADED) {
+                    bail!("Failed CoInitializeEx with RPC_E_CHANGED_MODE");
+                }
+
+                let hook = SetWinEventHook(
+                    EVENT_SYSTEM_DESKTOPSWITCH,
+                    EVENT_SYSTEM_DESKTOPSWITCH,
+                    NULL as _,
+                    Some(hook_win_event),
+                    0,
+                    0,
+                    WINEVENT_OUTOFCONTEXT | WINEVENT_SKIPOWNPROCESS,
+                );
+                Ok(Self { hook })
+            }
+        }
+    }
+
+    impl Drop for WinEventHook {
+        fn drop(&mut self) {
+            unsafe {
+                UnhookWinEvent(self.hook);
+                CoUninitialize();
+            }
+        }
+    }
+
+    #[no_mangle]
+    pub extern "system" fn hook_win_event(
+        _hook: HWINEVENTHOOK,
+        event: DWORD,
+        _hwnd: HWND,
+        _id_object: LONG,
+        _id_child: LONG,
+        _dw_event_thread: DWORD,
+        _dwms_event_time: DWORD,
+    ) {
+        if event == EVENT_SYSTEM_DESKTOPSWITCH {
+            *DESKTOP_SWITCH.lock().unwrap() = true;
+        }
+    }
+
+    pub fn is_process_consent_running() -> ResultType<bool> {
+        let output = std::process::Command::new("cmd")
+            .args(&["/C", "tasklist | findstr consent.exe"])
+            .output()?;
+        Ok(output.status.success() && !output.stdout.is_empty())
+    }
+}
+
 mod test {
     #[test]
     fn privacy_hook() {
