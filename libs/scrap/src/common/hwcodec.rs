@@ -5,7 +5,7 @@ use crate::{
 use hbb_common::{
     anyhow::{anyhow, Context},
     lazy_static, log,
-    message_proto::{H264s, H265s, Message, VideoFrame, H264, H265},
+    message_proto::{H264s, H265s, ImageQuality, Message, VideoFrame, H264, H265},
     ResultType,
 };
 use hwcodec::{
@@ -13,6 +13,8 @@ use hwcodec::{
     encode::{EncodeContext, EncodeFrame, Encoder},
     ffmpeg::{CodecInfo, DataFormat},
     AVPixelFormat,
+    Quality::{self, *},
+    RateContorl::{self, *},
 };
 use std::sync::{Arc, Mutex, Once};
 
@@ -25,6 +27,10 @@ lazy_static::lazy_static! {
 }
 
 const DEFAULT_PIXFMT: AVPixelFormat = AVPixelFormat::AV_PIX_FMT_YUV420P;
+const DEFAULT_TIME_BASE: [i32; 2] = [1, 30];
+const DEFAULT_GOP: i32 = 60;
+const DEFAULT_HW_QUALITY: Quality = Quality_Default;
+const DEFAULT_RC: RateContorl = RC_DEFAULT;
 
 pub struct HwEncoder {
     encoder: Encoder,
@@ -40,13 +46,19 @@ impl EncoderApi for HwEncoder {
     {
         match cfg {
             EncoderCfg::HW(config) => {
+                let (bitrate, timebase, gop, quality, rc) =
+                    HwEncoder::convert_quality(&config.codec_name, config.quallity);
                 let ctx = EncodeContext {
                     name: config.codec_name.clone(),
-                    fps: config.fps as _,
                     width: config.width as _,
                     height: config.height as _,
                     pixfmt: DEFAULT_PIXFMT,
                     align: HW_STRIDE_ALIGN as _,
+                    bitrate,
+                    timebase,
+                    gop,
+                    quality,
+                    rc,
                 };
                 let format = match Encoder::format_from_name(config.codec_name.clone()) {
                     Ok(format) => format,
@@ -131,11 +143,15 @@ impl HwEncoder {
     pub fn best() -> (Option<CodecInfo>, Option<CodecInfo>) {
         let ctx = EncodeContext {
             name: String::from(""),
-            fps: 30,
             width: 1920,
             height: 1080,
             pixfmt: DEFAULT_PIXFMT,
             align: HW_STRIDE_ALIGN as _,
+            bitrate: 0,
+            timebase: DEFAULT_TIME_BASE,
+            gop: DEFAULT_GOP,
+            quality: DEFAULT_HW_QUALITY,
+            rc: DEFAULT_RC,
         };
         CodecInfo::score(Encoder::avaliable_encoders(ctx))
     }
@@ -173,6 +189,38 @@ impl HwEncoder {
                 Ok(data)
             }
             Err(_) => Ok(Vec::<EncodeFrame>::new()),
+        }
+    }
+
+    fn convert_quality(name: &str, q: ImageQuality) -> (i32, [i32; 2], i32, Quality, RateContorl) {
+        // TODO
+        let bitrate = if name.contains("qsv") {
+            1_000_000
+        } else {
+            2_000_000
+        };
+        match q {
+            ImageQuality::Low => (
+                bitrate / 2,
+                DEFAULT_TIME_BASE,
+                DEFAULT_GOP,
+                DEFAULT_HW_QUALITY,
+                DEFAULT_RC,
+            ),
+            ImageQuality::Best => (
+                bitrate * 2,
+                DEFAULT_TIME_BASE,
+                DEFAULT_GOP,
+                DEFAULT_HW_QUALITY,
+                DEFAULT_RC,
+            ),
+            ImageQuality::NotSet | ImageQuality::Balanced => (
+                0,
+                DEFAULT_TIME_BASE,
+                DEFAULT_GOP,
+                DEFAULT_HW_QUALITY,
+                DEFAULT_RC,
+            ),
         }
     }
 }

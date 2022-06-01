@@ -184,9 +184,9 @@ fn run(sp: GenericService) -> ResultType<()> {
     let encoder_cfg = match Encoder::current_hw_encoder_name() {
         Some(codec_name) => EncoderCfg::HW(HwEncoderConfig {
             codec_name,
-            fps,
             width,
             height,
+            quallity: convert_quality_back(q),
         }),
         None => EncoderCfg::VPX(VpxEncoderConfig {
             width: width as _,
@@ -513,6 +513,20 @@ fn convert_quality(q: i32) -> i32 {
         0
     } else {
         q.0 << 8 | q.1
+    }
+}
+
+fn convert_quality_back(q: i32) -> ImageQuality {
+    let q = q >> 8;
+    if q == 100 * 2 / 3 {
+        ImageQuality::Balanced
+    } else if q == 100 / 2 {
+        ImageQuality::Low
+    } else if q == 100 {
+        ImageQuality::Best
+    } else {
+        log::error!("Error convert quality:{}", q);
+        ImageQuality::Balanced
     }
 }
 

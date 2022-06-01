@@ -365,7 +365,7 @@ impl Connection {
         video_service::notify_video_frame_feched(id, None);
         super::video_service::update_test_latency(id, 0);
         super::video_service::update_image_quality(id, None);
-        scrap::codec::Encoder::update_video_encoder(id, None);
+        scrap::codec::Encoder::update_video_encoder(id, scrap::codec::EncoderUpdate::Remove);
         if let Err(err) = conn.try_port_forward_loop(&mut rx_from_cm).await {
             conn.on_close(&err.to_string(), false);
         }
@@ -1190,15 +1190,14 @@ impl Connection {
 
         // TODO: add option
         if let Some(q) = o.video_codec_state.clone().take() {
-            scrap::codec::Encoder::update_video_encoder(self.inner.id(), Some(q));
+            scrap::codec::Encoder::update_video_encoder(
+                self.inner.id(),
+                scrap::codec::EncoderUpdate::State(q),
+            );
         } else {
             scrap::codec::Encoder::update_video_encoder(
                 self.inner.id(),
-                Some(VideoCodecState {
-                    H264: false,
-                    H265: false,
-                    ..Default::default()
-                }),
+                scrap::codec::EncoderUpdate::DisableHwIfNotExist,
             );
         }
     }

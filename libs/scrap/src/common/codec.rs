@@ -11,7 +11,7 @@ use crate::vpxcodec::*;
 
 use hbb_common::{
     anyhow::anyhow,
-    message_proto::{video_frame, Message, VP9s, VideoCodecState},
+    message_proto::{video_frame, ImageQuality, Message, VP9s, VideoCodecState},
     ResultType,
 };
 #[cfg(feature = "hwcodec")]
@@ -28,9 +28,9 @@ lazy_static::lazy_static! {
 #[derive(Debug, Clone)]
 pub struct HwEncoderConfig {
     pub codec_name: String,
-    pub fps: i32,
     pub width: usize,
     pub height: usize,
+    pub quallity: ImageQuality,
 }
 
 pub enum EncoderCfg {
@@ -78,6 +78,13 @@ pub struct Decoder {
     i420: Vec<u8>,
 }
 
+#[derive(Debug, Clone)]
+pub enum EncoderUpdate {
+    State(VideoCodecState),
+    Remove,
+    DisableHwIfNotExist,
+}
+
 impl Encoder {
     pub fn new(config: EncoderCfg) -> ResultType<Encoder> {
         match config {
@@ -95,14 +102,23 @@ impl Encoder {
     }
 
     // TODO
-    pub fn update_video_encoder(id: i32, decoder: Option<VideoCodecState>) {
+    pub fn update_video_encoder(id: i32, update: EncoderUpdate) {
         #[cfg(feature = "hwcodec")]
         {
             let mut states = VIDEO_CODEC_STATES.lock().unwrap();
-            match decoder {
-                Some(decoder) => states.insert(id, decoder),
-                None => states.remove(&id),
-            };
+            match update {
+                EncoderUpdate::State(state) => {
+                    states.insert(id, state);
+                }
+                EncoderUpdate::Remove => {
+                    states.remove(&id);
+                }
+                EncoderUpdate::DisableHwIfNotExist => {
+                    if !states.contains_key(&id) {
+                        states.insert(id, VideoCodecState::default());
+                    }
+                }
+            }
             let (encoder_h264, encoder_h265) = HwEncoder::best();
             let mut enabled_h264 = encoder_h264.is_some();
             let mut enabled_h265 = encoder_h265.is_some();
@@ -142,7 +158,7 @@ impl Encoder {
         #[cfg(not(feature = "hwcodec"))]
         {
             let _ = id;
-            let _ = decoder;
+            let _ = update;
         }
     }
     #[inline]
