@@ -781,6 +781,22 @@ impl Connection {
         if let Some(message::Union::login_request(lr)) = msg.union {
             if let Some(o) = lr.option.as_ref() {
                 self.update_option(o).await;
+                if let Some(q) = o.video_codec_state.clone().take() {
+                    scrap::codec::Encoder::update_video_encoder(
+                        self.inner.id(),
+                        scrap::codec::EncoderUpdate::State(q),
+                    );
+                } else {
+                    scrap::codec::Encoder::update_video_encoder(
+                        self.inner.id(),
+                        scrap::codec::EncoderUpdate::DisableHwIfNotExist,
+                    );
+                }
+            } else {
+                scrap::codec::Encoder::update_video_encoder(
+                    self.inner.id(),
+                    scrap::codec::EncoderUpdate::DisableHwIfNotExist,
+                );
             }
             self.video_ack_required = lr.video_ack_required;
             if self.authorized {
@@ -1186,19 +1202,6 @@ impl Connection {
                     _ => {}
                 }
             }
-        }
-
-        // TODO: add option
-        if let Some(q) = o.video_codec_state.clone().take() {
-            scrap::codec::Encoder::update_video_encoder(
-                self.inner.id(),
-                scrap::codec::EncoderUpdate::State(q),
-            );
-        } else {
-            scrap::codec::Encoder::update_video_encoder(
-                self.inner.id(),
-                scrap::codec::EncoderUpdate::DisableHwIfNotExist,
-            );
         }
     }
 

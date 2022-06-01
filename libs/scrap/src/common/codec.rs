@@ -11,12 +11,13 @@ use crate::vpxcodec::*;
 
 use hbb_common::{
     anyhow::anyhow,
+    log,
     message_proto::{video_frame, ImageQuality, Message, VP9s, VideoCodecState},
     ResultType,
 };
 #[cfg(feature = "hwcodec")]
 use hbb_common::{
-    lazy_static, log,
+    lazy_static,
     message_proto::{H264s, H265s},
 };
 
@@ -33,6 +34,7 @@ pub struct HwEncoderConfig {
     pub quallity: ImageQuality,
 }
 
+#[derive(Debug, Clone)]
 pub enum EncoderCfg {
     VPX(VpxEncoderConfig),
     HW(HwEncoderConfig),
@@ -87,6 +89,7 @@ pub enum EncoderUpdate {
 
 impl Encoder {
     pub fn new(config: EncoderCfg) -> ResultType<Encoder> {
+        log::info!("new encoder:{:?}", config);
         match config {
             EncoderCfg::VPX(_) => Ok(Encoder {
                 codec: Box::new(VpxEncoder::new(config)?),
@@ -103,6 +106,7 @@ impl Encoder {
 
     // TODO
     pub fn update_video_encoder(id: i32, update: EncoderUpdate) {
+        log::info!("update video encoder:{:?}", update);
         #[cfg(feature = "hwcodec")]
         {
             let mut states = VIDEO_CODEC_STATES.lock().unwrap();
@@ -119,30 +123,30 @@ impl Encoder {
                     }
                 }
             }
-            let (encoder_h264, encoder_h265) = HwEncoder::best();
-            let mut enabled_h264 = encoder_h264.is_some();
-            let mut enabled_h265 = encoder_h265.is_some();
-            let mut score_vpx = 90;
-            let mut score_h264 = encoder_h264.as_ref().map_or(0, |c| c.score);
-            let mut score_h265 = encoder_h265.as_ref().map_or(0, |c| c.score);
-
-            for state in states.iter() {
-                enabled_h264 = enabled_h264 && state.1.H264;
-                enabled_h265 = enabled_h265 && state.1.H265;
-                score_vpx += state.1.ScoreVpx;
-                score_h264 += state.1.ScoreH264;
-                score_h265 += state.1.ScoreH265;
-            }
-
             let current_encoder_name = HwEncoder::current_name();
-            if enabled_h265 && score_h265 >= score_vpx && score_h265 >= score_h264 {
-                *current_encoder_name.lock().unwrap() = Some(encoder_h265.unwrap().name);
-            } else if enabled_h264 && score_h264 >= score_vpx && score_h264 >= score_h265 {
-                *current_encoder_name.lock().unwrap() = Some(encoder_h264.unwrap().name);
-            } else {
-                *current_encoder_name.lock().unwrap() = None;
-            }
             if states.len() > 0 {
+                let (encoder_h264, encoder_h265) = HwEncoder::best();
+                let mut enabled_h264 = encoder_h264.is_some() && states.iter().any(|(_, s)| s.H264);
+                let mut enabled_h265 = encoder_h265.is_some() && states.iter().any(|(_, s)| s.H265);
+                let mut score_vpx = 90;
+                let mut score_h264 = encoder_h264.as_ref().map_or(0, |c| c.score);
+                let mut score_h265 = encoder_h265.as_ref().map_or(0, |c| c.score);
+
+                for state in states.iter() {
+                    enabled_h264 = enabled_h264 && state.1.H264;
+                    enabled_h265 = enabled_h265 && state.1.H265;
+                    score_vpx += state.1.ScoreVpx;
+                    score_h264 += state.1.ScoreH264;
+                    score_h265 += state.1.ScoreH265;
+                }
+
+                if enabled_h265 && score_h265 >= score_vpx && score_h265 >= score_h264 {
+                    *current_encoder_name.lock().unwrap() = Some(encoder_h265.unwrap().name);
+                } else if enabled_h264 && score_h264 >= score_vpx && score_h264 >= score_h265 {
+                    *current_encoder_name.lock().unwrap() = Some(encoder_h264.unwrap().name);
+                } else {
+                    *current_encoder_name.lock().unwrap() = None;
+                }
                 log::info!(
                     "connection count:{}, h264:{}, h265:{}, score: vpx({}), h264({}), h265({}), set current encoder name {:?}",
                     states.len(),
@@ -153,6 +157,8 @@ impl Encoder {
                     score_h265,
                     current_encoder_name.lock().unwrap()
                     )
+            } else {
+                *current_encoder_name.lock().unwrap() = None;
             }
         }
         #[cfg(not(feature = "hwcodec"))]
