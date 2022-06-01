@@ -4265,6 +4265,7 @@ dependencies = [
  "quest",
  "repng",
  "serde 1.0.136",
+ "serde_json 1.0.79",
  "target_build_utils",
  "tracing",
  "webm",
