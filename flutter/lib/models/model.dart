@@ -6,6 +6,7 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_hbb/generated_bridge.dart';
 import 'package:flutter_hbb/models/chat_model.dart';
 import 'package:flutter_hbb/models/file_model.dart';
 import 'package:flutter_hbb/models/server_model.dart';
@@ -121,6 +122,53 @@ class FfiModel with ChangeNotifier {
     _permissions.clear();
   }
 
+  void Function(Map<String, dynamic>) startEventListener(String peerId) {
+    return (evt) {
+      var name = evt['name'];
+      if (name == 'msgbox') {
+        handleMsgBox(evt, peerId);
+      } else if (name == 'peer_info') {
+        handlePeerInfo(evt, peerId);
+      } else if (name == 'connection_ready') {
+        FFI.ffiModel.setConnectionType(
+            evt['secure'] == 'true', evt['direct'] == 'true');
+      } else if (name == 'switch_display') {
+        handleSwitchDisplay(evt);
+      } else if (name == 'cursor_data') {
+        FFI.cursorModel.updateCursorData(evt);
+      } else if (name == 'cursor_id') {
+        FFI.cursorModel.updateCursorId(evt);
+      } else if (name == 'cursor_position') {
+        FFI.cursorModel.updateCursorPosition(evt);
+      } else if (name == 'clipboard') {
+        Clipboard.setData(ClipboardData(text: evt['content']));
+      } else if (name == 'permission') {
+        FFI.ffiModel.updatePermission(evt);
+      } else if (name == 'chat_client_mode') {
+        FFI.chatModel.receive(ChatModel.clientModeID, evt['text'] ?? "");
+      } else if (name == 'chat_server_mode') {
+        FFI.chatModel
+            .receive(int.parse(evt['id'] as String), evt['text'] ?? "");
+      } else if (name == 'file_dir') {
+        FFI.fileModel.receiveFileDir(evt);
+      } else if (name == 'job_progress') {
+        FFI.fileModel.tryUpdateJobProgress(evt);
+      } else if (name == 'job_done') {
+        FFI.fileModel.jobDone(evt);
+      } else if (name == 'job_error') {
+        FFI.fileModel.jobError(evt);
+      } else if (name == 'override_file_confirm') {
+        FFI.fileModel.overrideFileConfirm(evt);
+      } else if (name == 'try_start_without_auth') {
+        FFI.serverModel.loginRequest(evt);
+      } else if (name == 'on_client_authorized') {
+        FFI.serverModel.onClientAuthorized(evt);
+      } else if (name == 'on_client_remove') {
+        FFI.serverModel.onClientRemove(evt);
+      }
+    };
+  }
+
   /// Bind the event listener to receive events from the Rust core.
   void updateEventListener(String peerId) {
     final void Function(Map<String, dynamic>) cb = (evt) {
@@ -128,7 +176,7 @@ class FfiModel with ChangeNotifier {
       if (name == 'msgbox') {
         handleMsgBox(evt, peerId);
       } else if (name == 'peer_info') {
-        handlePeerInfo(evt);
+        handlePeerInfo(evt, peerId);
       } else if (name == 'connection_ready') {
         FFI.ffiModel.setConnectionType(
             evt['secure'] == 'true', evt['direct'] == 'true');
@@ -193,17 +241,19 @@ class FfiModel with ChangeNotifier {
       enterPasswordDialog(id);
     } else {
       var hasRetry = evt['hasRetry'] == 'true';
-      showMsgBox(type, title, text, hasRetry);
+      showMsgBox(id, type, title, text, hasRetry);
     }
   }
 
   /// Show a message box with [type], [title] and [text].
-  void showMsgBox(String type, String title, String text, bool hasRetry) {
+  void showMsgBox(
+      String id, String type, String title, String text, bool hasRetry) {
     msgBox(type, title, text);
     _timer?.cancel();
     if (hasRetry) {
       _timer = Timer(Duration(seconds: _reconnects), () {
-        FFI.reconnect();
+        FFI.bind.sessionReconnect(id: id);
+        clearPermissions();
         showLoading(translate('Connecting...'));
       });
       _reconnects *= 2;
@@ -213,7 +263,7 @@ class FfiModel with ChangeNotifier {
   }
 
   /// Handle the peer info event based on [evt].
-  void handlePeerInfo(Map<String, dynamic> evt) {
+  void handlePeerInfo(Map<String, dynamic> evt, String peerId) async {
     SmartDialog.dismiss();
     _pi.version = evt['version'];
     _pi.username = evt['username'];
@@ -228,7 +278,8 @@ class FfiModel with ChangeNotifier {
         Timer(Duration(milliseconds: 100), showMobileActionsOverlay);
       }
     } else {
-      _touchMode = FFI.getByName('peer_option', "touch-mode") != '';
+      _touchMode =
+          await FFI.bind.getSessionOption(id: peerId, arg: "touch-mode") != '';
     }
 
     if (evt['is_file_transfer'] == "true") {
@@ -263,26 +314,26 @@ class ImageModel with ChangeNotifier {
 
   ui.Image? get image => _image;
 
-  ImageModel() {
-    PlatformFFI.setRgbaCallback((rgba) {
-      if (_waitForImage) {
-        _waitForImage = false;
-        SmartDialog.dismiss();
+  String _id = "";
+
+  void onRgba(Uint8List rgba) {
+    if (_waitForImage) {
+      _waitForImage = false;
+      SmartDialog.dismiss();
+    }
+    final pid = FFI.id;
+    ui.decodeImageFromPixels(
+        rgba,
+        FFI.ffiModel.display.width,
+        FFI.ffiModel.display.height,
+        isWeb ? ui.PixelFormat.rgba8888 : ui.PixelFormat.bgra8888, (image) {
+      if (FFI.id != pid) return;
+      try {
+        // my throw exception, because the listener maybe already dispose
+        update(image);
+      } catch (e) {
+        print('update image: $e');
       }
-      final pid = FFI.id;
-      ui.decodeImageFromPixels(
-          rgba,
-          FFI.ffiModel.display.width,
-          FFI.ffiModel.display.height,
-          isWeb ? ui.PixelFormat.rgba8888 : ui.PixelFormat.bgra8888, (image) {
-        if (FFI.id != pid) return;
-        try {
-          // my throw exception, because the listener maybe already dispose
-          FFI.imageModel.update(image);
-        } catch (e) {
-          print('update image: $e');
-        }
-      });
     });
   }
 
@@ -299,8 +350,8 @@ class ImageModel with ChangeNotifier {
       initializeCursorAndCanvas();
       Future.delayed(Duration(milliseconds: 1), () {
         if (FFI.ffiModel.isPeerAndroid) {
-          FFI.setByName(
-              'peer_option', '{"name": "view-style", "value": "shrink"}');
+          FFI.bind
+              .sessionPeerOption(id: _id, name: "view-style", value: "shrink");
           FFI.canvasModel.updateViewStyle();
         }
       });
@@ -330,6 +381,7 @@ class CanvasModel with ChangeNotifier {
   double _x = 0;
   double _y = 0;
   double _scale = 1.0;
+  String id = ""; // TODO multi canvas model
 
   CanvasModel();
 
@@ -339,8 +391,11 @@ class CanvasModel with ChangeNotifier {
 
   double get scale => _scale;
 
-  void updateViewStyle() {
-    final s = FFI.getByName('peer_option', 'view-style');
+  void updateViewStyle() async {
+    final s = await FFI.bind.getSessionOption(id: id, arg: 'view-style');
+    if (s == null) {
+      return;
+    }
     final size = MediaQueryData.fromWindow(ui.window).size;
     final s1 = size.width / FFI.ffiModel.display.width;
     final s2 = size.height / FFI.ffiModel.display.height;
@@ -450,6 +505,7 @@ class CursorModel with ChangeNotifier {
   double _hoty = 0;
   double _displayOriginX = 0;
   double _displayOriginY = 0;
+  String id = ""; // TODO multi cursor model
 
   ui.Image? get image => _image;
 
@@ -598,17 +654,17 @@ class CursorModel with ChangeNotifier {
     final rgba = Uint8List.fromList(colors.map((s) => s as int).toList());
     var pid = FFI.id;
     ui.decodeImageFromPixels(rgba, width, height, ui.PixelFormat.rgba8888,
-            (image) {
-          if (FFI.id != pid) return;
-          _image = image;
-          _images[id] = Tuple3(image, _hotx, _hoty);
-          try {
-            // my throw exception, because the listener maybe already dispose
-            notifyListeners();
-          } catch (e) {
-            print('notify cursor: $e');
-          }
-        });
+        (image) {
+      if (FFI.id != pid) return;
+      _image = image;
+      _images[id] = Tuple3(image, _hotx, _hoty);
+      try {
+        // my throw exception, because the listener maybe already dispose
+        notifyListeners();
+      } catch (e) {
+        print('notify cursor: $e');
+      }
+    });
   }
 
   void updateCursorId(Map<String, dynamic> evt) {
@@ -637,7 +693,8 @@ class CursorModel with ChangeNotifier {
     notifyListeners();
   }
 
-  void updateDisplayOriginWithCursor(double x, double y, double xCursor, double yCursor) {
+  void updateDisplayOriginWithCursor(
+      double x, double y, double xCursor, double yCursor) {
     _displayOriginX = x;
     _displayOriginY = y;
     _x = xCursor;
@@ -688,7 +745,7 @@ class FFI {
 
   /// Get the remote id for current client.
   static String getId() {
-    return getByName('remote_id');
+    return getByName('remote_id'); // TODO
   }
 
   /// Send a mouse tap event(down and up).
@@ -700,14 +757,14 @@ class FFI {
   /// Send scroll event with scroll distance [y].
   static void scroll(int y) {
     setByName('send_mouse',
-        json.encode(modify({'type': 'wheel', 'y': y.toString()})));
+        json.encode(modify({'id': id, 'type': 'wheel', 'y': y.toString()})));
   }
 
   /// Reconnect to the remote peer.
-  static void reconnect() {
-    setByName('reconnect');
-    FFI.ffiModel.clearPermissions();
-  }
+  // static void reconnect() {
+  //   setByName('reconnect');
+  //   FFI.ffiModel.clearPermissions();
+  // }
 
   /// Reset key modifiers to false, including [shift], [ctrl], [alt] and [command].
   static void resetModifiers() {
@@ -727,7 +784,7 @@ class FFI {
   static void sendMouse(String type, MouseButtons button) {
     if (!ffiModel.keyboard()) return;
     setByName('send_mouse',
-        json.encode(modify({'type': type, 'buttons': button.value})));
+        json.encode(modify({'id': id, 'type': type, 'buttons': button.value})));
   }
 
   /// Send key stroke event.
@@ -735,17 +792,27 @@ class FFI {
   /// [press] indicates a click event(down and up).
   static void inputKey(String name, {bool? down, bool? press}) {
     if (!ffiModel.keyboard()) return;
-    final Map<String, String> out = Map();
-    out['name'] = name;
-    // default: down = false
-    if (down == true) {
-      out['down'] = "true";
-    }
-    // default: press = true
-    if (press != false) {
-      out['press'] = "true";
-    }
-    setByName('input_key', json.encode(modify(out)));
+    // final Map<String, String> out = Map();
+    // out['name'] = name;
+    // // default: down = false
+    // if (down == true) {
+    //   out['down'] = "true";
+    // }
+    // // default: press = true
+    // if (press != false) {
+    //   out['press'] = "true";
+    // }
+    // setByName('input_key', json.encode(modify(out)));
+    // TODO id
+    FFI.bind.sessionInputKey(
+        id: id,
+        name: name,
+        down: down ?? false,
+        press: press ?? true,
+        alt: alt,
+        ctrl: ctrl,
+        shift: shift,
+        command: command);
   }
 
   /// Send mouse movement event with distance in [x] and [y].
@@ -753,19 +820,20 @@ class FFI {
     if (!ffiModel.keyboard()) return;
     var x2 = x.toInt();
     var y2 = y.toInt();
-    setByName('send_mouse', json.encode(modify({'x': '$x2', 'y': '$y2'})));
+    setByName(
+        'send_mouse', json.encode(modify({'id': id, 'x': '$x2', 'y': '$y2'})));
   }
 
   /// List the saved peers.
   static List<Peer> peers() {
     try {
-      var str = getByName('peers');
+      var str = getByName('peers'); // TODO
       if (str == "") return [];
       List<dynamic> peers = json.decode(str);
       return peers
           .map((s) => s as List<dynamic>)
           .map((s) =>
-          Peer.fromJson(s[0] as String, s[1] as Map<String, dynamic>))
+              Peer.fromJson(s[0] as String, s[1] as Map<String, dynamic>))
           .toList();
     } catch (e) {
       print('peers(): $e');
@@ -779,31 +847,37 @@ class FFI {
       setByName('connect_file_transfer', id);
     } else {
       FFI.chatModel.resetClientMode();
-      setByName('connect', id);
+      // setByName('connect', id);
+      // TODO multi model instances
+      FFI.canvasModel.id = id;
+      FFI.imageModel._id = id;
+      FFI.cursorModel.id = id;
+      final stream =
+          FFI.bind.sessionConnect(id: id, isFileTransfer: isFileTransfer);
+      final cb = FFI.ffiModel.startEventListener(id);
+      () async {
+        await for (final message in stream) {
+          if (message is Event) {
+            try {
+              debugPrint("event:${message.field0}");
+              Map<String, dynamic> event = json.decode(message.field0);
+              cb(event);
+            } catch (e) {
+              print('json.decode fail(): $e');
+            }
+          } else if (message is Rgba) {
+            FFI.imageModel.onRgba(message.field0);
+          }
+        }
+      }();
+      // every instance will bind a stream
     }
     FFI.id = id;
   }
 
-  static Map<String, dynamic>? popEvent() {
-    var s = getByName('event');
-    if (s == '') return null;
-    try {
-      Map<String, dynamic> event = json.decode(s);
-      return event;
-    } catch (e) {
-      print('popEvent(): $e');
-    }
-    return null;
-  }
-
   /// Login with [password], choose if the client should [remember] it.
-  static void login(String password, bool remember) {
-    setByName(
-        'login',
-        json.encode({
-          'password': password,
-          'remember': remember ? 'true' : 'false',
-        }));
+  static void login(String id, String password, bool remember) {
+    FFI.bind.sessionLogin(id: id, password: password, remember: remember);
   }
 
   /// Close the remote session.
@@ -813,8 +887,8 @@ class FFI {
       savePreference(id, cursorModel.x, cursorModel.y, canvasModel.x,
           canvasModel.y, canvasModel.scale, ffiModel.pi.currentDisplay);
     }
+    FFI.bind.sessionClose(id: id);
     id = "";
-    setByName('close', '');
     imageModel.update(null);
     cursorModel.clear();
     ffiModel.clear();
@@ -832,6 +906,8 @@ class FFI {
   static void setByName(String name, [String value = '']) {
     PlatformFFI.setByName(name, value);
   }
+
+  static RustdeskImpl get bind => PlatformFFI.ffiBind;
 
   static handleMouse(Map<String, dynamic> evt) {
     var type = '';
@@ -884,6 +960,7 @@ class FFI {
         break;
     }
     evt['buttons'] = buttons;
+    evt['id'] = id;
     setByName('send_mouse', json.encode(evt));
   }
 

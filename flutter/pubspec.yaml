@@ -53,7 +53,11 @@ dependencies:
     image_picker: ^0.8.5
     image: ^3.1.3
     flutter_smart_dialog: ^4.3.1
-    flutter_rust_bridge: ^1.30.0
+    flutter_rust_bridge:
+        git:
+            url: https://github.com/SoLongAndThanksForAllThePizza/flutter_rust_bridge
+            ref: master
+            path: frb_dart
     window_manager: ^0.2.3
     desktop_multi_window:
         git:

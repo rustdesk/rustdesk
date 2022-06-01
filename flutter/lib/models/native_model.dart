@@ -30,8 +30,10 @@ class PlatformFFI {
   static String _homeDir = '';
   static F2? _getByName;
   static F3? _setByName;
+  static late RustdeskImpl _ffiBind;
   static void Function(Map<String, dynamic>)? _eventCallback;
-  static void Function(Uint8List)? _rgbaCallback;
+
+  static RustdeskImpl get ffiBind => _ffiBind;
 
   static Future<String> getVersion() async {
     PackageInfo packageInfo = await PackageInfo.fromPlatform();
@@ -88,7 +90,8 @@ class PlatformFFI {
           dylib.lookupFunction<Void Function(Pointer<Utf8>, Pointer<Utf8>), F3>(
               'set_by_name');
       _dir = (await getApplicationDocumentsDirectory()).path;
-      _startListenEvent(RustdeskImpl(dylib));
+      _ffiBind = RustdeskImpl(dylib);
+      _startListenEvent(_ffiBind); // global event
       try {
         _homeDir = (await ExternalPath.getExternalStorageDirectories())[0];
       } catch (e) {
@@ -133,7 +136,7 @@ class PlatformFFI {
   /// Start listening to the Rust core's events and frames.
   static void _startListenEvent(RustdeskImpl rustdeskImpl) {
     () async {
-      await for (final message in rustdeskImpl.startEventStream()) {
+      await for (final message in rustdeskImpl.startGlobalEventStream()) {
         if (_eventCallback != null) {
           try {
             Map<String, dynamic> event = json.decode(message);
@@ -144,24 +147,13 @@ class PlatformFFI {
         }
       }
     }();
-    () async {
-      await for (final rgba in rustdeskImpl.startRgbaStream()) {
-        if (_rgbaCallback != null) {
-          _rgbaCallback!(rgba);
-        } else {
-          rgba.clear();
-        }
-      }
-    }();
   }
 
   static void setEventCallback(void Function(Map<String, dynamic>) fun) async {
     _eventCallback = fun;
   }
 
-  static void setRgbaCallback(void Function(Uint8List) fun) async {
-    _rgbaCallback = fun;
-  }
+  static void setRgbaCallback(void Function(Uint8List) fun) async {}
 
   static void startDesktopWebListener() {}
 

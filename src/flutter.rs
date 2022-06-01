@@ -1,4 +1,4 @@
-use crate::client::*;
+use crate::{client::*, flutter_ffi::EventToUI};
 use flutter_rust_bridge::{StreamSink, ZeroCopyBuffer};
 use hbb_common::{
     allow_err,
@@ -26,17 +26,21 @@ use std::{
 };
 
 lazy_static::lazy_static! {
-    static ref SESSION: Arc<RwLock<Option<Session>>> = Default::default();
-    pub static ref EVENT_STREAM: RwLock<Option<StreamSink<String>>> = Default::default(); // rust to dart event channel
-    pub static ref RGBA_STREAM: RwLock<Option<StreamSink<ZeroCopyBuffer<Vec<u8>>>>> = Default::default(); // rust to dart rgba (big u8 list) channel
+    // static ref SESSION: Arc<RwLock<Option<Session>>> = Default::default();
+    pub static ref SESSIONS: RwLock<HashMap<String,Session>> = Default::default();
+    pub static ref GLOBAL_EVENT_STREAM: RwLock<Option<StreamSink<String>>> = Default::default(); // rust to dart event channel
 }
 
-#[derive(Clone, Default)]
+// pub fn get_session<'a>(id: &str) -> Option<&'a Session> {
+//     SESSIONS.read().unwrap().get(id)
+// }
+
+#[derive(Clone)]
 pub struct Session {
     id: String,
-    sender: Arc<RwLock<Option<mpsc::UnboundedSender<Data>>>>,
+    sender: Arc<RwLock<Option<mpsc::UnboundedSender<Data>>>>, // UI to rust
     lc: Arc<RwLock<LoginConfigHandler>>,
-    events2ui: Arc<RwLock<VecDeque<String>>>,
+    events2ui: Arc<RwLock<StreamSink<EventToUI>>>,
 }
 
 impl Session {
@@ -46,40 +50,47 @@ impl Session {
     ///
     /// * `id` - The id of the remote session.
     /// * `is_file_transfer` - If the session is used for file transfer.
-    pub fn start(id: &str, is_file_transfer: bool) {
-        LocalConfig::set_remote_id(id);
-        Self::close();
-        let mut session = Session::default();
+    pub fn start(id: &str, is_file_transfer: bool, events2ui: StreamSink<EventToUI>) {
+        LocalConfig::set_remote_id(&id);
+        // TODO check same id
+        // TODO close
+        // Self::close();
+        let events2ui = Arc::new(RwLock::new(events2ui));
+        let mut session = Session {
+            id: id.to_owned(),
+            sender: Default::default(),
+            lc: Default::default(),
+            events2ui,
+        };
         session
             .lc
             .write()
             .unwrap()
             .initialize(id.to_owned(), false, false);
-        session.id = id.to_owned();
-        *SESSION.write().unwrap() = Some(session.clone());
+        SESSIONS
+            .write()
+            .unwrap()
+            .insert(id.to_owned(), session.clone());
         std::thread::spawn(move || {
             Connection::start(session, is_file_transfer);
         });
     }
 
     /// Get the current session instance.
-    pub fn get() -> Arc<RwLock<Option<Session>>> {
-        SESSION.clone()
-    }
+    // pub fn get() -> Arc<RwLock<Option<Session>>> {
+    //     SESSION.clone()
+    // }
 
     /// Get the option of the current session.
     ///
     /// # Arguments
     ///
     /// * `name` - The name of the option to get. Currently only `remote_dir` is supported.
-    pub fn get_option(name: &str) -> String {
-        if let Some(session) = SESSION.read().unwrap().as_ref() {
-            if name == "remote_dir" {
-                return session.lc.read().unwrap().get_remote_dir();
-            }
-            return session.lc.read().unwrap().get_option(name);
+    pub fn get_option(&self, name: &str) -> String {
+        if name == "remote_dir" {
+            return self.lc.read().unwrap().get_remote_dir();
         }
-        "".to_owned()
+        self.lc.read().unwrap().get_option(name)
     }
 
     /// Set the option of the current session.
@@ -88,78 +99,59 @@ impl Session {
     ///
     /// * `name` - The name of the option to set. Currently only `remote_dir` is supported.
     /// * `value` - The value of the option to set.
-    pub fn set_option(name: String, value: String) {
-        if let Some(session) = SESSION.read().unwrap().as_ref() {
-            let mut value = value;
-            if name == "remote_dir" {
-                value = session.lc.write().unwrap().get_all_remote_dir(value);
-            }
-            return session.lc.write().unwrap().set_option(name, value);
+    pub fn set_option(&self, name: String, value: String) {
+        let mut value = value;
+        let mut lc = self.lc.write().unwrap();
+        if name == "remote_dir" {
+            value = lc.get_all_remote_dir(value);
         }
+        lc.set_option(name, value);
     }
 
     /// Input the OS password.
-    pub fn input_os_password(pass: String, activate: bool) {
-        if let Some(session) = SESSION.read().unwrap().as_ref() {
-            input_os_password(pass, activate, session.clone());
-        }
+    pub fn input_os_password(&self, pass: String, activate: bool) {
+        input_os_password(pass, activate, self.clone());
     }
 
+    // impl Interface
     /// Send message to the remote session.
     ///
     /// # Arguments
     ///
     /// * `data` - The data to send. See [`Data`] for more details.
-    fn send(data: Data) {
-        if let Some(session) = SESSION.read().unwrap().as_ref() {
-            session.send(data);
-        }
-    }
-
-    /// Pop a event from the event queue.
-    pub fn pop_event() -> Option<String> {
-        if let Some(session) = SESSION.read().unwrap().as_ref() {
-            session.events2ui.write().unwrap().pop_front()
-        } else {
-            None
-        }
-    }
+    // fn send(data: Data) {
+    //     if let Some(session) = SESSION.read().unwrap().as_ref() {
+    //         session.send(data);
+    //     }
+    // }
 
     /// Toggle an option.
-    pub fn toggle_option(name: &str) {
-        if let Some(session) = SESSION.read().unwrap().as_ref() {
-            let msg = session.lc.write().unwrap().toggle_option(name.to_owned());
-            if let Some(msg) = msg {
-                session.send_msg(msg);
-            }
+    pub fn toggle_option(&self, name: &str) {
+        let msg = self.lc.write().unwrap().toggle_option(name.to_owned());
+        if let Some(msg) = msg {
+            self.send_msg(msg);
         }
     }
 
     /// Send a refresh command.
-    pub fn refresh() {
-        Self::send(Data::Message(LoginConfigHandler::refresh()));
+    pub fn refresh(&self) {
+        self.send(Data::Message(LoginConfigHandler::refresh()));
     }
 
     /// Get image quality.
-    pub fn get_image_quality() -> String {
-        if let Some(session) = SESSION.read().unwrap().as_ref() {
-            session.lc.read().unwrap().image_quality.clone()
-        } else {
-            "".to_owned()
-        }
+    pub fn get_image_quality(&self) -> String {
+        self.lc.read().unwrap().image_quality.clone()
     }
 
     /// Set image quality.
-    pub fn set_image_quality(value: &str) {
-        if let Some(session) = SESSION.read().unwrap().as_ref() {
-            let msg = session
-                .lc
-                .write()
-                .unwrap()
-                .save_image_quality(value.to_owned());
-            if let Some(msg) = msg {
-                session.send_msg(msg);
-            }
+    pub fn set_image_quality(&self, value: &str) {
+        let msg = self
+            .lc
+            .write()
+            .unwrap()
+            .save_image_quality(value.to_owned());
+        if let Some(msg) = msg {
+            self.send_msg(msg);
         }
     }
 
@@ -169,12 +161,8 @@ impl Session {
     /// # Arguments
     ///
     /// * `name` - The name of the option to get.
-    pub fn get_toggle_option(name: &str) -> Option<bool> {
-        if let Some(session) = SESSION.read().unwrap().as_ref() {
-            Some(session.lc.write().unwrap().get_toggle_option(name))
-        } else {
-            None
-        }
+    pub fn get_toggle_option(&self, name: &str) -> bool {
+        self.lc.write().unwrap().get_toggle_option(name)
     }
 
     /// Login.
@@ -183,36 +171,28 @@ impl Session {
     ///
     /// * `password` - The password to login.
     /// * `remember` - If the password should be remembered.
-    pub fn login(password: &str, remember: bool) {
-        Session::send(Data::Login((password.to_owned(), remember)));
+    pub fn login(&self, password: &str, remember: bool) {
+        self.send(Data::Login((password.to_owned(), remember)));
     }
 
     /// Close the session.
-    pub fn close() {
-        Session::send(Data::Close);
-        SESSION.write().unwrap().take();
+    pub fn close(&self) {
+        self.send(Data::Close);
+        let _ = SESSIONS.write().unwrap().remove(&self.id);
     }
 
     /// Reconnect to the current session.
-    pub fn reconnect() {
-        if let Some(session) = SESSION.read().unwrap().as_ref() {
-            if let Some(sender) = session.sender.read().unwrap().as_ref() {
-                sender.send(Data::Close).ok();
-            }
-            let session = session.clone();
-            std::thread::spawn(move || {
-                Connection::start(session, false);
-            });
-        }
+    pub fn reconnect(&self) {
+        self.send(Data::Close);
+        let session = self.clone();
+        std::thread::spawn(move || {
+            Connection::start(session, false);
+        });
     }
 
     /// Get `remember` flag in [`LoginConfigHandler`].
-    pub fn get_remember() -> bool {
-        if let Some(session) = SESSION.read().unwrap().as_ref() {
-            session.lc.read().unwrap().remember
-        } else {
-            false
-        }
+    pub fn get_remember(&self) -> bool {
+        self.lc.read().unwrap().remember
     }
 
     /// Send message over the current session.
@@ -222,9 +202,7 @@ impl Session {
     /// * `msg` - The message to send.
     #[inline]
     pub fn send_msg(&self, msg: Message) {
-        if let Some(sender) = self.sender.read().unwrap().as_ref() {
-            sender.send(Data::Message(msg)).ok();
-        }
+        self.send(Data::Message(msg));
     }
 
     /// Send chat message over the current session.
@@ -232,7 +210,7 @@ impl Session {
     /// # Arguments
     ///
     /// * `text` - The message to send.
-    pub fn send_chat(text: String) {
+    pub fn send_chat(&self, text: String) {
         let mut misc = Misc::new();
         misc.set_chat_message(ChatMessage {
             text,
@@ -240,49 +218,46 @@ impl Session {
         });
         let mut msg_out = Message::new();
         msg_out.set_misc(misc);
-        Self::send_msg_static(msg_out);
+        self.send_msg(msg_out);
     }
 
+    // file trait
     /// Send file over the current session.
-    pub fn send_files(
-        id: i32,
-        path: String,
-        to: String,
-        file_num: i32,
-        include_hidden: bool,
-        is_remote: bool,
-    ) {
-        if let Some(session) = SESSION.write().unwrap().as_mut() {
-            session.send_files(id, path, to, file_num, include_hidden, is_remote);
-        }
-    }
+    // pub fn send_files(
+    //     id: i32,
+    //     path: String,
+    //     to: String,
+    //     file_num: i32,
+    //     include_hidden: bool,
+    //     is_remote: bool,
+    // ) {
+    //     if let Some(session) = SESSION.write().unwrap().as_mut() {
+    //         session.send_files(id, path, to, file_num, include_hidden, is_remote);
+    //     }
+    // }
 
+    // TODO into file trait
     /// Confirm file override.
     pub fn set_confirm_override_file(
+        &self,
         id: i32,
         file_num: i32,
         need_override: bool,
         remember: bool,
         is_upload: bool,
     ) {
-        if let Some(session) = SESSION.read().unwrap().as_ref() {
-            if let Some(sender) = session.sender.read().unwrap().as_ref() {
-                log::info!(
-                    "confirm file transfer, job: {}, need_override: {}",
-                    id,
-                    need_override
-                );
-                sender
-                    .send(Data::SetConfirmOverrideFile((
-                        id,
-                        file_num,
-                        need_override,
-                        remember,
-                        is_upload,
-                    )))
-                    .ok();
-            }
-        }
+        log::info!(
+            "confirm file transfer, job: {}, need_override: {}",
+            id,
+            need_override
+        );
+        self.send(Data::SetConfirmOverrideFile((
+            id,
+            file_num,
+            need_override,
+            remember,
+            is_upload,
+        )));
     }
 
     /// Static method to send message over the current session.
@@ -290,12 +265,12 @@ impl Session {
     /// # Arguments
     ///
     /// * `msg` - The message to send.
-    #[inline]
-    pub fn send_msg_static(msg: Message) {
-        if let Some(session) = SESSION.read().unwrap().as_ref() {
-            session.send_msg(msg);
-        }
-    }
+    // #[inline]
+    // pub fn send_msg_static(msg: Message) {
+    //     if let Some(session) = SESSION.read().unwrap().as_ref() {
+    //         session.send_msg(msg);
+    //     }
+    // }
 
     /// Push an event to the event queue.
     /// An event is stored as json in the event queue.
@@ -308,10 +283,8 @@ impl Session {
         let mut h: HashMap<&str, &str> = event.iter().cloned().collect();
         assert!(h.get("name").is_none());
         h.insert("name", name);
-
-        if let Some(s) = EVENT_STREAM.read().unwrap().as_ref() {
-            s.add(serde_json::ser::to_string(&h).unwrap_or("".to_owned()));
-        };
+        let out = serde_json::ser::to_string(&h).unwrap_or("".to_owned());
+        self.events2ui.read().unwrap().add(EventToUI::Event(out));
     }
 
     /// Get platform of peer.
@@ -321,15 +294,13 @@ impl Session {
     }
 
     /// Quick method for sending a ctrl_alt_del command.
-    pub fn ctrl_alt_del() {
-        if let Some(session) = SESSION.read().unwrap().as_ref() {
-            if session.peer_platform() == "Windows" {
-                let k = Key::ControlKey(ControlKey::CtrlAltDel);
-                session.key_down_or_up(1, k, false, false, false, false);
-            } else {
-                let k = Key::ControlKey(ControlKey::Delete);
-                session.key_down_or_up(3, k, true, true, false, false);
-            }
+    pub fn ctrl_alt_del(&self) {
+        if self.peer_platform() == "Windows" {
+            let k = Key::ControlKey(ControlKey::CtrlAltDel);
+            self.key_down_or_up(1, k, false, false, false, false);
+        } else {
+            let k = Key::ControlKey(ControlKey::Delete);
+            self.key_down_or_up(3, k, true, true, false, false);
         }
     }
 
@@ -338,7 +309,7 @@ impl Session {
     /// # Arguments
     ///
     /// * `display` - The display to switch to.
-    pub fn switch_display(display: i32) {
+    pub fn switch_display(&self, display: i32) {
         let mut misc = Misc::new();
         misc.set_switch_display(SwitchDisplay {
             display,
@@ -346,15 +317,13 @@ impl Session {
         });
         let mut msg_out = Message::new();
         msg_out.set_misc(misc);
-        Self::send_msg_static(msg_out);
+        self.send_msg(msg_out);
     }
 
     /// Send lock screen command.
-    pub fn lock_screen() {
-        if let Some(session) = SESSION.read().unwrap().as_ref() {
-            let k = Key::ControlKey(ControlKey::LockScreen);
-            session.key_down_or_up(1, k, false, false, false, false);
-        }
+    pub fn lock_screen(&self) {
+        let k = Key::ControlKey(ControlKey::LockScreen);
+        self.key_down_or_up(1, k, false, false, false, false);
     }
 
     /// Send key input command.
@@ -369,6 +338,7 @@ impl Session {
     /// * `shift` - If the shift key is also pressed.
     /// * `command` - If the command key is also pressed.
     pub fn input_key(
+        &self,
         name: &str,
         down: bool,
         press: bool,
@@ -377,15 +347,13 @@ impl Session {
         shift: bool,
         command: bool,
     ) {
-        if let Some(session) = SESSION.read().unwrap().as_ref() {
-            let chars: Vec<char> = name.chars().collect();
-            if chars.len() == 1 {
-                let key = Key::_Raw(chars[0] as _);
-                session._input_key(key, down, press, alt, ctrl, shift, command);
-            } else {
-                if let Some(key) = KEY_MAP.get(name) {
-                    session._input_key(key.clone(), down, press, alt, ctrl, shift, command);
-                }
+        let chars: Vec<char> = name.chars().collect();
+        if chars.len() == 1 {
+            let key = Key::_Raw(chars[0] as _);
+            self._input_key(key, down, press, alt, ctrl, shift, command);
+        } else {
+            if let Some(key) = KEY_MAP.get(name) {
+                self._input_key(key.clone(), down, press, alt, ctrl, shift, command);
             }
         }
     }
@@ -395,13 +363,13 @@ impl Session {
     ///
     /// # Arguments
     ///
-    /// * `value` - The text to input.
-    pub fn input_string(value: &str) {
+    /// * `value` - The text to input. TODO &str -> String
+    pub fn input_string(&self, value: &str) {
         let mut key_event = KeyEvent::new();
         key_event.set_seq(value.to_owned());
         let mut msg_out = Message::new();
         msg_out.set_key_event(key_event);
-        Self::send_msg_static(msg_out);
+        self.send_msg(msg_out);
     }
 
     fn _input_key(
@@ -425,6 +393,7 @@ impl Session {
     }
 
     pub fn send_mouse(
+        &self,
         mask: i32,
         x: i32,
         y: i32,
@@ -433,9 +402,7 @@ impl Session {
         shift: bool,
         command: bool,
     ) {
-        if let Some(session) = SESSION.read().unwrap().as_ref() {
-            send_mouse(mask, x, y, alt, ctrl, shift, command, session);
-        }
+        send_mouse(mask, x, y, alt, ctrl, shift, command, self);
     }
 
     fn key_down_or_up(
@@ -705,11 +672,11 @@ impl Connection {
                     if !self.first_frame {
                         self.first_frame = true;
                     }
-                    if let (Ok(true), Some(s)) = (
-                        self.video_handler.handle_frame(vf),
-                        RGBA_STREAM.read().unwrap().as_ref(),
-                    ) {
-                        s.add(ZeroCopyBuffer(self.video_handler.rgb.clone()));
+                    if let Ok(true) = self.video_handler.handle_frame(vf) {
+                        let stream = self.session.events2ui.read().unwrap();
+                        stream.add(EventToUI::Rgba(ZeroCopyBuffer(
+                            self.video_handler.rgb.clone(),
+                        )));
                     }
                 }
                 Some(message::Union::hash(hash)) => {
@@ -1303,7 +1270,7 @@ pub mod connection_manager {
     use scrap::android::call_main_service_set_by_name;
     use serde_derive::Serialize;
 
-    use super::EVENT_STREAM;
+    use super::GLOBAL_EVENT_STREAM;
 
     #[derive(Debug, Serialize, Clone)]
     struct Client {
@@ -1411,7 +1378,7 @@ pub mod connection_manager {
         assert!(h.get("name").is_none());
         h.insert("name", name);
 
-        if let Some(s) = EVENT_STREAM.read().unwrap().as_ref() {
+        if let Some(s) = GLOBAL_EVENT_STREAM.read().unwrap().as_ref() {
             s.add(serde_json::ser::to_string(&h).unwrap_or("".to_owned()));
         };
     }

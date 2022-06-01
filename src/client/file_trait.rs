@@ -1,16 +1,13 @@
 use super::{Data, Interface};
-use hbb_common::{
-    fs,
-    message_proto::*,
-};
+use hbb_common::{fs, message_proto::*};
 
 pub trait FileManager: Interface {
-    fn get_home_dir(&self) -> String{
+    fn get_home_dir(&self) -> String {
         fs::get_home_as_string()
     }
 
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    fn read_dir(&self,path: String, include_hidden: bool) -> sciter::Value {
+    fn read_dir(&self, path: String, include_hidden: bool) -> sciter::Value {
         match fs::read_dir(&fs::get_path(&path), include_hidden) {
             Err(_) => sciter::Value::null(),
             Ok(fd) => {
@@ -23,15 +20,15 @@ pub trait FileManager: Interface {
     }
 
     #[cfg(any(target_os = "android", target_os = "ios"))]
-    fn read_dir(&self,path: &str, include_hidden: bool) -> String {
+    fn read_dir(&self, path: &str, include_hidden: bool) -> String {
         use crate::flutter::make_fd_to_json;
-        match fs::read_dir(&fs::get_path(path), include_hidden){
+        match fs::read_dir(&fs::get_path(path), include_hidden) {
             Ok(fd) => make_fd_to_json(fd),
-            Err(_)=>"".into()
+            Err(_) => "".into(),
         }
     }
 
-    fn cancel_job(&mut self, id: i32) {
+    fn cancel_job(&self, id: i32) {
         self.send(Data::CancelJob(id));
     }
 
@@ -47,23 +44,23 @@ pub trait FileManager: Interface {
         self.send(Data::Message(msg_out));
     }
 
-    fn remove_file(&mut self, id: i32, path: String, file_num: i32, is_remote: bool) {
+    fn remove_file(&self, id: i32, path: String, file_num: i32, is_remote: bool) {
         self.send(Data::RemoveFile((id, path, file_num, is_remote)));
     }
 
-    fn remove_dir_all(&mut self, id: i32, path: String, is_remote: bool) {
+    fn remove_dir_all(&self, id: i32, path: String, is_remote: bool) {
         self.send(Data::RemoveDirAll((id, path, is_remote)));
     }
 
-    fn confirm_delete_files(&mut self, id: i32, file_num: i32) {
+    fn confirm_delete_files(&self, id: i32, file_num: i32) {
         self.send(Data::ConfirmDeleteFiles((id, file_num)));
     }
 
-    fn set_no_confirm(&mut self, id: i32) {
+    fn set_no_confirm(&self, id: i32) {
         self.send(Data::SetNoConfirm(id));
     }
 
-    fn remove_dir(&mut self, id: i32, path: String, is_remote: bool) {
+    fn remove_dir(&self, id: i32, path: String, is_remote: bool) {
         if is_remote {
             self.send(Data::RemoveDir((id, path)));
         } else {
@@ -71,12 +68,12 @@ pub trait FileManager: Interface {
         }
     }
 
-    fn create_dir(&mut self, id: i32, path: String, is_remote: bool) {
+    fn create_dir(&self, id: i32, path: String, is_remote: bool) {
         self.send(Data::CreateDir((id, path, is_remote)));
     }
 
     fn send_files(
-        &mut self,
+        &self,
         id: i32,
         path: String,
         to: String,
@@ -84,7 +81,14 @@ pub trait FileManager: Interface {
         include_hidden: bool,
         is_remote: bool,
     ) {
-        self.send(Data::SendFiles((id, path, to, file_num, include_hidden, is_remote)));
+        self.send(Data::SendFiles((
+            id,
+            path,
+            to,
+            file_num,
+            include_hidden,
+            is_remote,
+        )));
     }
 
     fn add_job(
@@ -96,10 +100,17 @@ pub trait FileManager: Interface {
         include_hidden: bool,
         is_remote: bool,
     ) {
-        self.send(Data::AddJob((id, path, to, file_num, include_hidden, is_remote)));
+        self.send(Data::AddJob((
+            id,
+            path,
+            to,
+            file_num,
+            include_hidden,
+            is_remote,
+        )));
     }
 
-    fn resume_job(&mut self, id: i32, is_remote: bool){
-        self.send(Data::ResumeJob((id,is_remote)));
+    fn resume_job(&mut self, id: i32, is_remote: bool) {
+        self.send(Data::ResumeJob((id, is_remote)));
     }
 }
