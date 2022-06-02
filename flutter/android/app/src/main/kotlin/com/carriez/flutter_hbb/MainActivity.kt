@@ -1,5 +1,12 @@
 package com.carriez.flutter_hbb
 
+/**
+ * Handle events from flutter
+ * Request MediaProjection permission
+ *
+ * Inspired by [droidVNC-NG] https://github.com/bk138/droidVNC-NG
+ */
+
 import android.app.Activity
 import android.content.ComponentName
 import android.content.Context

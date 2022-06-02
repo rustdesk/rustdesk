@@ -168,6 +168,7 @@ class FfiModel with ChangeNotifier {
   }
 
   void handleSwitchDisplay(Map<String, dynamic> evt) {
+    final oldOrientation = _display.width > _display.height;
     var old = _pi.currentDisplay;
     _pi.currentDisplay = int.parse(evt['display']);
     _display.x = double.parse(evt['x']);
@@ -176,6 +177,11 @@ class FfiModel with ChangeNotifier {
     _display.height = int.parse(evt['height']);
     if (old != _pi.currentDisplay)
       FFI.cursorModel.updateDisplayOrigin(_display.x, _display.y);
+
+    // remote is mobile, and orientation changed
+    if ((_display.width > _display.height) != oldOrientation) {
+      FFI.canvasModel.updateViewStyle();
+    }
     notifyListeners();
   }
 

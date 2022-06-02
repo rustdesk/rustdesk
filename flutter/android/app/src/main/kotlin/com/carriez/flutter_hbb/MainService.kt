@@ -1,8 +1,11 @@
+package com.carriez.flutter_hbb
+
 /**
  * Capture screen,get video and audio,send to rust.
- * Handle notification
+ * Dispatch notifications
+ *
+ * Inspired by [droidVNC-NG] https://github.com/bk138/droidVNC-NG
  */
-package com.carriez.flutter_hbb
 
 import android.Manifest
 import android.annotation.SuppressLint
