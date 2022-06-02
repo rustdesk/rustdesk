@@ -12,16 +12,16 @@ class DesktopTitleBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Expanded(
-      child: Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-              colors: [backgroundStartColor, backgroundEndColor],
-              stops: [0.0, 1.0]),
-        ),
-        child: WindowTitleBarBox(
+    return Container(
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [backgroundStartColor, backgroundEndColor],
+            stops: [0.0, 1.0]),
+      ),
+      child: WindowTitleBarBox(
+        child: SizedBox(
           child: Row(
             children: [
               Expanded(

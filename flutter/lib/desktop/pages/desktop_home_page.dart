@@ -20,20 +20,16 @@ class _DesktopHomePageState extends State<DesktopHomePage> {
     return Scaffold(
       body: Column(
         children: [
-          Row(
-            children: [
-              DesktopTitleBar(
-                child: Center(
-                  child: Text(
-                    "RustDesk",
-                    style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold),
-                  ),
-                ),
-              )
-            ],
+          DesktopTitleBar(
+            child: Center(
+              child: Text(
+                "RustDesk",
+                style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold),
+              ),
+            ),
           ),
           Expanded(
             child: Container(
