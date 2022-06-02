@@ -16,6 +16,8 @@ Chat with us: [Discord](https://discord.gg/nDceKgxnkV) | [Twitter](https://twitt
 
 Yet another remote desktop software, written in Rust. Works out of the box, no configuration required. You have full control of your data, with no concerns about security. You can use our rendezvous/relay server, [set up your own](https://rustdesk.com/server), or [write your own rendezvous/relay server](https://github.com/rustdesk/rustdesk-server-demo).
 
+![image](https://user-images.githubusercontent.com/71636191/171661982-430285f0-2e12-4b1d-9957-4a58e375304d.png)
+
 RustDesk welcomes contribution from everyone. See [`CONTRIBUTING.md`](CONTRIBUTING.md) for help getting started.
 
 [**How does RustDesk work?**](https://github.com/rustdesk/rustdesk/wiki/How-does-RustDesk-work%3F)
