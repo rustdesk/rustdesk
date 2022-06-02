@@ -1091,10 +1091,6 @@ fn write_cmds(cmds: String, ext: &str) -> ResultType<std::path::PathBuf> {
         cmds.as_ptr(),
         ext
     ));
-    let mut cmds = cmds;
-    if ext == "cmd" {
-        cmds = format!("{}\ndel /f \"{}\"", cmds, tmp.to_str().unwrap_or(""));
-    }
     let mut file = std::fs::File::create(&tmp)?;
     // in case cmds mixed with \r\n and \n, make sure all ending with \r\n
     // in some windows, \r\n required for cmd file to run
@@ -1118,14 +1114,19 @@ fn to_le(v: &mut [u16]) -> &[u8] {
 }
 
 fn run_cmds(cmds: String, show: bool) -> ResultType<()> {
-    let tmp = write_cmds(cmds, "cmd")?;
-    let res = runas::Command::new(tmp.to_str().unwrap_or(""))
+    let tmp = write_cmds(cmds, "bat")?;
+    let tmp_fn = tmp.to_str().unwrap_or("");
+    let res = runas::Command::new("cmd")
+        .args(&["/C", &tmp_fn])
         .show(show)
         .force_prompt(true)
         .status();
-    // double confirm delete, because below delete not work if program
-    // exit immediately such as --uninstall
-    allow_err!(std::fs::remove_file(tmp));
+    // leave the file for debug if execution failed
+    if let Ok(res) = res {
+        if res.success() {
+            allow_err!(std::fs::remove_file(tmp));
+        }
+    }
     let _ = res?;
     Ok(())
 }
