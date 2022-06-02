@@ -52,12 +52,7 @@ class _ConnectionPageState extends State<ConnectionPage> {
           crossAxisAlignment: CrossAxisAlignment.center,
           children: <Widget>[
             getUpdateUI(),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.start,
-              children: [
-                getSearchBarUI(),
-              ],
-            ),
+            getSearchBarUI(),
             SizedBox(height: 12),
             getPeers(),
           ]),
