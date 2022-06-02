@@ -1,5 +1,3 @@
-#[cfg(target_os = "macos")]
-mod macos;
 use crate::common::SOFTWARE_UPDATE_URL;
 use crate::ipc;
 use hbb_common::{
