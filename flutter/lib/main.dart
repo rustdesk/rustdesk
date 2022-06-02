@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_hbb/desktop/pages/desktop_home_page.dart';
 import 'package:flutter_hbb/desktop/screen/desktop_remote_screen.dart';
 import 'package:flutter_hbb/utils/multi_window_manager.dart';
+import 'package:flutter_hbb/utils/tray_manager.dart';
 import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
 import 'package:provider/provider.dart';
 import 'package:window_manager/window_manager.dart';
@@ -52,6 +53,7 @@ void runRustDeskApp(List<String> args) async {
         break;
     }
   } else {
+    initTray();
     FFI.serverModel.startService();
     runApp(App());
     doWhenWindowReady(() {

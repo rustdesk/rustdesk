@@ -64,37 +64,34 @@ class _ConnectionTabPageState extends State<ConnectionTabPage>
         animationDuration: Duration.zero,
         child: Column(
           children: [
-            SizedBox(
-              height: 50,
-              child: DesktopTitleBar(
-                child: TabBar(
-                    isScrollable: true,
-                    labelColor: Colors.white,
-                    physics: NeverScrollableScrollPhysics(),
-                    indicatorColor: Colors.white,
-                    tabs: connectionIds
-                        .map((e) => Tab(
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                crossAxisAlignment: CrossAxisAlignment.center,
-                                children: [
-                                  Text(e),
-                                  SizedBox(
-                                    width: 4,
-                                  ),
-                                  InkWell(
-                                      onTap: () {
-                                        onRemoveId(e);
-                                      },
-                                      child: Icon(
-                                        Icons.highlight_remove,
-                                        size: 20,
-                                      ))
-                                ],
-                              ),
-                            ))
-                        .toList()),
-              ),
+            DesktopTitleBar(
+              child: TabBar(
+                  isScrollable: true,
+                  labelColor: Colors.white,
+                  physics: NeverScrollableScrollPhysics(),
+                  indicatorColor: Colors.white,
+                  tabs: connectionIds
+                      .map((e) => Tab(
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              crossAxisAlignment: CrossAxisAlignment.center,
+                              children: [
+                                Text(e),
+                                SizedBox(
+                                  width: 4,
+                                ),
+                                InkWell(
+                                    onTap: () {
+                                      onRemoveId(e);
+                                    },
+                                    child: Icon(
+                                      Icons.highlight_remove,
+                                      size: 20,
+                                    ))
+                              ],
+                            ),
+                          ))
+                      .toList()),
             ),
             Expanded(
               child: TabBarView(

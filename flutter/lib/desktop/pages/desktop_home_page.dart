@@ -1,9 +1,13 @@
-import 'package:flutter/material.dart';
+import 'dart:io';
+
+import 'package:flutter/material.dart' hide MenuItem;
 import 'package:flutter_hbb/common.dart';
 import 'package:flutter_hbb/desktop/pages/connection_page.dart';
 import 'package:flutter_hbb/desktop/widgets/titlebar_widget.dart';
 import 'package:flutter_hbb/models/model.dart';
 import 'package:provider/provider.dart';
+import 'package:tray_manager/tray_manager.dart';
+import 'package:window_manager/window_manager.dart';
 
 class DesktopHomePage extends StatefulWidget {
   DesktopHomePage({Key? key}) : super(key: key);
@@ -14,26 +18,22 @@ class DesktopHomePage extends StatefulWidget {
 
 const borderColor = Color(0xFF2F65BA);
 
-class _DesktopHomePageState extends State<DesktopHomePage> {
+class _DesktopHomePageState extends State<DesktopHomePage> with TrayListener {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       body: Column(
         children: [
-          Row(
-            children: [
-              DesktopTitleBar(
-                child: Center(
-                  child: Text(
-                    "RustDesk",
-                    style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold),
-                  ),
-                ),
-              )
-            ],
+          DesktopTitleBar(
+            child: Center(
+              child: Text(
+                "RustDesk",
+                style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold),
+              ),
+            ),
           ),
           Expanded(
             child: Container(
@@ -206,5 +206,31 @@ class _DesktopHomePageState extends State<DesktopHomePage> {
 
   buildRecentSession(BuildContext context) {
     return Center(child: Text("waiting implementation"));
+  }
+
+  @override
+  void onTrayMenuItemClick(MenuItem menuItem) {
+    print("click ${menuItem.key}");
+    switch (menuItem.key) {
+      case "quit":
+        exit(0);
+      case "show":
+        windowManager.show();
+        break;
+      default:
+        break;
+    }
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    trayManager.addListener(this);
+  }
+
+  @override
+  void dispose() {
+    trayManager.removeListener(this);
+    super.dispose();
   }
 }
