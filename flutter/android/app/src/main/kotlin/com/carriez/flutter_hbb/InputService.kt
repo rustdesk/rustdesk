@@ -1,5 +1,11 @@
 package com.carriez.flutter_hbb
 
+/**
+ * Handle remote input and dispatch android gesture
+ *
+ * Inspired by [droidVNC-NG] https://github.com/bk138/droidVNC-NG
+ */
+
 import android.accessibilityservice.AccessibilityService
 import android.accessibilityservice.GestureDescription
 import android.content.Context
