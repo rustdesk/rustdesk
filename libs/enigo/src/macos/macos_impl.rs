@@ -495,6 +495,10 @@ impl Enigo {
 
     #[inline]
     fn map_key_board(&mut self, ch: char) -> CGKeyCode {
+        // no idea why below char not working with shift, https://github.com/rustdesk/rustdesk/issues/406#issuecomment-1145157327
+        if ch == '-' || ch == '=' || (ch >= '0' && ch <= '9') {
+            return self.map_key_board_en(ch);
+        }
         let mut code = 0;
         unsafe {
             let (keyboard, layout) = get_layout();
@@ -520,6 +524,11 @@ impl Enigo {
         if code > 0 {
             return code;
         }
+        self.map_key_board_en(ch)
+    }
+
+    #[inline]
+    fn map_key_board_en(&mut self, ch: char) -> CGKeyCode {
         match ch {
             'a' => kVK_ANSI_A,
             'b' => kVK_ANSI_B,
