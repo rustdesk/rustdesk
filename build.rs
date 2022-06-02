@@ -27,6 +27,20 @@ fn build_manifest() {
     }
 }
 
+#[cfg(all(windows, feature = "with_rc"))]
+fn build_rc_source() {
+    use simple_rc::{generate_with_conf, Config, ConfigItem};
+    generate_with_conf(&Config {
+        outfile: "src/rc.rs".to_owned(),
+        confs: vec![ConfigItem {
+            inc: "resources".to_owned(),
+            exc: vec![],
+            suppressed_front: "resources".to_owned(),
+        }],
+    })
+    .unwrap();
+}
+
 fn install_oboe() {
     let target_os = std::env::var("CARGO_CFG_TARGET_OS").unwrap();
     if target_os != "android" {
@@ -87,6 +101,8 @@ fn main() {
         gen_flutter_rust_bridge();
         return;
     }
+    #[cfg(all(windows, feature = "with_rc"))]
+    build_rc_source();
     #[cfg(all(windows, feature = "inline"))]
     build_manifest();
     #[cfg(windows)]

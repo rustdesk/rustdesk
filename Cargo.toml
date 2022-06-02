@@ -19,6 +19,7 @@ path = "src/naming.rs"
 inline = []
 hbbs = []
 cli = []
+with_rc = ["simple_rc"]
 use_samplerate = ["samplerate"]
 use_rubato = ["rubato"]
 use_dasp = ["dasp"]
@@ -79,6 +80,7 @@ winit = "0.25"
 winapi = { version = "0.3", features = ["winuser"] }
 winreg = "0.10"
 windows-service = "0.4"
+virtual_display = { path = "libs/virtual_display" }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 objc = "0.2"
@@ -103,7 +105,7 @@ jni = "0.19.0"
 flutter_rust_bridge = "1.30.0"
 
 [workspace]
-members = ["libs/scrap", "libs/hbb_common", "libs/enigo", "libs/clipboard", "libs/virtual_display"]
+members = ["libs/scrap", "libs/hbb_common", "libs/enigo", "libs/clipboard", "libs/virtual_display", "libs/simple_rc"]
 
 [package.metadata.winres]
 LegalCopyright = "Copyright © 2022 Purslane, Inc."
@@ -117,6 +119,7 @@ winapi = { version = "0.3", features = [ "winnt" ] }
 [build-dependencies]
 cc = "1.0"
 hbb_common = { path = "libs/hbb_common" }
+simple_rc = { path = "libs/simple_rc", optional = true }
 flutter_rust_bridge_codegen = "1.30.0"
 
 [dev-dependencies]

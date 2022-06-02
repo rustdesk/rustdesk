@@ -104,6 +104,10 @@ fn main() {
                     "".to_owned()
                 ));
                 return;
+            } else if args[0] == "--extract" {
+                #[cfg(feature = "with_rc")]
+                hbb_common::allow_err!(crate::rc::extract_resources(&args[1]));
+                return;
             }
         }
         if args[0] == "--remove" {

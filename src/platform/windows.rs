@@ -9,7 +9,7 @@ use hbb_common::{
 use std::io::prelude::*;
 use std::{
     ffi::OsString,
-    io, mem,
+    fs, io, mem,
     sync::{Arc, Mutex},
     time::{Duration, Instant},
 };
@@ -404,6 +404,7 @@ extern "C" {
     fn has_rdp_service() -> BOOL;
     fn get_current_session(rdp: BOOL) -> DWORD;
     fn LaunchProcessWin(cmd: *const u16, session_id: DWORD, as_user: BOOL) -> HANDLE;
+    fn GetSessionUserTokenWin(lphUserToken: LPHANDLE, dwSessionId: DWORD, as_user: BOOL) -> BOOL;
     fn selectInputDesktop() -> BOOL;
     fn inputDesktopSelected() -> BOOL;
     fn is_windows_server() -> BOOL;
@@ -558,7 +559,7 @@ async fn launch_server(session_id: DWORD, close_first: bool) -> ResultType<HANDL
     let wstr = wstr.as_ptr();
     let h = unsafe { LaunchProcessWin(wstr, session_id, FALSE) };
     if h.is_null() {
-        log::error!("Failed to luanch server: {}", get_error());
+        log::error!("Failed to launch server: {}", get_error());
     }
     Ok(h)
 }
@@ -796,6 +797,49 @@ fn get_default_install_path() -> String {
     format!("{}\\{}", pf, crate::get_app_name())
 }
 
+pub fn check_update_broker_process() -> ResultType<()> {
+    // let (_, path, _, _) = get_install_info();
+    let process_exe = crate::ui::win_privacy::INJECTED_PROCESS_EXE;
+    let origin_process_exe = crate::ui::win_privacy::ORIGIN_PROCESS_EXE;
+
+    let exe_file = std::env::current_exe()?;
+    if exe_file.parent().is_none() {
+        bail!("Cannot get parent of current exe file");
+    }
+    let cur_dir = exe_file.parent().unwrap();
+    let cur_exe = cur_dir.join(process_exe);
+
+    let ori_modified = fs::metadata(origin_process_exe)?.modified()?;
+    if let Ok(metadata) = fs::metadata(&cur_exe) {
+        if let Ok(cur_modified) = metadata.modified() {
+            if cur_modified == ori_modified {
+                return Ok(());
+            } else {
+                log::info!(
+                    "broker process updated, modify time from {:?} to {:?}",
+                    cur_modified,
+                    ori_modified
+                );
+            }
+        }
+    }
+
+    // Force update broker exe if failed to check modified time.
+    let cmds = format!(
+        "
+        chcp 65001
+        taskkill /F /IM {broker_exe}
+        copy /Y \"{origin_process_exe}\" \"{cur_exe}\"
+    ",
+        broker_exe = process_exe,
+        origin_process_exe = origin_process_exe,
+        cur_exe = cur_exe.to_string_lossy().to_string(),
+    );
+    run_cmds(cmds, false)?;
+
+    Ok(())
+}
+
 fn get_install_info_with_subkey(subkey: String) -> (String, String, String, String) {
     let mut path = get_reg_of(&subkey, "InstallLocation");
     if path.is_empty() {
@@ -811,19 +855,23 @@ fn get_install_info_with_subkey(subkey: String) -> (String, String, String, Stri
 }
 
 pub fn update_me() -> ResultType<()> {
-    let (_, _, _, exe) = get_install_info();
+    let (_, path, _, exe) = get_install_info();
     let src_exe = std::env::current_exe()?.to_str().unwrap_or("").to_owned();
     let cmds = format!(
         "
         chcp 65001
         sc stop {app_name}
+        taskkill /F /IM {broker_exe}
         taskkill /F /IM {app_name}.exe
         copy /Y \"{src_exe}\" \"{exe}\"
+        \"{src_exe}\" --extract \"{path}\"
         sc start {app_name}
         {lic}
     ",
         src_exe = src_exe,
         exe = exe,
+        broker_exe = crate::ui::win_privacy::INJECTED_PROCESS_EXE,
+        path = path,
         app_name = crate::get_app_name(),
         lic = register_licence(),
     );
@@ -975,6 +1023,8 @@ copy /Y \"{tmp_path}\\Uninstall {app_name}.lnk\" \"{start_menu}\\\"
 chcp 65001
 md \"{path}\"
 copy /Y \"{src_exe}\" \"{exe}\"
+copy /Y \"{ORIGIN_PROCESS_EXE}\" \"{path}\\{broker_exe}\"
+\"{src_exe}\" --extract \"{path}\"
 reg add {subkey} /f
 reg add {subkey} /f /v DisplayIcon /t REG_SZ /d \"{exe}\"
 reg add {subkey} /f /v DisplayName /t REG_SZ /d \"{app_name}\"
@@ -1010,6 +1060,8 @@ sc delete {app_name}
         path=path,
         src_exe=std::env::current_exe()?.to_str().unwrap_or(""),
         exe=exe,
+        ORIGIN_PROCESS_EXE = crate::ui::win_privacy::ORIGIN_PROCESS_EXE,
+        broker_exe=crate::ui::win_privacy::INJECTED_PROCESS_EXE,
         subkey=subkey,
         app_name=crate::get_app_name(),
         version=crate::VERSION,
@@ -1051,11 +1103,13 @@ fn get_before_uninstall() -> String {
     chcp 65001
     sc stop {app_name}
     sc delete {app_name}
+    taskkill /F /IM {broker_exe}
     taskkill /F /IM {app_name}.exe
     reg delete HKEY_CLASSES_ROOT\\.{ext} /f
     netsh advfirewall firewall delete rule name=\"{app_name} Service\"
     ",
         app_name = app_name,
+        broker_exe = crate::ui::win_privacy::INJECTED_PROCESS_EXE,
         ext = ext
     )
 }
@@ -1325,4 +1379,21 @@ pub fn get_win_key_state() -> bool {
 pub fn quit_gui() {
     std::process::exit(0);
     // unsafe { PostQuitMessage(0) }; // some how not work
+}
+
+pub fn get_user_token(session_id: u32, as_user: bool) -> HANDLE {
+    let mut token = NULL as HANDLE;
+    unsafe {
+        if FALSE
+            == GetSessionUserTokenWin(
+                &mut token as _,
+                session_id,
+                if as_user { TRUE } else { FALSE },
+            )
+        {
+            NULL as _
+        } else {
+            token
+        }
+    }
 }

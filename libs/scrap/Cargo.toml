@@ -17,11 +17,12 @@ block = "0.1"
 cfg-if = "1.0"
 libc = "0.2"
 num_cpus = "1.13"
+lazy_static = "1.4"
 
 [dependencies.winapi]
 version = "0.3"
 default-features = true
-features = ["dxgi", "dxgi1_2", "dxgi1_5", "d3d11", "winuser"]
+features = ["dxgi", "dxgi1_2", "dxgi1_5", "d3d11", "winuser", "winerror", "errhandlingapi", "libloaderapi"]
 
 [target.'cfg(target_os = "android")'.dependencies]
 android_logger = "0.10"

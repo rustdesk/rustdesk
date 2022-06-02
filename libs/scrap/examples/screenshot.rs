@@ -46,8 +46,7 @@ fn record(i: usize) {
                 }
             }
         };
-
-        println!("Captured! Saving...");
+        println!("Captured data len: {}, Saving...", buffer.len());
 
         // Flip the BGRA image into a RGBA image.
 
@@ -96,8 +95,7 @@ fn record(i: usize) {
                 }
             }
         };
-
-        println!("Captured! Saving...");
+        println!("Captured data len: {}, Saving...", buffer.len());
 
         let mut frame = Default::default();
         i420_to_rgb(w, h, &buffer, &mut frame);

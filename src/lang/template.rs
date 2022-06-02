@@ -270,5 +270,16 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Quit", ""),
         ("doc_mac_permission", ""),
         ("Help", ""),
+        ("Failed", ""),
+        ("Succeeded", ""),
+        ("Someone turns on privacy mode, exit", ""),
+        ("Unsupported", ""),
+        ("Peer denied", ""),
+        ("Please install plugins", ""),
+        ("Peer exit", ""),
+        ("Failed to turn off", ""),
+        ("Turned off", ""),
+        ("In privacy mode", ""),
+        ("Out privacy mode", ""),
     ].iter().cloned().collect();
 }

@@ -773,6 +773,7 @@ pub struct LoginConfigHandler {
     pub port_forward: (String, i32),
     pub version: i64,
     pub conn_id: i32,
+    features: Option<Features>,
 }
 
 impl Deref for LoginConfigHandler {
@@ -866,11 +867,11 @@ impl LoginConfigHandler {
             })
             .into();
         } else if name == "privacy-mode" {
-            config.privacy_mode = !config.privacy_mode;
+            // try toggle privacy mode
             option.privacy_mode = (if config.privacy_mode {
-                BoolOption::Yes
-            } else {
                 BoolOption::No
+            } else {
+                BoolOption::Yes
             })
             .into();
         } else if name == "enable-file-transfer" {
@@ -992,6 +993,14 @@ impl LoginConfigHandler {
         }
     }
 
+    pub fn is_privacy_mode_supported(&self) -> bool {
+        if let Some(features) = &self.features {
+            features.privacy_mode
+        } else {
+            false
+        }
+    }
+
     pub fn refresh() -> Message {
         let mut misc = Misc::new();
         misc.set_refresh_video(true);
@@ -1064,6 +1073,7 @@ impl LoginConfigHandler {
         if !pi.version.is_empty() {
             self.version = hbb_common::get_version_number(&pi.version);
         }
+        self.features = pi.features.into_option();
         let serde = PeerInfoSerde {
             username,
             hostname: pi.hostname.clone(),

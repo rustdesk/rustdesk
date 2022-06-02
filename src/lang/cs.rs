@@ -270,5 +270,16 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Quit", "Ukončit"),
         ("doc_mac_permission", "https://rustdesk.com/docs/en/manual/mac/#enable-permissions"),
         ("Help", "Nápověda"),
+        ("Failed", "Nepodařilo se"),
+        ("Succeeded", "Uspěl"),
+        ("Someone turns on privacy mode, exit", "Někdo zapne režim soukromí, ukončete ho"),
+        ("Unsupported", "Nepodporováno"),
+        ("Peer denied", "Peer popřel"),
+        ("Please install plugins", "Nainstalujte si prosím pluginy"),
+        ("Peer exit", "Peer exit"),
+        ("Failed to turn off", "Nepodařilo se vypnout"),
+        ("Turned off", "Vypnutý"),
+        ("In privacy mode", "v režimu soukromí"),
+        ("Out privacy mode", "mimo režim soukromí"),
     ].iter().cloned().collect();
 }
