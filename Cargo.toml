@@ -42,7 +42,7 @@ libc = "0.2"
 parity-tokio-ipc = { git = "https://github.com/open-trade/parity-tokio-ipc" }
 flexi_logger = { version = "0.22", features = ["async", "use_chrono_for_offset"] }
 runas = "0.2"
-magnum-opus = { git = "https://github.com/open-trade/magnum-opus" }
+magnum-opus = { git = "https://github.com/SoLongAndThanksForAllThePizza/magnum-opus" }
 dasp = { version = "0.11", features = ["signal", "interpolate-linear", "interpolate"], optional = true }
 rubato = { version = "0.12", optional = true }
 samplerate = { version = "0.2", optional = true }
@@ -53,7 +53,7 @@ rpassword = "6.0"
 base64 = "0.13"
 sysinfo = "0.23"
 num_cpus = "1.13"
-flutter_rust_bridge = { version = "1.30.0", optional = true }
+flutter_rust_bridge = { git = "https://github.com/SoLongAndThanksForAllThePizza/flutter_rust_bridge", optional = true }
 
 [target.'cfg(not(target_os = "linux"))'.dependencies]
 reqwest = { version = "0.11", features = ["json", "rustls-tls"], default-features=false }
@@ -102,7 +102,7 @@ android_logger = "0.11"
 jni = "0.19.0"
 
 [target.'cfg(any(target_os = "android", target_os = "ios"))'.dependencies]
-flutter_rust_bridge = "1.30.0"
+flutter_rust_bridge = { git = "https://github.com/SoLongAndThanksForAllThePizza/flutter_rust_bridge" }
 
 [workspace]
 members = ["libs/scrap", "libs/hbb_common", "libs/enigo", "libs/clipboard", "libs/virtual_display"]
