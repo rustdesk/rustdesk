@@ -14,7 +14,7 @@ Chat with us: [Discord](https://discord.gg/nDceKgxnkV) | [Reddit](https://www.re
 
 [![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/I2I04VU09)
 
-Rust로 작성되었고, 설정없이 바로 사용할 수 있는 리모트 데스트탑 소프트웨어입니다. 자신의 데이터를 완전히 컨트롤할 수 있고, 보안의 염려도 없습니다. 우리의 rendezvous/relay 서버를 사용해도, [스스로 설정](https://rustdesk.com/server)하는 것도, [스스로 rendezvous/relay 서버를 작성할 수도 있습니다](https://github.com/rustdesk/rustdesk-server-demo).
+Rust로 작성되었고, 설정없이 바로 사용할 수 있는 원격 데스트탑 소프트웨어입니다. 자신의 데이터를 완전히 컨트롤할 수 있고, 보안의 염려도 없습니다. 우리의 rendezvous/relay 서버를 사용해도, [스스로 설정](https://rustdesk.com/server)하는 것도, [스스로 rendezvous/relay 서버를 작성할 수도 있습니다](https://github.com/rustdesk/rustdesk-server-demo).
 
 RustDesk는 모든 기여를 환영합니다. 기여하고자 한다면 [`CONTRIBUTING.md`](CONTRIBUTING.md)를 참조해주세요.
 
@@ -130,7 +130,7 @@ docker build -t "rustdesk-builder" .
 docker run --rm -it -v $PWD:/home/user/rustdesk -v rustdesk-git-cache:/home/user/.cargo/git -v rustdesk-registry-cache:/home/user/.cargo/registry -e PUID="$(id -u)" -e PGID="$(id -g)" rustdesk-builder
 ```
 
-첫 빌드에서는 의존관계가 캐시될 때까지 시간이 거릴 수 있습니다만, 이후의 빌드때는 빨라집니다. 더불어 빌드 커맨드에 다른 인수를 지정할 필요가 있다면, 커맨드 끝에 있는 `<OPTIONAL-ARGS>` 에 지정할 수 있습니다. 예를 들어 최적화된 출시 버전을 빌드하고 싶다면 이렇게 상기한 커맨드 뒤에 `--release` 를 붙여 실행합니다. 성공했다면 실행파일은 시스템 타겟 폴더에 담겨지고, 다음 커맨드로 실행할 수 있습니다.
+첫 빌드에서는 의존관계가 캐시될 때까지 시간이 걸릴 수 있습니다만, 이후의 빌드때는 빨라집니다. 더불어 빌드 커맨드에 다른 인수를 지정할 필요가 있다면, 커맨드 끝에 있는 `<OPTIONAL-ARGS>` 에 지정할 수 있습니다. 예를 들어 최적화된 출시 버전을 빌드하고 싶다면 이렇게 상기한 커맨드 뒤에 `--release` 를 붙여 실행합니다. 성공했다면 실행파일은 시스템 타겟 폴더에 담겨지고, 다음 커맨드로 실행할 수 있습니다.
 
 ```sh
 target/debug/rustdesk
