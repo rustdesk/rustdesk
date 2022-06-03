@@ -405,6 +405,7 @@ pub fn is_login_wayland() -> bool {
     }
 }
 
+/*
 pub fn fix_login_wayland() {
     let mut file = "/etc/gdm3/custom.conf".to_owned();
     if !std::path::Path::new(&file).exists() {
@@ -430,12 +431,14 @@ pub fn fix_login_wayland() {
         }
     }
 }
+*/
 
 pub fn current_is_wayland() -> bool {
     let dtype = get_display_server();
     return "wayland" == dtype && unsafe { UNMODIFIED };
 }
 
+/*
 pub fn modify_default_login() -> String {
     let dsession = std::env::var("DESKTOP_SESSION").unwrap();
     let user_name = std::env::var("USERNAME").unwrap();
@@ -502,6 +505,7 @@ pub fn modify_default_login() -> String {
     }
     return "Fix failed! Please re-login with X server manually".to_owned();
 }
+*/
 
 // to-do: test the other display manager
 fn _get_display_manager() -> String {

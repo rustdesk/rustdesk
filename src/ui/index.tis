@@ -666,9 +666,7 @@ class FixWayland: Reactor.Component {
         return <div .trust-me>
             <div>{translate('Warning')}</div>
             <div>{translate('Login screen using Wayland is not supported')}</div>
-            <div #fix-wayland .link>{translate('Fix it')}</div>
             <div #help-me .link>{translate('Help')}</div>
-            <div>({translate('Reboot required')})</div>
         </div>;
     }
 
@@ -687,9 +685,7 @@ class ModifyDefaultLogin: Reactor.Component {
         return <div .trust-me>
             <div>{translate('Warning')}</div>
             <div>{translate('Current Wayland display server is not supported')}</div>
-            <div #modify-default-login .link>{translate('Fix it')}</div>
             <div #help-me .link>{translate('Help')}</div>
-            <div>({translate('Reboot required')})</div>
         </div>;
     }
 

@@ -3,8 +3,6 @@ mod cm;
 mod inline;
 #[cfg(target_os = "macos")]
 mod macos;
-#[cfg(target_os = "windows")]
-pub mod win_privacy;
 pub mod remote;
 use crate::common::SOFTWARE_UPDATE_URL;
 use crate::ipc;
@@ -609,8 +607,10 @@ impl UI {
     }
 
     fn fix_login_wayland(&mut self) {
+        /*
         #[cfg(target_os = "linux")]
         crate::platform::linux::fix_login_wayland();
+        */
     }
 
     fn current_is_wayland(&mut self) -> bool {
@@ -621,8 +621,10 @@ impl UI {
     }
 
     fn modify_default_login(&mut self) -> String {
+        /*
         #[cfg(target_os = "linux")]
         return crate::platform::linux::modify_default_login();
+        */
         #[cfg(not(target_os = "linux"))]
         return "".to_owned();
     }
