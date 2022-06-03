@@ -405,7 +405,6 @@ pub fn is_login_wayland() -> bool {
     }
 }
 
-/*
 pub fn fix_login_wayland() {
     let mut file = "/etc/gdm3/custom.conf".to_owned();
     if !std::path::Path::new(&file).exists() {
@@ -431,7 +430,6 @@ pub fn fix_login_wayland() {
         }
     }
 }
-*/
 
 pub fn current_is_wayland() -> bool {
     let dtype = get_display_server();
