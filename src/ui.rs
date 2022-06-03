@@ -624,8 +624,8 @@ impl UI {
         /*
         #[cfg(target_os = "linux")]
         return crate::platform::linux::modify_default_login();
-        */
         #[cfg(not(target_os = "linux"))]
+        */
         return "".to_owned();
     }
 
