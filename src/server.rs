@@ -420,5 +420,5 @@ async fn sync_and_watch_config_dir() {
             }
         }
     }
-    log::error!("skipped config sync");
+    log::warn!("skipped config sync");
 }
