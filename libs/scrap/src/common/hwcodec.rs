@@ -240,35 +240,15 @@ impl HwDecoder {
         static ONCE: Once = Once::new();
         // TODO: different process
         ONCE.call_once(|| {
-            let avaliable = Decoder::avaliable_decoders();
-            let mut decoders = vec![];
-            for decoder in avaliable {
-                if let Ok(d) = HwDecoder::new(decoder) {
-                    decoders.push(d);
-                }
-            }
-
+            let (h264_info, h265_info) = CodecInfo::score(Decoder::avaliable_decoders());
             let mut h264: Option<HwDecoder> = None;
             let mut h265: Option<HwDecoder> = None;
-            for decoder in decoders {
-                match decoder.info.format {
-                    DataFormat::H264 => match &h264 {
-                        Some(old) => {
-                            if decoder.info.score > old.info.score {
-                                h264 = Some(decoder)
-                            }
-                        }
-                        None => h264 = Some(decoder),
-                    },
-                    DataFormat::H265 => match &h265 {
-                        Some(old) => {
-                            if decoder.info.score > old.info.score {
-                                h265 = Some(decoder)
-                            }
-                        }
-                        None => h265 = Some(decoder),
-                    },
-                }
+
+            if let Some(info) = h264_info {
+                h264 = HwDecoder::new(info).ok();
+            }
+            if let Some(info) = h265_info {
+                h265 = HwDecoder::new(info).ok();
             }
             if h264.is_some() {
                 log::info!("h264 decoder:{:?}", h264.as_ref().unwrap().info);
