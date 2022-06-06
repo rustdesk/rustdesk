@@ -157,7 +157,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Allow using keyboard and mouse", "Tillad brug af tastatur og mus"),
         ("Allow using clipboard", "Tillad brug af udklipsholderen"),
         ("Allow hearing sound", "Tillader hørelse fra lyd"),
-        ("Allow file copying and pasting", "Tillad fil kopiering og indsættelse"),
+        ("Allow file copy and paste", "Tillad fil kopiering og indsættelse"),
         ("Connected", "Forbundet"),
         ("Direct and encrypted connection", "Direkte og krypteret forbindelse"),
         ("Relayed and encrypted connection", "Brugt relæet og krypteret forbindelse"),

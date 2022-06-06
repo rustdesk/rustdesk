@@ -157,7 +157,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Allow using keyboard and mouse", "Povoliť používanie klávesnice a myši"),
         ("Allow using clipboard", "Povoliť používanie schránky"),
         ("Allow hearing sound", "Povoliť zvuky"),
-        ("Allow file copying and pasting", "Povoliť kopírovanie a vkladanie súborov"),
+        ("Allow file copy and paste", "Povoliť kopírovanie a vkladanie súborov"),
         ("Connected", "Pripojené"),
         ("Direct and encrypted connection", "Priame a šifrované spojenie"),
         ("Relayed and encrypted connection", "Sprostredkované a šifrované spojenie"),
