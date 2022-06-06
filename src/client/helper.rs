@@ -4,6 +4,9 @@ use std::{
 };
 
 use hbb_common::log;
+use hbb_common::message_proto::FileEntry;
+
+use sciter::Value;
 
 const MAX_LATENCY: i64 = 500;
 const MIN_LATENCY: i64 = 100;
@@ -56,4 +59,32 @@ impl LatencyController {
         }
         self.allow_audio
     }
+}
+
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+pub fn make_fd(id: i32, entries: &Vec<FileEntry>, only_count: bool) -> Value {
+    let mut m = Value::map();
+    m.set_item("id", id);
+    let mut a = Value::array(0);
+    let mut n: u64 = 0;
+    for entry in entries {
+        n += entry.size;
+        if only_count {
+            continue;
+        }
+        let mut e = Value::map();
+        e.set_item("name", entry.name.to_owned());
+        let tmp = entry.entry_type.value();
+        e.set_item("type", if tmp == 0 { 1 } else { tmp });
+        e.set_item("time", entry.modified_time as f64);
+        e.set_item("size", entry.size as f64);
+        a.push(e);
+    }
+    if only_count {
+        m.set_item("num_entries", entries.len() as i32);
+    } else {
+        m.set_item("entries", a);
+    }
+    m.set_item("total_size", n as f64);
+    m
 }

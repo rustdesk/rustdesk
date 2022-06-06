@@ -3,7 +3,7 @@ use hbb_common::{
     fs,
     message_proto::*,
 };
-use crate::common::make_fd;
+use super::helper::make_fd;
 
 pub trait FileManager: Interface {
     fn get_home_dir(&self) -> String{
