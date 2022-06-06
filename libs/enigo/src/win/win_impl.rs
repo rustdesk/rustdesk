@@ -379,7 +379,7 @@ impl Enigo {
             let keycode_and_shiftstate = unsafe { VkKeyScanExW(chr as _, LAYOUT) };
             if keycode_and_shiftstate == (EVK_DECIMAL as i16) && chr == '.' {
                 // a workaround of italian keyboard shift + '.' issue
-                unsafe { VkKeyScanW(chr as _) as _ }
+                EVK_PERIOD as _
             } else {
                 keycode_and_shiftstate as _
             }
