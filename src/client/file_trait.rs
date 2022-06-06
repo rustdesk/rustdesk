@@ -3,7 +3,6 @@ use hbb_common::{
     fs,
     message_proto::*,
 };
-use super::helper::make_fd;
 
 pub trait FileManager: Interface {
     fn get_home_dir(&self) -> String{
@@ -11,14 +10,11 @@ pub trait FileManager: Interface {
     }
 
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    fn read_dir(&self,path: String, include_hidden: bool) -> sciter::Value {
-        match fs::read_dir(&fs::get_path(&path), include_hidden) {
-            Err(_) => sciter::Value::null(),
-            Ok(fd) => {
-                let mut m = make_fd(0, &fd.entries.to_vec(), false);
-                m.set_item("path", path);
-                m
-            }
+    fn read_dir(&self,path: String, include_hidden: bool) -> String {
+        use crate::common::make_fd_to_json;
+        match fs::read_dir(&fs::get_path(path.as_str()), include_hidden){
+            Ok(fd) => make_fd_to_json(fd),
+            Err(_)=>"".into()
         }
     }
 

@@ -322,10 +322,10 @@ class FolderView : Reactor.Component {
       if (!this.is_remote) {
         var dir = handler.get_option("local_dir");
         if (dir) {
-          this.fd = handler.read_dir(dir, this.show_hidden);
+          this.fd = JSON.parse(handler.read_dir(dir, this.show_hidden));
           if (this.fd) return;
         }
-        this.fd = handler.read_dir(handler.get_home_dir(), this.show_hidden);
+        this.fd = JSON.parse(handler.read_dir(handler.get_home_dir(), this.show_hidden));
       }
     }
 
@@ -453,7 +453,7 @@ class FolderView : Reactor.Component {
       if (this.is_remote) {
         handler.read_remote_dir(path, this.show_hidden);
       } else {
-        var fd = handler.read_dir(path, this.show_hidden);
+        var fd = JSON.parse(handler.read_dir(path, this.show_hidden));
         this.refresh({ fd: fd });
       }
     }

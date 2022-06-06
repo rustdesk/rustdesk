@@ -605,3 +605,28 @@ pub fn make_privacy_mode_msg(state: back_notification::PrivacyModeState) -> Mess
     msg_out.set_misc(misc);
     msg_out
 }
+
+pub fn make_fd_to_json(fd: FileDirectory) -> String {
+    use serde_json::json;
+    let mut fd_json = serde_json::Map::new();
+    fd_json.insert("id".into(), json!(fd.id));
+    fd_json.insert("path".into(), json!(fd.path));
+    fd_json.insert("num_entries".into(), json!(fd.entries.len()));
+
+    let mut entries = vec![];
+    let mut total_size:u64 = 0;
+    for entry in fd.entries {
+        total_size += entry.size;
+        let mut entry_map = serde_json::Map::new();
+        entry_map.insert("entry_type".into(), json!(entry.entry_type.value()));
+        entry_map.insert("type".into(), json!(entry.entry_type.value()));
+        entry_map.insert("name".into(), json!(entry.name));
+        entry_map.insert("size".into(), json!(entry.size));
+        entry_map.insert("modified_time".into(), json!(entry.modified_time));
+        entry_map.insert("time".into(), json!(entry.modified_time));
+        entries.push(entry_map);
+    }
+    fd_json.insert("entries".into(), json!(entries));
+    fd_json.insert("total_size".into(), json!(total_size));
+    serde_json::to_string(&fd_json).unwrap_or("".into())
+}
