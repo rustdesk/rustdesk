@@ -5,7 +5,7 @@ use crate::{
 use hbb_common::{
     anyhow::{anyhow, Context},
     lazy_static, log,
-    message_proto::{H264s, H265s, ImageQuality, Message, VideoFrame, H264, H265},
+    message_proto::{H264s, H265s, Message, VideoFrame, H264, H265},
     ResultType,
 };
 use hwcodec::{
@@ -47,7 +47,7 @@ impl EncoderApi for HwEncoder {
         match cfg {
             EncoderCfg::HW(config) => {
                 let (bitrate, timebase, gop, quality, rc) =
-                    HwEncoder::convert_quality(&config.codec_name, config.quallity);
+                    HwEncoder::convert_quality(&config.codec_name, config.bitrate_ratio);
                 let ctx = EncodeContext {
                     name: config.codec_name.clone(),
                     width: config.width as _,
@@ -192,36 +192,26 @@ impl HwEncoder {
         }
     }
 
-    fn convert_quality(name: &str, q: ImageQuality) -> (i32, [i32; 2], i32, Quality, RateContorl) {
+    fn convert_quality(
+        name: &str,
+        bitrate_ratio: i32,
+    ) -> (i32, [i32; 2], i32, Quality, RateContorl) {
         // TODO
-        let bitrate = if name.contains("qsv") {
+        let mut bitrate = if name.contains("qsv") {
             1_000_000
         } else {
             2_000_000
         };
-        match q {
-            ImageQuality::Low => (
-                bitrate / 2,
-                DEFAULT_TIME_BASE,
-                DEFAULT_GOP,
-                DEFAULT_HW_QUALITY,
-                DEFAULT_RC,
-            ),
-            ImageQuality::Best => (
-                bitrate * 2,
-                DEFAULT_TIME_BASE,
-                DEFAULT_GOP,
-                DEFAULT_HW_QUALITY,
-                DEFAULT_RC,
-            ),
-            ImageQuality::NotSet | ImageQuality::Balanced => (
-                0,
-                DEFAULT_TIME_BASE,
-                DEFAULT_GOP,
-                DEFAULT_HW_QUALITY,
-                DEFAULT_RC,
-            ),
-        }
+        if bitrate_ratio > 0 && bitrate_ratio <= 200 {
+            bitrate = bitrate * bitrate_ratio / 100;
+        };
+        (
+            bitrate,
+            DEFAULT_TIME_BASE,
+            DEFAULT_GOP,
+            DEFAULT_HW_QUALITY,
+            DEFAULT_RC,
+        )
     }
 }
 

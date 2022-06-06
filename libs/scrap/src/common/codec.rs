@@ -12,7 +12,7 @@ use crate::vpxcodec::*;
 use hbb_common::{
     anyhow::anyhow,
     log,
-    message_proto::{video_frame, ImageQuality, Message, VP9s, VideoCodecState},
+    message_proto::{video_frame, Message, VP9s, VideoCodecState},
     ResultType,
 };
 #[cfg(feature = "hwcodec")]
@@ -31,7 +31,7 @@ pub struct HwEncoderConfig {
     pub codec_name: String,
     pub width: usize,
     pub height: usize,
-    pub quallity: ImageQuality,
+    pub bitrate_ratio: i32,
 }
 
 #[derive(Debug, Clone)]
