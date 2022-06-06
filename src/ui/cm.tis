@@ -45,7 +45,7 @@ class Body: Reactor.Component
                     <div class={!c.keyboard ? "disabled" : ""} title={translate('Allow using keyboard and mouse')}><icon .keyboard /></div>
                     <div class={!c.clipboard ? "disabled" : ""} title={translate('Allow using clipboard')}><icon .clipboard /></div>
                     <div class={!c.audio ? "disabled" : ""} title={translate('Allow hearing sound')}><icon .audio /></div>
-                    <div class={!c.file ? "disabled" : ""} title={translate('Allow file transfer')}><icon .file /></div>
+                    <div class={!c.file ? "disabled" : ""} title={translate('Allow file copying and pasting')}><icon .file /></div>
                 </div>}
                 {c.port_forward ? <div>Port Forwarding: {c.port_forward}</div> : ""}
                 <div style="size:*"/>
