@@ -126,18 +126,25 @@ impl Encoder {
             let current_encoder_name = HwEncoder::current_name();
             if states.len() > 0 {
                 let (encoder_h264, encoder_h265) = HwEncoder::best();
-                let mut enabled_h264 = encoder_h264.is_some() && states.iter().any(|(_, s)| s.H264);
-                let mut enabled_h265 = encoder_h265.is_some() && states.iter().any(|(_, s)| s.H265);
+                let enabled_h264 = encoder_h264.is_some()
+                    && states.len() > 0
+                    && states.iter().all(|(_, s)| s.H264);
+                let enabled_h265 = encoder_h265.is_some()
+                    && states.len() > 0
+                    && states.iter().all(|(_, s)| s.H265);
+
+                // score encoder
                 let mut score_vpx = 90;
                 let mut score_h264 = encoder_h264.as_ref().map_or(0, |c| c.score);
                 let mut score_h265 = encoder_h265.as_ref().map_or(0, |c| c.score);
 
-                for state in states.iter() {
-                    enabled_h264 = enabled_h264 && state.1.H264;
-                    enabled_h265 = enabled_h265 && state.1.H265;
-                    score_vpx += state.1.ScoreVpx;
-                    score_h264 += state.1.ScoreH264;
-                    score_h265 += state.1.ScoreH265;
+                // score decoder
+                score_vpx += states.iter().map(|s| s.1.ScoreVpx).sum::<i32>();
+                if enabled_h264 {
+                    score_h264 += states.iter().map(|s| s.1.ScoreH264).sum::<i32>();
+                }
+                if enabled_h265 {
+                    score_h265 += states.iter().map(|s| s.1.ScoreH265).sum::<i32>();
                 }
 
                 if enabled_h265 && score_h265 >= score_vpx && score_h265 >= score_h264 {
