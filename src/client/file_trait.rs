@@ -3,6 +3,7 @@ use hbb_common::{
     fs,
     message_proto::*,
 };
+use crate::common::make_fd;
 
 pub trait FileManager: Interface {
     fn get_home_dir(&self) -> String{
@@ -14,7 +15,6 @@ pub trait FileManager: Interface {
         match fs::read_dir(&fs::get_path(&path), include_hidden) {
             Err(_) => sciter::Value::null(),
             Ok(fd) => {
-                use crate::ui::remote::make_fd;
                 let mut m = make_fd(0, &fd.entries.to_vec(), false);
                 m.set_item("path", path);
                 m

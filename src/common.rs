@@ -12,6 +12,7 @@ use hbb_common::{
     rendezvous_proto::*,
     sleep, socket_client, tokio, ResultType,
 };
+use sciter::Value;
 #[cfg(any(target_os = "android", target_os = "ios", feature = "cli"))]
 use hbb_common::{config::RENDEZVOUS_PORT, futures::future::join_all};
 use std::sync::{Arc, Mutex};
@@ -604,4 +605,32 @@ pub fn make_privacy_mode_msg(state: back_notification::PrivacyModeState) -> Mess
     let mut msg_out = Message::new();
     msg_out.set_misc(misc);
     msg_out
+}
+
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+pub fn make_fd(id: i32, entries: &Vec<FileEntry>, only_count: bool) -> Value {
+    let mut m = Value::map();
+    m.set_item("id", id);
+    let mut a = Value::array(0);
+    let mut n: u64 = 0;
+    for entry in entries {
+        n += entry.size;
+        if only_count {
+            continue;
+        }
+        let mut e = Value::map();
+        e.set_item("name", entry.name.to_owned());
+        let tmp = entry.entry_type.value();
+        e.set_item("type", if tmp == 0 { 1 } else { tmp });
+        e.set_item("time", entry.modified_time as f64);
+        e.set_item("size", entry.size as f64);
+        a.push(e);
+    }
+    if only_count {
+        m.set_item("num_entries", entries.len() as i32);
+    } else {
+        m.set_item("entries", a);
+    }
+    m.set_item("total_size", n as f64);
+    m
 }

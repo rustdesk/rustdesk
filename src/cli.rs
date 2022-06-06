@@ -1,6 +1,6 @@
 use crate::client::*;
 use hbb_common::{
-    config::PeerConfig,
+    config::{PeerConfig, LocalConfig},
     log,
     message_proto::*,
     protobuf::Message as _,
@@ -21,7 +21,7 @@ impl Session {
     pub fn new(id: &str, sender: mpsc::UnboundedSender<Data>) -> Self {
         let mut password = "".to_owned();
         if PeerConfig::load(id).password.is_empty() {
-            password = rpassword::read_password_from_tty(Some("Enter password: ")).unwrap();
+            password = rpassword::prompt_password("Enter password: ").unwrap();
         }
         let session = Self {
             id: id.to_owned(),
@@ -40,6 +40,10 @@ impl Session {
 
 #[async_trait]
 impl Interface for Session {
+    fn send(&self, data: Data) {
+        self.sender.send(data).ok();
+    }
+
     fn msgbox(&self, msgtype: &str, title: &str, text: &str) {
         if msgtype == "input-password" {
             self.sender
@@ -47,7 +51,7 @@ impl Interface for Session {
                 .ok();
         } else if msgtype == "re-input-password" {
             log::error!("{}: {}", title, text);
-            let pass = rpassword::read_password_from_tty(Some("Enter password: ")).unwrap();
+            let pass = rpassword::prompt_password("Enter password: ").unwrap();
             self.sender.send(Data::Login((pass, true))).ok();
         } else if msgtype.contains("error") {
             log::error!("{}: {}: {}", msgtype, title, text);
@@ -91,8 +95,9 @@ pub async fn start_one_port_forward(
     let (sender, mut receiver) = mpsc::unbounded_channel::<Data>();
     let handler = Session::new(&id, sender);
     handler.lc.write().unwrap().port_forward = (remote_host, remote_port);
+    let token = LocalConfig::get_option("access_token");
     if let Err(err) =
-        crate::port_forward::listen(handler.id.clone(), port, handler.clone(), receiver, &key).await
+        crate::port_forward::listen(handler.id.clone(), port, handler.clone(), receiver, &key, &token).await
     {
         log::error!("Failed to listen on {}: {}", port, err);
     }
