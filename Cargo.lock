@@ -2236,11 +2236,14 @@ checksum = "9a3a5bfb195931eeb336b2a7b4d761daec841b97f947d34394601737a7bba5e4"
 [[package]]
 name = "hwcodec"
 version = "0.1.0"
-source = "git+https://github.com/21pages/hwcodec#888af61b3e960d30ef1f2e49eb0bcf9f6f7a14ee"
+source = "git+https://github.com/21pages/hwcodec#6bb387828c9aa69861b707b0f71472b21b5b1711"
 dependencies = [
  "bindgen",
  "cc",
  "log",
+ "serde 1.0.136",
+ "serde_derive",
+ "serde_json 1.0.79",
 ]
 
 [[package]]

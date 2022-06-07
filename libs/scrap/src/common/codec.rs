@@ -125,18 +125,16 @@ impl Encoder {
             }
             let current_encoder_name = HwEncoder::current_name();
             if states.len() > 0 {
-                let (encoder_h264, encoder_h265) = HwEncoder::best();
-                let enabled_h264 = encoder_h264.is_some()
-                    && states.len() > 0
-                    && states.iter().all(|(_, s)| s.H264);
-                let enabled_h265 = encoder_h265.is_some()
-                    && states.len() > 0
-                    && states.iter().all(|(_, s)| s.H265);
+                let best = HwEncoder::best();
+                let enabled_h264 =
+                    best.h264.is_some() && states.len() > 0 && states.iter().all(|(_, s)| s.H264);
+                let enabled_h265 =
+                    best.h265.is_some() && states.len() > 0 && states.iter().all(|(_, s)| s.H265);
 
                 // score encoder
                 let mut score_vpx = 90;
-                let mut score_h264 = encoder_h264.as_ref().map_or(0, |c| c.score);
-                let mut score_h265 = encoder_h265.as_ref().map_or(0, |c| c.score);
+                let mut score_h264 = best.h264.as_ref().map_or(0, |c| c.score);
+                let mut score_h265 = best.h265.as_ref().map_or(0, |c| c.score);
 
                 // score decoder
                 score_vpx += states.iter().map(|s| s.1.ScoreVpx).sum::<i32>();
@@ -148,9 +146,9 @@ impl Encoder {
                 }
 
                 if enabled_h265 && score_h265 >= score_vpx && score_h265 >= score_h264 {
-                    *current_encoder_name.lock().unwrap() = Some(encoder_h265.unwrap().name);
+                    *current_encoder_name.lock().unwrap() = Some(best.h265.unwrap().name);
                 } else if enabled_h264 && score_h264 >= score_vpx && score_h264 >= score_h265 {
-                    *current_encoder_name.lock().unwrap() = Some(encoder_h264.unwrap().name);
+                    *current_encoder_name.lock().unwrap() = Some(best.h264.unwrap().name);
                 } else {
                     *current_encoder_name.lock().unwrap() = None;
                 }
@@ -191,11 +189,11 @@ impl Decoder {
 
         #[cfg(feature = "hwcodec")]
         {
-            let (h264, h265) = super::hwcodec::HwDecoder::best();
-            state.H264 = h264.is_some();
-            state.ScoreH264 = h264.map_or(0, |c| c.score);
-            state.H265 = h265.is_some();
-            state.ScoreH265 = h265.map_or(0, |c| c.score);
+            let best = super::hwcodec::HwDecoder::best(false);
+            state.H264 = best.h264.is_some();
+            state.ScoreH264 = best.h264.map_or(0, |c| c.score);
+            state.H265 = best.h265.is_some();
+            state.ScoreH265 = best.h265.map_or(0, |c| c.score);
         }
 
         state
