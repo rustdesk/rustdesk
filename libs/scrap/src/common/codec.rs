@@ -75,7 +75,7 @@ impl DerefMut for Encoder {
 pub struct Decoder {
     vpx: VpxDecoder,
     #[cfg(feature = "hwcodec")]
-    hw: Arc<Mutex<HwDecoderInstance>>,
+    hw: HwDecoders,
     #[cfg(feature = "hwcodec")]
     i420: Vec<u8>,
 }
@@ -191,11 +191,11 @@ impl Decoder {
 
         #[cfg(feature = "hwcodec")]
         {
-            let hw = HwDecoder::instance();
-            state.H264 = hw.lock().unwrap().h264.is_some();
-            state.ScoreH264 = hw.lock().unwrap().h264.as_ref().map_or(0, |d| d.info.score);
-            state.H265 = hw.lock().unwrap().h265.is_some();
-            state.ScoreH265 = hw.lock().unwrap().h265.as_ref().map_or(0, |d| d.info.score);
+            let (h264, h265) = super::hwcodec::HwDecoder::best();
+            state.H264 = h264.is_some();
+            state.ScoreH264 = h264.map_or(0, |c| c.score);
+            state.H265 = h265.is_some();
+            state.ScoreH265 = h265.map_or(0, |c| c.score);
         }
 
         state
@@ -206,7 +206,7 @@ impl Decoder {
         Decoder {
             vpx,
             #[cfg(feature = "hwcodec")]
-            hw: HwDecoder::instance(),
+            hw: HwDecoder::new_decoders(),
             #[cfg(feature = "hwcodec")]
             i420: vec![],
         }
@@ -223,7 +223,7 @@ impl Decoder {
             }
             #[cfg(feature = "hwcodec")]
             video_frame::Union::h264s(h264s) => {
-                if let Some(decoder) = &mut self.hw.lock().unwrap().h264 {
+                if let Some(decoder) = &mut self.hw.h264 {
                     Decoder::handle_h264s_video_frame(decoder, h264s, rgb, &mut self.i420)
                 } else {
                     Err(anyhow!("don't support h264!"))
@@ -231,7 +231,7 @@ impl Decoder {
             }
             #[cfg(feature = "hwcodec")]
             video_frame::Union::h265s(h265s) => {
-                if let Some(decoder) = &mut self.hw.lock().unwrap().h265 {
+                if let Some(decoder) = &mut self.hw.h265 {
                     Decoder::handle_h265s_video_frame(decoder, h265s, rgb, &mut self.i420)
                 } else {
                     Err(anyhow!("don't support h265!"))

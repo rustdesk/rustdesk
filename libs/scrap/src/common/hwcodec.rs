@@ -16,14 +16,10 @@ use hwcodec::{
     Quality::{self, *},
     RateContorl::{self, *},
 };
-use std::sync::{Arc, Mutex, Once};
+use std::sync::{Arc, Mutex};
 
 lazy_static::lazy_static! {
     static ref HW_ENCODER_NAME: Arc<Mutex<Option<String>>> = Default::default();
-    static ref HW_DECODER_INSTANCE: Arc<Mutex<HwDecoderInstance>> = Arc::new(Mutex::new(HwDecoderInstance {
-        h264: None,
-        h265: None,
-    }));
 }
 
 const DEFAULT_PIXFMT: AVPixelFormat = AVPixelFormat::AV_PIX_FMT_YUV420P;
@@ -220,36 +216,36 @@ pub struct HwDecoder {
     pub info: CodecInfo,
 }
 
-pub struct HwDecoderInstance {
+pub struct HwDecoders {
     pub h264: Option<HwDecoder>,
     pub h265: Option<HwDecoder>,
 }
 
 impl HwDecoder {
-    pub fn instance() -> Arc<Mutex<HwDecoderInstance>> {
-        static ONCE: Once = Once::new();
-        // TODO: different process
-        ONCE.call_once(|| {
-            let (h264_info, h265_info) = CodecInfo::score(Decoder::avaliable_decoders());
-            let mut h264: Option<HwDecoder> = None;
-            let mut h265: Option<HwDecoder> = None;
+    /// H264, H265 decoder info with the highest score.
+    /// Because available_decoders is singleton, it returns same result in the same process.
+    pub fn best() -> (Option<CodecInfo>, Option<CodecInfo>) {
+        CodecInfo::score(Decoder::avaliable_decoders())
+    }
 
-            if let Some(info) = h264_info {
-                h264 = HwDecoder::new(info).ok();
-            }
-            if let Some(info) = h265_info {
-                h265 = HwDecoder::new(info).ok();
-            }
-            if h264.is_some() {
-                log::info!("h264 decoder:{:?}", h264.as_ref().unwrap().info);
-            }
-            if h265.is_some() {
-                log::info!("h265 decoder:{:?}", h265.as_ref().unwrap().info);
-            }
-            HW_DECODER_INSTANCE.lock().unwrap().h264 = h264;
-            HW_DECODER_INSTANCE.lock().unwrap().h265 = h265;
-        });
-        HW_DECODER_INSTANCE.clone()
+    pub fn new_decoders() -> HwDecoders {
+        let (h264_info, h265_info) = HwDecoder::best();
+        let mut h264: Option<HwDecoder> = None;
+        let mut h265: Option<HwDecoder> = None;
+
+        if let Some(info) = h264_info {
+            h264 = HwDecoder::new(info).ok();
+        }
+        if let Some(info) = h265_info {
+            h265 = HwDecoder::new(info).ok();
+        }
+        if h264.is_some() {
+            log::info!("h264 decoder:{:?}", h264.as_ref().unwrap().info);
+        }
+        if h265.is_some() {
+            log::info!("h265 decoder:{:?}", h265.as_ref().unwrap().info);
+        }
+        HwDecoders { h264, h265 }
     }
 
     pub fn new(info: CodecInfo) -> ResultType<Self> {
