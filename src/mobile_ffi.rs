@@ -1,6 +1,7 @@
 use crate::client::file_trait::FileManager;
 use crate::mobile::connection_manager::{self, get_clients_length, get_clients_state};
-use crate::mobile::{self, make_fd_to_json, Session};
+use crate::mobile::{self, Session};
+use crate::common::{make_fd_to_json};
 use flutter_rust_bridge::{StreamSink, ZeroCopyBuffer};
 use hbb_common::ResultType;
 use hbb_common::{
