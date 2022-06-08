@@ -490,7 +490,6 @@ class App: Reactor.Component
                     <ConnectStatus @{this.connect_status} />
                 </div>
                 <div #overlay style="position: absolute;size:*;background:black;opacity:0.5;display:none" />
-                <div #msgbox />
             </div>;
     }
 
@@ -854,7 +853,7 @@ event keydown (evt) {
     }
 }
 
-$(body).content(<App />);
+$(body).content(<div style="size:*"><App /><div #msgbox /></div>);
 
 function self.closing() {
     var (x, y, w, h) = view.box(#rectw, #border, #screen);
