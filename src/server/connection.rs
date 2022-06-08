@@ -651,19 +651,14 @@ impl Connection {
         }
         self.authorized = true;
 
-        let mut pi = PeerInfo {
-            hostname: whoami::hostname(),
-            username,
-            platform: whoami::platform().to_string(),
-            version: crate::VERSION.to_owned(),
-            sas_enabled,
-            features: Some(Features {
-                privacy_mode: video_service::is_privacy_mode_supported(),
-                ..Default::default()
-            })
-            .into(),
+        pi.username = username;
+        pi.sas_enabled = sas_enabled;
+        pi.features = Some(Features {
+            privacy_mode: video_service::is_privacy_mode_supported(),
             ..Default::default()
-        };
+        })
+        .into();
+
         let mut sub_service = false;
         if self.file_transfer.is_some() {
             res.set_peer_info(pi);

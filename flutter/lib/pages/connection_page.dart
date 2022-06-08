@@ -256,7 +256,7 @@ class _ConnectionPageState extends State<ConnectionPage> {
               ? []
               : [
                   PopupMenuItem<String>(
-                      child: Text(translate('File transfer')), value: 'file')
+                      child: Text(translate('Transfer File')), value: 'file')
                 ]),
       elevation: 8,
     );
