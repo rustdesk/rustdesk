@@ -9,13 +9,11 @@ src/version.rs
 *dmg
 *exe
 *tgz
-*lib
 cert.pfx
 *.bak
 *png
 *svg
 *jpg
-web_hbb
 sciter.dll
 **pdb
 src/bridge_generated.rs

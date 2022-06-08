@@ -204,7 +204,7 @@ class _PermissionCheckerState extends State<PermissionChecker> {
                 serverModel.toggleService),
             PermissionRow(translate("Input Control"), serverModel.inputOk,
                 serverModel.toggleInput),
-            PermissionRow(translate("File Transfer"), serverModel.fileOk,
+            PermissionRow(translate("Transfer File"), serverModel.fileOk,
                 serverModel.toggleFile),
             hasAudioPermission
                 ? PermissionRow(translate("Audio Capture"), serverModel.audioOk,
