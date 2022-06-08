@@ -75,7 +75,17 @@ class MainService : Service() {
     @Keep
     @RequiresApi(Build.VERSION_CODES.N)
     fun rustMouseInput(mask: Int, x: Int, y: Int) {
-        InputService.ctx?.onMouseInput(mask,x,y)
+        // turn on screen with LIFT_DOWN when screen off
+        if (!powerManager.isInteractive && mask == LIFT_DOWN) {
+            if (wakeLock.isHeld) {
+                Log.d(logTag,"Turn on Screen, WakeLock release")
+                wakeLock.release()
+            }
+            Log.d(logTag,"Turn on Screen")
+            wakeLock.acquire(5000)
+        } else {
+            InputService.ctx?.onMouseInput(mask,x,y)
+        }
     }
 
     @Keep
@@ -144,6 +154,9 @@ class MainService : Service() {
 
     private var serviceLooper: Looper? = null
     private var serviceHandler: Handler? = null
+
+    private val powerManager: PowerManager by lazy { applicationContext.getSystemService(Context.POWER_SERVICE) as PowerManager }
+    private val wakeLock: PowerManager.WakeLock by lazy { powerManager.newWakeLock(PowerManager.ACQUIRE_CAUSES_WAKEUP or PowerManager.SCREEN_BRIGHT_WAKE_LOCK, "rustdesk:wakelock")}
 
     // jvm call rust
     private external fun init(ctx: Context)
