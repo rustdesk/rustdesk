@@ -206,7 +206,6 @@ class InputService : AccessibilityService() {
         }
     }
 
-    @RequiresApi(Build.VERSION_CODES.O)
     override fun onServiceConnected() {
         super.onServiceConnected()
         ctx = this
