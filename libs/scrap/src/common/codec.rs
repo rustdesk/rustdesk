@@ -23,8 +23,10 @@ use hbb_common::{
 
 #[cfg(feature = "hwcodec")]
 lazy_static::lazy_static! {
-    static ref VIDEO_CODEC_STATES: Arc<Mutex<HashMap<i32, VideoCodecState>>> = Default::default();
+    static ref PEER_DECODER_STATES: Arc<Mutex<HashMap<i32, VideoCodecState>>> = Default::default();
+    static ref MY_DECODER_STATE: Arc<Mutex<VideoCodecState>> = Default::default();
 }
+const SCORE_VPX: i32 = 90;
 
 #[derive(Debug, Clone)]
 pub struct HwEncoderConfig {
@@ -96,9 +98,15 @@ impl Encoder {
             }),
 
             #[cfg(feature = "hwcodec")]
-            EncoderCfg::HW(_) => Ok(Encoder {
-                codec: Box::new(HwEncoder::new(config)?),
-            }),
+            EncoderCfg::HW(_) => match HwEncoder::new(config) {
+                Ok(hw) => Ok(Encoder {
+                    codec: Box::new(hw),
+                }),
+                Err(e) => {
+                    HwEncoder::best(true);
+                    Err(e)
+                }
+            },
             #[cfg(not(feature = "hwcodec"))]
             _ => Err(anyhow!("unsupported encoder type")),
         }
@@ -109,7 +117,7 @@ impl Encoder {
         log::info!("update video encoder:{:?}", update);
         #[cfg(feature = "hwcodec")]
         {
-            let mut states = VIDEO_CODEC_STATES.lock().unwrap();
+            let mut states = PEER_DECODER_STATES.lock().unwrap();
             match update {
                 EncoderUpdate::State(state) => {
                     states.insert(id, state);
@@ -125,14 +133,14 @@ impl Encoder {
             }
             let current_encoder_name = HwEncoder::current_name();
             if states.len() > 0 {
-                let best = HwEncoder::best();
+                let best = HwEncoder::best(false);
                 let enabled_h264 =
                     best.h264.is_some() && states.len() > 0 && states.iter().all(|(_, s)| s.H264);
                 let enabled_h265 =
                     best.h265.is_some() && states.len() > 0 && states.iter().all(|(_, s)| s.H265);
 
                 // score encoder
-                let mut score_vpx = 90;
+                let mut score_vpx = SCORE_VPX;
                 let mut score_h264 = best.h264.as_ref().map_or(0, |c| c.score);
                 let mut score_h265 = best.h265.as_ref().map_or(0, |c| c.score);
 
@@ -181,33 +189,50 @@ impl Encoder {
     }
 }
 
+#[cfg(feature = "hwcodec")]
+impl Drop for Decoder {
+    fn drop(&mut self) {
+        *MY_DECODER_STATE.lock().unwrap() = VideoCodecState {
+            ScoreVpx: SCORE_VPX,
+            ..Default::default()
+        };
+    }
+}
+
 impl Decoder {
-    // TODO
     pub fn video_codec_state() -> VideoCodecState {
-        let mut state = VideoCodecState::default();
-        state.ScoreVpx = 90;
-
+        // video_codec_state is mainted by creation and destruction of Decoder.
+        // It has been ensured to use after Decoder's creation.
         #[cfg(feature = "hwcodec")]
-        {
-            let best = super::hwcodec::HwDecoder::best(false);
-            state.H264 = best.h264.is_some();
-            state.ScoreH264 = best.h264.map_or(0, |c| c.score);
-            state.H265 = best.h265.is_some();
-            state.ScoreH265 = best.h265.map_or(0, |c| c.score);
+        return MY_DECODER_STATE.lock().unwrap().clone();
+        #[cfg(not(feature = "hwcodec"))]
+        VideoCodecState {
+            ScoreVpx: SCORE_VPX,
+            ..Default::default()
         }
-
-        state
     }
 
     pub fn new(config: DecoderCfg) -> Decoder {
         let vpx = VpxDecoder::new(config.vpx).unwrap();
-        Decoder {
+        let decoder = Decoder {
             vpx,
             #[cfg(feature = "hwcodec")]
             hw: HwDecoder::new_decoders(),
             #[cfg(feature = "hwcodec")]
             i420: vec![],
+        };
+
+        #[cfg(feature = "hwcodec")]
+        {
+            let mut state = MY_DECODER_STATE.lock().unwrap();
+            state.ScoreVpx = SCORE_VPX;
+            state.H264 = decoder.hw.h264.is_some();
+            state.ScoreH264 = decoder.hw.h264.as_ref().map_or(0, |d| d.info.score);
+            state.H265 = decoder.hw.h265.is_some();
+            state.ScoreH265 = decoder.hw.h265.as_ref().map_or(0, |d| d.info.score);
         }
+
+        decoder
     }
 
     pub fn handle_video_frame(

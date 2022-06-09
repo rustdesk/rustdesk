@@ -137,29 +137,30 @@ impl EncoderApi for HwEncoder {
 }
 
 impl HwEncoder {
-    pub fn best() -> CodecInfos {
+    pub fn best(force_reset: bool) -> CodecInfos {
         let key = "bestHwEncoders";
-        match get_config(key) {
-            Ok(config) => config,
-            Err(_) => {
-                let ctx = EncodeContext {
-                    name: String::from(""),
-                    width: 1920,
-                    height: 1080,
-                    pixfmt: DEFAULT_PIXFMT,
-                    align: HW_STRIDE_ALIGN as _,
-                    bitrate: 0,
-                    timebase: DEFAULT_TIME_BASE,
-                    gop: DEFAULT_GOP,
-                    quality: DEFAULT_HW_QUALITY,
-                    rc: DEFAULT_RC,
-                };
-                let encoders = CodecInfo::score(Encoder::avaliable_encoders(ctx));
-                let _ = set_config(key, &encoders)
-                    .map_err(|e| log::error!("{:?}", e))
-                    .ok();
-                encoders
-            }
+
+        let config = get_config(key);
+        if !force_reset && config.is_ok() {
+            config.unwrap()
+        } else {
+            let ctx = EncodeContext {
+                name: String::from(""),
+                width: 1920,
+                height: 1080,
+                pixfmt: DEFAULT_PIXFMT,
+                align: HW_STRIDE_ALIGN as _,
+                bitrate: 0,
+                timebase: DEFAULT_TIME_BASE,
+                gop: DEFAULT_GOP,
+                quality: DEFAULT_HW_QUALITY,
+                rc: DEFAULT_RC,
+            };
+            let encoders = CodecInfo::score(Encoder::avaliable_encoders(ctx));
+            let _ = set_config(key, &encoders)
+                .map_err(|e| log::error!("{:?}", e))
+                .ok();
+            encoders
         }
     }
 
@@ -234,7 +235,7 @@ pub struct HwDecoders {
 
 impl HwDecoder {
     /// H264, H265 decoder info with the highest score.
-    pub fn best(force_reset: bool) -> CodecInfos {
+    fn best(force_reset: bool) -> CodecInfos {
         let key = "bestHwDecoders";
         let config = get_config(key);
         if !force_reset && config.is_ok() {
@@ -268,7 +269,6 @@ impl HwDecoder {
         }
         if fail {
             HwDecoder::best(true);
-            // TODO: notify encoder
         }
 
         if h264.is_some() {
