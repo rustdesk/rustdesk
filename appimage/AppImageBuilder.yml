@@ -5,10 +5,10 @@ script:
   # Remove any previous build
   - rm -rf AppDir | true
   # Install application dependencies
-  - pip3 install --system --ignore-installed --prefix=/usr --root=AppDir -r ./requirements.txt
+  - pip3 install --ignore-installed --prefix=/usr --root=AppDir -r ./requirements.txt
   # Download sciter.so
   - mkdir -p AppDir/usr/lib/rustdesk/
-  - curl https://raw.githubusercontent.com/c-smile/sciter-sdk/master/bin.lnx/x64/libsciter-gtk.so -o AppDir/usr/lib/rustdesk/libsciter-gtk.so
+  - curl https://github.com/c-smile/sciter-sdk/raw/29a598b6d20220b93848b5e8abab704619296857/bin.lnx/x64/libsciter-gtk.so -o AppDir/usr/lib/rustdesk/libsciter-gtk.so
   # pynput_service.py
   - cp ../pynput_service.py ./AppDir/usr/lib/rustdesk
   # Build rustdesk
