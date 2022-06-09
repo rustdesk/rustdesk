@@ -1,6 +1,8 @@
 use crate::rendezvous_mediator::RendezvousMediator;
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub use clipboard::ClipbaordFile;
+#[cfg(feature = "hwcodec")]
+use hbb_common::config::HwCodecConfig;
 use hbb_common::{
     allow_err, bail, bytes,
     bytes_codec::BytesCodec,
@@ -63,7 +65,7 @@ pub enum FS {
     WriteOffset {
         id: i32,
         file_num: i32,
-        offset_blk: u32
+        offset_blk: u32,
     },
     CheckDigest {
         id: i32,
@@ -116,6 +118,8 @@ pub enum Data {
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     ClipbaordFile(ClipbaordFile),
     ClipboardFileEnabled(bool),
+    #[cfg(feature = "hwcodec")]
+    HwCodecConfig(Option<HashMap<String, String>>),
 }
 
 #[tokio::main(flavor = "current_thread")]
@@ -324,6 +328,12 @@ async fn handle(data: Data, stream: &mut Connection) {
                     .send(&Data::SyncConfig(Some((Config::get(), Config2::get()))))
                     .await
             );
+        }
+        #[cfg(feature = "hwcodec")]
+        Data::HwCodecConfig(Some(config)) => {
+            for (k, v) in config {
+                HwCodecConfig::set_option(k, v);
+            }
         }
         _ => {}
     }
@@ -623,4 +633,21 @@ pub async fn set_socks(value: config::Socks5Server) -> ResultType<()> {
         .send(&Data::Socks(Some(value)))
         .await?;
     Ok(())
+}
+
+#[cfg(feature = "hwcodec")]
+#[tokio::main]
+pub async fn check_hwcodec_config() {
+    if let Some(config) = scrap::hwcodec::check_config() {
+        match connect(1000, "").await {
+            Ok(mut conn) => {
+                if conn.send(&Data::HwCodecConfig(Some(config))).await.is_err() {
+                    log::error!("Failed to send hwcodec config by ipc");
+                }
+            }
+            Err(err) => {
+                log::info!("Failed to connect ipc: {:?}", err);
+            }
+        }
+    }
 }

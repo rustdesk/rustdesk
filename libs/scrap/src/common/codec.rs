@@ -103,7 +103,7 @@ impl Encoder {
                     codec: Box::new(hw),
                 }),
                 Err(e) => {
-                    HwEncoder::best(true);
+                    HwEncoder::best(true, true);
                     Err(e)
                 }
             },
@@ -114,7 +114,7 @@ impl Encoder {
 
     // TODO
     pub fn update_video_encoder(id: i32, update: EncoderUpdate) {
-        log::info!("update video encoder:{:?}", update);
+        log::info!("encoder update: {:?}", update);
         #[cfg(feature = "hwcodec")]
         {
             let mut states = PEER_DECODER_STATES.lock().unwrap();
@@ -133,7 +133,7 @@ impl Encoder {
             }
             let current_encoder_name = HwEncoder::current_name();
             if states.len() > 0 {
-                let best = HwEncoder::best(false);
+                let (best, _) = HwEncoder::best(false, true);
                 let enabled_h264 =
                     best.h264.is_some() && states.len() > 0 && states.iter().all(|(_, s)| s.H264);
                 let enabled_h265 =

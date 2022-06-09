@@ -70,6 +70,15 @@ fn main() {
     }
     if args.is_empty() {
         std::thread::spawn(move || start_server(false));
+        #[cfg(feature = "hwcodec")]
+        if let Ok(exe) = std::env::current_exe() {
+            std::thread::spawn(move || {
+                std::process::Command::new(exe)
+                    .arg("--check-hwcodec-config")
+                    .status()
+                    .ok()
+            });
+        }
     } else {
         #[cfg(windows)]
         {
@@ -103,6 +112,10 @@ fn main() {
                     "desktopicon startmenu",
                     "".to_owned()
                 ));
+                return;
+            } else if args[0] == "--check-hwcodec-config" {
+                #[cfg(feature = "hwcodec")]
+                ipc::check_hwcodec_config();
                 return;
             }
         }

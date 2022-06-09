@@ -4,7 +4,7 @@ use crate::{
 };
 use hbb_common::{
     anyhow::{anyhow, Context},
-    config::LocalConfig,
+    config::HwCodecConfig,
     lazy_static, log,
     message_proto::{H264s, H265s, Message, VideoFrame, H264, H265},
     ResultType,
@@ -17,11 +17,17 @@ use hwcodec::{
     Quality::{self, *},
     RateContorl::{self, *},
 };
-use std::sync::{Arc, Mutex};
+use std::{
+    collections::HashMap,
+    sync::{Arc, Mutex},
+};
 
 lazy_static::lazy_static! {
     static ref HW_ENCODER_NAME: Arc<Mutex<Option<String>>> = Default::default();
 }
+
+const CFG_KEY_ENCODER: &str = "bestHwEncoders";
+const CFG_KEY_DECODER: &str = "bestHwDecoders";
 
 const DEFAULT_PIXFMT: AVPixelFormat = AVPixelFormat::AV_PIX_FMT_YUV420P;
 const DEFAULT_TIME_BASE: [i32; 2] = [1, 30];
@@ -137,12 +143,19 @@ impl EncoderApi for HwEncoder {
 }
 
 impl HwEncoder {
-    pub fn best(force_reset: bool) -> CodecInfos {
-        let key = "bestHwEncoders";
-
-        let config = get_config(key);
+    /// Get best encoders.
+    ///
+    /// # Parameter  
+    /// `force_reset`: force to refresh config.  
+    /// `write`: write to config file.  
+    ///
+    /// # Return  
+    /// `CodecInfos`: infos.  
+    /// `bool`: whether the config is refreshed.  
+    pub fn best(force_reset: bool, write: bool) -> (CodecInfos, bool) {
+        let config = get_config(CFG_KEY_ENCODER);
         if !force_reset && config.is_ok() {
-            config.unwrap()
+            (config.unwrap(), false)
         } else {
             let ctx = EncodeContext {
                 name: String::from(""),
@@ -157,10 +170,12 @@ impl HwEncoder {
                 rc: DEFAULT_RC,
             };
             let encoders = CodecInfo::score(Encoder::avaliable_encoders(ctx));
-            let _ = set_config(key, &encoders)
-                .map_err(|e| log::error!("{:?}", e))
-                .ok();
-            encoders
+            if write {
+                let _ = set_config(CFG_KEY_ENCODER, &encoders)
+                    .map_err(|e| log::error!("{:?}", e))
+                    .ok();
+            }
+            (encoders, true)
         }
     }
 
@@ -234,23 +249,24 @@ pub struct HwDecoders {
 }
 
 impl HwDecoder {
-    /// H264, H265 decoder info with the highest score.
-    fn best(force_reset: bool) -> CodecInfos {
-        let key = "bestHwDecoders";
-        let config = get_config(key);
+    /// See HwEncoder::best
+    fn best(force_reset: bool, write: bool) -> (CodecInfos, bool) {
+        let config = get_config(CFG_KEY_DECODER);
         if !force_reset && config.is_ok() {
-            config.unwrap()
+            (config.unwrap(), false)
         } else {
             let decoders = CodecInfo::score(Decoder::avaliable_decoders());
-            set_config(key, &decoders)
-                .map_err(|e| log::error!("{:?}", e))
-                .ok();
-            decoders
+            if write {
+                set_config(CFG_KEY_DECODER, &decoders)
+                    .map_err(|e| log::error!("{:?}", e))
+                    .ok();
+            }
+            (decoders, true)
         }
     }
 
     pub fn new_decoders() -> HwDecoders {
-        let best = HwDecoder::best(false);
+        let (best, _) = HwDecoder::best(false, true);
         let mut h264: Option<HwDecoder> = None;
         let mut h265: Option<HwDecoder> = None;
         let mut fail = false;
@@ -268,14 +284,7 @@ impl HwDecoder {
             }
         }
         if fail {
-            HwDecoder::best(true);
-        }
-
-        if h264.is_some() {
-            log::info!("h264 decoder:{:?}", h264.as_ref().unwrap().info);
-        }
-        if h265.is_some() {
-            log::info!("h265 decoder:{:?}", h265.as_ref().unwrap().info);
+            HwDecoder::best(true, true);
         }
         HwDecoders { h264, h265 }
     }
@@ -336,7 +345,7 @@ impl HwDecoderImage<'_> {
 }
 
 fn get_config(k: &str) -> ResultType<CodecInfos> {
-    let v = LocalConfig::get_option(k);
+    let v = HwCodecConfig::get_option(k);
     match CodecInfos::deserialize(&v) {
         Ok(v) => Ok(v),
         Err(_) => Err(anyhow!("Failed to get config:{}", k)),
@@ -346,9 +355,26 @@ fn get_config(k: &str) -> ResultType<CodecInfos> {
 fn set_config(k: &str, v: &CodecInfos) -> ResultType<()> {
     match v.serialize() {
         Ok(v) => {
-            LocalConfig::set_option(k.to_owned(), v);
+            HwCodecConfig::set_option(k.to_owned(), v);
             Ok(())
         }
         Err(_) => Err(anyhow!("Failed to set config:{}", k)),
     }
+}
+
+pub fn check_config() -> Option<HashMap<String, String>> {
+    let (encoders, update_encoders) = HwEncoder::best(false, false);
+    let (decoders, update_decoders) = HwDecoder::best(false, false);
+    if update_encoders || update_decoders {
+        if let Ok(encoders) = encoders.serialize() {
+            if let Ok(decoders) = decoders.serialize() {
+                return Some(HashMap::from([
+                    (CFG_KEY_ENCODER.to_owned(), encoders),
+                    (CFG_KEY_DECODER.to_owned(), decoders),
+                ]));
+            }
+        }
+        log::error!("Failed to serialize codec info");
+    }
+    None
 }
