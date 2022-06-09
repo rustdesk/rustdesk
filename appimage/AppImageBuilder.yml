@@ -1,183 +1,134 @@
 # appimage-builder recipe see https://appimage-builder.readthedocs.io for details
+# Tested Linux Distro: Ubuntu 20.04 LTS
 version: 1
+script:
+  # Remove any previous build
+  - rm -rf AppDir | true
+  # Install application dependencies
+  - pip3 install --system --ignore-installed --prefix=/usr --root=AppDir -r ./requirements.txt
+  # Download sciter.so
+  - mkdir -p AppDir/usr/lib/rustdesk/
+  - curl https://raw.githubusercontent.com/c-smile/sciter-sdk/master/bin.lnx/x64/libsciter-gtk.so -o AppDir/usr/lib/rustdesk/libsciter-gtk.so
+  # pynput_service.py
+  - cp ../pynput_service.py ./AppDir/usr/lib/rustdesk
+  # Build rustdesk
+  - pushd .. && python3 inline-sciter.py && cargo build --features inline,appimage --release && popd
+  - mkdir -p AppDir/usr/bin
+  - cp ../target/release/rustdesk  AppDir/usr/bin/rustdesk
+  # Make usr and icons dirs
+  - mkdir -p AppDir/usr/share/icons/hicolor/128x128 && cp ../128x128.png AppDir/usr/share/icons/hicolor/128x128/rustdesk.png
+  - mkdir -p AppDir/usr/share/icons/hicolor/32x32 && cp ../32x32.png AppDir/usr/share/icons/hicolor/32x32/rustdesk.png
+  - cp rustdesk.desktop AppDir/
+  
 AppDir:
-  path: /home/kingtous/projects/rustdesk/appimage/AppDir
+  path: ./AppDir
   app_info:
     id: rustdesk
     name: RustDesk
     icon: rustdesk
-    version: latest
+    version: 1.2.0
     exec: usr/bin/rustdesk
     exec_args: $@
-  pacman:
+  apt:
+    arch:
+    - amd64
+    allow_unauthenticated: true
+    sources:
+    - sourceline: deb http://archive.ubuntu.com/ubuntu/ focal main restricted
+    - sourceline: deb http://archive.ubuntu.com/ubuntu/ focal-updates main restricted
+    - sourceline: deb http://archive.ubuntu.com/ubuntu/ focal universe
+    - sourceline: deb http://archive.ubuntu.com/ubuntu/ focal-updates universe
+    - sourceline: deb http://archive.ubuntu.com/ubuntu/ focal multiverse
+    - sourceline: deb http://archive.ubuntu.com/ubuntu/ focal-updates multiverse
+    - sourceline: deb http://archive.ubuntu.com/ubuntu/ focal-backports main restricted
+        universe multiverse
+    - sourceline: deb http://archive.ubuntu.com/ubuntu/ focal-security main restricted
+    - sourceline: deb http://archive.ubuntu.com/ubuntu/ focal-security universe
+    - sourceline: deb http://archive.ubuntu.com/ubuntu/ focal-security multiverse
     include:
-    - at-spi2-atk
-    - at-spi2-core
-    - atk
-    - brotli
-    - bzip2
-    - cairo
-    - dbus-x11
-    - expat
-    - flac
-    - fontconfig
-    - freetype2
-    - fribidi
-    - gcc-libs
-    - gdk-pixbuf2
-    - glib2
-    - glibc-linux4
-    - graphite-mozilla
-    - gtk3-no-tracker
-    - harfbuzz
-    - icu
-    - json-glib
-    - libasyncns
-    - libcap
-    - libcloudproviders
-    - libdatrie
-    - libepoxy
-    - libffi
-    - libgcrypt
-    - libgpg-error
-    - libjpeg-turbo
-    - libogg
-    - libpng
-    - libpulse
-    - libsndfile
-    - libstemmer
-    - libthai
-    - libtiff
-    - libvorbis
-    - libx11
-    - libxau
-    - libxcb
-    - libxcomposite
-    - libxcursor
-    - libxdamage
-    - libxdmcp
-    - libxext
-    - libxfixes
-    - libxi
-    - libxinerama
-    - libxkbcommon
-    - libxml2
-    - libxrandr
-    - libxrender
-    - libxtst
-    - lz4
-    - opus
-    - pango
-    - pcre
-    - pixman
-    - sqlite
-    - systemd-libs-git
-    - tracker3
-    - util-linux-libs
-    - wayland
-    - xdotool
-    - xz
-    - zlib
-    - zstd
-    exclude: []
+    - libexpat1:amd64
+    - libgcc-s1:amd64
+    - libgpg-error0:amd64
+    - liblzma5:amd64
+    - libmount1:amd64
+    - libpcre3:amd64
+    - libpulse0:amd64
+    - libsystemd0:amd64
+    - libuuid1:amd64
+    - zlib1g:amd64
+    - python3:amd64
+    - python3-pkg-resources:amd64
   files:
     include:
-    - /lib64/ld-linux-x86-64.so.2
-    - /usr/lib/ld-linux-x86-64.so.2
-    - /usr/lib/libFLAC.so.8
-    - /usr/lib/libX11.so.6
-    - /usr/lib/libXau.so.6
-    - /usr/lib/libXcomposite.so.1
-    - /usr/lib/libXcursor.so.1
-    - /usr/lib/libXdamage.so.1
-    - /usr/lib/libXdmcp.so.6
-    - /usr/lib/libXext.so.6
-    - /usr/lib/libXfixes.so.3
-    - /usr/lib/libXi.so.6
-    - /usr/lib/libXinerama.so.1
-    - /usr/lib/libXrandr.so.2
-    - /usr/lib/libXrender.so.1
-    - /usr/lib/libXtst.so.6
-    - /usr/lib/libasyncns.so.0
-    - /usr/lib/libatk-1.0.so.0
-    - /usr/lib/libatk-bridge-2.0.so.0
-    - /usr/lib/libatspi.so.0
-    - /usr/lib/libblkid.so.1
-    - /usr/lib/libbrotlicommon.so.1
-    - /usr/lib/libbrotlidec.so.1
-    - /usr/lib/libbz2.so.1.0
-    - /usr/lib/libc.so.6
-    - /usr/lib/libcairo-gobject.so.2
-    - /usr/lib/libcairo.so.2
-    - /usr/lib/libcap.so.2
-    - /usr/lib/libcloudproviders.so.0
-    - /usr/lib/libdatrie.so.1
-    - /usr/lib/libdbus-1.so.3
-    - /usr/lib/libepoxy.so.0
-    - /usr/lib/libexpat.so.1
-    - /usr/lib/libffi.so.8
-    - /usr/lib/libfontconfig.so.1
-    - /usr/lib/libfreetype.so.6
-    - /usr/lib/libfribidi.so.0
-    - /usr/lib/libgcc_s.so.1
-    - /usr/lib/libgcrypt.so.20
-    - /usr/lib/libgdk-3.so.0
-    - /usr/lib/libgdk_pixbuf-2.0.so.0
-    - /usr/lib/libgio-2.0.so.0
-    - /usr/lib/libglib-2.0.so.0
-    - /usr/lib/libgmodule-2.0.so.0
-    - /usr/lib/libgobject-2.0.so.0
-    - /usr/lib/libgpg-error.so.0
-    - /usr/lib/libgraphite2.so.3
-    - /usr/lib/libgtk-3.so.0
-    - /usr/lib/libharfbuzz.so.0
-    - /usr/lib/libicudata.so.71
-    - /usr/lib/libicui18n.so.71
-    - /usr/lib/libicuuc.so.71
-    - /usr/lib/libjpeg.so.8
-    - /usr/lib/libjson-glib-1.0.so.0
-    - /usr/lib/liblz4.so.1
-    - /usr/lib/liblzma.so.5
-    - /usr/lib/libm.so.6
-    - /usr/lib/libmount.so.1
-    - /usr/lib/libogg.so.0
-    - /usr/lib/libopus.so.0
-    - /usr/lib/libpango-1.0.so.0
-    - /usr/lib/libpangocairo-1.0.so.0
-    - /usr/lib/libpangoft2-1.0.so.0
-    - /usr/lib/libpcre.so.1
-    - /usr/lib/libpixman-1.so.0
-    - /usr/lib/libpng16.so.16
-    - /usr/lib/libpthread.so.0
-    - /usr/lib/libpulse-simple.so.0
-    - /usr/lib/libpulse.so.0
-    - /usr/lib/libsndfile.so.1
-    - /usr/lib/libsqlite3.so.0
-    - /usr/lib/libstdc++.so.6
-    - /usr/lib/libstemmer.so.0
-    - /usr/lib/libsystemd.so.0
-    - /usr/lib/libthai.so.0
-    - /usr/lib/libtiff.so.5
-    - /usr/lib/libtracker-sparql-3.0.so.0
-    - /usr/lib/libvorbis.so.0
-    - /usr/lib/libvorbisenc.so.2
-    - /usr/lib/libwayland-client.so.0
-    - /usr/lib/libwayland-cursor.so.0
-    - /usr/lib/libwayland-egl.so.1
-    - /usr/lib/libxcb-randr.so.0
-    - /usr/lib/libxdo.so.3
-    - /usr/lib/libxkbcommon.so.0
-    - /usr/lib/libxml2.so.2
-    - /usr/lib/libz.so.1
-    - /usr/lib/libzstd.so.1
-    - /usr/lib/locale/locale-archive
-    - /usr/lib/pulseaudio/libpulsecommon-15.0.so
+    - /lib/x86_64-linux-gnu/libFLAC.so.8
+    - /lib/x86_64-linux-gnu/libX11.so.6
+    - /lib/x86_64-linux-gnu/libXau.so.6
+    - /lib/x86_64-linux-gnu/libXcomposite.so.1
+    - /lib/x86_64-linux-gnu/libXcursor.so.1
+    - /lib/x86_64-linux-gnu/libXdamage.so.1
+    - /lib/x86_64-linux-gnu/libXdmcp.so.6
+    - /lib/x86_64-linux-gnu/libXext.so.6
+    - /lib/x86_64-linux-gnu/libXfixes.so.3
+    - /lib/x86_64-linux-gnu/libXi.so.6
+    - /lib/x86_64-linux-gnu/libXinerama.so.1
+    - /lib/x86_64-linux-gnu/libXrandr.so.2
+    - /lib/x86_64-linux-gnu/libXrender.so.1
+    - /lib/x86_64-linux-gnu/libXtst.so.6
+    - /lib/x86_64-linux-gnu/libapparmor.so.1
+    - /lib/x86_64-linux-gnu/libasyncns.so.0
+    - /lib/x86_64-linux-gnu/libatk-1.0.so.0
+    - /lib/x86_64-linux-gnu/libatk-bridge-2.0.so.0
+    - /lib/x86_64-linux-gnu/libatspi.so.0
+    - /lib/x86_64-linux-gnu/libbsd.so.0
+    - /lib/x86_64-linux-gnu/libcairo-gobject.so.2
+    - /lib/x86_64-linux-gnu/libcairo.so.2
+    - /lib/x86_64-linux-gnu/libdatrie.so.1
+    - /lib/x86_64-linux-gnu/libepoxy.so.0
+    - /lib/x86_64-linux-gnu/libffi.so.7
+    - /lib/x86_64-linux-gnu/libfontconfig.so.1
+    - /lib/x86_64-linux-gnu/libfreetype.so.6
+    - /lib/x86_64-linux-gnu/libfribidi.so.0
+    - /lib/x86_64-linux-gnu/libgcrypt.so.20
+    - /lib/x86_64-linux-gnu/libgdk-3.so.0
+    - /lib/x86_64-linux-gnu/libgdk_pixbuf-2.0.so.0
+    - /lib/x86_64-linux-gnu/libgio-2.0.so.0
+    - /lib/x86_64-linux-gnu/libglib-2.0.so.0
+    - /lib/x86_64-linux-gnu/libgmodule-2.0.so.0
+    - /lib/x86_64-linux-gnu/libgobject-2.0.so.0
+    - /lib/x86_64-linux-gnu/libgraphite2.so.3
+    - /lib/x86_64-linux-gnu/libgtk-3.so.0
+    - /lib/x86_64-linux-gnu/libharfbuzz.so.0
+    - /lib/x86_64-linux-gnu/liblz4.so.1
+    - /lib/x86_64-linux-gnu/libogg.so.0
+    - /lib/x86_64-linux-gnu/libpango-1.0.so.0
+    - /lib/x86_64-linux-gnu/libpangocairo-1.0.so.0
+    - /lib/x86_64-linux-gnu/libpangoft2-1.0.so.0
+    - /lib/x86_64-linux-gnu/libpcre2-8.so.0
+    - /lib/x86_64-linux-gnu/libpixman-1.so.0
+    - /lib/x86_64-linux-gnu/libpng16.so.16
+    - /lib/x86_64-linux-gnu/libpulse-simple.so.0
+    - /lib/x86_64-linux-gnu/libpulse.so.0
+    - /lib/x86_64-linux-gnu/libsndfile.so.1
+    - /lib/x86_64-linux-gnu/libthai.so.0
+    - /lib/x86_64-linux-gnu/libvorbis.so.0
+    - /lib/x86_64-linux-gnu/libvorbisenc.so.2
+    - /lib/x86_64-linux-gnu/libwayland-client.so.0
+    - /lib/x86_64-linux-gnu/libwayland-cursor.so.0
+    - /lib/x86_64-linux-gnu/libwayland-egl.so.1
+    - /lib/x86_64-linux-gnu/libwrap.so.0
+    - /lib/x86_64-linux-gnu/libxcb-randr.so.0
+    - /lib/x86_64-linux-gnu/libxdo.so.3
+    - /lib/x86_64-linux-gnu/libxkbcommon.so.0
     exclude:
     - usr/share/man
     - usr/share/doc/*/README.*
     - usr/share/doc/*/changelog.*
     - usr/share/doc/*/NEWS.*
     - usr/share/doc/*/TODO.*
+  runtime:
+    env:
+      PYTHONHOME: '${APPDIR}/usr'
+      PYTHONPATH: '${APPDIR}/usr/lib/python3.8/site-packages'
   test:
     fedora-30:
       image: appimagecrafters/tests-env:fedora-30

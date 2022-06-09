@@ -491,7 +491,11 @@ fn start_pynput_service(rx: mpsc::Receiver<(PyMsg, bool)>) {
         if !std::path::Path::new(&py).exists() {
             py = "/usr/lib/rustdesk/pynput_service.py".to_owned();
             if !std::path::Path::new(&py).exists() {
-                log::error!("{} not exits", py);
+                // enigo libs, not rustdesk root project, so skip using appimage features
+                py = std::env::var("APPDIR").unwrap_or("".to_string()) + "/usr/lib/rustdesk/pynput_service.py";
+                if !std::path::Path::new(&py).exists() {
+                    log::error!("{} not exists", py);
+                }
             }
         }
     }
