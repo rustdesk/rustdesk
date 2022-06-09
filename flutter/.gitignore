@@ -56,3 +56,4 @@ windows/flutter/generated_plugin_registrant.h
 windows/flutter/generated_plugins.cmake
 flutter_export_environment.sh
 Flutter-Generated.xcconfig
+key.jks
