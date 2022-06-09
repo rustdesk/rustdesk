@@ -1,0 +1,150 @@
+# appimage-builder recipe see https://appimage-builder.readthedocs.io for details
+# Tested Linux Distro: Ubuntu 20.04 LTS
+version: 1
+script:
+  # Remove any previous build
+  - rm -rf AppDir | true
+  # Install application dependencies
+  - pip3 install --system --ignore-installed --prefix=/usr --root=AppDir -r ./requirements.txt
+  # Download sciter.so
+  - mkdir -p AppDir/usr/lib/rustdesk/
+  - curl https://raw.githubusercontent.com/c-smile/sciter-sdk/master/bin.lnx/x64/libsciter-gtk.so -o AppDir/usr/lib/rustdesk/libsciter-gtk.so
+  # pynput_service.py
+  - cp ../pynput_service.py ./AppDir/usr/lib/rustdesk
+  # Build rustdesk
+  - pushd .. && python3 inline-sciter.py && cargo build --features inline,appimage --release && popd
+  - mkdir -p AppDir/usr/bin
+  - cp ../target/release/rustdesk  AppDir/usr/bin/rustdesk
+  # Make usr and icons dirs
+  - mkdir -p AppDir/usr/share/icons/hicolor/128x128 && cp ../128x128.png AppDir/usr/share/icons/hicolor/128x128/rustdesk.png
+  - mkdir -p AppDir/usr/share/icons/hicolor/32x32 && cp ../32x32.png AppDir/usr/share/icons/hicolor/32x32/rustdesk.png
+  - cp rustdesk.desktop AppDir/
+  
+AppDir:
+  path: ./AppDir
+  app_info:
+    id: rustdesk
+    name: RustDesk
+    icon: rustdesk
+    version: 1.2.0
+    exec: usr/bin/rustdesk
+    exec_args: $@
+  apt:
+    arch:
+    - amd64
+    allow_unauthenticated: true
+    sources:
+    - sourceline: deb http://archive.ubuntu.com/ubuntu/ focal main restricted
+    - sourceline: deb http://archive.ubuntu.com/ubuntu/ focal-updates main restricted
+    - sourceline: deb http://archive.ubuntu.com/ubuntu/ focal universe
+    - sourceline: deb http://archive.ubuntu.com/ubuntu/ focal-updates universe
+    - sourceline: deb http://archive.ubuntu.com/ubuntu/ focal multiverse
+    - sourceline: deb http://archive.ubuntu.com/ubuntu/ focal-updates multiverse
+    - sourceline: deb http://archive.ubuntu.com/ubuntu/ focal-backports main restricted
+        universe multiverse
+    - sourceline: deb http://archive.ubuntu.com/ubuntu/ focal-security main restricted
+    - sourceline: deb http://archive.ubuntu.com/ubuntu/ focal-security universe
+    - sourceline: deb http://archive.ubuntu.com/ubuntu/ focal-security multiverse
+    include:
+    - libexpat1:amd64
+    - libgcc-s1:amd64
+    - libgpg-error0:amd64
+    - liblzma5:amd64
+    - libmount1:amd64
+    - libpcre3:amd64
+    - libpulse0:amd64
+    - libsystemd0:amd64
+    - libuuid1:amd64
+    - zlib1g:amd64
+    - python3:amd64
+    - python3-pkg-resources:amd64
+  files:
+    include:
+    - /lib/x86_64-linux-gnu/libFLAC.so.8
+    - /lib/x86_64-linux-gnu/libX11.so.6
+    - /lib/x86_64-linux-gnu/libXau.so.6
+    - /lib/x86_64-linux-gnu/libXcomposite.so.1
+    - /lib/x86_64-linux-gnu/libXcursor.so.1
+    - /lib/x86_64-linux-gnu/libXdamage.so.1
+    - /lib/x86_64-linux-gnu/libXdmcp.so.6
+    - /lib/x86_64-linux-gnu/libXext.so.6
+    - /lib/x86_64-linux-gnu/libXfixes.so.3
+    - /lib/x86_64-linux-gnu/libXi.so.6
+    - /lib/x86_64-linux-gnu/libXinerama.so.1
+    - /lib/x86_64-linux-gnu/libXrandr.so.2
+    - /lib/x86_64-linux-gnu/libXrender.so.1
+    - /lib/x86_64-linux-gnu/libXtst.so.6
+    - /lib/x86_64-linux-gnu/libapparmor.so.1
+    - /lib/x86_64-linux-gnu/libasyncns.so.0
+    - /lib/x86_64-linux-gnu/libatk-1.0.so.0
+    - /lib/x86_64-linux-gnu/libatk-bridge-2.0.so.0
+    - /lib/x86_64-linux-gnu/libatspi.so.0
+    - /lib/x86_64-linux-gnu/libbsd.so.0
+    - /lib/x86_64-linux-gnu/libcairo-gobject.so.2
+    - /lib/x86_64-linux-gnu/libcairo.so.2
+    - /lib/x86_64-linux-gnu/libdatrie.so.1
+    - /lib/x86_64-linux-gnu/libepoxy.so.0
+    - /lib/x86_64-linux-gnu/libffi.so.7
+    - /lib/x86_64-linux-gnu/libfontconfig.so.1
+    - /lib/x86_64-linux-gnu/libfreetype.so.6
+    - /lib/x86_64-linux-gnu/libfribidi.so.0
+    - /lib/x86_64-linux-gnu/libgcrypt.so.20
+    - /lib/x86_64-linux-gnu/libgdk-3.so.0
+    - /lib/x86_64-linux-gnu/libgdk_pixbuf-2.0.so.0
+    - /lib/x86_64-linux-gnu/libgio-2.0.so.0
+    - /lib/x86_64-linux-gnu/libglib-2.0.so.0
+    - /lib/x86_64-linux-gnu/libgmodule-2.0.so.0
+    - /lib/x86_64-linux-gnu/libgobject-2.0.so.0
+    - /lib/x86_64-linux-gnu/libgraphite2.so.3
+    - /lib/x86_64-linux-gnu/libgtk-3.so.0
+    - /lib/x86_64-linux-gnu/libharfbuzz.so.0
+    - /lib/x86_64-linux-gnu/liblz4.so.1
+    - /lib/x86_64-linux-gnu/libogg.so.0
+    - /lib/x86_64-linux-gnu/libpango-1.0.so.0
+    - /lib/x86_64-linux-gnu/libpangocairo-1.0.so.0
+    - /lib/x86_64-linux-gnu/libpangoft2-1.0.so.0
+    - /lib/x86_64-linux-gnu/libpcre2-8.so.0
+    - /lib/x86_64-linux-gnu/libpixman-1.so.0
+    - /lib/x86_64-linux-gnu/libpng16.so.16
+    - /lib/x86_64-linux-gnu/libpulse-simple.so.0
+    - /lib/x86_64-linux-gnu/libpulse.so.0
+    - /lib/x86_64-linux-gnu/libsndfile.so.1
+    - /lib/x86_64-linux-gnu/libthai.so.0
+    - /lib/x86_64-linux-gnu/libvorbis.so.0
+    - /lib/x86_64-linux-gnu/libvorbisenc.so.2
+    - /lib/x86_64-linux-gnu/libwayland-client.so.0
+    - /lib/x86_64-linux-gnu/libwayland-cursor.so.0
+    - /lib/x86_64-linux-gnu/libwayland-egl.so.1
+    - /lib/x86_64-linux-gnu/libwrap.so.0
+    - /lib/x86_64-linux-gnu/libxcb-randr.so.0
+    - /lib/x86_64-linux-gnu/libxdo.so.3
+    - /lib/x86_64-linux-gnu/libxkbcommon.so.0
+    exclude:
+    - usr/share/man
+    - usr/share/doc/*/README.*
+    - usr/share/doc/*/changelog.*
+    - usr/share/doc/*/NEWS.*
+    - usr/share/doc/*/TODO.*
+  runtime:
+    env:
+      PYTHONHOME: '${APPDIR}/usr'
+      PYTHONPATH: '${APPDIR}/usr/lib/python3.8/site-packages'
+  test:
+    fedora-30:
+      image: appimagecrafters/tests-env:fedora-30
+      command: ./AppRun
+    debian-stable:
+      image: appimagecrafters/tests-env:debian-stable
+      command: ./AppRun
+    archlinux-latest:
+      image: appimagecrafters/tests-env:archlinux-latest
+      command: ./AppRun
+    centos-7:
+      image: appimagecrafters/tests-env:centos-7
+      command: ./AppRun
+    ubuntu-xenial:
+      image: appimagecrafters/tests-env:ubuntu-xenial
+      command: ./AppRun
+AppImage:
+  arch: x86_64
+  update-information: guess

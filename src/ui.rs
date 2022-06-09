@@ -56,7 +56,13 @@ pub fn start(args: &mut [String]) {
         macos::show_dock();
     }
     #[cfg(all(target_os = "linux", feature = "inline"))]
-    sciter::set_library("/usr/lib/rustdesk/libsciter-gtk.so").ok();
+    {
+        #[cfg(feature = "appimage")]
+        let prefix = std::env::var("APPDIR").unwrap_or("".to_string());
+        #[cfg(not(feature = "appimage"))]
+        let prefix = "".to_string();
+        sciter::set_library(&(prefix + "/usr/lib/rustdesk/libsciter-gtk.so")).ok();
+    }
     // https://github.com/c-smile/sciter-sdk/blob/master/include/sciter-x-types.h
     // https://github.com/rustdesk/rustdesk/issues/132#issuecomment-886069737
     #[cfg(windows)]

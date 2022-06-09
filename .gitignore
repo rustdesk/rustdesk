@@ -19,3 +19,7 @@ sciter.dll
 src/bridge_generated.rs
 *deb
 rustdesk
+# appimage
+appimage/AppDir
+appimage/*.AppImage
+appimage/appimage-build
