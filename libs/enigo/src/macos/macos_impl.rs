@@ -338,7 +338,7 @@ impl KeyboardControllable for Enigo {
 
     fn key_click(&mut self, key: Key) {
         let keycode = self.key_to_keycode(key);
-        if keycode == 0 {
+        if keycode == u16::MAX {
             return;
         }
 
@@ -355,7 +355,7 @@ impl KeyboardControllable for Enigo {
 
     fn key_down(&mut self, key: Key) -> crate::ResultType {
         let code = self.key_to_keycode(key);
-        if code == 0 {
+        if code == u16::MAX {
             return Err("".into()); 
         }
         if let Some(src) = self.event_source.as_ref() {
@@ -489,7 +489,7 @@ impl Enigo {
             Key::Layout(c) => self.map_key_board(c),
 
             Key::Super | Key::Command | Key::Windows | Key::Meta => kVK_Command,
-            _ => 0,
+            _ => u16::MAX,
         }
     }
 
@@ -500,7 +500,7 @@ impl Enigo {
         if ch == '-' || ch == '=' || ch == '.' || ch == '/' || (ch >= '0' && ch <= '9') {
             return self.map_key_board_en(ch);
         }
-        let mut code = 0;
+        let mut code = u16::MAX;
         unsafe {
             let (keyboard, layout) = get_layout();
             if !keyboard.is_null() && !layout.is_null() {
@@ -509,10 +509,10 @@ impl Enigo {
                     let name = get_string(name_ref as _);
                     if let Some(name) = name {
                         if let Some(m) = self.char_to_vkey_map.get(&name) {
-                            code = *m.get(&ch).unwrap_or(&0);
+                            code = *m.get(&ch).unwrap_or(&u16::MAX);
                         } else {
                             let m = get_map(&name, layout);
-                            code = *m.get(&ch).unwrap_or(&0);
+                            code = *m.get(&ch).unwrap_or(&u16::MAX);
                             self.char_to_vkey_map.insert(name.clone(), m);
                         }
                     }
@@ -522,7 +522,7 @@ impl Enigo {
                 CFRelease(keyboard);
             }
         }
-        if code > 0 {
+        if code != u16::MAX {
             return code;
         }
         self.map_key_board_en(ch)
@@ -578,7 +578,7 @@ impl Enigo {
             '.' => kVK_ANSI_Period,
             '/' => kVK_ANSI_Slash,
             '`' => kVK_ANSI_Grave,
-            _ => 0,
+            _ => u16::MAX,
         }
     }
 }
