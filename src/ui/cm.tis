@@ -267,6 +267,7 @@ function bring_to_top(idx=-1) {
 }
 
 handler.addConnection = function(id, is_file_transfer, port_forward, peer_id, name, authorized, keyboard, clipboard, audio, file) {
+    stdout.println("new connection #" + id + ": " + peer_id);
     var conn;
     connections.map(function(c) {
         if (c.id == id) conn = c;
