@@ -3,6 +3,7 @@ use std::ops::Deref;
 mod cn;
 mod cs;
 mod da;
+mod sk;
 mod de;
 mod en;
 mod eo;
@@ -52,6 +53,7 @@ pub fn translate_locale(name: String, locale: &str) -> String {
         "tr" => tr::T.deref(),
         "cs" => cs::T.deref(),
         "da" => da::T.deref(),
+        "sk" => sk::T.deref(),
         _ => en::T.deref(),
     };
     if let Some(v) = m.get(&name as &str) {
