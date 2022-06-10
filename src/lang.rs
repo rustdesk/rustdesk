@@ -33,7 +33,7 @@ pub fn translate_locale(name: String, locale: &str) -> String {
         lang = locale
             .split("-")
             .next()
-            .map(|x| x.split("_").last().unwrap_or_default())
+            .map(|x| x.split("_").next().unwrap_or_default())
             .unwrap_or_default()
             .to_owned();
     }
