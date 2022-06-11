@@ -134,7 +134,16 @@ fn main() {
             }
         } else if args[0] == "--import-config" {
             if args.len() == 2 {
-                import_config(&args[1]);
+                let mut filepath = args[1].to_owned();
+                let path = std::path::Path::new(&args[1]);
+                if !path.is_absolute() {
+                    let mut cur = std::env::current_dir().unwrap();
+                    cur.push(path);
+                    filepath = cur.to_str().unwrap().to_string();
+                } else {
+                    filepath = path.to_str().unwrap().to_string();
+                }
+                import_config(&filepath);
             }
             return;
         } else if args[0] == "--password" {
