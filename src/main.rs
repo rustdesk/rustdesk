@@ -134,7 +134,7 @@ fn main() {
             }
         } else if args[0] == "--import-config" {
             if args.len() == 2 {
-                let mut filepath = args[1].to_owned();
+                let filepath;
                 let path = std::path::Path::new(&args[1]);
                 if !path.is_absolute() {
                     let mut cur = std::env::current_dir().unwrap();
