@@ -1,0 +1,3 @@
+远程桌面软件，开箱即用，无需任何配置。您完全掌控数据，不用担心安全问题。您可以使用我们的注册/中继服务器，
+或者<a href="https://rustdesk.com/server">自己设置</a>，
+亦或者<a href="https://github.com/rustdesk/rustdesk-server-demo">开发您的版本</a>。
