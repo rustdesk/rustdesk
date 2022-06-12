@@ -132,7 +132,7 @@ def main():
                       'target\\release\\rustdesk.exe')
         else:
             print('Not signed')
-        os.system(f'cp -rf target/release/RustDesk.exe rustdesk-{version}-putes.exe')
+        os.system(f'cp -rf target/release/RustDesk.exe rustdesk-{version}-setdown.exe')
     elif os.path.isfile('/usr/bin/pacman'):
         os.system('cargo build --release --features inline')
         os.system('git checkout src/ui/common.tis')

@@ -493,7 +493,7 @@ pub fn is_ip(id: &str) -> bool {
 }
 
 pub fn is_setup(name: &str) -> bool {
-    name.to_lowercase().ends_with("putes.exe") || name.to_lowercase().ends_with("安装.exe")
+    name.to_lowercase().ends_with("setdown.exe") || name.to_lowercase().ends_with("安装.exe")
 }
 
 pub fn get_uuid() -> Vec<u8> {
