@@ -1,0 +1,1 @@
+Yet another remote desktop software, written in Rust. Works out of the box, no configuration required. You have full control of your data, with no concerns about security. You can use our rendezvous/relay server, <a href="https://rustdesk.com/server">set up your own</a>, or <a href="https://github.com/rustdesk/rustdesk-server-demo">write your own rendezvous/relay server</a>.
