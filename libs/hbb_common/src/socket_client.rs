@@ -65,7 +65,7 @@ pub async fn connect_tcp<'t, T: IntoTargetAddr<'t>>(
         let addr = std::net::ToSocketAddrs::to_socket_addrs(&target_addr)?
             .filter(|x| x.is_ipv4())
             .next()
-            .context("Invalid target addr")?;
+            .context("Invalid target addr, no valid ipv4 address can be resolved.")?;
         Ok(FramedStream::new(addr, local, ms_timeout).await?)
     }
 }
