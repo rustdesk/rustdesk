@@ -41,6 +41,8 @@ RustDeskは誰からの貢献も歓迎します。 貢献するには [`CONTRIBU
 [Linux](https://raw.githubusercontent.com/c-smile/sciter-sdk/master/bin.lnx/x64/libsciter-gtk.so) |
 [MacOS](https://raw.githubusercontent.com/c-smile/sciter-sdk/master/bin.osx/libsciter.dylib)
 
+モバイル版はFlutterを利用します。デスクトップ版もSciterからFlutterへマイグレーション予定です。
+
 ## ビルド手順
 
 - Rust開発環境とC ++ビルド環境を準備します
