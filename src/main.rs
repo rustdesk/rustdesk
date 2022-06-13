@@ -95,13 +95,15 @@ fn main() {
                 hbb_common::allow_err!(platform::uninstall_me());
                 hbb_common::allow_err!(platform::install_me(
                     "desktopicon startmenu",
-                    "".to_owned()
+                    "".to_owned(),
+                    false,
                 ));
                 return;
             } else if args[0] == "--silent-install" {
                 hbb_common::allow_err!(platform::install_me(
                     "desktopicon startmenu",
-                    "".to_owned()
+                    "".to_owned(),
+                    true,
                 ));
                 return;
             } else if args[0] == "--extract" {

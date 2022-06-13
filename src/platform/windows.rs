@@ -905,7 +905,7 @@ fn get_after_install(exe: &str) -> String {
     ", ext=ext, exe=exe, app_name=app_name)
 }
 
-pub fn install_me(options: &str, path: String) -> ResultType<()> {
+pub fn install_me(options: &str, path: String, silent: bool) -> ResultType<()> {
     let uninstall_str = get_uninstall();
     let mut path = path.trim_end_matches('\\').to_owned();
     let (subkey, _path, start_menu, exe) = get_default_install_info();
@@ -1080,9 +1080,11 @@ sc delete {app_name}
     );
     run_cmds(cmds, false)?;
     std::thread::sleep(std::time::Duration::from_millis(2000));
-    std::process::Command::new(&exe).spawn()?;
-    std::process::Command::new(&exe).arg("--tray").spawn()?;
-    std::thread::sleep(std::time::Duration::from_millis(1000));
+    if !silent {
+        std::process::Command::new(&exe).spawn()?;
+        std::process::Command::new(&exe).arg("--tray").spawn()?;
+        std::thread::sleep(std::time::Duration::from_millis(1000));
+    }
     Ok(())
 }
 
