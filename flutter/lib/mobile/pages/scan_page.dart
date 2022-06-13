@@ -1,11 +1,13 @@
-import 'package:flutter/material.dart';
-import 'package:qr_code_scanner/qr_code_scanner.dart';
-import 'package:image_picker/image_picker.dart';
-import 'package:image/image.dart' as img;
-import 'package:zxing2/qrcode.dart';
-import 'dart:io';
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
+
+import 'package:flutter/material.dart';
+import 'package:image/image.dart' as img;
+import 'package:image_picker/image_picker.dart';
+import 'package:qr_code_scanner/qr_code_scanner.dart';
+import 'package:zxing2/qrcode.dart';
+
 import '../../common.dart';
 import '../../models/model.dart';
 
@@ -153,10 +155,10 @@ class _ScanPageState extends State<ScanPage> {
 void showServerSettingsWithValue(
     String id, String relay, String key, String api) {
   final formKey = GlobalKey<FormState>();
-  final id0 = FFI.getByName('option', 'custom-rendezvous-server');
-  final relay0 = FFI.getByName('option', 'relay-server');
-  final api0 = FFI.getByName('option', 'api-server');
-  final key0 = FFI.getByName('option', 'key');
+  final id0 = gFFI.getByName('option', 'custom-rendezvous-server');
+  final relay0 = gFFI.getByName('option', 'relay-server');
+  final api0 = gFFI.getByName('option', 'api-server');
+  final key0 = gFFI.getByName('option', 'key');
   DialogManager.show((setState, close) {
     return CustomAlertDialog(
       title: Text(translate('ID/Relay Server')),
@@ -227,17 +229,17 @@ void showServerSettingsWithValue(
                 formKey.currentState!.validate()) {
               formKey.currentState!.save();
               if (id != id0)
-                FFI.setByName('option',
+                gFFI.setByName('option',
                     '{"name": "custom-rendezvous-server", "value": "$id"}');
               if (relay != relay0)
-                FFI.setByName(
+                gFFI.setByName(
                     'option', '{"name": "relay-server", "value": "$relay"}');
               if (key != key0)
-                FFI.setByName('option', '{"name": "key", "value": "$key"}');
+                gFFI.setByName('option', '{"name": "key", "value": "$key"}');
               if (api != api0)
-                FFI.setByName(
+                gFFI.setByName(
                     'option', '{"name": "api-server", "value": "$api"}');
-              FFI.ffiModel.updateUser();
+              gFFI.ffiModel.updateUser();
               close();
             }
           },
@@ -253,6 +255,6 @@ String? validate(value) {
   if (value.isEmpty) {
     return null;
   }
-  final res = FFI.getByName('test_if_valid_server', value);
+  final res = gFFI.getByName('test_if_valid_server', value);
   return res.isEmpty ? null : res;
 }

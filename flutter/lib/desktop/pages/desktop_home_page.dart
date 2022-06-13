@@ -61,7 +61,7 @@ class _DesktopHomePageState extends State<DesktopHomePage> with TrayListener {
 
   buildServerInfo(BuildContext context) {
     return ChangeNotifierProvider.value(
-      value: FFI.serverModel,
+      value: gFFI.serverModel,
       child: Container(
         decoration: BoxDecoration(color: MyTheme.white),
         child: Column(
@@ -88,7 +88,7 @@ class _DesktopHomePageState extends State<DesktopHomePage> with TrayListener {
   }
 
   buildIDBoard(BuildContext context) {
-    final model = FFI.serverModel;
+    final model = gFFI.serverModel;
     return Container(
       margin: EdgeInsets.symmetric(vertical: 4.0, horizontal: 16.0),
       child: Row(
@@ -123,7 +123,7 @@ class _DesktopHomePageState extends State<DesktopHomePage> with TrayListener {
   }
 
   buildPasswordBoard(BuildContext context) {
-    final model = FFI.serverModel;
+    final model = gFFI.serverModel;
     return Container(
       margin: EdgeInsets.symmetric(vertical: 4.0, horizontal: 16.0),
       child: Row(

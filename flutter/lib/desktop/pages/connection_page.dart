@@ -44,7 +44,7 @@ class _ConnectionPageState extends State<ConnectionPage> {
   @override
   Widget build(BuildContext context) {
     Provider.of<FfiModel>(context);
-    if (_idController.text.isEmpty) _idController.text = FFI.getId();
+    if (_idController.text.isEmpty) _idController.text = gFFI.getId();
     return SingleChildScrollView(
       child: Column(
           mainAxisAlignment: MainAxisAlignment.start,
@@ -258,7 +258,7 @@ class _ConnectionPageState extends State<ConnectionPage> {
       width = size.width / n - 2 * space;
     }
     final cards = <Widget>[];
-    var peers = FFI.peers();
+    var peers = gFFI.peers();
     peers.forEach((p) {
       cards.add(Container(
           width: width,
@@ -316,7 +316,7 @@ class _ConnectionPageState extends State<ConnectionPage> {
       elevation: 8,
     );
     if (value == 'remove') {
-      setState(() => FFI.setByName('remove', '$id'));
+      setState(() => gFFI.setByName('remove', '$id'));
       () async {
         removePreference(id);
       }();

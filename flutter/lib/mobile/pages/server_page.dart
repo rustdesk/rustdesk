@@ -1,13 +1,13 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_hbb/models/model.dart';
 import 'package:flutter_hbb/mobile/widgets/dialog.dart';
+import 'package:flutter_hbb/models/model.dart';
 import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
 import 'package:provider/provider.dart';
 
 import '../../common.dart';
+import '../../models/model.dart';
 import '../../models/server_model.dart';
 import 'home_page.dart';
-import '../../models/model.dart';
 
 class ServerPage extends StatelessWidget implements PageShape {
   @override
@@ -30,12 +30,12 @@ class ServerPage extends StatelessWidget implements PageShape {
             PopupMenuItem(
               child: Text(translate("Set your own password")),
               value: "changePW",
-              enabled: FFI.serverModel.isStart,
+              enabled: gFFI.serverModel.isStart,
             ),
             PopupMenuItem(
               child: Text(translate("Refresh random password")),
               value: "refreshPW",
-              enabled: FFI.serverModel.isStart,
+              enabled: gFFI.serverModel.isStart,
             )
           ];
         },
@@ -47,7 +47,7 @@ class ServerPage extends StatelessWidget implements PageShape {
           } else if (value == "refreshPW") {
             () async {
               showLoading(translate("Waiting"));
-              if (await FFI.serverModel.updatePassword("")) {
+              if (await gFFI.serverModel.updatePassword("")) {
                 showSuccess();
               } else {
                 showError();
@@ -62,10 +62,10 @@ class ServerPage extends StatelessWidget implements PageShape {
   Widget build(BuildContext context) {
     checkService();
     return ChangeNotifierProvider.value(
-        value: FFI.serverModel,
+        value: gFFI.serverModel,
         child: Consumer<ServerModel>(
             builder: (context, serverModel, child) => SingleChildScrollView(
-                  controller: FFI.serverModel.controller,
+                  controller: gFFI.serverModel.controller,
                   child: Center(
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.start,
@@ -82,9 +82,9 @@ class ServerPage extends StatelessWidget implements PageShape {
 }
 
 void checkService() async {
-  FFI.invokeMethod("check_service"); // jvm
+  gFFI.invokeMethod("check_service"); // jvm
   // for Android 10/11,MANAGE_EXTERNAL_STORAGE permission from a system setting page
-  if (PermissionManager.isWaitingFile() && !FFI.serverModel.fileOk) {
+  if (PermissionManager.isWaitingFile() && !gFFI.serverModel.fileOk) {
     PermissionManager.complete("file", await PermissionManager.check("file"));
     debugPrint("file permission finished");
   }
@@ -96,7 +96,7 @@ class ServerInfo extends StatefulWidget {
 }
 
 class _ServerInfoState extends State<ServerInfo> {
-  final model = FFI.serverModel;
+  final model = gFFI.serverModel;
   var _passwdShow = false;
 
   @override
@@ -327,7 +327,7 @@ class ConnectionManager extends StatelessWidget {
                                 ? SizedBox.shrink()
                                 : IconButton(
                                     onPressed: () {
-                                      FFI.chatModel
+                                      gFFI.chatModel
                                           .changeCurrentID(entry.value.id);
                                       final bar =
                                           navigationBarKey.currentWidget;
@@ -355,8 +355,9 @@ class ConnectionManager extends StatelessWidget {
                                     MaterialStateProperty.all(Colors.red)),
                             icon: Icon(Icons.close),
                             onPressed: () {
-                              FFI.setByName("close_conn", entry.key.toString());
-                              FFI.invokeMethod(
+                              gFFI.setByName(
+                                  "close_conn", entry.key.toString());
+                              gFFI.invokeMethod(
                                   "cancel_notification", entry.key);
                             },
                             label: Text(translate("Close")))
@@ -461,14 +462,14 @@ Widget clientInfo(Client client) {
 }
 
 void toAndroidChannelInit() {
-  FFI.setMethodCallHandler((method, arguments) {
+  gFFI.setMethodCallHandler((method, arguments) {
     debugPrint("flutter got android msg,$method,$arguments");
     try {
       switch (method) {
         case "start_capture":
           {
             SmartDialog.dismiss();
-            FFI.serverModel.updateClientState();
+            gFFI.serverModel.updateClientState();
             break;
           }
         case "on_state_changed":
@@ -476,7 +477,7 @@ void toAndroidChannelInit() {
             var name = arguments["name"] as String;
             var value = arguments["value"] as String == "true";
             debugPrint("from jvm:on_state_changed,$name:$value");
-            FFI.serverModel.changeStatue(name, value);
+            gFFI.serverModel.changeStatue(name, value);
             break;
           }
         case "on_android_permission_result":
@@ -488,7 +489,7 @@ void toAndroidChannelInit() {
           }
         case "on_media_projection_canceled":
           {
-            FFI.serverModel.stopService();
+            gFFI.serverModel.stopService();
             break;
           }
       }

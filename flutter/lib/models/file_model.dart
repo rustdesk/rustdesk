@@ -1,7 +1,8 @@
 import 'dart:async';
 import 'dart:convert';
-import 'package:flutter_hbb/common.dart';
+
 import 'package:flutter/material.dart';
+import 'package:flutter_hbb/common.dart';
 import 'package:flutter_hbb/mobile/pages/file_manager_page.dart';
 import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
 import 'package:path/path.dart' as Path;
@@ -68,6 +69,10 @@ class FileModel extends ChangeNotifier {
   final _fileFetcher = FileFetcher();
 
   final _jobResultListener = JobResultListener<Map<String, dynamic>>();
+
+  final WeakReference<FFI> _ffi;
+
+  FileModel(this._ffi);
 
   toggleSelectMode() {
     if (jobState == JobState.inProgress) {
@@ -162,7 +167,7 @@ class FileModel extends ChangeNotifier {
         // overwrite
         msg['need_override'] = 'true';
       }
-      FFI.setByName("set_confirm_override_file", jsonEncode(msg));
+      _ffi.target?.setByName("set_confirm_override_file", jsonEncode(msg));
     }
   }
 
@@ -172,20 +177,23 @@ class FileModel extends ChangeNotifier {
   }
 
   onReady() async {
-    _localOption.home = FFI.getByName("get_home_dir");
+    _localOption.home = _ffi.target?.getByName("get_home_dir") ?? "";
     _localOption.showHidden =
-        FFI.getByName("peer_option", "local_show_hidden").isNotEmpty;
+        _ffi.target?.getByName("peer_option", "local_show_hidden").isNotEmpty ??
+            false;
 
-    _remoteOption.showHidden =
-        FFI.getByName("peer_option", "remote_show_hidden").isNotEmpty;
-    _remoteOption.isWindows = FFI.ffiModel.pi.platform == "Windows";
+    _remoteOption.showHidden = _ffi.target
+            ?.getByName("peer_option", "remote_show_hidden")
+            .isNotEmpty ??
+        false;
+    _remoteOption.isWindows = _ffi.target?.ffiModel.pi.platform == "Windows";
 
-    debugPrint("remote platform: ${FFI.ffiModel.pi.platform}");
+    debugPrint("remote platform: ${_ffi.target?.ffiModel.pi.platform}");
 
     await Future.delayed(Duration(milliseconds: 100));
 
-    final local = FFI.getByName("peer_option", "local_dir");
-    final remote = FFI.getByName("peer_option", "remote_dir");
+    final local = _ffi.target?.getByName("peer_option", "local_dir") ?? "";
+    final remote = _ffi.target?.getByName("peer_option", "remote_dir") ?? "";
     openDirectory(local.isEmpty ? _localOption.home : local, isLocal: true);
     openDirectory(remote.isEmpty ? _remoteOption.home : remote, isLocal: false);
     await Future.delayed(Duration(seconds: 1));
@@ -205,19 +213,19 @@ class FileModel extends ChangeNotifier {
 
     msg["name"] = "local_dir";
     msg["value"] = _currentLocalDir.path;
-    FFI.setByName('peer_option', jsonEncode(msg));
+    _ffi.target?.setByName('peer_option', jsonEncode(msg));
 
     msg["name"] = "local_show_hidden";
     msg["value"] = _localOption.showHidden ? "Y" : "";
-    FFI.setByName('peer_option', jsonEncode(msg));
+    _ffi.target?.setByName('peer_option', jsonEncode(msg));
 
     msg["name"] = "remote_dir";
     msg["value"] = _currentRemoteDir.path;
-    FFI.setByName('peer_option', jsonEncode(msg));
+    _ffi.target?.setByName('peer_option', jsonEncode(msg));
 
     msg["name"] = "remote_show_hidden";
     msg["value"] = _remoteOption.showHidden ? "Y" : "";
-    FFI.setByName('peer_option', jsonEncode(msg));
+    _ffi.target?.setByName('peer_option', jsonEncode(msg));
     _currentLocalDir.clear();
     _currentRemoteDir.clear();
     _localOption.clear();
@@ -279,7 +287,7 @@ class FileModel extends ChangeNotifier {
         "show_hidden": showHidden.toString(),
         "is_remote": (!(items.isLocal!)).toString()
       };
-      FFI.setByName("send_files", jsonEncode(msg));
+      _ffi.target?.setByName("send_files", jsonEncode(msg));
     });
   }
 
@@ -478,7 +486,7 @@ class FileModel extends ChangeNotifier {
       "file_num": fileNum.toString(),
       "is_remote": (!(isLocal)).toString()
     };
-    FFI.setByName("remove_file", jsonEncode(msg));
+    _ffi.target?.setByName("remove_file", jsonEncode(msg));
   }
 
   sendRemoveEmptyDir(String path, int fileNum, bool isLocal) {
@@ -487,7 +495,7 @@ class FileModel extends ChangeNotifier {
       "path": path,
       "is_remote": (!isLocal).toString()
     };
-    FFI.setByName("remove_all_empty_dirs", jsonEncode(msg));
+    _ffi.target?.setByName("remove_all_empty_dirs", jsonEncode(msg));
   }
 
   createDir(String path) {
@@ -497,11 +505,11 @@ class FileModel extends ChangeNotifier {
       "path": path,
       "is_remote": (!isLocal).toString()
     };
-    FFI.setByName("create_dir", jsonEncode(msg));
+    _ffi.target?.setByName("create_dir", jsonEncode(msg));
   }
 
   cancelJob(int id) {
-    FFI.setByName("cancel_job", id.toString());
+    _ffi.target?.setByName("cancel_job", id.toString());
     jobReset();
   }
 
@@ -627,11 +635,11 @@ class FileFetcher {
     try {
       final msg = {"path": path, "show_hidden": showHidden.toString()};
       if (isLocal) {
-        final res = FFI.getByName("read_local_dir_sync", jsonEncode(msg));
+        final res = gFFI.getByName("read_local_dir_sync", jsonEncode(msg));
         final fd = FileDirectory.fromJson(jsonDecode(res));
         return fd;
       } else {
-        FFI.setByName("read_remote_dir", jsonEncode(msg));
+        gFFI.setByName("read_remote_dir", jsonEncode(msg));
         return registerReadTask(isLocal, path);
       }
     } catch (e) {
@@ -649,7 +657,7 @@ class FileFetcher {
         "show_hidden": showHidden.toString(),
         "is_remote": (!isLocal).toString()
       };
-      FFI.setByName("read_dir_recursive", jsonEncode(msg));
+      gFFI.setByName("read_dir_recursive", jsonEncode(msg));
       return registerReadRecursiveTask(id);
     } catch (e) {
       return Future.error(e);

@@ -1,14 +1,16 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/mobile/pages/file_manager_page.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'dart:async';
+
 import '../../common.dart';
 import '../../models/model.dart';
 import 'home_page.dart';
 import 'remote_page.dart';
-import 'settings_page.dart';
 import 'scan_page.dart';
+import 'settings_page.dart';
 
 /// Connection page for connecting to a remote peer.
 class ConnectionPage extends StatefulWidget implements PageShape {
@@ -41,7 +43,7 @@ class _ConnectionPageState extends State<ConnectionPage> {
     super.initState();
     if (isAndroid) {
       Timer(Duration(seconds: 5), () {
-        _updateUrl = FFI.getByName('software_update_url');
+        _updateUrl = gFFI.getByName('software_update_url');
         if (_updateUrl.isNotEmpty) setState(() {});
       });
     }
@@ -50,7 +52,7 @@ class _ConnectionPageState extends State<ConnectionPage> {
   @override
   Widget build(BuildContext context) {
     Provider.of<FfiModel>(context);
-    if (_idController.text.isEmpty) _idController.text = FFI.getId();
+    if (_idController.text.isEmpty) _idController.text = gFFI.getId();
     return SingleChildScrollView(
       child: Column(
           mainAxisAlignment: MainAxisAlignment.start,
@@ -220,7 +222,7 @@ class _ConnectionPageState extends State<ConnectionPage> {
       width = size.width / n - 2 * space;
     }
     final cards = <Widget>[];
-    var peers = FFI.peers();
+    var peers = gFFI.peers();
     peers.forEach((p) {
       cards.add(Container(
           width: width,
@@ -278,7 +280,7 @@ class _ConnectionPageState extends State<ConnectionPage> {
       elevation: 8,
     );
     if (value == 'remove') {
-      setState(() => FFI.setByName('remove', '$id'));
+      setState(() => gFFI.setByName('remove', '$id'));
       () async {
         removePreference(id);
       }();

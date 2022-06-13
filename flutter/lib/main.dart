@@ -6,6 +6,7 @@ import 'package:flutter_hbb/desktop/pages/desktop_home_page.dart';
 import 'package:flutter_hbb/desktop/screen/desktop_remote_screen.dart';
 import 'package:flutter_hbb/utils/multi_window_manager.dart';
 import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
+import 'package:get/route_manager.dart';
 import 'package:provider/provider.dart';
 import 'package:window_manager/window_manager.dart';
 
@@ -13,13 +14,15 @@ import 'common.dart';
 import 'mobile/pages/home_page.dart';
 import 'mobile/pages/server_page.dart';
 import 'mobile/pages/settings_page.dart';
-import 'models/model.dart';
 
 int? windowId;
 
 Future<Null> main(List<String> args) async {
   WidgetsFlutterBinding.ensureInitialized();
-  await FFI.ffiModel.init();
+  // global FFI, use this **ONLY** for global configuration
+  // for convenience, use global FFI on mobile platform
+  // focus on multi-ffi on desktop first
+  initGlobalFFI();
   // await Firebase.initializeApp();
   if (isAndroid) {
     toAndroidChannelInit();
@@ -54,7 +57,7 @@ void runRustDeskApp(List<String> args) async {
   } else {
     // disable tray
     // initTray();
-    FFI.serverModel.startService();
+    gFFI.serverModel.startService();
     runApp(App());
     doWhenWindowReady(() {
       const initialSize = Size(1280, 720);
@@ -72,12 +75,13 @@ class App extends StatelessWidget {
     // final analytics = FirebaseAnalytics.instance;
     return MultiProvider(
       providers: [
-        ChangeNotifierProvider.value(value: FFI.ffiModel),
-        ChangeNotifierProvider.value(value: FFI.imageModel),
-        ChangeNotifierProvider.value(value: FFI.cursorModel),
-        ChangeNotifierProvider.value(value: FFI.canvasModel),
+        // TODO remove it, only for compile
+        ChangeNotifierProvider.value(value: gFFI.ffiModel),
+        ChangeNotifierProvider.value(value: gFFI.imageModel),
+        ChangeNotifierProvider.value(value: gFFI.cursorModel),
+        ChangeNotifierProvider.value(value: gFFI.canvasModel),
       ],
-      child: MaterialApp(
+      child: GetMaterialApp(
           navigatorKey: globalKey,
           debugShowCheckedModeBanner: false,
           title: 'RustDesk',
@@ -88,8 +92,8 @@ class App extends StatelessWidget {
           home: isDesktop
               ? DesktopHomePage()
               : !isAndroid
-              ? WebHomePage()
-              : HomePage(),
+                  ? WebHomePage()
+                  : HomePage(),
           navigatorObservers: [
             // FirebaseAnalyticsObserver(analytics: analytics),
             FlutterSmartDialog.observer

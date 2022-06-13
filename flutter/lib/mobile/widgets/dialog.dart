@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
+
 import '../../common.dart';
 import '../../models/model.dart';
 
@@ -86,7 +87,7 @@ void updatePasswordDialog() {
               ? () async {
                   close();
                   showLoading(translate("Waiting"));
-                  if (await FFI.serverModel.updatePassword(p0.text)) {
+                  if (await gFFI.serverModel.updatePassword(p0.text)) {
                     showSuccess();
                   } else {
                     showError();
@@ -102,7 +103,7 @@ void updatePasswordDialog() {
 
 void enterPasswordDialog(String id) {
   final controller = TextEditingController();
-  var remember = FFI.getByName('remember', id) == 'true';
+  var remember = gFFI.getByName('remember', id) == 'true';
   DialogManager.show((setState, close) {
     return CustomAlertDialog(
       title: Text(translate('Password Required')),
@@ -137,7 +138,7 @@ void enterPasswordDialog(String id) {
           onPressed: () {
             var text = controller.text.trim();
             if (text == '') return;
-            FFI.login(id, text, remember);
+            gFFI.login(id, text, remember);
             close();
             showLoading(translate('Logging in...'));
           },

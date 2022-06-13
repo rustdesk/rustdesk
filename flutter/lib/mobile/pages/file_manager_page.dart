@@ -1,11 +1,12 @@
 import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:flutter_breadcrumb/flutter_breadcrumb.dart';
 import 'package:flutter_hbb/models/file_model.dart';
 import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
 import 'package:provider/provider.dart';
-import 'package:flutter_breadcrumb/flutter_breadcrumb.dart';
-import 'package:wakelock/wakelock.dart';
 import 'package:toggle_switch/toggle_switch.dart';
+import 'package:wakelock/wakelock.dart';
 
 import '../../common.dart';
 import '../../models/model.dart';
@@ -20,22 +21,22 @@ class FileManagerPage extends StatefulWidget {
 }
 
 class _FileManagerPageState extends State<FileManagerPage> {
-  final model = FFI.fileModel;
+  final model = gFFI.fileModel;
   final _selectedItems = SelectedItems();
   final _breadCrumbScroller = ScrollController();
 
   @override
   void initState() {
     super.initState();
-    FFI.connect(widget.id, isFileTransfer: true);
-    FFI.ffiModel.updateEventListener(widget.id);
+    gFFI.connect(widget.id, isFileTransfer: true);
+    gFFI.ffiModel.updateEventListener(widget.id);
     Wakelock.enable();
   }
 
   @override
   void dispose() {
     model.onClose();
-    FFI.close();
+    gFFI.close();
     SmartDialog.dismiss();
     Wakelock.disable();
     super.dispose();
@@ -43,7 +44,7 @@ class _FileManagerPageState extends State<FileManagerPage> {
 
   @override
   Widget build(BuildContext context) => ChangeNotifierProvider.value(
-      value: FFI.fileModel,
+      value: gFFI.fileModel,
       child: Consumer<FileModel>(builder: (_context, _model, _child) {
         return WillPopScope(
             onWillPop: () async {

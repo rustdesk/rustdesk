@@ -157,7 +157,7 @@ hideChatWindowOverlay() {
 
 toggleChatOverlay() {
   if (chatIconOverlayEntry == null || chatWindowOverlayEntry == null) {
-    FFI.invokeMethod("enable_soft_keyboard", true);
+    gFFI.invokeMethod("enable_soft_keyboard", true);
     showChatIconOverlay();
     showChatWindowOverlay();
   } else {
@@ -248,12 +248,12 @@ showMobileActionsOverlay() {
       position: Offset(left, top),
       width: overlayW,
       height: overlayH,
-      onBackPressed: () => FFI.tap(MouseButtons.right),
-      onHomePressed: () => FFI.tap(MouseButtons.wheel),
+      onBackPressed: () => gFFI.tap(MouseButtons.right),
+      onHomePressed: () => gFFI.tap(MouseButtons.wheel),
       onRecentPressed: () async {
-        FFI.sendMouse('down', MouseButtons.wheel);
+        gFFI.sendMouse('down', MouseButtons.wheel);
         await Future.delayed(Duration(milliseconds: 500));
-        FFI.sendMouse('up', MouseButtons.wheel);
+        gFFI.sendMouse('up', MouseButtons.wheel);
       },
     );
   });
