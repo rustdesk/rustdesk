@@ -25,15 +25,15 @@ typedef F3 = void Function(Pointer<Utf8>, Pointer<Utf8>);
 /// FFI wrapper around the native Rust core.
 /// Hides the platform differences.
 class PlatformFFI {
-  static Pointer<RgbaFrame>? _lastRgbaFrame;
-  static String _dir = '';
-  static String _homeDir = '';
-  static F2? _getByName;
-  static F3? _setByName;
-  static late RustdeskImpl _ffiBind;
-  static void Function(Map<String, dynamic>)? _eventCallback;
+  Pointer<RgbaFrame>? _lastRgbaFrame;
+  String _dir = '';
+  String _homeDir = '';
+  F2? _getByName;
+  F3? _setByName;
+  late RustdeskImpl _ffiBind;
+  void Function(Map<String, dynamic>)? _eventCallback;
 
-  static RustdeskImpl get ffiBind => _ffiBind;
+  RustdeskImpl get ffiBind => _ffiBind;
 
   static Future<String> getVersion() async {
     PackageInfo packageInfo = await PackageInfo.fromPlatform();
@@ -42,7 +42,7 @@ class PlatformFFI {
 
   /// Send **get** command to the Rust core based on [name] and [arg].
   /// Return the result as a string.
-  static String getByName(String name, [String arg = '']) {
+  String getByName(String name, [String arg = '']) {
     if (_getByName == null) return '';
     var a = name.toNativeUtf8();
     var b = arg.toNativeUtf8();
@@ -56,7 +56,7 @@ class PlatformFFI {
   }
 
   /// Send **set** command to the Rust core based on [name] and [value].
-  static void setByName(String name, [String value = '']) {
+  void setByName(String name, [String value = '']) {
     if (_setByName == null) return;
     var a = name.toNativeUtf8();
     var b = value.toNativeUtf8();
@@ -66,7 +66,7 @@ class PlatformFFI {
   }
 
   /// Init the FFI class, loads the native Rust core library.
-  static Future<Null> init() async {
+  Future<Null> init() async {
     isIOS = Platform.isIOS;
     isAndroid = Platform.isAndroid;
     isDesktop = Platform.isWindows || Platform.isMacOS || Platform.isLinux;
@@ -134,7 +134,7 @@ class PlatformFFI {
   }
 
   /// Start listening to the Rust core's events and frames.
-  static void _startListenEvent(RustdeskImpl rustdeskImpl) {
+  void _startListenEvent(RustdeskImpl rustdeskImpl) {
     () async {
       await for (final message in rustdeskImpl.startGlobalEventStream()) {
         if (_eventCallback != null) {
@@ -149,24 +149,24 @@ class PlatformFFI {
     }();
   }
 
-  static void setEventCallback(void Function(Map<String, dynamic>) fun) async {
+  void setEventCallback(void Function(Map<String, dynamic>) fun) async {
     _eventCallback = fun;
   }
 
-  static void setRgbaCallback(void Function(Uint8List) fun) async {}
+  void setRgbaCallback(void Function(Uint8List) fun) async {}
 
-  static void startDesktopWebListener() {}
+  void startDesktopWebListener() {}
 
-  static void stopDesktopWebListener() {}
+  void stopDesktopWebListener() {}
 
-  static void setMethodCallHandler(FMethod callback) {
+  void setMethodCallHandler(FMethod callback) {
     toAndroidChannel.setMethodCallHandler((call) async {
       callback(call.method, call.arguments);
       return null;
     });
   }
 
-  static invokeMethod(String method, [dynamic arguments]) async {
+  invokeMethod(String method, [dynamic arguments]) async {
     if (!isAndroid) return Future<bool>(() => false);
     return await toAndroidChannel.invokeMethod(method, arguments);
   }

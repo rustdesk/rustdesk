@@ -8,6 +8,8 @@ import 'package:flutter/services.dart';
 import 'package:flutter_hbb/mobile/widgets/gesture_help.dart';
 import 'package:flutter_hbb/models/chat_model.dart';
 import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
+import 'package:get/get.dart';
+import 'package:get/route_manager.dart';
 import 'package:provider/provider.dart';
 import 'package:wakelock/wakelock.dart';
 import 'package:window_manager/window_manager.dart';
@@ -45,10 +47,15 @@ class _RemotePageState extends State<RemotePage> with WindowListener {
   var _showEdit = false; // use soft keyboard
   var _isPhysicalMouse = false;
 
+  FFI get _ffi => ffi(widget.id);
+
   @override
   void initState() {
     super.initState();
-    FFI.connect(widget.id);
+    final ffi = Get.put(FFI(), tag: widget.id);
+    // note: a little trick
+    ffi.ffiModel.platformFFI = gFFI.ffiModel.platformFFI;
+    ffi.connect(widget.id);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual, overlays: []);
       showLoading(translate('Connecting...'));
@@ -59,8 +66,8 @@ class _RemotePageState extends State<RemotePage> with WindowListener {
       Wakelock.enable();
     }
     _physicalFocusNode.requestFocus();
-    // FFI.ffiModel.updateEventListener(widget.id);
-    FFI.listenToMouse(true);
+    ffi.ffiModel.updateEventListener(widget.id);
+    ffi.listenToMouse(true);
     WindowManager.instance.addListener(this);
   }
 
@@ -68,11 +75,11 @@ class _RemotePageState extends State<RemotePage> with WindowListener {
   void dispose() {
     print("remote page dispose");
     hideMobileActionsOverlay();
-    FFI.listenToMouse(false);
-    FFI.invokeMethod("enable_soft_keyboard", true);
+    _ffi.listenToMouse(false);
+    _ffi.invokeMethod("enable_soft_keyboard", true);
     _mobileFocusNode.dispose();
     _physicalFocusNode.dispose();
-    FFI.close();
+    _ffi.close();
     _interval?.cancel();
     _timer?.cancel();
     SmartDialog.dismiss();
@@ -82,11 +89,12 @@ class _RemotePageState extends State<RemotePage> with WindowListener {
       Wakelock.disable();
     }
     WindowManager.instance.removeListener(this);
+    Get.delete<FFI>(tag: widget.id);
     super.dispose();
   }
 
   void resetTool() {
-    FFI.resetModifiers();
+    _ffi.resetModifiers();
   }
 
   bool isKeyboardShown() {
@@ -105,8 +113,8 @@ class _RemotePageState extends State<RemotePage> with WindowListener {
               overlays: []);
           // [pi.version.isNotEmpty] -> check ready or not,avoid login without soft-keyboard
           if (chatWindowOverlayEntry == null &&
-              FFI.ffiModel.pi.version.isNotEmpty) {
-            FFI.invokeMethod("enable_soft_keyboard", false);
+              _ffi.ffiModel.pi.version.isNotEmpty) {
+            _ffi.invokeMethod("enable_soft_keyboard", false);
           }
         }
       });
@@ -138,12 +146,12 @@ class _RemotePageState extends State<RemotePage> with WindowListener {
               newValue[common] == oldValue[common];
           ++common);
       for (i = 0; i < oldValue.length - common; ++i) {
-        FFI.inputKey('VK_BACK');
+        _ffi.inputKey('VK_BACK');
       }
       if (newValue.length > common) {
         var s = newValue.substring(common);
         if (s.length > 1) {
-          FFI.bind.sessionInputString(id: widget.id, value: s);
+          _ffi.bind.sessionInputString(id: widget.id, value: s);
         } else {
           inputChar(s);
         }
@@ -161,7 +169,7 @@ class _RemotePageState extends State<RemotePage> with WindowListener {
       // ?
     } else if (newValue.length < oldValue.length) {
       final char = 'VK_BACK';
-      FFI.inputKey(char);
+      _ffi.inputKey(char);
     } else {
       final content = newValue.substring(oldValue.length);
       if (content.length > 1) {
@@ -177,11 +185,11 @@ class _RemotePageState extends State<RemotePage> with WindowListener {
                 content == '（）' ||
                 content == '【】')) {
           // can not only input content[0], because when input ], [ are also auo insert, which cause ] never be input
-          FFI.bind.sessionInputString(id: widget.id, value: content);
+          _ffi.bind.sessionInputString(id: widget.id, value: content);
           openKeyboard();
           return;
         }
-        FFI.bind.sessionInputString(id: widget.id, value: content);
+        _ffi.bind.sessionInputString(id: widget.id, value: content);
       } else {
         inputChar(content);
       }
@@ -194,11 +202,11 @@ class _RemotePageState extends State<RemotePage> with WindowListener {
     } else if (char == ' ') {
       char = 'VK_SPACE';
     }
-    FFI.inputKey(char);
+    _ffi.inputKey(char);
   }
 
   void openKeyboard() {
-    FFI.invokeMethod("enable_soft_keyboard", true);
+    _ffi.invokeMethod("enable_soft_keyboard", true);
     // destroy first, so that our _value trick can work
     _value = initText;
     setState(() => _showEdit = false);
@@ -221,7 +229,7 @@ class _RemotePageState extends State<RemotePage> with WindowListener {
     final label = _logicalKeyMap[e.logicalKey.keyId] ??
         _physicalKeyMap[e.physicalKey.usbHidUsage] ??
         e.logicalKey.keyLabel;
-    FFI.inputKey(label, down: down, press: press ?? false);
+    _ffi.inputKey(label, down: down, press: press ?? false);
   }
 
   @override
@@ -229,7 +237,7 @@ class _RemotePageState extends State<RemotePage> with WindowListener {
     final pi = Provider.of<FfiModel>(context).pi;
     final hideKeyboard = isKeyboardShown() && _showEdit;
     final showActionButton = !_showBar || hideKeyboard;
-    final keyboard = FFI.ffiModel.permissions['keyboard'] != false;
+    final keyboard = _ffi.ffiModel.permissions['keyboard'] != false;
 
     return WillPopScope(
       onWillPop: () async {
@@ -251,7 +259,7 @@ class _RemotePageState extends State<RemotePage> with WindowListener {
                         setState(() {
                           if (hideKeyboard) {
                             _showEdit = false;
-                            FFI.invokeMethod("enable_soft_keyboard", false);
+                            _ffi.invokeMethod("enable_soft_keyboard", false);
                             _mobileFocusNode.unfocus();
                             _physicalFocusNode.requestFocus();
                           } else {
@@ -291,7 +299,7 @@ class _RemotePageState extends State<RemotePage> with WindowListener {
             });
           }
           if (_isPhysicalMouse) {
-            FFI.handleMouse(getEvent(e, 'mousemove'));
+            _ffi.handleMouse(getEvent(e, 'mousemove'));
           }
         },
         onPointerDown: (e) {
@@ -303,19 +311,19 @@ class _RemotePageState extends State<RemotePage> with WindowListener {
             }
           }
           if (_isPhysicalMouse) {
-            FFI.handleMouse(getEvent(e, 'mousedown'));
+            _ffi.handleMouse(getEvent(e, 'mousedown'));
           }
         },
         onPointerUp: (e) {
           if (e.kind != ui.PointerDeviceKind.mouse) return;
           if (_isPhysicalMouse) {
-            FFI.handleMouse(getEvent(e, 'mouseup'));
+            _ffi.handleMouse(getEvent(e, 'mouseup'));
           }
         },
         onPointerMove: (e) {
           if (e.kind != ui.PointerDeviceKind.mouse) return;
           if (_isPhysicalMouse) {
-            FFI.handleMouse(getEvent(e, 'mousemove'));
+            _ffi.handleMouse(getEvent(e, 'mousemove'));
           }
         },
         onPointerSignal: (e) {
@@ -328,7 +336,7 @@ class _RemotePageState extends State<RemotePage> with WindowListener {
             if (dy > 0)
               dy = -1;
             else if (dy < 0) dy = 1;
-            FFI.setByName('send_mouse',
+            _ffi.setByName('send_mouse',
                 '{"id": "${widget.id}", "type": "wheel", "x": "$dx", "y": "$dy"}');
           }
         },
@@ -346,14 +354,14 @@ class _RemotePageState extends State<RemotePage> with WindowListener {
                         if (e.repeat) {
                           sendRawKey(e, press: true);
                         } else {
-                          if (e.isAltPressed && !FFI.alt) {
-                            FFI.alt = true;
-                          } else if (e.isControlPressed && !FFI.ctrl) {
-                            FFI.ctrl = true;
-                          } else if (e.isShiftPressed && !FFI.shift) {
-                            FFI.shift = true;
-                          } else if (e.isMetaPressed && !FFI.command) {
-                            FFI.command = true;
+                          if (e.isAltPressed && !_ffi.alt) {
+                            _ffi.alt = true;
+                          } else if (e.isControlPressed && !_ffi.ctrl) {
+                            _ffi.ctrl = true;
+                          } else if (e.isShiftPressed && !_ffi.shift) {
+                            _ffi.shift = true;
+                          } else if (e.isMetaPressed && !_ffi.command) {
+                            _ffi.command = true;
                           }
                           sendRawKey(e, down: true);
                         }
@@ -362,16 +370,16 @@ class _RemotePageState extends State<RemotePage> with WindowListener {
                       if (!_showEdit && e is RawKeyUpEvent) {
                         if (key == LogicalKeyboardKey.altLeft ||
                             key == LogicalKeyboardKey.altRight) {
-                          FFI.alt = false;
+                          _ffi.alt = false;
                         } else if (key == LogicalKeyboardKey.controlLeft ||
                             key == LogicalKeyboardKey.controlRight) {
-                          FFI.ctrl = false;
+                          _ffi.ctrl = false;
                         } else if (key == LogicalKeyboardKey.shiftRight ||
                             key == LogicalKeyboardKey.shiftLeft) {
-                          FFI.shift = false;
+                          _ffi.shift = false;
                         } else if (key == LogicalKeyboardKey.metaLeft ||
                             key == LogicalKeyboardKey.metaRight) {
-                          FFI.command = false;
+                          _ffi.command = false;
                         }
                         sendRawKey(e);
                       }
@@ -410,7 +418,7 @@ class _RemotePageState extends State<RemotePage> with WindowListener {
                   ] +
                   (isWebDesktop
                       ? []
-                      : FFI.ffiModel.isPeerAndroid
+                      : _ffi.ffiModel.isPeerAndroid
                           ? [
                               IconButton(
                                 color: Colors.white,
@@ -431,7 +439,7 @@ class _RemotePageState extends State<RemotePage> with WindowListener {
                                   onPressed: openKeyboard),
                               IconButton(
                                 color: Colors.white,
-                                icon: Icon(FFI.ffiModel.touchMode
+                                icon: Icon(_ffi.ffiModel.touchMode
                                     ? Icons.touch_app
                                     : Icons.mouse),
                                 onPressed: changeTouchMode,
@@ -444,7 +452,7 @@ class _RemotePageState extends State<RemotePage> with WindowListener {
                             color: Colors.white,
                             icon: Icon(Icons.message),
                             onPressed: () {
-                              FFI.chatModel
+                              _ffi.chatModel
                                   .changeCurrentID(ChatModel.clientModeID);
                               toggleChatOverlay();
                             },
@@ -482,89 +490,89 @@ class _RemotePageState extends State<RemotePage> with WindowListener {
   ///   HoldDrag -> left drag
 
   Widget getBodyForMobileWithGesture() {
-    final touchMode = FFI.ffiModel.touchMode;
+    final touchMode = _ffi.ffiModel.touchMode;
     return getMixinGestureDetector(
         child: getBodyForMobile(),
         onTapUp: (d) {
           if (touchMode) {
-            FFI.cursorModel.touch(
+            _ffi.cursorModel.touch(
                 d.localPosition.dx, d.localPosition.dy, MouseButtons.left);
           } else {
-            FFI.tap(MouseButtons.left);
+            _ffi.tap(MouseButtons.left);
           }
         },
         onDoubleTapDown: (d) {
           if (touchMode) {
-            FFI.cursorModel.move(d.localPosition.dx, d.localPosition.dy);
+            _ffi.cursorModel.move(d.localPosition.dx, d.localPosition.dy);
           }
         },
         onDoubleTap: () {
-          FFI.tap(MouseButtons.left);
-          FFI.tap(MouseButtons.left);
+          _ffi.tap(MouseButtons.left);
+          _ffi.tap(MouseButtons.left);
         },
         onLongPressDown: (d) {
           if (touchMode) {
-            FFI.cursorModel.move(d.localPosition.dx, d.localPosition.dy);
+            _ffi.cursorModel.move(d.localPosition.dx, d.localPosition.dy);
           }
         },
         onLongPress: () {
-          FFI.tap(MouseButtons.right);
+          _ffi.tap(MouseButtons.right);
         },
         onDoubleFinerTap: (d) {
           if (!touchMode) {
-            FFI.tap(MouseButtons.right);
+            _ffi.tap(MouseButtons.right);
           }
         },
         onHoldDragStart: (d) {
           if (!touchMode) {
-            FFI.sendMouse('down', MouseButtons.left);
+            _ffi.sendMouse('down', MouseButtons.left);
           }
         },
         onHoldDragUpdate: (d) {
           if (!touchMode) {
-            FFI.cursorModel.updatePan(d.delta.dx, d.delta.dy, touchMode);
+            _ffi.cursorModel.updatePan(d.delta.dx, d.delta.dy, touchMode);
           }
         },
         onHoldDragEnd: (_) {
           if (!touchMode) {
-            FFI.sendMouse('up', MouseButtons.left);
+            _ffi.sendMouse('up', MouseButtons.left);
           }
         },
         onOneFingerPanStart: (d) {
           if (touchMode) {
-            FFI.cursorModel.move(d.localPosition.dx, d.localPosition.dy);
-            FFI.sendMouse('down', MouseButtons.left);
+            _ffi.cursorModel.move(d.localPosition.dx, d.localPosition.dy);
+            _ffi.sendMouse('down', MouseButtons.left);
           }
         },
         onOneFingerPanUpdate: (d) {
-          FFI.cursorModel.updatePan(d.delta.dx, d.delta.dy, touchMode);
+          _ffi.cursorModel.updatePan(d.delta.dx, d.delta.dy, touchMode);
         },
         onOneFingerPanEnd: (d) {
           if (touchMode) {
-            FFI.sendMouse('up', MouseButtons.left);
+            _ffi.sendMouse('up', MouseButtons.left);
           }
         },
         // scale + pan event
         onTwoFingerScaleUpdate: (d) {
-          FFI.canvasModel.updateScale(d.scale / _scale);
+          _ffi.canvasModel.updateScale(d.scale / _scale);
           _scale = d.scale;
-          FFI.canvasModel.panX(d.focalPointDelta.dx);
-          FFI.canvasModel.panY(d.focalPointDelta.dy);
+          _ffi.canvasModel.panX(d.focalPointDelta.dx);
+          _ffi.canvasModel.panY(d.focalPointDelta.dy);
         },
         onTwoFingerScaleEnd: (d) {
           _scale = 1;
-          FFI.bind
+          _ffi.bind
               .sessionPeerOption(id: widget.id, name: "view-style", value: "");
         },
-        onThreeFingerVerticalDragUpdate: FFI.ffiModel.isPeerAndroid
+        onThreeFingerVerticalDragUpdate: _ffi.ffiModel.isPeerAndroid
             ? null
             : (d) {
                 _mouseScrollIntegral += d.delta.dy / 4;
                 if (_mouseScrollIntegral > 1) {
-                  FFI.scroll(1);
+                  _ffi.scroll(1);
                   _mouseScrollIntegral = 0;
                 } else if (_mouseScrollIntegral < -1) {
-                  FFI.scroll(-1);
+                  _ffi.scroll(-1);
                   _mouseScrollIntegral = 0;
                 }
               });
@@ -574,8 +582,8 @@ class _RemotePageState extends State<RemotePage> with WindowListener {
     return Container(
         color: MyTheme.canvasColor,
         child: Stack(children: [
-          ImagePaint(),
-          CursorPaint(),
+          ImagePaint(id: widget.id),
+          CursorPaint(id: widget.id),
           getHelpTools(),
           SizedBox(
             width: 0,
@@ -599,11 +607,17 @@ class _RemotePageState extends State<RemotePage> with WindowListener {
   }
 
   Widget getBodyForDesktopWithListener(bool keyboard) {
-    var paints = <Widget>[ImagePaint()];
-    final cursor = FFI.bind
+    var paints = <Widget>[
+      ImagePaint(
+        id: widget.id,
+      )
+    ];
+    final cursor = _ffi.bind
         .getSessionToggleOptionSync(id: widget.id, arg: 'show-remote-cursor');
     if (keyboard || cursor) {
-      paints.add(CursorPaint());
+      paints.add(CursorPaint(
+        id: widget.id,
+      ));
     }
     return Container(
         color: MyTheme.canvasColor, child: Stack(children: paints));
@@ -616,10 +630,10 @@ class _RemotePageState extends State<RemotePage> with WindowListener {
     out['type'] = type;
     out['x'] = evt.position.dx;
     out['y'] = evt.position.dy;
-    if (FFI.alt) out['alt'] = 'true';
-    if (FFI.shift) out['shift'] = 'true';
-    if (FFI.ctrl) out['ctrl'] = 'true';
-    if (FFI.command) out['command'] = 'true';
+    if (_ffi.alt) out['alt'] = 'true';
+    if (_ffi.shift) out['shift'] = 'true';
+    if (_ffi.ctrl) out['ctrl'] = 'true';
+    if (_ffi.command) out['command'] = 'true';
     out['buttons'] = evt
         .buttons; // left button: 1, right button: 2, middle button: 4, 1 | 2 = 3 (left + right)
     if (evt.buttons != 0) {
@@ -635,8 +649,8 @@ class _RemotePageState extends State<RemotePage> with WindowListener {
     final x = 120.0;
     final y = size.height;
     final more = <PopupMenuItem<String>>[];
-    final pi = FFI.ffiModel.pi;
-    final perms = FFI.ffiModel.permissions;
+    final pi = _ffi.ffiModel.pi;
+    final perms = _ffi.ffiModel.permissions;
     if (pi.version.isNotEmpty) {
       more.add(PopupMenuItem<String>(
           child: Text(translate('Refresh')), value: 'refresh'));
@@ -672,11 +686,11 @@ class _RemotePageState extends State<RemotePage> with WindowListener {
       more.add(PopupMenuItem<String>(
           child: Text(translate('Insert Lock')), value: 'lock'));
       if (pi.platform == 'Windows' &&
-          await FFI.bind.getSessionToggleOption(id: id, arg: 'privacy-mode') !=
+          await _ffi.bind.getSessionToggleOption(id: id, arg: 'privacy-mode') !=
               true) {
         more.add(PopupMenuItem<String>(
-            child: Text(translate(
-                (FFI.ffiModel.inputBlocked ? 'Unb' : 'B') + 'lock user input')),
+            child: Text(translate((_ffi.ffiModel.inputBlocked ? 'Unb' : 'B') +
+                'lock user input')),
             value: 'block-input'));
       }
     }
@@ -688,33 +702,33 @@ class _RemotePageState extends State<RemotePage> with WindowListener {
         elevation: 8,
       );
       if (value == 'cad') {
-        FFI.bind.sessionCtrlAltDel(id: widget.id);
+        _ffi.bind.sessionCtrlAltDel(id: widget.id);
       } else if (value == 'lock') {
-        FFI.bind.sessionLockScreen(id: widget.id);
+        _ffi.bind.sessionLockScreen(id: widget.id);
       } else if (value == 'block-input') {
-        FFI.bind.sessionToggleOption(
+        _ffi.bind.sessionToggleOption(
             id: widget.id,
-            value: (FFI.ffiModel.inputBlocked ? 'un' : '') + 'block-input');
-        FFI.ffiModel.inputBlocked = !FFI.ffiModel.inputBlocked;
+            value: (_ffi.ffiModel.inputBlocked ? 'un' : '') + 'block-input');
+        _ffi.ffiModel.inputBlocked = !_ffi.ffiModel.inputBlocked;
       } else if (value == 'refresh') {
-        FFI.bind.sessionRefresh(id: widget.id);
+        _ffi.bind.sessionRefresh(id: widget.id);
       } else if (value == 'paste') {
         () async {
           ClipboardData? data = await Clipboard.getData(Clipboard.kTextPlain);
           if (data != null && data.text != null) {
-            FFI.bind.sessionInputString(id: widget.id, value: data.text ?? "");
+            _ffi.bind.sessionInputString(id: widget.id, value: data.text ?? "");
           }
         }();
       } else if (value == 'enter_os_password') {
         var password =
-            await FFI.bind.getSessionOption(id: id, arg: "os-password");
+            await _ffi.bind.getSessionOption(id: id, arg: "os-password");
         if (password != null) {
-          FFI.bind.sessionInputOsPassword(id: widget.id, value: password);
+          _ffi.bind.sessionInputOsPassword(id: widget.id, value: password);
         } else {
           showSetOSPassword(widget.id, true);
         }
       } else if (value == 'reset_canvas') {
-        FFI.cursorModel.reset();
+        _ffi.cursorModel.reset();
       }
     }();
   }
@@ -733,11 +747,11 @@ class _RemotePageState extends State<RemotePage> with WindowListener {
               return SingleChildScrollView(
                   padding: EdgeInsets.symmetric(vertical: 10),
                   child: GestureHelp(
-                      touchMode: FFI.ffiModel.touchMode,
+                      touchMode: _ffi.ffiModel.touchMode,
                       onTouchModeChange: (t) {
-                        FFI.ffiModel.toggleTouchMode();
-                        final v = FFI.ffiModel.touchMode ? 'Y' : '';
-                        FFI.bind.sessionPeerOption(
+                        _ffi.ffiModel.toggleTouchMode();
+                        final v = _ffi.ffiModel.touchMode ? 'Y' : '';
+                        _ffi.bind.sessionPeerOption(
                             id: widget.id, name: "touch-mode", value: v);
                       }));
             }));
@@ -769,21 +783,21 @@ class _RemotePageState extends State<RemotePage> with WindowListener {
                   style: TextStyle(color: Colors.white, fontSize: 11)),
           onPressed: onPressed);
     };
-    final pi = FFI.ffiModel.pi;
+    final pi = _ffi.ffiModel.pi;
     final isMac = pi.platform == "Mac OS";
     final modifiers = <Widget>[
       wrap('Ctrl ', () {
-        setState(() => FFI.ctrl = !FFI.ctrl);
-      }, FFI.ctrl),
+        setState(() => _ffi.ctrl = !_ffi.ctrl);
+      }, _ffi.ctrl),
       wrap(' Alt ', () {
-        setState(() => FFI.alt = !FFI.alt);
-      }, FFI.alt),
+        setState(() => _ffi.alt = !_ffi.alt);
+      }, _ffi.alt),
       wrap('Shift', () {
-        setState(() => FFI.shift = !FFI.shift);
-      }, FFI.shift),
+        setState(() => _ffi.shift = !_ffi.shift);
+      }, _ffi.shift),
       wrap(isMac ? ' Cmd ' : ' Win ', () {
-        setState(() => FFI.command = !FFI.command);
-      }, FFI.command),
+        setState(() => _ffi.command = !_ffi.command);
+      }, _ffi.command),
     ];
     final keys = <Widget>[
       wrap(
@@ -815,53 +829,53 @@ class _RemotePageState extends State<RemotePage> with WindowListener {
     for (var i = 1; i <= 12; ++i) {
       final name = 'F' + i.toString();
       fn.add(wrap(name, () {
-        FFI.inputKey('VK_' + name);
+        _ffi.inputKey('VK_' + name);
       }));
     }
     final more = <Widget>[
       SizedBox(width: 9999),
       wrap('Esc', () {
-        FFI.inputKey('VK_ESCAPE');
+        _ffi.inputKey('VK_ESCAPE');
       }),
       wrap('Tab', () {
-        FFI.inputKey('VK_TAB');
+        _ffi.inputKey('VK_TAB');
       }),
       wrap('Home', () {
-        FFI.inputKey('VK_HOME');
+        _ffi.inputKey('VK_HOME');
       }),
       wrap('End', () {
-        FFI.inputKey('VK_END');
+        _ffi.inputKey('VK_END');
       }),
       wrap('Del', () {
-        FFI.inputKey('VK_DELETE');
+        _ffi.inputKey('VK_DELETE');
       }),
       wrap('PgUp', () {
-        FFI.inputKey('VK_PRIOR');
+        _ffi.inputKey('VK_PRIOR');
       }),
       wrap('PgDn', () {
-        FFI.inputKey('VK_NEXT');
+        _ffi.inputKey('VK_NEXT');
       }),
       SizedBox(width: 9999),
       wrap('', () {
-        FFI.inputKey('VK_LEFT');
+        _ffi.inputKey('VK_LEFT');
       }, false, Icons.keyboard_arrow_left),
       wrap('', () {
-        FFI.inputKey('VK_UP');
+        _ffi.inputKey('VK_UP');
       }, false, Icons.keyboard_arrow_up),
       wrap('', () {
-        FFI.inputKey('VK_DOWN');
+        _ffi.inputKey('VK_DOWN');
       }, false, Icons.keyboard_arrow_down),
       wrap('', () {
-        FFI.inputKey('VK_RIGHT');
+        _ffi.inputKey('VK_RIGHT');
       }, false, Icons.keyboard_arrow_right),
       wrap(isMac ? 'Cmd+C' : 'Ctrl+C', () {
-        sendPrompt(isMac, 'VK_C');
+        sendPrompt(widget.id, isMac, 'VK_C');
       }),
       wrap(isMac ? 'Cmd+V' : 'Ctrl+V', () {
-        sendPrompt(isMac, 'VK_V');
+        sendPrompt(widget.id, isMac, 'VK_V');
       }),
       wrap(isMac ? 'Cmd+S' : 'Ctrl+S', () {
-        sendPrompt(isMac, 'VK_S');
+        sendPrompt(widget.id, isMac, 'VK_S');
       }),
     ];
     final space = size.width > 320 ? 4.0 : 2.0;
@@ -884,11 +898,11 @@ class _RemotePageState extends State<RemotePage> with WindowListener {
     print("window event: $eventName");
     switch (eventName) {
       case 'resize':
-        FFI.canvasModel.updateViewStyle();
+        _ffi.canvasModel.updateViewStyle();
         break;
       case 'maximize':
         Future.delayed(Duration(milliseconds: 100), () {
-          FFI.canvasModel.updateViewStyle();
+          _ffi.canvasModel.updateViewStyle();
         });
         break;
     }
@@ -896,11 +910,15 @@ class _RemotePageState extends State<RemotePage> with WindowListener {
 }
 
 class ImagePaint extends StatelessWidget {
+  final String id;
+
+  const ImagePaint({Key? key, required this.id}) : super(key: key);
+
   @override
   Widget build(BuildContext context) {
-    final m = Provider.of<ImageModel>(context);
-    final c = Provider.of<CanvasModel>(context);
-    final adjust = FFI.cursorModel.adjustForKeyboard();
+    final m = ffi(this.id).imageModel;
+    final c = ffi(this.id).canvasModel;
+    final adjust = ffi(this.id).cursorModel.adjustForKeyboard();
     var s = c.scale;
     return CustomPaint(
       painter: new ImagePainter(
@@ -910,11 +928,15 @@ class ImagePaint extends StatelessWidget {
 }
 
 class CursorPaint extends StatelessWidget {
+  final String id;
+
+  const CursorPaint({Key? key, required this.id}) : super(key: key);
+
   @override
   Widget build(BuildContext context) {
-    final m = Provider.of<CursorModel>(context);
-    final c = Provider.of<CanvasModel>(context);
-    final adjust = FFI.cursorModel.adjustForKeyboard();
+    final m = ffi(this.id).cursorModel;
+    final c = ffi(this.id).canvasModel;
+    final adjust = ffi(this.id).cursorModel.adjustForKeyboard();
     var s = c.scale;
     return CustomPaint(
       painter: new ImagePainter(
@@ -954,12 +976,12 @@ class ImagePainter extends CustomPainter {
 
 CheckboxListTile getToggle(
     String id, void Function(void Function()) setState, option, name) {
-  final opt = FFI.bind.getSessionToggleOptionSync(id: id, arg: option);
+  final opt = ffi(id).bind.getSessionToggleOptionSync(id: id, arg: option);
   return CheckboxListTile(
       value: opt,
       onChanged: (v) {
         setState(() {
-          FFI.bind.sessionToggleOption(id: id, value: option);
+          ffi(id).bind.sessionToggleOption(id: id, value: option);
         });
       },
       dense: true,
@@ -979,13 +1001,14 @@ RadioListTile<String> getRadio(String name, String toValue, String curValue,
 }
 
 void showOptions(String id) async {
-  String quality = await FFI.bind.getSessionImageQuality(id: id) ?? 'balanced';
+  String quality =
+      await ffi(id).bind.getSessionImageQuality(id: id) ?? 'balanced';
   if (quality == '') quality = 'balanced';
   String viewStyle =
-      await FFI.bind.getSessionOption(id: id, arg: 'view-style') ?? '';
+      await ffi(id).bind.getSessionOption(id: id, arg: 'view-style') ?? '';
   var displays = <Widget>[];
-  final pi = FFI.ffiModel.pi;
-  final image = FFI.ffiModel.getConnectionImage();
+  final pi = ffi(id).ffiModel.pi;
+  final image = ffi(id).ffiModel.getConnectionImage();
   if (image != null)
     displays.add(Padding(padding: const EdgeInsets.only(top: 8), child: image));
   if (pi.displays.length > 1) {
@@ -995,7 +1018,7 @@ void showOptions(String id) async {
       children.add(InkWell(
           onTap: () {
             if (i == cur) return;
-            FFI.bind.sessionSwitchDisplay(id: id, value: i);
+            ffi(id).bind.sessionSwitchDisplay(id: id, value: i);
             SmartDialog.dismiss();
           },
           child: Ink(
@@ -1019,7 +1042,7 @@ void showOptions(String id) async {
   if (displays.isNotEmpty) {
     displays.add(Divider(color: MyTheme.border));
   }
-  final perms = FFI.ffiModel.permissions;
+  final perms = ffi(id).ffiModel.permissions;
 
   DialogManager.show((setState, close) {
     final more = <Widget>[];
@@ -1040,15 +1063,17 @@ void showOptions(String id) async {
       if (value == null) return;
       setState(() {
         quality = value;
-        FFI.bind.sessionSetImageQuality(id: id, value: value);
+        ffi(id).bind.sessionSetImageQuality(id: id, value: value);
       });
     };
     var setViewStyle = (String? value) {
       if (value == null) return;
       setState(() {
         viewStyle = value;
-        FFI.bind.sessionPeerOption(id: id, name: "view-style", value: value);
-        FFI.canvasModel.updateViewStyle();
+        ffi(id)
+            .bind
+            .sessionPeerOption(id: id, name: "view-style", value: value);
+        ffi(id).canvasModel.updateViewStyle();
       });
     };
     return CustomAlertDialog(
@@ -1078,9 +1103,9 @@ void showOptions(String id) async {
 void showSetOSPassword(String id, bool login) async {
   final controller = TextEditingController();
   var password =
-      await FFI.bind.getSessionOption(id: id, arg: "os-password") ?? "";
+      await ffi(id).bind.getSessionOption(id: id, arg: "os-password") ?? "";
   var autoLogin =
-      await FFI.bind.getSessionOption(id: id, arg: "auto-login") != "";
+      await ffi(id).bind.getSessionOption(id: id, arg: "auto-login") != "";
   controller.text = password;
   DialogManager.show((setState, close) {
     return CustomAlertDialog(
@@ -1113,12 +1138,13 @@ void showSetOSPassword(String id, bool login) async {
             style: flatButtonStyle,
             onPressed: () {
               var text = controller.text.trim();
-              FFI.bind
+              ffi(id)
+                  .bind
                   .sessionPeerOption(id: id, name: "os-password", value: text);
-              FFI.bind.sessionPeerOption(
+              ffi(id).bind.sessionPeerOption(
                   id: id, name: "auto-login", value: autoLogin ? 'Y' : '');
               if (text != "" && login) {
-                FFI.bind.sessionInputOsPassword(id: id, value: text);
+                ffi(id).bind.sessionInputOsPassword(id: id, value: text);
               }
               close();
             },
@@ -1128,18 +1154,19 @@ void showSetOSPassword(String id, bool login) async {
   });
 }
 
-void sendPrompt(bool isMac, String key) {
-  final old = isMac ? FFI.command : FFI.ctrl;
+void sendPrompt(String id, bool isMac, String key) {
+  FFI _ffi = ffi(id);
+  final old = isMac ? _ffi.command : _ffi.ctrl;
   if (isMac) {
-    FFI.command = true;
+    _ffi.command = true;
   } else {
-    FFI.ctrl = true;
+    _ffi.ctrl = true;
   }
-  FFI.inputKey(key);
+  _ffi.inputKey(key);
   if (isMac) {
-    FFI.command = old;
+    _ffi.command = old;
   } else {
-    FFI.ctrl = old;
+    _ffi.ctrl = old;
   }
 }
 

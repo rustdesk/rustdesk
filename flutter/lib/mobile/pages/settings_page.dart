@@ -1,12 +1,14 @@
-import 'package:settings_ui/settings_ui.dart';
-import 'package:flutter/material.dart';
-import 'package:url_launcher/url_launcher.dart';
-import 'package:provider/provider.dart';
 import 'dart:convert';
+
+import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import 'package:provider/provider.dart';
+import 'package:settings_ui/settings_ui.dart';
+import 'package:url_launcher/url_launcher.dart';
+
 import '../../common.dart';
-import '../widgets/dialog.dart';
 import '../../models/model.dart';
+import '../widgets/dialog.dart';
 import 'home_page.dart';
 import 'scan_page.dart';
 
@@ -89,10 +91,10 @@ class _SettingsState extends State<SettingsPage> {
 }
 
 void showServerSettings() {
-  final id = FFI.getByName('option', 'custom-rendezvous-server');
-  final relay = FFI.getByName('option', 'relay-server');
-  final api = FFI.getByName('option', 'api-server');
-  final key = FFI.getByName('option', 'key');
+  final id = gFFI.getByName('option', 'custom-rendezvous-server');
+  final relay = gFFI.getByName('option', 'relay-server');
+  final api = gFFI.getByName('option', 'api-server');
+  final key = gFFI.getByName('option', 'key');
   showServerSettingsWithValue(id, relay, key, api);
 }
 
@@ -145,8 +147,8 @@ fetch('http://localhost:21114/api/login', {
   final body = {
     'username': name,
     'password': pass,
-    'id': FFI.getByName('server_id'),
-    'uuid': FFI.getByName('uuid')
+    'id': gFFI.getByName('server_id'),
+    'uuid': gFFI.getByName('uuid')
   };
   try {
     final response = await http.post(Uri.parse('${url}/api/login'),
@@ -166,24 +168,25 @@ String parseResp(String body) {
   }
   final token = data['access_token'];
   if (token != null) {
-    FFI.setByName('option', '{"name": "access_token", "value": "$token"}');
+    gFFI.setByName('option', '{"name": "access_token", "value": "$token"}');
   }
   final info = data['user'];
   if (info != null) {
     final value = json.encode(info);
-    FFI.setByName('option', json.encode({"name": "user_info", "value": value}));
-    FFI.ffiModel.updateUser();
+    gFFI.setByName(
+        'option', json.encode({"name": "user_info", "value": value}));
+    gFFI.ffiModel.updateUser();
   }
   return '';
 }
 
 void refreshCurrentUser() async {
-  final token = FFI.getByName("option", "access_token");
+  final token = gFFI.getByName("option", "access_token");
   if (token == '') return;
   final url = getUrl();
   final body = {
-    'id': FFI.getByName('server_id'),
-    'uuid': FFI.getByName('uuid')
+    'id': gFFI.getByName('server_id'),
+    'uuid': gFFI.getByName('uuid')
   };
   try {
     final response = await http.post(Uri.parse('${url}/api/currentUser'),
@@ -204,12 +207,12 @@ void refreshCurrentUser() async {
 }
 
 void logout() async {
-  final token = FFI.getByName("option", "access_token");
+  final token = gFFI.getByName("option", "access_token");
   if (token == '') return;
   final url = getUrl();
   final body = {
-    'id': FFI.getByName('server_id'),
-    'uuid': FFI.getByName('uuid')
+    'id': gFFI.getByName('server_id'),
+    'uuid': gFFI.getByName('uuid')
   };
   try {
     await http.post(Uri.parse('${url}/api/logout'),
@@ -225,15 +228,15 @@ void logout() async {
 }
 
 void resetToken() {
-  FFI.setByName('option', '{"name": "access_token", "value": ""}');
-  FFI.setByName('option', '{"name": "user_info", "value": ""}');
-  FFI.ffiModel.updateUser();
+  gFFI.setByName('option', '{"name": "access_token", "value": ""}');
+  gFFI.setByName('option', '{"name": "user_info", "value": ""}');
+  gFFI.ffiModel.updateUser();
 }
 
 String getUrl() {
-  var url = FFI.getByName('option', 'api-server');
+  var url = gFFI.getByName('option', 'api-server');
   if (url == '') {
-    url = FFI.getByName('option', 'custom-rendezvous-server');
+    url = gFFI.getByName('option', 'custom-rendezvous-server');
     if (url != '') {
       if (url.contains(':')) {
         final tmp = url.split(':');
@@ -323,10 +326,10 @@ void showLogin() {
 }
 
 String? getUsername() {
-  final token = FFI.getByName("option", "access_token");
+  final token = gFFI.getByName("option", "access_token");
   String? username;
   if (token != "") {
-    final info = FFI.getByName("option", "user_info");
+    final info = gFFI.getByName("option", "user_info");
     if (info != "") {
       try {
         Map<String, dynamic> tmp = json.decode(info);

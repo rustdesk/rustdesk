@@ -41,6 +41,11 @@ class ChatModel with ChangeNotifier {
 
   int get currentID => _currentID;
 
+  WeakReference<FFI> _ffi;
+
+  /// Constructor
+  ChatModel(this._ffi);
+
   ChatUser get currentUser {
     final user = messages[currentID]?.chatUser;
     if (user == null) {
@@ -56,7 +61,7 @@ class ChatModel with ChangeNotifier {
       _currentID = id;
       notifyListeners();
     } else {
-      final client = FFI.serverModel.clients[id];
+      final client = _ffi.target?.serverModel.clients[id];
       if (client == null) {
         return debugPrint(
             "Failed to changeCurrentID,remote user doesn't exist");
@@ -80,11 +85,11 @@ class ChatModel with ChangeNotifier {
     late final chatUser;
     if (id == clientModeID) {
       chatUser = ChatUser(
-        name: FFI.ffiModel.pi.username,
-        uid: FFI.getId(),
+        name: _ffi.target?.ffiModel.pi.username,
+        uid: _ffi.target?.getId(),
       );
     } else {
-      final client = FFI.serverModel.clients[id];
+      final client = _ffi.target?.serverModel.clients[id];
       if (client == null) {
         return debugPrint("Failed to receive msg,user doesn't exist");
       }
@@ -112,12 +117,12 @@ class ChatModel with ChangeNotifier {
     if (message.text != null && message.text!.isNotEmpty) {
       _messages[_currentID]?.add(message);
       if (_currentID == clientModeID) {
-        FFI.setByName("chat_client_mode", message.text!);
+        _ffi.target?.setByName("chat_client_mode", message.text!);
       } else {
         final msg = Map()
           ..["id"] = _currentID
           ..["text"] = message.text!;
-        FFI.setByName("chat_server_mode", jsonEncode(msg));
+        _ffi.target?.setByName("chat_server_mode", jsonEncode(msg));
       }
     }
     notifyListeners();

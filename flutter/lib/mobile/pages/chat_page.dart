@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_hbb/common.dart';
 import 'package:flutter_hbb/models/chat_model.dart';
 import 'package:provider/provider.dart';
+
 import '../../models/model.dart';
 import 'home_page.dart';
 
@@ -20,7 +21,7 @@ class ChatPage extends StatelessWidget implements PageShape {
     PopupMenuButton<int>(
         icon: Icon(Icons.group),
         itemBuilder: (context) {
-          final chatModel = FFI.chatModel;
+          final chatModel = gFFI.chatModel;
           return chatModel.messages.entries.map((entry) {
             final id = entry.key;
             final user = entry.value.chatUser;
@@ -31,14 +32,14 @@ class ChatPage extends StatelessWidget implements PageShape {
           }).toList();
         },
         onSelected: (id) {
-          FFI.chatModel.changeCurrentID(id);
+          gFFI.chatModel.changeCurrentID(id);
         })
   ];
 
   @override
   Widget build(BuildContext context) {
     return ChangeNotifierProvider.value(
-        value: FFI.chatModel,
+        value: gFFI.chatModel,
         child: Container(
             color: MyTheme.grayBg,
             child: Consumer<ChatModel>(builder: (context, chatModel, child) {

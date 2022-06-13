@@ -10,7 +10,6 @@ import '../mobile/pages/server_page.dart';
 import 'model.dart';
 
 const loginDialogTag = "LOGIN";
-final _emptyIdShow = translate("Generating ...");
 
 class ServerModel with ChangeNotifier {
   bool _isStart = false; // Android MainService status
@@ -20,7 +19,8 @@ class ServerModel with ChangeNotifier {
   bool _fileOk = false;
   int _connectStatus = 0; // Rendezvous Server status
 
-  final _serverId = TextEditingController(text: _emptyIdShow);
+  late String _emptyIdShow;
+  late final TextEditingController _serverId;
   final _serverPasswd = TextEditingController(text: "");
 
   Map<int, Client> _clients = {};
@@ -45,8 +45,12 @@ class ServerModel with ChangeNotifier {
 
   final controller = ScrollController();
 
-  ServerModel() {
+  WeakReference<FFI> parent;
+
+  ServerModel(this.parent) {
     () async {
+      _emptyIdShow = translate("Generating ...", ffi: this.parent.target);
+      _serverId = TextEditingController(text: this._emptyIdShow);
       /**
        * 1. check android permission
        * 2. check config
@@ -59,39 +63,42 @@ class ServerModel with ChangeNotifier {
       // audio
       if (androidVersion < 30 || !await PermissionManager.check("audio")) {
         _audioOk = false;
-        FFI.setByName(
+        parent.target?.setByName(
             'option',
             jsonEncode(Map()
               ..["name"] = "enable-audio"
               ..["value"] = "N"));
       } else {
-        final audioOption = FFI.getByName('option', 'enable-audio');
-        _audioOk = audioOption.isEmpty;
+        final audioOption = parent.target?.getByName('option', 'enable-audio');
+        _audioOk = audioOption?.isEmpty ?? false;
       }
 
       // file
       if (!await PermissionManager.check("file")) {
         _fileOk = false;
-        FFI.setByName(
+        parent.target?.setByName(
             'option',
             jsonEncode(Map()
               ..["name"] = "enable-file-transfer"
               ..["value"] = "N"));
       } else {
-        final fileOption = FFI.getByName('option', 'enable-file-transfer');
-        _fileOk = fileOption.isEmpty;
+        final fileOption =
+            parent.target?.getByName('option', 'enable-file-transfer');
+        _fileOk = fileOption?.isEmpty ?? false;
       }
 
       // input (mouse control)
       Map<String, String> res = Map()
         ..["name"] = "enable-keyboard"
         ..["value"] = 'N';
-      FFI.setByName('option', jsonEncode(res)); // input false by default
+      parent.target
+          ?.setByName('option', jsonEncode(res)); // input false by default
       notifyListeners();
     }();
 
     Timer.periodic(Duration(seconds: 1), (timer) {
-      var status = int.tryParse(FFI.getByName('connect_statue')) ?? 0;
+      var status =
+          int.tryParse(parent.target?.getByName('connect_statue') ?? "") ?? 0;
       if (status > 0) {
         status = 1;
       }
@@ -99,8 +106,9 @@ class ServerModel with ChangeNotifier {
         _connectStatus = status;
         notifyListeners();
       }
-      final res =
-          FFI.getByName('check_clients_length', _clients.length.toString());
+      final res = parent.target
+              ?.getByName('check_clients_length', _clients.length.toString()) ??
+          "";
       if (res.isNotEmpty) {
         debugPrint("clients not match!");
         updateClientState(res);
@@ -121,7 +129,7 @@ class ServerModel with ChangeNotifier {
     Map<String, String> res = Map()
       ..["name"] = "enable-audio"
       ..["value"] = _audioOk ? '' : 'N';
-    FFI.setByName('option', jsonEncode(res));
+    parent.target?.setByName('option', jsonEncode(res));
     notifyListeners();
   }
 
@@ -138,15 +146,17 @@ class ServerModel with ChangeNotifier {
     Map<String, String> res = Map()
       ..["name"] = "enable-file-transfer"
       ..["value"] = _fileOk ? '' : 'N';
-    FFI.setByName('option', jsonEncode(res));
+    parent.target?.setByName('option', jsonEncode(res));
     notifyListeners();
   }
 
   toggleInput() {
     if (_inputOk) {
-      FFI.invokeMethod("stop_input");
+      parent.target?.invokeMethod("stop_input");
     } else {
-      showInputWarnAlert();
+      if (parent.target != null) {
+        showInputWarnAlert(parent.target!);
+      }
     }
   }
 
@@ -203,9 +213,10 @@ class ServerModel with ChangeNotifier {
   Future<Null> startService() async {
     _isStart = true;
     notifyListeners();
-    FFI.ffiModel.updateEventListener("");
-    await FFI.invokeMethod("init_service");
-    FFI.setByName("start_service");
+    // TODO
+    parent.target?.ffiModel.updateEventListener("");
+    await parent.target?.invokeMethod("init_service");
+    parent.target?.setByName("start_service");
     getIDPasswd();
     updateClientState();
     if (!Platform.isLinux) {
@@ -217,9 +228,10 @@ class ServerModel with ChangeNotifier {
   /// Stop the screen sharing service.
   Future<Null> stopService() async {
     _isStart = false;
-    FFI.serverModel.closeAll();
-    await FFI.invokeMethod("stop_service");
-    FFI.setByName("stop_service");
+    // TODO
+    parent.target?.serverModel.closeAll();
+    await parent.target?.invokeMethod("stop_service");
+    parent.target?.setByName("stop_service");
     notifyListeners();
     if (!Platform.isLinux) {
       // current linux is not supported
@@ -228,12 +240,12 @@ class ServerModel with ChangeNotifier {
   }
 
   Future<Null> initInput() async {
-    await FFI.invokeMethod("init_input");
+    await parent.target?.invokeMethod("init_input");
   }
 
   Future<bool> updatePassword(String pw) async {
     final oldPasswd = _serverPasswd.text;
-    FFI.setByName("update_password", pw);
+    parent.target?.setByName("update_password", pw);
     await Future.delayed(Duration(milliseconds: 500));
     await getIDPasswd(force: true);
 
@@ -261,8 +273,8 @@ class ServerModel with ChangeNotifier {
     const maxCount = 10;
     while (count < maxCount) {
       await Future.delayed(Duration(seconds: 1));
-      final id = FFI.getByName("server_id");
-      final passwd = FFI.getByName("server_password");
+      final id = parent.target?.getByName("server_id") ?? "";
+      final passwd = parent.target?.getByName("server_password") ?? "";
       if (id.isEmpty) {
         continue;
       } else {
@@ -299,7 +311,7 @@ class ServerModel with ChangeNotifier {
           Map<String, String> res = Map()
             ..["name"] = "enable-keyboard"
             ..["value"] = value ? '' : 'N';
-          FFI.setByName('option', jsonEncode(res));
+          parent.target?.setByName('option', jsonEncode(res));
         }
         _inputOk = value;
         break;
@@ -310,7 +322,7 @@ class ServerModel with ChangeNotifier {
   }
 
   updateClientState([String? json]) {
-    var res = json ?? FFI.getByName("clients_state");
+    var res = json ?? parent.target?.getByName("clients_state") ?? "";
     try {
       final List clientsJson = jsonDecode(res);
       for (var clientJson in clientsJson) {
@@ -397,16 +409,16 @@ class ServerModel with ChangeNotifier {
     response["id"] = client.id;
     response["res"] = res;
     if (res) {
-      FFI.setByName("login_res", jsonEncode(response));
+      parent.target?.setByName("login_res", jsonEncode(response));
       if (!client.isFileTransfer) {
-        FFI.invokeMethod("start_capture");
+        parent.target?.invokeMethod("start_capture");
       }
-      FFI.invokeMethod("cancel_notification", client.id);
+      parent.target?.invokeMethod("cancel_notification", client.id);
       _clients[client.id]?.authorized = true;
       notifyListeners();
     } else {
-      FFI.setByName("login_res", jsonEncode(response));
-      FFI.invokeMethod("cancel_notification", client.id);
+      parent.target?.setByName("login_res", jsonEncode(response));
+      parent.target?.invokeMethod("cancel_notification", client.id);
       _clients.remove(client.id);
     }
   }
@@ -427,7 +439,7 @@ class ServerModel with ChangeNotifier {
       if (_clients.containsKey(id)) {
         _clients.remove(id);
         DialogManager.dismissByTag(getLoginDialogTag(id));
-        FFI.invokeMethod("cancel_notification", id);
+        parent.target?.invokeMethod("cancel_notification", id);
       }
       notifyListeners();
     } catch (e) {
@@ -437,7 +449,7 @@ class ServerModel with ChangeNotifier {
 
   closeAll() {
     _clients.forEach((id, client) {
-      FFI.setByName("close_conn", id.toString());
+      parent.target?.setByName("close_conn", id.toString());
     });
     _clients.clear();
   }
@@ -485,7 +497,7 @@ String getLoginDialogTag(int id) {
   return loginDialogTag + id.toString();
 }
 
-showInputWarnAlert() {
+showInputWarnAlert(FFI ffi) {
   DialogManager.show((setState, close) => CustomAlertDialog(
         title: Text(translate("How to get Android input permission?")),
         content: Column(
@@ -501,7 +513,7 @@ showInputWarnAlert() {
           ElevatedButton(
               child: Text(translate("Open System Setting")),
               onPressed: () {
-                FFI.serverModel.initInput();
+                ffi.serverModel.initInput();
                 close();
               }),
         ],

@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
+import 'package:get/instance_manager.dart';
 
 import 'models/model.dart';
 
@@ -274,7 +275,7 @@ class PermissionManager {
   static Future<bool> check(String type) {
     if (!permissions.contains(type))
       return Future.error("Wrong permission!$type");
-    return FFI.invokeMethod("check_permission", type);
+    return gFFI.invokeMethod("check_permission", type);
   }
 
   static Future<bool> request(String type) {
@@ -283,7 +284,7 @@ class PermissionManager {
 
     _current = type;
     _completer = Completer<bool>();
-    FFI.invokeMethod("request_permission", type);
+    gFFI.invokeMethod("request_permission", type);
 
     // timeout
     _timer?.cancel();
@@ -306,4 +307,22 @@ class PermissionManager {
     _completer?.complete(res);
     _current = "";
   }
+}
+
+/// find ffi, tag is Remote ID
+/// for session specific usage
+FFI ffi(String? tag) {
+  return Get.find<FFI>(tag: tag);
+}
+
+/// Global FFI object
+late FFI _globalFFI;
+
+FFI get gFFI => _globalFFI;
+
+Future<void> initGlobalFFI() async {
+  _globalFFI = FFI();
+  // after `put`, can also be globally found by Get.find<FFI>();
+  Get.put(_globalFFI, permanent: true);
+  await _globalFFI.ffiModel.init();
 }

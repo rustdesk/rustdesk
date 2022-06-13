@@ -46,7 +46,7 @@ class _RemotePageState extends State<RemotePage> {
   @override
   void initState() {
     super.initState();
-    FFI.connect(widget.id);
+    gFFI.connect(widget.id);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual, overlays: []);
       showLoading(translate('Connecting...'));
@@ -55,18 +55,18 @@ class _RemotePageState extends State<RemotePage> {
     });
     Wakelock.enable();
     _physicalFocusNode.requestFocus();
-    FFI.ffiModel.updateEventListener(widget.id);
-    FFI.listenToMouse(true);
+    gFFI.ffiModel.updateEventListener(widget.id);
+    gFFI.listenToMouse(true);
   }
 
   @override
   void dispose() {
     hideMobileActionsOverlay();
-    FFI.listenToMouse(false);
-    FFI.invokeMethod("enable_soft_keyboard", true);
+    gFFI.listenToMouse(false);
+    gFFI.invokeMethod("enable_soft_keyboard", true);
     _mobileFocusNode.dispose();
     _physicalFocusNode.dispose();
-    FFI.close();
+    gFFI.close();
     _interval?.cancel();
     _timer?.cancel();
     SmartDialog.dismiss();
@@ -77,7 +77,7 @@ class _RemotePageState extends State<RemotePage> {
   }
 
   void resetTool() {
-    FFI.resetModifiers();
+    gFFI.resetModifiers();
   }
 
   bool isKeyboardShown() {
@@ -96,8 +96,8 @@ class _RemotePageState extends State<RemotePage> {
               overlays: []);
           // [pi.version.isNotEmpty] -> check ready or not,avoid login without soft-keyboard
           if (chatWindowOverlayEntry == null &&
-              FFI.ffiModel.pi.version.isNotEmpty) {
-            FFI.invokeMethod("enable_soft_keyboard", false);
+              gFFI.ffiModel.pi.version.isNotEmpty) {
+            gFFI.invokeMethod("enable_soft_keyboard", false);
           }
         }
       });
@@ -129,12 +129,12 @@ class _RemotePageState extends State<RemotePage> {
           newValue[common] == oldValue[common];
       ++common);
       for (i = 0; i < oldValue.length - common; ++i) {
-        FFI.inputKey('VK_BACK');
+        gFFI.inputKey('VK_BACK');
       }
       if (newValue.length > common) {
         var s = newValue.substring(common);
         if (s.length > 1) {
-          FFI.setByName('input_string', s);
+          gFFI.setByName('input_string', s);
         } else {
           inputChar(s);
         }
@@ -152,7 +152,7 @@ class _RemotePageState extends State<RemotePage> {
       // ?
     } else if (newValue.length < oldValue.length) {
       final char = 'VK_BACK';
-      FFI.inputKey(char);
+      gFFI.inputKey(char);
     } else {
       final content = newValue.substring(oldValue.length);
       if (content.length > 1) {
@@ -168,11 +168,11 @@ class _RemotePageState extends State<RemotePage> {
                 content == '（）' ||
                 content == '【】')) {
           // can not only input content[0], because when input ], [ are also auo insert, which cause ] never be input
-          FFI.setByName('input_string', content);
+          gFFI.setByName('input_string', content);
           openKeyboard();
           return;
         }
-        FFI.setByName('input_string', content);
+        gFFI.setByName('input_string', content);
       } else {
         inputChar(content);
       }
@@ -185,11 +185,11 @@ class _RemotePageState extends State<RemotePage> {
     } else if (char == ' ') {
       char = 'VK_SPACE';
     }
-    FFI.inputKey(char);
+    gFFI.inputKey(char);
   }
 
   void openKeyboard() {
-    FFI.invokeMethod("enable_soft_keyboard", true);
+    gFFI.invokeMethod("enable_soft_keyboard", true);
     // destroy first, so that our _value trick can work
     _value = initText;
     setState(() => _showEdit = false);
@@ -212,7 +212,7 @@ class _RemotePageState extends State<RemotePage> {
     final label = _logicalKeyMap[e.logicalKey.keyId] ??
         _physicalKeyMap[e.physicalKey.usbHidUsage] ??
         e.logicalKey.keyLabel;
-    FFI.inputKey(label, down: down, press: press ?? false);
+    gFFI.inputKey(label, down: down, press: press ?? false);
   }
 
   @override
@@ -220,7 +220,7 @@ class _RemotePageState extends State<RemotePage> {
     final pi = Provider.of<FfiModel>(context).pi;
     final hideKeyboard = isKeyboardShown() && _showEdit;
     final showActionButton = !_showBar || hideKeyboard;
-    final keyboard = FFI.ffiModel.permissions['keyboard'] != false;
+    final keyboard = gFFI.ffiModel.permissions['keyboard'] != false;
 
     return WillPopScope(
       onWillPop: () async {
@@ -230,7 +230,7 @@ class _RemotePageState extends State<RemotePage> {
       child: getRawPointerAndKeyBody(
           keyboard,
           Scaffold(
-            // resizeToAvoidBottomInset: true,
+              // resizeToAvoidBottomInset: true,
               floatingActionButton: !showActionButton
                   ? null
                   : FloatingActionButton(
@@ -241,14 +241,14 @@ class _RemotePageState extends State<RemotePage> {
                   onPressed: () {
                     setState(() {
                       if (hideKeyboard) {
-                        _showEdit = false;
-                        FFI.invokeMethod("enable_soft_keyboard", false);
-                        _mobileFocusNode.unfocus();
-                        _physicalFocusNode.requestFocus();
-                      } else {
-                        _showBar = !_showBar;
-                      }
-                    });
+                            _showEdit = false;
+                            gFFI.invokeMethod("enable_soft_keyboard", false);
+                            _mobileFocusNode.unfocus();
+                            _physicalFocusNode.requestFocus();
+                          } else {
+                            _showBar = !_showBar;
+                          }
+                        });
                   }),
               bottomNavigationBar: _showBar && pi.displays.length > 0
                   ? getBottomAppBar(keyboard)
@@ -282,7 +282,7 @@ class _RemotePageState extends State<RemotePage> {
             });
           }
           if (_isPhysicalMouse) {
-            FFI.handleMouse(getEvent(e, 'mousemove'));
+            gFFI.handleMouse(getEvent(e, 'mousemove'));
           }
         },
         onPointerDown: (e) {
@@ -294,19 +294,19 @@ class _RemotePageState extends State<RemotePage> {
             }
           }
           if (_isPhysicalMouse) {
-            FFI.handleMouse(getEvent(e, 'mousedown'));
+            gFFI.handleMouse(getEvent(e, 'mousedown'));
           }
         },
         onPointerUp: (e) {
           if (e.kind != ui.PointerDeviceKind.mouse) return;
           if (_isPhysicalMouse) {
-            FFI.handleMouse(getEvent(e, 'mouseup'));
+            gFFI.handleMouse(getEvent(e, 'mouseup'));
           }
         },
         onPointerMove: (e) {
           if (e.kind != ui.PointerDeviceKind.mouse) return;
           if (_isPhysicalMouse) {
-            FFI.handleMouse(getEvent(e, 'mousemove'));
+            gFFI.handleMouse(getEvent(e, 'mousemove'));
           }
         },
         onPointerSignal: (e) {
@@ -319,7 +319,7 @@ class _RemotePageState extends State<RemotePage> {
             if (dy > 0)
               dy = -1;
             else if (dy < 0) dy = 1;
-            FFI.setByName(
+            gFFI.setByName(
                 'send_mouse', '{"type": "wheel", "x": "$dx", "y": "$dy"}');
           }
         },
@@ -337,14 +337,14 @@ class _RemotePageState extends State<RemotePage> {
                         if (e.repeat) {
                           sendRawKey(e, press: true);
                         } else {
-                          if (e.isAltPressed && !FFI.alt) {
-                            FFI.alt = true;
-                          } else if (e.isControlPressed && !FFI.ctrl) {
-                            FFI.ctrl = true;
-                          } else if (e.isShiftPressed && !FFI.shift) {
-                            FFI.shift = true;
-                          } else if (e.isMetaPressed && !FFI.command) {
-                            FFI.command = true;
+                          if (e.isAltPressed && !gFFI.alt) {
+                            gFFI.alt = true;
+                          } else if (e.isControlPressed && !gFFI.ctrl) {
+                            gFFI.ctrl = true;
+                          } else if (e.isShiftPressed && !gFFI.shift) {
+                            gFFI.shift = true;
+                          } else if (e.isMetaPressed && !gFFI.command) {
+                            gFFI.command = true;
                           }
                           sendRawKey(e, down: true);
                         }
@@ -353,16 +353,16 @@ class _RemotePageState extends State<RemotePage> {
                       if (!_showEdit && e is RawKeyUpEvent) {
                         if (key == LogicalKeyboardKey.altLeft ||
                             key == LogicalKeyboardKey.altRight) {
-                          FFI.alt = false;
+                          gFFI.alt = false;
                         } else if (key == LogicalKeyboardKey.controlLeft ||
                             key == LogicalKeyboardKey.controlRight) {
-                          FFI.ctrl = false;
+                          gFFI.ctrl = false;
                         } else if (key == LogicalKeyboardKey.shiftRight ||
                             key == LogicalKeyboardKey.shiftLeft) {
-                          FFI.shift = false;
+                          gFFI.shift = false;
                         } else if (key == LogicalKeyboardKey.metaLeft ||
                             key == LogicalKeyboardKey.metaRight) {
-                          FFI.command = false;
+                          gFFI.command = false;
                         }
                         sendRawKey(e);
                       }
@@ -401,32 +401,32 @@ class _RemotePageState extends State<RemotePage> {
                   ] +
                   (isWebDesktop
                       ? []
-                      : FFI.ffiModel.isPeerAndroid
-                      ? [
-                    IconButton(
-                      color: Colors.white,
-                      icon: Icon(Icons.build),
-                      onPressed: () {
-                        if (mobileActionsOverlayEntry == null) {
-                          showMobileActionsOverlay();
-                        } else {
-                          hideMobileActionsOverlay();
-                        }
-                      },
-                    )
-                  ]
-                      : [
-                    IconButton(
-                        color: Colors.white,
-                        icon: Icon(Icons.keyboard),
-                        onPressed: openKeyboard),
-                    IconButton(
-                      color: Colors.white,
-                      icon: Icon(FFI.ffiModel.touchMode
-                          ? Icons.touch_app
-                          : Icons.mouse),
-                      onPressed: changeTouchMode,
-                    ),
+                      : gFFI.ffiModel.isPeerAndroid
+                          ? [
+                              IconButton(
+                                color: Colors.white,
+                                icon: Icon(Icons.build),
+                                onPressed: () {
+                                  if (mobileActionsOverlayEntry == null) {
+                                    showMobileActionsOverlay();
+                                  } else {
+                                    hideMobileActionsOverlay();
+                                  }
+                                },
+                              )
+                            ]
+                          : [
+                              IconButton(
+                                  color: Colors.white,
+                                  icon: Icon(Icons.keyboard),
+                                  onPressed: openKeyboard),
+                              IconButton(
+                                color: Colors.white,
+                                icon: Icon(gFFI.ffiModel.touchMode
+                                    ? Icons.touch_app
+                                    : Icons.mouse),
+                                onPressed: changeTouchMode,
+                              ),
                   ]) +
                   (isWeb
                       ? []
@@ -435,10 +435,10 @@ class _RemotePageState extends State<RemotePage> {
                       color: Colors.white,
                       icon: Icon(Icons.message),
                       onPressed: () {
-                        FFI.chatModel
-                            .changeCurrentID(ChatModel.clientModeID);
-                        toggleChatOverlay();
-                      },
+                              gFFI.chatModel
+                                  .changeCurrentID(ChatModel.clientModeID);
+                              toggleChatOverlay();
+                            },
                     )
                   ]) +
                   [
@@ -473,91 +473,91 @@ class _RemotePageState extends State<RemotePage> {
   ///   HoldDrag -> left drag
 
   Widget getBodyForMobileWithGesture() {
-    final touchMode = FFI.ffiModel.touchMode;
+    final touchMode = gFFI.ffiModel.touchMode;
     return getMixinGestureDetector(
         child: getBodyForMobile(),
         onTapUp: (d) {
           if (touchMode) {
-            FFI.cursorModel.touch(
+            gFFI.cursorModel.touch(
                 d.localPosition.dx, d.localPosition.dy, MouseButtons.left);
           } else {
-            FFI.tap(MouseButtons.left);
+            gFFI.tap(MouseButtons.left);
           }
         },
         onDoubleTapDown: (d) {
           if (touchMode) {
-            FFI.cursorModel.move(d.localPosition.dx, d.localPosition.dy);
+            gFFI.cursorModel.move(d.localPosition.dx, d.localPosition.dy);
           }
         },
         onDoubleTap: () {
-          FFI.tap(MouseButtons.left);
-          FFI.tap(MouseButtons.left);
+          gFFI.tap(MouseButtons.left);
+          gFFI.tap(MouseButtons.left);
         },
         onLongPressDown: (d) {
           if (touchMode) {
-            FFI.cursorModel.move(d.localPosition.dx, d.localPosition.dy);
+            gFFI.cursorModel.move(d.localPosition.dx, d.localPosition.dy);
           }
         },
         onLongPress: () {
-          FFI.tap(MouseButtons.right);
+          gFFI.tap(MouseButtons.right);
         },
         onDoubleFinerTap: (d) {
           if (!touchMode) {
-            FFI.tap(MouseButtons.right);
+            gFFI.tap(MouseButtons.right);
           }
         },
         onHoldDragStart: (d) {
           if (!touchMode) {
-            FFI.sendMouse('down', MouseButtons.left);
+            gFFI.sendMouse('down', MouseButtons.left);
           }
         },
         onHoldDragUpdate: (d) {
           if (!touchMode) {
-            FFI.cursorModel.updatePan(d.delta.dx, d.delta.dy, touchMode);
+            gFFI.cursorModel.updatePan(d.delta.dx, d.delta.dy, touchMode);
           }
         },
         onHoldDragEnd: (_) {
           if (!touchMode) {
-            FFI.sendMouse('up', MouseButtons.left);
+            gFFI.sendMouse('up', MouseButtons.left);
           }
         },
         onOneFingerPanStart: (d) {
           if (touchMode) {
-            FFI.cursorModel.move(d.localPosition.dx, d.localPosition.dy);
-            FFI.sendMouse('down', MouseButtons.left);
+            gFFI.cursorModel.move(d.localPosition.dx, d.localPosition.dy);
+            gFFI.sendMouse('down', MouseButtons.left);
           }
         },
         onOneFingerPanUpdate: (d) {
-          FFI.cursorModel.updatePan(d.delta.dx, d.delta.dy, touchMode);
+          gFFI.cursorModel.updatePan(d.delta.dx, d.delta.dy, touchMode);
         },
         onOneFingerPanEnd: (d) {
           if (touchMode) {
-            FFI.sendMouse('up', MouseButtons.left);
+            gFFI.sendMouse('up', MouseButtons.left);
           }
         },
         // scale + pan event
         onTwoFingerScaleUpdate: (d) {
-          FFI.canvasModel.updateScale(d.scale / _scale);
+          gFFI.canvasModel.updateScale(d.scale / _scale);
           _scale = d.scale;
-          FFI.canvasModel.panX(d.focalPointDelta.dx);
-          FFI.canvasModel.panY(d.focalPointDelta.dy);
+          gFFI.canvasModel.panX(d.focalPointDelta.dx);
+          gFFI.canvasModel.panY(d.focalPointDelta.dy);
         },
         onTwoFingerScaleEnd: (d) {
           _scale = 1;
-          FFI.setByName('peer_option', '{"name": "view-style", "value": ""}');
+          gFFI.setByName('peer_option', '{"name": "view-style", "value": ""}');
         },
-        onThreeFingerVerticalDragUpdate: FFI.ffiModel.isPeerAndroid
+        onThreeFingerVerticalDragUpdate: gFFI.ffiModel.isPeerAndroid
             ? null
             : (d) {
-          _mouseScrollIntegral += d.delta.dy / 4;
-          if (_mouseScrollIntegral > 1) {
-            FFI.scroll(1);
-            _mouseScrollIntegral = 0;
-          } else if (_mouseScrollIntegral < -1) {
-            FFI.scroll(-1);
-            _mouseScrollIntegral = 0;
-          }
-        });
+                _mouseScrollIntegral += d.delta.dy / 4;
+                if (_mouseScrollIntegral > 1) {
+                  gFFI.scroll(1);
+                  _mouseScrollIntegral = 0;
+                } else if (_mouseScrollIntegral < -1) {
+                  gFFI.scroll(-1);
+                  _mouseScrollIntegral = 0;
+                }
+              });
   }
 
   Widget getBodyForMobile() {
@@ -591,7 +591,7 @@ class _RemotePageState extends State<RemotePage> {
   Widget getBodyForDesktopWithListener(bool keyboard) {
     var paints = <Widget>[ImagePaint()];
     if (keyboard ||
-        FFI.getByName('toggle_option', 'show-remote-cursor') == 'true') {
+        gFFI.getByName('toggle_option', 'show-remote-cursor') == 'true') {
       paints.add(CursorPaint());
     }
     return Container(
@@ -605,10 +605,10 @@ class _RemotePageState extends State<RemotePage> {
     out['type'] = type;
     out['x'] = evt.position.dx;
     out['y'] = evt.position.dy;
-    if (FFI.alt) out['alt'] = 'true';
-    if (FFI.shift) out['shift'] = 'true';
-    if (FFI.ctrl) out['ctrl'] = 'true';
-    if (FFI.command) out['command'] = 'true';
+    if (gFFI.alt) out['alt'] = 'true';
+    if (gFFI.shift) out['shift'] = 'true';
+    if (gFFI.ctrl) out['ctrl'] = 'true';
+    if (gFFI.command) out['command'] = 'true';
     out['buttons'] = evt
         .buttons; // left button: 1, right button: 2, middle button: 4, 1 | 2 = 3 (left + right)
     if (evt.buttons != 0) {
@@ -624,8 +624,8 @@ class _RemotePageState extends State<RemotePage> {
     final x = 120.0;
     final y = size.height;
     final more = <PopupMenuItem<String>>[];
-    final pi = FFI.ffiModel.pi;
-    final perms = FFI.ffiModel.permissions;
+    final pi = gFFI.ffiModel.pi;
+    final perms = gFFI.ffiModel.permissions;
     if (pi.version.isNotEmpty) {
       more.add(PopupMenuItem<String>(
           child: Text(translate('Refresh')), value: 'refresh'));
@@ -633,16 +633,16 @@ class _RemotePageState extends State<RemotePage> {
     more.add(PopupMenuItem<String>(
         child: Row(
             children: ([
-              Container(width: 100.0, child: Text(translate('OS Password'))),
-              TextButton(
-                style: flatButtonStyle,
-                onPressed: () {
-                  Navigator.pop(context);
-                  showSetOSPassword(false);
-                },
-                child: Icon(Icons.edit, color: MyTheme.accent),
-              )
-            ])),
+          Container(width: 100.0, child: Text(translate('OS Password'))),
+          TextButton(
+            style: flatButtonStyle,
+            onPressed: () {
+              Navigator.pop(context);
+              showSetOSPassword(false);
+            },
+            child: Icon(Icons.edit, color: MyTheme.accent),
+          )
+        ])),
         value: 'enter_os_password'));
     if (!isWebDesktop) {
       if (perms['keyboard'] != false && perms['clipboard'] != false) {
@@ -661,10 +661,10 @@ class _RemotePageState extends State<RemotePage> {
       more.add(PopupMenuItem<String>(
           child: Text(translate('Insert Lock')), value: 'lock'));
       if (pi.platform == 'Windows' &&
-          FFI.getByName('toggle_option', 'privacy-mode') != 'true') {
+          gFFI.getByName('toggle_option', 'privacy-mode') != 'true') {
         more.add(PopupMenuItem<String>(
-            child: Text(translate(
-                (FFI.ffiModel.inputBlocked ? 'Unb' : 'B') + 'lock user input')),
+            child: Text(translate((gFFI.ffiModel.inputBlocked ? 'Unb' : 'B') +
+                'lock user input')),
             value: 'block-input'));
       }
     }
@@ -676,31 +676,31 @@ class _RemotePageState extends State<RemotePage> {
         elevation: 8,
       );
       if (value == 'cad') {
-        FFI.setByName('ctrl_alt_del');
+        gFFI.setByName('ctrl_alt_del');
       } else if (value == 'lock') {
-        FFI.setByName('lock_screen');
+        gFFI.setByName('lock_screen');
       } else if (value == 'block-input') {
-        FFI.setByName('toggle_option',
-            (FFI.ffiModel.inputBlocked ? 'un' : '') + 'block-input');
-        FFI.ffiModel.inputBlocked = !FFI.ffiModel.inputBlocked;
+        gFFI.setByName('toggle_option',
+            (gFFI.ffiModel.inputBlocked ? 'un' : '') + 'block-input');
+        gFFI.ffiModel.inputBlocked = !gFFI.ffiModel.inputBlocked;
       } else if (value == 'refresh') {
-        FFI.setByName('refresh');
+        gFFI.setByName('refresh');
       } else if (value == 'paste') {
             () async {
           ClipboardData? data = await Clipboard.getData(Clipboard.kTextPlain);
           if (data != null && data.text != null) {
-            FFI.setByName('input_string', '${data.text}');
+            gFFI.setByName('input_string', '${data.text}');
           }
         }();
       } else if (value == 'enter_os_password') {
-        var password = FFI.getByName('peer_option', "os-password");
+        var password = gFFI.getByName('peer_option', "os-password");
         if (password != "") {
-          FFI.setByName('input_os_password', password);
+          gFFI.setByName('input_os_password', password);
         } else {
           showSetOSPassword(true);
         }
       } else if (value == 'reset_canvas') {
-        FFI.cursorModel.reset();
+        gFFI.cursorModel.reset();
       }
     }();
   }
@@ -719,11 +719,11 @@ class _RemotePageState extends State<RemotePage> {
               return SingleChildScrollView(
                   padding: EdgeInsets.symmetric(vertical: 10),
                   child: GestureHelp(
-                      touchMode: FFI.ffiModel.touchMode,
+                      touchMode: gFFI.ffiModel.touchMode,
                       onTouchModeChange: (t) {
-                        FFI.ffiModel.toggleTouchMode();
-                        final v = FFI.ffiModel.touchMode ? 'Y' : '';
-                        FFI.setByName('peer_option',
+                        gFFI.ffiModel.toggleTouchMode();
+                        final v = gFFI.ffiModel.touchMode ? 'Y' : '';
+                        gFFI.setByName('peer_option',
                             '{"name": "touch-mode", "value": "$v"}');
                       }));
             }));
@@ -752,24 +752,24 @@ class _RemotePageState extends State<RemotePage> {
           child: icon != null
               ? Icon(icon, size: 17, color: Colors.white)
               : Text(translate(text),
-              style: TextStyle(color: Colors.white, fontSize: 11)),
+                  style: TextStyle(color: Colors.white, fontSize: 11)),
           onPressed: onPressed);
     };
-    final pi = FFI.ffiModel.pi;
+    final pi = gFFI.ffiModel.pi;
     final isMac = pi.platform == "Mac OS";
     final modifiers = <Widget>[
       wrap('Ctrl ', () {
-        setState(() => FFI.ctrl = !FFI.ctrl);
-      }, FFI.ctrl),
+        setState(() => gFFI.ctrl = !gFFI.ctrl);
+      }, gFFI.ctrl),
       wrap(' Alt ', () {
-        setState(() => FFI.alt = !FFI.alt);
-      }, FFI.alt),
+        setState(() => gFFI.alt = !gFFI.alt);
+      }, gFFI.alt),
       wrap('Shift', () {
-        setState(() => FFI.shift = !FFI.shift);
-      }, FFI.shift),
+        setState(() => gFFI.shift = !gFFI.shift);
+      }, gFFI.shift),
       wrap(isMac ? ' Cmd ' : ' Win ', () {
-        setState(() => FFI.command = !FFI.command);
-      }, FFI.command),
+        setState(() => gFFI.command = !gFFI.command);
+      }, gFFI.command),
     ];
     final keys = <Widget>[
       wrap(
@@ -801,44 +801,44 @@ class _RemotePageState extends State<RemotePage> {
     for (var i = 1; i <= 12; ++i) {
       final name = 'F' + i.toString();
       fn.add(wrap(name, () {
-        FFI.inputKey('VK_' + name);
+        gFFI.inputKey('VK_' + name);
       }));
     }
     final more = <Widget>[
       SizedBox(width: 9999),
       wrap('Esc', () {
-        FFI.inputKey('VK_ESCAPE');
+        gFFI.inputKey('VK_ESCAPE');
       }),
       wrap('Tab', () {
-        FFI.inputKey('VK_TAB');
+        gFFI.inputKey('VK_TAB');
       }),
       wrap('Home', () {
-        FFI.inputKey('VK_HOME');
+        gFFI.inputKey('VK_HOME');
       }),
       wrap('End', () {
-        FFI.inputKey('VK_END');
+        gFFI.inputKey('VK_END');
       }),
       wrap('Del', () {
-        FFI.inputKey('VK_DELETE');
+        gFFI.inputKey('VK_DELETE');
       }),
       wrap('PgUp', () {
-        FFI.inputKey('VK_PRIOR');
+        gFFI.inputKey('VK_PRIOR');
       }),
       wrap('PgDn', () {
-        FFI.inputKey('VK_NEXT');
+        gFFI.inputKey('VK_NEXT');
       }),
       SizedBox(width: 9999),
       wrap('', () {
-        FFI.inputKey('VK_LEFT');
+        gFFI.inputKey('VK_LEFT');
       }, false, Icons.keyboard_arrow_left),
       wrap('', () {
-        FFI.inputKey('VK_UP');
+        gFFI.inputKey('VK_UP');
       }, false, Icons.keyboard_arrow_up),
       wrap('', () {
-        FFI.inputKey('VK_DOWN');
+        gFFI.inputKey('VK_DOWN');
       }, false, Icons.keyboard_arrow_down),
       wrap('', () {
-        FFI.inputKey('VK_RIGHT');
+        gFFI.inputKey('VK_RIGHT');
       }, false, Icons.keyboard_arrow_right),
       wrap(isMac ? 'Cmd+C' : 'Ctrl+C', () {
         sendPrompt(isMac, 'VK_C');
@@ -871,7 +871,7 @@ class ImagePaint extends StatelessWidget {
   Widget build(BuildContext context) {
     final m = Provider.of<ImageModel>(context);
     final c = Provider.of<CanvasModel>(context);
-    final adjust = FFI.cursorModel.adjustForKeyboard();
+    final adjust = gFFI.cursorModel.adjustForKeyboard();
     var s = c.scale;
     return CustomPaint(
       painter: new ImagePainter(
@@ -885,7 +885,7 @@ class CursorPaint extends StatelessWidget {
   Widget build(BuildContext context) {
     final m = Provider.of<CursorModel>(context);
     final c = Provider.of<CanvasModel>(context);
-    final adjust = FFI.cursorModel.adjustForKeyboard();
+    final adjust = gFFI.cursorModel.adjustForKeyboard();
     var s = c.scale;
     return CustomPaint(
       painter: new ImagePainter(
@@ -925,10 +925,10 @@ class ImagePainter extends CustomPainter {
 
 CheckboxListTile getToggle(void Function(void Function()) setState, option, name) {
   return CheckboxListTile(
-      value: FFI.getByName('toggle_option', option) == 'true',
+      value: gFFI.getByName('toggle_option', option) == 'true',
       onChanged: (v) {
         setState(() {
-          FFI.setByName('toggle_option', option);
+          gFFI.setByName('toggle_option', option);
         });
       },
       dense: true,
@@ -948,12 +948,12 @@ RadioListTile<String> getRadio(String name, String toValue, String curValue,
 }
 
 void showOptions() {
-  String quality = FFI.getByName('image_quality');
+  String quality = gFFI.getByName('image_quality');
   if (quality == '') quality = 'balanced';
-  String viewStyle = FFI.getByName('peer_option', 'view-style');
+  String viewStyle = gFFI.getByName('peer_option', 'view-style');
   var displays = <Widget>[];
-  final pi = FFI.ffiModel.pi;
-  final image = FFI.ffiModel.getConnectionImage();
+  final pi = gFFI.ffiModel.pi;
+  final image = gFFI.ffiModel.getConnectionImage();
   if (image != null)
     displays.add(Padding(padding: const EdgeInsets.only(top: 8), child: image));
   if (pi.displays.length > 1) {
@@ -963,7 +963,7 @@ void showOptions() {
       children.add(InkWell(
           onTap: () {
             if (i == cur) return;
-            FFI.setByName('switch_display', i.toString());
+            gFFI.setByName('switch_display', i.toString());
             SmartDialog.dismiss();
           },
           child: Ink(
@@ -987,7 +987,7 @@ void showOptions() {
   if (displays.isNotEmpty) {
     displays.add(Divider(color: MyTheme.border));
   }
-  final perms = FFI.ffiModel.permissions;
+  final perms = gFFI.ffiModel.permissions;
 
   DialogManager.show((setState, close) {
     final more = <Widget>[];
@@ -1007,16 +1007,16 @@ void showOptions() {
       if (value == null) return;
       setState(() {
         quality = value;
-        FFI.setByName('image_quality', value);
+        gFFI.setByName('image_quality', value);
       });
     };
     var setViewStyle = (String? value) {
       if (value == null) return;
       setState(() {
         viewStyle = value;
-        FFI.setByName(
+        gFFI.setByName(
             'peer_option', '{"name": "view-style", "value": "$value"}');
-        FFI.canvasModel.updateViewStyle();
+        gFFI.canvasModel.updateViewStyle();
       });
     };
     return CustomAlertDialog(
@@ -1044,8 +1044,8 @@ void showOptions() {
 
 void showSetOSPassword(bool login) {
   final controller = TextEditingController();
-  var password = FFI.getByName('peer_option', "os-password");
-  var autoLogin = FFI.getByName('peer_option', "auto-login") != "";
+  var password = gFFI.getByName('peer_option', "os-password");
+  var autoLogin = gFFI.getByName('peer_option', "auto-login") != "";
   controller.text = password;
   DialogManager.show((setState, close) {
     return CustomAlertDialog(
@@ -1078,12 +1078,12 @@ void showSetOSPassword(bool login) {
             style: flatButtonStyle,
             onPressed: () {
               var text = controller.text.trim();
-              FFI.setByName(
+              gFFI.setByName(
                   'peer_option', '{"name": "os-password", "value": "$text"}');
-              FFI.setByName('peer_option',
+              gFFI.setByName('peer_option',
                   '{"name": "auto-login", "value": "${autoLogin ? 'Y' : ''}"}');
               if (text != "" && login) {
-                FFI.setByName('input_os_password', text);
+                gFFI.setByName('input_os_password', text);
               }
               close();
             },
@@ -1094,17 +1094,17 @@ void showSetOSPassword(bool login) {
 }
 
 void sendPrompt(bool isMac, String key) {
-  final old = isMac ? FFI.command : FFI.ctrl;
+  final old = isMac ? gFFI.command : gFFI.ctrl;
   if (isMac) {
-    FFI.command = true;
+    gFFI.command = true;
   } else {
-    FFI.ctrl = true;
+    gFFI.ctrl = true;
   }
-  FFI.inputKey(key);
+  gFFI.inputKey(key);
   if (isMac) {
-    FFI.command = old;
+    gFFI.command = old;
   } else {
-    FFI.ctrl = old;
+    gFFI.ctrl = old;
   }
 }
 
