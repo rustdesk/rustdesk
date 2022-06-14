@@ -465,7 +465,7 @@ fn run(sp: GenericService) -> ResultType<()> {
                     }
                     scrap::Frame::RAW(data) => {
                         if (data.len() != 0) {
-                            let send_conn_ids = handle_one_frame(&sp, data, ms, &mut vpx)?;
+                            let send_conn_ids = handle_one_frame(&sp, data, ms, &mut encoder)?;
                             frame_controller.set_send(now, send_conn_ids);
                         }
                     }
