@@ -9,6 +9,26 @@ message VP9 {
 
 message VP9s { repeated VP9 frames = 1; }
 
+message H264 {
+  bytes data = 1;
+  bool key = 2;
+  int64 pts = 3;
+}
+
+message H264s {
+  repeated H264 h264s = 1;
+}
+
+message H265 {
+  bytes data = 1;
+  bool key = 2;
+  int64 pts = 3;
+}
+
+message H265s {
+  repeated H265 h265s = 1;
+}
+
 message RGB { bool compress = 1; }
 
 // planes data send directly in binary for better use arraybuffer on web
@@ -22,6 +42,8 @@ message VideoFrame {
     VP9s vp9s = 6;
     RGB rgb = 7;
     YUV yuv = 8;
+    H264s h264s = 10;
+    H265s h265s = 11;
   }
   int64 timestamp = 9;
 }
@@ -430,6 +452,14 @@ enum ImageQuality {
   Best = 4;
 }
 
+message VideoCodecState {
+  int32 ScoreVpx = 1;
+  bool H264 = 2;
+  int32 ScoreH264 = 3;
+  bool H265 = 4;
+  int32 ScoreH265 = 5;
+}
+
 message OptionMessage {
   enum BoolOption {
     NotSet = 0;
@@ -445,6 +475,7 @@ message OptionMessage {
   BoolOption disable_audio = 7;
   BoolOption disable_clipboard = 8;
   BoolOption enable_file_transfer = 9;
+  VideoCodecState video_codec_state = 10;
 }
 
 message TestDelay {

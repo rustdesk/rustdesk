@@ -2232,6 +2232,19 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9a3a5bfb195931eeb336b2a7b4d761daec841b97f947d34394601737a7bba5e4"
 
 [[package]]
+name = "hwcodec"
+version = "0.1.0"
+source = "git+https://github.com/21pages/hwcodec#504363444b6fcd93f0a9b2f21d80744306f15819"
+dependencies = [
+ "bindgen",
+ "cc",
+ "log",
+ "serde 1.0.137",
+ "serde_derive",
+ "serde_json 1.0.81",
+]
+
+[[package]]
 name = "hyper"
 version = "0.14.19"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4255,6 +4268,8 @@ dependencies = [
  "gstreamer",
  "gstreamer-app",
  "gstreamer-video",
+ "hbb_common",
+ "hwcodec",
  "jni",
  "lazy_static",
  "libc",

@@ -1,4 +1,4 @@
-pub use self::codec::*;
+pub use self::vpxcodec::*;
 
 cfg_if! {
     if #[cfg(quartz)] {
@@ -29,8 +29,12 @@ cfg_if! {
 
 pub mod codec;
 mod convert;
+#[cfg(feature = "hwcodec")]
+pub mod hwcodec;
+pub mod vpxcodec;
 pub use self::convert::*;
 pub const STRIDE_ALIGN: usize = 64; // commonly used in libvpx vpx_img_alloc caller
+pub const HW_STRIDE_ALIGN: usize = 0; // recommended by av_frame_get_buffer
 
 mod vpx;
 

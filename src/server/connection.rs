@@ -396,6 +396,7 @@ impl Connection {
         video_service::notify_video_frame_feched(id, None);
         video_service::update_test_latency(id, 0);
         video_service::update_image_quality(id, None);
+        scrap::codec::Encoder::update_video_encoder(id, scrap::codec::EncoderUpdate::Remove);
         if let Err(err) = conn.try_port_forward_loop(&mut rx_from_cm).await {
             conn.on_close(&err.to_string(), false);
         }
@@ -780,6 +781,22 @@ impl Connection {
         if let Some(message::Union::login_request(lr)) = msg.union {
             if let Some(o) = lr.option.as_ref() {
                 self.update_option(o).await;
+                if let Some(q) = o.video_codec_state.clone().take() {
+                    scrap::codec::Encoder::update_video_encoder(
+                        self.inner.id(),
+                        scrap::codec::EncoderUpdate::State(q),
+                    );
+                } else {
+                    scrap::codec::Encoder::update_video_encoder(
+                        self.inner.id(),
+                        scrap::codec::EncoderUpdate::DisableHwIfNotExist,
+                    );
+                }
+            } else {
+                scrap::codec::Encoder::update_video_encoder(
+                    self.inner.id(),
+                    scrap::codec::EncoderUpdate::DisableHwIfNotExist,
+                );
             }
             self.video_ack_required = lr.video_ack_required;
             if self.authorized {
