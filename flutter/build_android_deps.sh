@@ -56,7 +56,7 @@ function build {
     export CC=$TOOLCHAIN/bin/${NDK_LLVM_TARGET}${API_LEVEL}-clang
     export CXX=$TOOLCHAIN/bin/${NDK_LLVM_TARGET}${API_LEVEL}-clang++
   fi
-
+  make clean
   ./configure --target=$LIBVPX_TARGET \
               --enable-pic --disable-vp8 \
               --disable-webm-io \
@@ -77,6 +77,7 @@ function build {
   # 3
   echo "*** [$ANDROID_ABI][Start] Build oboe"
   pushd build/oboe
+  make clean
   cmake -DBUILD_SHARED_LIBS=true \
           -DCMAKE_BUILD_TYPE=RelWithDebInfo \
           -DANDROID_TOOLCHAIN=clang \
