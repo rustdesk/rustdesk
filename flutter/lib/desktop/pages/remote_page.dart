@@ -241,52 +241,61 @@ class _RemotePageState extends State<RemotePage> with WindowListener {
 
     return WillPopScope(
       onWillPop: () async {
-        clientClose();
-        return false;
-      },
-      child: getRawPointerAndKeyBody(
-          keyboard,
-          Scaffold(
-              // resizeToAvoidBottomInset: true,
-              floatingActionButton: !showActionButton
-                  ? null
-                  : FloatingActionButton(
-                      mini: !hideKeyboard,
-                      child: Icon(
-                          hideKeyboard ? Icons.expand_more : Icons.expand_less),
-                      backgroundColor: MyTheme.accent,
-                      onPressed: () {
-                        setState(() {
-                          if (hideKeyboard) {
-                            _showEdit = false;
-                            _ffi.invokeMethod("enable_soft_keyboard", false);
-                            _mobileFocusNode.unfocus();
-                            _physicalFocusNode.requestFocus();
-                          } else {
-                            _showBar = !_showBar;
-                          }
-                        });
-                      }),
-              bottomNavigationBar: _showBar && pi.displays.length > 0
-                  ? getBottomAppBar(keyboard)
-                  : null,
-              body: Overlay(
-                initialEntries: [
-                  OverlayEntry(builder: (context) {
-                    return Container(
-                        color: Colors.black,
-                        child: isWebDesktop
-                            ? getBodyForDesktopWithListener(keyboard)
-                            : SafeArea(
-                                child: Container(
-                                    color: MyTheme.canvasColor,
-                                    child: _isPhysicalMouse
-                                        ? getBodyForMobile()
-                                        : getBodyForMobileWithGesture())));
-                  })
-                ],
-              ))),
-    );
+          clientClose();
+          return false;
+        },
+        child: MultiProvider(
+          providers: [
+            ChangeNotifierProvider.value(value: _ffi.ffiModel),
+            ChangeNotifierProvider.value(value: _ffi.imageModel),
+            ChangeNotifierProvider.value(value: _ffi.cursorModel),
+            ChangeNotifierProvider.value(value: _ffi.canvasModel),
+          ],
+          child: getRawPointerAndKeyBody(
+              keyboard,
+              Scaffold(
+                  // resizeToAvoidBottomInset: true,
+                  floatingActionButton: !showActionButton
+                      ? null
+                      : FloatingActionButton(
+                          mini: !hideKeyboard,
+                          child: Icon(hideKeyboard
+                              ? Icons.expand_more
+                              : Icons.expand_less),
+                          backgroundColor: MyTheme.accent,
+                          onPressed: () {
+                            setState(() {
+                              if (hideKeyboard) {
+                                _showEdit = false;
+                                _ffi.invokeMethod(
+                                    "enable_soft_keyboard", false);
+                                _mobileFocusNode.unfocus();
+                                _physicalFocusNode.requestFocus();
+                              } else {
+                                _showBar = !_showBar;
+                              }
+                            });
+                          }),
+                  bottomNavigationBar: _showBar && pi.displays.length > 0
+                      ? getBottomAppBar(keyboard)
+                      : null,
+                  body: Overlay(
+                    initialEntries: [
+                      OverlayEntry(builder: (context) {
+                        return Container(
+                            color: Colors.black,
+                            child: isWebDesktop
+                                ? getBodyForDesktopWithListener(keyboard)
+                                : SafeArea(
+                                    child: Container(
+                                        color: MyTheme.canvasColor,
+                                        child: _isPhysicalMouse
+                                            ? getBodyForMobile()
+                                            : getBodyForMobileWithGesture())));
+                      })
+                    ],
+                  ))),
+        ));
   }
 
   Widget getRawPointerAndKeyBody(bool keyboard, Widget child) {
@@ -916,13 +925,12 @@ class ImagePaint extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final m = ffi(this.id).imageModel;
-    final c = ffi(this.id).canvasModel;
-    final adjust = ffi(this.id).cursorModel.adjustForKeyboard();
+    final m = Provider.of<ImageModel>(context);
+    final c = Provider.of<CanvasModel>(context);
     var s = c.scale;
     return CustomPaint(
-      painter: new ImagePainter(
-          image: m.image, x: c.x / s, y: (c.y - adjust) / s, scale: s),
+      painter:
+          new ImagePainter(image: m.image, x: c.x / s, y: c.y / s, scale: s),
     );
   }
 }
@@ -934,15 +942,15 @@ class CursorPaint extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final m = ffi(this.id).cursorModel;
-    final c = ffi(this.id).canvasModel;
-    final adjust = ffi(this.id).cursorModel.adjustForKeyboard();
+    final m = Provider.of<CursorModel>(context);
+    final c = Provider.of<CanvasModel>(context);
+    // final adjust = m.adjustForKeyboard();
     var s = c.scale;
     return CustomPaint(
       painter: new ImagePainter(
           image: m.image,
           x: m.x * s - m.hotx + c.x,
-          y: m.y * s - m.hoty + c.y - adjust,
+          y: m.y * s - m.hoty + c.y,
           scale: 1),
     );
   }
