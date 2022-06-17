@@ -22,7 +22,7 @@ Future<Null> main(List<String> args) async {
   // global FFI, use this **ONLY** for global configuration
   // for convenience, use global FFI on mobile platform
   // focus on multi-ffi on desktop first
-  initGlobalFFI();
+  await initGlobalFFI();
   // await Firebase.initializeApp();
   if (isAndroid) {
     toAndroidChannelInit();

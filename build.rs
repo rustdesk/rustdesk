@@ -77,7 +77,7 @@ fn gen_flutter_rust_bridge() {
         ..Default::default()
     };
     // run fbr_codegen
-    lib_flutter_rust_bridge_codegen::frb_codegen(opts).unwrap();
+    // lib_flutter_rust_bridge_codegen::frb_codegen(opts).unwrap();
 }
 
 fn main() {
