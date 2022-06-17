@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_hbb/mobile/pages/file_manager_page.dart';
 import 'package:flutter_hbb/utils/multi_window_manager.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -79,21 +78,8 @@ class _ConnectionPageState extends State<ConnectionPage> {
           }
         }
       }
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (BuildContext context) => FileManagerPage(id: id),
-        ),
-      );
+      await rustDeskWinManager.new_file_transfer(id);
     } else {
-      // single window
-      // Navigator.push(
-      //   context,
-      //   MaterialPageRoute(
-      //     builder: (BuildContext context) => RemotePage(id: id),
-      //   ),
-      // );
-      // multi window
       await rustDeskWinManager.new_remote_desktop(id);
     }
     FocusScopeNode currentFocus = FocusScope.of(context);
@@ -307,12 +293,10 @@ class _ConnectionPageState extends State<ConnectionPage> {
             PopupMenuItem<String>(
                 child: Text(translate('Remove')), value: 'remove')
           ] +
-          (!isAndroid
-              ? []
-              : [
-                  PopupMenuItem<String>(
-                      child: Text(translate('File transfer')), value: 'file')
-                ]),
+          ([
+            PopupMenuItem<String>(
+                child: Text(translate('File transfer')), value: 'file')
+          ]),
       elevation: 8,
     );
     if (value == 'remove') {

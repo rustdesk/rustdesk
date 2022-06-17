@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:bitsdojo_window/bitsdojo_window.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/desktop/pages/desktop_home_page.dart';
+import 'package:flutter_hbb/desktop/screen/desktop_file_transfer_screen.dart';
 import 'package:flutter_hbb/desktop/screen/desktop_remote_screen.dart';
 import 'package:flutter_hbb/utils/multi_window_manager.dart';
 import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
@@ -51,6 +52,9 @@ void runRustDeskApp(List<String> args) async {
           params: argument,
         ));
         break;
+      case WindowType.FileTransfer:
+        runApp(DesktopFileTransferScreen(params: argument));
+        break;
       default:
         break;
     }
@@ -75,7 +79,8 @@ class App extends StatelessWidget {
     // final analytics = FirebaseAnalytics.instance;
     return MultiProvider(
       providers: [
-        // TODO remove it, only for compile
+        // global configuration
+        // use session related FFI when in remote control or file transfer page
         ChangeNotifierProvider.value(value: gFFI.ffiModel),
         ChangeNotifierProvider.value(value: gFFI.imageModel),
         ChangeNotifierProvider.value(value: gFFI.cursorModel),
