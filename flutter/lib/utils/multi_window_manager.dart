@@ -33,6 +33,7 @@ class RustDeskMultiWindowManager {
   static final instance = RustDeskMultiWindowManager._();
 
   int? _remoteDesktopWindowId;
+  int? _fileTransferWindowId;
 
   Future<dynamic> new_remote_desktop(String remote_id) async {
     final msg =
@@ -57,6 +58,31 @@ class RustDeskMultiWindowManager {
       _remoteDesktopWindowId = remoteDesktopController.windowId;
     } else {
       return call(WindowType.RemoteDesktop, "new_remote_desktop", msg);
+    }
+  }
+
+  Future<dynamic> new_file_transfer(String remote_id) async {
+    final msg =
+        jsonEncode({"type": WindowType.FileTransfer.index, "id": remote_id});
+
+    try {
+      final ids = await DesktopMultiWindow.getAllSubWindowIds();
+      if (!ids.contains(_fileTransferWindowId)) {
+        _fileTransferWindowId = null;
+      }
+    } on Error {
+      _fileTransferWindowId = null;
+    }
+    if (_fileTransferWindowId == null) {
+      final fileTransferController = await DesktopMultiWindow.createWindow(msg);
+      fileTransferController
+        ..setFrame(const Offset(0, 0) & const Size(1280, 720))
+        ..center()
+        ..setTitle("rustdesk - file transfer")
+        ..show();
+      _fileTransferWindowId = fileTransferController.windowId;
+    } else {
+      return call(WindowType.FileTransfer, "new_file_transfer", msg);
     }
   }
 

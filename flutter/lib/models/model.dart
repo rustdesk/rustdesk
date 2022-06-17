@@ -913,7 +913,7 @@ class FFI {
       }();
       // every instance will bind a stream
     }
-    id = id;
+    this.id = id;
   }
 
   /// Login with [password], choose if the client should [remember] it.
@@ -935,6 +935,7 @@ class FFI {
     ffiModel.clear();
     canvasModel.clear();
     resetModifiers();
+    print("model closed");
   }
 
   /// Send **get** command to the Rust core based on [name] and [arg].

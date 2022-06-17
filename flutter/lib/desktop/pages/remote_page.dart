@@ -31,7 +31,8 @@ class RemotePage extends StatefulWidget {
   _RemotePageState createState() => _RemotePageState();
 }
 
-class _RemotePageState extends State<RemotePage> with WindowListener {
+class _RemotePageState extends State<RemotePage>
+    with WindowListener, AutomaticKeepAliveClientMixin {
   Timer? _interval;
   Timer? _timer;
   bool _showBar = !isWebDesktop;
@@ -234,13 +235,14 @@ class _RemotePageState extends State<RemotePage> with WindowListener {
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     final pi = Provider.of<FfiModel>(context).pi;
     final hideKeyboard = isKeyboardShown() && _showEdit;
     final showActionButton = !_showBar || hideKeyboard;
     final keyboard = _ffi.ffiModel.permissions['keyboard'] != false;
 
     return WillPopScope(
-      onWillPop: () async {
+        onWillPop: () async {
           clientClose();
           return false;
         },
@@ -254,28 +256,28 @@ class _RemotePageState extends State<RemotePage> with WindowListener {
           child: getRawPointerAndKeyBody(
               keyboard,
               Scaffold(
-                  // resizeToAvoidBottomInset: true,
+                // resizeToAvoidBottomInset: true,
                   floatingActionButton: !showActionButton
                       ? null
                       : FloatingActionButton(
-                          mini: !hideKeyboard,
-                          child: Icon(hideKeyboard
-                              ? Icons.expand_more
-                              : Icons.expand_less),
-                          backgroundColor: MyTheme.accent,
-                          onPressed: () {
-                            setState(() {
-                              if (hideKeyboard) {
-                                _showEdit = false;
-                                _ffi.invokeMethod(
-                                    "enable_soft_keyboard", false);
-                                _mobileFocusNode.unfocus();
-                                _physicalFocusNode.requestFocus();
-                              } else {
-                                _showBar = !_showBar;
-                              }
-                            });
-                          }),
+                      mini: !hideKeyboard,
+                      child: Icon(hideKeyboard
+                          ? Icons.expand_more
+                          : Icons.expand_less),
+                      backgroundColor: MyTheme.accent,
+                      onPressed: () {
+                        setState(() {
+                          if (hideKeyboard) {
+                            _showEdit = false;
+                            _ffi.invokeMethod(
+                                "enable_soft_keyboard", false);
+                            _mobileFocusNode.unfocus();
+                            _physicalFocusNode.requestFocus();
+                          } else {
+                            _showBar = !_showBar;
+                          }
+                        });
+                      }),
                   bottomNavigationBar: _showBar && pi.displays.length > 0
                       ? getBottomAppBar(keyboard)
                       : null,
@@ -287,11 +289,11 @@ class _RemotePageState extends State<RemotePage> with WindowListener {
                             child: isWebDesktop
                                 ? getBodyForDesktopWithListener(keyboard)
                                 : SafeArea(
-                                    child: Container(
-                                        color: MyTheme.canvasColor,
-                                        child: _isPhysicalMouse
-                                            ? getBodyForMobile()
-                                            : getBodyForMobileWithGesture())));
+                                child: Container(
+                                    color: MyTheme.canvasColor,
+                                    child: _isPhysicalMouse
+                                        ? getBodyForMobile()
+                                        : getBodyForMobileWithGesture())));
                       })
                     ],
                   ))),
@@ -916,6 +918,9 @@ class _RemotePageState extends State<RemotePage> with WindowListener {
         break;
     }
   }
+
+  @override
+  bool get wantKeepAlive => true;
 }
 
 class ImagePaint extends StatelessWidget {
