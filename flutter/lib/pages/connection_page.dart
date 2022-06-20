@@ -100,8 +100,8 @@ class _ConnectionPageState extends State<ConnectionPage> {
         : InkWell(
             onTap: () async {
               final url = _updateUrl + '.apk';
-              if (await canLaunch(url)) {
-                await launch(url);
+              if (await canLaunchUrl(Uri.parse(url))) {
+                await launchUrl(Uri.parse(url));
               }
             },
             child: Container(

@@ -594,10 +594,7 @@ class _TapTracker {
     required this.entry,
     required Duration doubleTapMinTime,
     required this.gestureSettings,
-  })  : assert(doubleTapMinTime != null),
-        assert(event != null),
-        assert(event.buttons != null),
-        pointer = event.pointer,
+  })  : pointer = event.pointer,
         _initialGlobalPosition = event.position,
         initialButtons = event.buttons,
         _doubleTapMinTimeCountdown =
@@ -643,7 +640,7 @@ class _TapTracker {
 /// CountdownZoned tracks whether the specified duration has elapsed since
 /// creation, honoring [Zone].
 class _CountdownZoned {
-  _CountdownZoned({required Duration duration}) : assert(duration != null) {
+  _CountdownZoned({required Duration duration}) {
     Timer(duration, _onTimeout);
   }
 
