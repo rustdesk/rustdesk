@@ -2087,6 +2087,7 @@ dependencies = [
  "lazy_static",
  "log",
  "mac_address",
+ "machine-uid",
  "protobuf",
  "protobuf-codegen",
  "quinn",

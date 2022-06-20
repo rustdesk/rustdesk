@@ -3,6 +3,7 @@ pub mod protos;
 pub use  protos::message as message_proto;
 pub use  protos::rendezvous as rendezvous_proto;
 pub use bytes;
+use config::Config;
 pub use futures;
 pub use protobuf;
 use std::{
@@ -26,6 +27,7 @@ pub use anyhow::{self, bail};
 pub use futures_util;
 pub mod config;
 pub mod fs;
+pub use lazy_static;
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub use mac_address;
 pub use rand;
@@ -34,7 +36,7 @@ pub use sodiumoxide;
 pub use tokio_socks;
 pub use tokio_socks::IntoTargetAddr;
 pub use tokio_socks::TargetAddr;
-pub use lazy_static;
+pub mod password_security;
 
 #[cfg(feature = "quic")]
 pub type Stream = quic::Connection;
@@ -197,6 +199,14 @@ pub fn get_modified_time(path: &std::path::Path) -> SystemTime {
     std::fs::metadata(&path)
         .map(|m| m.modified().unwrap_or(UNIX_EPOCH))
         .unwrap_or(UNIX_EPOCH)
+}
+
+pub fn get_uuid() -> Vec<u8> {
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    if let Ok(id) = machine_uid::get() {
+        return id.into();
+    }
+    Config::get_key_pair().1
 }
 
 #[cfg(test)]

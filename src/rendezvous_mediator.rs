@@ -389,7 +389,7 @@ impl RendezvousMediator {
     async fn register_pk(&mut self, socket: &mut FramedSocket) -> ResultType<()> {
         let mut msg_out = Message::new();
         let pk = Config::get_key_pair().1;
-        let uuid = crate::get_uuid();
+        let uuid = hbb_common::get_uuid();
         let id = Config::get_id();
         self.last_id_pk_registry = id.clone();
         msg_out.set_register_pk(RegisterPk {

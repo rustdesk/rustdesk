@@ -287,5 +287,18 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Keep RustDesk background service", ""),
         ("Ignore Battery Optimizations", ""),
         ("android_open_battery_optimizations_tip", ""),
+        ("Random Password After Session", ""),
+        ("Keep", ""),
+        ("Update", ""),
+        ("Disable", ""),
+        ("Onetime Password", ""),
+        ("Verification Method", ""),
+        ("Enable security password", ""),
+        ("Enable random password", ""),
+        ("Enable onetime password", ""),
+        ("Disable onetime password", ""),
+        ("Activate onetime password", ""),
+        ("Set security password", ""),
+        ("Connection not allowed", ""),
     ].iter().cloned().collect();
 }

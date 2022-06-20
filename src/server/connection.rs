@@ -8,6 +8,7 @@ use crate::video_service;
 use crate::{common::MOBILE_INFO2, mobile::connection_manager::start_channel};
 use crate::{ipc, VERSION};
 use hbb_common::fs::can_enable_overwrite_detection;
+use hbb_common::password_security::password;
 use hbb_common::{
     config::Config,
     fs,
@@ -398,6 +399,7 @@ impl Connection {
         video_service::notify_video_frame_feched(id, None);
         scrap::codec::Encoder::update_video_encoder(id, scrap::codec::EncoderUpdate::Remove);
         video_service::VIDEO_QOS.lock().unwrap().reset();
+        password::after_session(conn.authorized);
         if let Err(err) = conn.try_port_forward_loop(&mut rx_from_cm).await {
             conn.on_close(&err.to_string(), false);
         }
@@ -571,7 +573,7 @@ impl Connection {
         let url = self.api_server.clone();
         let mut v = v;
         v["id"] = json!(Config::get_id());
-        v["uuid"] = json!(base64::encode(crate::get_uuid()));
+        v["uuid"] = json!(base64::encode(hbb_common::get_uuid()));
         v["Id"] = json!(self.inner.id);
         tokio::spawn(async move {
             allow_err!(Self::post_audit_async(url, v).await);
@@ -778,6 +780,36 @@ impl Connection {
         self.tx_input.send(MessageInput::Key((msg, press))).ok();
     }
 
+    fn validate_password(&mut self, lr_password: Vec<u8>) -> bool {
+        let validate = |password: String| {
+            if password.len() == 0 {
+                return false;
+            }
+            let mut hasher = Sha256::new();
+            hasher.update(password);
+            hasher.update(&self.hash.salt);
+            let mut hasher2 = Sha256::new();
+            hasher2.update(&hasher.finalize()[..]);
+            hasher2.update(&self.hash.challenge);
+            hasher2.finalize()[..] == lr_password[..]
+        };
+        if password::security_enabled() {
+            if validate(Config::get_security_password()) {
+                return true;
+            }
+        }
+        if password::random_password_valid() {
+            if validate(password::random_password()) {
+                if password::onetime_password_activated() {
+                    password::set_onetime_password_activated(false);
+                }
+                return true;
+            }
+        }
+
+        false
+    }
+
     async fn on_message(&mut self, msg: Message) -> bool {
         if let Some(message::Union::LoginRequest(lr)) = msg.union {
             if let Some(o) = lr.option.as_ref() {
@@ -853,12 +885,10 @@ impl Connection {
             } else if lr.password.is_empty() {
                 self.try_start_cm(lr.my_id, lr.my_name, false);
             } else {
-                let mut hasher = Sha256::new();
-                hasher.update(&Config::get_password());
-                hasher.update(&self.hash.salt);
-                let mut hasher2 = Sha256::new();
-                hasher2.update(&hasher.finalize()[..]);
-                hasher2.update(&self.hash.challenge);
+                if password::passwords().len() == 0 {
+                    self.send_login_error("Connection not allowed").await;
+                    return false;
+                }
                 let mut failure = LOGIN_FAILURES
                     .lock()
                     .unwrap()
@@ -871,7 +901,7 @@ impl Connection {
                         .await;
                 } else if time == failure.0 && failure.1 > 6 {
                     self.send_login_error("Please try 1 minute later").await;
-                } else if hasher2.finalize()[..] != lr.password[..] {
+                } else if !self.validate_password(lr.password.clone()) {
                     if failure.0 == time {
                         failure.1 += 1;
                         failure.2 += 1;

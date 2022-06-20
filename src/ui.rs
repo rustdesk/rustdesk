@@ -43,6 +43,7 @@ struct UI(
     Arc<Mutex<HashMap<String, String>>>,
     Arc<Mutex<String>>,
     mpsc::UnboundedSender<ipc::Data>,
+    Arc<Mutex<String>>,
 );
 
 struct UIHostHandler;
@@ -169,7 +170,7 @@ pub fn start(args: &mut [String]) {
 impl UI {
     fn new(childs: Childs) -> Self {
         let res = check_connect_status(true);
-        Self(childs, res.0, res.1, Default::default(), res.2)
+        Self(childs, res.0, res.1, Default::default(), res.2, res.3)
     }
 
     fn recent_sessions_updated(&mut self) -> bool {
@@ -186,16 +187,16 @@ impl UI {
         ipc::get_id()
     }
 
-    fn get_password(&mut self) -> String {
-        ipc::get_password()
+    fn get_random_password(&self) -> String {
+        ipc::get_random_password()
     }
 
-    fn update_password(&mut self, password: String) {
-        if password.is_empty() {
-            allow_err!(ipc::set_password(Config::get_auto_password()));
-        } else {
-            allow_err!(ipc::set_password(password));
-        }
+    fn update_random_password(&self) {
+        allow_err!(ipc::set_random_password(Config::get_auto_password()));
+    }
+
+    fn set_security_password(&self, password: String) {
+        allow_err!(ipc::set_security_password(password));
     }
 
     fn get_remote_id(&mut self) -> String {
@@ -704,7 +705,7 @@ impl UI {
     }
 
     fn get_uuid(&self) -> String {
-        base64::encode(crate::get_uuid())
+        base64::encode(hbb_common::get_uuid())
     }
 
     fn open_url(&self, url: String) {
@@ -774,6 +775,54 @@ impl UI {
     fn get_langs(&self) -> String {
         crate::lang::LANGS.to_string()
     }
+
+    fn random_password_update_method(&self) -> String {
+        ipc::random_password_update_method()
+    }
+
+    fn set_random_password_update_method(&self, method: String) {
+        allow_err!(ipc::set_random_password_update_method(method));
+    }
+
+    fn is_random_password_enabled(&self) -> bool {
+        ipc::is_random_password_enabled()
+    }
+
+    fn set_random_password_enabled(&self, enabled: bool) {
+        allow_err!(ipc::set_random_password_enabled(enabled));
+    }
+
+    fn is_security_password_enabled(&self) -> bool {
+        ipc::is_security_password_enabled()
+    }
+
+    fn set_security_password_enabled(&self, enabled: bool) {
+        allow_err!(ipc::set_security_password_enabled(enabled));
+    }
+
+    fn is_onetime_password_enabled(&self) -> bool {
+        ipc::is_onetime_password_enabled()
+    }
+
+    fn set_onetime_password_enabled(&self, enabled: bool) {
+        allow_err!(ipc::set_onetime_password_enabled(enabled));
+    }
+
+    fn is_onetime_password_activated(&self) -> bool {
+        ipc::is_onetime_password_activated()
+    }
+
+    fn set_onetime_password_activated(&self, activated: bool) {
+        allow_err!(ipc::set_onetime_password_activated(activated));
+    }
+
+    fn is_random_password_valid(&self) -> bool {
+        ipc::is_random_password_valid()
+    }
+
+    fn password_description(&mut self) -> String {
+        self.5.lock().unwrap().clone()
+    }
 }
 
 impl sciter::EventHandler for UI {
@@ -783,8 +832,9 @@ impl sciter::EventHandler for UI {
         fn is_xfce();
         fn using_public_server();
         fn get_id();
-        fn get_password();
-        fn update_password(String);
+        fn get_random_password();
+        fn update_random_password();
+        fn set_security_password(String);
         fn get_remote_id();
         fn set_remote_id(String);
         fn closing(i32, i32, i32, i32);
@@ -854,6 +904,18 @@ impl sciter::EventHandler for UI {
         fn get_uuid();
         fn has_hwcodec();
         fn get_langs();
+        fn random_password_update_method();
+        fn set_random_password_update_method(String);
+        fn is_random_password_enabled();
+        fn set_random_password_enabled(bool);
+        fn is_security_password_enabled();
+        fn set_security_password_enabled(bool);
+        fn is_onetime_password_enabled();
+        fn set_onetime_password_enabled(bool);
+        fn is_onetime_password_activated();
+        fn set_onetime_password_activated(bool);
+        fn is_random_password_valid();
+        fn password_description();
     }
 }
 
@@ -893,6 +955,7 @@ async fn check_connect_status_(
     status: Arc<Mutex<Status>>,
     options: Arc<Mutex<HashMap<String, String>>>,
     rx: mpsc::UnboundedReceiver<ipc::Data>,
+    password: Arc<Mutex<String>>,
 ) {
     let mut key_confirmed = false;
     let mut rx = rx;
@@ -919,6 +982,8 @@ async fn check_connect_status_(
                             Ok(Some(ipc::Data::Config((name, Some(value))))) => {
                                 if name == "id" {
                                     id = value;
+                                } else if name == ipc::STR_PASSWORD_DESCRIPTION {
+                                    *password.lock().unwrap() = value;
                                 }
                             }
                             Ok(Some(ipc::Data::OnlineStatus(Some((mut x, c))))) => {
@@ -938,6 +1003,7 @@ async fn check_connect_status_(
                         c.send(&ipc::Data::OnlineStatus(None)).await.ok();
                         c.send(&ipc::Data::Options(None)).await.ok();
                         c.send(&ipc::Data::Config(("id".to_owned(), None))).await.ok();
+                        c.send(&ipc::Data::Config((ipc::STR_PASSWORD_DESCRIPTION.to_owned(), None))).await.ok();
                     }
                 }
             }
@@ -986,14 +1052,19 @@ fn check_connect_status(
     Arc<Mutex<Status>>,
     Arc<Mutex<HashMap<String, String>>>,
     mpsc::UnboundedSender<ipc::Data>,
+    Arc<Mutex<String>>,
 ) {
     let status = Arc::new(Mutex::new((0, false, 0, "".to_owned())));
     let options = Arc::new(Mutex::new(Config::get_options()));
     let cloned = status.clone();
     let cloned_options = options.clone();
     let (tx, rx) = mpsc::unbounded_channel::<ipc::Data>();
-    std::thread::spawn(move || check_connect_status_(reconnect, cloned, cloned_options, rx));
-    (status, options, tx)
+    let password = Arc::new(Mutex::new(String::default()));
+    let cloned_password = password.clone();
+    std::thread::spawn(move || {
+        check_connect_status_(reconnect, cloned, cloned_options, rx, cloned_password)
+    });
+    (status, options, tx, password)
 }
 
 const INVALID_FORMAT: &'static str = "Invalid format";
