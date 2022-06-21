@@ -307,6 +307,15 @@ pub fn session_create_dir(id: String, act_id: i32, path: String, is_remote: bool
     }
 }
 
+pub fn session_read_local_dir_sync(id: String, path: String, show_hidden: bool) -> String {
+    if let Some(session) = SESSIONS.read().unwrap().get(&id) {
+        if let Ok(fd) = fs::read_dir(&fs::get_path(&path), show_hidden) {
+            return make_fd_to_json(fd);
+        }
+    }
+    "".to_string()
+}
+
 /// FFI for **get** commands which are idempotent.
 /// Return result in c string.
 ///
@@ -397,21 +406,21 @@ unsafe extern "C" fn get_by_name(name: *const c_char, arg: *const c_char) -> *co
             "get_home_dir" => {
                 res = fs::get_home_as_string();
             }
-            "read_local_dir_sync" => {
-                if let Ok(value) = arg.to_str() {
-                    if let Ok(m) = serde_json::from_str::<HashMap<String, String>>(value) {
-                        if let (Some(path), Some(show_hidden)) =
-                            (m.get("path"), m.get("show_hidden"))
-                        {
-                            if let Ok(fd) =
-                                fs::read_dir(&fs::get_path(path), show_hidden.eq("true"))
-                            {
-                                res = make_fd_to_json(fd);
-                            }
-                        }
-                    }
-                }
-            }
+            // "read_local_dir_sync" => {
+            //     if let Ok(value) = arg.to_str() {
+            //         if let Ok(m) = serde_json::from_str::<HashMap<String, String>>(value) {
+            //             if let (Some(path), Some(show_hidden)) =
+            //                 (m.get("path"), m.get("show_hidden"))
+            //             {
+            //                 if let Ok(fd) =
+            //                     fs::read_dir(&fs::get_path(path), show_hidden.eq("true"))
+            //                 {
+            //                     res = make_fd_to_json(fd);
+            //                 }
+            //             }
+            //         }
+            //     }
+            // }
             // Server Side
             #[cfg(not(any(target_os = "ios")))]
             "clients_state" => {
@@ -452,13 +461,11 @@ unsafe extern "C" fn set_by_name(name: *const c_char, value: *const c_char) {
                 "init" => {
                     initialize(value);
                 }
-                #[cfg(any(target_os = "android", target_os = "ios"))]
                 "info1" => {
-                    *crate::common::MOBILE_INFO1.lock().unwrap() = value.to_owned();
+                    *crate::common::FLUTTER_INFO1.lock().unwrap() = value.to_owned();
                 }
-                #[cfg(any(target_os = "android", target_os = "ios"))]
                 "info2" => {
-                    *crate::common::MOBILE_INFO2.lock().unwrap() = value.to_owned();
+                    *crate::common::FLUTTER_INFO2.lock().unwrap() = value.to_owned();
                 }
                 // "connect" => {
                 //     Session::start(value, false);

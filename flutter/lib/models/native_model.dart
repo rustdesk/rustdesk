@@ -93,7 +93,12 @@ class PlatformFFI {
       _ffiBind = RustdeskImpl(dylib);
       _startListenEvent(_ffiBind); // global event
       try {
-        _homeDir = (await ExternalPath.getExternalStorageDirectories())[0];
+        if (isAndroid) {
+          // only support for android
+          _homeDir = (await ExternalPath.getExternalStorageDirectories())[0];
+        } else {
+          _homeDir = (await getDownloadsDirectory())?.path ?? "";
+        }
       } catch (e) {
         print(e);
       }

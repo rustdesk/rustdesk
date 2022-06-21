@@ -36,14 +36,13 @@ class _FileManagerPageState extends State<FileManagerPage>
   @override
   void initState() {
     super.initState();
-    Get.put(FFI(), tag: 'ft_${widget.id}');
-    _ffi.ffiModel.platformFFI = gFFI.ffiModel.platformFFI;
-
-    _ffi.connect(widget.id, isFileTransfer: true);
-    _ffi.ffiModel.updateEventListener(widget.id);
+    Get.put(FFI.newFFI()..connect(widget.id, isFileTransfer: true),
+        tag: 'ft_${widget.id}');
+    // _ffi.ffiModel.updateEventListener(widget.id);
     if (!Platform.isLinux) {
       Wakelock.enable();
     }
+    print("init success with id ${widget.id}");
   }
 
   @override

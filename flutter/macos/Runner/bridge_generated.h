@@ -149,6 +149,11 @@ void wire_session_create_dir(int64_t port_,
                              struct wire_uint_8_list *path,
                              bool is_remote);
 
+void wire_session_read_local_dir_sync(int64_t port_,
+                                      struct wire_uint_8_list *id,
+                                      struct wire_uint_8_list *path,
+                                      bool show_hidden);
+
 struct wire_uint_8_list *new_uint_8_list(int32_t len);
 
 void free_WireSyncReturnStruct(struct WireSyncReturnStruct val);
@@ -194,6 +199,7 @@ static int64_t dummy_method_to_enforce_bundling(void) {
     dummy_var ^= ((int64_t) (void*) wire_session_remove_all_empty_dirs);
     dummy_var ^= ((int64_t) (void*) wire_session_cancel_job);
     dummy_var ^= ((int64_t) (void*) wire_session_create_dir);
+    dummy_var ^= ((int64_t) (void*) wire_session_read_local_dir_sync);
     dummy_var ^= ((int64_t) (void*) new_uint_8_list);
     dummy_var ^= ((int64_t) (void*) free_WireSyncReturnStruct);
     dummy_var ^= ((int64_t) (void*) store_dart_post_cobject);
