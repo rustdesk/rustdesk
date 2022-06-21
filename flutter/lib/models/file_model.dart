@@ -233,7 +233,12 @@ class FileModel extends ChangeNotifier {
   }
 
   refresh() {
-    openDirectory(currentDir.path);
+    if (isDesktop) {
+      openDirectory(currentRemoteDir.path);
+      openDirectory(currentLocalDir.path);
+    } else {
+      openDirectory(currentDir.path);
+    }
   }
 
   openDirectory(String path, {bool? isLocal}) async {
@@ -519,6 +524,10 @@ class FileModel extends ChangeNotifier {
     _currentRemoteDir.changeSortStyle(sort);
     notifyListeners();
   }
+
+  initFileFetcher() {
+    _fileFetcher.id = _ffi.target?.id;
+  }
 }
 
 class JobResultListener<T> {
@@ -565,6 +574,17 @@ class FileFetcher {
   // Map<String,Completer<FileDirectory>> localTasks = Map(); // now we only use read local dir sync
   Map<String, Completer<FileDirectory>> remoteTasks = Map();
   Map<int, Completer<FileDirectory>> readRecursiveTasks = Map();
+
+  String? _id;
+
+  String? get id => _id;
+
+  set id(String? id) {
+    _id = id;
+  }
+
+  // if id == null, means to fetch global FFI
+  FFI get _ffi => ffi(_id == null ? "" : 'ft_${_id}');
 
   Future<FileDirectory> registerReadTask(bool isLocal, String path) {
     // final jobs = isLocal?localJobs:remoteJobs; // maybe we will use read local dir async later
@@ -633,13 +653,14 @@ class FileFetcher {
   Future<FileDirectory> fetchDirectory(
       String path, bool isLocal, bool showHidden) async {
     try {
-      final msg = {"path": path, "show_hidden": showHidden.toString()};
       if (isLocal) {
-        final res = gFFI.getByName("read_local_dir_sync", jsonEncode(msg));
+        final res = await _ffi.bind.sessionReadLocalDirSync(
+            id: id ?? "", path: path, showHidden: showHidden);
         final fd = FileDirectory.fromJson(jsonDecode(res));
         return fd;
       } else {
-        gFFI.setByName("read_remote_dir", jsonEncode(msg));
+        await _ffi.bind.sessionReadRemoteDir(
+            id: id ?? "", path: path, includeHidden: showHidden);
         return registerReadTask(isLocal, path);
       }
     } catch (e) {
@@ -657,7 +678,8 @@ class FileFetcher {
         "show_hidden": showHidden.toString(),
         "is_remote": (!isLocal).toString()
       };
-      gFFI.setByName("read_dir_recursive", jsonEncode(msg));
+      // TODO
+      _ffi.setByName("read_dir_recursive", jsonEncode(msg));
       return registerReadRecursiveTask(id);
     } catch (e) {
       return Future.error(e);

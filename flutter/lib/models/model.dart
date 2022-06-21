@@ -784,6 +784,13 @@ class FFI {
     this.fileModel = FileModel(WeakReference(this));
   }
 
+  static FFI newFFI() {
+    final ffi = FFI();
+    // keep platformFFI only once
+    ffi.ffiModel.platformFFI = gFFI.ffiModel.platformFFI;
+    return ffi;
+  }
+
   /// Get the remote id for current client.
   String getId() {
     return getByName('remote_id'); // TODO
@@ -888,32 +895,32 @@ class FFI {
       setByName('connect_file_transfer', id);
     } else {
       chatModel.resetClientMode();
-      // setByName('connect', id);
-      // TODO multi model instances
       canvasModel.id = id;
       imageModel._id = id;
       cursorModel.id = id;
-      final stream =
-          bind.sessionConnect(id: id, isFileTransfer: isFileTransfer);
-      final cb = ffiModel.startEventListener(id);
-      () async {
-        await for (final message in stream) {
-          if (message is Event) {
-            try {
-              debugPrint("event:${message.field0}");
-              Map<String, dynamic> event = json.decode(message.field0);
-              cb(event);
-            } catch (e) {
-              print('json.decode fail(): $e');
-            }
-          } else if (message is Rgba) {
-            imageModel.onRgba(message.field0);
-          }
-        }
-      }();
-      // every instance will bind a stream
     }
+    final stream = bind.sessionConnect(id: id, isFileTransfer: isFileTransfer);
+    final cb = ffiModel.startEventListener(id);
+    () async {
+      await for (final message in stream) {
+        if (message is Event) {
+          try {
+            debugPrint("event:${message.field0}");
+            Map<String, dynamic> event = json.decode(message.field0);
+            cb(event);
+          } catch (e) {
+            print('json.decode fail(): $e');
+          }
+        } else if (message is Rgba) {
+          imageModel.onRgba(message.field0);
+        }
+      }
+    }();
+    // every instance will bind a stream
     this.id = id;
+    if (isFileTransfer) {
+      this.fileModel.initFileFetcher();
+    }
   }
 
   /// Login with [password], choose if the client should [remember] it.

@@ -24,10 +24,9 @@ lazy_static::lazy_static! {
     pub static ref SOFTWARE_UPDATE_URL: Arc<Mutex<String>> = Default::default();
 }
 
-#[cfg(any(target_os = "android", target_os = "ios"))]
 lazy_static::lazy_static! {
-    pub static ref MOBILE_INFO1: Arc<Mutex<String>> = Default::default();
-    pub static ref MOBILE_INFO2: Arc<Mutex<String>> = Default::default();
+    pub static ref FLUTTER_INFO1: Arc<Mutex<String>> = Default::default();
+    pub static ref FLUTTER_INFO2: Arc<Mutex<String>> = Default::default();
 }
 
 #[inline]
