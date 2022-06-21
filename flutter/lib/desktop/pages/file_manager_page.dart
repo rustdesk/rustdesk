@@ -8,7 +8,6 @@ import 'package:flutter_hbb/models/file_model.dart';
 import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
 import 'package:get/get.dart';
 import 'package:provider/provider.dart';
-import 'package:toggle_switch/toggle_switch.dart';
 import 'package:wakelock/wakelock.dart';
 
 import '../../common.dart';
@@ -79,24 +78,24 @@ class _FileManagerPageState extends State<FileManagerPage>
                     IconButton(icon: Icon(Icons.close), onPressed: clientClose),
                   ]),
                   centerTitle: true,
-                  title: ToggleSwitch(
-                    initialLabelIndex: model.isLocal ? 0 : 1,
-                    activeBgColor: [MyTheme.idColor],
-                    inactiveBgColor: MyTheme.grayBg,
-                    inactiveFgColor: Colors.black54,
-                    totalSwitches: 2,
-                    minWidth: 100,
-                    fontSize: 15,
-                    iconSize: 18,
-                    labels: [translate("Local"), translate("Remote")],
-                    icons: [Icons.phone_android_sharp, Icons.screen_share],
-                    onToggle: (index) {
-                      final current = model.isLocal ? 0 : 1;
-                      if (index != current) {
-                        model.togglePage();
-                      }
-                    },
-                  ),
+                  // title: ToggleSwitch(
+                  //   initialLabelIndex: model.isLocal ? 0 : 1,
+                  //   activeBgColor: [MyTheme.idColor],
+                  //   inactiveBgColor: MyTheme.grayBg,
+                  //   inactiveFgColor: Colors.black54,
+                  //   totalSwitches: 2,
+                  //   minWidth: 100,
+                  //   fontSize: 15,
+                  //   iconSize: 18,
+                  //   labels: [translate("Local"), translate("Remote")],
+                  //   icons: [Icons.phone_android_sharp, Icons.screen_share],
+                  //   onToggle: (index) {
+                  //     final current = model.isLocal ? 0 : 1;
+                  //     if (index != current) {
+                  //       model.togglePage();
+                  //     }
+                  //   },
+                  // ),
                   actions: [
                     PopupMenuButton<String>(
                         icon: Icon(Icons.more_vert),
@@ -196,7 +195,12 @@ class _FileManagerPageState extends State<FileManagerPage>
                         }),
                   ],
                 ),
-                body: body(),
+                body: Row(
+                  children: [
+                    Flexible(flex: 1, child: body(isLocal: true)),
+                    Flexible(flex: 1, child: body(isLocal: false))
+                  ],
+                ),
                 bottomSheet: bottomSheet(),
               ));
         }));
@@ -209,9 +213,8 @@ class _FileManagerPageState extends State<FileManagerPage>
     return !_selectedItems.isOtherPage(model.isLocal);
   }
 
-  Widget body() {
-    final isLocal = model.isLocal;
-    final fd = model.currentDir;
+  Widget body({bool isLocal = false}) {
+    final fd = isLocal ? model.currentLocalDir : model.currentRemoteDir;
     final entries = fd.entries;
     return Column(children: [
       headTools(),

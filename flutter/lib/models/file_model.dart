@@ -233,7 +233,12 @@ class FileModel extends ChangeNotifier {
   }
 
   refresh() {
-    openDirectory(currentDir.path);
+    if (isDesktop) {
+      openDirectory(currentRemoteDir.path);
+      openDirectory(currentLocalDir.path);
+    } else {
+      openDirectory(currentDir.path);
+    }
   }
 
   openDirectory(String path, {bool? isLocal}) async {
