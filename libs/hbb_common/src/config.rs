@@ -1,6 +1,9 @@
 use crate::{
     log,
-    password_security::config::{decrypt_str_or_original, encrypt_str_or_original},
+    password_security::config::{
+        decrypt_str_or_original, decrypt_vec_or_original, encrypt_str_or_original,
+        encrypt_vec_or_original,
+    },
 };
 use anyhow::Result;
 use directories_next::ProjectDirs;
@@ -119,7 +122,7 @@ pub struct Config2 {
     pub options: HashMap<String, String>,
 }
 
-#[derive(Debug, Default, Serialize, Deserialize, Clone)]
+#[derive(Debug, Default, Serialize, Deserialize, Clone, PartialEq)]
 pub struct PeerConfig {
     #[serde(default)]
     pub password: Vec<u8>,
@@ -173,7 +176,7 @@ pub struct PeerInfoSerde {
     pub platform: String,
 }
 
-#[derive(Debug, Default, Serialize, Deserialize, Clone)]
+#[derive(Debug, Default, Serialize, Deserialize, Clone, PartialEq)]
 pub struct TransferSerde {
     #[serde(default)]
     pub write_jobs: Vec<String>,
@@ -212,7 +215,16 @@ fn patch(path: PathBuf) -> PathBuf {
 
 impl Config2 {
     fn load() -> Config2 {
-        Config::load_::<Config2>("2")
+        let mut config = Config::load_::<Config2>("2");
+        if let Some(mut socks) = config.socks {
+            let (password, store) = decrypt_str_or_original(&socks.password, PASSWORD_ENC_VERSION);
+            socks.password = password;
+            config.socks = Some(socks);
+            if store {
+                config.store();
+            }
+        }
+        config
     }
 
     pub fn file() -> PathBuf {
@@ -220,7 +232,12 @@ impl Config2 {
     }
 
     fn store(&self) {
-        Config::store_(self, "2");
+        let mut config = self.clone();
+        if let Some(mut socks) = config.socks {
+            socks.password = encrypt_str_or_original(&socks.password, PASSWORD_ENC_VERSION);
+            config.socks = Some(socks);
+        }
+        Config::store_(&config, "2");
     }
 
     pub fn get() -> Config2 {
@@ -722,7 +739,28 @@ impl PeerConfig {
     pub fn load(id: &str) -> PeerConfig {
         let _ = CONFIG.read().unwrap(); // for lock
         match confy::load_path(&Self::path(id)) {
-            Ok(config) => config,
+            Ok(config) => {
+                let mut config: PeerConfig = config;
+                let mut store = false;
+                let (password, store2) =
+                    decrypt_vec_or_original(&config.password, PASSWORD_ENC_VERSION);
+                config.password = password;
+                store = store || store2;
+                config.options.get_mut("rdp_password").map(|v| {
+                    let (password, store2) = decrypt_str_or_original(v, PASSWORD_ENC_VERSION);
+                    *v = password;
+                    store = store || store2;
+                });
+                config.options.get_mut("os-password").map(|v| {
+                    let (password, store2) = decrypt_str_or_original(v, PASSWORD_ENC_VERSION);
+                    *v = password;
+                    store = store || store2;
+                });
+                if store {
+                    config.store(id);
+                }
+                config
+            }
             Err(err) => {
                 log::error!("Failed to load config: {}", err);
                 Default::default()
@@ -732,7 +770,17 @@ impl PeerConfig {
 
     pub fn store(&self, id: &str) {
         let _ = CONFIG.read().unwrap(); // for lock
-        if let Err(err) = confy::store_path(Self::path(id), self) {
+        let mut config = self.clone();
+        config.password = encrypt_vec_or_original(&config.password, PASSWORD_ENC_VERSION);
+        config
+            .options
+            .get_mut("rdp_password")
+            .map(|v| *v = encrypt_str_or_original(v, PASSWORD_ENC_VERSION));
+        config
+            .options
+            .get_mut("os-password")
+            .map(|v| *v = encrypt_str_or_original(v, PASSWORD_ENC_VERSION));
+        if let Err(err) = confy::store_path(Self::path(id), config) {
             log::error!("Failed to store config: {}", err);
         }
     }
