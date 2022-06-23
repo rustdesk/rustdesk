@@ -425,9 +425,9 @@ message PermissionInfo {
 
 enum ImageQuality {
   NotSet = 0;
-  Low = 2;
-  Balanced = 3;
-  Best = 4;
+  Low = 50;
+  Balanced = 66;
+  Best = 100;
 }
 
 message OptionMessage {
@@ -441,15 +441,18 @@ message OptionMessage {
   BoolOption show_remote_cursor = 3;
   BoolOption privacy_mode = 4;
   BoolOption block_input = 5;
-  int32 custom_image_quality = 6;
+  uint32 custom_image_quality = 6;
   BoolOption disable_audio = 7;
   BoolOption disable_clipboard = 8;
   BoolOption enable_file_transfer = 9;
+  BoolOption enable_abr = 10;
 }
 
 message TestDelay {
   int64 time = 1;
   bool from_client = 2;
+  uint32 last_delay = 3;
+  uint32 target_bitrate = 4;
 }
 
 message PublicKey {

@@ -107,17 +107,6 @@ impl Encoder {
         c.rc_target_bitrate = config.bitrate;
         c.rc_undershoot_pct = 95;
         c.rc_dropframe_thresh = 25;
-        if config.rc_min_quantizer > 0 {
-            c.rc_min_quantizer = config.rc_min_quantizer;
-        }
-        if config.rc_max_quantizer > 0 {
-            c.rc_max_quantizer = config.rc_max_quantizer;
-        }
-        let mut speed = config.speed;
-        if speed <= 0 {
-            speed = 6;
-        }
-
         c.g_threads = if num_threads == 0 {
             num_cpus::get() as _
         } else {
@@ -162,7 +151,7 @@ impl Encoder {
             Higher numbers (7 or 8) will be lower quality but more manageable for lower latency
             use cases and also for lower CPU power devices such as mobile.
             */
-            call_vpx!(vpx_codec_control_(&mut ctx, VP8E_SET_CPUUSED as _, speed,));
+            call_vpx!(vpx_codec_control_(&mut ctx, VP8E_SET_CPUUSED as _, 7,));
             // set row level multi-threading
             /*
             as some people in comments and below have already commented,
@@ -222,6 +211,19 @@ impl Encoder {
         })
     }
 
+    pub fn set_bitrate(&mut self, bitrate: c_uint) -> Result<()> {
+        // let mut cfg = self.ctx.config.enc;
+        let mut new_enc_cfg = unsafe { *self.ctx.config.enc.to_owned() };
+        new_enc_cfg.rc_target_bitrate = bitrate;
+        call_vpx!(vpx_codec_enc_config_set(&mut self.ctx, &new_enc_cfg));
+        return Ok(());
+    }
+
+    pub fn get_bitrate(&mut self) -> u32 {
+        let cfg = unsafe { *self.ctx.config.enc.to_owned() };
+        cfg.rc_target_bitrate
+    }
+
     /// Notify the encoder to return any pending packets
     pub fn flush(&mut self) -> Result<EncodeFrames> {
         call_vpx!(vpx_codec_encode(
@@ -273,9 +275,6 @@ pub struct Config {
     pub bitrate: c_uint,
     /// The codec
     pub codec: VideoCodecId,
-    pub rc_min_quantizer: u32,
-    pub rc_max_quantizer: u32,
-    pub speed: i32,
 }
 
 pub struct EncodeFrames<'a> {

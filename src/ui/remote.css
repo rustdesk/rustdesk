@@ -9,6 +9,16 @@ div#video-wrapper {
     background: #212121;
 }
 
+div#quality-monitor {
+    top: 20px;
+    right: 20px;
+    background: #7571719c;
+    padding: 5px;
+    min-width: 150px;
+    color: azure;
+    border: solid azure;
+}
+
 video#handler {
     behavior: native-remote video;
     size: *;
@@ -24,7 +34,7 @@ img#cursor {
 }
 
 .goup {
-  transform: rotate(90deg);
+    transform: rotate(90deg);
 }
 
 table#remote-folder-view {
