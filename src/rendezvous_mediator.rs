@@ -216,7 +216,7 @@ impl RendezvousMediator {
                         },
                         Some(Err(e)) => bail!("Failed to receive next {}", e),  // maybe socks5 tcp disconnected
                         None => {
-                            // unreachable!()
+                            bail!("Socket receive none. Maybe socks5 server is down.");
                         },
                     }
                 },
