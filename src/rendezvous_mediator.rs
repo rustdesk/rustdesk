@@ -231,7 +231,7 @@ impl RendezvousMediator {
                     }
                     last_timer = now;
                     let elapsed_resp = last_register_resp.map(|x| x.elapsed().as_millis() as i64).unwrap_or(REG_INTERVAL);
-                    let timeout = (last_register_sent.map(|x| x.elapsed().as_millis() as i64).unwrap_or(REG_INTERVAL) - elapsed_resp) > REG_TIMEOUT;
+                    let timeout = (elapsed_resp - last_register_sent.map(|x| x.elapsed().as_millis() as i64).unwrap_or(REG_INTERVAL)) > REG_TIMEOUT;
                     if timeout || elapsed_resp >= REG_INTERVAL {
                         allow_err!(rz.register_peer(&mut socket).await);
                         last_register_sent = now;
