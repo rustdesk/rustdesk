@@ -22,7 +22,6 @@ class MyController(Controller):
         keysym = self._keysym(key)
         # Get keycode according to system language
         keycode = self._display.keysym_to_keycode(keysym)
-        print(keycode)
 
         fake_input(self._display, event,  keycode)
         self._display.sync()
