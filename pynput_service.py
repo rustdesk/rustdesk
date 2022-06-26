@@ -1,12 +1,15 @@
 from pynput.keyboard import Key, Controller
 from pynput.keyboard._xorg import KeyCode
 from pynput._util.xorg import display_manager
-import Xlib
 import os
 import sys
 import socket
+from Xlib.ext.xtest import fake_input
+from Xlib import X
+import Xlib
 
 KeyCode._from_symbol("\0")  # test
+
 
 class MyController(Controller):
     def _handle(self, key, is_press):
@@ -14,52 +17,32 @@ class MyController(Controller):
         :param event: The *X* keyboard event.
         :param int keysym: The keysym to handle.
         """
+
         event = Xlib.display.event.KeyPress if is_press \
             else Xlib.display.event.KeyRelease
-        keysym = self._keysym(key)
 
-        # Make sure to verify that the key was resolved
-        if keysym is None:
-            raise self.InvalidKeyException(key)
+        origin_keysym = self._keysym(key)
+        keycode = self._display.keysym_to_keycode(origin_keysym)
 
-        # If the key has a virtual key code, use that immediately with
-        # fake_input; fake input,being an X server extension, has access to
-        # more internal state that we do
-        if key.vk is not None:
-            with display_manager(self._display) as dm:
-                Xlib.ext.xtest.fake_input(
-                    dm,
-                    Xlib.X.KeyPress if is_press else Xlib.X.KeyRelease,
-                    dm.keysym_to_keycode(key.vk))
+        with display_manager(self._display) as dm, self.modifiers as modifiers:
+            # Under certain cimcumstances, such as when running under Xephyr,
+            # the value returned by dm.get_input_focus is an int
+            window = dm.get_input_focus().focus
+            send_event = getattr(
+                window,
+                'send_event',
+                lambda event: dm.send_event(window, event))
+            send_event(event(
+                detail=keycode,
+                state=self._shift_mask(modifiers),
+                time=0,
+                root=dm.screen().root,
+                window=window,
+                same_screen=0,
+                child=Xlib.X.NONE,
+                root_x=0, root_y=0, event_x=0, event_y=0))
 
-        # Otherwise use XSendEvent; we need to use this in the general case to
-        # work around problems with keyboard layouts
-        else:
-            try:
-                keycode, shift_state = self.keyboard_mapping[keysym]
-                with self.modifiers as modifiers:
-                    alt_gr = Key.alt_gr in modifiers
-                if alt_gr:
-                    self._send_key(event, keycode, shift_state)
-                else:
-                    with display_manager(self._display) as dm:
-                        Xlib.ext.xtest.fake_input(
-                            dm,
-                            Xlib.X.KeyPress if is_press else Xlib.X.KeyRelease,
-                            keycode)
 
-            except KeyError:
-                with self._borrow_lock:
-                    keycode, index, count = self._borrows[keysym]
-                    self._send_key(
-                        event,
-                        keycode,
-                        index_to_shift(self._display, index))
-                    count += 1 if is_press else -1
-                    self._borrows[keysym] = (keycode, index, count)
-
-        # Notify any running listeners
-        self._emit('_on_fake_event', key, is_press)
 
 keyboard = MyController()
 
@@ -77,7 +60,7 @@ server = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
 server.bind(server_address)
 server.listen(1)
 clientsocket, address = server.accept()
-os.system('chmod a+rw %s'%server_address)
+os.system('chmod a+rw %s' % server_address)
 print("Got pynput connection")
 
 
@@ -121,4 +104,3 @@ def loop():
 loop()
 clientsocket.close()
 server.close()
-
