@@ -698,7 +698,7 @@ pub fn set_share_rdp(enable: bool) {
         subkey,
         if enable { "true" } else { "false" }
     );
-    run_cmds(cmd, false).ok();
+    run_cmds(cmd, false, "share_rdp").ok();
 }
 
 pub fn get_active_username() -> String {
@@ -835,7 +835,7 @@ pub fn check_update_broker_process() -> ResultType<()> {
         origin_process_exe = origin_process_exe,
         cur_exe = cur_exe.to_string_lossy().to_string(),
     );
-    run_cmds(cmds, false)?;
+    run_cmds(cmds, false, "update_broker")?;
 
     Ok(())
 }
@@ -876,7 +876,7 @@ pub fn update_me() -> ResultType<()> {
         lic = register_licence(),
     );
     std::thread::sleep(std::time::Duration::from_millis(1000));
-    run_cmds(cmds, false)?;
+    run_cmds(cmds, false, "update")?;
     std::thread::sleep(std::time::Duration::from_millis(2000));
     std::process::Command::new(&exe).arg("--tray").spawn().ok();
     std::process::Command::new(&exe).spawn().ok();
@@ -905,7 +905,7 @@ fn get_after_install(exe: &str) -> String {
     ", ext=ext, exe=exe, app_name=app_name)
 }
 
-pub fn install_me(options: &str, path: String, silent: bool) -> ResultType<()> {
+pub fn install_me(options: &str, path: String, silent: bool, debug: bool) -> ResultType<()> {
     let uninstall_str = get_uninstall();
     let mut path = path.trim_end_matches('\\').to_owned();
     let (subkey, _path, start_menu, exe) = get_default_install_info();
@@ -929,7 +929,7 @@ pub fn install_me(options: &str, path: String, silent: bool) -> ResultType<()> {
         version_build = versions[2];
     }
 
-    let tmp_path = "C:\\Windows\\temp";
+    let tmp_path = std::env::temp_dir().to_string_lossy().to_string();
     let mk_shortcut = write_cmds(
         format!(
             "
@@ -945,6 +945,7 @@ oLink.Save
             exe = exe,
         ),
         "vbs",
+        "mk_shortcut",
     )?
     .to_str()
     .unwrap_or("")
@@ -966,6 +967,7 @@ oLink.Save
             exe = exe,
         ),
         "vbs",
+        "uninstall_shortcut",
     )?
     .to_str()
     .unwrap_or("")
@@ -986,6 +988,7 @@ oLink.Save
             exe = exe,
         ),
         "vbs",
+        "tray_shortcut",
     )?
     .to_str()
     .unwrap_or("")
@@ -1042,7 +1045,7 @@ reg add {subkey} /f /v WindowsInstaller /t REG_DWORD /d 0
 cscript \"{mk_shortcut}\"
 cscript \"{uninstall_shortcut}\"
 cscript \"{tray_shortcut}\"
-copy /Y \"{tmp_path}\\{app_name} Tray.lnk\" \"C:\\ProgramData\\Microsoft\\Windows\\Start Menu\\Programs\\Startup\\\"
+copy /Y \"{tmp_path}\\{app_name} Tray.lnk\" \"%PROGRAMDATA%\\Microsoft\\Windows\\Start Menu\\Programs\\Startup\\\"
 {shortcuts}
 copy /Y \"{tmp_path}\\Uninstall {app_name}.lnk\" \"{path}\\\"
 del /f \"{mk_shortcut}\"
@@ -1079,7 +1082,7 @@ sc delete {app_name}
         lic=register_licence(),
         after_install=get_after_install(&exe),
     );
-    run_cmds(cmds, false)?;
+    run_cmds(cmds, debug, "install")?;
     std::thread::sleep(std::time::Duration::from_millis(2000));
     if !silent {
         std::process::Command::new(&exe).spawn()?;
@@ -1091,11 +1094,11 @@ sc delete {app_name}
 
 pub fn run_after_install() -> ResultType<()> {
     let (_, _, _, exe) = get_install_info();
-    run_cmds(get_after_install(&exe), true)
+    run_cmds(get_after_install(&exe), true, "after_install")
 }
 
 pub fn run_before_uninstall() -> ResultType<()> {
-    run_cmds(get_before_uninstall(), true)
+    run_cmds(get_before_uninstall(), true, "before_install")
 }
 
 fn get_before_uninstall() -> String {
@@ -1126,7 +1129,7 @@ fn get_uninstall() -> String {
     rd /s /q \"{path}\"
     rd /s /q \"{start_menu}\"
     del /f /q \"%PUBLIC%\\Desktop\\{app_name}*\"
-    del /f /q \"C:\\ProgramData\\Microsoft\\Windows\\Start Menu\\Programs\\Startup\\{app_name} Tray.lnk\"
+    del /f /q \"%PROGRAMDATA%\\Microsoft\\Windows\\Start Menu\\Programs\\Startup\\{app_name} Tray.lnk\"
     ",
         before_uninstall=get_before_uninstall(),
         subkey=subkey,
@@ -1137,17 +1140,12 @@ fn get_uninstall() -> String {
 }
 
 pub fn uninstall_me() -> ResultType<()> {
-    run_cmds(get_uninstall(), true)
+    run_cmds(get_uninstall(), true, "uninstall")
 }
 
-fn write_cmds(cmds: String, ext: &str) -> ResultType<std::path::PathBuf> {
+fn write_cmds(cmds: String, ext: &str, tip: &str) -> ResultType<std::path::PathBuf> {
     let mut tmp = std::env::temp_dir();
-    tmp.push(format!(
-        "{}_{:?}.{}",
-        crate::get_app_name(),
-        cmds.as_ptr(),
-        ext
-    ));
+    tmp.push(format!("{}_{}.{}", crate::get_app_name(), tip, ext));
     let mut file = std::fs::File::create(&tmp)?;
     // in case cmds mixed with \r\n and \n, make sure all ending with \r\n
     // in some windows, \r\n required for cmd file to run
@@ -1170,8 +1168,8 @@ fn to_le(v: &mut [u16]) -> &[u8] {
     unsafe { v.align_to().1 }
 }
 
-fn run_cmds(cmds: String, show: bool) -> ResultType<()> {
-    let tmp = write_cmds(cmds, "bat")?;
+fn run_cmds(cmds: String, show: bool, tip: &str) -> ResultType<()> {
+    let tmp = write_cmds(cmds, "bat", tip)?;
     let tmp_fn = tmp.to_str().unwrap_or("");
     let res = runas::Command::new("cmd")
         .args(&["/C", &tmp_fn])
@@ -1348,6 +1346,7 @@ oLink.Save
             id = id,
         ),
         "vbs",
+        "connect_shortcut",
     )?
     .to_str()
     .unwrap_or("")

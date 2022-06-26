@@ -213,7 +213,9 @@ impl UI {
     fn install_me(&mut self, _options: String, _path: String) {
         #[cfg(windows)]
         std::thread::spawn(move || {
-            allow_err!(crate::platform::windows::install_me(&_options, _path, false));
+            allow_err!(crate::platform::windows::install_me(
+                &_options, _path, false, false
+            ));
             std::process::exit(0);
         });
     }
