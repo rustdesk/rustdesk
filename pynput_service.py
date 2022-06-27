@@ -17,30 +17,14 @@ class MyController(Controller):
         :param event: The *X* keyboard event.
         :param int keysym: The keysym to handle.
         """
+        keysym = self._keysym(key)
+        keycode = self._display.keysym_to_keycode(keysym)
 
-        event = Xlib.display.event.KeyPress if is_press \
-            else Xlib.display.event.KeyRelease
-
-        origin_keysym = self._keysym(key)
-        keycode = self._display.keysym_to_keycode(origin_keysym)
-
-        with display_manager(self._display) as dm, self.modifiers as modifiers:
-            # Under certain cimcumstances, such as when running under Xephyr,
-            # the value returned by dm.get_input_focus is an int
-            window = dm.get_input_focus().focus
-            send_event = getattr(
-                window,
-                'send_event',
-                lambda event: dm.send_event(window, event))
-            send_event(event(
-                detail=keycode,
-                state=self._shift_mask(modifiers),
-                time=0,
-                root=dm.screen().root,
-                window=window,
-                same_screen=0,
-                child=Xlib.X.NONE,
-                root_x=0, root_y=0, event_x=0, event_y=0))
+        with display_manager(self._display) as dm:
+            Xlib.ext.xtest.fake_input(
+                dm,
+                Xlib.X.KeyPress if is_press else Xlib.X.KeyRelease,
+                keycode)
 
 
 
