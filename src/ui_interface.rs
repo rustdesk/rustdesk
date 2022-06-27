@@ -441,6 +441,7 @@ pub fn is_installed_daemon(_prompt: bool) -> bool {
 }
 
 pub fn get_error() -> String {
+    #[cfg(not(any(feature = "cli")))]
     #[cfg(target_os = "linux")]
     {
         let dtype = crate::platform::linux::get_display_server();
