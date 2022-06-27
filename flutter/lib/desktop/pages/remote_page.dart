@@ -256,28 +256,28 @@ class _RemotePageState extends State<RemotePage>
           child: getRawPointerAndKeyBody(
               keyboard,
               Scaffold(
-                // resizeToAvoidBottomInset: true,
+                  // resizeToAvoidBottomInset: true,
                   floatingActionButton: !showActionButton
                       ? null
                       : FloatingActionButton(
-                      mini: !hideKeyboard,
-                      child: Icon(hideKeyboard
-                          ? Icons.expand_more
-                          : Icons.expand_less),
-                      backgroundColor: MyTheme.accent,
-                      onPressed: () {
-                        setState(() {
-                          if (hideKeyboard) {
-                            _showEdit = false;
-                            _ffi.invokeMethod(
-                                "enable_soft_keyboard", false);
-                            _mobileFocusNode.unfocus();
-                            _physicalFocusNode.requestFocus();
-                          } else {
-                            _showBar = !_showBar;
-                          }
-                        });
-                      }),
+                          mini: !hideKeyboard,
+                          child: Icon(hideKeyboard
+                              ? Icons.expand_more
+                              : Icons.expand_less),
+                          backgroundColor: MyTheme.accent,
+                          onPressed: () {
+                            setState(() {
+                              if (hideKeyboard) {
+                                _showEdit = false;
+                                _ffi.invokeMethod(
+                                    "enable_soft_keyboard", false);
+                                _mobileFocusNode.unfocus();
+                                _physicalFocusNode.requestFocus();
+                              } else {
+                                _showBar = !_showBar;
+                              }
+                            });
+                          }),
                   bottomNavigationBar: _showBar && pi.displays.length > 0
                       ? getBottomAppBar(keyboard)
                       : null,

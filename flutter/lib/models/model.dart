@@ -425,18 +425,35 @@ class CanvasModel with ChangeNotifier {
     final size = MediaQueryData.fromWindow(ui.window).size;
     final s1 = size.width / (parent.target?.ffiModel.display.width ?? 720);
     final s2 = size.height / (parent.target?.ffiModel.display.height ?? 1280);
-    if (s == 'shrink') {
+    // Closure to perform shrink operation.
+    final shrinkOp = () {
       final s = s1 < s2 ? s1 : s2;
       if (s < 1) {
         _scale = s;
       }
-    } else if (s == 'stretch') {
+    };
+    // Closure to perform stretch operation.
+    final stretchOp = () {
       final s = s1 > s2 ? s1 : s2;
       if (s > 1) {
         _scale = s;
       }
+    };
+    // Closure to perform default operation(set the scale to 1.0).
+    final defaultOp = () {
+      _scale = 1.0;
+    };
+    if (s == 'shrink') {
+      shrinkOp();
+    } else if (s == 'stretch') {
+      stretchOp();
     } else {
-      _scale = 1;
+      // On desktop, shrink is the default behavior.
+      if (isDesktop) {
+        shrinkOp();
+      } else {
+        defaultOp();
+      }
     }
     _x = (size.width - getDisplayWidth() * _scale) / 2;
     _y = (size.height - getDisplayHeight() * _scale) / 2;
@@ -459,21 +476,24 @@ class CanvasModel with ChangeNotifier {
   }
 
   void moveDesktopMouse(double x, double y) {
-    final size = MediaQueryData.fromWindow(ui.window).size;
-    final dw = getDisplayWidth() * _scale;
-    final dh = getDisplayHeight() * _scale;
-    var dxOffset = 0;
-    var dyOffset = 0;
-    if (dw > size.width) {
-      dxOffset = (x - dw * (x / size.width) - _x).toInt();
-    }
-    if (dh > size.height) {
-      dyOffset = (y - dh * (y / size.height) - _y).toInt();
-    }
-    _x += dxOffset;
-    _y += dyOffset;
-    if (dxOffset != 0 || dyOffset != 0) {
-      notifyListeners();
+    // On mobile platforms, move the canvas with the cursor.
+    if (!isDesktop) {
+      final size = MediaQueryData.fromWindow(ui.window).size;
+      final dw = getDisplayWidth() * _scale;
+      final dh = getDisplayHeight() * _scale;
+      var dxOffset = 0;
+      var dyOffset = 0;
+      if (dw > size.width) {
+        dxOffset = (x - dw * (x / size.width) - _x).toInt();
+      }
+      if (dh > size.height) {
+        dyOffset = (y - dh * (y / size.height) - _y).toInt();
+      }
+      _x += dxOffset;
+      _y += dyOffset;
+      if (dxOffset != 0 || dyOffset != 0) {
+        notifyListeners();
+      }
     }
     parent.target?.cursorModel.moveLocal(x, y);
   }
@@ -714,6 +734,7 @@ class CursorModel with ChangeNotifier {
     }
   }
 
+  /// Update the cursor position.
   void updateCursorPosition(Map<String, dynamic> evt) {
     _x = double.parse(evt['x']);
     _y = double.parse(evt['y']);
