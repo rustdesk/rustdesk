@@ -60,6 +60,21 @@ class FileModel extends ChangeNotifier {
     }
   }
 
+  String shortPath(bool isLocal) {
+    final dir = isLocal ? currentLocalDir : currentRemoteDir;
+    if (dir.path.startsWith(currentHome)) {
+      var path = dir.path.replaceFirst(currentHome, "");
+      if (path.length == 0) return "";
+      if (path[0] == "/" || path[0] == "\\") {
+        // remove more '/' or '\'
+        path = path.replaceFirst(path[0], "");
+      }
+      return path;
+    } else {
+      return dir.path.replaceFirst(currentHome, "");
+    }
+  }
+
   bool get currentShowHidden =>
       _isLocal ? _localOption.showHidden : _remoteOption.showHidden;
 
@@ -265,9 +280,9 @@ class FileModel extends ChangeNotifier {
     openDirectory(currentHome);
   }
 
-  goToParentDirectory() {
+  goToParentDirectory({bool? isLocal}) {
     final parent = PathUtil.dirname(currentDir.path, currentIsWindows);
-    openDirectory(parent);
+    openDirectory(parent, isLocal: isLocal);
   }
 
   sendFiles(SelectedItems items) {
@@ -282,17 +297,10 @@ class FileModel extends ChangeNotifier {
         items.isLocal! ? _localOption.isWindows : _remoteOption.isWindows;
     final showHidden =
         items.isLocal! ? _localOption.showHidden : _remoteOption.showHidden;
-    items.items.forEach((from) {
+    items.items.forEach((from) async {
       _jobId++;
-      final msg = {
-        "id": _jobId.toString(),
-        "path": from.path,
-        "to": PathUtil.join(toPath, from.name, isWindows),
-        "file_num": "0",
-        "show_hidden": showHidden.toString(),
-        "is_remote": (!(items.isLocal!)).toString()
-      };
-      _ffi.target?.setByName("send_files", jsonEncode(msg));
+      await _ffi.target?.bind.sessionSendFiles(id: '${_ffi.target?.getId()}', actId: _jobId, path: from.path, to: PathUtil.join(toPath, from.name, isWindows)
+          ,fileNum: 0, includeHidden: showHidden, isRemote: !(items.isLocal!));
     });
   }
 
@@ -485,43 +493,34 @@ class FileModel extends ChangeNotifier {
   }
 
   sendRemoveFile(String path, int fileNum, bool isLocal) {
-    final msg = {
-      "id": _jobId.toString(),
-      "path": path,
-      "file_num": fileNum.toString(),
-      "is_remote": (!(isLocal)).toString()
-    };
-    _ffi.target?.setByName("remove_file", jsonEncode(msg));
+    _ffi.target?.bind.sessionRemoveFile(id: '${_ffi.target?.getId()}', actId: _jobId, path: path, isRemote: !isLocal, fileNum: fileNum);
   }
 
   sendRemoveEmptyDir(String path, int fileNum, bool isLocal) {
-    final msg = {
-      "id": _jobId.toString(),
-      "path": path,
-      "is_remote": (!isLocal).toString()
-    };
-    _ffi.target?.setByName("remove_all_empty_dirs", jsonEncode(msg));
+    _ffi.target?.bind.sessionRemoveAllEmptyDirs(id: '${_ffi.target?.getId()}', actId: _jobId, path: path, isRemote: !isLocal);
   }
 
-  createDir(String path) {
+  createDir(String path) async {
     _jobId++;
-    final msg = {
-      "id": _jobId.toString(),
-      "path": path,
-      "is_remote": (!isLocal).toString()
-    };
-    _ffi.target?.setByName("create_dir", jsonEncode(msg));
+    _ffi.target?.bind.sessionCreateDir(id: '${_ffi.target?.getId()}', actId: _jobId, path: path, isRemote: !isLocal);
   }
 
-  cancelJob(int id) {
-    _ffi.target?.setByName("cancel_job", id.toString());
+  cancelJob(int id) async {
+    _ffi.target?.bind.sessionCancelJob(id: '${_ffi.target?.getId()}', actId: id);
     jobReset();
   }
 
-  changeSortStyle(SortBy sort) {
+  changeSortStyle(SortBy sort, {bool? isLocal}) {
     _sortStyle = sort;
-    _currentLocalDir.changeSortStyle(sort);
-    _currentRemoteDir.changeSortStyle(sort);
+    if (isLocal == null) {
+      // compatible for mobile logic
+      _currentLocalDir.changeSortStyle(sort);
+      _currentRemoteDir.changeSortStyle(sort);
+    } else if (isLocal) {
+      _currentLocalDir.changeSortStyle(sort);
+    } else {
+      _currentRemoteDir.changeSortStyle(sort);
+    }
     notifyListeners();
   }
 

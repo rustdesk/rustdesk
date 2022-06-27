@@ -11,7 +11,6 @@ import 'package:provider/provider.dart';
 import 'package:wakelock/wakelock.dart';
 
 import '../../common.dart';
-import '../../mobile/widgets/dialog.dart';
 import '../../models/model.dart';
 
 class FileManagerPage extends StatefulWidget {
@@ -25,7 +24,8 @@ class FileManagerPage extends StatefulWidget {
 class _FileManagerPageState extends State<FileManagerPage>
     with AutomaticKeepAliveClientMixin {
   final _selectedItems = SelectedItems();
-  final _breadCrumbScroller = ScrollController();
+  final _breadCrumbLocalScroller = ScrollController();
+  final _breadCrumbRemoteScroller = ScrollController();
 
   /// FFI with name file_transfer_id
   FFI get _ffi => ffi('ft_${widget.id}');
@@ -66,135 +66,11 @@ class _FileManagerPageState extends State<FileManagerPage>
               onWillPop: () async {
                 if (model.selectMode) {
                   model.toggleSelectMode();
-                } else {
-                  goBack();
                 }
                 return false;
               },
               child: Scaffold(
                 backgroundColor: MyTheme.grayBg,
-                appBar: AppBar(
-                  leading: Row(children: [
-                    IconButton(icon: Icon(Icons.close), onPressed: clientClose),
-                  ]),
-                  centerTitle: true,
-                  // title: ToggleSwitch(
-                  //   initialLabelIndex: model.isLocal ? 0 : 1,
-                  //   activeBgColor: [MyTheme.idColor],
-                  //   inactiveBgColor: MyTheme.grayBg,
-                  //   inactiveFgColor: Colors.black54,
-                  //   totalSwitches: 2,
-                  //   minWidth: 100,
-                  //   fontSize: 15,
-                  //   iconSize: 18,
-                  //   labels: [translate("Local"), translate("Remote")],
-                  //   icons: [Icons.phone_android_sharp, Icons.screen_share],
-                  //   onToggle: (index) {
-                  //     final current = model.isLocal ? 0 : 1;
-                  //     if (index != current) {
-                  //       model.togglePage();
-                  //     }
-                  //   },
-                  // ),
-                  actions: [
-                    PopupMenuButton<String>(
-                        icon: Icon(Icons.more_vert),
-                        itemBuilder: (context) {
-                          return [
-                            PopupMenuItem(
-                              child: Row(
-                                children: [
-                                  Icon(Icons.refresh, color: Colors.black),
-                                  SizedBox(width: 5),
-                                  Text(translate("Refresh File"))
-                                ],
-                              ),
-                              value: "refresh",
-                            ),
-                            PopupMenuItem(
-                              child: Row(
-                                children: [
-                                  Icon(Icons.check, color: Colors.black),
-                                  SizedBox(width: 5),
-                                  Text(translate("Multi Select"))
-                                ],
-                              ),
-                              value: "select",
-                            ),
-                            PopupMenuItem(
-                              child: Row(
-                                children: [
-                                  Icon(Icons.folder_outlined,
-                                      color: Colors.black),
-                                  SizedBox(width: 5),
-                                  Text(translate("Create Folder"))
-                                ],
-                              ),
-                              value: "folder",
-                            ),
-                            PopupMenuItem(
-                              child: Row(
-                                children: [
-                                  Icon(
-                                      model.currentShowHidden
-                                          ? Icons.check_box_outlined
-                                          : Icons.check_box_outline_blank,
-                                      color: Colors.black),
-                                  SizedBox(width: 5),
-                                  Text(translate("Show Hidden Files"))
-                                ],
-                              ),
-                              value: "hidden",
-                            )
-                          ];
-                        },
-                        onSelected: (v) {
-                          if (v == "refresh") {
-                            model.refresh();
-                          } else if (v == "select") {
-                            _selectedItems.clear();
-                            model.toggleSelectMode();
-                          } else if (v == "folder") {
-                            final name = TextEditingController();
-                            DialogManager.show((setState, close) =>
-                                CustomAlertDialog(
-                                    title: Text(translate("Create Folder")),
-                                    content: Column(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        TextFormField(
-                                          decoration: InputDecoration(
-                                            labelText: translate(
-                                                "Please enter the folder name"),
-                                          ),
-                                          controller: name,
-                                        ),
-                                      ],
-                                    ),
-                                    actions: [
-                                      TextButton(
-                                          style: flatButtonStyle,
-                                          onPressed: () => close(false),
-                                          child: Text(translate("Cancel"))),
-                                      ElevatedButton(
-                                          style: flatButtonStyle,
-                                          onPressed: () {
-                                            if (name.value.text.isNotEmpty) {
-                                              model.createDir(PathUtil.join(
-                                                  model.currentDir.path,
-                                                  name.value.text,
-                                                  model.currentIsWindows));
-                                              close();
-                                            }
-                                          },
-                                          child: Text(translate("OK")))
-                                    ]));
-                          } else if (v == "hidden") {
-                            model.toggleShowHidden();
-                          }
-                        }),
-                  ],
-                ),
                 body: Row(
                   children: [
                     Flexible(flex: 1, child: body(isLocal: true)),
@@ -213,11 +89,110 @@ class _FileManagerPageState extends State<FileManagerPage>
     return !_selectedItems.isOtherPage(model.isLocal);
   }
 
+  Widget menu({bool isLocal = false}) {
+    return PopupMenuButton<String>(
+        icon: Icon(Icons.more_vert),
+        itemBuilder: (context) {
+          return [
+            PopupMenuItem(
+              child: Row(
+                children: [
+                  Icon(Icons.refresh, color: Colors.black),
+                  SizedBox(width: 5),
+                  Text(translate("Refresh File"))
+                ],
+              ),
+              value: "refresh",
+            ),
+            PopupMenuItem(
+              child: Row(
+                children: [
+                  Icon(Icons.check, color: Colors.black),
+                  SizedBox(width: 5),
+                  Text(translate("Multi Select"))
+                ],
+              ),
+              value: "select",
+            ),
+            PopupMenuItem(
+              child: Row(
+                children: [
+                  Icon(Icons.folder_outlined,
+                      color: Colors.black),
+                  SizedBox(width: 5),
+                  Text(translate("Create Folder"))
+                ],
+              ),
+              value: "folder",
+            ),
+            PopupMenuItem(
+              child: Row(
+                children: [
+                  Icon(
+                      model.currentShowHidden
+                          ? Icons.check_box_outlined
+                          : Icons.check_box_outline_blank,
+                      color: Colors.black),
+                  SizedBox(width: 5),
+                  Text(translate("Show Hidden Files"))
+                ],
+              ),
+              value: "hidden",
+            )
+          ];
+        },
+        onSelected: (v) {
+          if (v == "refresh") {
+            model.refresh();
+          } else if (v == "select") {
+            _selectedItems.clear();
+            model.toggleSelectMode();
+          } else if (v == "folder") {
+            final name = TextEditingController();
+            DialogManager.show((setState, close) =>
+                CustomAlertDialog(
+                    title: Text(translate("Create Folder")),
+                    content: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        TextFormField(
+                          decoration: InputDecoration(
+                            labelText: translate(
+                                "Please enter the folder name"),
+                          ),
+                          controller: name,
+                        ),
+                      ],
+                    ),
+                    actions: [
+                      TextButton(
+                          style: flatButtonStyle,
+                          onPressed: () => close(false),
+                          child: Text(translate("Cancel"))),
+                      ElevatedButton(
+                          style: flatButtonStyle,
+                          onPressed: () {
+                            if (name.value.text.isNotEmpty) {
+                              model.createDir(PathUtil.join(
+                                  model.currentDir.path,
+                                  name.value.text,
+                                  model.currentIsWindows));
+                              close();
+                            }
+                          },
+                          child: Text(translate("OK")))
+                    ]));
+          } else if (v == "hidden") {
+            model.toggleShowHidden(local: isLocal);
+          }
+        });
+  }
+
   Widget body({bool isLocal = false}) {
     final fd = isLocal ? model.currentLocalDir : model.currentRemoteDir;
     final entries = fd.entries;
     return Column(children: [
-      headTools(),
+      headTools(isLocal),
       Expanded(
           child: ListView.builder(
         itemCount: entries.length + 1,
@@ -301,8 +276,8 @@ class _FileManagerPageState extends State<FileManagerPage>
                   return;
                 }
                 if (entries[index].isDirectory) {
-                  model.openDirectory(entries[index].path);
-                  breadCrumbScrollToEnd();
+                  model.openDirectory(entries[index].path, isLocal: isLocal);
+                  breadCrumbScrollToEnd(isLocal);
                 } else {
                   // Perform file-related tasks.
                 }
@@ -322,20 +297,21 @@ class _FileManagerPageState extends State<FileManagerPage>
     ]);
   }
 
-  goBack() {
-    model.goToParentDirectory();
+  goBack({bool? isLocal}) {
+    model.goToParentDirectory(isLocal: isLocal);
   }
 
-  breadCrumbScrollToEnd() {
+  breadCrumbScrollToEnd(bool isLocal) {
+    final controller = isLocal ? _breadCrumbLocalScroller : _breadCrumbRemoteScroller;
     Future.delayed(Duration(milliseconds: 200), () {
-      _breadCrumbScroller.animateTo(
-          _breadCrumbScroller.position.maxScrollExtent,
+      controller.animateTo(
+          controller.position.maxScrollExtent,
           duration: Duration(milliseconds: 200),
           curve: Curves.fastLinearToSlowEaseIn);
     });
   }
 
-  Widget headTools() => Container(
+  Widget headTools(bool isLocal) => Container(
           child: Row(
         children: [
           Expanded(
@@ -353,16 +329,18 @@ class _FileManagerPageState extends State<FileManagerPage>
                   path = PathUtil.join(path, item, model.currentIsWindows);
                 }
               }
-              model.openDirectory(path);
-            }),
+              model.openDirectory(path, isLocal: isLocal);
+            }, isLocal),
             divider: Icon(Icons.chevron_right),
-            overflow: ScrollableOverflow(controller: _breadCrumbScroller),
+            overflow: ScrollableOverflow(controller: isLocal ? _breadCrumbLocalScroller : _breadCrumbRemoteScroller),
           )),
           Row(
             children: [
               IconButton(
                 icon: Icon(Icons.arrow_upward),
-                onPressed: goBack,
+                onPressed: () {
+                  goBack(isLocal: isLocal);
+                },
               ),
               PopupMenuButton<SortBy>(
                   icon: Icon(Icons.sort),
@@ -375,7 +353,10 @@ class _FileManagerPageState extends State<FileManagerPage>
                             ))
                         .toList();
                   },
-                  onSelected: model.changeSortStyle),
+                  onSelected: (sort) {
+                    model.changeSortStyle(sort, isLocal: isLocal);
+                  }),
+              menu(isLocal: isLocal)
             ],
           )
         ],
@@ -486,8 +467,8 @@ class _FileManagerPageState extends State<FileManagerPage>
   }
 
   List<BreadCrumbItem> getPathBreadCrumbItems(
-      void Function() onHome, void Function(List<String>) onPressed) {
-    final path = model.currentShortPath;
+      void Function() onHome, void Function(List<String>) onPressed, bool isLocal) {
+    final path = model.shortPath(isLocal);
     final list = PathUtil.split(path, model.currentIsWindows);
     final breadCrumbList = [
       BreadCrumbItem(
