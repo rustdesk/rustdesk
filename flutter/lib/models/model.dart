@@ -891,9 +891,7 @@ class FFI {
 
   /// Connect with the given [id]. Only transfer file if [isFileTransfer].
   void connect(String id, {bool isFileTransfer = false}) {
-    if (isFileTransfer) {
-      setByName('connect_file_transfer', id);
-    } else {
+    if (!isFileTransfer) {
       chatModel.resetClientMode();
       canvasModel.id = id;
       imageModel._id = id;

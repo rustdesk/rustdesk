@@ -7,7 +7,6 @@ import 'package:flutter_hbb/desktop/widgets/titlebar_widget.dart';
 import 'package:flutter_hbb/models/model.dart';
 import 'package:provider/provider.dart';
 import 'package:tray_manager/tray_manager.dart';
-import 'package:window_manager/window_manager.dart';
 
 class DesktopHomePage extends StatefulWidget {
   DesktopHomePage({Key? key}) : super(key: key);
@@ -215,7 +214,7 @@ class _DesktopHomePageState extends State<DesktopHomePage> with TrayListener {
       case "quit":
         exit(0);
       case "show":
-        windowManager.show();
+        // windowManager.show();
         break;
       default:
         break;

@@ -1,8 +1,8 @@
 import Cocoa
 import FlutterMacOS
-import bitsdojo_window_macos
+// import bitsdojo_window_macos
 
-class MainFlutterWindow: BitsdojoWindow {
+class MainFlutterWindow: NSWindow {
     override func awakeFromNib() {
         if (!rustdesk_core_main()){
             print("Rustdesk core returns false, exiting without launching Flutter app")
@@ -18,7 +18,7 @@ class MainFlutterWindow: BitsdojoWindow {
         super.awakeFromNib()
     }
     
-    override func bitsdojo_window_configure() -> UInt {
-        return BDW_CUSTOM_FRAME | BDW_HIDE_ON_STARTUP
-    }
+//     override func bitsdojo_window_configure() -> UInt {
+//         return BDW_CUSTOM_FRAME | BDW_HIDE_ON_STARTUP
+//     }
 }
