@@ -52,6 +52,21 @@ lazy_static::lazy_static! {
     pub static ref VIDEO_QOS: Arc<Mutex<VideoQoS>> = Default::default();
 }
 
+trait Percent {
+    fn as_percent(&self) -> u32;
+}
+
+impl Percent for ImageQuality {
+    fn as_percent(&self) -> u32 {
+        match self {
+            ImageQuality::NotSet => 0,
+            ImageQuality::Low => 50,
+            ImageQuality::Balanced => 66,
+            ImageQuality::Best => 100,
+        }
+    }
+}
+
 pub struct VideoQoS {
     width: u32,
     height: u32,
@@ -93,8 +108,8 @@ impl Default for VideoQoS {
     fn default() -> Self {
         VideoQoS {
             fps: FPS,
-            user_image_quality: ImageQuality::Balanced.value() as _,
-            current_image_quality: ImageQuality::Balanced.value() as _,
+            user_image_quality: ImageQuality::Balanced.as_percent(),
+            current_image_quality: ImageQuality::Balanced.as_percent(),
             width: 0,
             height: 0,
             current_delay: 0,
@@ -147,13 +162,13 @@ impl VideoQoS {
             );
             self.state = current_state;
             self.debounce_count = 0;
-            self.update_quality();
+            self.refresh_quality();
         } else {
             self.debounce_count += 1;
         }
     }
 
-    fn update_quality(&mut self) {
+    fn refresh_quality(&mut self) {
         match self.state {
             DelayState::Normal => {
                 self.fps = FPS;
@@ -176,19 +191,15 @@ impl VideoQoS {
         self.updated = true;
     }
 
-    pub fn update_image_quality(&mut self, image_quality: Option<u32>) {
-        if let Some(image_quality) = image_quality {
-            if image_quality < 10 || image_quality > 200 {
-                self.current_image_quality = ImageQuality::Balanced.value() as _;
-            }
-            if self.current_image_quality != image_quality {
-                self.current_image_quality = image_quality;
-                let _ = self.generate_bitrate().ok();
-                self.updated = true;
-            }
-        } else {
-            self.current_image_quality = ImageQuality::Balanced.value() as _;
+    pub fn update_image_quality(&mut self, image_quality: i32) {
+        let image_quality = Self::convert_quality(image_quality) as _;
+        log::debug!("VideoQoS update_image_quality{}", image_quality);
+        if self.current_image_quality != image_quality {
+            self.current_image_quality = image_quality;
+            let _ = self.generate_bitrate().ok();
+            self.updated = true;
         }
+
         self.user_image_quality = self.current_image_quality;
     }
 
@@ -198,7 +209,7 @@ impl VideoQoS {
             bail!("Fail to generate_bitrate, width or height is not set");
         }
         if self.current_image_quality == 0 {
-            self.current_image_quality = ImageQuality::Balanced.value() as _;
+            self.current_image_quality = ImageQuality::Balanced.as_percent();
         }
 
         let base_bitrate = ((self.width * self.height) / 800) as u32;
@@ -226,6 +237,18 @@ impl VideoQoS {
 
     pub fn reset(&mut self) {
         *self = Default::default();
+    }
+
+    pub fn convert_quality(q: i32) -> i32 {
+        if q == ImageQuality::Balanced.value() {
+            100 * 2 / 3
+        } else if q == ImageQuality::Low.value() {
+            100 / 2
+        } else if q == ImageQuality::Best.value() {
+            100
+        } else {
+            (q >> 8 & 0xFF) * 2
+        }
     }
 }
 
