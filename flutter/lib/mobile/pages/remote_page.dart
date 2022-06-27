@@ -268,7 +268,7 @@ class _RemotePageState extends State<RemotePage> {
                                   Timer(Duration(milliseconds: 200), () {
                                     resetMobileActionsOverlay();
                                     _currentOrientation = orientation;
-                                    FFI.canvasModel.updateViewStyle();
+                                    gFFI.canvasModel.updateViewStyle();
                                   });
                                 }
                                 return Container(

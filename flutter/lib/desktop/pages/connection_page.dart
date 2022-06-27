@@ -71,13 +71,6 @@ class _ConnectionPageState extends State<ConnectionPage> {
     if (id == '') return;
     id = id.replaceAll(' ', '');
     if (isFileTransfer) {
-      if (!isDesktop) {
-        if (!await PermissionManager.check("file")) {
-          if (!await PermissionManager.request("file")) {
-            return;
-          }
-        }
-      }
       await rustDeskWinManager.new_file_transfer(id);
     } else {
       await rustDeskWinManager.new_remote_desktop(id);
@@ -180,7 +173,7 @@ class _ConnectionPageState extends State<ConnectionPage> {
                               vertical: 8.0, horizontal: 8.0),
                           child: Text(
                             translate(
-                              "File Transfer",
+                              "Transfer File",
                             ),
                             style: TextStyle(color: MyTheme.dark),
                           ),
@@ -295,7 +288,7 @@ class _ConnectionPageState extends State<ConnectionPage> {
           ] +
           ([
             PopupMenuItem<String>(
-                child: Text(translate('File transfer')), value: 'file')
+                child: Text(translate('Transfer File')), value: 'file')
           ]),
       elevation: 8,
     );

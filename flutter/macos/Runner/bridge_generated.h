@@ -2,6 +2,10 @@
 #include <stdint.h>
 #include <stdlib.h>
 
+#define GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT 2
+
+#define GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS 4
+
 typedef struct wire_uint_8_list {
   uint8_t *ptr;
   int32_t len;

@@ -171,7 +171,7 @@ impl UI {
     }
 
     fn install_me(&mut self, _options: String, _path: String) {
-        install_me(_options, _path);
+        install_me(_options, _path, false, false);
     }
 
     fn update_me(&self, _path: String) {
