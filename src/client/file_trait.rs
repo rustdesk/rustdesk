@@ -6,7 +6,7 @@ pub trait FileManager: Interface {
         fs::get_home_as_string()
     }
 
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    #[cfg(not(any(target_os = "android", target_os = "ios", feature = "cli")))]
     fn read_dir(&self, path: String, include_hidden: bool) -> sciter::Value {
         match fs::read_dir(&fs::get_path(&path), include_hidden) {
             Err(_) => sciter::Value::null(),
@@ -19,7 +19,7 @@ pub trait FileManager: Interface {
         }
     }
 
-    #[cfg(any(target_os = "android", target_os = "ios"))]
+    #[cfg(any(target_os = "android", target_os = "ios", feature = "cli"))]
     fn read_dir(&self, path: &str, include_hidden: bool) -> String {
         use crate::flutter::make_fd_to_json;
         match fs::read_dir(&fs::get_path(path), include_hidden) {

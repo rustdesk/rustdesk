@@ -5,7 +5,7 @@
   <a href="#how-to-build-with-docker">Docker</a> •
   <a href="#file-structure">Rakenne</a> •
   <a href="#snapshot">Tilannevedos</a><br>
-  [<a href="README-ZH.md">中文</a>] | [<a href="README-ES.md">Español</a>] | [<a href="README-FR.md">Français</a>] | [<a href="README-DE.md">Deutsch</a>] | [<a href="README-PL.md">Polski</a>] | [<a href="README-FI.md">Suomi</a>] | [<a href="README-ML.md">മലയാളം</a>] | [<a href="README-JP.md">日本語</a>] | [<a href="README-NL.md">Nederlands</a>] | [<a href="README-IT.md">Italiano</a>] | [<a href="README-RU.md">Русский</a>] | [<a href="README-PTBR.md">Português (Brasil)</a>] | [<a href="README-EO.md">Esperanto</a>] | [<a href="README-KR.md">한국어</a>]<br>
+  [<a href="README-ZH.md">中文</a>] | [<a href="README-ES.md">Español</a>] | [<a href="README-FA.md">فارسی</a>] | [<a href="README-FR.md">Français</a>] | [<a href="README-DE.md">Deutsch</a>] | [<a href="README-PL.md">Polski</a>] | [<a href="README-FI.md">Suomi</a>] | [<a href="README-ML.md">മലയാളം</a>] | [<a href="README-JP.md">日本語</a>] | [<a href="README-NL.md">Nederlands</a>] | [<a href="README-IT.md">Italiano</a>] | [<a href="README-RU.md">Русский</a>] | [<a href="README-PTBR.md">Português (Brasil)</a>] | [<a href="README-EO.md">Esperanto</a>] | [<a href="README-KR.md">한국어</a>] | [<a href="README-AR.md">العربي</a>]<br>
   <b>Tarvitsemme apua tämän README-tiedoston kääntämiseksi äidinkielellesi</b>
 </p>
 
@@ -125,7 +125,7 @@ Sitten, joka kerta kun sinun on rakennettava sovellus, aja seuraava komento:
 docker run --rm -it -v $PWD:/home/user/rustdesk -v rustdesk-git-cache:/home/user/.cargo/git -v rustdesk-registry-cache:/home/user/.cargo/registry -e PUID="$(id -u)" -e PGID="$(id -g)" rustdesk-builder
 ```
 
-Huomaa, että ensimmäinen rakentaminen saattaa kestää pitempään ennen kuin riippuvuudet on siirretty välimuistiin, seuraavat rakentamiset ovat nopeampia. Lisäksi, jos sinun on määritettävä eri argumentteja rakentamiskomennolle, saatat tehdä sen niin, että komennon lopussa <OPTIONAL-ARGS>`-kohdassa. Esimerkiksi, jos haluat rakentaa optimoidun julkaisuversion, sinun on ajettava komento yllä siten, että sitä seuraa argumentti`---release`. Suoritettava tiedosto on saatavilla järjestelmäsi kohdehakemistossa, ja se voidaan suorittaa seuraavan kera:
+Huomaa, että ensimmäinen rakentaminen saattaa kestää pitempään ennen kuin riippuvuudet on siirretty välimuistiin, seuraavat rakentamiset ovat nopeampia. Lisäksi, jos sinun on määritettävä eri argumentteja rakentamiskomennolle, saatat tehdä sen niin, että komennon lopussa <OPTIONAL-ARGS>`-kohdassa. Esimerkiksi, jos haluat rakentaa optimoidun julkaisuversion, sinun on ajettava komento yllä siten, että sitä seuraa argumentti`--release`. Suoritettava tiedosto on saatavilla järjestelmäsi kohdehakemistossa, ja se voidaan suorittaa seuraavan kera:
 
 ```sh
 target/debug/rustdesk

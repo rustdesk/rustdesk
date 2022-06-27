@@ -1,4 +1,5 @@
 use crate::{client::*, flutter_ffi::EventToUI};
+use crate::common::{make_fd_to_json};
 use flutter_rust_bridge::{StreamSink, ZeroCopyBuffer};
 use hbb_common::{
     allow_err,
@@ -499,7 +500,12 @@ impl Interface for Session {
         let mut displays = Vec::new();
         let mut current = pi.current_display as usize;
 
-        if !lc.is_file_transfer {
+        if lc.is_file_transfer {
+            if pi.username.is_empty() {
+                self.msgbox("error", "Error", "No active console user logged on, please connect and logon first.");
+                return;
+            }
+        } else {
             if pi.displays.is_empty() {
                 self.msgbox("error", "Remote Error", "No Display");
             }

@@ -1,0 +1,12 @@
+开源远程桌面应用，开源 TeamViewer 替代方案。
+源代码：https://github.com/rustdesk/rustdesk
+文档：https://rustdesk.com/docs/en/manual/mobile/
+
+为了让远程设备通过鼠标或触摸控制您的 Android 设备，您需要允许 RustDesk 使用“Accessibility”服务，RustDesk 使用 AccessibilityService API 来实现 Addroid 远程控制。
+
+除了远程控制，您还可以使用 RustDesk 在 Android 设备和 PC 之间轻松传输文件。
+
+您完全掌控数据，不用担心安全问题。您可以使用我们的注册/中继服务器，或者自建，亦或者开发您的版本。
+自托管服务器是免费和开源的：https://github.com/rustdesk/rustdesk-server
+
+请从：https://rustdesk.com 下载并安装桌面版，然后您可以通过手机访问和控制您的桌面，或从桌面控制您的手机。

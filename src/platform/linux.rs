@@ -1,7 +1,6 @@
 use super::{CursorData, ResultType};
 use hbb_common::{allow_err, bail, log};
 use libc::{c_char, c_int, c_void};
-use std::io::prelude::*;
 use std::{
     cell::RefCell,
     sync::{
@@ -371,8 +370,7 @@ fn get_display_server_of_session(session: &str) -> String {
                     .replace("TTY=", "")
                     .trim_end()
                     .into();
-                if let Ok(Some(xorg_results)) =
-                    run_cmds(format!("ps -e | grep \"{}.\\\\+Xorg\"", tty))
+                if let Ok(xorg_results) = run_cmds(format!("ps -e | grep \"{}.\\\\+Xorg\"", tty))
                 // And check if Xorg is running on that tty
                 {
                     if xorg_results.trim_end().to_string() != "" {
@@ -441,9 +439,7 @@ pub fn current_is_wayland() -> bool {
 pub fn modify_default_login() -> String {
     let dsession = std::env::var("DESKTOP_SESSION").unwrap();
     let user_name = std::env::var("USERNAME").unwrap();
-    if let Ok(Some(x)) =
-        run_cmds("ls /usr/share/* | grep ${DESKTOP_SESSION}-xorg.desktop".to_owned())
-    {
+    if let Ok(x) = run_cmds("ls /usr/share/* | grep ${DESKTOP_SESSION}-xorg.desktop".to_owned()) {
         if x.trim_end().to_string() != "" {
             match std::process::Command::new("pkexec")
                 .args(vec![
@@ -471,7 +467,7 @@ pub fn modify_default_login() -> String {
                     return "Fix failed! Please re-login with X server manually".to_owned();
                 }
             }
-        } else if let Ok(Some(z)) =
+        } else if let Ok(z) =
             run_cmds("ls /usr/share/* | grep ${DESKTOP_SESSION:0:-8}.desktop".to_owned())
         {
             if z.trim_end().to_string() != "" {
@@ -605,20 +601,11 @@ pub fn is_installed() -> bool {
     true
 }
 
-fn run_cmds(cmds: String) -> ResultType<Option<String>> {
-    let mut tmp = std::env::temp_dir();
-    tmp.push(format!("{}_{}", crate::get_app_name(), crate::get_time()));
-    let mut file = std::fs::File::create(&tmp)?;
-    file.write_all(cmds.as_bytes())?;
-    file.sync_all()?;
-    if let Ok(output) = std::process::Command::new("bash")
-        .arg(tmp.to_str().unwrap_or(""))
-        .output()
-    {
-        Ok(Some(String::from_utf8_lossy(&output.stdout).to_string()))
-    } else {
-        Ok(None)
-    }
+pub fn run_cmds(cmds: String) -> ResultType<String> {
+    let output = std::process::Command::new("sh")
+        .args(vec!["-c", &cmds])
+        .output()?;
+    Ok(String::from_utf8_lossy(&output.stdout).to_string())
 }
 
 fn get_env_tries(name: &str, uid: &str, n: usize) -> String {
@@ -635,7 +622,7 @@ fn get_env_tries(name: &str, uid: &str, n: usize) -> String {
 fn get_env(name: &str, uid: &str) -> String {
     let cmd = format!("ps -u {} -o pid= | xargs -I__ cat /proc/__/environ 2>/dev/null | tr '\\0' '\\n' | grep '^{}=' | tail -1 | sed 's/{}=//g'", uid, name, name);
     log::debug!("Run: {}", &cmd);
-    if let Ok(Some(x)) = run_cmds(cmd) {
+    if let Ok(x) = run_cmds(cmd) {
         x.trim_end().to_string()
     } else {
         "".to_owned()

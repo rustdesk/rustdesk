@@ -35,6 +35,7 @@ class _RemotePageState extends State<RemotePage> {
   String _value = '';
   double _scale = 1;
   double _mouseScrollIntegral = 0; // mouse scroll speed controller
+  Orientation? _currentOrientation;
 
   var _more = true;
   var _fn = false;
@@ -127,7 +128,7 @@ class _RemotePageState extends State<RemotePage> {
       common < oldValue.length &&
           common < newValue.length &&
           newValue[common] == oldValue[common];
-      ++common);
+      ++common) {}
       for (i = 0; i < oldValue.length - common; ++i) {
         gFFI.inputKey('VK_BACK');
       }
@@ -260,12 +261,22 @@ class _RemotePageState extends State<RemotePage> {
                         color: Colors.black,
                         child: isWebDesktop
                             ? getBodyForDesktopWithListener(keyboard)
-                            : SafeArea(
-                            child: Container(
+                            : SafeArea(child:
+                            OrientationBuilder(builder: (ctx, orientation) {
+                                if (_currentOrientation != orientation) {
+                                  debugPrint("on orientation changed");
+                                  Timer(Duration(milliseconds: 200), () {
+                                    resetMobileActionsOverlay();
+                                    _currentOrientation = orientation;
+                                    FFI.canvasModel.updateViewStyle();
+                                  });
+                                }
+                                return Container(
                                 color: MyTheme.canvasColor,
                                 child: _isPhysicalMouse
                                     ? getBodyForMobile()
-                                    : getBodyForMobileWithGesture())));
+                                    : getBodyForMobileWithGesture());
+                              })));
                   })
                 ],
               ))),

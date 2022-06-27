@@ -10,14 +10,16 @@ src/version.rs
 *exe
 *tgz
 cert.pfx
-flutter_hbb
 *.bak
 *png
 *svg
 *jpg
-web_hbb
 sciter.dll
 **pdb
 src/bridge_generated.rs
 *deb
 rustdesk
+# appimage
+appimage/AppDir
+appimage/*.AppImage
+appimage/appimage-build

@@ -5,7 +5,7 @@
   <a href="#how-to-build-with-docker">Docker</a> •
   <a href="#file-structure">Structure</a> •
   <a href="#snapshot">Snapshot</a><br>
-  [<a href="README-ZH.md">中文</a>] | [<a href="README-ES.md">Español</a>] | [<a href="README-FR.md">Français</a>] | [<a href="README-DE.md">Deutsch</a>] | [<a href="README-PL.md">Polski</a>] | [<a href="README-FI.md">Suomi</a>] | [<a href="README-ML.md">മലയാളം</a>] | [<a href="README-JP.md">日本語</a>] | [<a href="README-NL.md">Nederlands</a>] | [<a href="README-IT.md">Italiano</a>] | [<a href="README-RU.md">Русский</a>] | [<a href="README-PTBR.md">Português (Brasil)</a>] | [<a href="README-EO.md">Esperanto</a>] | [<a href="README-KR.md">한국어</a>]<br>
+  [<a href="README-ZH.md">中文</a>] | [<a href="README-ES.md">Español</a>] | [<a href="README-FA.md">فارسی</a>] | [<a href="README-FR.md">Français</a>] | [<a href="README-DE.md">Deutsch</a>] | [<a href="README-PL.md">Polski</a>] | [<a href="README-FI.md">Suomi</a>] | [<a href="README-ML.md">മലയാളം</a>] | [<a href="README-JP.md">日本語</a>] | [<a href="README-NL.md">Nederlands</a>] | [<a href="README-IT.md">Italiano</a>] | [<a href="README-RU.md">Русский</a>] | [<a href="README-PTBR.md">Português (Brasil)</a>] | [<a href="README-EO.md">Esperanto</a>] | [<a href="README-KR.md">한국어</a>] | [<a href="README-AR.md">العربي</a>]<br>
   <b>ഈ README നിങ്ങളുടെ മാതൃഭാഷയിലേക്ക് വിവർത്തനം ചെയ്യാൻ ഞങ്ങൾക്ക് നിങ്ങളുടെ സഹായം ആവശ്യമാണ്</b>
 </p>
 
@@ -125,7 +125,7 @@ docker build -t "rustdesk-builder" .
 docker run --rm -it -v $PWD:/home/user/rustdesk -v rustdesk-git-cache:/home/user/.cargo/git -v rustdesk-registry-cache:/home/user/.cargo/registry -e PUID="$(id -u)" -e PGID="$(id -g)" rustdesk-builder
 ```
 
-ഡിപൻഡൻസികൾ കാഷെ ചെയ്യുന്നതിനുമുമ്പ് ആദ്യ ബിൽഡ് കൂടുതൽ സമയമെടുത്തേക്കാം, തുടർന്നുള്ള ബിൽഡുകൾ വേഗത്തിലാകും. കൂടാതെ, നിങ്ങൾക്ക് ബിൽഡ് കമാൻഡിലേക്ക് വ്യത്യസ്ത ആർഗ്യുമെന്റുകൾ വ്യക്തമാക്കണമെങ്കിൽ, കമാൻഡിന്റെ അവസാനം `<OPTIONAL-ARGS>` സ്ഥാനത്ത് നിങ്ങൾക്ക് അങ്ങനെ ചെയ്യാം. ഉദാഹരണത്തിന്, നിങ്ങൾ ഒരു ഒപ്റ്റിമൈസ് ചെയ്ത റിലീസ് പതിപ്പ് നിർമ്മിക്കാൻ ആഗ്രഹിക്കുന്നുവെങ്കിൽ, മുകളിലുള്ള കമാൻഡ് തുടർന്ന് `---release` നിങ്ങൾ പ്രവർത്തിപ്പിക്കും. തത്ഫലമായുണ്ടാകുന്ന എക്സിക്യൂട്ടബിൾ നിങ്ങളുടെ സിസ്റ്റത്തിലെ ടാർഗെറ്റ് ഫോൾഡറിൽ ലഭ്യമാകും, കൂടാതെ ഇത് ഉപയോഗിച്ച് പ്രവർത്തിപ്പിക്കാം:
+ഡിപൻഡൻസികൾ കാഷെ ചെയ്യുന്നതിനുമുമ്പ് ആദ്യ ബിൽഡ് കൂടുതൽ സമയമെടുത്തേക്കാം, തുടർന്നുള്ള ബിൽഡുകൾ വേഗത്തിലാകും. കൂടാതെ, നിങ്ങൾക്ക് ബിൽഡ് കമാൻഡിലേക്ക് വ്യത്യസ്ത ആർഗ്യുമെന്റുകൾ വ്യക്തമാക്കണമെങ്കിൽ, കമാൻഡിന്റെ അവസാനം `<OPTIONAL-ARGS>` സ്ഥാനത്ത് നിങ്ങൾക്ക് അങ്ങനെ ചെയ്യാം. ഉദാഹരണത്തിന്, നിങ്ങൾ ഒരു ഒപ്റ്റിമൈസ് ചെയ്ത റിലീസ് പതിപ്പ് നിർമ്മിക്കാൻ ആഗ്രഹിക്കുന്നുവെങ്കിൽ, മുകളിലുള്ള കമാൻഡ് തുടർന്ന് `--release` നിങ്ങൾ പ്രവർത്തിപ്പിക്കും. തത്ഫലമായുണ്ടാകുന്ന എക്സിക്യൂട്ടബിൾ നിങ്ങളുടെ സിസ്റ്റത്തിലെ ടാർഗെറ്റ് ഫോൾഡറിൽ ലഭ്യമാകും, കൂടാതെ ഇത് ഉപയോഗിച്ച് പ്രവർത്തിപ്പിക്കാം:
 
 ```sh
 target/debug/rustdesk

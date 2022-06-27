@@ -2,7 +2,7 @@
 pub mod win10;
 
 use hbb_common::{bail, lazy_static, ResultType};
-use std::{ffi::CString, path::Path, sync::Mutex};
+use std::{path::Path, sync::Mutex};
 
 lazy_static::lazy_static! {
     // If device is uninstalled though "Device Manager" Window.
@@ -33,16 +33,24 @@ pub fn install_update_driver(_reboot_required: &mut bool) -> ResultType<()> {
         bail!("{} not exists", install_path)
     }
 
-    let _full_install_path = match abs_path.to_str() {
-        Some(p) => CString::new(p)?.into_raw(),
-        None => bail!("{} not exists", install_path),
-    };
-
     #[cfg(windows)]
     unsafe {
         {
+            // Device must be created before install driver.
+            // https://github.com/fufesou/RustDeskIddDriver/issues/1
+            if let Err(e) = create_device() {
+                bail!("{}", e);
+            }
+
+            let full_install_path: Vec<u16> = abs_path
+                .to_string_lossy()
+                .as_ref()
+                .encode_utf16()
+                .chain(Some(0).into_iter())
+                .collect();
+
             let mut reboot_required_tmp = win10::idd::FALSE;
-            if win10::idd::InstallUpdate(_full_install_path, &mut reboot_required_tmp)
+            if win10::idd::InstallUpdate(full_install_path.as_ptr() as _, &mut reboot_required_tmp)
                 == win10::idd::FALSE
             {
                 bail!("{}", win10::get_last_msg()?);
@@ -65,16 +73,18 @@ pub fn uninstall_driver(_reboot_required: &mut bool) -> ResultType<()> {
         bail!("{} not exists", install_path)
     }
 
-    let _full_install_path = match abs_path.to_str() {
-        Some(p) => CString::new(p)?.into_raw(),
-        None => bail!("{} not exists", install_path),
-    };
-
     #[cfg(windows)]
     unsafe {
         {
+            let full_install_path: Vec<u16> = abs_path
+                .to_string_lossy()
+                .as_ref()
+                .encode_utf16()
+                .chain(Some(0).into_iter())
+                .collect();
+
             let mut reboot_required_tmp = win10::idd::FALSE;
-            if win10::idd::Uninstall(_full_install_path, &mut reboot_required_tmp)
+            if win10::idd::Uninstall(full_install_path.as_ptr() as _, &mut reboot_required_tmp)
                 == win10::idd::FALSE
             {
                 bail!("{}", win10::get_last_msg()?);

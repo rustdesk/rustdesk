@@ -1,7 +1,10 @@
 use std::{
     collections::HashMap,
     ops::Deref,
-    sync::{Arc, Mutex, RwLock},
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc, Mutex, RwLock,
+    },
 };
 
 use sciter::{
@@ -21,8 +24,8 @@ use clipboard::{
 };
 use enigo::{self, Enigo, KeyboardControllable};
 use hbb_common::fs::{
-    can_enable_overwrite_detection, get_string, new_send_confirm,
-    DigestCheckResult, RemoveJobMeta, get_job,
+    can_enable_overwrite_detection, get_job, get_string, new_send_confirm, DigestCheckResult,
+    RemoveJobMeta,
 };
 use hbb_common::{
     allow_err,
@@ -45,7 +48,7 @@ use hbb_common::{config::TransferSerde, fs::TransferJobMeta};
 use crate::clipboard_file::*;
 use crate::{
     client::*,
-    common::{self, check_clipboard, update_clipboard, ClipboardContext, CLIPBOARD_INTERVAL}
+    common::{self, check_clipboard, update_clipboard, ClipboardContext, CLIPBOARD_INTERVAL},
 };
 
 type Video = AssetPtr<video_destination>;
@@ -63,11 +66,11 @@ fn get_key_state(key: enigo::Key) -> bool {
     ENIGO.lock().unwrap().get_key_state(key)
 }
 
-static mut IS_IN: bool = false;
-static mut KEYBOARD_HOOKED: bool = false;
-static mut SERVER_KEYBOARD_ENABLED: bool = true;
-static mut SERVER_FILE_TRANSFER_ENABLED: bool = true;
-static mut SERVER_CLIPBOARD_ENABLED: bool = true;
+static IS_IN: AtomicBool = AtomicBool::new(false);
+static KEYBOARD_HOOKED: AtomicBool = AtomicBool::new(false);
+static SERVER_KEYBOARD_ENABLED: AtomicBool = AtomicBool::new(true);
+static SERVER_FILE_TRANSFER_ENABLED: AtomicBool = AtomicBool::new(true);
+static SERVER_CLIPBOARD_ENABLED: AtomicBool = AtomicBool::new(true);
 #[cfg(windows)]
 static mut IS_ALT_GR: bool = false;
 
@@ -223,6 +226,7 @@ impl sciter::EventHandler for Handler {
         fn save_custom_image_quality(i32, i32);
         fn refresh_video();
         fn get_toggle_option(String);
+        fn is_privacy_mode_supported();
         fn toggle_option(String);
         fn get_remember();
         fn peer_platform();
@@ -249,11 +253,8 @@ impl Handler {
         if self.is_port_forward() || self.is_file_transfer() {
             return;
         }
-        if unsafe { KEYBOARD_HOOKED } {
+        if KEYBOARD_HOOKED.swap(true, Ordering::SeqCst) {
             return;
-        }
-        unsafe {
-            KEYBOARD_HOOKED = true;
         }
         log::info!("keyboard hooked");
         let mut me = self.clone();
@@ -266,7 +267,8 @@ impl Handler {
             std::env::set_var("KEYBOARD_ONLY", "y"); // pass to rdev
             use rdev::{EventType::*, *};
             let func = move |evt: Event| {
-                if unsafe { !IS_IN || !SERVER_KEYBOARD_ENABLED } {
+                if !IS_IN.load(Ordering::SeqCst) || !SERVER_KEYBOARD_ENABLED.load(Ordering::SeqCst)
+                {
                     return;
                 }
                 let (key, down) = match evt.event_type {
@@ -496,7 +498,7 @@ impl Handler {
     }
 
     #[inline]
-    fn save_config(&self, config: PeerConfig) {
+    pub(super) fn save_config(&self, config: PeerConfig) {
         self.lc.write().unwrap().save_config(config);
     }
 
@@ -505,7 +507,7 @@ impl Handler {
     }
 
     #[inline]
-    fn load_config(&self) -> PeerConfig {
+    pub(super) fn load_config(&self) -> PeerConfig {
         load_config(&self.id)
     }
 
@@ -521,6 +523,10 @@ impl Handler {
 
     fn get_toggle_option(&mut self, name: String) -> bool {
         self.lc.read().unwrap().get_toggle_option(&name)
+    }
+
+    fn is_privacy_mode_supported(&self) -> bool {
+        self.lc.read().unwrap().is_privacy_mode_supported()
     }
 
     fn refresh_video(&mut self) {
@@ -865,17 +871,13 @@ impl Handler {
     fn enter(&mut self) {
         #[cfg(windows)]
         crate::platform::windows::stop_system_key_propagate(true);
-        unsafe {
-            IS_IN = true;
-        }
+        IS_IN.store(true, Ordering::SeqCst);
     }
 
     fn leave(&mut self) {
         #[cfg(windows)]
         crate::platform::windows::stop_system_key_propagate(false);
-        unsafe {
-            IS_IN = false;
-        }
+        IS_IN.store(false, Ordering::SeqCst);
     }
 
     fn send_mouse(
@@ -1380,11 +1382,9 @@ impl Remote {
         };
         match Client::start(&self.handler.id, key, token, conn_type).await {
             Ok((mut peer, direct)) => {
-                unsafe {
-                    SERVER_KEYBOARD_ENABLED = true;
-                    SERVER_CLIPBOARD_ENABLED = true;
-                    SERVER_FILE_TRANSFER_ENABLED = true;
-                }
+                SERVER_KEYBOARD_ENABLED.store(true, Ordering::SeqCst);
+                SERVER_CLIPBOARD_ENABLED.store(true, Ordering::SeqCst);
+                SERVER_FILE_TRANSFER_ENABLED.store(true, Ordering::SeqCst);
                 self.handler
                     .call("setConnectionType", &make_args!(peer.is_secured(), direct));
 
@@ -1462,11 +1462,9 @@ impl Remote {
         if let Some(stop) = stop_clipboard {
             stop.send(()).ok();
         }
-        unsafe {
-            SERVER_KEYBOARD_ENABLED = false;
-            SERVER_CLIPBOARD_ENABLED = false;
-            SERVER_FILE_TRANSFER_ENABLED = false;
-        }
+        SERVER_KEYBOARD_ENABLED.store(false, Ordering::SeqCst);
+        SERVER_CLIPBOARD_ENABLED.store(false, Ordering::SeqCst);
+        SERVER_FILE_TRANSFER_ENABLED.store(false, Ordering::SeqCst);
     }
 
     fn handle_job_status(&mut self, id: i32, file_num: i32, err: Option<String>) {
@@ -1518,8 +1516,8 @@ impl Remote {
                         }
                         _ => {}
                     }
-                    if !unsafe { SERVER_CLIPBOARD_ENABLED }
-                        || !unsafe { SERVER_KEYBOARD_ENABLED }
+                    if !SERVER_CLIPBOARD_ENABLED.load(Ordering::SeqCst)
+                        || !SERVER_KEYBOARD_ENABLED.load(Ordering::SeqCst)
                         || lc.read().unwrap().disable_clipboard
                     {
                         continue;
@@ -1663,7 +1661,12 @@ impl Remote {
             Data::AddJob((id, path, to, file_num, include_hidden, is_remote)) => {
                 let od = can_enable_overwrite_detection(self.handler.lc.read().unwrap().version);
                 if is_remote {
-                    log::debug!("new write waiting job {}, write to {} from remote {}", id, to, path);
+                    log::debug!(
+                        "new write waiting job {}, write to {} from remote {}",
+                        id,
+                        to,
+                        path
+                    );
                     let mut job = fs::TransferJob::new_write(
                         id,
                         path.clone(),
@@ -1711,15 +1714,27 @@ impl Remote {
                     if let Some(job) = get_job(id, &mut self.write_jobs) {
                         job.is_last_job = false;
                         allow_err!(
-                            peer.send(&fs::new_send(id, job.remote.clone(), job.file_num, job.show_hidden))
-                                .await
+                            peer.send(&fs::new_send(
+                                id,
+                                job.remote.clone(),
+                                job.file_num,
+                                job.show_hidden
+                            ))
+                            .await
                         );
                     }
                 } else {
                     if let Some(job) = get_job(id, &mut self.read_jobs) {
                         job.is_last_job = false;
-                        allow_err!(peer.send(&fs::new_receive(id, job.path.to_string_lossy().to_string(),
-                         job.file_num, job.files.clone())).await);
+                        allow_err!(
+                            peer.send(&fs::new_receive(
+                                id,
+                                job.path.to_string_lossy().to_string(),
+                                job.file_num,
+                                job.files.clone()
+                            ))
+                            .await
+                        );
                     }
                 }
             }
@@ -1947,7 +1962,7 @@ impl Remote {
             let json_str = serde_json::to_string(&job.gen_meta()).unwrap();
             transfer_metas.write_jobs.push(json_str);
         }
-        log::info!("meta: {:?}",transfer_metas);
+        log::info!("meta: {:?}", transfer_metas);
         config.transfer = transfer_metas;
         self.handler.save_config(config);
         true
@@ -1978,8 +1993,8 @@ impl Remote {
                         self.check_clipboard_file_context();
                         if !(self.handler.is_file_transfer()
                             || self.handler.is_port_forward()
-                            || !unsafe { SERVER_CLIPBOARD_ENABLED }
-                            || !unsafe { SERVER_KEYBOARD_ENABLED }
+                            || !SERVER_CLIPBOARD_ENABLED.load(Ordering::SeqCst)
+                            || !SERVER_KEYBOARD_ENABLED.load(Ordering::SeqCst)
                             || self.handler.lc.read().unwrap().disable_clipboard)
                         {
                             let txt = self.old_clipboard.lock().unwrap().clone();
@@ -2027,13 +2042,16 @@ impl Remote {
                 Some(message::Union::file_response(fr)) => {
                     match fr.union {
                         Some(file_response::Union::dir(fd)) => {
+                            #[cfg(windows)]
+                            let entries = fd.entries.to_vec();
+                            #[cfg(not(windows))]
                             let mut entries = fd.entries.to_vec();
                             #[cfg(not(windows))]
                             {
                                 if self.handler.peer_platform() == "Windows" {
                                     fs::transform_windows_path(&mut entries);
                                 }
-                            }  
+                            }
                             let mut m = make_fd(fd.id, &entries, fd.id > 0);
                             if fd.id <= 0 {
                                 m.set_item("path", fd.path);
@@ -2181,16 +2199,12 @@ impl Remote {
                         log::info!("Change permission {:?} -> {}", p.permission, p.enabled);
                         match p.permission.enum_value_or_default() {
                             Permission::Keyboard => {
-                                unsafe {
-                                    SERVER_KEYBOARD_ENABLED = p.enabled;
-                                }
+                                SERVER_KEYBOARD_ENABLED.store(p.enabled, Ordering::SeqCst);
                                 self.handler
                                     .call2("setPermission", &make_args!("keyboard", p.enabled));
                             }
                             Permission::Clipboard => {
-                                unsafe {
-                                    SERVER_CLIPBOARD_ENABLED = p.enabled;
-                                }
+                                SERVER_CLIPBOARD_ENABLED.store(p.enabled, Ordering::SeqCst);
                                 self.handler
                                     .call2("setPermission", &make_args!("clipboard", p.enabled));
                             }
@@ -2199,9 +2213,7 @@ impl Remote {
                                     .call2("setPermission", &make_args!("audio", p.enabled));
                             }
                             Permission::File => {
-                                unsafe {
-                                    SERVER_FILE_TRANSFER_ENABLED = p.enabled;
-                                }
+                                SERVER_FILE_TRANSFER_ENABLED.store(p.enabled, Ordering::SeqCst);
                                 if !p.enabled && self.handler.is_file_transfer() {
                                     return true;
                                 }
@@ -2231,9 +2243,10 @@ impl Remote {
                         self.handler.msgbox("error", "Connection Error", &c);
                         return false;
                     }
-                    Some(misc::Union::option_response(resp)) => {
-                        self.handler
-                            .msgbox("custom-error", "Option Error", &resp.error);
+                    Some(misc::Union::back_notification(notification)) => {
+                        if !self.handle_back_notification(notification).await {
+                            return false;
+                        }
                     }
                     _ => {}
                 },
@@ -2259,10 +2272,131 @@ impl Remote {
         true
     }
 
+    async fn handle_back_notification(&mut self, notification: BackNotification) -> bool {
+        match notification.union {
+            Some(back_notification::Union::block_input_state(state)) => {
+                self.handle_back_msg_block_input(
+                    state.enum_value_or(back_notification::BlockInputState::StateUnknown),
+                )
+                .await;
+            }
+            Some(back_notification::Union::privacy_mode_state(state)) => {
+                if !self
+                    .handle_back_msg_privacy_mode(
+                        state.enum_value_or(back_notification::PrivacyModeState::StateUnknown),
+                    )
+                    .await
+                {
+                    return false;
+                }
+            }
+            _ => {}
+        }
+        true
+    }
+
+    #[inline(always)]
+    fn update_block_input_state(&mut self, on: bool) {
+        self.handler.call("updateBlockInputState", &make_args!(on));
+    }
+
+    async fn handle_back_msg_block_input(&mut self, state: back_notification::BlockInputState) {
+        match state {
+            back_notification::BlockInputState::OnSucceeded => {
+                self.update_block_input_state(true);
+            }
+            back_notification::BlockInputState::OnFailed => {
+                self.handler
+                    .msgbox("custom-error", "Block user input", "Failed");
+                self.update_block_input_state(false);
+            }
+            back_notification::BlockInputState::OffSucceeded => {
+                self.update_block_input_state(false);
+            }
+            back_notification::BlockInputState::OffFailed => {
+                self.handler
+                    .msgbox("custom-error", "Unblock user input", "Failed");
+            }
+            _ => {}
+        }
+    }
+
+    #[inline(always)]
+    fn update_privacy_mode(&mut self, on: bool) {
+        let mut config = self.handler.load_config();
+        config.privacy_mode = on;
+        self.handler.save_config(config);
+
+        self.handler.call("updatePrivacyMode", &[]);
+    }
+
+    async fn handle_back_msg_privacy_mode(
+        &mut self,
+        state: back_notification::PrivacyModeState,
+    ) -> bool {
+        match state {
+            back_notification::PrivacyModeState::OnByOther => {
+                self.handler.msgbox(
+                    "error",
+                    "Connecting...",
+                    "Someone turns on privacy mode, exit",
+                );
+                return false;
+            }
+            back_notification::PrivacyModeState::NotSupported => {
+                self.handler
+                    .msgbox("custom-error", "Privacy mode", "Unsupported");
+                self.update_privacy_mode(false);
+            }
+            back_notification::PrivacyModeState::OnSucceeded => {
+                self.handler
+                    .msgbox("custom-nocancel", "Privacy mode", "In privacy mode");
+                self.update_privacy_mode(true);
+            }
+            back_notification::PrivacyModeState::OnFailedDenied => {
+                self.handler
+                    .msgbox("custom-error", "Privacy mode", "Peer denied");
+                self.update_privacy_mode(false);
+            }
+            back_notification::PrivacyModeState::OnFailedPlugin => {
+                self.handler
+                    .msgbox("custom-error", "Privacy mode", "Please install plugins");
+                self.update_privacy_mode(false);
+            }
+            back_notification::PrivacyModeState::OnFailed => {
+                self.handler
+                    .msgbox("custom-error", "Privacy mode", "Failed");
+                self.update_privacy_mode(false);
+            }
+            back_notification::PrivacyModeState::OffSucceeded => {
+                self.handler
+                .msgbox("custom-nocancel", "Privacy mode", "Out privacy mode");
+                self.update_privacy_mode(false);
+            }
+            back_notification::PrivacyModeState::OffByPeer => {
+                self.handler
+                    .msgbox("custom-error", "Privacy mode", "Peer exit");
+                self.update_privacy_mode(false);
+            }
+            back_notification::PrivacyModeState::OffFailed => {
+                self.handler
+                    .msgbox("custom-error", "Privacy mode", "Failed to turn off");
+            }
+            back_notification::PrivacyModeState::OffUnknown => {
+                self.handler
+                    .msgbox("custom-error", "Privacy mode", "Turned off");
+                // log::error!("Privacy mode is turned off with unknown reason");
+                self.update_privacy_mode(false);
+            }
+            _ => {}
+        }
+        true
+    }
+
     fn check_clipboard_file_context(&mut self) {
         #[cfg(windows)]
         {
-            let enabled = unsafe { SERVER_FILE_TRANSFER_ENABLED }
+            let enabled = SERVER_FILE_TRANSFER_ENABLED.load(Ordering::SeqCst)
                 && self.handler.lc.read().unwrap().enable_file_transfer;
             if enabled == self.clipboard_file_context.is_none() {
                 self.clipboard_file_context = if enabled {
@@ -2347,6 +2481,7 @@ impl Interface for Handler {
         } else if !self.is_port_forward() {
             if pi.displays.is_empty() {
                 self.lc.write().unwrap().handle_peer_info(username, pi);
+                self.call("updatePrivacyMode", &[]);
                 self.msgbox("error", "Remote Error", "No Display");
                 return;
             }
@@ -2385,6 +2520,7 @@ impl Interface for Handler {
             }
         }
         self.lc.write().unwrap().handle_peer_info(username, pi);
+        self.call("updatePrivacyMode", &[]);
         self.call("updatePi", &make_args!(pi_sciter));
         if self.is_file_transfer() {
             self.call2("closeSuccess", &make_args!());

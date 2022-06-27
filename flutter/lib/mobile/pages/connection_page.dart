@@ -113,8 +113,8 @@ class _ConnectionPageState extends State<ConnectionPage> {
         : InkWell(
             onTap: () async {
               final url = _updateUrl + '.apk';
-              if (await canLaunch(url)) {
-                await launch(url);
+              if (await canLaunchUrl(Uri.parse(url))) {
+                await launchUrl(Uri.parse(url));
               }
             },
             child: Container(
@@ -275,7 +275,7 @@ class _ConnectionPageState extends State<ConnectionPage> {
               ? []
               : [
                   PopupMenuItem<String>(
-                      child: Text(translate('File transfer')), value: 'file')
+                      child: Text(translate('Transfer File')), value: 'file')
                 ]),
       elevation: 8,
     );
