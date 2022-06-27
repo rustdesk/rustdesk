@@ -126,7 +126,7 @@ class _RemotePageState extends State<RemotePage> {
           common < oldValue.length &&
               common < newValue.length &&
               newValue[common] == oldValue[common];
-          ++common);
+          ++common) {}
       for (i = 0; i < oldValue.length - common; ++i) {
         FFI.inputKey('VK_BACK');
       }

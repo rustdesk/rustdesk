@@ -233,7 +233,7 @@ class AccessibilityListener extends StatelessWidget {
           }
         },
         onPointerUp: (evt) {
-          if (evt.size == 1 && GestureBinding.instance != null) {
+          if (evt.size == 1) {
             GestureBinding.instance.handlePointerEvent(PointerUpEvent(
                 pointer: evt.pointer + offset,
                 size: 0.1,
@@ -243,7 +243,7 @@ class AccessibilityListener extends StatelessWidget {
           }
         },
         onPointerMove: (evt) {
-          if (evt.size == 1 && GestureBinding.instance != null) {
+          if (evt.size == 1) {
             GestureBinding.instance.handlePointerEvent(PointerMoveEvent(
                 pointer: evt.pointer + offset,
                 size: 0.1,

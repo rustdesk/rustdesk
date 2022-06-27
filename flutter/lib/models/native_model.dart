@@ -21,7 +21,6 @@ typedef F2 = Pointer<Utf8> Function(Pointer<Utf8>, Pointer<Utf8>);
 typedef F3 = void Function(Pointer<Utf8>, Pointer<Utf8>);
 
 class PlatformFFI {
-  static Pointer<RgbaFrame>? _lastRgbaFrame;
   static String _dir = '';
   static String _homeDir = '';
   static F2? _getByName;

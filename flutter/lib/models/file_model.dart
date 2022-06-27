@@ -593,15 +593,7 @@ class FileFetcher {
 
   tryCompleteTask(String? msg, String? isLocalStr) {
     if (msg == null || isLocalStr == null) return;
-    late final isLocal;
     late final tasks;
-    if (isLocalStr == "true") {
-      isLocal = true;
-    } else if (isLocalStr == "false") {
-      isLocal = false;
-    } else {
-      return;
-    }
     try {
       final fd = FileDirectory.fromJson(jsonDecode(msg));
       if (fd.id > 0) {

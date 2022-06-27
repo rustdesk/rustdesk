@@ -140,6 +140,8 @@ pub struct PeerConfig {
     pub disable_clipboard: bool,
     #[serde(default)]
     pub enable_file_transfer: bool,
+    #[serde(default)]
+    pub show_quality_monitor: bool,
 
     // the other scalar value must before this
     #[serde(default)]

@@ -880,6 +880,8 @@ impl LoginConfigHandler {
             option.block_input = BoolOption::Yes.into();
         } else if name == "unblock-input" {
             option.block_input = BoolOption::No.into();
+        } else if name == "show-quality-monitor" {
+            config.show_quality_monitor = !config.show_quality_monitor;
         } else {
             let v = self.options.get(&name).is_some();
             if v {
@@ -912,15 +914,8 @@ impl LoginConfigHandler {
             n += 1;
         } else if q == "custom" {
             let config = PeerConfig::load(&self.id);
-            let mut it = config.custom_image_quality.iter();
-            let bitrate = it.next();
-            let quantizer = it.next();
-            if let Some(bitrate) = bitrate {
-                if let Some(quantizer) = quantizer {
-                    msg.custom_image_quality = bitrate << 8 | quantizer;
-                    n += 1;
-                }
-            }
+            msg.custom_image_quality = config.custom_image_quality[0] as _;
+            n += 1;
         }
         if self.get_toggle_option("show-remote-cursor") {
             msg.show_remote_cursor = BoolOption::Yes.into();
@@ -987,6 +982,8 @@ impl LoginConfigHandler {
             self.config.disable_audio
         } else if name == "disable-clipboard" {
             self.config.disable_clipboard
+        } else if name == "show-quality-monitor" {
+            self.config.show_quality_monitor
         } else {
             !self.get_option(name).is_empty()
         }
@@ -1008,17 +1005,17 @@ impl LoginConfigHandler {
         msg_out
     }
 
-    pub fn save_custom_image_quality(&mut self, bitrate: i32, quantizer: i32) -> Message {
+    pub fn save_custom_image_quality(&mut self, custom_image_quality: u32) -> Message {
         let mut misc = Misc::new();
         misc.set_option(OptionMessage {
-            custom_image_quality: bitrate << 8 | quantizer,
+            custom_image_quality,
             ..Default::default()
         });
         let mut msg_out = Message::new();
         msg_out.set_misc(misc);
         let mut config = self.load_config();
         config.image_quality = "custom".to_owned();
-        config.custom_image_quality = vec![bitrate, quantizer];
+        config.custom_image_quality = vec![custom_image_quality as _];
         self.save_config(config);
         msg_out
     }
@@ -1213,14 +1210,6 @@ where
         log::info!("Audio decoder loop exits");
     });
     return (video_sender, audio_sender);
-}
-
-pub async fn handle_test_delay(t: TestDelay, peer: &mut Stream) {
-    if !t.from_client {
-        let mut msg_out = Message::new();
-        msg_out.set_test_delay(t);
-        allow_err!(peer.send(&msg_out).await);
-    }
 }
 
 // mask = buttons << 3 | type

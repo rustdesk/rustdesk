@@ -50,6 +50,8 @@ pub trait EncoderApi {
     fn encode_to_message(&mut self, frame: &[u8], ms: i64) -> ResultType<Message>;
 
     fn use_yuv(&self) -> bool;
+
+    fn set_bitrate(&mut self, bitrate: u32) -> ResultType<()>;
 }
 
 pub struct DecoderCfg {
