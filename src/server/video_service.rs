@@ -73,7 +73,7 @@ pub struct VideoQoS {
 enum AdaptiveState {
     Normal,
     LowDelay,
-    HeightDelay,
+    HighDelay,
 }
 
 impl Default for VideoQoS {
@@ -95,8 +95,7 @@ impl Default for VideoQoS {
     }
 }
 
-const MAX: f32 = 1.2;
-const MIN: f32 = 0.8;
+const THRESHOLD: f32 = 1.2;
 const MAX_COUNT: u32 = 3;
 const MAX_DELAY: u32 = 500;
 const MIN_DELAY: u32 = 50;
@@ -117,7 +116,6 @@ impl VideoQoS {
         time::Duration::from_secs_f32(1. / (self.fps as f32))
     }
 
-    // abr
     pub fn update_network_delay(&mut self, delay: u32) {
         if self.current_delay.eq(&0) {
             self.current_delay = delay;
@@ -126,7 +124,7 @@ impl VideoQoS {
         let current_delay = self.current_delay as f32;
 
         self.current_delay = delay / 2 + self.current_delay / 2;
-        log::debug!(
+        log::trace!(
             "update_network_delay:{}, {}, state:{:?},count:{}",
             self.current_delay,
             delay,
@@ -134,10 +132,14 @@ impl VideoQoS {
             self.count
         );
 
+        // ABR
+        if !self.enable_abr {
+            // return;
+        }
         if self.current_delay < MIN_DELAY {
-            if self.fps != 30 && self.current_image_quality != self.user_image_quality {
+            if self.fps != FPS && self.current_image_quality != self.user_image_quality {
                 log::debug!("current_delay is normal, set to user_image_quality");
-                self.fps = 30;
+                self.fps = FPS;
                 self.current_image_quality = self.user_image_quality;
                 let _ = self.generate_bitrate().ok();
                 self.updated = true;
@@ -145,28 +147,38 @@ impl VideoQoS {
             self.state = AdaptiveState::Normal;
         } else if self.current_delay > MAX_DELAY {
             if self.fps != 5 && self.current_image_quality != 25 {
-                log::debug!("current_delay is very height, set fps to 5, image_quality to 25");
+                log::debug!("current_delay is very high, set fps to 5, image_quality to 25");
                 self.fps = 5;
                 self.current_image_quality = 25;
                 let _ = self.generate_bitrate().ok();
                 self.updated = true;
             }
         } else {
+            // MAX_DELAY to Normal
+            if self.fps == 5 && self.current_image_quality == 25 {
+                self.fps = FPS;
+                self.current_image_quality =
+                    std::cmp::min(self.user_image_quality, ImageQuality::Low.value() as _);
+                self.last_delay = self.current_delay;
+                let _ = self.generate_bitrate().ok();
+                self.updated = true;
+                return;
+            }
             let delay = delay as f32;
             let last_delay = self.last_delay as f32;
             match self.state {
                 AdaptiveState::Normal => {
-                    if delay > current_delay * MAX {
-                        self.state = AdaptiveState::HeightDelay;
-                    } else if delay < current_delay * MIN
+                    if delay > current_delay * THRESHOLD {
+                        self.state = AdaptiveState::HighDelay;
+                    } else if delay < current_delay * THRESHOLD
                         && self.current_image_quality < self.user_image_quality
                     {
                         self.state = AdaptiveState::LowDelay;
                     }
-                    self.count = 1;
+                    self.count = 0;
                     self.last_delay = self.current_delay
                 }
-                AdaptiveState::HeightDelay => {
+                AdaptiveState::HighDelay => {
                     if delay > last_delay {
                         if self.count > MAX_COUNT {
                             self.decrease_quality();
@@ -179,7 +191,7 @@ impl VideoQoS {
                     }
                 }
                 AdaptiveState::LowDelay => {
-                    if delay < last_delay * MIN {
+                    if delay < last_delay * THRESHOLD {
                         if self.count > MAX_COUNT {
                             self.increase_quality();
                             self.reset_state();
