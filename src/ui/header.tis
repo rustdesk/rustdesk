@@ -335,7 +335,8 @@ class Header: Reactor.Component {
 }
 
 function handle_custom_image_quality() {
-    var bitrate = handler.get_custom_image_quality()[0] / 2;
+    var tmp = handler.get_custom_image_quality();
+    var bitrate = (tmp[0] || 100) / 2;
     msgbox("custom", "Custom Image Quality", "<div .form> \
           <div><input type=\"hslider\" style=\"width: 50%\" name=\"bitrate\" max=\"100\" min=\"10\" value=\"" + bitrate + "\"/ buddy=\"bitrate-buddy\"><b #bitrate-buddy>x</b>% Bitrate</div> \
       </div>", function(res=null) {
