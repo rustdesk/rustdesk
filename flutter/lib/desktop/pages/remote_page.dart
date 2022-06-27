@@ -630,8 +630,17 @@ class _RemotePageState extends State<RemotePage>
         id: widget.id,
       ));
     }
-    return Container(
-        color: MyTheme.canvasColor, child: Stack(children: paints));
+    paints.add(getHelpTools());
+    return MouseRegion(
+      onEnter: (evt) {
+          _ffi.bind.hostStopSystemKeyPropagate(stopped: false);
+        },
+      onExit: (evt) {
+          _ffi.bind.hostStopSystemKeyPropagate(stopped: true);
+        },
+      child: Container(
+          color: MyTheme.canvasColor, child: Stack(children: paints)),
+    );
   }
 
   int lastMouseDownButtons = 0;

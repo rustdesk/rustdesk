@@ -69,6 +69,11 @@ pub fn start_global_event_stream(s: StreamSink<String>) -> ResultType<()> {
     Ok(())
 }
 
+pub fn host_stop_system_key_propagate(stopped: bool) {
+    #[cfg(windows)]
+    crate::platform::windows::stop_system_key_propagate(stopped);
+}
+
 pub fn session_connect(
     events2ui: StreamSink<EventToUI>,
     id: String,

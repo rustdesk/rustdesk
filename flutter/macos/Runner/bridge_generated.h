@@ -21,6 +21,8 @@ void wire_rustdesk_core_main(int64_t port_);
 
 void wire_start_global_event_stream(int64_t port_);
 
+void wire_host_stop_system_key_propagate(int64_t port_, bool stopped);
+
 void wire_session_connect(int64_t port_, struct wire_uint_8_list *id, bool is_file_transfer);
 
 void wire_get_session_remember(int64_t port_, struct wire_uint_8_list *id);
@@ -170,6 +172,7 @@ static int64_t dummy_method_to_enforce_bundling(void) {
     int64_t dummy_var = 0;
     dummy_var ^= ((int64_t) (void*) wire_rustdesk_core_main);
     dummy_var ^= ((int64_t) (void*) wire_start_global_event_stream);
+    dummy_var ^= ((int64_t) (void*) wire_host_stop_system_key_propagate);
     dummy_var ^= ((int64_t) (void*) wire_session_connect);
     dummy_var ^= ((int64_t) (void*) wire_get_session_remember);
     dummy_var ^= ((int64_t) (void*) wire_get_session_toggle_option);
