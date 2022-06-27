@@ -12,11 +12,11 @@ import 'package:get/get.dart';
 import 'package:get/route_manager.dart';
 import 'package:provider/provider.dart';
 import 'package:wakelock/wakelock.dart';
+
 // import 'package:window_manager/window_manager.dart';
 
 import '../../common.dart';
 import '../../mobile/widgets/dialog.dart';
-import '../../mobile/widgets/gestures.dart';
 import '../../mobile/widgets/overlay.dart';
 import '../../models/model.dart';
 
@@ -493,123 +493,6 @@ class _RemotePageState extends State<RemotePage>
   ///   DoubleFiner -> right click
   ///   HoldDrag -> left drag
 
-  Widget getBodyForMobileWithGesture() {
-    final touchMode = _ffi.ffiModel.touchMode;
-    return getMixinGestureDetector(
-        child: getBodyForMobile(),
-        onTapUp: (d) {
-          if (touchMode) {
-            _ffi.cursorModel.touch(
-                d.localPosition.dx, d.localPosition.dy, MouseButtons.left);
-          } else {
-            _ffi.tap(MouseButtons.left);
-          }
-        },
-        onDoubleTapDown: (d) {
-          if (touchMode) {
-            _ffi.cursorModel.move(d.localPosition.dx, d.localPosition.dy);
-          }
-        },
-        onDoubleTap: () {
-          _ffi.tap(MouseButtons.left);
-          _ffi.tap(MouseButtons.left);
-        },
-        onLongPressDown: (d) {
-          if (touchMode) {
-            _ffi.cursorModel.move(d.localPosition.dx, d.localPosition.dy);
-          }
-        },
-        onLongPress: () {
-          _ffi.tap(MouseButtons.right);
-        },
-        onDoubleFinerTap: (d) {
-          if (!touchMode) {
-            _ffi.tap(MouseButtons.right);
-          }
-        },
-        onHoldDragStart: (d) {
-          if (!touchMode) {
-            _ffi.sendMouse('down', MouseButtons.left);
-          }
-        },
-        onHoldDragUpdate: (d) {
-          if (!touchMode) {
-            _ffi.cursorModel.updatePan(d.delta.dx, d.delta.dy, touchMode);
-          }
-        },
-        onHoldDragEnd: (_) {
-          if (!touchMode) {
-            _ffi.sendMouse('up', MouseButtons.left);
-          }
-        },
-        onOneFingerPanStart: (d) {
-          if (touchMode) {
-            _ffi.cursorModel.move(d.localPosition.dx, d.localPosition.dy);
-            _ffi.sendMouse('down', MouseButtons.left);
-          }
-        },
-        onOneFingerPanUpdate: (d) {
-          _ffi.cursorModel.updatePan(d.delta.dx, d.delta.dy, touchMode);
-        },
-        onOneFingerPanEnd: (d) {
-          if (touchMode) {
-            _ffi.sendMouse('up', MouseButtons.left);
-          }
-        },
-        // scale + pan event
-        onTwoFingerScaleUpdate: (d) {
-          _ffi.canvasModel.updateScale(d.scale / _scale);
-          _scale = d.scale;
-          _ffi.canvasModel.panX(d.focalPointDelta.dx);
-          _ffi.canvasModel.panY(d.focalPointDelta.dy);
-        },
-        onTwoFingerScaleEnd: (d) {
-          _scale = 1;
-          _ffi.bind
-              .sessionPeerOption(id: widget.id, name: "view-style", value: "");
-        },
-        onThreeFingerVerticalDragUpdate: _ffi.ffiModel.isPeerAndroid
-            ? null
-            : (d) {
-                _mouseScrollIntegral += d.delta.dy / 4;
-                if (_mouseScrollIntegral > 1) {
-                  _ffi.scroll(1);
-                  _mouseScrollIntegral = 0;
-                } else if (_mouseScrollIntegral < -1) {
-                  _ffi.scroll(-1);
-                  _mouseScrollIntegral = 0;
-                }
-              });
-  }
-
-  Widget getBodyForMobile() {
-    return Container(
-        color: MyTheme.canvasColor,
-        child: Stack(children: [
-          ImagePaint(id: widget.id),
-          CursorPaint(id: widget.id),
-          getHelpTools(),
-          SizedBox(
-            width: 0,
-            height: 0,
-            child: !_showEdit
-                ? Container()
-                : TextFormField(
-                    textInputAction: TextInputAction.newline,
-                    autocorrect: false,
-                    enableSuggestions: false,
-                    autofocus: true,
-                    focusNode: _mobileFocusNode,
-                    maxLines: null,
-                    initialValue: _value,
-                    // trick way to make backspace work always
-                    keyboardType: TextInputType.multiline,
-                    onChanged: handleInput,
-                  ),
-          ),
-        ]));
-  }
-
   Widget getBodyForDesktopWithListener(bool keyboard) {
     var paints = <Widget>[
       ImagePaint(
@@ -625,15 +508,24 @@ class _RemotePageState extends State<RemotePage>
     }
     paints.add(getHelpTools());
     return MouseRegion(
-      onEnter: (evt) {
+        onEnter: (evt) {
           _ffi.bind.hostStopSystemKeyPropagate(stopped: false);
         },
-      onExit: (evt) {
+        onExit: (evt) {
           _ffi.bind.hostStopSystemKeyPropagate(stopped: true);
         },
-      child: Container(
-          color: MyTheme.canvasColor, child: Stack(children: paints)),
-    );
+        child: Container(
+          color: MyTheme.canvasColor,
+          child: LayoutBuilder(builder: (context, constraints) {
+            Future.delayed(Duration.zero, () {
+              Provider.of<CanvasModel>(context, listen: false)
+                  .updateViewStyle();
+            });
+            return Stack(
+              children: paints,
+            );
+          }),
+        ));
   }
 
   int lastMouseDownButtons = 0;
