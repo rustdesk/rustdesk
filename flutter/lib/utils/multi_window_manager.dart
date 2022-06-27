@@ -101,7 +101,7 @@ class RustDeskMultiWindowManager {
       case WindowType.RemoteDesktop:
         return _remoteDesktopWindowId;
       case WindowType.FileTransfer:
-        break;
+        return _fileTransferWindowId;
       case WindowType.PortForward:
         break;
       case WindowType.Unknown:
