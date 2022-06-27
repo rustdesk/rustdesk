@@ -3,8 +3,8 @@ use crate::rgba_to_i420;
 use lazy_static::lazy_static;
 use serde_json::Value;
 use std::collections::HashMap;
-use std::io;
 use std::sync::Mutex;
+use std::{io, time::Duration};
 
 lazy_static! {
     static ref SCREEN_SIZE: Mutex<(u16, u16, u16)> = Mutex::new((0, 0, 0)); // (width, height, scale)
@@ -33,7 +33,7 @@ impl Capturer {
         self.display.height() as usize
     }
 
-    pub fn frame<'a>(&'a mut self, _timeout_ms: u32) -> io::Result<Frame<'a>> {
+    pub fn frame<'a>(&'a mut self, _timeout: Duration) -> io::Result<Frame<'a>> {
         if let Some(buf) = get_video_raw() {
             crate::would_block_if_equal(&mut self.saved_raw_data, buf)?;
             rgba_to_i420(self.width(), self.height(), buf, &mut self.bgra);

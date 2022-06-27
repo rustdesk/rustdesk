@@ -37,19 +37,249 @@ use std::{
 use virtual_display;
 
 pub const NAME: &'static str = "video";
+const FPS: u8 = 30;
 
 lazy_static::lazy_static! {
     static ref CURRENT_DISPLAY: Arc<Mutex<usize>> = Arc::new(Mutex::new(usize::MAX));
     static ref LAST_ACTIVE: Arc<Mutex<Instant>> = Arc::new(Mutex::new(Instant::now()));
     static ref SWITCH: Arc<Mutex<bool>> = Default::default();
-    static ref TEST_LATENCIES: Arc<Mutex<HashMap<i32, i64>>> = Default::default();
-    static ref IMAGE_QUALITIES: Arc<Mutex<HashMap<i32, i32>>> = Default::default();
     static ref FRAME_FETCHED_NOTIFIER: (UnboundedSender<(i32, Option<Instant>)>, Arc<TokioMutex<UnboundedReceiver<(i32, Option<Instant>)>>>) = {
         let (tx, rx) = unbounded_channel();
         (tx, Arc::new(TokioMutex::new(rx)))
     };
     static ref PRIVACY_MODE_CONN_ID: Mutex<i32> = Mutex::new(0);
     static ref IS_CAPTURER_MAGNIFIER_SUPPORTED: bool = is_capturer_mag_supported();
+    pub static ref VIDEO_QOS: Arc<Mutex<VideoQoS>> = Default::default();
+}
+
+pub struct VideoQoS {
+    width: u32,
+    height: u32,
+    user_image_quality: u32,
+    current_image_quality: u32,
+    enable_abr: bool,
+
+    pub current_delay: u32,
+    pub fps: u8,             // abr
+    pub target_bitrate: u32, // abr
+    updated: bool,
+
+    state: AdaptiveState,
+    last_delay: u32,
+    count: u32,
+}
+
+#[derive(Debug)]
+enum AdaptiveState {
+    Normal,
+    LowDelay,
+    HeightDelay,
+}
+
+impl Default for VideoQoS {
+    fn default() -> Self {
+        VideoQoS {
+            fps: FPS,
+            user_image_quality: ImageQuality::Balanced.value() as _,
+            current_image_quality: ImageQuality::Balanced.value() as _,
+            enable_abr: false,
+            width: 0,
+            height: 0,
+            current_delay: 0,
+            target_bitrate: 0,
+            updated: false,
+            state: AdaptiveState::Normal,
+            last_delay: 0,
+            count: 0,
+        }
+    }
+}
+
+const MAX: f32 = 1.2;
+const MIN: f32 = 0.8;
+const MAX_COUNT: u32 = 3;
+const MAX_DELAY: u32 = 500;
+const MIN_DELAY: u32 = 50;
+
+impl VideoQoS {
+    pub fn set_size(&mut self, width: u32, height: u32) {
+        if width == 0 || height == 0 {
+            return;
+        }
+        self.width = width;
+        self.height = height;
+    }
+
+    pub fn spf(&mut self) -> Duration {
+        if self.fps <= 0 {
+            self.fps = FPS;
+        }
+        time::Duration::from_secs_f32(1. / (self.fps as f32))
+    }
+
+    // abr
+    pub fn update_network_delay(&mut self, delay: u32) {
+        if self.current_delay.eq(&0) {
+            self.current_delay = delay;
+            return;
+        }
+        let current_delay = self.current_delay as f32;
+
+        self.current_delay = delay / 2 + self.current_delay / 2;
+        log::debug!(
+            "update_network_delay:{}, {}, state:{:?},count:{}",
+            self.current_delay,
+            delay,
+            self.state,
+            self.count
+        );
+
+        if self.current_delay < MIN_DELAY {
+            if self.fps != 30 && self.current_image_quality != self.user_image_quality {
+                log::debug!("current_delay is normal, set to user_image_quality");
+                self.fps = 30;
+                self.current_image_quality = self.user_image_quality;
+                let _ = self.generate_bitrate().ok();
+                self.updated = true;
+            }
+            self.state = AdaptiveState::Normal;
+        } else if self.current_delay > MAX_DELAY {
+            if self.fps != 5 && self.current_image_quality != 25 {
+                log::debug!("current_delay is very height, set fps to 5, image_quality to 25");
+                self.fps = 5;
+                self.current_image_quality = 25;
+                let _ = self.generate_bitrate().ok();
+                self.updated = true;
+            }
+        } else {
+            let delay = delay as f32;
+            let last_delay = self.last_delay as f32;
+            match self.state {
+                AdaptiveState::Normal => {
+                    if delay > current_delay * MAX {
+                        self.state = AdaptiveState::HeightDelay;
+                    } else if delay < current_delay * MIN
+                        && self.current_image_quality < self.user_image_quality
+                    {
+                        self.state = AdaptiveState::LowDelay;
+                    }
+                    self.count = 1;
+                    self.last_delay = self.current_delay
+                }
+                AdaptiveState::HeightDelay => {
+                    if delay > last_delay {
+                        if self.count > MAX_COUNT {
+                            self.decrease_quality();
+                            self.reset_state();
+                            return;
+                        }
+                        self.count += 1;
+                    } else {
+                        self.reset_state();
+                    }
+                }
+                AdaptiveState::LowDelay => {
+                    if delay < last_delay * MIN {
+                        if self.count > MAX_COUNT {
+                            self.increase_quality();
+                            self.reset_state();
+                            return;
+                        }
+                        self.count += 1;
+                    } else {
+                        self.reset_state();
+                    }
+                }
+            }
+        }
+    }
+
+    fn reset_state(&mut self) {
+        self.count = 0;
+        self.state = AdaptiveState::Normal;
+    }
+
+    fn increase_quality(&mut self) {
+        log::debug!("Adaptive increase quality");
+        if self.fps < FPS {
+            log::debug!("increase fps {} -> {}", self.fps, FPS);
+            self.fps = FPS;
+        } else {
+            self.current_image_quality += self.current_image_quality / 2;
+            let _ = self.generate_bitrate().ok();
+            log::debug!("increase quality:{}", self.current_image_quality);
+        }
+        self.updated = true;
+    }
+
+    fn decrease_quality(&mut self) {
+        log::debug!("Adaptive decrease quality");
+        if self.fps < 15 {
+            log::debug!("fps is low enough :{}", self.fps);
+            return;
+        }
+        if self.current_image_quality < ImageQuality::Low.value() as _ {
+            self.fps = self.fps / 2;
+            log::debug!("decrease fps:{}", self.fps);
+        } else {
+            self.current_image_quality -= self.current_image_quality / 2;
+            let _ = self.generate_bitrate().ok();
+            log::debug!("decrease quality:{}", self.current_image_quality);
+        };
+        self.updated = true;
+    }
+
+    pub fn update_image_quality(&mut self, image_quality: Option<u32>) {
+        if let Some(image_quality) = image_quality {
+            if image_quality < 10 || image_quality > 200 {
+                self.current_image_quality = ImageQuality::Balanced.value() as _;
+            }
+            if self.current_image_quality != image_quality {
+                self.current_image_quality = image_quality;
+                let _ = self.generate_bitrate().ok();
+                self.updated = true;
+            }
+        } else {
+            self.current_image_quality = ImageQuality::Balanced.value() as _;
+        }
+        self.user_image_quality = self.current_image_quality;
+    }
+
+    pub fn generate_bitrate(&mut self) -> ResultType<u32> {
+        // https://www.nvidia.com/en-us/geforce/guides/broadcasting-guide/
+        if self.width == 0 || self.height == 0 {
+            bail!("Fail to generate_bitrate, width or height is not set");
+        }
+        if self.current_image_quality == 0 {
+            self.current_image_quality = ImageQuality::Balanced.value() as _;
+        }
+
+        let base_bitrate = ((self.width * self.height) / 800) as u32;
+
+        #[cfg(target_os = "android")]
+        {
+            // fix when andorid screen shrinks
+            let fix = Display::fix_quality() as u32;
+            log::debug!("Android screen, fix quality:{}", fix);
+            let base_bitrate = base_bitrate * fix;
+            self.target_bitrate = base_bitrate * self.image_quality / 100;
+            Ok(self.target_bitrate)
+        }
+        self.target_bitrate = base_bitrate * self.current_image_quality / 100;
+        Ok(self.target_bitrate)
+    }
+
+    pub fn check_if_updated(&mut self) -> bool {
+        if self.updated {
+            self.updated = false;
+            return true;
+        }
+        return false;
+    }
+
+    pub fn reset(&mut self) {
+        *self = Default::default();
+    }
 }
 
 fn is_capturer_mag_supported() -> bool {
@@ -129,7 +359,7 @@ impl VideoFrameController {
 }
 
 trait TraitCapturer {
-    fn frame<'a>(&'a mut self, timeout_ms: u32) -> Result<Frame<'a>>;
+    fn frame<'a>(&'a mut self, timeout: Duration) -> Result<Frame<'a>>;
 
     #[cfg(windows)]
     fn is_gdi(&self) -> bool;
@@ -138,8 +368,8 @@ trait TraitCapturer {
 }
 
 impl TraitCapturer for Capturer {
-    fn frame<'a>(&'a mut self, timeout_ms: u32) -> Result<Frame<'a>> {
-        self.frame(timeout_ms)
+    fn frame<'a>(&'a mut self, timeout: Duration) -> Result<Frame<'a>> {
+        self.frame(timeout)
     }
 
     #[cfg(windows)]
@@ -155,7 +385,7 @@ impl TraitCapturer for Capturer {
 
 #[cfg(windows)]
 impl TraitCapturer for scrap::CapturerMag {
-    fn frame<'a>(&'a mut self, _timeout_ms: u32) -> Result<Frame<'a>> {
+    fn frame<'a>(&'a mut self, _timeout_ms: Duration) -> Result<Frame<'a>> {
         self.frame(_timeout_ms)
     }
 
@@ -326,9 +556,6 @@ fn run(sp: GenericService) -> ResultType<()> {
     #[cfg(windows)]
     ensure_close_virtual_device()?;
 
-    let fps = 30;
-    let wait = 1000 / fps;
-    let spf = time::Duration::from_secs_f32(1. / (fps as f32));
     let (ndisplay, current, display) = get_current_display()?;
     let (origin, width, height) = (display.origin(), display.width(), display.height());
     log::debug!(
@@ -342,16 +569,21 @@ fn run(sp: GenericService) -> ResultType<()> {
         num_cpus::get(),
     );
 
-    let q = get_image_quality();
-    let (bitrate, rc_min_quantizer, rc_max_quantizer, speed) = get_quality(width, height, q);
-    log::info!("bitrate={}, rc_min_quantizer={}", bitrate, rc_min_quantizer);
+    let mut video_qos = VIDEO_QOS.lock().unwrap();
+
+    video_qos.set_size(width as _, height as _);
+    let mut spf = video_qos.spf();
+    let bitrate = video_qos.generate_bitrate()?;
+    drop(video_qos);
+
+    log::info!("init bitrate={}", bitrate);
 
     let encoder_cfg = match Encoder::current_hw_encoder_name() {
         Some(codec_name) => EncoderCfg::HW(HwEncoderConfig {
             codec_name,
             width,
             height,
-            bitrate_ratio: q >> 8,
+            bitrate_ratio: bitrate as _,
         }),
         None => EncoderCfg::VPX(VpxEncoderConfig {
             width: width as _,
@@ -359,9 +591,6 @@ fn run(sp: GenericService) -> ResultType<()> {
             timebase: [1, 1000], // Output timestamp precision
             bitrate,
             codec: VpxVideoCodecId::VP9,
-            rc_min_quantizer,
-            rc_max_quantizer,
-            speed,
             num_threads: (num_cpus::get() / 2) as _,
         }),
     };
@@ -418,9 +647,23 @@ fn run(sp: GenericService) -> ResultType<()> {
     let mut try_gdi = 1;
     #[cfg(windows)]
     log::info!("gdi: {}", c.is_gdi());
+
     while sp.ok() {
         #[cfg(windows)]
         check_uac_switch(privacy_mode_id, captuerer_privacy_mode_id)?;
+
+        {
+            let mut video_qos = VIDEO_QOS.lock().unwrap();
+            if video_qos.check_if_updated() {
+                log::debug!(
+                    "qos is updated, target_bitrate:{}, fps:{}",
+                    video_qos.target_bitrate,
+                    video_qos.fps
+                );
+                encoder.set_bitrate(video_qos.target_bitrate).unwrap();
+                spf = video_qos.spf();
+            }
+        }
 
         if *SWITCH.lock().unwrap() {
             bail!("SWITCH");
@@ -430,9 +673,6 @@ fn run(sp: GenericService) -> ResultType<()> {
             bail!("SWITCH");
         }
         check_privacy_mode_changed(&sp, privacy_mode_id)?;
-        if get_image_quality() != q {
-            bail!("SWITCH");
-        }
         #[cfg(windows)]
         {
             if crate::platform::windows::desktop_changed() {
@@ -454,7 +694,7 @@ fn run(sp: GenericService) -> ResultType<()> {
         frame_controller.reset();
 
         #[cfg(any(target_os = "android", target_os = "ios"))]
-        let res = match (*c).frame(wait as _) {
+        let res = match c.frame(spf) {
             Ok(frame) => {
                 let time = now - start;
                 let ms = (time.as_secs() * 1000 + time.subsec_millis() as u64) as i64;
@@ -477,7 +717,7 @@ fn run(sp: GenericService) -> ResultType<()> {
         };
 
         #[cfg(not(any(target_os = "android", target_os = "ios")))]
-        let res = match (*c).frame(wait as _) {
+        let res = match c.frame(spf) {
             Ok(frame) => {
                 let time = now - start;
                 let ms = (time.as_secs() * 1000 + time.subsec_millis() as u64) as i64;
@@ -742,83 +982,4 @@ fn get_current_display() -> ResultType<(usize, usize, Display)> {
         *CURRENT_DISPLAY.lock().unwrap() = current;
     }
     return Ok((n, current, displays.remove(current)));
-}
-
-#[inline]
-fn update_latency(id: i32, latency: i64, latencies: &mut HashMap<i32, i64>) {
-    if latency <= 0 {
-        latencies.remove(&id);
-    } else {
-        latencies.insert(id, latency);
-    }
-}
-
-pub fn update_test_latency(id: i32, latency: i64) {
-    update_latency(id, latency, &mut *TEST_LATENCIES.lock().unwrap());
-}
-
-fn convert_quality(q: i32) -> i32 {
-    let q = {
-        if q == ImageQuality::Balanced.value() {
-            (100 * 2 / 3, 12)
-        } else if q == ImageQuality::Low.value() {
-            (100 / 2, 18)
-        } else if q == ImageQuality::Best.value() {
-            (100, 12)
-        } else {
-            let bitrate = q >> 8 & 0xFF;
-            let quantizer = q & 0xFF;
-            (bitrate * 2, (100 - quantizer) * 36 / 100)
-        }
-    };
-    if q.0 <= 0 {
-        0
-    } else {
-        q.0 << 8 | q.1
-    }
-}
-
-pub fn update_image_quality(id: i32, q: Option<i32>) {
-    match q {
-        Some(q) => {
-            let q = convert_quality(q);
-            if q > 0 {
-                IMAGE_QUALITIES.lock().unwrap().insert(id, q);
-            } else {
-                IMAGE_QUALITIES.lock().unwrap().remove(&id);
-            }
-        }
-        None => {
-            IMAGE_QUALITIES.lock().unwrap().remove(&id);
-        }
-    }
-}
-
-fn get_image_quality() -> i32 {
-    IMAGE_QUALITIES
-        .lock()
-        .unwrap()
-        .values()
-        .min()
-        .unwrap_or(&convert_quality(ImageQuality::Balanced.value()))
-        .clone()
-}
-
-#[inline]
-fn get_quality(w: usize, h: usize, q: i32) -> (u32, u32, u32, i32) {
-    // https://www.nvidia.com/en-us/geforce/guides/broadcasting-guide/
-    let bitrate = q >> 8 & 0xFF;
-    let quantizer = q & 0xFF;
-    let b = ((w * h) / 1000) as u32;
-
-    #[cfg(target_os = "android")]
-    {
-        // fix when andorid screen shrinks
-        let fix = Display::fix_quality() as u32;
-        log::debug!("Android screen, fix quality:{}", fix);
-        let b = b * fix;
-        return (bitrate as u32 * b / 100, quantizer as _, 56, 7);
-    }
-
-    (bitrate as u32 * b / 100, quantizer as _, 56, 7)
 }

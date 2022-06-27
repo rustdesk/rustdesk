@@ -1,5 +1,5 @@
 use crate::x11;
-use std::{io, ops};
+use std::{io, ops, time::Duration};
 
 pub struct Capturer(x11::Capturer);
 
@@ -16,7 +16,7 @@ impl Capturer {
         self.0.display().rect().h as usize
     }
 
-    pub fn frame<'a>(&'a mut self, _timeout_ms: u32) -> io::Result<Frame<'a>> {
+    pub fn frame<'a>(&'a mut self, _timeout: Duration) -> io::Result<Frame<'a>> {
         Ok(Frame(self.0.frame()?))
     }
 }

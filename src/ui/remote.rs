@@ -2,7 +2,7 @@ use std::{
     collections::HashMap,
     ops::Deref,
     sync::{
-        atomic::{AtomicBool, Ordering},
+        atomic::{AtomicBool, AtomicUsize, Ordering},
         Arc, Mutex, RwLock,
     },
 };
@@ -223,7 +223,7 @@ impl sciter::EventHandler for Handler {
         fn get_custom_image_quality();
         fn save_view_style(String);
         fn save_image_quality(String);
-        fn save_custom_image_quality(i32, i32);
+        fn save_custom_image_quality(i32);
         fn refresh_video();
         fn get_toggle_option(String);
         fn is_privacy_mode_supported();
@@ -231,6 +231,25 @@ impl sciter::EventHandler for Handler {
         fn get_remember();
         fn peer_platform();
         fn set_write_override(i32, i32, bool, bool, bool);
+    }
+}
+
+#[derive(Debug)]
+struct QualityStatus {
+    speed: String,
+    fps: i32,
+    delay: i32,
+    target_bitrate: i32,
+}
+
+impl Default for QualityStatus {
+    fn default() -> Self {
+        Self {
+            speed: Default::default(),
+            fps: -1,
+            delay: -1,
+            target_bitrate: -1,
+        }
     }
 }
 
@@ -247,6 +266,18 @@ impl Handler {
             .unwrap()
             .initialize(id, me.is_file_transfer(), me.is_port_forward());
         me
+    }
+
+    fn update_quality_status(&self, status: QualityStatus) {
+        self.call2(
+            "updateQualityStatus",
+            &make_args!(
+                status.speed,
+                status.fps,
+                status.delay,
+                status.target_bitrate
+            ),
+        );
     }
 
     fn start_keyboard_hook(&self) {
@@ -533,12 +564,12 @@ impl Handler {
         self.send(Data::Message(LoginConfigHandler::refresh()));
     }
 
-    fn save_custom_image_quality(&mut self, bitrate: i32, quantizer: i32) {
+    fn save_custom_image_quality(&mut self, custom_image_quality: i32) {
         let msg = self
             .lc
             .write()
             .unwrap()
-            .save_custom_image_quality(bitrate, quantizer);
+            .save_custom_image_quality(custom_image_quality);
         self.send(Data::Message(msg));
     }
 
@@ -1296,7 +1327,10 @@ async fn io_loop(handler: Handler) {
         }
         return;
     }
-    let (video_sender, audio_sender) = start_video_audio_threads(|data: &[u8]| {
+    let frame_count = Arc::new(AtomicUsize::new(0));
+    let frame_count_cl = frame_count.clone();
+    let (video_sender, audio_sender) = start_video_audio_threads(move |data: &[u8]| {
+        frame_count_cl.fetch_add(1, Ordering::Relaxed);
         VIDEO
             .lock()
             .unwrap()
@@ -1319,6 +1353,8 @@ async fn io_loop(handler: Handler) {
         first_frame: false,
         #[cfg(windows)]
         clipboard_file_context: None,
+        data_count: Arc::new(AtomicUsize::new(0)),
+        frame_count,
     };
     remote.io_loop(&key, &token).await;
     remote.sync_jobs_status_to_local().await;
@@ -1369,6 +1405,8 @@ struct Remote {
     first_frame: bool,
     #[cfg(windows)]
     clipboard_file_context: Option<Box<CliprdrClientContext>>,
+    data_count: Arc<AtomicUsize>,
+    frame_count: Arc<AtomicUsize>,
 }
 
 impl Remote {
@@ -1394,6 +1432,8 @@ impl Remote {
                 #[cfg(windows)]
                 let mut rx_clip_client = get_rx_clip_client().lock().await;
 
+                let mut status_timer = time::interval(Duration::new(1, 0));
+
                 loop {
                     tokio::select! {
                         res = peer.next() => {
@@ -1406,6 +1446,7 @@ impl Remote {
                                     }
                                     Ok(ref bytes) => {
                                         last_recv_time = Instant::now();
+                                        self.data_count.fetch_add(bytes.len(), Ordering::Relaxed);
                                         if !self.handle_msg_from_peer(bytes, &mut peer).await {
                                             break
                                         }
@@ -1449,6 +1490,16 @@ impl Remote {
                             } else {
                                 self.timer = time::interval_at(Instant::now() + SEC30, SEC30);
                             }
+                        }
+                        _ = status_timer.tick() => {
+                            let speed = self.data_count.swap(0, Ordering::Relaxed);
+                            let speed = format!("{:.2}kB/s", speed as f32 / 1024 as f32);
+                            let fps = self.frame_count.swap(0, Ordering::Relaxed) as _;
+                            self.handler.update_quality_status(QualityStatus {
+                                speed,
+                                fps,
+                                ..Default::default()
+                            });
                         }
                     }
                 }
@@ -2370,7 +2421,7 @@ impl Remote {
             }
             back_notification::PrivacyModeState::OffSucceeded => {
                 self.handler
-                .msgbox("custom-nocancel", "Privacy mode", "Out privacy mode");
+                    .msgbox("custom-nocancel", "Privacy mode", "Out privacy mode");
                 self.update_privacy_mode(false);
             }
             back_notification::PrivacyModeState::OffByPeer => {
@@ -2549,7 +2600,16 @@ impl Interface for Handler {
     }
 
     async fn handle_test_delay(&mut self, t: TestDelay, peer: &mut Stream) {
-        handle_test_delay(t, peer).await;
+        if !t.from_client {
+            self.update_quality_status(QualityStatus {
+                delay: t.last_delay as _,
+                target_bitrate: t.target_bitrate as _,
+                ..Default::default()
+            });
+            let mut msg_out = Message::new();
+            msg_out.set_test_delay(t);
+            allow_err!(peer.send(&msg_out).await);
+        }
     }
 }
 

@@ -1,1 +1,1 @@
-Yet another remote desktop software
+An open-source remote desktop application, the open source TeamViewer alternative.

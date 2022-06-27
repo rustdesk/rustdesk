@@ -119,17 +119,6 @@ impl EncoderApi for VpxEncoder {
                 c.rc_target_bitrate = config.bitrate;
                 c.rc_undershoot_pct = 95;
                 c.rc_dropframe_thresh = 25;
-                if config.rc_min_quantizer > 0 {
-                    c.rc_min_quantizer = config.rc_min_quantizer;
-                }
-                if config.rc_max_quantizer > 0 {
-                    c.rc_max_quantizer = config.rc_max_quantizer;
-                }
-                let mut speed = config.speed;
-                if speed <= 0 {
-                    speed = 6;
-                }
-
                 c.g_threads = if config.num_threads == 0 {
                     num_cpus::get() as _
                 } else {
@@ -174,7 +163,7 @@ impl EncoderApi for VpxEncoder {
                     Higher numbers (7 or 8) will be lower quality but more manageable for lower latency
                     use cases and also for lower CPU power devices such as mobile.
                     */
-                    call_vpx!(vpx_codec_control_(&mut ctx, VP8E_SET_CPUUSED as _, speed,));
+                    call_vpx!(vpx_codec_control_(&mut ctx, VP8E_SET_CPUUSED as _, 7,));
                     // set row level multi-threading
                     /*
                     as some people in comments and below have already commented,
@@ -231,6 +220,13 @@ impl EncoderApi for VpxEncoder {
 
     fn use_yuv(&self) -> bool {
         true
+    }
+
+    fn set_bitrate(&mut self, bitrate: u32) -> ResultType<()> {
+        let mut new_enc_cfg = unsafe { *self.ctx.config.enc.to_owned() };
+        new_enc_cfg.rc_target_bitrate = bitrate;
+        call_vpx!(vpx_codec_enc_config_set(&mut self.ctx, &new_enc_cfg));
+        return Ok(());
     }
 }
 
@@ -336,9 +332,6 @@ pub struct VpxEncoderConfig {
     pub bitrate: c_uint,
     /// The codec
     pub codec: VpxVideoCodecId,
-    pub rc_min_quantizer: u32,
-    pub rc_max_quantizer: u32,
-    pub speed: i32,
     pub num_threads: u32,
 }
 
