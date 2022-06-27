@@ -21,7 +21,7 @@ impl Session {
     pub fn new(id: &str, sender: mpsc::UnboundedSender<Data>) -> Self {
         let mut password = "".to_owned();
         if PeerConfig::load(id).password.is_empty() {
-            password = rpassword::read_password_from_tty(Some("Enter password: ")).unwrap();
+            password = rpassword::prompt_password("Enter password: ").unwrap();
         }
         let session = Self {
             id: id.to_owned(),
@@ -47,7 +47,7 @@ impl Interface for Session {
                 .ok();
         } else if msgtype == "re-input-password" {
             log::error!("{}: {}", title, text);
-            let pass = rpassword::read_password_from_tty(Some("Enter password: ")).unwrap();
+            let pass = rpassword::prompt_password("Enter password: ").unwrap();
             self.sender.send(Data::Login((pass, true))).ok();
         } else if msgtype.contains("error") {
             log::error!("{}: {}: {}", msgtype, title, text);
@@ -76,6 +76,10 @@ impl Interface for Session {
     async fn handle_test_delay(&mut self, t: TestDelay, peer: &mut Stream) {
         handle_test_delay(t, peer).await;
     }
+
+    fn send(&self, data: Data) {
+        self.sender.send(data).ok();
+    }
 }
 
 #[tokio::main(flavor = "current_thread")]
@@ -85,6 +89,7 @@ pub async fn start_one_port_forward(
     remote_host: String,
     remote_port: i32,
     key: String,
+    token: String,
 ) {
     crate::common::test_rendezvous_server();
     crate::common::test_nat_type();
@@ -92,7 +97,7 @@ pub async fn start_one_port_forward(
     let handler = Session::new(&id, sender);
     handler.lc.write().unwrap().port_forward = (remote_host, remote_port);
     if let Err(err) =
-        crate::port_forward::listen(handler.id.clone(), port, handler.clone(), receiver, &key).await
+        crate::port_forward::listen(handler.id.clone(), port, handler.clone(), receiver, &key, &token).await
     {
         log::error!("Failed to listen on {}: {}", port, err);
     }

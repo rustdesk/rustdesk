@@ -20,6 +20,16 @@ use std::{collections::HashMap, sync::atomic::Ordering};
 #[cfg(not(windows))]
 use std::{fs::File, io::prelude::*};
 
+// State with timestamp, because std::time::Instant cannot be serialized
+#[derive(Debug, Serialize, Deserialize, Copy, Clone)]
+#[serde(tag = "t", content = "c")]
+pub enum PrivacyModeState {
+    OffSucceeded,
+    OffFailed,
+    OffByPeer,
+    OffUnknown,
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(tag = "t", content = "c")]
 pub enum FS {
@@ -116,6 +126,7 @@ pub enum Data {
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     ClipbaordFile(ClipbaordFile),
     ClipboardFileEnabled(bool),
+    PrivacyModeState((i32, PrivacyModeState)),
 }
 
 #[tokio::main(flavor = "current_thread")]

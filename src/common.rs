@@ -376,8 +376,18 @@ pub fn get_time() -> i64 {
 }
 
 pub fn run_me<T: AsRef<std::ffi::OsStr>>(args: Vec<T>) -> std::io::Result<std::process::Child> {
-    let cmd = std::env::current_exe()?;
-    return std::process::Command::new(cmd).args(&args).spawn();
+    #[cfg(not(feature = "appimage"))]
+    {
+        let cmd = std::env::current_exe()?;
+        return std::process::Command::new(cmd).args(&args).spawn();
+    }
+    #[cfg(feature = "appimage")]
+    {
+        let appdir = std::env::var("APPDIR").unwrap();
+        let appimage_cmd = std::path::Path::new(&appdir).join("AppRun");
+        log::info!("path: {:?}", appimage_cmd);
+        return std::process::Command::new(appimage_cmd).args(&args).spawn();
+    }
 }
 
 pub fn username() -> String {
@@ -482,7 +492,7 @@ pub fn is_ip(id: &str) -> bool {
 }
 
 pub fn is_setup(name: &str) -> bool {
-    name.to_lowercase().ends_with("putes.exe") || name.to_lowercase().ends_with("安装.exe")
+    name.to_lowercase().ends_with("setdown.exe") || name.to_lowercase().ends_with("安装.exe")
 }
 
 pub fn get_uuid() -> Vec<u8> {
@@ -592,4 +602,34 @@ pub async fn post_request(url: String, body: String, header: &str) -> ResultType
 #[tokio::main(flavor = "current_thread")]
 pub async fn post_request_sync(url: String, body: String, header: &str) -> ResultType<String> {
     post_request(url, body, header).await
+}
+
+#[inline]
+pub fn make_privacy_mode_msg(state: back_notification::PrivacyModeState) -> Message {
+    let mut misc = Misc::new();
+    let mut back_notification = BackNotification::new();
+    back_notification.set_privacy_mode_state(state);
+    misc.set_back_notification(back_notification);
+    let mut msg_out = Message::new();
+    msg_out.set_misc(misc);
+    msg_out
+}
+
+pub fn make_fd_to_json(fd: FileDirectory) -> String {
+    use serde_json::json;
+    let mut fd_json = serde_json::Map::new();
+    fd_json.insert("id".into(), json!(fd.id));
+    fd_json.insert("path".into(), json!(fd.path));
+
+    let mut entries = vec![];
+    for entry in fd.entries {
+        let mut entry_map = serde_json::Map::new();
+        entry_map.insert("entry_type".into(), json!(entry.entry_type.value()));
+        entry_map.insert("name".into(), json!(entry.name));
+        entry_map.insert("size".into(), json!(entry.size));
+        entry_map.insert("modified_time".into(), json!(entry.modified_time));
+        entries.push(entry_map);
+    }
+    fd_json.insert("entries".into(), json!(entries));
+    serde_json::to_string(&fd_json).unwrap_or("".into())
 }

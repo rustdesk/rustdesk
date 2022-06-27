@@ -3,6 +3,8 @@ mod cm;
 mod inline;
 #[cfg(target_os = "macos")]
 mod macos;
+#[cfg(target_os = "windows")]
+pub mod win_privacy;
 pub mod remote;
 use crate::ui_interface::*;
 use hbb_common::{allow_err, config::PeerConfig, log};
@@ -29,7 +31,13 @@ pub fn start(args: &mut [String]) {
         macos::show_dock();
     }
     #[cfg(all(target_os = "linux", feature = "inline"))]
-    sciter::set_library("/usr/lib/rustdesk/libsciter-gtk.so").ok();
+    {
+        #[cfg(feature = "appimage")]
+        let prefix = std::env::var("APPDIR").unwrap_or("".to_string());
+        #[cfg(not(feature = "appimage"))]
+        let prefix = "".to_string();
+        sciter::set_library(&(prefix + "/usr/lib/rustdesk/libsciter-gtk.so")).ok();
+    }
     // https://github.com/c-smile/sciter-sdk/blob/master/include/sciter-x-types.h
     // https://github.com/rustdesk/rustdesk/issues/132#issuecomment-886069737
     #[cfg(windows)]
@@ -163,7 +171,7 @@ impl UI {
     }
 
     fn install_me(&mut self, _options: String, _path: String) {
-        install_me(_options, _path);
+        install_me(_options, _path, false, false);
     }
 
     fn update_me(&self, _path: String) {

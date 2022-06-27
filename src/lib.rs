@@ -49,3 +49,6 @@ mod ui_interface;
 
 #[cfg(windows)]
 pub mod clipboard_file;
+
+#[cfg(all(windows, feature = "with_rc"))]
+pub mod rc;

@@ -56,7 +56,6 @@ class ServerModel with ChangeNotifier {
        * 2. check config
        * audio true by default (if permission on) (false default < Android 10)
        * file true by default (if permission on)
-       * input false by default (it need turning on manually everytime)
        */
       await Future.delayed(Duration(seconds: 1));
 

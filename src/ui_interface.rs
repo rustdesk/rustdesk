@@ -69,10 +69,10 @@ pub fn goto_install() {
     allow_err!(crate::run_me(vec!["--install"]));
 }
 
-pub fn install_me(_options: String, _path: String) {
+pub fn install_me(_options: String, _path: String, silent: bool, debug: bool) {
     #[cfg(windows)]
     std::thread::spawn(move || {
-        allow_err!(crate::platform::windows::install_me(&_options, _path));
+        allow_err!(crate::platform::windows::install_me(&_options, _path, silent, debug));
         std::process::exit(0);
     });
 }

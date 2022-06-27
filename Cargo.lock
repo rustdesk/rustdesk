@@ -4035,7 +4035,7 @@ dependencies = [
 
 [[package]]
 name = "rustdesk"
-version = "1.2.0"
+version = "1.1.10"
 dependencies = [
  "android_logger 0.11.0",
  "arboard",
@@ -4085,11 +4085,13 @@ dependencies = [
  "serde_derive",
  "serde_json 1.0.81",
  "sha2",
+ "simple_rc",
  "sys-locale",
  "sysinfo",
  "tray-item",
  "trayicon",
  "uuid",
+ "virtual_display",
  "whoami",
  "winapi 0.3.9",
  "windows-service",
@@ -4257,6 +4259,7 @@ dependencies = [
  "quest",
  "repng",
  "serde 1.0.137",
+ "serde_json 1.0.81",
  "target_build_utils",
  "tracing",
  "webm",
@@ -4437,6 +4440,17 @@ name = "signature"
 version = "1.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f054c6c1a6e95179d6f23ed974060dcefb2d9388bb7256900badad682c499de4"
+
+[[package]]
+name = "simple_rc"
+version = "0.1.0"
+dependencies = [
+ "confy",
+ "hbb_common",
+ "serde 1.0.137",
+ "serde_derive",
+ "walkdir",
+]
 
 [[package]]
 name = "siphasher"

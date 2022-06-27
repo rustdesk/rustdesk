@@ -186,9 +186,11 @@ packages:
   desktop_multi_window:
     dependency: "direct main"
     description:
-      path: "../../rustdesk_desktop_multi_window"
-      relative: true
-    source: path
+      path: "."
+      ref: c7d97cb6615f2def34f8bad4def01af9e0077beb
+      resolved-ref: c7d97cb6615f2def34f8bad4def01af9e0077beb
+      url: "https://github.com/Kingtous/rustdesk_desktop_multi_window"
+    source: git
     version: "0.0.1"
   device_info_plus:
     dependency: "direct main"

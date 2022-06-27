@@ -70,8 +70,8 @@ class _SettingsState extends State<SettingsPage> {
           tiles: [
             SettingsTile.navigation(
                 onPressed: (context) async {
-                  if (await canLaunch(url)) {
-                    await launch(url);
+                  if (await canLaunchUrl(Uri.parse(url))) {
+                    await launchUrl(Uri.parse(url));
                   }
                 },
                 title: Text(translate("Version: ") + version),
@@ -107,8 +107,8 @@ void showAbout() {
         InkWell(
             onTap: () async {
               const url = 'https://rustdesk.com/';
-              if (await canLaunch(url)) {
-                await launch(url);
+              if (await canLaunchUrl(Uri.parse(url))) {
+                await launchUrl(Uri.parse(url));
               }
             },
             child: Padding(
@@ -151,7 +151,7 @@ fetch('http://localhost:21114/api/login', {
     'uuid': gFFI.getByName('uuid')
   };
   try {
-    final response = await http.post(Uri.parse('${url}/api/login'),
+    final response = await http.post(Uri.parse('$url/api/login'),
         headers: {"Content-Type": "application/json"}, body: json.encode(body));
     return parseResp(response.body);
   } catch (e) {
@@ -189,7 +189,7 @@ void refreshCurrentUser() async {
     'uuid': gFFI.getByName('uuid')
   };
   try {
-    final response = await http.post(Uri.parse('${url}/api/currentUser'),
+    final response = await http.post(Uri.parse('$url/api/currentUser'),
         headers: {
           "Content-Type": "application/json",
           "Authorization": "Bearer $token"
@@ -215,7 +215,7 @@ void logout() async {
     'uuid': gFFI.getByName('uuid')
   };
   try {
-    await http.post(Uri.parse('${url}/api/logout'),
+    await http.post(Uri.parse('$url/api/logout'),
         headers: {
           "Content-Type": "application/json",
           "Authorization": "Bearer $token"
@@ -245,7 +245,7 @@ String getUrl() {
           url = 'http://${tmp[0]}:$port';
         }
       } else {
-        url = 'http://${url}:21114';
+        url = 'http://$url:21114';
       }
     }
   }

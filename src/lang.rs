@@ -1,16 +1,20 @@
 use std::ops::Deref;
 
 mod cn;
-mod en;
-mod fr;
-mod it;
-mod tw;
+mod cs;
+mod da;
+mod sk;
 mod de;
-mod ru;
+mod en;
+mod es;
 mod eo;
-mod ptbr;
+mod fr;
 mod id;
+mod it;
+mod ptbr;
+mod ru;
 mod tr;
+mod tw;
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub fn translate(name: String) -> String {
@@ -22,15 +26,15 @@ pub fn translate_locale(name: String, locale: &str) -> String {
     let mut lang = hbb_common::config::LocalConfig::get_option("lang").to_lowercase();
     if lang.is_empty() {
         // zh_CN on Linux, zh-Hans-CN on mac, zh_CN_#Hans on Android
-        if locale.starts_with("zh") && (locale.ends_with("CN") || locale.ends_with("SG") || locale.ends_with("Hans")) {
-            lang = "cn".to_owned();
+        if locale.starts_with("zh") {
+            lang = (if locale.contains("TW") { "tw" } else { "cn" }).to_owned();
         }
     }
     if lang.is_empty() {
         lang = locale
             .split("-")
-            .last()
-            .map(|x| x.split("_").last().unwrap_or_default())
+            .next()
+            .map(|x| x.split("_").next().unwrap_or_default())
             .unwrap_or_default()
             .to_owned();
     }
@@ -41,6 +45,7 @@ pub fn translate_locale(name: String, locale: &str) -> String {
         "it" => it::T.deref(),
         "tw" => tw::T.deref(),
         "de" => de::T.deref(),
+        "es" => es::T.deref(),
         "ru" => ru::T.deref(),
         "eo" => eo::T.deref(),
         "id" => id::T.deref(),
@@ -48,6 +53,9 @@ pub fn translate_locale(name: String, locale: &str) -> String {
         "br" => ptbr::T.deref(),
         "pt" => ptbr::T.deref(),
         "tr" => tr::T.deref(),
+        "cs" => cs::T.deref(),
+        "da" => da::T.deref(),
+        "sk" => sk::T.deref(),
         _ => en::T.deref(),
     };
     if let Some(v) = m.get(&name as &str) {

@@ -5,11 +5,11 @@
   <a href="#como-compilar-con-docker">Docker</a> •
   <a href="#estructura-de-archivos">Estructura</a> •
   <a href="#captura-de-pantalla">Captura de pantalla</a><br>
-  [<a href="README-ZH.md">中文</a>] | [<a href="README-ES.md">Español</a>] | [<a href="README-FR.md">Français</a>] | [<a href="README-DE.md">Deutsch</a>] | [<a href="README-PL.md">Polski</a>] | [<a href="README-FI.md">Suomi</a>] | [<a href="README-ML.md">മലയാളം</a>] | [<a href="README-JP.md">日本語</a>] | [<a href="README-NL.md">Nederlands</a>] | [<a href="README-IT.md">Italiano</a>] | [<a href="README-RU.md">Русский</a>] | [<a href="README-PTBR.md">Português (Brasil)</a>] | [<a href="README-EO.md">Esperanto</a>] | [<a href="README-KR.md">한국어</a>]<br>
+  [<a href="README-CS.md">česky</a>] | [<a href="README-ZH.md">中文</a>] | [<a href="README-ES.md">Español</a>] | [<a href="README-FA.md">فارسی</a>] | [<a href="README-FR.md">Français</a>] | [<a href="README-DE.md">Deutsch</a>] | [<a href="README-PL.md">Polski</a>] | [<a href="README-ID.md">Indonesian</a>] | [<a href="README-FI.md">Suomi</a>] | [<a href="README-ML.md">മലയാളം</a>] | [<a href="README-JP.md">日本語</a>] | [<a href="README-NL.md">Nederlands</a>] | [<a href="README-IT.md">Italiano</a>] | [<a href="README-RU.md">Русский</a>] | [<a href="README-PTBR.md">Português (Brasil)</a>] | [<a href="README-EO.md">Esperanto</a>] | [<a href="README-KR.md">한국어</a>] | [<a href="README-AR.md">العربي</a>]<br>
   <b>Necesitamos tu ayuda para traducir este README a tu idioma</b>
 </p>
 
-Chat with us: [Discord](https://discord.gg/nDceKgxnkV) | [Reddit](https://www.reddit.com/r/rustdesk)
+Chatea con nosotros: [Discord](https://discord.gg/nDceKgxnkV) | [Twitter](https://twitter.com/rustdesk) | [Reddit](https://www.reddit.com/r/rustdesk)
 
 [![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/I2I04VU09)
 
@@ -23,9 +23,11 @@ RustDesk agradece la contribución de todo el mundo. Ve [`CONTRIBUTING.md`](CONT
 
 A continuación se muestran los servidores que está utilizando de forma gratuita, puede cambiar en algún momento. Si no estás cerca de uno de ellos, tu red puede ser lenta.
 
-- Seoul, AWS lightsail, 1 VCPU/0.5G RAM
-- Singapore, Vultr, 1 VCPU/1G RAM
-- Dallas, Vultr, 1 VCPU/1G RAM
+| Ubicación | Vendedor | Especificación |
+| --------- | ------------- | ------------------ |
+| Seoul | AWS lightsail | 1 VCPU / 0.5GB RAM |
+| Singapore | Vultr | 1 VCPU / 1GB RAM |
+| Dallas | Vultr | 1 VCPU / 1GB RAM | |
 
 ## Dependencies
 
@@ -37,7 +39,7 @@ La versión Desktop usa [sciter](https://sciter.com/) para GUI, por favor bajate
 
 ## Pasos para compilar desde el inicio
 
-- Prepara el entono de desarrollode Rust y el entorno de compilación de C++ y Rust.
+- Prepara el entono de desarrollo de Rust y el entorno de compilación de C++ y Rust.
 
 - Instala [vcpkg](https://github.com/microsoft/vcpkg), y configura la variable de entono `VCPKG_ROOT` correctamente.
 
@@ -78,7 +80,7 @@ export VCPKG_ROOT=$HOME/vcpkg
 vcpkg/vcpkg install libvpx libyuv opus
 ```
 
-### Soluciona libvpx (For Fedora)
+### Soluciona libvpx (Para Fedora)
 
 ```sh
 cd vcpkg/buildtrees/libvpx/src
@@ -124,7 +126,7 @@ Entonces, cada vez que necesites compilar una modificación, ejecuta el siguient
 docker run --rm -it -v $PWD:/home/user/rustdesk -v rustdesk-git-cache:/home/user/.cargo/git -v rustdesk-registry-cache:/home/user/.cargo/registry -e PUID="$(id -u)" -e PGID="$(id -g)" rustdesk-builder
 ```
 
-Ten en cuenta que la primera compilación puede tardar más tiempo antes de que las dependencias se almacenen en la caché, las siguientes compilaciones serán más rápidas. Además, si necesitas especificar diferentes argumentos a la orden de compilación, puede hacerlo al final de la linea de comandos en el apartado`<OPTIONAL-ARGS>`. Por ejemplo, si desea compilar una versión optimizada para publicación, deberá ejecutar el comando anterior seguido de `---release`. El ejecutable resultante estará disponible en la carpeta de destino en su sistema, y puede ser ejecutado con:
+Ten en cuenta que la primera compilación puede tardar más tiempo antes de que las dependencias se almacenen en la caché, las siguientes compilaciones serán más rápidas. Además, si necesitas especificar diferentes argumentos a la orden de compilación, puede hacerlo al final de la linea de comandos en el apartado `<OPTIONAL-ARGS>`. Por ejemplo, si desea compilar una versión optimizada para publicación, deberá ejecutar el comando anterior seguido de `--release`. El ejecutable resultante estará disponible en la carpeta de destino en su sistema, y puede ser ejecutado con:
 
 ```sh
 target/debug/rustdesk
@@ -148,6 +150,8 @@ Por favor, asegurate de que estás ejecutando estos comandos desde la raíz del 
 - **[src/client.rs](https://github.com/rustdesk/rustdesk/tree/master/src/client.rs)**: iniciar una conexión "peer to peer"
 - **[src/rendezvous_mediator.rs](https://github.com/rustdesk/rustdesk/tree/master/src/rendezvous_mediator.rs)**: Comunicación con [rustdesk-server](https://github.com/rustdesk/rustdesk-server), esperar la conexión remota directa ("TCP hole punching") o conexión indirecta ("relayed")
 - **[src/platform](https://github.com/rustdesk/rustdesk/tree/master/src/platform)**: código específico de cada plataforma
+- **[flutter](https://github.com/rustdesk/rustdesk/tree/master/flutter)**: Flutter, código para moviles
+- **[flutter/web/js](https://github.com/rustdesk/rustdesk/tree/master/flutter/web/js)**: Javascript para cliente web Flutter
 
 ## Captura de pantalla
 

@@ -490,7 +490,6 @@ class App: Reactor.Component
                     <ConnectStatus @{this.connect_status} />
                 </div>
                 <div #overlay style="position: absolute;size:*;background:black;opacity:0.5;display:none" />
-                <div #msgbox />
             </div>;
     }
 
@@ -666,9 +665,7 @@ class FixWayland: Reactor.Component {
         return <div .trust-me>
             <div>{translate('Warning')}</div>
             <div>{translate('Login screen using Wayland is not supported')}</div>
-            <div #fix-wayland .link>{translate('Fix it')}</div>
             <div #help-me .link>{translate('Help')}</div>
-            <div>({translate('Reboot required')})</div>
         </div>;
     }
 
@@ -687,9 +684,7 @@ class ModifyDefaultLogin: Reactor.Component {
         return <div .trust-me>
             <div>{translate('Warning')}</div>
             <div>{translate('Current Wayland display server is not supported')}</div>
-            <div #modify-default-login .link>{translate('Fix it')}</div>
             <div #help-me .link>{translate('Help')}</div>
-            <div>({translate('Reboot required')})</div>
         </div>;
     }
 
@@ -858,7 +853,7 @@ event keydown (evt) {
     }
 }
 
-$(body).content(<App />);
+$(body).content(<div style="size:*"><App /><div #msgbox /></div>);
 
 function self.closing() {
     var (x, y, w, h) = view.box(#rectw, #border, #screen);

@@ -1,5 +1,11 @@
 package com.carriez.flutter_hbb
 
+/**
+ * Handle remote input and dispatch android gesture
+ *
+ * Inspired by [droidVNC-NG] https://github.com/bk138/droidVNC-NG
+ */
+
 import android.accessibilityservice.AccessibilityService
 import android.accessibilityservice.GestureDescription
 import android.content.Context
@@ -32,12 +38,6 @@ class InputService : AccessibilityService() {
             get() = ctx != null
     }
 
-    private external fun init(ctx: Context)
-
-    init {
-        System.loadLibrary("rustdesk")
-    }
-
     private val logTag = "input service"
     private var leftIsDown = false
     private var touchPath = Path()
@@ -50,9 +50,8 @@ class InputService : AccessibilityService() {
     private val wheelActionsQueue = LinkedList<GestureDescription>()
     private var isWheelActionsPolling = false
 
-    @Keep
     @RequiresApi(Build.VERSION_CODES.N)
-    fun rustMouseInput(mask: Int, _x: Int, _y: Int) {
+    fun onMouseInput(mask: Int, _x: Int, _y: Int) {
         val x = if (_x < 0) {
             0
         } else {
@@ -207,12 +206,15 @@ class InputService : AccessibilityService() {
         }
     }
 
-    @RequiresApi(Build.VERSION_CODES.O)
     override fun onServiceConnected() {
         super.onServiceConnected()
         ctx = this
         Log.d(logTag, "onServiceConnected!")
-        init(this)
+    }
+
+    override fun onDestroy() {
+        ctx = null
+        super.onDestroy()
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {}

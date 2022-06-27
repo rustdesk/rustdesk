@@ -795,6 +795,7 @@ pub struct LoginConfigHandler {
     pub port_forward: (String, i32),
     pub version: i64,
     pub conn_id: i32,
+    features: Option<Features>,
 }
 
 impl Deref for LoginConfigHandler {
@@ -924,11 +925,11 @@ impl LoginConfigHandler {
             })
             .into();
         } else if name == "privacy-mode" {
-            config.privacy_mode = !config.privacy_mode;
+            // try toggle privacy mode
             option.privacy_mode = (if config.privacy_mode {
-                BoolOption::Yes
-            } else {
                 BoolOption::No
+            } else {
+                BoolOption::Yes
             })
             .into();
         } else if name == "enable-file-transfer" {
@@ -1068,6 +1069,14 @@ impl LoginConfigHandler {
         }
     }
 
+    pub fn is_privacy_mode_supported(&self) -> bool {
+        if let Some(features) = &self.features {
+            features.privacy_mode
+        } else {
+            false
+        }
+    }
+
     /// Create a [`Message`] for refreshing video.
     pub fn refresh() -> Message {
         let mut misc = Misc::new();
@@ -1166,6 +1175,7 @@ impl LoginConfigHandler {
         if !pi.version.is_empty() {
             self.version = hbb_common::get_version_number(&pi.version);
         }
+        self.features = pi.features.into_option();
         let serde = PeerInfoSerde {
             username,
             hostname: pi.hostname.clone(),
@@ -1378,9 +1388,9 @@ pub fn send_mouse(
 }
 
 /// Avtivate OS by sending mouse movement.
-/// 
+///
 /// # Arguments
-/// 
+///
 /// * `interface` - The interface for sending data.
 fn activate_os(interface: &impl Interface) {
     send_mouse(0, 0, 0, false, false, false, false, interface);
@@ -1401,9 +1411,9 @@ fn activate_os(interface: &impl Interface) {
 }
 
 /// Input the OS's password.
-/// 
+///
 /// # Arguments
-/// 
+///
 /// * `p` - The password.
 /// * `avtivate` - Whether to activate OS.
 /// * `interface` - The interface for sending data.
@@ -1414,9 +1424,9 @@ pub fn input_os_password(p: String, activate: bool, interface: impl Interface) {
 }
 
 /// Input the OS's password.
-/// 
+///
 /// # Arguments
-/// 
+///
 /// * `p` - The password.
 /// * `avtivate` - Whether to activate OS.
 /// * `interface` - The interface for sending data.
@@ -1673,9 +1683,9 @@ lazy_static::lazy_static! {
 }
 
 /// Check if the given message is an error and can be retried.
-/// 
+///
 /// # Arguments
-/// 
+///
 /// * `msgtype` - The message type.
 /// * `title` - The title of the message.
 /// * `text` - The text of the message.

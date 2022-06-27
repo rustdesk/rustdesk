@@ -1,4 +1,5 @@
 use crate::{client::*, flutter_ffi::EventToUI};
+use crate::common::{make_fd_to_json};
 use flutter_rust_bridge::{StreamSink, ZeroCopyBuffer};
 use hbb_common::{
     allow_err,
@@ -499,7 +500,12 @@ impl Interface for Session {
         let mut displays = Vec::new();
         let mut current = pi.current_display as usize;
 
-        if !lc.is_file_transfer {
+        if lc.is_file_transfer {
+            if pi.username.is_empty() {
+                self.msgbox("error", "Error", "No active console user logged on, please connect and logon first.");
+                return;
+            }
+        } else {
             if pi.displays.is_empty() {
                 self.msgbox("error", "Remote Error", "No Display");
             }
@@ -1216,26 +1222,6 @@ impl Connection {
             ],
         );
     }
-}
-
-/// Parse [`FileDirectory`] to json.
-pub fn make_fd_to_json(fd: FileDirectory) -> String {
-    use serde_json::json;
-    let mut fd_json = serde_json::Map::new();
-    fd_json.insert("id".into(), json!(fd.id));
-    fd_json.insert("path".into(), json!(fd.path));
-
-    let mut entries = vec![];
-    for entry in fd.entries {
-        let mut entry_map = serde_json::Map::new();
-        entry_map.insert("entry_type".into(), json!(entry.entry_type.value()));
-        entry_map.insert("name".into(), json!(entry.name));
-        entry_map.insert("size".into(), json!(entry.size));
-        entry_map.insert("modified_time".into(), json!(entry.modified_time));
-        entries.push(entry_map);
-    }
-    fd_json.insert("entries".into(), json!(entries));
-    serde_json::to_string(&fd_json).unwrap_or("".into())
 }
 
 // Server Side

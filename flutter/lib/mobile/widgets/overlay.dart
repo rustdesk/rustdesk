@@ -228,6 +228,12 @@ class DraggableMobileActions extends StatelessWidget {
   }
 }
 
+resetMobileActionsOverlay() {
+  if (mobileActionsOverlayEntry == null) return;
+  hideMobileActionsOverlay();
+  showMobileActionsOverlay();
+}
+
 showMobileActionsOverlay() {
   if (mobileActionsOverlayEntry != null) return;
   if (globalKey.currentContext == null ||

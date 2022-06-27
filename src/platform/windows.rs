@@ -9,7 +9,7 @@ use hbb_common::{
 use std::io::prelude::*;
 use std::{
     ffi::OsString,
-    io, mem,
+    fs, io, mem,
     sync::{Arc, Mutex},
     time::{Duration, Instant},
 };
@@ -404,6 +404,7 @@ extern "C" {
     fn has_rdp_service() -> BOOL;
     fn get_current_session(rdp: BOOL) -> DWORD;
     fn LaunchProcessWin(cmd: *const u16, session_id: DWORD, as_user: BOOL) -> HANDLE;
+    fn GetSessionUserTokenWin(lphUserToken: LPHANDLE, dwSessionId: DWORD, as_user: BOOL) -> BOOL;
     fn selectInputDesktop() -> BOOL;
     fn inputDesktopSelected() -> BOOL;
     fn is_windows_server() -> BOOL;
@@ -558,7 +559,7 @@ async fn launch_server(session_id: DWORD, close_first: bool) -> ResultType<HANDL
     let wstr = wstr.as_ptr();
     let h = unsafe { LaunchProcessWin(wstr, session_id, FALSE) };
     if h.is_null() {
-        log::error!("Failed to luanch server: {}", get_error());
+        log::error!("Failed to launch server: {}", get_error());
     }
     Ok(h)
 }
@@ -697,7 +698,7 @@ pub fn set_share_rdp(enable: bool) {
         subkey,
         if enable { "true" } else { "false" }
     );
-    run_cmds(cmd, false).ok();
+    run_cmds(cmd, false, "share_rdp").ok();
 }
 
 pub fn get_active_username() -> String {
@@ -796,6 +797,49 @@ fn get_default_install_path() -> String {
     format!("{}\\{}", pf, crate::get_app_name())
 }
 
+pub fn check_update_broker_process() -> ResultType<()> {
+    // let (_, path, _, _) = get_install_info();
+    let process_exe = crate::ui::win_privacy::INJECTED_PROCESS_EXE;
+    let origin_process_exe = crate::ui::win_privacy::ORIGIN_PROCESS_EXE;
+
+    let exe_file = std::env::current_exe()?;
+    if exe_file.parent().is_none() {
+        bail!("Cannot get parent of current exe file");
+    }
+    let cur_dir = exe_file.parent().unwrap();
+    let cur_exe = cur_dir.join(process_exe);
+
+    let ori_modified = fs::metadata(origin_process_exe)?.modified()?;
+    if let Ok(metadata) = fs::metadata(&cur_exe) {
+        if let Ok(cur_modified) = metadata.modified() {
+            if cur_modified == ori_modified {
+                return Ok(());
+            } else {
+                log::info!(
+                    "broker process updated, modify time from {:?} to {:?}",
+                    cur_modified,
+                    ori_modified
+                );
+            }
+        }
+    }
+
+    // Force update broker exe if failed to check modified time.
+    let cmds = format!(
+        "
+        chcp 65001
+        taskkill /F /IM {broker_exe}
+        copy /Y \"{origin_process_exe}\" \"{cur_exe}\"
+    ",
+        broker_exe = process_exe,
+        origin_process_exe = origin_process_exe,
+        cur_exe = cur_exe.to_string_lossy().to_string(),
+    );
+    run_cmds(cmds, false, "update_broker")?;
+
+    Ok(())
+}
+
 fn get_install_info_with_subkey(subkey: String) -> (String, String, String, String) {
     let mut path = get_reg_of(&subkey, "InstallLocation");
     if path.is_empty() {
@@ -811,24 +855,28 @@ fn get_install_info_with_subkey(subkey: String) -> (String, String, String, Stri
 }
 
 pub fn update_me() -> ResultType<()> {
-    let (_, _, _, exe) = get_install_info();
+    let (_, path, _, exe) = get_install_info();
     let src_exe = std::env::current_exe()?.to_str().unwrap_or("").to_owned();
     let cmds = format!(
         "
         chcp 65001
         sc stop {app_name}
+        taskkill /F /IM {broker_exe}
         taskkill /F /IM {app_name}.exe
         copy /Y \"{src_exe}\" \"{exe}\"
+        \"{src_exe}\" --extract \"{path}\"
         sc start {app_name}
         {lic}
     ",
         src_exe = src_exe,
         exe = exe,
+        broker_exe = crate::ui::win_privacy::INJECTED_PROCESS_EXE,
+        path = path,
         app_name = crate::get_app_name(),
         lic = register_licence(),
     );
     std::thread::sleep(std::time::Duration::from_millis(1000));
-    run_cmds(cmds, false)?;
+    run_cmds(cmds, false, "update")?;
     std::thread::sleep(std::time::Duration::from_millis(2000));
     std::process::Command::new(&exe).arg("--tray").spawn().ok();
     std::process::Command::new(&exe).spawn().ok();
@@ -857,7 +905,7 @@ fn get_after_install(exe: &str) -> String {
     ", ext=ext, exe=exe, app_name=app_name)
 }
 
-pub fn install_me(options: &str, path: String) -> ResultType<()> {
+pub fn install_me(options: &str, path: String, silent: bool, debug: bool) -> ResultType<()> {
     let uninstall_str = get_uninstall();
     let mut path = path.trim_end_matches('\\').to_owned();
     let (subkey, _path, start_menu, exe) = get_default_install_info();
@@ -881,7 +929,7 @@ pub fn install_me(options: &str, path: String) -> ResultType<()> {
         version_build = versions[2];
     }
 
-    let tmp_path = "C:\\Windows\\temp";
+    let tmp_path = std::env::temp_dir().to_string_lossy().to_string();
     let mk_shortcut = write_cmds(
         format!(
             "
@@ -897,6 +945,7 @@ oLink.Save
             exe = exe,
         ),
         "vbs",
+        "mk_shortcut",
     )?
     .to_str()
     .unwrap_or("")
@@ -918,6 +967,7 @@ oLink.Save
             exe = exe,
         ),
         "vbs",
+        "uninstall_shortcut",
     )?
     .to_str()
     .unwrap_or("")
@@ -938,6 +988,7 @@ oLink.Save
             exe = exe,
         ),
         "vbs",
+        "tray_shortcut",
     )?
     .to_str()
     .unwrap_or("")
@@ -975,9 +1026,12 @@ copy /Y \"{tmp_path}\\Uninstall {app_name}.lnk\" \"{start_menu}\\\"
 chcp 65001
 md \"{path}\"
 copy /Y \"{src_exe}\" \"{exe}\"
+copy /Y \"{ORIGIN_PROCESS_EXE}\" \"{path}\\{broker_exe}\"
+\"{src_exe}\" --extract \"{path}\"
 reg add {subkey} /f
 reg add {subkey} /f /v DisplayIcon /t REG_SZ /d \"{exe}\"
 reg add {subkey} /f /v DisplayName /t REG_SZ /d \"{app_name}\"
+reg add {subkey} /f /v DisplayVersion /t REG_SZ /d \"{version}\"
 reg add {subkey} /f /v Version /t REG_SZ /d \"{version}\"
 reg add {subkey} /f /v InstallLocation /t REG_SZ /d \"{path}\"
 reg add {subkey} /f /v Publisher /t REG_SZ /d \"{app_name}\"
@@ -988,10 +1042,10 @@ reg add {subkey} /f /v UninstallString /t REG_SZ /d \"\\\"{exe}\\\" --uninstall\
 reg add {subkey} /f /v EstimatedSize /t REG_DWORD /d {size}
 reg add {subkey} /f /v WindowsInstaller /t REG_DWORD /d 0
 {lic}
-\"{mk_shortcut}\"
-\"{uninstall_shortcut}\"
-\"{tray_shortcut}\"
-copy /Y \"{tmp_path}\\{app_name} Tray.lnk\" \"C:\\ProgramData\\Microsoft\\Windows\\Start Menu\\Programs\\Startup\\\"
+cscript \"{mk_shortcut}\"
+cscript \"{uninstall_shortcut}\"
+cscript \"{tray_shortcut}\"
+copy /Y \"{tmp_path}\\{app_name} Tray.lnk\" \"%PROGRAMDATA%\\Microsoft\\Windows\\Start Menu\\Programs\\Startup\\\"
 {shortcuts}
 copy /Y \"{tmp_path}\\Uninstall {app_name}.lnk\" \"{path}\\\"
 del /f \"{mk_shortcut}\"
@@ -1010,6 +1064,8 @@ sc delete {app_name}
         path=path,
         src_exe=std::env::current_exe()?.to_str().unwrap_or(""),
         exe=exe,
+        ORIGIN_PROCESS_EXE = crate::ui::win_privacy::ORIGIN_PROCESS_EXE,
+        broker_exe=crate::ui::win_privacy::INJECTED_PROCESS_EXE,
         subkey=subkey,
         app_name=crate::get_app_name(),
         version=crate::VERSION,
@@ -1026,21 +1082,23 @@ sc delete {app_name}
         lic=register_licence(),
         after_install=get_after_install(&exe),
     );
-    run_cmds(cmds, false)?;
+    run_cmds(cmds, debug, "install")?;
     std::thread::sleep(std::time::Duration::from_millis(2000));
-    std::process::Command::new(&exe).spawn()?;
-    std::process::Command::new(&exe).arg("--tray").spawn()?;
-    std::thread::sleep(std::time::Duration::from_millis(1000));
+    if !silent {
+        std::process::Command::new(&exe).spawn()?;
+        std::process::Command::new(&exe).arg("--tray").spawn()?;
+        std::thread::sleep(std::time::Duration::from_millis(1000));
+    }
     Ok(())
 }
 
 pub fn run_after_install() -> ResultType<()> {
     let (_, _, _, exe) = get_install_info();
-    run_cmds(get_after_install(&exe), true)
+    run_cmds(get_after_install(&exe), true, "after_install")
 }
 
 pub fn run_before_uninstall() -> ResultType<()> {
-    run_cmds(get_before_uninstall(), true)
+    run_cmds(get_before_uninstall(), true, "before_install")
 }
 
 fn get_before_uninstall() -> String {
@@ -1051,11 +1109,13 @@ fn get_before_uninstall() -> String {
     chcp 65001
     sc stop {app_name}
     sc delete {app_name}
+    taskkill /F /IM {broker_exe}
     taskkill /F /IM {app_name}.exe
     reg delete HKEY_CLASSES_ROOT\\.{ext} /f
     netsh advfirewall firewall delete rule name=\"{app_name} Service\"
     ",
         app_name = app_name,
+        broker_exe = crate::ui::win_privacy::INJECTED_PROCESS_EXE,
         ext = ext
     )
 }
@@ -1069,7 +1129,7 @@ fn get_uninstall() -> String {
     rd /s /q \"{path}\"
     rd /s /q \"{start_menu}\"
     del /f /q \"%PUBLIC%\\Desktop\\{app_name}*\"
-    del /f /q \"C:\\ProgramData\\Microsoft\\Windows\\Start Menu\\Programs\\Startup\\{app_name} Tray.lnk\"
+    del /f /q \"%PROGRAMDATA%\\Microsoft\\Windows\\Start Menu\\Programs\\Startup\\{app_name} Tray.lnk\"
     ",
         before_uninstall=get_before_uninstall(),
         subkey=subkey,
@@ -1080,21 +1140,12 @@ fn get_uninstall() -> String {
 }
 
 pub fn uninstall_me() -> ResultType<()> {
-    run_cmds(get_uninstall(), true)
+    run_cmds(get_uninstall(), true, "uninstall")
 }
 
-fn write_cmds(cmds: String, ext: &str) -> ResultType<std::path::PathBuf> {
+fn write_cmds(cmds: String, ext: &str, tip: &str) -> ResultType<std::path::PathBuf> {
     let mut tmp = std::env::temp_dir();
-    tmp.push(format!(
-        "{}_{:?}.{}",
-        crate::get_app_name(),
-        cmds.as_ptr(),
-        ext
-    ));
-    let mut cmds = cmds;
-    if ext == "cmd" {
-        cmds = format!("{}\ndel /f \"{}\"", cmds, tmp.to_str().unwrap_or(""));
-    }
+    tmp.push(format!("{}_{}.{}", crate::get_app_name(), tip, ext));
     let mut file = std::fs::File::create(&tmp)?;
     // in case cmds mixed with \r\n and \n, make sure all ending with \r\n
     // in some windows, \r\n required for cmd file to run
@@ -1117,15 +1168,20 @@ fn to_le(v: &mut [u16]) -> &[u8] {
     unsafe { v.align_to().1 }
 }
 
-fn run_cmds(cmds: String, show: bool) -> ResultType<()> {
-    let tmp = write_cmds(cmds, "cmd")?;
-    let res = runas::Command::new(tmp.to_str().unwrap_or(""))
+fn run_cmds(cmds: String, show: bool, tip: &str) -> ResultType<()> {
+    let tmp = write_cmds(cmds, "bat", tip)?;
+    let tmp_fn = tmp.to_str().unwrap_or("");
+    let res = runas::Command::new("cmd")
+        .args(&["/C", &tmp_fn])
         .show(show)
         .force_prompt(true)
         .status();
-    // double confirm delete, because below delete not work if program
-    // exit immediately such as --uninstall
-    allow_err!(std::fs::remove_file(tmp));
+    // leave the file for debug if execution failed
+    if let Ok(res) = res {
+        if res.success() {
+            allow_err!(std::fs::remove_file(tmp));
+        }
+    }
     let _ = res?;
     Ok(())
 }
@@ -1290,6 +1346,7 @@ oLink.Save
             id = id,
         ),
         "vbs",
+        "connect_shortcut",
     )?
     .to_str()
     .unwrap_or("")
@@ -1324,4 +1381,21 @@ pub fn get_win_key_state() -> bool {
 pub fn quit_gui() {
     std::process::exit(0);
     // unsafe { PostQuitMessage(0) }; // some how not work
+}
+
+pub fn get_user_token(session_id: u32, as_user: bool) -> HANDLE {
+    let mut token = NULL as HANDLE;
+    unsafe {
+        if FALSE
+            == GetSessionUserTokenWin(
+                &mut token as _,
+                session_id,
+                if as_user { TRUE } else { FALSE },
+            )
+        {
+            NULL as _
+        } else {
+            token
+        }
+    }
 }

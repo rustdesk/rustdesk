@@ -2,9 +2,11 @@
 
 import os
 import platform
-import zlib
-from shutil import copy2
+import zipfile
+import urllib.request
+import shutil
 import hashlib
+import argparse
 
 windows = platform.platform().startswith('Windows')
 osx = platform.platform().startswith('Darwin') or platform.platform().startswith("macOS")
@@ -20,7 +22,93 @@ def get_version():
     return ''
 
 
+def get_features(feature):
+    available_features = {
+        'IddDriver': {
+            'zip_url': 'https://github.com/fufesou/RustDeskIddDriver/releases/download/v0.1/RustDeskIddDriver_x64.zip',
+            'checksum_url': 'https://github.com/fufesou/RustDeskIddDriver/releases/download/v0.1'
+                            '/RustDeskIddDriver_x64.zip.checksum_md5',
+        },
+        'PrivacyMode': {
+            'zip_url': 'https://github.com/fufesou/RustDeskTempTopMostWindow/releases/download/v0.1'
+                       '/TempTopMostWindow_x64.zip',
+            'checksum_url': 'https://github.com/fufesou/RustDeskTempTopMostWindow/releases/download/v0.1'
+                            '/TempTopMostWindow_x64.zip.checksum_md5',
+        }
+    }
+    apply_features = {}
+    if not feature:
+        return apply_features
+    elif isinstance(feature, str) and feature.upper() == 'ALL':
+        return available_features
+    elif isinstance(feature, list):
+        for feat in feature:
+            if isinstance(feat, str) and feat.upper() == 'ALL':
+                return available_features
+            if feat in available_features:
+                apply_features[feat] = available_features[feat]
+            else:
+                print(f'Unrecognized feature {feat}')
+        return apply_features
+    else:
+        raise Exception(f'Unsupported features param {feature}')
+
+
+def make_parser():
+    parser = argparse.ArgumentParser(description='Build script.')
+    parser.add_argument(
+        '-f',
+        '--feature',
+        dest='feature',
+        metavar='N',
+        type=str,
+        nargs='+',
+        default='',
+        help='Integrate features, windows only.'
+             'Available: IddDriver, PrivacyMode. Special value is "ALL" and empty "". Default is empty.')
+    return parser
+
+
+def download_extract_features(features, res_dir):
+    for (feat, feat_info) in features.items():
+        print(f'{feat} download begin')
+        checksum_md5_response = urllib.request.urlopen(feat_info['checksum_url'])
+        checksum_md5 = checksum_md5_response.read().decode('utf-8').split()[0]
+        download_filename = feat_info['zip_url'].split('/')[-1]
+        filename, _headers = urllib.request.urlretrieve(feat_info['zip_url'], download_filename)
+        md5 = hashlib.md5(open(filename, 'rb').read()).hexdigest()
+        if checksum_md5 != md5:
+            raise Exception(f'{feat} download failed')
+        print(f'{feat} download end. extract bein')
+        zip_file = zipfile.ZipFile(filename)
+        zip_list = zip_file.namelist()
+        for f in zip_list:
+            zip_file.extract(f, res_dir)
+        zip_file.close()
+        os.remove(download_filename)
+        print(f'{feat} extract end')
+
+
+def build_windows(feature):
+    features = get_features(feature)
+    if not features:
+        os.system('cargo build --release --features inline')
+    else:
+        print(f'Build with features {list(features.keys())}')
+        res_dir = 'resources'
+        if os.path.isdir(res_dir) and not os.path.islink(res_dir):
+            shutil.rmtree(res_dir)
+        elif os.path.exists(res_dir):
+            raise Exception(f'Find file {res_dir}, not a directory')
+        os.makedirs(res_dir, exist_ok=True)
+        download_extract_features(features, res_dir)
+        os.system('cargo build --release --features inline,with_rc')
+
+
 def main():
+    parser = make_parser()
+    args = parser.parse_args()
+
     os.system("cp Cargo.toml Cargo.toml.bk")
     os.system("cp src/main.rs src/main.rs.bk")
     if windows:
@@ -35,39 +123,40 @@ def main():
         os.system('git checkout src/ui/common.tis')
     version = get_version()
     if windows:
-        os.system('cargo build --release --features inline')
+        build_windows(args.feature)
         # os.system('upx.exe target/release/rustdesk.exe')
         os.system('mv target/release/rustdesk.exe target/release/RustDesk.exe')
         pa = os.environ.get('P')
         if pa:
-          os.system('signtool sign /a /v /p %s /debug /f .\\cert.pfx /t http://timestamp.digicert.com  target\\release\\rustdesk.exe'%pa)
+            os.system(f'signtool sign /a /v /p {pa} /debug /f .\\cert.pfx /t http://timestamp.digicert.com  '
+                      'target\\release\\rustdesk.exe')
         else:
-          print('Not signed')
-        os.system('cp -rf target/release/RustDesk.exe rustdesk-%s-putes.exe'%version)
+            print('Not signed')
+        os.system(f'cp -rf target/release/RustDesk.exe rustdesk-{version}-setdown.exe')
     elif os.path.isfile('/usr/bin/pacman'):
         os.system('cargo build --release --features inline')
         os.system('git checkout src/ui/common.tis')
         os.system('strip target/release/rustdesk')
-        os.system("sed -i 's/pkgver=.*/pkgver=%s/g' PKGBUILD"%version)
+        os.system("sed -i 's/pkgver=.*/pkgver=%s/g' PKGBUILD" % version)
         # pacman -S -needed base-devel
         os.system('HBB=`pwd` makepkg -f')
-        os.system('mv rustdesk-%s-0-x86_64.pkg.tar.zst rustdesk-%s-manjaro-arch.pkg.tar.zst'%(version, version))
+        os.system('mv rustdesk-%s-0-x86_64.pkg.tar.zst rustdesk-%s-manjaro-arch.pkg.tar.zst' % (version, version))
         # pacman -U ./rustdesk.pkg.tar.zst
     elif os.path.isfile('/usr/bin/yum'):
         os.system('cargo build --release --features inline')
         os.system('strip target/release/rustdesk')
-        os.system("sed -i 's/Version:    .*/Version:    %s/g' rpm.spec"%version)
+        os.system("sed -i 's/Version:    .*/Version:    %s/g' rpm.spec" % version)
         os.system('HBB=`pwd` rpmbuild -ba rpm.spec')
-        os.system('mv $HOME/rpmbuild/RPMS/x86_64/rustdesk-%s-0.x86_64.rpm ./rustdesk-%s-fedora28-centos8.rpm'%(version, version))
+        os.system('mv $HOME/rpmbuild/RPMS/x86_64/rustdesk-%s-0.x86_64.rpm ./rustdesk-%s-fedora28-centos8.rpm' % (
+            version, version))
         # yum localinstall rustdesk.rpm
     elif os.path.isfile('/usr/bin/zypper'):
         os.system('cargo build --release --features inline')
         os.system('strip target/release/rustdesk')
-        os.system("sed -i 's/Version:    .*/Version:    %s/g' rpm-suse.spec"%version)
+        os.system("sed -i 's/Version:    .*/Version:    %s/g' rpm-suse.spec" % version)
         os.system('HBB=`pwd` rpmbuild -ba rpm-suse.spec')
-        os.system('mv $HOME/rpmbuild/RPMS/x86_64/rustdesk-%s-0.x86_64.rpm ./rustdesk-%s-suse.rpm'%(version, version))
+        os.system('mv $HOME/rpmbuild/RPMS/x86_64/rustdesk-%s-0.x86_64.rpm ./rustdesk-%s-suse.rpm' % (version, version))
         # yum localinstall rustdesk.rpm
-
     else:
         os.system('cargo bundle --release --features inline')
         if osx:
@@ -81,12 +170,12 @@ def main():
             txt = open(plist).read()
             with open(plist, "wt") as fh:
                 fh.write(txt.replace("</dict>", """
-  <key>LSUIElement</key>    
-  <string>1</string>    
+  <key>LSUIElement</key>
+  <string>1</string>
 </dict>"""))
             pa = os.environ.get('P')
             if pa:
-              os.system('''
+                os.system('''
 # buggy: rcodesign sign ... path/*, have to sign one by one
 #rcodesign sign --p12-file ~/.p12/rustdesk-developer-id.p12 --p12-password-file ~/.p12/.cert-pass --code-signature-flags runtime ./target/release/bundle/osx/RustDesk.app/Contents/MacOS/rustdesk
 #rcodesign sign --p12-file ~/.p12/rustdesk-developer-id.p12 --p12-password-file ~/.p12/.cert-pass --code-signature-flags runtime ./target/release/bundle/osx/RustDesk.app/Contents/MacOS/libsciter.dylib
@@ -96,9 +185,9 @@ codesign -s "Developer ID Application: {0}" --force --options runtime  ./target/
 codesign -s "Developer ID Application: {0}" --force --options runtime  ./target/release/bundle/osx/RustDesk.app
 '''.format(pa))
             os.system('create-dmg target/release/bundle/osx/RustDesk.app')
-            os.rename('RustDesk %s.dmg'%version, 'rustdesk-%s.dmg'%version)
+            os.rename('RustDesk %s.dmg' % version, 'rustdesk-%s.dmg' % version)
             if pa:
-              os.system('''
+                os.system('''
 #rcodesign sign --p12-file ~/.p12/rustdesk-developer-id.p12 --p12-password-file ~/.p12/.cert-pass --code-signature-flags runtime ./rustdesk-{1}.dmg
 codesign -s "Developer ID Application: {0}" --force --options runtime ./rustdesk-{1}.dmg
 # https://pyoxidizer.readthedocs.io/en/latest/apple_codesign_rcodesign.html
@@ -106,7 +195,7 @@ rcodesign notarize --api-issuer 69a6de7d-2907-47e3-e053-5b8c7c11a4d1 --api-key 9
 # verify:  spctl -a -t exec -v /Applications/RustDesk.app
 '''.format(pa, version))
             else:
-              print('Not signed')
+                print('Not signed')
         else:
             os.system('mv target/release/bundle/deb/rustdesk*.deb ./rustdesk.deb')
             os.system('dpkg-deb -R rustdesk.deb tmpdeb')
@@ -122,7 +211,7 @@ rcodesign notarize --api-issuer 69a6de7d-2907-47e3-e053-5b8c7c11a4d1 --api-key 9
             md5_file('usr/share/rustdesk/files/pynput_service.py')
             md5_file('usr/lib/rustdesk/libsciter-gtk.so')
             os.system('dpkg-deb -b tmpdeb rustdesk.deb; /bin/rm -rf tmpdeb/')
-            os.rename('rustdesk.deb', 'rustdesk-%s.deb'%version)
+            os.rename('rustdesk.deb', 'rustdesk-%s.deb' % version)
     os.system("mv Cargo.toml.bk Cargo.toml")
     os.system("mv src/main.rs.bk src/main.rs")
 
