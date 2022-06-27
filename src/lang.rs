@@ -6,6 +6,7 @@ mod da;
 mod sk;
 mod de;
 mod en;
+mod es;
 mod eo;
 mod fr;
 mod id;
@@ -44,6 +45,7 @@ pub fn translate_locale(name: String, locale: &str) -> String {
         "it" => it::T.deref(),
         "tw" => tw::T.deref(),
         "de" => de::T.deref(),
+        "es" => es::T.deref(),
         "ru" => ru::T.deref(),
         "eo" => eo::T.deref(),
         "id" => id::T.deref(),
