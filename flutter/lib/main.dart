@@ -1,6 +1,5 @@
 import 'dart:convert';
 
-import 'package:bitsdojo_window/bitsdojo_window.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/desktop/pages/desktop_home_page.dart';
 import 'package:flutter_hbb/desktop/screen/desktop_file_transfer_screen.dart';
@@ -9,7 +8,7 @@ import 'package:flutter_hbb/utils/multi_window_manager.dart';
 import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
 import 'package:get/route_manager.dart';
 import 'package:provider/provider.dart';
-import 'package:window_manager/window_manager.dart';
+// import 'package:window_manager/window_manager.dart';
 
 import 'common.dart';
 import 'mobile/pages/home_page.dart';
@@ -38,7 +37,6 @@ void runRustDeskApp(List<String> args) async {
     return;
   }
   // main window
-  await windowManager.ensureInitialized();
   if (args.isNotEmpty && args.first == 'multi_window') {
     windowId = int.parse(args[1]);
     final argument = args[2].isEmpty
@@ -59,17 +57,11 @@ void runRustDeskApp(List<String> args) async {
         break;
     }
   } else {
+    // await windowManager.ensureInitialized();
     // disable tray
     // initTray();
     gFFI.serverModel.startService();
     runApp(App());
-    doWhenWindowReady(() {
-      const initialSize = Size(1280, 720);
-      appWindow.minSize = initialSize;
-      appWindow.size = initialSize;
-      appWindow.alignment = Alignment.center;
-      appWindow.show();
-    });
   }
 }
 

@@ -36,41 +36,6 @@ packages:
       url: "https://pub.flutter-io.cn"
     source: hosted
     version: "2.8.2"
-  bitsdojo_window:
-    dependency: "direct main"
-    description:
-      name: bitsdojo_window
-      url: "https://pub.flutter-io.cn"
-    source: hosted
-    version: "0.1.2"
-  bitsdojo_window_linux:
-    dependency: transitive
-    description:
-      name: bitsdojo_window_linux
-      url: "https://pub.flutter-io.cn"
-    source: hosted
-    version: "0.1.2"
-  bitsdojo_window_macos:
-    dependency: transitive
-    description:
-      name: bitsdojo_window_macos
-      url: "https://pub.flutter-io.cn"
-    source: hosted
-    version: "0.1.2"
-  bitsdojo_window_platform_interface:
-    dependency: transitive
-    description:
-      name: bitsdojo_window_platform_interface
-      url: "https://pub.flutter-io.cn"
-    source: hosted
-    version: "0.1.2"
-  bitsdojo_window_windows:
-    dependency: transitive
-    description:
-      name: bitsdojo_window_windows
-      url: "https://pub.flutter-io.cn"
-    source: hosted
-    version: "0.1.2"
   boolean_selector:
     dependency: transitive
     description:
@@ -221,11 +186,9 @@ packages:
   desktop_multi_window:
     dependency: "direct main"
     description:
-      path: "."
-      ref: "704718b2853723b615675e048f1f385cbfb209a6"
-      resolved-ref: "704718b2853723b615675e048f1f385cbfb209a6"
-      url: "https://github.com/Kingtous/rustdesk_desktop_multi_window"
-    source: git
+      path: "../../rustdesk_desktop_multi_window"
+      relative: true
+    source: path
     version: "0.0.1"
   device_info_plus:
     dependency: "direct main"
@@ -785,13 +748,6 @@ packages:
       url: "https://pub.flutter-io.cn"
     source: hosted
     version: "3.1.0"
-  screen_retriever:
-    dependency: transitive
-    description:
-      name: screen_retriever
-      url: "https://pub.flutter-io.cn"
-    source: hosted
-    version: "0.1.2"
   settings_ui:
     dependency: "direct main"
     description:
@@ -1105,13 +1061,6 @@ packages:
       url: "https://pub.flutter-io.cn"
     source: hosted
     version: "2.6.1"
-  window_manager:
-    dependency: "direct main"
-    description:
-      name: window_manager
-      url: "https://pub.flutter-io.cn"
-    source: hosted
-    version: "0.2.5"
   xdg_directories:
     dependency: transitive
     description:

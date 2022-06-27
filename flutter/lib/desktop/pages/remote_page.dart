@@ -12,7 +12,7 @@ import 'package:get/get.dart';
 import 'package:get/route_manager.dart';
 import 'package:provider/provider.dart';
 import 'package:wakelock/wakelock.dart';
-import 'package:window_manager/window_manager.dart';
+// import 'package:window_manager/window_manager.dart';
 
 import '../../common.dart';
 import '../../mobile/widgets/dialog.dart';
@@ -32,7 +32,7 @@ class RemotePage extends StatefulWidget {
 }
 
 class _RemotePageState extends State<RemotePage>
-    with WindowListener, AutomaticKeepAliveClientMixin {
+    with AutomaticKeepAliveClientMixin {
   Timer? _interval;
   Timer? _timer;
   bool _showBar = !isWebDesktop;
@@ -69,7 +69,7 @@ class _RemotePageState extends State<RemotePage>
     _physicalFocusNode.requestFocus();
     ffi.ffiModel.updateEventListener(widget.id);
     ffi.listenToMouse(true);
-    WindowManager.instance.addListener(this);
+    // WindowManager.instance.addListener(this);
   }
 
   @override
@@ -89,7 +89,7 @@ class _RemotePageState extends State<RemotePage>
     if (!Platform.isLinux) {
       Wakelock.disable();
     }
-    WindowManager.instance.removeListener(this);
+    // WindowManager.instance.removeListener(this);
     Get.delete<FFI>(tag: widget.id);
     super.dispose();
   }
@@ -286,14 +286,7 @@ class _RemotePageState extends State<RemotePage>
                       OverlayEntry(builder: (context) {
                         return Container(
                             color: Colors.black,
-                            child: isWebDesktop
-                                ? getBodyForDesktopWithListener(keyboard)
-                                : SafeArea(
-                                child: Container(
-                                    color: MyTheme.canvasColor,
-                                    child: _isPhysicalMouse
-                                        ? getBodyForMobile()
-                                        : getBodyForMobileWithGesture())));
+                            child: getBodyForDesktopWithListener(keyboard));
                       })
                     ],
                   ))),
