@@ -140,6 +140,10 @@ impl EncoderApi for HwEncoder {
     fn use_yuv(&self) -> bool {
         false
     }
+
+    fn set_bitrate(&mut self, bitrate: u32) -> ResultType<()> {
+        todo!()
+    }
 }
 
 impl HwEncoder {

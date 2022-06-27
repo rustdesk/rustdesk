@@ -385,7 +385,7 @@ impl TraitCapturer for Capturer {
 
 #[cfg(windows)]
 impl TraitCapturer for scrap::CapturerMag {
-    fn frame<'a>(&'a mut self, _timeout_ms: u32) -> Result<Frame<'a>> {
+    fn frame<'a>(&'a mut self, _timeout_ms: Duration) -> Result<Frame<'a>> {
         self.frame(_timeout_ms)
     }
 

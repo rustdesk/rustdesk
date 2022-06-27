@@ -1117,7 +1117,7 @@ impl Connection {
             let mut image_quality = None;
             if let ImageQuality::NotSet = q {
                 if o.custom_image_quality > 0 {
-                    image_quality = Some(o.custom_image_quality);
+                    image_quality = Some(o.custom_image_quality as _);
                 }
             } else {
                 image_quality = Some(q.value() as _)

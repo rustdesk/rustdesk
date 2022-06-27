@@ -569,7 +569,7 @@ impl Handler {
             .lc
             .write()
             .unwrap()
-            .save_custom_image_quality(custom_image_quality as u32);
+            .save_custom_image_quality(custom_image_quality);
         self.send(Data::Message(msg));
     }
 

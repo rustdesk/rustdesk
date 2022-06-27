@@ -1005,7 +1005,7 @@ impl LoginConfigHandler {
         msg_out
     }
 
-    pub fn save_custom_image_quality(&mut self, custom_image_quality: u32) -> Message {
+    pub fn save_custom_image_quality(&mut self, custom_image_quality: i32) -> Message {
         let mut misc = Misc::new();
         misc.set_option(OptionMessage {
             custom_image_quality,
