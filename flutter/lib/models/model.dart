@@ -954,10 +954,10 @@ class FFI {
   }
 
   /// Close the remote session.
-  void close() {
+  Future<void> close() async {
     chatModel.close();
     if (imageModel.image != null && !isWebDesktop) {
-      savePreference(id, cursorModel.x, cursorModel.y, canvasModel.x,
+      await savePreference(id, cursorModel.x, cursorModel.y, canvasModel.x,
           canvasModel.y, canvasModel.scale, ffiModel.pi.currentDisplay);
     }
     bind.sessionClose(id: id);
@@ -1085,8 +1085,8 @@ class PeerInfo {
   List<Display> displays = [];
 }
 
-void savePreference(String id, double xCursor, double yCursor, double xCanvas,
-    double yCanvas, double scale, int currentDisplay) async {
+Future<void> savePreference(String id, double xCursor, double yCursor,
+    double xCanvas, double yCanvas, double scale, int currentDisplay) async {
   SharedPreferences prefs = await SharedPreferences.getInstance();
   final p = Map<String, dynamic>();
   p['xCursor'] = xCursor;

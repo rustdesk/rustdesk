@@ -2,9 +2,13 @@ import 'dart:convert';
 import 'dart:math';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_hbb/common.dart';
 import 'package:flutter_hbb/desktop/pages/remote_page.dart';
 import 'package:flutter_hbb/desktop/widgets/titlebar_widget.dart';
 import 'package:flutter_hbb/utils/multi_window_manager.dart';
+import 'package:get/get.dart';
+
+import '../../models/model.dart';
 
 class ConnectionTabPage extends StatefulWidget {
   final Map<String, dynamic> params;
@@ -51,6 +55,15 @@ class _ConnectionTabPageState extends State<ConnectionTabPage>
             });
           }
         });
+      } else if (call.method == "onDestroy") {
+        print("executing onDestroy hook, closing ${connectionIds}");
+        connectionIds.forEach((id) {
+          final tag = '${id}';
+          ffi(tag).close().then((_) {
+            Get.delete<FFI>(tag: tag);
+          });
+        });
+        Get.back();
       }
     });
   }
