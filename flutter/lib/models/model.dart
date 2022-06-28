@@ -924,6 +924,7 @@ class FFI {
       imageModel._id = id;
       cursorModel.id = id;
     }
+    id = isFileTransfer ? 'ft_${id}' : id;
     final stream = bind.sessionConnect(id: id, isFileTransfer: isFileTransfer);
     final cb = ffiModel.startEventListener(id);
     () async {

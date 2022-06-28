@@ -1,5 +1,5 @@
+use crate::common::make_fd_to_json;
 use crate::{client::*, flutter_ffi::EventToUI};
-use crate::common::{make_fd_to_json};
 use flutter_rust_bridge::{StreamSink, ZeroCopyBuffer};
 use hbb_common::{
     allow_err,
@@ -49,16 +49,17 @@ impl Session {
     ///
     /// # Arguments
     ///
-    /// * `id` - The id of the remote session.
+    /// * `id` - The identifier of the remote session with prefix. Regex: [\w]*[\_]*[\d]+
     /// * `is_file_transfer` - If the session is used for file transfer.
-    pub fn start(id: &str, is_file_transfer: bool, events2ui: StreamSink<EventToUI>) {
-        LocalConfig::set_remote_id(&id);
+    pub fn start(identifier: &str, is_file_transfer: bool, events2ui: StreamSink<EventToUI>) {
+        LocalConfig::set_remote_id(&identifier);
         // TODO check same id
+        let session_id = get_session_id(identifier.to_owned());
         // TODO close
         // Self::close();
         let events2ui = Arc::new(RwLock::new(events2ui));
         let mut session = Session {
-            id: id.to_owned(),
+            id: session_id.clone(),
             sender: Default::default(),
             lc: Default::default(),
             events2ui,
@@ -67,11 +68,11 @@ impl Session {
             .lc
             .write()
             .unwrap()
-            .initialize(id.to_owned(), false, false);
+            .initialize(session_id.clone(), is_file_transfer, false);
         SESSIONS
             .write()
             .unwrap()
-            .insert(id.to_owned(), session.clone());
+            .insert(identifier.to_owned(), session.clone());
         std::thread::spawn(move || {
             Connection::start(session, is_file_transfer);
         });
@@ -1657,4 +1658,13 @@ pub mod connection_manager {
             err => allow_err!(err),
         }
     }
+}
+
+#[inline]
+pub fn get_session_id(id: String) -> String {
+    return if let Some(index) = id.find('_') {
+        id[index + 1..].to_string()
+    } else {
+        id
+    };
 }
