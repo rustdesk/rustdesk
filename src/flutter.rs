@@ -179,7 +179,6 @@ impl Session {
     /// Close the session.
     pub fn close(&self) {
         self.send(Data::Close);
-        let _ = SESSIONS.write().unwrap().remove(&self.id);
     }
 
     /// Reconnect to the current session.

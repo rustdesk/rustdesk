@@ -133,6 +133,7 @@ pub fn session_close(id: String) {
     if let Some(session) = SESSIONS.read().unwrap().get(&id) {
         session.close();
     }
+    let _ = SESSIONS.write().unwrap().remove(&id);
 }
 
 pub fn session_refresh(id: String) {
