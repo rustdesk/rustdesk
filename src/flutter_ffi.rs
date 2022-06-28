@@ -1,7 +1,7 @@
 use crate::client::file_trait::FileManager;
+use crate::common::make_fd_to_json;
 use crate::flutter::connection_manager::{self, get_clients_length, get_clients_state};
 use crate::flutter::{self, Session, SESSIONS};
-use crate::common::make_fd_to_json;
 use crate::start_server;
 use crate::ui_interface;
 use flutter_rust_bridge::{StreamSink, SyncReturn, ZeroCopyBuffer};
@@ -133,6 +133,7 @@ pub fn session_close(id: String) {
     if let Some(session) = SESSIONS.read().unwrap().get(&id) {
         session.close();
     }
+    let _ = SESSIONS.write().unwrap().remove(&id);
 }
 
 pub fn session_refresh(id: String) {

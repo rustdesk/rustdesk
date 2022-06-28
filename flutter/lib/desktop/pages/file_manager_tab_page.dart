@@ -2,8 +2,10 @@ import 'dart:convert';
 import 'dart:math';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_hbb/common.dart';
 import 'package:flutter_hbb/desktop/pages/file_manager_page.dart';
 import 'package:flutter_hbb/desktop/widgets/titlebar_widget.dart';
+import 'package:flutter_hbb/models/model.dart';
 import 'package:flutter_hbb/utils/multi_window_manager.dart';
 import 'package:get/get.dart';
 
@@ -21,7 +23,7 @@ class _FileManagerTabPageState extends State<FileManagerTabPage>
     with SingleTickerProviderStateMixin {
   // refactor List<int> when using multi-tab
   // this singleton is only for test
-  List<String> connectionIds = List.empty(growable: true);
+  var connectionIds = List<String>.empty(growable: true).obs;
   var initialIndex = 0.obs;
 
   _FileManagerTabPageState(Map<String, dynamic> params) {
@@ -47,6 +49,15 @@ class _FileManagerTabPageState extends State<FileManagerTabPage>
           connectionIds.add(id);
           initialIndex.value = connectionIds.length - 1;
         }
+      } else if (call.method == "onDestroy") {
+        print("executing onDestroy hook, closing ${connectionIds}");
+        connectionIds.forEach((id) {
+          final tag = 'ft_${id}';
+          ffi(tag).close().then((_) {
+            Get.delete<FFI>(tag: tag);
+          });
+        });
+        Get.back();
       }
     });
   }
