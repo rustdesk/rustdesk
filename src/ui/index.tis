@@ -163,7 +163,42 @@ class AudioInputs: Reactor.Component {
         }
         this.toggleMenuState();
     }
+};
+
+class Languages: Reactor.Component {
+    function render() {
+        var langs = JSON.parse(handler.get_langs());
+        var me = this;
+        self.timer(1ms, function() { me.toggleMenuState() });
+        return <li>{translate('Language')}
+            <menu #languages key={langs.length}>
+                <li id="default"><span>{svg_checkmark}</span>Default</li>
+                <div .separator />
+                {langs.map(function(lang) {
+                return <li id={lang[0]}><span>{svg_checkmark}</span>{lang[1]}</li>;
+                })}
+            </menu>
+        </li>;
+    }
+
+
+    function toggleMenuState() {
+        var cur = handler.get_local_option("lang") || "default";
+        for (var el in this.$$(menu#languages>li)) {
+            var selected = cur == el.id;
+            el.attributes.toggleClass("selected", selected);
+        }
+    }
+
+    event click $(menu#languages>li) (_, me) {
+        var v = me.id;
+        if (v == "default") v = "";
+        handler.set_local_option("lang", v);
+        app.update();
+        this.toggleMenuState();
+    }
 }
+
 
 function getUserName() {
     try {
@@ -223,6 +258,7 @@ class MyIdMenu: Reactor.Component {
                 <div .separator />
                 <li #allow-darktheme><span>{svg_checkmark}</span>{translate('Dark Theme')}</li>
                 <div .separator />
+                <Languages />
                 <li #about>{translate('About')} {" "}{handler.get_app_name()}</li>
             </menu>
         </popup>;

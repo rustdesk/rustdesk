@@ -158,7 +158,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Allow using clipboard", "Izinkan menggunakan papan klip"),
         ("Allow hearing sound", "Izinkan mendengarkan suara"),
         ("Allow file copy and paste", "Izinkan penyalinan dan tempel file"),
-        ("File transfer", "Transfer file"),
         ("Connected", "Terkoneksi"),
         ("Direct and encrypted connection", "Koneksi langsung dan terenkripsi"),
         ("Relayed and encrypted connection", "Koneksi relai dan terenkripsi"),
@@ -280,5 +279,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Turned off", "Matikan"),
         ("In privacy mode", "Dalam mode privasi"),
         ("Out privacy mode", "Keluar dari mode privasi"),
+        ("Language", ""),
     ].iter().cloned().collect();
 }
