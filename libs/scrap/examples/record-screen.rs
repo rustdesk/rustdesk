@@ -104,9 +104,6 @@ fn main() -> io::Result<()> {
         timebase: [1, 1000],
         bitrate: args.flag_bv,
         codec: vpx_codec,
-        rc_min_quantizer: 0,
-        rc_max_quantizer: 0,
-        speed: 6,
         num_threads: 0,
     }))
     .unwrap();
@@ -137,7 +134,7 @@ fn main() -> io::Result<()> {
             break;
         }
 
-        if let Ok(frame) = c.frame(0) {
+        if let Ok(frame) = c.frame(Duration::from_millis(0)) {
             let ms = time.as_secs() * 1000 + time.subsec_millis() as u64;
 
             for frame in vpx.encode(ms as i64, &frame, STRIDE_ALIGN).unwrap() {
