@@ -3,7 +3,7 @@
 // https://github.com/rust-av/vpx-rs/blob/master/src/decoder.rs
 
 use hbb_common::anyhow::{anyhow, Context};
-use hbb_common::message_proto::{Message, VP9s, VideoFrame, VP9};
+use hbb_common::message_proto::{Message, VP9s, VideoFrame, VP9, test_delay};
 use hbb_common::ResultType;
 
 use crate::codec::EncoderApi;
@@ -27,6 +27,7 @@ impl Default for VpxVideoCodecId {
 
 pub struct VpxEncoder {
     ctx: vpx_codec_ctx_t,
+    format: VpxVideoCodecId,
     width: usize,
     height: usize,
 }
@@ -96,14 +97,17 @@ impl EncoderApi for VpxEncoder {
     {
         match cfg {
             crate::codec::EncoderCfg::VPX(config) => {
+                let format;
                 let i;
                 if cfg!(feature = "VP8") {
                     i = match config.codec {
                         VpxVideoCodecId::VP8 => call_vpx_ptr!(vpx_codec_vp8_cx()),
                         VpxVideoCodecId::VP9 => call_vpx_ptr!(vpx_codec_vp9_cx()),
                     };
+                    format = config.codec;
                 } else {
                     i = call_vpx_ptr!(vpx_codec_vp9_cx());
+                    format = VpxVideoCodecId::VP9;
                 }
                 let mut c = unsafe { std::mem::MaybeUninit::zeroed().assume_init() };
                 call_vpx!(vpx_codec_enc_config_default(i, &mut c, 0));
@@ -190,6 +194,7 @@ impl EncoderApi for VpxEncoder {
 
                 Ok(Self {
                     ctx,
+                    format,
                     width: config.width as _,
                     height: config.height as _,
                 })
@@ -227,6 +232,13 @@ impl EncoderApi for VpxEncoder {
         new_enc_cfg.rc_target_bitrate = bitrate;
         call_vpx!(vpx_codec_enc_config_set(&mut self.ctx, &new_enc_cfg));
         return Ok(());
+    }
+
+    fn get_codec_format(&self) -> test_delay::CodecFormat {
+        match self.format {
+            VpxVideoCodecId::VP8 => test_delay::CodecFormat::VP8,
+            VpxVideoCodecId::VP9 => test_delay::CodecFormat::VP9
+        }
     }
 }
 

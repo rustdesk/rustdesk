@@ -72,11 +72,11 @@ pub struct VideoQoS {
     height: u32,
     user_image_quality: u32,
     current_image_quality: u32,
-
+    enable_abr: bool,
+    pub codec_format: test_delay::CodecFormat,
     pub current_delay: u32,
     pub fps: u8,             // abr
     pub target_bitrate: u32, // abr
-
     updated: bool,
     state: DelayState,
     debounce_count: u32,
@@ -110,6 +110,8 @@ impl Default for VideoQoS {
             fps: FPS,
             user_image_quality: ImageQuality::Balanced.as_percent(),
             current_image_quality: ImageQuality::Balanced.as_percent(),
+            enable_abr: false,
+            codec_format: Default::default(),
             width: 0,
             height: 0,
             current_delay: 0,
@@ -145,14 +147,16 @@ impl VideoQoS {
 
         self.current_delay = delay / 2 + self.current_delay / 2;
         log::trace!(
-            "VideoQoS update_network_delay:{}, {}, state:{:?},count:{}",
+            "VideoQoS update_network_delay:{}, {}, state:{:?}",
             self.current_delay,
             delay,
             self.state,
-            self.debounce_count
         );
 
         // ABR
+        if !self.enable_abr {
+            return;
+        }
         let current_state = DelayState::from_delay(self.current_delay);
         if current_state != self.state && self.debounce_count > 5 {
             log::debug!(
@@ -544,7 +548,6 @@ fn run(sp: GenericService) -> ResultType<()> {
     video_qos.set_size(width as _, height as _);
     let mut spf = video_qos.spf();
     let bitrate = video_qos.generate_bitrate()?;
-    drop(video_qos);
 
     log::info!("init bitrate={}", bitrate);
 
@@ -570,6 +573,9 @@ fn run(sp: GenericService) -> ResultType<()> {
         Ok(x) => encoder = x,
         Err(err) => bail!("Failed to create encoder: {}", err),
     }
+
+    video_qos.codec_format = encoder.get_codec_format();
+    drop(video_qos);
 
     let privacy_mode_id = *PRIVACY_MODE_CONN_ID.lock().unwrap();
     #[cfg(not(windows))]
