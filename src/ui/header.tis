@@ -335,13 +335,14 @@ class Header: Reactor.Component {
 }
 
 function handle_custom_image_quality() {
-    var bitrate = handler.get_custom_image_quality()[0] / 2;
+    var tmp = handler.get_custom_image_quality();
+    var bitrate = (tmp[0] || 50);
     msgbox("custom", "Custom Image Quality", "<div .form> \
           <div><input type=\"hslider\" style=\"width: 50%\" name=\"bitrate\" max=\"100\" min=\"10\" value=\"" + bitrate + "\"/ buddy=\"bitrate-buddy\"><b #bitrate-buddy>x</b>% Bitrate</div> \
       </div>", function(res=null) {
         if (!res) return;
         if (!res.bitrate) return;
-        handler.save_custom_image_quality(res.bitrate * 2);
+        handler.save_custom_image_quality(res.bitrate);
         toggleMenuState();
       });
 }

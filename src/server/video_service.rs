@@ -52,54 +52,74 @@ lazy_static::lazy_static! {
     pub static ref VIDEO_QOS: Arc<Mutex<VideoQoS>> = Default::default();
 }
 
+trait Percent {
+    fn as_percent(&self) -> u32;
+}
+
+impl Percent for ImageQuality {
+    fn as_percent(&self) -> u32 {
+        match self {
+            ImageQuality::NotSet => 0,
+            ImageQuality::Low => 50,
+            ImageQuality::Balanced => 66,
+            ImageQuality::Best => 100,
+        }
+    }
+}
+
 pub struct VideoQoS {
     width: u32,
     height: u32,
     user_image_quality: u32,
     current_image_quality: u32,
-    enable_abr: bool,
 
     pub current_delay: u32,
     pub fps: u8,             // abr
     pub target_bitrate: u32, // abr
-    updated: bool,
 
-    state: AdaptiveState,
-    last_delay: u32,
-    count: u32,
+    updated: bool,
+    state: DelayState,
+    debounce_count: u32,
 }
 
-#[derive(Debug)]
-enum AdaptiveState {
-    Normal,
-    LowDelay,
-    HeightDelay,
+#[derive(PartialEq, Debug)]
+enum DelayState {
+    Normal = 0,
+    LowDelay = 200,
+    HighDelay = 500,
+    Broken = 1000,
+}
+
+impl DelayState {
+    fn from_delay(delay: u32) -> Self {
+        if delay > DelayState::Broken as u32 {
+            DelayState::Broken
+        } else if delay > DelayState::HighDelay as u32 {
+            DelayState::HighDelay
+        } else if delay > DelayState::LowDelay as u32 {
+            DelayState::LowDelay
+        } else {
+            DelayState::Normal
+        }
+    }
 }
 
 impl Default for VideoQoS {
     fn default() -> Self {
         VideoQoS {
             fps: FPS,
-            user_image_quality: ImageQuality::Balanced.value() as _,
-            current_image_quality: ImageQuality::Balanced.value() as _,
-            enable_abr: false,
+            user_image_quality: ImageQuality::Balanced.as_percent(),
+            current_image_quality: ImageQuality::Balanced.as_percent(),
             width: 0,
             height: 0,
             current_delay: 0,
             target_bitrate: 0,
             updated: false,
-            state: AdaptiveState::Normal,
-            last_delay: 0,
-            count: 0,
+            state: DelayState::Normal,
+            debounce_count: 0,
         }
     }
 }
-
-const MAX: f32 = 1.2;
-const MIN: f32 = 0.8;
-const MAX_COUNT: u32 = 3;
-const MAX_DELAY: u32 = 500;
-const MIN_DELAY: u32 = 50;
 
 impl VideoQoS {
     pub fn set_size(&mut self, width: u32, height: u32) {
@@ -117,131 +137,69 @@ impl VideoQoS {
         time::Duration::from_secs_f32(1. / (self.fps as f32))
     }
 
-    // abr
     pub fn update_network_delay(&mut self, delay: u32) {
         if self.current_delay.eq(&0) {
             self.current_delay = delay;
             return;
         }
-        let current_delay = self.current_delay as f32;
 
         self.current_delay = delay / 2 + self.current_delay / 2;
-        log::debug!(
-            "update_network_delay:{}, {}, state:{:?},count:{}",
+        log::trace!(
+            "VideoQoS update_network_delay:{}, {}, state:{:?},count:{}",
             self.current_delay,
             delay,
             self.state,
-            self.count
+            self.debounce_count
         );
 
-        if self.current_delay < MIN_DELAY {
-            if self.fps != 30 && self.current_image_quality != self.user_image_quality {
-                log::debug!("current_delay is normal, set to user_image_quality");
-                self.fps = 30;
+        // ABR
+        let current_state = DelayState::from_delay(self.current_delay);
+        if current_state != self.state && self.debounce_count > 5 {
+            log::debug!(
+                "VideoQoS state changed:{:?} -> {:?}",
+                self.state,
+                current_state
+            );
+            self.state = current_state;
+            self.debounce_count = 0;
+            self.refresh_quality();
+        } else {
+            self.debounce_count += 1;
+        }
+    }
+
+    fn refresh_quality(&mut self) {
+        match self.state {
+            DelayState::Normal => {
+                self.fps = FPS;
                 self.current_image_quality = self.user_image_quality;
-                let _ = self.generate_bitrate().ok();
-                self.updated = true;
             }
-            self.state = AdaptiveState::Normal;
-        } else if self.current_delay > MAX_DELAY {
-            if self.fps != 5 && self.current_image_quality != 25 {
-                log::debug!("current_delay is very height, set fps to 5, image_quality to 25");
-                self.fps = 5;
-                self.current_image_quality = 25;
-                let _ = self.generate_bitrate().ok();
-                self.updated = true;
+            DelayState::LowDelay => {
+                self.fps = FPS;
+                self.current_image_quality = std::cmp::min(self.user_image_quality, 50);
             }
-        } else {
-            let delay = delay as f32;
-            let last_delay = self.last_delay as f32;
-            match self.state {
-                AdaptiveState::Normal => {
-                    if delay > current_delay * MAX {
-                        self.state = AdaptiveState::HeightDelay;
-                    } else if delay < current_delay * MIN
-                        && self.current_image_quality < self.user_image_quality
-                    {
-                        self.state = AdaptiveState::LowDelay;
-                    }
-                    self.count = 1;
-                    self.last_delay = self.current_delay
-                }
-                AdaptiveState::HeightDelay => {
-                    if delay > last_delay {
-                        if self.count > MAX_COUNT {
-                            self.decrease_quality();
-                            self.reset_state();
-                            return;
-                        }
-                        self.count += 1;
-                    } else {
-                        self.reset_state();
-                    }
-                }
-                AdaptiveState::LowDelay => {
-                    if delay < last_delay * MIN {
-                        if self.count > MAX_COUNT {
-                            self.increase_quality();
-                            self.reset_state();
-                            return;
-                        }
-                        self.count += 1;
-                    } else {
-                        self.reset_state();
-                    }
-                }
+            DelayState::HighDelay => {
+                self.fps = FPS / 2;
+                self.current_image_quality = std::cmp::min(self.user_image_quality, 25);
+            }
+            DelayState::Broken => {
+                self.fps = FPS / 4;
+                self.current_image_quality = 10;
             }
         }
-    }
-
-    fn reset_state(&mut self) {
-        self.count = 0;
-        self.state = AdaptiveState::Normal;
-    }
-
-    fn increase_quality(&mut self) {
-        log::debug!("Adaptive increase quality");
-        if self.fps < FPS {
-            log::debug!("increase fps {} -> {}", self.fps, FPS);
-            self.fps = FPS;
-        } else {
-            self.current_image_quality += self.current_image_quality / 2;
-            let _ = self.generate_bitrate().ok();
-            log::debug!("increase quality:{}", self.current_image_quality);
-        }
+        let _ = self.generate_bitrate().ok();
         self.updated = true;
     }
 
-    fn decrease_quality(&mut self) {
-        log::debug!("Adaptive decrease quality");
-        if self.fps < 15 {
-            log::debug!("fps is low enough :{}", self.fps);
-            return;
-        }
-        if self.current_image_quality < ImageQuality::Low.value() as _ {
-            self.fps = self.fps / 2;
-            log::debug!("decrease fps:{}", self.fps);
-        } else {
-            self.current_image_quality -= self.current_image_quality / 2;
+    pub fn update_image_quality(&mut self, image_quality: i32) {
+        let image_quality = Self::convert_quality(image_quality) as _;
+        log::debug!("VideoQoS update_image_quality{}", image_quality);
+        if self.current_image_quality != image_quality {
+            self.current_image_quality = image_quality;
             let _ = self.generate_bitrate().ok();
-            log::debug!("decrease quality:{}", self.current_image_quality);
-        };
-        self.updated = true;
-    }
-
-    pub fn update_image_quality(&mut self, image_quality: Option<u32>) {
-        if let Some(image_quality) = image_quality {
-            if image_quality < 10 || image_quality > 200 {
-                self.current_image_quality = ImageQuality::Balanced.value() as _;
-            }
-            if self.current_image_quality != image_quality {
-                self.current_image_quality = image_quality;
-                let _ = self.generate_bitrate().ok();
-                self.updated = true;
-            }
-        } else {
-            self.current_image_quality = ImageQuality::Balanced.value() as _;
+            self.updated = true;
         }
+
         self.user_image_quality = self.current_image_quality;
     }
 
@@ -251,7 +209,7 @@ impl VideoQoS {
             bail!("Fail to generate_bitrate, width or height is not set");
         }
         if self.current_image_quality == 0 {
-            self.current_image_quality = ImageQuality::Balanced.value() as _;
+            self.current_image_quality = ImageQuality::Balanced.as_percent();
         }
 
         let base_bitrate = ((self.width * self.height) / 800) as u32;
@@ -279,6 +237,18 @@ impl VideoQoS {
 
     pub fn reset(&mut self) {
         *self = Default::default();
+    }
+
+    pub fn convert_quality(q: i32) -> i32 {
+        if q == ImageQuality::Balanced.value() {
+            100 * 2 / 3
+        } else if q == ImageQuality::Low.value() {
+            100 / 2
+        } else if q == ImageQuality::Best.value() {
+            100
+        } else {
+            (q >> 8 & 0xFF) * 2
+        }
     }
 }
 

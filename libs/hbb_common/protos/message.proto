@@ -447,9 +447,9 @@ message PermissionInfo {
 
 enum ImageQuality {
   NotSet = 0;
-  Low = 50;
-  Balanced = 66;
-  Best = 100;
+  Low = 2;
+  Balanced = 3;
+  Best = 4;
 }
 
 message VideoCodecState {

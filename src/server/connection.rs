@@ -1114,13 +1114,15 @@ impl Connection {
     async fn update_option(&mut self, o: &OptionMessage) {
         log::info!("Option update: {:?}", o);
         if let Ok(q) = o.image_quality.enum_value() {
-            let mut image_quality = None;
+            let image_quality;
             if let ImageQuality::NotSet = q {
                 if o.custom_image_quality > 0 {
-                    image_quality = Some(o.custom_image_quality as _);
+                    image_quality = o.custom_image_quality;
+                } else {
+                    image_quality = ImageQuality::Balanced.value();
                 }
             } else {
-                image_quality = Some(q.value() as _)
+                image_quality = q.value();
             }
             video_service::VIDEO_QOS
                 .lock()
