@@ -33,7 +33,7 @@ pub struct HwEncoderConfig {
     pub codec_name: String,
     pub width: usize,
     pub height: usize,
-    pub bitrate_ratio: i32,
+    pub bitrate: i32,
 }
 
 #[derive(Debug, Clone)]

@@ -49,19 +49,17 @@ impl EncoderApi for HwEncoder {
     {
         match cfg {
             EncoderCfg::HW(config) => {
-                let (bitrate, timebase, gop, quality, rc) =
-                    HwEncoder::convert_quality(&config.codec_name, config.bitrate_ratio);
                 let ctx = EncodeContext {
                     name: config.codec_name.clone(),
                     width: config.width as _,
                     height: config.height as _,
                     pixfmt: DEFAULT_PIXFMT,
                     align: HW_STRIDE_ALIGN as _,
-                    bitrate,
-                    timebase,
-                    gop,
-                    quality,
-                    rc,
+                    bitrate: config.bitrate * 1000,
+                    timebase: DEFAULT_TIME_BASE,
+                    gop: DEFAULT_GOP,
+                    quality: DEFAULT_HW_QUALITY,
+                    rc: DEFAULT_RC,
                 };
                 let format = match Encoder::format_from_name(config.codec_name.clone()) {
                     Ok(format) => format,
@@ -142,7 +140,8 @@ impl EncoderApi for HwEncoder {
     }
 
     fn set_bitrate(&mut self, bitrate: u32) -> ResultType<()> {
-        todo!()
+        self.encoder.set_bitrate((bitrate * 1000) as _).ok();
+        Ok(())
     }
 }
 
@@ -217,28 +216,6 @@ impl HwEncoder {
             }
             Err(_) => Ok(Vec::<EncodeFrame>::new()),
         }
-    }
-
-    fn convert_quality(
-        name: &str,
-        bitrate_ratio: i32,
-    ) -> (i32, [i32; 2], i32, Quality, RateContorl) {
-        // TODO
-        let mut bitrate = if name.contains("qsv") {
-            1_000_000
-        } else {
-            2_000_000
-        };
-        if bitrate_ratio > 0 && bitrate_ratio <= 200 {
-            bitrate = bitrate * bitrate_ratio / 100;
-        };
-        (
-            bitrate,
-            DEFAULT_TIME_BASE,
-            DEFAULT_GOP,
-            DEFAULT_HW_QUALITY,
-            DEFAULT_RC,
-        )
     }
 }
 

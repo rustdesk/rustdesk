@@ -553,7 +553,7 @@ fn run(sp: GenericService) -> ResultType<()> {
             codec_name,
             width,
             height,
-            bitrate_ratio: bitrate as _,
+            bitrate: bitrate as _,
         }),
         None => EncoderCfg::VPX(VpxEncoderConfig {
             width: width as _,
