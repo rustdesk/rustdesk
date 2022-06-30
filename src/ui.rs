@@ -702,7 +702,7 @@ impl UI {
         let p = "explorer";
         #[cfg(target_os = "macos")]
         let p = "open";
-        #[cfg(target_os = "linux")] 
+        #[cfg(target_os = "linux")]
         let p = if std::path::Path::new("/usr/bin/firefox").exists() {
             "firefox"
         } else {
@@ -752,6 +752,13 @@ impl UI {
             self.get_option_("api-server"),
             self.get_option_("custom-rendezvous-server"),
         )
+    }
+
+    fn has_hwcodec(&self) -> bool {
+        #[cfg(not(feature = "hwcodec"))]
+        return false;
+        #[cfg(feature = "hwcodec")]
+        return true;
     }
 }
 
@@ -829,6 +836,7 @@ impl sciter::EventHandler for UI {
         fn discover();
         fn get_lan_peers();
         fn get_uuid();
+        fn has_hwcodec();
     }
 }
 
