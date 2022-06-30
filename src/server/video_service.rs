@@ -72,11 +72,11 @@ pub struct VideoQoS {
     height: u32,
     user_image_quality: u32,
     current_image_quality: u32,
-
+    enable_abr: bool,
+    pub codec_format: test_delay::CodecFormat,
     pub current_delay: u32,
     pub fps: u8,             // abr
     pub target_bitrate: u32, // abr
-
     updated: bool,
     state: DelayState,
     debounce_count: u32,
@@ -110,6 +110,8 @@ impl Default for VideoQoS {
             fps: FPS,
             user_image_quality: ImageQuality::Balanced.as_percent(),
             current_image_quality: ImageQuality::Balanced.as_percent(),
+            enable_abr: false,
+            codec_format: Default::default(),
             width: 0,
             height: 0,
             current_delay: 0,
@@ -137,6 +139,8 @@ impl VideoQoS {
         time::Duration::from_secs_f32(1. / (self.fps as f32))
     }
 
+    // update_network_delay periodically
+    // decrease the bitrate when the delay gets bigger
     pub fn update_network_delay(&mut self, delay: u32) {
         if self.current_delay.eq(&0) {
             self.current_delay = delay;
@@ -145,14 +149,16 @@ impl VideoQoS {
 
         self.current_delay = delay / 2 + self.current_delay / 2;
         log::trace!(
-            "VideoQoS update_network_delay:{}, {}, state:{:?},count:{}",
+            "VideoQoS update_network_delay:{}, {}, state:{:?}",
             self.current_delay,
             delay,
             self.state,
-            self.debounce_count
         );
 
         // ABR
+        if !self.enable_abr {
+            return;
+        }
         let current_state = DelayState::from_delay(self.current_delay);
         if current_state != self.state && self.debounce_count > 5 {
             log::debug!(
@@ -191,9 +197,10 @@ impl VideoQoS {
         self.updated = true;
     }
 
+    // handle image_quality change from peer
     pub fn update_image_quality(&mut self, image_quality: i32) {
         let image_quality = Self::convert_quality(image_quality) as _;
-        log::debug!("VideoQoS update_image_quality{}", image_quality);
+        log::debug!("VideoQoS update_image_quality: {}", image_quality);
         if self.current_image_quality != image_quality {
             self.current_image_quality = image_quality;
             let _ = self.generate_bitrate().ok();
@@ -220,11 +227,14 @@ impl VideoQoS {
             let fix = Display::fix_quality() as u32;
             log::debug!("Android screen, fix quality:{}", fix);
             let base_bitrate = base_bitrate * fix;
-            self.target_bitrate = base_bitrate * self.image_quality / 100;
+            self.target_bitrate = base_bitrate * self.current_image_quality / 100;
             Ok(self.target_bitrate)
         }
-        self.target_bitrate = base_bitrate * self.current_image_quality / 100;
-        Ok(self.target_bitrate)
+        #[cfg(not(target_os = "android"))]
+        {
+            self.target_bitrate = base_bitrate * self.current_image_quality / 100;
+            Ok(self.target_bitrate)
+        }
     }
 
     pub fn check_if_updated(&mut self) -> bool {
@@ -237,6 +247,15 @@ impl VideoQoS {
 
     pub fn reset(&mut self) {
         *self = Default::default();
+    }
+
+    fn check_abr_config(&mut self) -> bool {
+        self.enable_abr = if let Some(v) = Config2::get().options.get("enable-abr") {
+            v != "N"
+        } else {
+            true // default is true
+        };
+        self.enable_abr
     }
 
     pub fn convert_quality(q: i32) -> i32 {
@@ -544,9 +563,9 @@ fn run(sp: GenericService) -> ResultType<()> {
     video_qos.set_size(width as _, height as _);
     let mut spf = video_qos.spf();
     let bitrate = video_qos.generate_bitrate()?;
-    drop(video_qos);
+    let abr = video_qos.check_abr_config();
 
-    log::info!("init bitrate={}", bitrate);
+    log::info!("init bitrate={}, abr enabled:{}", bitrate, abr);
 
     let encoder_cfg = match Encoder::current_hw_encoder_name() {
         Some(codec_name) => EncoderCfg::HW(HwEncoderConfig {
@@ -570,6 +589,9 @@ fn run(sp: GenericService) -> ResultType<()> {
         Ok(x) => encoder = x,
         Err(err) => bail!("Failed to create encoder: {}", err),
     }
+
+    video_qos.codec_format = encoder.get_codec_format();
+    drop(video_qos);
 
     let privacy_mode_id = *PRIVACY_MODE_CONN_ID.lock().unwrap();
     #[cfg(not(windows))]

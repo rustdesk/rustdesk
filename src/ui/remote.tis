@@ -482,16 +482,20 @@ class QualityMonitor: Reactor.Component
             <div>
                 Target Bitrate: {qualityMonitorData[3]}kb
             </div>
+            <div>
+                Codec: {qualityMonitorData[4]}
+            </div>
         </div>;
     }
 }
 
 $(#quality-monitor).content(<QualityMonitor />);
-handler.updateQualityStatus = function(speed, fps, delay, bitrate) {
+handler.updateQualityStatus = function(speed, fps, delay, bitrate, codec_format) {
     speed ? qualityMonitorData[0] = speed:null;
     fps > -1 ? qualityMonitorData[1] = fps:null;
     delay > -1 ? qualityMonitorData[2] = delay:null;
     bitrate > -1 ? qualityMonitorData[3] = bitrate:null;
+    codec_format != "Unknown" ? qualityMonitorData[4] = codec_format:null;
     qualityMonitor.update();
 }
 

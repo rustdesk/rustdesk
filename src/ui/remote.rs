@@ -240,6 +240,7 @@ struct QualityStatus {
     fps: i32,
     delay: i32,
     target_bitrate: i32,
+    codec_format: test_delay::CodecFormat,
 }
 
 impl Default for QualityStatus {
@@ -249,6 +250,7 @@ impl Default for QualityStatus {
             fps: -1,
             delay: -1,
             target_bitrate: -1,
+            codec_format: test_delay::CodecFormat::Unknown,
         }
     }
 }
@@ -269,13 +271,21 @@ impl Handler {
     }
 
     fn update_quality_status(&self, status: QualityStatus) {
+        let codec_format = match status.codec_format {
+            test_delay::CodecFormat::Unknown => "Unknown",
+            test_delay::CodecFormat::VP8 => "VP8",
+            test_delay::CodecFormat::VP9 => "VP9",
+            test_delay::CodecFormat::H264 => "H264",
+            test_delay::CodecFormat::H265 => "H265",
+        };
         self.call2(
             "updateQualityStatus",
             &make_args!(
                 status.speed,
                 status.fps,
                 status.delay,
-                status.target_bitrate
+                status.target_bitrate,
+                codec_format
             ),
         );
     }
@@ -2604,11 +2614,10 @@ impl Interface for Handler {
             self.update_quality_status(QualityStatus {
                 delay: t.last_delay as _,
                 target_bitrate: t.target_bitrate as _,
+                codec_format: t.codec_format.enum_value_or_default(),
                 ..Default::default()
             });
-            let mut msg_out = Message::new();
-            msg_out.set_test_delay(t);
-            allow_err!(peer.send(&msg_out).await);
+            handle_test_delay(t, peer).await;
         }
     }
 }
