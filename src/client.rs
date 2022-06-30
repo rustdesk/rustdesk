@@ -914,7 +914,7 @@ impl LoginConfigHandler {
             n += 1;
         } else if q == "custom" {
             let config = PeerConfig::load(&self.id);
-            msg.custom_image_quality = config.custom_image_quality[0] as _;
+            msg.custom_image_quality = config.custom_image_quality[0] << 8;
             n += 1;
         }
         if self.get_toggle_option("show-remote-cursor") {
@@ -1210,6 +1210,14 @@ where
         log::info!("Audio decoder loop exits");
     });
     return (video_sender, audio_sender);
+}
+
+pub async fn handle_test_delay(t: TestDelay, peer: &mut Stream) {
+    if !t.from_client {
+        let mut msg_out = Message::new();
+        msg_out.set_test_delay(t);
+        allow_err!(peer.send(&msg_out).await);
+    }
 }
 
 // mask = buttons << 3 | type

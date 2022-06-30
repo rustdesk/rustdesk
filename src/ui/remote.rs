@@ -277,7 +277,7 @@ impl Handler {
             test_delay::CodecFormat::VP9 => "VP9",
             test_delay::CodecFormat::H264 => "H264",
             test_delay::CodecFormat::H265 => "H265",
-        }; 
+        };
         self.call2(
             "updateQualityStatus",
             &make_args!(
@@ -2617,9 +2617,7 @@ impl Interface for Handler {
                 codec_format: t.codec_format.enum_value_or_default(),
                 ..Default::default()
             });
-            let mut msg_out = Message::new();
-            msg_out.set_test_delay(t);
-            allow_err!(peer.send(&msg_out).await);
+            handle_test_delay(t, peer).await;
         }
     }
 }

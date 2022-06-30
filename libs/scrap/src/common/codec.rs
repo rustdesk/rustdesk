@@ -11,13 +11,13 @@ use crate::vpxcodec::*;
 
 use hbb_common::{
     anyhow::anyhow,
-    config::Config2,
     log,
     message_proto::{test_delay, video_frame, Message, VP9s, VideoCodecState},
     ResultType,
 };
 #[cfg(feature = "hwcodec")]
 use hbb_common::{
+    config::Config2,
     lazy_static,
     message_proto::{H264s, H265s},
 };

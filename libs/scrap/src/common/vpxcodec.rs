@@ -3,7 +3,7 @@
 // https://github.com/rust-av/vpx-rs/blob/master/src/decoder.rs
 
 use hbb_common::anyhow::{anyhow, Context};
-use hbb_common::message_proto::{Message, VP9s, VideoFrame, VP9, test_delay};
+use hbb_common::message_proto::{test_delay, Message, VP9s, VideoFrame, VP9};
 use hbb_common::ResultType;
 
 use crate::codec::EncoderApi;
@@ -237,7 +237,7 @@ impl EncoderApi for VpxEncoder {
     fn get_codec_format(&self) -> test_delay::CodecFormat {
         match self.format {
             VpxVideoCodecId::VP8 => test_delay::CodecFormat::VP8,
-            VpxVideoCodecId::VP9 => test_delay::CodecFormat::VP9
+            VpxVideoCodecId::VP9 => test_delay::CodecFormat::VP9,
         }
     }
 }

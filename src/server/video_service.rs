@@ -139,6 +139,8 @@ impl VideoQoS {
         time::Duration::from_secs_f32(1. / (self.fps as f32))
     }
 
+    // update_network_delay periodically
+    // decrease the bitrate when the delay gets bigger
     pub fn update_network_delay(&mut self, delay: u32) {
         if self.current_delay.eq(&0) {
             self.current_delay = delay;
@@ -195,9 +197,10 @@ impl VideoQoS {
         self.updated = true;
     }
 
+    // handle image_quality change from peer
     pub fn update_image_quality(&mut self, image_quality: i32) {
         let image_quality = Self::convert_quality(image_quality) as _;
-        log::debug!("VideoQoS update_image_quality{}", image_quality);
+        log::debug!("VideoQoS update_image_quality: {}", image_quality);
         if self.current_image_quality != image_quality {
             self.current_image_quality = image_quality;
             let _ = self.generate_bitrate().ok();
@@ -224,11 +227,14 @@ impl VideoQoS {
             let fix = Display::fix_quality() as u32;
             log::debug!("Android screen, fix quality:{}", fix);
             let base_bitrate = base_bitrate * fix;
-            self.target_bitrate = base_bitrate * self.image_quality / 100;
+            self.target_bitrate = base_bitrate * self.current_image_quality / 100;
             Ok(self.target_bitrate)
         }
-        self.target_bitrate = base_bitrate * self.current_image_quality / 100;
-        Ok(self.target_bitrate)
+        #[cfg(not(target_os = "android"))]
+        {
+            self.target_bitrate = base_bitrate * self.current_image_quality / 100;
+            Ok(self.target_bitrate)
+        }
     }
 
     pub fn check_if_updated(&mut self) -> bool {
