@@ -177,8 +177,8 @@ class Enhancements: Reactor.Component {
         self.timer(1ms, function() { me.toggleMenuState() });
         return <li>{translate('Enhancements')}
             <menu #enhancements-menu>
-                {has_hwcodec ? <li #enable-hwcodec><span>{svg_checkmark}</span>{translate("Hardware Codec")}</li> : ""}
-                <li #enable-abr><span>{svg_checkmark}</span>{translate("ABR")}</li>
+                {has_hwcodec ? <li #enable-hwcodec><span>{svg_checkmark}</span>{translate("Hardware Codec")}{"(beta)"}</li> : ""}
+                <li #enable-abr><span>{svg_checkmark}</span>{translate("Adaptive Bitrate")}{"(beta)"}</li>
             </menu>
         </li>;
     }
