@@ -343,6 +343,7 @@ impl Decoder {
     }
 }
 
+#[cfg(feature = "hwcodec")]
 fn check_hwcodec_config() -> bool {
     if let Some(v) = Config2::get().options.get("enable-hwcodec") {
         return v != "N";
