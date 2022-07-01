@@ -276,23 +276,40 @@ class FileModel extends ChangeNotifier {
     openDirectory(parent, isLocal: isLocal);
   }
 
-  sendFiles(SelectedItems items) {
-    if (items.isLocal == null) {
-      debugPrint("Failed to sendFiles ,wrong path state");
-      return;
+  /// isRemote only for desktop now, [isRemote == true] means [remote -> local]
+  sendFiles(SelectedItems items, {bool isRemote = false}) {
+    if (isDesktop) {
+      // desktop sendFiles
+      _jobProgress.state = JobState.inProgress;
+      final toPath =
+      isRemote ? currentRemoteDir.path : currentLocalDir.path;
+      final isWindows =
+      isRemote ?  _localOption.isWindows : _remoteOption.isWindows;
+      final showHidden =
+      isRemote ? _localOption.showHidden : _remoteOption.showHidden ;
+      items.items.forEach((from) async {
+        _jobId++;
+        await _ffi.target?.bind.sessionSendFiles(id: '${_ffi.target?.id}', actId: _jobId, path: from.path, to: PathUtil.join(toPath, from.name, isWindows)
+            ,fileNum: 0, includeHidden: showHidden, isRemote: isRemote);
+      });
+    } else {
+      if (items.isLocal == null) {
+        debugPrint("Failed to sendFiles ,wrong path state");
+        return;
+      }
+      _jobProgress.state = JobState.inProgress;
+      final toPath =
+      items.isLocal! ? currentRemoteDir.path : currentLocalDir.path;
+      final isWindows =
+      items.isLocal! ? _localOption.isWindows : _remoteOption.isWindows;
+      final showHidden =
+      items.isLocal! ? _localOption.showHidden : _remoteOption.showHidden;
+      items.items.forEach((from) async {
+        _jobId++;
+        await _ffi.target?.bind.sessionSendFiles(id: '${_ffi.target?.getId()}', actId: _jobId, path: from.path, to: PathUtil.join(toPath, from.name, isWindows)
+            ,fileNum: 0, includeHidden: showHidden, isRemote: !(items.isLocal!));
+      });
     }
-    _jobProgress.state = JobState.inProgress;
-    final toPath =
-        items.isLocal! ? currentRemoteDir.path : currentLocalDir.path;
-    final isWindows =
-        items.isLocal! ? _localOption.isWindows : _remoteOption.isWindows;
-    final showHidden =
-        items.isLocal! ? _localOption.showHidden : _remoteOption.showHidden;
-    items.items.forEach((from) async {
-      _jobId++;
-      await _ffi.target?.bind.sessionSendFiles(id: '${_ffi.target?.getId()}', actId: _jobId, path: from.path, to: PathUtil.join(toPath, from.name, isWindows)
-          ,fileNum: 0, includeHidden: showHidden, isRemote: !(items.isLocal!));
-    });
   }
 
   bool removeCheckboxRemember = false;

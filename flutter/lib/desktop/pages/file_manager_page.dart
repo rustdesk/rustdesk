@@ -73,8 +73,9 @@ class _FileManagerPageState extends State<FileManagerPage>
                 backgroundColor: MyTheme.grayBg,
                 body: Row(
                   children: [
-                    Flexible(flex: 1, child: body(isLocal: true)),
-                    Flexible(flex: 1, child: body(isLocal: false))
+                    Flexible(flex: 3, child: body(isLocal: true)),
+                    Flexible(flex: 3, child: body(isLocal: false)),
+                    Flexible(flex: 2, child: statusList())
                   ],
                 ),
                 bottomSheet: bottomSheet(),
@@ -198,7 +199,7 @@ class _FileManagerPageState extends State<FileManagerPage>
         itemCount: entries.length + 1,
         itemBuilder: (context, index) {
           if (index >= entries.length) {
-            return listTail();
+            return listTail(isLocal: isLocal);
           }
           var selected = false;
           if (model.selectMode) {
@@ -297,6 +298,16 @@ class _FileManagerPageState extends State<FileManagerPage>
     ]);
   }
 
+  /// transfer status list
+  /// watch transfer status
+  Widget statusList() {
+    return PreferredSize(child: Container(
+      decoration: BoxDecoration(
+        border: Border.all(color: Colors.white70)
+      ),
+    ), preferredSize: Size(200, double.infinity));
+  }
+
   goBack({bool? isLocal}) {
     model.goToParentDirectory(isLocal: isLocal);
   }
@@ -362,7 +373,8 @@ class _FileManagerPageState extends State<FileManagerPage>
         ],
       ));
 
-  Widget listTail() {
+  Widget listTail({bool isLocal = false}) {
+    final dir = isLocal ? model.currentLocalDir : model.currentRemoteDir;
     return Container(
       height: 100,
       child: Column(
@@ -370,14 +382,14 @@ class _FileManagerPageState extends State<FileManagerPage>
           Padding(
             padding: EdgeInsets.fromLTRB(30, 5, 30, 0),
             child: Text(
-              model.currentDir.path,
+              dir.path,
               style: TextStyle(color: MyTheme.darkGray),
             ),
           ),
           Padding(
             padding: EdgeInsets.all(2),
             child: Text(
-              "${translate("Total")}: ${model.currentDir.entries.length} ${translate("items")}",
+              "${translate("Total")}: ${dir.entries.length} ${translate("items")}",
               style: TextStyle(color: MyTheme.darkGray),
             ),
           )
