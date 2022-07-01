@@ -1,21 +1,24 @@
+use std::{
+    collections::HashMap,
+    ffi::{CStr, CString},
+    os::raw::c_char,
+};
+
+use flutter_rust_bridge::{StreamSink, SyncReturn, ZeroCopyBuffer};
+use serde_json::{Number, Value};
+
+use hbb_common::ResultType;
+use hbb_common::{
+    config::{self, Config, LocalConfig, PeerConfig, ONLINE},
+    fs, log,
+};
+
 use crate::client::file_trait::FileManager;
 use crate::common::make_fd_to_json;
 use crate::flutter::connection_manager::{self, get_clients_length, get_clients_state};
 use crate::flutter::{self, Session, SESSIONS};
 use crate::start_server;
 use crate::ui_interface;
-use flutter_rust_bridge::{StreamSink, SyncReturn, ZeroCopyBuffer};
-use hbb_common::ResultType;
-use hbb_common::{
-    config::{self, Config, LocalConfig, PeerConfig, ONLINE},
-    fs, log,
-};
-use serde_json::{Number, Value};
-use std::{
-    collections::HashMap,
-    ffi::{CStr, CString},
-    os::raw::c_char,
-};
 
 fn initialize(app_dir: &str) {
     *config::APP_DIR.write().unwrap() = app_dir.to_owned();
@@ -244,6 +247,13 @@ pub fn session_peer_option(id: String, name: String, value: String) {
     }
 }
 
+pub fn session_get_peer_option(id: String, name: String) -> String {
+    if let Some(session) = SESSIONS.read().unwrap().get(&id) {
+        return session.get_option(&name);
+    }
+    "".to_string()
+}
+
 pub fn session_input_os_password(id: String, value: String) {
     if let Some(session) = SESSIONS.read().unwrap().get(&id) {
         session.input_os_password(value, true);
@@ -290,9 +300,15 @@ pub fn session_remove_file(id: String, act_id: i32, path: String, file_num: i32,
     }
 }
 
-pub fn session_read_dir_recursive(id: String, act_id: i32, path: String, is_remote: bool) {
+pub fn session_read_dir_recursive(
+    id: String,
+    act_id: i32,
+    path: String,
+    is_remote: bool,
+    show_hidden: bool,
+) {
     if let Some(session) = SESSIONS.read().unwrap().get(&id) {
-        session.remove_dir_all(act_id, path, is_remote);
+        session.remove_dir_all(act_id, path, is_remote, show_hidden);
     }
 }
 
@@ -814,12 +830,13 @@ unsafe extern "C" fn set_by_name(name: *const c_char, value: *const c_char) {
 
 #[cfg(target_os = "android")]
 pub mod server_side {
-    use hbb_common::{config::Config, log};
     use jni::{
         objects::{JClass, JString},
         sys::jstring,
         JNIEnv,
     };
+
+    use hbb_common::{config::Config, log};
 
     use crate::start_server;
 

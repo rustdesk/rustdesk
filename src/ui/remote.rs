@@ -201,7 +201,7 @@ impl sciter::EventHandler for Handler {
         fn read_remote_dir(String, bool);
         fn send_chat(String);
         fn switch_display(i32);
-        fn remove_dir_all(i32, String, bool);
+        fn remove_dir_all(i32, String, bool, bool);
         fn confirm_delete_files(i32, i32);
         fn set_no_confirm(i32);
         fn cancel_job(i32);
@@ -1793,7 +1793,7 @@ impl Remote {
                     }
                 }
             }
-            Data::RemoveDirAll((id, path, is_remote)) => {
+            Data::RemoveDirAll((id, path, is_remote, include_hidden)) => {
                 let sep = self.handler.get_path_sep(is_remote);
                 if is_remote {
                     let mut msg_out = Message::new();
@@ -1801,7 +1801,7 @@ impl Remote {
                     file_action.set_all_files(ReadAllFiles {
                         id,
                         path: path.clone(),
-                        include_hidden: true,
+                        include_hidden,
                         ..Default::default()
                     });
                     msg_out.set_file_action(file_action);
@@ -1809,7 +1809,7 @@ impl Remote {
                     self.remove_jobs
                         .insert(id, RemoveJob::new(Vec::new(), path, sep, is_remote));
                 } else {
-                    match fs::get_recursive_files(&path, true) {
+                    match fs::get_recursive_files(&path, include_hidden) {
                         Ok(entries) => {
                             let m = make_fd(id, &entries, true);
                             self.handler.call("updateFolderFiles", &make_args!(m));
@@ -2370,7 +2370,7 @@ impl Remote {
             }
             back_notification::PrivacyModeState::OffSucceeded => {
                 self.handler
-                .msgbox("custom-nocancel", "Privacy mode", "Out privacy mode");
+                    .msgbox("custom-nocancel", "Privacy mode", "Out privacy mode");
                 self.update_privacy_mode(false);
             }
             back_notification::PrivacyModeState::OffByPeer => {

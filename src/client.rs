@@ -15,6 +15,7 @@ use magnum_opus::{Channels::*, Decoder as AudioDecoder};
 use sha2::{Digest, Sha256};
 use uuid::Uuid;
 
+pub use file_trait::FileManager;
 use hbb_common::{
     allow_err,
     anyhow::{anyhow, Context},
@@ -30,13 +31,14 @@ use hbb_common::{
     tokio::time::Duration,
     AddrMangle, ResultType, Stream,
 };
+pub use helper::LatencyController;
 use scrap::{Decoder, Image, VideoCodecId};
 
 pub use super::lang::*;
+
 pub mod file_trait;
-pub use file_trait::FileManager;
 pub mod helper;
-pub use helper::LatencyController;
+
 pub const SEC30: Duration = Duration::from_secs(30);
 
 /// Client of the remote desktop.
@@ -1535,7 +1537,7 @@ pub enum Data {
     Login((String, bool)),
     Message(Message),
     SendFiles((i32, String, String, i32, bool, bool)),
-    RemoveDirAll((i32, String, bool)),
+    RemoveDirAll((i32, String, bool, bool)),
     ConfirmDeleteFiles((i32, i32)),
     SetNoConfirm(i32),
     RemoveDir((i32, String)),
