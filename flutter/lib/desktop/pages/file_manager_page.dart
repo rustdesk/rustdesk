@@ -118,8 +118,7 @@ class _FileManagerPageState extends State<FileManagerPage>
             PopupMenuItem(
               child: Row(
                 children: [
-                  Icon(Icons.folder_outlined,
-                      color: Colors.black),
+                  Icon(Icons.folder_outlined, color: Colors.black),
                   SizedBox(width: 5),
                   Text(translate("Create Folder"))
                 ],
@@ -150,16 +149,15 @@ class _FileManagerPageState extends State<FileManagerPage>
             model.toggleSelectMode();
           } else if (v == "folder") {
             final name = TextEditingController();
-            DialogManager.show((setState, close) =>
-                CustomAlertDialog(
+            DialogManager.show((setState, close) => CustomAlertDialog(
                     title: Text(translate("Create Folder")),
                     content: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         TextFormField(
                           decoration: InputDecoration(
-                            labelText: translate(
-                                "Please enter the folder name"),
+                            labelText:
+                                translate("Please enter the folder name"),
                           ),
                           controller: name,
                         ),
@@ -192,120 +190,195 @@ class _FileManagerPageState extends State<FileManagerPage>
   Widget body({bool isLocal = false}) {
     final fd = isLocal ? model.currentLocalDir : model.currentRemoteDir;
     final entries = fd.entries;
-    return Column(children: [
-      headTools(isLocal),
-      Expanded(
-          child: ListView.builder(
-        itemCount: entries.length + 1,
-        itemBuilder: (context, index) {
-          if (index >= entries.length) {
-            return listTail(isLocal: isLocal);
-          }
-          var selected = false;
-          if (model.selectMode) {
-            selected = _selectedItems.contains(entries[index]);
-          }
-
-          final sizeStr = entries[index].isFile
-              ? readableFileSize(entries[index].size.toDouble())
-              : "";
-          return Card(
-            child: ListTile(
-              leading: Icon(
-                  entries[index].isFile ? Icons.feed_outlined : Icons.folder,
-                  size: 40),
-              title: Text(entries[index].name),
-              selected: selected,
-              subtitle: Text(
-                entries[index]
-                        .lastModified()
-                        .toString()
-                        .replaceAll(".000", "") +
-                    "   " +
-                    sizeStr,
-                style: TextStyle(fontSize: 12, color: MyTheme.darkGray),
+    return Container(
+      decoration: BoxDecoration(
+          color: Colors.white70, border: Border.all(color: Colors.grey)),
+      margin: const EdgeInsets.all(16.0),
+      padding: const EdgeInsets.all(8.0),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        headTools(isLocal),
+        Expanded(
+            child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: SingleChildScrollView(
+                child: DataTable(
+                  showCheckboxColumn: true,
+                  dataRowHeight: 30,
+                  columnSpacing: 8,
+                  columns: [
+                    DataColumn(label: Text(translate(" "))), // icon
+                    DataColumn(
+                        label: Text(
+                      translate("Name"),
+                    )),
+                    DataColumn(label: Text(translate("Modified"))),
+                    DataColumn(label: Text(translate("Size"))),
+                  ],
+                  rows: entries.map((entry) {
+                    final sizeStr = entry.isFile
+                        ? readableFileSize(entry.size.toDouble())
+                        : "";
+                    return DataRow(
+                        key: ValueKey(entry.name),
+                        onSelectChanged: (s) {
+                          // TODO
+                        },
+                        cells: [
+                          // TODO: icon
+                          DataCell(Icon(
+                              entry.isFile ? Icons.feed_outlined : Icons.folder,
+                              size: 25)),
+                          DataCell(
+                              ConstrainedBox(
+                                  constraints: BoxConstraints(maxWidth: 100),
+                                  child: Text(entry.name,
+                                      overflow: TextOverflow.ellipsis)),
+                              onTap: () {
+                            if (entry.isDirectory) {
+                              model.openDirectory(entry.path, isLocal: isLocal);
+                            } else {
+                              // Perform file-related tasks.
+                            }
+                          }),
+                          DataCell(Text(
+                            entry
+                                    .lastModified()
+                                    .toString()
+                                    .replaceAll(".000", "") +
+                                "   ",
+                            style: TextStyle(
+                                fontSize: 12, color: MyTheme.darkGray),
+                          )),
+                          DataCell(Text(
+                            sizeStr,
+                            style: TextStyle(
+                                fontSize: 12, color: MyTheme.darkGray),
+                          )),
+                        ]);
+                  }).toList(),
+                ),
               ),
-              trailing: needShowCheckBox()
-                  ? Checkbox(
-                      value: selected,
-                      onChanged: (v) {
-                        if (v == null) return;
-                        if (v && !selected) {
-                          _selectedItems.add(isLocal, entries[index]);
-                        } else if (!v && selected) {
-                          _selectedItems.remove(entries[index]);
-                        }
-                        setState(() {});
-                      })
-                  : PopupMenuButton<String>(
-                      icon: Icon(Icons.more_vert),
-                      itemBuilder: (context) {
-                        return [
-                          PopupMenuItem(
-                            child: Text(translate("Delete")),
-                            value: "delete",
-                          ),
-                          PopupMenuItem(
-                            child: Text(translate("Multi Select")),
-                            value: "multi_select",
-                          ),
-                          PopupMenuItem(
-                            child: Text(translate("Properties")),
-                            value: "properties",
-                            enabled: false,
-                          )
-                        ];
-                      },
-                      onSelected: (v) {
-                        if (v == "delete") {
-                          final items = SelectedItems();
-                          items.add(isLocal, entries[index]);
-                          model.removeAction(items);
-                        } else if (v == "multi_select") {
-                          _selectedItems.clear();
-                          model.toggleSelectMode();
-                        }
-                      }),
-              onTap: () {
-                if (model.selectMode && !_selectedItems.isOtherPage(isLocal)) {
-                  if (selected) {
-                    _selectedItems.remove(entries[index]);
-                  } else {
-                    _selectedItems.add(isLocal, entries[index]);
-                  }
-                  setState(() {});
-                  return;
-                }
-                if (entries[index].isDirectory) {
-                  model.openDirectory(entries[index].path, isLocal: isLocal);
-                  breadCrumbScrollToEnd(isLocal);
-                } else {
-                  // Perform file-related tasks.
-                }
-              },
-              onLongPress: () {
-                _selectedItems.clear();
-                model.toggleSelectMode();
-                if (model.selectMode) {
-                  _selectedItems.add(isLocal, entries[index]);
-                }
-                setState(() {});
-              },
-            ),
-          );
-        },
-      ))
-    ]);
+            )
+          ],
+        )),
+        Center(child: listTail(isLocal: isLocal)),
+        // Expanded(
+        //     child: ListView.builder(
+        //   itemCount: entries.length + 1,
+        //   itemBuilder: (context, index) {
+        //     if (index >= entries.length) {
+        //       return listTail(isLocal: isLocal);
+        //     }
+        //     var selected = false;
+        //     if (model.selectMode) {
+        //       selected = _selectedItems.contains(entries[index]);
+        //     }
+        //
+        //     final sizeStr = entries[index].isFile
+        //         ? readableFileSize(entries[index].size.toDouble())
+        //         : "";
+        //     return Card(
+        //       child: ListTile(
+        //         leading: Icon(
+        //             entries[index].isFile ? Icons.feed_outlined : Icons.folder,
+        //             size: 40),
+        //         title: Text(entries[index].name),
+        //         selected: selected,
+        //         subtitle: Text(
+        //           entries[index]
+        //                   .lastModified()
+        //                   .toString()
+        //                   .replaceAll(".000", "") +
+        //               "   " +
+        //               sizeStr,
+        //           style: TextStyle(fontSize: 12, color: MyTheme.darkGray),
+        //         ),
+        //         trailing: needShowCheckBox()
+        //             ? Checkbox(
+        //                 value: selected,
+        //                 onChanged: (v) {
+        //                   if (v == null) return;
+        //                   if (v && !selected) {
+        //                     _selectedItems.add(isLocal, entries[index]);
+        //                   } else if (!v && selected) {
+        //                     _selectedItems.remove(entries[index]);
+        //                   }
+        //                   setState(() {});
+        //                 })
+        //             : PopupMenuButton<String>(
+        //                 icon: Icon(Icons.more_vert),
+        //                 itemBuilder: (context) {
+        //                   return [
+        //                     PopupMenuItem(
+        //                       child: Text(translate("Delete")),
+        //                       value: "delete",
+        //                     ),
+        //                     PopupMenuItem(
+        //                       child: Text(translate("Multi Select")),
+        //                       value: "multi_select",
+        //                     ),
+        //                     PopupMenuItem(
+        //                       child: Text(translate("Properties")),
+        //                       value: "properties",
+        //                       enabled: false,
+        //                     )
+        //                   ];
+        //                 },
+        //                 onSelected: (v) {
+        //                   if (v == "delete") {
+        //                     final items = SelectedItems();
+        //                     items.add(isLocal, entries[index]);
+        //                     model.removeAction(items);
+        //                   } else if (v == "multi_select") {
+        //                     _selectedItems.clear();
+        //                     model.toggleSelectMode();
+        //                   }
+        //                 }),
+        //         onTap: () {
+        //           if (model.selectMode && !_selectedItems.isOtherPage(isLocal)) {
+        //             if (selected) {
+        //               _selectedItems.remove(entries[index]);
+        //             } else {
+        //               _selectedItems.add(isLocal, entries[index]);
+        //             }
+        //             setState(() {});
+        //             return;
+        //           }
+        //           if (entries[index].isDirectory) {
+        //             model.openDirectory(entries[index].path, isLocal: isLocal);
+        //             breadCrumbScrollToEnd(isLocal);
+        //           } else {
+        //             // Perform file-related tasks.
+        //           }
+        //         },
+        //         onLongPress: () {
+        //           _selectedItems.clear();
+        //           model.toggleSelectMode();
+        //           if (model.selectMode) {
+        //             _selectedItems.add(isLocal, entries[index]);
+        //           }
+        //           setState(() {});
+        //         },
+        //       ),
+        //     );
+        //   },
+        // ))
+      ]),
+    );
   }
 
   /// transfer status list
   /// watch transfer status
   Widget statusList() {
-    return PreferredSize(child: Container(
-      decoration: BoxDecoration(
-        border: Border.all(color: Colors.white70)
-      ),
-    ), preferredSize: Size(200, double.infinity));
+    return PreferredSize(
+        child: Container(
+          margin: const EdgeInsets.only(top: 16.0,bottom: 16.0, right: 16.0),
+          padding: const EdgeInsets.all(8.0),
+          decoration: BoxDecoration(color: Colors.white70,border: Border.all(color: Colors.grey)),
+        ),
+        preferredSize: Size(200, double.infinity));
   }
 
   goBack({bool? isLocal}) {
@@ -313,10 +386,10 @@ class _FileManagerPageState extends State<FileManagerPage>
   }
 
   breadCrumbScrollToEnd(bool isLocal) {
-    final controller = isLocal ? _breadCrumbLocalScroller : _breadCrumbRemoteScroller;
+    final controller =
+        isLocal ? _breadCrumbLocalScroller : _breadCrumbRemoteScroller;
     Future.delayed(Duration(milliseconds: 200), () {
-      controller.animateTo(
-          controller.position.maxScrollExtent,
+      controller.animateTo(controller.position.maxScrollExtent,
           duration: Duration(milliseconds: 200),
           curve: Curves.fastLinearToSlowEaseIn);
     });
@@ -343,7 +416,10 @@ class _FileManagerPageState extends State<FileManagerPage>
               model.openDirectory(path, isLocal: isLocal);
             }, isLocal),
             divider: Icon(Icons.chevron_right),
-            overflow: ScrollableOverflow(controller: isLocal ? _breadCrumbLocalScroller : _breadCrumbRemoteScroller),
+            overflow: ScrollableOverflow(
+                controller: isLocal
+                    ? _breadCrumbLocalScroller
+                    : _breadCrumbRemoteScroller),
           )),
           Row(
             children: [
@@ -478,8 +554,8 @@ class _FileManagerPageState extends State<FileManagerPage>
     return null;
   }
 
-  List<BreadCrumbItem> getPathBreadCrumbItems(
-      void Function() onHome, void Function(List<String>) onPressed, bool isLocal) {
+  List<BreadCrumbItem> getPathBreadCrumbItems(void Function() onHome,
+      void Function(List<String>) onPressed, bool isLocal) {
     final path = model.shortPath(isLocal);
     final list = PathUtil.split(path, model.currentIsWindows);
     final breadCrumbList = [
