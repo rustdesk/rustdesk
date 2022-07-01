@@ -170,19 +170,18 @@ class FileModel extends ChangeNotifier {
     if (false == resp) {
       cancelJob(int.tryParse(evt['id']) ?? 0);
     } else {
-      var msg = Map()
-        ..['id'] = evt['id']
-        ..['file_num'] = evt['file_num']
-        ..['is_upload'] = evt['is_upload']
-        ..['remember'] = fileConfirmCheckboxRemember.toString();
+      var need_override = false;
       if (resp == null) {
         // skip
-        msg['need_override'] = 'false';
+        need_override = false;
       } else {
         // overwrite
-        msg['need_override'] = 'true';
+        need_override = true;
       }
-      _ffi.target?.setByName("set_confirm_override_file", jsonEncode(msg));
+      _ffi.target?.bind.sessionSetConfirmOverrideFile(id: _ffi.target?.id ?? "",
+          actId: evt['id'], fileNum: evt['file_num'],
+          needOverride: need_override, remember: fileConfirmCheckboxRemember,
+          isUpload: evt['is_upload']);
     }
   }
 
@@ -193,22 +192,21 @@ class FileModel extends ChangeNotifier {
 
   onReady() async {
     _localOption.home = _ffi.target?.getByName("get_home_dir") ?? "";
-    _localOption.showHidden =
-        _ffi.target?.getByName("peer_option", "local_show_hidden").isNotEmpty ??
-            false;
+    _localOption.showHidden = (await _ffi.target?.bind.sessionGetPeerOption
+      (id: _ffi.target?.id ?? "", name: "local_show_hidden"))?.isNotEmpty ?? false;
 
-    _remoteOption.showHidden = _ffi.target
-            ?.getByName("peer_option", "remote_show_hidden")
-            .isNotEmpty ??
-        false;
+    _remoteOption.showHidden = (await _ffi.target?.bind.sessionGetPeerOption
+      (id: _ffi.target?.id ?? "", name: "remote_show_hidden"))?.isNotEmpty ?? false;
     _remoteOption.isWindows = _ffi.target?.ffiModel.pi.platform == "Windows";
 
     debugPrint("remote platform: ${_ffi.target?.ffiModel.pi.platform}");
 
     await Future.delayed(Duration(milliseconds: 100));
 
-    final local = _ffi.target?.getByName("peer_option", "local_dir") ?? "";
-    final remote = _ffi.target?.getByName("peer_option", "remote_dir") ?? "";
+    final local = (await _ffi.target?.bind.sessionGetPeerOption
+      (id: _ffi.target?.id ?? "", name: "local_dir")) ?? "";
+    final remote = (await _ffi.target?.bind.sessionGetPeerOption
+      (id: _ffi.target?.id ?? "", name: "remote_dir")) ?? "";
     openDirectory(local.isEmpty ? _localOption.home : local, isLocal: true);
     openDirectory(remote.isEmpty ? _remoteOption.home : remote, isLocal: false);
     await Future.delayed(Duration(seconds: 1));
@@ -224,23 +222,16 @@ class FileModel extends ChangeNotifier {
     SmartDialog.dismiss();
 
     // save config
-    Map<String, String> msg = Map();
+    Map<String, String> msgMap = Map();
 
-    msg["name"] = "local_dir";
-    msg["value"] = _currentLocalDir.path;
-    _ffi.target?.setByName('peer_option', jsonEncode(msg));
-
-    msg["name"] = "local_show_hidden";
-    msg["value"] = _localOption.showHidden ? "Y" : "";
-    _ffi.target?.setByName('peer_option', jsonEncode(msg));
-
-    msg["name"] = "remote_dir";
-    msg["value"] = _currentRemoteDir.path;
-    _ffi.target?.setByName('peer_option', jsonEncode(msg));
-
-    msg["name"] = "remote_show_hidden";
-    msg["value"] = _remoteOption.showHidden ? "Y" : "";
-    _ffi.target?.setByName('peer_option', jsonEncode(msg));
+    msgMap["local_dir"] = _currentLocalDir.path;
+    msgMap["local_show_hidden"] = _localOption.showHidden ? "Y" : "";
+    msgMap["remote_dir"] = _currentRemoteDir.path;
+    msgMap["remote_show_hidden"] = _remoteOption.showHidden ? "Y" : "";
+    final id = _ffi.target?.id ?? "";
+    for(final msg in msgMap.entries) {
+      _ffi.target?.bind.sessionPeerOption(id: id, name: msg.key, value: msg.value);
+    }
     _currentLocalDir.clear();
     _currentRemoteDir.clear();
     _localOption.clear();
@@ -583,7 +574,7 @@ class FileFetcher {
   }
 
   // if id == null, means to fetch global FFI
-  FFI get _ffi => ffi(_id == null ? "" : 'ft_${_id}');
+  FFI get _ffi => ffi(_id ?? "");
 
   Future<FileDirectory> registerReadTask(bool isLocal, String path) {
     // final jobs = isLocal?localJobs:remoteJobs; // maybe we will use read local dir async later
@@ -663,14 +654,7 @@ class FileFetcher {
       int id, String path, bool isLocal, bool showHidden) async {
     // TODO test Recursive is show hidden default?
     try {
-      final msg = {
-        "id": id.toString(),
-        "path": path,
-        "show_hidden": showHidden.toString(),
-        "is_remote": (!isLocal).toString()
-      };
-      // TODO
-      _ffi.setByName("read_dir_recursive", jsonEncode(msg));
+      await _ffi.bind.sessionReadDirRecursive(id: _ffi.id, actId: id, path: path, isRemote: !isLocal, showHidden: showHidden);
       return registerReadRecursiveTask(id);
     } catch (e) {
       return Future.error(e);

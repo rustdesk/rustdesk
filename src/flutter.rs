@@ -1,6 +1,10 @@
-use crate::common::make_fd_to_json;
-use crate::{client::*, flutter_ffi::EventToUI};
+use std::{
+    collections::{HashMap, VecDeque},
+    sync::{Arc, Mutex, RwLock},
+};
+
 use flutter_rust_bridge::{StreamSink, ZeroCopyBuffer};
+
 use hbb_common::{
     allow_err,
     compress::decompress,
@@ -21,10 +25,9 @@ use hbb_common::{
     },
     Stream,
 };
-use std::{
-    collections::{HashMap, VecDeque},
-    sync::{Arc, Mutex, RwLock},
-};
+
+use crate::common::make_fd_to_json;
+use crate::{client::*, flutter_ffi::EventToUI};
 
 lazy_static::lazy_static! {
     // static ref SESSION: Arc<RwLock<Option<Session>>> = Default::default();
@@ -52,9 +55,9 @@ impl Session {
     /// * `id` - The identifier of the remote session with prefix. Regex: [\w]*[\_]*[\d]+
     /// * `is_file_transfer` - If the session is used for file transfer.
     pub fn start(identifier: &str, is_file_transfer: bool, events2ui: StreamSink<EventToUI>) {
-        LocalConfig::set_remote_id(&identifier);
         // TODO check same id
         let session_id = get_session_id(identifier.to_owned());
+        LocalConfig::set_remote_id(&session_id);
         // TODO close
         // Self::close();
         let events2ui = Arc::new(RwLock::new(events2ui));
@@ -502,7 +505,11 @@ impl Interface for Session {
 
         if lc.is_file_transfer {
             if pi.username.is_empty() {
-                self.msgbox("error", "Error", "No active console user logged on, please connect and logon first.");
+                self.msgbox(
+                    "error",
+                    "Error",
+                    "No active console user logged on, please connect and logon first.",
+                );
                 return;
             }
         } else {
@@ -992,20 +999,20 @@ impl Connection {
                     }
                 }
             }
-            Data::RemoveDirAll((id, path, is_remote)) => {
+            Data::RemoveDirAll((id, path, is_remote, include_hidden)) => {
                 if is_remote {
                     let mut msg_out = Message::new();
                     let mut file_action = FileAction::new();
                     file_action.set_all_files(ReadAllFiles {
                         id,
                         path: path.clone(),
-                        include_hidden: true,
+                        include_hidden,
                         ..Default::default()
                     });
                     msg_out.set_file_action(file_action);
                     allow_err!(peer.send(&msg_out).await);
                 } else {
-                    match fs::get_recursive_files(&path, true) {
+                    match fs::get_recursive_files(&path, include_hidden) {
                         Ok(entries) => {
                             let mut fd = FileDirectory::new();
                             fd.id = id;
@@ -1235,9 +1242,8 @@ pub mod connection_manager {
         sync::{Mutex, RwLock},
     };
 
-    use crate::ipc;
-    use crate::ipc::Data;
-    use crate::server::Connection as Conn;
+    use serde_derive::Serialize;
+
     use hbb_common::{
         allow_err,
         config::Config,
@@ -1254,7 +1260,10 @@ pub mod connection_manager {
     };
     #[cfg(any(target_os = "android"))]
     use scrap::android::call_main_service_set_by_name;
-    use serde_derive::Serialize;
+
+    use crate::ipc;
+    use crate::ipc::Data;
+    use crate::server::Connection as Conn;
 
     use super::GLOBAL_EVENT_STREAM;
 

@@ -1,5 +1,6 @@
-use super::{Data, Interface};
 use hbb_common::{fs, message_proto::*};
+
+use super::{Data, Interface};
 
 pub trait FileManager: Interface {
     fn get_home_dir(&self) -> String {
@@ -48,8 +49,8 @@ pub trait FileManager: Interface {
         self.send(Data::RemoveFile((id, path, file_num, is_remote)));
     }
 
-    fn remove_dir_all(&self, id: i32, path: String, is_remote: bool) {
-        self.send(Data::RemoveDirAll((id, path, is_remote)));
+    fn remove_dir_all(&self, id: i32, path: String, is_remote: bool, include_hidden: bool) {
+        self.send(Data::RemoveDirAll((id, path, is_remote, include_hidden)));
     }
 
     fn confirm_delete_files(&self, id: i32, file_num: i32) {
