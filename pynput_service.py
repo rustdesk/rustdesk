@@ -33,6 +33,7 @@ DEAD_KEYS = {
 }
 
 
+
 def my_keyboard_mapping(display):
     """Generates a mapping from *keysyms* to *key codes* and required
     modifier shift states.
@@ -151,8 +152,8 @@ class MyController(Controller):
         try:
             with self.modifiers as modifiers:
                 alt_gr = Key.alt_gr in modifiers
-
-            if alt_gr or keycode_flag:
+            # !!!: Send_event can't support lock screen, this condition cann't be modified
+            if alt_gr:
                 self.send_event(
                     event, keycode, shift_state)
             else:
