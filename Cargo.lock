@@ -2256,16 +2256,16 @@ dependencies = [
 ]
 
 [[package]]
-name = "hyper-rustls"
-version = "0.23.0"
+name = "hyper-tls"
+version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d87c48c02e0dc5e3b849a2041db3029fd066650f8f717c07bf8ed78ccb895cac"
+checksum = "d6183ddfa99b85da61a140bea0efc93fdf56ceaa041b37d553518030827f9905"
 dependencies = [
- "http",
+ "bytes",
  "hyper",
- "rustls",
+ "native-tls",
  "tokio",
- "tokio-rustls",
+ "tokio-native-tls",
 ]
 
 [[package]]
@@ -2422,10 +2422,9 @@ dependencies = [
 [[package]]
 name = "kernel32-sys"
 version = "0.2.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7507624b29483431c0ba2d82aece8ca6cdba9382bff4ddd0f7490560c056098d"
+source = "git+https://github.com/sj6219/winapi-rs?branch=0.2.8_alpha#26f3b8e483aebe599cdd23e43554e704ec28467e"
 dependencies = [
- "winapi 0.2.8",
+ "winapi 0.2.8+alpha",
  "winapi-build",
 ]
 
@@ -2712,9 +2711,8 @@ dependencies = [
 
 [[package]]
 name = "mio"
-version = "0.6.23"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4afd66f5b91bf2a3bc13fad0e21caedac168ca4c707504e75585648ae80e4cc4"
+version = "0.6.23+alpha"
+source = "git+https://github.com/sj6219/mio?branch=0.6.23_alpha#b8323bb52200b30b30a414043c8931703f51acb4"
 dependencies = [
  "cfg-if 0.1.10",
  "fuchsia-zircon",
@@ -2723,10 +2721,10 @@ dependencies = [
  "kernel32-sys",
  "libc",
  "log",
- "miow 0.2.2",
+ "miow 0.2.2+alpha",
  "net2",
  "slab",
- "winapi 0.2.8",
+ "winapi 0.2.8+alpha",
 ]
 
 [[package]]
@@ -2768,25 +2766,23 @@ dependencies = [
 
 [[package]]
 name = "mio-named-pipes"
-version = "0.1.7"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0840c1c50fd55e521b247f949c241c9997709f23bd7f023b9762cd561e935656"
+version = "0.1.7+alpha"
+source = "git+https://github.com/sj6219/mio-named-pipes?branch=0.1.7_alpha#9fafff2ab25d05e6233e1756cbc56c21e49501c0"
 dependencies = [
  "log",
- "mio 0.6.23",
+ "mio 0.6.23+alpha",
  "miow 0.3.7",
  "winapi 0.3.9",
 ]
 
 [[package]]
 name = "miow"
-version = "0.2.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ebd808424166322d4a38da87083bfddd3ac4c131334ed55856112eb06d46944d"
+version = "0.2.2+alpha"
+source = "git+https://github.com/sj6219/miow?branch=0.2.2_alpha#e3eceb5eacc983b309fbb47b6ae868662f2ce982"
 dependencies = [
  "kernel32-sys",
  "net2",
- "winapi 0.2.8",
+ "winapi 0.2.8+alpha",
  "ws2_32-sys",
 ]
 
@@ -2813,6 +2809,24 @@ name = "muldiv"
 version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0419348c027fa7be448d2ae7ea0e4e04c2334c31dc4e74ab29f00a2a7ca69204"
+
+[[package]]
+name = "native-tls"
+version = "0.2.10"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fd7e2f3618557f980e0b17e8856252eee3c97fa12c54dff0ca290fb6266ca4a9"
+dependencies = [
+ "lazy_static",
+ "libc",
+ "log",
+ "openssl",
+ "openssl-probe",
+ "openssl-sys",
+ "schannel",
+ "security-framework",
+ "security-framework-sys",
+ "tempfile",
+]
 
 [[package]]
 name = "ndk"
@@ -3184,10 +3198,49 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7709cef83f0c1f58f666e746a08b21e0085f7440fa6a29cc194d68aac97a4225"
 
 [[package]]
+name = "openssl"
+version = "0.10.40"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fb81a6430ac911acb25fe5ac8f1d2af1b4ea8a4fdfda0f1ee4292af2e2d8eb0e"
+dependencies = [
+ "bitflags",
+ "cfg-if 1.0.0",
+ "foreign-types",
+ "libc",
+ "once_cell",
+ "openssl-macros",
+ "openssl-sys",
+]
+
+[[package]]
+name = "openssl-macros"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b501e44f11665960c7e7fcf062c7d96a14ade4aa98116c004b2e37b5be7d736c"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
 name = "openssl-probe"
 version = "0.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ff011a302c396a5197692431fc1948019154afc178baf7d8e37367442a4601cf"
+
+[[package]]
+name = "openssl-sys"
+version = "0.9.74"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "835363342df5fba8354c5b453325b110ffd54044e588c539cf2f20a8014e4cb1"
+dependencies = [
+ "autocfg 1.1.0",
+ "cc",
+ "libc",
+ "pkg-config",
+ "vcpkg",
+]
 
 [[package]]
 name = "os_str_bytes"
@@ -3237,8 +3290,8 @@ dependencies = [
 
 [[package]]
 name = "parity-tokio-ipc"
-version = "0.7.3"
-source = "git+https://github.com/open-trade/parity-tokio-ipc#64d5b6b11464d01bfe75b3b79a49bd455b79e352"
+version = "0.7.3+alpha"
+source = "git+https://github.com/sj6219/parity-tokio-ipc?branch=0.7.3_alpha#fe46ac2bc16c87715666d6904b99e6f82acb8ff9"
 dependencies = [
  "futures",
  "libc",
@@ -3569,12 +3622,11 @@ dependencies = [
 
 [[package]]
 name = "quest"
-version = "0.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "556af5f5c953a2ee13f45753e581a38f9778e6551bc3ccc56d90b14628fe59d8"
+version = "0.3.0+alpha"
+source = "git+https://github.com/sj6219/quest?branch=0.3.0_alpha#48bdd7f40abb2231b89e3207f85fdcd1d12af5bc"
 dependencies = [
  "cfg-if 0.1.10",
- "rpassword 2.1.0",
+ "rpassword 2.1.0+alpha",
  "tempfile",
  "termios",
  "winapi 0.3.9",
@@ -3582,9 +3634,8 @@ dependencies = [
 
 [[package]]
 name = "quinn"
-version = "0.8.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d7542006acd6e057ff632307d219954c44048f818898da03113d6c0086bfddd9"
+version = "0.8.3+alpha"
+source = "git+https://github.com/sj6219/quinn?branch=0.8.3_alpha#a8545f0490cdb073c2e40abcd46a4ba8c55aafab"
 dependencies = [
  "bytes",
  "futures-channel",
@@ -3601,9 +3652,8 @@ dependencies = [
 
 [[package]]
 name = "quinn-proto"
-version = "0.8.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3a13a5c0a674c1ce7150c9df7bc4a1e46c2fbbe7c710f56c0dc78b1a810e779e"
+version = "0.8.3+alpha"
+source = "git+https://github.com/sj6219/quinn?branch=0.8.3_alpha#a8545f0490cdb073c2e40abcd46a4ba8c55aafab"
 dependencies = [
  "bytes",
  "fxhash",
@@ -3621,9 +3671,8 @@ dependencies = [
 
 [[package]]
 name = "quinn-udp"
-version = "0.1.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b3149f7237331015f1a6adf065c397d1be71e032fcf110ba41da52e7926b882f"
+version = "0.1.2+alpha"
+source = "git+https://github.com/sj6219/quinn?branch=0.8.3_alpha#a8545f0490cdb073c2e40abcd46a4ba8c55aafab"
 dependencies = [
  "futures-util",
  "libc",
@@ -3912,9 +3961,8 @@ dependencies = [
 
 [[package]]
 name = "reqwest"
-version = "0.11.11"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b75aa69a3f06bbcc66ede33af2af253c6f7a86b1ca0033f60c580a27074fbf92"
+version = "0.11.11+alpha"
+source = "git+https://github.com/sj6219/reqwest?branch=0.11.11_alpha#7343d1dda3b344988578f5c916346156467c8ac3"
 dependencies = [
  "base64",
  "bytes",
@@ -3925,54 +3973,49 @@ dependencies = [
  "http",
  "http-body",
  "hyper",
- "hyper-rustls",
+ "hyper-tls",
  "ipnet",
  "js-sys",
  "lazy_static",
  "log",
  "mime",
+ "native-tls",
  "percent-encoding",
  "pin-project-lite",
- "rustls",
- "rustls-pemfile 1.0.0",
  "serde 1.0.137",
  "serde_json 1.0.81",
  "serde_urlencoded",
  "tokio",
- "tokio-rustls",
+ "tokio-native-tls",
  "tower-service",
  "url",
  "wasm-bindgen",
  "wasm-bindgen-futures",
  "web-sys",
- "webpki-roots",
  "winreg 0.10.1",
 ]
 
 [[package]]
 name = "ring"
-version = "0.16.20"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3053cf52e236a3ed746dfc745aa9cacf1b791d846bdaf412f60a8d7d6e17c8fc"
+version = "0.17.0-not-released-yet"
+source = "git+https://github.com/sj6219/ring?branch=0.16.20_alpha#0de715419351d0844db646135975543bddfdb6a5"
 dependencies = [
  "cc",
  "libc",
  "once_cell",
  "spin",
  "untrusted",
- "web-sys",
  "winapi 0.3.9",
 ]
 
 [[package]]
 name = "rpassword"
-version = "2.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d37473170aedbe66ffa3ad3726939ba677d83c646ad4fd99e5b4bc38712f45ec"
+version = "2.1.0+alpha"
+source = "git+https://github.com/sj6219/rpassword?branch=2.1.0_alpha#9cf0ef2fd0d6969c130d846970167e1df90d64ba"
 dependencies = [
  "kernel32-sys",
  "libc",
- "winapi 0.2.8",
+ "winapi 0.2.8+alpha",
 ]
 
 [[package]]
@@ -4040,7 +4083,7 @@ dependencies = [
 
 [[package]]
 name = "rustdesk"
-version = "1.1.10"
+version = "1.1.10+alpha"
 dependencies = [
  "android_logger 0.11.0",
  "arboard",
@@ -4122,10 +4165,8 @@ dependencies = [
 [[package]]
 name = "rustls"
 version = "0.20.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5aab8ee6c7097ed6057f43c187a62418d0c05a4bd5f18b3571db50ee0f9ce033"
+source = "git+https://github.com/sj6219/rustls?branch=0.20.6_alpha#6c2fb9922bf0370513893067bd63e25ca086e44e"
 dependencies = [
- "log",
  "ring",
  "sct",
  "webpki",
@@ -4265,8 +4306,7 @@ dependencies = [
 [[package]]
 name = "sct"
 version = "0.7.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d53dcdb7c9f8158937a7981b48accfd39a43af418591a5d008c7b22b5e1b7ca4"
+source = "git+https://github.com/sj6219/sct.rs?branch=0.7.0_alpha#cf3463acfd2700ecd99d745f88a7cee54caae051"
 dependencies = [
  "ring",
  "untrusted",
@@ -4520,9 +4560,9 @@ dependencies = [
 
 [[package]]
 name = "spin"
-version = "0.5.2"
+version = "0.9.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6e63cff320ae2c57904679ba7cb63280a3dc4613885beafb148ee7bf9aa9042d"
+checksum = "c530c2b0d0bf8b69304b39fe2001993e267461948b890cd037d8ad4293fa1a0d"
 
 [[package]]
 name = "stdweb"
@@ -4846,14 +4886,13 @@ dependencies = [
 ]
 
 [[package]]
-name = "tokio-rustls"
-version = "0.23.4"
+name = "tokio-native-tls"
+version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c43ee83903113e03984cb9e5cebe6c04a5116269e900e3ddba8f068a62adda59"
+checksum = "f7d995660bd2b7f8c1568414c1126076c13fbb725c40112dc0120b78eb9b717b"
 dependencies = [
- "rustls",
+ "native-tls",
  "tokio",
- "webpki",
 ]
 
 [[package]]
@@ -5076,6 +5115,12 @@ checksum = "dd6469f4314d5f1ffec476e05f17cc9a78bc7a27a6a857842170bdf8d6f98d2f"
 dependencies = [
  "getrandom",
 ]
+
+[[package]]
+name = "vcpkg"
+version = "0.2.15"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "accd4ea62f7bb7a82fe23066fb0957d48ef677f6eeb8215f372f52e48bb32426"
 
 [[package]]
 name = "vec_map"
@@ -5315,21 +5360,11 @@ dependencies = [
 
 [[package]]
 name = "webpki"
-version = "0.22.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f095d78192e208183081cc07bc5515ef55216397af48b873e5edcd72637fa1bd"
+version = "0.22.0+alpha"
+source = "git+https://github.com/sj6219/webpki?branch=0.22.0_alpha#e14e3821387e70afcdfc1b34b3942c22c53fd530"
 dependencies = [
  "ring",
  "untrusted",
-]
-
-[[package]]
-name = "webpki-roots"
-version = "0.22.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "44d8de8415c823c8abd270ad483c6feeac771fad964890779f9a8cb24fbbc1bf"
-dependencies = [
- "webpki",
 ]
 
 [[package]]
@@ -5386,9 +5421,8 @@ checksum = "c168940144dd21fd8046987c16a46a33d5fc84eec29ef9dcddc2ac9e31526b7c"
 
 [[package]]
 name = "winapi"
-version = "0.2.8"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "167dc9d6949a9b857f3451275e911c3f44255842c1f7a76f33c55103a909087a"
+version = "0.2.8+alpha"
+source = "git+https://github.com/sj6219/winapi-rs?branch=0.2.8_alpha#26f3b8e483aebe599cdd23e43554e704ec28467e"
 
 [[package]]
 name = "winapi"
@@ -5403,8 +5437,7 @@ dependencies = [
 [[package]]
 name = "winapi-build"
 version = "0.1.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2d315eee3b34aca4797b2da6b13ed88266e6d612562a0c46390af8299fc699bc"
+source = "git+https://github.com/sj6219/winapi-rs?branch=0.2.8_alpha#26f3b8e483aebe599cdd23e43554e704ec28467e"
 
 [[package]]
 name = "winapi-i686-pc-windows-gnu"
@@ -5596,10 +5629,9 @@ dependencies = [
 [[package]]
 name = "ws2_32-sys"
 version = "0.2.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d59cefebd0c892fa2dd6de581e937301d8552cb44489cdff035c6187cb63fa5e"
+source = "git+https://github.com/sj6219/winapi-rs?branch=0.2.8_alpha#26f3b8e483aebe599cdd23e43554e704ec28467e"
 dependencies = [
- "winapi 0.2.8",
+ "winapi 0.2.8+alpha",
  "winapi-build",
 ]
 

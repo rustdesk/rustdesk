@@ -36,7 +36,8 @@ repng = "0.2"
 docopt = "1.1"
 webm = "1.0"
 serde = {version="1.0", features=["derive"]}
-quest = "0.3"
+#quest = "0.3"
+quest = { git = "https://github.com/sj6219/quest", branch = "0.3.0_alpha" }
 
 [build-dependencies]
 target_build_utils = "0.3"

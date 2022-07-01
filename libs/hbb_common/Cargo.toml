@@ -16,7 +16,8 @@ log = "0.4"
 env_logger = "0.9"
 socket2 = { version = "0.3", features = ["reuseport"] }
 zstd = "0.9"
-quinn = {version = "0.8", optional = true }
+#quinn = {version = "0.8", optional = true }
+quinn = { git = "https://github.com/sj6219/quinn", branch = "0.8.3_alpha", optional = true }
 anyhow = "1.0"
 futures-util = "0.3"
 directories-next = "2.0"

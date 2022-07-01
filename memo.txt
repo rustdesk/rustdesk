@@ -1,0 +1,127 @@
+# build
+
+%comspec% /k "C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Build\vcvarsamd64_arm64.bat" 
+cargo rustc --release --target=aarch64-pc-windows-msvc --  -C target-feature=+crt-static 
+cargo build  --release --target=aarch64-pc-windows-msvc -vv
+
+set path=C:\Program Files\LLVM\bin;%path%;
+llvm
+perl
+.\target\tools\windows\nasm\nasm.exe
+
+ring = { git = "https://github.com/sj6219/ring", branch = "0.16.20_alpha" }
+ring = { path = "../ring" }
+
+name = "ring"
+version = "0.16.20"
+
+name = "sct"
+version = "0.7.0"
+source = "git+https://github.com/sj6219/ring?branch=0.16.20_alpha#14361a09694419ad93ceb42d3d3935adce8731ab"
+name = "webpki"
+version = "0.22.0"
+source = "git+https://github.com/sj6219/ring?branch=0.16.20_alpha#14361a09694419ad93ceb42d3d3935adce8731ab"
+name = "rustls"
+version = "0.20.6"
+
+name = "quinn-proto"
+version = "0.8.3"
+
+name = "quinn-udp"
+version = "0.1.2"
+
+name = "quinn"
+version = "0.8.3"
+
+name = "tokio-rustls"
+version = "0.23.4"
+
+name = "hyper-rustls"
+version = "0.23.0"
+
+name = "reqwest"
+version = "0.11.11"
+
+
+name = "hbb_common"
+version = "0.1.0"
+
+name = "clipboard"
+version = "0.1.0"
+
+name = "simple_rc"
+version = "0.1.0"
+
+name = "virtual_display"
+version = "0.1.0"
+
+
+name = "rpassword"
+version = "2.1.0"
+
+name = "quest"
+version = "0.3.0"
+
+name= winapi
+version = 0.2.8
+
+name = "miow"
+version = "0.2.2"
+
+name = "kernel32-sys"
+version = "0.2.2"
+
+name = "mio"
+version = "0.6.23"
+
+name = "mio-named-pipes"
+version = "0.1.7"
+
+name = "parity-tokio-ipc"
+version = "0.7.3"
+
+cd C:\Users\sjpark\Documents\tightvnc\wix-installer
+"C:\Program Files (x86)\WiX Toolset v3.14\bin\candle.exe" -d"DevEnvDir=C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\Common7\IDE\\" -dSolutionDir=C:\Users\sjpark\Documents\tightvnc\wix-installer\ -dSolutionExt=.sln -dSolutionFileName=wix-installer.sln -dSolutionName=wix-installer -dSolutionPath=C:\Users\sjpark\Documents\tightvnc\wix-installer\wix-installer.sln -dConfiguration=Release -dOutDir=C:\Users\sjpark\Documents\tightvnc\wix-installer\\x64\Release\ -dPlatform=x64 -dProjectDir=C:\Users\sjpark\Documents\tightvnc\wix-installer\ -dProjectExt=.wixproj -dProjectFileName=wix-installer.wixproj -dProjectName=wix-installer -dProjectPath=C:\Users\sjpark\Documents\tightvnc\wix-installer\wix-installer.wixproj -dTargetDir=C:\Users\sjpark\Documents\tightvnc\wix-installer\x64\Release\ -dTargetExt=.msi -dTargetFileName=setup.msi -dTargetName=setup -dTargetPath=C:\Users\sjpark\Documents\tightvnc\wix-installer\x64\Release\setup.msi -out C:\Users\sjpark\Documents\tightvnc\wix-installer\\x64\Release\wixobj\ -arch x64 -ext "C:\Program Files (x86)\WiX Toolset v3.14\bin\\WixFirewallExtension.dll" -ext "C:\Program Files (x86)\WiX Toolset v3.14\bin\\WixUtilExtension.dll" -ext "C:\Program Files (x86)\WiX Toolset v3.14\bin\\WixUIExtension.dll" components.wxs custom_actions.wxs features.wxs gui.wxs gui_pages.wxs Properties.wxs setup.wxs
+"C:\Program Files (x86)\WiX Toolset v3.14\bin\Light.exe" -out C:\Users\sjpark\Documents\tightvnc\wix-installer\x64\Release\setup.msi -pdbout C:\Users\sjpark\Documents\tightvnc\wix-installer\x64\Release\setup.wixpdb -cultures:null -ext "C:\Program Files (x86)\WiX Toolset v3.14\bin\\WixFirewallExtension.dll" -ext "C:\Program Files (x86)\WiX Toolset v3.14\bin\\WixUtilExtension.dll" -ext "C:\Program Files (x86)\WiX Toolset v3.14\bin\\WixUIExtension.dll" -spdb -contentsfile C:\Users\sjpark\Documents\tightvnc\wix-installer\\x64\Release\wixobj\wix-installer.wixproj.BindContentsFileListnull.txt -outputsfile C:\Users\sjpark\Documents\tightvnc\wix-installer\\x64\Release\wixobj\wix-installer.wixproj.BindOutputsFileListnull.txt -builtoutputsfile C:\Users\sjpark\Documents\tightvnc\wix-installer\\x64\Release\wixobj\wix-installer.wixproj.BindBuiltOutputsFileListnull.txt -wixprojectfile C:\Users\sjpark\Documents\tightvnc\wix-installer\wix-installer.wixproj C:\Users\sjpark\Documents\tightvnc\wix-installer\\x64\Release\wixobj\components.wixobj C:\Users\sjpark\Documents\tightvnc\wix-installer\\x64\Release\wixobj\custom_actions.wixobj C:\Users\sjpark\Documents\tightvnc\wix-installer\\x64\Release\wixobj\features.wixobj C:\Users\sjpark\Documents\tightvnc\wix-installer\\x64\Release\wixobj\gui.wixobj C:\Users\sjpark\Documents\tightvnc\wix-installer\\x64\Release\wixobj\gui_pages.wixobj C:\Users\sjpark\Documents\tightvnc\wix-installer\\x64\Release\wixobj\Properties.wixobj C:\Users\sjpark\Documents\tightvnc\wix-installer\\x64\Release\wixobj\setup.wixobj
+"C:\Program Files (x86)\WiX Toolset v3.14\bin\candle.exe" -d"DevEnvDir=C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\Common7\IDE\\" -dSolutionDir=C:\Users\sjpark\Documents\tightvnc\wix-installer\ -dSolutionExt=.sln -dSolutionFileName=wix-installer.sln -dSolutionName=wix-installer -dSolutionPath=C:\Users\sjpark\Documents\tightvnc\wix-installer\wix-installer.sln -dConfiguration=Release -dOutDir=C:\Users\sjpark\Documents\tightvnc\wix-installer\\arm64\Release\ -dPlatform=arm64 -dProjectDir=C:\Users\sjpark\Documents\tightvnc\wix-installer\ -dProjectExt=.wixproj -dProjectFileName=wix-installer.wixproj -dProjectName=wix-installer -dProjectPath=C:\Users\sjpark\Documents\tightvnc\wix-installer\wix-installer.wixproj -dTargetDir=C:\Users\sjpark\Documents\tightvnc\wix-installer\arm64\Release\ -dTargetExt=.msi -dTargetFileName=setup.msi -dTargetName=setup -dTargetPath=C:\Users\sjpark\Documents\tightvnc\wix-installer\arm64\Release\setup.msi -out C:\Users\sjpark\Documents\tightvnc\wix-installer\\arm64\Release\wixobj\ -arch arm64 -ext "C:\Program Files (x86)\WiX Toolset v3.14\bin\\WixFirewallExtension.dll" -ext "C:\Program Files (x86)\WiX Toolset v3.14\bin\\WixUtilExtension.dll" -ext "C:\Program Files (x86)\WiX Toolset v3.14\bin\\WixUIExtension.dll" components.wxs custom_actions.wxs features.wxs gui.wxs gui_pages.wxs Properties.wxs setup.wxs
+"C:\Program Files (x86)\WiX Toolset v3.14\bin\Light.exe" -out C:\Users\sjpark\Documents\tightvnc\wix-installer\arm64\Release\setup.msi -pdbout C:\Users\sjpark\Documents\tightvnc\wix-installer\arm64\Release\setup.wixpdb -cultures:null -ext "C:\Program Files (x86)\WiX Toolset v3.14\bin\\WixFirewallExtension.dll" -ext "C:\Program Files (x86)\WiX Toolset v3.14\bin\\WixUtilExtension.dll" -ext "C:\Program Files (x86)\WiX Toolset v3.14\bin\\WixUIExtension.dll" -contentsfile C:\Users\sjpark\Documents\tightvnc\wix-installer\\arm64\Release\wixobj\wix-installer.wixproj.BindContentsFileListnull.txt -outputsfile C:\Users\sjpark\Documents\tightvnc\wix-installer\\arm64\Release\wixobj\wix-installer.wixproj.BindOutputsFileListnull.txt -builtoutputsfile C:\Users\sjpark\Documents\tightvnc\wix-installer\\arm64\Release\wixobj\wix-installer.wixproj.BindBuiltOutputsFileListnull.txt -wixprojectfile C:\Users\sjpark\Documents\tightvnc\wix-installer\wix-installer.wixproj C:\Users\sjpark\Documents\tightvnc\wix-installer\\arm64\Release\wixobj\components.wixobj C:\Users\sjpark\Documents\tightvnc\wix-installer\\arm64\Release\wixobj\custom_actions.wixobj C:\Users\sjpark\Documents\tightvnc\wix-installer\\arm64\Release\wixobj\features.wixobj C:\Users\sjpark\Documents\tightvnc\wix-installer\\arm64\Release\wixobj\gui.wixobj C:\Users\sjpark\Documents\tightvnc\wix-installer\\arm64\Release\wixobj\gui_pages.wixobj C:\Users\sjpark\Documents\tightvnc\wix-installer\\arm64\Release\wixobj\Properties.wixobj C:\Users\sjpark\Documents\tightvnc\wix-installer\\arm64\Release\wixobj\setup.wixobj
+
+C:\Users\sjpark\Documents\tightvnc\wix-installer\x64\Release\setup.msi
+C:\Users\sjpark\Documents\tightvnc\wix-installer\arm64\Release\setup.msi
+"args": ["-v", "-optionsfile=C:\\Users\\sjpark\\Desktop\\flex.vnc"],
+\\192.168.111.12\c\Program Files\TightVNC
+
+\\127.0.0.1@4918\DavWWWRoot
+\\127.0.0.1@4918\DavWWWRoot\192.168.111.12#c
+-> \\192.168.111.12\c
+\\127.0.0.1@5700\DavWWWRoot\192.168.111.11#192.168.111.2#Users 
+-> \\192.168.111.2\Users 
+\\127.0.0.1@5700\DavWWWRoot\192.168.111.2#127.0.0.1#Users 
+-> \\192.168.111.2\Users
+\\127.0.0.1@5700\DavWWWRoot\192.168.111.2#127.0.0.1@5700#DavWWWRoot
+-> \\192.168.111.2@5700\DavWWWRoot 
+\\127.0.0.1@5700\DavWWWRoot\192.168.111.11#127.0.0.1@5700#DavWWWRoot\192.168.111.12#c
+-> \\192.168.111.11@5700\DavWWWRoot\192.168.111.12#c
+-> \\192.168.111.12\c
+
+http://127.0.0.1:4918/192.168.111.12%23c
+C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\gflags.exe
+vsjitdebugger.exe
+
+server : C:\Program Files\TightVNC\tvnserver.exe -service
+server-dll: C:\Program Files\TightVNC\tvnviewer.exe -s -controlservice -slave
+
+server : C:\Program Files\TightVNC\tvnserver.exe
+server-dll: C:\Program Files\TightVNC\tvnviewer.exe -s -controlapp -slave
+
+viewer-dll : C:\Users\sjpark\Documents\tightvnc\webdav-server-rs\target\debug\tvnviewer.exe -optionsfile=C:\Users\sjpark\Desktop\flex.vnc
+-optionsfile=C:\Users\sjpark\Desktop\pro-x.vnc
+
+
+INSTALL: go get github.com/akavel/rsrc
+
+# del .\*.syso
+# rsrc -manifest viewer.manifest -o tvnserver.syso
+go build -ldflags "-H windowsgui" -v -o webdav.exe
+
+go build  -v -o webdav.exe

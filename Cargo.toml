@@ -1,6 +1,6 @@
 [package]
 name = "rustdesk"
-version = "1.1.10"
+version = "1.1.10+alpha"
 authors = ["rustdesk <info@rustdesk.com>"]
 edition = "2021"
 build= "build.rs"
@@ -40,7 +40,8 @@ lazy_static = "1.4"
 sha2 = "0.10"
 repng = "0.2"
 libc = "0.2"
-parity-tokio-ipc = { git = "https://github.com/open-trade/parity-tokio-ipc" }
+#parity-tokio-ipc = { git = "https://github.com/open-trade/parity-tokio-ipc" }
+parity-tokio-ipc = { git = "https://github.com/sj6219/parity-tokio-ipc", branch = "0.7.3_alpha" }
 flexi_logger = { version = "0.22", features = ["async", "use_chrono_for_offset"] }
 runas = "0.2"
 magnum-opus = { git = "https://github.com/open-trade/magnum-opus" }
@@ -51,12 +52,14 @@ async-trait = "0.1"
 uuid = { version = "1.0", features = ["v4"] }
 clap = "3.0"
 rpassword = "6.0"
+#rpassword = { git = "https://github.com/sj6219/rpassword", branch = "2.1.0_alpha" }
 base64 = "0.13"
 sysinfo = "0.23"
 num_cpus = "1.13"
 
 [target.'cfg(not(target_os = "linux"))'.dependencies]
-reqwest = { version = "0.11", features = ["json", "rustls-tls"], default-features=false }
+#reqwest = { version = "0.11", features = ["json", "rustls-tls"], default-features=false }
+reqwest = { git = "https://github.com/sj6219/reqwest", branch = "0.11.11_alpha" }
 
 [target.'cfg(not(any(target_os = "android", target_os = "linux")))'.dependencies]
 cpal = "0.13.5"
