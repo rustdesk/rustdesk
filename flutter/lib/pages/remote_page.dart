@@ -481,6 +481,7 @@ class _RemotePageState extends State<RemotePage> {
   ///   DoubleFiner -> right click
   ///   HoldDrag -> left drag
 
+  Offset _cacheLongPressPosition = Offset(0, 0);
   Widget getBodyForMobileWithGesture() {
     final touchMode = FFI.ffiModel.touchMode;
     return getMixinGestureDetector(
@@ -504,10 +505,14 @@ class _RemotePageState extends State<RemotePage> {
         },
         onLongPressDown: (d) {
           if (touchMode) {
-            FFI.cursorModel.move(d.localPosition.dx, d.localPosition.dy);
+            _cacheLongPressPosition = d.localPosition;
           }
         },
         onLongPress: () {
+          if (touchMode) {
+            FFI.cursorModel
+                .move(_cacheLongPressPosition.dx, _cacheLongPressPosition.dy);
+          }
           FFI.tap(MouseButtons.right);
         },
         onDoubleFinerTap: (d) {
@@ -534,6 +539,15 @@ class _RemotePageState extends State<RemotePage> {
           if (touchMode) {
             FFI.cursorModel.move(d.localPosition.dx, d.localPosition.dy);
             FFI.sendMouse('down', MouseButtons.left);
+          } else {
+            final cursorX = FFI.cursorModel.x;
+            final cursorY = FFI.cursorModel.y;
+            final visible =
+                FFI.cursorModel.getVisibleRect().inflate(1); // extend edges
+            final size = MediaQueryData.fromWindow(ui.window).size;
+            if (!visible.contains(Offset(cursorX, cursorY))) {
+              FFI.cursorModel.move(size.width / 2, size.height / 2);
+            }
           }
         },
         onOneFingerPanUpdate: (d) {
