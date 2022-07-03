@@ -2559,8 +2559,7 @@ dependencies = [
 [[package]]
 name = "libsodium-sys"
 version = "0.2.7"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6b779387cd56adfbc02ea4a668e704f729be8d6a6abd2c27ca5ee537849a92fd"
+source = "git+https://github.com/sj6219/sodiumoxide?branch=0.2.7_alpha#fec95db8b3d13a7ec44c4302d96788298ef63182"
 dependencies = [
  "cc",
  "libc",
@@ -2623,8 +2622,8 @@ dependencies = [
 
 [[package]]
 name = "magnum-opus"
-version = "0.4.0"
-source = "git+https://github.com/open-trade/magnum-opus#3c3d0b86ae95c84930bebffe4bcb03b3bd83342b"
+version = "0.4.0+alpha"
+source = "git+https://github.com/sj6219/magnum-opus?branch=0.4.0_alpha#f95ec9be01adf9e0d170b713dd123327a8e616e9"
 dependencies = [
  "bindgen",
  "target_build_utils",
@@ -4548,9 +4547,8 @@ dependencies = [
 
 [[package]]
 name = "sodiumoxide"
-version = "0.2.7"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e26be3acb6c2d9a7aac28482586a7856436af4cfe7100031d219de2d2ecb0028"
+version = "0.2.7+alpha"
+source = "git+https://github.com/sj6219/sodiumoxide?branch=0.2.7_alpha#fec95db8b3d13a7ec44c4302d96788298ef63182"
 dependencies = [
  "ed25519",
  "libc",

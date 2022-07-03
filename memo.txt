@@ -1,13 +1,18 @@
 # build
 
 %comspec% /k "C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Build\vcvarsamd64_arm64.bat" 
-cargo rustc --release --target=aarch64-pc-windows-msvc --  -C target-feature=+crt-static 
-cargo build  --release --target=aarch64-pc-windows-msvc -vv
+cargo build --release --target=aarch64-pc-windows-msvc -vv 
+cargo update
+target\release\rustdesk
 
-set path=C:\Program Files\LLVM\bin;%path%;
-llvm
-perl
+# rustdesk
+set VCPKG_ROOT=C:\Users\sjpark\Documents\vcpkg
+set LIBCLANG_PATH=C:\Program Files\LLVM\bin
+
+# ring
+set path=C:\Program Files\LLVM\bin;C:\Strawberry\perl\bin\%path%; 
 .\target\tools\windows\nasm\nasm.exe
+;set RING_PREGENERATE_ASM=1
 
 ring = { git = "https://github.com/sj6219/ring", branch = "0.16.20_alpha" }
 ring = { path = "../ring" }
@@ -79,6 +84,12 @@ version = "0.1.7"
 
 name = "parity-tokio-ipc"
 version = "0.7.3"
+
+name = "magnum-opus"
+version = "0.4.0+alpha"
+
+name = "sodiumoxide"
+version = "0.2.7"	
 
 cd C:\Users\sjpark\Documents\tightvnc\wix-installer
 "C:\Program Files (x86)\WiX Toolset v3.14\bin\candle.exe" -d"DevEnvDir=C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\Common7\IDE\\" -dSolutionDir=C:\Users\sjpark\Documents\tightvnc\wix-installer\ -dSolutionExt=.sln -dSolutionFileName=wix-installer.sln -dSolutionName=wix-installer -dSolutionPath=C:\Users\sjpark\Documents\tightvnc\wix-installer\wix-installer.sln -dConfiguration=Release -dOutDir=C:\Users\sjpark\Documents\tightvnc\wix-installer\\x64\Release\ -dPlatform=x64 -dProjectDir=C:\Users\sjpark\Documents\tightvnc\wix-installer\ -dProjectExt=.wixproj -dProjectFileName=wix-installer.wixproj -dProjectName=wix-installer -dProjectPath=C:\Users\sjpark\Documents\tightvnc\wix-installer\wix-installer.wixproj -dTargetDir=C:\Users\sjpark\Documents\tightvnc\wix-installer\x64\Release\ -dTargetExt=.msi -dTargetFileName=setup.msi -dTargetName=setup -dTargetPath=C:\Users\sjpark\Documents\tightvnc\wix-installer\x64\Release\setup.msi -out C:\Users\sjpark\Documents\tightvnc\wix-installer\\x64\Release\wixobj\ -arch x64 -ext "C:\Program Files (x86)\WiX Toolset v3.14\bin\\WixFirewallExtension.dll" -ext "C:\Program Files (x86)\WiX Toolset v3.14\bin\\WixUtilExtension.dll" -ext "C:\Program Files (x86)\WiX Toolset v3.14\bin\\WixUIExtension.dll" components.wxs custom_actions.wxs features.wxs gui.wxs gui_pages.wxs Properties.wxs setup.wxs

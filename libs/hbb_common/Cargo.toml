@@ -28,7 +28,10 @@ lazy_static = "1.4"
 confy = { git = "https://github.com/open-trade/confy" }
 dirs-next = "2.0"
 filetime = "0.2"
-sodiumoxide = "0.2"
+#sodiumoxide = "0.2"
+sodiumoxide = { git = "https://github.com/sj6219/sodiumoxide", branch = "0.2.7_alpha" }
+#sodiumoxide = { path = "../../../sodiumoxide" }
+
 regex = "1.4"
 tokio-socks = { git = "https://github.com/open-trade/tokio-socks" }
 
