@@ -724,13 +724,17 @@ class FFI {
 
   static void inputKey(String name, {bool? down, bool? press}) {
     if (!ffiModel.keyboard()) return;
-    setByName(
-        'input_key',
-        json.encode(modify({
-          'name': name,
-          'down': (down ?? false).toString(),
-          'press': (press ?? true).toString()
-        })));
+    final Map<String, String> out = Map();
+    out['name'] = name;
+    // default: down = false
+    if (down == true) {
+      out['down'] = "true";
+    }
+    // default: press = true
+    if (press != false) {
+      out['press'] = "true";
+    }
+    setByName('input_key', json.encode(modify(out)));
   }
 
   static void moveMouse(double x, double y) {
