@@ -47,7 +47,7 @@ case "$1" in
   ;;
   2)
     # for upgrade
-    service rustdesk stop || true
+    systemctl stop rustdesk || true
   ;;
 esac
 
@@ -61,10 +61,26 @@ systemctl start rustdesk
 update-desktop-database
 
 %preun
-systemctl stop rustdesk || true
-systemctl disable rustdesk || true
-rm /etc/systemd/system/rustdesk.service || true
+case "$1" in
+  0)
+    # for uninstall
+    systemctl stop rustdesk || true
+    systemctl disable rustdesk || true
+    rm /etc/systemd/system/rustdesk.service || true
+  ;;
+  1)
+    # for upgrade
+  ;;
+esac
 
 %postun
-rm /usr/share/applications/rustdesk.desktop || true
-update-desktop-database
+case "$1" in
+  0)
+    # for uninstall
+    rm /usr/share/applications/rustdesk.desktop || true
+    update-desktop-database
+  ;;
+  1)
+    # for upgrade
+  ;;
+esac
