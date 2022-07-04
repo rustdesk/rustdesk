@@ -263,9 +263,9 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("android_version_audio_tip", "Текущая версия Android не поддерживает захват звука, обновите ее до Android 10 или выше."),
         ("android_start_service_tip", "Нажмите [Запуск промежуточного сервера] или ОТКРЫТЬ разрешение [Захват экрана], чтобы запустить службу демонстрации экрана."),
         ("Account", "Аккаунт"),
-        ("Quit", "Выйти"),
         ("Overwrite", "Перезаписать"),
         ("This file exists, skip or overwrite this file?", "Этот файл существует, пропустить или перезаписать этот файл?"),
+        ("Quit", "Выйти"),
         ("doc_mac_permission", "https://rustdesk.com/docs/ru/manual/mac/#включение-разрешений"),
         ("Help", "Помощь"),
         ("Failed", "Неуспешный"),
@@ -279,5 +279,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Turned off", "Выключен"),
         ("In privacy mode", "В режиме конфиденциальности"),
         ("Out privacy mode", "Выход из режима конфиденциальности"),
+        ("Language", ""),
     ].iter().cloned().collect();
 }

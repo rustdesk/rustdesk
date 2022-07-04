@@ -1059,6 +1059,7 @@ sc start {app_name}
 sc stop {app_name}
 sc delete {app_name}
 {after_install}
+{sleep}
     ",
         uninstall_str=uninstall_str,
         path=path,
@@ -1081,6 +1082,11 @@ sc delete {app_name}
         config_path=Config::file().to_str().unwrap_or(""),
         lic=register_licence(),
         after_install=get_after_install(&exe),
+        sleep=if debug {
+            "timeout 300"
+        } else {
+            ""
+        }
     );
     run_cmds(cmds, debug, "install")?;
     std::thread::sleep(std::time::Duration::from_millis(2000));

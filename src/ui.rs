@@ -3,9 +3,9 @@ mod cm;
 mod inline;
 #[cfg(target_os = "macos")]
 mod macos;
+pub mod remote;
 #[cfg(target_os = "windows")]
 pub mod win_privacy;
-pub mod remote;
 use crate::common::SOFTWARE_UPDATE_URL;
 use crate::ipc;
 use hbb_common::{
@@ -702,7 +702,7 @@ impl UI {
         let p = "explorer";
         #[cfg(target_os = "macos")]
         let p = "open";
-        #[cfg(target_os = "linux")] 
+        #[cfg(target_os = "linux")]
         let p = if std::path::Path::new("/usr/bin/firefox").exists() {
             "firefox"
         } else {
@@ -752,6 +752,10 @@ impl UI {
             self.get_option_("api-server"),
             self.get_option_("custom-rendezvous-server"),
         )
+    }
+
+    fn get_langs(&self) -> String {
+        crate::lang::LANGS.to_string()
     }
 }
 
@@ -829,6 +833,7 @@ impl sciter::EventHandler for UI {
         fn discover();
         fn get_lan_peers();
         fn get_uuid();
+        fn get_langs();
     }
 }
 

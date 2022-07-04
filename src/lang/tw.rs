@@ -262,13 +262,12 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("android_stop_service_tip", "關閉服務將自動關閉所有已建立的連接。"),
         ("android_version_audio_tip", "目前的 Android 版本不支持音訊錄製，請升級至 Android 10 或以上版本。"),
         ("android_start_service_tip", "點擊 ｢啟動服務｣ 或啟用 ｢畫面錄製｣ 權限以開啟手機畫面共享服務。"),
-        ("Account", "帳號"),
-        ("Quit", "退出"),
+        ("Account", "帳戶"),
         ("Overwrite", "覆寫"),
         ("This file exists, skip or overwrite this file?", "此檔案/資料夾已存在，要跳過或是覆寫此檔案嗎？"),
+        ("Quit", "退出"),
         ("doc_mac_permission", "https://rustdesk.com/docs/zh-tw/manual/mac/#啟用權限"),
         ("Help", "幫助"),
-        ("Account", "帳戶"),
         ("Failed", "失敗"),
         ("Succeeded", "成功"),
         ("Someone turns on privacy mode, exit", "其他用戶開啟隱私模式，退出"),
@@ -280,5 +279,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Turned off", "退出"),
         ("In privacy mode", "開啟隱私模式"),
         ("Out privacy mode", "退出隱私模式"),
+        ("Language", "語言"),
     ].iter().cloned().collect();
 }

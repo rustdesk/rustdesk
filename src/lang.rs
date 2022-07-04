@@ -1,20 +1,42 @@
+use serde_json::{json, value::Value};
 use std::ops::Deref;
 
 mod cn;
 mod cs;
 mod da;
-mod sk;
 mod de;
 mod en;
-mod es;
 mod eo;
+mod es;
 mod fr;
 mod id;
 mod it;
 mod ptbr;
 mod ru;
+mod sk;
 mod tr;
 mod tw;
+
+lazy_static::lazy_static! {
+    pub static ref LANGS: Value =
+        json!(vec![
+            ("en", "English"),
+            ("it", "Italiano"),
+            ("fr", "Français"),
+            ("de", "Deutsch"),
+            ("cn", "简体中文"),
+            ("tw", "繁體中文"),
+            ("pt", "Português"),
+            ("es", "Español"),
+            ("ru", "Русский"),
+            ("sk", "Slovenčina"),
+            ("id", "Indonesia"),
+            ("cs", "Čeština"),
+            ("da", "Dansk"),
+            ("eo", "Esperanto"),
+            ("tr", "Türkçe"),
+        ]);
+}
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub fn translate(name: String) -> String {
