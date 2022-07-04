@@ -343,9 +343,14 @@ class _RemotePageState extends State<RemotePage> {
                     onKey: (data, e) {
                       final key = e.logicalKey;
                       if (e is RawKeyDownEvent) {
-                        if (e.repeat) {
+                        if (e.repeat &&
+                            !e.isAltPressed &&
+                            !e.isControlPressed &&
+                            !e.isShiftPressed &&
+                            !e.isMetaPressed) {
                           sendRawKey(e, press: true);
                         } else {
+                          sendRawKey(e, down: true);
                           if (e.isAltPressed && !FFI.alt) {
                             FFI.alt = true;
                           } else if (e.isControlPressed && !FFI.ctrl) {
@@ -355,7 +360,6 @@ class _RemotePageState extends State<RemotePage> {
                           } else if (e.isMetaPressed && !FFI.command) {
                             FFI.command = true;
                           }
-                          sendRawKey(e, down: true);
                         }
                       }
                       // [!_showEdit] workaround for soft-keyboard's control_key like Backspace / Enter
