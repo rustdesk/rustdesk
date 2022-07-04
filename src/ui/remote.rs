@@ -276,7 +276,6 @@ impl Handler {
                     KeyRelease(k) => (k, 0),
                     _ => return,
                 };
-                log::debug!("{:?}", key);a
                 let alt = get_key_state(enigo::Key::Alt);
                 #[cfg(windows)]
                 let ctrl = {
@@ -1956,11 +1955,11 @@ impl Remote {
         let mut config: PeerConfig = self.handler.load_config();
         let mut transfer_metas = TransferSerde::default();
         for job in self.read_jobs.iter() {
-            let json_str = serde_json::to_string(&job.gen_meta()).unwrap();
+            let json_str = serde_json::to_string(&job.gen_meta()).unwrap_or_default();
             transfer_metas.read_jobs.push(json_str);
         }
         for job in self.write_jobs.iter() {
-            let json_str = serde_json::to_string(&job.gen_meta()).unwrap();
+            let json_str = serde_json::to_string(&job.gen_meta()).unwrap_or_default();
             transfer_metas.write_jobs.push(json_str);
         }
         log::info!("meta: {:?}", transfer_metas);
@@ -2371,7 +2370,7 @@ impl Remote {
             }
             back_notification::PrivacyModeState::OffSucceeded => {
                 self.handler
-                .msgbox("custom-nocancel", "Privacy mode", "Out privacy mode");
+                    .msgbox("custom-nocancel", "Privacy mode", "Out privacy mode");
                 self.update_privacy_mode(false);
             }
             back_notification::PrivacyModeState::OffByPeer => {
