@@ -6,6 +6,7 @@ cargo update
 target\release\rustdesk
 
 # rustdesk
+cd C:\Users\sjpark\Documents\rustdesk
 set VCPKG_ROOT=C:\Users\sjpark\Documents\vcpkg
 set LIBCLANG_PATH=C:\Program Files\LLVM\bin
 
