@@ -145,7 +145,11 @@ class MyController(Controller):
             or (keycode_flag == False and keycode == list(keycode_set)[0] and len(keycode_set) == 1):
             deakkey_chr = str(key).replace("'", '')
             keysym = DEAD_KEYS[deakkey_chr]
-            keycode, shift_state = self.keyboard_mapping[keysym][0]
+            # shift_state = 0
+            keycode, shift_state = list(
+                filter(lambda x: x[1] == 0,
+                       self.keyboard_mapping[keysym])
+            )[0]
 
         # If the key has a virtual key code, use that immediately with
         # fake_input; fake input,being an X server extension, has access to
