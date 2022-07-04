@@ -33,6 +33,7 @@ DEAD_KEYS = {
 }
 
 
+
 def my_keyboard_mapping(display):
     """Generates a mapping from *keysyms* to *key codes* and required
     modifier shift states.
@@ -138,8 +139,10 @@ class MyController(Controller):
         else:
             keycode, shift_state = self._display.keysym_to_keycode(keysym), 0
 
-        # The keycode of the dead key is inconsistent
-        if keycode != self._display.keysym_to_keycode(keysym):
+        keycode_set = set(map(lambda x: x[0], self.keyboard_mapping[keysym]))
+        # The keycode of the dead key is inconsistent, The keysym has multiple combinations of a keycode.
+        if keycode != self._display.keysym_to_keycode(keysym) \
+            or (keycode_flag == False and keycode == list(keycode_set)[0] and len(keycode_set) == 1):
             deakkey_chr = str(key).replace("'", '')
             keysym = DEAD_KEYS[deakkey_chr]
             keycode, shift_state = self.keyboard_mapping[keysym][0]
@@ -151,8 +154,8 @@ class MyController(Controller):
         try:
             with self.modifiers as modifiers:
                 alt_gr = Key.alt_gr in modifiers
-
-            if alt_gr or keycode_flag:
+            # !!!: Send_event can't support lock screen, this condition cann't be modified
+            if alt_gr:
                 self.send_event(
                     event, keycode, shift_state)
             else:
@@ -225,7 +228,7 @@ def loop():
                 else:
                     keyboard.release(name)
             except Exception as e:
-                print(e)
+                print('[x] error key',e)
 
 
 loop()
