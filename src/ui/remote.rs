@@ -276,7 +276,7 @@ impl Handler {
                     KeyRelease(k) => (k, 0),
                     _ => return,
                 };
-                log::debug!("{:?}", key);
+                log::debug!("{:?}", key);a
                 let alt = get_key_state(enigo::Key::Alt);
                 #[cfg(windows)]
                 let ctrl = {
