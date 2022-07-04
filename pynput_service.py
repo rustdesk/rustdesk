@@ -139,8 +139,10 @@ class MyController(Controller):
         else:
             keycode, shift_state = self._display.keysym_to_keycode(keysym), 0
 
-        # The keycode of the dead key is inconsistent
-        if keycode != self._display.keysym_to_keycode(keysym):
+        keycode_set = set(map(lambda x: x[0], self.keyboard_mapping[keysym]))
+        # The keycode of the dead key is inconsistent, The keysym has multiple combinations of a keycode.
+        if keycode != self._display.keysym_to_keycode(keysym) \
+            or (keycode_flag == False and keycode == list(keycode_set)[0] and len(keycode_set) == 1):
             deakkey_chr = str(key).replace("'", '')
             keysym = DEAD_KEYS[deakkey_chr]
             keycode, shift_state = self.keyboard_mapping[keysym][0]
@@ -226,7 +228,7 @@ def loop():
                 else:
                     keyboard.release(name)
             except Exception as e:
-                print(e)
+                print('[x] error key',e)
 
 
 loop()
