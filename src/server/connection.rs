@@ -380,7 +380,6 @@ impl Connection {
                             time,
                             last_delay:qos.current_delay,
                             target_bitrate:qos.target_bitrate,
-                            codec_format:qos.codec_format.into(),
                             ..Default::default()
                         });
                         conn.inner.send(msg_out.into());

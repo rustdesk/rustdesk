@@ -73,7 +73,6 @@ pub struct VideoQoS {
     user_image_quality: u32,
     current_image_quality: u32,
     enable_abr: bool,
-    pub codec_format: test_delay::CodecFormat,
     pub current_delay: u32,
     pub fps: u8,             // abr
     pub target_bitrate: u32, // abr
@@ -111,7 +110,6 @@ impl Default for VideoQoS {
             user_image_quality: ImageQuality::Balanced.as_percent(),
             current_image_quality: ImageQuality::Balanced.as_percent(),
             enable_abr: false,
-            codec_format: Default::default(),
             width: 0,
             height: 0,
             current_delay: 0,
@@ -564,7 +562,7 @@ fn run(sp: GenericService) -> ResultType<()> {
     let mut spf = video_qos.spf();
     let bitrate = video_qos.generate_bitrate()?;
     let abr = video_qos.check_abr_config();
-
+    drop(video_qos);
     log::info!("init bitrate={}, abr enabled:{}", bitrate, abr);
 
     let encoder_cfg = match Encoder::current_hw_encoder_name() {
@@ -589,10 +587,7 @@ fn run(sp: GenericService) -> ResultType<()> {
         Ok(x) => encoder = x,
         Err(err) => bail!("Failed to create encoder: {}", err),
     }
-
-    video_qos.codec_format = encoder.get_codec_format();
-    drop(video_qos);
-
+    
     let privacy_mode_id = *PRIVACY_MODE_CONN_ID.lock().unwrap();
     #[cfg(not(windows))]
     let captuerer_privacy_mode_id = privacy_mode_id;

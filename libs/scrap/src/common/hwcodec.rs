@@ -6,7 +6,7 @@ use hbb_common::{
     anyhow::{anyhow, Context},
     config::HwCodecConfig,
     lazy_static, log,
-    message_proto::{test_delay, H264s, H265s, Message, VideoFrame, H264, H265},
+    message_proto::{H264s, H265s, Message, VideoFrame, H264, H265},
     ResultType,
 };
 use hwcodec::{
@@ -142,13 +142,6 @@ impl EncoderApi for HwEncoder {
     fn set_bitrate(&mut self, bitrate: u32) -> ResultType<()> {
         self.encoder.set_bitrate((bitrate * 1000) as _).ok();
         Ok(())
-    }
-
-    fn get_codec_format(&self) -> test_delay::CodecFormat {
-        match self.format {
-            DataFormat::H264 => test_delay::CodecFormat::H264,
-            DataFormat::H265 => test_delay::CodecFormat::H265,
-        }
     }
 }
 

@@ -12,7 +12,7 @@ use crate::vpxcodec::*;
 use hbb_common::{
     anyhow::anyhow,
     log,
-    message_proto::{test_delay, video_frame, Message, VP9s, VideoCodecState},
+    message_proto::{video_frame, Message, VP9s, VideoCodecState},
     ResultType,
 };
 #[cfg(feature = "hwcodec")]
@@ -53,8 +53,6 @@ pub trait EncoderApi {
     fn use_yuv(&self) -> bool;
 
     fn set_bitrate(&mut self, bitrate: u32) -> ResultType<()>;
-
-    fn get_codec_format(&self) -> test_delay::CodecFormat;
 }
 
 pub struct DecoderCfg {
