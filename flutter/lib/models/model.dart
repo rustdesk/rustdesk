@@ -310,19 +310,19 @@ class ImageModel with ChangeNotifier {
   }
 
   double get maxScale {
-    if (_image == null) return 1.0;
+    if (_image == null) return 1.5;
     final size = MediaQueryData.fromWindow(ui.window).size;
     final xscale = size.width / _image!.width;
     final yscale = size.height / _image!.height;
-    return max(1.0, max(xscale, yscale));
+    return max(1.5, max(xscale, yscale));
   }
 
   double get minScale {
-    if (_image == null) return 1.0;
+    if (_image == null) return 1.5;
     final size = MediaQueryData.fromWindow(ui.window).size;
     final xscale = size.width / _image!.width;
     final yscale = size.height / _image!.height;
-    return min(xscale, yscale);
+    return min(xscale, yscale) / 1.5;
   }
 }
 
@@ -724,13 +724,17 @@ class FFI {
 
   static void inputKey(String name, {bool? down, bool? press}) {
     if (!ffiModel.keyboard()) return;
-    setByName(
-        'input_key',
-        json.encode(modify({
-          'name': name,
-          'down': (down ?? false).toString(),
-          'press': (press ?? true).toString()
-        })));
+    final Map<String, String> out = Map();
+    out['name'] = name;
+    // default: down = false
+    if (down == true) {
+      out['down'] = "true";
+    }
+    // default: press = true
+    if (press != false) {
+      out['press'] = "true";
+    }
+    setByName('input_key', json.encode(modify(out)));
   }
 
   static void moveMouse(double x, double y) {
