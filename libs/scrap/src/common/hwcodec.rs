@@ -17,10 +17,7 @@ use hwcodec::{
     Quality::{self, *},
     RateContorl::{self, *},
 };
-use std::{
-    collections::HashMap,
-    sync::{Arc, Mutex},
-};
+use std::sync::{Arc, Mutex};
 
 lazy_static::lazy_static! {
     static ref HW_ENCODER_NAME: Arc<Mutex<Option<String>>> = Default::default();
@@ -161,7 +158,7 @@ impl HwEncoder {
             };
             let encoders = CodecInfo::score(Encoder::avaliable_encoders(ctx));
             if write {
-                let _ = set_config(CFG_KEY_ENCODER, &encoders)
+                set_config(CFG_KEY_ENCODER, &encoders)
                     .map_err(|e| log::error!("{:?}", e))
                     .ok();
             }
@@ -313,7 +310,11 @@ impl HwDecoderImage<'_> {
 }
 
 fn get_config(k: &str) -> ResultType<CodecInfos> {
-    let v = HwCodecConfig::get_option(k);
+    let v = HwCodecConfig::load()
+        .options
+        .get(k)
+        .unwrap_or(&"".to_owned())
+        .to_owned();
     match CodecInfos::deserialize(&v) {
         Ok(v) => Ok(v),
         Err(_) => Err(anyhow!("Failed to get config:{}", k)),
@@ -323,26 +324,28 @@ fn get_config(k: &str) -> ResultType<CodecInfos> {
 fn set_config(k: &str, v: &CodecInfos) -> ResultType<()> {
     match v.serialize() {
         Ok(v) => {
-            HwCodecConfig::set_option(k.to_owned(), v);
+            let mut config = HwCodecConfig::load();
+            config.options.insert(k.to_owned(), v);
+            config.store();
             Ok(())
         }
         Err(_) => Err(anyhow!("Failed to set config:{}", k)),
     }
 }
 
-pub fn check_config() -> Option<HashMap<String, String>> {
+pub fn check_config() {
     let (encoders, update_encoders) = HwEncoder::best(false, false);
     let (decoders, update_decoders) = HwDecoder::best(false, false);
     if update_encoders || update_decoders {
         if let Ok(encoders) = encoders.serialize() {
             if let Ok(decoders) = decoders.serialize() {
-                return Some(HashMap::from([
-                    (CFG_KEY_ENCODER.to_owned(), encoders),
-                    (CFG_KEY_DECODER.to_owned(), decoders),
-                ]));
+                let mut config = HwCodecConfig::load();
+                config.options.insert(CFG_KEY_ENCODER.to_owned(), encoders);
+                config.options.insert(CFG_KEY_DECODER.to_owned(), decoders);
+                config.store();
+                return;
             }
         }
         log::error!("Failed to serialize codec info");
     }
-    None
 }

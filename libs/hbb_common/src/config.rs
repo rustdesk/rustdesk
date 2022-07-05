@@ -35,7 +35,6 @@ lazy_static::lazy_static! {
     static ref CONFIG: Arc<RwLock<Config>> = Arc::new(RwLock::new(Config::load()));
     static ref CONFIG2: Arc<RwLock<Config2>> = Arc::new(RwLock::new(Config2::load()));
     static ref LOCAL_CONFIG: Arc<RwLock<LocalConfig>> = Arc::new(RwLock::new(LocalConfig::load()));
-    static ref HWCODEC_CONFIG: Arc<RwLock<HwCodecConfig>> = Arc::new(RwLock::new(HwCodecConfig::load()));
     pub static ref ONLINE: Arc<Mutex<HashMap<String, i64>>> = Default::default();
     pub static ref PROD_RENDEZVOUS_SERVER: Arc<RwLock<String>> = Default::default();
     pub static ref APP_NAME: Arc<RwLock<String>> = Arc::new(RwLock::new("RustDesk".to_owned()));
@@ -887,37 +886,16 @@ impl LanPeers {
 #[derive(Debug, Default, Serialize, Deserialize, Clone)]
 pub struct HwCodecConfig {
     #[serde(default)]
-    options: HashMap<String, String>,
+    pub options: HashMap<String, String>,
 }
 
 impl HwCodecConfig {
-    fn load() -> HwCodecConfig {
+    pub fn load() -> HwCodecConfig {
         Config::load_::<HwCodecConfig>("_hwcodec")
     }
 
-    fn store(&self) {
+    pub fn store(&self) {
         Config::store_(self, "_hwcodec");
-    }
-
-    pub fn get_option(k: &str) -> String {
-        if let Some(v) = HWCODEC_CONFIG.read().unwrap().options.get(k) {
-            v.clone()
-        } else {
-            "".to_owned()
-        }
-    }
-
-    pub fn set_option(k: String, v: String) {
-        let mut config = HWCODEC_CONFIG.write().unwrap();
-        let v2 = if v.is_empty() { None } else { Some(&v) };
-        if v2 != config.options.get(&k) {
-            if v2.is_none() {
-                config.options.remove(&k);
-            } else {
-                config.options.insert(k, v);
-            }
-            config.store();
-        }
     }
 }
 
