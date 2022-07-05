@@ -434,10 +434,8 @@ enum ImageQuality {
 
 message VideoCodecState {
   int32 ScoreVpx = 1;
-  bool H264 = 2;
-  int32 ScoreH264 = 3;
-  bool H265 = 4;
-  int32 ScoreH265 = 5;
+  int32 ScoreH264 = 2;
+  int32 ScoreH265 = 3;
 }
 
 message OptionMessage {

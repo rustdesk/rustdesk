@@ -135,10 +135,12 @@ impl Encoder {
             let current_encoder_name = HwEncoder::current_name();
             if states.len() > 0 {
                 let (best, _) = HwEncoder::best(false, true);
-                let enabled_h264 =
-                    best.h264.is_some() && states.len() > 0 && states.iter().all(|(_, s)| s.H264);
-                let enabled_h265 =
-                    best.h265.is_some() && states.len() > 0 && states.iter().all(|(_, s)| s.H265);
+                let enabled_h264 = best.h264.is_some()
+                    && states.len() > 0
+                    && states.iter().all(|(_, s)| s.ScoreH264 > 0);
+                let enabled_h265 = best.h265.is_some()
+                    && states.len() > 0
+                    && states.iter().all(|(_, s)| s.ScoreH265 > 0);
 
                 // score encoder
                 let mut score_vpx = SCORE_VPX;
@@ -238,9 +240,7 @@ impl Decoder {
         {
             let mut state = MY_DECODER_STATE.lock().unwrap();
             state.ScoreVpx = SCORE_VPX;
-            state.H264 = decoder.hw.h264.is_some();
             state.ScoreH264 = decoder.hw.h264.as_ref().map_or(0, |d| d.info.score);
-            state.H265 = decoder.hw.h265.is_some();
             state.ScoreH265 = decoder.hw.h265.as_ref().map_or(0, |d| d.info.score);
         }
 
