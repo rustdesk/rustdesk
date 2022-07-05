@@ -38,6 +38,7 @@ pub const NAME_POS: &'static str = "";
 
 mod connection;
 mod service;
+mod video_qos;
 pub mod video_service;
 
 use hbb_common::tcp::new_listener;
