@@ -1,33 +1,13 @@
 syntax = "proto3";
 package hbb;
 
-message VP9 {
+message EncodedVideoFrame {
   bytes data = 1;
   bool key = 2;
   int64 pts = 3;
 }
 
-message VP9s { repeated VP9 frames = 1; }
-
-message H264 {
-  bytes data = 1;
-  bool key = 2;
-  int64 pts = 3;
-}
-
-message H264s {
-  repeated H264 h264s = 1;
-}
-
-message H265 {
-  bytes data = 1;
-  bool key = 2;
-  int64 pts = 3;
-}
-
-message H265s {
-  repeated H265 h265s = 1;
-}
+message EncodedVideoFrames { repeated EncodedVideoFrame frames = 1; }
 
 message RGB { bool compress = 1; }
 
@@ -39,11 +19,11 @@ message YUV {
 
 message VideoFrame {
   oneof union {
-    VP9s vp9s = 6;
+    EncodedVideoFrames vp9s = 6;
     RGB rgb = 7;
     YUV yuv = 8;
-    H264s h264s = 10;
-    H265s h265s = 11;
+    EncodedVideoFrames h264s = 10;
+    EncodedVideoFrames h265s = 11;
   }
   int64 timestamp = 9;
 }

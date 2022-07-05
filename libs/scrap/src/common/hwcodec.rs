@@ -6,7 +6,7 @@ use hbb_common::{
     anyhow::{anyhow, Context},
     config::HwCodecConfig,
     lazy_static, log,
-    message_proto::{test_delay, H264s, H265s, Message, VideoFrame, H264, H265},
+    message_proto::{test_delay, EncodedVideoFrame, EncodedVideoFrames, Message, VideoFrame},
     ResultType,
 };
 use hwcodec::{
@@ -91,47 +91,27 @@ impl EncoderApi for HwEncoder {
     ) -> ResultType<hbb_common::message_proto::Message> {
         let mut msg_out = Message::new();
         let mut vf = VideoFrame::new();
-        match self.format {
-            DataFormat::H264 => {
-                let mut h264s = Vec::new();
-                for frame in self.encode(frame).with_context(|| "Failed to encode")? {
-                    h264s.push(H264 {
-                        data: frame.data,
-                        pts: frame.pts as _,
-                        ..Default::default()
-                    });
-                }
-                if h264s.len() > 0 {
-                    vf.set_h264s(H264s {
-                        h264s: h264s.into(),
-                        ..Default::default()
-                    });
-                    msg_out.set_video_frame(vf);
-                    Ok(msg_out)
-                } else {
-                    Err(anyhow!("no valid frame"))
-                }
+        let mut frames = Vec::new();
+        for frame in self.encode(frame).with_context(|| "Failed to encode")? {
+            frames.push(EncodedVideoFrame {
+                data: frame.data,
+                pts: frame.pts as _,
+                ..Default::default()
+            });
+        }
+        if frames.len() > 0 {
+            let frames = EncodedVideoFrames {
+                frames: frames.into(),
+                ..Default::default()
+            };
+            match self.format {
+                DataFormat::H264 => vf.set_h264s(frames),
+                DataFormat::H265 => vf.set_h265s(frames),
             }
-            DataFormat::H265 => {
-                let mut h265s = Vec::new();
-                for frame in self.encode(frame).with_context(|| "Failed to encode")? {
-                    h265s.push(H265 {
-                        data: frame.data,
-                        pts: frame.pts,
-                        ..Default::default()
-                    });
-                }
-                if h265s.len() > 0 {
-                    vf.set_h265s(H265s {
-                        h265s,
-                        ..Default::default()
-                    });
-                    msg_out.set_video_frame(vf);
-                    Ok(msg_out)
-                } else {
-                    Err(anyhow!("no valid frame"))
-                }
-            }
+            msg_out.set_video_frame(vf);
+            Ok(msg_out)
+        } else {
+            Err(anyhow!("no valid frame"))
         }
     }
 

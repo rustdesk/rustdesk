@@ -3,7 +3,9 @@
 // https://github.com/rust-av/vpx-rs/blob/master/src/decoder.rs
 
 use hbb_common::anyhow::{anyhow, Context};
-use hbb_common::message_proto::{test_delay, Message, VP9s, VideoFrame, VP9};
+use hbb_common::message_proto::{
+    test_delay, EncodedVideoFrame, EncodedVideoFrames, Message, VideoFrame,
+};
 use hbb_common::ResultType;
 
 use crate::codec::EncoderApi;
@@ -289,10 +291,10 @@ impl VpxEncoder {
     }
 
     #[inline]
-    fn create_msg(vp9s: Vec<VP9>) -> Message {
+    fn create_msg(vp9s: Vec<EncodedVideoFrame>) -> Message {
         let mut msg_out = Message::new();
         let mut vf = VideoFrame::new();
-        vf.set_vp9s(VP9s {
+        vf.set_vp9s(EncodedVideoFrames {
             frames: vp9s.into(),
             ..Default::default()
         });
@@ -301,8 +303,8 @@ impl VpxEncoder {
     }
 
     #[inline]
-    fn create_frame(frame: &EncodeFrame) -> VP9 {
-        VP9 {
+    fn create_frame(frame: &EncodeFrame) -> EncodedVideoFrame {
+        EncodedVideoFrame {
             data: frame.data.to_vec(),
             key: frame.key,
             pts: frame.pts,
