@@ -5,6 +5,8 @@ cargo build --release --target=aarch64-pc-windows-msvc -vv
 cargo update
 target\release\rustdesk
 
+MSVC v143 - VS 2022 c++ ARM64 build tools(Latest)
+
 # rustdesk
 cd C:\Users\sjpark\Documents\rustdesk
 set VCPKG_ROOT=C:\Users\sjpark\Documents\vcpkg
@@ -13,7 +15,7 @@ set LIBCLANG_PATH=C:\Program Files\LLVM\bin
 # ring
 set path=C:\Program Files\LLVM\bin;C:\Strawberry\perl\bin\%path%; 
 .\target\tools\windows\nasm\nasm.exe
-;set RING_PREGENERATE_ASM=1
+set RING_PREGENERATE_ASM=1
 
 ring = { git = "https://github.com/sj6219/ring", branch = "0.16.20_alpha" }
 ring = { path = "../ring" }
