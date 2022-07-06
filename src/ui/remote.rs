@@ -234,25 +234,13 @@ impl sciter::EventHandler for Handler {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 struct QualityStatus {
-    speed: String,
-    fps: i32,
-    delay: i32,
-    target_bitrate: i32,
-    codec_format: test_delay::CodecFormat,
-}
-
-impl Default for QualityStatus {
-    fn default() -> Self {
-        Self {
-            speed: Default::default(),
-            fps: -1,
-            delay: -1,
-            target_bitrate: -1,
-            codec_format: test_delay::CodecFormat::Unknown,
-        }
-    }
+    speed: Option<String>,
+    fps: Option<i32>,
+    delay: Option<i32>,
+    target_bitrate: Option<i32>,
+    codec_format: Option<CodecFormat>,
 }
 
 impl Handler {
@@ -271,21 +259,16 @@ impl Handler {
     }
 
     fn update_quality_status(&self, status: QualityStatus) {
-        let codec_format = match status.codec_format {
-            test_delay::CodecFormat::Unknown => "Unknown",
-            test_delay::CodecFormat::VP8 => "VP8",
-            test_delay::CodecFormat::VP9 => "VP9",
-            test_delay::CodecFormat::H264 => "H264",
-            test_delay::CodecFormat::H265 => "H265",
-        };
         self.call2(
             "updateQualityStatus",
             &make_args!(
-                status.speed,
-                status.fps,
-                status.delay,
-                status.target_bitrate,
-                codec_format
+                status.speed.map_or(Value::null(), |it| it.into()),
+                status.fps.map_or(Value::null(), |it| it.into()),
+                status.delay.map_or(Value::null(), |it| it.into()),
+                status.target_bitrate.map_or(Value::null(), |it| it.into()),
+                status
+                    .codec_format
+                    .map_or(Value::null(), |it| it.to_string().into())
             ),
         );
     }
@@ -1365,6 +1348,7 @@ async fn io_loop(handler: Handler) {
         clipboard_file_context: None,
         data_count: Arc::new(AtomicUsize::new(0)),
         frame_count,
+        video_format: CodecFormat::Unknown,
     };
     remote.io_loop(&key, &token).await;
     remote.sync_jobs_status_to_local().await;
@@ -1417,6 +1401,7 @@ struct Remote {
     clipboard_file_context: Option<Box<CliprdrClientContext>>,
     data_count: Arc<AtomicUsize>,
     frame_count: Arc<AtomicUsize>,
+    video_format: CodecFormat,
 }
 
 impl Remote {
@@ -1506,8 +1491,8 @@ impl Remote {
                             let speed = format!("{:.2}kB/s", speed as f32 / 1024 as f32);
                             let fps = self.frame_count.swap(0, Ordering::Relaxed) as _;
                             self.handler.update_quality_status(QualityStatus {
-                                speed,
-                                fps,
+                                speed:Some(speed),
+                                fps:Some(fps),
                                 ..Default::default()
                             });
                         }
@@ -2038,6 +2023,14 @@ impl Remote {
                         self.handler.call2("closeSuccess", &make_args!());
                         self.handler.call("adaptSize", &make_args!());
                     }
+                    let incomming_format = CodecFormat::from(&vf);
+                    if self.video_format != incomming_format {
+                        self.video_format = incomming_format.clone();
+                        self.handler.update_quality_status(QualityStatus {
+                            codec_format: Some(incomming_format),
+                            ..Default::default()
+                        })
+                    };
                     self.video_sender.send(MediaData::VideoFrame(vf)).ok();
                 }
                 Some(message::Union::hash(hash)) => {
@@ -2612,9 +2605,8 @@ impl Interface for Handler {
     async fn handle_test_delay(&mut self, t: TestDelay, peer: &mut Stream) {
         if !t.from_client {
             self.update_quality_status(QualityStatus {
-                delay: t.last_delay as _,
-                target_bitrate: t.target_bitrate as _,
-                codec_format: t.codec_format.enum_value_or_default(),
+                delay: Some(t.last_delay as _),
+                target_bitrate: Some(t.target_bitrate as _),
                 ..Default::default()
             });
             handle_test_delay(t, peer).await;

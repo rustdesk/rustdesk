@@ -40,7 +40,7 @@ pub use super::lang::*;
 pub mod file_trait;
 pub use file_trait::FileManager;
 pub mod helper;
-pub use helper::LatencyController;
+pub use helper::*;
 pub const SEC30: Duration = Duration::from_secs(30);
 
 pub struct Client;

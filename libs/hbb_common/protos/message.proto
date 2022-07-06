@@ -457,18 +457,10 @@ message OptionMessage {
 }
 
 message TestDelay {
-  enum CodecFormat {
-    Unknown = 0;
-    VP8 = 1;
-    VP9 = 2;
-    H264 = 3;
-    H265 = 4;
-  }
   int64 time = 1;
   bool from_client = 2;
   uint32 last_delay = 3;
   uint32 target_bitrate = 4;
-  CodecFormat codec_format = 5;
 }
 
 message PublicKey {
