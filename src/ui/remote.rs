@@ -2001,11 +2001,11 @@ impl Remote {
         let mut config: PeerConfig = self.handler.load_config();
         let mut transfer_metas = TransferSerde::default();
         for job in self.read_jobs.iter() {
-            let json_str = serde_json::to_string(&job.gen_meta()).unwrap();
+            let json_str = serde_json::to_string(&job.gen_meta()).unwrap_or_default();
             transfer_metas.read_jobs.push(json_str);
         }
         for job in self.write_jobs.iter() {
-            let json_str = serde_json::to_string(&job.gen_meta()).unwrap();
+            let json_str = serde_json::to_string(&job.gen_meta()).unwrap_or_default();
             transfer_metas.write_jobs.push(json_str);
         }
         log::info!("meta: {:?}", transfer_metas);

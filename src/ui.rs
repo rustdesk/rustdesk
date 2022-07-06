@@ -3,9 +3,9 @@ mod cm;
 mod inline;
 #[cfg(target_os = "macos")]
 mod macos;
+pub mod remote;
 #[cfg(target_os = "windows")]
 pub mod win_privacy;
-pub mod remote;
 use crate::common::SOFTWARE_UPDATE_URL;
 use crate::ipc;
 use hbb_common::{
@@ -760,6 +760,10 @@ impl UI {
         #[cfg(feature = "hwcodec")]
         return true;
     }
+
+    fn get_langs(&self) -> String {
+        crate::lang::LANGS.to_string()
+    }
 }
 
 impl sciter::EventHandler for UI {
@@ -837,6 +841,7 @@ impl sciter::EventHandler for UI {
         fn get_lan_peers();
         fn get_uuid();
         fn has_hwcodec();
+        fn get_langs();
     }
 }
 

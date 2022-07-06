@@ -283,5 +283,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Turned off", "Ausgeschaltet"),
         ("In privacy mode", "im Datenschutzmodus"),
         ("Out privacy mode", "Datenschutzmodus aus"),
+        ("Language", "Sprache"),
     ].iter().cloned().collect();
 }
