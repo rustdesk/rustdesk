@@ -38,6 +38,7 @@ pub const NAME_POS: &'static str = "";
 
 mod connection;
 mod service;
+mod video_qos;
 pub mod video_service;
 
 use hbb_common::tcp::new_listener;
@@ -320,6 +321,15 @@ pub async fn start_server(is_server: bool) {
                 std::process::exit(-1);
             }
         });
+        #[cfg(feature = "hwcodec")]
+        if let Ok(exe) = std::env::current_exe() {
+            std::thread::spawn(move || {
+                std::process::Command::new(exe)
+                    .arg("--check-hwcodec-config")
+                    .status()
+                    .ok()
+            });
+        }
         #[cfg(windows)]
         crate::platform::windows::bootstrap();
         input_service::fix_key_down_timeout_loop();

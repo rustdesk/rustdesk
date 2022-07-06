@@ -139,6 +139,8 @@ pub struct PeerConfig {
     pub disable_clipboard: bool,
     #[serde(default)]
     pub enable_file_transfer: bool,
+    #[serde(default)]
+    pub show_quality_monitor: bool,
 
     // the other scalar value must before this
     #[serde(default)]
@@ -878,6 +880,22 @@ impl LanPeers {
             .modified()?
             .duration_since(SystemTime::UNIX_EPOCH)?
             .as_millis() as _)
+    }
+}
+
+#[derive(Debug, Default, Serialize, Deserialize, Clone)]
+pub struct HwCodecConfig {
+    #[serde(default)]
+    pub options: HashMap<String, String>,
+}
+
+impl HwCodecConfig {
+    pub fn load() -> HwCodecConfig {
+        Config::load_::<HwCodecConfig>("_hwcodec")
+    }
+
+    pub fn store(&self) {
+        Config::store_(self, "_hwcodec");
     }
 }
 

@@ -21,6 +21,8 @@ fn get_display(i: usize) -> Display {
 
 #[cfg(windows)]
 fn record(i: usize) {
+    use std::time::Duration;
+
     for d in Display::all().unwrap() {
         println!("{:?} {} {}", d.origin(), d.width(), d.height());
     }
@@ -40,7 +42,7 @@ fn record(i: usize) {
             println!("Filter window for cls {} name {}", wnd_cls, wnd_name);
         }
 
-        let frame = capture_mag.frame(0).unwrap();
+        let frame = capture_mag.frame(Duration::from_millis(0)).unwrap();
         println!("Capture data len: {}, Saving...", frame.len());
 
         let mut bitflipped = Vec::with_capacity(w * h * 4);
@@ -76,7 +78,7 @@ fn record(i: usize) {
             println!("Filter window for cls {} title {}", wnd_cls, wnd_title);
         }
 
-        let buffer = capture_mag.frame(0).unwrap();
+        let buffer = capture_mag.frame(Duration::from_millis(0)).unwrap();
         println!("Capture data len: {}, Saving...", buffer.len());
 
         let mut frame = Default::default();

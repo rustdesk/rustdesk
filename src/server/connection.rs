@@ -3,6 +3,7 @@ use super::{input_service::*, *};
 use crate::clipboard_file::*;
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use crate::common::update_clipboard;
+use crate::video_service;
 #[cfg(any(target_os = "android", target_os = "ios"))]
 use crate::{common::MOBILE_INFO2, mobile::connection_manager::start_channel};
 use crate::{ipc, VERSION};
@@ -69,7 +70,6 @@ pub struct Connection {
     audio: bool,
     file: bool,
     last_test_delay: i64,
-    image_quality: i32,
     lock_after_session_end: bool,
     show_remote_cursor: bool, // by peer
     ip: String,
@@ -105,7 +105,7 @@ impl Subscriber for ConnInner {
     }
 }
 
-const TEST_DELAY_TIMEOUT: Duration = Duration::from_secs(3);
+const TEST_DELAY_TIMEOUT: Duration = Duration::from_secs(1);
 const SEC30: Duration = Duration::from_secs(30);
 const H1: Duration = Duration::from_secs(3600);
 const MILLI1: Duration = Duration::from_millis(1);
@@ -154,7 +154,6 @@ impl Connection {
             audio: Config::get_option("enable-audio").is_empty(),
             file: Config::get_option("enable-file-transfer").is_empty(),
             last_test_delay: 0,
-            image_quality: ImageQuality::Balanced.value(),
             lock_after_session_end: false,
             show_remote_cursor: false,
             ip: "".to_owned(),
@@ -376,8 +375,11 @@ impl Connection {
                     if time > 0 && conn.last_test_delay == 0 {
                         conn.last_test_delay = time;
                         let mut msg_out = Message::new();
+                        let qos = video_service::VIDEO_QOS.lock().unwrap();
                         msg_out.set_test_delay(TestDelay{
                             time,
+                            last_delay:qos.current_delay,
+                            target_bitrate:qos.target_bitrate,
                             ..Default::default()
                         });
                         conn.inner.send(msg_out.into());
@@ -394,8 +396,8 @@ impl Connection {
             let _ = privacy_mode::turn_off_privacy(0);
         }
         video_service::notify_video_frame_feched(id, None);
-        video_service::update_test_latency(id, 0);
-        video_service::update_image_quality(id, None);
+        scrap::codec::Encoder::update_video_encoder(id, scrap::codec::EncoderUpdate::Remove);
+        video_service::VIDEO_QOS.lock().unwrap().reset();
         if let Err(err) = conn.try_port_forward_loop(&mut rx_from_cm).await {
             conn.on_close(&err.to_string(), false);
         }
@@ -664,7 +666,7 @@ impl Connection {
             res.set_peer_info(pi);
         } else {
             try_activate_screen();
-            match super::video_service::get_displays() {
+            match video_service::get_displays() {
                 Err(err) => {
                     res.set_error(format!("X11 error: {}", err));
                 }
@@ -780,6 +782,22 @@ impl Connection {
         if let Some(message::Union::login_request(lr)) = msg.union {
             if let Some(o) = lr.option.as_ref() {
                 self.update_option(o).await;
+                if let Some(q) = o.video_codec_state.clone().take() {
+                    scrap::codec::Encoder::update_video_encoder(
+                        self.inner.id(),
+                        scrap::codec::EncoderUpdate::State(q),
+                    );
+                } else {
+                    scrap::codec::Encoder::update_video_encoder(
+                        self.inner.id(),
+                        scrap::codec::EncoderUpdate::DisableHwIfNotExist,
+                    );
+                }
+            } else {
+                scrap::codec::Encoder::update_video_encoder(
+                    self.inner.id(),
+                    scrap::codec::EncoderUpdate::DisableHwIfNotExist,
+                );
             }
             self.video_ack_required = lr.video_ack_required;
             if self.authorized {
@@ -886,10 +904,11 @@ impl Connection {
                 self.inner.send(msg_out.into());
             } else {
                 self.last_test_delay = 0;
-                let latency = crate::get_time() - t.time;
-                if latency > 0 {
-                    super::video_service::update_test_latency(self.inner.id(), latency);
-                }
+                let new_delay = (crate::get_time() - t.time) as u32;
+                video_service::VIDEO_QOS
+                    .lock()
+                    .unwrap()
+                    .update_network_delay(new_delay);
             }
         } else if self.authorized {
             match msg.union {
@@ -1065,7 +1084,7 @@ impl Connection {
                 },
                 Some(message::Union::misc(misc)) => match misc.union {
                     Some(misc::Union::switch_display(s)) => {
-                        super::video_service::switch_display(s.display);
+                        video_service::switch_display(s.display);
                     }
                     Some(misc::Union::chat_message(c)) => {
                         self.send_to_cm(ipc::Data::ChatMessage { text: c.text });
@@ -1075,7 +1094,7 @@ impl Connection {
                     }
                     Some(misc::Union::refresh_video(r)) => {
                         if r {
-                            super::video_service::refresh();
+                            video_service::refresh();
                         }
                     }
                     Some(misc::Union::video_received(_)) => {
@@ -1095,13 +1114,20 @@ impl Connection {
     async fn update_option(&mut self, o: &OptionMessage) {
         log::info!("Option update: {:?}", o);
         if let Ok(q) = o.image_quality.enum_value() {
-            self.image_quality = q.value();
-            super::video_service::update_image_quality(self.inner.id(), Some(q.value()));
-        }
-        let q = o.custom_image_quality;
-        if q > 0 {
-            self.image_quality = q;
-            super::video_service::update_image_quality(self.inner.id(), Some(q));
+            let image_quality;
+            if let ImageQuality::NotSet = q {
+                if o.custom_image_quality > 0 {
+                    image_quality = o.custom_image_quality;
+                } else {
+                    image_quality = ImageQuality::Balanced.value();
+                }
+            } else {
+                image_quality = q.value();
+            }
+            video_service::VIDEO_QOS
+                .lock()
+                .unwrap()
+                .update_image_quality(image_quality);
         }
         if let Ok(q) = o.lock_after_session_end.enum_value() {
             if q != BoolOption::NotSet {

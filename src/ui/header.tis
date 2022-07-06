@@ -159,6 +159,7 @@ class Header: Reactor.Component {
                 <li #custom type="image-quality"><span>{svg_checkmark}</span>{translate('Custom')}</li>
                 <div .separator />
                 <li #show-remote-cursor .toggle-option><span>{svg_checkmark}</span>{translate('Show remote cursor')}</li> 
+                <li #show-quality-monitor .toggle-option><span>{svg_checkmark}</span>{translate('Show quality monitor')}</li> 
                 {audio_enabled ? <li #disable-audio .toggle-option><span>{svg_checkmark}</span>{translate('Mute')}</li> : ""}
                 {is_win && pi.platform == 'Windows' && file_enabled ? <li #enable-file-transfer .toggle-option><span>{svg_checkmark}</span>{translate('Allow file copy and paste')}</li> : ""}
                 {keyboard_enabled && clipboard_enabled ? <li #disable-clipboard .toggle-option><span>{svg_checkmark}</span>{translate('Disable clipboard')}</li> : ""} 
@@ -315,7 +316,9 @@ class Header: Reactor.Component {
             handle_custom_image_quality();
         } else if (me.id == "privacy-mode") {
             togglePrivacyMode(me.id);
-        } else if (me.attributes.hasClass("toggle-option")) {
+        } else if (me.id == "show-quality-monitor") {
+            toggleQualityMonitor(me.id);
+        }else if (me.attributes.hasClass("toggle-option")) {
             handler.toggle_option(me.id);
             toggleMenuState();
         } else if (!me.attributes.hasClass("selected")) {
@@ -333,15 +336,13 @@ class Header: Reactor.Component {
 
 function handle_custom_image_quality() {
     var tmp = handler.get_custom_image_quality();
-    var bitrate0 = tmp[0] || 50;
-    var quantizer0 = tmp.length > 1 ? tmp[1] : 100;
+    var bitrate = (tmp[0] || 50);
     msgbox("custom", "Custom Image Quality", "<div .form> \
-          <div><input type=\"hslider\" style=\"width: 50%\" name=\"bitrate\" max=\"100\" min=\"10\" value=\"" + bitrate0 + "\"/ buddy=\"bitrate-buddy\"><b #bitrate-buddy>x</b>% bitrate</div> \
-          <div><input type=\"hslider\" style=\"width: 50%\" name=\"quantizer\" max=\"100\" min=\"0\" value=\"" + quantizer0 + "\"/ buddy=\"quantizer-buddy\"><b #quantizer-buddy>x</b>% quantizer</div> \
+          <div><input type=\"hslider\" style=\"width: 50%\" name=\"bitrate\" max=\"100\" min=\"10\" value=\"" + bitrate + "\"/ buddy=\"bitrate-buddy\"><b #bitrate-buddy>x</b>% Bitrate</div> \
       </div>", function(res=null) {
         if (!res) return;
         if (!res.bitrate) return;
-        handler.save_custom_image_quality(res.bitrate, res.quantizer);
+        handler.save_custom_image_quality(res.bitrate);
         toggleMenuState();
       });
 }
@@ -357,7 +358,7 @@ function toggleMenuState() {
     for (var el in $$(menu#display-options>li)) {
         el.attributes.toggleClass("selected", values.indexOf(el.id) >= 0);
     }
-    for (var id in ["show-remote-cursor", "disable-audio", "enable-file-transfer", "disable-clipboard", "lock-after-session-end"]) {
+    for (var id in ["show-remote-cursor", "show-quality-monitor", "disable-audio", "enable-file-transfer", "disable-clipboard", "lock-after-session-end"]) {
         var el = self.select('#' + id);
         if (el) {
             var value = handler.get_toggle_option(id);
@@ -423,6 +424,17 @@ function togglePrivacyMode(privacy_id) {
     } else {
         handler.toggle_option(privacy_id);
     }
+}
+
+function toggleQualityMonitor(name) {
+    var show = handler.get_toggle_option(name);
+    if (show) {
+        $(#quality-monitor).style.set{ display: "none" };
+    } else {
+        $(#quality-monitor).style.set{ display: "block" };
+    }
+    handler.toggle_option(name);
+    toggleMenuState();
 }
 
 handler.updateBlockInputState = function(input_blocked) {

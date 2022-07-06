@@ -1,13 +1,13 @@
 syntax = "proto3";
 package hbb;
 
-message VP9 {
+message EncodedVideoFrame {
   bytes data = 1;
   bool key = 2;
   int64 pts = 3;
 }
 
-message VP9s { repeated VP9 frames = 1; }
+message EncodedVideoFrames { repeated EncodedVideoFrame frames = 1; }
 
 message RGB { bool compress = 1; }
 
@@ -19,9 +19,11 @@ message YUV {
 
 message VideoFrame {
   oneof union {
-    VP9s vp9s = 6;
+    EncodedVideoFrames vp9s = 6;
     RGB rgb = 7;
     YUV yuv = 8;
+    EncodedVideoFrames h264s = 10;
+    EncodedVideoFrames h265s = 11;
   }
   int64 timestamp = 9;
 }
@@ -430,6 +432,12 @@ enum ImageQuality {
   Best = 4;
 }
 
+message VideoCodecState {
+  int32 ScoreVpx = 1;
+  int32 ScoreH264 = 2;
+  int32 ScoreH265 = 3;
+}
+
 message OptionMessage {
   enum BoolOption {
     NotSet = 0;
@@ -445,11 +453,14 @@ message OptionMessage {
   BoolOption disable_audio = 7;
   BoolOption disable_clipboard = 8;
   BoolOption enable_file_transfer = 9;
+  VideoCodecState video_codec_state = 10;
 }
 
 message TestDelay {
   int64 time = 1;
   bool from_client = 2;
+  uint32 last_delay = 3;
+  uint32 target_bitrate = 4;
 }
 
 message PublicKey {

@@ -1,5 +1,6 @@
 use crate::dxgi;
 use std::io::ErrorKind::{NotFound, TimedOut, WouldBlock};
+use std::time::Duration;
 use std::{io, ops};
 
 pub struct Capturer {
@@ -40,8 +41,8 @@ impl Capturer {
         self.height
     }
 
-    pub fn frame<'a>(&'a mut self, timeout_ms: u32) -> io::Result<Frame<'a>> {
-        match self.inner.frame(timeout_ms) {
+    pub fn frame<'a>(&'a mut self, timeout_ms: Duration) -> io::Result<Frame<'a>> {
+        match self.inner.frame(timeout_ms.as_millis() as _) {
             Ok(frame) => Ok(Frame(frame)),
             Err(ref error) if error.kind() == TimedOut => Err(WouldBlock.into()),
             Err(error) => Err(error),
@@ -135,7 +136,7 @@ impl CapturerMag {
     pub fn get_rect(&self) -> ((i32, i32), usize, usize) {
         self.inner.get_rect()
     }
-    pub fn frame<'a>(&'a mut self, _timeout_ms: u32) -> io::Result<Frame<'a>> {
+    pub fn frame<'a>(&'a mut self, _timeout_ms: Duration) -> io::Result<Frame<'a>> {
         self.inner.frame(&mut self.data)?;
         Ok(Frame(&self.data))
     }
