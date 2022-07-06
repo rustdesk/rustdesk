@@ -573,10 +573,10 @@ fn check_privacy_mode_changed(sp: &GenericService, privacy_mode_id: i32) -> Resu
 
 #[inline]
 #[cfg(any(target_os = "android", target_os = "ios"))]
-fn create_msg(vp9s: Vec<VP9>) -> Message {
+fn create_msg(vp9s: Vec<EncodedVideoFrame>) -> Message {
     let mut msg_out = Message::new();
     let mut vf = VideoFrame::new();
-    vf.set_vp9s(VP9s {
+    vf.set_vp9s(EncodedVideoFrames {
         frames: vp9s.into(),
         ..Default::default()
     });
@@ -622,7 +622,7 @@ pub fn handle_one_frame_encoded(
         Ok(())
     })?;
     let mut send_conn_ids: HashSet<i32> = Default::default();
-    let vp9_frame = VP9 {
+    let vp9_frame = EncodedVideoFrame {
         data: frame.to_vec(),
         key: true,
         pts: ms,

@@ -6,7 +6,7 @@ use hbb_common::{
     anyhow::{anyhow, Context},
     config::HwCodecConfig,
     lazy_static, log,
-    message_proto::{H264s, H265s, Message, VideoFrame, H264, H265},
+    message_proto::{EncodedVideoFrame, EncodedVideoFrames, Message, VideoFrame},
     ResultType,
 };
 use hwcodec::{
@@ -17,10 +17,7 @@ use hwcodec::{
     Quality::{self, *},
     RateContorl::{self, *},
 };
-use std::{
-    collections::HashMap,
-    sync::{Arc, Mutex},
-};
+use std::sync::{Arc, Mutex};
 
 lazy_static::lazy_static! {
     static ref HW_ENCODER_NAME: Arc<Mutex<Option<String>>> = Default::default();
@@ -91,47 +88,27 @@ impl EncoderApi for HwEncoder {
     ) -> ResultType<hbb_common::message_proto::Message> {
         let mut msg_out = Message::new();
         let mut vf = VideoFrame::new();
-        match self.format {
-            DataFormat::H264 => {
-                let mut h264s = Vec::new();
-                for frame in self.encode(frame).with_context(|| "Failed to encode")? {
-                    h264s.push(H264 {
-                        data: frame.data,
-                        pts: frame.pts as _,
-                        ..Default::default()
-                    });
-                }
-                if h264s.len() > 0 {
-                    vf.set_h264s(H264s {
-                        h264s: h264s.into(),
-                        ..Default::default()
-                    });
-                    msg_out.set_video_frame(vf);
-                    Ok(msg_out)
-                } else {
-                    Err(anyhow!("no valid frame"))
-                }
+        let mut frames = Vec::new();
+        for frame in self.encode(frame).with_context(|| "Failed to encode")? {
+            frames.push(EncodedVideoFrame {
+                data: frame.data,
+                pts: frame.pts as _,
+                ..Default::default()
+            });
+        }
+        if frames.len() > 0 {
+            let frames = EncodedVideoFrames {
+                frames: frames.into(),
+                ..Default::default()
+            };
+            match self.format {
+                DataFormat::H264 => vf.set_h264s(frames),
+                DataFormat::H265 => vf.set_h265s(frames),
             }
-            DataFormat::H265 => {
-                let mut h265s = Vec::new();
-                for frame in self.encode(frame).with_context(|| "Failed to encode")? {
-                    h265s.push(H265 {
-                        data: frame.data,
-                        pts: frame.pts,
-                        ..Default::default()
-                    });
-                }
-                if h265s.len() > 0 {
-                    vf.set_h265s(H265s {
-                        h265s,
-                        ..Default::default()
-                    });
-                    msg_out.set_video_frame(vf);
-                    Ok(msg_out)
-                } else {
-                    Err(anyhow!("no valid frame"))
-                }
-            }
+            msg_out.set_video_frame(vf);
+            Ok(msg_out)
+        } else {
+            Err(anyhow!("no valid frame"))
         }
     }
 
@@ -174,7 +151,7 @@ impl HwEncoder {
             };
             let encoders = CodecInfo::score(Encoder::avaliable_encoders(ctx));
             if write {
-                let _ = set_config(CFG_KEY_ENCODER, &encoders)
+                set_config(CFG_KEY_ENCODER, &encoders)
                     .map_err(|e| log::error!("{:?}", e))
                     .ok();
             }
@@ -326,7 +303,11 @@ impl HwDecoderImage<'_> {
 }
 
 fn get_config(k: &str) -> ResultType<CodecInfos> {
-    let v = HwCodecConfig::get_option(k);
+    let v = HwCodecConfig::load()
+        .options
+        .get(k)
+        .unwrap_or(&"".to_owned())
+        .to_owned();
     match CodecInfos::deserialize(&v) {
         Ok(v) => Ok(v),
         Err(_) => Err(anyhow!("Failed to get config:{}", k)),
@@ -336,26 +317,28 @@ fn get_config(k: &str) -> ResultType<CodecInfos> {
 fn set_config(k: &str, v: &CodecInfos) -> ResultType<()> {
     match v.serialize() {
         Ok(v) => {
-            HwCodecConfig::set_option(k.to_owned(), v);
+            let mut config = HwCodecConfig::load();
+            config.options.insert(k.to_owned(), v);
+            config.store();
             Ok(())
         }
         Err(_) => Err(anyhow!("Failed to set config:{}", k)),
     }
 }
 
-pub fn check_config() -> Option<HashMap<String, String>> {
+pub fn check_config() {
     let (encoders, update_encoders) = HwEncoder::best(false, false);
     let (decoders, update_decoders) = HwDecoder::best(false, false);
     if update_encoders || update_decoders {
         if let Ok(encoders) = encoders.serialize() {
             if let Ok(decoders) = decoders.serialize() {
-                return Some(HashMap::from([
-                    (CFG_KEY_ENCODER.to_owned(), encoders),
-                    (CFG_KEY_DECODER.to_owned(), decoders),
-                ]));
+                let mut config = HwCodecConfig::load();
+                config.options.insert(CFG_KEY_ENCODER.to_owned(), encoders);
+                config.options.insert(CFG_KEY_DECODER.to_owned(), decoders);
+                config.store();
+                return;
             }
         }
         log::error!("Failed to serialize codec info");
     }
-    None
 }

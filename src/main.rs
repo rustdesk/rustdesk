@@ -70,15 +70,6 @@ fn main() {
     }
     if args.is_empty() {
         std::thread::spawn(move || start_server(false));
-        #[cfg(feature = "hwcodec")]
-        if let Ok(exe) = std::env::current_exe() {
-            std::thread::spawn(move || {
-                std::process::Command::new(exe)
-                    .arg("--check-hwcodec-config")
-                    .status()
-                    .ok()
-            });
-        }
     } else {
         #[cfg(windows)]
         {
@@ -116,10 +107,6 @@ fn main() {
                     true,
                     args.len() > 1,
                 ));
-                return;
-            } else if args[0] == "--check-hwcodec-config" {
-                #[cfg(feature = "hwcodec")]
-                ipc::check_hwcodec_config();
                 return;
             }
         }
@@ -163,6 +150,10 @@ fn main() {
             if args.len() == 2 {
                 ipc::set_password(args[1].to_owned()).unwrap();
             }
+            return;
+        } else if args[0] == "--check-hwcodec-config" {
+            #[cfg(feature = "hwcodec")]
+            scrap::hwcodec::check_config();
             return;
         }
     }

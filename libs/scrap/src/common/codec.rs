@@ -12,15 +12,11 @@ use crate::vpxcodec::*;
 use hbb_common::{
     anyhow::anyhow,
     log,
-    message_proto::{video_frame, Message, VP9s, VideoCodecState},
+    message_proto::{video_frame, EncodedVideoFrames, Message, VideoCodecState},
     ResultType,
 };
 #[cfg(feature = "hwcodec")]
-use hbb_common::{
-    config::Config2,
-    lazy_static,
-    message_proto::{H264s, H265s},
-};
+use hbb_common::{config::Config2, lazy_static};
 
 #[cfg(feature = "hwcodec")]
 lazy_static::lazy_static! {
@@ -137,10 +133,12 @@ impl Encoder {
             let current_encoder_name = HwEncoder::current_name();
             if states.len() > 0 {
                 let (best, _) = HwEncoder::best(false, true);
-                let enabled_h264 =
-                    best.h264.is_some() && states.len() > 0 && states.iter().all(|(_, s)| s.H264);
-                let enabled_h265 =
-                    best.h265.is_some() && states.len() > 0 && states.iter().all(|(_, s)| s.H265);
+                let enabled_h264 = best.h264.is_some()
+                    && states.len() > 0
+                    && states.iter().all(|(_, s)| s.ScoreH264 > 0);
+                let enabled_h265 = best.h265.is_some()
+                    && states.len() > 0
+                    && states.iter().all(|(_, s)| s.ScoreH265 > 0);
 
                 // score encoder
                 let mut score_vpx = SCORE_VPX;
@@ -240,9 +238,7 @@ impl Decoder {
         {
             let mut state = MY_DECODER_STATE.lock().unwrap();
             state.ScoreVpx = SCORE_VPX;
-            state.H264 = decoder.hw.h264.is_some();
             state.ScoreH264 = decoder.hw.h264.as_ref().map_or(0, |d| d.info.score);
-            state.H265 = decoder.hw.h265.is_some();
             state.ScoreH265 = decoder.hw.h265.as_ref().map_or(0, |d| d.info.score);
         }
 
@@ -261,7 +257,7 @@ impl Decoder {
             #[cfg(feature = "hwcodec")]
             video_frame::Union::h264s(h264s) => {
                 if let Some(decoder) = &mut self.hw.h264 {
-                    Decoder::handle_h264s_video_frame(decoder, h264s, rgb, &mut self.i420)
+                    Decoder::handle_hw_video_frame(decoder, h264s, rgb, &mut self.i420)
                 } else {
                     Err(anyhow!("don't support h264!"))
                 }
@@ -269,7 +265,7 @@ impl Decoder {
             #[cfg(feature = "hwcodec")]
             video_frame::Union::h265s(h265s) => {
                 if let Some(decoder) = &mut self.hw.h265 {
-                    Decoder::handle_h265s_video_frame(decoder, h265s, rgb, &mut self.i420)
+                    Decoder::handle_hw_video_frame(decoder, h265s, rgb, &mut self.i420)
                 } else {
                     Err(anyhow!("don't support h265!"))
                 }
@@ -280,7 +276,7 @@ impl Decoder {
 
     fn handle_vp9s_video_frame(
         decoder: &mut VpxDecoder,
-        vp9s: &VP9s,
+        vp9s: &EncodedVideoFrames,
         rgb: &mut Vec<u8>,
     ) -> ResultType<bool> {
         let mut last_frame = Image::new();
@@ -303,34 +299,15 @@ impl Decoder {
     }
 
     #[cfg(feature = "hwcodec")]
-    fn handle_h264s_video_frame(
+    fn handle_hw_video_frame(
         decoder: &mut HwDecoder,
-        h264s: &H264s,
+        frames: &EncodedVideoFrames,
         rgb: &mut Vec<u8>,
         i420: &mut Vec<u8>,
     ) -> ResultType<bool> {
         let mut ret = false;
-        for h264 in h264s.h264s.iter() {
+        for h264 in frames.frames.iter() {
             for image in decoder.decode(&h264.data)? {
-                // TODO: just process the last frame
-                if image.bgra(rgb, i420).is_ok() {
-                    ret = true;
-                }
-            }
-        }
-        return Ok(ret);
-    }
-
-    #[cfg(feature = "hwcodec")]
-    fn handle_h265s_video_frame(
-        decoder: &mut HwDecoder,
-        h265s: &H265s,
-        rgb: &mut Vec<u8>,
-        i420: &mut Vec<u8>,
-    ) -> ResultType<bool> {
-        let mut ret = false;
-        for h265 in h265s.h265s.iter() {
-            for image in decoder.decode(&h265.data)? {
                 // TODO: just process the last frame
                 if image.bgra(rgb, i420).is_ok() {
                     ret = true;
