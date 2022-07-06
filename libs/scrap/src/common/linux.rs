@@ -2,7 +2,7 @@ use crate::common::{
     wayland,
     x11::{self, Frame},
 };
-use std::io;
+use std::{io, time::Duration};
 
 pub enum Capturer {
     X11(x11::Capturer),
