@@ -31,7 +31,7 @@ default = ["use_dasp"]
 
 [dependencies]
 whoami = "1.2"
-scrap = { path = "libs/scrap" }
+scrap = { path = "libs/scrap", features = ["wayland"] }
 hbb_common = { path = "libs/hbb_common" }
 serde_derive = "1.0"
 serde = "1.0"
@@ -69,7 +69,7 @@ machine-uid = "0.2"
 mac_address = "1.1"
 sciter-rs = { git = "https://github.com/open-trade/rust-sciter", branch = "dyn" }
 sys-locale = "0.2"
-enigo = { path = "libs/enigo" }
+enigo = { path = "libs/enigo", features = [ "with_serde" ] }
 clipboard = { path = "libs/clipboard" }
 rdev = { git = "https://github.com/open-trade/rdev" }
 ctrlc = "3.2"
@@ -99,6 +99,8 @@ psimple = { package = "libpulse-simple-binding", version = "2.25" }
 pulse = { package = "libpulse-binding", version = "2.26" }
 rust-pulsectl = { git = "https://github.com/open-trade/pulsectl" }
 async-process = "1.3"
+mouce = { git="https://github.com/fufesou/mouce.git" }
+evdev = { git="https://github.com/fufesou/evdev" }
 
 [target.'cfg(target_os = "android")'.dependencies]
 android_logger = "0.11"

@@ -279,6 +279,8 @@ impl Drop for Server {
         for s in self.services.values() {
             s.join();
         }
+        #[cfg(target_os = "linux")]
+        video_service::wayland_support::clear();
     }
 }
 

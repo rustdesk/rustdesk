@@ -74,7 +74,7 @@ pub use macos::Enigo;
 #[cfg(target_os = "linux")]
 mod linux;
 #[cfg(target_os = "linux")]
-pub use crate::linux::Enigo;
+pub use crate::linux::{is_x11, Enigo};
 
 /// DSL parser module
 pub mod dsl;
@@ -249,7 +249,7 @@ pub trait MouseControllable {
 /// For alphabetical keys, use Key::Layout for a system independent key.
 /// If a key is missing, you can use the raw keycode with Key::Raw.
 #[cfg_attr(feature = "with_serde", derive(Serialize, Deserialize))]
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub enum Key {
     /// alt key on Linux and Windows (option key on macOS)
     Alt,
