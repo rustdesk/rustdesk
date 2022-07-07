@@ -2772,7 +2772,7 @@ dependencies = [
 [[package]]
 name = "mouce"
 version = "0.2.1"
-source = "git+https://github.com/fufesou/mouce.git#7da9d9b6597f4c4461881deb4ed49da2385e3cac"
+source = "git+https://github.com/fufesou/mouce.git#f503ca2b01c50f46c2a0f61d37cd23a1732f7b55"
 dependencies = [
  "glob",
 ]
