@@ -1,5 +1,5 @@
 [Unit]
-Description=RustDesk
+Description=RustDesk user service (--server)
 
 [Service]
 Type=simple
@@ -8,6 +8,8 @@ PIDFile=/run/rustdesk.user.pid
 KillMode=mixed
 TimeoutStopSec=30
 LimitNOFILE=100000
+Restart=on-failure
+RestartSec=3
 
 [Install]
 WantedBy=multi-user.target
