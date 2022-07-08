@@ -102,7 +102,7 @@ impl Encoder {
                     codec: Box::new(hw),
                 }),
                 Err(e) => {
-                    HwEncoder::best(true, true);
+                    check_config_process(true);
                     Err(e)
                 }
             },
@@ -132,7 +132,7 @@ impl Encoder {
             }
             let current_encoder_name = HwEncoder::current_name();
             if states.len() > 0 {
-                let (best, _) = HwEncoder::best(false, true);
+                let best = HwEncoder::best();
                 let enabled_h264 = best.h264.is_some()
                     && states.len() > 0
                     && states.iter().all(|(_, s)| s.ScoreH264 > 0);
