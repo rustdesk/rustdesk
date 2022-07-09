@@ -25,6 +25,6 @@ cargo build --release --target=aarch64-pc-windows-msvc
 
 Download from https://github.com/c-smile/sciter-sdk/blob/master/bin.win/arm64/sciter.dll.
 
-# Build libsodium.dll
+# Build libsodium.lib
 
 Build StaticRelease version at https://github.com/sj6219/libsodium/blob/1.0.18_alpha/builds/msvc/vs2022/libsodium.sln
