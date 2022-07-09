@@ -1,10 +1,12 @@
-# Install arm64 rustdesk
+# aarch64-pc-windows-msvc
+
+## Install rustdesk
 
 Install rustdesk for x64 version. 
 
-Extract arm64.zip at https://github.com/sj6219/rustdesk/releases/tag/1.1.10_alpha/ to C:\Program Files\RustDesk
+Extract aarch64-pc-windows-msvc.zip at https://github.com/sj6219/rustdesk/releases/tag/alpha/ to C:\Program Files\RustDesk
 
-# Build arm64 rustdesk
+## Build rustdesk
 
 Install visual studio 2022 and add the following components.
 
@@ -21,10 +23,10 @@ vcpkg install libvpx:arm64-windows-static libyuv:arm64-windows-static opus:arm64
 
 cargo build --release --target=aarch64-pc-windows-msvc 
 
-# sciter.dll
+## sciter.dll
 
 Download from https://github.com/c-smile/sciter-sdk/blob/master/bin.win/arm64/sciter.dll.
 
-# Build libsodium.lib
+## Build libsodium.lib
 
 Build StaticRelease version at https://github.com/sj6219/libsodium/blob/1.0.18_alpha/builds/msvc/vs2022/libsodium.sln
