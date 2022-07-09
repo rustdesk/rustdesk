@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_breadcrumb/flutter_breadcrumb.dart';
@@ -23,7 +24,8 @@ class FileManagerPage extends StatefulWidget {
 
 class _FileManagerPageState extends State<FileManagerPage>
     with AutomaticKeepAliveClientMixin {
-  final _selectedItems = SelectedItems();
+  final _localSelectedItems = SelectedItems();
+  final _remoteSelectedItems = SelectedItems();
   final _breadCrumbLocalScroller = ScrollController();
   final _breadCrumbRemoteScroller = ScrollController();
 
@@ -31,6 +33,10 @@ class _FileManagerPageState extends State<FileManagerPage>
   FFI get _ffi => ffi('ft_${widget.id}');
 
   FileModel get model => _ffi.fileModel;
+
+  SelectedItems getSelectedItem(bool isLocal) {
+    return isLocal ? _localSelectedItems : _remoteSelectedItems;
+  }
 
   @override
   void initState() {
@@ -81,13 +87,6 @@ class _FileManagerPageState extends State<FileManagerPage>
                 bottomSheet: bottomSheet(),
               ));
         }));
-  }
-
-  bool needShowCheckBox() {
-    if (!model.selectMode) {
-      return false;
-    }
-    return !_selectedItems.isOtherPage(model.isLocal);
   }
 
   Widget menu({bool isLocal = false}) {
@@ -145,7 +144,7 @@ class _FileManagerPageState extends State<FileManagerPage>
           if (v == "refresh") {
             model.refresh();
           } else if (v == "select") {
-            _selectedItems.clear();
+            _localSelectedItems.clear();
             model.toggleSelectMode();
           } else if (v == "folder") {
             final name = TextEditingController();
@@ -223,8 +222,16 @@ class _FileManagerPageState extends State<FileManagerPage>
                     return DataRow(
                         key: ValueKey(entry.name),
                         onSelectChanged: (s) {
-                          // TODO
+                          if (s != null) {
+                            if (s) {
+                              getSelectedItem(isLocal).add(isLocal, entry);
+                            } else {
+                              getSelectedItem(isLocal).remove(entry);
+                            }
+                            setState((){});
+                          }
                         },
+                        selected: getSelectedItem(isLocal).contains(entry),
                         cells: [
                           // TODO: icon
                           DataCell(Icon(
@@ -240,6 +247,13 @@ class _FileManagerPageState extends State<FileManagerPage>
                               model.openDirectory(entry.path, isLocal: isLocal);
                             } else {
                               // Perform file-related tasks.
+                              final _selectedItems = getSelectedItem(isLocal);
+                              if (_selectedItems.contains(entry)) {
+                                _selectedItems.remove(entry);
+                              } else {
+                                _selectedItems.add(isLocal, entry);
+                              }
+                              setState((){});
                             }
                           }),
                           DataCell(Text(
@@ -377,6 +391,21 @@ class _FileManagerPageState extends State<FileManagerPage>
           margin: const EdgeInsets.only(top: 16.0,bottom: 16.0, right: 16.0),
           padding: const EdgeInsets.all(8.0),
           decoration: BoxDecoration(color: Colors.white70,border: Border.all(color: Colors.grey)),
+          child: Obx(
+            () => ListView.builder(
+              itemExtent: 100, itemBuilder: (BuildContext context, int index) {
+                final item = model.jobTable[index + 1];
+                return Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    Text('${item.id}'),
+                    Icon(Icons.delete)
+                  ],
+                );
+            },
+              itemCount: model.jobTable.length,
+            ),
+          ),
         ),
         preferredSize: Size(200, double.infinity));
   }
@@ -398,29 +427,46 @@ class _FileManagerPageState extends State<FileManagerPage>
   Widget headTools(bool isLocal) => Container(
           child: Row(
         children: [
+          Offstage(
+            offstage: isLocal,
+            child: TextButton.icon(
+                onPressed: (){}, icon: Transform.rotate(
+              angle: isLocal ? 0 : pi,
+              child: Icon(
+                  Icons.send
+              ),
+            ), label: Text(isLocal ? translate('Send') : translate('Receive'))),
+          ),
           Expanded(
-              child: BreadCrumb(
-            items: getPathBreadCrumbItems(() => model.goHome(), (list) {
-              var path = "";
-              if (model.currentHome.startsWith(list[0])) {
-                // absolute path
-                for (var item in list) {
-                  path = PathUtil.join(path, item, model.currentIsWindows);
+              child: Container(
+                decoration: BoxDecoration(
+                  border: Border.all(color: Colors.black12)
+                ),
+                child: BreadCrumb(
+            items: getPathBreadCrumbItems(() => model.goHome(isLocal: isLocal), (list) {
+                var path = "";
+                final currentHome = model.getCurrentHome(isLocal);
+                final currentIsWindows = model.getCurrentIsWindows(isLocal);
+                if (currentHome.startsWith(list[0])) {
+                  // absolute path
+                  for (var item in list) {
+                    path = PathUtil.join(path, item, currentIsWindows);
+                  }
+                } else {
+                  path += currentHome;
+                  for (var item in list) {
+                    path = PathUtil.join(path, item, currentIsWindows);
+                  }
                 }
-              } else {
-                path += model.currentHome;
-                for (var item in list) {
-                  path = PathUtil.join(path, item, model.currentIsWindows);
-                }
-              }
-              model.openDirectory(path, isLocal: isLocal);
+                model.openDirectory(path, isLocal: isLocal);
             }, isLocal),
             divider: Icon(Icons.chevron_right),
             overflow: ScrollableOverflow(
-                controller: isLocal
-                    ? _breadCrumbLocalScroller
-                    : _breadCrumbRemoteScroller),
-          )),
+                  controller: isLocal
+                      ? _breadCrumbLocalScroller
+                      : _breadCrumbRemoteScroller),
+          ),
+              )),
           Row(
             children: [
               IconButton(
@@ -443,8 +489,18 @@ class _FileManagerPageState extends State<FileManagerPage>
                   onSelected: (sort) {
                     model.changeSortStyle(sort, isLocal: isLocal);
                   }),
-              menu(isLocal: isLocal)
+              menu(isLocal: isLocal),
             ],
+          ),
+          Offstage(
+            offstage: !isLocal,
+            child: TextButton.icon(
+                onPressed: (){}, icon: Transform.rotate(
+              angle: isLocal ? 0 : pi,
+              child: Icon(
+                  Icons.send
+              ),
+            ), label: Text(isLocal ? translate('Send') : translate('Receive'))),
           )
         ],
       ));
@@ -476,14 +532,14 @@ class _FileManagerPageState extends State<FileManagerPage>
 
   Widget? bottomSheet() {
     final state = model.jobState;
-    final isOtherPage = _selectedItems.isOtherPage(model.isLocal);
-    final selectedItemsLen = "${_selectedItems.length} ${translate("items")}";
-    final local = _selectedItems.isLocal == null
+    final isOtherPage = _localSelectedItems.isOtherPage(model.isLocal);
+    final selectedItemsLen = "${_localSelectedItems.length} ${translate("items")}";
+    final local = _localSelectedItems.isLocal == null
         ? ""
-        : " [${_selectedItems.isLocal! ? translate("Local") : translate("Remote")}]";
+        : " [${_localSelectedItems.isLocal! ? translate("Local") : translate("Remote")}]";
 
     if (model.selectMode) {
-      if (_selectedItems.length == 0 || !isOtherPage) {
+      if (_localSelectedItems.length == 0 || !isOtherPage) {
         return BottomSheetBody(
             leading: Icon(Icons.check),
             title: translate("Selected"),
@@ -497,8 +553,8 @@ class _FileManagerPageState extends State<FileManagerPage>
               IconButton(
                 icon: Icon(Icons.delete_forever),
                 onPressed: () {
-                  if (_selectedItems.length > 0) {
-                    model.removeAction(_selectedItems);
+                  if (_localSelectedItems.length > 0) {
+                    model.removeAction(_localSelectedItems);
                   }
                 },
               )
@@ -518,7 +574,7 @@ class _FileManagerPageState extends State<FileManagerPage>
                 icon: Icon(Icons.paste),
                 onPressed: () {
                   model.toggleSelectMode();
-                  model.sendFiles(_selectedItems);
+                  model.sendFiles(_localSelectedItems);
                 },
               )
             ]);

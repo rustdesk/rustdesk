@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_hbb/common.dart';
 import 'package:flutter_hbb/mobile/pages/file_manager_page.dart';
 import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
+import 'package:get/get.dart';
 import 'package:path/path.dart' as Path;
 
 import 'model.dart';
@@ -21,6 +22,11 @@ class FileModel extends ChangeNotifier {
   var _jobId = 0;
 
   var _jobProgress = JobProgress(); // from rust update
+
+  /// JobTable <jobId, JobProgress>
+  final _jobTable = List<JobProgress>.empty(growable: true).obs;
+
+  RxList<JobProgress> get jobTable => _jobTable;
 
   bool get isLocal => _isLocal;
 
@@ -45,6 +51,10 @@ class FileModel extends ChangeNotifier {
   FileDirectory get currentDir => _isLocal ? currentLocalDir : currentRemoteDir;
 
   String get currentHome => _isLocal ? _localOption.home : _remoteOption.home;
+
+  String getCurrentHome(bool isLocal) {
+    return isLocal ? _localOption.home : _remoteOption.home;
+  }
 
   String get currentShortPath {
     if (currentDir.path.startsWith(currentHome)) {
@@ -81,6 +91,10 @@ class FileModel extends ChangeNotifier {
   bool get currentIsWindows =>
       _isLocal ? _localOption.isWindows : _remoteOption.isWindows;
 
+  bool getCurrentIsWindows(bool isLocal) {
+    return isLocal ? _localOption.isWindows : _remoteOption.isWindows;
+  }
+
   final _fileFetcher = FileFetcher();
 
   final _jobResultListener = JobResultListener<Map<String, dynamic>>();
@@ -115,10 +129,20 @@ class FileModel extends ChangeNotifier {
   tryUpdateJobProgress(Map<String, dynamic> evt) {
     try {
       int id = int.parse(evt['id']);
-      _jobProgress.id = id;
-      _jobProgress.fileNum = int.parse(evt['file_num']);
-      _jobProgress.speed = double.parse(evt['speed']);
-      _jobProgress.finishedSize = int.parse(evt['finished_size']);
+      if (!isDesktop) {
+        _jobProgress.id = id;
+        _jobProgress.fileNum = int.parse(evt['file_num']);
+        _jobProgress.speed = double.parse(evt['speed']);
+        _jobProgress.finishedSize = int.parse(evt['finished_size']);
+      } else {
+        // Desktop uses jobTable
+        final job = _jobTable[id];
+        if (job != null) {
+          job.fileNum = int.parse(evt['file_num']);
+          job.speed = double.parse(evt['speed']);
+          job.finishedSize = int.parse(evt['finished_size']);
+        }
+      }
       notifyListeners();
     } catch (e) {
       debugPrint("Failed to tryUpdateJobProgress,evt:${evt.toString()}");
@@ -270,12 +294,12 @@ class FileModel extends ChangeNotifier {
       }
       notifyListeners();
     } catch (e) {
-      debugPrint("Failed to openDirectory :$e");
+      debugPrint("Failed to openDirectory ${path} :$e");
     }
   }
 
-  goHome() {
-    openDirectory(currentHome);
+  goHome({bool? isLocal}) {
+    openDirectory(currentHome, isLocal: isLocal);
   }
 
   goToParentDirectory({bool? isLocal}) {
@@ -303,7 +327,10 @@ class FileModel extends ChangeNotifier {
       final showHidden =
       isRemote ? _localOption.showHidden : _remoteOption.showHidden ;
       items.items.forEach((from) async {
-        _jobId++;
+        final jobId = ++_jobId;
+        _jobTable[jobId] = JobProgress()
+          ..state = JobState.inProgress
+          ..id = jobId;
         await _ffi.target?.bind.sessionSendFiles(id: '${_ffi.target?.id}', actId: _jobId, path: from.path, to: PathUtil.join(toPath, from.name, isWindows)
             ,fileNum: 0, includeHidden: showHidden, isRemote: isRemote);
       });
