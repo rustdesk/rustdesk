@@ -635,6 +635,16 @@ impl Connection {
             pi.hostname = MOBILE_INFO2.lock().unwrap().clone();
             pi.platform = "Android".into();
         }
+        #[cfg(feature = "hwcodec")]
+        {
+            let (h264, h265) = scrap::codec::Encoder::supported_encoding();
+            pi.encoding = Some(SupportedEncoding {
+                h264,
+                h265,
+                ..Default::default()
+            })
+            .into();
+        }
 
         if self.port_forward_socket.is_some() {
             let mut msg_out = Message::new();
@@ -1350,6 +1360,12 @@ impl Connection {
                     _ => {}
                 }
             }
+        }
+        if let Some(q) = o.video_codec_state.clone().take() {
+            scrap::codec::Encoder::update_video_encoder(
+                self.inner.id(),
+                scrap::codec::EncoderUpdate::State(q),
+            );
         }
     }
 
