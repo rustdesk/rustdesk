@@ -253,6 +253,13 @@ class FileModel extends ChangeNotifier {
         isLocal ? _localOption.showHidden : _remoteOption.showHidden;
     final isWindows =
         isLocal ? _localOption.isWindows : _remoteOption.isWindows;
+    // process /C:\ -> C:\ on Windows
+    if (currentIsWindows && path.length > 1 && path[0] == '/') {
+      path = path.substring(1);
+      if (path[path.length - 1] != '\\') {
+        path = path + "\\";
+      }
+    }
     try {
       final fd = await _fileFetcher.fetchDirectory(path, isLocal, showHidden);
       fd.format(isWindows, sort: _sortStyle);
@@ -272,7 +279,13 @@ class FileModel extends ChangeNotifier {
   }
 
   goToParentDirectory({bool? isLocal}) {
-    final parent = PathUtil.dirname(currentDir.path, currentIsWindows);
+    final currDir = isLocal != null ? isLocal ? currentLocalDir : currentRemoteDir : currentDir;
+    var parent = PathUtil.dirname(currDir.path, currentIsWindows);
+    // specially for C:\, D:\, goto '/'
+    if (parent == currDir.path && currentIsWindows) {
+      openDirectory('/', isLocal: isLocal);
+      return;
+    }
     openDirectory(parent, isLocal: isLocal);
   }
 
