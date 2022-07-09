@@ -14,7 +14,7 @@ Install visual studio 2022 and add the following components.
 
   - MSVC v143 - VS 2022 c++ ARM64 build tools(Latest)
 
-Install LLVM and perl and add them to the environment variable path.
+Install LLVM and Strawberry Perl and add them to the environment variable path.
 
 
 Perform the following:
