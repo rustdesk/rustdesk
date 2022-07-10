@@ -51,7 +51,7 @@ impl Capturer {
         self.inner.height()
     }
 
-    pub fn frame<'a>(&'a mut self, _timeout_ms: u32) -> io::Result<Frame<'a>> {
+    pub fn frame<'a>(&'a mut self, _timeout_ms: std::time::Duration) -> io::Result<Frame<'a>> {
         match self.frame.try_lock() {
             Ok(mut handle) => {
                 let mut frame = None;
