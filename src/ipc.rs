@@ -73,7 +73,7 @@ pub enum FS {
     WriteOffset {
         id: i32,
         file_num: i32,
-        offset_blk: u32
+        offset_blk: u32,
     },
     CheckDigest {
         id: i32,
@@ -336,6 +336,7 @@ async fn handle(data: Data, stream: &mut Connection) {
                     .await
             );
         }
+
         _ => {}
     }
 }

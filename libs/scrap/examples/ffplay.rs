@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 extern crate scrap;
 
 fn main() {
@@ -29,7 +31,7 @@ fn main() {
     let mut out = child.stdin.unwrap();
 
     loop {
-        match capturer.frame(0) {
+        match capturer.frame(Duration::from_millis(0)) {
             Ok(frame) => {
                 // Write the frame, removing end-of-row padding.
                 let stride = frame.len() / h;

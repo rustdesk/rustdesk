@@ -456,6 +456,49 @@ function self.closing() {
     if (is_file_transfer || is_port_forward || size_adapted) handler.save_size(x, y, w, h);
 }
 
+var qualityMonitor;
+var qualityMonitorData = [];
+
+class QualityMonitor: Reactor.Component
+{
+    function this() {
+        qualityMonitor = this;
+        if (handler.get_toggle_option("show-quality-monitor")) {
+            $(#quality-monitor).style.set{ display: "block" };
+        }
+    }
+
+    function render() {
+        return <div >
+            <div>
+                Speed: {qualityMonitorData[0]}
+            </div>
+            <div>
+                FPS: {qualityMonitorData[1]}
+            </div>
+            <div>
+                Delay: {qualityMonitorData[2]} ms
+            </div>
+            <div>
+                Target Bitrate: {qualityMonitorData[3]}kb
+            </div>
+            <div>
+                Codec: {qualityMonitorData[4]}
+            </div>
+        </div>;
+    }
+}
+
+$(#quality-monitor).content(<QualityMonitor />);
+handler.updateQualityStatus = function(speed, fps, delay, bitrate, codec_format) {
+    speed ? qualityMonitorData[0] = speed:null;
+    fps ? qualityMonitorData[1] = fps:null;
+    delay ? qualityMonitorData[2] = delay:null;
+    bitrate ? qualityMonitorData[3] = bitrate:null;
+    codec_format ? qualityMonitorData[4] = codec_format:null;
+    qualityMonitor.update();
+}
+
 handler.setPermission = function(name, enabled) {
     self.timer(60ms, function() {
     if (name == "keyboard") keyboard_enabled = enabled;
