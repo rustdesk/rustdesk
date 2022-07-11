@@ -40,6 +40,20 @@ class FileModel extends ChangeNotifier {
 
   SortBy get sortStyle => _sortStyle;
 
+  SortBy _localSortStyle = SortBy.Name;
+
+  bool _localSortAscending = true;
+
+  bool _remoteSortAscending = true;
+
+  SortBy _remoteSortStyle = SortBy.Name;
+
+  bool get localSortAscending => _localSortAscending;
+
+  SortBy getSortStyle(bool isLocal){
+    return isLocal ? _localSortStyle : _remoteSortStyle;
+  }
+
   FileDirectory _currentLocalDir = FileDirectory();
 
   FileDirectory get currentLocalDir => _currentLocalDir;
@@ -49,6 +63,10 @@ class FileModel extends ChangeNotifier {
   FileDirectory get currentRemoteDir => _currentRemoteDir;
 
   FileDirectory get currentDir => _isLocal ? currentLocalDir : currentRemoteDir;
+
+  FileDirectory getCurrentDir(bool isLocal) {
+    return isLocal ? currentLocalDir : currentRemoteDir;
+  }
 
   String get currentHome => _isLocal ? _localOption.home : _remoteOption.home;
 
@@ -91,6 +109,10 @@ class FileModel extends ChangeNotifier {
 
   bool get currentShowHidden =>
       _isLocal ? _localOption.showHidden : _remoteOption.showHidden;
+
+  bool getCurrentShowHidden(bool isLocal) {
+    return isLocal ? _localOption.showHidden : _remoteOption.showHidden;
+  }
 
   bool get currentIsWindows =>
       _isLocal ? _localOption.isWindows : _remoteOption.isWindows;
@@ -163,13 +185,15 @@ class FileModel extends ChangeNotifier {
       try {
         final fd = FileDirectory.fromJson(jsonDecode(evt['value']));
         fd.format(_remoteOption.isWindows, sort: _sortStyle);
-        if (fd.id > 0){
+        if (fd.id > 0) {
           final jobIndex = getJob(fd.id);
-          if (jobIndex != -1){
+          if (jobIndex != -1) {
             final job = jobTable[jobIndex];
             var totalSize = 0;
             var fileCount = fd.entries.length;
-            fd.entries.forEach((element) {totalSize += element.size;});
+            fd.entries.forEach((element) {
+              totalSize += element.size;
+            });
             job.totalSize = totalSize;
             job.fileCount = fileCount;
             debugPrint("update receive details:${fd.path}");
@@ -179,11 +203,11 @@ class FileModel extends ChangeNotifier {
           debugPrint("init remote home:${fd.path}");
           _currentRemoteDir = fd;
         }
-        notifyListeners();
-        return;
-      } finally {}
+      }
+      finally {}
     }
     _fileFetcher.tryCompleteTask(evt['value'], evt['is_local']);
+    notifyListeners();
   }
 
   jobDone(Map<String, dynamic> evt) {
@@ -307,10 +331,10 @@ class FileModel extends ChangeNotifier {
     _remoteOption.clear();
   }
 
-  refresh() {
+  refresh({bool? isLocal}) {
     if (isDesktop) {
-      openDirectory(currentRemoteDir.path);
-      openDirectory(currentLocalDir.path);
+      isLocal = isLocal ?? _isLocal;
+      isLocal ? openDirectory(currentLocalDir.path) : openDirectory(currentRemoteDir.path);
     } else {
       openDirectory(currentDir.path);
     }
@@ -344,7 +368,8 @@ class FileModel extends ChangeNotifier {
   }
 
   goHome({bool? isLocal}) {
-    openDirectory(currentHome, isLocal: isLocal);
+    isLocal = isLocal ?? _isLocal;
+    openDirectory(getCurrentHome(isLocal), isLocal: isLocal);
   }
 
   goToParentDirectory({bool? isLocal}) {
@@ -598,7 +623,8 @@ class FileModel extends ChangeNotifier {
     _ffi.target?.bind.sessionRemoveAllEmptyDirs(id: '${_ffi.target?.id}', actId: _jobId, path: path, isRemote: !isLocal);
   }
 
-  createDir(String path) async {
+  createDir(String path, {bool? isLocal}) async {
+    isLocal = isLocal ?? this.isLocal;
     _jobId++;
     _ffi.target?.bind.sessionCreateDir(id: '${_ffi.target?.id}', actId: _jobId, path: path, isRemote: !isLocal);
   }
@@ -608,16 +634,20 @@ class FileModel extends ChangeNotifier {
     jobReset();
   }
 
-  changeSortStyle(SortBy sort, {bool? isLocal}) {
+  changeSortStyle(SortBy sort, {bool? isLocal, bool ascending = true}) {
     _sortStyle = sort;
     if (isLocal == null) {
       // compatible for mobile logic
-      _currentLocalDir.changeSortStyle(sort);
-      _currentRemoteDir.changeSortStyle(sort);
+      _currentLocalDir.changeSortStyle(sort, ascending: ascending);
+      _currentRemoteDir.changeSortStyle(sort, ascending: ascending);
+      _localSortStyle = sort; _localSortAscending = ascending;
+      _remoteSortStyle = sort; _remoteSortAscending = ascending;
     } else if (isLocal) {
-      _currentLocalDir.changeSortStyle(sort);
+      _currentLocalDir.changeSortStyle(sort, ascending: ascending);
+      _localSortStyle = sort; _localSortAscending = ascending;
     } else {
-      _currentRemoteDir.changeSortStyle(sort);
+      _currentRemoteDir.changeSortStyle(sort, ascending: ascending);
+      _remoteSortStyle = sort; _remoteSortAscending = ascending;
     }
     notifyListeners();
   }
@@ -640,6 +670,8 @@ class FileModel extends ChangeNotifier {
     }
     debugPrint("update folder files: ${info}");
   }
+
+  bool get remoteSortAscending => _remoteSortAscending;
 }
 
 class JobResultListener<T> {
@@ -809,8 +841,8 @@ class FileDirectory {
     }
   }
 
-  changeSortStyle(SortBy sort) {
-    entries = _sortList(entries, sort);
+  changeSortStyle(SortBy sort, {bool ascending = true}) {
+    entries = _sortList(entries, sort, ascending);
   }
 
   clear() {
@@ -929,7 +961,7 @@ class DirectoryOption {
 }
 
 // code from file_manager pkg after edit
-List<Entry> _sortList(List<Entry> list, SortBy sortType) {
+List<Entry> _sortList(List<Entry> list, SortBy sortType, bool ascending) {
   if (sortType == SortBy.Name) {
     // making list of only folders.
     final dirs = list.where((element) => element.isDirectory).toList();
@@ -942,7 +974,7 @@ List<Entry> _sortList(List<Entry> list, SortBy sortType) {
     files.sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
 
     // first folders will go to list (if available) then files will go to list.
-    return [...dirs, ...files];
+    return ascending ? [...dirs, ...files] : [...dirs.reversed.toList(), ...files.reversed.toList()];
   } else if (sortType == SortBy.Modified) {
     // making the list of Path & DateTime
     List<_PathStat> _pathStat = [];
@@ -957,7 +989,7 @@ List<Entry> _sortList(List<Entry> list, SortBy sortType) {
     list.sort((a, b) => _pathStat
         .indexWhere((element) => element.path == a.name)
         .compareTo(_pathStat.indexWhere((element) => element.path == b.name)));
-    return list;
+    return ascending ? list : list.reversed.toList();
   } else if (sortType == SortBy.Type) {
     // making list of only folders.
     final dirs = list.where((element) => element.isDirectory).toList();
@@ -974,7 +1006,7 @@ List<Entry> _sortList(List<Entry> list, SortBy sortType) {
         .split('.')
         .last
         .compareTo(b.name.toLowerCase().split('.').last));
-    return [...dirs, ...files];
+    return ascending ? [...dirs, ...files]: [...dirs.reversed.toList(), ...files.reversed.toList()];
   } else if (sortType == SortBy.Size) {
     // create list of path and size
     Map<String, int> _sizeMap = {};
@@ -999,7 +1031,7 @@ List<Entry> _sortList(List<Entry> list, SortBy sortType) {
         .indexWhere((element) => element.key == a.name)
         .compareTo(
             _sizeMapList.indexWhere((element) => element.key == b.name)));
-    return [...dirs, ...files];
+    return ascending ? [...dirs, ...files]:  [...dirs.reversed.toList(), ...files.reversed.toList()];
   }
   return [];
 }

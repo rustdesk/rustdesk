@@ -339,6 +339,19 @@ pub fn session_read_local_dir_sync(id: String, path: String, show_hidden: bool) 
     "".to_string()
 }
 
+pub fn session_get_platform(id: String, is_remote: bool) -> String {
+    if let Some(session) = SESSIONS.read().unwrap().get(&id) {
+        return session.get_platform(is_remote);
+    }
+    "".to_string()
+}
+
+pub fn session_load_last_transfer_jobs(id: String) {
+    if let Some(session) = SESSIONS.read().unwrap().get(&id) {
+        return session.load_last_jobs();
+    }
+}
+
 /// FFI for **get** commands which are idempotent.
 /// Return result in c string.
 ///

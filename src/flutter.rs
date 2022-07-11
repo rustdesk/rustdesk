@@ -5,6 +5,8 @@ use std::{
 
 use flutter_rust_bridge::{StreamSink, ZeroCopyBuffer};
 
+use hbb_common::config::PeerConfig;
+use hbb_common::fs::TransferJobMeta;
 use hbb_common::{
     allow_err,
     compress::decompress,
@@ -463,6 +465,41 @@ impl Session {
         msg_out.set_key_event(key_event);
         log::debug!("{:?}", msg_out);
         self.send_msg(msg_out);
+    }
+
+    pub fn load_config(&self) -> PeerConfig {
+        load_config(&self.id)
+    }
+
+    pub fn get_platform(&self, is_remote: bool) -> String {
+        if is_remote {
+            self.lc.read().unwrap().info.platform.clone()
+        } else {
+            whoami::platform().to_string()
+        }
+    }
+
+    pub fn load_last_jobs(&self) {
+        let pc = self.load_config();
+        if pc.transfer.write_jobs.is_empty() && pc.transfer.read_jobs.is_empty() {
+            // no last jobs
+            return;
+        }
+        let mut cnt = 1;
+        for job_str in pc.transfer.read_jobs.iter() {
+            if !job_str.is_empty() {
+                self.push_event("addJob", vec![("value", job_str)]);
+                cnt += 1;
+                println!("restore read_job: {:?}", job);
+            }
+        }
+        for job_str in pc.transfer.write_jobs.iter() {
+            if !job_str.is_empty() {
+                self.push_event("addJob", vec![("value", job_str)]);
+                cnt += 1;
+                println!("restore write_job: {:?}", job);
+            }
+        }
     }
 }
 
