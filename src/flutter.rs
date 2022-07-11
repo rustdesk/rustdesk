@@ -27,7 +27,7 @@ use hbb_common::{
 };
 
 use crate::common::make_fd_to_json;
-use crate::{client::*, flutter_ffi::EventToUI};
+use crate::{client::*, flutter_ffi::EventToUI, make_fd_flutter};
 
 lazy_static::lazy_static! {
     // static ref SESSION: Arc<RwLock<Option<Session>>> = Default::default();
@@ -991,6 +991,9 @@ impl Connection {
                                 to,
                                 job.files().len()
                             );
+                            let m = make_fd_flutter(id, job.files(), true);
+                            self.session
+                                .push_event("update_folder_files", vec![("info", &m)]);
                             let files = job.files().clone();
                             self.read_jobs.push(job);
                             self.timer = time::interval(MILLI1);

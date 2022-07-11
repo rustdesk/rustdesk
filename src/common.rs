@@ -1,5 +1,9 @@
+use std::sync::{Arc, Mutex};
+
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub use arboard::Clipboard as ClipboardContext;
+use serde_json::json;
+
 use hbb_common::{
     allow_err,
     anyhow::bail,
@@ -14,7 +18,6 @@ use hbb_common::{
 };
 // #[cfg(any(target_os = "android", target_os = "ios", feature = "cli"))]
 use hbb_common::{config::RENDEZVOUS_PORT, futures::future::join_all};
-use std::sync::{Arc, Mutex};
 
 pub const CLIPBOARD_NAME: &'static str = "clipboard";
 pub const CLIPBOARD_INTERVAL: u64 = 333;
@@ -632,4 +635,31 @@ pub fn make_fd_to_json(fd: FileDirectory) -> String {
     }
     fd_json.insert("entries".into(), json!(entries));
     serde_json::to_string(&fd_json).unwrap_or("".into())
+}
+
+pub fn make_fd_flutter(id: i32, entries: &Vec<FileEntry>, only_count: bool) -> String {
+    let mut m = serde_json::Map::new();
+    m.insert("id".into(), json!(id));
+    let mut a = vec![];
+    let mut n: u64 = 0;
+    for entry in entries {
+        n += entry.size;
+        if only_count {
+            continue;
+        }
+        let mut e = serde_json::Map::new();
+        e.insert("name".into(), json!(entry.name.to_owned()));
+        let tmp = entry.entry_type.value();
+        e.insert("type".into(), json!(if tmp == 0 { 1 } else { tmp }));
+        e.insert("time".into(), json!(entry.modified_time as f64));
+        e.insert("size".into(), json!(entry.size as f64));
+        a.push(e);
+    }
+    if only_count {
+        m.insert("num_entries".into(), json!(entries.len() as i32));
+    } else {
+        m.insert("entries".into(), json!(a));
+    }
+    m.insert("total_size".into(), json!(n as f64));
+    serde_json::to_string(&m).unwrap_or("".into())
 }

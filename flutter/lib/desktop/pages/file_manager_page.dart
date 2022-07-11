@@ -393,13 +393,52 @@ class _FileManagerPageState extends State<FileManagerPage>
           decoration: BoxDecoration(color: Colors.white70,border: Border.all(color: Colors.grey)),
           child: Obx(
             () => ListView.builder(
-              itemExtent: 100, itemBuilder: (BuildContext context, int index) {
-                final item = model.jobTable[index + 1];
-                return Row(
-                  crossAxisAlignment: CrossAxisAlignment.center,
+              itemBuilder: (BuildContext context, int index) {
+                final item = model.jobTable[index];
+                return Column(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    Text('${item.id}'),
-                    Icon(Icons.delete)
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        Transform.rotate(
+                            angle: item.isRemote ? pi : 0,
+                            child: Icon(Icons.send)),
+                        SizedBox(width: 16.0,),
+                        Expanded(
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Tooltip(
+                                  message: item.jobName,
+                                  child: Text('${item.jobName}',
+                                    maxLines: 1,
+                                    style: TextStyle(color: Colors.black45), overflow: TextOverflow.ellipsis,)),
+                              Wrap(
+                                children: [
+                                  Text('${item.state.display()} ${max(0, item.fileNum)}/${item.fileCount} '),
+                                  Text('${translate("files")} ${readableFileSize(item.totalSize.toDouble())} '),
+                                  Offstage(offstage: item.state != JobState.inProgress, child: Text('${readableFileSize(item.speed) + "/s"} ')),
+                                  Text('${(item.finishedSize.toDouble() * 100 / item.totalSize.toDouble()).toStringAsFixed(2)}%'),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.end,
+                          children: [
+                            IconButton(icon: Icon(Icons.delete), onPressed: () {
+                              model.jobTable.removeAt(index);
+                              model.cancelJob(item.id);
+                            },),
+                          ],
+                        )
+                      ],
+                    ),
+                    SizedBox(height: 8.0,),
+                    Divider(height: 2.0, )
                   ],
                 );
             },
@@ -430,12 +469,15 @@ class _FileManagerPageState extends State<FileManagerPage>
           Offstage(
             offstage: isLocal,
             child: TextButton.icon(
-                onPressed: (){}, icon: Transform.rotate(
+                onPressed: (){
+                  final items = getSelectedItem(isLocal);
+                  model.sendFiles(items, isRemote: true);
+                }, icon: Transform.rotate(
               angle: isLocal ? 0 : pi,
               child: Icon(
                   Icons.send
               ),
-            ), label: Text(isLocal ? translate('Send') : translate('Receive'))),
+            ), label: Text(translate('Receive'))),
           ),
           Expanded(
               child: Container(
@@ -495,12 +537,15 @@ class _FileManagerPageState extends State<FileManagerPage>
           Offstage(
             offstage: !isLocal,
             child: TextButton.icon(
-                onPressed: (){}, icon: Transform.rotate(
+                onPressed: (){
+                  final items = getSelectedItem(isLocal);
+                  model.sendFiles(items, isRemote: !isLocal);
+                }, icon: Transform.rotate(
               angle: isLocal ? 0 : pi,
               child: Icon(
                   Icons.send
               ),
-            ), label: Text(isLocal ? translate('Send') : translate('Receive'))),
+            ), label: Text(translate('Send'))),
           )
         ],
       ));

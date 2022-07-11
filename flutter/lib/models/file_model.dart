@@ -56,6 +56,10 @@ class FileModel extends ChangeNotifier {
     return isLocal ? _localOption.home : _remoteOption.home;
   }
 
+  int getJob(int id) {
+    return jobTable.indexWhere((element) => element.id == id);
+  }
+
   String get currentShortPath {
     if (currentDir.path.startsWith(currentHome)) {
       var path = currentDir.path.replaceFirst(currentHome, "");
@@ -136,11 +140,14 @@ class FileModel extends ChangeNotifier {
         _jobProgress.finishedSize = int.parse(evt['finished_size']);
       } else {
         // Desktop uses jobTable
-        final job = _jobTable[id];
-        if (job != null) {
+        // id = index + 1
+        final jobIndex = getJob(id);
+        if (jobIndex >= 0 && _jobTable.length > jobIndex){
+          final job = _jobTable[jobIndex];
           job.fileNum = int.parse(evt['file_num']);
           job.speed = double.parse(evt['speed']);
           job.finishedSize = int.parse(evt['finished_size']);
+          debugPrint("update job ${id} with ${evt}");
         }
       }
       notifyListeners();
@@ -150,14 +157,28 @@ class FileModel extends ChangeNotifier {
   }
 
   receiveFileDir(Map<String, dynamic> evt) {
-    if (_remoteOption.home.isEmpty && evt['is_local'] == "false") {
+    debugPrint("recv file dir:${evt}");
+    if (evt['is_local'] == "false") {
       // init remote home, the connection will automatic read remote home when established,
       try {
         final fd = FileDirectory.fromJson(jsonDecode(evt['value']));
         fd.format(_remoteOption.isWindows, sort: _sortStyle);
-        _remoteOption.home = fd.path;
-        debugPrint("init remote home:${fd.path}");
-        _currentRemoteDir = fd;
+        if (fd.id > 0){
+          final jobIndex = getJob(fd.id);
+          if (jobIndex != -1){
+            final job = jobTable[jobIndex];
+            var totalSize = 0;
+            var fileCount = fd.entries.length;
+            fd.entries.forEach((element) {totalSize += element.size;});
+            job.totalSize = totalSize;
+            job.fileCount = fileCount;
+            debugPrint("update receive details:${fd.path}");
+          }
+        } else if (_remoteOption.home.isEmpty) {
+          _remoteOption.home = fd.path;
+          debugPrint("init remote home:${fd.path}");
+          _currentRemoteDir = fd;
+        }
         notifyListeners();
         return;
       } finally {}
@@ -166,33 +187,57 @@ class FileModel extends ChangeNotifier {
   }
 
   jobDone(Map<String, dynamic> evt) {
-    if (_jobResultListener.isListening) {
-      _jobResultListener.complete(evt);
-      return;
+    if (!isDesktop) {
+      if (_jobResultListener.isListening) {
+        _jobResultListener.complete(evt);
+        return;
+      }
+      _selectMode = false;
+      _jobProgress.state = JobState.done;
+    } else {
+      int id = int.parse(evt['id']);
+      final jobIndex = getJob(id);
+      if (jobIndex != -1) {
+        final job = jobTable[jobIndex];
+        job.finishedSize = job.totalSize;
+        job.state = JobState.done;
+        job.fileNum = int.parse(evt['file_num']);
+      }
     }
-    _selectMode = false;
-    _jobProgress.state = JobState.done;
     refresh();
   }
 
   jobError(Map<String, dynamic> evt) {
-    if (_jobResultListener.isListening) {
-      _jobResultListener.complete(evt);
-      return;
+    if (!isDesktop) {
+      if (_jobResultListener.isListening) {
+        _jobResultListener.complete(evt);
+        return;
+      }
+      _selectMode = false;
+      _jobProgress.clear();
+      _jobProgress.state = JobState.error;
+    } else {
+      int jobIndex = getJob(int.parse(evt['id']));
+      if (jobIndex != -1) {
+        final job = jobTable[jobIndex];
+        job.state = JobState.error;
+      }
     }
-
     debugPrint("jobError $evt");
-    _selectMode = false;
-    _jobProgress.clear();
-    _jobProgress.state = JobState.error;
     notifyListeners();
   }
 
   overrideFileConfirm(Map<String, dynamic> evt) async {
     final resp = await showFileConfirmDialog(
         translate("Overwrite"), "${evt['read_path']}", true);
+    final id = int.tryParse(evt['id']) ?? 0;
     if (false == resp) {
-      cancelJob(int.tryParse(evt['id']) ?? 0);
+      final jobIndex = getJob(id);
+      if (jobIndex != -1){
+        cancelJob(id);
+        final job = jobTable[jobIndex];
+        job.state = JobState.done;
+      }
     } else {
       var need_override = false;
       if (resp == null) {
@@ -203,9 +248,9 @@ class FileModel extends ChangeNotifier {
         need_override = true;
       }
       _ffi.target?.bind.sessionSetConfirmOverrideFile(id: _ffi.target?.id ?? "",
-          actId: evt['id'], fileNum: evt['file_num'],
+          actId: id, fileNum: int.parse(evt['file_num']),
           needOverride: need_override, remember: fileConfirmCheckboxRemember,
-          isUpload: evt['is_upload']);
+          isUpload: evt['is_upload'] == "true");
     }
   }
 
@@ -319,7 +364,6 @@ class FileModel extends ChangeNotifier {
   sendFiles(SelectedItems items, {bool isRemote = false}) {
     if (isDesktop) {
       // desktop sendFiles
-      _jobProgress.state = JobState.inProgress;
       final toPath =
       isRemote ? currentRemoteDir.path : currentLocalDir.path;
       final isWindows =
@@ -328,10 +372,14 @@ class FileModel extends ChangeNotifier {
       isRemote ? _localOption.showHidden : _remoteOption.showHidden ;
       items.items.forEach((from) async {
         final jobId = ++_jobId;
-        _jobTable[jobId] = JobProgress()
+        _jobTable.add(JobProgress()
+          ..jobName = from.path
+          ..totalSize = from.size
           ..state = JobState.inProgress
-          ..id = jobId;
-        await _ffi.target?.bind.sessionSendFiles(id: '${_ffi.target?.id}', actId: _jobId, path: from.path, to: PathUtil.join(toPath, from.name, isWindows)
+          ..id = jobId
+          ..isRemote = isRemote
+        );
+        _ffi.target?.bind.sessionSendFiles(id: '${_ffi.target?.id}', actId: _jobId, path: from.path, to: PathUtil.join(toPath, from.name, isWindows)
             ,fileNum: 0, includeHidden: showHidden, isRemote: isRemote);
       });
     } else {
@@ -543,20 +591,20 @@ class FileModel extends ChangeNotifier {
   }
 
   sendRemoveFile(String path, int fileNum, bool isLocal) {
-    _ffi.target?.bind.sessionRemoveFile(id: '${_ffi.target?.getId()}', actId: _jobId, path: path, isRemote: !isLocal, fileNum: fileNum);
+    _ffi.target?.bind.sessionRemoveFile(id: '${_ffi.target?.id}', actId: _jobId, path: path, isRemote: !isLocal, fileNum: fileNum);
   }
 
   sendRemoveEmptyDir(String path, int fileNum, bool isLocal) {
-    _ffi.target?.bind.sessionRemoveAllEmptyDirs(id: '${_ffi.target?.getId()}', actId: _jobId, path: path, isRemote: !isLocal);
+    _ffi.target?.bind.sessionRemoveAllEmptyDirs(id: '${_ffi.target?.id}', actId: _jobId, path: path, isRemote: !isLocal);
   }
 
   createDir(String path) async {
     _jobId++;
-    _ffi.target?.bind.sessionCreateDir(id: '${_ffi.target?.getId()}', actId: _jobId, path: path, isRemote: !isLocal);
+    _ffi.target?.bind.sessionCreateDir(id: '${_ffi.target?.id}', actId: _jobId, path: path, isRemote: !isLocal);
   }
 
   cancelJob(int id) async {
-    _ffi.target?.bind.sessionCancelJob(id: '${_ffi.target?.getId()}', actId: id);
+    _ffi.target?.bind.sessionCancelJob(id: '${_ffi.target?.id}', actId: id);
     jobReset();
   }
 
@@ -576,6 +624,21 @@ class FileModel extends ChangeNotifier {
 
   initFileFetcher() {
     _fileFetcher.id = _ffi.target?.id;
+  }
+
+  void updateFolderFiles(Map<String, dynamic> evt) {
+    // ret: "{\"id\":1,\"num_entries\":12,\"total_size\":1264822.0}"
+    Map<String,dynamic> info = json.decode(evt['info']);
+    int id = info['id'];
+    int num_entries = info['num_entries'];
+    double total_size = info['total_size'];
+    final jobIndex = getJob(id);
+    if (jobIndex != -1) {
+      final job = jobTable[jobIndex];
+      job.fileCount = num_entries;
+      job.totalSize = total_size.toInt();
+    }
+    debugPrint("update folder files: ${info}");
   }
 }
 
@@ -784,12 +847,33 @@ class Entry {
 
 enum JobState { none, inProgress, done, error }
 
+extension JobStateDisplay on JobState {
+  String display() {
+    switch (this) {
+      case JobState.none:
+        return translate("Waiting");
+      case JobState.inProgress:
+        return translate("Transfer File");
+      case JobState.done:
+        return translate("Finished");
+      case JobState.error:
+        return translate("Error");
+      default:
+        return "";
+    }
+  }
+}
+
 class JobProgress {
   JobState state = JobState.none;
   var id = 0;
   var fileNum = 0;
   var speed = 0.0;
   var finishedSize = 0;
+  var totalSize = 0;
+  var fileCount = 0;
+  var isRemote = false;
+  var jobName = "";
 
   clear() {
     state = JobState.none;
@@ -797,6 +881,8 @@ class JobProgress {
     fileNum = 0;
     speed = 0;
     finishedSize = 0;
+    jobName = "";
+    fileCount = 0;
   }
 }
 
