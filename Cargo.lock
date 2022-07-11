@@ -1317,6 +1317,7 @@ dependencies = [
  "log",
  "objc",
  "pkg-config",
+ "rdev 0.5.1",
  "serde 1.0.137",
  "serde_derive",
  "unicode-segmentation",
@@ -3837,6 +3838,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "rdev"
+version = "0.5.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7336f02e29f34e9a7186ccf87051f6a5697536195569012e076e18a4efddcede"
+dependencies = [
+ "cocoa 0.22.0",
+ "core-foundation 0.7.0",
+ "core-foundation-sys 0.7.0",
+ "core-graphics 0.19.2",
+ "lazy_static",
+ "libc",
+ "winapi 0.3.9",
+ "x11",
+]
+
+[[package]]
 name = "rdrand"
 version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4076,7 +4093,7 @@ dependencies = [
  "num_cpus",
  "objc",
  "parity-tokio-ipc",
- "rdev",
+ "rdev 0.5.0",
  "repng",
  "reqwest",
  "rpassword 6.0.1",

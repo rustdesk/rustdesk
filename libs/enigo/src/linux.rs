@@ -3,8 +3,8 @@ use libc;
 use crate::{Key, KeyboardControllable, MouseButton, MouseControllable};
 
 use self::libc::{c_char, c_int, c_void, useconds_t};
-use std::{borrow::Cow, ffi::CString, io::prelude::*, ptr, sync::mpsc};
-
+use rdev::{simulate, EventType, EventType::*, Key as RdevKey, SimulateError};
+use std::{borrow::Cow, ffi::CString, io::prelude::*, ptr, sync::mpsc, thread, time};
 const CURRENT_WINDOW: c_int = 0;
 const DEFAULT_DELAY: u64 = 12000;
 type Window = c_int;
@@ -103,6 +103,30 @@ impl Enigo {
     pub fn reset(&mut self) {
         self.tx.send((PyMsg::Char('\0'), true)).ok();
     }
+
+    fn send_rdev(&mut self, key: &Key, is_press: bool) -> bool {
+        log::info!("{:?} {:?}", key, is_press);
+
+        if let Key::Raw(keycode) = key {
+            let event_type = match is_press {
+                // todo: Acccodding to client type
+                true => Box::leak(Box::new(EventType::KeyPress(RdevKey::Unknown(
+                    (*keycode).into(),
+                )))),
+                false => Box::leak(Box::new(EventType::KeyRelease(RdevKey::Unknown(
+                    (*keycode).into(),
+                )))),
+            };
+
+            match simulate(event_type) {
+                Ok(()) => true,
+                Err(SimulateError) => false,
+            }
+        } else {
+            false
+        }
+    }
+
     #[inline]
     fn send_pynput(&mut self, key: &Key, is_press: bool) -> bool {
         if unsafe { PYNPUT_EXIT || !PYNPUT_REDAY } {
@@ -111,8 +135,15 @@ impl Enigo {
         if let Key::Layout(c) = key {
             return self.tx.send((PyMsg::Char(*c), is_press)).is_ok();
         }
-        if let Key::Raw(_) = key {
-            return false;
+        if let Key::Raw(chr) = key {
+            fn string_to_static_str(s: String) -> &'static str {
+                Box::leak(s.into_boxed_str())
+            }
+            dbg!(chr.to_string());
+            return self
+                .tx
+                .send((PyMsg::Str(string_to_static_str(chr.to_string())), is_press))
+                .is_ok();
         }
         #[allow(deprecated)]
         let s = match key {
@@ -431,6 +462,9 @@ impl KeyboardControllable for Enigo {
         if self.xdo.is_null() {
             return Ok(());
         }
+        if self.send_rdev(&key, true) {
+            return Ok(());
+        }
         if self.send_pynput(&key, true) {
             return Ok(());
         }
@@ -447,6 +481,11 @@ impl KeyboardControllable for Enigo {
     }
     fn key_up(&mut self, key: Key) {
         if self.xdo.is_null() {
+            return;
+        }
+        // todo
+        let keyboard_mode = 1;
+        if keyboard_mode == 1 && self.send_rdev(&key, false) {
             return;
         }
         if self.send_pynput(&key, false) {
@@ -478,6 +517,21 @@ impl KeyboardControllable for Enigo {
             }
         }
     }
+
+    fn key_sequence_parse(&mut self, sequence: &str)
+    where
+        Self: Sized,
+    {
+        self.key_sequence_parse_try(sequence)
+            .expect("Could not parse sequence");
+    }
+
+    fn key_sequence_parse_try(&mut self, sequence: &str) -> Result<(), crate::dsl::ParseError>
+    where
+        Self: Sized,
+    {
+        crate::dsl::eval(self, sequence)
+    }
 }
 
 static mut PYNPUT_EXIT: bool = false;
@@ -492,7 +546,8 @@ fn start_pynput_service(rx: mpsc::Receiver<(PyMsg, bool)>) {
             py = "/usr/lib/rustdesk/pynput_service.py".to_owned();
             if !std::path::Path::new(&py).exists() {
                 // enigo libs, not rustdesk root project, so skip using appimage features
-                py = std::env::var("APPDIR").unwrap_or("".to_string()) + "/usr/lib/rustdesk/pynput_service.py";
+                py = std::env::var("APPDIR").unwrap_or("".to_string())
+                    + "/usr/lib/rustdesk/pynput_service.py";
                 if !std::path::Path::new(&py).exists() {
                     log::error!("{} not exists", py);
                 }
