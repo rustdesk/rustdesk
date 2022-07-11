@@ -309,6 +309,8 @@ class FileModel extends ChangeNotifier {
     if (_currentRemoteDir.path.isEmpty) {
       openDirectory(_remoteOption.home, isLocal: false);
     }
+    // load last transfer jobs
+    await _ffi.target?.bind.sessionLoadLastTransferJobs(id: '${_ffi.target?.id}');
   }
 
   onClose() {
@@ -390,11 +392,11 @@ class FileModel extends ChangeNotifier {
     if (isDesktop) {
       // desktop sendFiles
       final toPath =
-      isRemote ? currentRemoteDir.path : currentLocalDir.path;
+      isRemote ? currentLocalDir.path : currentRemoteDir.path;
       final isWindows =
-      isRemote ?  _localOption.isWindows : _remoteOption.isWindows;
+      isRemote ?  _remoteOption.isWindows : _localOption.isWindows;
       final showHidden =
-      isRemote ? _localOption.showHidden : _remoteOption.showHidden ;
+      isRemote ? _remoteOption.showHidden : _localOption.showHidden;
       items.items.forEach((from) async {
         final jobId = ++_jobId;
         _jobTable.add(JobProgress()
@@ -406,6 +408,7 @@ class FileModel extends ChangeNotifier {
         );
         _ffi.target?.bind.sessionSendFiles(id: '${_ffi.target?.id}', actId: _jobId, path: from.path, to: PathUtil.join(toPath, from.name, isWindows)
             ,fileNum: 0, includeHidden: showHidden, isRemote: isRemote);
+        print("path:${from.path}, toPath:${toPath}, to:${PathUtil.join(toPath, from.name, isWindows)}");
       });
     } else {
       if (items.isLocal == null) {
@@ -672,6 +675,50 @@ class FileModel extends ChangeNotifier {
   }
 
   bool get remoteSortAscending => _remoteSortAscending;
+
+  void loadLastJob(Map<String, dynamic> evt) {
+    debugPrint("load last job: ${evt}");
+    Map<String,dynamic> jobDetail = json.decode(evt['value']);
+    // int id = int.parse(jobDetail['id']);
+    String remote = jobDetail['remote'];
+    String to = jobDetail['to'];
+    bool showHidden = jobDetail['show_hidden'];
+    int fileNum = jobDetail['file_num'];
+    bool isRemote = jobDetail['is_remote'];
+    final currJobId = _jobId++;
+    var jobProgress = JobProgress()
+      ..jobName = isRemote ? remote : to
+      ..id = currJobId
+      ..isRemote = isRemote
+      ..fileNum = fileNum
+      ..remote = remote
+      ..to = to
+      ..showHidden = showHidden
+      ..state = JobState.paused;
+    jobTable.add(jobProgress);
+    _ffi.target?.bind.sessionAddJob(id: '${_ffi.target?.id}',
+        isRemote: isRemote,
+        includeHidden: showHidden,
+        actId: currJobId,
+        path: isRemote ? remote : to,
+        to: isRemote ? to: remote,
+        fileNum: fileNum,
+    );
+  }
+
+  resumeJob(int jobId) {
+    final jobIndex = getJob(jobId);
+    if (jobIndex != -1) {
+      final job = jobTable[jobIndex];
+      _ffi.target?.bind.sessionResumeJob(id: '${_ffi.target?.id}',
+          actId: job.id,
+          isRemote: job.isRemote);
+      job.state = JobState.inProgress;
+    } else {
+      debugPrint("jobId ${jobId} is not exists");
+    }
+    notifyListeners();
+  }
 }
 
 class JobResultListener<T> {
@@ -877,7 +924,7 @@ class Entry {
   }
 }
 
-enum JobState { none, inProgress, done, error }
+enum JobState { none, inProgress, done, error, paused }
 
 extension JobStateDisplay on JobState {
   String display() {
@@ -906,6 +953,9 @@ class JobProgress {
   var fileCount = 0;
   var isRemote = false;
   var jobName = "";
+  var remote = "";
+  var to = "";
+  var showHidden = false;
 
   clear() {
     state = JobState.none;
@@ -915,6 +965,8 @@ class JobProgress {
     finishedSize = 0;
     jobName = "";
     fileCount = 0;
+    remote = "";
+    to = "";
   }
 }
 

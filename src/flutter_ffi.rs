@@ -349,6 +349,32 @@ pub fn session_get_platform(id: String, is_remote: bool) -> String {
 pub fn session_load_last_transfer_jobs(id: String) {
     if let Some(session) = SESSIONS.read().unwrap().get(&id) {
         return session.load_last_jobs();
+    } else {
+        // a tip for flutter dev
+        eprintln!(
+            "cannot load last transfer job from non-existed session. Please ensure session \
+        is connected before calling load last transfer jobs."
+        );
+    }
+}
+
+pub fn session_add_job(
+    id: String,
+    act_id: i32,
+    path: String,
+    to: String,
+    file_num: i32,
+    include_hidden: bool,
+    is_remote: bool,
+) {
+    if let Some(session) = SESSIONS.read().unwrap().get(&id) {
+        session.add_job(act_id, path, to, file_num, include_hidden, is_remote);
+    }
+}
+
+pub fn session_resume_job(id: String, act_id: i32, is_remote: bool) {
+    if let Some(session) = SESSIONS.read().unwrap().get(&id) {
+        session.resume_job(act_id, is_remote);
     }
 }
 

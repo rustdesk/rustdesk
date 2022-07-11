@@ -168,6 +168,8 @@ class FfiModel with ChangeNotifier {
         parent.target?.fileModel.jobError(evt);
       } else if (name == 'override_file_confirm') {
         parent.target?.fileModel.overrideFileConfirm(evt);
+      } else if (name == 'load_last_job') {
+        parent.target?.fileModel.loadLastJob(evt);
       } else if (name == 'update_folder_files') {
         parent.target?.fileModel.updateFolderFiles(evt);
       } else if (name == 'try_start_without_auth') {
@@ -219,6 +221,8 @@ class FfiModel with ChangeNotifier {
         parent.target?.fileModel.jobError(evt);
       } else if (name == 'override_file_confirm') {
         parent.target?.fileModel.overrideFileConfirm(evt);
+      } else if (name == 'load_last_job') {
+        parent.target?.fileModel.loadLastJob(evt);
       } else if (name == 'update_folder_files') {
         parent.target?.fileModel.updateFolderFiles(evt);
       } else if (name == 'try_start_without_auth') {

@@ -413,6 +413,14 @@ class _FileManagerPageState extends State<FileManagerPage>
                         Row(
                           mainAxisAlignment: MainAxisAlignment.end,
                           children: [
+                            Offstage(
+                              offstage: item.state != JobState.paused,
+                              child: IconButton(
+                                  onPressed: () {
+                                    model.resumeJob(item.id);
+                                  },
+                                  icon: Icon(Icons.restart_alt_rounded)),
+                            ),
                             IconButton(
                               icon: Icon(Icons.delete),
                               onPressed: () {
@@ -597,6 +605,7 @@ class _FileManagerPageState extends State<FileManagerPage>
                   onPressed: () {
                     final items = getSelectedItem(isLocal);
                     model.sendFiles(items, isRemote: !isLocal);
+                    items.clear();
                   },
                   icon: Transform.rotate(
                     angle: isLocal ? 0 : pi,

@@ -5,8 +5,8 @@ use std::{
 
 use flutter_rust_bridge::{StreamSink, ZeroCopyBuffer};
 
-use hbb_common::config::PeerConfig;
-use hbb_common::fs::TransferJobMeta;
+use hbb_common::config::{PeerConfig, TransferSerde};
+use hbb_common::fs::{get_job, TransferJobMeta};
 use hbb_common::{
     allow_err,
     compress::decompress,
@@ -471,6 +471,10 @@ impl Session {
         load_config(&self.id)
     }
 
+    pub fn save_config(&self, config: &PeerConfig) {
+        config.store(&self.id);
+    }
+
     pub fn get_platform(&self, is_remote: bool) -> String {
         if is_remote {
             self.lc.read().unwrap().info.platform.clone()
@@ -488,16 +492,16 @@ impl Session {
         let mut cnt = 1;
         for job_str in pc.transfer.read_jobs.iter() {
             if !job_str.is_empty() {
-                self.push_event("addJob", vec![("value", job_str)]);
+                self.push_event("load_last_job", vec![("value", job_str)]);
                 cnt += 1;
-                println!("restore read_job: {:?}", job);
+                println!("restore read_job: {:?}", job_str);
             }
         }
         for job_str in pc.transfer.write_jobs.iter() {
             if !job_str.is_empty() {
-                self.push_event("addJob", vec![("value", job_str)]);
+                self.push_event("load_last_job", vec![("value", job_str)]);
                 cnt += 1;
-                println!("restore write_job: {:?}", job);
+                println!("restore write_job: {:?}", job_str);
             }
         }
     }
@@ -978,6 +982,7 @@ impl Connection {
     async fn handle_msg_from_ui(&mut self, data: Data, peer: &mut Stream) -> bool {
         match data {
             Data::Close => {
+                self.sync_jobs_status_to_local().await;
                 return false;
             }
             Data::Login((password, remember)) => {
@@ -989,8 +994,7 @@ impl Connection {
                 allow_err!(peer.send(&msg).await);
             }
             Data::SendFiles((id, path, to, file_num, include_hidden, is_remote)) => {
-                // in mobile, can_enable_override_detection is always true
-                let od = true;
+                let od = can_enable_overwrite_detection(self.session.lc.read().unwrap().version);
                 if is_remote {
                     log::debug!("New job {}, write to {} from remote {}", id, to, path);
                     self.write_jobs.push(fs::TransferJob::new_write(
@@ -1001,7 +1005,7 @@ impl Connection {
                         include_hidden,
                         is_remote,
                         Vec::new(),
-                        true,
+                        od,
                     ));
                     allow_err!(
                         peer.send(&fs::new_send(id, path, file_num, include_hidden))
@@ -1015,7 +1019,7 @@ impl Connection {
                         file_num,
                         include_hidden,
                         is_remote,
-                        true,
+                        od,
                     ) {
                         Err(err) => {
                             self.handle_job_status(id, -1, Some(err.to_string()));
@@ -1180,6 +1184,87 @@ impl Connection {
                     }
                 }
             }
+            Data::AddJob((id, path, to, file_num, include_hidden, is_remote)) => {
+                let od = can_enable_overwrite_detection(self.session.lc.read().unwrap().version);
+                if is_remote {
+                    log::debug!(
+                        "new write waiting job {}, write to {} from remote {}",
+                        id,
+                        to,
+                        path
+                    );
+                    let mut job = fs::TransferJob::new_write(
+                        id,
+                        path.clone(),
+                        to,
+                        file_num,
+                        include_hidden,
+                        is_remote,
+                        Vec::new(),
+                        od,
+                    );
+                    job.is_last_job = true;
+                    self.write_jobs.push(job);
+                } else {
+                    match fs::TransferJob::new_read(
+                        id,
+                        to.clone(),
+                        path.clone(),
+                        file_num,
+                        include_hidden,
+                        is_remote,
+                        od,
+                    ) {
+                        Err(err) => {
+                            self.handle_job_status(id, -1, Some(err.to_string()));
+                        }
+                        Ok(mut job) => {
+                            log::debug!(
+                                "new read waiting job {}, read {} to remote {}, {} files",
+                                id,
+                                path,
+                                to,
+                                job.files().len()
+                            );
+                            let m = make_fd_flutter(job.id(), job.files(), true);
+                            self.session
+                                .push_event("update_folder_files", vec![("info", &m)]);
+                            job.is_last_job = true;
+                            self.read_jobs.push(job);
+                            self.timer = time::interval(MILLI1);
+                        }
+                    }
+                }
+            }
+            Data::ResumeJob((id, is_remote)) => {
+                if is_remote {
+                    if let Some(job) = get_job(id, &mut self.write_jobs) {
+                        job.is_last_job = false;
+                        allow_err!(
+                            peer.send(&fs::new_send(
+                                id,
+                                job.remote.clone(),
+                                job.file_num,
+                                job.show_hidden
+                            ))
+                            .await
+                        );
+                    }
+                } else {
+                    if let Some(job) = get_job(id, &mut self.read_jobs) {
+                        job.is_last_job = false;
+                        allow_err!(
+                            peer.send(&fs::new_receive(
+                                id,
+                                job.path.to_string_lossy().to_string(),
+                                job.file_num,
+                                job.files.clone()
+                            ))
+                            .await
+                        );
+                    }
+                }
+            }
             _ => {}
         }
         true
@@ -1268,6 +1353,24 @@ impl Connection {
                 ("is_upload", &is_upload.to_string()),
             ],
         );
+    }
+
+    async fn sync_jobs_status_to_local(&mut self) -> bool {
+        log::info!("sync transfer job status");
+        let mut config: PeerConfig = self.session.load_config();
+        let mut transfer_metas = TransferSerde::default();
+        for job in self.read_jobs.iter() {
+            let json_str = serde_json::to_string(&job.gen_meta()).unwrap();
+            transfer_metas.read_jobs.push(json_str);
+        }
+        for job in self.write_jobs.iter() {
+            let json_str = serde_json::to_string(&job.gen_meta()).unwrap();
+            transfer_metas.write_jobs.push(json_str);
+        }
+        log::info!("meta: {:?}", transfer_metas);
+        config.transfer = transfer_metas;
+        self.session.save_config(&config);
+        true
     }
 }
 
@@ -1510,7 +1613,6 @@ pub mod connection_manager {
                 mut files,
             } => {
                 // in mobile, can_enable_override_detection is always true
-                let od = true;
                 WRITE_JOBS.lock().unwrap().push(fs::TransferJob::new_write(
                     id,
                     "".to_string(),
