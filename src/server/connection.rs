@@ -421,7 +421,8 @@ impl Connection {
                             msg.down = true;
                         }
                         handle_key(&msg);
-                        if press {
+                        let keyboard_mode = 1;
+                        if press && keyboard_mode != 1{
                             msg.down = false;
                             handle_key(&msg);
                         }

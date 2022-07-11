@@ -585,6 +585,19 @@ fn handle_key_(evt: &KeyEvent) {
     #[cfg(windows)]
     crate::platform::windows::try_change_desktop();
     let mut en = ENIGO.lock().unwrap();
+    let keyboard_mode = 1;
+    if keyboard_mode == 1 {
+        if let Some(key_event::Union::chr(chr)) = evt.union {
+            if evt.down {
+                println!("key down: {:?}", chr);
+                en.key_down(Key::Raw(chr.try_into().unwrap()));
+            } else {
+                println!("key up: {:?}", chr);
+                en.key_up(Key::Raw(chr.try_into().unwrap()));
+            }
+        }
+        return;
+    }
     // disable numlock if press home etc when numlock is on,
     // because we will get numpad value (7,8,9 etc) if not
     #[cfg(windows)]
