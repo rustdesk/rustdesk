@@ -23,6 +23,8 @@ vcpkg install libvpx:arm64-windows-static libyuv:arm64-windows-static opus:arm64
 
 %comspec% /k "C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Build\vcvarsamd64_arm64.bat" 
 
+cargo update
+
 cargo build --release --target=aarch64-pc-windows-msvc 
 
 ## sciter.dll
