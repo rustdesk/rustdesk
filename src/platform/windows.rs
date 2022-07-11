@@ -1020,6 +1020,22 @@ copy /Y \"{tmp_path}\\Uninstall {app_name}.lnk\" \"{start_menu}\\\"
     // https://docs.microsoft.com/zh-cn/windows/win32/msi/uninstall-registry-key?redirectedfrom=MSDNa
     // https://www.windowscentral.com/how-edit-registry-using-command-prompt-windows-10
     // https://www.tenforums.com/tutorials/70903-add-remove-allowed-apps-through-windows-firewall-windows-10-a.html
+    // Note: without if exist, the bat may exit in advance on some Windows7 https://github.com/rustdesk/rustdesk/issues/895
+    let dels = format!(
+        "
+if exist \"{mk_shortcut}\" del /f /q \"{mk_shortcut}\"
+if exist \"{uninstall_shortcut}\" del /f /q \"{uninstall_shortcut}\"
+if exist \"{tray_shortcut}\" del /f /q \"{tray_shortcut}\"
+if exist \"{tmp_path}\\{app_name}.lnk\" del /f /q \"{tmp_path}\\{app_name}.lnk\"
+if exist \"{tmp_path}\\Uninstall {app_name}.lnk\" del /f /q \"{tmp_path}\\Uninstall {app_name}.lnk\"
+if exist \"{tmp_path}\\{app_name} Tray.lnk\" del /f /q \"{tmp_path}\\{app_name} Tray.lnk\"
+        ",
+        mk_shortcut = mk_shortcut,
+        uninstall_shortcut = uninstall_shortcut,
+        tray_shortcut = tray_shortcut,
+        tmp_path = tmp_path,
+        app_name = crate::get_app_name(),
+    );
     let cmds = format!(
         "
 {uninstall_str}
@@ -1048,12 +1064,7 @@ cscript \"{tray_shortcut}\"
 copy /Y \"{tmp_path}\\{app_name} Tray.lnk\" \"%PROGRAMDATA%\\Microsoft\\Windows\\Start Menu\\Programs\\Startup\\\"
 {shortcuts}
 copy /Y \"{tmp_path}\\Uninstall {app_name}.lnk\" \"{path}\\\"
-del /f \"{mk_shortcut}\"
-del /f \"{uninstall_shortcut}\"
-del /f \"{tray_shortcut}\"
-del /f \"{tmp_path}\\{app_name}.lnk\"
-del /f \"{tmp_path}\\Uninstall {app_name}.lnk\"
-del /f \"{tmp_path}\\{app_name} Tray.lnk\"
+{dels}
 sc create {app_name} binpath= \"\\\"{exe}\\\" --import-config \\\"{config_path}\\\"\" start= auto DisplayName= \"{app_name} Service\"
 sc start {app_name}
 sc stop {app_name}
@@ -1086,7 +1097,12 @@ sc delete {app_name}
             "timeout 300"
         } else {
             ""
-        }
+        },
+        dels=if debug {
+            ""
+        } else {
+            &dels
+        },
     );
     run_cmds(cmds, debug, "install")?;
     std::thread::sleep(std::time::Duration::from_millis(2000));
@@ -1132,10 +1148,10 @@ fn get_uninstall() -> String {
         "
     {before_uninstall}
     reg delete {subkey} /f
-    rd /s /q \"{path}\"
-    rd /s /q \"{start_menu}\"
-    del /f /q \"%PUBLIC%\\Desktop\\{app_name}*\"
-    del /f /q \"%PROGRAMDATA%\\Microsoft\\Windows\\Start Menu\\Programs\\Startup\\{app_name} Tray.lnk\"
+    if exist \"{path}\" rd /s /q \"{path}\"
+    if exist \"{start_menu}\" rd /s /q \"{start_menu}\"
+    if exist \"%PUBLIC%\\Desktop\\{app_name}.lnk\" del /f /q \"%PUBLIC%\\Desktop\\{app_name}.lnk\"
+    if exist \"%PROGRAMDATA%\\Microsoft\\Windows\\Start Menu\\Programs\\Startup\\{app_name} Tray.lnk\" del /f /q \"%PROGRAMDATA%\\Microsoft\\Windows\\Start Menu\\Programs\\Startup\\{app_name} Tray.lnk\"
     ",
         before_uninstall=get_before_uninstall(),
         subkey=subkey,
@@ -1182,11 +1198,8 @@ fn run_cmds(cmds: String, show: bool, tip: &str) -> ResultType<()> {
         .show(show)
         .force_prompt(true)
         .status();
-    // leave the file for debug if execution failed
-    if let Ok(res) = res {
-        if res.success() {
-            allow_err!(std::fs::remove_file(tmp));
-        }
+    if !show {
+        allow_err!(std::fs::remove_file(tmp));
     }
     let _ = res?;
     Ok(())

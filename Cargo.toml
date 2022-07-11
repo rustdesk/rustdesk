@@ -24,6 +24,7 @@ appimage = []
 use_samplerate = ["samplerate"]
 use_rubato = ["rubato"]
 use_dasp = ["dasp"]
+hwcodec = ["scrap/hwcodec"]
 default = ["use_dasp"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
