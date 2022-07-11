@@ -102,6 +102,10 @@ void wire_session_peer_option(int64_t port_,
                               struct wire_uint_8_list *name,
                               struct wire_uint_8_list *value);
 
+void wire_session_get_peer_option(int64_t port_,
+                                  struct wire_uint_8_list *id,
+                                  struct wire_uint_8_list *name);
+
 void wire_session_input_os_password(int64_t port_,
                                     struct wire_uint_8_list *id,
                                     struct wire_uint_8_list *value);
@@ -139,7 +143,8 @@ void wire_session_read_dir_recursive(int64_t port_,
                                      struct wire_uint_8_list *id,
                                      int32_t act_id,
                                      struct wire_uint_8_list *path,
-                                     bool is_remote);
+                                     bool is_remote,
+                                     bool show_hidden);
 
 void wire_session_remove_all_empty_dirs(int64_t port_,
                                         struct wire_uint_8_list *id,
@@ -197,6 +202,7 @@ static int64_t dummy_method_to_enforce_bundling(void) {
     dummy_var ^= ((int64_t) (void*) wire_session_send_chat);
     dummy_var ^= ((int64_t) (void*) wire_session_send_mouse);
     dummy_var ^= ((int64_t) (void*) wire_session_peer_option);
+    dummy_var ^= ((int64_t) (void*) wire_session_get_peer_option);
     dummy_var ^= ((int64_t) (void*) wire_session_input_os_password);
     dummy_var ^= ((int64_t) (void*) wire_session_read_remote_dir);
     dummy_var ^= ((int64_t) (void*) wire_session_send_files);

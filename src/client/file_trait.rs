@@ -93,7 +93,7 @@ pub trait FileManager: Interface {
     }
 
     fn add_job(
-        &mut self,
+        &self,
         id: i32,
         path: String,
         to: String,
@@ -111,7 +111,7 @@ pub trait FileManager: Interface {
         )));
     }
 
-    fn resume_job(&mut self, id: i32, is_remote: bool) {
+    fn resume_job(&self, id: i32, is_remote: bool) {
         self.send(Data::ResumeJob((id, is_remote)));
     }
 }
