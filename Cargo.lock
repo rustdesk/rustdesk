@@ -1317,7 +1317,7 @@ dependencies = [
  "log",
  "objc",
  "pkg-config",
- "rdev 0.5.0 (git+https://github.com/asur4s/rdev)",
+ "rdev",
  "serde 1.0.137",
  "serde_derive",
  "unicode-segmentation",
@@ -3858,22 +3858,7 @@ dependencies = [
 [[package]]
 name = "rdev"
 version = "0.5.0"
-dependencies = [
- "cocoa 0.22.0",
- "core-foundation 0.7.0",
- "core-foundation-sys 0.7.0",
- "core-graphics 0.19.2",
- "enum-map",
- "lazy_static",
- "libc",
- "winapi 0.3.9",
- "x11",
-]
-
-[[package]]
-name = "rdev"
-version = "0.5.0"
-source = "git+https://github.com/asur4s/rdev#83d998895677129f0ba8fc2ada4cddd1e0df418f"
+source = "git+https://github.com/asur4s/rdev#e0ed6e08b7fb7e8ac80b2ef6e710ba1db9fe0751"
 dependencies = [
  "cocoa 0.22.0",
  "core-foundation 0.7.0",
@@ -4126,7 +4111,7 @@ dependencies = [
  "num_cpus",
  "objc",
  "parity-tokio-ipc",
- "rdev 0.5.0",
+ "rdev",
  "repng",
  "reqwest",
  "rpassword 6.0.1",
