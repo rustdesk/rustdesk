@@ -1,9 +1,9 @@
-use winapi;
-
 use self::winapi::ctypes::c_int;
 use self::winapi::shared::{basetsd::ULONG_PTR, minwindef::*, windef::*};
 use self::winapi::um::winbase::*;
 use self::winapi::um::winuser::*;
+use rdev::{simulate, EventType, EventType::*, Key as RdevKey, SimulateError};
+use winapi;
 
 use crate::win::keycodes::*;
 use crate::{Key, KeyboardControllable, MouseButton, MouseControllable};
@@ -198,9 +198,14 @@ impl KeyboardControllable for Enigo {
     }
 
     fn key_down(&mut self, key: Key) -> crate::ResultType {
+        let keyboard_mode = 1;
+        if keyboard_mode == 1 {
+            self.send_rdev(&key, true);
+            return Ok(());
+        };
         let code = self.key_to_keycode(key);
         if code == 0 || code == 65535 {
-            return Err("".into()); 
+            return Err("".into());
         }
         let res = keybd_event(0, code, 0);
         if res == 0 {
@@ -213,6 +218,11 @@ impl KeyboardControllable for Enigo {
     }
 
     fn key_up(&mut self, key: Key) {
+        let keyboard_mode = 1;
+        if keyboard_mode == 1 {
+            self.send_rdev(&key, false);
+            return;
+        };
         keybd_event(KEYEVENTF_KEYUP, self.key_to_keycode(key), 0);
     }
 
@@ -227,7 +237,8 @@ impl KeyboardControllable for Enigo {
 }
 
 impl Enigo {
-    /// Gets the (width, height) of the main display in screen coordinates (pixels).
+    /// Gets the (width, height) of the main display in screen coordinates
+    /// (pixels).
     ///
     /// # Example
     ///
@@ -270,6 +281,29 @@ impl Enigo {
 
     fn unicode_key_up(&self, unicode_char: u16) {
         keybd_event(KEYEVENTF_UNICODE | KEYEVENTF_KEYUP, 0, unicode_char);
+    }
+
+    fn send_rdev(&mut self, key: &Key, is_press: bool) -> bool {
+        log::info!("{:?} {:?}", key, is_press);
+
+        if let Key::Raw(keycode) = key {
+            let event_type = match is_press {
+                // todo: Acccodding to client type
+                true => Box::leak(Box::new(EventType::KeyPress(RdevKey::Unknown(
+                    (*keycode).into(),
+                )))),
+                false => Box::leak(Box::new(EventType::KeyRelease(RdevKey::Unknown(
+                    (*keycode).into(),
+                )))),
+            };
+
+            match simulate(event_type) {
+                Ok(()) => true,
+                Err(SimulateError) => false,
+            }
+        } else {
+            false
+        }
     }
 
     fn key_to_keycode(&self, key: Key) -> u16 {
