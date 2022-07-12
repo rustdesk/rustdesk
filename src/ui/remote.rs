@@ -346,7 +346,7 @@ impl Handler {
 
                     let mut key_event = KeyEvent::new();
                     // According to peer platform.
-                    if peer == "linux" {
+                    if peer == "Linux" {
                         let keycode: u32 = rdev::linux_keycode_from_key(key).unwrap().into();
                         key_event.set_chr(keycode);
                     } else if peer == "Windows" {
