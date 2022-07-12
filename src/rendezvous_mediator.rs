@@ -1,4 +1,7 @@
-use crate::server::{check_zombie, new as new_server, ServerPtr};
+use crate::{
+    ipc::get_id,
+    server::{check_zombie, new as new_server, ServerPtr},
+};
 use hbb_common::{
     allow_err,
     anyhow::bail,
@@ -15,8 +18,9 @@ use hbb_common::{
     udp::FramedSocket,
     AddrMangle, IntoTargetAddr, ResultType, TargetAddr,
 };
+use serde_derive::{Deserialize, Serialize};
 use std::{
-    net::SocketAddr,
+    net::{IpAddr, Ipv4Addr, SocketAddr, ToSocketAddrs, UdpSocket},
     sync::{
         atomic::{AtomicBool, Ordering},
         Arc, Mutex,
@@ -62,11 +66,9 @@ impl RendezvousMediator {
             direct_server(server_cloned).await;
         });
         #[cfg(not(any(target_os = "android", target_os = "ios")))]
-        if crate::platform::is_installed() {
-            std::thread::spawn(move || {
-                allow_err!(lan_discovery());
-            });
-        }
+        std::thread::spawn(move || {
+            allow_err!(lan_discovery());
+        });
         loop {
             Config::reset_online();
             if Config::get_option("stop-service").is_empty() {
@@ -546,15 +548,75 @@ pub fn get_broadcast_port() -> u16 {
     (RENDEZVOUS_PORT + 3) as _
 }
 
-pub fn get_mac() -> String {
+#[derive(Default, Serialize, Deserialize, Clone)]
+pub struct DiscoveryPeer {
+    id: String,
+    mac: String,
+    ip: String,
+    username: String,
+    hostname: String,
+    platform: String,
+}
+
+pub fn get_mac(ip: &IpAddr) -> String {
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    if let Ok(Some(mac)) = mac_address::get_mac_address() {
+    if let Ok(mac) = get_mac_by_ip(ip) {
         mac.to_string()
     } else {
         "".to_owned()
     }
     #[cfg(any(target_os = "android", target_os = "ios"))]
     "".to_owned()
+}
+
+fn get_all_ipv4s() -> ResultType<Vec<Ipv4Addr>> {
+    let mut ipv4s = Vec::new();
+    for interface in default_net::get_interfaces() {
+        for ipv4 in &interface.ipv4 {
+            ipv4s.push(ipv4.addr.clone());
+        }
+    }
+    Ok(ipv4s)
+}
+
+fn get_mac_by_ip(ip: &IpAddr) -> ResultType<String> {
+    for interface in default_net::get_interfaces() {
+        match ip {
+            IpAddr::V4(local_ipv4) => {
+                if interface.ipv4.iter().any(|x| x.addr == *local_ipv4) {
+                    if let Some(mac_addr) = interface.mac_addr {
+                        return Ok(mac_addr.address());
+                    }
+                }
+            }
+            IpAddr::V6(local_ipv6) => {
+                if interface.ipv6.iter().any(|x| x.addr == *local_ipv6) {
+                    if let Some(mac_addr) = interface.mac_addr {
+                        return Ok(mac_addr.address());
+                    }
+                }
+            }
+        }
+    }
+    bail!("No interface found for ip: {:?}", ip);
+}
+
+// Mainly from https://github.com/shellrow/default-net/blob/cf7ca24e7e6e8e566ed32346c9cfddab3f47e2d6/src/interface/shared.rs#L4
+pub fn get_ipaddr_by_peer<A: ToSocketAddrs>(peer: A) -> Option<IpAddr> {
+    let socket = match UdpSocket::bind("0.0.0.0:0") {
+        Ok(s) => s,
+        Err(_) => return None,
+    };
+
+    match socket.connect(peer) {
+        Ok(()) => (),
+        Err(_) => return None,
+    };
+
+    match socket.local_addr() {
+        Ok(addr) => return Some(addr.ip()),
+        Err(_) => return None,
+    };
 }
 
 fn lan_discovery() -> ResultType<()> {
@@ -569,18 +631,20 @@ fn lan_discovery() -> ResultType<()> {
                 match msg_in.union {
                     Some(rendezvous_message::Union::PeerDiscovery(p)) => {
                         if p.cmd == "ping" {
-                            let mut msg_out = Message::new();
-                            let peer = PeerDiscovery {
-                                cmd: "pong".to_owned(),
-                                mac: get_mac(),
-                                id: Config::get_id(),
-                                hostname: whoami::hostname(),
-                                username: crate::platform::get_active_username(),
-                                platform: whoami::platform().to_string(),
-                                ..Default::default()
-                            };
-                            msg_out.set_peer_discovery(peer);
-                            socket.send_to(&msg_out.write_to_bytes()?, addr).ok();
+                            if let Some(self_addr) = get_ipaddr_by_peer(&addr) {
+                                let mut msg_out = Message::new();
+                                let peer = PeerDiscovery {
+                                    cmd: "pong".to_owned(),
+                                    mac: get_mac(&self_addr),
+                                    id: Config::get_id(),
+                                    hostname: whoami::hostname(),
+                                    username: crate::platform::get_active_username(),
+                                    platform: whoami::platform().to_string(),
+                                    ..Default::default()
+                                };
+                                msg_out.set_peer_discovery(peer);
+                                socket.send_to(&msg_out.write_to_bytes()?, addr).ok();
+                            }
                         }
                     }
                     _ => {}
@@ -590,10 +654,25 @@ fn lan_discovery() -> ResultType<()> {
     }
 }
 
-pub fn discover() -> ResultType<()> {
-    let addr = SocketAddr::from(([0, 0, 0, 0], 0));
-    let socket = std::net::UdpSocket::bind(addr)?;
-    socket.set_broadcast(true)?;
+fn create_broadcast_sockets() -> ResultType<Vec<UdpSocket>> {
+    let mut sockets = Vec::new();
+    for v4_addr in get_all_ipv4s()? {
+        if v4_addr.is_private() {
+            let s = UdpSocket::bind(SocketAddr::from((v4_addr, 0)))?;
+            s.set_broadcast(true)?;
+            log::debug!("Bind socket to {}", &v4_addr);
+            sockets.push(s)
+        }
+    }
+    Ok(sockets)
+}
+
+fn send_query() -> ResultType<Vec<UdpSocket>> {
+    let sockets = create_broadcast_sockets()?;
+    if sockets.is_empty() {
+        bail!("Found no ipv4 addresses");
+    }
+
     let mut msg_out = Message::new();
     let peer = PeerDiscovery {
         cmd: "ping".to_owned(),
@@ -601,25 +680,49 @@ pub fn discover() -> ResultType<()> {
     };
     msg_out.set_peer_discovery(peer);
     let maddr = SocketAddr::from(([255, 255, 255, 255], get_broadcast_port()));
-    socket.send_to(&msg_out.write_to_bytes()?, maddr)?;
+    for socket in &sockets {
+        socket.send_to(&msg_out.write_to_bytes()?, maddr)?;
+    }
     log::info!("discover ping sent");
+    Ok(sockets)
+}
+
+fn wait_response(
+    socket: UdpSocket,
+    timeout: Option<std::time::Duration>,
+) -> ResultType<Vec<DiscoveryPeer>> {
     let mut last_recv_time = Instant::now();
-    let mut last_write_time = Instant::now();
-    let mut last_write_n = 0;
-    // to-do: load saved peers, and update incrementally (then we can see offline)
     let mut peers = Vec::new();
-    let mac = get_mac();
-    socket.set_read_timeout(Some(std::time::Duration::from_millis(10)))?;
+
+    socket.set_read_timeout(timeout)?;
     loop {
         let mut buf = [0; 2048];
-        if let Ok((len, _)) = socket.recv_from(&mut buf) {
+        if let Ok((len, addr)) = socket.recv_from(&mut buf) {
             if let Ok(msg_in) = Message::parse_from_bytes(&buf[0..len]) {
                 match msg_in.union {
                     Some(rendezvous_message::Union::PeerDiscovery(p)) => {
                         last_recv_time = Instant::now();
                         if p.cmd == "pong" {
-                            if p.mac != mac {
-                                peers.push((p.id, p.username, p.hostname, p.platform));
+                            let mac = if let Some(self_addr) = get_ipaddr_by_peer(&addr) {
+                                get_mac(&self_addr)
+                            } else {
+                                "".to_owned()
+                            };
+
+                            let is_self = if !mac.is_empty() {
+                                p.mac == mac
+                            } else {
+                                p.id == get_id()
+                            };
+                            if !is_self {
+                                peers.push(DiscoveryPeer {
+                                    id: p.id.clone(),
+                                    mac: p.mac.clone(),
+                                    ip: addr.to_string(),
+                                    username: p.username.clone(),
+                                    hostname: p.hostname.clone(),
+                                    platform: p.platform.clone(),
+                                });
                             }
                         }
                     }
@@ -627,13 +730,41 @@ pub fn discover() -> ResultType<()> {
                 }
             }
         }
-        if last_write_time.elapsed().as_millis() > 300 && last_write_n != peers.len() {
-            config::LanPeers::store(serde_json::to_string(&peers)?);
-            last_write_time = Instant::now();
-            last_write_n = peers.len();
-        }
         if last_recv_time.elapsed().as_millis() > 3_000 {
             break;
+        }
+    }
+    Ok(peers)
+}
+
+pub fn discover() -> ResultType<()> {
+    let sockets = send_query()?;
+    let mut join_handles = Vec::new();
+    for socket in sockets {
+        let handle = std::thread::spawn(move || {
+            wait_response(socket, Some(std::time::Duration::from_millis(10)))
+        });
+        join_handles.push(handle);
+    }
+
+    // to-do: load saved peers, and update incrementally (then we can see offline)
+    let mut peers: Vec<DiscoveryPeer> = match serde_json::from_str(&config::LanPeers::load().peers)
+    {
+        Ok(p) => p,
+        _ => Vec::new(),
+    };
+
+    for handle in join_handles {
+        match handle.join() {
+            Ok(Ok(mut tmp)) => {
+                peers.append(&mut tmp);
+            }
+            Ok(Err(e)) => {
+                log::error!("Failed lan discove {e}");
+            }
+            Err(e) => {
+                log::error!("Failed join lan discove thread {e:?}");
+            }
         }
     }
     log::info!("discover ping done");
