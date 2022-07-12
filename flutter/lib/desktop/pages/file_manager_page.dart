@@ -2,7 +2,6 @@ import 'dart:io';
 import 'dart:math';
 
 import 'package:flutter/material.dart';
-import 'package:flutter_breadcrumb/flutter_breadcrumb.dart';
 import 'package:flutter_hbb/mobile/pages/file_manager_page.dart';
 import 'package:flutter_hbb/models/file_model.dart';
 import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
@@ -81,7 +80,6 @@ class _FileManagerPageState extends State<FileManagerPage>
                     Flexible(flex: 2, child: statusList())
                   ],
                 ),
-                bottomSheet: bottomSheet(),
               ));
         }));
   }
@@ -593,8 +591,7 @@ class _FileManagerPageState extends State<FileManagerPage>
                           final items = isLocal
                               ? _localSelectedItems
                               : _remoteSelectedItems;
-                          debugPrint("remove items: ${items.items}");
-                          await (model.removeAction(items));
+                          await (model.removeAction(items, isLocal: isLocal));
                           items.clear();
                         },
                         icon: Icon(Icons.delete_forever_outlined)),
@@ -650,107 +647,6 @@ class _FileManagerPageState extends State<FileManagerPage>
     );
   }
 
-  Widget? bottomSheet() {
-    final state = model.jobState;
-    final isOtherPage = _localSelectedItems.isOtherPage(model.isLocal);
-    final selectedItemsLen =
-        "${_localSelectedItems.length} ${translate("items")}";
-    final local = _localSelectedItems.isLocal == null
-        ? ""
-        : " [${_localSelectedItems.isLocal! ? translate("Local") : translate("Remote")}]";
-
-    if (model.selectMode) {
-      if (_localSelectedItems.length == 0 || !isOtherPage) {
-        return BottomSheetBody(
-            leading: Icon(Icons.check),
-            title: translate("Selected"),
-            text: selectedItemsLen + local,
-            onCanceled: () => model.toggleSelectMode(),
-            actions: [
-              IconButton(
-                icon: Icon(Icons.compare_arrows),
-                onPressed: model.togglePage,
-              ),
-              IconButton(
-                icon: Icon(Icons.delete_forever),
-                onPressed: () {
-                  if (_localSelectedItems.length > 0) {
-                    model.removeAction(_localSelectedItems);
-                  }
-                },
-              )
-            ]);
-      } else {
-        return BottomSheetBody(
-            leading: Icon(Icons.input),
-            title: translate("Paste here?"),
-            text: selectedItemsLen + local,
-            onCanceled: () => model.toggleSelectMode(),
-            actions: [
-              IconButton(
-                icon: Icon(Icons.compare_arrows),
-                onPressed: model.togglePage,
-              ),
-              IconButton(
-                icon: Icon(Icons.paste),
-                onPressed: () {
-                  model.toggleSelectMode();
-                  model.sendFiles(_localSelectedItems);
-                },
-              )
-            ]);
-      }
-    }
-
-    switch (state) {
-      case JobState.inProgress:
-        return BottomSheetBody(
-          leading: CircularProgressIndicator(),
-          title: translate("Waiting"),
-          text:
-              "${translate("Speed")}:  ${readableFileSize(model.jobProgress.speed)}/s",
-          onCanceled: () => model.cancelJob(model.jobProgress.id),
-        );
-      case JobState.done:
-        return BottomSheetBody(
-          leading: Icon(Icons.check),
-          title: "${translate("Successful")}!",
-          text: "",
-          onCanceled: () => model.jobReset(),
-        );
-      case JobState.error:
-        return BottomSheetBody(
-          leading: Icon(Icons.error),
-          title: "${translate("Error")}!",
-          text: "",
-          onCanceled: () => model.jobReset(),
-        );
-      case JobState.none:
-        break;
-    }
-    return null;
-  }
-
-  List<BreadCrumbItem> getPathBreadCrumbItems(void Function() onHome,
-      void Function(List<String>) onPressed, bool isLocal) {
-    final path = model.shortPath(isLocal);
-    final list = PathUtil.split(path, model.currentIsWindows);
-    final breadCrumbList = [
-      BreadCrumbItem(
-          content: IconButton(
-        icon: Icon(Icons.home_filled),
-        onPressed: onHome,
-      ))
-    ];
-    breadCrumbList.addAll(list.asMap().entries.map((e) => BreadCrumbItem(
-        content: TextButton(
-            child: Text(e.value),
-            style:
-                ButtonStyle(minimumSize: MaterialStateProperty.all(Size(0, 0))),
-            onPressed: () => onPressed(list.sublist(0, e.key + 1))))));
-    return breadCrumbList;
-  }
-
   @override
   bool get wantKeepAlive => true;
 
@@ -761,69 +657,5 @@ class _FileManagerPageState extends State<FileManagerPage>
       platform = 'mac';
     else if (platform != 'linux' && platform != 'android') platform = 'win';
     return Image.asset('assets/$platform.png', width: 25, height: 25);
-  }
-}
-
-class BottomSheetBody extends StatelessWidget {
-  BottomSheetBody(
-      {required this.leading,
-      required this.title,
-      required this.text,
-      this.onCanceled,
-      this.actions});
-
-  final Widget leading;
-  final String title;
-  final String text;
-  final VoidCallback? onCanceled;
-  final List<IconButton>? actions;
-
-  @override
-  BottomSheet build(BuildContext context) {
-    final _actions = actions ?? [];
-    return BottomSheet(
-      builder: (BuildContext context) {
-        return Container(
-            height: 65,
-            alignment: Alignment.centerLeft,
-            decoration: BoxDecoration(
-                color: MyTheme.accent50,
-                borderRadius: BorderRadius.vertical(top: Radius.circular(10))),
-            child: Padding(
-              padding: EdgeInsets.symmetric(horizontal: 15),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Row(
-                    children: [
-                      leading,
-                      SizedBox(width: 16),
-                      Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(title, style: TextStyle(fontSize: 18)),
-                          Text(text,
-                              style: TextStyle(
-                                  fontSize: 14, color: MyTheme.grayBg))
-                        ],
-                      )
-                    ],
-                  ),
-                  Row(children: () {
-                    _actions.add(IconButton(
-                      icon: Icon(Icons.cancel_outlined),
-                      onPressed: onCanceled,
-                    ));
-                    return _actions;
-                  }())
-                ],
-              ),
-            ));
-      },
-      onClosing: () {},
-      backgroundColor: MyTheme.grayBg,
-      enableDrag: false,
-    );
   }
 }
