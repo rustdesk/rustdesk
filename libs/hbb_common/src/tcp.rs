@@ -68,6 +68,8 @@ fn new_socket(addr: std::net::SocketAddr, reuse: bool) -> Result<TcpSocket, std:
         socket.set_reuseport(true)?;
         socket.set_reuseaddr(true)?;
     }
+    // only nonblocking work with tokio, https://stackoverflow.com/questions/64649405/receiver-on-tokiompscchannel-only-receives-messages-when-buffer-is-full
+    socket.set_nonblocking(true)?;
     socket.bind(addr)?;
     Ok(socket)
 }
