@@ -149,7 +149,7 @@ class FileModel extends ChangeNotifier {
     } else {
       _remoteOption.showHidden = showHidden ?? !_remoteOption.showHidden;
     }
-    refresh();
+    refresh(isLocal: local);
   }
 
   tryUpdateJobProgress(Map<String, dynamic> evt) {
@@ -210,12 +210,12 @@ class FileModel extends ChangeNotifier {
     notifyListeners();
   }
 
-  jobDone(Map<String, dynamic> evt) {
+  jobDone(Map<String, dynamic> evt) async {
+    if (_jobResultListener.isListening) {
+      _jobResultListener.complete(evt);
+      return;
+    }
     if (!isDesktop) {
-      if (_jobResultListener.isListening) {
-        _jobResultListener.complete(evt);
-        return;
-      }
       _selectMode = false;
       _jobProgress.state = JobState.done;
     } else {
@@ -228,7 +228,10 @@ class FileModel extends ChangeNotifier {
         job.fileNum = int.parse(evt['file_num']);
       }
     }
-    refresh();
+    await Future.wait([
+      refresh(isLocal: false),
+      refresh(isLocal: true),
+    ]);
   }
 
   jobError(Map<String, dynamic> evt) {
@@ -333,12 +336,13 @@ class FileModel extends ChangeNotifier {
     _remoteOption.clear();
   }
 
-  refresh({bool? isLocal}) {
+  Future refresh({bool? isLocal}) async {
     if (isDesktop) {
       isLocal = isLocal ?? _isLocal;
-      isLocal ? openDirectory(currentLocalDir.path) : openDirectory(currentRemoteDir.path);
+      await isLocal ? openDirectory(currentLocalDir.path, isLocal: isLocal) :
+        openDirectory(currentRemoteDir.path, isLocal: isLocal);
     } else {
-      openDirectory(currentDir.path);
+      await openDirectory(currentDir.path);
     }
   }
 
@@ -394,9 +398,9 @@ class FileModel extends ChangeNotifier {
       final toPath =
       isRemote ? currentLocalDir.path : currentRemoteDir.path;
       final isWindows =
-      isRemote ?  _remoteOption.isWindows : _localOption.isWindows;
+      isRemote ?  _localOption.isWindows : _remoteOption.isWindows;
       final showHidden =
-      isRemote ? _remoteOption.showHidden : _localOption.showHidden;
+      isRemote ? _localOption.showHidden : _remoteOption.showHidden;
       items.items.forEach((from) async {
         final jobId = ++_jobId;
         _jobTable.add(JobProgress()
@@ -432,7 +436,8 @@ class FileModel extends ChangeNotifier {
 
   bool removeCheckboxRemember = false;
 
-  removeAction(SelectedItems items) async {
+  removeAction(SelectedItems items, {bool? isLocal}) async {
+    isLocal = isLocal ?? _isLocal;
     removeCheckboxRemember = false;
     if (items.isLocal == null) {
       debugPrint("Failed to removeFile, wrong path state");
@@ -506,11 +511,13 @@ class FileModel extends ChangeNotifier {
             }
             break;
           }
-        } catch (e) {}
+        } catch (e) {
+          print("remove error: ${e}");
+        }
       }
     });
     _selectMode = false;
-    refresh();
+    refresh(isLocal: isLocal);
   }
 
   Future<bool?> showRemoveDialog(
