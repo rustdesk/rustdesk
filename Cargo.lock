@@ -1317,11 +1317,31 @@ dependencies = [
  "log",
  "objc",
  "pkg-config",
- "rdev 0.5.1",
+ "rdev 0.5.0 (git+https://github.com/asur4s/rdev)",
  "serde 1.0.137",
  "serde_derive",
  "unicode-segmentation",
  "winapi 0.3.9",
+]
+
+[[package]]
+name = "enum-map"
+version = "2.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6ddfe61e8040145222887d0d32a939c70c8cae681490d72fb868305e9b40ced8"
+dependencies = [
+ "enum-map-derive",
+]
+
+[[package]]
+name = "enum-map-derive"
+version = "0.9.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "00d1c54e25a57236a790ecf051c2befbb57740c9b86c4273eac378ba84d620d6"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
 ]
 
 [[package]]
@@ -3838,12 +3858,12 @@ dependencies = [
 [[package]]
 name = "rdev"
 version = "0.5.0"
-source = "git+https://github.com/open-trade/rdev#fbbefd0b5d87095a7349965aec9ecd33de7035ac"
 dependencies = [
  "cocoa 0.22.0",
  "core-foundation 0.7.0",
  "core-foundation-sys 0.7.0",
  "core-graphics 0.19.2",
+ "enum-map",
  "lazy_static",
  "libc",
  "winapi 0.3.9",
@@ -3852,14 +3872,14 @@ dependencies = [
 
 [[package]]
 name = "rdev"
-version = "0.5.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7336f02e29f34e9a7186ccf87051f6a5697536195569012e076e18a4efddcede"
+version = "0.5.0"
+source = "git+https://github.com/asur4s/rdev#83d998895677129f0ba8fc2ada4cddd1e0df418f"
 dependencies = [
  "cocoa 0.22.0",
  "core-foundation 0.7.0",
  "core-foundation-sys 0.7.0",
  "core-graphics 0.19.2",
+ "enum-map",
  "lazy_static",
  "libc",
  "winapi 0.3.9",
