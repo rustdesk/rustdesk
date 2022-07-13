@@ -270,7 +270,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Overwrite", "Felülírás"),
         ("This file exists, skip or overwrite this file?", "Ez a fájl már létezik, skippeljünk, vagy felülírjuk ezt a fájlt?"),
         ("Quit", "Kilépés"),
-        ("doc_mac_permission", "https://rustdesk.com/docs/en/manual/mac/#enable-permissions"), 
+        ("doc_mac_permission", "https://rustdesk.com/docs/hu/manual/mac/#enable-permissions"), 
         ("Help", "Segítség"),
         ("Failed", "Sikertelen"),
         ("Succeeded", "Sikeres"),

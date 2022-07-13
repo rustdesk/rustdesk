@@ -13,11 +13,11 @@ Beszélgess velünk: [Discord](https://discord.gg/nDceKgxnkV) | [Twitter](https:
 
 [![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/I2I04VU09)
 
-Még egy távoli elérésű asztali szoftver, Rust-ban írva. Működik mindenféle konfiguráció nélkül, feltelepítéssel, vagy a nélkül. A saját adataidat teljesen te kezeled, nincs szükség aggódásra a biztonságuk felől. Használhatod a RustDesk punblikus randevú/relay szerverét, vagy szervereit, [hostolhatsz sajátot](https://rustdesk.com/server), vagy akár [írhatsz is egyet](https://github.com/rustdesk/rustdesk-server-demo).
+A RustDesk egy távoli elérésű asztali szoftver, Rust-ban írva. Működik mindenféle konfiguráció nélkül, feltelepítéssel, vagy anélkül. Az adataidat teljesen te kezeled, nincs szükség aggódásra a harmadik felek miatt. Használhatod a RustDesk punblikus randevú/relay szervereit, [hostolhatsz sajátot](https://rustdesk.com/server), vagy akár [írhatsz is egyet](https://github.com/rustdesk/rustdesk-server-demo).
 
 ![image](https://user-images.githubusercontent.com/71636191/171661982-430285f0-2e12-4b1d-9957-4a58e375304d.png)
 
-A RustDesk szívesen fogad hozzájárulást, támogatást mindenkitől. Lásd a [`CONTRIBUTING.md`](CONTRIBUTING.md) fájlt a kezdéshez.
+A RustDesk szívesen fogad minden contributiont, támogatást mindenkitől. Lásd a [`CONTRIBUTING.md`](CONTRIBUTING.md) fájlt a kezdéshez.
 
 [**Hogyan működik a RustDesk?**](https://github.com/rustdesk/rustdesk/wiki/How-does-RustDesk-work%3F)
 
@@ -57,7 +57,7 @@ A telefonos verziók Flutter-t hasznának. Később lehetséges hogy Sciterről 
 
 - Futtasd a `cargo run` parancsot
 
-## [Építés](https://rustdesk.com/docs/en/dev/build/)
+## [Építés](https://rustdesk.com/docs/hu/dev/build/)
 
 ## Hogyan építs Linuxon
 
@@ -143,7 +143,7 @@ Ezután, minden egyes alkalommal amikor meg kell építened a RustDesk-et, futta
 docker run --rm -it -v $PWD:/home/user/rustdesk -v rustdesk-git-cache:/home/user/.cargo/git -v rustdesk-registry-cache:/home/user/.cargo/registry -e PUID="$(id -u)" -e PGID="$(id -g)" rustdesk-builder
 ```
 
-Fontos, hogy az első építés lehet hogy több ideig fog tartani mint a következőek, mivel a dependenciek még nincsenek cachelve. Emelett, ha esetleg szeretnél valamilyen argumentumot hozzáadni az építő parancshoz, akkor megteheted a paracssor végén, a `<OPTIONAL-ARGS>` opció használatával. Például ha egy optimalizált release éptést szeretnél megépíteni, akkor add hozzá a fenti parancsorhoz a `--release` opciót. A futtatható binary elérhető lesz a target mappában a rendszereden, futtatni a következőképpen tudod: 
+Fontos, hogy az első építés lehet hogy több ideig fog tartani mint a következőek, mivel a dependenciek még nincsenek cachelve. Emelett, ha esetleg szeretnél valamilyen argumentumot hozzáadni az építő parancshoz, akkor megteheted a paracssor végén, a `<OPTIONAL-ARGS>` argumentum használatával. Például ha egy optimalizált release éptést szeretnél megépíteni, akkor add hozzá a fenti parancsorhoz a `--release` opciót. A futtatható binary elérhető lesz a target mappában a rendszereden, futtatni a következőképpen tudod: 
 
 ```sh
 target/debug/rustdesk
