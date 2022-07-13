@@ -2,8 +2,13 @@
 
 %comspec% /k "C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Build\vcvarsamd64_arm64.bat" 
 cargo build --release --target=aarch64-pc-windows-msvc -vv 
+cargo build --release --target=x86_64-apple-darwin
+cargo build --release --target=aarch64-apple-darwin
+file libsciter.dylib
+
 cargo update
 target\release\rustdesk
+target/x86_64-apple-darwin/release/rustdesk
 
 MSVC v143 - VS 2022 c++ ARM64 build tools(Latest)
 

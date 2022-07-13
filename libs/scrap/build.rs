@@ -14,7 +14,8 @@ fn find_package(name: &str) -> Vec<PathBuf> {
         target_arch = "arm64".to_owned();
     }
     let mut target = if target_os == "macos" {
-        "x64-osx".to_owned()
+        //"x64-osx".to_owned()
+        format!("{}-osx", target_arch)
     } else if target_os == "windows" {
         //"x64-windows-static".to_owned()
         format!("{}-windows-static", target_arch)
