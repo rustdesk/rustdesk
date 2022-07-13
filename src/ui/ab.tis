@@ -320,7 +320,7 @@ class SessionList: Reactor.Component {
                     <li #rdp>RDP<EditRdpPort /></li>
                     <div .separator />
                     <li #rename>{translate('Rename')}</li>
-                    {this.type != "fav" && this.type != "lan" && <li #remove>{translate('Remove')}</li>}
+                    {this.type != "fav" && <li #remove>{translate('Remove')}</li>}
                     {is_win && <li #shortcut>{translate('Create Desktop Shortcut')}</li>}
                     <li #forget-password>{translate('Unremember Password')}</li>
                     {(!this.type || this.type == "fav") && <li #add-fav>{translate('Add to Favorites')}</li>}
@@ -429,6 +429,9 @@ class SessionList: Reactor.Component {
                         break;
                     }
                 }
+            } else if (this.type == "lan") {
+                handler.remove_discovered(id);
+                app.update();
             } else {
                 handler.remove_peer(id);
                 app.update();
