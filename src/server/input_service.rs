@@ -589,10 +589,8 @@ fn handle_key_(evt: &KeyEvent) {
     if keyboard_mode == 1 {
         if let Some(key_event::Union::chr(chr)) = evt.union {
             if evt.down {
-                println!("key down: {:?}", chr);
                 en.key_down(Key::Raw(chr.try_into().unwrap()));
             } else {
-                println!("key up: {:?}", chr);
                 en.key_up(Key::Raw(chr.try_into().unwrap()));
             }
         }

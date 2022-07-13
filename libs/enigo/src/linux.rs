@@ -105,8 +105,6 @@ impl Enigo {
     }
 
     fn send_rdev(&mut self, key: &Key, is_press: bool) -> bool {
-        log::info!("{:?} {:?}", key, is_press);
-
         if let Key::Raw(keycode) = key {
             let event_type = match is_press {
                 // todo: Acccodding to client type
@@ -139,7 +137,6 @@ impl Enigo {
             fn string_to_static_str(s: String) -> &'static str {
                 Box::leak(s.into_boxed_str())
             }
-            dbg!(chr.to_string());
             return self
                 .tx
                 .send((PyMsg::Str(string_to_static_str(chr.to_string())), is_press))

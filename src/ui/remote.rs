@@ -321,7 +321,6 @@ impl Handler {
                                 }
                                 MUTEX_SPECIAL_KEYS.lock().unwrap().insert(k, true);
                             }
-                            println!("keydown {:?} {:?} {:?}", k, evt.code, evt.scan_code);
                             (k, 1)
                         }
                         KeyRelease(k) => {
@@ -329,7 +328,6 @@ impl Handler {
                             if MUTEX_SPECIAL_KEYS.lock().unwrap().contains_key(&k) {
                                 MUTEX_SPECIAL_KEYS.lock().unwrap().insert(k, false);
                             }
-                            println!("keyup {:?} {:?} {:?}", k, evt.code, evt.scan_code);
                             (k, 0)
                         }
                         _ => return,
@@ -338,11 +336,6 @@ impl Handler {
                     // todo: clear key
                     #[cfg(target_os = "windows")]
                     let key = rdev::get_win_key(evt.code.into(), evt.scan_code);
-
-                    // todo: up down left right in numpad
-                    // #[cfg(target_os = "linux")]
-                    dbg!(key);
-                    println!("--------------");
 
                     let mut key_event = KeyEvent::new();
                     // According to peer platform.
