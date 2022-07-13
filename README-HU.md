@@ -1,36 +1,36 @@
 <p align="center">
   <img src="logo-header.svg" alt="RustDesk - Your remote desktop"><br>
-  <a href="#free-public-servers">Servers</a> •
-  <a href="#raw-steps-to-build">Build</a> •
-  <a href="#how-to-build-with-docker">Docker</a> •
-  <a href="#file-structure">Structure</a> •
-  <a href="#snapshot">Snapshot</a><br>
+  <a href="#ingyenes-publikus-szerverek">Szerverek</a> •
+  <a href="#építési-pontok">Építés</a> •
+  <a href="#hogyan-éptís-dockerrel">Docker</a> •
+  <a href="#fájl-struktúra">Struktúra</a> •
+  <a href="#képernyőképek">Képernyőképek</a><br>
   [<a href="README-CS.md">česky</a>] | [<a href="README-ZH.md">中文</a>] | | [<a href="README-HU.md">Magyar</a>] | [<a href="README-ES.md">Español</a>] | [<a href="README-FA.md">فارسی</a>] | [<a href="README-FR.md">Français</a>] | [<a href="README-DE.md">Deutsch</a>] | [<a href="README-PL.md">Polski</a>] | [<a href="README-ID.md">Indonesian</a>] | [<a href="README-FI.md">Suomi</a>] | [<a href="README-ML.md">മലയാളം</a>] | [<a href="README-JP.md">日本語</a>] | [<a href="README-NL.md">Nederlands</a>] | [<a href="README-IT.md">Italiano</a>] | [<a href="README-RU.md">Русский</a>] | [<a href="README-PTBR.md">Português (Brasil)</a>] | [<a href="README-EO.md">Esperanto</a>] | [<a href="README-KR.md">한국어</a>] | [<a href="README-AR.md">العربي</a>]<br>
-  <b>We need your help to translate this README, <a href="https://github.com/rustdesk/rustdesk/tree/master/src/lang">RustDesk UI</a> and <a href="https://github.com/rustdesk/doc.rustdesk.com">Doc</a> to your native language</b>
+  <b>Kell a segítséged, hogy lefordítsuk ezt a README-t, <a href="https://github.com/rustdesk/rustdesk/tree/master/src/lang">a RustDesk UI-t</a> és a <a href="https://github.com/rustdesk/doc.rustdesk.com">Dokumentációt</a> az anyanyelvedre</b>
 </p>
 
-Chat with us: [Discord](https://discord.gg/nDceKgxnkV) | [Twitter](https://twitter.com/rustdesk) | [Reddit](https://www.reddit.com/r/rustdesk)
+Beszélgess velünk: [Discord](https://discord.gg/nDceKgxnkV) | [Twitter](https://twitter.com/rustdesk) | [Reddit](https://www.reddit.com/r/rustdesk)
 
 [![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/I2I04VU09)
 
-Yet another remote desktop software, written in Rust. Works out of the box, no configuration required. You have full control of your data, with no concerns about security. You can use our rendezvous/relay server, [set up your own](https://rustdesk.com/server), or [write your own rendezvous/relay server](https://github.com/rustdesk/rustdesk-server-demo).
+A RustDesk egy távoli elérésű asztali szoftver, Rust-ban írva. Működik mindenféle konfiguráció nélkül, feltelepítéssel, vagy anélkül. Az adataidat teljesen te kezeled, nincs szükség aggódásra a harmadik felek miatt. Használhatod a RustDesk punblikus randevú/relay szervereit, [hostolhatsz sajátot](https://rustdesk.com/server), vagy akár [írhatsz is egyet](https://github.com/rustdesk/rustdesk-server-demo).
 
 ![image](https://user-images.githubusercontent.com/71636191/171661982-430285f0-2e12-4b1d-9957-4a58e375304d.png)
 
-RustDesk welcomes contribution from everyone. See [`CONTRIBUTING.md`](CONTRIBUTING.md) for help getting started.
+A RustDesk szívesen fogad minden contributiont, támogatást mindenkitől. Lásd a [`CONTRIBUTING.md`](CONTRIBUTING.md) fájlt a kezdéshez.
 
-[**How does RustDesk work?**](https://github.com/rustdesk/rustdesk/wiki/How-does-RustDesk-work%3F)
+[**Hogyan működik a RustDesk?**](https://github.com/rustdesk/rustdesk/wiki/How-does-RustDesk-work%3F)
 
-[**BINARY DOWNLOAD**](https://github.com/rustdesk/rustdesk/releases)
+[**BINARY LELTÖLTÉS**](https://github.com/rustdesk/rustdesk/releases)
 
 [<img src="https://fdroid.gitlab.io/artwork/badge/get-it-on.png"
     alt="Get it on F-Droid"
     height="80">](https://f-droid.org/en/packages/com.carriez.flutter_hbb)
 
-## Free Public Servers
+## Ingyenes publikus szerverek
 
-Below are the servers you are using for free, it may change along the time. If you are not close to one of these, your network may be slow.
-| Location | Vendor | Specification |
+Ezalatt az üzenet alatt találhatóak azok a publikus szerverek, amelyeket ingyen használhatsz. Ezek a szerverek változhatnak a jövőben, illetve a hálózatuk lehet hogy lassú lehet.
+| Hely | Host | Specifikáció |
 | --------- | ------------- | ------------------ |
 | Seoul | AWS lightsail | 1 VCPU / 0.5GB RAM |
 | Singapore | Vultr | 1 VCPU / 1GB RAM |
@@ -38,28 +38,28 @@ Below are the servers you are using for free, it may change along the time. If y
 
 ## Dependencies
 
-Desktop versions use [sciter](https://sciter.com/) for GUI, please download sciter dynamic library yourself.
+Az asztali verziók [sciter](https://sciter.com/)-t használnak a GUI-hoz, kérlek telepítsd a dynamikus könyvtárat magad.
 
 [Windows](https://raw.githubusercontent.com/c-smile/sciter-sdk/master/bin.win/x64/sciter.dll) |
 [Linux](https://raw.githubusercontent.com/c-smile/sciter-sdk/master/bin.lnx/x64/libsciter-gtk.so) |
 [MacOS](https://raw.githubusercontent.com/c-smile/sciter-sdk/master/bin.osx/libsciter.dylib)
 
-Mobile versions use Flutter. We will migrate desktop version from Sciter to Flutter.
+A telefonos verziók Flutter-t hasznának. Később lehetséges hogy Sciterről Flutterre migrálunk az asztali verziókban is.
 
-## Raw steps to build
+## Építési pontok
 
-- Prepare your Rust development env and C++ build env
+- Készítsd elő a Rust, C++ fejlesztői környezetet (env)
 
-- Install [vcpkg](https://github.com/microsoft/vcpkg), and set `VCPKG_ROOT` env variable correctly
+- Telepítsd a [vcpkg](https://github.com/microsoft/vcpkg)-t, és állítsd be a `VCPKG_ROOT` környezeti változót helyesen
 
   - Windows: vcpkg install libvpx:x64-windows-static libyuv:x64-windows-static opus:x64-windows-static
   - Linux/MacOS: vcpkg install libvpx libyuv opus
 
-- run `cargo run`
+- Futtasd a `cargo run` parancsot
 
-## [Build](https://rustdesk.com/docs/en/dev/build/)
+## [Építés](https://rustdesk.com/docs/hu/dev/build/)
 
-## How to build on Linux
+## Hogyan építs Linuxon
 
 ### Ubuntu 18 (Debian 10)
 
@@ -79,13 +79,13 @@ sudo yum -y install gcc-c++ git curl wget nasm yasm gcc gtk3-devel clang libxcb-
 sudo pacman -Syu --needed unzip git cmake gcc curl wget yasm nasm zip make pkg-config clang gtk3 xdotool libxcb libxfixes alsa-lib pulseaudio
 ```
 
-### Install pynput package
+### Telepítsd a pynput csomagot
 
 ```sh
 pip3 install pynput
 ```
 
-### Install vcpkg
+### Telepítsd a vcpkg-t
 
 ```sh
 git clone https://github.com/microsoft/vcpkg
@@ -97,7 +97,7 @@ export VCPKG_ROOT=$HOME/vcpkg
 vcpkg/vcpkg install libvpx libyuv opus
 ```
 
-### Fix libvpx (For Fedora)
+### Fixeld a libvpx-t (Fedora-n csak)
 
 ```sh
 cd vcpkg/buildtrees/libvpx/src
@@ -110,7 +110,7 @@ cp libvpx.a $HOME/vcpkg/installed/x64-linux/lib/
 cd
 ```
 
-### Build
+### Építés
 
 ```sh
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
@@ -123,13 +123,13 @@ mv libsciter-gtk.so target/debug
 VCPKG_ROOT=$HOME/vcpkg cargo run
 ```
 
-### Change Wayland to X11 (Xorg)
+### Válts Wayland-ról X11-re (Xorg)
 
-RustDesk does not support Wayland. Check [this](https://docs.fedoraproject.org/en-US/quick-docs/configuring-xorg-as-default-gnome-session/) to configuring Xorg as the default GNOME session.
+A RustDesk nem támogatja a Waylendet. [Itt](https://docs.fedoraproject.org/en-US/quick-docs/configuring-xorg-as-default-gnome-session/) található egy tutorial amelynek segítségével beállíthatod a Xorg-ot mint alap GNOME session.
 
-## How to build with Docker
+## Hogyan építs Dockerrel
 
-Begin by cloning the repository and building the docker container:
+Kezdjünk a repo clónozásával, majd pedig a Docker container megépítésével:
 
 ```sh
 git clone https://github.com/rustdesk/rustdesk
@@ -137,27 +137,28 @@ cd rustdesk
 docker build -t "rustdesk-builder" .
 ```
 
-Then, each time you need to build the application, run the following command:
+Ezután, minden egyes alkalommal amikor meg kell építened a RustDesk-et, futtasd a kövezkező parancsot:
 
 ```sh
 docker run --rm -it -v $PWD:/home/user/rustdesk -v rustdesk-git-cache:/home/user/.cargo/git -v rustdesk-registry-cache:/home/user/.cargo/registry -e PUID="$(id -u)" -e PGID="$(id -g)" rustdesk-builder
 ```
 
-Note that the first build may take longer before dependencies are cached, subsequent builds will be faster. Additionally, if you need to specify different arguments to the build command, you may do so at the end of the command in the `<OPTIONAL-ARGS>` position. For instance, if you wanted to build an optimized release version, you would run the command above followed by `--release`. The resulting executable will be available in the target folder on your system, and can be run with:
+Fontos, hogy az első építés lehet hogy több ideig fog tartani mint a következőek, mivel a dependenciek még nincsenek cachelve. Emelett, ha esetleg szeretnél valamilyen argumentumot hozzáadni az építő parancshoz, akkor megteheted a paracssor végén, a `<OPTIONAL-ARGS>` argumentum használatával. Például ha egy optimalizált release éptést szeretnél megépíteni, akkor add hozzá a fenti parancsorhoz a `--release` opciót. A futtatható binary elérhető lesz a target mappában a rendszereden, futtatni a következőképpen tudod: 
 
 ```sh
 target/debug/rustdesk
 ```
 
-Or, if you're running a release executable:
+Vagy ha release binary, akkor:
 
 ```sh
 target/release/rustdesk
 ```
 
-Please ensure that you are running these commands from the root of the RustDesk repository, otherwise the application may be unable to find the required resources. Also note that other cargo subcommands such as `install` or `run` are not currently supported via this method as they would install or run the program inside the container instead of the host.
+Kérlek mindenképpen nézd meg hogy ezeket a parancsokat a root RustDesk mappában futtatod e, különben a RustDesk lehet hogy nem fogja megtalálni az építéshez szükséges elemeket. Fontos az is, hogy jelenleg más cargo subparancsok, például `install`vagy `run` nem támogatottak, mivel egy Dockeres építés esetén elindítanák a programot a containeren belül.
 
-## File Structure
+
+## Fájl Struktúra
 
 - **[libs/hbb_common](https://github.com/rustdesk/rustdesk/tree/master/libs/hbb_common)**: video codec, config, tcp/udp wrapper, protobuf, fs functions for file transfer, and some other utility functions
 - **[libs/scrap](https://github.com/rustdesk/rustdesk/tree/master/libs/scrap)**: screen capture
@@ -170,7 +171,7 @@ Please ensure that you are running these commands from the root of the RustDesk 
 - **[flutter](https://github.com/rustdesk/rustdesk/tree/master/flutter)**: Flutter code for mobile
 - **[flutter/web/js](https://github.com/rustdesk/rustdesk/tree/master/flutter/web/js)**: Javascript for Flutter web client
 
-## Snapshot
+## Képernyőképek
 
 ![image](https://user-images.githubusercontent.com/71636191/113112362-ae4deb80-923b-11eb-957d-ff88daad4f06.png)
 
