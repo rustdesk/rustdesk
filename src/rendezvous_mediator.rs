@@ -64,9 +64,11 @@ impl RendezvousMediator {
             direct_server(server_cloned).await;
         });
         #[cfg(not(any(target_os = "android", target_os = "ios")))]
-        std::thread::spawn(move || {
-            allow_err!(lan_discovery());
-        });
+        if crate::platform::is_installed() {
+            std::thread::spawn(move || {
+                allow_err!(lan_discovery());
+            });
+        }
         loop {
             Config::reset_online();
             if Config::get_option("stop-service").is_empty() {

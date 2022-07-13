@@ -532,7 +532,7 @@ class MultipleSessions: Reactor.Component {
                     <div style="width:*" .sessions-tab #sessions-type>
                         <span class={!type ? 'active' : 'inactive'}>{translate('Recent Sessions')}</span>
                         <span #fav class={type == "fav" ? 'active' : 'inactive'}>{translate('Favorites')}</span>
-                        {<span #lan class={type == "lan" ? 'active' : 'inactive'}>{translate('Discovered')}</span>}
+                        {handler.is_installed() && <span #lan class={type == "lan" ? 'active' : 'inactive'}>{translate('Discovered')}</span>}
                         <span #ab class={type == "ab" ? 'active' : 'inactive'}>{translate('Address Book')}</span>
                     </div>
                     {!this.hidden && <SearchBar type={type} />}
@@ -540,7 +540,7 @@ class MultipleSessions: Reactor.Component {
                 </div>
                 {!this.hidden && 
                 ((type == "fav" && <Favorites />) ||
-                (type == "lan" && <LanPeers />) ||
+                (type == "lan" && handler.is_installed() && <LanPeers />) ||
                 (type == "ab" && <AddressBook />) ||
                 <SessionList sessions={handler.get_recent_sessions()} />)}
             </div>;
