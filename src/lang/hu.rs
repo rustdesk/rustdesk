@@ -262,7 +262,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("android_input_permission_tip1", "Ahhoz hogy egy távoli eszköz kontolálhassa az Android eszközödet egérrel vagy érintéssel, jogot kell adnod a RustDesk-nek, hogy használja az \"Elérhetőségi\" szolgáltatást."),
         ("android_input_permission_tip2", "Kérlek navigálj a rendszer beállításaihoz, keresd meg vagy írd be hogy [Feltelepített Szolgáltatások], és kapcsold be a [RustDesk Input] szolgáltatást."),
         ("android_new_connection_tip", "Új kontrollálási kérés érkezett, amely irányítani szeretné az eszközöded."),
-        ("android_service_will_start_tip, "A \"Képernyőrögzítés\" engedélyezése automatikusan elindítja majd a szolgáltatást, amely megengedi más eszközöknek hogy kérést kezdeményezzenek az eszköz felé."),
+        ("android_service_will_start_tip", "A \"Képernyőrögzítés\" engedélyezése automatikusan elindítja majd a szolgáltatást, amely megengedi más eszközöknek hogy kérést kezdeményezzenek az eszköz felé."),
         ("android_stop_service_tip", "A szolgáltatás bezárása automatikusan szétkapcsol minden létező kapcsolatot."),
         ("android_version_audio_tip", "A jelenlegi Android verzió nem támogatja a hangrögzítést, kérlek frissíts legalább Android 10-re, vagy egy újabb verzióra."),
         ("android_start_service_tip", "Nyomj a [Szolgáltatás Indítása] opcióra, vagy adj [Képernyőrözítési] jogot az applikációnak hogy elindítsd a képernyőmegosztó szolgáltatást."),
