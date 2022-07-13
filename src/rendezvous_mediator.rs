@@ -16,7 +16,6 @@ use hbb_common::{
     udp::FramedSocket,
     AddrMangle, IntoTargetAddr, ResultType, TargetAddr,
 };
-use serde_derive::{Deserialize, Serialize};
 use std::{
     collections::{HashMap, HashSet},
     net::{IpAddr, Ipv4Addr, SocketAddr, ToSocketAddrs, UdpSocket},
@@ -547,22 +546,6 @@ pub fn get_broadcast_port() -> u16 {
     (RENDEZVOUS_PORT + 3) as _
 }
 
-#[derive(Debug, Default, Serialize, Deserialize, Clone)]
-pub struct DiscoveryPeer {
-    id: String,
-    mac_ips: HashMap<String, String>,
-    username: String,
-    hostname: String,
-    platform: String,
-    online: bool,
-}
-
-impl DiscoveryPeer {
-    fn is_same_peer(&self, other: &DiscoveryPeer) -> bool {
-        self.id == other.id && self.username == other.username
-    }
-}
-
 pub fn get_mac(ip: &IpAddr) -> String {
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     if let Ok(mac) = get_mac_by_ip(ip) {
@@ -695,7 +678,7 @@ fn send_query() -> ResultType<Vec<UdpSocket>> {
 fn wait_response(
     socket: UdpSocket,
     timeout: Option<std::time::Duration>,
-    tx: UnboundedSender<DiscoveryPeer>,
+    tx: UnboundedSender<config::DiscoveryPeer>,
 ) -> ResultType<()> {
     let mut last_recv_time = Instant::now();
 
@@ -715,7 +698,7 @@ fn wait_response(
                             };
 
                             if mac != p.mac {
-                                allow_err!(tx.send(DiscoveryPeer {
+                                allow_err!(tx.send(config::DiscoveryPeer {
                                     id: p.id.clone(),
                                     mac_ips: HashMap::from([(
                                         p.mac.clone(),
@@ -740,7 +723,7 @@ fn wait_response(
     Ok(())
 }
 
-fn spawn_wait_responses(sockets: Vec<UdpSocket>) -> UnboundedReceiver<DiscoveryPeer> {
+fn spawn_wait_responses(sockets: Vec<UdpSocket>) -> UnboundedReceiver<config::DiscoveryPeer> {
     let (tx, rx) = unbounded_channel::<_>();
     for socket in sockets {
         let tx_clone = tx.clone();
@@ -755,12 +738,8 @@ fn spawn_wait_responses(sockets: Vec<UdpSocket>) -> UnboundedReceiver<DiscoveryP
     rx
 }
 
-async fn handle_received_peers(mut rx: UnboundedReceiver<DiscoveryPeer>) -> ResultType<()> {
-    let mut peers: Vec<DiscoveryPeer> = match serde_json::from_str(&config::LanPeers::load().peers)
-    {
-        Ok(p) => p,
-        _ => Vec::new(),
-    };
+async fn handle_received_peers(mut rx: UnboundedReceiver<config::DiscoveryPeer>) -> ResultType<()> {
+    let mut peers = config::LanPeers::load().peers;
     peers.iter_mut().for_each(|peer| {
         peer.online = false;
     });
@@ -793,7 +772,7 @@ async fn handle_received_peers(mut rx: UnboundedReceiver<DiscoveryPeer>) -> Resu
                     }
 
                     if last_write_time.elapsed().as_millis() > 300 {
-                        config::LanPeers::store(serde_json::to_string(&peers)?);
+                        config::LanPeers::store(&peers);
                         last_write_time = Instant::now();
                     }
                 }
@@ -804,7 +783,7 @@ async fn handle_received_peers(mut rx: UnboundedReceiver<DiscoveryPeer>) -> Resu
         }
     }
 
-    config::LanPeers::store(serde_json::to_string(&peers)?);
+    config::LanPeers::store(&peers);
     Ok(())
 }
 

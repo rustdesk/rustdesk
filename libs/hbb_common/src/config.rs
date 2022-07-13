@@ -857,9 +857,33 @@ impl LocalConfig {
 }
 
 #[derive(Debug, Default, Serialize, Deserialize, Clone)]
+pub struct DiscoveryPeer {
+    pub id: String,
+    #[serde(with = "serde_with::rust::map_as_tuple_list")]
+    pub mac_ips: HashMap<String, String>,
+    pub username: String,
+    pub hostname: String,
+    pub platform: String,
+    pub online: bool,
+}
+
+impl DiscoveryPeer {
+    pub fn is_same_peer(&self, other: &DiscoveryPeer) -> bool {
+        self.id == other.id && self.username == other.username
+    }
+}
+
+#[derive(Debug, Default, Serialize, Deserialize, Clone)]
 pub struct LanPeers {
-    #[serde(default)]
-    pub peers: String,
+    // #[serde(default)]
+    // pub peers: String,
+    pub peers: Vec<DiscoveryPeer>,
+}
+
+#[derive(Serialize, Deserialize)]
+struct MyConfig {
+    version: u8,
+    api_key: String,
 }
 
 impl LanPeers {
@@ -874,8 +898,10 @@ impl LanPeers {
         }
     }
 
-    pub fn store(peers: String) {
-        let f = LanPeers { peers };
+    pub fn store(peers: &Vec<DiscoveryPeer>) {
+        let f = LanPeers {
+            peers: peers.clone(),
+        };
         if let Err(err) = confy::store_path(Config::file_("_lan_peers"), f) {
             log::error!("Failed to store lan peers: {}", err);
         }
