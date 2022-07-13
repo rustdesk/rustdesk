@@ -151,6 +151,10 @@ fn main() {
                 ipc::set_password(args[1].to_owned()).unwrap();
             }
             return;
+        } else if args[0] == "--check-hwcodec-config" {
+            #[cfg(feature = "hwcodec")]
+            scrap::hwcodec::check_config();
+            return;
         }
     }
     ui::start(&mut args[..]);

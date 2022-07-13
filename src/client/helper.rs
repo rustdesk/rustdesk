@@ -3,7 +3,7 @@ use std::{
     time::Instant,
 };
 
-use hbb_common::log;
+use hbb_common::{log, message_proto::{VideoFrame, video_frame}};
 
 const MAX_LATENCY: i64 = 500;
 const MIN_LATENCY: i64 = 100;
@@ -55,5 +55,35 @@ impl LatencyController {
             }
         }
         self.allow_audio
+    }
+}
+
+#[derive(PartialEq, Debug, Clone)]
+pub enum CodecFormat {
+    VP9,
+    H264,
+    H265,
+    Unknown,
+}
+
+impl From<&VideoFrame> for CodecFormat {
+    fn from(it: &VideoFrame) -> Self {
+        match it.union {
+            Some(video_frame::Union::vp9s(_)) => CodecFormat::VP9,
+            Some(video_frame::Union::h264s(_)) => CodecFormat::H264,
+            Some(video_frame::Union::h265s(_)) => CodecFormat::H265,
+            _ => CodecFormat::Unknown,
+        }
+    }
+}
+
+impl ToString for CodecFormat {
+    fn to_string(&self) -> String {
+        match self {
+            CodecFormat::VP9 => "VP9".into(),
+            CodecFormat::H264 => "H264".into(),
+            CodecFormat::H265 => "H265".into(),
+            CodecFormat::Unknown => "Unknow".into(),
+        }
     }
 }

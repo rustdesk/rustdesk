@@ -13,10 +13,11 @@ use std::time::{Duration, Instant};
 use std::{io, thread};
 
 use docopt::Docopt;
+use scrap::codec::{EncoderApi, EncoderCfg};
 use webm::mux;
 use webm::mux::Track;
 
-use scrap::codec as vpx_encode;
+use scrap::vpxcodec as vpx_encode;
 use scrap::{Capturer, Display, STRIDE_ALIGN};
 
 const USAGE: &'static str = "
@@ -89,27 +90,22 @@ fn main() -> io::Result<()> {
         mux::Segment::new(mux::Writer::new(out)).expect("Could not initialize the multiplexer.");
 
     let (vpx_codec, mux_codec) = match args.flag_codec {
-        Codec::Vp8 => (vpx_encode::VideoCodecId::VP8, mux::VideoCodecId::VP8),
-        Codec::Vp9 => (vpx_encode::VideoCodecId::VP9, mux::VideoCodecId::VP9),
+        Codec::Vp8 => (vpx_encode::VpxVideoCodecId::VP8, mux::VideoCodecId::VP8),
+        Codec::Vp9 => (vpx_encode::VpxVideoCodecId::VP9, mux::VideoCodecId::VP9),
     };
 
     let mut vt = webm.add_video_track(width, height, None, mux_codec);
 
     // Setup the encoder.
 
-    let mut vpx = vpx_encode::Encoder::new(
-        &vpx_encode::Config {
-            width,
-            height,
-            timebase: [1, 1000],
-            bitrate: args.flag_bv,
-            codec: vpx_codec,
-            rc_min_quantizer: 0,
-            rc_max_quantizer: 0,
-            speed: 6,
-        },
-        0,
-    )
+    let mut vpx = vpx_encode::VpxEncoder::new(EncoderCfg::VPX(vpx_encode::VpxEncoderConfig {
+        width,
+        height,
+        timebase: [1, 1000],
+        bitrate: args.flag_bv,
+        codec: vpx_codec,
+        num_threads: 0,
+    }))
     .unwrap();
 
     // Start recording.
@@ -138,7 +134,7 @@ fn main() -> io::Result<()> {
             break;
         }
 
-        if let Ok(frame) = c.frame(0) {
+        if let Ok(frame) = c.frame(Duration::from_millis(0)) {
             let ms = time.as_secs() * 1000 + time.subsec_millis() as u64;
 
             for frame in vpx.encode(ms as i64, &frame, STRIDE_ALIGN).unwrap() {

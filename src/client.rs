@@ -12,6 +12,11 @@ use cpal::{
     Device, Host, StreamConfig,
 };
 use magnum_opus::{Channels::*, Decoder as AudioDecoder};
+use scrap::{
+    codec::{Decoder, DecoderCfg},
+    VpxDecoderConfig, VpxVideoCodecId,
+};
+
 use sha2::{Digest, Sha256};
 use uuid::Uuid;
 
@@ -30,13 +35,12 @@ use hbb_common::{
     tokio::time::Duration,
     AddrMangle, ResultType, Stream,
 };
-use scrap::{Decoder, Image, VideoCodecId};
 
 pub use super::lang::*;
 pub mod file_trait;
 pub use file_trait::FileManager;
 pub mod helper;
-pub use helper::LatencyController;
+pub use helper::*;
 pub const SEC30: Duration = Duration::from_secs(30);
 
 pub struct Client;
@@ -717,7 +721,12 @@ pub struct VideoHandler {
 impl VideoHandler {
     pub fn new(latency_controller: Arc<Mutex<LatencyController>>) -> Self {
         VideoHandler {
-            decoder: Decoder::new(VideoCodecId::VP9, (num_cpus::get() / 2) as _).unwrap(),
+            decoder: Decoder::new(DecoderCfg {
+                vpx: VpxDecoderConfig {
+                    codec: VpxVideoCodecId::VP9,
+                    num_threads: (num_cpus::get() / 2) as _,
+                },
+            }),
             latency_controller,
             rgb: Default::default(),
         }
@@ -731,33 +740,18 @@ impl VideoHandler {
                 .update_video(vf.timestamp);
         }
         match &vf.union {
-            Some(video_frame::Union::vp9s(vp9s)) => self.handle_vp9s(vp9s),
+            Some(frame) => self.decoder.handle_video_frame(frame, &mut self.rgb),
             _ => Ok(false),
         }
     }
 
-    pub fn handle_vp9s(&mut self, vp9s: &VP9s) -> ResultType<bool> {
-        let mut last_frame = Image::new();
-        for vp9 in vp9s.frames.iter() {
-            for frame in self.decoder.decode(&vp9.data)? {
-                drop(last_frame);
-                last_frame = frame;
-            }
-        }
-        for frame in self.decoder.flush()? {
-            drop(last_frame);
-            last_frame = frame;
-        }
-        if last_frame.is_null() {
-            Ok(false)
-        } else {
-            last_frame.rgb(1, true, &mut self.rgb);
-            Ok(true)
-        }
-    }
-
     pub fn reset(&mut self) {
-        self.decoder = Decoder::new(VideoCodecId::VP9, 1).unwrap();
+        self.decoder = Decoder::new(DecoderCfg {
+            vpx: VpxDecoderConfig {
+                codec: VpxVideoCodecId::VP9,
+                num_threads: 1,
+            },
+        });
     }
 }
 
@@ -886,6 +880,8 @@ impl LoginConfigHandler {
             option.block_input = BoolOption::Yes.into();
         } else if name == "unblock-input" {
             option.block_input = BoolOption::No.into();
+        } else if name == "show-quality-monitor" {
+            config.show_quality_monitor = !config.show_quality_monitor;
         } else {
             let v = self.options.get(&name).is_some();
             if v {
@@ -918,15 +914,8 @@ impl LoginConfigHandler {
             n += 1;
         } else if q == "custom" {
             let config = PeerConfig::load(&self.id);
-            let mut it = config.custom_image_quality.iter();
-            let bitrate = it.next();
-            let quantizer = it.next();
-            if let Some(bitrate) = bitrate {
-                if let Some(quantizer) = quantizer {
-                    msg.custom_image_quality = bitrate << 8 | quantizer;
-                    n += 1;
-                }
-            }
+            msg.custom_image_quality = config.custom_image_quality[0] << 8;
+            n += 1;
         }
         if self.get_toggle_option("show-remote-cursor") {
             msg.show_remote_cursor = BoolOption::Yes.into();
@@ -952,6 +941,11 @@ impl LoginConfigHandler {
             msg.disable_clipboard = BoolOption::Yes.into();
             n += 1;
         }
+        // TODO: add option
+        let state = Decoder::video_codec_state();
+        msg.video_codec_state = hbb_common::protobuf::MessageField::some(state);
+        n += 1;
+
         if n > 0 {
             Some(msg)
         } else {
@@ -988,6 +982,8 @@ impl LoginConfigHandler {
             self.config.disable_audio
         } else if name == "disable-clipboard" {
             self.config.disable_clipboard
+        } else if name == "show-quality-monitor" {
+            self.config.show_quality_monitor
         } else {
             !self.get_option(name).is_empty()
         }
@@ -1009,17 +1005,17 @@ impl LoginConfigHandler {
         msg_out
     }
 
-    pub fn save_custom_image_quality(&mut self, bitrate: i32, quantizer: i32) -> Message {
+    pub fn save_custom_image_quality(&mut self, image_quality: i32) -> Message {
         let mut misc = Misc::new();
         misc.set_option(OptionMessage {
-            custom_image_quality: bitrate << 8 | quantizer,
+            custom_image_quality: image_quality << 8,
             ..Default::default()
         });
         let mut msg_out = Message::new();
         msg_out.set_misc(misc);
         let mut config = self.load_config();
         config.image_quality = "custom".to_owned();
-        config.custom_image_quality = vec![bitrate, quantizer];
+        config.custom_image_quality = vec![image_quality as _];
         self.save_config(config);
         msg_out
     }
@@ -1170,9 +1166,11 @@ where
 
     let latency_controller = LatencyController::new();
     let latency_controller_cl = latency_controller.clone();
+    // Create video_handler out of the thread below to ensure that the handler exists before client start.
+    // It will take a few tenths of a second for the first time, and then tens of milliseconds.
+    let mut video_handler = VideoHandler::new(latency_controller);
 
     std::thread::spawn(move || {
-        let mut video_handler = VideoHandler::new(latency_controller);
         loop {
             if let Ok(data) = video_receiver.recv() {
                 match data {

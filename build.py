@@ -66,6 +66,11 @@ def make_parser():
         default='',
         help='Integrate features, windows only.'
              'Available: IddDriver, PrivacyMode. Special value is "ALL" and empty "". Default is empty.')
+    parser.add_argument(
+        '--hwcodec',
+        action='store_true',
+        help='Enable feature hwcodec, windows only.'
+    )
     return parser
 
 
@@ -89,11 +94,9 @@ def download_extract_features(features, res_dir):
         print(f'{feat} extract end')
 
 
-def build_windows(feature):
-    features = get_features(feature)
-    if not features:
-        os.system('cargo build --release --features inline')
-    else:
+def build_windows(args):
+    features = get_features(args.feature)
+    if features:
         print(f'Build with features {list(features.keys())}')
         res_dir = 'resources'
         if os.path.isdir(res_dir) and not os.path.islink(res_dir):
@@ -102,8 +105,12 @@ def build_windows(feature):
             raise Exception(f'Find file {res_dir}, not a directory')
         os.makedirs(res_dir, exist_ok=True)
         download_extract_features(features, res_dir)
-        os.system('cargo build --release --features inline,with_rc')
 
+    with_rc = ',with_rc' if features else ''
+    hwcodec = ',hwcodec' if args.hwcodec else ''
+    cmd = 'cargo build --release --features inline' + with_rc + hwcodec
+    print(cmd)
+    os.system(cmd)
 
 def main():
     parser = make_parser()
@@ -123,7 +130,7 @@ def main():
         os.system('git checkout src/ui/common.tis')
     version = get_version()
     if windows:
-        build_windows(args.feature)
+        build_windows(args)
         # os.system('upx.exe target/release/rustdesk.exe')
         os.system('mv target/release/rustdesk.exe target/release/RustDesk.exe')
         pa = os.environ.get('P')

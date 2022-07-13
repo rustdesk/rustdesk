@@ -754,6 +754,13 @@ impl UI {
         )
     }
 
+    fn has_hwcodec(&self) -> bool {
+        #[cfg(not(feature = "hwcodec"))]
+        return false;
+        #[cfg(feature = "hwcodec")]
+        return true;
+    }
+
     fn get_langs(&self) -> String {
         crate::lang::LANGS.to_string()
     }
@@ -833,6 +840,7 @@ impl sciter::EventHandler for UI {
         fn discover();
         fn get_lan_peers();
         fn get_uuid();
+        fn has_hwcodec();
         fn get_langs();
     }
 }
