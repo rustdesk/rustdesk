@@ -34,3 +34,22 @@ Download from https://github.com/c-smile/sciter-sdk/blob/master/bin.win/arm64/sc
 ## Build libsodium.lib
 
 Build StaticRelease version at https://github.com/sj6219/libsodium/blob/1.0.18_alpha/builds/msvc/vs2022/libsodium.sln
+
+---
+
+# aarch64-apple-darwin
+
+## Build rustdesk
+
+Perform the following:
+
+vcpkg install libvpx:arm64-osx libyuv:arm64-osx opus:arm64-osx
+
+cargo update
+
+cargo build --release --target=aarch64-apple-darwin 
+
+## libsciter.dylib
+
+Download from https://github.com/c-smile/sciter-sdk/blob/master/bin.osx/libsciter.dylib .
+
