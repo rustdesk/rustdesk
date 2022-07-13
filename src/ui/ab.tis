@@ -319,9 +319,9 @@ class SessionList: Reactor.Component {
                     {false && !handler.using_public_server() && <li #force-always-relay><span>{svg_checkmark}</span>{translate('Always connect via relay')}</li>}
                     <li #rdp>RDP<EditRdpPort /></li>
                     <div .separator />
-                    <li #rename>{translate('Rename')}</li>
+                    {this.type != "lan" && <li #rename>{translate('Rename')}</li>}
                     {this.type != "fav" && <li #remove>{translate('Remove')}</li>}
-                    {is_win && <li #shortcut>{translate('Create Desktop Shortcut')}</li>}
+                    {is_win && this.type != "lan" && <li #shortcut>{translate('Create Desktop Shortcut')}</li>}
                     <li #forget-password>{translate('Unremember Password')}</li>
                     {(!this.type || this.type == "fav") && <li #add-fav>{translate('Add to Favorites')}</li>}
                     {(!this.type || this.type == "fav") && <li #remove-fav>{translate('Remove from Favorites')}</li>}
