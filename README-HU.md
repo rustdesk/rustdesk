@@ -2,9 +2,9 @@
   <img src="logo-header.svg" alt="RustDesk - Your remote desktop"><br>
   <a href="#ingyenes-publikus-szerverek">Szerverek</a> •
   <a href="#építési-pontok">Építés</a> •
-  <a href="#hogyan-épts-dockerrel">Docker</a> •
+  <a href="#hogyan-éptís-dockerrel">Docker</a> •
   <a href="#fájl-struktúra">Struktúra</a> •
-  <a href="#Képernyőképek">Képernyőképek</a><br>
+  <a href="#képernyőképek">Képernyőképek</a><br>
   [<a href="README-CS.md">česky</a>] | [<a href="README-ZH.md">中文</a>] | | [<a href="README-HU.md">Magyar</a>] | [<a href="README-ES.md">Español</a>] | [<a href="README-FA.md">فارسی</a>] | [<a href="README-FR.md">Français</a>] | [<a href="README-DE.md">Deutsch</a>] | [<a href="README-PL.md">Polski</a>] | [<a href="README-ID.md">Indonesian</a>] | [<a href="README-FI.md">Suomi</a>] | [<a href="README-ML.md">മലയാളം</a>] | [<a href="README-JP.md">日本語</a>] | [<a href="README-NL.md">Nederlands</a>] | [<a href="README-IT.md">Italiano</a>] | [<a href="README-RU.md">Русский</a>] | [<a href="README-PTBR.md">Português (Brasil)</a>] | [<a href="README-EO.md">Esperanto</a>] | [<a href="README-KR.md">한국어</a>] | [<a href="README-AR.md">العربي</a>]<br>
   <b>Kell a segítséged, hogy lefordítsuk ezt a README-t, <a href="https://github.com/rustdesk/rustdesk/tree/master/src/lang">a RustDesk UI-t</a> és a <a href="https://github.com/rustdesk/doc.rustdesk.com">Dokumentációt</a> az anyanyelvedre</b>
 </p>
@@ -13,7 +13,7 @@ Beszélgess velünk: [Discord](https://discord.gg/nDceKgxnkV) | [Twitter](https:
 
 [![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/I2I04VU09)
 
-Még egy távoli elérésű asztali szoftwer, Rust-ban írva. Működik mindenféle konfiguráció nélkül, feltelepítéssel, vagy a nélkül. A saját adataidat teljesen te kezeled, nincs szükség aggódásra a biztonságuk felől. Használhatod a RustDesk punblikus randevú/relay szerverét, vagy szervereit, [hostolhatsz sajátot](https://rustdesk.com/server), vagy akár [írhatsz is egyet](https://github.com/rustdesk/rustdesk-server-demo).
+Még egy távoli elérésű asztali szoftver, Rust-ban írva. Működik mindenféle konfiguráció nélkül, feltelepítéssel, vagy a nélkül. A saját adataidat teljesen te kezeled, nincs szükség aggódásra a biztonságuk felől. Használhatod a RustDesk punblikus randevú/relay szerverét, vagy szervereit, [hostolhatsz sajátot](https://rustdesk.com/server), vagy akár [írhatsz is egyet](https://github.com/rustdesk/rustdesk-server-demo).
 
 ![image](https://user-images.githubusercontent.com/71636191/171661982-430285f0-2e12-4b1d-9957-4a58e375304d.png)
 
