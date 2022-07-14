@@ -284,5 +284,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("In privacy mode", "開啟隱私模式"),
         ("Out privacy mode", "退出隱私模式"),
         ("Language", "語言"),
+        ("Keep RustDesk background service", "保持RustDesk後台服務"),
+        ("Ignore Battery Optimizations", "忽略電池優化"),
     ].iter().cloned().collect();
 }

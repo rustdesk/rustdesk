@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:settings_ui/settings_ui.dart';
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -26,11 +28,69 @@ class SettingsPage extends StatefulWidget implements PageShape {
 
 class _SettingsState extends State<SettingsPage> {
   static const url = 'https://rustdesk.com/';
+  var _showIgnoreBattery = false;
+
+  @override
+  void initState() {
+    super.initState();
+    if (androidVersion >= 26) {
+      () async {
+        final res =
+            await PermissionManager.check("ignore_battery_optimizations");
+        if (_showIgnoreBattery != !res) {
+          setState(() {
+            _showIgnoreBattery = !res;
+          });
+        }
+      }();
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     Provider.of<FfiModel>(context);
     final username = getUsername();
+    final settingsTiles = [
+      SettingsTile.navigation(
+        title: Text(translate('ID/Relay Server')),
+        leading: Icon(Icons.cloud),
+        onPressed: (context) {
+          showServerSettings();
+        },
+      ),
+      SettingsTile.navigation(
+        title: Text(translate('Enhancements')),
+        leading: Icon(Icons.tune),
+        onPressed: (context) {},
+      ),
+    ];
+    if (_showIgnoreBattery) {
+      settingsTiles.add(SettingsTile.navigation(
+          title: Text(translate('Keep RustDesk background service')),
+          description: Text('* ${translate('Ignore Battery Optimizations')}'),
+          leading: Icon(Icons.settings_backup_restore),
+          onPressed: (context) {
+            PermissionManager.request("ignore_battery_optimizations");
+            var count = 0;
+            Timer.periodic(Duration(seconds: 1), (timer) async {
+              debugPrint("BatteryOpt Timer, count:$count");
+              if (count > 5) {
+                count = 0;
+                timer.cancel();
+              }
+              if (await PermissionManager.check(
+                  "ignore_battery_optimizations")) {
+                count = 0;
+                timer.cancel();
+                setState(() {
+                  _showIgnoreBattery = false;
+                });
+              }
+              count++;
+            });
+          }));
+    }
+
     return SettingsList(
       sections: [
         SettingsSection(
@@ -53,15 +113,7 @@ class _SettingsState extends State<SettingsPage> {
         ),
         SettingsSection(
           title: Text(translate("Settings")),
-          tiles: [
-            SettingsTile.navigation(
-              title: Text(translate('ID/Relay Server')),
-              leading: Icon(Icons.cloud),
-              onPressed: (context) {
-                showServerSettings();
-              },
-            ),
-          ],
+          tiles: settingsTiles,
         ),
         SettingsSection(
           title: Text(translate("About")),
