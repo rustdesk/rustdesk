@@ -316,6 +316,9 @@ async fn test_nat_type_() -> ResultType<bool> {
 }
 
 pub async fn get_rendezvous_server(ms_timeout: u64) -> (String, Vec<String>, bool) {
+    #[cfg(any(target_os = "android", target_os = "ios"))]
+    let (mut a, mut b) = get_rendezvous_server_(ms_timeout);
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
     let (mut a, mut b) = get_rendezvous_server_(ms_timeout).await;
     let mut b: Vec<String> = b
         .drain(..)

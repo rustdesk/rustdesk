@@ -147,7 +147,6 @@ impl VideoQoS {
     // handle image_quality change from peer
     pub fn update_image_quality(&mut self, image_quality: i32) {
         let image_quality = Self::convert_quality(image_quality) as _;
-        log::debug!("VideoQoS update_image_quality: {}", image_quality);
         if self.current_image_quality != image_quality {
             self.current_image_quality = image_quality;
             let _ = self.generate_bitrate().ok();
@@ -171,7 +170,7 @@ impl VideoQoS {
         #[cfg(target_os = "android")]
         {
             // fix when andorid screen shrinks
-            let fix = Display::fix_quality() as u32;
+            let fix = scrap::Display::fix_quality() as u32;
             log::debug!("Android screen, fix quality:{}", fix);
             let base_bitrate = base_bitrate * fix;
             self.target_bitrate = base_bitrate * self.current_image_quality / 100;

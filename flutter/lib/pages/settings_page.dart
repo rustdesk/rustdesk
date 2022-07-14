@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:settings_ui/settings_ui.dart';
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -26,11 +28,75 @@ class SettingsPage extends StatefulWidget implements PageShape {
 
 class _SettingsState extends State<SettingsPage> {
   static const url = 'https://rustdesk.com/';
+  var _showIgnoreBattery = false;
+
+  @override
+  void initState() {
+    super.initState();
+    if (androidVersion >= 26) {
+      () async {
+        final res =
+            await PermissionManager.check("ignore_battery_optimizations");
+        if (_showIgnoreBattery != !res) {
+          setState(() {
+            _showIgnoreBattery = !res;
+          });
+        }
+      }();
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     Provider.of<FfiModel>(context);
     final username = getUsername();
+    final enableAbr = FFI.getByName("option", "enable-abr") != 'N';
+    final enhancementsTiles = [
+      SettingsTile.switchTile(
+        leading: Icon(Icons.more_horiz),
+        title: Text(translate('Adaptive Bitrate') + '(beta)'),
+        initialValue: enableAbr,
+        onToggle: (v) {
+          final msg = Map()
+            ..["name"] = "enable-abr"
+            ..["value"] = "";
+          if (!v) {
+            msg["value"] = "N";
+          }
+          FFI.setByName("option", json.encode(msg));
+          setState(() {});
+        },
+      )
+    ];
+    if (_showIgnoreBattery) {
+      enhancementsTiles.insert(
+          0,
+          SettingsTile.navigation(
+              title: Text(translate('Keep RustDesk background service')),
+              description:
+                  Text('* ${translate('Ignore Battery Optimizations')}'),
+              leading: Icon(Icons.battery_saver),
+              onPressed: (context) {
+                PermissionManager.request("ignore_battery_optimizations");
+                var count = 0;
+                Timer.periodic(Duration(seconds: 1), (timer) async {
+                  if (count > 5) {
+                    count = 0;
+                    timer.cancel();
+                  }
+                  if (await PermissionManager.check(
+                      "ignore_battery_optimizations")) {
+                    count = 0;
+                    timer.cancel();
+                    setState(() {
+                      _showIgnoreBattery = false;
+                    });
+                  }
+                  count++;
+                });
+              }));
+    }
+
     return SettingsList(
       sections: [
         SettingsSection(
@@ -51,17 +117,17 @@ class _SettingsState extends State<SettingsPage> {
             ),
           ],
         ),
-        SettingsSection(
-          title: Text(translate("Settings")),
-          tiles: [
-            SettingsTile.navigation(
+        SettingsSection(title: Text(translate("Settings")), tiles: [
+          SettingsTile.navigation(
               title: Text(translate('ID/Relay Server')),
               leading: Icon(Icons.cloud),
               onPressed: (context) {
                 showServerSettings();
-              },
-            ),
-          ],
+              })
+        ]),
+        SettingsSection(
+          title: Text(translate("Enhancements")),
+          tiles: enhancementsTiles,
         ),
         SettingsSection(
           title: Text(translate("About")),
