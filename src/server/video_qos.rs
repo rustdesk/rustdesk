@@ -147,7 +147,6 @@ impl VideoQoS {
     // handle image_quality change from peer
     pub fn update_image_quality(&mut self, image_quality: i32) {
         let image_quality = Self::convert_quality(image_quality) as _;
-        log::debug!("VideoQoS update_image_quality: {}", image_quality);
         if self.current_image_quality != image_quality {
             self.current_image_quality = image_quality;
             let _ = self.generate_bitrate().ok();
