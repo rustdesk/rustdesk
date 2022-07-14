@@ -7,7 +7,7 @@ edition = "2018"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-protobuf = "3.0.0-alpha.2"
+protobuf = { version = "3.1.0", features = ["with-bytes"] }
 tokio = { version = "1.15", features = ["full"] }
 tokio-util = { version = "0.6", features = ["full"] }
 futures = "0.3"
@@ -38,7 +38,7 @@ mac_address = "1.1"
 quic = []
 
 [build-dependencies]
-protobuf-codegen-pure = "3.0.0-alpha.2"
+protobuf-codegen = { version = "3.1.0" }
 
 [target.'cfg(target_os = "windows")'.dependencies]
 winapi = { version = "0.3", features = ["winuser"] }

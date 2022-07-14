@@ -1,8 +1,7 @@
 pub mod compress;
-#[path = "./protos/message.rs"]
-pub mod message_proto;
-#[path = "./protos/rendezvous.rs"]
-pub mod rendezvous_proto;
+pub mod protos;
+pub use  protos::message as message_proto;
+pub use  protos::rendezvous as rendezvous_proto;
 pub use bytes;
 pub use futures;
 pub use protobuf;
