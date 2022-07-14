@@ -56,6 +56,7 @@ base64 = "0.13"
 sysinfo = "0.23"
 num_cpus = "1.13"
 default-net = "0.11.0"
+wol-rs = "0.9.1"
 
 [target.'cfg(not(target_os = "linux"))'.dependencies]
 reqwest = { version = "0.11", features = ["json", "rustls-tls"], default-features=false }
