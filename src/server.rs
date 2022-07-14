@@ -7,7 +7,7 @@ use hbb_common::{
     config::{Config, Config2, CONNECT_TIMEOUT, RELAY_PORT},
     log,
     message_proto::*,
-    protobuf::{Message as _, ProtobufEnum},
+    protobuf::{Message as _, Enum},
     rendezvous_proto::*,
     socket_client,
     sodiumoxide::crypto::{box_, secretbox, sign},
@@ -140,7 +140,7 @@ pub async fn create_tcp_connection(
             Some(res) => {
                 let bytes = res?;
                 if let Ok(msg_in) = Message::parse_from_bytes(&bytes) {
-                    if let Some(message::Union::public_key(pk)) = msg_in.union {
+                    if let Some(message::Union::PublicKey(pk)) = msg_in.union {
                         if pk.asymmetric_value.len() == box_::PUBLICKEYBYTES {
                             let nonce = box_::Nonce([0u8; box_::NONCEBYTES]);
                             let mut pk_ = [0u8; box_::PUBLICKEYBYTES];

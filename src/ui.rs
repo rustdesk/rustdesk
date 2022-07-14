@@ -1045,7 +1045,7 @@ async fn check_id(
             if let Some(Ok(bytes)) = socket.next_timeout(3_000).await {
                 if let Ok(msg_in) = RendezvousMessage::parse_from_bytes(&bytes) {
                     match msg_in.union {
-                        Some(rendezvous_message::Union::register_pk_response(rpr)) => {
+                        Some(rendezvous_message::Union::RegisterPkResponse(rpr)) => {
                             match rpr.result.enum_value_or_default() {
                                 register_pk_response::Result::OK => {
                                     ok = true;

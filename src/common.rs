@@ -8,7 +8,7 @@ use hbb_common::{
     get_version_number, log,
     message_proto::*,
     protobuf::Message as _,
-    protobuf::ProtobufEnum,
+    protobuf::Enum,
     rendezvous_proto::*,
     sleep, socket_client, tokio, ResultType,
 };
@@ -32,7 +32,7 @@ lazy_static::lazy_static! {
 
 #[inline]
 pub fn valid_for_numlock(evt: &KeyEvent) -> bool {
-    if let Some(key_event::Union::control_key(ck)) = evt.union {
+    if let Some(key_event::Union::ControlKey(ck)) = evt.union {
         let v = ck.value();
         (v >= ControlKey::Numpad0.value() && v <= ControlKey::Numpad9.value())
             || v == ControlKey::Decimal.value()
@@ -284,7 +284,7 @@ async fn test_nat_type_() -> ResultType<bool> {
         socket.send(&msg_out).await?;
         if let Some(Ok(bytes)) = socket.next_timeout(RENDEZVOUS_TIMEOUT).await {
             if let Ok(msg_in) = RendezvousMessage::parse_from_bytes(&bytes) {
-                if let Some(rendezvous_message::Union::test_nat_response(tnr)) = msg_in.union {
+                if let Some(rendezvous_message::Union::TestNatResponse(tnr)) = msg_in.union {
                     if i == 0 {
                         port1 = tnr.port;
                     } else {
@@ -412,7 +412,7 @@ pub const POSTFIX_SERVICE: &'static str = "_service";
 
 #[inline]
 pub fn is_control_key(evt: &KeyEvent, key: &ControlKey) -> bool {
-    if let Some(key_event::Union::control_key(ck)) = evt.union {
+    if let Some(key_event::Union::ControlKey(ck)) = evt.union {
         ck.value() == key.value()
     } else {
         false
@@ -421,7 +421,7 @@ pub fn is_control_key(evt: &KeyEvent, key: &ControlKey) -> bool {
 
 #[inline]
 pub fn is_modifier(evt: &KeyEvent) -> bool {
-    if let Some(key_event::Union::control_key(ck)) = evt.union {
+    if let Some(key_event::Union::ControlKey(ck)) = evt.union {
         let v = ck.value();
         v == ControlKey::Alt.value()
             || v == ControlKey::Shift.value()
@@ -457,7 +457,7 @@ async fn _check_software_update() -> hbb_common::ResultType<()> {
     use hbb_common::protobuf::Message;
     if let Some(Ok((bytes, _))) = socket.next_timeout(30_000).await {
         if let Ok(msg_in) = RendezvousMessage::parse_from_bytes(&bytes) {
-            if let Some(rendezvous_message::Union::software_update(su)) = msg_in.union {
+            if let Some(rendezvous_message::Union::SoftwareUpdate(su)) = msg_in.union {
                 let version = hbb_common::get_version_from_url(&su.url);
                 if get_version_number(&version) > get_version_number(crate::VERSION) {
                     *SOFTWARE_UPDATE_URL.lock().unwrap() = su.url;

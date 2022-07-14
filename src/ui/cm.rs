@@ -204,7 +204,7 @@ impl ConnectionManager {
                         let mut req = FileTransferSendConfirmRequest {
                             id,
                             file_num,
-                            union: Some(file_transfer_send_confirm_request::Union::offset_blk(0)),
+                            union: Some(file_transfer_send_confirm_request::Union::OffsetBlk(0)),
                             ..Default::default()
                         };
                         let digest = FileTransferDigest {

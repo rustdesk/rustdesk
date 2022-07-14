@@ -120,21 +120,21 @@ async fn connect_and_login(
                 Ok(Some(Ok(bytes))) => {
                     let msg_in = Message::parse_from_bytes(&bytes)?;
                     match msg_in.union {
-                        Some(message::Union::hash(hash)) => {
+                        Some(message::Union::Hash(hash)) => {
                             interface.handle_hash(hash, &mut stream).await;
                         }
-                        Some(message::Union::login_response(lr)) => match lr.union {
-                            Some(login_response::Union::error(err)) => {
+                        Some(message::Union::LoginResponse(lr)) => match lr.union {
+                            Some(login_response::Union::Error(err)) => {
                                 interface.handle_login_error(&err);
                                 return Ok(None);
                             }
-                            Some(login_response::Union::peer_info(pi)) => {
+                            Some(login_response::Union::PeerInfo(pi)) => {
                                 interface.handle_peer_info(pi);
                                 break;
                             }
                             _ => {}
                         }
-                        Some(message::Union::test_delay(t)) => {
+                        Some(message::Union::TestDelay(t)) => {
                             interface.handle_test_delay(t, &mut stream).await;
                         }
                         _ => {}

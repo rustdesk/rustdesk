@@ -251,11 +251,11 @@ impl Decoder {
         rgb: &mut Vec<u8>,
     ) -> ResultType<bool> {
         match frame {
-            video_frame::Union::vp9s(vp9s) => {
+            video_frame::Union::Vp9s(vp9s) => {
                 Decoder::handle_vp9s_video_frame(&mut self.vpx, vp9s, rgb)
             }
             #[cfg(feature = "hwcodec")]
-            video_frame::Union::h264s(h264s) => {
+            video_frame::Union::H264s(h264s) => {
                 if let Some(decoder) = &mut self.hw.h264 {
                     Decoder::handle_hw_video_frame(decoder, h264s, rgb, &mut self.i420)
                 } else {
@@ -263,7 +263,7 @@ impl Decoder {
                 }
             }
             #[cfg(feature = "hwcodec")]
-            video_frame::Union::h265s(h265s) => {
+            video_frame::Union::H265s(h265s) => {
                 if let Some(decoder) = &mut self.hw.h265 {
                     Decoder::handle_hw_video_frame(decoder, h265s, rgb, &mut self.i420)
                 } else {

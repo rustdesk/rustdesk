@@ -165,7 +165,7 @@ impl Client {
         for i in 1..=3 {
             log::info!("#{} punch attempt with {}, id: {}", i, my_addr, peer);
             let mut msg_out = RendezvousMessage::new();
-            use hbb_common::protobuf::ProtobufEnum;
+            use hbb_common::protobuf::Enum;
             let nat_type = NatType::from_i32(my_nat_type).unwrap_or(NatType::UNKNOWN_NAT);
             msg_out.set_punch_hole_request(PunchHoleRequest {
                 id: peer.to_owned(),
@@ -179,7 +179,7 @@ impl Client {
             if let Some(Ok(bytes)) = socket.next_timeout(i * 6000).await {
                 if let Ok(msg_in) = RendezvousMessage::parse_from_bytes(&bytes) {
                     match msg_in.union {
-                        Some(rendezvous_message::Union::punch_hole_response(ph)) => {
+                        Some(rendezvous_message::Union::PunchHoleResponse(ph)) => {
                             if ph.socket_addr.is_empty() {
                                 if !ph.other_failure.is_empty() {
                                     bail!(ph.other_failure);
@@ -199,8 +199,8 @@ impl Client {
                                     }
                                 }
                             } else {
-                                peer_nat_type = ph.get_nat_type();
-                                is_local = ph.get_is_local();
+                                peer_nat_type = ph.nat_type();
+                                is_local = ph.is_local();
                                 signed_id_pk = ph.pk;
                                 relay_server = ph.relay_server;
                                 peer_addr = AddrMangle::decode(&ph.socket_addr);
@@ -208,13 +208,13 @@ impl Client {
                                 break;
                             }
                         }
-                        Some(rendezvous_message::Union::relay_response(rr)) => {
+                        Some(rendezvous_message::Union::RelayResponse(rr)) => {
                             log::info!(
                                 "relay requested from peer, time used: {:?}, relay_server: {}",
                                 start.elapsed(),
                                 rr.relay_server
                             );
-                            signed_id_pk = rr.get_pk().into();
+                            signed_id_pk = rr.pk().into();
                             let mut conn =
                                 Self::create_relay(peer, rr.uuid, rr.relay_server, key, conn_type)
                                     .await?;
@@ -383,7 +383,7 @@ impl Client {
             Some(res) => {
                 let bytes = res?;
                 if let Ok(msg_in) = Message::parse_from_bytes(&bytes) {
-                    if let Some(message::Union::signed_id(si)) = msg_in.union {
+                    if let Some(message::Union::SignedId(si)) = msg_in.union {
                         if let Ok((id, their_pk_b)) = decode_id_pk(&si.id, &sign_pk) {
                             if id == peer_id {
                                 let their_pk_b = box_::PublicKey(their_pk_b);
@@ -466,7 +466,7 @@ impl Client {
             socket.send(&msg_out).await?;
             if let Some(Ok(bytes)) = socket.next_timeout(CONNECT_TIMEOUT).await {
                 if let Ok(msg_in) = RendezvousMessage::parse_from_bytes(&bytes) {
-                    if let Some(rendezvous_message::Union::relay_response(rs)) = msg_in.union {
+                    if let Some(rendezvous_message::Union::RelayResponse(rs)) = msg_in.union {
                         if !rs.refuse_reason.is_empty() {
                             bail!(rs.refuse_reason);
                         }

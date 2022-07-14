@@ -91,7 +91,7 @@ impl Subscriber for ConnInner {
     #[inline]
     fn send(&mut self, msg: Arc<Message>) {
         match &msg.union {
-            Some(message::Union::video_frame(_)) => {
+            Some(message::Union::VideoFrame(_)) => {
                 self.tx_video.as_mut().map(|tx| {
                     allow_err!(tx.send((Instant::now(), msg)));
                 });
@@ -354,7 +354,7 @@ impl Connection {
 
                     if latency > 1000 {
                         match &msg.union {
-                            Some(message::Union::audio_frame(_)) => {
+                            Some(message::Union::AudioFrame(_)) => {
                                 // log::info!("audio frame latency {}", instant.elapsed().as_secs_f32());
                                 continue;
                             }
@@ -779,7 +779,7 @@ impl Connection {
     }
 
     async fn on_message(&mut self, msg: Message) -> bool {
-        if let Some(message::Union::login_request(lr)) = msg.union {
+        if let Some(message::Union::LoginRequest(lr)) = msg.union {
             if let Some(o) = lr.option.as_ref() {
                 self.update_option(o).await;
                 if let Some(q) = o.video_codec_state.clone().take() {
@@ -804,7 +804,7 @@ impl Connection {
                 return true;
             }
             match lr.union {
-                Some(login_request::Union::file_transfer(ft)) => {
+                Some(login_request::Union::FileTransfer(ft)) => {
                     if !Config::get_option("enable-file-transfer").is_empty() {
                         self.send_login_error("No permission of file transfer")
                             .await;
@@ -813,7 +813,7 @@ impl Connection {
                     }
                     self.file_transfer = Some((ft.dir, ft.show_hidden));
                 }
-                Some(login_request::Union::port_forward(mut pf)) => {
+                Some(login_request::Union::PortForward(mut pf)) => {
                     if !Config::get_option("enable-tunnel").is_empty() {
                         self.send_login_error("No permission of IP tunneling").await;
                         sleep(1.).await;
@@ -897,7 +897,7 @@ impl Connection {
                     }
                 }
             }
-        } else if let Some(message::Union::test_delay(t)) = msg.union {
+        } else if let Some(message::Union::TestDelay(t)) = msg.union {
             if t.from_client {
                 let mut msg_out = Message::new();
                 msg_out.set_test_delay(t);
@@ -912,7 +912,7 @@ impl Connection {
             }
         } else if self.authorized {
             match msg.union {
-                Some(message::Union::mouse_event(me)) => {
+                Some(message::Union::MouseEvent(me)) => {
                     #[cfg(any(target_os = "android", target_os = "ios"))]
                     if let Err(e) = call_main_service_mouse_input(me.mask, me.x, me.y) {
                         log::debug!("call_main_service_mouse_input fail:{}", e);
@@ -927,7 +927,7 @@ impl Connection {
                         self.input_mouse(me, self.inner.id());
                     }
                 }
-                Some(message::Union::key_event(me)) => {
+                Some(message::Union::KeyEvent(me)) => {
                     #[cfg(not(any(target_os = "android", target_os = "ios")))]
                     if self.keyboard {
                         if is_enter(&me) {
@@ -943,8 +943,8 @@ impl Connection {
                         };
                         if is_press {
                             match me.union {
-                                Some(key_event::Union::unicode(_))
-                                | Some(key_event::Union::seq(_)) => {
+                                Some(key_event::Union::Unicode(_))
+                                | Some(key_event::Union::Seq(_)) => {
                                     self.input_key(me, false);
                                 }
                                 _ => {
@@ -956,14 +956,14 @@ impl Connection {
                         }
                     }
                 }
-                Some(message::Union::clipboard(cb)) =>
+                Some(message::Union::Clipboard(cb)) =>
                 {
                     #[cfg(not(any(target_os = "android", target_os = "ios")))]
                     if self.clipboard {
                         update_clipboard(cb, None);
                     }
                 }
-                Some(message::Union::cliprdr(_clip)) => {
+                Some(message::Union::Cliprdr(_clip)) => {
                     if self.file_transfer_enabled() {
                         #[cfg(windows)]
                         if let Some(clip) = msg_2_clip(_clip) {
@@ -971,13 +971,13 @@ impl Connection {
                         }
                     }
                 }
-                Some(message::Union::file_action(fa)) => {
+                Some(message::Union::FileAction(fa)) => {
                     if self.file_transfer.is_some() {
                         match fa.union {
-                            Some(file_action::Union::read_dir(rd)) => {
+                            Some(file_action::Union::ReadDir(rd)) => {
                                 self.read_dir(&rd.path, rd.include_hidden);
                             }
-                            Some(file_action::Union::all_files(f)) => {
+                            Some(file_action::Union::AllFiles(f)) => {
                                 match fs::get_recursive_files(&f.path, f.include_hidden) {
                                     Err(err) => {
                                         self.send(fs::new_error(f.id, err, -1)).await;
@@ -987,7 +987,7 @@ impl Connection {
                                     }
                                 }
                             }
-                            Some(file_action::Union::send(s)) => {
+                            Some(file_action::Union::Send(s)) => {
                                 let id = s.id;
                                 let od =
                                     can_enable_overwrite_detection(get_version_number(VERSION));
@@ -1012,7 +1012,7 @@ impl Connection {
                                     }
                                 }
                             }
-                            Some(file_action::Union::receive(r)) => {
+                            Some(file_action::Union::Receive(r)) => {
                                 self.send_fs(ipc::FS::NewWrite {
                                     path: r.path,
                                     id: r.id,
@@ -1025,31 +1025,31 @@ impl Connection {
                                         .collect(),
                                 });
                             }
-                            Some(file_action::Union::remove_dir(d)) => {
+                            Some(file_action::Union::RemoveDir(d)) => {
                                 self.send_fs(ipc::FS::RemoveDir {
                                     path: d.path,
                                     id: d.id,
                                     recursive: d.recursive,
                                 });
                             }
-                            Some(file_action::Union::remove_file(f)) => {
+                            Some(file_action::Union::RemoveFile(f)) => {
                                 self.send_fs(ipc::FS::RemoveFile {
                                     path: f.path,
                                     id: f.id,
                                     file_num: f.file_num,
                                 });
                             }
-                            Some(file_action::Union::create(c)) => {
+                            Some(file_action::Union::Create(c)) => {
                                 self.send_fs(ipc::FS::CreateDir {
                                     path: c.path,
                                     id: c.id,
                                 });
                             }
-                            Some(file_action::Union::cancel(c)) => {
+                            Some(file_action::Union::Cancel(c)) => {
                                 self.send_fs(ipc::FS::CancelWrite { id: c.id });
                                 fs::remove_job(c.id, &mut self.read_jobs);
                             }
-                            Some(file_action::Union::send_confirm(r)) => {
+                            Some(file_action::Union::SendConfirm(r)) => {
                                 if let Some(job) = fs::get_job(r.id, &mut self.read_jobs) {
                                     job.confirm(&r);
                                 }
@@ -1058,8 +1058,8 @@ impl Connection {
                         }
                     }
                 }
-                Some(message::Union::file_response(fr)) => match fr.union {
-                    Some(file_response::Union::block(block)) => {
+                Some(message::Union::FileResponse(fr)) => match fr.union {
+                    Some(file_response::Union::Block(block)) => {
                         self.send_fs(ipc::FS::WriteBlock {
                             id: block.id,
                             file_num: block.file_num,
@@ -1067,13 +1067,13 @@ impl Connection {
                             compressed: block.compressed,
                         });
                     }
-                    Some(file_response::Union::done(d)) => {
+                    Some(file_response::Union::Done(d)) => {
                         self.send_fs(ipc::FS::WriteDone {
                             id: d.id,
                             file_num: d.file_num,
                         });
                     }
-                    Some(file_response::Union::digest(d)) => self.send_fs(ipc::FS::CheckDigest {
+                    Some(file_response::Union::Digest(d)) => self.send_fs(ipc::FS::CheckDigest {
                         id: d.id,
                         file_num: d.file_num,
                         file_size: d.file_size,
@@ -1082,22 +1082,22 @@ impl Connection {
                     }),
                     _ => {}
                 },
-                Some(message::Union::misc(misc)) => match misc.union {
-                    Some(misc::Union::switch_display(s)) => {
+                Some(message::Union::Misc(misc)) => match misc.union {
+                    Some(misc::Union::SwitchDisplay(s)) => {
                         video_service::switch_display(s.display);
                     }
-                    Some(misc::Union::chat_message(c)) => {
+                    Some(misc::Union::ChatMessage(c)) => {
                         self.send_to_cm(ipc::Data::ChatMessage { text: c.text });
                     }
-                    Some(misc::Union::option(o)) => {
+                    Some(misc::Union::Option(o)) => {
                         self.update_option(&o).await;
                     }
-                    Some(misc::Union::refresh_video(r)) => {
+                    Some(misc::Union::RefreshVideo(r)) => {
                         if r {
                             video_service::refresh();
                         }
                     }
-                    Some(misc::Union::video_received(_)) => {
+                    Some(misc::Union::VideoReceived(_)) => {
                         video_service::notify_video_frame_feched(
                             self.inner.id,
                             Some(Instant::now().into()),

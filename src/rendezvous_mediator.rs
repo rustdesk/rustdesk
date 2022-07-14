@@ -157,7 +157,7 @@ impl RendezvousMediator {
                         Some(Ok((bytes, _))) => {
                             if let Ok(msg_in) = Message::parse_from_bytes(&bytes) {
                                 match msg_in.union {
-                                    Some(rendezvous_message::Union::register_peer_response(rpr)) => {
+                                    Some(rendezvous_message::Union::RegisterPeerResponse(rpr)) => {
                                         update_latency();
                                         if rpr.request_pk {
                                             log::info!("request_pk received from {}", host);
@@ -165,7 +165,7 @@ impl RendezvousMediator {
                                             continue;
                                         }
                                     }
-                                    Some(rendezvous_message::Union::register_pk_response(rpr)) => {
+                                    Some(rendezvous_message::Union::RegisterPkResponse(rpr)) => {
                                         update_latency();
                                         match rpr.result.enum_value_or_default() {
                                             register_pk_response::Result::OK => {
@@ -179,28 +179,28 @@ impl RendezvousMediator {
                                             _ => {}
                                         }
                                     }
-                                    Some(rendezvous_message::Union::punch_hole(ph)) => {
+                                    Some(rendezvous_message::Union::PunchHole(ph)) => {
                                         let rz = rz.clone();
                                         let server = server.clone();
                                         tokio::spawn(async move {
                                             allow_err!(rz.handle_punch_hole(ph, server).await);
                                         });
                                     }
-                                    Some(rendezvous_message::Union::request_relay(rr)) => {
+                                    Some(rendezvous_message::Union::RequestRelay(rr)) => {
                                         let rz = rz.clone();
                                         let server = server.clone();
                                         tokio::spawn(async move {
                                             allow_err!(rz.handle_request_relay(rr, server).await);
                                         });
                                     }
-                                    Some(rendezvous_message::Union::fetch_local_addr(fla)) => {
+                                    Some(rendezvous_message::Union::FetchLocalAddr(fla)) => {
                                         let rz = rz.clone();
                                         let server = server.clone();
                                         tokio::spawn(async move {
                                             allow_err!(rz.handle_intranet(fla, server).await);
                                         });
                                     }
-                                    Some(rendezvous_message::Union::configure_update(cu)) => {
+                                    Some(rendezvous_message::Union::ConfigureUpdate(cu)) => {
                                         let v0 = Config::get_rendezvous_servers();
                                         Config::set_option("rendezvous-servers".to_owned(), cu.rendezvous_servers.join(","));
                                         Config::set_serial(cu.serial);
@@ -367,7 +367,7 @@ impl RendezvousMediator {
             socket
         };
         let mut msg_out = Message::new();
-        use hbb_common::protobuf::ProtobufEnum;
+        use hbb_common::protobuf::Enum;
         let nat_type = NatType::from_i32(Config::get_nat_type()).unwrap_or(NatType::UNKNOWN_NAT);
         msg_out.set_punch_hole_sent(PunchHoleSent {
             socket_addr: ph.socket_addr,
@@ -564,7 +564,7 @@ fn lan_discovery() -> ResultType<()> {
         if let Ok((len, addr)) = socket.recv_from(&mut buf) {
             if let Ok(msg_in) = Message::parse_from_bytes(&buf[0..len]) {
                 match msg_in.union {
-                    Some(rendezvous_message::Union::peer_discovery(p)) => {
+                    Some(rendezvous_message::Union::PeerDiscovery(p)) => {
                         if p.cmd == "ping" {
                             let mut msg_out = Message::new();
                             let peer = PeerDiscovery {
@@ -612,7 +612,7 @@ pub fn discover() -> ResultType<()> {
         if let Ok((len, _)) = socket.recv_from(&mut buf) {
             if let Ok(msg_in) = Message::parse_from_bytes(&buf[0..len]) {
                 match msg_in.union {
-                    Some(rendezvous_message::Union::peer_discovery(p)) => {
+                    Some(rendezvous_message::Union::PeerDiscovery(p)) => {
                         last_recv_time = Instant::now();
                         if p.cmd == "pong" {
                             if p.mac != mac {
