@@ -183,7 +183,7 @@ async fn run_forward(forward: Framed<TcpStream, BytesCodec>, stream: Stream) -> 
             },
             res = stream.next() => {
                 if let Some(Ok(bytes)) = res {
-                    allow_err!(forward.send(bytes.into()).await);
+                    allow_err!(forward.send(bytes).await);
                 } else {
                     break;
                 }

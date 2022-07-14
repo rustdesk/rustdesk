@@ -104,7 +104,7 @@ android_logger = "0.11"
 jni = "0.19"
 
 [target.'cfg(any(target_os = "android", target_os = "ios"))'.dependencies]
-flutter_rust_bridge = "1.30.0"
+flutter_rust_bridge = "=1.30.0"
 
 [workspace]
 members = ["libs/scrap", "libs/hbb_common", "libs/enigo", "libs/clipboard", "libs/virtual_display", "libs/simple_rc"]
@@ -122,7 +122,7 @@ winapi = { version = "0.3", features = [ "winnt" ] }
 cc = "1.0"
 hbb_common = { path = "libs/hbb_common" }
 simple_rc = { path = "libs/simple_rc", optional = true }
-flutter_rust_bridge_codegen = "1.30.0"
+flutter_rust_bridge_codegen = "=1.30.0"
 
 [dev-dependencies]
 hound = "3.4"
