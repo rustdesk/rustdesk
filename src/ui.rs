@@ -547,6 +547,10 @@ impl UI {
         config::LanPeers::store(&peers);
     }
 
+    fn send_wol(&mut self, id: String) {
+        crate::rendezvous_mediator::send_wol(id)
+    }
+
     fn new_remote(&mut self, id: String, remote_type: String) {
         let mut lock = self.0.lock().unwrap();
         let args = vec![format!("--{}", remote_type), id.clone()];
@@ -786,6 +790,7 @@ impl sciter::EventHandler for UI {
         fn closing(i32, i32, i32, i32);
         fn get_size();
         fn new_remote(String, bool);
+        fn send_wol(String);
         fn remove_peer(String);
         fn remove_discovered(String);
         fn get_connect_status();

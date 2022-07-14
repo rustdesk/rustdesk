@@ -860,7 +860,7 @@ impl LocalConfig {
 pub struct DiscoveryPeer {
     pub id: String,
     #[serde(with = "serde_with::rust::map_as_tuple_list")]
-    pub mac_ips: HashMap<String, String>,
+    pub ip_mac: HashMap<String, String>,
     pub username: String,
     pub hostname: String,
     pub platform: String,

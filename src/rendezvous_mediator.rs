@@ -700,10 +700,9 @@ fn wait_response(
                             if mac != p.mac {
                                 allow_err!(tx.send(config::DiscoveryPeer {
                                     id: p.id.clone(),
-                                    mac_ips: HashMap::from([(
-                                        p.mac.clone(),
-                                        addr.ip().to_string()
-                                    )]),
+                                    ip_mac: HashMap::from([
+                                        (addr.ip().to_string(), p.mac.clone(),)
+                                    ]),
                                     username: p.username.clone(),
                                     hostname: p.hostname.clone(),
                                     platform: p.platform.clone(),
@@ -744,7 +743,6 @@ async fn handle_received_peers(mut rx: UnboundedReceiver<config::DiscoveryPeer>)
         peer.online = false;
     });
 
-    // handle received peers
     let mut response_set = HashSet::new();
     let mut last_write_time = Instant::now() - std::time::Duration::from_secs(4);
     loop {
@@ -753,20 +751,24 @@ async fn handle_received_peers(mut rx: UnboundedReceiver<config::DiscoveryPeer>)
                 Some(peer) => {
                     let in_response_set = !response_set.insert(peer.id.clone());
                     let mut pre_found = false;
+                    // Try find and update peer
                     for peer1 in &mut peers {
                         if peer1.is_same_peer(&peer) {
                             if in_response_set {
-                                peer1.mac_ips.extend(peer.mac_ips.clone());
+                                // Merge ip_mac and update other infos
+                                peer1.ip_mac.extend(peer.ip_mac.clone());
                                 peer1.hostname = peer.hostname.clone();
                                 peer1.platform = peer.platform.clone();
                                 peer1.online = true;
                             } else {
+                                // Update all peer infos
                                 *peer1 = peer.clone();
                             }
                             pre_found = true;
                             break
                         }
                     }
+                    // Push if not found
                     if !pre_found {
                         peers.push(peer);
                     }
@@ -795,4 +797,32 @@ pub async fn discover() -> ResultType<()> {
 
     log::info!("discover ping done");
     Ok(())
+}
+
+pub fn send_wol(id: String) {
+    let interfaces = default_net::get_interfaces();
+    for peer in &config::LanPeers::load().peers {
+        if peer.id == id {
+            for (ip, mac) in peer.ip_mac.iter() {
+                if let Ok(mac_addr) = mac.parse() {
+                    if let Ok(IpAddr::V4(ip)) = ip.parse() {
+                        for interface in &interfaces {
+                            for ipv4 in &interface.ipv4 {
+                                if (u32::from(ipv4.addr) & u32::from(ipv4.netmask))
+                                    == (u32::from(ip) & u32::from(ipv4.netmask))
+                                {
+                                    allow_err!(wol::send_wol(
+                                        mac_addr,
+                                        None,
+                                        Some(IpAddr::V4(ipv4.addr))
+                                    ));
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            break;
+        }
+    }
 }
