@@ -50,45 +50,51 @@ class _SettingsState extends State<SettingsPage> {
   Widget build(BuildContext context) {
     Provider.of<FfiModel>(context);
     final username = getUsername();
-    final settingsTiles = [
-      SettingsTile.navigation(
-        title: Text(translate('ID/Relay Server')),
-        leading: Icon(Icons.cloud),
-        onPressed: (context) {
-          showServerSettings();
+    final enableAbr = FFI.getByName("option", "enable-abr") != 'N';
+    final enhancementsTiles = [
+      SettingsTile.switchTile(
+        leading: Icon(Icons.more_horiz),
+        title: Text(translate('Adaptive Bitrate') + '(beta)'),
+        initialValue: enableAbr,
+        onToggle: (v) {
+          final msg = Map()
+            ..["name"] = "enable-abr"
+            ..["value"] = "";
+          if (!v) {
+            msg["value"] = "N";
+          }
+          FFI.setByName("option", json.encode(msg));
+          setState(() {});
         },
-      ),
-      SettingsTile.navigation(
-        title: Text(translate('Enhancements')),
-        leading: Icon(Icons.tune),
-        onPressed: (context) {},
-      ),
+      )
     ];
     if (_showIgnoreBattery) {
-      settingsTiles.add(SettingsTile.navigation(
-          title: Text(translate('Keep RustDesk background service')),
-          description: Text('* ${translate('Ignore Battery Optimizations')}'),
-          leading: Icon(Icons.settings_backup_restore),
-          onPressed: (context) {
-            PermissionManager.request("ignore_battery_optimizations");
-            var count = 0;
-            Timer.periodic(Duration(seconds: 1), (timer) async {
-              debugPrint("BatteryOpt Timer, count:$count");
-              if (count > 5) {
-                count = 0;
-                timer.cancel();
-              }
-              if (await PermissionManager.check(
-                  "ignore_battery_optimizations")) {
-                count = 0;
-                timer.cancel();
-                setState(() {
-                  _showIgnoreBattery = false;
+      enhancementsTiles.insert(
+          0,
+          SettingsTile.navigation(
+              title: Text(translate('Keep RustDesk background service')),
+              description:
+                  Text('* ${translate('Ignore Battery Optimizations')}'),
+              leading: Icon(Icons.battery_saver),
+              onPressed: (context) {
+                PermissionManager.request("ignore_battery_optimizations");
+                var count = 0;
+                Timer.periodic(Duration(seconds: 1), (timer) async {
+                  if (count > 5) {
+                    count = 0;
+                    timer.cancel();
+                  }
+                  if (await PermissionManager.check(
+                      "ignore_battery_optimizations")) {
+                    count = 0;
+                    timer.cancel();
+                    setState(() {
+                      _showIgnoreBattery = false;
+                    });
+                  }
+                  count++;
                 });
-              }
-              count++;
-            });
-          }));
+              }));
     }
 
     return SettingsList(
@@ -111,9 +117,17 @@ class _SettingsState extends State<SettingsPage> {
             ),
           ],
         ),
+        SettingsSection(title: Text(translate("Settings")), tiles: [
+          SettingsTile.navigation(
+              title: Text(translate('ID/Relay Server')),
+              leading: Icon(Icons.cloud),
+              onPressed: (context) {
+                showServerSettings();
+              })
+        ]),
         SettingsSection(
-          title: Text(translate("Settings")),
-          tiles: settingsTiles,
+          title: Text(translate("Enhancements")),
+          tiles: enhancementsTiles,
         ),
         SettingsSection(
           title: Text(translate("About")),
