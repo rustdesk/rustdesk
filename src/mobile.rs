@@ -591,7 +591,6 @@ impl Connection {
                 log::debug!("Exit io_loop of id={}", session.id);
             }
             Err(err) => {
-                crate::common::test_rendezvous_server();
                 session.msgbox("error", "Connection Error", &err.to_string());
             }
         }

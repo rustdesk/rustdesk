@@ -148,11 +148,25 @@ impl Client {
                 true,
             ));
         }
-        let rendezvous_server = crate::get_rendezvous_server(1_000).await;
-        log::info!("rendezvous server: {}", rendezvous_server);
-
+        let (mut rendezvous_server, servers, contained) = crate::get_rendezvous_server(1_000).await;
         let mut socket =
-            socket_client::connect_tcp(&*rendezvous_server, any_addr, RENDEZVOUS_TIMEOUT).await?;
+            socket_client::connect_tcp(&*rendezvous_server, any_addr, RENDEZVOUS_TIMEOUT).await;
+        debug_assert!(!servers.contains(&rendezvous_server));
+        if socket.is_err() && !servers.is_empty() {
+            log::info!("try the other servers: {:?}", servers);
+            for server in servers {
+                socket = socket_client::connect_tcp(&*server, any_addr, RENDEZVOUS_TIMEOUT).await;
+                if socket.is_ok() {
+                    rendezvous_server = server;
+                    break;
+                }
+            }
+            crate::refresh_rendezvous_server();
+        } else if !contained {
+            crate::refresh_rendezvous_server();
+        }
+        log::info!("rendezvous server: {}", rendezvous_server);
+        let mut socket = socket?;
         let my_addr = socket.local_addr();
         let mut signed_id_pk = Vec::new();
         let mut relay_server = "".to_owned();

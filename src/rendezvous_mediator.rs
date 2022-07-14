@@ -51,8 +51,11 @@ impl RendezvousMediator {
         check_zombie();
         let server = new_server();
         if Config::get_nat_type() == NatType::UNKNOWN_NAT as i32 {
-            crate::common::test_nat_type();
+            crate::test_nat_type();
             nat_tested = true;
+        }
+        if !Config::get_option("stop-service").is_empty() {
+            crate::test_rendezvous_server();
         }
         let server_cloned = server.clone();
         tokio::spawn(async move {
@@ -68,7 +71,7 @@ impl RendezvousMediator {
             Config::reset_online();
             if Config::get_option("stop-service").is_empty() {
                 if !nat_tested {
-                    crate::common::test_nat_type();
+                    crate::test_nat_type();
                     nat_tested = true;
                 }
                 let mut futs = Vec::new();
