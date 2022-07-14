@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 import 'dart:math';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
@@ -990,6 +991,17 @@ class FFI {
     ffiModel.platformFFI.setByName(name, value);
   }
 
+  String getOption(String name) {
+    return ffiModel.platformFFI.getByName("option", name);
+  }
+
+  void setOption(String name, String value) {
+    Map<String, String> res = Map()
+      ..["name"] =  name
+      ..["value"] = value;
+    return ffiModel.platformFFI.setByName('option', jsonEncode(res));
+  }
+
   RustdeskImpl get bind => ffiModel.platformFFI.ffiBind;
 
   handleMouse(Map<String, dynamic> evt) {
@@ -1061,6 +1073,22 @@ class FFI {
 
   Future<bool> invokeMethod(String method, [dynamic arguments]) async {
     return await ffiModel.platformFFI.invokeMethod(method, arguments);
+  }
+
+  Future<List<String>> getAudioInputs() async {
+    return await bind.mainGetSoundInputs();
+  }
+  
+  String getDefaultAudioInput() {
+    final input = getOption('audio-input');
+    if (input.isEmpty && Platform.isWindows) {
+      return "System Sound";
+    }
+    return input;
+  }
+
+  void setDefaultAudioInput(String input){
+    setOption('audio-input', input);
   }
 }
 

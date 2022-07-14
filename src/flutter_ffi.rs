@@ -19,6 +19,7 @@ use crate::flutter::connection_manager::{self, get_clients_length, get_clients_s
 use crate::flutter::{self, Session, SESSIONS};
 use crate::start_server;
 use crate::ui_interface;
+use crate::ui_interface::get_sound_inputs;
 
 fn initialize(app_dir: &str) {
     *config::APP_DIR.write().unwrap() = app_dir.to_owned();
@@ -376,6 +377,10 @@ pub fn session_resume_job(id: String, act_id: i32, is_remote: bool) {
     if let Some(session) = SESSIONS.read().unwrap().get(&id) {
         session.resume_job(act_id, is_remote);
     }
+}
+
+pub fn main_get_sound_inputs() -> Vec<String> {
+    get_sound_inputs()
 }
 
 /// FFI for **get** commands which are idempotent.
