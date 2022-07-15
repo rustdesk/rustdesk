@@ -49,7 +49,7 @@ pub fn create_clipboard_msg(content: String) -> Message {
     let mut msg = Message::new();
     msg.set_clipboard(Clipboard {
         compress,
-        content,
+        content:content.into(),
         ..Default::default()
     });
     msg
@@ -80,7 +80,7 @@ pub fn update_clipboard(clipboard: Clipboard, old: Option<&Arc<Mutex<String>>>) 
     let content = if clipboard.compress {
         decompress(&clipboard.content)
     } else {
-        clipboard.content
+        clipboard.content.as_ref().to_vec()
     };
     if let Ok(content) = String::from_utf8(content) {
         if content.is_empty() {

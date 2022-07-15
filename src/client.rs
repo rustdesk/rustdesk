@@ -201,7 +201,7 @@ impl Client {
                             } else {
                                 peer_nat_type = ph.nat_type();
                                 is_local = ph.is_local();
-                                signed_id_pk = ph.pk;
+                                signed_id_pk = ph.pk.as_ref().to_vec();
                                 relay_server = ph.relay_server;
                                 peer_addr = AddrMangle::decode(&ph.socket_addr);
                                 log::info!("Hole Punched {} = {}", peer, peer_addr);
@@ -393,8 +393,8 @@ impl Client {
                                 let sealed_key = box_::seal(&key.0, &nonce, &their_pk_b, &out_sk_b);
                                 let mut msg_out = Message::new();
                                 msg_out.set_public_key(PublicKey {
-                                    asymmetric_value: our_pk_b.0.into(),
-                                    symmetric_value: sealed_key,
+                                    asymmetric_value: Vec::from(our_pk_b.0).into(),
+                                    symmetric_value: sealed_key.into(),
                                     ..Default::default()
                                 });
                                 timeout(CONNECT_TIMEOUT, conn.send(&msg_out)).await??;
@@ -1122,7 +1122,7 @@ impl LoginConfigHandler {
         let my_id = Config::get_id();
         let mut lr = LoginRequest {
             username: self.id.clone(),
-            password,
+            password:password.into(),
             my_id,
             my_name: crate::username(),
             option: self.get_option_message(true).into(),

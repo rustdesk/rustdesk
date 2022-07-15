@@ -263,7 +263,7 @@ impl RendezvousMediator {
 
     async fn handle_request_relay(&self, rr: RequestRelay, server: ServerPtr) -> ResultType<()> {
         self.create_relay(
-            rr.socket_addr,
+            rr.socket_addr.as_ref().to_vec(),
             rr.relay_server,
             rr.uuid,
             server,
@@ -300,7 +300,7 @@ impl RendezvousMediator {
 
         let mut msg_out = Message::new();
         let mut rr = RelayResponse {
-            socket_addr,
+            socket_addr: socket_addr.into(),
             version: crate::VERSION.to_owned(),
             ..Default::default()
         };
@@ -331,8 +331,8 @@ impl RendezvousMediator {
         let relay_server = self.get_relay_server(fla.relay_server);
         msg_out.set_local_addr(LocalAddr {
             id: Config::get_id(),
-            socket_addr: AddrMangle::encode(peer_addr),
-            local_addr: AddrMangle::encode(local_addr),
+            socket_addr: AddrMangle::encode(peer_addr).into(),
+            local_addr: AddrMangle::encode(local_addr).into(),
             relay_server,
             version: crate::VERSION.to_owned(),
             ..Default::default()
@@ -350,7 +350,7 @@ impl RendezvousMediator {
         {
             let uuid = Uuid::new_v4().to_string();
             return self
-                .create_relay(ph.socket_addr, relay_server, uuid, server, true, true)
+                .create_relay(ph.socket_addr.as_ref().to_vec(), relay_server, uuid, server, true, true)
                 .await;
         }
         let peer_addr = AddrMangle::decode(&ph.socket_addr);
@@ -391,8 +391,8 @@ impl RendezvousMediator {
         self.last_id_pk_registry = id.clone();
         msg_out.set_register_pk(RegisterPk {
             id,
-            uuid,
-            pk,
+            uuid: uuid.into(),
+            pk: pk.into(),
             ..Default::default()
         });
         socket.send(&msg_out, self.addr.to_owned()).await?;

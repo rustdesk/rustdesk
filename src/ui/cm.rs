@@ -263,7 +263,7 @@ impl ConnectionManager {
                                 FileTransferBlock {
                                     id,
                                     file_num,
-                                    data,
+                                    data: data.into(),
                                     compressed,
                                     ..Default::default()
                                 },

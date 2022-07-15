@@ -5,6 +5,11 @@ fn main() {
         .out_dir("src/protos")
         .inputs(&["protos/rendezvous.proto", "protos/message.proto"])
         .include("protos")
+        .customize(
+            protobuf_codegen::Customize::default()
+            .tokio_bytes(true)
+            // .tokio_bytes_for_string(true)
+        )
         .run()
         .expect("Codegen failed.");
 }

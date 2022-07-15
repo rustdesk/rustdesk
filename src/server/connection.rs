@@ -1063,7 +1063,7 @@ impl Connection {
                         self.send_fs(ipc::FS::WriteBlock {
                             id: block.id,
                             file_num: block.file_num,
-                            data: block.data,
+                            data: block.data.as_ref().to_vec(),
                             compressed: block.compressed,
                         });
                     }
