@@ -266,6 +266,8 @@ class _DesktopHomePageState extends State<DesktopHomePage> with TrayListener {
     } else if (value == "stop-service") {
       final option = gFFI.getOption(value);
       gFFI.setOption(value, option == "Y" ? "" : "Y");
+    } else if (value == "change-id") {
+      changeId();
     }
   }
 
@@ -340,5 +342,65 @@ class _DesktopHomePageState extends State<DesktopHomePage> with TrayListener {
         }
       },
     ), value: 'audio-input',);
+  }
+
+  /// change local ID
+  void changeId() {
+    var newId = "";
+    var msg = "";
+    var isInProgress = false;
+    DialogManager.show( (setState, close) {
+      return CustomAlertDialog(
+        title: Text(translate("Change ID")),
+        content: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(translate("id_change_tip")),
+            Offstage(
+                offstage: msg.isEmpty,
+                child: Text(msg, style: TextStyle(color: Colors.grey),)).marginOnly(bottom: 4.0),
+            TextField(
+              onChanged: (s) {
+                newId = s;
+              },
+              decoration: InputDecoration(
+                border: OutlineInputBorder()
+              ),
+              inputFormatters: [
+                LengthLimitingTextInputFormatter(16),
+                // FilteringTextInputFormatter(RegExp(r"[a-zA-z][a-zA-z0-9\_]*"), allow: true)
+              ],
+              maxLength: 16,
+            ),
+            SizedBox(height: 4.0,),
+            Offstage(
+                offstage: !isInProgress,
+                child: LinearProgressIndicator())
+          ],
+        ), actions: [
+          TextButton(onPressed: (){
+            close();
+          }, child: Text("取消")),
+          TextButton(onPressed: () async {
+            setState(() {
+              msg = "";
+              isInProgress = true;
+              gFFI.bind.mainChangeId(newId: newId);
+            });
+
+            var status = await gFFI.bind.mainGetAsyncStatus();
+            while (status == " "){
+              await Future.delayed(Duration(milliseconds: 100));
+              status = await gFFI.bind.mainGetAsyncStatus();
+            }
+            setState(() {
+              isInProgress = false;
+              msg = translate(status);
+            });
+
+          }, child: Text("确定")),
+      ],
+      );
+    });
   }
 }
