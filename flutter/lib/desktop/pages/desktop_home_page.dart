@@ -356,21 +356,28 @@ class _DesktopHomePageState extends State<DesktopHomePage> with TrayListener {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(translate("id_change_tip")),
-            Offstage(
-                offstage: msg.isEmpty,
-                child: Text(msg, style: TextStyle(color: Colors.grey),)).marginOnly(bottom: 4.0),
-            TextField(
-              onChanged: (s) {
-                newId = s;
-              },
-              decoration: InputDecoration(
-                border: OutlineInputBorder()
-              ),
-              inputFormatters: [
-                LengthLimitingTextInputFormatter(16),
-                // FilteringTextInputFormatter(RegExp(r"[a-zA-z][a-zA-z0-9\_]*"), allow: true)
+            SizedBox(height: 8.0,),
+            Row(
+              children: [
+                Text("ID:").marginOnly(bottom: 16.0),
+                SizedBox(width: 24.0,),
+                Expanded(
+                  child: TextField(
+                    onChanged: (s) {
+                      newId = s;
+                    },
+                    decoration: InputDecoration(
+                      border: OutlineInputBorder(),
+                      errorText: msg.isEmpty ? null : translate(msg)
+                    ),
+                    inputFormatters: [
+                      LengthLimitingTextInputFormatter(16),
+                      // FilteringTextInputFormatter(RegExp(r"[a-zA-z][a-zA-z0-9\_]*"), allow: true)
+                    ],
+                    maxLength: 16,
+                  ),
+                ),
               ],
-              maxLength: 16,
             ),
             SizedBox(height: 4.0,),
             Offstage(
