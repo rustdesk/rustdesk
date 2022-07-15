@@ -750,31 +750,16 @@ async fn handle_received_peers(mut rx: UnboundedReceiver<config::DiscoveryPeer>)
     loop {
         tokio::select! {
             data = rx.recv() => match data {
-                Some(peer) => {
+                Some(mut peer) => {
                     let in_response_set = !response_set.insert(peer.id.clone());
-                    let mut pre_found = false;
-                    // Try find and update peer
-                    for peer1 in &mut peers {
-                        if peer1.is_same_peer(&peer) {
-                            if in_response_set {
-                                // Merge ip_mac and update other infos
-                                peer1.ip_mac.extend(peer.ip_mac.clone());
-                                peer1.hostname = peer.hostname.clone();
-                                peer1.platform = peer.platform.clone();
-                                peer1.online = true;
-                            } else {
-                                // Update all peer infos
-                                *peer1 = peer.clone();
-                            }
-                            pre_found = true;
-                            break
+                    if let Some(pos) = peers.iter().position(|x| x.is_same_peer(&peer) ) {
+                        let peer1 = peers.remove(pos);
+                        if in_response_set {
+                            peer.ip_mac.extend(peer1.ip_mac);
+                            peer.online = true;
                         }
                     }
-                    // Push if not found
-                    if !pre_found {
-                        peers.push(peer);
-                    }
-
+                    peers.insert(0, peer);
                     if last_write_time.elapsed().as_millis() > 300 {
                         config::LanPeers::store(&peers);
                         last_write_time = Instant::now();

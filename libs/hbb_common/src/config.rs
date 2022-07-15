@@ -875,8 +875,6 @@ impl DiscoveryPeer {
 
 #[derive(Debug, Default, Serialize, Deserialize, Clone)]
 pub struct LanPeers {
-    // #[serde(default)]
-    // pub peers: String,
     pub peers: Vec<DiscoveryPeer>,
 }
 
