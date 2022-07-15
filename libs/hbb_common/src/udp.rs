@@ -37,7 +37,6 @@ fn new_socket(addr: SocketAddr, reuse: bool, buf_size: usize) -> Result<Socket, 
         addr,
         socket.recv_buffer_size()
     );
-    socket.set_nonblocking(true)?;
     socket.bind(&addr.into())?;
     Ok(socket)
 }

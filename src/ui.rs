@@ -548,7 +548,7 @@ impl UI {
     }
 
     fn send_wol(&mut self, id: String) {
-        crate::rendezvous_mediator::send_wol(id)
+        crate::lan::send_wol(id)
     }
 
     fn new_remote(&mut self, id: String, remote_type: String) {
@@ -695,7 +695,7 @@ impl UI {
 
     fn discover(&self) {
         std::thread::spawn(move || {
-            allow_err!(crate::rendezvous_mediator::discover());
+            allow_err!(crate::lan::discover());
         });
     }
 
