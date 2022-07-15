@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/utils/multi_window_manager.dart';
+import 'package:get/get.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -44,15 +45,23 @@ class _ConnectionPageState extends State<ConnectionPage> {
   Widget build(BuildContext context) {
     Provider.of<FfiModel>(context);
     if (_idController.text.isEmpty) _idController.text = gFFI.getId();
-    return SingleChildScrollView(
+    return Container(
+      decoration: BoxDecoration(
+        color: MyTheme.grayBg
+      ),
       child: Column(
           mainAxisAlignment: MainAxisAlignment.start,
           mainAxisSize: MainAxisSize.max,
-          crossAxisAlignment: CrossAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
             getUpdateUI(),
-            getSearchBarUI(),
+            Row(
+              children: [
+                getSearchBarUI(),
+              ],
+            ).marginOnly(top: 16.0, left: 16.0),
             SizedBox(height: 12),
+            Divider(thickness: 1,),
             getPeers(),
           ]),
     );
@@ -106,104 +115,102 @@ class _ConnectionPageState extends State<ConnectionPage> {
   /// UI for the search bar.
   /// Search for a peer and connect to it if the id exists.
   Widget getSearchBarUI() {
-    var w = Padding(
-      padding: const EdgeInsets.fromLTRB(16.0, 16.0, 16.0, 16.0),
-      child: Container(
-        child: Padding(
-          padding: const EdgeInsets.only(top: 16, bottom: 16),
-          child: Ink(
-            decoration: BoxDecoration(
-              color: MyTheme.white,
-              borderRadius: const BorderRadius.all(Radius.circular(13)),
-            ),
-            child: Column(
-              children: [
-                Row(
-                  children: <Widget>[
-                    Expanded(
-                      child: Container(
-                        padding: const EdgeInsets.only(left: 16, right: 16),
-                        child: TextField(
-                          autocorrect: false,
-                          enableSuggestions: false,
-                          keyboardType: TextInputType.visiblePassword,
-                          // keyboardType: TextInputType.number,
-                          style: TextStyle(
-                            fontFamily: 'WorkSans',
-                            fontWeight: FontWeight.bold,
-                            fontSize: 30,
-                            // color: MyTheme.idColor,
-                          ),
-                          decoration: InputDecoration(
-                            labelText: translate('Control Remote Desktop'),
-                            // hintText: 'Enter your remote ID',
-                            // border: InputBorder.,
-                            border: OutlineInputBorder(
-                                borderRadius: BorderRadius.zero),
-                            helperStyle: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 16,
-                              color: MyTheme.dark,
-                            ),
-                            labelStyle: TextStyle(
-                              fontWeight: FontWeight.w600,
-                              fontSize: 26,
-                              letterSpacing: 0.2,
-                              color: MyTheme.dark,
-                            ),
-                          ),
-                          controller: _idController,
+    var w = Container(
+      width: 500,
+      padding: EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+      decoration: BoxDecoration(
+        color: MyTheme.white,
+        borderRadius: const BorderRadius.all(Radius.circular(13)),
+      ),
+      child: Ink(
+        child: Column(
+          children: [
+            Row(
+              children: <Widget>[
+                Expanded(
+                  child: Container(
+                    child: TextField(
+                      autocorrect: false,
+                      enableSuggestions: false,
+                      keyboardType: TextInputType.visiblePassword,
+                      // keyboardType: TextInputType.number,
+                      style: TextStyle(
+                        fontFamily: 'WorkSans',
+                        fontWeight: FontWeight.bold,
+                        fontSize: 30,
+                        // color: MyTheme.idColor,
+                      ),
+                      decoration: InputDecoration(
+                        labelText: translate('Control Remote Desktop'),
+                        // hintText: 'Enter your remote ID',
+                        // border: InputBorder.,
+                        border: OutlineInputBorder(
+                            borderRadius: BorderRadius.zero),
+                        helperStyle: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                          color: MyTheme.dark,
+                        ),
+                        labelStyle: TextStyle(
+                          fontWeight: FontWeight.w600,
+                          fontSize: 26,
+                          letterSpacing: 0.2,
+                          color: MyTheme.dark,
                         ),
                       ),
+                      controller: _idController,
+                      onSubmitted: (s) {
+                        onConnect();
+                      },
                     ),
-                  ],
-                ),
-                Padding(
-                  padding: const EdgeInsets.symmetric(
-                      vertical: 16.0, horizontal: 16.0),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.end,
-                    children: [
-                      OutlinedButton(
-                        onPressed: () {
-                          onConnect(isFileTransfer: true);
-                        },
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(
-                              vertical: 8.0, horizontal: 8.0),
-                          child: Text(
-                            translate(
-                              "Transfer File",
-                            ),
-                            style: TextStyle(color: MyTheme.dark),
-                          ),
-                        ),
-                      ),
-                      SizedBox(
-                        width: 30,
-                      ),
-                      OutlinedButton(
-                        onPressed: onConnect,
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(
-                              vertical: 8.0, horizontal: 16.0),
-                          child: Text(
-                            translate(
-                              "Connection",
-                            ),
-                            style: TextStyle(color: MyTheme.white),
-                          ),
-                        ),
-                        style: OutlinedButton.styleFrom(
-                          backgroundColor: Colors.blueAccent,
-                        ),
-                      ),
-                    ],
                   ),
-                )
+                ),
               ],
             ),
-          ),
+            Padding(
+              padding: const EdgeInsets.only(
+                  top: 16.0),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  OutlinedButton(
+                    onPressed: () {
+                      onConnect(isFileTransfer: true);
+                    },
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                          vertical: 8.0, horizontal: 8.0),
+                      child: Text(
+                        translate(
+                          "Transfer File",
+                        ),
+                        style: TextStyle(color: MyTheme.dark),
+                      ),
+                    ),
+                  ),
+                  SizedBox(
+                    width: 30,
+                  ),
+                  OutlinedButton(
+                    onPressed: onConnect,
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                          vertical: 8.0, horizontal: 16.0),
+                      child: Text(
+                        translate(
+                          "Connection",
+                        ),
+                        style: TextStyle(color: MyTheme.white),
+                      ),
+                    ),
+                    style: OutlinedButton.styleFrom(
+                      backgroundColor: Colors.blueAccent,
+                    ),
+                  ),
+                ],
+              ),
+            )
+          ],
         ),
       ),
     );
