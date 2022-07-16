@@ -27,5 +27,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("doc_mac_permission", "https://rustdesk.com/docs/en/manual/mac/#enable-permissions"),
         ("doc_fix_wayland", "https://rustdesk.com/docs/en/manual/linux/#x11-required"),
         ("server_not_support", "Not yet supported by the server"),
+        ("android_open_battery_optimizations_tip", "If you want to disable this feature, please go to the next RustDesk application settings page, find and enter [Battery] ,Uncheck [Unrestricted]"),
     ].iter().cloned().collect();
 }
