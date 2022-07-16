@@ -8,7 +8,6 @@ fn main() {
         .customize(
             protobuf_codegen::Customize::default()
             .tokio_bytes(true)
-            // .tokio_bytes_for_string(true)
         )
         .run()
         .expect("Codegen failed.");
