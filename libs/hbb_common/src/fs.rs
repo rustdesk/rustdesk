@@ -6,7 +6,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use serde_derive::{Deserialize, Serialize};
 use tokio::{fs::File, io::*};
 
-use crate::{bail, get_version_number, message_proto::*, ResultType, Stream};
+use crate::{bail, get_version_number, message_proto::*, ResultType, Stream, protos::message};
 // https://doc.rust-lang.org/std/os/windows/fs/trait.MetadataExt.html
 use crate::{
     compress::{compress, decompress},
