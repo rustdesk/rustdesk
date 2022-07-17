@@ -39,6 +39,7 @@ fn mouse_event(flags: u32, data: u32, dx: i32, dy: i32) -> DWORD {
 }
 
 fn keybd_event(flags: u32, vk: u16, scan: u16) -> DWORD {
+    let mut vk = vk;
     let mut scan = scan;
     unsafe {
         // https://github.com/rustdesk/rustdesk/issues/366
@@ -47,6 +48,11 @@ fn keybd_event(flags: u32, vk: u16, scan: u16) -> DWORD {
                 let current_window_thread_id =
                     GetWindowThreadProcessId(GetForegroundWindow(), std::ptr::null_mut());
                 LAYOUT = GetKeyboardLayout(current_window_thread_id);
+            }
+            if winapi::shared::minwindef::LOWORD(LAYOUT as usize as u32) == 0x0412 {
+                if vk == winapi::um::winuser::VK_RMENU as u16 {
+                    vk = winapi::um::winuser::VK_HANGUL as u16;
+                }
             }
             scan = MapVirtualKeyExW(vk as _, 0, LAYOUT) as _;
         }
