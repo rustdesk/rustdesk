@@ -130,9 +130,6 @@ unsafe extern "C" fn get_by_name(name: *const c_char, arg: *const c_char) -> *co
                     .clone()
                     .to_string();
             }
-            "langs" => {
-                res = crate::lang::LANGS.to_string();
-            }
             // File Action
             "get_home_dir" => {
                 res = fs::get_home_as_string();

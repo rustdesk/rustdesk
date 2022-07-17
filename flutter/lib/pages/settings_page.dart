@@ -146,13 +146,7 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
               leading: Icon(Icons.cloud),
               onPressed: (context) {
                 showServerSettings();
-              }),
-          SettingsTile.navigation(
-              title: Text(translate('Language')),
-              leading: Icon(Icons.translate),
-              onPressed: (context) {
-                showLanguageSettings();
-              }),
+              })
         ]),
         SettingsSection(
           title: Text(translate("Enhancements")),
@@ -189,13 +183,6 @@ void showServerSettings() {
   final api = FFI.getByName('option', 'api-server');
   final key = FFI.getByName('option', 'key');
   showServerSettingsWithValue(id, relay, key, api);
-}
-
-void showLanguageSettings() {
-  try {
-    final langs = json.decode(FFI.getByName('langs')) as Map<String, String>;
-    debugPrint("langs:$langs");
-  } catch (e) {}
 }
 
 void showAbout() {
