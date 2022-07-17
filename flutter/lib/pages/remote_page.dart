@@ -262,7 +262,6 @@ class _RemotePageState extends State<RemotePage> {
                             : SafeArea(child:
                                 OrientationBuilder(builder: (ctx, orientation) {
                                 if (_currentOrientation != orientation) {
-                                  debugPrint("on orientation changed");
                                   Timer(Duration(milliseconds: 200), () {
                                     resetMobileActionsOverlay();
                                     _currentOrientation = orientation;
@@ -1061,6 +1060,8 @@ void showOptions() {
                 getRadio('Optimize reaction time', 'low', quality, setQuality),
                 Divider(color: MyTheme.border),
                 getToggle(setState, 'show-remote-cursor', 'Show remote cursor'),
+                getToggle(
+                    setState, 'show-quality-monitor', 'Show quality monitor'),
               ] +
               more),
       actions: [],
