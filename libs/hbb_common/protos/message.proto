@@ -190,6 +190,7 @@ message KeyEvent {
     string seq = 6;
   }
   repeated ControlKey modifiers = 8;
+  uint32 mode = 9;
 }
 
 message CursorData {

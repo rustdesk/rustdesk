@@ -2,7 +2,7 @@ use self::winapi::ctypes::c_int;
 use self::winapi::shared::{basetsd::ULONG_PTR, minwindef::*, windef::*};
 use self::winapi::um::winbase::*;
 use self::winapi::um::winuser::*;
-use rdev::{simulate, EventType, EventType::*, Key as RdevKey, SimulateError};
+use rdev::{simulate, EventType, Key as RdevKey, SimulateError};
 use winapi;
 
 use crate::win::keycodes::*;

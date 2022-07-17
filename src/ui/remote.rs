@@ -43,6 +43,7 @@ use hbb_common::{
     Stream,
 };
 use hbb_common::{config::TransferSerde, fs::TransferJobMeta};
+use rdev::{Event, EventType::*, Key as RdevKey};
 
 #[cfg(windows)]
 use crate::clipboard_file::*;
@@ -288,288 +289,54 @@ impl Handler {
         crate::platform::windows::enable_lowlevel_keyboard(std::ptr::null_mut() as _);
         std::thread::spawn(move || {
             // This will block.
-            std::env::set_var("KEYBOARD_ONLY", "y"); // pass to rdev
-            let keyboard_mode = 1;
-            if keyboard_mode == 1 {
-                use rdev::{Event, EventType::*, Key as RdevKey};
-                lazy_static::lazy_static! {
-                    static ref MUTEX_SPECIAL_KEYS: Mutex<HashMap<RdevKey, bool>> = {
-                        let mut m = HashMap::new();
-                        // m.insert(RdevKey::PrintScreen, false); // TODO
-                        m.insert(RdevKey::ShiftLeft, false);
-                        m.insert(RdevKey::ShiftRight, false);
-                        m.insert(RdevKey::ControlLeft, false);
-                        m.insert(RdevKey::ControlRight, false);
-                        m.insert(RdevKey::Alt, false);
-                        m.insert(RdevKey::AltGr, false);
-                        Mutex::new(m)
-                    };
-                }
-                // todo: auto change paltform
-                let func = move |evt: Event| {
-                    if !IS_IN.load(Ordering::SeqCst)
-                        || !SERVER_KEYBOARD_ENABLED.load(Ordering::SeqCst)
-                    {
-                        return;
-                    }
-                    let (key, down) = match evt.event_type {
-                        KeyPress(k) => {
-                            // keyboard long press
-                            if MUTEX_SPECIAL_KEYS.lock().unwrap().contains_key(&k) {
-                                if *MUTEX_SPECIAL_KEYS.lock().unwrap().get(&k).unwrap() {
-                                    return;
-                                }
-                                MUTEX_SPECIAL_KEYS.lock().unwrap().insert(k, true);
-                            }
-                            (k, 1)
-                        }
-                        KeyRelease(k) => {
-                            // keyboard long press
-                            if MUTEX_SPECIAL_KEYS.lock().unwrap().contains_key(&k) {
-                                MUTEX_SPECIAL_KEYS.lock().unwrap().insert(k, false);
-                            }
-                            (k, 0)
-                        }
-                        _ => return,
-                    };
-
-                    // todo: clear key
-                    #[cfg(target_os = "windows")]
-                    let key = rdev::get_win_key(evt.code.into(), evt.scan_code);
-
-                    let mut key_event = KeyEvent::new();
-                    // According to peer platform.
-                    if peer == "Linux" {
-                        let keycode: u32 = rdev::linux_keycode_from_key(key).unwrap().into();
-                        key_event.set_chr(keycode);
-                    } else if peer == "Windows" {
-                        let keycode: u32 = rdev::win_keycode_from_key(key).unwrap().into();
-                        key_event.set_chr(keycode);
-                    } else if peer == "Mac OS" {
-                        let keycode: u32 = rdev::macos_keycode_from_key(key).unwrap().into();
-                        key_event.set_chr(keycode);
-                    }
-                    me.key_down_or_up(down, key_event, false, false, false, false);
+            std::env::set_var("KEYBOARD_ONLY", "y");
+            lazy_static::lazy_static! {
+                static ref MUTEX_SPECIAL_KEYS: Mutex<HashMap<RdevKey, bool>> = {
+                    let mut m = HashMap::new();
+                    m.insert(RdevKey::ShiftLeft, false);
+                    m.insert(RdevKey::ShiftRight, false);
+                    m.insert(RdevKey::ControlLeft, false);
+                    m.insert(RdevKey::ControlRight, false);
+                    m.insert(RdevKey::Alt, false);
+                    m.insert(RdevKey::AltGr, false);
+                    Mutex::new(m)
                 };
-                if let Err(error) = rdev::listen(func) {
-                    log::error!("rdev: {:?}", error);
+            }
+
+            let func = move |evt: Event| {
+                if !IS_IN.load(Ordering::SeqCst) || !SERVER_KEYBOARD_ENABLED.load(Ordering::SeqCst)
+                {
+                    return;
                 }
-            } else {
-                use rdev::{EventType::*, *};
-                let func = move |evt: Event| {
-                    if !IS_IN.load(Ordering::SeqCst)
-                        || !SERVER_KEYBOARD_ENABLED.load(Ordering::SeqCst)
-                    {
-                        return;
+                let (key, down) = match evt.event_type {
+                    KeyPress(k) => {
+                        // keyboard long press
+                        if MUTEX_SPECIAL_KEYS.lock().unwrap().contains_key(&k) {
+                            if *MUTEX_SPECIAL_KEYS.lock().unwrap().get(&k).unwrap() {
+                                return;
+                            }
+                            MUTEX_SPECIAL_KEYS.lock().unwrap().insert(k, true);
+                        }
+                        (k, true)
                     }
-                    let (key, down) = match evt.event_type {
-                        KeyPress(k) => (k, 1),
-                        KeyRelease(k) => (k, 0),
-                        _ => return,
-                    };
-                    let alt = get_key_state(enigo::Key::Alt);
-                    #[cfg(windows)]
-                    let ctrl = {
-                        let mut tmp = get_key_state(enigo::Key::Control);
-                        unsafe {
-                            if IS_ALT_GR {
-                                if alt || key == Key::AltGr {
-                                    if tmp {
-                                        tmp = false;
-                                    }
-                                } else {
-                                    IS_ALT_GR = false;
-                                }
-                            }
+                    KeyRelease(k) => {
+                        // keyboard long press
+                        if MUTEX_SPECIAL_KEYS.lock().unwrap().contains_key(&k) {
+                            MUTEX_SPECIAL_KEYS.lock().unwrap().insert(k, false);
                         }
-                        tmp
-                    };
-                    #[cfg(not(windows))]
-                    let ctrl = get_key_state(enigo::Key::Control);
-                    let shift = get_key_state(enigo::Key::Shift);
-                    #[cfg(windows)]
-                    let command = crate::platform::windows::get_win_key_state();
-                    #[cfg(not(windows))]
-                    let command = get_key_state(enigo::Key::Meta);
-                    let control_key = match key {
-                        Key::Alt => Some(ControlKey::Alt),
-                        Key::AltGr => Some(ControlKey::RAlt),
-                        Key::Backspace => Some(ControlKey::Backspace),
-                        Key::ControlLeft => {
-                            // when pressing AltGr, an extra VK_LCONTROL with a special
-                            // scancode with bit 9 set is sent, let's ignore this.
-                            #[cfg(windows)]
-                            if evt.scan_code & 0x200 != 0 {
-                                unsafe {
-                                    IS_ALT_GR = true;
-                                }
-                                return;
-                            }
-                            Some(ControlKey::Control)
-                        }
-                        Key::ControlRight => Some(ControlKey::RControl),
-                        Key::DownArrow => Some(ControlKey::DownArrow),
-                        Key::Escape => Some(ControlKey::Escape),
-                        Key::F1 => Some(ControlKey::F1),
-                        Key::F10 => Some(ControlKey::F10),
-                        Key::F11 => Some(ControlKey::F11),
-                        Key::F12 => Some(ControlKey::F12),
-                        Key::F2 => Some(ControlKey::F2),
-                        Key::F3 => Some(ControlKey::F3),
-                        Key::F4 => Some(ControlKey::F4),
-                        Key::F5 => Some(ControlKey::F5),
-                        Key::F6 => Some(ControlKey::F6),
-                        Key::F7 => Some(ControlKey::F7),
-                        Key::F8 => Some(ControlKey::F8),
-                        Key::F9 => Some(ControlKey::F9),
-                        Key::LeftArrow => Some(ControlKey::LeftArrow),
-                        Key::MetaLeft => Some(ControlKey::Meta),
-                        Key::MetaRight => Some(ControlKey::RWin),
-                        Key::Return => Some(ControlKey::Return),
-                        Key::RightArrow => Some(ControlKey::RightArrow),
-                        Key::ShiftLeft => Some(ControlKey::Shift),
-                        Key::ShiftRight => Some(ControlKey::RShift),
-                        Key::Space => Some(ControlKey::Space),
-                        Key::Tab => Some(ControlKey::Tab),
-                        Key::UpArrow => Some(ControlKey::UpArrow),
-                        Key::Delete => {
-                            if is_win && ctrl && alt {
-                                me.ctrl_alt_del();
-                                return;
-                            }
-                            Some(ControlKey::Delete)
-                        }
-                        Key::Apps => Some(ControlKey::Apps),
-                        Key::Cancel => Some(ControlKey::Cancel),
-                        Key::Clear => Some(ControlKey::Clear),
-                        Key::Kana => Some(ControlKey::Kana),
-                        Key::Hangul => Some(ControlKey::Hangul),
-                        Key::Junja => Some(ControlKey::Junja),
-                        Key::Final => Some(ControlKey::Final),
-                        Key::Hanja => Some(ControlKey::Hanja),
-                        Key::Hanji => Some(ControlKey::Hanja),
-                        Key::Convert => Some(ControlKey::Convert),
-                        Key::Print => Some(ControlKey::Print),
-                        Key::Select => Some(ControlKey::Select),
-                        Key::Execute => Some(ControlKey::Execute),
-                        Key::PrintScreen => Some(ControlKey::Snapshot),
-                        Key::Help => Some(ControlKey::Help),
-                        Key::Sleep => Some(ControlKey::Sleep),
-                        Key::Separator => Some(ControlKey::Separator),
-                        Key::KpReturn => Some(ControlKey::NumpadEnter),
-                        Key::Kp0 => Some(ControlKey::Numpad0),
-                        Key::Kp1 => Some(ControlKey::Numpad1),
-                        Key::Kp2 => Some(ControlKey::Numpad2),
-                        Key::Kp3 => Some(ControlKey::Numpad3),
-                        Key::Kp4 => Some(ControlKey::Numpad4),
-                        Key::Kp5 => Some(ControlKey::Numpad5),
-                        Key::Kp6 => Some(ControlKey::Numpad6),
-                        Key::Kp7 => Some(ControlKey::Numpad7),
-                        Key::Kp8 => Some(ControlKey::Numpad8),
-                        Key::Kp9 => Some(ControlKey::Numpad9),
-                        Key::KpDivide => Some(ControlKey::Divide),
-                        Key::KpMultiply => Some(ControlKey::Multiply),
-                        Key::KpDecimal => Some(ControlKey::Decimal),
-                        Key::KpMinus => Some(ControlKey::Subtract),
-                        Key::KpPlus => Some(ControlKey::Add),
-                        Key::CapsLock | Key::NumLock | Key::ScrollLock => {
-                            return;
-                        }
-                        Key::Home => Some(ControlKey::Home),
-                        Key::End => Some(ControlKey::End),
-                        Key::Insert => Some(ControlKey::Insert),
-                        Key::PageUp => Some(ControlKey::PageUp),
-                        Key::PageDown => Some(ControlKey::PageDown),
-                        Key::Pause => Some(ControlKey::Pause),
-                        _ => None,
-                    };
-                    let mut key_event = KeyEvent::new();
-                    if let Some(k) = control_key {
-                        key_event.set_control_key(k);
-                    } else {
-                        let mut chr = match evt.name {
-                            Some(ref s) => {
-                                if s.len() <= 2 {
-                                    // exclude chinese characters
-                                    s.chars().next().unwrap_or('\0')
-                                } else {
-                                    '\0'
-                                }
-                            }
-                            _ => '\0',
-                        };
-                        if chr == '·' {
-                            // special for Chinese
-                            chr = '`';
-                        }
-                        if chr == '\0' {
-                            chr = match key {
-                                Key::Num1 => '1',
-                                Key::Num2 => '2',
-                                Key::Num3 => '3',
-                                Key::Num4 => '4',
-                                Key::Num5 => '5',
-                                Key::Num6 => '6',
-                                Key::Num7 => '7',
-                                Key::Num8 => '8',
-                                Key::Num9 => '9',
-                                Key::Num0 => '0',
-                                Key::KeyA => 'a',
-                                Key::KeyB => 'b',
-                                Key::KeyC => 'c',
-                                Key::KeyD => 'd',
-                                Key::KeyE => 'e',
-                                Key::KeyF => 'f',
-                                Key::KeyG => 'g',
-                                Key::KeyH => 'h',
-                                Key::KeyI => 'i',
-                                Key::KeyJ => 'j',
-                                Key::KeyK => 'k',
-                                Key::KeyL => 'l',
-                                Key::KeyM => 'm',
-                                Key::KeyN => 'n',
-                                Key::KeyO => 'o',
-                                Key::KeyP => 'p',
-                                Key::KeyQ => 'q',
-                                Key::KeyR => 'r',
-                                Key::KeyS => 's',
-                                Key::KeyT => 't',
-                                Key::KeyU => 'u',
-                                Key::KeyV => 'v',
-                                Key::KeyW => 'w',
-                                Key::KeyX => 'x',
-                                Key::KeyY => 'y',
-                                Key::KeyZ => 'z',
-                                Key::Comma => ',',
-                                Key::Dot => '.',
-                                Key::SemiColon => ';',
-                                Key::Quote => '\'',
-                                Key::LeftBracket => '[',
-                                Key::RightBracket => ']',
-                                Key::BackSlash => '\\',
-                                Key::Minus => '-',
-                                Key::Equal => '=',
-                                Key::BackQuote => '`',
-                                _ => '\0',
-                            }
-                        }
-                        if chr != '\0' {
-                            if chr == 'l' && is_win && command {
-                                me.lock_screen();
-                                return;
-                            }
-                            key_event.set_chr(chr as _);
-                        } else {
-                            log::error!("Unknown key {:?}", evt);
-                            return;
-                        }
+                        (k, false)
                     }
-                    me.key_down_or_up(down, key_event, alt, ctrl, shift, command);
+                    _ => return,
                 };
-                if let Err(error) = rdev::listen(func) {
-                    log::error!("rdev: {:?}", error);
-                }
+
+                #[cfg(target_os = "windows")]
+                let key = rdev::get_win_key(evt.code.into(), evt.scan_code);
+
+                me.key_down_or_up(down, key, evt);
             };
+            if let Err(error) = rdev::listen(func) {
+                log::error!("rdev: {:?}", error);
+            }
         });
     }
 
@@ -1150,18 +917,19 @@ impl Handler {
         if self.peer_platform() == "Windows" {
             let mut key_event = KeyEvent::new();
             key_event.set_control_key(ControlKey::CtrlAltDel);
-            self.key_down_or_up(1, key_event, false, false, false, false);
+            // todo
+            self.send_key_event(key_event, 2);
         } else {
             let mut key_event = KeyEvent::new();
             key_event.set_control_key(ControlKey::Delete);
-            self.key_down_or_up(3, key_event, true, true, false, false);
+            // self.key_down_or_up(3, key_event, true, true, false, false);
         }
     }
 
     fn lock_screen(&mut self) {
         let mut key_event = KeyEvent::new();
         key_event.set_control_key(ControlKey::LockScreen);
-        self.key_down_or_up(1, key_event, false, false, false, false);
+        // self.key_down_or_up(1, key_event, false, false, false, false);
     }
 
     fn transfer_file(&mut self) {
@@ -1180,16 +948,246 @@ impl Handler {
         }
     }
 
-    fn key_down_or_up(
-        &mut self,
-        down_or_up: i32,
-        evt: KeyEvent,
-        alt: bool,
-        ctrl: bool,
-        shift: bool,
-        command: bool,
-    ) {
-        let mut key_event = evt;
+    fn send_key_event(&mut self, mut evt: KeyEvent, keyboard_mode: u32) {
+        // mode: map(1), translate(2), legacy(3), auto(4)
+        evt.mode = keyboard_mode;
+        let mut msg_out = Message::new();
+        msg_out.set_key_event(evt);
+        log::info!("{:?}", msg_out);
+        self.send(Data::Message(msg_out));
+    }
+
+    fn map_keyboard_mode(&mut self, down_or_up: bool, key: RdevKey) {
+        // map mode(1): Send keycode according to the peer platform.
+        let peer = self.peer_platform();
+
+        let mut key_event = KeyEvent::new();
+        // According to peer platform.
+        if peer == "Linux" {
+            let keycode: u32 = rdev::linux_keycode_from_key(key).unwrap_or_default().into();
+            key_event.set_chr(keycode);
+        } else if peer == "Windows" {
+            let keycode: u32 = rdev::win_keycode_from_key(key).unwrap_or_default().into();
+            key_event.set_chr(keycode);
+        } else if peer == "Mac OS" {
+            let keycode: u32 = rdev::macos_keycode_from_key(key).unwrap_or_default().into();
+            key_event.set_chr(keycode);
+        }
+        if down_or_up == true {
+            key_event.down = true;
+        } else if down_or_up == true {
+            key_event.press = true;
+        }
+        self.send_key_event(key_event, 1);
+    }
+
+    fn translate_keyboard_mode(&mut self, down_or_up: bool, key: RdevKey) {
+        // translate mode(2): locally generated characters are send to the peer.
+    }
+
+    fn legacy_keyboard_mode(&mut self, down_or_up: bool, key: RdevKey, evt: Event) {
+        // legacy mode(3): Generate characters locally, look for keycode on other side.
+        println!("legacy_keyboard_mode {:?}", key);
+        let peer = self.peer_platform();
+        let is_win = peer == "Windows";
+
+        let alt = get_key_state(enigo::Key::Alt);
+        #[cfg(windows)]
+        let ctrl = {
+            let mut tmp = get_key_state(enigo::Key::Control);
+            unsafe {
+                if IS_ALT_GR {
+                    if alt || key == RdevKey::AltGr {
+                        if tmp {
+                            tmp = false;
+                        }
+                    } else {
+                        IS_ALT_GR = false;
+                    }
+                }
+            }
+            tmp
+        };
+        #[cfg(not(windows))]
+        let ctrl = get_key_state(enigo::Key::Control);
+        let shift = get_key_state(enigo::Key::Shift);
+        #[cfg(windows)]
+        let command = crate::platform::windows::get_win_key_state();
+        #[cfg(not(windows))]
+        let command = get_key_state(enigo::Key::Meta);
+        let control_key = match key {
+            RdevKey::Alt => Some(ControlKey::Alt),
+            RdevKey::AltGr => Some(ControlKey::RAlt),
+            RdevKey::Backspace => Some(ControlKey::Backspace),
+            RdevKey::ControlLeft => {
+                // when pressing AltGr, an extra VK_LCONTROL with a special
+                // scancode with bit 9 set is sent, let's ignore this.
+                #[cfg(windows)]
+                if evt.scan_code & 0x200 != 0 {
+                    unsafe {
+                        IS_ALT_GR = true;
+                    }
+                    return;
+                }
+                Some(ControlKey::Control)
+            }
+            RdevKey::ControlRight => Some(ControlKey::RControl),
+            RdevKey::DownArrow => Some(ControlKey::DownArrow),
+            RdevKey::Escape => Some(ControlKey::Escape),
+            RdevKey::F1 => Some(ControlKey::F1),
+            RdevKey::F10 => Some(ControlKey::F10),
+            RdevKey::F11 => Some(ControlKey::F11),
+            RdevKey::F12 => Some(ControlKey::F12),
+            RdevKey::F2 => Some(ControlKey::F2),
+            RdevKey::F3 => Some(ControlKey::F3),
+            RdevKey::F4 => Some(ControlKey::F4),
+            RdevKey::F5 => Some(ControlKey::F5),
+            RdevKey::F6 => Some(ControlKey::F6),
+            RdevKey::F7 => Some(ControlKey::F7),
+            RdevKey::F8 => Some(ControlKey::F8),
+            RdevKey::F9 => Some(ControlKey::F9),
+            RdevKey::LeftArrow => Some(ControlKey::LeftArrow),
+            RdevKey::MetaLeft => Some(ControlKey::Meta),
+            RdevKey::MetaRight => Some(ControlKey::RWin),
+            RdevKey::Return => Some(ControlKey::Return),
+            RdevKey::RightArrow => Some(ControlKey::RightArrow),
+            RdevKey::ShiftLeft => Some(ControlKey::Shift),
+            RdevKey::ShiftRight => Some(ControlKey::RShift),
+            RdevKey::Space => Some(ControlKey::Space),
+            RdevKey::Tab => Some(ControlKey::Tab),
+            RdevKey::UpArrow => Some(ControlKey::UpArrow),
+            RdevKey::Delete => {
+                if is_win && ctrl && alt {
+                    self.ctrl_alt_del();
+                    return;
+                }
+                Some(ControlKey::Delete)
+            }
+            RdevKey::Apps => Some(ControlKey::Apps),
+            RdevKey::Cancel => Some(ControlKey::Cancel),
+            RdevKey::Clear => Some(ControlKey::Clear),
+            RdevKey::Kana => Some(ControlKey::Kana),
+            RdevKey::Hangul => Some(ControlKey::Hangul),
+            RdevKey::Junja => Some(ControlKey::Junja),
+            RdevKey::Final => Some(ControlKey::Final),
+            RdevKey::Hanja => Some(ControlKey::Hanja),
+            RdevKey::Hanji => Some(ControlKey::Hanja),
+            RdevKey::Convert => Some(ControlKey::Convert),
+            RdevKey::Print => Some(ControlKey::Print),
+            RdevKey::Select => Some(ControlKey::Select),
+            RdevKey::Execute => Some(ControlKey::Execute),
+            RdevKey::PrintScreen => Some(ControlKey::Snapshot),
+            RdevKey::Help => Some(ControlKey::Help),
+            RdevKey::Sleep => Some(ControlKey::Sleep),
+            RdevKey::Separator => Some(ControlKey::Separator),
+            RdevKey::KpReturn => Some(ControlKey::NumpadEnter),
+            RdevKey::Kp0 => Some(ControlKey::Numpad0),
+            RdevKey::Kp1 => Some(ControlKey::Numpad1),
+            RdevKey::Kp2 => Some(ControlKey::Numpad2),
+            RdevKey::Kp3 => Some(ControlKey::Numpad3),
+            RdevKey::Kp4 => Some(ControlKey::Numpad4),
+            RdevKey::Kp5 => Some(ControlKey::Numpad5),
+            RdevKey::Kp6 => Some(ControlKey::Numpad6),
+            RdevKey::Kp7 => Some(ControlKey::Numpad7),
+            RdevKey::Kp8 => Some(ControlKey::Numpad8),
+            RdevKey::Kp9 => Some(ControlKey::Numpad9),
+            RdevKey::KpDivide => Some(ControlKey::Divide),
+            RdevKey::KpMultiply => Some(ControlKey::Multiply),
+            RdevKey::KpDecimal => Some(ControlKey::Decimal),
+            RdevKey::KpMinus => Some(ControlKey::Subtract),
+            RdevKey::KpPlus => Some(ControlKey::Add),
+            RdevKey::CapsLock | RdevKey::NumLock | RdevKey::ScrollLock => {
+                return;
+            }
+            RdevKey::Home => Some(ControlKey::Home),
+            RdevKey::End => Some(ControlKey::End),
+            RdevKey::Insert => Some(ControlKey::Insert),
+            RdevKey::PageUp => Some(ControlKey::PageUp),
+            RdevKey::PageDown => Some(ControlKey::PageDown),
+            RdevKey::Pause => Some(ControlKey::Pause),
+            _ => None,
+        };
+        let mut key_event = KeyEvent::new();
+        if let Some(k) = control_key {
+            key_event.set_control_key(k);
+        } else {
+            let mut chr = match evt.name {
+                Some(ref s) => {
+                    if s.len() <= 2 {
+                        // exclude chinese characters
+                        s.chars().next().unwrap_or('\0')
+                    } else {
+                        '\0'
+                    }
+                }
+                _ => '\0',
+            };
+            if chr == '·' {
+                // special for Chinese
+                chr = '`';
+            }
+            if chr == '\0' {
+                chr = match key {
+                    RdevKey::Num1 => '1',
+                    RdevKey::Num2 => '2',
+                    RdevKey::Num3 => '3',
+                    RdevKey::Num4 => '4',
+                    RdevKey::Num5 => '5',
+                    RdevKey::Num6 => '6',
+                    RdevKey::Num7 => '7',
+                    RdevKey::Num8 => '8',
+                    RdevKey::Num9 => '9',
+                    RdevKey::Num0 => '0',
+                    RdevKey::KeyA => 'a',
+                    RdevKey::KeyB => 'b',
+                    RdevKey::KeyC => 'c',
+                    RdevKey::KeyD => 'd',
+                    RdevKey::KeyE => 'e',
+                    RdevKey::KeyF => 'f',
+                    RdevKey::KeyG => 'g',
+                    RdevKey::KeyH => 'h',
+                    RdevKey::KeyI => 'i',
+                    RdevKey::KeyJ => 'j',
+                    RdevKey::KeyK => 'k',
+                    RdevKey::KeyL => 'l',
+                    RdevKey::KeyM => 'm',
+                    RdevKey::KeyN => 'n',
+                    RdevKey::KeyO => 'o',
+                    RdevKey::KeyP => 'p',
+                    RdevKey::KeyQ => 'q',
+                    RdevKey::KeyR => 'r',
+                    RdevKey::KeyS => 's',
+                    RdevKey::KeyT => 't',
+                    RdevKey::KeyU => 'u',
+                    RdevKey::KeyV => 'v',
+                    RdevKey::KeyW => 'w',
+                    RdevKey::KeyX => 'x',
+                    RdevKey::KeyY => 'y',
+                    RdevKey::KeyZ => 'z',
+                    RdevKey::Comma => ',',
+                    RdevKey::Dot => '.',
+                    RdevKey::SemiColon => ';',
+                    RdevKey::Quote => '\'',
+                    RdevKey::LeftBracket => '[',
+                    RdevKey::RightBracket => ']',
+                    RdevKey::BackSlash => '\\',
+                    RdevKey::Minus => '-',
+                    RdevKey::Equal => '=',
+                    RdevKey::BackQuote => '`',
+                    _ => '\0',
+                }
+            }
+            if chr != '\0' {
+                if chr == 'l' && is_win && command {
+                    self.lock_screen();
+                    return;
+                }
+                key_event.set_chr(chr as _);
+            } else {
+                log::error!("Unknown key {:?}", evt);
+                return;
+            }
+        }
 
         if alt
             && !crate::is_control_key(&key_event, &ControlKey::Alt)
@@ -1223,15 +1221,25 @@ impl Handler {
                 key_event.modifiers.push(ControlKey::NumLock.into());
             }
         }
-        if down_or_up == 1 {
+        if down_or_up == true {
             key_event.down = true;
-        } else if down_or_up == 3 {
-            key_event.press = true;
         }
-        let mut msg_out = Message::new();
-        msg_out.set_key_event(key_event);
-        log::debug!("{:?}", msg_out);
-        self.send(Data::Message(msg_out));
+        dbg!(&key_event);
+        self.send_key_event(key_event, 2)
+    }
+
+    fn key_down_or_up(&mut self, down_or_up: bool, key: RdevKey, evt: Event) {
+        // Call different functions according to keyboard mode.
+        let mode = std::env::var("KEYBOARD_MOAD").unwrap_or(String::from("map"));
+        match mode.as_str() {
+            "map" => {
+                self.map_keyboard_mode(down_or_up, key);
+            }
+            "legacy" => self.legacy_keyboard_mode(down_or_up, key, evt),
+            _ => {
+                self.map_keyboard_mode(down_or_up, key);
+            }
+        }
     }
 
     #[inline]
