@@ -9,7 +9,7 @@
   <b>Wir brauchen deine Hilfe um diese README Datei zu verbessern und aktualisieren</b>
 </p>
 
-Rede mit uns: [Discord](https://discord.gg/nDceKgxnkV) | [Reddit](https://www.reddit.com/r/rustdesk)
+Rede mit uns: [Discord](https://discord.gg/nDceKgxnkV) | [Twitter](https://twitter.com/rustdesk) | [Reddit](https://www.reddit.com/r/rustdesk)
 
 [![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/I2I04VU09)
 
