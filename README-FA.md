@@ -9,7 +9,7 @@
   &#x202b;<b>برای ترجمه این  <a href="https://github.com/rustdesk/rustdesk/tree/master/src/lang"> RustDesk UI</a>  ،README  و <a href="https://github.com/rustdesk/doc.rustdesk.com">Doc</a> به زبان مادری شما به کمکتون نیاز داریم
 </p>
 
-با ما گپ بزنید:  [Reddit](https://www.reddit.com/r/rustdesk) | [Twitter](https://twitter.com/rustdesk)  | [Discord](https://discord.gg/nDceKgxnkV) 
+با ما گپ بزنید:  [Reddit](https://www.reddit.com/r/rustdesk) | [Twitter](https://twitter.com/rustdesk) | [Discord](https://discord.gg/nDceKgxnkV) 
 
 
 [![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/I2I04VU09)

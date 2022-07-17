@@ -9,7 +9,7 @@
   <b>Kami membutuhkan bantuan Anda untuk menerjemahkan README ini dan <a href="https://github.com/rustdesk/rustdesk/tree/master/src/lang">RustDesk UI</a> ke bahasa asli anda</b>
 </p>
 
-Birbincang bersama kami: [Discord](https://discord.gg/nDceKgxnkV) | [Reddit](https://www.reddit.com/r/rustdesk)
+Birbincang bersama kami: [Discord](https://discord.gg/nDceKgxnkV) | [Twitter](https://twitter.com/rustdesk) | [Reddit](https://www.reddit.com/r/rustdesk)
 
 [![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/I2I04VU09)
 
