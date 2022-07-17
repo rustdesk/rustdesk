@@ -878,12 +878,6 @@ pub struct LanPeers {
     pub peers: Vec<DiscoveryPeer>,
 }
 
-#[derive(Serialize, Deserialize)]
-struct MyConfig {
-    version: u8,
-    api_key: String,
-}
-
 impl LanPeers {
     pub fn load() -> LanPeers {
         let _ = CONFIG.read().unwrap(); // for lock
