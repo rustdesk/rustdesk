@@ -258,10 +258,10 @@ pub fn check_main_window() {
     let app = format!("/Applications/{}.app", crate::get_app_name());
     let my_uid = sys
         .process((std::process::id() as i32).into())
-        .map(|x| x.uid)
+        .map(|x| x.user_id())
         .unwrap_or_default();
     for (_, p) in sys.processes().iter() {
-        if p.cmd().len() == 1 && p.uid == my_uid && p.cmd()[0].contains(&app) {
+        if p.cmd().len() == 1 && p.user_id() == my_uid && p.cmd()[0].contains(&app) {
             return;
         }
     }
