@@ -19,7 +19,10 @@ use crate::flutter::connection_manager::{self, get_clients_length, get_clients_s
 use crate::flutter::{self, Session, SESSIONS};
 use crate::start_server;
 use crate::ui_interface;
-use crate::ui_interface::{change_id, get_async_job_status, get_sound_inputs, is_ok_change_id};
+use crate::ui_interface::{
+    change_id, get_app_name, get_async_job_status, get_license, get_options, get_socks,
+    get_sound_inputs, get_version, is_ok_change_id, set_options, set_socks, test_if_valid_server,
+};
 
 fn initialize(app_dir: &str) {
     *config::APP_DIR.write().unwrap() = app_dir.to_owned();
@@ -389,6 +392,41 @@ pub fn main_change_id(new_id: String) {
 
 pub fn main_get_async_status() -> String {
     get_async_job_status()
+}
+
+pub fn main_get_options() -> String {
+    get_options()
+}
+
+pub fn main_set_options(json: String) {
+    let map: HashMap<String, String> = serde_json::from_str(&json).unwrap_or(HashMap::new());
+    if !map.is_empty() {
+        set_options(map)
+    }
+}
+
+pub fn main_test_if_valid_server(server: String) -> String {
+    test_if_valid_server(server)
+}
+
+pub fn main_set_socks(proxy: String, username: String, password: String) {
+    set_socks(proxy, username, password)
+}
+
+pub fn main_get_socks() -> Vec<String> {
+    get_socks()
+}
+
+pub fn main_get_app_name() -> String {
+    get_app_name()
+}
+
+pub fn main_get_license() -> String {
+    get_license()
+}
+
+pub fn main_get_version() -> String {
+    get_version()
 }
 
 /// FFI for **get** commands which are idempotent.

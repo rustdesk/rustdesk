@@ -1,5 +1,10 @@
-use crate::common::SOFTWARE_UPDATE_URL;
-use crate::ipc;
+use std::{
+    collections::HashMap,
+    process::Child,
+    sync::{Arc, Mutex},
+    time::SystemTime,
+};
+
 use hbb_common::{
     allow_err,
     config::{self, Config, LocalConfig, PeerConfig, RENDEZVOUS_PORT, RENDEZVOUS_TIMEOUT},
@@ -11,12 +16,9 @@ use hbb_common::{
     tcp::FramedStream,
     tokio::{self, sync::mpsc, time},
 };
-use std::{
-    collections::HashMap,
-    process::Child,
-    sync::{Arc, Mutex},
-    time::SystemTime,
-};
+
+use crate::common::SOFTWARE_UPDATE_URL;
+use crate::ipc;
 
 type Message = RendezvousMessage;
 
@@ -72,7 +74,9 @@ pub fn goto_install() {
 pub fn install_me(_options: String, _path: String, silent: bool, debug: bool) {
     #[cfg(windows)]
     std::thread::spawn(move || {
-        allow_err!(crate::platform::windows::install_me(&_options, _path, silent, debug));
+        allow_err!(crate::platform::windows::install_me(
+            &_options, _path, silent, debug
+        ));
         std::process::exit(0);
     });
 }
@@ -185,14 +189,13 @@ pub fn using_public_server() -> bool {
     crate::get_custom_rendezvous_server(get_option_("custom-rendezvous-server")).is_empty()
 }
 
-pub fn get_options() -> HashMap<String, String> {
-    // TODO Vec<(String,String)>
+pub fn get_options() -> String {
     let options = OPTIONS.lock().unwrap();
-    let mut m = HashMap::new();
+    let mut m = serde_json::Map::new();
     for (k, v) in options.iter() {
-        m.insert(k.into(), v.into());
+        m.insert(k.into(), v.to_owned().into());
     }
-    m
+    serde_json::to_string(&m).unwrap()
 }
 
 pub fn test_if_valid_server(host: String) -> String {
