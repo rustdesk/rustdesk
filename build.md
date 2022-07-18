@@ -39,6 +39,10 @@ Build StaticRelease version at https://github.com/sj6219/libsodium/blob/1.0.18_a
 
 # aarch64-apple-darwin
 
+## Install rustdesk
+
+Install RustDesk.dmg at https://github.com/sj6219/rustdesk/releases/tag/alpha/ 
+
 ## Build rustdesk
 
 Perform the following:
