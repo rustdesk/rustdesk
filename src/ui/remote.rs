@@ -283,8 +283,6 @@ impl Handler {
         }
         log::info!("keyboard hooked");
         let mut me = self.clone();
-        let peer = self.peer_platform();
-        let is_win = peer == "Windows";
         #[cfg(windows)]
         crate::platform::windows::enable_lowlevel_keyboard(std::ptr::null_mut() as _);
         std::thread::spawn(move || {
@@ -308,7 +306,7 @@ impl Handler {
                 {
                     return;
                 }
-                let (key, down) = match evt.event_type {
+                let (_key, down) = match evt.event_type {
                     KeyPress(k) => {
                         // keyboard long press
                         if MUTEX_SPECIAL_KEYS.lock().unwrap().contains_key(&k) {
@@ -330,9 +328,9 @@ impl Handler {
                 };
 
                 #[cfg(target_os = "windows")]
-                let key = rdev::get_win_key(evt.code.into(), evt.scan_code);
+                let _key = rdev::get_win_key(evt.code.into(), evt.scan_code);
 
-                me.key_down_or_up(down, key, evt);
+                me.key_down_or_up(down, _key, evt);
             };
             if let Err(error) = rdev::listen(func) {
                 log::error!("rdev: {:?}", error);

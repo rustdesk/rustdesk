@@ -3,7 +3,7 @@ use super::*;
 use dispatch::Queue;
 use enigo::{Enigo, Key, KeyboardControllable, MouseButton, MouseControllable};
 use hbb_common::{config::COMPRESS_LEVEL, protobuf::ProtobufEnumOrUnknown};
-use rdev::{simulate, EventType, EventType::*, Key as RdevKey, SimulateError};
+use rdev::{simulate, EventType, Key as RdevKey};
 use std::{
     convert::TryFrom,
     sync::atomic::{AtomicBool, Ordering},
