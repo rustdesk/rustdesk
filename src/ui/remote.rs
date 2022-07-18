@@ -918,18 +918,24 @@ impl Handler {
             let mut key_event = KeyEvent::new();
             key_event.set_control_key(ControlKey::CtrlAltDel);
             // todo
-            self.send_key_event(key_event, 2);
+            key_event.down = true;
+            self.send_key_event(key_event, 3);
         } else {
             let mut key_event = KeyEvent::new();
             key_event.set_control_key(ControlKey::Delete);
-            // self.key_down_or_up(3, key_event, true, true, false, false);
+            self.legacy_modifiers(&mut key_event, true, true, false, false);
+            // todo
+            key_event.press = true;
+            self.send_key_event(key_event, 3);
         }
     }
 
     fn lock_screen(&mut self) {
         let mut key_event = KeyEvent::new();
         key_event.set_control_key(ControlKey::LockScreen);
-        // self.key_down_or_up(1, key_event, false, false, false, false);
+        // todo
+        key_event.down = true;
+        self.send_key_event(key_event, 3);
     }
 
     fn transfer_file(&mut self) {
@@ -975,14 +981,49 @@ impl Handler {
         }
         if down_or_up == true {
             key_event.down = true;
-        } else if down_or_up == true {
-            key_event.press = true;
+        } else {
+            key_event.down = false;
         }
         self.send_key_event(key_event, 1);
     }
 
-    fn translate_keyboard_mode(&mut self, down_or_up: bool, key: RdevKey) {
-        // translate mode(2): locally generated characters are send to the peer.
+    // fn translate_keyboard_mode(&mut self, down_or_up: bool, key: RdevKey) {
+    //     // translate mode(2): locally generated characters are send to the peer.
+    // }
+
+    fn legacy_modifiers(&self, key_event: &mut KeyEvent, alt: bool, ctrl: bool, shift: bool, command: bool){
+        if alt
+            && !crate::is_control_key(&key_event, &ControlKey::Alt)
+            && !crate::is_control_key(&key_event, &ControlKey::RAlt)
+        {
+            key_event.modifiers.push(ControlKey::Alt.into());
+        }
+        if shift
+            && !crate::is_control_key(&key_event, &ControlKey::Shift)
+            && !crate::is_control_key(&key_event, &ControlKey::RShift)
+        {
+            key_event.modifiers.push(ControlKey::Shift.into());
+        }
+        if ctrl
+            && !crate::is_control_key(&key_event, &ControlKey::Control)
+            && !crate::is_control_key(&key_event, &ControlKey::RControl)
+        {
+            key_event.modifiers.push(ControlKey::Control.into());
+        }
+        if command
+            && !crate::is_control_key(&key_event, &ControlKey::Meta)
+            && !crate::is_control_key(&key_event, &ControlKey::RWin)
+        {
+            key_event.modifiers.push(ControlKey::Meta.into());
+        }
+        if get_key_state(enigo::Key::CapsLock) {
+            key_event.modifiers.push(ControlKey::CapsLock.into());
+        }
+        if self.peer_platform() != "Mac OS" {
+            if get_key_state(enigo::Key::NumLock) && common::valid_for_numlock(&key_event) {
+                key_event.modifiers.push(ControlKey::NumLock.into());
+            }
+        }
     }
 
     fn legacy_keyboard_mode(&mut self, down_or_up: bool, key: RdevKey, evt: Event) {
@@ -1189,38 +1230,8 @@ impl Handler {
             }
         }
 
-        if alt
-            && !crate::is_control_key(&key_event, &ControlKey::Alt)
-            && !crate::is_control_key(&key_event, &ControlKey::RAlt)
-        {
-            key_event.modifiers.push(ControlKey::Alt.into());
-        }
-        if shift
-            && !crate::is_control_key(&key_event, &ControlKey::Shift)
-            && !crate::is_control_key(&key_event, &ControlKey::RShift)
-        {
-            key_event.modifiers.push(ControlKey::Shift.into());
-        }
-        if ctrl
-            && !crate::is_control_key(&key_event, &ControlKey::Control)
-            && !crate::is_control_key(&key_event, &ControlKey::RControl)
-        {
-            key_event.modifiers.push(ControlKey::Control.into());
-        }
-        if command
-            && !crate::is_control_key(&key_event, &ControlKey::Meta)
-            && !crate::is_control_key(&key_event, &ControlKey::RWin)
-        {
-            key_event.modifiers.push(ControlKey::Meta.into());
-        }
-        if get_key_state(enigo::Key::CapsLock) {
-            key_event.modifiers.push(ControlKey::CapsLock.into());
-        }
-        if self.peer_platform() != "Mac OS" {
-            if get_key_state(enigo::Key::NumLock) && common::valid_for_numlock(&key_event) {
-                key_event.modifiers.push(ControlKey::NumLock.into());
-            }
-        }
+        self.legacy_modifiers(&mut key_event, alt, ctrl, shift, command);
+
         if down_or_up == true {
             key_event.down = true;
         }
