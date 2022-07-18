@@ -988,6 +988,9 @@ impl Handler {
         if get_key_state(enigo::Key::CapsLock) {
             key_event.modifiers.push(ControlKey::CapsLock.into());
         }
+        if get_key_state(enigo::Key::NumLock) {
+            key_event.modifiers.push(ControlKey::NumLock.into());
+        }
 
         self.send_key_event(key_event, 1);
     }
@@ -996,7 +999,14 @@ impl Handler {
     //     // translate mode(2): locally generated characters are send to the peer.
     // }
 
-    fn legacy_modifiers(&self, key_event: &mut KeyEvent, alt: bool, ctrl: bool, shift: bool, command: bool){
+    fn legacy_modifiers(
+        &self,
+        key_event: &mut KeyEvent,
+        alt: bool,
+        ctrl: bool,
+        shift: bool,
+        command: bool,
+    ) {
         if alt
             && !crate::is_control_key(&key_event, &ControlKey::Alt)
             && !crate::is_control_key(&key_event, &ControlKey::RAlt)

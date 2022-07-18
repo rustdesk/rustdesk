@@ -597,23 +597,31 @@ fn rdev_key_down_or_up(key: RdevKey, down_or_up: bool) {
 
 fn sync_status(evt: &KeyEvent) {
     let mut en = ENIGO.lock().unwrap();
-    // sync CAPS status
+
+    // remote caps status
     let caps_locking = evt
         .modifiers
         .iter()
         .position(|&r| r == ControlKey::CapsLock.into())
         .is_some();
-    println!(
-        "[*] remote, client: {:?} {:?}",
-        caps_locking,
-        en.get_key_state(enigo::Key::CapsLock)
-    );
+    // remote numpad status
+    let num_locking = evt
+        .modifiers
+        .iter()
+        .position(|&r| r == ControlKey::NumLock.into())
+        .is_some();
+
     if (caps_locking && !en.get_key_state(enigo::Key::CapsLock))
         || (!caps_locking && en.get_key_state(enigo::Key::CapsLock))
     {
-        println!("[*]: Changing status");
         rdev_key_down_or_up(RdevKey::CapsLock, true);
         rdev_key_down_or_up(RdevKey::CapsLock, false);
+    };
+    if (num_locking && !en.get_key_state(enigo::Key::NumLock))
+        || (!num_locking && en.get_key_state(enigo::Key::NumLock))
+    {
+        rdev_key_down_or_up(RdevKey::NumLock, true);
+        rdev_key_down_or_up(RdevKey::NumLock, false);
     };
 }
 
