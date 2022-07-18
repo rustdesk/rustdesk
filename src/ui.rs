@@ -1,20 +1,23 @@
-mod cm;
-#[cfg(feature = "inline")]
-mod inline;
-#[cfg(target_os = "macos")]
-mod macos;
-#[cfg(target_os = "windows")]
-pub mod win_privacy;
-pub mod remote;
-use crate::ui_interface::*;
-use hbb_common::{allow_err, config::PeerConfig, log};
-use sciter::Value;
 use std::{
     collections::HashMap,
     iter::FromIterator,
     sync::{Arc, Mutex},
 };
 
+use sciter::Value;
+
+use hbb_common::{allow_err, config::PeerConfig, log};
+
+use crate::ui_interface::*;
+
+mod cm;
+#[cfg(feature = "inline")]
+mod inline;
+#[cfg(target_os = "macos")]
+mod macos;
+pub mod remote;
+#[cfg(target_os = "windows")]
+pub mod win_privacy;
 lazy_static::lazy_static! {
     // stupid workaround for https://sciter.com/forums/topic/crash-on-latest-tis-mac-sdk-sometimes/
     static ref STUPID_VALUES: Mutex<Vec<Arc<Vec<Value>>>> = Default::default();
@@ -227,7 +230,7 @@ impl UI {
     }
 
     fn get_options(&self) -> Value {
-        let hashmap = get_options();
+        let hashmap: HashMap<String, String> = serde_json::from_str(&get_options()).unwrap();
         let mut m = Value::map();
         for (k, v) in hashmap {
             m.set_item(k, v);
