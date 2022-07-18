@@ -1,5 +1,5 @@
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     ops::Deref,
     sync::{
         atomic::{AtomicBool, AtomicUsize, Ordering},
@@ -57,6 +57,7 @@ type Video = AssetPtr<video_destination>;
 lazy_static::lazy_static! {
     static ref ENIGO: Arc<Mutex<Enigo>> = Arc::new(Mutex::new(Enigo::new()));
     static ref VIDEO: Arc<Mutex<Option<Video>>> = Default::default();
+    static ref TO_RELEASE: Arc<Mutex<HashSet<RdevKey>>> = Arc::new(Mutex::new(HashSet::<RdevKey>::new()));
 }
 
 fn get_key_state(key: enigo::Key) -> bool {
@@ -732,6 +733,9 @@ impl Handler {
     }
 
     fn leave(&mut self) {
+        for key in TO_RELEASE.lock().unwrap().iter() {
+            self.map_keyboard_mode(false, *key)
+        }
         #[cfg(windows)]
         crate::platform::windows::stop_system_key_propagate(false);
         IS_IN.store(false, Ordering::SeqCst);
@@ -986,8 +990,10 @@ impl Handler {
         if get_key_state(enigo::Key::CapsLock) {
             key_event.modifiers.push(ControlKey::CapsLock.into());
         }
-        if get_key_state(enigo::Key::NumLock) {
-            key_event.modifiers.push(ControlKey::NumLock.into());
+        if self.peer_platform() != "Mac OS" {
+            if get_key_state(enigo::Key::NumLock) && common::valid_for_numlock(&key_event) {
+                key_event.modifiers.push(ControlKey::NumLock.into());
+            }
         }
 
         self.send_key_event(key_event, 1);
@@ -1257,6 +1263,11 @@ impl Handler {
         let mode = std::env::var("KEYBOARD_MOAD").unwrap_or(String::from("map"));
         match mode.as_str() {
             "map" => {
+                if down_or_up == true {
+                    TO_RELEASE.lock().unwrap().insert(key);
+                } else {
+                    TO_RELEASE.lock().unwrap().remove(&key);
+                }
                 self.map_keyboard_mode(down_or_up, key);
             }
             "legacy" => self.legacy_keyboard_mode(down_or_up, key, evt),
