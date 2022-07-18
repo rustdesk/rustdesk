@@ -103,7 +103,6 @@ impl Enigo {
         self.tx.send((PyMsg::Char('\0'), true)).ok();
     }
 
- 
     #[inline]
     fn send_pynput(&mut self, key: &Key, is_press: bool) -> bool {
         if unsafe { PYNPUT_EXIT || !PYNPUT_REDAY } {
@@ -112,14 +111,8 @@ impl Enigo {
         if let Key::Layout(c) = key {
             return self.tx.send((PyMsg::Char(*c), is_press)).is_ok();
         }
-        if let Key::Raw(chr) = key {
-            fn string_to_static_str(s: String) -> &'static str {
-                Box::leak(s.into_boxed_str())
-            }
-            return self
-                .tx
-                .send((PyMsg::Str(string_to_static_str(chr.to_string())), is_press))
-                .is_ok();
+        if let Key::Raw(_) = key {
+            return false;
         }
         #[allow(deprecated)]
         let s = match key {

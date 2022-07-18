@@ -450,6 +450,7 @@ pub fn lock_screen() {
             key_event.down = true;
             key_event.set_chr('l' as _);
             key_event.modifiers.push(ControlKey::Meta.into());
+            key_event.mode = 3;
             handle_key(&key_event);
             key_event.down = false;
             handle_key(&key_event);
@@ -462,6 +463,7 @@ pub fn lock_screen() {
             key_event.set_chr('q' as _);
             key_event.modifiers.push(ControlKey::Meta.into());
             key_event.modifiers.push(ControlKey::Control.into());
+            key_event.mode = 3;
             handle_key(&key_event);
             key_event.down = false;
             handle_key(&key_event);
