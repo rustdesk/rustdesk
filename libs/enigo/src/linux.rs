@@ -3,7 +3,6 @@ use libc;
 use crate::{Key, KeyboardControllable, MouseButton, MouseControllable};
 
 use self::libc::{c_char, c_int, c_void, useconds_t};
-use rdev::{simulate, EventType, EventType::*, Key as RdevKey, SimulateError};
 use std::{borrow::Cow, ffi::CString, io::prelude::*, ptr, sync::mpsc, thread, time};
 const CURRENT_WINDOW: c_int = 0;
 const DEFAULT_DELAY: u64 = 12000;
@@ -104,27 +103,7 @@ impl Enigo {
         self.tx.send((PyMsg::Char('\0'), true)).ok();
     }
 
-    fn send_rdev(&mut self, key: &Key, is_press: bool) -> bool {
-        if let Key::Raw(keycode) = key {
-            let event_type = match is_press {
-                // todo: Acccodding to client type
-                true => Box::leak(Box::new(EventType::KeyPress(RdevKey::Unknown(
-                    (*keycode).into(),
-                )))),
-                false => Box::leak(Box::new(EventType::KeyRelease(RdevKey::Unknown(
-                    (*keycode).into(),
-                )))),
-            };
-
-            match simulate(event_type) {
-                Ok(()) => true,
-                Err(SimulateError) => false,
-            }
-        } else {
-            false
-        }
-    }
-
+ 
     #[inline]
     fn send_pynput(&mut self, key: &Key, is_press: bool) -> bool {
         if unsafe { PYNPUT_EXIT || !PYNPUT_REDAY } {
@@ -459,12 +438,9 @@ impl KeyboardControllable for Enigo {
         if self.xdo.is_null() {
             return Ok(());
         }
-        if self.send_rdev(&key, true) {
-            return Ok(());
-        }
-        if self.send_pynput(&key, true) {
-            return Ok(());
-        }
+        // if self.send_pynput(&key, true) {
+        //     return Ok(());
+        // }
         let string = CString::new(&*keysequence(key))?;
         unsafe {
             xdo_send_keysequence_window_down(
@@ -480,14 +456,9 @@ impl KeyboardControllable for Enigo {
         if self.xdo.is_null() {
             return;
         }
-        // todo
-        let keyboard_mode = 1;
-        if keyboard_mode == 1 && self.send_rdev(&key, false) {
-            return;
-        }
-        if self.send_pynput(&key, false) {
-            return;
-        }
+        // if self.send_pynput(&key, false) {
+        //     return;
+        // }
         if let Ok(string) = CString::new(&*keysequence(key)) {
             unsafe {
                 xdo_send_keysequence_window_up(

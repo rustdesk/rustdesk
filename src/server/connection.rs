@@ -419,15 +419,8 @@ impl Connection {
                         handle_mouse(&msg, id);
                     }
                     MessageInput::Key((mut msg, press)) => {
-                        if press {
-                            msg.down = true;
-                        }
+                        // todo: press and down have similar meanings.
                         handle_key(&msg);
-                        let keyboard_mode = 1;
-                        if press && keyboard_mode != 1{
-                            msg.down = false;
-                            handle_key(&msg);
-                        }
                     }
                     MessageInput::BlockOn => {
                         if crate::platform::block_input(true) {

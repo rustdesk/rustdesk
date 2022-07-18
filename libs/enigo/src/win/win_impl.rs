@@ -2,7 +2,6 @@ use self::winapi::ctypes::c_int;
 use self::winapi::shared::{basetsd::ULONG_PTR, minwindef::*, windef::*};
 use self::winapi::um::winbase::*;
 use self::winapi::um::winuser::*;
-use rdev::{simulate, EventType, Key as RdevKey, SimulateError};
 use winapi;
 
 use crate::win::keycodes::*;
@@ -198,11 +197,6 @@ impl KeyboardControllable for Enigo {
     }
 
     fn key_down(&mut self, key: Key) -> crate::ResultType {
-        let keyboard_mode = 1;
-        if keyboard_mode == 1 {
-            self.send_rdev(&key, true);
-            return Ok(());
-        };
         let code = self.key_to_keycode(key);
         if code == 0 || code == 65535 {
             return Err("".into());
@@ -218,11 +212,6 @@ impl KeyboardControllable for Enigo {
     }
 
     fn key_up(&mut self, key: Key) {
-        let keyboard_mode = 1;
-        if keyboard_mode == 1 {
-            self.send_rdev(&key, false);
-            return;
-        };
         keybd_event(KEYEVENTF_KEYUP, self.key_to_keycode(key), 0);
     }
 
@@ -281,27 +270,6 @@ impl Enigo {
 
     fn unicode_key_up(&self, unicode_char: u16) {
         keybd_event(KEYEVENTF_UNICODE | KEYEVENTF_KEYUP, 0, unicode_char);
-    }
-
-    fn send_rdev(&mut self, key: &Key, is_press: bool) -> bool {
-        if let Key::Raw(keycode) = key {
-            let event_type = match is_press {
-                // todo: Acccodding to client type
-                true => Box::leak(Box::new(EventType::KeyPress(RdevKey::Unknown(
-                    (*keycode).into(),
-                )))),
-                false => Box::leak(Box::new(EventType::KeyRelease(RdevKey::Unknown(
-                    (*keycode).into(),
-                )))),
-            };
-
-            match simulate(event_type) {
-                Ok(()) => true,
-                Err(SimulateError) => false,
-            }
-        } else {
-            false
-        }
     }
 
     fn key_to_keycode(&self, key: Key) -> u16 {

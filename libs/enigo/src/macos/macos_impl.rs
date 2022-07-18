@@ -1,5 +1,4 @@
 use core_graphics;
-use rdev::{simulate, EventType, EventType::*, Key as RdevKey, SimulateError};
 // TODO(dustin): use only the things i need
 
 use self::core_graphics::display::*;
@@ -354,11 +353,6 @@ impl KeyboardControllable for Enigo {
     }
 
     fn key_down(&mut self, key: Key) -> crate::ResultType {
-        let keyboard_mode = 1;
-        if keyboard_mode == 1 {
-            self.send_rdev(&key, true);
-            return Ok(());
-        };
         let code = self.key_to_keycode(key);
         if code == u16::MAX {
             return Err("".into()); 
@@ -374,11 +368,6 @@ impl KeyboardControllable for Enigo {
     }
 
     fn key_up(&mut self, key: Key) {
-        let keyboard_mode = 1;
-        if keyboard_mode == 1 {
-            self.send_rdev(&key, true);
-            return Ok(());
-        };
         if let Some(src) = self.event_source.as_ref() {
             if let Ok(event) =
                 CGEvent::new_keyboard_event(src.clone(), self.key_to_keycode(key), false)
@@ -429,27 +418,6 @@ impl Enigo {
         let (x, y_inv) = Self::mouse_location_raw_coords();
         let (_, display_height) = Self::main_display_size();
         (x, (display_height as i32) - y_inv)
-    }
-
-    fn send_rdev(&mut self, key: &Key, is_press: bool) -> bool {
-        if let Key::Raw(keycode) = key {
-            let event_type = match is_press {
-                // todo: Acccodding to client type
-                true => Box::leak(Box::new(EventType::KeyPress(RdevKey::Unknown(
-                    (*keycode).into(),
-                )))),
-                false => Box::leak(Box::new(EventType::KeyRelease(RdevKey::Unknown(
-                    (*keycode).into(),
-                )))),
-            };
-
-            match simulate(event_type) {
-                Ok(()) => true,
-                Err(SimulateError) => false,
-            }
-        } else {
-            false
-        }
     }
 
     fn key_to_keycode(&mut self, key: Key) -> CGKeyCode {

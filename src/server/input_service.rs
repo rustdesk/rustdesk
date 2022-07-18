@@ -3,6 +3,7 @@ use super::*;
 use dispatch::Queue;
 use enigo::{Enigo, Key, KeyboardControllable, MouseButton, MouseControllable};
 use hbb_common::{config::COMPRESS_LEVEL, protobuf::ProtobufEnumOrUnknown};
+use rdev::{simulate, EventType, EventType::*, Key as RdevKey, SimulateError};
 use std::{
     convert::TryFrom,
     sync::atomic::{AtomicBool, Ordering},
@@ -578,24 +579,27 @@ pub fn handle_key(evt: &KeyEvent) {
     handle_key_(evt);
 }
 
-fn handle_key_(evt: &KeyEvent) {
-    if EXITING.load(Ordering::SeqCst) {
-        return;
+fn map_keyboard_map(evt: &KeyEvent) {
+    // map mode(1): Send keycode according to the peer platform.
+    let event_type = match evt.down {
+        true => EventType::KeyPress(RdevKey::Unknown(evt.get_chr())),
+        false => EventType::KeyRelease(RdevKey::Unknown(evt.get_chr())),
+    };
+
+    match simulate(&event_type) {
+        Ok(()) => (),
+        Err(_simulate_error) => {
+            // todo
+            log::error!("rdev could not send {:?}", event_type);
+        }
     }
+    return;
+}
+
+fn legacy_keyboard_map(evt: &KeyEvent) {
     #[cfg(windows)]
     crate::platform::windows::try_change_desktop();
     let mut en = ENIGO.lock().unwrap();
-    let keyboard_mode = 1;
-    if keyboard_mode == 1 {
-        if let Some(key_event::Union::chr(chr)) = evt.union {
-            if evt.down {
-                en.key_down(Key::Raw(chr.try_into().unwrap()));
-            } else {
-                en.key_up(Key::Raw(chr.try_into().unwrap()));
-            }
-        }
-        return;
-    }
     // disable numlock if press home etc when numlock is on,
     // because we will get numpad value (7,8,9 etc) if not
     #[cfg(windows)]
@@ -740,9 +744,67 @@ fn handle_key_(evt: &KeyEvent) {
     }
 }
 
+fn handle_key_(evt: &KeyEvent) {
+    if EXITING.load(Ordering::SeqCst) {
+        return;
+    }
+
+    match evt.mode {
+        1 => {
+            map_keyboard_map(evt);
+        }
+        3 => {
+            legacy_keyboard_map(evt);
+        }
+        _ => {
+            map_keyboard_map(evt);
+        }
+    }
+}
+
 #[tokio::main(flavor = "current_thread")]
 async fn send_sas() -> ResultType<()> {
     let mut stream = crate::ipc::connect(1000, crate::POSTFIX_SERVICE).await?;
     timeout(1000, stream.send(&crate::ipc::Data::SAS)).await??;
     Ok(())
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use rdev::{listen, simulate, Event, EventType, Key};
+    use std::sync::mpsc;
+    use std::thread;
+
+    #[test]
+    fn test_handle_key() {
+        // listen
+        let (tx, rx) = mpsc::channel();
+        std::thread::spawn(move || {
+            std::env::set_var("KEYBOARD_ONLY", "y");
+            let func = move |event: Event| {
+                tx.send(event).ok();
+            };
+            if let Err(error) = listen(func) {
+                println!("Error: {:?}", error);
+            }
+        });
+        // set key/char base on char
+        let mut evt = KeyEvent::new();
+        evt.set_chr(49);
+        evt.mode = 3;
+
+        // press
+        evt.down = true;
+        handle_key(&evt);
+        if let Ok(listen_evt) = rx.recv() {
+            assert_eq!(listen_evt.event_type, EventType::KeyPress(Key::Num1))
+        }
+        // release
+        evt.down = false;
+        handle_key(&evt);
+        if let Ok(listen_evt) = rx.recv() {
+            assert_eq!(listen_evt.event_type, EventType::KeyRelease(Key::Num1))
+        }
+    }
 }
