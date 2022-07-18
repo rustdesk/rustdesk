@@ -984,6 +984,11 @@ impl Handler {
         } else {
             key_event.down = false;
         }
+
+        if get_key_state(enigo::Key::CapsLock) {
+            key_event.modifiers.push(ControlKey::CapsLock.into());
+        }
+
         self.send_key_event(key_event, 1);
     }
 
@@ -1236,7 +1241,7 @@ impl Handler {
             key_event.down = true;
         }
         dbg!(&key_event);
-        self.send_key_event(key_event, 2)
+        self.send_key_event(key_event, 3)
     }
 
     fn key_down_or_up(&mut self, down_or_up: bool, key: RdevKey, evt: Event) {

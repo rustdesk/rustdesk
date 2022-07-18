@@ -579,20 +579,46 @@ pub fn handle_key(evt: &KeyEvent) {
     handle_key_(evt);
 }
 
-fn map_keyboard_map(evt: &KeyEvent) {
-    // map mode(1): Send keycode according to the peer platform.
-    let event_type = match evt.down {
-        true => EventType::KeyPress(RdevKey::Unknown(evt.get_chr())),
-        false => EventType::KeyRelease(RdevKey::Unknown(evt.get_chr())),
-    };
-
-    match simulate(&event_type) {
+fn rdev_simulate(event_type: &EventType) {
+    let delay = std::time::Duration::from_millis(20);
+    match simulate(event_type) {
         Ok(()) => (),
         Err(_simulate_error) => {
             // todo
             log::error!("rdev could not send {:?}", event_type);
         }
     }
+    // Let ths OS catchup (at least MacOS)
+    std::thread::sleep(delay);
+}
+
+fn map_keyboard_map(evt: &KeyEvent) {
+    // map mode(1): Send keycode according to the peer platform.
+    let mut en = ENIGO.lock().unwrap();
+    // sync CAPS status
+    let caps_locking = evt
+        .modifiers
+        .iter()
+        .position(|&r| r == ControlKey::CapsLock.into())
+        .is_some();
+    println!("[*] remote, client: {:?} {:?}", caps_locking, en.get_key_state(enigo::Key::CapsLock));
+    if caps_locking && !en.get_key_state(enigo::Key::CapsLock)
+    {
+        println!("[*]: Changing status");
+        rdev_simulate(&EventType::KeyPress(RdevKey::CapsLock));
+        rdev_simulate(&EventType::KeyRelease(RdevKey::CapsLock));
+    }else if !caps_locking && en.get_key_state(enigo::Key::CapsLock){
+        println!("[*]: Changing status");
+        rdev_simulate(&EventType::KeyPress(RdevKey::CapsLock));
+        rdev_simulate(&EventType::KeyRelease(RdevKey::CapsLock));
+    };
+
+    let event_type = match evt.down {
+        true => EventType::KeyPress(RdevKey::Unknown(evt.get_chr())),
+        false => EventType::KeyRelease(RdevKey::Unknown(evt.get_chr())),
+    };
+
+    rdev_simulate(&event_type);
     return;
 }
 
@@ -791,8 +817,10 @@ mod test {
         });
         // set key/char base on char
         let mut evt = KeyEvent::new();
-        evt.set_chr(49);
-        evt.mode = 3;
+        evt.set_chr(66);
+        evt.mode = 1;
+
+        evt.modifiers.push(ControlKey::CapsLock.into());
 
         // press
         evt.down = true;
