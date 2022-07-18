@@ -1133,6 +1133,10 @@ impl Connection {
                             Some(Instant::now().into()),
                         );
                     }
+                    Some(misc::Union::CloseReason(_)) => {
+                        self.on_close("Peer close", true);
+                        return false;
+                    }
                     _ => {}
                 },
                 _ => {}
