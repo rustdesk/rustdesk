@@ -287,5 +287,18 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Keep RustDesk background service", "保持RustDesk后台服务"),
         ("Ignore Battery Optimizations", "忽略电池优化"),
         ("android_open_battery_optimizations_tip", "如需关闭此功能，请在接下来的RustDesk应用设置页面中，找到并进入 [电源] 页面，取消勾选 [不受限制]"),
+        ("Random Password After Session", "会话结束更新随机密码"),
+        ("Keep", "保持"),
+        ("Update", "更新"),
+        ("Disable", "禁用"),
+        ("Onetime Password", "一次性口令"),
+        ("Verification Method", "密码验证方式"),
+        ("Enable security password", "启用安全密码"),
+        ("Enable random password", "启用随机密码"),
+        ("Enable onetime password", "启用一次性访问功能"),
+        ("Disable onetime password", "禁用一次性访问功能"),
+        ("Activate onetime password", "激活一次性访问功能"),
+        ("Set security password", "设置安全密码"),
+        ("Connection not allowed", "对方不允许连接"),
     ].iter().cloned().collect();
 }

@@ -141,7 +141,7 @@ function adjustBorder() {
     if (el) el.attributes.toggleClass("active", view.windowState == View.WINDOW_FULL_SCREEN);
 }
 
-var svg_checkmark = <svg viewBox="0 0 492 492"><path d="M484 105l-16-17a27 27 0 00-38 0L204 315 62 173c-5-5-12-7-19-7s-14 2-19 7L8 189a27 27 0 000 38l160 160v1l16 16c5 5 12 8 19 8 8 0 14-3 20-8l16-16v-1l245-244a27 27 0 000-38z"/></svg>;
+var svg_checkmark = <svg class="checkmark" viewBox="0 0 492 492"><path d="M484 105l-16-17a27 27 0 00-38 0L204 315 62 173c-5-5-12-7-19-7s-14 2-19 7L8 189a27 27 0 000 38l160 160v1l16 16c5 5 12 8 19 8 8 0 14-3 20-8l16-16v-1l245-244a27 27 0 000-38z"/></svg>;
 var svg_edit = <svg #edit viewBox="0 0 384 384">
     <path d="M0 304v80h80l236-236-80-80zM378 56L328 6c-8-8-22-8-30 0l-39 39 80 80 39-39c8-8 8-22 0-30z"/>
 </svg>;

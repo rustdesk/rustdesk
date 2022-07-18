@@ -537,14 +537,6 @@ pub fn is_setup(name: &str) -> bool {
     name.to_lowercase().ends_with("setdown.exe") || name.to_lowercase().ends_with("安装.exe")
 }
 
-pub fn get_uuid() -> Vec<u8> {
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    if let Ok(id) = machine_uid::get() {
-        return id.into();
-    }
-    Config::get_key_pair().1
-}
-
 pub fn get_custom_rendezvous_server(custom: String) -> String {
     if !custom.is_empty() {
         return custom;
