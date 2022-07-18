@@ -36,6 +36,7 @@ pub type Sender = mpsc::UnboundedSender<(Instant, Arc<Message>)>;
 
 lazy_static::lazy_static! {
     static ref LOGIN_FAILURES: Arc::<Mutex<HashMap<String, (i32, i32, i32)>>> = Default::default();
+    static ref SESSIONS: Arc::<Mutex<HashMap<String, Session>>> = Default::default();
 }
 pub static CLICK_TIME: AtomicI64 = AtomicI64::new(0);
 pub static MOUSE_MOVE_TIME: AtomicI64 = AtomicI64::new(0);
@@ -52,6 +53,14 @@ enum MessageInput {
     Key((KeyEvent, bool)),
     BlockOn,
     BlockOff,
+}
+
+#[derive(Clone, Debug)]
+struct Session {
+    name: String,
+    session_id: u64,
+    last_recv_time: Arc<Mutex<Instant>>,
+    random_password: String,
 }
 
 pub struct Connection {
@@ -81,6 +90,8 @@ pub struct Connection {
     video_ack_required: bool,
     peer_info: (String, String),
     api_server: String,
+    lr: LoginRequest,
+    last_recv_time: Arc<Mutex<Instant>>,
 }
 
 impl Subscriber for ConnInner {
@@ -112,6 +123,7 @@ const H1: Duration = Duration::from_secs(3600);
 const MILLI1: Duration = Duration::from_millis(1);
 const SEND_TIMEOUT_VIDEO: u64 = 12_000;
 const SEND_TIMEOUT_OTHER: u64 = SEND_TIMEOUT_VIDEO * 10;
+const SESSION_TIMEOUT: Duration = Duration::from_secs(30);
 
 impl Connection {
     pub async fn start(
@@ -165,6 +177,8 @@ impl Connection {
             video_ack_required: false,
             peer_info: Default::default(),
             api_server: "".to_owned(),
+            lr: Default::default(),
+            last_recv_time: Arc::new(Mutex::new(Instant::now())),
         };
         #[cfg(not(any(target_os = "android", target_os = "ios")))]
         tokio::spawn(async move {
@@ -224,6 +238,7 @@ impl Connection {
                             msg_out.set_misc(misc);
                             conn.send(msg_out).await;
                             conn.on_close("Close requested from connection manager", false);
+                            SESSIONS.lock().unwrap().remove(&conn.lr.my_id);
                             break;
                         }
                         ipc::Data::ChatMessage{text} => {
@@ -317,6 +332,7 @@ impl Connection {
                             },
                             Ok(bytes) => {
                                 last_recv_time = Instant::now();
+                                *conn.last_recv_time.lock().unwrap() = Instant::now();
                                 if let Ok(msg_in) = Message::parse_from_bytes(&bytes) {
                                     if !conn.on_message(msg_in).await {
                                         break;
@@ -780,38 +796,77 @@ impl Connection {
         self.tx_input.send(MessageInput::Key((msg, press))).ok();
     }
 
-    fn validate_password(&mut self, lr_password: Vec<u8>) -> bool {
-        let validate = |password: String| {
-            if password.len() == 0 {
-                return false;
-            }
-            let mut hasher = Sha256::new();
-            hasher.update(password);
-            hasher.update(&self.hash.salt);
-            let mut hasher2 = Sha256::new();
-            hasher2.update(&hasher.finalize()[..]);
-            hasher2.update(&self.hash.challenge);
-            hasher2.finalize()[..] == lr_password[..]
-        };
+    fn validate_one_password(&self, password: String) -> bool {
+        if password.len() == 0 {
+            return false;
+        }
+        let mut hasher = Sha256::new();
+        hasher.update(password);
+        hasher.update(&self.hash.salt);
+        let mut hasher2 = Sha256::new();
+        hasher2.update(&hasher.finalize()[..]);
+        hasher2.update(&self.hash.challenge);
+        hasher2.finalize()[..] == self.lr.password[..]
+    }
+
+    fn validate_password(&mut self) -> bool {
         if password::security_enabled() {
-            if validate(Config::get_security_password()) {
+            if self.validate_one_password(Config::get_security_password()) {
                 return true;
             }
         }
         if password::random_password_valid() {
-            if validate(password::random_password()) {
+            let password = password::random_password();
+            if self.validate_one_password(password.clone()) {
                 if password::onetime_password_activated() {
                     password::set_onetime_password_activated(false);
                 }
+                SESSIONS.lock().unwrap().insert(
+                    self.lr.my_id.clone(),
+                    Session {
+                        name: self.lr.my_name.clone(),
+                        session_id: self.lr.session_id,
+                        last_recv_time: self.last_recv_time.clone(),
+                        random_password: password,
+                    },
+                );
                 return true;
             }
         }
+        false
+    }
 
+    fn is_of_recent_session(&mut self) -> bool {
+        let session = SESSIONS
+            .lock()
+            .unwrap()
+            .get(&self.lr.my_id)
+            .map(|s| s.to_owned());
+        if let Some(session) = session {
+            if session.name == self.lr.my_name
+                && session.session_id == self.lr.session_id
+                && !self.lr.password.is_empty()
+                && self.validate_one_password(session.random_password.clone())
+                && session.last_recv_time.lock().unwrap().elapsed() < SESSION_TIMEOUT
+            {
+                SESSIONS.lock().unwrap().insert(
+                    self.lr.my_id.clone(),
+                    Session {
+                        name: self.lr.my_name.clone(),
+                        session_id: self.lr.session_id,
+                        last_recv_time: self.last_recv_time.clone(),
+                        random_password: session.random_password,
+                    },
+                );
+                return true;
+            }
+        }
         false
     }
 
     async fn on_message(&mut self, msg: Message) -> bool {
         if let Some(message::Union::LoginRequest(lr)) = msg.union {
+            self.lr = lr.clone();
             if let Some(o) = lr.option.as_ref() {
                 self.update_option(o).await;
                 if let Some(q) = o.video_codec_state.clone().take() {
@@ -882,6 +937,12 @@ impl Connection {
             }
             if !crate::is_ip(&lr.username) && lr.username != Config::get_id() {
                 self.send_login_error("Offline").await;
+            } else if self.is_of_recent_session() {
+                self.try_start_cm(lr.my_id, lr.my_name, true);
+                self.send_logon_response().await;
+                if self.port_forward_socket.is_some() {
+                    return false;
+                }
             } else if lr.password.is_empty() {
                 self.try_start_cm(lr.my_id, lr.my_name, false);
             } else {
@@ -901,7 +962,7 @@ impl Connection {
                         .await;
                 } else if time == failure.0 && failure.1 > 6 {
                     self.send_login_error("Please try 1 minute later").await;
-                } else if !self.validate_password(lr.password.clone()) {
+                } else if !self.validate_password() {
                     if failure.0 == time {
                         failure.1 += 1;
                         failure.2 += 1;
@@ -1135,6 +1196,7 @@ impl Connection {
                     }
                     Some(misc::Union::CloseReason(_)) => {
                         self.on_close("Peer close", true);
+                        SESSIONS.lock().unwrap().remove(&self.lr.my_id);
                         return false;
                     }
                     _ => {}
