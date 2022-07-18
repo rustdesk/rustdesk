@@ -420,7 +420,14 @@ impl Connection {
                     }
                     MessageInput::Key((mut msg, press)) => {
                         // todo: press and down have similar meanings.
+                        if press && msg.mode == 3 {
+                            msg.down = true;
+                        }
                         handle_key(&msg);
+                        if press && msg.mode == 3 {
+                            msg.down = false;
+                            handle_key(&msg);
+                        }
                     }
                     MessageInput::BlockOn => {
                         if crate::platform::block_input(true) {

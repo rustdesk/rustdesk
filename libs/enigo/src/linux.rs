@@ -438,9 +438,9 @@ impl KeyboardControllable for Enigo {
         if self.xdo.is_null() {
             return Ok(());
         }
-        // if self.send_pynput(&key, true) {
-        //     return Ok(());
-        // }
+        if self.send_pynput(&key, true) {
+            return Ok(());
+        }
         let string = CString::new(&*keysequence(key))?;
         unsafe {
             xdo_send_keysequence_window_down(
@@ -456,9 +456,9 @@ impl KeyboardControllable for Enigo {
         if self.xdo.is_null() {
             return;
         }
-        // if self.send_pynput(&key, false) {
-        //     return;
-        // }
+        if self.send_pynput(&key, false) {
+            return;
+        }
         if let Ok(string) = CString::new(&*keysequence(key)) {
             unsafe {
                 xdo_send_keysequence_window_up(
