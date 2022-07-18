@@ -286,5 +286,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Language", "Nyelv"),
         ("Keep RustDesk background service", ""),
         ("Ignore Battery Optimizations", ""),
+        ("android_open_battery_optimizations_tip", ""),
     ].iter().cloned().collect();
 }
