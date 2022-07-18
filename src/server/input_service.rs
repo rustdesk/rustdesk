@@ -579,21 +579,23 @@ pub fn handle_key(evt: &KeyEvent) {
     handle_key_(evt);
 }
 
-fn rdev_simulate(event_type: &EventType) {
+fn rdev_key_down_or_up(key: RdevKey, down_or_up: bool) {
+    let event_type = match down_or_up {
+        true => EventType::KeyPress(key),
+        false => EventType::KeyRelease(key),
+    };
     let delay = std::time::Duration::from_millis(20);
-    match simulate(event_type) {
+    match simulate(&event_type) {
         Ok(()) => (),
         Err(_simulate_error) => {
-            // todo
-            log::error!("rdev could not send {:?}", event_type);
+            println!("We could not send {:?}", &event_type);
         }
     }
     // Let ths OS catchup (at least MacOS)
     std::thread::sleep(delay);
 }
 
-fn map_keyboard_map(evt: &KeyEvent) {
-    // map mode(1): Send keycode according to the peer platform.
+fn sync_status(evt: &KeyEvent) {
     let mut en = ENIGO.lock().unwrap();
     // sync CAPS status
     let caps_locking = evt
@@ -601,24 +603,24 @@ fn map_keyboard_map(evt: &KeyEvent) {
         .iter()
         .position(|&r| r == ControlKey::CapsLock.into())
         .is_some();
-    println!("[*] remote, client: {:?} {:?}", caps_locking, en.get_key_state(enigo::Key::CapsLock));
-    if caps_locking && !en.get_key_state(enigo::Key::CapsLock)
+    println!(
+        "[*] remote, client: {:?} {:?}",
+        caps_locking,
+        en.get_key_state(enigo::Key::CapsLock)
+    );
+    if (caps_locking && !en.get_key_state(enigo::Key::CapsLock))
+        || (!caps_locking && en.get_key_state(enigo::Key::CapsLock))
     {
         println!("[*]: Changing status");
-        rdev_simulate(&EventType::KeyPress(RdevKey::CapsLock));
-        rdev_simulate(&EventType::KeyRelease(RdevKey::CapsLock));
-    }else if !caps_locking && en.get_key_state(enigo::Key::CapsLock){
-        println!("[*]: Changing status");
-        rdev_simulate(&EventType::KeyPress(RdevKey::CapsLock));
-        rdev_simulate(&EventType::KeyRelease(RdevKey::CapsLock));
+        rdev_key_down_or_up(RdevKey::CapsLock, true);
+        rdev_key_down_or_up(RdevKey::CapsLock, false);
     };
+}
 
-    let event_type = match evt.down {
-        true => EventType::KeyPress(RdevKey::Unknown(evt.get_chr())),
-        false => EventType::KeyRelease(RdevKey::Unknown(evt.get_chr())),
-    };
-
-    rdev_simulate(&event_type);
+fn map_keyboard_map(evt: &KeyEvent) {
+    // map mode(1): Send keycode according to the peer platform.
+    sync_status(evt);
+    rdev_key_down_or_up(RdevKey::Unknown(evt.get_chr()), evt.down);
     return;
 }
 
