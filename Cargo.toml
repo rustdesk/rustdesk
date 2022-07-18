@@ -51,9 +51,9 @@ samplerate = { version = "0.2", optional = true }
 async-trait = "0.1"
 uuid = { version = "1.0", features = ["v4"] }
 clap = "3.0"
-rpassword = "6.0"
+rpassword = "7.0"
 base64 = "0.13"
-sysinfo = "0.23"
+sysinfo = "0.24"
 num_cpus = "1.13"
 default-net = "0.11.0"
 wol-rs = "0.9.1"
@@ -78,9 +78,8 @@ arboard = "2.0"
 
 [target.'cfg(target_os = "windows")'.dependencies]
 #systray = { git = "https://github.com/open-trade/systray-rs" }
-trayicon = { version = "0.1", features = ["winit"] }
-# > 0.25 not work with trayicon
-winit = "0.25"
+trayicon = { git = "https://github.com/open-trade/trayicon-rs", features = ["winit"] }
+winit = "0.26"
 winapi = { version = "0.3", features = ["winuser"] }
 winreg = "0.10"
 windows-service = "0.4"
