@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:settings_ui/settings_ui.dart';
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -24,13 +26,100 @@ class SettingsPage extends StatefulWidget implements PageShape {
   _SettingsState createState() => _SettingsState();
 }
 
-class _SettingsState extends State<SettingsPage> {
+class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
   static const url = 'https://rustdesk.com/';
+  final _hasIgnoreBattery = androidVersion >= 26;
+  var _ignoreBatteryOpt = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    if (_hasIgnoreBattery) {
+      updateIgnoreBatteryStatus();
+    }
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      updateIgnoreBatteryStatus();
+    }
+  }
+
+  Future<bool> updateIgnoreBatteryStatus() async {
+    final res = await PermissionManager.check("ignore_battery_optimizations");
+    if (_ignoreBatteryOpt != res) {
+      setState(() {
+        _ignoreBatteryOpt = res;
+      });
+      return true;
+    } else {
+      return false;
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     Provider.of<FfiModel>(context);
     final username = getUsername();
+    final enableAbr = FFI.getByName("option", "enable-abr") != 'N';
+    final enhancementsTiles = [
+      SettingsTile.switchTile(
+        title: Text(translate('Adaptive Bitrate') + '(beta)'),
+        initialValue: enableAbr,
+        onToggle: (v) {
+          final msg = Map()
+            ..["name"] = "enable-abr"
+            ..["value"] = "";
+          if (!v) {
+            msg["value"] = "N";
+          }
+          FFI.setByName("option", json.encode(msg));
+          setState(() {});
+        },
+      )
+    ];
+    if (_hasIgnoreBattery) {
+      enhancementsTiles.insert(
+          0,
+          SettingsTile.switchTile(
+              initialValue: _ignoreBatteryOpt,
+              title: Text(translate('Keep RustDesk background service')),
+              description:
+                  Text('* ${translate('Ignore Battery Optimizations')}'),
+              onToggle: (v) async {
+                if (v) {
+                  PermissionManager.request("ignore_battery_optimizations");
+                } else {
+                  final res = await DialogManager.show<bool>(
+                      (setState, close) => CustomAlertDialog(
+                            title: Text(translate("Open System Setting")),
+                            content: Text(translate(
+                                "android_open_battery_optimizations_tip")),
+                            actions: [
+                              TextButton(
+                                  onPressed: () => close(),
+                                  child: Text(translate("Cancel"))),
+                              ElevatedButton(
+                                  onPressed: () => close(true),
+                                  child:
+                                      Text(translate("Open System Setting"))),
+                            ],
+                          ));
+                  if (res == true) {
+                    PermissionManager.request("application_details_settings");
+                  }
+                }
+              }));
+    }
+
     return SettingsList(
       sections: [
         SettingsSection(
@@ -51,17 +140,17 @@ class _SettingsState extends State<SettingsPage> {
             ),
           ],
         ),
-        SettingsSection(
-          title: Text(translate("Settings")),
-          tiles: [
-            SettingsTile.navigation(
+        SettingsSection(title: Text(translate("Settings")), tiles: [
+          SettingsTile.navigation(
               title: Text(translate('ID/Relay Server')),
               leading: Icon(Icons.cloud),
               onPressed: (context) {
                 showServerSettings();
-              },
-            ),
-          ],
+              })
+        ]),
+        SettingsSection(
+          title: Text(translate("Enhancements")),
+          tiles: enhancementsTiles,
         ),
         SettingsSection(
           title: Text(translate("About")),

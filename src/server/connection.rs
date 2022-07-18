@@ -492,7 +492,7 @@ impl Connection {
                     res = self.stream.next() => {
                         if let Some(res) = res {
                             last_recv_time = Instant::now();
-                            timeout(SEND_TIMEOUT_OTHER, forward.send(res?.into())).await??;
+                            timeout(SEND_TIMEOUT_OTHER, forward.send(res?)).await??;
                         } else {
                             bail!("Stream reset by the peer");
                         }

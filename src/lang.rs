@@ -8,6 +8,7 @@ mod de;
 mod en;
 mod eo;
 mod es;
+mod hu;
 mod fr;
 mod id;
 mod it;
@@ -28,6 +29,7 @@ lazy_static::lazy_static! {
             ("tw", "繁體中文"),
             ("pt", "Português"),
             ("es", "Español"),
+            ("hu", "Magyar"),
             ("ru", "Русский"),
             ("sk", "Slovenčina"),
             ("id", "Indonesia"),
@@ -68,6 +70,7 @@ pub fn translate_locale(name: String, locale: &str) -> String {
         "tw" => tw::T.deref(),
         "de" => de::T.deref(),
         "es" => es::T.deref(),
+        "hu" => hu::T.deref(),
         "ru" => ru::T.deref(),
         "eo" => eo::T.deref(),
         "id" => id::T.deref(),

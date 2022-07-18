@@ -541,6 +541,16 @@ impl UI {
         PeerConfig::remove(&id);
     }
 
+    fn remove_discovered(&mut self, id: String) {
+        let mut peers = config::LanPeers::load().peers;
+        peers.retain(|x| x.id != id);
+        config::LanPeers::store(&peers);
+    }
+
+    fn send_wol(&mut self, id: String) {
+        crate::lan::send_wol(id)
+    }
+
     fn new_remote(&mut self, id: String, remote_type: String) {
         let mut lock = self.0.lock().unwrap();
         let args = vec![format!("--{}", remote_type), id.clone()];
@@ -685,12 +695,12 @@ impl UI {
 
     fn discover(&self) {
         std::thread::spawn(move || {
-            allow_err!(crate::rendezvous_mediator::discover());
+            allow_err!(crate::lan::discover());
         });
     }
 
     fn get_lan_peers(&self) -> String {
-        config::LanPeers::load().peers
+        serde_json::to_string(&config::LanPeers::load().peers).unwrap_or_default()
     }
 
     fn get_uuid(&self) -> String {
@@ -780,7 +790,9 @@ impl sciter::EventHandler for UI {
         fn closing(i32, i32, i32, i32);
         fn get_size();
         fn new_remote(String, bool);
+        fn send_wol(String);
         fn remove_peer(String);
+        fn remove_discovered(String);
         fn get_connect_status();
         fn get_mouse_time();
         fn check_mouse_time();

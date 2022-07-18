@@ -127,6 +127,7 @@ pub enum Data {
     ClipbaordFile(ClipbaordFile),
     ClipboardFileEnabled(bool),
     PrivacyModeState((i32, PrivacyModeState)),
+    TestRendezvousServer,
 }
 
 #[tokio::main(flavor = "current_thread")]
@@ -286,7 +287,11 @@ async fn handle(data: Data, stream: &mut Connection) {
                 } else if name == "salt" {
                     value = Some(Config::get_salt());
                 } else if name == "rendezvous_server" {
-                    value = Some(Config::get_rendezvous_server());
+                    value = Some(format!(
+                        "{},{}",
+                        Config::get_rendezvous_server(),
+                        Config::get_rendezvous_servers().join(",")
+                    ));
                 } else if name == "rendezvous_servers" {
                     value = Some(Config::get_rendezvous_servers().join(","));
                 } else {
@@ -336,7 +341,9 @@ async fn handle(data: Data, stream: &mut Connection) {
                     .await
             );
         }
-
+        Data::TestRendezvousServer => {
+            crate::test_rendezvous_server();
+        }
         _ => {}
     }
 }
@@ -520,11 +527,17 @@ pub fn get_password() -> String {
     }
 }
 
-pub async fn get_rendezvous_server(ms_timeout: u64) -> String {
+pub async fn get_rendezvous_server(ms_timeout: u64) -> (String, Vec<String>) {
     if let Ok(Some(v)) = get_config_async("rendezvous_server", ms_timeout).await {
-        v
+        let mut urls = v.split(",");
+        let a = urls.next().unwrap_or_default().to_owned();
+        let b: Vec<String> = urls.map(|x| x.to_owned()).collect();
+        (a, b)
     } else {
-        Config::get_rendezvous_server()
+        (
+            Config::get_rendezvous_server(),
+            Config::get_rendezvous_servers(),
+        )
     }
 }
 
@@ -634,5 +647,12 @@ pub async fn set_socks(value: config::Socks5Server) -> ResultType<()> {
         .await?
         .send(&Data::Socks(Some(value)))
         .await?;
+    Ok(())
+}
+
+#[tokio::main(flavor = "current_thread")]
+pub async fn test_rendezvous_server() -> ResultType<()> {
+    let mut c = connect(1000, "").await?;
+    c.send(&Data::TestRendezvousServer).await?;
     Ok(())
 }

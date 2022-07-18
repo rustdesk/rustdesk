@@ -260,7 +260,12 @@ class PermissionManager {
   static Timer? _timer;
   static var _current = "";
 
-  static final permissions = ["audio", "file"];
+  static final permissions = [
+    "audio",
+    "file",
+    "ignore_battery_optimizations",
+    "application_details_settings"
+  ];
 
   static bool isWaitingFile() {
     if (_completer != null) {
@@ -279,9 +284,12 @@ class PermissionManager {
     if (!permissions.contains(type))
       return Future.error("Wrong permission!$type");
 
+    FFI.invokeMethod("request_permission", type);
+    if (type == "ignore_battery_optimizations") {
+      return Future.value(false);
+    }
     _current = type;
     _completer = Completer<bool>();
-    FFI.invokeMethod("request_permission", type);
 
     // timeout
     _timer?.cancel();

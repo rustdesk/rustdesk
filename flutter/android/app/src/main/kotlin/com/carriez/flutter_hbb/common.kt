@@ -2,19 +2,25 @@ package com.carriez.flutter_hbb
 
 import android.annotation.SuppressLint
 import android.content.Context
+import android.content.Intent
 import android.media.AudioRecord
 import android.media.AudioRecord.READ_BLOCKING
 import android.media.MediaCodecList
 import android.media.MediaFormat
+import android.net.Uri
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
-import android.util.Log
+import android.os.PowerManager
+import android.provider.Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS
+import android.provider.Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS
 import androidx.annotation.RequiresApi
+import androidx.core.content.ContextCompat.getSystemService
 import com.hjq.permissions.Permission
 import com.hjq.permissions.XXPermissions
 import java.nio.ByteBuffer
 import java.util.*
+
 
 @SuppressLint("ConstantLocale")
 val LOCAL_NAME = Locale.getDefault().toString()
@@ -38,8 +44,31 @@ fun testVP9Support(): Boolean {
     return res != null
 }
 
+@RequiresApi(Build.VERSION_CODES.M)
 fun requestPermission(context: Context, type: String) {
     val permission = when (type) {
+        "ignore_battery_optimizations" -> {
+            try {
+                context.startActivity(Intent(ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
+                    data = Uri.parse("package:" + context.packageName)
+                })
+            } catch (e:Exception) {
+                e.printStackTrace()
+            }
+            return
+        }
+        "application_details_settings" -> {
+            try {
+                context.startActivity(Intent().apply {
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    action = "android.settings.APPLICATION_DETAILS_SETTINGS"
+                    data = Uri.parse("package:" + context.packageName)
+                })
+            } catch (e:Exception) {
+                e.printStackTrace()
+            }
+            return
+        }
         "audio" -> {
             Permission.RECORD_AUDIO
         }
@@ -52,7 +81,7 @@ fun requestPermission(context: Context, type: String) {
     }
     XXPermissions.with(context)
         .permission(permission)
-        .request { permissions, all ->
+        .request { _, all ->
             if (all) {
                 Handler(Looper.getMainLooper()).post {
                     MainActivity.flutterMethodChannel.invokeMethod(
@@ -64,8 +93,13 @@ fun requestPermission(context: Context, type: String) {
         }
 }
 
+@RequiresApi(Build.VERSION_CODES.M)
 fun checkPermission(context: Context, type: String): Boolean {
     val permission = when (type) {
+        "ignore_battery_optimizations" -> {
+            val pw = context.getSystemService(Context.POWER_SERVICE) as PowerManager
+            return pw.isIgnoringBatteryOptimizations(context.packageName)
+        }
         "audio" -> {
             Permission.RECORD_AUDIO
         }

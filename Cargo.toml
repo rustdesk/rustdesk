@@ -51,11 +51,13 @@ samplerate = { version = "0.2", optional = true }
 async-trait = "0.1"
 uuid = { version = "1.0", features = ["v4"] }
 clap = "3.0"
-rpassword = "6.0"
+rpassword = "7.0"
 base64 = "0.13"
-sysinfo = "0.23"
+sysinfo = "0.24"
 num_cpus = "1.13"
 bytes = "1.1"
+default-net = "0.11.0"
+wol-rs = "0.9.1"
 
 [target.'cfg(not(target_os = "linux"))'.dependencies]
 reqwest = { version = "0.11", features = ["json", "rustls-tls"], default-features=false }
@@ -77,9 +79,8 @@ arboard = "2.0"
 
 [target.'cfg(target_os = "windows")'.dependencies]
 #systray = { git = "https://github.com/open-trade/systray-rs" }
-trayicon = { version = "0.1", features = ["winit"] }
-# > 0.25 not work with trayicon
-winit = "0.25"
+trayicon = { git = "https://github.com/open-trade/trayicon-rs", features = ["winit"] }
+winit = "0.26"
 winapi = { version = "0.3", features = ["winuser"] }
 winreg = "0.10"
 windows-service = "0.4"
@@ -102,10 +103,10 @@ async-process = "1.3"
 
 [target.'cfg(target_os = "android")'.dependencies]
 android_logger = "0.11"
-jni = "0.19.0"
+jni = "0.19"
 
 [target.'cfg(any(target_os = "android", target_os = "ios"))'.dependencies]
-flutter_rust_bridge = "1.30.0"
+flutter_rust_bridge = "=1.30.0"
 
 [workspace]
 members = ["libs/scrap", "libs/hbb_common", "libs/enigo", "libs/clipboard", "libs/virtual_display", "libs/simple_rc"]
@@ -123,7 +124,7 @@ winapi = { version = "0.3", features = [ "winnt" ] }
 cc = "1.0"
 hbb_common = { path = "libs/hbb_common" }
 simple_rc = { path = "libs/simple_rc", optional = true }
-flutter_rust_bridge_codegen = "1.30.0"
+flutter_rust_bridge_codegen = "=1.30.0"
 
 [dev-dependencies]
 hound = "3.4"

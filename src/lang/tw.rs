@@ -284,5 +284,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("In privacy mode", "開啟隱私模式"),
         ("Out privacy mode", "退出隱私模式"),
         ("Language", "語言"),
+        ("Keep RustDesk background service", "保持RustDesk後台服務"),
+        ("Ignore Battery Optimizations", "忽略電池優化"),
+        ("android_open_battery_optimizations_tip", "如需關閉此功能，請在接下來的RustDesk應用設置頁面中，找到並進入 [電源] 頁面，取消勾選 [不受限制]"),
     ].iter().cloned().collect();
 }
