@@ -990,10 +990,8 @@ impl Handler {
         if get_key_state(enigo::Key::CapsLock) {
             key_event.modifiers.push(ControlKey::CapsLock.into());
         }
-        if self.peer_platform() != "Mac OS" {
-            if get_key_state(enigo::Key::NumLock) && common::valid_for_numlock(&key_event) {
-                key_event.modifiers.push(ControlKey::NumLock.into());
-            }
+        if get_key_state(enigo::Key::NumLock) {
+            key_event.modifiers.push(ControlKey::NumLock.into());
         }
 
         self.send_key_event(key_event, 1);

@@ -810,9 +810,8 @@ async fn send_sas() -> ResultType<()> {
 #[cfg(test)]
 mod test {
     use super::*;
-    use rdev::{listen, simulate, Event, EventType, Key};
+    use rdev::{listen, Event, EventType, Key};
     use std::sync::mpsc;
-    use std::thread;
 
     #[test]
     fn test_handle_key() {
@@ -846,5 +845,13 @@ mod test {
         if let Ok(listen_evt) = rx.recv() {
             assert_eq!(listen_evt.event_type, EventType::KeyRelease(Key::Num1))
         }
+    }
+    #[test]
+    fn test_get_key_state() {
+        let mut en = ENIGO.lock().unwrap();
+        println!(
+            "[*] test_get_key_state: {:?}",
+            en.get_key_state(enigo::Key::NumLock)
+        );
     }
 }
