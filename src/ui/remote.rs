@@ -921,14 +921,14 @@ impl Handler {
             key_event.set_control_key(ControlKey::CtrlAltDel);
             // todo
             key_event.down = true;
-            self.send_key_event(key_event, 3);
+            self.send_key_event(key_event, 0);
         } else {
             let mut key_event = KeyEvent::new();
             key_event.set_control_key(ControlKey::Delete);
             self.legacy_modifiers(&mut key_event, true, true, false, false);
             // todo
             key_event.press = true;
-            self.send_key_event(key_event, 3);
+            self.send_key_event(key_event, 0);
         }
     }
 
@@ -937,7 +937,7 @@ impl Handler {
         key_event.set_control_key(ControlKey::LockScreen);
         // todo
         key_event.down = true;
-        self.send_key_event(key_event, 3);
+        self.send_key_event(key_event, 0);
     }
 
     fn transfer_file(&mut self) {
@@ -965,6 +965,7 @@ impl Handler {
         self.send(Data::Message(msg_out));
     }
 
+    #[allow(dead_code)]
     fn convert_numpad_keys(&mut self, key: RdevKey) -> RdevKey {
         if get_key_state(enigo::Key::NumLock) {
             return key;
@@ -1000,13 +1001,9 @@ impl Handler {
         } else {
             rdev::macos_keycode_from_key(key).unwrap_or_default().into()
         };
-        key_event.set_chr(keycode);
 
-        if down_or_up == true {
-            key_event.down = true;
-        } else {
-            key_event.down = false;
-        }
+        key_event.set_chr(keycode);
+        key_event.down = down_or_up;
 
         if get_key_state(enigo::Key::CapsLock) {
             key_event.modifiers.push(ControlKey::CapsLock.into());
@@ -1065,7 +1062,7 @@ impl Handler {
     }
 
     fn legacy_keyboard_mode(&mut self, down_or_up: bool, key: RdevKey, evt: Event) {
-        // legacy mode(3): Generate characters locally, look for keycode on other side.
+        // legacy mode(0): Generate characters locally, look for keycode on other side.
         let peer = self.peer_platform();
         let is_win = peer == "Windows";
 
@@ -1273,12 +1270,12 @@ impl Handler {
             key_event.down = true;
         }
         dbg!(&key_event);
-        self.send_key_event(key_event, 3)
+        self.send_key_event(key_event, 0)
     }
 
     fn key_down_or_up(&mut self, down_or_up: bool, key: RdevKey, evt: Event) {
         // Call different functions according to keyboard mode.
-        let mode = std::env::var("KEYBOARD_MOAD").unwrap_or(String::from("map"));
+        let mode = std::env::var("KEYBOARD_MOAD").unwrap_or(String::from("legacy"));
         match mode.as_str() {
             "map" => {
                 if down_or_up == true {
@@ -1289,9 +1286,7 @@ impl Handler {
                 self.map_keyboard_mode(down_or_up, key);
             }
             "legacy" => self.legacy_keyboard_mode(down_or_up, key, evt),
-            _ => {
-                self.map_keyboard_mode(down_or_up, key);
-            }
+            _ => self.legacy_keyboard_mode(down_or_up, key, evt),
         }
     }
 
