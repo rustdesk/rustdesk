@@ -965,22 +965,42 @@ impl Handler {
         self.send(Data::Message(msg_out));
     }
 
+    fn convert_numpad_keys(&mut self, key: &RdevKey) -> &RdevKey {
+        if get_key_state(enigo::Key::NumLock) {
+            return;
+        }
+        match key {
+            &RdevKey::Num0 => &RdevKey::Insert,
+            &RdevKey::KpDecimal => &RdevKey::Delete,
+            &RdevKey::Num1 => &RdevKey::End,
+            &RdevKey::Num2 => &RdevKey::DownArrow,
+            &RdevKey::Num3 => &RdevKey::PageDown,
+            &RdevKey::Num4 => &RdevKey::LeftArrow,
+            &RdevKey::Num5 => &RdevKey::Clear,
+            &RdevKey::Num6 => &RdevKey::RightArrow,
+            &RdevKey::Num7 => &RdevKey::Home,
+            &RdevKey::Num8 => &RdevKey::UpArrow,
+            &RdevKey::Num9 => &RdevKey::PageUp,
+        }
+    }
+
     fn map_keyboard_mode(&mut self, down_or_up: bool, key: RdevKey) {
         // map mode(1): Send keycode according to the peer platform.
         let peer = self.peer_platform();
 
         let mut key_event = KeyEvent::new();
         // According to peer platform.
-        if peer == "Linux" {
-            let keycode: u32 = rdev::linux_keycode_from_key(key).unwrap_or_default().into();
-            key_event.set_chr(keycode);
+        let keycode: u32 = if peer == "Linux" {
+            rdev::linux_keycode_from_key(key).unwrap_or_default().into()
         } else if peer == "Windows" {
-            let keycode: u32 = rdev::win_keycode_from_key(key).unwrap_or_default().into();
-            key_event.set_chr(keycode);
+            #[cfg(not(windows))]
+            self.convert_numpad_keys(&key);
+            rdev::win_keycode_from_key(key).unwrap_or_default().into()
         } else if peer == "Mac OS" {
-            let keycode: u32 = rdev::macos_keycode_from_key(key).unwrap_or_default().into();
-            key_event.set_chr(keycode);
-        }
+            rdev::macos_keycode_from_key(key).unwrap_or_default().into()
+        };
+        key_event.set_chr(keycode);
+
         if down_or_up == true {
             key_event.down = true;
         } else {
