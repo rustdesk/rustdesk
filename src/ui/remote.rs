@@ -41,7 +41,6 @@ use hbb_common::{
         time::{self, Duration, Instant, Interval},
     },
     Stream,
-    protobuf::ProtobufEnumOrUnknown,
 };
 use hbb_common::{config::TransferSerde, fs::TransferJobMeta};
 use rdev::{Event, EventType::*, Key as RdevKey};
@@ -959,7 +958,7 @@ impl Handler {
 
     fn send_key_event(&mut self, mut evt: KeyEvent, keyboard_mode: KeyboardMode) {
         // mode: legacy(0), map(1), translate(2), auto(3)
-        evt.mode = ProtobufEnumOrUnknown::new(keyboard_mode);
+        evt.mode = keyboard_mode.into();
         let mut msg_out = Message::new();
         msg_out.set_key_event(evt);
         log::info!("{:?}", msg_out);

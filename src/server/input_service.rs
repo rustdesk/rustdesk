@@ -447,11 +447,14 @@ pub fn lock_screen() {
         // loginctl lock-session also not work, they both work run rustdesk from cmd
         std::thread::spawn(|| {
             let mut key_event = KeyEvent::new();
-            key_event.down = true;
+            
             key_event.set_chr('l' as _);
             key_event.modifiers.push(ControlKey::Meta.into());
-            key_event.mode = KeyboardMode::Legacy;
+            key_event.mode = KeyboardMode::Legacy.into();
+
+            key_event.down = true;
             handle_key(&key_event);
+
             key_event.down = false;
             handle_key(&key_event);
         });
@@ -459,11 +462,13 @@ pub fn lock_screen() {
         // CGSession -suspend not real lock screen, it is user switch
         std::thread::spawn(|| {
             let mut key_event = KeyEvent::new();
-            key_event.down = true;
+            
             key_event.set_chr('q' as _);
             key_event.modifiers.push(ControlKey::Meta.into());
             key_event.modifiers.push(ControlKey::Control.into());
-            key_event.mode = KeyboardMode::Legacy;
+            key_event.mode = KeyboardMode::Legacy.into();
+
+            key_event.down = true;
             handle_key(&key_event);
             key_event.down = false;
             handle_key(&key_event);
@@ -829,7 +834,7 @@ mod test {
         // set key/char base on char
         let mut evt = KeyEvent::new();
         evt.set_chr(66);
-        evt.mode = 1;
+        evt.mode = ProtobufEnum::new(KeyboardMode::Legacy);
 
         evt.modifiers.push(ControlKey::CapsLock.into());
 
