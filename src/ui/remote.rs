@@ -41,6 +41,7 @@ use hbb_common::{
         time::{self, Duration, Instant, Interval},
     },
     Stream,
+    protobuf::ProtobufEnumOrUnknown,
 };
 use hbb_common::{config::TransferSerde, fs::TransferJobMeta};
 use rdev::{Event, EventType::*, Key as RdevKey};
@@ -921,14 +922,14 @@ impl Handler {
             key_event.set_control_key(ControlKey::CtrlAltDel);
             // todo
             key_event.down = true;
-            self.send_key_event(key_event, 0);
+            self.send_key_event(key_event, KeyboardMode::Legacy);
         } else {
             let mut key_event = KeyEvent::new();
             key_event.set_control_key(ControlKey::Delete);
             self.legacy_modifiers(&mut key_event, true, true, false, false);
             // todo
             key_event.press = true;
-            self.send_key_event(key_event, 0);
+            self.send_key_event(key_event, KeyboardMode::Legacy);
         }
     }
 
@@ -937,7 +938,7 @@ impl Handler {
         key_event.set_control_key(ControlKey::LockScreen);
         // todo
         key_event.down = true;
-        self.send_key_event(key_event, 0);
+        self.send_key_event(key_event, KeyboardMode::Legacy);
     }
 
     fn transfer_file(&mut self) {
@@ -956,9 +957,9 @@ impl Handler {
         }
     }
 
-    fn send_key_event(&mut self, mut evt: KeyEvent, keyboard_mode: u32) {
-        // mode: map(1), translate(2), legacy(3), auto(4)
-        evt.mode = keyboard_mode;
+    fn send_key_event(&mut self, mut evt: KeyEvent, keyboard_mode: KeyboardMode) {
+        // mode: legacy(0), map(1), translate(2), auto(3)
+        evt.mode = ProtobufEnumOrUnknown::new(keyboard_mode);
         let mut msg_out = Message::new();
         msg_out.set_key_event(evt);
         log::info!("{:?}", msg_out);
@@ -1012,7 +1013,7 @@ impl Handler {
             key_event.modifiers.push(ControlKey::NumLock.into());
         }
 
-        self.send_key_event(key_event, 1);
+        self.send_key_event(key_event, KeyboardMode::Map);
     }
 
     // fn translate_keyboard_mode(&mut self, down_or_up: bool, key: RdevKey) {
@@ -1269,15 +1270,22 @@ impl Handler {
         if down_or_up == true {
             key_event.down = true;
         }
-        dbg!(&key_event);
-        self.send_key_event(key_event, 0)
+        self.send_key_event(key_event, KeyboardMode::Legacy)
     }
 
     fn key_down_or_up(&mut self, down_or_up: bool, key: RdevKey, evt: Event) {
         // Call different functions according to keyboard mode.
-        let mode = std::env::var("KEYBOARD_MOAD").unwrap_or(String::from("legacy"));
-        match mode.as_str() {
-            "map" => {
+        let mode = match std::env::var("KEYBOARD_MOAD")
+            .unwrap_or(String::from("legacy"))
+            .as_str()
+        {
+            "map" => KeyboardMode::Map,
+            "legacy" => KeyboardMode::Legacy,
+            _ => KeyboardMode::Legacy,
+        };
+
+        match mode {
+            KeyboardMode::Map => {
                 if down_or_up == true {
                     TO_RELEASE.lock().unwrap().insert(key);
                 } else {
@@ -1285,7 +1293,7 @@ impl Handler {
                 }
                 self.map_keyboard_mode(down_or_up, key);
             }
-            "legacy" => self.legacy_keyboard_mode(down_or_up, key, evt),
+            KeyboardMode::Legacy => self.legacy_keyboard_mode(down_or_up, key, evt),
             _ => self.legacy_keyboard_mode(down_or_up, key, evt),
         }
     }

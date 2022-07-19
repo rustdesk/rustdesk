@@ -420,11 +420,11 @@ impl Connection {
                     }
                     MessageInput::Key((mut msg, press)) => {
                         // todo: press and down have similar meanings.
-                        if press && msg.mode == 0 {
+                        if press && msg.mode.unwrap() == KeyboardMode::Legacy {
                             msg.down = true;
                         }
                         handle_key(&msg);
-                        if press && msg.mode == 0 {
+                        if press && msg.mode.unwrap() == KeyboardMode::Legacy {
                             msg.down = false;
                             handle_key(&msg);
                         }
