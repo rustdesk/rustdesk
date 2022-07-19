@@ -450,7 +450,7 @@ pub fn lock_screen() {
             key_event.down = true;
             key_event.set_chr('l' as _);
             key_event.modifiers.push(ControlKey::Meta.into());
-            key_event.mode = 3;
+            key_event.mode = 0;
             handle_key(&key_event);
             key_event.down = false;
             handle_key(&key_event);
@@ -463,7 +463,7 @@ pub fn lock_screen() {
             key_event.set_chr('q' as _);
             key_event.modifiers.push(ControlKey::Meta.into());
             key_event.modifiers.push(ControlKey::Control.into());
-            key_event.mode = 3;
+            key_event.mode = 0;
             handle_key(&key_event);
             key_event.down = false;
             handle_key(&key_event);
@@ -788,14 +788,14 @@ fn handle_key_(evt: &KeyEvent) {
     }
 
     match evt.mode {
+        0 => {
+            legacy_keyboard_map(evt);
+        }
         1 => {
             map_keyboard_map(evt);
         }
-        3 => {
-            legacy_keyboard_map(evt);
-        }
         _ => {
-            map_keyboard_map(evt);
+            legacy_keyboard_map(evt);
         }
     }
 }

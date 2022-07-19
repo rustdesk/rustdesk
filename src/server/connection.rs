@@ -420,11 +420,11 @@ impl Connection {
                     }
                     MessageInput::Key((mut msg, press)) => {
                         // todo: press and down have similar meanings.
-                        if press && msg.mode == 3 {
+                        if press && msg.mode == 0 {
                             msg.down = true;
                         }
                         handle_key(&msg);
-                        if press && msg.mode == 3 {
+                        if press && msg.mode == 0 {
                             msg.down = false;
                             handle_key(&msg);
                         }
