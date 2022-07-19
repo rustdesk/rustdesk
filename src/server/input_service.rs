@@ -834,7 +834,7 @@ mod test {
         // set key/char base on char
         let mut evt = KeyEvent::new();
         evt.set_chr(66);
-        evt.mode = ProtobufEnum::new(KeyboardMode::Legacy);
+        evt.mode = KeyboardMode::Legacy.into();
 
         evt.modifiers.push(ControlKey::CapsLock.into());
 

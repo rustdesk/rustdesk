@@ -961,7 +961,6 @@ impl Handler {
         evt.mode = keyboard_mode.into();
         let mut msg_out = Message::new();
         msg_out.set_key_event(evt);
-        log::info!("{:?}", msg_out);
         self.send(Data::Message(msg_out));
     }
 
@@ -1274,7 +1273,7 @@ impl Handler {
 
     fn key_down_or_up(&mut self, down_or_up: bool, key: RdevKey, evt: Event) {
         // Call different functions according to keyboard mode.
-        let mode = match std::env::var("KEYBOARD_MOAD")
+        let mode = match std::env::var("KEYBOARD_MODE")
             .unwrap_or(String::from("legacy"))
             .as_str()
         {
