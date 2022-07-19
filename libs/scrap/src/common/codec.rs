@@ -25,7 +25,6 @@ use hbb_common::{
 #[cfg(feature = "hwcodec")]
 lazy_static::lazy_static! {
     static ref PEER_DECODER_STATES: Arc<Mutex<HashMap<i32, VideoCodecState>>> = Default::default();
-    static ref MY_DECODER_STATE: Arc<Mutex<VideoCodecState>> = Default::default();
 }
 const SCORE_VPX: i32 = 90;
 
@@ -238,25 +237,18 @@ impl Encoder {
     }
 }
 
-#[cfg(feature = "hwcodec")]
-impl Drop for Decoder {
-    fn drop(&mut self) {
-        *MY_DECODER_STATE.lock().unwrap() = VideoCodecState {
-            score_vpx: SCORE_VPX,
-            ..Default::default()
-        };
-    }
-}
-
 impl Decoder {
     pub fn video_codec_state(_id: &str) -> VideoCodecState {
-        // video_codec_state is mainted by creation and destruction of Decoder.
-        // It has been ensured to use after Decoder's creation.
         #[cfg(feature = "hwcodec")]
         if check_hwcodec_config() {
-            let mut state = MY_DECODER_STATE.lock().unwrap();
-            state.perfer = Self::codec_preference(_id).into();
-            state.clone()
+            let best = HwDecoder::best();
+            VideoCodecState {
+                score_vpx: SCORE_VPX,
+                score_h264: best.h264.map_or(0, |c| c.score),
+                score_h265: best.h265.map_or(0, |c| c.score),
+                perfer: Self::codec_preference(_id).into(),
+                ..Default::default()
+            }
         } else {
             return VideoCodecState {
                 score_vpx: SCORE_VPX,
@@ -272,23 +264,13 @@ impl Decoder {
 
     pub fn new(config: DecoderCfg) -> Decoder {
         let vpx = VpxDecoder::new(config.vpx).unwrap();
-        let decoder = Decoder {
+        Decoder {
             vpx,
             #[cfg(feature = "hwcodec")]
             hw: HwDecoder::new_decoders(),
             #[cfg(feature = "hwcodec")]
             i420: vec![],
-        };
-
-        #[cfg(feature = "hwcodec")]
-        {
-            let mut state = MY_DECODER_STATE.lock().unwrap();
-            state.score_vpx = SCORE_VPX;
-            state.score_h264 = decoder.hw.h264.as_ref().map_or(0, |d| d.info.score);
-            state.score_h265 = decoder.hw.h265.as_ref().map_or(0, |d| d.info.score);
         }
-
-        decoder
     }
 
     pub fn handle_video_frame(

@@ -178,7 +178,7 @@ pub struct HwDecoders {
 }
 
 impl HwDecoder {
-    fn best() -> CodecInfos {
+    pub fn best() -> CodecInfos {
         get_config(CFG_KEY_DECODER).unwrap_or(CodecInfos {
             h264: None,
             h265: None,
