@@ -1274,7 +1274,7 @@ impl Handler {
     fn key_down_or_up(&mut self, down_or_up: bool, key: RdevKey, evt: Event) {
         // Call different functions according to keyboard mode.
         let mode = match std::env::var("KEYBOARD_MODE")
-            .unwrap_or(String::from("legacy"))
+            .unwrap_or(String::from("legacy")).to_lowercase()
             .as_str()
         {
             "map" => KeyboardMode::Map,
