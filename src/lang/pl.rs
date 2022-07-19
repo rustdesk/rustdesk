@@ -1,0 +1,32 @@
+lazy_static::lazy_static! {
+pub static ref T: std::collections::HashMap<&'static str, &'static str> =
+    [
+        ("desk_tip", "Z tym identyfikatorem i hasłem można uzyskać dostęp do twojego pulpitu."),
+        ("connecting_status", "Łączenie do sieci RustDesk..."),
+        ("not_ready_status", "Brak gotowości. Proszę sprawdzić połączenie."),
+        ("id_change_tip", "Dozwolone są tylko znaki a-z, A-Z, 0-9 i _ (podkreślenie). Pierwszą literą musi być a-z, A-Z. Długość od 6 do 16."),
+        ("install_tip", "Ze względu na UAC, RustDesk może w niektórych przypadkach nie działać poprawnie po stronie zdalnej. Aby uniknąć UAC, proszę kliknąć poniższy przycisk, aby zainstalować RustDesk w systemie."),
+        ("config_acc", "Aby móc zdalnie kontrolować swój Pulpit, musisz przyznać odpowiednie uprawnienia dla RustDesk"),
+        ("config_screen", "Aby uzyskać zdalny dostęp do Pulpitu, musisz przyznać uprawnienia RustDesk do nagrywania ekranu"),
+        ("agreement_tip", "Rozpoczynając instalację, akceptujesz umowę licencyjną."),
+        ("not_close_tcp_tip", "Nie zamykaj tego okna podczas korzystania z tunelu"),
+        ("setup_server_tip", "Aby uzyskać szybsze połączenie, proszę uruchomić własny serwer"),
+        ("Auto Login", "Automatyczne logowanie (dotyczy tylko ustawienia \"Blokada po zakończeniu sesji\")"),
+        ("whitelist_tip", "Tylko IP z białej listy może uzyskać dostęp do mnie"),
+        ("whitelist_sep", "Oddzielone przecinkiem, średnikiem, spacjami lub nowym wierszem"),
+        ("Wrong credentials", "Nieprawidłowa nazwa użytkownika lub hasło"),
+        ("invalid_http", "musi zaczynać się od http:// lub https://"),
+        ("install_daemon_tip", "Aby uruchomić się przy starcie systemu, należy zainstalować usługę systemową."),
+        ("android_input_permission_tip1", "Aby zdalne urządzenie mogło kontrolować Twoje urządzenie z systemem Android za pomocą myszy lub dotyku, musisz zezwolić RustDesk na korzystanie z usługi \"Dostępność\"."),
+        ("android_input_permission_tip2", "Proszę przejść do kolejnej strony ustawień systemu, znaleźć i wejść w [Zainstalowane usługi], włączyć usługę [RustDesk Input]."),
+        ("android_new_connection_tip", "Otrzymano nowe żądanie dostępu, które chce kontrolować Twoje aktualne urządzenie."),
+        ("android_service_will_start_tip", "Włączenie opcji \"Screen Capture\" spowoduje automatyczne uruchomienie usługi, umożliwiając innym urządzeniom żądanie połączenia z Twoim urządzeniem."),
+        ("android_stop_service_tip", "Zamknięcie usługi spowoduje automatyczne zamknięcie wszystkich nawiązanych połączeń."),
+        ("android_version_audio_tip", "Obecna wersja Androida nie obsługuje przechwytywania dźwięku, proszę uaktualnić do Androida 10 lub wyższego."),
+        ("android_start_service_tip", "Stuknij [Uruchom usługę] lub otwórz uprawnienia [Przechwytywanie obrazu], aby uruchomić usługę udostępniania ekranu."),
+        ("doc_mac_permission", "https://rustdesk.com/docs/en/manual/mac/#enable-permissions"),
+        ("doc_fix_wayland", "https://rustdesk.com/docs/en/manual/linux/#x11-required"),
+        ("server_not_support", "Nie jest jeszcze wspierane przez serwer"),
+        ("android_open_battery_optimizations_tip", "Jeśli chcesz wyłączyć tę funkcję, przejdź do kolejnej strony ustawień aplikacji RustDesk, znajdź i wpisz [Bateria],Odznacz [Nieograniczony]"),
+    ].iter().cloned().collect();
+}
