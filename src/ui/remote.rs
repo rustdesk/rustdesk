@@ -965,22 +965,23 @@ impl Handler {
         self.send(Data::Message(msg_out));
     }
 
-    fn convert_numpad_keys(&mut self, key: &RdevKey) -> &RdevKey {
+    fn convert_numpad_keys(&mut self, key: RdevKey) -> RdevKey {
         if get_key_state(enigo::Key::NumLock) {
-            return;
+            return key;
         }
         match key {
-            &RdevKey::Num0 => &RdevKey::Insert,
-            &RdevKey::KpDecimal => &RdevKey::Delete,
-            &RdevKey::Num1 => &RdevKey::End,
-            &RdevKey::Num2 => &RdevKey::DownArrow,
-            &RdevKey::Num3 => &RdevKey::PageDown,
-            &RdevKey::Num4 => &RdevKey::LeftArrow,
-            &RdevKey::Num5 => &RdevKey::Clear,
-            &RdevKey::Num6 => &RdevKey::RightArrow,
-            &RdevKey::Num7 => &RdevKey::Home,
-            &RdevKey::Num8 => &RdevKey::UpArrow,
-            &RdevKey::Num9 => &RdevKey::PageUp,
+            RdevKey::Kp0 => RdevKey::Insert,
+            RdevKey::KpDecimal => RdevKey::Delete,
+            RdevKey::Kp1 => RdevKey::End,
+            RdevKey::Kp2 => RdevKey::DownArrow,
+            RdevKey::Kp3 => RdevKey::PageDown,
+            RdevKey::Kp4 => RdevKey::LeftArrow,
+            RdevKey::Kp5 => RdevKey::Clear,
+            RdevKey::Kp6 => RdevKey::RightArrow,
+            RdevKey::Kp7 => RdevKey::Home,
+            RdevKey::Kp8 => RdevKey::UpArrow,
+            RdevKey::Kp9 => RdevKey::PageUp,
+            _ => key,
         }
     }
 
@@ -994,9 +995,9 @@ impl Handler {
             rdev::linux_keycode_from_key(key).unwrap_or_default().into()
         } else if peer == "Windows" {
             #[cfg(not(windows))]
-            self.convert_numpad_keys(&key);
+            let key = self.convert_numpad_keys(key);
             rdev::win_keycode_from_key(key).unwrap_or_default().into()
-        } else if peer == "Mac OS" {
+        } else {
             rdev::macos_keycode_from_key(key).unwrap_or_default().into()
         };
         key_event.set_chr(keycode);
@@ -1065,7 +1066,6 @@ impl Handler {
 
     fn legacy_keyboard_mode(&mut self, down_or_up: bool, key: RdevKey, evt: Event) {
         // legacy mode(3): Generate characters locally, look for keycode on other side.
-        println!("legacy_keyboard_mode {:?}", key);
         let peer = self.peer_platform();
         let is_win = peer == "Windows";
 
