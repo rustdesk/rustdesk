@@ -8,6 +8,10 @@ impl Capturer {
         x11::Capturer::new(display.0, yuv).map(Capturer)
     }
 
+    pub fn set_use_yuv(&mut self, use_yuv: bool) {
+        self.0.set_use_yuv(use_yuv);
+    }
+
     pub fn width(&self) -> usize {
         self.0.display().rect().w as usize
     }

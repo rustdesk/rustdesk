@@ -318,6 +318,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bef38d45163c2f1dde094a7dfd33ccf595c92905c8f8f4fdc18d06fb1037718a"
 
 [[package]]
+name = "bitvec"
+version = "1.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1489fcb93a5bb47da0462ca93ad252ad6af2145cce58d10d46a83931ba9f016b"
+dependencies = [
+ "funty",
+ "radium",
+ "tap",
+ "wyz",
+]
+
+[[package]]
 name = "block"
 version = "0.1.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1254,6 +1266,7 @@ name = "enigo"
 version = "0.0.14"
 dependencies = [
  "core-graphics 0.22.3",
+ "hbb_common",
  "libc",
  "log",
  "objc",
@@ -1321,6 +1334,16 @@ checksum = "64f18991e7bf11e7ffee451b5318b5c1a73c52d0d0ada6e5a3017c8c1ced6a21"
 dependencies = [
  "libc",
  "str-buf",
+]
+
+[[package]]
+name = "evdev"
+version = "0.11.5"
+source = "git+https://github.com/fufesou/evdev#cec616e37790293d2cd2aa54a96601ed6b1b35a9"
+dependencies = [
+ "bitvec",
+ "libc",
+ "nix 0.23.1",
 ]
 
 [[package]]
@@ -1497,6 +1520,12 @@ name = "fuchsia-zircon-sys"
 version = "0.3.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3dcaa9ae7725d12cdb85b3ad99a434db70b468c09ded17e012d86b5c1010f7a7"
+
+[[package]]
+name = "funty"
+version = "2.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e6d5a32815ae3f33302d95fdcb2ce17862f8c65363dcfd29360480ba1001fc9c"
 
 [[package]]
 name = "futures"
@@ -2742,6 +2771,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "mouce"
+version = "0.2.1"
+source = "git+https://github.com/fufesou/mouce.git#26da8d4b0009b7f96996799c2a5c0990a8dbf08b"
+dependencies = [
+ "glob",
+ "libc",
+]
+
+[[package]]
 name = "muldiv"
 version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3528,6 +3566,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "radium"
+version = "0.7.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "dc33ff2d4973d518d823d61aa239014831e521c75da58e3df4840d3f47749d09"
+
+[[package]]
 name = "rand"
 version = "0.6.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3933,6 +3977,7 @@ dependencies = [
  "default-net",
  "dispatch",
  "enigo",
+ "evdev",
  "flexi_logger",
  "flutter_rust_bridge",
  "flutter_rust_bridge_codegen",
@@ -3947,6 +3992,7 @@ dependencies = [
  "mac_address",
  "machine-uid",
  "magnum-opus",
+ "mouce",
  "num_cpus",
  "objc",
  "parity-tokio-ipc",
@@ -4586,6 +4632,12 @@ dependencies = [
  "toml",
  "version-compare 0.1.0",
 ]
+
+[[package]]
+name = "tap"
+version = "1.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "55937e1799185b12863d447f42597ed69d9928686b8d88a1df17376a097d8369"
 
 [[package]]
 name = "target_build_utils"
@@ -5540,6 +5592,15 @@ checksum = "d59cefebd0c892fa2dd6de581e937301d8552cb44489cdff035c6187cb63fa5e"
 dependencies = [
  "winapi 0.2.8",
  "winapi-build",
+]
+
+[[package]]
+name = "wyz"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "30b31594f29d27036c383b53b59ed3476874d518f0efb151b27a4c275141390e"
+dependencies = [
+ "tap",
 ]
 
 [[package]]

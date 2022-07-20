@@ -237,7 +237,7 @@ impl Connection {
                             let mut msg_out = Message::new();
                             msg_out.set_misc(misc);
                             conn.send(msg_out).await;
-                            conn.on_close("Close requested from connection manager", false);
+                            conn.on_close("Close requested from connection manager", false).await;
                             SESSIONS.lock().unwrap().remove(&conn.lr.my_id);
                             break;
                         }
@@ -327,7 +327,7 @@ impl Connection {
                     if let Some(res) = res {
                         match res {
                             Err(err) => {
-                                conn.on_close(&err.to_string(), true);
+                                conn.on_close(&err.to_string(), true).await;
                                 break;
                             },
                             Ok(bytes) => {
@@ -341,14 +341,14 @@ impl Connection {
                             }
                         }
                     } else {
-                        conn.on_close("Reset by the peer", true);
+                        conn.on_close("Reset by the peer", true).await;
                         break;
                     }
                 },
                 _ = conn.timer.tick() => {
                     if !conn.read_jobs.is_empty() {
                         if let Err(err) = fs::handle_read_jobs(&mut conn.read_jobs, &mut conn.stream).await {
-                            conn.on_close(&err.to_string(), false);
+                            conn.on_close(&err.to_string(), false).await;
                             break;
                         }
                     } else {
@@ -361,7 +361,7 @@ impl Connection {
                         video_service::notify_video_frame_feched(id, Some(instant.into()));
                     }
                     if let Err(err) = conn.stream.send(&value as &Message).await {
-                        conn.on_close(&err.to_string(), false);
+                        conn.on_close(&err.to_string(), false).await;
                         break;
                     }
                 },
@@ -379,13 +379,13 @@ impl Connection {
                         }
                     }
                     if let Err(err) = conn.stream.send(msg).await {
-                        conn.on_close(&err.to_string(), false);
+                        conn.on_close(&err.to_string(), false).await;
                         break;
                     }
                 },
                 _ = test_delay_timer.tick() => {
                     if last_recv_time.elapsed() >= SEC30 {
-                        conn.on_close("Timeout", true);
+                        conn.on_close("Timeout", true).await;
                         break;
                     }
                     let time = crate::get_time();
@@ -417,7 +417,7 @@ impl Connection {
         video_service::VIDEO_QOS.lock().unwrap().reset();
         password::after_session(conn.authorized);
         if let Err(err) = conn.try_port_forward_loop(&mut rx_from_cm).await {
-            conn.on_close(&err.to_string(), false);
+            conn.on_close(&err.to_string(), false).await;
         }
 
         conn.post_audit(json!({
@@ -646,9 +646,9 @@ impl Connection {
         #[cfg(target_os = "linux")]
         if !self.file_transfer.is_some() && !self.port_forward_socket.is_some() {
             let dtype = crate::platform::linux::get_display_server();
-            if dtype != "x11" {
+            if dtype != "x11" && dtype != "wayland" {
                 res.set_error(format!(
-                    "Unsupported display server type {}, x11 expected",
+                    "Unsupported display server type {}, x11 or wayland expected",
                     dtype
                 ));
                 let mut msg_out = Message::new();
@@ -684,7 +684,7 @@ impl Connection {
             res.set_peer_info(pi);
         } else {
             try_activate_screen();
-            match video_service::get_displays() {
+            match super::video_service::get_displays().await {
                 Err(err) => {
                     res.set_error(format!("X11 error: {}", err));
                 }
@@ -1175,7 +1175,7 @@ impl Connection {
                 },
                 Some(message::Union::Misc(misc)) => match misc.union {
                     Some(misc::Union::SwitchDisplay(s)) => {
-                        video_service::switch_display(s.display);
+                        video_service::switch_display(s.display).await;
                     }
                     Some(misc::Union::ChatMessage(c)) => {
                         self.send_to_cm(ipc::Data::ChatMessage { text: c.text });
@@ -1185,7 +1185,7 @@ impl Connection {
                     }
                     Some(misc::Union::RefreshVideo(r)) => {
                         if r {
-                            video_service::refresh();
+                            super::video_service::refresh();
                         }
                     }
                     Some(misc::Union::VideoReceived(_)) => {
@@ -1195,7 +1195,7 @@ impl Connection {
                         );
                     }
                     Some(misc::Union::CloseReason(_)) => {
-                        self.on_close("Peer close", true);
+                        self.on_close("Peer close", true).await;
                         SESSIONS.lock().unwrap().remove(&self.lr.my_id);
                         return false;
                     }
@@ -1353,14 +1353,14 @@ impl Connection {
         }
     }
 
-    fn on_close(&mut self, reason: &str, lock: bool) {
+    async fn on_close(&mut self, reason: &str, lock: bool) {
         if let Some(s) = self.server.upgrade() {
             s.write().unwrap().remove_connection(&self.inner);
         }
         log::info!("#{} Connection closed: {}", self.inner.id(), reason);
         if lock && self.lock_after_session_end && self.keyboard {
             #[cfg(not(any(target_os = "android", target_os = "ios")))]
-            lock_screen();
+            lock_screen().await;
         }
         self.tx_to_cm.send(ipc::Data::Close).ok();
         self.port_forward_socket.take();
