@@ -28,7 +28,7 @@ impl super::video_service::TraitCapturer for *mut Capturer {
 }
 
 async fn check_init() -> ResultType<()> {
-    if scrap::is_wayland() {
+    if !scrap::is_x11() {
         let mut minx = 0;
         let mut maxx = 0;
         let mut miny = 0;
@@ -96,7 +96,7 @@ async fn check_init() -> ResultType<()> {
 }
 
 pub fn clear() {
-    if !scrap::is_wayland() {
+    if scrap::is_x11() {
         return;
     }
 
@@ -153,7 +153,7 @@ pub(super) fn get_display_num() -> ResultType<usize> {
 }
 
 pub(super) fn get_capturer() -> ResultType<super::video_service::CapturerInfo> {
-    if !scrap::is_wayland() {
+    if scrap::is_x11() {
         bail!("Do not call this function if not wayland");
     }
     let addr = *CAP_DISPLAY_INFO.read().unwrap();

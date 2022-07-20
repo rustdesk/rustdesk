@@ -193,7 +193,7 @@ fn check_display_changed(
     #[cfg(target_os = "linux")]
     {
         // wayland do not support changing display for now
-        if scrap::is_wayland() {
+        if !scrap::is_x11() {
             return false;
         }
     }
@@ -369,7 +369,7 @@ impl DerefMut for CapturerInfo {
 fn get_capturer(use_yuv: bool) -> ResultType<CapturerInfo> {
     #[cfg(target_os = "linux")]
     {
-        if scrap::is_wayland() {
+        if !scrap::is_x11() {
             return super::wayland::get_capturer();
         }
     }
@@ -702,7 +702,7 @@ pub fn handle_one_frame_encoded(
 fn get_display_num() -> usize {
     #[cfg(target_os = "linux")]
     {
-        if scrap::is_wayland() {
+        if !scrap::is_x11() {
             return if let Ok(n) = super::wayland::get_display_num() {
                 n
             } else {
@@ -745,7 +745,7 @@ pub(super) fn get_displays_2(all: &Vec<Display>) -> (usize, Vec<DisplayInfo>) {
 pub async fn get_displays() -> ResultType<(usize, Vec<DisplayInfo>)> {
     #[cfg(target_os = "linux")]
     {
-        if scrap::is_wayland() {
+        if !scrap::is_x11() {
             return super::wayland::get_displays().await;
         }
     }
@@ -774,7 +774,7 @@ pub fn refresh() {
 fn get_primary() -> usize {
     #[cfg(target_os = "linux")]
     {
-        if scrap::is_wayland() {
+        if !scrap::is_x11() {
             return match super::wayland::get_primary() {
                 Ok(n) => n,
                 Err(_) => 0,

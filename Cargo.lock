@@ -1266,6 +1266,7 @@ name = "enigo"
 version = "0.0.14"
 dependencies = [
  "core-graphics 0.22.3",
+ "hbb_common",
  "libc",
  "log",
  "objc",

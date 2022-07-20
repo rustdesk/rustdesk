@@ -52,30 +52,29 @@ pub enum Display {
 }
 
 #[inline]
-pub fn is_wayland() -> bool {
-    std::env::var("IS_WAYLAND").is_ok()
-        || std::env::var("XDG_SESSION_TYPE") == Ok("wayland".to_owned())
+pub fn is_x11() -> bool {
+    "x11" == hbb_common::platform::linux::get_display_server()
 }
 
 impl Display {
     pub fn primary() -> io::Result<Display> {
-        Ok(if is_wayland() {
-            Display::WAYLAND(wayland::Display::primary()?)
-        } else {
+        Ok(if is_x11() {
             Display::X11(x11::Display::primary()?)
+        } else {
+            Display::WAYLAND(wayland::Display::primary()?)
         })
     }
 
     pub fn all() -> io::Result<Vec<Display>> {
-        Ok(if is_wayland() {
-            wayland::Display::all()?
-                .drain(..)
-                .map(|x| Display::WAYLAND(x))
-                .collect()
-        } else {
+        Ok(if is_x11() {
             x11::Display::all()?
                 .drain(..)
                 .map(|x| Display::X11(x))
+                .collect()
+        } else {
+            wayland::Display::all()?
+                .drain(..)
+                .map(|x| Display::WAYLAND(x))
                 .collect()
         })
     }

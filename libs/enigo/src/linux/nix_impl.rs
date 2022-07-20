@@ -40,7 +40,7 @@ impl Enigo {
 impl Default for Enigo {
     fn default() -> Self {
         Self {
-            is_x11: crate::linux::is_x11(),
+            is_x11: "x11" == hbb_common::platform::linux::get_display_server(),
             uinput_keyboard: None,
             uinput_mouse: None,
             xdo: EnigoXdo::default(),

@@ -74,7 +74,7 @@ pub use macos::Enigo;
 #[cfg(target_os = "linux")]
 mod linux;
 #[cfg(target_os = "linux")]
-pub use crate::linux::{is_x11, Enigo};
+pub use crate::linux::Enigo;
 
 /// DSL parser module
 pub mod dsl;

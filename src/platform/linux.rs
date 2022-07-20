@@ -1,4 +1,5 @@
 use super::{CursorData, ResultType};
+pub use hbb_common::platform::linux::*;
 use hbb_common::{allow_err, bail, log};
 use libc::{c_char, c_int, c_void};
 use std::{
@@ -8,6 +9,7 @@ use std::{
         Arc,
     },
 };
+
 type Xdo = *const c_void;
 
 pub const PA_SAMPLE_RATE: u32 = 48000;
@@ -335,17 +337,6 @@ pub fn get_active_userid() -> String {
     get_value_of_seat0(1)
 }
 
-fn is_active(sid: &str) -> bool {
-    if let Ok(output) = std::process::Command::new("loginctl")
-        .args(vec!["show-session", "-p", "State", sid])
-        .output()
-    {
-        String::from_utf8_lossy(&output.stdout).contains("active")
-    } else {
-        false
-    }
-}
-
 fn get_cm() -> bool {
     if let Ok(output) = std::process::Command::new("ps").args(vec!["aux"]).output() {
         for line in String::from_utf8_lossy(&output.stdout).lines() {
@@ -399,89 +390,6 @@ fn get_display() -> String {
         }
     }
     last
-}
-
-fn get_value_of_seat0(i: usize) -> String {
-    if let Ok(output) = std::process::Command::new("loginctl").output() {
-        for line in String::from_utf8_lossy(&output.stdout).lines() {
-            if line.contains("seat0") {
-                if let Some(sid) = line.split_whitespace().nth(0) {
-                    if is_active(sid) {
-                        if let Some(uid) = line.split_whitespace().nth(i) {
-                            return uid.to_owned();
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    // some case, there is no seat0 https://github.com/rustdesk/rustdesk/issues/73
-    if let Ok(output) = std::process::Command::new("loginctl").output() {
-        for line in String::from_utf8_lossy(&output.stdout).lines() {
-            if let Some(sid) = line.split_whitespace().nth(0) {
-                let d = get_display_server_of_session(sid);
-                if is_active(sid) && d != "tty" {
-                    if let Some(uid) = line.split_whitespace().nth(i) {
-                        return uid.to_owned();
-                    }
-                }
-            }
-        }
-    }
-
-    return "".to_owned();
-}
-
-pub fn get_display_server() -> String {
-    let session = get_value_of_seat0(0);
-    get_display_server_of_session(&session)
-}
-
-fn get_display_server_of_session(session: &str) -> String {
-    if let Ok(output) = std::process::Command::new("loginctl")
-        .args(vec!["show-session", "-p", "Type", session])
-        .output()
-    // Check session type of the session
-    {
-        let display_server = String::from_utf8_lossy(&output.stdout)
-            .replace("Type=", "")
-            .trim_end()
-            .into();
-        if display_server == "tty" {
-            // If the type is tty...
-            if let Ok(output) = std::process::Command::new("loginctl")
-                .args(vec!["show-session", "-p", "TTY", session])
-                .output()
-            // Get the tty number
-            {
-                let tty: String = String::from_utf8_lossy(&output.stdout)
-                    .replace("TTY=", "")
-                    .trim_end()
-                    .into();
-                if let Ok(xorg_results) = run_cmds(format!("ps -e | grep \"{}.\\\\+Xorg\"", tty))
-                // And check if Xorg is running on that tty
-                {
-                    if xorg_results.trim_end().to_string() != "" {
-                        // If it is, manually return "x11", otherwise return tty
-                        "x11".to_owned()
-                    } else {
-                        display_server
-                    }
-                } else {
-                    // If any of these commands fail just fall back to the display server
-                    display_server
-                }
-            } else {
-                display_server
-            }
-        } else {
-            // If the session is not a tty, then just return the type as usual
-            display_server
-        }
-    } else {
-        "".to_owned()
-    }
 }
 
 pub fn is_login_wayland() -> bool {
@@ -688,13 +596,6 @@ pub fn block_input(_v: bool) -> bool {
 
 pub fn is_installed() -> bool {
     true
-}
-
-pub fn run_cmds(cmds: String) -> ResultType<String> {
-    let output = std::process::Command::new("sh")
-        .args(vec!["-c", &cmds])
-        .output()?;
-    Ok(String::from_utf8_lossy(&output.stdout).to_string())
 }
 
 fn get_env_tries(name: &str, uid: &str, n: usize) -> String {
