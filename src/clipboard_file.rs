@@ -156,7 +156,7 @@ pub fn msg_2_clip(msg: Cliprdr) -> Option<ClipbaordFile> {
             Some(ClipbaordFile::ServerFormatDataResponse {
                 conn_id: data.conn_id,
                 msg_flags: data.msg_flags,
-                format_data: data.format_data.as_ref().to_vec(),
+                format_data: data.format_data.into(),
             })
         }
         Some(cliprdr::Union::FileContentsRequest(data)) => {
@@ -177,7 +177,7 @@ pub fn msg_2_clip(msg: Cliprdr) -> Option<ClipbaordFile> {
                 conn_id: data.conn_id,
                 msg_flags: data.msg_flags,
                 stream_id: data.stream_id,
-                requested_data: data.requested_data.as_ref().to_vec(),
+                requested_data: data.requested_data.into(),
             })
         }
         _ => None,

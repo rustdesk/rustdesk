@@ -79,7 +79,7 @@ pub fn update_clipboard(clipboard: Clipboard, old: Option<&Arc<Mutex<String>>>) 
     let content = if clipboard.compress {
         decompress(&clipboard.content)
     } else {
-        clipboard.content.as_ref().to_vec()
+        clipboard.content.into()
     };
     if let Ok(content) = String::from_utf8(content) {
         if content.is_empty() {

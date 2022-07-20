@@ -215,7 +215,7 @@ impl Client {
                             } else {
                                 peer_nat_type = ph.nat_type();
                                 is_local = ph.is_local();
-                                signed_id_pk = ph.pk.as_ref().to_vec();
+                                signed_id_pk = ph.pk.into();
                                 relay_server = ph.relay_server;
                                 peer_addr = AddrMangle::decode(&ph.socket_addr);
                                 log::info!("Hole Punched {} = {}", peer, peer_addr);

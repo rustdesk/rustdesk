@@ -266,7 +266,7 @@ impl RendezvousMediator {
 
     async fn handle_request_relay(&self, rr: RequestRelay, server: ServerPtr) -> ResultType<()> {
         self.create_relay(
-            rr.socket_addr.as_ref().to_vec(),
+            rr.socket_addr.into(),
             rr.relay_server,
             rr.uuid,
             server,
@@ -353,7 +353,7 @@ impl RendezvousMediator {
         {
             let uuid = Uuid::new_v4().to_string();
             return self
-                .create_relay(ph.socket_addr.as_ref().to_vec(), relay_server, uuid, server, true, true)
+                .create_relay(ph.socket_addr.into(), relay_server, uuid, server, true, true)
                 .await;
         }
         let peer_addr = AddrMangle::decode(&ph.socket_addr);
