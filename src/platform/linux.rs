@@ -144,7 +144,7 @@ pub fn get_cursor_data(hcursor: u64) -> ResultType<CursorData> {
 }
 
 fn start_uinput_service() {
-    use crate::server::input_service::uinput::service;
+    use crate::server::uinput::service;
     std::thread::spawn(|| {
         service::start_service_control();
     });

@@ -7,7 +7,7 @@ use hbb_common::{
     config::{Config, Config2, CONNECT_TIMEOUT, RELAY_PORT},
     log,
     message_proto::*,
-    protobuf::{Message as _, Enum},
+    protobuf::{Enum, Message as _},
     rendezvous_proto::*,
     socket_client,
     sodiumoxide::crypto::{box_, secretbox, sign},
@@ -24,6 +24,10 @@ pub mod audio_service;
 cfg_if::cfg_if! {
 if #[cfg(not(any(target_os = "android", target_os = "ios")))] {
 mod clipboard_service;
+#[cfg(target_os = "linux")]
+mod wayland;
+#[cfg(target_os = "linux")]
+pub mod uinput;
 pub mod input_service;
 } else {
 mod clipboard_service {
@@ -280,7 +284,7 @@ impl Drop for Server {
             s.join();
         }
         #[cfg(target_os = "linux")]
-        video_service::wayland_support::clear();
+        wayland::clear();
     }
 }
 
