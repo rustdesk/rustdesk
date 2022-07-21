@@ -21,6 +21,10 @@ impl Capturer {
         })
     }
 
+    pub fn set_use_yuv(&mut self, use_yuv: bool) {
+        self.inner.set_use_yuv(use_yuv);
+    }
+
     pub fn is_gdi(&self) -> bool {
         self.inner.is_gdi()
     }
@@ -41,8 +45,8 @@ impl Capturer {
         self.height
     }
 
-    pub fn frame<'a>(&'a mut self, timeout_ms: Duration) -> io::Result<Frame<'a>> {
-        match self.inner.frame(timeout_ms.as_millis() as _) {
+    pub fn frame<'a>(&'a mut self, timeout: Duration) -> io::Result<Frame<'a>> {
+        match self.inner.frame(timeout.as_millis() as _) {
             Ok(frame) => Ok(Frame(frame)),
             Err(ref error) if error.kind() == TimedOut => Err(WouldBlock.into()),
             Err(error) => Err(error),
@@ -129,6 +133,11 @@ impl CapturerMag {
             data: Vec::new(),
         })
     }
+
+    pub fn set_use_yuv(&mut self, use_yuv: bool) {
+        self.inner.set_use_yuv(use_yuv)
+    }
+
     pub fn exclude(&mut self, cls: &str, name: &str) -> io::Result<bool> {
         self.inner.exclude(cls, name)
     }

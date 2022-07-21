@@ -26,23 +26,42 @@ class SettingsPage extends StatefulWidget implements PageShape {
   _SettingsState createState() => _SettingsState();
 }
 
-class _SettingsState extends State<SettingsPage> {
+class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
   static const url = 'https://rustdesk.com/';
-  var _showIgnoreBattery = false;
+  final _hasIgnoreBattery = androidVersion >= 26;
+  var _ignoreBatteryOpt = false;
 
   @override
   void initState() {
     super.initState();
-    if (androidVersion >= 26) {
-      () async {
-        final res =
-            await PermissionManager.check("ignore_battery_optimizations");
-        if (_showIgnoreBattery != !res) {
-          setState(() {
-            _showIgnoreBattery = !res;
-          });
-        }
-      }();
+    WidgetsBinding.instance.addObserver(this);
+    if (_hasIgnoreBattery) {
+      updateIgnoreBatteryStatus();
+    }
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      updateIgnoreBatteryStatus();
+    }
+  }
+
+  Future<bool> updateIgnoreBatteryStatus() async {
+    final res = await PermissionManager.check("ignore_battery_optimizations");
+    if (_ignoreBatteryOpt != res) {
+      setState(() {
+        _ignoreBatteryOpt = res;
+      });
+      return true;
+    } else {
+      return false;
     }
   }
 
@@ -53,7 +72,6 @@ class _SettingsState extends State<SettingsPage> {
     final enableAbr = FFI.getByName("option", "enable-abr") != 'N';
     final enhancementsTiles = [
       SettingsTile.switchTile(
-        leading: Icon(Icons.more_horiz),
         title: Text(translate('Adaptive Bitrate') + '(beta)'),
         initialValue: enableAbr,
         onToggle: (v) {
@@ -68,32 +86,37 @@ class _SettingsState extends State<SettingsPage> {
         },
       )
     ];
-    if (_showIgnoreBattery) {
+    if (_hasIgnoreBattery) {
       enhancementsTiles.insert(
           0,
-          SettingsTile.navigation(
+          SettingsTile.switchTile(
+              initialValue: _ignoreBatteryOpt,
               title: Text(translate('Keep RustDesk background service')),
               description:
                   Text('* ${translate('Ignore Battery Optimizations')}'),
-              leading: Icon(Icons.battery_saver),
-              onPressed: (context) {
-                PermissionManager.request("ignore_battery_optimizations");
-                var count = 0;
-                Timer.periodic(Duration(seconds: 1), (timer) async {
-                  if (count > 5) {
-                    count = 0;
-                    timer.cancel();
+              onToggle: (v) async {
+                if (v) {
+                  PermissionManager.request("ignore_battery_optimizations");
+                } else {
+                  final res = await DialogManager.show<bool>(
+                      (setState, close) => CustomAlertDialog(
+                            title: Text(translate("Open System Setting")),
+                            content: Text(translate(
+                                "android_open_battery_optimizations_tip")),
+                            actions: [
+                              TextButton(
+                                  onPressed: () => close(),
+                                  child: Text(translate("Cancel"))),
+                              ElevatedButton(
+                                  onPressed: () => close(true),
+                                  child:
+                                      Text(translate("Open System Setting"))),
+                            ],
+                          ));
+                  if (res == true) {
+                    PermissionManager.request("application_details_settings");
                   }
-                  if (await PermissionManager.check(
-                      "ignore_battery_optimizations")) {
-                    count = 0;
-                    timer.cancel();
-                    setState(() {
-                      _showIgnoreBattery = false;
-                    });
-                  }
-                  count++;
-                });
+                }
               }));
     }
 

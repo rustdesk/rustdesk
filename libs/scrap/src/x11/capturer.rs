@@ -74,6 +74,10 @@ impl Capturer {
         Ok(c)
     }
 
+    pub fn set_use_yuv(&mut self, use_yuv: bool) {
+        self.use_yuv = use_yuv;
+    }
+
     pub fn display(&self) -> &Display {
         &self.display
     }

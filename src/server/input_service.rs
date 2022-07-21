@@ -187,6 +187,26 @@ lazy_static::lazy_static! {
     static ref IS_SERVER: bool =  std::env::args().nth(1) == Some("--server".to_owned());
 }
 
+#[cfg(target_os = "linux")]
+pub async fn set_uinput() -> ResultType<()> {
+    // Keyboard and mouse both open /dev/uinput
+    // TODO: Make sure there's no race
+    let keyboard = super::uinput::client::UInputKeyboard::new().await?;
+    log::info!("UInput keyboard created");
+    let mouse = super::uinput::client::UInputMouse::new().await?;
+    log::info!("UInput mouse created");
+
+    let mut en = ENIGO.lock().unwrap();
+    en.set_uinput_keyboard(Some(Box::new(keyboard)));
+    en.set_uinput_mouse(Some(Box::new(mouse)));
+    Ok(())
+}
+
+#[cfg(target_os = "linux")]
+pub async fn set_uinput_resolution(minx: i32, maxx: i32, miny: i32, maxy: i32) -> ResultType<()> {
+    super::uinput::client::set_resolution(minx, maxx, miny, maxy).await
+}
+
 pub fn is_left_up(evt: &MouseEvent) -> bool {
     let buttons = evt.mask >> 3;
     let evt_type = evt.mask & 0x7;
@@ -439,7 +459,7 @@ pub fn is_enter(evt: &KeyEvent) -> bool {
     return false;
 }
 
-pub fn lock_screen() {
+pub async fn lock_screen() {
     cfg_if::cfg_if! {
     if #[cfg(target_os = "linux")] {
         // xdg_screensaver lock not work on Linux from our service somehow
@@ -469,7 +489,7 @@ pub fn lock_screen() {
     crate::platform::lock_screen();
     }
     }
-    super::video_service::switch_to_primary();
+    super::video_service::switch_to_primary().await;
 }
 
 lazy_static::lazy_static! {
@@ -548,7 +568,6 @@ lazy_static::lazy_static! {
         (ControlKey::Equals, Key::Equals),
         (ControlKey::NumpadEnter, Key::NumpadEnter),
         (ControlKey::RAlt, Key::RightAlt),
-        (ControlKey::RWin, Key::RWin),
         (ControlKey::RControl, Key::RightControl),
         (ControlKey::RShift, Key::RightShift),
     ].iter().map(|(a, b)| (a.value(), b.clone())).collect();
@@ -679,7 +698,7 @@ fn handle_key_(evt: &KeyEvent) {
                     allow_err!(send_sas());
                 });
             } else if ck.value() == ControlKey::LockScreen.value() {
-                lock_screen();
+                lock_screen_2();
             }
         }
         Some(key_event::Union::Chr(chr)) => {
@@ -727,6 +746,11 @@ fn handle_key_(evt: &KeyEvent) {
         en.key_down(Key::NumLock).ok();
         en.key_up(Key::NumLock);
     }
+}
+
+#[tokio::main(flavor = "current_thread")]
+async fn lock_screen_2() {
+    lock_screen().await;
 }
 
 #[tokio::main(flavor = "current_thread")]

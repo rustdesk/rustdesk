@@ -57,6 +57,18 @@ fun requestPermission(context: Context, type: String) {
             }
             return
         }
+        "application_details_settings" -> {
+            try {
+                context.startActivity(Intent().apply {
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    action = "android.settings.APPLICATION_DETAILS_SETTINGS"
+                    data = Uri.parse("package:" + context.packageName)
+                })
+            } catch (e:Exception) {
+                e.printStackTrace()
+            }
+            return
+        }
         "audio" -> {
             Permission.RECORD_AUDIO
         }

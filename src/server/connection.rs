@@ -8,6 +8,7 @@ use crate::video_service;
 use crate::{common::MOBILE_INFO2, mobile::connection_manager::start_channel};
 use crate::{ipc, VERSION};
 use hbb_common::fs::can_enable_overwrite_detection;
+use hbb_common::password_security::password;
 use hbb_common::{
     config::Config,
     fs,
@@ -35,6 +36,7 @@ pub type Sender = mpsc::UnboundedSender<(Instant, Arc<Message>)>;
 
 lazy_static::lazy_static! {
     static ref LOGIN_FAILURES: Arc::<Mutex<HashMap<String, (i32, i32, i32)>>> = Default::default();
+    static ref SESSIONS: Arc::<Mutex<HashMap<String, Session>>> = Default::default();
 }
 pub static CLICK_TIME: AtomicI64 = AtomicI64::new(0);
 pub static MOUSE_MOVE_TIME: AtomicI64 = AtomicI64::new(0);
@@ -51,6 +53,14 @@ enum MessageInput {
     Key((KeyEvent, bool)),
     BlockOn,
     BlockOff,
+}
+
+#[derive(Clone, Debug)]
+struct Session {
+    name: String,
+    session_id: u64,
+    last_recv_time: Arc<Mutex<Instant>>,
+    random_password: String,
 }
 
 pub struct Connection {
@@ -80,6 +90,8 @@ pub struct Connection {
     video_ack_required: bool,
     peer_info: (String, String),
     api_server: String,
+    lr: LoginRequest,
+    last_recv_time: Arc<Mutex<Instant>>,
 }
 
 impl Subscriber for ConnInner {
@@ -111,6 +123,7 @@ const H1: Duration = Duration::from_secs(3600);
 const MILLI1: Duration = Duration::from_millis(1);
 const SEND_TIMEOUT_VIDEO: u64 = 12_000;
 const SEND_TIMEOUT_OTHER: u64 = SEND_TIMEOUT_VIDEO * 10;
+const SESSION_TIMEOUT: Duration = Duration::from_secs(30);
 
 impl Connection {
     pub async fn start(
@@ -164,6 +177,8 @@ impl Connection {
             video_ack_required: false,
             peer_info: Default::default(),
             api_server: "".to_owned(),
+            lr: Default::default(),
+            last_recv_time: Arc::new(Mutex::new(Instant::now())),
         };
         #[cfg(not(any(target_os = "android", target_os = "ios")))]
         tokio::spawn(async move {
@@ -222,7 +237,8 @@ impl Connection {
                             let mut msg_out = Message::new();
                             msg_out.set_misc(misc);
                             conn.send(msg_out).await;
-                            conn.on_close("Close requested from connection manager", false);
+                            conn.on_close("Close requested from connection manager", false).await;
+                            SESSIONS.lock().unwrap().remove(&conn.lr.my_id);
                             break;
                         }
                         ipc::Data::ChatMessage{text} => {
@@ -311,11 +327,12 @@ impl Connection {
                     if let Some(res) = res {
                         match res {
                             Err(err) => {
-                                conn.on_close(&err.to_string(), true);
+                                conn.on_close(&err.to_string(), true).await;
                                 break;
                             },
                             Ok(bytes) => {
                                 last_recv_time = Instant::now();
+                                *conn.last_recv_time.lock().unwrap() = Instant::now();
                                 if let Ok(msg_in) = Message::parse_from_bytes(&bytes) {
                                     if !conn.on_message(msg_in).await {
                                         break;
@@ -324,14 +341,14 @@ impl Connection {
                             }
                         }
                     } else {
-                        conn.on_close("Reset by the peer", true);
+                        conn.on_close("Reset by the peer", true).await;
                         break;
                     }
                 },
                 _ = conn.timer.tick() => {
                     if !conn.read_jobs.is_empty() {
                         if let Err(err) = fs::handle_read_jobs(&mut conn.read_jobs, &mut conn.stream).await {
-                            conn.on_close(&err.to_string(), false);
+                            conn.on_close(&err.to_string(), false).await;
                             break;
                         }
                     } else {
@@ -344,7 +361,7 @@ impl Connection {
                         video_service::notify_video_frame_feched(id, Some(instant.into()));
                     }
                     if let Err(err) = conn.stream.send(&value as &Message).await {
-                        conn.on_close(&err.to_string(), false);
+                        conn.on_close(&err.to_string(), false).await;
                         break;
                     }
                 },
@@ -362,13 +379,13 @@ impl Connection {
                         }
                     }
                     if let Err(err) = conn.stream.send(msg).await {
-                        conn.on_close(&err.to_string(), false);
+                        conn.on_close(&err.to_string(), false).await;
                         break;
                     }
                 },
                 _ = test_delay_timer.tick() => {
                     if last_recv_time.elapsed() >= SEC30 {
-                        conn.on_close("Timeout", true);
+                        conn.on_close("Timeout", true).await;
                         break;
                     }
                     let time = crate::get_time();
@@ -398,8 +415,9 @@ impl Connection {
         video_service::notify_video_frame_feched(id, None);
         scrap::codec::Encoder::update_video_encoder(id, scrap::codec::EncoderUpdate::Remove);
         video_service::VIDEO_QOS.lock().unwrap().reset();
+        password::after_session(conn.authorized);
         if let Err(err) = conn.try_port_forward_loop(&mut rx_from_cm).await {
-            conn.on_close(&err.to_string(), false);
+            conn.on_close(&err.to_string(), false).await;
         }
 
         conn.post_audit(json!({
@@ -571,7 +589,7 @@ impl Connection {
         let url = self.api_server.clone();
         let mut v = v;
         v["id"] = json!(Config::get_id());
-        v["uuid"] = json!(base64::encode(crate::get_uuid()));
+        v["uuid"] = json!(base64::encode(hbb_common::get_uuid()));
         v["Id"] = json!(self.inner.id);
         tokio::spawn(async move {
             allow_err!(Self::post_audit_async(url, v).await);
@@ -628,9 +646,9 @@ impl Connection {
         #[cfg(target_os = "linux")]
         if !self.file_transfer.is_some() && !self.port_forward_socket.is_some() {
             let dtype = crate::platform::linux::get_display_server();
-            if dtype != "x11" {
+            if dtype != "x11" && dtype != "wayland" {
                 res.set_error(format!(
-                    "Unsupported display server type {}, x11 expected",
+                    "Unsupported display server type {}, x11 or wayland expected",
                     dtype
                 ));
                 let mut msg_out = Message::new();
@@ -666,7 +684,7 @@ impl Connection {
             res.set_peer_info(pi);
         } else {
             try_activate_screen();
-            match video_service::get_displays() {
+            match super::video_service::get_displays().await {
                 Err(err) => {
                     res.set_error(format!("X11 error: {}", err));
                 }
@@ -778,8 +796,77 @@ impl Connection {
         self.tx_input.send(MessageInput::Key((msg, press))).ok();
     }
 
+    fn validate_one_password(&self, password: String) -> bool {
+        if password.len() == 0 {
+            return false;
+        }
+        let mut hasher = Sha256::new();
+        hasher.update(password);
+        hasher.update(&self.hash.salt);
+        let mut hasher2 = Sha256::new();
+        hasher2.update(&hasher.finalize()[..]);
+        hasher2.update(&self.hash.challenge);
+        hasher2.finalize()[..] == self.lr.password[..]
+    }
+
+    fn validate_password(&mut self) -> bool {
+        if password::security_enabled() {
+            if self.validate_one_password(Config::get_security_password()) {
+                return true;
+            }
+        }
+        if password::random_password_valid() {
+            let password = password::random_password();
+            if self.validate_one_password(password.clone()) {
+                if password::onetime_password_activated() {
+                    password::set_onetime_password_activated(false);
+                }
+                SESSIONS.lock().unwrap().insert(
+                    self.lr.my_id.clone(),
+                    Session {
+                        name: self.lr.my_name.clone(),
+                        session_id: self.lr.session_id,
+                        last_recv_time: self.last_recv_time.clone(),
+                        random_password: password,
+                    },
+                );
+                return true;
+            }
+        }
+        false
+    }
+
+    fn is_of_recent_session(&mut self) -> bool {
+        let session = SESSIONS
+            .lock()
+            .unwrap()
+            .get(&self.lr.my_id)
+            .map(|s| s.to_owned());
+        if let Some(session) = session {
+            if session.name == self.lr.my_name
+                && session.session_id == self.lr.session_id
+                && !self.lr.password.is_empty()
+                && self.validate_one_password(session.random_password.clone())
+                && session.last_recv_time.lock().unwrap().elapsed() < SESSION_TIMEOUT
+            {
+                SESSIONS.lock().unwrap().insert(
+                    self.lr.my_id.clone(),
+                    Session {
+                        name: self.lr.my_name.clone(),
+                        session_id: self.lr.session_id,
+                        last_recv_time: self.last_recv_time.clone(),
+                        random_password: session.random_password,
+                    },
+                );
+                return true;
+            }
+        }
+        false
+    }
+
     async fn on_message(&mut self, msg: Message) -> bool {
         if let Some(message::Union::LoginRequest(lr)) = msg.union {
+            self.lr = lr.clone();
             if let Some(o) = lr.option.as_ref() {
                 self.update_option(o).await;
                 if let Some(q) = o.video_codec_state.clone().take() {
@@ -850,15 +937,19 @@ impl Connection {
             }
             if !crate::is_ip(&lr.username) && lr.username != Config::get_id() {
                 self.send_login_error("Offline").await;
+            } else if self.is_of_recent_session() {
+                self.try_start_cm(lr.my_id, lr.my_name, true);
+                self.send_logon_response().await;
+                if self.port_forward_socket.is_some() {
+                    return false;
+                }
             } else if lr.password.is_empty() {
                 self.try_start_cm(lr.my_id, lr.my_name, false);
             } else {
-                let mut hasher = Sha256::new();
-                hasher.update(&Config::get_password());
-                hasher.update(&self.hash.salt);
-                let mut hasher2 = Sha256::new();
-                hasher2.update(&hasher.finalize()[..]);
-                hasher2.update(&self.hash.challenge);
+                if password::passwords().len() == 0 {
+                    self.send_login_error("Connection not allowed").await;
+                    return false;
+                }
                 let mut failure = LOGIN_FAILURES
                     .lock()
                     .unwrap()
@@ -871,7 +962,7 @@ impl Connection {
                         .await;
                 } else if time == failure.0 && failure.1 > 6 {
                     self.send_login_error("Please try 1 minute later").await;
-                } else if hasher2.finalize()[..] != lr.password[..] {
+                } else if !self.validate_password() {
                     if failure.0 == time {
                         failure.1 += 1;
                         failure.2 += 1;
@@ -1084,7 +1175,7 @@ impl Connection {
                 },
                 Some(message::Union::Misc(misc)) => match misc.union {
                     Some(misc::Union::SwitchDisplay(s)) => {
-                        video_service::switch_display(s.display);
+                        video_service::switch_display(s.display).await;
                     }
                     Some(misc::Union::ChatMessage(c)) => {
                         self.send_to_cm(ipc::Data::ChatMessage { text: c.text });
@@ -1094,7 +1185,7 @@ impl Connection {
                     }
                     Some(misc::Union::RefreshVideo(r)) => {
                         if r {
-                            video_service::refresh();
+                            super::video_service::refresh();
                         }
                     }
                     Some(misc::Union::VideoReceived(_)) => {
@@ -1102,6 +1193,11 @@ impl Connection {
                             self.inner.id,
                             Some(Instant::now().into()),
                         );
+                    }
+                    Some(misc::Union::CloseReason(_)) => {
+                        self.on_close("Peer close", true).await;
+                        SESSIONS.lock().unwrap().remove(&self.lr.my_id);
+                        return false;
                     }
                     _ => {}
                 },
@@ -1257,14 +1353,14 @@ impl Connection {
         }
     }
 
-    fn on_close(&mut self, reason: &str, lock: bool) {
+    async fn on_close(&mut self, reason: &str, lock: bool) {
         if let Some(s) = self.server.upgrade() {
             s.write().unwrap().remove_connection(&self.inner);
         }
         log::info!("#{} Connection closed: {}", self.inner.id(), reason);
         if lock && self.lock_after_session_end && self.keyboard {
             #[cfg(not(any(target_os = "android", target_os = "ios")))]
-            lock_screen();
+            lock_screen().await;
         }
         self.tx_to_cm.send(ipc::Data::Close).ok();
         self.port_forward_socket.take();

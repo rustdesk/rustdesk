@@ -28,6 +28,7 @@ use hbb_common::{
     log,
     message_proto::{option_message::BoolOption, *},
     protobuf::Message as _,
+    rand,
     rendezvous_proto::*,
     socket_client,
     sodiumoxide::crypto::{box_, secretbox, sign},
@@ -782,6 +783,7 @@ pub struct LoginConfigHandler {
     pub version: i64,
     pub conn_id: i32,
     features: Option<Features>,
+    session_id: u64,
 }
 
 impl Deref for LoginConfigHandler {
@@ -805,6 +807,7 @@ impl LoginConfigHandler {
         let config = self.load_config();
         self.remember = !config.password.is_empty();
         self.config = config;
+        self.session_id = rand::random();
     }
 
     pub fn should_auto_login(&self) -> String {
@@ -1140,6 +1143,7 @@ impl LoginConfigHandler {
             my_id,
             my_name: crate::username(),
             option: self.get_option_message(true).into(),
+            session_id: self.session_id,
             ..Default::default()
         };
         if self.is_file_transfer {
