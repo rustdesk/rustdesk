@@ -435,6 +435,7 @@ fn run(sp: GenericService) -> ResultType<()> {
     let mut try_gdi = 1;
     #[cfg(windows)]
     log::info!("gdi: {}", c.is_gdi());
+    let codec_name = Encoder::current_hw_encoder_name();
 
     while sp.ok() {
         #[cfg(windows)]
@@ -458,6 +459,9 @@ fn run(sp: GenericService) -> ResultType<()> {
         }
         if c.current != *CURRENT_DISPLAY.lock().unwrap() {
             *SWITCH.lock().unwrap() = true;
+            bail!("SWITCH");
+        }
+        if codec_name != Encoder::current_hw_encoder_name() {
             bail!("SWITCH");
         }
         check_privacy_mode_changed(&sp, c.privacy_mode_id)?;
