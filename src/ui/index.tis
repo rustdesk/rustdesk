@@ -20,6 +20,7 @@ var svg_menu = <svg #menu viewBox="0 0 512 512">
 	<circle cx="256" cy="448" r="64"/>
 	<circle cx="256" cy="64" r="64"/>
 </svg>;
+var svg_refresh_password = <svg #refresh-password xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 2v6h6M2.66 15.57a10 10 0 1 0 .57-8.38"/></svg>;
 
 var my_id = "";
 function get_id() {
@@ -520,10 +521,6 @@ class App: Reactor.Component
         var is_can_screen_recording = handler.is_can_screen_recording(false);
         return
             <div .app>
-                    <popup><menu.context #edit-password-context>
-                        <li #refresh-password>{translate('Refresh random password')}</li>
-                        <li #set-password>{translate('Set your own password')}</li>
-                    </menu></popup>
                     <div .left-pane>
                     <div>
                         <div .title>{translate('Your Desktop')}</div>
@@ -533,8 +530,7 @@ class App: Reactor.Component
                             {key_confirmed ? <input type="text" readonly value={formatId(get_id())}/> : translate("Generating ...")}
                         </div>
                         <div .your-desktop>
-                            <div>{translate('Password')}</div>
-                            <Password />
+                            <PasswordArea />
                         </div>
                     </div>
                     {!is_win || handler.is_installed() ? "": <InstallMe />}
@@ -806,44 +802,151 @@ function watch_screen_recording() {
 
 class PasswordEyeArea : Reactor.Component {
     render() {
+        var show = handler.is_random_password_valid();
+        var value = show ? handler.get_random_password() : "-";
         return
             <div .eye-area style="width: *">
-                <input|text @{this.input} readonly value="******" />
-                {svg_eye}
+                <input|text @{this.input} readonly value={value} />
+                {svg_refresh_password}
             </div>;
     }
-    
-    event mouseenter {
-        var me = this;
-        me.leaved = false;
-        me.timer(300ms, function() {
-            if (me.leaved) return;
-            me.input.value = handler.get_password();
-        });
-    }
 
-    event mouseleave {
-        this.leaved = true;
-        this.input.value = "******";
+    event click $(svg#refresh-password) (_, me) {
+        if (handler.is_random_password_valid()) handler.update_random_password();
+        this.update();
     }
 }
 
-class Password: Reactor.Component {
+var verificationMethodMenu;
+class VerificationMethodMenu: Reactor.Component {
+    function this() {
+        verificationMethodMenu = this;
+    }
+
     function render() {
-        return <div .password style="flow:horizontal">
-            <PasswordEyeArea />
-            {svg_edit}
+        if (!this.show) return <li />;
+        var me = this;
+        self.timer(1ms, function() { me.toggleMenuState() });
+        return <li>{translate('Verification Method')}
+            <menu #verification-method>
+                <li #verification-method-security><span>{svg_checkmark}</span>{translate('Enable security password')}</li>
+                <li #verification-method-random><span>{svg_checkmark}</span>{translate('Enable random password')}</li>
+            </menu>
+        </li>;
+    }
+
+    function toggleMenuState() {
+        var security_enabled = handler.is_security_password_enabled();
+        var random_enabled = handler.is_random_password_enabled();
+        var onetime_enabled = handler.is_onetime_password_enabled();
+        for (var (index, el) in this.$$(menu#verification-method>li)) {
+            if (index == 0) el.attributes.toggleClass("selected", security_enabled);
+            if (index == 1) el.attributes.toggleClass("selected", random_enabled);
+        }
+    }
+
+    event click $(menu#verification-method>li) (_, me) {
+        switch (me.id.substring('verification-method-'.length)) {
+            case 'security':
+                {
+                    var security_enabled = handler.is_security_password_enabled();
+                    handler.set_security_password_enabled(!security_enabled);
+                }
+                break;
+            case 'random':
+                {
+                    var random_enabled = handler.is_random_password_enabled();
+                    handler.set_random_password_enabled(!random_enabled);
+                }
+                break;
+        }
+        
+        this.toggleMenuState();
+        passwordArea.update();
+    }
+}
+
+var randomPasswordUpdateMethodMenu;
+class RandomPasswordUpdateMethodMenu: Reactor.Component {
+    function this() {
+        randomPasswordUpdateMethodMenu = this;
+    }
+
+    function render() {
+        if (!this.show) return <li />;
+        var me = this;
+        var random_enabled = handler.is_random_password_enabled();
+        self.timer(1ms, function() { me.toggleMenuState() });
+        return <li disabled={ random_enabled ? "false" : "true" }>{translate('Random Password After Session')}
+            <menu #random-password-update-method>
+                <li #random-password-update-method-keep><span>{svg_checkmark}</span>{translate('Keep')}</li>
+                <li #random-password-update-method-update><span>{svg_checkmark}</span>{translate('Update')}</li>
+                <li #random-password-update-method-disable><span>{svg_checkmark}</span>{translate('Disable')}</li>
+            </menu>
+        </li>;
+    }
+
+    function toggleMenuState() {
+        var method = handler.random_password_update_method();
+        for (var (index, el) in this.$$(menu#random-password-update-method>li)) {
+            if (index == 0) el.attributes.toggleClass("selected", method == "KEEP");
+            if (index == 1) el.attributes.toggleClass("selected", method == "UPDATE");
+            if (index == 2) el.attributes.toggleClass("selected", method == "DISABLE");
+        }
+    }
+
+    event click $(menu#random-password-update-method>li) (_, me) {
+        if (me.id === 'random-password-update-method-keep') handler.set_random_password_update_method("KEEP");
+        if (me.id === 'random-password-update-method-update') handler.set_random_password_update_method("UPDATE");
+        if (me.id === 'random-password-update-method-disable') handler.set_random_password_update_method("DISABLE");
+        this.toggleMenuState();
+        passwordArea.update();
+    }
+}
+
+var passwordArea;
+class PasswordArea: Reactor.Component {
+    function this() {
+        passwordArea = this;
+    }
+
+    function render() {
+        var onetime_enabled = handler.is_onetime_password_enabled();
+
+        return 
+        <div>
+            <div>{translate(onetime_enabled ? 'Onetime Password' : 'Password')}</div>
+            <div .password style="flow:horizontal">
+                {this.renderPop()}
+                <PasswordEyeArea />
+                {svg_edit}
+            </div>
         </div>;
     }
 
-    event click $(svg#edit) (_, me) {
-        var menu = $(menu#edit-password-context);
-        me.popup(menu);
+    function renderPop() {
+        var security_enabled = handler.is_security_password_enabled();
+        var random_enabled = handler.is_random_password_enabled();
+        var onetime_enabled = handler.is_onetime_password_enabled();
+        var onetime_activated = handler.is_onetime_password_activated();
+
+        return <popup><menu.context #edit-password-context>
+            <li #enable-onetime-password disabled={ random_enabled ? "false" : "true" }>{translate(onetime_enabled ? "Disable onetime password" : "Enable onetime password")}</li>
+            <li #activate-onetime-password disabled={ !random_enabled || !onetime_enabled || onetime_activated ? "true" : "false" }>{translate('Activate onetime password')}</li>
+            <div .separator />
+            <VerificationMethodMenu />
+            <div .separator />
+            <li #set-password  disabled={ security_enabled ? "false" : "true" }>{translate('Set security password')}</li>
+            <div .separator />
+            <RandomPasswordUpdateMethodMenu />
+        </menu></popup>;
     }
 
-    event click $(li#refresh-password) {
-        handler.update_password("");
-        this.update();
+    event click $(svg#edit) (_, me) {
+        randomPasswordUpdateMethodMenu.update({show: true });
+        verificationMethodMenu.update({show: true });
+        var menu = $(menu#edit-password-context);        
+        me.popup(menu);
     }
 
     event click $(li#set-password) {
@@ -862,11 +965,35 @@ class Password: Reactor.Component {
             if (p0 != p1) {
                 return translate("The confirmation is not identical.");
             }
-            handler.update_password(p0);
+            handler.set_security_password(p0);
             me.update();
         });
     }
+
+    event click $(li#enable-onetime-password) {
+        var onetime_enabled = handler.is_onetime_password_enabled();
+        handler.set_onetime_password_enabled(!onetime_enabled);
+        passwordArea.update();
+    }
+
+    event click $(li#activate-onetime-password) {
+        handler.set_onetime_password_activated(true);
+        passwordArea.update();
+    }
 }
+
+var last_password_description = "";
+function updatePasswordArea() {
+    self.timer(1s, function() {
+        var description = handler.password_description();
+        if (last_password_description != description) {
+            last_password_description = description
+            passwordArea.update();
+        }
+        updatePasswordArea();
+    });                          
+}
+updatePasswordArea();
 
 class ID: Reactor.Component {
     function render() {

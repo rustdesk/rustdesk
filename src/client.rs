@@ -28,6 +28,7 @@ use hbb_common::{
     log,
     message_proto::{option_message::BoolOption, *},
     protobuf::Message as _,
+    rand,
     rendezvous_proto::*,
     socket_client,
     sodiumoxide::crypto::{box_, secretbox, sign},
@@ -148,11 +149,25 @@ impl Client {
                 true,
             ));
         }
-        let rendezvous_server = crate::get_rendezvous_server(1_000).await;
-        log::info!("rendezvous server: {}", rendezvous_server);
-
+        let (mut rendezvous_server, servers, contained) = crate::get_rendezvous_server(1_000).await;
         let mut socket =
-            socket_client::connect_tcp(&*rendezvous_server, any_addr, RENDEZVOUS_TIMEOUT).await?;
+            socket_client::connect_tcp(&*rendezvous_server, any_addr, RENDEZVOUS_TIMEOUT).await;
+        debug_assert!(!servers.contains(&rendezvous_server));
+        if socket.is_err() && !servers.is_empty() {
+            log::info!("try the other servers: {:?}", servers);
+            for server in servers {
+                socket = socket_client::connect_tcp(&*server, any_addr, RENDEZVOUS_TIMEOUT).await;
+                if socket.is_ok() {
+                    rendezvous_server = server;
+                    break;
+                }
+            }
+            crate::refresh_rendezvous_server();
+        } else if !contained {
+            crate::refresh_rendezvous_server();
+        }
+        log::info!("rendezvous server: {}", rendezvous_server);
+        let mut socket = socket?;
         let my_addr = socket.local_addr();
         let mut signed_id_pk = Vec::new();
         let mut relay_server = "".to_owned();
@@ -165,7 +180,7 @@ impl Client {
         for i in 1..=3 {
             log::info!("#{} punch attempt with {}, id: {}", i, my_addr, peer);
             let mut msg_out = RendezvousMessage::new();
-            use hbb_common::protobuf::ProtobufEnum;
+            use hbb_common::protobuf::Enum;
             let nat_type = NatType::from_i32(my_nat_type).unwrap_or(NatType::UNKNOWN_NAT);
             msg_out.set_punch_hole_request(PunchHoleRequest {
                 id: peer.to_owned(),
@@ -179,7 +194,7 @@ impl Client {
             if let Some(Ok(bytes)) = socket.next_timeout(i * 6000).await {
                 if let Ok(msg_in) = RendezvousMessage::parse_from_bytes(&bytes) {
                     match msg_in.union {
-                        Some(rendezvous_message::Union::punch_hole_response(ph)) => {
+                        Some(rendezvous_message::Union::PunchHoleResponse(ph)) => {
                             if ph.socket_addr.is_empty() {
                                 if !ph.other_failure.is_empty() {
                                     bail!(ph.other_failure);
@@ -199,8 +214,8 @@ impl Client {
                                     }
                                 }
                             } else {
-                                peer_nat_type = ph.get_nat_type();
-                                is_local = ph.get_is_local();
+                                peer_nat_type = ph.nat_type();
+                                is_local = ph.is_local();
                                 signed_id_pk = ph.pk;
                                 relay_server = ph.relay_server;
                                 peer_addr = AddrMangle::decode(&ph.socket_addr);
@@ -208,13 +223,13 @@ impl Client {
                                 break;
                             }
                         }
-                        Some(rendezvous_message::Union::relay_response(rr)) => {
+                        Some(rendezvous_message::Union::RelayResponse(rr)) => {
                             log::info!(
                                 "relay requested from peer, time used: {:?}, relay_server: {}",
                                 start.elapsed(),
                                 rr.relay_server
                             );
-                            signed_id_pk = rr.get_pk().into();
+                            signed_id_pk = rr.pk().into();
                             let mut conn =
                                 Self::create_relay(peer, rr.uuid, rr.relay_server, key, conn_type)
                                     .await?;
@@ -383,7 +398,7 @@ impl Client {
             Some(res) => {
                 let bytes = res?;
                 if let Ok(msg_in) = Message::parse_from_bytes(&bytes) {
-                    if let Some(message::Union::signed_id(si)) = msg_in.union {
+                    if let Some(message::Union::SignedId(si)) = msg_in.union {
                         if let Ok((id, their_pk_b)) = decode_id_pk(&si.id, &sign_pk) {
                             if id == peer_id {
                                 let their_pk_b = box_::PublicKey(their_pk_b);
@@ -466,7 +481,7 @@ impl Client {
             socket.send(&msg_out).await?;
             if let Some(Ok(bytes)) = socket.next_timeout(CONNECT_TIMEOUT).await {
                 if let Ok(msg_in) = RendezvousMessage::parse_from_bytes(&bytes) {
-                    if let Some(rendezvous_message::Union::relay_response(rs)) = msg_in.union {
+                    if let Some(rendezvous_message::Union::RelayResponse(rs)) = msg_in.union {
                         if !rs.refuse_reason.is_empty() {
                             bail!(rs.refuse_reason);
                         }
@@ -768,6 +783,7 @@ pub struct LoginConfigHandler {
     pub version: i64,
     pub conn_id: i32,
     features: Option<Features>,
+    session_id: u64,
 }
 
 impl Deref for LoginConfigHandler {
@@ -791,6 +807,7 @@ impl LoginConfigHandler {
         let config = self.load_config();
         self.remember = !config.password.is_empty();
         self.config = config;
+        self.session_id = rand::random();
     }
 
     pub fn should_auto_login(&self) -> String {
@@ -1126,6 +1143,7 @@ impl LoginConfigHandler {
             my_id,
             my_name: crate::username(),
             option: self.get_option_message(true).into(),
+            session_id: self.session_id,
             ..Default::default()
         };
         if self.is_file_transfer {

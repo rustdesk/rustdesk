@@ -2,7 +2,7 @@ use super::*;
 #[cfg(target_os = "macos")]
 use dispatch::Queue;
 use enigo::{Enigo, Key, KeyboardControllable, MouseButton, MouseControllable};
-use hbb_common::{config::COMPRESS_LEVEL, protobuf::ProtobufEnumOrUnknown};
+use hbb_common::{config::COMPRESS_LEVEL, protobuf::ProtobufEnumOrUnknown, protobuf::EnumOrUnknown};
 use rdev::{simulate, EventType, Key as RdevKey};
 use std::{
     convert::TryFrom,
@@ -69,7 +69,7 @@ impl Subscriber for MouseCursorSub {
 
     #[inline]
     fn send(&mut self, msg: Arc<Message>) {
-        if let Some(message::Union::cursor_data(cd)) = &msg.union {
+        if let Some(message::Union::CursorData(cd)) = &msg.union {
             if let Some(msg) = self.cached.get(&cd.id) {
                 self.inner.send(msg.clone());
             } else {
@@ -188,6 +188,26 @@ lazy_static::lazy_static! {
     static ref IS_SERVER: bool =  std::env::args().nth(1) == Some("--server".to_owned());
 }
 
+#[cfg(target_os = "linux")]
+pub async fn set_uinput() -> ResultType<()> {
+    // Keyboard and mouse both open /dev/uinput
+    // TODO: Make sure there's no race
+    let keyboard = super::uinput::client::UInputKeyboard::new().await?;
+    log::info!("UInput keyboard created");
+    let mouse = super::uinput::client::UInputMouse::new().await?;
+    log::info!("UInput mouse created");
+
+    let mut en = ENIGO.lock().unwrap();
+    en.set_uinput_keyboard(Some(Box::new(keyboard)));
+    en.set_uinput_mouse(Some(Box::new(mouse)));
+    Ok(())
+}
+
+#[cfg(target_os = "linux")]
+pub async fn set_uinput_resolution(minx: i32, maxx: i32, miny: i32, maxy: i32) -> ResultType<()> {
+    super::uinput::client::set_resolution(minx, maxx, miny, maxy).await
+}
+
 pub fn is_left_up(evt: &MouseEvent) -> bool {
     let buttons = evt.mask >> 3;
     let evt_type = evt.mask & 0x7;
@@ -300,12 +320,12 @@ fn fix_key_down_timeout(force: bool) {
 // e.g. current state of ctrl is down, but ctrl not in modifier, we should change ctrl to up, to make modifier state sync between remote and local
 #[inline]
 fn fix_modifier(
-    modifiers: &[ProtobufEnumOrUnknown<ControlKey>],
+    modifiers: &[EnumOrUnknown<ControlKey>],
     key0: ControlKey,
     key1: Key,
     en: &mut Enigo,
 ) {
-    if get_modifier_state(key1, en) && !modifiers.contains(&ProtobufEnumOrUnknown::new(key0)) {
+    if get_modifier_state(key1, en) && !modifiers.contains(&EnumOrUnknown::new(key0)) {
         #[cfg(windows)]
         if key0 == ControlKey::Control && get_modifier_state(Key::Alt, en) {
             // AltGr case
@@ -316,7 +336,7 @@ fn fix_modifier(
     }
 }
 
-fn fix_modifiers(modifiers: &[ProtobufEnumOrUnknown<ControlKey>], en: &mut Enigo, ck: i32) {
+fn fix_modifiers(modifiers: &[EnumOrUnknown<ControlKey>], en: &mut Enigo, ck: i32) {
     if ck != ControlKey::Shift.value() {
         fix_modifier(modifiers, ControlKey::Shift, Key::Shift, en);
     }
@@ -431,7 +451,7 @@ fn handle_mouse_(evt: &MouseEvent, conn: i32) {
 }
 
 pub fn is_enter(evt: &KeyEvent) -> bool {
-    if let Some(key_event::Union::control_key(ck)) = evt.union {
+    if let Some(key_event::Union::ControlKey(ck)) = evt.union {
         if ck.value() == ControlKey::Return.value() || ck.value() == ControlKey::NumpadEnter.value()
         {
             return true;
@@ -440,7 +460,7 @@ pub fn is_enter(evt: &KeyEvent) -> bool {
     return false;
 }
 
-pub fn lock_screen() {
+pub async fn lock_screen() {
     cfg_if::cfg_if! {
     if #[cfg(target_os = "linux")] {
         // xdg_screensaver lock not work on Linux from our service somehow
@@ -477,7 +497,7 @@ pub fn lock_screen() {
     crate::platform::lock_screen();
     }
     }
-    super::video_service::switch_to_primary();
+    super::video_service::switch_to_primary().await;
 }
 
 lazy_static::lazy_static! {
@@ -556,7 +576,6 @@ lazy_static::lazy_static! {
         (ControlKey::Equals, Key::Equals),
         (ControlKey::NumpadEnter, Key::NumpadEnter),
         (ControlKey::RAlt, Key::RightAlt),
-        (ControlKey::RWin, Key::RWin),
         (ControlKey::RControl, Key::RightControl),
         (ControlKey::RShift, Key::RightShift),
     ].iter().map(|(a, b)| (a.value(), b.clone())).collect();
@@ -656,7 +675,7 @@ fn legacy_keyboard_map(evt: &KeyEvent) {
     #[cfg(windows)]
     let mut has_numlock = false;
     if evt.down {
-        let ck = if let Some(key_event::Union::control_key(ck)) = evt.union {
+        let ck = if let Some(key_event::Union::ControlKey(ck)) = evt.union {
             ck.value()
         } else {
             -1
@@ -711,7 +730,7 @@ fn legacy_keyboard_map(evt: &KeyEvent) {
         }
     }
     match evt.union {
-        Some(key_event::Union::control_key(ck)) => {
+        Some(key_event::Union::ControlKey(ck)) => {
             if let Some(key) = KEY_MAP.get(&ck.value()) {
                 #[cfg(windows)]
                 if let Some(_) = NUMPAD_KEY_MAP.get(&ck.value()) {
@@ -737,10 +756,10 @@ fn legacy_keyboard_map(evt: &KeyEvent) {
                     allow_err!(send_sas());
                 });
             } else if ck.value() == ControlKey::LockScreen.value() {
-                lock_screen();
+                lock_screen_2();
             }
         }
-        Some(key_event::Union::chr(chr)) => {
+        Some(key_event::Union::Chr(chr)) => {
             if evt.down {
                 if en.key_down(get_layout(chr)).is_ok() {
                     KEYS_DOWN
@@ -766,12 +785,12 @@ fn legacy_keyboard_map(evt: &KeyEvent) {
                     .remove(&(chr as u64 + KEY_CHAR_START));
             }
         }
-        Some(key_event::Union::unicode(chr)) => {
+        Some(key_event::Union::Unicode(chr)) => {
             if let Ok(chr) = char::try_from(chr) {
                 en.key_sequence(&chr.to_string());
             }
         }
-        Some(key_event::Union::seq(ref seq)) => {
+        Some(key_event::Union::Seq(ref seq)) => {
             en.key_sequence(&seq);
         }
         _ => {}
@@ -803,6 +822,11 @@ fn handle_key_(evt: &KeyEvent) {
             legacy_keyboard_map(evt);
         }
     }
+}
+
+#[tokio::main(flavor = "current_thread")]
+async fn lock_screen_2() {
+    lock_screen().await;
 }
 
 #[tokio::main(flavor = "current_thread")]

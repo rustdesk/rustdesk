@@ -27,6 +27,8 @@ fn new_socket(addr: SocketAddr, reuse: bool, buf_size: usize) -> Result<Socket, 
         socket.set_reuse_port(true)?;
         socket.set_reuse_address(true)?;
     }
+    // only nonblocking work with tokio, https://stackoverflow.com/questions/64649405/receiver-on-tokiompscchannel-only-receives-messages-when-buffer-is-full
+    socket.set_nonblocking(true)?;
     if buf_size > 0 {
         socket.set_recv_buffer_size(buf_size).ok();
     }

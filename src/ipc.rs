@@ -7,7 +7,9 @@ use hbb_common::{
     config::{self, Config, Config2},
     futures::StreamExt as _,
     futures_util::sink::SinkExt,
-    log, timeout, tokio,
+    log,
+    password_security::password,
+    timeout, tokio,
     tokio::io::{AsyncRead, AsyncWrite},
     tokio_util::codec::Framed,
     ResultType,
@@ -19,6 +21,16 @@ use serde_derive::{Deserialize, Serialize};
 use std::{collections::HashMap, sync::atomic::Ordering};
 #[cfg(not(windows))]
 use std::{fs::File, io::prelude::*};
+
+const STR_RANDOM_PASSWORD: &'static str = "random-password";
+const STR_SECURITY_PASSWORD: &'static str = "security-password";
+const STR_RANDOM_PASSWORD_UPDATE_METHOD: &'static str = "random-password-update-method";
+const STR_RANDOM_PASSWORD_ENABLED: &'static str = "random-password-enabled";
+const STR_SECURITY_PASSWORD_ENABLED: &'static str = "security-password-enabled";
+const STR_ONETIME_PASSWORD_ENABLED: &'static str = "onetime-password-enabled";
+const STR_ONETIME_PASSWORD_ACTIVATED: &'static str = "onetime-password-activated";
+const STR_RANDOM_PASSWORD_VALID: &'static str = "random-password-valid";
+pub const STR_PASSWORD_DESCRIPTION: &'static str = "password-description";
 
 // State with timestamp, because std::time::Instant cannot be serialized
 #[derive(Debug, Serialize, Deserialize, Copy, Clone)]
@@ -86,6 +98,45 @@ pub enum FS {
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(tag = "t", content = "c")]
+pub enum DataKeyboard {
+    Sequence(String),
+    KeyDown(enigo::Key),
+    KeyUp(enigo::Key),
+    KeyClick(enigo::Key),
+    GetKeyState(enigo::Key),
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(tag = "t", content = "c")]
+pub enum DataKeyboardResponse {
+    GetKeyState(bool),
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(tag = "t", content = "c")]
+pub enum DataMouse {
+    MoveTo(i32, i32),
+    MoveRelative(i32, i32),
+    Down(enigo::MouseButton),
+    Up(enigo::MouseButton),
+    Click(enigo::MouseButton),
+    ScrollX(i32),
+    ScrollY(i32),
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(tag = "t", content = "c")]
+pub enum DataControl {
+    Resolution {
+        minx: i32,
+        maxx: i32,
+        miny: i32,
+        maxy: i32,
+    },
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(tag = "t", content = "c")]
 pub enum Data {
     Login {
         id: i32,
@@ -127,6 +178,13 @@ pub enum Data {
     ClipbaordFile(ClipbaordFile),
     ClipboardFileEnabled(bool),
     PrivacyModeState((i32, PrivacyModeState)),
+    TestRendezvousServer,
+    Bool((String, Option<bool>)),
+    Keyboard(DataKeyboard),
+    KeyboardResponse(DataKeyboardResponse),
+    Mouse(DataMouse),
+    Control(DataControl),
+    Empty,
 }
 
 #[tokio::main(flavor = "current_thread")]
@@ -281,12 +339,28 @@ async fn handle(data: Data, stream: &mut Connection) {
                 let value;
                 if name == "id" {
                     value = Some(Config::get_id());
-                } else if name == "password" {
-                    value = Some(Config::get_password());
+                } else if name == STR_RANDOM_PASSWORD {
+                    value = Some(password::random_password());
+                } else if name == STR_SECURITY_PASSWORD {
+                    value = Some(Config::get_security_password());
+                } else if name == STR_RANDOM_PASSWORD_UPDATE_METHOD {
+                    value = Some(password::update_method().to_string());
+                } else if name == STR_PASSWORD_DESCRIPTION {
+                    value = Some(
+                        password::random_password()
+                            + &password::security_enabled().to_string()
+                            + &password::random_enabled().to_string()
+                            + &password::onetime_password_enabled().to_string()
+                            + &password::onetime_password_activated().to_string(),
+                    );
                 } else if name == "salt" {
                     value = Some(Config::get_salt());
                 } else if name == "rendezvous_server" {
-                    value = Some(Config::get_rendezvous_server());
+                    value = Some(format!(
+                        "{},{}",
+                        Config::get_rendezvous_server(),
+                        Config::get_rendezvous_servers().join(",")
+                    ));
                 } else if name == "rendezvous_servers" {
                     value = Some(Config::get_rendezvous_servers().join(","));
                 } else {
@@ -298,8 +372,12 @@ async fn handle(data: Data, stream: &mut Connection) {
                 if name == "id" {
                     Config::set_key_confirmed(false);
                     Config::set_id(&value);
-                } else if name == "password" {
-                    Config::set_password(&value);
+                } else if name == STR_RANDOM_PASSWORD {
+                    password::set_random_password(&value);
+                } else if name == STR_SECURITY_PASSWORD {
+                    Config::set_security_password(&value);
+                } else if name == STR_RANDOM_PASSWORD_UPDATE_METHOD {
+                    password::set_update_method(&value);
                 } else if name == "salt" {
                     Config::set_salt(&value);
                 } else {
@@ -336,7 +414,39 @@ async fn handle(data: Data, stream: &mut Connection) {
                     .await
             );
         }
-
+        Data::TestRendezvousServer => {
+            crate::test_rendezvous_server();
+        }
+        Data::Bool((name, value)) => match value {
+            None => {
+                let value;
+                if name == STR_SECURITY_PASSWORD_ENABLED {
+                    value = Some(password::security_enabled());
+                } else if name == STR_RANDOM_PASSWORD_ENABLED {
+                    value = Some(password::random_enabled());
+                } else if name == STR_ONETIME_PASSWORD_ENABLED {
+                    value = Some(password::onetime_password_enabled());
+                } else if name == STR_ONETIME_PASSWORD_ACTIVATED {
+                    value = Some(password::onetime_password_activated());
+                } else if name == STR_RANDOM_PASSWORD_VALID {
+                    value = Some(password::random_password_valid());
+                } else {
+                    return;
+                }
+                allow_err!(stream.send(&Data::Bool((name, value))).await);
+            }
+            Some(value) => {
+                if name == STR_SECURITY_PASSWORD_ENABLED {
+                    password::set_security_enabled(value);
+                } else if name == STR_RANDOM_PASSWORD_ENABLED {
+                    password::set_random_enabled(value);
+                } else if name == STR_ONETIME_PASSWORD_ENABLED {
+                    password::set_onetime_password_enabled(value);
+                } else if name == STR_ONETIME_PASSWORD_ACTIVATED {
+                    password::set_onetime_password_activated(value);
+                }
+            }
+        },
         _ => {}
     }
 }
@@ -419,6 +529,10 @@ where
             .await
     }
 
+    async fn send_bool(&mut self, name: &str, value: bool) -> ResultType<()> {
+        self.send(&Data::Bool((name.to_owned(), Some(value)))).await
+    }
+
     pub async fn next_timeout(&mut self, ms_timeout: u64) -> ResultType<Option<Data>> {
         Ok(timeout(ms_timeout, self.next()).await??)
     }
@@ -490,9 +604,128 @@ pub async fn set_config(name: &str, value: String) -> ResultType<()> {
     set_config_async(name, value).await
 }
 
-pub fn set_password(v: String) -> ResultType<()> {
-    Config::set_password(&v);
-    set_config("password", v)
+#[tokio::main(flavor = "current_thread")]
+async fn get_bool(name: &str) -> ResultType<Option<bool>> {
+    get_bool_async(name, 1_000).await
+}
+
+async fn get_bool_async(name: &str, ms_timeout: u64) -> ResultType<Option<bool>> {
+    let mut c = connect(ms_timeout, "").await?;
+    c.send(&Data::Bool((name.to_owned(), None))).await?;
+    if let Some(Data::Bool((name2, value))) = c.next_timeout(ms_timeout).await? {
+        if name == name2 {
+            return Ok(value);
+        }
+    }
+    return Ok(None);
+}
+
+pub async fn set_bool_async(name: &str, value: bool) -> ResultType<()> {
+    let mut c = connect(1000, "").await?;
+    c.send_bool(name, value).await?;
+    Ok(())
+}
+
+#[tokio::main(flavor = "current_thread")]
+pub async fn set_bool(name: &str, value: bool) -> ResultType<()> {
+    set_bool_async(name, value).await
+}
+
+pub fn get_random_password() -> String {
+    if let Ok(Some(password)) = get_config(STR_RANDOM_PASSWORD) {
+        password::set_random_password(&password);
+        password
+    } else {
+        password::random_password()
+    }
+}
+
+pub fn set_random_password(v: String) -> ResultType<()> {
+    password::set_random_password(&v);
+    set_config(STR_RANDOM_PASSWORD, v)
+}
+
+pub fn set_security_password(v: String) -> ResultType<()> {
+    Config::set_security_password(&v);
+    set_config(STR_SECURITY_PASSWORD, v)
+}
+
+pub fn random_password_update_method() -> String {
+    if let Ok(Some(method)) = get_config(STR_RANDOM_PASSWORD_UPDATE_METHOD) {
+        password::set_update_method(&method);
+        method
+    } else {
+        password::update_method()
+    }
+}
+
+pub fn set_random_password_update_method(method: String) -> ResultType<()> {
+    password::set_update_method(&method);
+    set_config(STR_RANDOM_PASSWORD_UPDATE_METHOD, method)
+}
+
+pub fn is_random_password_enabled() -> bool {
+    if let Ok(Some(enabled)) = get_bool(STR_RANDOM_PASSWORD_ENABLED) {
+        password::set_random_enabled(enabled);
+        enabled
+    } else {
+        password::random_enabled()
+    }
+}
+
+pub fn set_random_password_enabled(enabled: bool) -> ResultType<()> {
+    password::set_random_enabled(enabled);
+    set_bool(STR_RANDOM_PASSWORD_ENABLED, enabled)
+}
+
+pub fn is_security_password_enabled() -> bool {
+    if let Ok(Some(enabled)) = get_bool(STR_SECURITY_PASSWORD_ENABLED) {
+        password::set_security_enabled(enabled);
+        enabled
+    } else {
+        password::security_enabled()
+    }
+}
+
+pub fn set_security_password_enabled(enabled: bool) -> ResultType<()> {
+    password::set_security_enabled(enabled);
+    set_bool(STR_SECURITY_PASSWORD_ENABLED, enabled)
+}
+
+pub fn is_onetime_password_enabled() -> bool {
+    if let Ok(Some(enabled)) = get_bool(STR_ONETIME_PASSWORD_ENABLED) {
+        password::set_onetime_password_enabled(enabled);
+        enabled
+    } else {
+        password::onetime_password_enabled()
+    }
+}
+
+pub fn set_onetime_password_enabled(enabled: bool) -> ResultType<()> {
+    password::set_onetime_password_enabled(enabled);
+    set_bool(STR_ONETIME_PASSWORD_ENABLED, enabled)
+}
+
+pub fn is_onetime_password_activated() -> bool {
+    if let Ok(Some(activated)) = get_bool(STR_ONETIME_PASSWORD_ACTIVATED) {
+        password::set_onetime_password_activated(activated);
+        activated
+    } else {
+        password::onetime_password_activated()
+    }
+}
+
+pub fn set_onetime_password_activated(activated: bool) -> ResultType<()> {
+    password::set_onetime_password_activated(activated);
+    set_bool(STR_ONETIME_PASSWORD_ACTIVATED, activated)
+}
+
+pub fn is_random_password_valid() -> bool {
+    if let Ok(Some(valid)) = get_bool(STR_RANDOM_PASSWORD_VALID) {
+        valid
+    } else {
+        password::random_password_valid()
+    }
 }
 
 pub fn get_id() -> String {
@@ -511,20 +744,17 @@ pub fn get_id() -> String {
     }
 }
 
-pub fn get_password() -> String {
-    if let Ok(Some(v)) = get_config("password") {
-        Config::set_password(&v);
-        v
-    } else {
-        Config::get_password()
-    }
-}
-
-pub async fn get_rendezvous_server(ms_timeout: u64) -> String {
+pub async fn get_rendezvous_server(ms_timeout: u64) -> (String, Vec<String>) {
     if let Ok(Some(v)) = get_config_async("rendezvous_server", ms_timeout).await {
-        v
+        let mut urls = v.split(",");
+        let a = urls.next().unwrap_or_default().to_owned();
+        let b: Vec<String> = urls.map(|x| x.to_owned()).collect();
+        (a, b)
     } else {
-        Config::get_rendezvous_server()
+        (
+            Config::get_rendezvous_server(),
+            Config::get_rendezvous_servers(),
+        )
     }
 }
 
@@ -634,5 +864,12 @@ pub async fn set_socks(value: config::Socks5Server) -> ResultType<()> {
         .await?
         .send(&Data::Socks(Some(value)))
         .await?;
+    Ok(())
+}
+
+#[tokio::main(flavor = "current_thread")]
+pub async fn test_rendezvous_server() -> ResultType<()> {
+    let mut c = connect(1000, "").await?;
+    c.send(&Data::TestRendezvousServer).await?;
     Ok(())
 }
