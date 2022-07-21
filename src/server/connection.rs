@@ -1063,7 +1063,7 @@ impl Connection {
                         self.send_fs(ipc::FS::WriteBlock {
                             id: block.id,
                             file_num: block.file_num,
-                            data: block.data.into(),
+                            data: block.data,
                             compressed: block.compressed,
                         });
                     }
@@ -1363,8 +1363,8 @@ async fn start_ipc(
                             file_num,
                             data,
                             compressed}) = data {
-                                stream.send(&Data::FS(ipc::FS::WriteBlock{id, file_num, data: Vec::new(), compressed})).await?;
-                                stream.send_raw(data).await?;
+                                stream.send(&Data::FS(ipc::FS::WriteBlock{id, file_num, data: Bytes::new(), compressed})).await?;
+                                stream.send_raw(data.into()).await?;
                         } else {
                             stream.send(&data).await?;
                         }

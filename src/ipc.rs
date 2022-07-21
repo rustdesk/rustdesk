@@ -17,6 +17,7 @@ use parity_tokio_ipc::{
 };
 use serde_derive::{Deserialize, Serialize};
 use std::{collections::HashMap, sync::atomic::Ordering};
+use bytes::Bytes;
 #[cfg(not(windows))]
 use std::{fs::File, io::prelude::*};
 
@@ -63,7 +64,7 @@ pub enum FS {
     WriteBlock {
         id: i32,
         file_num: i32,
-        data: Vec<u8>,
+        data: Bytes,
         compressed: bool,
     },
     WriteDone {
