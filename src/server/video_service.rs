@@ -393,8 +393,10 @@ fn get_capturer(use_yuv: bool) -> ResultType<CapturerInfo> {
     #[cfg(windows)]
     let mut captuerer_privacy_mode_id = privacy_mode_id;
     #[cfg(windows)]
-    if crate::ui::win_privacy::is_process_consent_running()? {
-        captuerer_privacy_mode_id = 0;
+    if captuerer_privacy_mode_id != 0 {
+        if crate::ui::win_privacy::is_process_consent_running()? {
+            captuerer_privacy_mode_id = 0;
+        }
     }
     log::debug!(
         "Try create capturer with captuerer privacy mode id {}",
