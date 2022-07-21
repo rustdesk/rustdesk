@@ -1,7 +1,12 @@
-use crate::dxgi;
-use std::io::ErrorKind::{NotFound, TimedOut, WouldBlock};
-use std::time::Duration;
-use std::{io, ops};
+use crate::{common::TraitCapturer, dxgi};
+use std::{
+    io::{
+        self,
+        ErrorKind::{NotFound, TimedOut, WouldBlock},
+    },
+    ops,
+    time::Duration,
+};
 
 pub struct Capturer {
     inner: dxgi::Capturer,
@@ -21,18 +26,6 @@ impl Capturer {
         })
     }
 
-    pub fn set_use_yuv(&mut self, use_yuv: bool) {
-        self.inner.set_use_yuv(use_yuv);
-    }
-
-    pub fn is_gdi(&self) -> bool {
-        self.inner.is_gdi()
-    }
-
-    pub fn set_gdi(&mut self) -> bool {
-        self.inner.set_gdi()
-    }
-
     pub fn cancel_gdi(&mut self) {
         self.inner.cancel_gdi()
     }
@@ -44,13 +37,27 @@ impl Capturer {
     pub fn height(&self) -> usize {
         self.height
     }
+}
 
-    pub fn frame<'a>(&'a mut self, timeout: Duration) -> io::Result<Frame<'a>> {
+impl TraitCapturer for Capturer {
+    fn set_use_yuv(&mut self, use_yuv: bool) {
+        self.inner.set_use_yuv(use_yuv);
+    }
+
+    fn frame<'a>(&'a mut self, timeout: Duration) -> io::Result<Frame<'a>> {
         match self.inner.frame(timeout.as_millis() as _) {
             Ok(frame) => Ok(Frame(frame)),
             Err(ref error) if error.kind() == TimedOut => Err(WouldBlock.into()),
             Err(error) => Err(error),
         }
+    }
+
+    fn is_gdi(&self) -> bool {
+        self.inner.is_gdi()
+    }
+
+    fn set_gdi(&mut self) -> bool {
+        self.inner.set_gdi()
     }
 }
 
@@ -134,10 +141,6 @@ impl CapturerMag {
         })
     }
 
-    pub fn set_use_yuv(&mut self, use_yuv: bool) {
-        self.inner.set_use_yuv(use_yuv)
-    }
-
     pub fn exclude(&mut self, cls: &str, name: &str) -> io::Result<bool> {
         self.inner.exclude(cls, name)
     }
@@ -145,8 +148,23 @@ impl CapturerMag {
     pub fn get_rect(&self) -> ((i32, i32), usize, usize) {
         self.inner.get_rect()
     }
-    pub fn frame<'a>(&'a mut self, _timeout_ms: Duration) -> io::Result<Frame<'a>> {
+}
+
+impl TraitCapturer for CapturerMag {
+    fn set_use_yuv(&mut self, use_yuv: bool) {
+        self.inner.set_use_yuv(use_yuv)
+    }
+
+    fn frame<'a>(&'a mut self, _timeout_ms: Duration) -> io::Result<Frame<'a>> {
         self.inner.frame(&mut self.data)?;
         Ok(Frame(&self.data))
+    }
+
+    fn is_gdi(&self) -> bool {
+        false
+    }
+
+    fn set_gdi(&mut self) -> bool {
+        false
     }
 }

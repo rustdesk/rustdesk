@@ -49,3 +49,13 @@ pub fn would_block_if_equal(old: &mut Vec<u128>, b: &[u8]) -> std::io::Result<()
     old.copy_from_slice(b);
     Ok(())
 }
+
+pub trait TraitCapturer {
+    fn set_use_yuv(&mut self, use_yuv: bool);
+    fn frame<'a>(&'a mut self, timeout: std::time::Duration) -> std::io::Result<Frame<'a>>;
+
+    #[cfg(windows)]
+    fn is_gdi(&self) -> bool;
+    #[cfg(windows)]
+    fn set_gdi(&mut self) -> bool;
+}
