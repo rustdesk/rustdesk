@@ -111,7 +111,8 @@ pub fn get_cursor_data(hcursor: u64) -> ResultType<CursorData> {
                         cd.id = (*img).cursor_serial as _;
                         let pixels =
                             std::slice::from_raw_parts((*img).pixels, (cd.width * cd.height) as _);
-                        cd.colors.resize(pixels.len() * 4, 0);
+                        // cd.colors.resize(pixels.len() * 4, 0);
+                        let mut cd_colors = vec![0_u8; pixels.len() * 4];
                         for y in 0..cd.height {
                             for x in 0..cd.width {
                                 let pos = (y * cd.width + x) as usize;
@@ -124,12 +125,13 @@ pub fn get_cursor_data(hcursor: u64) -> ResultType<CursorData> {
                                     continue;
                                 }
                                 let pos = pos * 4;
-                                cd.colors[pos] = r as _;
-                                cd.colors[pos + 1] = g as _;
-                                cd.colors[pos + 2] = b as _;
-                                cd.colors[pos + 3] = a as _;
+                                cd_colors[pos] = r as _;
+                                cd_colors[pos + 1] = g as _;
+                                cd_colors[pos + 2] = b as _;
+                                cd_colors[pos + 3] = a as _;
                             }
                         }
+                        cd.colors = cd_colors.into();
                         res = Some(cd);
                     }
                     if !img.is_null() {

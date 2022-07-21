@@ -12,6 +12,7 @@ use crate::STRIDE_ALIGN;
 use super::vpx::{vp8e_enc_control_id::*, vpx_codec_err_t::*, *};
 use std::os::raw::{c_int, c_uint};
 use std::{ptr, slice};
+use hbb_common::bytes::Bytes;
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 pub enum VpxVideoCodecId {
@@ -291,7 +292,7 @@ impl VpxEncoder {
     #[inline]
     fn create_frame(frame: &EncodeFrame) -> EncodedVideoFrame {
         EncodedVideoFrame {
-            data: frame.data.to_vec(),
+            data: Bytes::from(frame.data.to_vec()),
             key: frame.key,
             pts: frame.pts,
             ..Default::default()

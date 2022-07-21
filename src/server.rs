@@ -20,6 +20,8 @@ use std::{
     sync::{Arc, Mutex, RwLock, Weak},
     time::Duration,
 };
+use bytes::Bytes;
+
 pub mod audio_service;
 cfg_if::cfg_if! {
 if #[cfg(not(any(target_os = "android", target_os = "ios")))] {
@@ -130,13 +132,13 @@ pub async fn create_tcp_connection(
             id: sign::sign(
                 &IdPk {
                     id: Config::get_id(),
-                    pk: our_pk_b.0.to_vec(),
+                    pk: Bytes::from(our_pk_b.0.to_vec()),
                     ..Default::default()
                 }
                 .write_to_bytes()
                 .unwrap_or_default(),
                 &sk,
-            ),
+            ).into(),
             ..Default::default()
         });
         timeout(CONNECT_TIMEOUT, stream.send(&msg_out)).await??;

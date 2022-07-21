@@ -590,7 +590,7 @@ async fn start_pa() {
                                             } else {
                                                 buf.clone()
                                             };
-                                        if let Err(err) = stream.send_raw(out).await {
+                                        if let Err(err) = stream.send_raw(out.into()).await {
                                             log::error!("Failed to send audio data:{}", err);
                                             break;
                                         }
