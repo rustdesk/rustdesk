@@ -5,6 +5,7 @@ use crate::{
 use hbb_common::{allow_err, bail, lazy_static, log, tokio, ResultType};
 use std::{
     ffi::CString,
+    os::windows::process::CommandExt,
     sync::Mutex,
     time::{Duration, Instant},
 };
@@ -24,7 +25,9 @@ use winapi::{
             CreateProcessAsUserW, GetCurrentThreadId, QueueUserAPC, ResumeThread,
             PROCESS_INFORMATION, STARTUPINFOW,
         },
-        winbase::{WTSGetActiveConsoleSessionId, CREATE_SUSPENDED, DETACHED_PROCESS},
+        winbase::{
+            WTSGetActiveConsoleSessionId, CREATE_NO_WINDOW, CREATE_SUSPENDED, DETACHED_PROCESS,
+        },
         winnt::{MEM_COMMIT, PAGE_READWRITE},
         winuser::*,
     },
@@ -317,6 +320,7 @@ fn wait_find_privacy_hwnd(msecs: u128) -> ResultType<HWND> {
 pub fn is_process_consent_running() -> ResultType<bool> {
     let output = std::process::Command::new("cmd")
         .args(&["/C", "tasklist | findstr consent.exe"])
+        .creation_flags(CREATE_NO_WINDOW)
         .output()?;
     Ok(output.status.success() && !output.stdout.is_empty())
 }
