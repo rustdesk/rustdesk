@@ -2,7 +2,7 @@ use super::*;
 #[cfg(target_os = "macos")]
 use dispatch::Queue;
 use enigo::{Enigo, Key, KeyboardControllable, MouseButton, MouseControllable};
-use hbb_common::{config::COMPRESS_LEVEL, protobuf::ProtobufEnumOrUnknown, protobuf::EnumOrUnknown};
+use hbb_common::{config::COMPRESS_LEVEL, protobuf::EnumOrUnknown};
 use rdev::{simulate, EventType, Key as RdevKey};
 use std::{
     convert::TryFrom,
@@ -654,7 +654,7 @@ fn sync_status(evt: &KeyEvent) {
 fn map_keyboard_map(evt: &KeyEvent) {
     // map mode(1): Send keycode according to the peer platform.
     sync_status(evt);
-    rdev_key_down_or_up(RdevKey::Unknown(evt.get_chr()), evt.down);
+    rdev_key_down_or_up(RdevKey::Unknown(evt.chr()), evt.down);
     return;
 }
 
