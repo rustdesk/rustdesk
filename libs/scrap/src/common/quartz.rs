@@ -52,7 +52,7 @@ impl Capturer {
     }
 }
 
-impl TraitCapturer for Capturer {
+impl crate::TraitCapturer for Capturer {
     fn set_use_yuv(&mut self, use_yuv: bool) {
         self.use_yuv = use_yuv;
     }
