@@ -120,7 +120,7 @@ textarea:empty {
   @ELLIPSIS;
 }
 
-div.password svg {
+div.password svg:not(.checkmark) {
     padding-left: 1em;
     size: 16px;
     color: #ddd;

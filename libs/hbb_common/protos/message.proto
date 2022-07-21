@@ -63,6 +63,7 @@ message LoginRequest {
     PortForward port_forward = 8;
   }
   bool video_ack_required = 9;
+  uint64 session_id = 10;
 }
 
 message ChatMessage { string text = 1; }

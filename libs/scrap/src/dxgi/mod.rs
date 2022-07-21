@@ -156,6 +156,10 @@ impl Capturer {
         })
     }
 
+    pub fn set_use_yuv(&mut self, use_yuv: bool) {
+        self.use_yuv = use_yuv;
+    }
+
     pub fn is_gdi(&self) -> bool {
         self.gdi_capturer.is_some()
     }

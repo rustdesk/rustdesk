@@ -599,7 +599,7 @@ impl Connection {
     async fn handle_msg_from_peer(&mut self, data: &[u8], peer: &mut Stream) -> bool {
         if let Ok(msg_in) = Message::parse_from_bytes(&data) {
             match msg_in.union {
-                Some(message::Union::video_frame(vf)) => {
+                Some(message::Union::VideoFrame(vf)) => {
                     if !self.first_frame {
                         self.first_frame = true;
                     }
@@ -610,21 +610,21 @@ impl Connection {
                         s.add(ZeroCopyBuffer(self.video_handler.rgb.clone()));
                     }
                 }
-                Some(message::Union::hash(hash)) => {
+                Some(message::Union::Hash(hash)) => {
                     self.session.handle_hash(hash, peer).await;
                 }
-                Some(message::Union::login_response(lr)) => match lr.union {
-                    Some(login_response::Union::error(err)) => {
+                Some(message::Union::LoginResponse(lr)) => match lr.union {
+                    Some(login_response::Union::Error(err)) => {
                         if !self.session.handle_login_error(&err) {
                             return false;
                         }
                     }
-                    Some(login_response::Union::peer_info(pi)) => {
+                    Some(login_response::Union::PeerInfo(pi)) => {
                         self.session.handle_peer_info(pi);
                     }
                     _ => {}
                 },
-                Some(message::Union::clipboard(cb)) => {
+                Some(message::Union::Clipboard(cb)) => {
                     if !self.session.lc.read().unwrap().disable_clipboard {
                         let content = if cb.compress {
                             decompress(&cb.content)
@@ -637,7 +637,7 @@ impl Connection {
                         }
                     }
                 }
-                Some(message::Union::cursor_data(cd)) => {
+                Some(message::Union::CursorData(cd)) => {
                     let colors = hbb_common::compress::decompress(&cd.colors);
                     self.session.push_event(
                         "cursor_data",
@@ -654,18 +654,18 @@ impl Connection {
                         ],
                     );
                 }
-                Some(message::Union::cursor_id(id)) => {
+                Some(message::Union::CursorId(id)) => {
                     self.session
                         .push_event("cursor_id", vec![("id", &id.to_string())]);
                 }
-                Some(message::Union::cursor_position(cp)) => {
+                Some(message::Union::CursorPosition(cp)) => {
                     self.session.push_event(
                         "cursor_position",
                         vec![("x", &cp.x.to_string()), ("y", &cp.y.to_string())],
                     );
                 }
-                Some(message::Union::file_response(fr)) => match fr.union {
-                    Some(file_response::Union::dir(fd)) => {
+                Some(message::Union::FileResponse(fr)) => match fr.union {
+                    Some(file_response::Union::Dir(fd)) => {
                         let mut entries = fd.entries.to_vec();
                         if self.session.peer_platform() == "Windows" {
                             fs::transform_windows_path(&mut entries);
@@ -679,7 +679,7 @@ impl Connection {
                             job.set_files(entries);
                         }
                     }
-                    Some(file_response::Union::block(block)) => {
+                    Some(file_response::Union::Block(block)) => {
                         if let Some(job) = fs::get_job(block.id, &mut self.write_jobs) {
                             if let Err(_err) = job.write(block, None).await {
                                 // to-do: add "skip" for writing job
@@ -687,17 +687,17 @@ impl Connection {
                             self.update_jobs_status();
                         }
                     }
-                    Some(file_response::Union::done(d)) => {
+                    Some(file_response::Union::Done(d)) => {
                         if let Some(job) = fs::get_job(d.id, &mut self.write_jobs) {
                             job.modify_time();
                             fs::remove_job(d.id, &mut self.write_jobs);
                         }
                         self.handle_job_status(d.id, d.file_num, None);
                     }
-                    Some(file_response::Union::error(e)) => {
+                    Some(file_response::Union::Error(e)) => {
                         self.handle_job_status(e.id, e.file_num, Some(e.error));
                     }
-                    Some(file_response::Union::digest(digest)) => {
+                    Some(file_response::Union::Digest(digest)) => {
                         if digest.is_upload {
                             if let Some(job) = fs::get_job(digest.id, &mut self.read_jobs) {
                                 if let Some(file) = job.files().get(digest.file_num as usize) {
@@ -708,9 +708,9 @@ impl Connection {
                                             id: digest.id,
                                             file_num: digest.file_num,
                                             union: Some(if overwrite {
-                                                file_transfer_send_confirm_request::Union::offset_blk(0)
+                                                file_transfer_send_confirm_request::Union::OffsetBlk(0)
                                             } else {
-                                                file_transfer_send_confirm_request::Union::skip(
+                                                file_transfer_send_confirm_request::Union::Skip(
                                                     true,
                                                 )
                                             }),
@@ -740,7 +740,7 @@ impl Connection {
                                                 let msg= new_send_confirm(FileTransferSendConfirmRequest {
                                                     id: digest.id,
                                                     file_num: digest.file_num,
-                                                    union: Some(file_transfer_send_confirm_request::Union::skip(true)),
+                                                    union: Some(file_transfer_send_confirm_request::Union::Skip(true)),
                                                     ..Default::default()
                                                 });
                                                 self.session.send_msg(msg);
@@ -752,9 +752,9 @@ impl Connection {
                                                             id: digest.id,
                                                             file_num: digest.file_num,
                                                             union: Some(if overwrite {
-                                                                file_transfer_send_confirm_request::Union::offset_blk(0)
+                                                                file_transfer_send_confirm_request::Union::OffsetBlk(0)
                                                             } else {
-                                                                file_transfer_send_confirm_request::Union::skip(true)
+                                                                file_transfer_send_confirm_request::Union::Skip(true)
                                                             }),
                                                             ..Default::default()
                                                         },
@@ -774,7 +774,7 @@ impl Connection {
                                                     FileTransferSendConfirmRequest {
                                                         id: digest.id,
                                                         file_num: digest.file_num,
-                                                        union: Some(file_transfer_send_confirm_request::Union::offset_blk(0)),
+                                                        union: Some(file_transfer_send_confirm_request::Union::OffsetBlk(0)),
                                                         ..Default::default()
                                                     },
                                                 );
@@ -791,15 +791,15 @@ impl Connection {
                     }
                     _ => {}
                 },
-                Some(message::Union::misc(misc)) => match misc.union {
-                    Some(misc::Union::audio_format(f)) => {
+                Some(message::Union::Misc(misc)) => match misc.union {
+                    Some(misc::Union::AudioFormat(f)) => {
                         self.audio_handler.handle_format(f); //
                     }
-                    Some(misc::Union::chat_message(c)) => {
+                    Some(misc::Union::ChatMessage(c)) => {
                         self.session
                             .push_event("chat_client_mode", vec![("text", &c.text)]);
                     }
-                    Some(misc::Union::permission_info(p)) => {
+                    Some(misc::Union::PermissionInfo(p)) => {
                         log::info!("Change permission {:?} -> {}", p.permission, p.enabled);
                         use permission_info::Permission;
                         self.session.push_event(
@@ -815,7 +815,7 @@ impl Connection {
                             )],
                         );
                     }
-                    Some(misc::Union::switch_display(s)) => {
+                    Some(misc::Union::SwitchDisplay(s)) => {
                         self.video_handler.reset();
                         self.session.push_event(
                             "switch_display",
@@ -828,22 +828,22 @@ impl Connection {
                             ],
                         );
                     }
-                    Some(misc::Union::close_reason(c)) => {
+                    Some(misc::Union::CloseReason(c)) => {
                         self.session.msgbox("error", "Connection Error", &c);
                         return false;
                     }
                     _ => {}
                 },
-                Some(message::Union::test_delay(t)) => {
+                Some(message::Union::TestDelay(t)) => {
                     self.session.handle_test_delay(t, peer).await;
                 }
-                Some(message::Union::audio_frame(frame)) => {
+                Some(message::Union::AudioFrame(frame)) => {
                     if !self.session.lc.read().unwrap().disable_audio {
                         self.audio_handler.handle_frame(frame);
                     }
                 }
-                Some(message::Union::file_action(action)) => match action.union {
-                    Some(file_action::Union::send_confirm(c)) => {
+                Some(message::Union::FileAction(action)) => match action.union {
+                    Some(file_action::Union::SendConfirm(c)) => {
                         if let Some(job) = fs::get_job(c.id, &mut self.read_jobs) {
                             job.confirm(&c);
                         }
@@ -1029,9 +1029,9 @@ impl Connection {
                             id,
                             file_num,
                             union: if need_override {
-                                Some(file_transfer_send_confirm_request::Union::offset_blk(0))
+                                Some(file_transfer_send_confirm_request::Union::OffsetBlk(0))
                             } else {
-                                Some(file_transfer_send_confirm_request::Union::skip(true))
+                                Some(file_transfer_send_confirm_request::Union::Skip(true))
                             },
                             ..Default::default()
                         });
@@ -1047,9 +1047,9 @@ impl Connection {
                             id,
                             file_num,
                             union: if need_override {
-                                Some(file_transfer_send_confirm_request::Union::offset_blk(0))
+                                Some(file_transfer_send_confirm_request::Union::OffsetBlk(0))
                             } else {
-                                Some(file_transfer_send_confirm_request::Union::skip(true))
+                                Some(file_transfer_send_confirm_request::Union::Skip(true))
                             },
                             ..Default::default()
                         });
@@ -1451,7 +1451,7 @@ pub mod connection_manager {
                     let mut req = FileTransferSendConfirmRequest {
                         id,
                         file_num,
-                        union: Some(file_transfer_send_confirm_request::Union::offset_blk(0)),
+                        union: Some(file_transfer_send_confirm_request::Union::OffsetBlk(0)),
                         ..Default::default()
                     };
                     let digest = FileTransferDigest {

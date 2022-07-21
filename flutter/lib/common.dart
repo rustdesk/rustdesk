@@ -260,7 +260,12 @@ class PermissionManager {
   static Timer? _timer;
   static var _current = "";
 
-  static final permissions = ["audio", "file", "ignore_battery_optimizations"];
+  static final permissions = [
+    "audio",
+    "file",
+    "ignore_battery_optimizations",
+    "application_details_settings"
+  ];
 
   static bool isWaitingFile() {
     if (_completer != null) {

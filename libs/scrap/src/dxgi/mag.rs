@@ -446,6 +446,10 @@ impl CapturerMag {
         Ok(s)
     }
 
+    pub(crate) fn set_use_yuv(&mut self, use_yuv: bool) {
+        self.use_yuv = use_yuv;
+    }
+
     pub(crate) fn exclude(&mut self, cls: &str, name: &str) -> Result<bool> {
         let name_c = CString::new(name).unwrap();
         unsafe {

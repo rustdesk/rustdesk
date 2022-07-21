@@ -11,6 +11,7 @@ cfg_if! {
         mod wayland;
         mod x11;
         pub use self::linux::*;
+        pub use self::x11::Frame;
             } else {
                 mod x11;
                 pub use self::x11::*;
