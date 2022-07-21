@@ -6,7 +6,7 @@ use std::io::ErrorKind::WouldBlock;
 use std::thread;
 use std::time::Duration;
 
-use scrap::{i420_to_rgb, Capturer, Display};
+use scrap::{i420_to_rgb, Capturer, Display, TraitCapturer};
 
 fn main() {
     let n = Display::all().unwrap().len();
