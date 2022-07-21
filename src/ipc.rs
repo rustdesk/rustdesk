@@ -456,8 +456,8 @@ where
         }
     }
 
-    pub async fn send_raw(&mut self, data: Vec<u8>) -> ResultType<()> {
-        self.inner.send(bytes::Bytes::from(data)).await?;
+    pub async fn send_raw(&mut self, data: Bytes) -> ResultType<()> {
+        self.inner.send(data).await?;
         Ok(())
     }
 
