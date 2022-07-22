@@ -7,7 +7,7 @@ use hbb_common::{
     config::HwCodecConfig,
     lazy_static, log,
     message_proto::{EncodedVideoFrame, EncodedVideoFrames, Message, VideoFrame},
-    ResultType,
+    ResultType, bytes::Bytes,
 };
 use hwcodec::{
     decode::{DecodeContext, DecodeFrame, Decoder},
@@ -91,7 +91,7 @@ impl EncoderApi for HwEncoder {
         let mut frames = Vec::new();
         for frame in self.encode(frame).with_context(|| "Failed to encode")? {
             frames.push(EncodedVideoFrame {
-                data: frame.data,
+                data: Bytes::from(frame.data),
                 pts: frame.pts as _,
                 ..Default::default()
             });
