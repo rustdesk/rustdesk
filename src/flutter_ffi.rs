@@ -20,8 +20,9 @@ use crate::flutter::{self, Session, SESSIONS};
 use crate::start_server;
 use crate::ui_interface;
 use crate::ui_interface::{
-    change_id, get_app_name, get_async_job_status, get_license, get_options, get_socks,
-    get_sound_inputs, get_version, is_ok_change_id, set_options, set_socks, test_if_valid_server,
+    change_id, get_app_name, get_async_job_status, get_fav, get_lan_peers, get_license,
+    get_options, get_peer, get_socks, get_sound_inputs, get_version, is_ok_change_id, set_options,
+    set_socks, store_fav, test_if_valid_server,
 };
 
 fn initialize(app_dir: &str) {
@@ -427,6 +428,23 @@ pub fn main_get_license() -> String {
 
 pub fn main_get_version() -> String {
     get_version()
+}
+
+pub fn main_get_fav() -> Vec<String> {
+    get_fav()
+}
+
+pub fn main_store_fav(favs: Vec<String>) {
+    store_fav(favs)
+}
+
+pub fn main_get_peers(id: String) -> String {
+    let conf = get_peer(id);
+    serde_json::to_string(&conf).unwrap_or("".to_string())
+}
+
+pub fn main_get_lan_peers() -> String {
+    get_lan_peers()
 }
 
 /// FFI for **get** commands which are idempotent.

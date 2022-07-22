@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/utils/multi_window_manager.dart';
 import 'package:get/get.dart';
@@ -9,6 +11,12 @@ import '../../mobile/pages/home_page.dart';
 import '../../mobile/pages/scan_page.dart';
 import '../../mobile/pages/settings_page.dart';
 import '../../models/model.dart';
+
+enum RemoteType {
+  recently,
+  favorite,
+  discovered
+}
 
 /// Connection page for connecting to a remote peer.
 class ConnectionPage extends StatefulWidget implements PageShape {
@@ -62,7 +70,45 @@ class _ConnectionPageState extends State<ConnectionPage> {
             ).marginOnly(top: 16.0, left: 16.0),
             SizedBox(height: 12),
             Divider(thickness: 1,),
-            getPeers(),
+            Expanded(
+              child: DefaultTabController(
+                  length: 4,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      TabBar(
+                        labelColor: Colors.black87,
+                  isScrollable: true,
+                          indicatorSize: TabBarIndicatorSize.label,
+                          tabs: [
+                        Tab(child: Text(translate("Recent Sessions")),),
+                        Tab(child: Text(translate("Favorites")),),
+                        Tab(child: Text(translate("Discovered")),),
+                        Tab(child: Text(translate("Address Book")),),
+                      ]),
+                      Expanded(child: TabBarView(children: [
+                        FutureBuilder<Widget>(future: getPeers(rType: RemoteType.recently),
+                            builder: (context, snapshot){
+                            if (snapshot.hasData) {
+                              return snapshot.data!;
+                            } else {
+                              return Offstage();
+                            }
+                            }),
+                        FutureBuilder<Widget>(future: getPeers(rType: RemoteType.favorite),
+                            builder: (context, snapshot){
+                              if (snapshot.hasData) {
+                                return snapshot.data!;
+                              } else {
+                                return Offstage();
+                              }
+                            }),
+                        Container(),
+                        Container(),
+                      ]).paddingSymmetric(horizontal: 12.0,vertical: 4.0))
+                    ],
+                  )),
+            ),
           ]),
     );
   }
@@ -230,25 +276,47 @@ class _ConnectionPageState extends State<ConnectionPage> {
     if (platform == 'mac os')
       platform = 'mac';
     else if (platform != 'linux' && platform != 'android') platform = 'win';
-    return Image.asset('assets/$platform.png', width: 24, height: 24);
+    return Image.asset('assets/$platform.png', height: 50);
   }
 
   /// Get all the saved peers.
-  Widget getPeers() {
+  Future<Widget> getPeers({RemoteType rType = RemoteType.recently}) async {
     final size = MediaQuery.of(context).size;
     final space = 8.0;
-    var width = size.width - 2 * space;
-    final minWidth = 320.0;
-    if (size.width > minWidth + 2 * space) {
-      final n = (size.width / (minWidth + 2 * space)).floor();
-      width = size.width / n - 2 * space;
-    }
     final cards = <Widget>[];
-    var peers = gFFI.peers();
+    var peers;
+    switch (rType) {
+      case RemoteType.recently:
+        peers = gFFI.peers();
+        break;
+      case RemoteType.favorite:
+        peers = await gFFI.bind.mainGetFav().then((peers) async {
+          final peersEntities = await Future.wait(peers.map((id) => gFFI.bind.mainGetPeers(id: id)).toList(growable: false))
+              .then((peers_str){
+            final len = peers_str.length;
+            final ps = List<Peer>.empty(growable: true);
+            for(var i = 0; i< len ; i++){
+              print("${peers[i]}: ${peers_str[i]}");
+              ps.add(Peer.fromJson(peers[i], jsonDecode(peers_str[i])['info']));
+            }
+            return ps;
+          });
+          return peersEntities;
+        });
+        break;
+      case RemoteType.discovered:
+        // TODO: Handle this case.
+        peers = await gFFI.bind.mainGetLanPeers().then((peers_string){
+
+        });
+        break;
+    }
     peers.forEach((p) {
       cards.add(Container(
-          width: width,
+          width: 250,
+          height: 150,
           child: Card(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
               child: GestureDetector(
                   onTap: !isWebDesktop ? () => connect('${p.id}') : null,
                   onDoubleTap: isWebDesktop ? () => connect('${p.id}') : null,
@@ -258,29 +326,67 @@ class _ConnectionPageState extends State<ConnectionPage> {
                     _menuPos = RelativeRect.fromLTRB(x, y, x, y);
                     showPeerMenu(context, p.id);
                   },
-                  child: ListTile(
-                    contentPadding: const EdgeInsets.only(left: 12),
-                    subtitle: Text('${p.username}@${p.hostname}'),
-                    title: Text('${p.id}'),
-                    leading: Container(
-                        padding: const EdgeInsets.all(6),
-                        child: getPlatformImage('${p.platform}'),
-                        color: str2color('${p.id}${p.platform}', 0x7f)),
-                    trailing: InkWell(
-                        child: Padding(
-                            padding: const EdgeInsets.all(12),
-                            child: Icon(Icons.more_vert)),
-                        onTapDown: (e) {
-                          final x = e.globalPosition.dx;
-                          final y = e.globalPosition.dy;
-                          _menuPos = RelativeRect.fromLTRB(x, y, x, y);
-                        },
-                        onTap: () {
-                          showPeerMenu(context, p.id);
-                        }),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Expanded(
+                        child: Container(
+                          decoration: BoxDecoration(
+                            color: str2color('${p.id}${p.platform}', 0x7f),
+                            borderRadius: BorderRadius.only(
+                              topLeft: Radius.circular(20),
+                              topRight: Radius.circular(20),
+                            )
+                          ),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.center,
+                                  children: [
+                                    Container(
+                                        padding: const EdgeInsets.all(6),
+                                        child: getPlatformImage('${p.platform}'),),
+                                    Row(
+                                      children: [
+                                        Expanded(
+                                          child: Text('${p.username}@${p.hostname}', style: TextStyle(
+                                            color: Colors.white70,
+                                            fontSize: 12
+                                          ),textAlign: TextAlign.center,
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ],
+                                ).paddingAll(4.0),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text("${p.id}"),
+                          InkWell(
+                              child: Icon(Icons.more_vert),
+                              onTapDown: (e) {
+                                final x = e.globalPosition.dx;
+                                final y = e.globalPosition.dy;
+                                _menuPos = RelativeRect.fromLTRB(x, y, x, y);
+                              },
+                              onTap: () {
+                                showPeerMenu(context, p.id);
+                              }),
+                        ],
+                      ).paddingSymmetric(vertical: 8.0,horizontal: 12.0)
+                    ],
                   )))));
     });
-    return Wrap(children: cards, spacing: space, runSpacing: space);
+    return SingleChildScrollView(child: Wrap(children: cards, spacing: space, runSpacing: space));
   }
 
   /// Show the peer menu and handle user's choice.
