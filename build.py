@@ -22,7 +22,7 @@ def get_version():
     return ''
 
 
-def prase_rc_features(feature):
+def parse_rc_features(feature):
     available_features = {
         'IddDriver': {
             'zip_url': 'https://github.com/fufesou/RustDeskIddDriver/releases/download/v0.1/RustDeskIddDriver_x64.zip',
@@ -95,7 +95,7 @@ def download_extract_features(features, res_dir):
 
 
 def get_rc_features(args):
-    features = prase_rc_features(args.feature)
+    features = parse_rc_features(args.feature)
     if features:
         print(f'Build with features {list(features.keys())}')
         res_dir = 'resources'
