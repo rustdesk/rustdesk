@@ -20,6 +20,8 @@ use std::{
     sync::{Arc, Mutex, RwLock, Weak},
     time::Duration,
 };
+use bytes::Bytes;
+
 pub mod audio_service;
 cfg_if::cfg_if! {
 if #[cfg(not(any(target_os = "android", target_os = "ios")))] {
@@ -130,13 +132,13 @@ pub async fn create_tcp_connection(
             id: sign::sign(
                 &IdPk {
                     id: Config::get_id(),
-                    pk: our_pk_b.0.to_vec(),
+                    pk: Bytes::from(our_pk_b.0.to_vec()),
                     ..Default::default()
                 }
                 .write_to_bytes()
                 .unwrap_or_default(),
                 &sk,
-            ),
+            ).into(),
             ..Default::default()
         });
         timeout(CONNECT_TIMEOUT, stream.send(&msg_out)).await??;
@@ -319,6 +321,14 @@ pub async fn start_server(is_server: bool) {
         log::info!("DISPLAY={:?}", std::env::var("DISPLAY"));
         log::info!("XAUTHORITY={:?}", std::env::var("XAUTHORITY"));
     }
+    #[cfg(feature = "hwcodec")]
+    {
+        use std::sync::Once;
+        static ONCE: Once = Once::new();
+        ONCE.call_once(|| {
+            scrap::hwcodec::check_config_process(false);
+        })
+    }
 
     if is_server {
         std::thread::spawn(move || {
@@ -327,15 +337,6 @@ pub async fn start_server(is_server: bool) {
                 std::process::exit(-1);
             }
         });
-        #[cfg(feature = "hwcodec")]
-        if let Ok(exe) = std::env::current_exe() {
-            std::thread::spawn(move || {
-                std::process::Command::new(exe)
-                    .arg("--check-hwcodec-config")
-                    .status()
-                    .ok()
-            });
-        }
         #[cfg(windows)]
         crate::platform::windows::bootstrap();
         input_service::fix_key_down_timeout_loop();

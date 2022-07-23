@@ -636,6 +636,16 @@ impl Connection {
             pi.hostname = MOBILE_INFO2.lock().unwrap().clone();
             pi.platform = "Android".into();
         }
+        #[cfg(feature = "hwcodec")]
+        {
+            let (h264, h265) = scrap::codec::Encoder::supported_encoding();
+            pi.encoding = Some(SupportedEncoding {
+                h264,
+                h265,
+                ..Default::default()
+            })
+            .into();
+        }
 
         if self.port_forward_socket.is_some() {
             let mut msg_out = Message::new();
@@ -1352,6 +1362,12 @@ impl Connection {
                 }
             }
         }
+        if let Some(q) = o.video_codec_state.clone().take() {
+            scrap::codec::Encoder::update_video_encoder(
+                self.inner.id(),
+                scrap::codec::EncoderUpdate::State(q),
+            );
+        }
     }
 
     async fn on_close(&mut self, reason: &str, lock: bool) {
@@ -1460,7 +1476,7 @@ async fn start_ipc(
                             file_num,
                             data,
                             compressed}) = data {
-                                stream.send(&Data::FS(ipc::FS::WriteBlock{id, file_num, data: Vec::new(), compressed})).await?;
+                                stream.send(&Data::FS(ipc::FS::WriteBlock{id, file_num, data: Bytes::new(), compressed})).await?;
                                 stream.send_raw(data).await?;
                         } else {
                             stream.send(&data).await?;

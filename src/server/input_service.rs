@@ -146,7 +146,7 @@ fn run_cursor(sp: MouseCursorService, state: &mut StateCursor) -> ResultType<()>
                 msg = cached.clone();
             } else {
                 let mut data = crate::get_cursor_data(hcursor)?;
-                data.colors = hbb_common::compress::compress(&data.colors[..], COMPRESS_LEVEL);
+                data.colors = hbb_common::compress::compress(&data.colors[..], COMPRESS_LEVEL).into();
                 let mut tmp = Message::new();
                 tmp.set_cursor_data(data);
                 msg = Arc::new(tmp);

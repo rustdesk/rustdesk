@@ -26,11 +26,11 @@ use hbb_common::tokio::sync::{
 use scrap::{
     codec::{Encoder, EncoderCfg, HwEncoderConfig},
     vpxcodec::{VpxEncoderConfig, VpxVideoCodecId},
-    Capturer, Display, Frame,
+    Capturer, Display, TraitCapturer,
 };
 use std::{
     collections::HashSet,
-    io::{ErrorKind::WouldBlock, Result},
+    io::ErrorKind::WouldBlock,
     ops::{Deref, DerefMut},
     time::{self, Duration, Instant},
 };
@@ -125,56 +125,6 @@ impl VideoFrameController {
                 // this branch would nerver be reached
             }
         }
-    }
-}
-
-pub(super) trait TraitCapturer {
-    fn frame<'a>(&'a mut self, timeout: Duration) -> Result<Frame<'a>>;
-
-    fn set_use_yuv(&mut self, use_yuv: bool);
-
-    #[cfg(windows)]
-    fn is_gdi(&self) -> bool;
-    #[cfg(windows)]
-    fn set_gdi(&mut self) -> bool;
-}
-
-impl TraitCapturer for Capturer {
-    fn frame<'a>(&'a mut self, timeout: Duration) -> Result<Frame<'a>> {
-        self.frame(timeout)
-    }
-
-    fn set_use_yuv(&mut self, use_yuv: bool) {
-        self.set_use_yuv(use_yuv);
-    }
-
-    #[cfg(windows)]
-    fn is_gdi(&self) -> bool {
-        self.is_gdi()
-    }
-
-    #[cfg(windows)]
-    fn set_gdi(&mut self) -> bool {
-        self.set_gdi()
-    }
-}
-
-#[cfg(windows)]
-impl TraitCapturer for scrap::CapturerMag {
-    fn frame<'a>(&'a mut self, _timeout_ms: Duration) -> Result<Frame<'a>> {
-        self.frame(_timeout_ms)
-    }
-
-    fn set_use_yuv(&mut self, use_yuv: bool) {
-        self.set_use_yuv(use_yuv);
-    }
-
-    fn is_gdi(&self) -> bool {
-        false
-    }
-
-    fn set_gdi(&mut self) -> bool {
-        false
     }
 }
 
@@ -393,8 +343,10 @@ fn get_capturer(use_yuv: bool) -> ResultType<CapturerInfo> {
     #[cfg(windows)]
     let mut captuerer_privacy_mode_id = privacy_mode_id;
     #[cfg(windows)]
-    if crate::ui::win_privacy::is_process_consent_running()? {
-        captuerer_privacy_mode_id = 0;
+    if captuerer_privacy_mode_id != 0 {
+        if crate::ui::win_privacy::is_process_consent_running()? {
+            captuerer_privacy_mode_id = 0;
+        }
     }
     log::debug!(
         "Try create capturer with captuerer privacy mode id {}",
@@ -483,6 +435,7 @@ fn run(sp: GenericService) -> ResultType<()> {
     let mut try_gdi = 1;
     #[cfg(windows)]
     log::info!("gdi: {}", c.is_gdi());
+    let codec_name = Encoder::current_hw_encoder_name();
 
     while sp.ok() {
         #[cfg(windows)]
@@ -506,6 +459,9 @@ fn run(sp: GenericService) -> ResultType<()> {
         }
         if c.current != *CURRENT_DISPLAY.lock().unwrap() {
             *SWITCH.lock().unwrap() = true;
+            bail!("SWITCH");
+        }
+        if codec_name != Encoder::current_hw_encoder_name() {
             bail!("SWITCH");
         }
         check_privacy_mode_changed(&sp, c.privacy_mode_id)?;

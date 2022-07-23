@@ -1,4 +1,4 @@
-use crate::x11;
+use crate::{x11, common::TraitCapturer};
 use std::{io, ops, time::Duration};
 
 pub struct Capturer(x11::Capturer);
@@ -8,10 +8,6 @@ impl Capturer {
         x11::Capturer::new(display.0, yuv).map(Capturer)
     }
 
-    pub fn set_use_yuv(&mut self, use_yuv: bool) {
-        self.0.set_use_yuv(use_yuv);
-    }
-
     pub fn width(&self) -> usize {
         self.0.display().rect().w as usize
     }
@@ -19,8 +15,14 @@ impl Capturer {
     pub fn height(&self) -> usize {
         self.0.display().rect().h as usize
     }
+}
 
-    pub fn frame<'a>(&'a mut self, _timeout: Duration) -> io::Result<Frame<'a>> {
+impl TraitCapturer for Capturer {
+    fn set_use_yuv(&mut self, use_yuv: bool) {
+        self.0.set_use_yuv(use_yuv);
+    }
+
+    fn frame<'a>(&'a mut self, _timeout: Duration) -> io::Result<Frame<'a>> {
         Ok(Frame(self.0.frame()?))
     }
 }

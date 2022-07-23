@@ -4,7 +4,7 @@ extern crate scrap;
 use std::fs::File;
 
 #[cfg(windows)]
-use scrap::CapturerMag;
+use scrap::{CapturerMag, TraitCapturer};
 use scrap::{i420_to_rgb, Display};
 
 fn main() {
