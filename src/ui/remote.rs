@@ -231,6 +231,9 @@ impl sciter::EventHandler for Handler {
         fn get_remember();
         fn peer_platform();
         fn set_write_override(i32, i32, bool, bool, bool);
+        fn has_hwcodec();
+        fn supported_hwcodec();
+        fn change_prefer_codec();
     }
 }
 
@@ -593,6 +596,42 @@ impl Handler {
             is_upload,
         )));
         true
+    }
+
+    fn has_hwcodec(&self) -> bool {
+        #[cfg(not(feature = "hwcodec"))]
+        return false;
+        #[cfg(feature = "hwcodec")]
+        return true;
+    }
+
+    fn supported_hwcodec(&self) -> Value {
+        #[cfg(feature = "hwcodec")]
+        {
+            let mut v = Value::array(0);
+            let decoder = scrap::codec::Decoder::video_codec_state(&self.id);
+            let mut h264 = decoder.score_h264 > 0;
+            let mut h265 = decoder.score_h265 > 0;
+            if let Some((encoding_264, encoding_265)) = self.lc.read().unwrap().supported_encoding {
+                h264 = h264 && encoding_264;
+                h265 = h265 && encoding_265;
+            }
+            v.push(h264);
+            v.push(h265);
+            v
+        }
+        #[cfg(not(feature = "hwcodec"))]
+        {
+            let mut v = Value::array(0);
+            v.push(false);
+            v.push(false);
+            v
+        }
+    }
+
+    fn change_prefer_codec(&self) {
+        let msg = self.lc.write().unwrap().change_prefer_codec();
+        self.send(Data::Message(msg));
     }
 
     fn t(&self, name: String) -> String {

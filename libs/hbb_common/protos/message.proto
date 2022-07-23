@@ -72,6 +72,11 @@ message Features {
   bool privacy_mode = 1;
 }
 
+message SupportedEncoding {
+  bool h264 = 1;
+  bool h265 = 2;
+}
+
 message PeerInfo {
   string username = 1;
   string hostname = 2;
@@ -82,6 +87,7 @@ message PeerInfo {
   string version = 7;
   int32 conn_id = 8;
   Features features = 9;
+  SupportedEncoding encoding = 10;
 }
 
 message LoginResponse {
@@ -434,9 +440,17 @@ enum ImageQuality {
 }
 
 message VideoCodecState {
-  int32 ScoreVpx = 1;
-  int32 ScoreH264 = 2;
-  int32 ScoreH265 = 3;
+  enum PerferCodec {
+    Auto = 0;
+    VPX = 1;
+    H264 = 2;
+    H265 = 3;
+  }
+
+  int32 score_vpx = 1;
+  int32 score_h264 = 2;
+  int32 score_h265 = 3;
+  PerferCodec perfer = 4;
 }
 
 message OptionMessage {

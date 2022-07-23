@@ -978,6 +978,10 @@ impl HwCodecConfig {
     pub fn store(&self) {
         Config::store_(self, "_hwcodec");
     }
+
+    pub fn remove() {
+        std::fs::remove_file(Config::file_("_hwcodec")).ok();
+    }
 }
 
 #[cfg(test)]

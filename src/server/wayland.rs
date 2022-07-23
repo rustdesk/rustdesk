@@ -1,30 +1,39 @@
 use super::*;
 use hbb_common::allow_err;
-use scrap::{Capturer, Display, Frame};
-use std::{io::Result, time::Duration};
+use scrap::{Capturer, Display, Frame, TraitCapturer};
+use std::io::Result;
 
 lazy_static::lazy_static! {
     static ref CAP_DISPLAY_INFO: RwLock<u64> = RwLock::new(0);
 }
+
+struct CapturerPtr(*mut Capturer);
+
+impl Clone for CapturerPtr {
+    fn clone(&self) -> Self {
+        Self(self.0)
+    }
+}
+
+impl TraitCapturer for CapturerPtr {
+    fn frame<'a>(&'a mut self, timeout: Duration) -> Result<Frame<'a>> {
+        unsafe { (*self.0).frame(timeout) }
+    }
+
+    fn set_use_yuv(&mut self, use_yuv: bool) {
+        unsafe {
+            (*self.0).set_use_yuv(use_yuv);
+        }
+    }
+}
+
 struct CapDisplayInfo {
     rects: Vec<((i32, i32), usize, usize)>,
     displays: Vec<DisplayInfo>,
     num: usize,
     primary: usize,
     current: usize,
-    capturer: *mut Capturer,
-}
-
-impl super::video_service::TraitCapturer for *mut Capturer {
-    fn frame<'a>(&'a mut self, timeout: Duration) -> Result<Frame<'a>> {
-        unsafe { (**self).frame(timeout) }
-    }
-
-    fn set_use_yuv(&mut self, use_yuv: bool) {
-        unsafe {
-            (**self).set_use_yuv(use_yuv);
-        }
-    }
+    capturer: CapturerPtr,
 }
 
 async fn check_init() -> ResultType<()> {
@@ -68,6 +77,7 @@ async fn check_init() -> ResultType<()> {
                 let capturer = Box::into_raw(Box::new(
                     Capturer::new(display, true).with_context(|| "Failed to create capturer")?,
                 ));
+                let capturer = CapturerPtr(capturer);
                 let cap_display_info = Box::into_raw(Box::new(CapDisplayInfo {
                     rects,
                     displays,
@@ -104,7 +114,7 @@ pub fn clear() {
     if *lock != 0 {
         unsafe {
             let cap_display_info = Box::from_raw(*lock as *mut CapDisplayInfo);
-            let _ = Box::from_raw(cap_display_info.capturer);
+            let _ = Box::from_raw(cap_display_info.capturer.0);
         }
         *lock = 0;
     }
@@ -170,7 +180,7 @@ pub(super) fn get_capturer() -> ResultType<super::video_service::CapturerInfo> {
                 current: cap_display_info.current,
                 privacy_mode_id: 0,
                 _captuerer_privacy_mode_id: 0,
-                capturer: Box::new(cap_display_info.capturer),
+                capturer: Box::new(cap_display_info.capturer.clone()),
             })
         }
     } else {
