@@ -110,7 +110,6 @@ impl EnigoPynput {
                 return true;
             }
         };
-        log::info!("send pynput: {:?}", &s);
         return self.tx.send((PyMsg::Str(s), is_press)).is_ok();
     }
 }
