@@ -246,6 +246,7 @@ pub unsafe fn nv12_to_i420(
 #[cfg(feature = "hwcodec")]
 pub mod hw {
     use hbb_common::{anyhow::anyhow, ResultType};
+    #[cfg(target_os = "windows")]
     use hwcodec::{ffmpeg::ffmpeg_linesize_offset_length, AVPixelFormat};
 
     pub fn hw_bgra_to_i420(
@@ -381,6 +382,8 @@ pub mod hw {
         src_stride_y: usize,
         src_stride_uv: usize,
         dst: &mut Vec<u8>,
+        _i420: &mut Vec<u8>,
+        _align: usize,
     ) -> ResultType<()> {
         dst.resize(width * height * 4, 0);
         unsafe {

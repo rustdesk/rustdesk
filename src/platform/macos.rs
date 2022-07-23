@@ -342,7 +342,7 @@ pub fn get_cursor_data(hcursor: u64) -> ResultType<CursorData> {
         }
         Ok(CursorData {
             id: hcursor,
-            colors,
+            colors: colors.into(),
             hotx: hotspot.x as _,
             hoty: hotspot.y as _,
             width: size.width as _,

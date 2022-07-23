@@ -32,8 +32,12 @@ impl Capturer {
     pub fn height(&self) -> usize {
         self.display.height() as usize
     }
+}
 
-    pub fn frame<'a>(&'a mut self, _timeout: Duration) -> io::Result<Frame<'a>> {
+impl crate::TraitCapturer for Capturer {
+    fn set_use_yuv(&mut self, _use_yuv: bool) {}
+
+    fn frame<'a>(&'a mut self, _timeout: Duration) -> io::Result<Frame<'a>> {
         if let Some(buf) = get_video_raw() {
             crate::would_block_if_equal(&mut self.saved_raw_data, buf)?;
             rgba_to_i420(self.width(), self.height(), buf, &mut self.bgra);

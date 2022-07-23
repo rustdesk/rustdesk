@@ -3,7 +3,7 @@ use std::time::Duration;
 extern crate scrap;
 
 fn main() {
-    use scrap::{Capturer, Display};
+    use scrap::{Capturer, Display, TraitCapturer};
     use std::io::ErrorKind::WouldBlock;
     use std::io::Write;
     use std::process::{Command, Stdio};

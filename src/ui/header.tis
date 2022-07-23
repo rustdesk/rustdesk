@@ -145,6 +145,9 @@ class Header: Reactor.Component {
     }
 
     function renderDisplayPop() {
+        var codecs = handler.supported_hwcodec();
+        var show_codec = handler.has_hwcodec() && (codecs[0] || codecs[1]);
+
         return <popup>
             <menu.context #display-options>
                 <li #adjust-window style="display:none">{translate('Adjust Window')}</li> 
@@ -157,6 +160,13 @@ class Header: Reactor.Component {
                 <li #balanced type="image-quality"><span>{svg_checkmark}</span>{translate('Balanced')}</li> 
                 <li #low type="image-quality"><span>{svg_checkmark}</span>{translate('Optimize reaction time')}</li> 
                 <li #custom type="image-quality"><span>{svg_checkmark}</span>{translate('Custom')}</li>
+                {show_codec ? <div>
+                <div .separator />
+                <li #auto type="codec-preference"><span>{svg_checkmark}</span>Auto</li>
+                <li #vp9 type="codec-preference"><span>{svg_checkmark}</span>VP9</li>
+                {codecs[0] ? <li #h264 type="codec-preference"><span>{svg_checkmark}</span>H264</li> : ""}
+                {codecs[1] ? <li #h265 type="codec-preference"><span>{svg_checkmark}</span>H265</li> : ""}
+                </div> : ""}
                 <div .separator />
                 <li #show-remote-cursor .toggle-option><span>{svg_checkmark}</span>{translate('Show remote cursor')}</li> 
                 <li #show-quality-monitor .toggle-option><span>{svg_checkmark}</span>{translate('Show quality monitor')}</li> 
@@ -311,7 +321,7 @@ class Header: Reactor.Component {
         }
     }
 
-    event click $(menu#display-options>li) (_, me) {
+    event click $(menu#display-options li) (_, me) {
         if (me.id == "custom") {
             handle_custom_image_quality();
         } else if (me.id == "privacy-mode") {
@@ -328,6 +338,9 @@ class Header: Reactor.Component {
             } else if (type == "view-style") {
                 handler.save_view_style(me.id);
                 adaptDisplay();
+            } else if (type == "codec-preference") {
+                handler.set_option("codec-preference", me.id);
+                handler.change_prefer_codec();
             }
             toggleMenuState();
         }
@@ -355,7 +368,10 @@ function toggleMenuState() {
     var s = handler.get_view_style();
     if (!s) s = "original";
     values.push(s);
-    for (var el in $$(menu#display-options>li)) {
+    var c = handler.get_option("codec-preference");
+    if (!c) c = "auto";
+    values.push(c);
+    for (var el in $$(menu#display-options li)) {
         el.attributes.toggleClass("selected", values.indexOf(el.id) >= 0);
     }
     for (var id in ["show-remote-cursor", "show-quality-monitor", "disable-audio", "enable-file-transfer", "disable-clipboard", "lock-after-session-end"]) {
