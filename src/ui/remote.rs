@@ -233,6 +233,8 @@ impl sciter::EventHandler for Handler {
         fn get_remember();
         fn peer_platform();
         fn set_write_override(i32, i32, bool, bool, bool);
+        fn get_keyboard_mode();
+        fn save_keyboard_mode(String);
     }
 }
 
@@ -345,6 +347,16 @@ impl Handler {
 
     fn get_image_quality(&mut self) -> String {
         return self.lc.read().unwrap().image_quality.clone();
+    }
+
+    fn get_keyboard_mode(&mut self) -> String {
+        return std::env::var("KEYBOARD_MODE")
+            .unwrap_or(String::from("legacy"))
+            .to_lowercase();
+    }
+
+    fn save_keyboard_mode(&mut self, value: String) {
+        std::env::set_var("KEYBOARD_MODE", value);
     }
 
     fn get_custom_image_quality(&mut self) -> Value {
@@ -1273,10 +1285,7 @@ impl Handler {
 
     fn key_down_or_up(&mut self, down_or_up: bool, key: RdevKey, evt: Event) {
         // Call different functions according to keyboard mode.
-        let mode = match std::env::var("KEYBOARD_MODE")
-            .unwrap_or(String::from("legacy")).to_lowercase()
-            .as_str()
-        {
+        let mode = match self.get_keyboard_mode().as_str() {
             "map" => KeyboardMode::Map,
             "legacy" => KeyboardMode::Legacy,
             _ => KeyboardMode::Legacy,
