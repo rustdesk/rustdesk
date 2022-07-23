@@ -146,7 +146,8 @@ fn run_cursor(sp: MouseCursorService, state: &mut StateCursor) -> ResultType<()>
                 msg = cached.clone();
             } else {
                 let mut data = crate::get_cursor_data(hcursor)?;
-                data.colors = hbb_common::compress::compress(&data.colors[..], COMPRESS_LEVEL).into();
+                data.colors =
+                    hbb_common::compress::compress(&data.colors[..], COMPRESS_LEVEL).into();
                 let mut tmp = Message::new();
                 tmp.set_cursor_data(data);
                 msg = Arc::new(tmp);
@@ -467,7 +468,7 @@ pub async fn lock_screen() {
         // loginctl lock-session also not work, they both work run rustdesk from cmd
         std::thread::spawn(|| {
             let mut key_event = KeyEvent::new();
-            
+
             key_event.set_chr('l' as _);
             key_event.modifiers.push(ControlKey::Meta.into());
             key_event.mode = KeyboardMode::Legacy.into();
@@ -482,7 +483,7 @@ pub async fn lock_screen() {
         // CGSession -suspend not real lock screen, it is user switch
         std::thread::spawn(|| {
             let mut key_event = KeyEvent::new();
-            
+
             key_event.set_chr('q' as _);
             key_event.modifiers.push(ControlKey::Meta.into());
             key_event.modifiers.push(ControlKey::Control.into());
@@ -621,7 +622,12 @@ fn rdev_key_down_or_up(key: RdevKey, down_or_up: bool) {
     std::thread::sleep(delay);
 }
 
-fn sync_status(evt: &KeyEvent) {
+fn rdev_key_click(key: RdevKey) {
+    rdev_key_down_or_up(key, true);
+    rdev_key_down_or_up(key, false);
+}
+
+fn sync_status(evt: &KeyEvent) -> (bool, bool) {
     let mut en = ENIGO.lock().unwrap();
 
     // remote caps status
@@ -637,31 +643,38 @@ fn sync_status(evt: &KeyEvent) {
         .position(|&r| r == ControlKey::NumLock.into())
         .is_some();
 
-    if (caps_locking && !en.get_key_state(enigo::Key::CapsLock))
-        || (!caps_locking && en.get_key_state(enigo::Key::CapsLock))
-    {
-        rdev_key_down_or_up(RdevKey::CapsLock, true);
-        rdev_key_down_or_up(RdevKey::CapsLock, false);
-    };
-    if (num_locking && !en.get_key_state(enigo::Key::NumLock))
-        || (!num_locking && en.get_key_state(enigo::Key::NumLock))
-    {
-        rdev_key_down_or_up(RdevKey::NumLock, true);
-        rdev_key_down_or_up(RdevKey::NumLock, false);
-    };
+    let click_capslock = (caps_locking && !en.get_key_state(enigo::Key::CapsLock))
+        || (!caps_locking && en.get_key_state(enigo::Key::CapsLock));
+    let click_numlock = (num_locking && !en.get_key_state(enigo::Key::NumLock))
+        || (!num_locking && en.get_key_state(enigo::Key::NumLock));
+    return (click_capslock, click_numlock);
 }
 
 fn map_keyboard_map(evt: &KeyEvent) {
     // map mode(1): Send keycode according to the peer platform.
-    sync_status(evt);
+    let (click_capslock, click_numlock) = sync_status(evt);
+    if click_capslock {
+        rdev_key_click(RdevKey::CapsLock);
+    }
+    if click_numlock {
+        rdev_key_click(RdevKey::NumLock);
+    }
     rdev_key_down_or_up(RdevKey::Unknown(evt.chr()), evt.down);
     return;
 }
 
 fn legacy_keyboard_map(evt: &KeyEvent) {
+    let (click_capslock, click_numlock) = sync_status(evt);
+
     #[cfg(windows)]
     crate::platform::windows::try_change_desktop();
     let mut en = ENIGO.lock().unwrap();
+    if click_capslock {
+        en.key_click(Key::CapsLock);
+    }
+    if click_numlock {
+        en.key_click(Key::NumLock);
+    }
     // disable numlock if press home etc when numlock is on,
     // because we will get numpad value (7,8,9 etc) if not
     #[cfg(windows)]

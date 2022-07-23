@@ -363,7 +363,6 @@ class Header: Reactor.Component {
     }
 
     event click $(menu#keyboard-options>li) (_, me) {
-        stdout.println(me.id);
         if (me.id == "legacy") {
             handler.save_keyboard_mode("legacy");
         } else if (me.id == "map") {
