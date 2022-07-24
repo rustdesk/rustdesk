@@ -529,9 +529,7 @@ class App: Reactor.Component
                             <MyIdMenu />
                             {key_confirmed ? <input type="text" readonly value={formatId(get_id())}/> : translate("Generating ...")}
                         </div>
-                        <div .your-desktop>
-                            <PasswordArea />
-                        </div>
+                        <PasswordArea />
                     </div>
                     {!is_win || handler.is_installed() ? "": <InstallMe />}
                     {software_update_url ? <UpdateMe /> : ""}
@@ -802,8 +800,8 @@ function watch_screen_recording() {
 
 class PasswordEyeArea : Reactor.Component {
     render() {
-        var show = handler.is_random_password_valid();
-        var value = show ? handler.get_random_password() : "-";
+        var method = handler.get_option('verification-method');
+        var value = method != 'use-permanent-password' ? password_cache[0] : "-";
         return
             <div .eye-area style="width: *">
                 <input|text @{this.input} readonly value={value} />
@@ -812,95 +810,49 @@ class PasswordEyeArea : Reactor.Component {
     }
 
     event click $(svg#refresh-password) (_, me) {
-        if (handler.is_random_password_valid()) handler.update_random_password();
+        handler.update_temporary_password();
         this.update();
     }
 }
 
-var verificationMethodMenu;
-class VerificationMethodMenu: Reactor.Component {
+var temporaryPasswordLengthMenu;
+class TemporaryPasswordLengthMenu: Reactor.Component {
     function this() {
-        verificationMethodMenu = this;
+        temporaryPasswordLengthMenu = this;
     }
 
     function render() {
         if (!this.show) return <li />;
         var me = this;
+        var method = handler.get_option('verification-method');
         self.timer(1ms, function() { me.toggleMenuState() });
-        return <li>{translate('Verification Method')}
-            <menu #verification-method>
-                <li #verification-method-security><span>{svg_checkmark}</span>{translate('Enable security password')}</li>
-                <li #verification-method-random><span>{svg_checkmark}</span>{translate('Enable random password')}</li>
+        return <li disabled={ method == 'use-permanent-password' ? "true" : "false" }>{translate("Set temporary password length")}
+            <menu #temporary-password-length>
+                <li #temporary-password-length-6><span>{svg_checkmark}</span>6</li>
+                <li #temporary-password-length-8><span>{svg_checkmark}</span>8</li>
+                <li #temporary-password-length-10><span>{svg_checkmark}</span>10</li>
             </menu>
         </li>;
     }
 
     function toggleMenuState() {
-        var security_enabled = handler.is_security_password_enabled();
-        var random_enabled = handler.is_random_password_enabled();
-        var onetime_enabled = handler.is_onetime_password_enabled();
-        for (var (index, el) in this.$$(menu#verification-method>li)) {
-            if (index == 0) el.attributes.toggleClass("selected", security_enabled);
-            if (index == 1) el.attributes.toggleClass("selected", random_enabled);
+        var length = handler.get_option("temporary-password-length");
+        var index = ['6', '8', '10'].indexOf(length);
+        if (index < 0) index = 0;
+        for (var (i, el) in this.$$(menu#temporary-password-length>li)) {
+            el.attributes.toggleClass("selected", i == index);
         }
     }
 
-    event click $(menu#verification-method>li) (_, me) {
-        switch (me.id.substring('verification-method-'.length)) {
-            case 'security':
-                {
-                    var security_enabled = handler.is_security_password_enabled();
-                    handler.set_security_password_enabled(!security_enabled);
-                }
-                break;
-            case 'random':
-                {
-                    var random_enabled = handler.is_random_password_enabled();
-                    handler.set_random_password_enabled(!random_enabled);
-                }
-                break;
+    event click $(menu#temporary-password-length>li) (_, me) {
+        var length = me.id.substring('temporary-password-length-'.length);
+        var old_length = handler.get_option('temporary-password-length');
+        if (length != old_length) {
+            handler.set_option('temporary-password-length', length);
+            handler.update_temporary_password();
+            this.toggleMenuState();
+            passwordArea.update();
         }
-        
-        this.toggleMenuState();
-        passwordArea.update();
-    }
-}
-
-var randomPasswordUpdateMethodMenu;
-class RandomPasswordUpdateMethodMenu: Reactor.Component {
-    function this() {
-        randomPasswordUpdateMethodMenu = this;
-    }
-
-    function render() {
-        if (!this.show) return <li />;
-        var me = this;
-        var random_enabled = handler.is_random_password_enabled();
-        self.timer(1ms, function() { me.toggleMenuState() });
-        return <li disabled={ random_enabled ? "false" : "true" }>{translate('Random Password After Session')}
-            <menu #random-password-update-method>
-                <li #random-password-update-method-keep><span>{svg_checkmark}</span>{translate('Keep')}</li>
-                <li #random-password-update-method-update><span>{svg_checkmark}</span>{translate('Update')}</li>
-                <li #random-password-update-method-disable><span>{svg_checkmark}</span>{translate('Disable')}</li>
-            </menu>
-        </li>;
-    }
-
-    function toggleMenuState() {
-        var method = handler.random_password_update_method();
-        for (var (index, el) in this.$$(menu#random-password-update-method>li)) {
-            if (index == 0) el.attributes.toggleClass("selected", method == "KEEP");
-            if (index == 1) el.attributes.toggleClass("selected", method == "UPDATE");
-            if (index == 2) el.attributes.toggleClass("selected", method == "DISABLE");
-        }
-    }
-
-    event click $(menu#random-password-update-method>li) (_, me) {
-        if (me.id === 'random-password-update-method-keep') handler.set_random_password_update_method("KEEP");
-        if (me.id === 'random-password-update-method-update') handler.set_random_password_update_method("UPDATE");
-        if (me.id === 'random-password-update-method-disable') handler.set_random_password_update_method("DISABLE");
-        this.toggleMenuState();
-        passwordArea.update();
     }
 }
 
@@ -911,11 +863,11 @@ class PasswordArea: Reactor.Component {
     }
 
     function render() {
-        var onetime_enabled = handler.is_onetime_password_enabled();
-
+        var me = this;
+        self.timer(1ms, function() { me.toggleMenuState() });
         return 
-        <div>
-            <div>{translate(onetime_enabled ? 'Onetime Password' : 'Password')}</div>
+        <div .your-desktop>
+            <div>{translate('Password')}</div>
             <div .password style="flow:horizontal">
                 {this.renderPop()}
                 <PasswordEyeArea />
@@ -925,35 +877,39 @@ class PasswordArea: Reactor.Component {
     }
 
     function renderPop() {
-        var security_enabled = handler.is_security_password_enabled();
-        var random_enabled = handler.is_random_password_enabled();
-        var onetime_enabled = handler.is_onetime_password_enabled();
-        var onetime_activated = handler.is_onetime_password_activated();
-
+        var method = handler.get_option('verification-method');
         return <popup><menu.context #edit-password-context>
-            <li #enable-onetime-password disabled={ random_enabled ? "false" : "true" }>{translate(onetime_enabled ? "Disable onetime password" : "Enable onetime password")}</li>
-            <li #activate-onetime-password disabled={ !random_enabled || !onetime_enabled || onetime_activated ? "true" : "false" }>{translate('Activate onetime password')}</li>
+            <li #use-temporary-password><span>{svg_checkmark}</span>{translate('Use temporary password')}</li>
+            <li #use-permanent-password><span>{svg_checkmark}</span>{translate('Use permanent password')}</li>
+            <li #use-both-passwords><span>{svg_checkmark}</span>{translate('Use both passwords')}</li>
             <div .separator />
-            <VerificationMethodMenu />
-            <div .separator />
-            <li #set-password  disabled={ security_enabled ? "false" : "true" }>{translate('Set security password')}</li>
-            <div .separator />
-            <RandomPasswordUpdateMethodMenu />
+            <li #set-password  disabled={ method == 'use-temporary-password' ? "true" : "false" }>{translate('Set permanent password')}</li>
+            <TemporaryPasswordLengthMenu />
         </menu></popup>;
     }
 
+    function toggleMenuState() {
+        var id = handler.get_option('verification-method');
+        if (id != 'use-temporary-password' && id != 'use-permanent-password')
+            id = 'use-both-passwords';
+        for (var el in [this.$(li#use-temporary-password), this.$(li#use-permanent-password), this.$(li#use-both-passwords)]) {
+            el.attributes.toggleClass("selected", el.id == id);
+        }
+    }
+
     event click $(svg#edit) (_, me) {
-        randomPasswordUpdateMethodMenu.update({show: true });
-        verificationMethodMenu.update({show: true });
+        temporaryPasswordLengthMenu.update({show: true });
         var menu = $(menu#edit-password-context);        
         me.popup(menu);
     }
 
     event click $(li#set-password) {
         var me = this;
+        var password = handler.permanent_password();
+        var value_field = password.length == 0 ? "" : "value=" + password;
         msgbox("custom-password", translate("Set Password"), "<div .form .set-password> \
-            <div><span>" + translate('Password') + ":</span><input|password(password) .outline-focus /></div> \
-            <div><span>" + translate('Confirmation') + ":</span><input|password(confirmation) /></div> \
+            <div><span>" + translate('Password') + ":</span><input|password(password) .outline-focus " + value_field + " /></div> \
+            <div><span>" + translate('Confirmation') + ":</span><input|password(confirmation) " + value_field + " /></div> \
         </div> \
         ", function(res=null) {
             if (!res) return;
@@ -965,31 +921,40 @@ class PasswordArea: Reactor.Component {
             if (p0 != p1) {
                 return translate("The confirmation is not identical.");
             }
-            handler.set_security_password(p0);
+            handler.set_permanent_password(p0);
             me.update();
         });
     }
 
-    event click $(li#enable-onetime-password) {
-        var onetime_enabled = handler.is_onetime_password_enabled();
-        handler.set_onetime_password_enabled(!onetime_enabled);
-        passwordArea.update();
-    }
-
-    event click $(li#activate-onetime-password) {
-        handler.set_onetime_password_activated(true);
-        passwordArea.update();
+    event click $(menu#edit-password-context>li) (_, me) {
+        if (me.id.indexOf('use-') == 0) {
+            handler.set_option('verification-method', me.id);
+            this.toggleMenuState();
+            passwordArea.update();
+        }
     }
 }
 
-var last_password_description = "";
+var password_cache = ["","",""];
 function updatePasswordArea() {
     self.timer(1s, function() {
-        var description = handler.password_description();
-        if (last_password_description != description) {
-            last_password_description = description
-            passwordArea.update();
+        var temporary_password = handler.temporary_password();
+        var verification_method = handler.get_option('verification-method');
+        var temporary_password_length = handler.get_option('temporary-password-length');
+        var update = false;
+        if (password_cache[0] != temporary_password) {
+            password_cache[0] = temporary_password;
+            update = true;
         }
+        if (password_cache[1] != verification_method) {
+            password_cache[1] = verification_method;
+            update = true;
+        }
+        if (password_cache[2] != temporary_password_length) {
+            password_cache[2] = temporary_password_length;
+            update = true;
+        }
+        if (update) passwordArea.update();
         updatePasswordArea();
     });                          
 }

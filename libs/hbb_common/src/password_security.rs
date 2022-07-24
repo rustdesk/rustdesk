@@ -1,182 +1,62 @@
 pub mod password {
     use crate::config::Config;
-    use std::{
-        fmt::Display,
-        str::FromStr,
-        sync::{Arc, RwLock},
-    };
+    use std::sync::{Arc, RwLock};
 
     lazy_static::lazy_static! {
-        pub static ref RANDOM_PASSWORD:Arc<RwLock<String>> = Arc::new(RwLock::new(Config::get_auto_password()));
+        pub static ref TEMPORARY_PASSWORD:Arc<RwLock<String>> = Arc::new(RwLock::new(Config::get_auto_password(temporary_password_length())));
     }
 
-    const SECURITY_ENABLED: &'static str = "security-password-enabled";
-    const RANDOM_ENABLED: &'static str = "random-password-enabled";
-    const ONETIME_ENABLED: &'static str = "onetime-password-enabled";
-    const ONETIME_ACTIVATED: &'static str = "onetime-password-activated";
-    const UPDATE_METHOD: &'static str = "random-password-update-method";
-
-    #[derive(Debug, Clone, PartialEq, Eq)]
-    pub enum UpdateMethod {
-        KEEP,
-        UPDATE,
-        DISABLE,
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    enum VerificationMethod {
+        OnlyUseTemporaryPassword,
+        OnlyUsePermanentPassword,
+        UseBothPasswords,
     }
 
-    impl FromStr for UpdateMethod {
-        type Err = ();
-
-        fn from_str(s: &str) -> Result<Self, Self::Err> {
-            if s == "KEEP" {
-                Ok(Self::KEEP)
-            } else if s == "UPDATE" {
-                Ok(Self::UPDATE)
-            } else if s == "DISABLE" {
-                Ok(Self::DISABLE)
-            } else {
-                Err(())
-            }
-        }
+    // Should only be called in server
+    pub fn update_temporary_password() {
+        *TEMPORARY_PASSWORD.write().unwrap() =
+            Config::get_auto_password(temporary_password_length());
     }
 
-    impl Display for UpdateMethod {
-        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-            match self {
-                UpdateMethod::KEEP => write!(f, "KEEP"),
-                UpdateMethod::UPDATE => write!(f, "UPDATE"),
-                UpdateMethod::DISABLE => write!(f, "DISABLE"),
-            }
-        }
+    // Should only be called in server
+    pub fn temporary_password() -> String {
+        TEMPORARY_PASSWORD.read().unwrap().clone()
     }
 
-    pub fn set_random_password(password: &str) {
-        *RANDOM_PASSWORD.write().unwrap() = password.to_owned();
-    }
-
-    pub fn random_password() -> String {
-        let mut password = RANDOM_PASSWORD.read().unwrap().clone();
-        if password.is_empty() {
-            password = Config::get_auto_password();
-            set_random_password(&password);
-        }
-        password
-    }
-
-    pub fn random_password_valid() -> bool {
-        if random_enabled() {
-            onetime_password_activated() || !onetime_password_enabled()
+    fn verification_method() -> VerificationMethod {
+        let method = Config::get_option("verification-method");
+        if method == "use-temporary-password" {
+            VerificationMethod::OnlyUseTemporaryPassword
+        } else if method == "use-permanent-password" {
+            VerificationMethod::OnlyUsePermanentPassword
         } else {
-            false
+            VerificationMethod::UseBothPasswords // default
         }
     }
 
-    pub fn passwords() -> Vec<String> {
-        let mut v = vec![];
-        if random_password_valid() {
-            v.push(random_password());
-        }
-        if security_enabled() {
-            v.push(Config::get_security_password());
-        }
-        v
-    }
-
-    pub fn after_session(authorized: bool) {
-        if authorized && random_enabled() {
-            UpdateMethod::from_str(&update_method())
-                .map(|method| match method {
-                    UpdateMethod::KEEP => {}
-                    UpdateMethod::UPDATE => set_random_password(&Config::get_auto_password()),
-                    UpdateMethod::DISABLE => set_random_enabled(false),
-                })
-                .ok();
-        }
-    }
-
-    pub fn update_method() -> String {
-        let mut method = Config::get_option(UPDATE_METHOD);
-        if UpdateMethod::from_str(&method).is_err() {
-            method = UpdateMethod::KEEP.to_string(); // default is keep
-            set_update_method(&method);
-        }
-        method
-    }
-
-    pub fn set_update_method(method: &str) {
-        Config::set_option(UPDATE_METHOD.to_owned(), method.to_owned());
-    }
-
-    pub fn random_enabled() -> bool {
-        str2bool(RANDOM_ENABLED, true, || {
-            set_onetime_password_activated(false);
-            set_random_password(&Config::get_auto_password());
-        })
-    }
-
-    pub fn set_random_enabled(enabled: bool) {
-        if enabled != random_enabled() {
-            Config::set_option(RANDOM_ENABLED.to_owned(), bool2str(enabled));
-            set_onetime_password_activated(false);
-            if enabled {
-                set_random_password(&Config::get_auto_password());
-            }
-        }
-    }
-
-    pub fn security_enabled() -> bool {
-        str2bool(SECURITY_ENABLED, true, || {})
-    }
-
-    pub fn set_security_enabled(enabled: bool) {
-        if enabled != security_enabled() {
-            Config::set_option(SECURITY_ENABLED.to_owned(), bool2str(enabled));
-        }
-    }
-
-    pub fn onetime_password_enabled() -> bool {
-        str2bool(ONETIME_ENABLED, false, || {
-            set_onetime_password_activated(false);
-            set_random_password(&Config::get_auto_password());
-        })
-    }
-
-    pub fn set_onetime_password_enabled(enabled: bool) {
-        if enabled != onetime_password_enabled() {
-            Config::set_option(ONETIME_ENABLED.to_owned(), bool2str(enabled));
-            set_onetime_password_activated(false);
-            set_random_password(&Config::get_auto_password());
-        }
-    }
-
-    pub fn onetime_password_activated() -> bool {
-        str2bool(ONETIME_ACTIVATED, false, || {})
-    }
-
-    pub fn set_onetime_password_activated(activated: bool) {
-        if activated != onetime_password_activated() {
-            Config::set_option(ONETIME_ACTIVATED.to_owned(), bool2str(activated));
-            if activated {
-                set_random_password(&Config::get_auto_password());
-            }
-        }
-    }
-
-    // notice: Function nesting
-    fn str2bool(key: &str, default: bool, default_set: impl Fn()) -> bool {
-        let option = Config::get_option(key);
-        if option == "Y" {
-            true
-        } else if option == "N" {
-            false
+    pub fn temporary_password_length() -> usize {
+        let length = Config::get_option("temporary-password-length");
+        if length == "8" {
+            8
+        } else if length == "10" {
+            10
         } else {
-            Config::set_option(key.to_owned(), bool2str(default));
-            default_set();
-            default
+            6 // default
         }
     }
 
-    fn bool2str(option: bool) -> String {
-        if option { "Y" } else { "N" }.to_owned()
+    pub fn temporary_enabled() -> bool {
+        verification_method() != VerificationMethod::OnlyUsePermanentPassword
+    }
+
+    pub fn permanent_enabled() -> bool {
+        verification_method() != VerificationMethod::OnlyUseTemporaryPassword
+    }
+
+    pub fn has_valid_password() -> bool {
+        temporary_enabled() && !temporary_password().is_empty()
+            || permanent_enabled() && !Config::get_permanent_password().is_empty()
     }
 }
 
