@@ -379,8 +379,8 @@ fn handle_mouse_(evt: &MouseEvent, conn: i32) {
     let mut to_release = Vec::new();
     if evt_type == 1 {
         fix_modifiers(&evt.modifiers[..], &mut en, 0);
-        #[cfg(target_os = "macos")]
-        en.reset_flag();
+        // #[cfg(target_os = "macos")]
+        // en.reset_flag();
         for ref ck in evt.modifiers.iter() {
             if let Some(key) = KEY_MAP.get(&ck.value()) {
                 #[cfg(target_os = "macos")]
@@ -609,7 +609,9 @@ fn handle_key_(evt: &KeyEvent) {
     #[cfg(windows)]
     let mut disable_numlock = false;
     #[cfg(target_os = "macos")]
-    en.reset_flag();
+    if !evt.down {
+        en.reset_flag();
+    }
     #[cfg(not(target_os = "macos"))]
     let mut to_release = Vec::new();
     #[cfg(not(target_os = "macos"))]
