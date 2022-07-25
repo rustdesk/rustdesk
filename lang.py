@@ -1,7 +1,5 @@
 #!/usr/bin/env python3
 
-# Based on 'cn.rs', generate entries that are not completed in other languages
-
 import os
 import glob
 import sys
