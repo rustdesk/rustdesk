@@ -534,9 +534,9 @@ impl Config {
         }
     }
 
-    pub fn get_auto_password() -> String {
+    pub fn get_auto_password(length: usize) -> String {
         let mut rng = rand::thread_rng();
-        (0..6)
+        (0..length)
             .map(|_| CHARS[rng.gen::<usize>() % CHARS.len()])
             .collect()
     }
@@ -657,7 +657,7 @@ impl Config {
         log::info!("id updated from {} to {}", id, new_id);
     }
 
-    pub fn set_security_password(password: &str) {
+    pub fn set_permanent_password(password: &str) {
         let mut config = CONFIG.write().unwrap();
         if password == config.password {
             return;
@@ -666,7 +666,7 @@ impl Config {
         config.store();
     }
 
-    pub fn get_security_password() -> String {
+    pub fn get_permanent_password() -> String {
         CONFIG.read().unwrap().password.clone()
     }
 
@@ -682,7 +682,7 @@ impl Config {
     pub fn get_salt() -> String {
         let mut salt = CONFIG.read().unwrap().salt.clone();
         if salt.is_empty() {
-            salt = Config::get_auto_password();
+            salt = Config::get_auto_password(6);
             Config::set_salt(&salt);
         }
         salt

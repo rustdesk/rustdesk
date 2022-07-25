@@ -152,7 +152,7 @@ fn main() {
             return;
         } else if args[0] == "--password" {
             if args.len() == 2 {
-                ipc::set_security_password(args[1].to_owned()).unwrap();
+                ipc::set_permanent_password(args[1].to_owned()).unwrap();
             }
             return;
         } else if args[0] == "--check-hwcodec-config" {

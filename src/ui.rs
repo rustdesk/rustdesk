@@ -187,16 +187,20 @@ impl UI {
         ipc::get_id()
     }
 
-    fn get_random_password(&self) -> String {
-        ipc::get_random_password()
+    fn temporary_password(&mut self) -> String {
+        self.5.lock().unwrap().clone()
     }
 
-    fn update_random_password(&self) {
-        allow_err!(ipc::set_random_password(Config::get_auto_password()));
+    fn update_temporary_password(&self) {
+        allow_err!(ipc::update_temporary_password());
     }
 
-    fn set_security_password(&self, password: String) {
-        allow_err!(ipc::set_security_password(password));
+    fn permanent_password(&self) -> String {
+        ipc::get_permanent_password()
+    }
+
+    fn set_permanent_password(&self, password: String) {
+        allow_err!(ipc::set_permanent_password(password));
     }
 
     fn get_remote_id(&mut self) -> String {
@@ -775,54 +779,6 @@ impl UI {
     fn get_langs(&self) -> String {
         crate::lang::LANGS.to_string()
     }
-
-    fn random_password_update_method(&self) -> String {
-        ipc::random_password_update_method()
-    }
-
-    fn set_random_password_update_method(&self, method: String) {
-        allow_err!(ipc::set_random_password_update_method(method));
-    }
-
-    fn is_random_password_enabled(&self) -> bool {
-        ipc::is_random_password_enabled()
-    }
-
-    fn set_random_password_enabled(&self, enabled: bool) {
-        allow_err!(ipc::set_random_password_enabled(enabled));
-    }
-
-    fn is_security_password_enabled(&self) -> bool {
-        ipc::is_security_password_enabled()
-    }
-
-    fn set_security_password_enabled(&self, enabled: bool) {
-        allow_err!(ipc::set_security_password_enabled(enabled));
-    }
-
-    fn is_onetime_password_enabled(&self) -> bool {
-        ipc::is_onetime_password_enabled()
-    }
-
-    fn set_onetime_password_enabled(&self, enabled: bool) {
-        allow_err!(ipc::set_onetime_password_enabled(enabled));
-    }
-
-    fn is_onetime_password_activated(&self) -> bool {
-        ipc::is_onetime_password_activated()
-    }
-
-    fn set_onetime_password_activated(&self, activated: bool) {
-        allow_err!(ipc::set_onetime_password_activated(activated));
-    }
-
-    fn is_random_password_valid(&self) -> bool {
-        ipc::is_random_password_valid()
-    }
-
-    fn password_description(&mut self) -> String {
-        self.5.lock().unwrap().clone()
-    }
 }
 
 impl sciter::EventHandler for UI {
@@ -832,9 +788,10 @@ impl sciter::EventHandler for UI {
         fn is_xfce();
         fn using_public_server();
         fn get_id();
-        fn get_random_password();
-        fn update_random_password();
-        fn set_security_password(String);
+        fn temporary_password();
+        fn update_temporary_password();
+        fn permanent_password();
+        fn set_permanent_password(String);
         fn get_remote_id();
         fn set_remote_id(String);
         fn closing(i32, i32, i32, i32);
@@ -904,18 +861,6 @@ impl sciter::EventHandler for UI {
         fn get_uuid();
         fn has_hwcodec();
         fn get_langs();
-        fn random_password_update_method();
-        fn set_random_password_update_method(String);
-        fn is_random_password_enabled();
-        fn set_random_password_enabled(bool);
-        fn is_security_password_enabled();
-        fn set_security_password_enabled(bool);
-        fn is_onetime_password_enabled();
-        fn set_onetime_password_enabled(bool);
-        fn is_onetime_password_activated();
-        fn set_onetime_password_activated(bool);
-        fn is_random_password_valid();
-        fn password_description();
     }
 }
 
@@ -982,7 +927,7 @@ async fn check_connect_status_(
                             Ok(Some(ipc::Data::Config((name, Some(value))))) => {
                                 if name == "id" {
                                     id = value;
-                                } else if name == ipc::STR_PASSWORD_DESCRIPTION {
+                                } else if name == "temporary-password" {
                                     *password.lock().unwrap() = value;
                                 }
                             }
@@ -1003,7 +948,7 @@ async fn check_connect_status_(
                         c.send(&ipc::Data::OnlineStatus(None)).await.ok();
                         c.send(&ipc::Data::Options(None)).await.ok();
                         c.send(&ipc::Data::Config(("id".to_owned(), None))).await.ok();
-                        c.send(&ipc::Data::Config((ipc::STR_PASSWORD_DESCRIPTION.to_owned(), None))).await.ok();
+                        c.send(&ipc::Data::Config(("temporary-password".to_owned(), None))).await.ok();
                     }
                 }
             }

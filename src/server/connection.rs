@@ -134,7 +134,7 @@ impl Connection {
     ) {
         let hash = Hash {
             salt: Config::get_salt(),
-            challenge: Config::get_auto_password(),
+            challenge: Config::get_auto_password(6),
             ..Default::default()
         };
         let (tx_from_cm_holder, mut rx_from_cm) = mpsc::unbounded_channel::<ipc::Data>();
@@ -415,7 +415,9 @@ impl Connection {
         video_service::notify_video_frame_feched(id, None);
         scrap::codec::Encoder::update_video_encoder(id, scrap::codec::EncoderUpdate::Remove);
         video_service::VIDEO_QOS.lock().unwrap().reset();
-        password::after_session(conn.authorized);
+        if conn.authorized {
+            password::update_temporary_password();
+        }
         if let Err(err) = conn.try_port_forward_loop(&mut rx_from_cm).await {
             conn.on_close(&err.to_string(), false).await;
         }
@@ -820,17 +822,9 @@ impl Connection {
     }
 
     fn validate_password(&mut self) -> bool {
-        if password::security_enabled() {
-            if self.validate_one_password(Config::get_security_password()) {
-                return true;
-            }
-        }
-        if password::random_password_valid() {
-            let password = password::random_password();
+        if password::temporary_enabled() {
+            let password = password::temporary_password();
             if self.validate_one_password(password.clone()) {
-                if password::onetime_password_activated() {
-                    password::set_onetime_password_activated(false);
-                }
                 SESSIONS.lock().unwrap().insert(
                     self.lr.my_id.clone(),
                     Session {
@@ -840,6 +834,11 @@ impl Connection {
                         random_password: password,
                     },
                 );
+                return true;
+            }
+        }
+        if password::permanent_enabled() {
+            if self.validate_one_password(Config::get_permanent_password()) {
                 return true;
             }
         }
@@ -956,7 +955,7 @@ impl Connection {
             } else if lr.password.is_empty() {
                 self.try_start_cm(lr.my_id, lr.my_name, false);
             } else {
-                if password::passwords().len() == 0 {
+                if !password::has_valid_password() {
                     self.send_login_error("Connection not allowed").await;
                     return false;
                 }
