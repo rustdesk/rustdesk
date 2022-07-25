@@ -1,4 +1,12 @@
-use crate::rendezvous_mediator::RendezvousMediator;
+use std::{collections::HashMap, sync::atomic::Ordering};
+#[cfg(not(windows))]
+use std::{fs::File, io::prelude::*};
+
+use parity_tokio_ipc::{
+    Connection as Conn, ConnectionClient as ConnClient, Endpoint, Incoming, SecurityAttributes,
+};
+use serde_derive::{Deserialize, Serialize};
+
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub use clipboard::ClipbaordFile;
 use hbb_common::{
@@ -12,13 +20,8 @@ use hbb_common::{
     tokio_util::codec::Framed,
     ResultType,
 };
-use parity_tokio_ipc::{
-    Connection as Conn, ConnectionClient as ConnClient, Endpoint, Incoming, SecurityAttributes,
-};
-use serde_derive::{Deserialize, Serialize};
-use std::{collections::HashMap, sync::atomic::Ordering};
-#[cfg(not(windows))]
-use std::{fs::File, io::prelude::*};
+
+use crate::rendezvous_mediator::RendezvousMediator;
 
 // State with timestamp, because std::time::Instant cannot be serialized
 #[derive(Debug, Serialize, Deserialize, Copy, Clone)]
@@ -73,7 +76,7 @@ pub enum FS {
     WriteOffset {
         id: i32,
         file_num: i32,
-        offset_blk: u32
+        offset_blk: u32,
     },
     CheckDigest {
         id: i32,

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -5,6 +6,7 @@ import 'package:flutter_hbb/utils/multi_window_manager.dart';
 import 'package:get/get.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:url_launcher/url_launcher_string.dart';
 
 import '../../common.dart';
 import '../../mobile/pages/home_page.dart';
@@ -12,11 +14,7 @@ import '../../mobile/pages/scan_page.dart';
 import '../../mobile/pages/settings_page.dart';
 import '../../models/model.dart';
 
-enum RemoteType {
-  recently,
-  favorite,
-  discovered
-}
+enum RemoteType { recently, favorite, discovered, addressBook }
 
 /// Connection page for connecting to a remote peer.
 class ConnectionPage extends StatefulWidget implements PageShape {
@@ -44,18 +42,22 @@ class _ConnectionPageState extends State<ConnectionPage> {
   var _updateUrl = '';
   var _menuPos;
 
+  Timer? _updateTimer;
+
   @override
   void initState() {
     super.initState();
+    _updateTimer = Timer.periodic(Duration(seconds: 1), (timer) {
+      updateStatus();
+    });
   }
 
   @override
   Widget build(BuildContext context) {
-    Provider.of<FfiModel>(context);
     if (_idController.text.isEmpty) _idController.text = gFFI.getId();
     return Container(
       decoration: BoxDecoration(
-        color: MyTheme.grayBg
+          color: MyTheme.grayBg
       ),
       child: Column(
           mainAxisAlignment: MainAxisAlignment.start,
@@ -77,25 +79,17 @@ class _ConnectionPageState extends State<ConnectionPage> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       TabBar(
-                        labelColor: Colors.black87,
-                  isScrollable: true,
+                          labelColor: Colors.black87,
+                          isScrollable: true,
                           indicatorSize: TabBarIndicatorSize.label,
                           tabs: [
-                        Tab(child: Text(translate("Recent Sessions")),),
-                        Tab(child: Text(translate("Favorites")),),
-                        Tab(child: Text(translate("Discovered")),),
-                        Tab(child: Text(translate("Address Book")),),
-                      ]),
+                            Tab(child: Text(translate("Recent Sessions")),),
+                            Tab(child: Text(translate("Favorites")),),
+                            Tab(child: Text(translate("Discovered")),),
+                            Tab(child: Text(translate("Address Book")),),
+                          ]),
                       Expanded(child: TabBarView(children: [
                         FutureBuilder<Widget>(future: getPeers(rType: RemoteType.recently),
-                            builder: (context, snapshot){
-                            if (snapshot.hasData) {
-                              return snapshot.data!;
-                            } else {
-                              return Offstage();
-                            }
-                            }),
-                        FutureBuilder<Widget>(future: getPeers(rType: RemoteType.favorite),
                             builder: (context, snapshot){
                               if (snapshot.hasData) {
                                 return snapshot.data!;
@@ -103,12 +97,40 @@ class _ConnectionPageState extends State<ConnectionPage> {
                                 return Offstage();
                               }
                             }),
-                        Container(),
-                        Container(),
-                      ]).paddingSymmetric(horizontal: 12.0,vertical: 4.0))
+                        FutureBuilder<Widget>(
+                            future: getPeers(rType: RemoteType.favorite),
+                            builder: (context, snapshot) {
+                              if (snapshot.hasData) {
+                                return snapshot.data!;
+                              } else {
+                                return Offstage();
+                              }
+                            }),
+                        FutureBuilder<Widget>(
+                            future: getPeers(rType: RemoteType.discovered),
+                            builder: (context, snapshot) {
+                              if (snapshot.hasData) {
+                                return snapshot.data!;
+                              } else {
+                                return Offstage();
+                              }
+                            }),
+                        FutureBuilder<Widget>(
+                            future: buildAddressBook(context),
+                            builder: (context, snapshot) {
+                              if (snapshot.hasData) {
+                                return snapshot.data!;
+                              } else {
+                                return Offstage();
+                              }
+                            }),
+                      ]).paddingSymmetric(horizontal: 12.0, vertical: 4.0))
                     ],
                   )),
             ),
+            Divider(),
+            SizedBox(height: 50, child: Obx(() => buildStatus()))
+                .paddingSymmetric(horizontal: 12.0)
           ]),
     );
   }
@@ -142,20 +164,20 @@ class _ConnectionPageState extends State<ConnectionPage> {
     return _updateUrl.isEmpty
         ? SizedBox(height: 0)
         : InkWell(
-            onTap: () async {
-              final url = _updateUrl + '.apk';
-              if (await canLaunch(url)) {
-                await launch(url);
-              }
-            },
-            child: Container(
-                alignment: AlignmentDirectional.center,
-                width: double.infinity,
-                color: Colors.pinkAccent,
-                padding: EdgeInsets.symmetric(vertical: 12),
-                child: Text(translate('Download new version'),
-                    style: TextStyle(
-                        color: Colors.white, fontWeight: FontWeight.bold))));
+        onTap: () async {
+          final url = _updateUrl + '.apk';
+          if (await canLaunch(url)) {
+            await launch(url);
+          }
+        },
+        child: Container(
+            alignment: AlignmentDirectional.center,
+            width: double.infinity,
+            color: Colors.pinkAccent,
+            padding: EdgeInsets.symmetric(vertical: 12),
+            child: Text(translate('Download new version'),
+                style: TextStyle(
+                    color: Colors.white, fontWeight: FontWeight.bold))));
   }
 
   /// UI for the search bar.
@@ -267,6 +289,7 @@ class _ConnectionPageState extends State<ConnectionPage> {
   @override
   void dispose() {
     _idController.dispose();
+    _updateTimer?.cancel();
     super.dispose();
   }
 
@@ -281,7 +304,6 @@ class _ConnectionPageState extends State<ConnectionPage> {
 
   /// Get all the saved peers.
   Future<Widget> getPeers({RemoteType rType = RemoteType.recently}) async {
-    final size = MediaQuery.of(context).size;
     final space = 8.0;
     final cards = <Widget>[];
     var peers;
@@ -305,104 +327,145 @@ class _ConnectionPageState extends State<ConnectionPage> {
         });
         break;
       case RemoteType.discovered:
-        // TODO: Handle this case.
-        peers = await gFFI.bind.mainGetLanPeers().then((peers_string){
-
+        peers = await gFFI.bind.mainGetLanPeers().then((peers_string) {
+          print(peers_string);
+          return [];
         });
+        break;
+      case RemoteType.addressBook:
+        await gFFI.abModel.getAb();
+        peers = gFFI.abModel.peers.map((e) {
+          return Peer.fromJson(e['id'], e);
+        }).toList();
         break;
     }
     peers.forEach((p) {
+      var deco = Rx<BoxDecoration?>(BoxDecoration(
+          border: Border.all(color: Colors.transparent, width: 1.0),
+          borderRadius: BorderRadius.circular(20)));
       cards.add(Container(
-          width: 250,
+          width: 225,
           height: 150,
           child: Card(
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-              child: GestureDetector(
-                  onTap: !isWebDesktop ? () => connect('${p.id}') : null,
-                  onDoubleTap: isWebDesktop ? () => connect('${p.id}') : null,
-                  onLongPressStart: (details) {
-                    final x = details.globalPosition.dx;
-                    final y = details.globalPosition.dy;
-                    _menuPos = RelativeRect.fromLTRB(x, y, x, y);
-                    showPeerMenu(context, p.id);
-                  },
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Expanded(
-                        child: Container(
-                          decoration: BoxDecoration(
-                            color: str2color('${p.id}${p.platform}', 0x7f),
-                            borderRadius: BorderRadius.only(
-                              topLeft: Radius.circular(20),
-                              topRight: Radius.circular(20),
-                            )
-                          ),
-                          child: Row(
-                            children: [
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.center,
-                                  children: [
-                                    Container(
-                                        padding: const EdgeInsets.all(6),
-                                        child: getPlatformImage('${p.platform}'),),
-                                    Row(
-                                      children: [
-                                        Expanded(
-                                          child: Text('${p.username}@${p.hostname}', style: TextStyle(
-                                            color: Colors.white70,
-                                            fontSize: 12
-                                          ),textAlign: TextAlign.center,
-                                            overflow: TextOverflow.ellipsis,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ],
-                                ).paddingAll(4.0),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(20)),
+              child: MouseRegion(
+                onEnter: (evt) {
+                  deco.value = BoxDecoration(
+                      border: Border.all(color: Colors.blue, width: 1.0),
+                      borderRadius: BorderRadius.circular(20));
+                },
+                onExit: (evt) {
+                  deco.value = BoxDecoration(
+                      border: Border.all(color: Colors.transparent, width: 1.0),
+                      borderRadius: BorderRadius.circular(20));
+                },
+                child: Obx(
+                  () => Container(
+                    decoration: deco.value,
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Expanded(
+                          child: Container(
+                            decoration: BoxDecoration(
+                              color: str2color('${p.id}${p.platform}', 0x7f),
+                              borderRadius: BorderRadius.only(
+                                topLeft: Radius.circular(20),
+                                topRight: Radius.circular(20),
                               ),
-                            ],
+                            ),
+                            child: Row(
+                              children: [
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.center,
+                                    children: [
+                                      Container(
+                                        padding: const EdgeInsets.all(6),
+                                        child:
+                                            getPlatformImage('${p.platform}'),
+                                      ),
+                                      Row(
+                                        children: [
+                                          Expanded(
+                                            child: Tooltip(
+                                              message:
+                                                  '${p.username}@${p.hostname}',
+                                              child: Text(
+                                                '${p.username}@${p.hostname}',
+                                                style: TextStyle(
+                                                    color: Colors.white70,
+                                                    fontSize: 12),
+                                                textAlign: TextAlign.center,
+                                                overflow: TextOverflow.ellipsis,
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ],
+                                  ).paddingAll(4.0),
+                                ),
+                              ],
+                            ),
                           ),
                         ),
-                      ),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text("${p.id}"),
-                          InkWell(
-                              child: Icon(Icons.more_vert),
-                              onTapDown: (e) {
-                                final x = e.globalPosition.dx;
-                                final y = e.globalPosition.dy;
-                                _menuPos = RelativeRect.fromLTRB(x, y, x, y);
-                              },
-                              onTap: () {
-                                showPeerMenu(context, p.id);
-                              }),
-                        ],
-                      ).paddingSymmetric(vertical: 8.0,horizontal: 12.0)
-                    ],
-                  )))));
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text("${p.id}"),
+                            InkWell(
+                                child: Icon(Icons.more_vert),
+                                onTapDown: (e) {
+                                  final x = e.globalPosition.dx;
+                                  final y = e.globalPosition.dy;
+                                  _menuPos = RelativeRect.fromLTRB(x, y, x, y);
+                                },
+                                onTap: () {
+                                  showPeerMenu(context, p.id, rType);
+                                }),
+                          ],
+                        ).paddingSymmetric(vertical: 8.0, horizontal: 12.0)
+                      ],
+                    ),
+                  ),
+                ),
+              ))));
     });
-    return SingleChildScrollView(child: Wrap(children: cards, spacing: space, runSpacing: space));
+    return SingleChildScrollView(
+        child: Wrap(children: cards, spacing: space, runSpacing: space));
   }
 
   /// Show the peer menu and handle user's choice.
   /// User might remove the peer or send a file to the peer.
-  void showPeerMenu(BuildContext context, String id) async {
+  void showPeerMenu(BuildContext context, String id, RemoteType rType) async {
+    var items = [
+      PopupMenuItem<String>(
+          child: Text(translate('Connect')), value: 'connect'),
+      PopupMenuItem<String>(
+          child: Text(translate('Transfer File')), value: 'file'),
+      PopupMenuItem<String>(
+          child: Text(translate('TCP Tunneling')), value: 'tcp-tunnel'),
+      PopupMenuItem<String>(child: Text(translate('Rename')), value: 'rename'),
+      PopupMenuItem<String>(child: Text(translate('Remove')), value: 'remove'),
+      PopupMenuItem<String>(
+          child: Text(translate('Unremember Password')),
+          value: 'unremember-password'),
+    ];
+    if (rType == RemoteType.favorite) {
+      items.add(PopupMenuItem<String>(
+          child: Text(translate('Remove from Favorites')),
+          value: 'remove-fav'));
+    } else
+      items.add(PopupMenuItem<String>(
+          child: Text(translate('Add to Favorites')), value: 'add-fav'));
     var value = await showMenu(
       context: context,
       position: this._menuPos,
-      items: [
-            PopupMenuItem<String>(
-                child: Text(translate('Remove')), value: 'remove')
-          ] +
-          ([
-            PopupMenuItem<String>(
-                child: Text(translate('Transfer File')), value: 'file')
-          ]),
+      items: items,
       elevation: 8,
     );
     if (value == 'remove') {
@@ -412,7 +475,200 @@ class _ConnectionPageState extends State<ConnectionPage> {
       }();
     } else if (value == 'file') {
       connect(id, isFileTransfer: true);
+    } else if (value == 'add-fav') {}
+  }
+
+  var svcStopped = false.obs;
+  var svcStatusCode = 0.obs;
+  var svcIsUsingPublicServer = true.obs;
+
+  Widget buildStatus() {
+    final light = Container(
+      height: 8,
+      width: 8,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(20),
+        color: Colors.green,
+      ),
+    ).paddingSymmetric(horizontal: 8.0);
+    if (svcStopped.value) {
+      return Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [light, Text(translate("Service is not running"))],
+      );
+    } else {
+      if (svcStatusCode.value == 0) {
+        return Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [light, Text(translate("connecting_status"))],
+        );
+      } else if (svcStatusCode.value == -1) {
+        return Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [light, Text(translate("not_ready_status"))],
+        );
+      }
     }
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        light,
+        Text("${translate('Ready')}"),
+        svcIsUsingPublicServer.value
+            ? InkWell(
+                onTap: onUsePublicServerGuide,
+                child: Text(
+                  ', ${translate('setup_server_tip')}',
+                  style: TextStyle(decoration: TextDecoration.underline),
+                ),
+              )
+            : Offstage()
+      ],
+    );
+  }
+
+  void onUsePublicServerGuide() {
+    final url = "https://rustdesk.com/blog/id-relay-set/";
+    canLaunchUrlString(url).then((can) {
+      if (can) {
+        launchUrlString(url);
+      }
+    });
+  }
+
+  updateStatus() async {
+    svcStopped.value = gFFI.getOption("stop-service") == "Y";
+    final status = jsonDecode(await gFFI.bind.mainGetConnectStatus())
+        as Map<String, dynamic>;
+    svcStatusCode.value = status["status_num"];
+    svcIsUsingPublicServer.value = await gFFI.bind.mainIsUsingPublicServer();
+  }
+
+  handleLogin() {}
+
+  Future<Widget> buildAddressBook(BuildContext context) async {
+    final token = await gFFI.getLocalOption('access_token');
+    if (token.trim().isEmpty) {
+      return Center(
+        child: InkWell(
+          onTap: handleLogin,
+          child: Text(
+            translate("Login"),
+            style: TextStyle(decoration: TextDecoration.underline),
+          ),
+        ),
+      );
+    }
+    final model = gFFI.abModel;
+    return FutureBuilder(
+        future: model.getAb(),
+        builder: (context, snapshot) {
+          if (snapshot.hasData) {
+            return _buildAddressBook(context);
+          } else {
+            if (model.abLoading) {
+              return Center(
+                child: CircularProgressIndicator(),
+              );
+            } else if (model.abError.isNotEmpty) {
+              return Center(
+                child: CircularProgressIndicator(),
+              );
+            } else {
+              return Offstage();
+            }
+          }
+        });
+  }
+
+  Widget _buildAddressBook(BuildContext context) {
+    return Row(
+      children: [
+        Card(
+          shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(20),
+              side: BorderSide(color: MyTheme.grayBg)),
+          color: Colors.white,
+          child: Container(
+            width: 200,
+            height: double.infinity,
+            padding: EdgeInsets.symmetric(horizontal: 12.0, vertical: 8.0),
+            child: Column(
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(translate('Tags')),
+                    InkWell(
+                      child: PopupMenuButton(
+                          itemBuilder: (context) => [],
+                          child: Icon(Icons.more_vert_outlined)),
+                    )
+                  ],
+                ),
+                Expanded(
+                  child: Container(
+                    width: double.infinity,
+                    height: double.infinity,
+                    decoration: BoxDecoration(
+                        border: Border.all(color: MyTheme.darkGray)),
+                    child: Wrap(
+                      children:
+                          gFFI.abModel.tags.map((e) => buildTag(e)).toList(),
+                    ),
+                  ).marginSymmetric(vertical: 8.0),
+                )
+              ],
+            ),
+          ),
+        ).marginOnly(right: 8.0),
+        Column(
+          children: [
+            FutureBuilder<Widget>(
+                future: getPeers(rType: RemoteType.addressBook),
+                builder: (context, snapshot) {
+                  if (snapshot.hasData) {
+                    return snapshot.data!;
+                  } else {
+                    return Center(child: CircularProgressIndicator());
+                  }
+                }),
+          ],
+        )
+      ],
+    );
+  }
+
+  Widget buildTag(String tagName) {
+    return Container(
+      decoration: BoxDecoration(
+          border: Border.all(color: MyTheme.darkGray),
+          borderRadius: BorderRadius.circular(10)),
+      margin: EdgeInsets.symmetric(horizontal: 4.0, vertical: 8.0),
+      padding: EdgeInsets.symmetric(vertical: 2.0, horizontal: 8.0),
+      child: Text(tagName),
+    );
+  }
+}
+
+class AddressBookPage extends StatefulWidget {
+  const AddressBookPage({Key? key}) : super(key: key);
+
+  @override
+  State<AddressBookPage> createState() => _AddressBookPageState();
+}
+
+class _AddressBookPageState extends State<AddressBookPage> {
+  @override
+  void initState() {
+    // TODO: implement initState
+    final ab = gFFI.abModel.getAb();
+    super.initState();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container();
   }
 }
 
@@ -430,13 +686,13 @@ class _WebMenuState extends State<WebMenu> {
         icon: Icon(Icons.more_vert),
         itemBuilder: (context) {
           return (isIOS
-                  ? [
-                      PopupMenuItem(
-                        child: Icon(Icons.qr_code_scanner, color: Colors.black),
-                        value: "scan",
-                      )
-                    ]
-                  : <PopupMenuItem<String>>[]) +
+              ? [
+            PopupMenuItem(
+              child: Icon(Icons.qr_code_scanner, color: Colors.black),
+              value: "scan",
+            )
+          ]
+              : <PopupMenuItem<String>>[]) +
               [
                 PopupMenuItem(
                   child: Text(translate('ID/Relay Server')),
@@ -446,13 +702,13 @@ class _WebMenuState extends State<WebMenu> {
               (getUrl().contains('admin.rustdesk.com')
                   ? <PopupMenuItem<String>>[]
                   : [
-                      PopupMenuItem(
-                        child: Text(username == null
-                            ? translate("Login")
-                            : translate("Logout") + ' ($username)'),
-                        value: "login",
-                      )
-                    ]) +
+                PopupMenuItem(
+                  child: Text(username == null
+                      ? translate("Login")
+                      : translate("Logout") + ' ($username)'),
+                  value: "login",
+                )
+              ]) +
               [
                 PopupMenuItem(
                   child: Text(translate('About') + ' RustDesk'),

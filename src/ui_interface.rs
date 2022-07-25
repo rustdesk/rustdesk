@@ -630,7 +630,7 @@ pub fn check_zombie(childs: Childs) {
     }
 }
 
-fn check_connect_status(reconnect: bool) -> mpsc::UnboundedSender<ipc::Data> {
+pub(crate) fn check_connect_status(reconnect: bool) -> mpsc::UnboundedSender<ipc::Data> {
     let (tx, rx) = mpsc::unbounded_channel::<ipc::Data>();
     std::thread::spawn(move || check_connect_status_(reconnect, rx));
     tx

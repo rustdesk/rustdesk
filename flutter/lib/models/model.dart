@@ -8,6 +8,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_hbb/generated_bridge.dart';
+import 'package:flutter_hbb/models/ab_model.dart';
 import 'package:flutter_hbb/models/chat_model.dart';
 import 'package:flutter_hbb/models/file_model.dart';
 import 'package:flutter_hbb/models/server_model.dart';
@@ -809,6 +810,7 @@ class FFI {
   late final ServerModel serverModel;
   late final ChatModel chatModel;
   late final FileModel fileModel;
+  late final AbModel abModel;
 
   FFI() {
     this.imageModel = ImageModel(WeakReference(this));
@@ -818,6 +820,7 @@ class FFI {
     this.serverModel = ServerModel(WeakReference(this)); // use global FFI
     this.chatModel = ChatModel(WeakReference(this));
     this.fileModel = FileModel(WeakReference(this));
+    this.abModel = AbModel(WeakReference(this));
   }
 
   static FFI newFFI() {
@@ -995,9 +998,17 @@ class FFI {
     return ffiModel.platformFFI.getByName("option", name);
   }
 
+  Future<String> getLocalOption(String name) {
+    return bind.mainGetLocalOption(key: name);
+  }
+
+  Future<void> setLocalOption(String key, String value) {
+    return bind.mainSetLocalOption(key: key, value: value);
+  }
+
   void setOption(String name, String value) {
     Map<String, String> res = Map()
-      ..["name"] =  name
+      ..["name"] = name
       ..["value"] = value;
     return ffiModel.platformFFI.setByName('option', jsonEncode(res));
   }
@@ -1087,8 +1098,12 @@ class FFI {
     return input;
   }
 
-  void setDefaultAudioInput(String input){
+  void setDefaultAudioInput(String input) {
     setOption('audio-input', input);
+  }
+
+  Future<Map<String, String>> getHttpHeaders() async {
+    return {"Authorization": "Bearer " + await getLocalOption("access_token")};
   }
 }
 

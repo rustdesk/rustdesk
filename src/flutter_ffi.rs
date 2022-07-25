@@ -5,7 +5,7 @@ use std::{
 };
 
 use flutter_rust_bridge::{StreamSink, SyncReturn, ZeroCopyBuffer};
-use serde_json::{Number, Value};
+use serde_json::{json, Number, Value};
 
 use hbb_common::ResultType;
 use hbb_common::{
@@ -20,9 +20,11 @@ use crate::flutter::{self, Session, SESSIONS};
 use crate::start_server;
 use crate::ui_interface;
 use crate::ui_interface::{
-    change_id, get_app_name, get_async_job_status, get_fav, get_lan_peers, get_license,
-    get_options, get_peer, get_socks, get_sound_inputs, get_version, is_ok_change_id, set_options,
-    set_socks, store_fav, test_if_valid_server,
+    change_id, check_connect_status, get_api_server, get_app_name, get_async_job_status,
+    get_connect_status, get_fav, get_lan_peers, get_license, get_local_option, get_options,
+    get_peer, get_socks, get_sound_inputs, get_version, has_rendezvous_service, is_ok_change_id,
+    post_request, set_local_option, set_options, set_socks, store_fav, test_if_valid_server,
+    using_public_server,
 };
 
 fn initialize(app_dir: &str) {
@@ -445,6 +447,45 @@ pub fn main_get_peers(id: String) -> String {
 
 pub fn main_get_lan_peers() -> String {
     get_lan_peers()
+}
+
+pub fn main_get_connect_status() -> String {
+    let status = get_connect_status();
+    // (status_num, key_confirmed, mouse_time, id)
+    let mut m = serde_json::Map::new();
+    m.insert("status_num".to_string(), json!(status.0));
+    m.insert("key_confirmed".to_string(), json!(status.1));
+    m.insert("mouse_time".to_string(), json!(status.2));
+    m.insert("id".to_string(), json!(status.3));
+    serde_json::to_string(&m).unwrap_or("".to_string())
+}
+
+pub fn main_check_connect_status() {
+    check_connect_status(true);
+}
+
+pub fn main_is_using_public_server() -> bool {
+    using_public_server()
+}
+
+pub fn main_has_rendezvous_service() -> bool {
+    has_rendezvous_service()
+}
+
+pub fn main_get_api_server() -> String {
+    get_api_server()
+}
+
+pub fn main_post_request(url: String, body: String, header: String) {
+    post_request(url, body, header)
+}
+
+pub fn main_get_local_option(key: String) -> String {
+    get_local_option(key)
+}
+
+pub fn main_set_local_option(key: String, value: String) {
+    set_local_option(key, value)
 }
 
 /// FFI for **get** commands which are idempotent.
