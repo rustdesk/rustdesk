@@ -31,6 +31,8 @@ use std::sync::{
     atomic::{AtomicI64, Ordering},
     mpsc as std_mpsc,
 };
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+use system_shutdown;
 
 pub type Sender = mpsc::UnboundedSender<(Instant, Arc<Message>)>;
 
@@ -79,6 +81,7 @@ pub struct Connection {
     clipboard: bool,
     audio: bool,
     file: bool,
+    restart: bool,
     last_test_delay: i64,
     lock_after_session_end: bool,
     show_remote_cursor: bool, // by peer
@@ -166,6 +169,7 @@ impl Connection {
             clipboard: Config::get_option("enable-clipboard").is_empty(),
             audio: Config::get_option("enable-audio").is_empty(),
             file: Config::get_option("enable-file-transfer").is_empty(),
+            restart: Config::get_option("enable-remote-restart").is_empty(),
             last_test_delay: 0,
             lock_after_session_end: false,
             show_remote_cursor: false,
@@ -203,6 +207,9 @@ impl Connection {
         }
         if !conn.file {
             conn.send_permission(Permission::File, false).await;
+        }
+        if !conn.restart {
+            conn.send_permission(Permission::Restart, false).await;
         }
         let mut test_delay_timer =
             time::interval_at(Instant::now() + TEST_DELAY_TIMEOUT, TEST_DELAY_TIMEOUT);
@@ -281,6 +288,9 @@ impl Connection {
                                 conn.file = enabled;
                                 conn.send_permission(Permission::File, enabled).await;
                                 conn.send_to_cm(ipc::Data::ClipboardFileEnabled(conn.file_transfer_enabled()));
+                            } else if &name == "restart" {
+                                conn.restart = enabled;
+                                conn.send_permission(Permission::Restart, enabled).await;
                             }
                         }
                         ipc::Data::RawMessage(bytes) => {
@@ -766,6 +776,7 @@ impl Connection {
             audio: self.audio,
             file: self.file,
             file_transfer_enabled: self.file_transfer_enabled(),
+            restart: self.restart,
         });
     }
 
@@ -1207,6 +1218,17 @@ impl Connection {
                         self.on_close("Peer close", true).await;
                         SESSIONS.lock().unwrap().remove(&self.lr.my_id);
                         return false;
+                    }
+
+                    Some(misc::Union::RestartRemoteDevice(_)) =>
+                    {
+                        #[cfg(not(any(target_os = "android", target_os = "ios")))]
+                        if self.restart {
+                            match system_shutdown::reboot() {
+                                Ok(_) => log::info!("Restart by the peer"),
+                                Err(e) => log::error!("Failed to restart:{}", e),
+                            }
+                        }
                     }
                     _ => {}
                 },

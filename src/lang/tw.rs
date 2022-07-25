@@ -293,5 +293,11 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Use both passwords", "同時使用兩種密碼"),
         ("Set permanent password", "設定固定密碼"),
         ("Set temporary password length", "設定臨時密碼長度"),
+        ("Enable Remote Restart", "允許遠程重啓"),
+        ("Allow remote restart", "允許遠程重啓"),
+        ("Restart Remote Device", "重啓遠程電腦"),
+        ("Are you sure you want to restart", "确定要重启"),
+        ("Restarting Remote Device", "正在重啓遠程設備"),
+        ("Remote device is restarting, please close this message box and reconnect with permanent password after a while", "遠程設備正在重啓，請關閉當前提示框，並在一段時間後使用永久密碼重新連接"),
     ].iter().cloned().collect();
 }

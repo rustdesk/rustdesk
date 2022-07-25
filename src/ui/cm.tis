@@ -46,6 +46,7 @@ class Body: Reactor.Component
                     <div class={!c.clipboard ? "disabled" : ""} title={translate('Allow using clipboard')}><icon .clipboard /></div>
                     <div class={!c.audio ? "disabled" : ""} title={translate('Allow hearing sound')}><icon .audio /></div>
                     <div class={!c.file ? "disabled" : ""} title={translate('Allow file copy and paste')}><icon .file /></div>
+                    <div class={!c.restart ? "disabled" : ""} title={translate('Allow remote restart')}><icon .restart /></div>
                 </div>}
                 {c.port_forward ? <div>Port Forwarding: {c.port_forward}</div> : ""}
                 <div style="size:*"/>
@@ -105,6 +106,15 @@ class Body: Reactor.Component
             connection.file = !connection.file;
             body.update();
             handler.switch_permission(cid, "file", connection.file);
+        });
+    }
+
+    event click $(icon.restart) {
+        var { cid, connection } = this;
+        checkClickTime(function() {
+            connection.restart = !connection.restart;
+            body.update();
+            handler.switch_permission(cid, "restart", connection.restart);
         });
     }
 
@@ -266,7 +276,7 @@ function bring_to_top(idx=-1) {
     }
 }
 
-handler.addConnection = function(id, is_file_transfer, port_forward, peer_id, name, authorized, keyboard, clipboard, audio, file) {
+handler.addConnection = function(id, is_file_transfer, port_forward, peer_id, name, authorized, keyboard, clipboard, audio, file, restart) {
     stdout.println("new connection #" + id + ": " + peer_id);
     var conn;
     connections.map(function(c) {
@@ -283,7 +293,7 @@ handler.addConnection = function(id, is_file_transfer, port_forward, peer_id, na
         port_forward: port_forward,
         name: name, authorized: authorized, time: new Date(),
         keyboard: keyboard, clipboard: clipboard, msgs: [], unreaded: 0,
-        audio: audio, file: file
+        audio: audio, file: file, restart: restart
     });
     body.cur = connections.length - 1;
     bring_to_top();

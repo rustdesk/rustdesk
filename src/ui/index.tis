@@ -274,6 +274,7 @@ class MyIdMenu: Reactor.Component {
                 <li #enable-keyboard><span>{svg_checkmark}</span>{translate('Enable Keyboard/Mouse')}</li>
                 <li #enable-clipboard><span>{svg_checkmark}</span>{translate('Enable Clipboard')}</li>
                 <li #enable-file-transfer><span>{svg_checkmark}</span>{translate('Enable File Transfer')}</li> 
+                <li #enable-remote-restart><span>{svg_checkmark}</span>{translate('Enable Remote Restart')}</li> 
                 <li #enable-tunnel><span>{svg_checkmark}</span>{translate('Enable TCP Tunneling')}</li>
                 <AudioInputs />
                 <Enhancements />

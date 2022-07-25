@@ -14,7 +14,7 @@ use hbb_common::{
     fs, get_version_number, log,
     message_proto::*,
     protobuf::Message as _,
-    tokio::{self, sync::mpsc, task::spawn_blocking}
+    tokio::{self, sync::mpsc, task::spawn_blocking},
 };
 use sciter::{make_args, Element, Value, HELEMENT};
 use std::{
@@ -90,6 +90,7 @@ impl ConnectionManager {
         clipboard: bool,
         audio: bool,
         file: bool,
+        restart: bool,
         tx: mpsc::UnboundedSender<Data>,
     ) {
         self.call(
@@ -104,7 +105,8 @@ impl ConnectionManager {
                 keyboard,
                 clipboard,
                 audio,
-                file
+                file,
+                restart
             ),
         );
         self.write().unwrap().senders.insert(id, tx);
@@ -489,11 +491,11 @@ async fn start_ipc(cm: ConnectionManager) {
                                             }
                                             Ok(Some(data)) => {
                                                 match data {
-                                                    Data::Login{id, is_file_transfer, port_forward, peer_id, name, authorized, keyboard, clipboard, audio, file, file_transfer_enabled} => {
+                                                    Data::Login{id, is_file_transfer, port_forward, peer_id, name, authorized, keyboard, clipboard, audio, file, file_transfer_enabled, restart} => {
                                                         log::debug!("conn_id: {}", id);
                                                         conn_id = id;
                                                         tx_file.send(ClipboardFileData::Enable((id, file_transfer_enabled))).ok();
-                                                        cm.add_connection(id, is_file_transfer, port_forward, peer_id, name, authorized, keyboard, clipboard, audio, file, tx.clone());
+                                                        cm.add_connection(id, is_file_transfer, port_forward, peer_id, name, authorized, keyboard, clipboard, audio, file, restart, tx.clone());
                                                     }
                                                     Data::Close => {
                                                         tx_file.send(ClipboardFileData::Enable((conn_id, false))).ok();

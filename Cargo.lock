@@ -4017,6 +4017,7 @@ dependencies = [
  "simple_rc",
  "sys-locale",
  "sysinfo",
+ "system_shutdown",
  "tray-item",
  "trayicon",
  "uuid",
@@ -4635,6 +4636,15 @@ dependencies = [
  "pkg-config",
  "toml",
  "version-compare 0.1.0",
+]
+
+[[package]]
+name = "system_shutdown"
+version = "3.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "035e081d603551d8d78db27d2232913269c749ea67648c369100049820406a14"
+dependencies = [
+ "winapi 0.3.9",
 ]
 
 [[package]]
