@@ -325,4 +325,6 @@ Future<void> initGlobalFFI() async {
   // after `put`, can also be globally found by Get.find<FFI>();
   Get.put(_globalFFI, permanent: true);
   await _globalFFI.ffiModel.init();
+  // trigger connection status updater
+  await _globalFFI.bind.mainCheckConnectStatus();
 }
