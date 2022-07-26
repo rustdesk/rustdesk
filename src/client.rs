@@ -1334,11 +1334,21 @@ fn _input_os_password(p: String, activate: bool, interface: impl Interface) {
 
 pub async fn handle_hash(
     lc: Arc<RwLock<LoginConfigHandler>>,
+    password_preset: &str,
     hash: Hash,
     interface: &impl Interface,
     peer: &mut Stream,
 ) {
     let mut password = lc.read().unwrap().password.clone();
+    if password.is_empty() {
+        if !password_preset.is_empty() {
+            let mut hasher = Sha256::new();
+            hasher.update(password_preset);
+            hasher.update(&hash.salt);
+            let res = hasher.finalize();
+            password = res[..].into();
+        }
+    }
     if password.is_empty() {
         password = lc.read().unwrap().config.password.clone();
     }
@@ -1384,7 +1394,7 @@ pub trait Interface: Send + Clone + 'static + Sized {
     fn msgbox(&self, msgtype: &str, title: &str, text: &str);
     fn handle_login_error(&mut self, err: &str) -> bool;
     fn handle_peer_info(&mut self, pi: PeerInfo);
-    async fn handle_hash(&mut self, hash: Hash, peer: &mut Stream);
+    async fn handle_hash(&mut self, pass: &str, hash: Hash, peer: &mut Stream);
     async fn handle_login_from_ui(&mut self, password: String, remember: bool, peer: &mut Stream);
     async fn handle_test_delay(&mut self, t: TestDelay, peer: &mut Stream);
 }

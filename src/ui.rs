@@ -133,10 +133,16 @@ pub fn start(args: &mut [String]) {
         let mut iter = args.iter();
         let cmd = iter.next().unwrap().clone();
         let id = iter.next().unwrap().clone();
+        let pass = iter.next().unwrap_or(&"".to_owned()).clone();
         let args: Vec<String> = iter.map(|x| x.clone()).collect();
         frame.set_title(&id);
         frame.register_behavior("native-remote", move || {
-            Box::new(remote::Handler::new(cmd.clone(), id.clone(), args.clone()))
+            Box::new(remote::Handler::new(
+                cmd.clone(),
+                id.clone(),
+                pass.clone(),
+                args.clone(),
+            ))
         });
         page = "remote.html";
     } else {
