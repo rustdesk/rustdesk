@@ -1669,7 +1669,6 @@ impl Remote {
     }
 
     async fn handle_msg_from_ui(&mut self, data: Data, peer: &mut Stream) -> bool {
-        // log::info!("new msg from ui, {}",data);
         match data {
             Data::Close => {
                 let mut misc = Misc::new();

@@ -192,7 +192,7 @@ pub fn make_menubar(host: Rc<Host>, is_index: bool) {
             app_menu.addItem_(new_item);
         } else {
             // When app launched without argument, is the main panel.
-            let about_item = make_menu_item("About", "a", SHOW_ABOUT_TAG);
+            let about_item = make_menu_item("About", "", SHOW_ABOUT_TAG);
             app_menu.addItem_(about_item);
             let separator = NSMenuItem::separatorItem(nil).autorelease();
             app_menu.addItem_(separator);
