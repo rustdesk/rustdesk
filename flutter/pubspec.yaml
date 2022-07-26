@@ -67,6 +67,7 @@ dependencies:
     freezed_annotation: ^2.0.3
     tray_manager: 0.1.7
     get: ^4.6.5
+    contextmenu: ^3.0.0
 
 dev_dependencies:
     flutter_launcher_icons: ^0.9.1

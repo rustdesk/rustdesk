@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:contextmenu/contextmenu.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/utils/multi_window_manager.dart';
 import 'package:get/get.dart';
@@ -302,22 +303,39 @@ class _ConnectionPageState extends State<ConnectionPage> {
     return Image.asset('assets/$platform.png', height: 50);
   }
 
+  bool hitTag(List<dynamic> selectedTags, List<dynamic> idents) {
+    if (selectedTags.isEmpty) {
+      return true;
+    }
+    if (idents.isEmpty) {
+      return false;
+    }
+    for (final tag in selectedTags) {
+      if (!idents.contains(tag)) {
+        return false;
+      }
+    }
+    return true;
+  }
+
   /// Get all the saved peers.
   Future<Widget> getPeers({RemoteType rType = RemoteType.recently}) async {
     final space = 8.0;
     final cards = <Widget>[];
-    var peers;
+    List<Peer> peers;
     switch (rType) {
       case RemoteType.recently:
         peers = gFFI.peers();
         break;
       case RemoteType.favorite:
         peers = await gFFI.bind.mainGetFav().then((peers) async {
-          final peersEntities = await Future.wait(peers.map((id) => gFFI.bind.mainGetPeers(id: id)).toList(growable: false))
-              .then((peers_str){
+          final peersEntities = await Future.wait(peers
+                  .map((id) => gFFI.bind.mainGetPeers(id: id))
+                  .toList(growable: false))
+              .then((peers_str) {
             final len = peers_str.length;
             final ps = List<Peer>.empty(growable: true);
-            for(var i = 0; i< len ; i++){
+            for (var i = 0; i < len; i++) {
               print("${peers[i]}: ${peers_str[i]}");
               ps.add(Peer.fromJson(peers[i], jsonDecode(peers_str[i])['info']));
             }
@@ -333,7 +351,6 @@ class _ConnectionPageState extends State<ConnectionPage> {
         });
         break;
       case RemoteType.addressBook:
-        await gFFI.abModel.getAb();
         peers = gFFI.abModel.peers.map((e) {
           return Peer.fromJson(e['id'], e);
         }).toList();
@@ -343,97 +360,107 @@ class _ConnectionPageState extends State<ConnectionPage> {
       var deco = Rx<BoxDecoration?>(BoxDecoration(
           border: Border.all(color: Colors.transparent, width: 1.0),
           borderRadius: BorderRadius.circular(20)));
-      cards.add(Container(
-          width: 225,
-          height: 150,
-          child: Card(
-              shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(20)),
-              child: MouseRegion(
-                onEnter: (evt) {
-                  deco.value = BoxDecoration(
-                      border: Border.all(color: Colors.blue, width: 1.0),
-                      borderRadius: BorderRadius.circular(20));
-                },
-                onExit: (evt) {
-                  deco.value = BoxDecoration(
-                      border: Border.all(color: Colors.transparent, width: 1.0),
-                      borderRadius: BorderRadius.circular(20));
-                },
-                child: Obx(
-                  () => Container(
-                    decoration: deco.value,
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Expanded(
-                          child: Container(
-                            decoration: BoxDecoration(
-                              color: str2color('${p.id}${p.platform}', 0x7f),
-                              borderRadius: BorderRadius.only(
-                                topLeft: Radius.circular(20),
-                                topRight: Radius.circular(20),
-                              ),
-                            ),
-                            child: Row(
-                              children: [
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.center,
-                                    children: [
-                                      Container(
-                                        padding: const EdgeInsets.all(6),
-                                        child:
-                                            getPlatformImage('${p.platform}'),
-                                      ),
-                                      Row(
+      cards.add(Obx(
+        () => Offstage(
+          offstage: !hitTag(gFFI.abModel.selectedTags, p.tags) &&
+              rType == RemoteType.addressBook,
+          child: Container(
+              width: 225,
+              height: 150,
+              child: Card(
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(20)),
+                  child: MouseRegion(
+                    onEnter: (evt) {
+                      deco.value = BoxDecoration(
+                          border: Border.all(color: Colors.blue, width: 1.0),
+                          borderRadius: BorderRadius.circular(20));
+                    },
+                    onExit: (evt) {
+                      deco.value = BoxDecoration(
+                          border:
+                              Border.all(color: Colors.transparent, width: 1.0),
+                          borderRadius: BorderRadius.circular(20));
+                    },
+                    child: Obx(
+                      () => Container(
+                        decoration: deco.value,
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Expanded(
+                              child: Container(
+                                decoration: BoxDecoration(
+                                  color:
+                                      str2color('${p.id}${p.platform}', 0x7f),
+                                  borderRadius: BorderRadius.only(
+                                    topLeft: Radius.circular(20),
+                                    topRight: Radius.circular(20),
+                                  ),
+                                ),
+                                child: Row(
+                                  children: [
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.center,
                                         children: [
-                                          Expanded(
-                                            child: Tooltip(
-                                              message:
-                                                  '${p.username}@${p.hostname}',
-                                              child: Text(
-                                                '${p.username}@${p.hostname}',
-                                                style: TextStyle(
-                                                    color: Colors.white70,
-                                                    fontSize: 12),
-                                                textAlign: TextAlign.center,
-                                                overflow: TextOverflow.ellipsis,
+                                          Container(
+                                            padding: const EdgeInsets.all(6),
+                                            child: getPlatformImage(
+                                                '${p.platform}'),
+                                          ),
+                                          Row(
+                                            children: [
+                                              Expanded(
+                                                child: Tooltip(
+                                                  message:
+                                                      '${p.username}@${p.hostname}',
+                                                  child: Text(
+                                                    '${p.username}@${p.hostname}',
+                                                    style: TextStyle(
+                                                        color: Colors.white70,
+                                                        fontSize: 12),
+                                                    textAlign: TextAlign.center,
+                                                    overflow:
+                                                        TextOverflow.ellipsis,
+                                                  ),
+                                                ),
                                               ),
-                                            ),
+                                            ],
                                           ),
                                         ],
-                                      ),
-                                    ],
-                                  ).paddingAll(4.0),
+                                      ).paddingAll(4.0),
+                                    ),
+                                  ],
                                 ),
-                              ],
+                              ),
                             ),
-                          ),
-                        ),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Text("${p.id}"),
-                            InkWell(
-                                child: Icon(Icons.more_vert),
-                                onTapDown: (e) {
-                                  final x = e.globalPosition.dx;
-                                  final y = e.globalPosition.dy;
-                                  _menuPos = RelativeRect.fromLTRB(x, y, x, y);
-                                },
-                                onTap: () {
-                                  showPeerMenu(context, p.id, rType);
-                                }),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Text("${p.id}"),
+                                InkWell(
+                                    child: Icon(Icons.more_vert),
+                                    onTapDown: (e) {
+                                      final x = e.globalPosition.dx;
+                                      final y = e.globalPosition.dy;
+                                      _menuPos =
+                                          RelativeRect.fromLTRB(x, y, x, y);
+                                    },
+                                    onTap: () {
+                                      showPeerMenu(context, p.id, rType);
+                                    }),
+                              ],
+                            ).paddingSymmetric(vertical: 8.0, horizontal: 12.0)
                           ],
-                        ).paddingSymmetric(vertical: 8.0, horizontal: 12.0)
-                      ],
+                        ),
+                      ),
                     ),
-                  ),
-                ),
-              ))));
+                  ))),
+        ),
+      ));
     });
     return SingleChildScrollView(
         child: Wrap(children: cards, spacing: space, runSpacing: space));
@@ -450,7 +477,11 @@ class _ConnectionPageState extends State<ConnectionPage> {
       PopupMenuItem<String>(
           child: Text(translate('TCP Tunneling')), value: 'tcp-tunnel'),
       PopupMenuItem<String>(child: Text(translate('Rename')), value: 'rename'),
-      PopupMenuItem<String>(child: Text(translate('Remove')), value: 'remove'),
+      rType == RemoteType.addressBook
+          ? PopupMenuItem<String>(
+              child: Text(translate('Remove')), value: 'ab-delete')
+          : PopupMenuItem<String>(
+              child: Text(translate('Remove')), value: 'remove'),
       PopupMenuItem<String>(
           child: Text(translate('Unremember Password')),
           value: 'unremember-password'),
@@ -459,9 +490,13 @@ class _ConnectionPageState extends State<ConnectionPage> {
       items.add(PopupMenuItem<String>(
           child: Text(translate('Remove from Favorites')),
           value: 'remove-fav'));
-    } else
+    } else if (rType != RemoteType.addressBook) {
       items.add(PopupMenuItem<String>(
           child: Text(translate('Add to Favorites')), value: 'add-fav'));
+    } else {
+      items.add(PopupMenuItem<String>(
+          child: Text(translate('Edit Tag')), value: 'ab-edit-tag'));
+    }
     var value = await showMenu(
       context: context,
       position: this._menuPos,
@@ -475,7 +510,16 @@ class _ConnectionPageState extends State<ConnectionPage> {
       }();
     } else if (value == 'file') {
       connect(id, isFileTransfer: true);
-    } else if (value == 'add-fav') {}
+    } else if (value == 'add-fav') {
+    } else if (value == 'connect') {
+      connect(id, isFileTransfer: false);
+    } else if (value == 'ab-delete') {
+      gFFI.abModel.deletePeer(id);
+      await gFFI.abModel.updateAb();
+      setState(() {});
+    } else if (value == 'ab-edit-tag') {
+      abEditTag(id);
+    }
   }
 
   var svcStopped = false.obs;
@@ -572,7 +616,7 @@ class _ConnectionPageState extends State<ConnectionPage> {
               );
             } else if (model.abError.isNotEmpty) {
               return Center(
-                child: CircularProgressIndicator(),
+                child: Text(translate("${model.abError}")),
               );
             } else {
               return Offstage();
@@ -601,7 +645,21 @@ class _ConnectionPageState extends State<ConnectionPage> {
                     Text(translate('Tags')),
                     InkWell(
                       child: PopupMenuButton(
-                          itemBuilder: (context) => [],
+                          itemBuilder: (context) => [
+                                PopupMenuItem(
+                                  child: Text(translate("Add ID")),
+                                  value: 'add-id',
+                                ),
+                                PopupMenuItem(
+                                  child: Text(translate("Add Tag")),
+                                  value: 'add-tag',
+                                ),
+                                PopupMenuItem(
+                                  child: Text(translate("Unselect all tags")),
+                                  value: 'unset-all-tag',
+                                ),
+                              ],
+                          onSelected: handleAbOp,
                           child: Icon(Icons.more_vert_outlined)),
                     )
                   ],
@@ -612,9 +670,20 @@ class _ConnectionPageState extends State<ConnectionPage> {
                     height: double.infinity,
                     decoration: BoxDecoration(
                         border: Border.all(color: MyTheme.darkGray)),
-                    child: Wrap(
-                      children:
-                          gFFI.abModel.tags.map((e) => buildTag(e)).toList(),
+                    child: Obx(
+                      () => Wrap(
+                        children: gFFI.abModel.tags
+                            .map((e) => buildTag(e, gFFI.abModel.selectedTags,
+                                    onTap: () {
+                                  //
+                                  if (gFFI.abModel.selectedTags.contains(e)) {
+                                    gFFI.abModel.selectedTags.remove(e);
+                                  } else {
+                                    gFFI.abModel.selectedTags.add(e);
+                                  }
+                                }))
+                            .toList(),
+                      ),
                     ),
                   ).marginSymmetric(vertical: 8.0),
                 )
@@ -622,32 +691,265 @@ class _ConnectionPageState extends State<ConnectionPage> {
             ),
           ),
         ).marginOnly(right: 8.0),
-        Column(
-          children: [
-            FutureBuilder<Widget>(
-                future: getPeers(rType: RemoteType.addressBook),
-                builder: (context, snapshot) {
-                  if (snapshot.hasData) {
-                    return snapshot.data!;
-                  } else {
-                    return Center(child: CircularProgressIndicator());
-                  }
-                }),
-          ],
+        Expanded(
+          child: FutureBuilder<Widget>(
+              future: getPeers(rType: RemoteType.addressBook),
+              builder: (context, snapshot) {
+                if (snapshot.hasData) {
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [Expanded(child: snapshot.data!)],
+                  );
+                } else if (snapshot.hasError) {
+                  return Container(
+                      alignment: Alignment.center,
+                      child: Text('${snapshot.error}'));
+                } else {
+                  return Container(
+                      alignment: Alignment.center,
+                      child: CircularProgressIndicator());
+                }
+              }),
         )
       ],
     );
   }
 
-  Widget buildTag(String tagName) {
-    return Container(
-      decoration: BoxDecoration(
-          border: Border.all(color: MyTheme.darkGray),
-          borderRadius: BorderRadius.circular(10)),
-      margin: EdgeInsets.symmetric(horizontal: 4.0, vertical: 8.0),
-      padding: EdgeInsets.symmetric(vertical: 2.0, horizontal: 8.0),
-      child: Text(tagName),
+  Widget buildTag(String tagName, RxList<dynamic> rxTags, {Function()? onTap}) {
+    return ContextMenuArea(
+      width: 100,
+      builder: (context) => [
+        ListTile(
+          title: Text(translate("Delete")),
+          onTap: () {
+            gFFI.abModel.deleteTag(tagName);
+            gFFI.abModel.updateAb();
+            Future.delayed(Duration.zero, () => Get.back());
+          },
+        )
+      ],
+      child: GestureDetector(
+        onTap: onTap,
+        child: Obx(
+          () => Container(
+            decoration: BoxDecoration(
+                color: rxTags.contains(tagName) ? Colors.blue : null,
+                border: Border.all(color: MyTheme.darkGray),
+                borderRadius: BorderRadius.circular(10)),
+            margin: EdgeInsets.symmetric(horizontal: 4.0, vertical: 8.0),
+            padding: EdgeInsets.symmetric(vertical: 2.0, horizontal: 8.0),
+            child: Text(
+              tagName,
+              style: TextStyle(
+                  color: rxTags.contains(tagName) ? MyTheme.white : null),
+            ),
+          ),
+        ),
+      ),
     );
+  }
+
+  /// tag operation
+  void handleAbOp(String value) {
+    if (value == 'add-id') {
+      abAddId();
+    } else if (value == 'add-tag') {
+      abAddTag();
+    } else if (value == 'unset-all-tag') {
+      gFFI.abModel.unsetSelectedTags();
+    }
+  }
+
+  void abAddId() async {
+    var field = "";
+    var msg = "";
+    var isInProgress = false;
+    DialogManager.show((setState, close) {
+      return CustomAlertDialog(
+        title: Text(translate("Add ID")),
+        content: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(translate("whitelist_sep")),
+            SizedBox(
+              height: 8.0,
+            ),
+            Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    onChanged: (s) {
+                      field = s;
+                    },
+                    maxLines: null,
+                    decoration: InputDecoration(
+                      border: OutlineInputBorder(),
+                      errorText: msg.isEmpty ? null : translate(msg),
+                    ),
+                    controller: TextEditingController(text: field),
+                  ),
+                ),
+              ],
+            ),
+            SizedBox(
+              height: 4.0,
+            ),
+            Offstage(offstage: !isInProgress, child: LinearProgressIndicator())
+          ],
+        ),
+        actions: [
+          TextButton(
+              onPressed: () {
+                close();
+              },
+              child: Text(translate("Cancel"))),
+          TextButton(
+              onPressed: () async {
+                setState(() {
+                  msg = "";
+                  isInProgress = true;
+                });
+                field = field.trim();
+                if (field.isEmpty) {
+                  // pass
+                } else {
+                  final ids = field.trim().split(RegExp(r"[\s,;\n]+"));
+                  field = ids.join(',');
+                  for (final newId in ids) {
+                    if (gFFI.abModel.idContainBy(newId)) {
+                      continue;
+                    }
+                    gFFI.abModel.addId(newId);
+                  }
+                  await gFFI.abModel.updateAb();
+                  this.setState(() {});
+                  // final currentPeers
+                }
+                close();
+              },
+              child: Text(translate("OK"))),
+        ],
+      );
+    });
+  }
+
+  void abAddTag() async {
+    var field = "";
+    var msg = "";
+    var isInProgress = false;
+    DialogManager.show((setState, close) {
+      return CustomAlertDialog(
+        title: Text(translate("Add Tag")),
+        content: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(translate("whitelist_sep")),
+            SizedBox(
+              height: 8.0,
+            ),
+            Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    onChanged: (s) {
+                      field = s;
+                    },
+                    maxLines: null,
+                    decoration: InputDecoration(
+                      border: OutlineInputBorder(),
+                      errorText: msg.isEmpty ? null : translate(msg),
+                    ),
+                    controller: TextEditingController(text: field),
+                  ),
+                ),
+              ],
+            ),
+            SizedBox(
+              height: 4.0,
+            ),
+            Offstage(offstage: !isInProgress, child: LinearProgressIndicator())
+          ],
+        ),
+        actions: [
+          TextButton(
+              onPressed: () {
+                close();
+              },
+              child: Text(translate("Cancel"))),
+          TextButton(
+              onPressed: () async {
+                setState(() {
+                  msg = "";
+                  isInProgress = true;
+                });
+                field = field.trim();
+                if (field.isEmpty) {
+                  // pass
+                } else {
+                  final tags = field.trim().split(RegExp(r"[\s,;\n]+"));
+                  field = tags.join(',');
+                  for (final tag in tags) {
+                    gFFI.abModel.addTag(tag);
+                  }
+                  await gFFI.abModel.updateAb();
+                  // final currentPeers
+                }
+                close();
+              },
+              child: Text(translate("OK"))),
+        ],
+      );
+    });
+  }
+
+  void abEditTag(String id) {
+    var isInProgress = false;
+
+    final tags = List.of(gFFI.abModel.tags);
+    var selectedTag = gFFI.abModel.getPeerTags(id).obs;
+
+    DialogManager.show((setState, close) {
+      return CustomAlertDialog(
+        title: Text(translate("Edit Tag")),
+        content: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              padding: EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+              child: Wrap(
+                children: tags
+                    .map((e) => buildTag(e, selectedTag, onTap: () {
+                          if (selectedTag.contains(e)) {
+                            selectedTag.remove(e);
+                          } else {
+                            selectedTag.add(e);
+                          }
+                        }))
+                    .toList(growable: false),
+              ),
+            ),
+            Offstage(offstage: !isInProgress, child: LinearProgressIndicator())
+          ],
+        ),
+        actions: [
+          TextButton(
+              onPressed: () {
+                close();
+              },
+              child: Text(translate("Cancel"))),
+          TextButton(
+              onPressed: () async {
+                setState(() {
+                  isInProgress = true;
+                });
+                gFFI.abModel.changeTagForPeer(id, selectedTag);
+                await gFFI.abModel.updateAb();
+                close();
+              },
+              child: Text(translate("OK"))),
+        ],
+      );
+    });
   }
 }
 

@@ -1112,12 +1112,14 @@ class Peer {
   final String username;
   final String hostname;
   final String platform;
+  final List<dynamic> tags;
 
   Peer.fromJson(String id, Map<String, dynamic> json)
       : id = id,
-        username = json['username'],
-        hostname = json['hostname'],
-        platform = json['platform'];
+        username = json['username'] ?? '',
+        hostname = json['hostname'] ?? '',
+        platform = json['platform'] ?? '',
+        tags = json['tags'] ?? [];
 }
 
 class Display {
