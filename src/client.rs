@@ -371,7 +371,7 @@ impl Client {
         conn: &mut Stream,
     ) -> ResultType<()> {
         let rs_pk = get_rs_pk(if key.is_empty() {
-            "OeVuKk5nlHiXp+APNn0Y3pC1Iwpwn44JGqrQCsWqmBw="
+            hbb_common::config::RS_PUB_KEY
         } else {
             key
         });
