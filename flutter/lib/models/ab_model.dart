@@ -24,22 +24,25 @@ class AbModel with ChangeNotifier {
     notifyListeners();
     // request
     final api = "${await getApiServer()}/api/ab/get";
-    final resp = await http.post(Uri.parse(api), headers: await _getHeaders());
-    abLoading = false;
-    Map<String, dynamic> json = jsonDecode(resp.body);
-    if (json.containsKey('error')) {
-      abError = json['error'];
-    } else if (json.containsKey('data')) {
-      // {"tags":["aaa","bbb"],
-      // "peers":[{"id":"aa1234","username":"selfd",
-      // "hostname":"PC","platform":"Windows","tags":["aaa"]}]}
-      final data = jsonDecode(json['data']);
-      tags.value = data['tags'];
-      peers.value = data['peers'];
+    try {
+      final resp =
+          await http.post(Uri.parse(api), headers: await _getHeaders());
+      Map<String, dynamic> json = jsonDecode(resp.body);
+      if (json.containsKey('error')) {
+        abError = json['error'];
+      } else if (json.containsKey('data')) {
+        final data = jsonDecode(json['data']);
+        tags.value = data['tags'];
+        peers.value = data['peers'];
+      }
+      return resp.body;
+    } catch (err) {
+      abError = err.toString();
+    } finally {
+      abLoading = false;
     }
-    print(json);
     notifyListeners();
-    return resp.body;
+    return null;
   }
 
   Future<String> getApiServer() async {

@@ -609,6 +609,18 @@ class _ConnectionPageState extends State<ConnectionPage> {
         builder: (context, snapshot) {
           if (snapshot.hasData) {
             return _buildAddressBook(context);
+          } else if (snapshot.hasError) {
+            return Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(translate("${snapshot.error}")),
+                TextButton(
+                    onPressed: () {
+                      setState(() {});
+                    },
+                    child: Text(translate("Retry")))
+              ],
+            );
           } else {
             if (model.abLoading) {
               return Center(
@@ -616,7 +628,17 @@ class _ConnectionPageState extends State<ConnectionPage> {
               );
             } else if (model.abError.isNotEmpty) {
               return Center(
-                child: Text(translate("${model.abError}")),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(translate("${model.abError}")),
+                    TextButton(
+                        onPressed: () {
+                          setState(() {});
+                        },
+                        child: Text(translate("Retry")))
+                  ],
+                ),
               );
             } else {
               return Offstage();
