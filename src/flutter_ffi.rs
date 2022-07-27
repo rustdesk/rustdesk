@@ -21,10 +21,10 @@ use crate::start_server;
 use crate::ui_interface;
 use crate::ui_interface::{
     change_id, check_connect_status, get_api_server, get_app_name, get_async_job_status,
-    get_connect_status, get_fav, get_lan_peers, get_license, get_local_option, get_options,
-    get_peer, get_socks, get_sound_inputs, get_version, has_rendezvous_service, is_ok_change_id,
-    post_request, set_local_option, set_options, set_socks, store_fav, test_if_valid_server,
-    using_public_server,
+    get_connect_status, get_fav, get_id, get_lan_peers, get_license, get_local_option, get_options,
+    get_peer, get_socks, get_sound_inputs, get_uuid, get_version, has_rendezvous_service,
+    is_ok_change_id, post_request, set_local_option, set_options, set_socks, store_fav,
+    test_if_valid_server, using_public_server,
 };
 
 fn initialize(app_dir: &str) {
@@ -486,6 +486,14 @@ pub fn main_get_local_option(key: String) -> String {
 
 pub fn main_set_local_option(key: String, value: String) {
     set_local_option(key, value)
+}
+
+pub fn main_get_my_id() -> String {
+    get_id()
+}
+
+pub fn main_get_uuid() -> String {
+    get_uuid()
 }
 
 /// FFI for **get** commands which are idempotent.

@@ -12,6 +12,7 @@ import 'package:flutter_hbb/models/ab_model.dart';
 import 'package:flutter_hbb/models/chat_model.dart';
 import 'package:flutter_hbb/models/file_model.dart';
 import 'package:flutter_hbb/models/server_model.dart';
+import 'package:flutter_hbb/models/user_model.dart';
 import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:tuple/tuple.dart';
@@ -811,6 +812,7 @@ class FFI {
   late final ChatModel chatModel;
   late final FileModel fileModel;
   late final AbModel abModel;
+  late final UserModel userModel;
 
   FFI() {
     this.imageModel = ImageModel(WeakReference(this));
@@ -821,6 +823,7 @@ class FFI {
     this.chatModel = ChatModel(WeakReference(this));
     this.fileModel = FileModel(WeakReference(this));
     this.abModel = AbModel(WeakReference(this));
+    this.userModel = UserModel(WeakReference(this));
   }
 
   static FFI newFFI() {

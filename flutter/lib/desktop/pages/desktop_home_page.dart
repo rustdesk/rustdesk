@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -110,68 +111,18 @@ class _DesktopHomePageState extends State<DesktopHomePage> with TrayListener {
                         style: TextStyle(
                             fontSize: 18, fontWeight: FontWeight.w500),
                       ),
-                      PopupMenuButton(
-                        padding: EdgeInsets.all(4.0),
-                        itemBuilder: (context) => [
-                          genEnablePopupMenuItem(
-                            translate("Enable Keyboard/Mouse"),
-                            'enable-keyboard',
-                          ),
-                          genEnablePopupMenuItem(
-                            translate("Enable Clipboard"),
-                            'enable-clipboard',
-                          ),
-                          genEnablePopupMenuItem(
-                            translate("Enable File Transfer"),
-                            'enable-file-transfer',
-                          ),
-                          genEnablePopupMenuItem(
-                            translate("Enable TCP Tunneling"),
-                            'enable-tunnel',
-                          ),
-                          genAudioInputPopupMenuItem(),
-                          // TODO: Audio Input
-                          PopupMenuItem(
-                            child: Text(translate("ID/Relay Server")),
-                            value: 'custom-server',
-                          ),
-                          PopupMenuItem(
-                            child: Text(translate("IP Whitelisting")),
-                            value: 'whitelist',
-                          ),
-                          PopupMenuItem(
-                            child: Text(translate("Socks5 Proxy")),
-                            value: 'socks5-proxy',
-                          ),
-                          // sep
-                          genEnablePopupMenuItem(
-                            translate("Enable Service"),
-                            'stop-service',
-                          ),
-                          // TODO: direct server
-                          genEnablePopupMenuItem(
-                            translate("Always connected via relay"),
-                            'allow-always-relay',
-                          ),
-                          genEnablePopupMenuItem(
-                            translate("Start ID/relay service"),
-                            'stop-rendezvous-service',
-                          ),
-                          PopupMenuItem(
-                            child: Text(translate("Change ID")),
-                            value: 'change-id',
-                          ),
-                          genEnablePopupMenuItem(
-                            translate("Dark Theme"),
-                            'allow-darktheme',
-                          ),
-                          PopupMenuItem(
-                            child: Text(translate("About")),
-                            value: 'about',
-                          ),
-                        ],
-                        onSelected: onSelectMenu,
-                      )
+                      FutureBuilder<Widget>(
+                          future: buildPopupMenu(context),
+                          builder: (context, snapshot) {
+                            if (snapshot.hasError) {
+                              print("${snapshot.error}");
+                            }
+                            if (snapshot.hasData) {
+                              return snapshot.data!;
+                            } else {
+                              return Offstage();
+                            }
+                          })
                     ],
                   ),
                   TextFormField(
@@ -187,6 +138,91 @@ class _DesktopHomePageState extends State<DesktopHomePage> with TrayListener {
         ],
       ),
     );
+  }
+
+  Future<Widget> buildPopupMenu(BuildContext context) async {
+    var position;
+    return GestureDetector(
+        onTapDown: (detail) {
+          final x = detail.globalPosition.dx;
+          final y = detail.globalPosition.dy;
+          position = RelativeRect.fromLTRB(x, y, x, y);
+        },
+        onTap: () async {
+          final userName = await gFFI.userModel.getUserName();
+          var menu = [
+            genEnablePopupMenuItem(
+              translate("Enable Keyboard/Mouse"),
+              'enable-keyboard',
+            ),
+            genEnablePopupMenuItem(
+              translate("Enable Clipboard"),
+              'enable-clipboard',
+            ),
+            genEnablePopupMenuItem(
+              translate("Enable File Transfer"),
+              'enable-file-transfer',
+            ),
+            genEnablePopupMenuItem(
+              translate("Enable TCP Tunneling"),
+              'enable-tunnel',
+            ),
+            genAudioInputPopupMenuItem(),
+            PopupMenuItem(
+              child: Text(translate("ID/Relay Server")),
+              value: 'custom-server',
+            ),
+            PopupMenuItem(
+              child: Text(translate("IP Whitelisting")),
+              value: 'whitelist',
+            ),
+            PopupMenuItem(
+              child: Text(translate("Socks5 Proxy")),
+              value: 'socks5-proxy',
+            ),
+            // sep
+            genEnablePopupMenuItem(
+              translate("Enable Service"),
+              'stop-service',
+            ),
+            // TODO: direct server
+            genEnablePopupMenuItem(
+              translate("Always connected via relay"),
+              'allow-always-relay',
+            ),
+            genEnablePopupMenuItem(
+              translate("Start ID/relay service"),
+              'stop-rendezvous-service',
+            ),
+            userName.isEmpty
+                ? PopupMenuItem(
+                    child: Text(translate("Login")),
+                    value: 'login',
+                  )
+                : PopupMenuItem(
+                    child: Text("${translate("Logout")} $userName"),
+                    value: 'logout',
+                  ),
+            PopupMenuItem(
+              child: Text(translate("Change ID")),
+              value: 'change-id',
+            ),
+            genEnablePopupMenuItem(
+              translate("Dark Theme"),
+              'allow-darktheme',
+            ),
+            PopupMenuItem(
+              child: Text(translate("About")),
+              value: 'about',
+            ),
+          ];
+          final v =
+              await showMenu(context: context, position: position, items: menu);
+          if (v != null) {
+            onSelectMenu(v);
+          }
+        },
+        child: Icon(Icons.more_vert_outlined));
   }
 
   buildPasswordBoard(BuildContext context) {
@@ -259,15 +295,15 @@ class _DesktopHomePageState extends State<DesktopHomePage> with TrayListener {
           Text(translate("Control Remote Desktop")),
           Form(
               child: Column(
-            children: [
-              TextFormField(
-                controller: TextEditingController(),
-                inputFormatters: [
-                  FilteringTextInputFormatter.allow(RegExp(r"[0-9]"))
+                children: [
+                  TextFormField(
+                    controller: TextEditingController(),
+                    inputFormatters: [
+                      FilteringTextInputFormatter.allow(RegExp(r"[0-9]"))
+                    ],
+                  )
                 ],
-              )
-            ],
-          ))
+              ))
         ],
       ),
     );
@@ -284,7 +320,7 @@ class _DesktopHomePageState extends State<DesktopHomePage> with TrayListener {
       case "quit":
         exit(0);
       case "show":
-        // windowManager.show();
+      // windowManager.show();
         break;
       default:
         break;
@@ -323,6 +359,10 @@ class _DesktopHomePageState extends State<DesktopHomePage> with TrayListener {
       changeSocks5Proxy();
     } else if (value == "about") {
       about();
+    } else if (value == "logout") {
+      logOut();
+    } else if (value == "login") {
+      login();
     }
   }
 
@@ -348,7 +388,7 @@ class _DesktopHomePageState extends State<DesktopHomePage> with TrayListener {
     return isPositive
         ? TextStyle()
         : TextStyle(
-            color: Colors.redAccent, decoration: TextDecoration.lineThrough);
+        color: Colors.redAccent, decoration: TextDecoration.lineThrough);
   }
 
   PopupMenuItem<String> genAudioInputPopupMenuItem() {
@@ -366,23 +406,23 @@ class _DesktopHomePageState extends State<DesktopHomePage> with TrayListener {
             }
             var inputList = inputs
                 .map((e) => PopupMenuItem(
-                      child: Row(
-                        children: [
-                          Obx(() => Offstage(
-                              offstage: defaultInput.value != e,
-                              child: Icon(Icons.check))),
-                          Expanded(
-                              child: Tooltip(
-                                  message: e,
-                                  child: Text(
-                                    "$e",
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                  ))),
-                        ],
-                      ),
-                      value: e,
-                    ))
+              child: Row(
+                children: [
+                  Obx(() => Offstage(
+                      offstage: defaultInput.value != e,
+                      child: Icon(Icons.check))),
+                  Expanded(
+                      child: Tooltip(
+                          message: e,
+                          child: Text(
+                            "$e",
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ))),
+                ],
+              ),
+              value: e,
+            ))
                 .toList();
             inputList.insert(
                 0,
@@ -503,7 +543,7 @@ class _DesktopHomePageState extends State<DesktopHomePage> with TrayListener {
 
   void changeServer() async {
     Map<String, dynamic> oldOptions =
-        jsonDecode(await gFFI.bind.mainGetOptions());
+    jsonDecode(await gFFI.bind.mainGetOptions());
     print("${oldOptions}");
     String idServer = oldOptions['custom-rendezvous-server'] ?? "";
     var idServerMsg = "";
@@ -542,7 +582,7 @@ class _DesktopHomePageState extends State<DesktopHomePage> with TrayListener {
                       decoration: InputDecoration(
                           border: OutlineInputBorder(),
                           errorText:
-                              idServerMsg.isNotEmpty ? idServerMsg : null),
+                          idServerMsg.isNotEmpty ? idServerMsg : null),
                       controller: TextEditingController(text: idServer),
                     ),
                   ),
@@ -595,7 +635,7 @@ class _DesktopHomePageState extends State<DesktopHomePage> with TrayListener {
                       decoration: InputDecoration(
                           border: OutlineInputBorder(),
                           errorText:
-                              apiServerMsg.isNotEmpty ? apiServerMsg : null),
+                          apiServerMsg.isNotEmpty ? apiServerMsg : null),
                       controller: TextEditingController(text: apiServer),
                     ),
                   ),
@@ -711,7 +751,7 @@ class _DesktopHomePageState extends State<DesktopHomePage> with TrayListener {
 
   void changeWhiteList() async {
     Map<String, dynamic> oldOptions =
-        jsonDecode(await gFFI.bind.mainGetOptions());
+    jsonDecode(await gFFI.bind.mainGetOptions());
     var newWhiteList = ((oldOptions['whitelist'] ?? "") as String).split(',');
     var newWhiteListField = newWhiteList.join('\n');
     var msg = "";
@@ -767,7 +807,7 @@ class _DesktopHomePageState extends State<DesktopHomePage> with TrayListener {
                   // pass
                 } else {
                   final ips =
-                      newWhiteListField.trim().split(RegExp(r"[\s,;\n]+"));
+                  newWhiteListField.trim().split(RegExp(r"[\s,;\n]+"));
                   // test ip
                   final ipMatch = RegExp(r"^\d+\.\d+\.\d+\.\d+$");
                   for (final ip in ips) {
@@ -832,8 +872,7 @@ class _DesktopHomePageState extends State<DesktopHomePage> with TrayListener {
                       },
                       decoration: InputDecoration(
                           border: OutlineInputBorder(),
-                          errorText:
-                              proxyMsg.isNotEmpty ? proxyMsg : null),
+                          errorText: proxyMsg.isNotEmpty ? proxyMsg : null),
                       controller: TextEditingController(text: proxy),
                     ),
                   ),
@@ -857,8 +896,8 @@ class _DesktopHomePageState extends State<DesktopHomePage> with TrayListener {
                         username = s;
                       },
                       decoration: InputDecoration(
-                          border: OutlineInputBorder(),
-                          ),
+                        border: OutlineInputBorder(),
+                      ),
                       controller: TextEditingController(text: username),
                     ),
                   ),
@@ -882,8 +921,8 @@ class _DesktopHomePageState extends State<DesktopHomePage> with TrayListener {
                         password = s;
                       },
                       decoration: InputDecoration(
-                          border: OutlineInputBorder(),
-                          ),
+                        border: OutlineInputBorder(),
+                      ),
                       controller: TextEditingController(text: password),
                     ),
                   ),
@@ -941,9 +980,7 @@ class _DesktopHomePageState extends State<DesktopHomePage> with TrayListener {
     final appName = await gFFI.bind.mainGetAppName();
     final license = await gFFI.bind.mainGetLicense();
     final version = await gFFI.bind.mainGetVersion();
-    final linkStyle = TextStyle(
-      decoration: TextDecoration.underline
-    );
+    final linkStyle = TextStyle(decoration: TextDecoration.underline);
     DialogManager.show((setState, close) {
       return CustomAlertDialog(
         title: Text("About $appName"),
@@ -960,16 +997,20 @@ class _DesktopHomePageState extends State<DesktopHomePage> with TrayListener {
                   onTap: () {
                     launchUrlString("https://rustdesk.com/privacy");
                   },
-                  child: Text("Privacy Statement", style: linkStyle,).marginSymmetric(vertical: 4.0)),
+                  child: Text(
+                    "Privacy Statement",
+                    style: linkStyle,
+                  ).marginSymmetric(vertical: 4.0)),
               InkWell(
-              onTap: () {
-                launchUrlString("https://rustdesk.com");
-              }
-              ,child: Text("Website",style: linkStyle,).marginSymmetric(vertical: 4.0)),
+                  onTap: () {
+                    launchUrlString("https://rustdesk.com");
+                  },
+                  child: Text(
+                    "Website",
+                    style: linkStyle,
+                  ).marginSymmetric(vertical: 4.0)),
               Container(
-                decoration: BoxDecoration(
-                  color: Color(0xFF2c8cff)
-                ),
+                decoration: BoxDecoration(color: Color(0xFF2c8cff)),
                 padding: EdgeInsets.symmetric(vertical: 24, horizontal: 8),
                 child: Row(
                   children: [
@@ -977,13 +1018,16 @@ class _DesktopHomePageState extends State<DesktopHomePage> with TrayListener {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text("Copyright &copy; 2022 Purslane Ltd.\n$license", style: TextStyle(
-                            color: Colors.white
-                          ),),
-                          Text("Made with heart in this chaotic world!", style: TextStyle(
-                              fontWeight: FontWeight.w800,
-                            color: Colors.white
-                          ),)
+                          Text(
+                            "Copyright &copy; 2022 Purslane Ltd.\n$license",
+                            style: TextStyle(color: Colors.white),
+                          ),
+                          Text(
+                            "Made with heart in this chaotic world!",
+                            style: TextStyle(
+                                fontWeight: FontWeight.w800,
+                                color: Colors.white),
+                          )
                         ],
                       ),
                     ),
@@ -1003,4 +1047,151 @@ class _DesktopHomePageState extends State<DesktopHomePage> with TrayListener {
       );
     });
   }
+
+  void login() {
+    loginDialog().then((success) {
+      if (success) {
+        // refresh frame
+        setState(() {});
+      }
+    });
+  }
+
+  void logOut() {
+    gFFI.userModel.logOut().then((_) => {setState(() {})});
+  }
+}
+
+/// common login dialog for desktop
+/// call this directly
+Future<bool> loginDialog() async {
+  String userName = "";
+  var userNameMsg = "";
+  String pass = "";
+  var passMsg = "";
+
+  var isInProgress = false;
+  var completer = Completer<bool>();
+  DialogManager.show((setState, close) {
+    return CustomAlertDialog(
+      title: Text(translate("Login")),
+      content: ConstrainedBox(
+        constraints: BoxConstraints(minWidth: 500),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SizedBox(
+              height: 8.0,
+            ),
+            Row(
+              children: [
+                ConstrainedBox(
+                    constraints: BoxConstraints(minWidth: 100),
+                    child: Text(
+                      "${translate('Username')}:",
+                      textAlign: TextAlign.start,
+                    ).marginOnly(bottom: 16.0)),
+                SizedBox(
+                  width: 24.0,
+                ),
+                Expanded(
+                  child: TextField(
+                    onChanged: (s) {
+                      userName = s;
+                    },
+                    decoration: InputDecoration(
+                        border: OutlineInputBorder(),
+                        errorText: userNameMsg.isNotEmpty ? userNameMsg : null),
+                    controller: TextEditingController(text: userName),
+                  ),
+                ),
+              ],
+            ),
+            SizedBox(
+              height: 8.0,
+            ),
+            Row(
+              children: [
+                ConstrainedBox(
+                    constraints: BoxConstraints(minWidth: 100),
+                    child: Text("${translate('Password')}:")
+                        .marginOnly(bottom: 16.0)),
+                SizedBox(
+                  width: 24.0,
+                ),
+                Expanded(
+                  child: TextField(
+                    obscureText: true,
+                    onChanged: (s) {
+                      pass = s;
+                    },
+                    decoration: InputDecoration(
+                        border: OutlineInputBorder(),
+                        errorText: passMsg.isNotEmpty ? passMsg : null),
+                    controller: TextEditingController(text: pass),
+                  ),
+                ),
+              ],
+            ),
+            SizedBox(
+              height: 4.0,
+            ),
+            Offstage(offstage: !isInProgress, child: LinearProgressIndicator())
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+            onPressed: () {
+              completer.complete(false);
+              close();
+            },
+            child: Text(translate("Cancel"))),
+        TextButton(
+            onPressed: () async {
+              setState(() {
+                userNameMsg = "";
+                passMsg = "";
+                isInProgress = true;
+              });
+              final cancel = () {
+                setState(() {
+                  isInProgress = false;
+                });
+              };
+              userName = userName;
+              pass = pass;
+              if (userName.isEmpty) {
+                userNameMsg = translate("Username missed");
+                cancel();
+                return;
+              }
+              if (pass.isEmpty) {
+                passMsg = translate("Password missed");
+                cancel();
+                return;
+              }
+              try {
+                final resp = await gFFI.userModel.login(userName, pass);
+                if (resp.containsKey('error')) {
+                  passMsg = resp['error'];
+                  cancel();
+                  return;
+                }
+                // {access_token: eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJndWlkIjoiMDFkZjQ2ZjgtZjg3OS00MDE0LTk5Y2QtMGMwYzM2MmViZGJlIiwiZXhwIjoxNjYxNDg2NzYwfQ.GZpe1oI8TfM5yTYNrpcwbI599P4Z_-b2GmnwNl2Lr-w,
+                // token_type: Bearer, user: {id: , name: admin, email: null, note: null, status: null, grp: null, is_admin: true}}
+                debugPrint("$resp");
+                completer.complete(true);
+              } catch (err) {
+                print(err.toString());
+                cancel();
+                return;
+              }
+              close();
+            },
+            child: Text(translate("OK"))),
+      ],
+    );
+  });
+  return completer.future;
 }
