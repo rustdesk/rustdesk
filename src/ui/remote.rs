@@ -1503,7 +1503,7 @@ impl Remote {
                             } else {
                                 if self.handler.is_restarting_remote_device() {
                                     log::info!("Restart remote device");
-                                    self.handler.msgbox("restarting", "Restarting Remote Device", "Remote device is restarting, please close this message box and reconnect with permanent password after a while");
+                                    self.handler.msgbox("restarting", "Restarting Remote Device", "remote_restarting_tip");
                                 } else {
                                     log::info!("Reset by the peer");
                                     self.handler.msgbox("error", "Connection Error", "Reset by the peer");

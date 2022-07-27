@@ -298,6 +298,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Restart Remote Device", "Reiniciar dispositivo"),
         ("Are you sure you want to restart", "Esta Seguro que desea reiniciar?"),
         ("Restarting Remote Device", "Reiniciando dispositivo remoto"),
-        ("Remote device is restarting, please close this message box and reconnect with permanent password after a while", "Dispositivo remoto reiniciando, favor de cerrar este mensaje y reconectarse con la contraseña permamente despues de un momento."),
+        ("remote_restarting_tip", "Dispositivo remoto reiniciando, favor de cerrar este mensaje y reconectarse con la contraseña permamente despues de un momento."),
     ].iter().cloned().collect();
 }
