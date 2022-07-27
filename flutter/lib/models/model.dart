@@ -21,6 +21,7 @@ import '../common.dart';
 import '../mobile/widgets/dialog.dart';
 import '../mobile/widgets/overlay.dart';
 import 'native_model.dart' if (dart.library.html) 'web_model.dart';
+import 'peer_model.dart';
 
 typedef HandleMsgBox = void Function(Map<String, dynamic> evt, String id);
 bool _waitForImage = false;
@@ -1092,7 +1093,7 @@ class FFI {
   Future<List<String>> getAudioInputs() async {
     return await bind.mainGetSoundInputs();
   }
-  
+
   String getDefaultAudioInput() {
     final input = getOption('audio-input');
     if (input.isEmpty && Platform.isWindows) {
@@ -1108,21 +1109,6 @@ class FFI {
   Future<Map<String, String>> getHttpHeaders() async {
     return {"Authorization": "Bearer " + await getLocalOption("access_token")};
   }
-}
-
-class Peer {
-  final String id;
-  final String username;
-  final String hostname;
-  final String platform;
-  final List<dynamic> tags;
-
-  Peer.fromJson(String id, Map<String, dynamic> json)
-      : id = id,
-        username = json['username'] ?? '',
-        hostname = json['hostname'] ?? '',
-        platform = json['platform'] ?? '',
-        tags = json['tags'] ?? [];
 }
 
 class Display {

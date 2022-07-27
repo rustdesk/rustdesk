@@ -985,6 +985,21 @@ unsafe extern "C" fn set_by_name(name: *const c_char, value: *const c_char) {
     }
 }
 
+fn handle_query_onlines(onlines: Vec<String>, offlines: Vec<String>) {
+    if let Some(s) = flutter::GLOBAL_EVENT_STREAM.read().unwrap().as_ref() {
+        let data = HashMap::from([
+            ("name", "callback_query_onlines".to_owned()),
+            ("onlines", onlines.join(",")),
+            ("offlines", offlines.join(",")),
+        ]);
+        s.add(serde_json::ser::to_string(&data).unwrap_or("".to_owned()));
+    };
+}
+
+pub fn query_onlines(ids: Vec<String>) {
+    crate::rendezvous_mediator::query_online_states(ids, handle_query_onlines)
+}
+
 #[cfg(target_os = "android")]
 pub mod server_side {
     use jni::{

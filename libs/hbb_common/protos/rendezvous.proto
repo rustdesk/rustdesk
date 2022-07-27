@@ -148,6 +148,15 @@ message PeerDiscovery {
   string misc = 7;
 }
 
+message OnlineRequest {
+  string id = 1;
+  repeated string peers = 2;
+}
+
+message OnlineResponse {
+  bytes states = 1;
+}
+
 message RendezvousMessage {
   oneof union {
     RegisterPeer register_peer = 6;
@@ -167,5 +176,7 @@ message RendezvousMessage {
     TestNatRequest test_nat_request = 20;
     TestNatResponse test_nat_response = 21;
     PeerDiscovery peer_discovery = 22;
+    OnlineRequest online_request = 23;
+    OnlineResponse online_response = 24;
   }
 }

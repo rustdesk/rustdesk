@@ -58,7 +58,7 @@ dependencies:
             url: https://github.com/SoLongAndThanksForAllThePizza/flutter_rust_bridge
             ref: master
             path: frb_dart
-    # window_manager: ^0.2.5
+    window_manager: ^0.2.5
     desktop_multi_window:
         git:
             url: https://github.com/Kingtous/rustdesk_desktop_multi_window
@@ -67,6 +67,7 @@ dependencies:
     freezed_annotation: ^2.0.3
     tray_manager: 0.1.7
     get: ^4.6.5
+    visibility_detector: ^0.3.3
     contextmenu: ^3.0.0
 
 dev_dependencies:

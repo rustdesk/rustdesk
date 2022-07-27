@@ -6,6 +6,7 @@ import 'dart:typed_data';
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:external_path/external_path.dart';
 import 'package:ffi/ffi.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:path_provider/path_provider.dart';
@@ -21,6 +22,7 @@ class RgbaFrame extends Struct {
 
 typedef F2 = Pointer<Utf8> Function(Pointer<Utf8>, Pointer<Utf8>);
 typedef F3 = void Function(Pointer<Utf8>, Pointer<Utf8>);
+typedef HandleEvent = void Function(Map<String, dynamic> evt);
 
 /// FFI wrapper around the native Rust core.
 /// Hides the platform differences.
@@ -30,6 +32,7 @@ class PlatformFFI {
   String _homeDir = '';
   F2? _getByName;
   F3? _setByName;
+  var _eventHandlers = Map<String, Map<String, HandleEvent>>();
   late RustdeskImpl _ffiBind;
   void Function(Map<String, dynamic>)? _eventCallback;
 
@@ -38,6 +41,31 @@ class PlatformFFI {
   static Future<String> getVersion() async {
     PackageInfo packageInfo = await PackageInfo.fromPlatform();
     return packageInfo.version;
+  }
+
+  bool registerEventHandler(
+      String event_name, String handler_name, HandleEvent handler) {
+    debugPrint('registerEventHandler $event_name $handler_name');
+    var handlers = _eventHandlers[event_name];
+    if (handlers == null) {
+      _eventHandlers[event_name] = {handler_name: handler};
+      return true;
+    } else {
+      if (handlers.containsKey(handler_name)) {
+        return false;
+      } else {
+        handlers[handler_name] = handler;
+        return true;
+      }
+    }
+  }
+
+  void unregisterEventHandler(String event_name, String handler_name) {
+    debugPrint('unregisterEventHandler $event_name $handler_name');
+    var handlers = _eventHandlers[event_name];
+    if (handlers != null) {
+      handlers.remove(handler_name);
+    }
   }
 
   /// Send **get** command to the Rust core based on [name] and [arg].
@@ -138,6 +166,22 @@ class PlatformFFI {
     version = await getVersion();
   }
 
+  bool _tryHandle(Map<String, dynamic> evt) {
+    final name = evt['name'];
+    if (name != null) {
+      final handlers = _eventHandlers[name];
+      if (handlers != null) {
+        if (handlers.isNotEmpty) {
+          handlers.values.forEach((handler) {
+            handler(evt);
+          });
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
   /// Start listening to the Rust core's events and frames.
   void _startListenEvent(RustdeskImpl rustdeskImpl) {
     () async {
@@ -145,7 +189,10 @@ class PlatformFFI {
         if (_eventCallback != null) {
           try {
             Map<String, dynamic> event = json.decode(message);
-            _eventCallback!(event);
+            // _tryHandle here may be more flexible than _eventCallback
+            if (!_tryHandle(event)) {
+              _eventCallback!(event);
+            }
           } catch (e) {
             print('json.decode fail(): $e');
           }

@@ -17,6 +17,11 @@ typedef struct WireSyncReturnStruct {
   bool success;
 } WireSyncReturnStruct;
 
+typedef struct wire_StringList {
+  struct wire_uint_8_list **ptr;
+  int32_t len;
+} wire_StringList;
+
 typedef int64_t DartPort;
 
 typedef bool (*DartPostCObjectFnType)(DartPort port_id, void *message);
@@ -165,6 +170,82 @@ void wire_session_read_local_dir_sync(int64_t port_,
                                       struct wire_uint_8_list *path,
                                       bool show_hidden);
 
+void wire_session_get_platform(int64_t port_, struct wire_uint_8_list *id, bool is_remote);
+
+void wire_session_load_last_transfer_jobs(int64_t port_, struct wire_uint_8_list *id);
+
+void wire_session_add_job(int64_t port_,
+                          struct wire_uint_8_list *id,
+                          int32_t act_id,
+                          struct wire_uint_8_list *path,
+                          struct wire_uint_8_list *to,
+                          int32_t file_num,
+                          bool include_hidden,
+                          bool is_remote);
+
+void wire_session_resume_job(int64_t port_,
+                             struct wire_uint_8_list *id,
+                             int32_t act_id,
+                             bool is_remote);
+
+void wire_main_get_sound_inputs(int64_t port_);
+
+void wire_main_change_id(int64_t port_, struct wire_uint_8_list *new_id);
+
+void wire_main_get_async_status(int64_t port_);
+
+void wire_main_get_options(int64_t port_);
+
+void wire_main_set_options(int64_t port_, struct wire_uint_8_list *json);
+
+void wire_main_test_if_valid_server(int64_t port_, struct wire_uint_8_list *server);
+
+void wire_main_set_socks(int64_t port_,
+                         struct wire_uint_8_list *proxy,
+                         struct wire_uint_8_list *username,
+                         struct wire_uint_8_list *password);
+
+void wire_main_get_socks(int64_t port_);
+
+void wire_main_get_app_name(int64_t port_);
+
+void wire_main_get_license(int64_t port_);
+
+void wire_main_get_version(int64_t port_);
+
+void wire_main_get_fav(int64_t port_);
+
+void wire_main_store_fav(int64_t port_, struct wire_StringList *favs);
+
+void wire_main_get_peers(int64_t port_, struct wire_uint_8_list *id);
+
+void wire_main_get_lan_peers(int64_t port_);
+
+void wire_main_get_connect_status(int64_t port_);
+
+void wire_main_check_connect_status(int64_t port_);
+
+void wire_main_is_using_public_server(int64_t port_);
+
+void wire_main_has_rendezvous_service(int64_t port_);
+
+void wire_main_get_api_server(int64_t port_);
+
+void wire_main_post_request(int64_t port_,
+                            struct wire_uint_8_list *url,
+                            struct wire_uint_8_list *body,
+                            struct wire_uint_8_list *header);
+
+void wire_main_get_local_option(int64_t port_, struct wire_uint_8_list *key);
+
+void wire_main_set_local_option(int64_t port_,
+                                struct wire_uint_8_list *key,
+                                struct wire_uint_8_list *value);
+
+void wire_query_onlines(int64_t port_, struct wire_StringList *ids);
+
+struct wire_StringList *new_StringList(int32_t len);
+
 struct wire_uint_8_list *new_uint_8_list(int32_t len);
 
 void free_WireSyncReturnStruct(struct WireSyncReturnStruct val);
@@ -213,6 +294,35 @@ static int64_t dummy_method_to_enforce_bundling(void) {
     dummy_var ^= ((int64_t) (void*) wire_session_cancel_job);
     dummy_var ^= ((int64_t) (void*) wire_session_create_dir);
     dummy_var ^= ((int64_t) (void*) wire_session_read_local_dir_sync);
+    dummy_var ^= ((int64_t) (void*) wire_session_get_platform);
+    dummy_var ^= ((int64_t) (void*) wire_session_load_last_transfer_jobs);
+    dummy_var ^= ((int64_t) (void*) wire_session_add_job);
+    dummy_var ^= ((int64_t) (void*) wire_session_resume_job);
+    dummy_var ^= ((int64_t) (void*) wire_main_get_sound_inputs);
+    dummy_var ^= ((int64_t) (void*) wire_main_change_id);
+    dummy_var ^= ((int64_t) (void*) wire_main_get_async_status);
+    dummy_var ^= ((int64_t) (void*) wire_main_get_options);
+    dummy_var ^= ((int64_t) (void*) wire_main_set_options);
+    dummy_var ^= ((int64_t) (void*) wire_main_test_if_valid_server);
+    dummy_var ^= ((int64_t) (void*) wire_main_set_socks);
+    dummy_var ^= ((int64_t) (void*) wire_main_get_socks);
+    dummy_var ^= ((int64_t) (void*) wire_main_get_app_name);
+    dummy_var ^= ((int64_t) (void*) wire_main_get_license);
+    dummy_var ^= ((int64_t) (void*) wire_main_get_version);
+    dummy_var ^= ((int64_t) (void*) wire_main_get_fav);
+    dummy_var ^= ((int64_t) (void*) wire_main_store_fav);
+    dummy_var ^= ((int64_t) (void*) wire_main_get_peers);
+    dummy_var ^= ((int64_t) (void*) wire_main_get_lan_peers);
+    dummy_var ^= ((int64_t) (void*) wire_main_get_connect_status);
+    dummy_var ^= ((int64_t) (void*) wire_main_check_connect_status);
+    dummy_var ^= ((int64_t) (void*) wire_main_is_using_public_server);
+    dummy_var ^= ((int64_t) (void*) wire_main_has_rendezvous_service);
+    dummy_var ^= ((int64_t) (void*) wire_main_get_api_server);
+    dummy_var ^= ((int64_t) (void*) wire_main_post_request);
+    dummy_var ^= ((int64_t) (void*) wire_main_get_local_option);
+    dummy_var ^= ((int64_t) (void*) wire_main_set_local_option);
+    dummy_var ^= ((int64_t) (void*) wire_query_onlines);
+    dummy_var ^= ((int64_t) (void*) new_StringList);
     dummy_var ^= ((int64_t) (void*) new_uint_8_list);
     dummy_var ^= ((int64_t) (void*) free_WireSyncReturnStruct);
     dummy_var ^= ((int64_t) (void*) store_dart_post_cobject);

@@ -771,6 +771,13 @@ packages:
       url: "https://pub.flutter-io.cn"
     source: hosted
     version: "3.1.0"
+  screen_retriever:
+    dependency: transitive
+    description:
+      name: screen_retriever
+      url: "https://pub.flutter-io.cn"
+    source: hosted
+    version: "0.1.2"
   settings_ui:
     dependency: "direct main"
     description:
@@ -1028,6 +1035,13 @@ packages:
       url: "https://pub.flutter-io.cn"
     source: hosted
     version: "2.1.2"
+  visibility_detector:
+    dependency: "direct main"
+    description:
+      name: visibility_detector
+      url: "https://pub.flutter-io.cn"
+    source: hosted
+    version: "0.3.3"
   wakelock:
     dependency: "direct main"
     description:
@@ -1084,6 +1098,13 @@ packages:
       url: "https://pub.flutter-io.cn"
     source: hosted
     version: "2.6.1"
+  window_manager:
+    dependency: "direct main"
+    description:
+      name: window_manager
+      url: "https://pub.flutter-io.cn"
+    source: hosted
+    version: "0.2.5"
   xdg_directories:
     dependency: transitive
     description:
