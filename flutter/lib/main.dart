@@ -8,6 +8,7 @@ import 'package:flutter_hbb/utils/multi_window_manager.dart';
 import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
 import 'package:get/route_manager.dart';
 import 'package:provider/provider.dart';
+
 // import 'package:window_manager/window_manager.dart';
 
 import 'common.dart';
@@ -77,6 +78,8 @@ class App extends StatelessWidget {
         ChangeNotifierProvider.value(value: gFFI.imageModel),
         ChangeNotifierProvider.value(value: gFFI.cursorModel),
         ChangeNotifierProvider.value(value: gFFI.canvasModel),
+        ChangeNotifierProvider.value(value: gFFI.abModel),
+        ChangeNotifierProvider.value(value: gFFI.userModel),
       ],
       child: GetMaterialApp(
           navigatorKey: globalKey,

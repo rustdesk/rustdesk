@@ -140,4 +140,10 @@ class AbModel with ChangeNotifier {
       return it.first['tags'] ?? [];
     }
   }
+
+  void clear() {
+    peers.clear();
+    tags.clear();
+    notifyListeners();
+  }
 }

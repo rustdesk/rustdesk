@@ -3,6 +3,7 @@ import 'dart:convert';
 
 import 'package:contextmenu/contextmenu.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_hbb/desktop/pages/desktop_home_page.dart';
 import 'package:flutter_hbb/utils/multi_window_manager.dart';
 import 'package:get/get.dart';
 import 'package:provider/provider.dart';
@@ -588,7 +589,13 @@ class _ConnectionPageState extends State<ConnectionPage> {
     svcIsUsingPublicServer.value = await gFFI.bind.mainIsUsingPublicServer();
   }
 
-  handleLogin() {}
+  handleLogin() {
+    loginDialog().then((success) {
+      if (success) {
+        setState(() {});
+      }
+    });
+  }
 
   Future<Widget> buildAddressBook(BuildContext context) async {
     final token = await gFFI.getLocalOption('access_token');
@@ -972,27 +979,6 @@ class _ConnectionPageState extends State<ConnectionPage> {
         ],
       );
     });
-  }
-}
-
-class AddressBookPage extends StatefulWidget {
-  const AddressBookPage({Key? key}) : super(key: key);
-
-  @override
-  State<AddressBookPage> createState() => _AddressBookPageState();
-}
-
-class _AddressBookPageState extends State<AddressBookPage> {
-  @override
-  void initState() {
-    // TODO: implement initState
-    final ab = gFFI.abModel.getAb();
-    super.initState();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Container();
   }
 }
 
