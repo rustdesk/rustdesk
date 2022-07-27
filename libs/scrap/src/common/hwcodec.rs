@@ -4,10 +4,11 @@ use crate::{
 };
 use hbb_common::{
     anyhow::{anyhow, Context},
+    bytes::Bytes,
     config::HwCodecConfig,
     lazy_static, log,
     message_proto::{EncodedVideoFrame, EncodedVideoFrames, Message, VideoFrame},
-    ResultType, bytes::Bytes,
+    ResultType,
 };
 use hwcodec::{
     decode::{DecodeContext, DecodeFrame, Decoder},
@@ -17,10 +18,14 @@ use hwcodec::{
     Quality::{self, *},
     RateContorl::{self, *},
 };
-use std::sync::{Arc, Mutex};
+use std::sync::{
+    atomic::{AtomicUsize, Ordering},
+    Arc, Mutex,
+};
 
 lazy_static::lazy_static! {
     static ref HW_ENCODER_NAME: Arc<Mutex<Option<String>>> = Default::default();
+    static ref ODD_SCREEN_WIDTH_ALIGN: AtomicUsize = AtomicUsize::new(64);
 }
 
 const CFG_KEY_ENCODER: &str = "bestHwEncoders";
@@ -48,8 +53,8 @@ impl EncoderApi for HwEncoder {
             EncoderCfg::HW(config) => {
                 let ctx = EncodeContext {
                     name: config.codec_name.clone(),
-                    width: config.width as _,
-                    height: config.height as _,
+                    width: Self::align_width(config.width as _) as i32,
+                    height: Self::align_height(config.height as _) as i32,
                     pixfmt: DEFAULT_PIXFMT,
                     align: HW_STRIDE_ALIGN as _,
                     bitrate: config.bitrate * 1000,
@@ -135,6 +140,9 @@ impl HwEncoder {
     }
 
     pub fn encode(&mut self, bgra: &[u8]) -> ResultType<Vec<EncodeFrame>> {
+        if bgra.len() < (self.encoder.ctx.width * self.encoder.ctx.height * 4) as usize {
+            return Err(anyhow!("bgra not long enough"));
+        }
         match self.pixfmt {
             AVPixelFormat::AV_PIX_FMT_YUV420P => hw::hw_bgra_to_i420(
                 self.encoder.ctx.width as _,
@@ -163,6 +171,35 @@ impl HwEncoder {
                 Ok(data)
             }
             Err(_) => Ok(Vec::<EncodeFrame>::new()),
+        }
+    }
+
+    pub fn is_odd_width_align_changed(width: usize, height: usize, frame_length: usize) -> bool {
+        if width % 2 != 0 {
+            let aligns = vec![64, 32, 16, 8, 4, 2, 1];
+            for align in aligns {
+                if frame_length == ((width + align - 1) / align * align) * height * 4 {
+                    return ODD_SCREEN_WIDTH_ALIGN.swap(align, Ordering::Relaxed) != align;
+                }
+            }
+        }
+        false
+    }
+
+    pub fn align_width(width: usize) -> usize {
+        if width % 2 == 0 {
+            width
+        } else {
+            let align = ODD_SCREEN_WIDTH_ALIGN.load(Ordering::Relaxed);
+            (width + align - 1) / align * align
+        }
+    }
+
+    pub fn align_height(height: usize) -> usize {
+        if height % 2 == 0 {
+            height
+        } else {
+            height / 2 * 2
         }
     }
 }

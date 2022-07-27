@@ -23,6 +23,8 @@ use hbb_common::tokio::sync::{
     mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender},
     Mutex as TokioMutex,
 };
+#[cfg(feature = "hwcodec")]
+use scrap::hwcodec::HwEncoder;
 use scrap::{
     codec::{Encoder, EncoderCfg, HwEncoderConfig},
     vpxcodec::{VpxEncoderConfig, VpxVideoCodecId},
@@ -417,8 +419,8 @@ fn run(sp: GenericService) -> ResultType<()> {
             display: c.current as _,
             x: c.origin.0 as _,
             y: c.origin.1 as _,
-            width: c.width as _,
-            height: c.height as _,
+            width: adjust_display_width(c.width) as _,
+            height: adjust_display_height(c.height) as _,
             ..Default::default()
         });
         let mut msg_out = Message::new();
@@ -436,6 +438,8 @@ fn run(sp: GenericService) -> ResultType<()> {
     #[cfg(windows)]
     log::info!("gdi: {}", c.is_gdi());
     let codec_name = Encoder::current_hw_encoder_name();
+    #[cfg(feature = "hwcodec")]
+    let (mut odd_width_align_checked, width, height) = (false, c.width, c.height);
 
     while sp.ok() {
         #[cfg(windows)]
@@ -462,6 +466,7 @@ fn run(sp: GenericService) -> ResultType<()> {
             bail!("SWITCH");
         }
         if codec_name != Encoder::current_hw_encoder_name() {
+            *SWITCH.lock().unwrap() = c.width % 2 != 0 || c.height % 2 != 0;
             bail!("SWITCH");
         }
         check_privacy_mode_changed(&sp, c.privacy_mode_id)?;
@@ -511,6 +516,19 @@ fn run(sp: GenericService) -> ResultType<()> {
         #[cfg(not(any(target_os = "android", target_os = "ios")))]
         let res = match c.frame(spf) {
             Ok(frame) => {
+                #[cfg(feature = "hwcodec")]
+                {
+                    if width % 2 != 0
+                        && !odd_width_align_checked
+                        && Encoder::current_hw_encoder_name().is_some()
+                    {
+                        odd_width_align_checked = true;
+                        if HwEncoder::is_odd_width_align_changed(width, height, frame.len()) {
+                            *SWITCH.lock().unwrap() = true;
+                            bail!("Align");
+                        }
+                    }
+                }
                 let time = now - start;
                 let ms = (time.as_secs() * 1000 + time.subsec_millis() as u64) as i64;
                 let send_conn_ids = handle_one_frame(&sp, &frame, ms, &mut encoder)?;
@@ -655,6 +673,24 @@ pub fn handle_one_frame_encoded(
     Ok(send_conn_ids)
 }
 
+#[inline]
+fn adjust_display_width(width: usize) -> usize {
+    #[cfg(feature = "hwcodec")]
+    if Encoder::current_hw_encoder_name().is_some() {
+        return HwEncoder::align_width(width);
+    }
+    width
+}
+
+#[inline]
+fn adjust_display_height(height: usize) -> usize {
+    #[cfg(feature = "hwcodec")]
+    if Encoder::current_hw_encoder_name().is_some() {
+        return HwEncoder::align_height(height);
+    }
+    height
+}
+
 fn get_display_num() -> usize {
     #[cfg(target_os = "linux")]
     {
@@ -684,8 +720,8 @@ pub(super) fn get_displays_2(all: &Vec<Display>) -> (usize, Vec<DisplayInfo>) {
         displays.push(DisplayInfo {
             x: d.origin().0 as _,
             y: d.origin().1 as _,
-            width: d.width() as _,
-            height: d.height() as _,
+            width: adjust_display_width(d.width()) as _,
+            height: adjust_display_height(d.height()) as _,
             name: d.name(),
             online: d.is_online(),
             ..Default::default()

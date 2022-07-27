@@ -271,7 +271,7 @@ pub mod hw {
         unsafe {
             super::ARGBToI420(
                 src.as_ptr(),
-                (src.len() / height) as _,
+                4 * width as i32,
                 dst_y,
                 stride_y as _,
                 dst_u,
@@ -303,7 +303,7 @@ pub mod hw {
         unsafe {
             super::ARGBToNV12(
                 src.as_ptr(),
-                (src.len() / height) as _,
+                4 * width as i32,
                 dst_y,
                 stride_y as _,
                 dst_uv,
