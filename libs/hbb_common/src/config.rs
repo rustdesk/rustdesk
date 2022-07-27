@@ -228,6 +228,13 @@ impl Config2 {
         config
     }
 
+    pub fn decrypt_password(&mut self) {
+        if let Some(mut socks) = self.socks.clone() {
+            socks.password = decrypt_str_or_original(&socks.password, PASSWORD_ENC_VERSION).0;
+            self.socks = Some(socks);
+        }
+    }
+
     pub fn file() -> PathBuf {
         Config::file_("2")
     }
@@ -297,6 +304,10 @@ impl Config {
             config.store();
         }
         config
+    }
+
+    pub fn decrypt_password(&mut self) {
+        self.password = decrypt_str_or_original(&self.password, PASSWORD_ENC_VERSION).0;
     }
 
     fn store(&self) {
