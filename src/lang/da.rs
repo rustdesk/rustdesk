@@ -293,5 +293,11 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Use both passwords", ""),
         ("Set permanent password", ""),
         ("Set temporary password length", ""),
+        ("Enable Remote Restart", ""),
+        ("Allow remote restart", ""),
+        ("Restart Remote Device", ""),
+        ("Are you sure you want to restart", ""),
+        ("Restarting Remote Device", ""),
+        ("Remote device is restarting, please close this message box and reconnect with permanent password after a while", ""),
     ].iter().cloned().collect();
 }

@@ -785,6 +785,7 @@ pub struct LoginConfigHandler {
     features: Option<Features>,
     session_id: u64,
     pub supported_encoding: Option<(bool, bool)>,
+    pub restarting_remote_device: bool,
 }
 
 impl Deref for LoginConfigHandler {
@@ -810,6 +811,7 @@ impl LoginConfigHandler {
         self.config = config;
         self.session_id = rand::random();
         self.supported_encoding = None;
+        self.restarting_remote_device = false;
     }
 
     pub fn should_auto_login(&self) -> String {
@@ -1144,7 +1146,7 @@ impl LoginConfigHandler {
         let my_id = Config::get_id();
         let mut lr = LoginRequest {
             username: self.id.clone(),
-            password:password.into(),
+            password: password.into(),
             my_id,
             my_name: crate::username(),
             option: self.get_option_message(true).into(),
@@ -1176,6 +1178,14 @@ impl LoginConfigHandler {
             video_codec_state: hbb_common::protobuf::MessageField::some(state),
             ..Default::default()
         });
+        let mut msg_out = Message::new();
+        msg_out.set_misc(misc);
+        msg_out
+    }
+
+    pub fn restart_remote_device(&self) -> Message {
+        let mut misc = Misc::new();
+        misc.set_restart_remote_device(true);
         let mut msg_out = Message::new();
         msg_out.set_misc(misc);
         msg_out

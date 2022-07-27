@@ -141,6 +141,7 @@ pub enum Data {
         audio: bool,
         file: bool,
         file_transfer_enabled: bool,
+        restart: bool,
     },
     ChatMessage {
         text: String,
@@ -170,7 +171,6 @@ pub enum Data {
     ClipboardFileEnabled(bool),
     PrivacyModeState((i32, PrivacyModeState)),
     TestRendezvousServer,
-    Bool((String, Option<bool>)),
     Keyboard(DataKeyboard),
     KeyboardResponse(DataKeyboardResponse),
     Mouse(DataMouse),

@@ -235,6 +235,7 @@ impl sciter::EventHandler for Handler {
         fn has_hwcodec();
         fn supported_hwcodec();
         fn change_prefer_codec();
+        fn restart_remote_device();
     }
 }
 
@@ -634,6 +635,16 @@ impl Handler {
     fn change_prefer_codec(&self) {
         let msg = self.lc.write().unwrap().change_prefer_codec();
         self.send(Data::Message(msg));
+    }
+
+    fn restart_remote_device(&mut self) {
+        self.lc.write().unwrap().restarting_remote_device = true;
+        let msg = self.lc.write().unwrap().restart_remote_device();
+        self.send(Data::Message(msg));
+    }
+
+    pub fn is_restarting_remote_device(&self) -> bool {
+        self.lc.read().unwrap().restarting_remote_device
     }
 
     fn t(&self, name: String) -> String {
@@ -1490,8 +1501,13 @@ impl Remote {
                                     }
                                 }
                             } else {
-                                log::info!("Reset by the peer");
-                                self.handler.msgbox("error", "Connection Error", "Reset by the peer");
+                                if self.handler.is_restarting_remote_device() {
+                                    log::info!("Restart remote device");
+                                    self.handler.msgbox("restarting", "Restarting Remote Device", "Remote device is restarting, please close this message box and reconnect with permanent password after a while");
+                                } else {
+                                    log::info!("Reset by the peer");
+                                    self.handler.msgbox("error", "Connection Error", "Reset by the peer");
+                                }
                                 break;
                             }
                         }
@@ -2322,6 +2338,10 @@ impl Remote {
                                 self.check_clipboard_file_context();
                                 self.handler
                                     .call2("setPermission", &make_args!("file", p.enabled));
+                            }
+                            Permission::Restart => {
+                                self.handler
+                                    .call2("setPermission", &make_args!("restart", p.enabled));
                             }
                         }
                     }
