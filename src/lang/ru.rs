@@ -300,5 +300,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Activate onetime password", "Активировать одноразовый пароль"),
         ("Set security password", "Задать пароль безопасности"),
         ("Connection not allowed", "Подключение не разрешено"),
+        ("Legacy mode", ""),
+        ("Map mode", ""),
     ].iter().cloned().collect();
 }

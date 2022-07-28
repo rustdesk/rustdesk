@@ -615,7 +615,7 @@ fn rdev_key_down_or_up(key: RdevKey, down_or_up: bool) {
     match simulate(&event_type) {
         Ok(()) => (),
         Err(_simulate_error) => {
-            println!("We could not send {:?}", &event_type);
+            log::error!("Could not send {:?}", &event_type);
         }
     }
     // Let ths OS catchup (at least MacOS)
@@ -650,7 +650,7 @@ fn sync_status(evt: &KeyEvent) -> (bool, bool) {
     return (click_capslock, click_numlock);
 }
 
-fn map_keyboard_map(evt: &KeyEvent) {
+fn map_keyboard_mode(evt: &KeyEvent) {
     // map mode(1): Send keycode according to the peer platform.
     let (click_capslock, click_numlock) = sync_status(evt);
     if click_capslock {
@@ -663,7 +663,7 @@ fn map_keyboard_map(evt: &KeyEvent) {
     return;
 }
 
-fn legacy_keyboard_map(evt: &KeyEvent) {
+fn legacy_keyboard_mode(evt: &KeyEvent) {
     let (click_capslock, click_numlock) = sync_status(evt);
 
     #[cfg(windows)]
@@ -819,6 +819,7 @@ fn legacy_keyboard_map(evt: &KeyEvent) {
     }
 }
 
+
 fn handle_key_(evt: &KeyEvent) {
     if EXITING.load(Ordering::SeqCst) {
         return;
@@ -826,13 +827,13 @@ fn handle_key_(evt: &KeyEvent) {
 
     match evt.mode.unwrap() {
         KeyboardMode::Legacy => {
-            legacy_keyboard_map(evt);
+            legacy_keyboard_mode(evt);
         }
         KeyboardMode::Map => {
-            map_keyboard_map(evt);
+            map_keyboard_mode(evt);
         }
         _ => {
-            legacy_keyboard_map(evt);
+            legacy_keyboard_mode(evt);
         }
     }
 }
