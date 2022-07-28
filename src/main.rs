@@ -171,18 +171,20 @@ fn import_config(path: &str) {
     let path2 = std::path::Path::new(&path2);
     let path = std::path::Path::new(path);
     log::info!("import config from {:?} and {:?}", path, path2);
-    let config: Config = load_path(path.into());
+    let mut config: Config = load_path(path.into());
     if config.id.is_empty() || config.key_pair.0.is_empty() {
         log::info!("Empty source config, skipped");
         return;
     }
     if get_modified_time(&path) > get_modified_time(&Config::file()) {
+        config.decrypt_password();
         if Config::set(config) {
             log::info!("config written");
         }
     }
-    let config2: Config2 = load_path(path2.into());
+    let mut config2: Config2 = load_path(path2.into());
     if get_modified_time(&path2) > get_modified_time(&Config2::file()) {
+        config2.decrypt_password();
         if Config2::set(config2) {
             log::info!("config2 written");
         }

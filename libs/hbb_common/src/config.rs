@@ -218,7 +218,8 @@ impl Config2 {
     fn load() -> Config2 {
         let mut config = Config::load_::<Config2>("2");
         if let Some(mut socks) = config.socks {
-            let (password, store) = decrypt_str_or_original(&socks.password, PASSWORD_ENC_VERSION);
+            let (password, _, store) =
+                decrypt_str_or_original(&socks.password, PASSWORD_ENC_VERSION);
             socks.password = password;
             config.socks = Some(socks);
             if store {
@@ -226,6 +227,13 @@ impl Config2 {
             }
         }
         config
+    }
+
+    pub fn decrypt_password(&mut self) {
+        if let Some(mut socks) = self.socks.clone() {
+            socks.password = decrypt_str_or_original(&socks.password, PASSWORD_ENC_VERSION).0;
+            self.socks = Some(socks);
+        }
     }
 
     pub fn file() -> PathBuf {
@@ -291,12 +299,16 @@ impl Config {
 
     fn load() -> Config {
         let mut config = Config::load_::<Config>("");
-        let (password, store) = decrypt_str_or_original(&config.password, PASSWORD_ENC_VERSION);
+        let (password, _, store) = decrypt_str_or_original(&config.password, PASSWORD_ENC_VERSION);
         config.password = password;
         if store {
             config.store();
         }
         config
+    }
+
+    pub fn decrypt_password(&mut self) {
+        self.password = decrypt_str_or_original(&self.password, PASSWORD_ENC_VERSION).0;
     }
 
     fn store(&self) {
@@ -743,17 +755,17 @@ impl PeerConfig {
             Ok(config) => {
                 let mut config: PeerConfig = config;
                 let mut store = false;
-                let (password, store2) =
+                let (password, _, store2) =
                     decrypt_vec_or_original(&config.password, PASSWORD_ENC_VERSION);
                 config.password = password;
                 store = store || store2;
                 config.options.get_mut("rdp_password").map(|v| {
-                    let (password, store2) = decrypt_str_or_original(v, PASSWORD_ENC_VERSION);
+                    let (password, _, store2) = decrypt_str_or_original(v, PASSWORD_ENC_VERSION);
                     *v = password;
                     store = store || store2;
                 });
                 config.options.get_mut("os-password").map(|v| {
-                    let (password, store2) = decrypt_str_or_original(v, PASSWORD_ENC_VERSION);
+                    let (password, _, store2) = decrypt_str_or_original(v, PASSWORD_ENC_VERSION);
                     *v = password;
                     store = store || store2;
                 });

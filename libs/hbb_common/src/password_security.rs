@@ -67,6 +67,10 @@ pub mod config {
     const VERSION_LEN: usize = 2;
 
     pub fn encrypt_str_or_original(s: &str, version: &str) -> String {
+        if decrypt_str_or_original(s, version).1 {
+            log::error!("Duplicate encryption!");
+            return s.to_owned();
+        }
         if version.len() == VERSION_LEN {
             if version == "00" {
                 if let Ok(s) = encrypt00(s.as_bytes()) {
@@ -78,24 +82,31 @@ pub mod config {
         s.to_owned()
     }
 
+    // String: password
+    // bool: whether decryption is successful
     // bool: whether should store to re-encrypt when load
-    pub fn decrypt_str_or_original(s: &str, current_version: &str) -> (String, bool) {
+    pub fn decrypt_str_or_original(s: &str, current_version: &str) -> (String, bool, bool) {
         if s.len() > VERSION_LEN {
             let version = &s[..VERSION_LEN];
             if version == "00" {
                 if let Ok(v) = decrypt00(&s[VERSION_LEN..].as_bytes()) {
                     return (
                         String::from_utf8_lossy(&v).to_string(),
+                        true,
                         version != current_version,
                     );
                 }
             }
         }
 
-        (s.to_owned(), !s.is_empty())
+        (s.to_owned(), false, !s.is_empty())
     }
 
     pub fn encrypt_vec_or_original(v: &[u8], version: &str) -> Vec<u8> {
+        if decrypt_vec_or_original(v, version).1 {
+            log::error!("Duplicate encryption!");
+            return v.to_owned();
+        }
         if version.len() == VERSION_LEN {
             if version == "00" {
                 if let Ok(s) = encrypt00(v) {
@@ -109,18 +120,20 @@ pub mod config {
         v.to_owned()
     }
 
+    // String: password
+    // bool: whether decryption is successful
     // bool: whether should store to re-encrypt when load
-    pub fn decrypt_vec_or_original(v: &[u8], current_version: &str) -> (Vec<u8>, bool) {
+    pub fn decrypt_vec_or_original(v: &[u8], current_version: &str) -> (Vec<u8>, bool, bool) {
         if v.len() > VERSION_LEN {
             let version = String::from_utf8_lossy(&v[..VERSION_LEN]);
             if version == "00" {
                 if let Ok(v) = decrypt00(&v[VERSION_LEN..]) {
-                    return (v, version != current_version);
+                    return (v, true, version != current_version);
                 }
             }
         }
 
-        (v.to_owned(), !v.is_empty())
+        (v.to_owned(), false, !v.is_empty())
     }
 
     mod test {
@@ -129,45 +142,58 @@ pub mod config {
         fn test() {
             use crate::password_security::config::*;
 
+            let version = "00";
+
             println!("test str");
             let data = "Hello World";
-            let encrypted = encrypt_str_or_original(data, "00");
-            let (decrypted, store) = decrypt_str_or_original(&encrypted, "00");
+            let encrypted = encrypt_str_or_original(data, version);
+            let (decrypted, succ, store) = decrypt_str_or_original(&encrypted, version);
             println!("data: {}", data);
             println!("encrypted: {}", encrypted);
             println!("decrypted: {}", decrypted);
             assert_eq!(data, decrypted);
-            assert_eq!("00", &encrypted[..2]);
+            assert_eq!(version, &encrypted[..2]);
+            assert_eq!(succ, true);
             assert_eq!(store, false);
-            let (_, store2) = decrypt_str_or_original(&encrypted, "01");
-            assert_eq!(store2, true);
+            let (_, _, store) = decrypt_str_or_original(&encrypted, "99");
+            assert_eq!(store, true);
+            assert_eq!(decrypt_str_or_original(&decrypted, version).1, false);
+            assert_eq!(encrypt_str_or_original(&encrypted, version), encrypted);
 
             println!("test vec");
-            let data: Vec<u8> = vec![1, 2, 3, 4];
-            let encrypted = encrypt_vec_or_original(&data, "00");
-            let (decrypted, store) = decrypt_vec_or_original(&encrypted, "00");
+            let data: Vec<u8> = vec![1, 2, 3, 4, 5, 6];
+            let encrypted = encrypt_vec_or_original(&data, version);
+            let (decrypted, succ, store) = decrypt_vec_or_original(&encrypted, version);
             println!("data: {:?}", data);
             println!("encrypted: {:?}", encrypted);
             println!("decrypted: {:?}", decrypted);
             assert_eq!(data, decrypted);
-            assert_eq!("00".as_bytes(), &encrypted[..2]);
+            assert_eq!(version.as_bytes(), &encrypted[..2]);
             assert_eq!(store, false);
-            let (_, store2) = decrypt_vec_or_original(&encrypted, "01");
-            assert_eq!(store2, true);
+            assert_eq!(succ, true);
+            let (_, _, store) = decrypt_vec_or_original(&encrypted, "99");
+            assert_eq!(store, true);
+            assert_eq!(decrypt_vec_or_original(&decrypted, version).1, false);
+            assert_eq!(encrypt_vec_or_original(&encrypted, version), encrypted);
 
-            println!("test old");
-            let data = "00Hello World";
-            let (decrypted, store) = decrypt_str_or_original(&data, "00");
+            println!("test original");
+            let data = version.to_string() + "Hello World";
+            let (decrypted, succ, store) = decrypt_str_or_original(&data, version);
             assert_eq!(data, decrypted);
             assert_eq!(store, true);
-            let data: Vec<u8> = vec!['0' as u8, '0' as u8, 1, 2, 3, 4];
-            let (decrypted, store) = decrypt_vec_or_original(&data, "00");
+            assert_eq!(succ, false);
+            let verbytes = version.as_bytes();
+            let data: Vec<u8> = vec![verbytes[0] as u8, verbytes[1] as u8, 1, 2, 3, 4, 5, 6];
+            let (decrypted, succ, store) = decrypt_vec_or_original(&data, version);
             assert_eq!(data, decrypted);
             assert_eq!(store, true);
-            let (_, store) = decrypt_str_or_original("", "00");
+            assert_eq!(succ, false);
+            let (_, succ, store) = decrypt_str_or_original("", version);
             assert_eq!(store, false);
-            let (_, store) = decrypt_vec_or_original(&vec![], "00");
+            assert_eq!(succ, false);
+            let (_, succ, store) = decrypt_vec_or_original(&vec![], version);
             assert_eq!(store, false);
+            assert_eq!(succ, false);
         }
     }
 }
