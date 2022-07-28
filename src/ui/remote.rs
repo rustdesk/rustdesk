@@ -1065,9 +1065,40 @@ impl Handler {
         self.send_key_event(key_event, KeyboardMode::Map);
     }
 
-    // fn translate_keyboard_mode(&mut self, down_or_up: bool, key: RdevKey) {
-    //     // translate mode(2): locally generated characters are send to the peer.
-    // }
+    fn translate_keyboard_mode(&mut self, down_or_up: bool, key: RdevKey, evt: Event) {
+        // translate mode(2): locally generated characters are send to the peer.
+        let string = evt.name.unwrap_or_default();
+
+        let chars = if string == "" {
+            None
+        } else {
+            let chars: Vec<char> = string.chars().collect();
+            Some(chars)
+        };
+
+        if let Some(chars) = chars {
+            for chr in chars {
+                dbg!(chr);
+
+                let mut key_event = KeyEvent::new();
+                key_event.set_chr(chr as _);
+                key_event.down = true;
+                self.send_key_event(key_event, KeyboardMode::Translate);
+
+                let mut key_event = KeyEvent::new();
+                key_event.set_chr(chr as _);
+                key_event.down = false;
+                self.send_key_event(key_event, KeyboardMode::Translate);
+            }
+        } else {
+            if down_or_up == true {
+                TO_RELEASE.lock().unwrap().insert(key);
+            } else {
+                TO_RELEASE.lock().unwrap().remove(&key);
+            }
+            self.map_keyboard_mode(down_or_up, key);
+        }
+    }
 
     fn legacy_modifiers(
         &self,
@@ -1327,6 +1358,7 @@ impl Handler {
         let mode = match self.get_keyboard_mode().as_str() {
             "map" => KeyboardMode::Map,
             "legacy" => KeyboardMode::Legacy,
+            "translate" => KeyboardMode::Translate,
             _ => KeyboardMode::Legacy,
         };
 
@@ -1340,6 +1372,9 @@ impl Handler {
                 self.map_keyboard_mode(down_or_up, key);
             }
             KeyboardMode::Legacy => self.legacy_keyboard_mode(down_or_up, key, evt),
+            KeyboardMode::Translate => {
+                self.translate_keyboard_mode(down_or_up, key, evt);
+            }
             _ => self.legacy_keyboard_mode(down_or_up, key, evt),
         }
     }
