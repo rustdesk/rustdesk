@@ -118,7 +118,7 @@ unsafe extern "C" fn get_by_name(name: *const c_char, arg: *const c_char) -> *co
                 res = Config::get_id();
             }
             "server_password" => {
-                res = Config::get_password();
+                todo!()
             }
             "connect_statue" => {
                 res = ONLINE
@@ -163,7 +163,7 @@ unsafe extern "C" fn get_by_name(name: *const c_char, arg: *const c_char) -> *co
                 }
             }
             "uuid" => {
-                res = base64::encode(crate::get_uuid());
+                res = base64::encode(hbb_common::get_uuid());
             }
             _ => {
                 log::error!("Unknown name of get_by_name: {}", name);
@@ -458,11 +458,7 @@ unsafe extern "C" fn set_by_name(name: *const c_char, value: *const c_char) {
                 }
                 // Server Side
                 "update_password" => {
-                    if value.is_empty() {
-                        Config::set_password(&Config::get_auto_password());
-                    } else {
-                        Config::set_password(value);
-                    }
+                    todo!()
                 }
                 #[cfg(target_os = "android")]
                 "chat_server_mode" => {

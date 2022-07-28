@@ -347,7 +347,7 @@ fn send_f32(data: &[f32], encoder: &mut Encoder, sp: &GenericService) {
                     Ok(data) => {
                         let mut msg_out = Message::new();
                         msg_out.set_audio_frame(AudioFrame {
-                            data,
+                            data: data.into(),
                             timestamp: crate::common::get_time(),
                             ..Default::default()
                         });
