@@ -87,6 +87,7 @@ pub struct Handler {
     inner: Arc<RwLock<HandlerInner>>,
     cmd: String,
     id: String,
+    password: String,
     args: Vec<String>,
     lc: Arc<RwLock<LoginConfigHandler>>,
 }
@@ -234,6 +235,7 @@ impl sciter::EventHandler for Handler {
         fn has_hwcodec();
         fn supported_hwcodec();
         fn change_prefer_codec();
+        fn restart_remote_device();
     }
 }
 
@@ -247,10 +249,11 @@ struct QualityStatus {
 }
 
 impl Handler {
-    pub fn new(cmd: String, id: String, args: Vec<String>) -> Self {
+    pub fn new(cmd: String, id: String, password: String, args: Vec<String>) -> Self {
         let me = Self {
             cmd,
             id: id.clone(),
+            password: password.clone(),
             args,
             ..Default::default()
         };
@@ -632,6 +635,16 @@ impl Handler {
     fn change_prefer_codec(&self) {
         let msg = self.lc.write().unwrap().change_prefer_codec();
         self.send(Data::Message(msg));
+    }
+
+    fn restart_remote_device(&mut self) {
+        self.lc.write().unwrap().restarting_remote_device = true;
+        let msg = self.lc.write().unwrap().restart_remote_device();
+        self.send(Data::Message(msg));
+    }
+
+    pub fn is_restarting_remote_device(&self) -> bool {
+        self.lc.read().unwrap().restarting_remote_device
     }
 
     fn t(&self, name: String) -> String {
@@ -1137,7 +1150,7 @@ impl Handler {
 
     fn transfer_file(&mut self) {
         let id = self.get_id();
-        let args = vec!["--file-transfer", &id];
+        let args = vec!["--file-transfer", &id, &self.password];
         if let Err(err) = crate::run_me(args) {
             log::error!("Failed to spawn file transfer: {}", err);
         }
@@ -1145,7 +1158,7 @@ impl Handler {
 
     fn tunnel(&mut self) {
         let id = self.get_id();
-        let args = vec!["--port-forward", &id];
+        let args = vec!["--port-forward", &id, &self.password];
         if let Err(err) = crate::run_me(args) {
             log::error!("Failed to spawn IP tunneling: {}", err);
         }
@@ -1251,6 +1264,7 @@ async fn start_one_port_forward(
     handler.lc.write().unwrap().port_forward = (remote_host, remote_port);
     if let Err(err) = crate::port_forward::listen(
         handler.id.clone(),
+        handler.password.clone(),
         port,
         handler.clone(),
         receiver,
@@ -1487,8 +1501,13 @@ impl Remote {
                                     }
                                 }
                             } else {
-                                log::info!("Reset by the peer");
-                                self.handler.msgbox("error", "Connection Error", "Reset by the peer");
+                                if self.handler.is_restarting_remote_device() {
+                                    log::info!("Restart remote device");
+                                    self.handler.msgbox("restarting", "Restarting Remote Device", "remote_restarting_tip");
+                                } else {
+                                    log::info!("Reset by the peer");
+                                    self.handler.msgbox("error", "Connection Error", "Reset by the peer");
+                                }
                                 break;
                             }
                         }
@@ -1669,7 +1688,6 @@ impl Remote {
     }
 
     async fn handle_msg_from_ui(&mut self, data: Data, peer: &mut Stream) -> bool {
-        // log::info!("new msg from ui, {}",data);
         match data {
             Data::Close => {
                 let mut misc = Misc::new();
@@ -2078,7 +2096,9 @@ impl Remote {
                     self.video_sender.send(MediaData::VideoFrame(vf)).ok();
                 }
                 Some(message::Union::Hash(hash)) => {
-                    self.handler.handle_hash(hash, peer).await;
+                    self.handler
+                        .handle_hash(&self.handler.password.clone(), hash, peer)
+                        .await;
                 }
                 Some(message::Union::LoginResponse(lr)) => match lr.union {
                     Some(login_response::Union::Error(err)) => {
@@ -2318,6 +2338,10 @@ impl Remote {
                                 self.check_clipboard_file_context();
                                 self.handler
                                     .call2("setPermission", &make_args!("file", p.enabled));
+                            }
+                            Permission::Restart => {
+                                self.handler
+                                    .call2("setPermission", &make_args!("restart", p.enabled));
                             }
                         }
                     }
@@ -2638,8 +2662,8 @@ impl Interface for Handler {
         self.start_keyboard_hook();
     }
 
-    async fn handle_hash(&mut self, hash: Hash, peer: &mut Stream) {
-        handle_hash(self.lc.clone(), hash, self, peer).await;
+    async fn handle_hash(&mut self, pass: &str, hash: Hash, peer: &mut Stream) {
+        handle_hash(self.lc.clone(), pass, hash, self, peer).await;
     }
 
     async fn handle_login_from_ui(&mut self, password: String, remember: bool, peer: &mut Stream) {
