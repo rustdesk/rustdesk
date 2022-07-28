@@ -609,7 +609,7 @@ fn handle_key_(evt: &KeyEvent) {
     #[cfg(windows)]
     let mut disable_numlock = false;
     #[cfg(target_os = "macos")]
-    if !evt.down {
+    if !evt.down && crate::is_modifier(evt) {
         en.reset_flag();
     }
     #[cfg(not(target_os = "macos"))]
