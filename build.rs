@@ -77,6 +77,10 @@ fn install_oboe() {
 }
 
 fn gen_flutter_rust_bridge() {
+    let llvm_path = match std::env::var("LLVM_HOME") {
+        Ok(path) => Some(vec![path]),
+        Err(_) => None,
+    };
     // Tell Cargo that if the given file changes, to rerun this build script.
     println!("cargo:rerun-if-changed=src/flutter_ffi.rs");
     // settings for fbr_codegen
@@ -88,6 +92,7 @@ fn gen_flutter_rust_bridge() {
         // Path of output generated C header
         c_output: Some(vec!["flutter/macos/Runner/bridge_generated.h".to_string()]),
         // for other options lets use default
+        llvm_path,
         ..Default::default()
     };
     // run fbr_codegen

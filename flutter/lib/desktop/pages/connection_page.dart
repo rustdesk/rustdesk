@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:contextmenu/contextmenu.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/desktop/pages/desktop_home_page.dart';
+import 'package:flutter_hbb/desktop/widgets/peer_widget.dart';
 import 'package:flutter_hbb/utils/multi_window_manager.dart';
 import 'package:get/get.dart';
 import 'package:provider/provider.dart';
@@ -15,6 +16,7 @@ import '../../mobile/pages/home_page.dart';
 import '../../mobile/pages/scan_page.dart';
 import '../../mobile/pages/settings_page.dart';
 import '../../models/model.dart';
+import '../../models/peer_model.dart';
 
 enum RemoteType { recently, favorite, discovered, addressBook }
 
@@ -58,9 +60,7 @@ class _ConnectionPageState extends State<ConnectionPage> {
   Widget build(BuildContext context) {
     if (_idController.text.isEmpty) _idController.text = gFFI.getId();
     return Container(
-      decoration: BoxDecoration(
-          color: MyTheme.grayBg
-      ),
+      decoration: BoxDecoration(color: MyTheme.grayBg),
       child: Column(
           mainAxisAlignment: MainAxisAlignment.start,
           mainAxisSize: MainAxisSize.max,
@@ -73,7 +73,9 @@ class _ConnectionPageState extends State<ConnectionPage> {
               ],
             ).marginOnly(top: 16.0, left: 16.0),
             SizedBox(height: 12),
-            Divider(thickness: 1,),
+            Divider(
+              thickness: 1,
+            ),
             Expanded(
               child: DefaultTabController(
                   length: 4,
@@ -85,47 +87,61 @@ class _ConnectionPageState extends State<ConnectionPage> {
                           isScrollable: true,
                           indicatorSize: TabBarIndicatorSize.label,
                           tabs: [
-                            Tab(child: Text(translate("Recent Sessions")),),
-                            Tab(child: Text(translate("Favorites")),),
-                            Tab(child: Text(translate("Discovered")),),
-                            Tab(child: Text(translate("Address Book")),),
+                            Tab(
+                              child: Text(translate("Recent Sessions")),
+                            ),
+                            Tab(
+                              child: Text(translate("Favorites")),
+                            ),
+                            Tab(
+                              child: Text(translate("Discovered")),
+                            ),
+                            Tab(
+                              child: Text(translate("Address Book")),
+                            ),
                           ]),
-                      Expanded(child: TabBarView(children: [
-                        FutureBuilder<Widget>(future: getPeers(rType: RemoteType.recently),
-                            builder: (context, snapshot){
-                              if (snapshot.hasData) {
-                                return snapshot.data!;
-                              } else {
-                                return Offstage();
-                              }
-                            }),
-                        FutureBuilder<Widget>(
-                            future: getPeers(rType: RemoteType.favorite),
-                            builder: (context, snapshot) {
-                              if (snapshot.hasData) {
-                                return snapshot.data!;
-                              } else {
-                                return Offstage();
-                              }
-                            }),
-                        FutureBuilder<Widget>(
-                            future: getPeers(rType: RemoteType.discovered),
-                            builder: (context, snapshot) {
-                              if (snapshot.hasData) {
-                                return snapshot.data!;
-                              } else {
-                                return Offstage();
-                              }
-                            }),
-                        FutureBuilder<Widget>(
-                            future: buildAddressBook(context),
-                            builder: (context, snapshot) {
-                              if (snapshot.hasData) {
-                                return snapshot.data!;
-                              } else {
-                                return Offstage();
-                              }
-                            }),
+                      Expanded(
+                          child: TabBarView(children: [
+                        RecentPeerWidget(),
+                        FavoritePeerWidget(),
+                        DiscoveredPeerWidget(),
+                        AddressBookPeerWidget(),
+                        // FutureBuilder<Widget>(
+                        //     future: getPeers(rType: RemoteType.recently),
+                        //     builder: (context, snapshot) {
+                        //       if (snapshot.hasData) {
+                        //         return snapshot.data!;
+                        //       } else {
+                        //         return Offstage();
+                        //       }
+                        //     }),
+                        // FutureBuilder<Widget>(
+                        //     future: getPeers(rType: RemoteType.favorite),
+                        //     builder: (context, snapshot) {
+                        //       if (snapshot.hasData) {
+                        //         return snapshot.data!;
+                        //       } else {
+                        //         return Offstage();
+                        //       }
+                        //     }),
+                        // FutureBuilder<Widget>(
+                        //     future: getPeers(rType: RemoteType.discovered),
+                        //     builder: (context, snapshot) {
+                        //       if (snapshot.hasData) {
+                        //         return snapshot.data!;
+                        //       } else {
+                        //         return Offstage();
+                        //       }
+                        //     }),
+                        // FutureBuilder<Widget>(
+                        //     future: buildAddressBook(context),
+                        //     builder: (context, snapshot) {
+                        //       if (snapshot.hasData) {
+                        //         return snapshot.data!;
+                        //       } else {
+                        //         return Offstage();
+                        //       }
+                        //     }),
                       ]).paddingSymmetric(horizontal: 12.0, vertical: 4.0))
                     ],
                   )),
@@ -166,20 +182,20 @@ class _ConnectionPageState extends State<ConnectionPage> {
     return _updateUrl.isEmpty
         ? SizedBox(height: 0)
         : InkWell(
-        onTap: () async {
-          final url = _updateUrl + '.apk';
-          if (await canLaunch(url)) {
-            await launch(url);
-          }
-        },
-        child: Container(
-            alignment: AlignmentDirectional.center,
-            width: double.infinity,
-            color: Colors.pinkAccent,
-            padding: EdgeInsets.symmetric(vertical: 12),
-            child: Text(translate('Download new version'),
-                style: TextStyle(
-                    color: Colors.white, fontWeight: FontWeight.bold))));
+            onTap: () async {
+              final url = _updateUrl + '.apk';
+              if (await canLaunch(url)) {
+                await launch(url);
+              }
+            },
+            child: Container(
+                alignment: AlignmentDirectional.center,
+                width: double.infinity,
+                color: Colors.pinkAccent,
+                padding: EdgeInsets.symmetric(vertical: 12),
+                child: Text(translate('Download new version'),
+                    style: TextStyle(
+                        color: Colors.white, fontWeight: FontWeight.bold))));
   }
 
   /// UI for the search bar.
@@ -214,8 +230,8 @@ class _ConnectionPageState extends State<ConnectionPage> {
                         labelText: translate('Control Remote Desktop'),
                         // hintText: 'Enter your remote ID',
                         // border: InputBorder.,
-                        border: OutlineInputBorder(
-                            borderRadius: BorderRadius.zero),
+                        border:
+                            OutlineInputBorder(borderRadius: BorderRadius.zero),
                         helperStyle: TextStyle(
                           fontWeight: FontWeight.bold,
                           fontSize: 16,
@@ -238,8 +254,7 @@ class _ConnectionPageState extends State<ConnectionPage> {
               ],
             ),
             Padding(
-              padding: const EdgeInsets.only(
-                  top: 16.0),
+              padding: const EdgeInsets.only(top: 16.0),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.end,
                 children: [
@@ -996,13 +1011,13 @@ class _WebMenuState extends State<WebMenu> {
         icon: Icon(Icons.more_vert),
         itemBuilder: (context) {
           return (isIOS
-              ? [
-            PopupMenuItem(
-              child: Icon(Icons.qr_code_scanner, color: Colors.black),
-              value: "scan",
-            )
-          ]
-              : <PopupMenuItem<String>>[]) +
+                  ? [
+                      PopupMenuItem(
+                        child: Icon(Icons.qr_code_scanner, color: Colors.black),
+                        value: "scan",
+                      )
+                    ]
+                  : <PopupMenuItem<String>>[]) +
               [
                 PopupMenuItem(
                   child: Text(translate('ID/Relay Server')),
@@ -1012,13 +1027,13 @@ class _WebMenuState extends State<WebMenu> {
               (getUrl().contains('admin.rustdesk.com')
                   ? <PopupMenuItem<String>>[]
                   : [
-                PopupMenuItem(
-                  child: Text(username == null
-                      ? translate("Login")
-                      : translate("Logout") + ' ($username)'),
-                  value: "login",
-                )
-              ]) +
+                      PopupMenuItem(
+                        child: Text(username == null
+                            ? translate("Login")
+                            : translate("Logout") + ' ($username)'),
+                        value: "login",
+                      )
+                    ]) +
               [
                 PopupMenuItem(
                   child: Text(translate('About') + ' RustDesk'),
