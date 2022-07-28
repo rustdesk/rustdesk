@@ -156,7 +156,6 @@ impl KeyboardControllable for Enigo {
     }
     fn key_up(&mut self, key: Key) {
         if self.is_x11 {
-            dbg!(key);
             if self.pynput.send_pynput(&key, false) {
                 return;
             }
