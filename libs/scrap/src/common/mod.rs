@@ -59,3 +59,9 @@ pub trait TraitCapturer {
     #[cfg(windows)]
     fn set_gdi(&mut self) -> bool;
 }
+
+#[cfg(x11)]
+#[inline]
+pub fn is_x11() -> bool {
+    "x11" == hbb_common::platform::linux::get_display_server()
+}

@@ -54,14 +54,9 @@ pub enum Display {
     WAYLAND(wayland::Display),
 }
 
-#[inline]
-pub fn is_x11() -> bool {
-    "x11" == hbb_common::platform::linux::get_display_server()
-}
-
 impl Display {
     pub fn primary() -> io::Result<Display> {
-        Ok(if is_x11() {
+        Ok(if super::is_x11() {
             Display::X11(x11::Display::primary()?)
         } else {
             Display::WAYLAND(wayland::Display::primary()?)
@@ -69,7 +64,7 @@ impl Display {
     }
 
     pub fn all() -> io::Result<Vec<Display>> {
-        Ok(if is_x11() {
+        Ok(if super::is_x11() {
             x11::Display::all()?
                 .drain(..)
                 .map(|x| Display::X11(x))
