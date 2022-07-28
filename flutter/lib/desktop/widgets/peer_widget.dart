@@ -167,6 +167,7 @@ class RecentPeerWidget extends BasePeerWidget {
   }
 
   Future<List<Peer>> _loadPeers() async {
+    debugPrint("call RecentPeerWidget _loadPeers");
     return gFFI.peers();
   }
 }
@@ -180,6 +181,7 @@ class FavoritePeerWidget extends BasePeerWidget {
 
   @override
   Future<List<Peer>> _loadPeers() async {
+    debugPrint("call FavoritePeerWidget _loadPeers");
     return await gFFI.bind.mainGetFav().then((peers) async {
       final peersEntities = await Future.wait(peers
               .map((id) => gFFI.bind.mainGetPeers(id: id))
@@ -206,6 +208,7 @@ class DiscoveredPeerWidget extends BasePeerWidget {
   }
 
   Future<List<Peer>> _loadPeers() async {
+    debugPrint("call DiscoveredPeerWidget _loadPeers");
     return await gFFI.bind.mainGetLanPeers().then((peers_string) {
       debugPrint(peers_string);
       return [];
@@ -222,6 +225,7 @@ class AddressBookPeerWidget extends BasePeerWidget {
   }
 
   Future<List<Peer>> _loadPeers() async {
+    debugPrint("call AddressBookPeerWidget _loadPeers");
     return gFFI.abModel.peers.map((e) {
       return Peer.fromJson(e['id'], e);
     }).toList();
