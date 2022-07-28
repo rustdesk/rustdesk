@@ -69,6 +69,7 @@ pub const RENDEZVOUS_SERVERS: &'static [&'static str] = &[
     "rs-sg.rustdesk.com",
     "rs-cn.rustdesk.com",
 ];
+pub const RS_PUB_KEY: &'static str = "OeVuKk5nlHiXp+APNn0Y3pC1Iwpwn44JGqrQCsWqmBw=";
 pub const RENDEZVOUS_PORT: i32 = 21116;
 pub const RELAY_PORT: i32 = 21117;
 
@@ -217,7 +218,8 @@ impl Config2 {
     fn load() -> Config2 {
         let mut config = Config::load_::<Config2>("2");
         if let Some(mut socks) = config.socks {
-            let (password, store) = decrypt_str_or_original(&socks.password, PASSWORD_ENC_VERSION);
+            let (password, _, store) =
+                decrypt_str_or_original(&socks.password, PASSWORD_ENC_VERSION);
             socks.password = password;
             config.socks = Some(socks);
             if store {
@@ -225,6 +227,13 @@ impl Config2 {
             }
         }
         config
+    }
+
+    pub fn decrypt_password(&mut self) {
+        if let Some(mut socks) = self.socks.clone() {
+            socks.password = decrypt_str_or_original(&socks.password, PASSWORD_ENC_VERSION).0;
+            self.socks = Some(socks);
+        }
     }
 
     pub fn file() -> PathBuf {
@@ -290,12 +299,16 @@ impl Config {
 
     fn load() -> Config {
         let mut config = Config::load_::<Config>("");
-        let (password, store) = decrypt_str_or_original(&config.password, PASSWORD_ENC_VERSION);
+        let (password, _, store) = decrypt_str_or_original(&config.password, PASSWORD_ENC_VERSION);
         config.password = password;
         if store {
             config.store();
         }
         config
+    }
+
+    pub fn decrypt_password(&mut self) {
+        self.password = decrypt_str_or_original(&self.password, PASSWORD_ENC_VERSION).0;
     }
 
     fn store(&self) {
@@ -534,9 +547,9 @@ impl Config {
         }
     }
 
-    pub fn get_auto_password() -> String {
+    pub fn get_auto_password(length: usize) -> String {
         let mut rng = rand::thread_rng();
-        (0..6)
+        (0..length)
             .map(|_| CHARS[rng.gen::<usize>() % CHARS.len()])
             .collect()
     }
@@ -657,7 +670,7 @@ impl Config {
         log::info!("id updated from {} to {}", id, new_id);
     }
 
-    pub fn set_security_password(password: &str) {
+    pub fn set_permanent_password(password: &str) {
         let mut config = CONFIG.write().unwrap();
         if password == config.password {
             return;
@@ -666,7 +679,7 @@ impl Config {
         config.store();
     }
 
-    pub fn get_security_password() -> String {
+    pub fn get_permanent_password() -> String {
         CONFIG.read().unwrap().password.clone()
     }
 
@@ -682,7 +695,7 @@ impl Config {
     pub fn get_salt() -> String {
         let mut salt = CONFIG.read().unwrap().salt.clone();
         if salt.is_empty() {
-            salt = Config::get_auto_password();
+            salt = Config::get_auto_password(6);
             Config::set_salt(&salt);
         }
         salt
@@ -742,17 +755,17 @@ impl PeerConfig {
             Ok(config) => {
                 let mut config: PeerConfig = config;
                 let mut store = false;
-                let (password, store2) =
+                let (password, _, store2) =
                     decrypt_vec_or_original(&config.password, PASSWORD_ENC_VERSION);
                 config.password = password;
                 store = store || store2;
                 config.options.get_mut("rdp_password").map(|v| {
-                    let (password, store2) = decrypt_str_or_original(v, PASSWORD_ENC_VERSION);
+                    let (password, _, store2) = decrypt_str_or_original(v, PASSWORD_ENC_VERSION);
                     *v = password;
                     store = store || store2;
                 });
                 config.options.get_mut("os-password").map(|v| {
-                    let (password, store2) = decrypt_str_or_original(v, PASSWORD_ENC_VERSION);
+                    let (password, _, store2) = decrypt_str_or_original(v, PASSWORD_ENC_VERSION);
                     *v = password;
                     store = store || store2;
                 });

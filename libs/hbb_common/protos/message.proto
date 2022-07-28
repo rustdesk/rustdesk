@@ -426,6 +426,7 @@ message PermissionInfo {
     Clipboard = 2;
     Audio = 3;
     File = 4;
+    Restart = 5;
   }
 
   Permission permission = 1;
@@ -544,6 +545,7 @@ message Misc {
     bool refresh_video = 10;
     bool video_received = 12;
     BackNotification back_notification = 13;
+    bool restart_remote_device = 14;
   }
 }
 

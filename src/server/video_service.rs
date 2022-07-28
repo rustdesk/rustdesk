@@ -378,7 +378,6 @@ fn run(sp: GenericService) -> ResultType<()> {
     let mut c = get_capturer(true)?;
 
     let mut video_qos = VIDEO_QOS.lock().unwrap();
-
     video_qos.set_size(c.width as _, c.height as _);
     let mut spf = video_qos.spf();
     let bitrate = video_qos.generate_bitrate()?;
@@ -441,18 +440,17 @@ fn run(sp: GenericService) -> ResultType<()> {
         #[cfg(windows)]
         check_uac_switch(c.privacy_mode_id, c._captuerer_privacy_mode_id)?;
 
-        {
-            let mut video_qos = VIDEO_QOS.lock().unwrap();
-            if video_qos.check_if_updated() {
-                log::debug!(
-                    "qos is updated, target_bitrate:{}, fps:{}",
-                    video_qos.target_bitrate,
-                    video_qos.fps
-                );
-                encoder.set_bitrate(video_qos.target_bitrate).unwrap();
-                spf = video_qos.spf();
-            }
+        let mut video_qos = VIDEO_QOS.lock().unwrap();
+        if video_qos.check_if_updated() {
+            log::debug!(
+                "qos is updated, target_bitrate:{}, fps:{}",
+                video_qos.target_bitrate,
+                video_qos.fps
+            );
+            encoder.set_bitrate(video_qos.target_bitrate).unwrap();
+            spf = video_qos.spf();
         }
+        drop(video_qos);
 
         if *SWITCH.lock().unwrap() {
             bail!("SWITCH");
