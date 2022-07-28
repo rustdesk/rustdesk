@@ -17,6 +17,7 @@ mod ru;
 mod sk;
 mod tr;
 mod tw;
+mod vn;
 
 lazy_static::lazy_static! {
     pub static ref LANGS: Value =
@@ -37,6 +38,7 @@ lazy_static::lazy_static! {
             ("da", "Dansk"),
             ("eo", "Esperanto"),
             ("tr", "Türkçe"),
+            ("vn", "Tiếng Việt"),
         ]);
 }
 
@@ -81,6 +83,7 @@ pub fn translate_locale(name: String, locale: &str) -> String {
         "cs" => cs::T.deref(),
         "da" => da::T.deref(),
         "sk" => sk::T.deref(),
+        "vn" => vn::T.deref(),
         _ => en::T.deref(),
     };
     if let Some(v) = m.get(&name as &str) {
