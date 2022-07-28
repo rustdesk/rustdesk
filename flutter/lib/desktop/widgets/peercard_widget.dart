@@ -7,11 +7,13 @@ import '../../common.dart';
 import '../../models/model.dart';
 import '../../models/peer_model.dart';
 
+typedef PopupMenuItemsFunc = Future<List<PopupMenuItem<String>>> Function();
+
 class _PeerCard extends StatefulWidget {
   final Peer peer;
-  final List<PopupMenuItem<String>> popupMenuItems;
+  final PopupMenuItemsFunc popupMenuItemsFunc;
 
-  _PeerCard({required this.peer, required this.popupMenuItems, Key? key})
+  _PeerCard({required this.peer, required this.popupMenuItemsFunc, Key? key})
       : super(key: key);
 
   @override
@@ -148,7 +150,7 @@ class _PeerCardState extends State<_PeerCard> {
     var value = await showMenu(
       context: context,
       position: this._menuPos,
-      items: super.widget.popupMenuItems,
+      items: await super.widget.popupMenuItemsFunc(),
       elevation: 8,
     );
     if (value == 'remove') {
@@ -271,17 +273,18 @@ abstract class BasePeerCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return _PeerCard(peer: peer, popupMenuItems: _getPopupMenuItems());
+    return _PeerCard(peer: peer, popupMenuItemsFunc: _getPopupMenuItems);
   }
 
   @protected
-  List<PopupMenuItem<String>> _getPopupMenuItems();
+  Future<List<PopupMenuItem<String>>> _getPopupMenuItems();
 }
 
 class RecentPeerCard extends BasePeerCard {
   RecentPeerCard({required Peer peer, Key? key}) : super(peer: peer, key: key);
 
-  List<PopupMenuItem<String>> _getPopupMenuItems() {
+  Future<List<PopupMenuItem<String>>> _getPopupMenuItems() async {
+    debugPrint("call RecentPeerCard _getPopupMenuItems");
     return [
       PopupMenuItem<String>(
           child: Text(translate('Connect')), value: 'connect'),
@@ -304,7 +307,8 @@ class FavoritePeerCard extends BasePeerCard {
   FavoritePeerCard({required Peer peer, Key? key})
       : super(peer: peer, key: key);
 
-  List<PopupMenuItem<String>> _getPopupMenuItems() {
+  Future<List<PopupMenuItem<String>>> _getPopupMenuItems() async {
+    debugPrint("call FavoritePeerCard _getPopupMenuItems");
     return [
       PopupMenuItem<String>(
           child: Text(translate('Connect')), value: 'connect'),
@@ -327,7 +331,8 @@ class DiscoveredPeerCard extends BasePeerCard {
   DiscoveredPeerCard({required Peer peer, Key? key})
       : super(peer: peer, key: key);
 
-  List<PopupMenuItem<String>> _getPopupMenuItems() {
+  Future<List<PopupMenuItem<String>>> _getPopupMenuItems() async {
+    debugPrint("call DiscoveredPeerCard _getPopupMenuItems");
     return [
       PopupMenuItem<String>(
           child: Text(translate('Connect')), value: 'connect'),
@@ -350,7 +355,8 @@ class AddressBookPeerCard extends BasePeerCard {
   AddressBookPeerCard({required Peer peer, Key? key})
       : super(peer: peer, key: key);
 
-  List<PopupMenuItem<String>> _getPopupMenuItems() {
+  Future<List<PopupMenuItem<String>>> _getPopupMenuItems() async {
+    debugPrint("call AddressBookPeerCard _getPopupMenuItems");
     return [
       PopupMenuItem<String>(
           child: Text(translate('Connect')), value: 'connect'),
