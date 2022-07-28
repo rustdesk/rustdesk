@@ -63,10 +63,10 @@ function createNewConnect(id, type) {
     id = id.replace(/\s/g, "");
     app.remote_id.value = formatId(id);
     if (!id) return;
-    if (id == my_id) {
-        msgbox("custom-error", "Error", "You cannot connect to your own computer");
-        return;
-    }
+    // if (id == my_id) {
+    //     msgbox("custom-error", "Error", "You cannot connect to your own computer");
+    //     return;
+    // }
     handler.set_remote_id(id);
     handler.new_remote(id, type);
 }

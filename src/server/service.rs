@@ -160,6 +160,10 @@ impl<T: Subscriber + From<ConnInner>> ServiceTmpl<T> {
 
     pub fn send_shared(&self, msg: Arc<Message>) {
         let mut lock = self.0.write().unwrap();
+        log::error!(
+            "send_shared subscribes count:{}",
+            lock.subscribes.values_mut().len()
+        );
         for s in lock.subscribes.values_mut() {
             s.send(msg.clone());
         }

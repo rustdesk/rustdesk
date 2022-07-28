@@ -179,6 +179,7 @@ impl HwEncoder {
             let aligns = vec![64, 32, 16, 8, 4, 2, 1];
             for align in aligns {
                 if frame_length == ((width + align - 1) / align * align) * height * 4 {
+                    log::error!("set align {}", align);
                     return ODD_SCREEN_WIDTH_ALIGN.swap(align, Ordering::Relaxed) != align;
                 }
             }

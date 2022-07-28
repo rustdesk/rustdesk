@@ -373,6 +373,10 @@ fn get_capturer(use_yuv: bool) -> ResultType<CapturerInfo> {
     })
 }
 
+const WIDTH: usize = 2715;
+const HEIGHT: usize = 1527;
+const PATCH: usize = 2720 * 4;
+
 fn run(sp: GenericService) -> ResultType<()> {
     #[cfg(windows)]
     ensure_close_virtual_device()?;
@@ -391,8 +395,8 @@ fn run(sp: GenericService) -> ResultType<()> {
     let encoder_cfg = match Encoder::current_hw_encoder_name() {
         Some(codec_name) => EncoderCfg::HW(HwEncoderConfig {
             codec_name,
-            width: c.width,
-            height: c.height,
+            width: WIDTH,
+            height: HEIGHT,
             bitrate: bitrate as _,
         }),
         None => EncoderCfg::VPX(VpxEncoderConfig {
@@ -419,14 +423,16 @@ fn run(sp: GenericService) -> ResultType<()> {
             display: c.current as _,
             x: c.origin.0 as _,
             y: c.origin.1 as _,
-            width: adjust_display_width(c.width) as _,
-            height: adjust_display_height(c.height) as _,
+            width: adjust_display_width(WIDTH) as _,
+            height: adjust_display_height(HEIGHT) as _,
             ..Default::default()
         });
         let mut msg_out = Message::new();
         msg_out.set_misc(misc);
         *SWITCH.lock().unwrap() = false;
+        log::error!("SwitchDisplay send start");
         sp.send(msg_out);
+        log::error!("SwitchDisplay send end");
     }
 
     let mut frame_controller = VideoFrameController::new();
@@ -439,7 +445,15 @@ fn run(sp: GenericService) -> ResultType<()> {
     log::info!("gdi: {}", c.is_gdi());
     let codec_name = Encoder::current_hw_encoder_name();
     #[cfg(feature = "hwcodec")]
-    let (mut odd_width_align_checked, width, height) = (false, c.width, c.height);
+    let (mut odd_width_align_checked, _width, _height) = (false, c.width, c.height);
+
+    let mut row: Vec<u8> = vec![0xff; PATCH / 2];
+    row.append(&mut vec![0; PATCH / 2]);
+    let mut my_frame = vec![];
+    for _ in 0..HEIGHT {
+        my_frame.append(&mut row.clone());
+    }
+    log::error!("my_frame_len:{}", my_frame.len());
 
     while sp.ok() {
         #[cfg(windows)]
@@ -515,15 +529,15 @@ fn run(sp: GenericService) -> ResultType<()> {
 
         #[cfg(not(any(target_os = "android", target_os = "ios")))]
         let res = match c.frame(spf) {
-            Ok(frame) => {
+            Ok(_frame) => {
                 #[cfg(feature = "hwcodec")]
                 {
-                    if width % 2 != 0
+                    if WIDTH % 2 != 0
                         && !odd_width_align_checked
                         && Encoder::current_hw_encoder_name().is_some()
                     {
                         odd_width_align_checked = true;
-                        if HwEncoder::is_odd_width_align_changed(width, height, frame.len()) {
+                        if HwEncoder::is_odd_width_align_changed(WIDTH, HEIGHT, my_frame.len()) {
                             *SWITCH.lock().unwrap() = true;
                             bail!("Align");
                         }
@@ -531,7 +545,7 @@ fn run(sp: GenericService) -> ResultType<()> {
                 }
                 let time = now - start;
                 let ms = (time.as_secs() * 1000 + time.subsec_millis() as u64) as i64;
-                let send_conn_ids = handle_one_frame(&sp, &frame, ms, &mut encoder)?;
+                let send_conn_ids = handle_one_frame(&sp, &my_frame, ms, &mut encoder)?;
                 frame_controller.set_send(now, send_conn_ids);
                 #[cfg(windows)]
                 {
@@ -720,8 +734,8 @@ pub(super) fn get_displays_2(all: &Vec<Display>) -> (usize, Vec<DisplayInfo>) {
         displays.push(DisplayInfo {
             x: d.origin().0 as _,
             y: d.origin().1 as _,
-            width: adjust_display_width(d.width()) as _,
-            height: adjust_display_height(d.height()) as _,
+            width: adjust_display_width(WIDTH) as _,
+            height: adjust_display_height(HEIGHT) as _,
             name: d.name(),
             online: d.is_online(),
             ..Default::default()

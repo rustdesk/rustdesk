@@ -2349,6 +2349,7 @@ impl Remote {
                         self.handler.call("switchDisplay", &make_args!(s.display));
                         self.video_sender.send(MediaData::Reset).ok();
                         if s.width > 0 && s.height > 0 {
+                            log::error!("remote size switch:({},{})", s.width, s.height);
                             VIDEO.lock().unwrap().as_mut().map(|v| {
                                 v.stop_streaming().ok();
                                 let ok = v.start_streaming(
@@ -2628,6 +2629,11 @@ impl Interface for Handler {
             // Nothing spectacular in decoder – done on CPU side.
             // So if you can do BGRA translation on your side – the better.
             // BGRA is used as internal image format so it will not require additional transformations.
+            log::error!(
+                "remote size login response:({},{})",
+                current.width,
+                current.height
+            );
             VIDEO.lock().unwrap().as_mut().map(|v| {
                 let ok = v.start_streaming(
                     (current.width as _, current.height as _),
