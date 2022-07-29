@@ -6,6 +6,7 @@ import 'package:flutter_hbb/desktop/screen/desktop_file_transfer_screen.dart';
 import 'package:flutter_hbb/desktop/screen/desktop_remote_screen.dart';
 import 'package:flutter_hbb/utils/multi_window_manager.dart';
 import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
+import 'package:get/get.dart';
 import 'package:get/route_manager.dart';
 import 'package:provider/provider.dart';
 
@@ -32,6 +33,10 @@ Future<Null> main(List<String> args) async {
   runRustDeskApp(args);
 }
 
+ThemeData getCurrentTheme() {
+  return isDarkTheme() ? MyTheme.darkTheme : MyTheme.darkTheme;
+}
+
 void runRustDeskApp(List<String> args) async {
   if (!isDesktop) {
     runApp(App());
@@ -47,12 +52,17 @@ void runRustDeskApp(List<String> args) async {
     WindowType wType = type.windowType;
     switch (wType) {
       case WindowType.RemoteDesktop:
-        runApp(DesktopRemoteScreen(
-          params: argument,
+        runApp(GetMaterialApp(
+          theme: getCurrentTheme(),
+          home: DesktopRemoteScreen(
+            params: argument,
+          ),
         ));
         break;
       case WindowType.FileTransfer:
-        runApp(DesktopFileTransferScreen(params: argument));
+        runApp(GetMaterialApp(
+            theme: getCurrentTheme(),
+            home: DesktopFileTransferScreen(params: argument)));
         break;
       default:
         break;
@@ -85,10 +95,7 @@ class App extends StatelessWidget {
           navigatorKey: globalKey,
           debugShowCheckedModeBanner: false,
           title: 'RustDesk',
-          theme: ThemeData(
-            primarySwatch: Colors.blue,
-            visualDensity: VisualDensity.adaptivePlatformDensity,
-          ),
+          theme: getCurrentTheme(),
           home: isDesktop
               ? DesktopHomePage()
               : !isAndroid

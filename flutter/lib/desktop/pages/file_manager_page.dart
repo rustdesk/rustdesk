@@ -72,7 +72,7 @@ class _FileManagerPageState extends State<FileManagerPage>
                 return false;
               },
               child: Scaffold(
-                backgroundColor: MyTheme.grayBg,
+                backgroundColor: isDarkTheme() ? MyTheme.dark : MyTheme.grayBg,
                 body: Row(
                   children: [
                     Flexible(flex: 3, child: body(isLocal: true)),

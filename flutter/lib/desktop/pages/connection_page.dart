@@ -16,7 +16,6 @@ import '../../mobile/pages/home_page.dart';
 import '../../mobile/pages/scan_page.dart';
 import '../../mobile/pages/settings_page.dart';
 import '../../models/model.dart';
-import '../../models/peer_model.dart';
 
 enum RemoteType { recently, favorite, discovered, addressBook }
 
@@ -60,7 +59,7 @@ class _ConnectionPageState extends State<ConnectionPage> {
   Widget build(BuildContext context) {
     if (_idController.text.isEmpty) _idController.text = gFFI.getId();
     return Container(
-      decoration: BoxDecoration(color: MyTheme.grayBg),
+      decoration: BoxDecoration(color: isDarkTheme() ? null : MyTheme.grayBg),
       child: Column(
           mainAxisAlignment: MainAxisAlignment.start,
           mainAxisSize: MainAxisSize.max,
@@ -83,7 +82,6 @@ class _ConnectionPageState extends State<ConnectionPage> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       TabBar(
-                          labelColor: Colors.black87,
                           isScrollable: true,
                           indicatorSize: TabBarIndicatorSize.label,
                           tabs: [
@@ -105,7 +103,7 @@ class _ConnectionPageState extends State<ConnectionPage> {
                         RecentPeerWidget(),
                         FavoritePeerWidget(),
                         DiscoveredPeerWidget(),
-                        AddressBookPeerWidget(),
+                        // AddressBookPeerWidget(),
                         // FutureBuilder<Widget>(
                         //     future: getPeers(rType: RemoteType.recently),
                         //     builder: (context, snapshot) {
@@ -133,15 +131,15 @@ class _ConnectionPageState extends State<ConnectionPage> {
                         //         return Offstage();
                         //       }
                         //     }),
-                        // FutureBuilder<Widget>(
-                        //     future: buildAddressBook(context),
-                        //     builder: (context, snapshot) {
-                        //       if (snapshot.hasData) {
-                        //         return snapshot.data!;
-                        //       } else {
-                        //         return Offstage();
-                        //       }
-                        //     }),
+                        FutureBuilder<Widget>(
+                            future: buildAddressBook(context),
+                            builder: (context, snapshot) {
+                              if (snapshot.hasData) {
+                                return snapshot.data!;
+                              } else {
+                                return Offstage();
+                              }
+                            }),
                       ]).paddingSymmetric(horizontal: 12.0, vertical: 4.0))
                     ],
                   )),
@@ -205,7 +203,7 @@ class _ConnectionPageState extends State<ConnectionPage> {
       width: 500,
       padding: EdgeInsets.symmetric(horizontal: 16, vertical: 24),
       decoration: BoxDecoration(
-        color: MyTheme.white,
+        color: isDarkTheme() ? null : MyTheme.white,
         borderRadius: const BorderRadius.all(Radius.circular(13)),
       ),
       child: Ink(
@@ -235,13 +233,11 @@ class _ConnectionPageState extends State<ConnectionPage> {
                         helperStyle: TextStyle(
                           fontWeight: FontWeight.bold,
                           fontSize: 16,
-                          color: MyTheme.dark,
                         ),
                         labelStyle: TextStyle(
                           fontWeight: FontWeight.w600,
                           fontSize: 26,
                           letterSpacing: 0.2,
-                          color: MyTheme.dark,
                         ),
                       ),
                       controller: _idController,
@@ -269,7 +265,6 @@ class _ConnectionPageState extends State<ConnectionPage> {
                         translate(
                           "Transfer File",
                         ),
-                        style: TextStyle(color: MyTheme.dark),
                       ),
                     ),
                   ),
@@ -332,154 +327,6 @@ class _ConnectionPageState extends State<ConnectionPage> {
       }
     }
     return true;
-  }
-
-  /// Get all the saved peers.
-  Future<Widget> getPeers({RemoteType rType = RemoteType.recently}) async {
-    final space = 8.0;
-    final cards = <Widget>[];
-    List<Peer> peers;
-    switch (rType) {
-      case RemoteType.recently:
-        peers = gFFI.peers();
-        break;
-      case RemoteType.favorite:
-        peers = await gFFI.bind.mainGetFav().then((peers) async {
-          final peersEntities = await Future.wait(peers
-                  .map((id) => gFFI.bind.mainGetPeers(id: id))
-                  .toList(growable: false))
-              .then((peers_str) {
-            final len = peers_str.length;
-            final ps = List<Peer>.empty(growable: true);
-            for (var i = 0; i < len; i++) {
-              print("${peers[i]}: ${peers_str[i]}");
-              ps.add(Peer.fromJson(peers[i], jsonDecode(peers_str[i])['info']));
-            }
-            return ps;
-          });
-          return peersEntities;
-        });
-        break;
-      case RemoteType.discovered:
-        peers = await gFFI.bind.mainGetLanPeers().then((peers_string) {
-          print(peers_string);
-          return [];
-        });
-        break;
-      case RemoteType.addressBook:
-        peers = gFFI.abModel.peers.map((e) {
-          return Peer.fromJson(e['id'], e);
-        }).toList();
-        break;
-    }
-    peers.forEach((p) {
-      var deco = Rx<BoxDecoration?>(BoxDecoration(
-          border: Border.all(color: Colors.transparent, width: 1.0),
-          borderRadius: BorderRadius.circular(20)));
-      cards.add(Obx(
-        () => Offstage(
-          offstage: !hitTag(gFFI.abModel.selectedTags, p.tags) &&
-              rType == RemoteType.addressBook,
-          child: Container(
-              width: 225,
-              height: 150,
-              child: Card(
-                  shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(20)),
-                  child: MouseRegion(
-                    onEnter: (evt) {
-                      deco.value = BoxDecoration(
-                          border: Border.all(color: Colors.blue, width: 1.0),
-                          borderRadius: BorderRadius.circular(20));
-                    },
-                    onExit: (evt) {
-                      deco.value = BoxDecoration(
-                          border:
-                              Border.all(color: Colors.transparent, width: 1.0),
-                          borderRadius: BorderRadius.circular(20));
-                    },
-                    child: Obx(
-                      () => Container(
-                        decoration: deco.value,
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Expanded(
-                              child: Container(
-                                decoration: BoxDecoration(
-                                  color:
-                                      str2color('${p.id}${p.platform}', 0x7f),
-                                  borderRadius: BorderRadius.only(
-                                    topLeft: Radius.circular(20),
-                                    topRight: Radius.circular(20),
-                                  ),
-                                ),
-                                child: Row(
-                                  children: [
-                                    Expanded(
-                                      child: Column(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.center,
-                                        children: [
-                                          Container(
-                                            padding: const EdgeInsets.all(6),
-                                            child: getPlatformImage(
-                                                '${p.platform}'),
-                                          ),
-                                          Row(
-                                            children: [
-                                              Expanded(
-                                                child: Tooltip(
-                                                  message:
-                                                      '${p.username}@${p.hostname}',
-                                                  child: Text(
-                                                    '${p.username}@${p.hostname}',
-                                                    style: TextStyle(
-                                                        color: Colors.white70,
-                                                        fontSize: 12),
-                                                    textAlign: TextAlign.center,
-                                                    overflow:
-                                                        TextOverflow.ellipsis,
-                                                  ),
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-                                        ],
-                                      ).paddingAll(4.0),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                Text("${p.id}"),
-                                InkWell(
-                                    child: Icon(Icons.more_vert),
-                                    onTapDown: (e) {
-                                      final x = e.globalPosition.dx;
-                                      final y = e.globalPosition.dy;
-                                      _menuPos =
-                                          RelativeRect.fromLTRB(x, y, x, y);
-                                    },
-                                    onTap: () {
-                                      showPeerMenu(context, p.id, rType);
-                                    }),
-                              ],
-                            ).paddingSymmetric(vertical: 8.0, horizontal: 12.0)
-                          ],
-                        ),
-                      ),
-                    ),
-                  ))),
-        ),
-      ));
-    });
-    return SingleChildScrollView(
-        child: Wrap(children: cards, spacing: space, runSpacing: space));
   }
 
   /// Show the peer menu and handle user's choice.
@@ -676,7 +523,6 @@ class _ConnectionPageState extends State<ConnectionPage> {
           shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(20),
               side: BorderSide(color: MyTheme.grayBg)),
-          color: Colors.white,
           child: Container(
             width: 200,
             height: double.infinity,
@@ -736,24 +582,8 @@ class _ConnectionPageState extends State<ConnectionPage> {
           ),
         ).marginOnly(right: 8.0),
         Expanded(
-          child: FutureBuilder<Widget>(
-              future: getPeers(rType: RemoteType.addressBook),
-              builder: (context, snapshot) {
-                if (snapshot.hasData) {
-                  return Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [Expanded(child: snapshot.data!)],
-                  );
-                } else if (snapshot.hasError) {
-                  return Container(
-                      alignment: Alignment.center,
-                      child: Text('${snapshot.error}'));
-                } else {
-                  return Container(
-                      alignment: Alignment.center,
-                      child: CircularProgressIndicator());
-                }
-              }),
+          child: Align(
+              alignment: Alignment.topLeft, child: AddressBookPeerWidget()),
         )
       ],
     );

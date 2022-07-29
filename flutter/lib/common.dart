@@ -4,6 +4,7 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
 import 'package:get/instance_manager.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'models/model.dart';
 
@@ -38,6 +39,24 @@ class MyTheme {
   static const Color idColor = Color(0xFF00B6F0);
   static const Color darkGray = Color(0xFFB9BABC);
   static const Color dark = Colors.black87;
+
+  static ThemeData lightTheme = ThemeData(
+    brightness: Brightness.light,
+    primarySwatch: Colors.blue,
+    visualDensity: VisualDensity.adaptivePlatformDensity,
+    tabBarTheme: TabBarTheme(labelColor: Colors.black87),
+  );
+  static ThemeData darkTheme = ThemeData(
+      brightness: Brightness.dark,
+      primarySwatch: Colors.blue,
+      visualDensity: VisualDensity.adaptivePlatformDensity,
+      tabBarTheme: TabBarTheme(labelColor: Colors.white70));
+}
+
+bool isDarkTheme() {
+  final isDark = "Y" == Get.find<SharedPreferences>().getString("darkTheme");
+  debugPrint("current is dark theme: $isDark");
+  return isDark;
 }
 
 final ButtonStyle flatButtonStyle = TextButton.styleFrom(
@@ -327,4 +346,6 @@ Future<void> initGlobalFFI() async {
   await _globalFFI.ffiModel.init();
   // trigger connection status updater
   await _globalFFI.bind.mainCheckConnectStatus();
+  // global shared preference
+  await Get.putAsync(() => SharedPreferences.getInstance());
 }

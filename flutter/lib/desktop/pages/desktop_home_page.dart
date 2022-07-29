@@ -10,6 +10,7 @@ import 'package:flutter_hbb/desktop/widgets/titlebar_widget.dart';
 import 'package:flutter_hbb/models/model.dart';
 import 'package:get/get.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:tray_manager/tray_manager.dart';
 import 'package:url_launcher/url_launcher_string.dart';
 
@@ -64,7 +65,6 @@ class _DesktopHomePageState extends State<DesktopHomePage> with TrayListener {
     return ChangeNotifierProvider.value(
       value: gFFI.serverModel,
       child: Container(
-        decoration: BoxDecoration(color: MyTheme.white),
         child: Column(
           children: [
             buildTip(context),
@@ -339,13 +339,24 @@ class _DesktopHomePageState extends State<DesktopHomePage> with TrayListener {
     super.dispose();
   }
 
+  void changeTheme(String choice) async {
+    if (choice == "Y") {
+      Get.changeTheme(MyTheme.darkTheme);
+    } else {
+      Get.changeTheme(MyTheme.lightTheme);
+    }
+    Get.find<SharedPreferences>().setString("darkTheme", choice);
+  }
+
   void onSelectMenu(String value) {
     if (value.startsWith('enable-')) {
       final option = gFFI.getOption(value);
       gFFI.setOption(value, option == "N" ? "" : "N");
     } else if (value.startsWith('allow-')) {
       final option = gFFI.getOption(value);
-      gFFI.setOption(value, option == "Y" ? "" : "Y");
+      final choice = option == "Y" ? "" : "Y";
+      gFFI.setOption(value, choice);
+      changeTheme(choice);
     } else if (value == "stop-service") {
       final option = gFFI.getOption(value);
       gFFI.setOption(value, option == "Y" ? "" : "Y");
@@ -367,9 +378,8 @@ class _DesktopHomePageState extends State<DesktopHomePage> with TrayListener {
   }
 
   PopupMenuItem<String> genEnablePopupMenuItem(String label, String value) {
-    final isEnable = label.startsWith('enable-')
-        ? gFFI.getOption(value) != "N"
-        : gFFI.getOption(value) != "Y";
+    final v = gFFI.getOption(value);
+    final isEnable = value.startsWith('enable-') ? v != "N" : v == "Y";
     return PopupMenuItem(
       child: Row(
         children: [
