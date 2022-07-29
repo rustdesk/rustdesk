@@ -870,8 +870,7 @@ impl Connection {
                 allow_err!(peer.send(&msg).await);
             }
             Data::SendFiles((id, path, to, file_num, include_hidden, is_remote)) => {
-                // in mobile, can_enable_override_detection is always true
-                let od = true;
+                let od = can_enable_overwrite_detection(self.session.lc.read().unwrap().version);
                 if is_remote {
                     log::debug!("New job {}, write to {} from remote {}", id, to, path);
                     self.write_jobs.push(fs::TransferJob::new_write(
@@ -882,7 +881,7 @@ impl Connection {
                         include_hidden,
                         is_remote,
                         Vec::new(),
-                        true,
+                        od,
                     ));
                     allow_err!(
                         peer.send(&fs::new_send(id, path, file_num, include_hidden))
@@ -896,7 +895,7 @@ impl Connection {
                         file_num,
                         include_hidden,
                         is_remote,
-                        true,
+                        od,
                     ) {
                         Err(err) => {
                             self.handle_job_status(id, -1, Some(err.to_string()));
