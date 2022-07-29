@@ -120,6 +120,10 @@ void setTemporaryPasswordLengthDialog() {
         ..["value"] = newValue;
       FFI.setByName("option", jsonEncode(msg));
       FFI.setByName("temporary_password");
+      Future.delayed(Duration(milliseconds: 200), () {
+        close();
+        showSuccess();
+      });
     };
     return CustomAlertDialog(
       title: Text(translate("Set temporary password length")),

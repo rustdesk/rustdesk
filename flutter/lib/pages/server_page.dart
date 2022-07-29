@@ -26,43 +26,66 @@ class ServerPage extends StatelessWidget implements PageShape {
           return [
             PopupMenuItem(
               child: Text(translate("Change ID")),
+              padding: EdgeInsets.symmetric(horizontal: 16.0),
               value: "changeID",
               enabled: false,
             ),
             PopupMenuItem(
               child: Text(translate("Set permanent password")),
+              padding: EdgeInsets.symmetric(horizontal: 16.0),
               value: "setPermanentPassword",
               enabled:
                   FFI.serverModel.verificationMethod != kUseTemporaryPassword,
             ),
             PopupMenuItem(
               child: Text(translate("Set temporary password length")),
+              padding: EdgeInsets.symmetric(horizontal: 16.0),
               value: "setTemporaryPasswordLength",
               enabled:
                   FFI.serverModel.verificationMethod != kUsePermanentPassword,
             ),
             const PopupMenuDivider(),
-            CheckedPopupMenuItem(
-              checked:
-                  FFI.serverModel.verificationMethod == kUseTemporaryPassword,
-              padding: EdgeInsets.all(0),
+            PopupMenuItem(
+              padding: EdgeInsets.symmetric(horizontal: 0.0),
               value: kUseTemporaryPassword,
-              child: Text(translate("Use temporary password")),
+              child: Container(
+                  child: ListTile(
+                      title: Text(translate("Use temporary password")),
+                      trailing: Icon(
+                        Icons.check,
+                        color: FFI.serverModel.verificationMethod ==
+                                kUseTemporaryPassword
+                            ? null
+                            : Color(0xFFFFFFFF),
+                      ))),
             ),
-            CheckedPopupMenuItem(
-              checked:
-                  FFI.serverModel.verificationMethod == kUsePermanentPassword,
-              padding: EdgeInsets.all(0),
+            PopupMenuItem(
+              padding: EdgeInsets.symmetric(horizontal: 0.0),
               value: kUsePermanentPassword,
-              child: Text(translate("Use permanent password")),
+              child: ListTile(
+                  title: Text(translate("Use permanent password")),
+                  trailing: Icon(
+                    Icons.check,
+                    color: FFI.serverModel.verificationMethod ==
+                            kUsePermanentPassword
+                        ? null
+                        : Color(0xFFFFFFFF),
+                  )),
             ),
-            CheckedPopupMenuItem(
-              checked: FFI.serverModel.verificationMethod !=
-                      kUseTemporaryPassword &&
-                  FFI.serverModel.verificationMethod != kUsePermanentPassword,
-              padding: EdgeInsets.all(0),
+            PopupMenuItem(
+              padding: EdgeInsets.symmetric(horizontal: 0.0),
               value: kUseBothPasswords,
-              child: Text(translate("Use both passwords")),
+              child: ListTile(
+                  title: Text(translate("Use both passwords")),
+                  trailing: Icon(
+                    Icons.check,
+                    color: FFI.serverModel.verificationMethod !=
+                                kUseTemporaryPassword &&
+                            FFI.serverModel.verificationMethod !=
+                                kUsePermanentPassword
+                        ? null
+                        : Color(0xFFFFFFFF),
+                  )),
             ),
           ];
         },
@@ -80,6 +103,7 @@ class ServerPage extends StatelessWidget implements PageShape {
               ..["name"] = "verification-method"
               ..["value"] = value;
             FFI.setByName('option', jsonEncode(msg));
+            FFI.serverModel.updatePasswordModel();
           }
         })
   ];

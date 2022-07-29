@@ -89,14 +89,13 @@ class ServerModel with ChangeNotifier {
     }();
 
     Timer.periodic(Duration(seconds: 1), (timer) {
-      var update = false;
       var status = int.tryParse(FFI.getByName('connect_statue')) ?? 0;
       if (status > 0) {
         status = 1;
       }
       if (status != _connectStatus) {
         _connectStatus = status;
-        update = true;
+        notifyListeners();
       }
       final res =
           FFI.getByName('check_clients_length', _clients.length.toString());
@@ -105,23 +104,26 @@ class ServerModel with ChangeNotifier {
         updateClientState(res);
       }
 
-      final temporaryPassword = FFI.getByName("temporary_password");
-      final verificationMethod = FFI.getByName("option", "verification-method");
-      if (_serverPasswd.text != temporaryPassword) {
-        _serverPasswd.text = temporaryPassword;
-        update = true;
-      }
-
-      if (_verificationMethod != verificationMethod) {
-        debugPrint("_verificationMethod changed: $verificationMethod");
-        _verificationMethod = verificationMethod;
-        update = true;
-      }
-
-      if (update) {
-        notifyListeners();
-      }
+      updatePasswordModel();
     });
+  }
+
+  updatePasswordModel() {
+    var update = false;
+    final temporaryPassword = FFI.getByName("temporary_password");
+    final verificationMethod = FFI.getByName("option", "verification-method");
+    if (_serverPasswd.text != temporaryPassword) {
+      _serverPasswd.text = temporaryPassword;
+      update = true;
+    }
+
+    if (_verificationMethod != verificationMethod) {
+      _verificationMethod = verificationMethod;
+      update = true;
+    }
+    if (update) {
+      notifyListeners();
+    }
   }
 
   toggleAudio() async {
