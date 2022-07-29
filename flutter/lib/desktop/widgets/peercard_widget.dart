@@ -1,8 +1,7 @@
+import 'package:contextmenu/contextmenu.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_hbb/desktop/pages/desktop_home_page.dart';
 import 'package:flutter_hbb/utils/multi_window_manager.dart';
 import 'package:get/get.dart';
-import 'package:contextmenu/contextmenu.dart';
 
 import '../../common.dart';
 import '../../models/model.dart';
@@ -16,11 +15,10 @@ class _PeerCard extends StatefulWidget {
   final PopupMenuItemsFunc popupMenuItemsFunc;
   final PeerType type;
 
-  _PeerCard(
-      {required this.peer,
-      required this.popupMenuItemsFunc,
-      Key? key,
-      required this.type})
+  _PeerCard({required this.peer,
+    required this.popupMenuItemsFunc,
+    Key? key,
+    required this.type})
       : super(key: key);
 
   @override
@@ -28,11 +26,13 @@ class _PeerCard extends StatefulWidget {
 }
 
 /// State for the connection page.
-class _PeerCardState extends State<_PeerCard> {
+class _PeerCardState extends State<_PeerCard>
+    with AutomaticKeepAliveClientMixin {
   var _menuPos;
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     final peer = super.widget.peer;
     var deco = Rx<BoxDecoration?>(BoxDecoration(
         border: Border.all(color: Colors.transparent, width: 1.0),
@@ -54,10 +54,9 @@ class _PeerCardState extends State<_PeerCard> {
         ));
   }
 
-  Widget _buildPeerTile(
-      BuildContext context, Peer peer, Rx<BoxDecoration?> deco) {
+  Widget _buildPeerTile(BuildContext context, Peer peer, Rx<BoxDecoration?> deco) {
     return Obx(
-      () => Container(
+          () => Container(
         decoration: deco.value,
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -104,7 +103,16 @@ class _PeerCardState extends State<_PeerCard> {
                                         ),
                                       );
                                     } else {
-                                      return Text(translate("Loading"));
+                                      // alias has not arrived
+                                      return Center(
+                                          child: Text(
+                                        '${peer.username}@${peer.hostname}',
+                                        style: TextStyle(
+                                            color: Colors.white70,
+                                            fontSize: 12),
+                                        textAlign: TextAlign.center,
+                                        overflow: TextOverflow.ellipsis,
+                                      ));
                                     }
                                   },
                                 ),
@@ -127,7 +135,7 @@ class _PeerCardState extends State<_PeerCard> {
                       child: CircleAvatar(
                           radius: 5,
                           backgroundColor:
-                              peer.online ? Colors.green : Colors.yellow)),
+                          peer.online ? Colors.green : Colors.yellow)),
                   Text('${peer.id}')
                 ]),
                 InkWell(
@@ -175,13 +183,12 @@ class _PeerCardState extends State<_PeerCard> {
     );
     if (value == 'remove') {
       setState(() => gFFI.setByName('remove', '$id'));
-      () async {
+          () async {
         removePreference(id);
       }();
     } else if (value == 'file') {
       _connect(id, isFileTransfer: true);
-    } else if (value == 'add-fav') {
-    } else if (value == 'connect') {
+    } else if (value == 'add-fav') {} else if (value == 'connect') {
       _connect(id, isFileTransfer: false);
     } else if (value == 'ab-delete') {
       gFFI.abModel.deletePeer(id);
@@ -191,6 +198,8 @@ class _PeerCardState extends State<_PeerCard> {
       _abEditTag(id);
     } else if (value == 'rename') {
       _rename(id);
+    } else if (value == 'unremember-password') {
+      await gFFI.bind.mainForgetPassword(id: id);
     }
   }
 
@@ -211,7 +220,7 @@ class _PeerCardState extends State<_PeerCard> {
       child: GestureDetector(
         onTap: onTap,
         child: Obx(
-          () => Container(
+              () => Container(
             decoration: BoxDecoration(
                 color: rxTags.contains(tagName) ? Colors.blue : null,
                 border: Border.all(color: MyTheme.darkGray),
@@ -255,12 +264,12 @@ class _PeerCardState extends State<_PeerCard> {
               child: Wrap(
                 children: tags
                     .map((e) => _buildTag(e, selectedTag, onTap: () {
-                          if (selectedTag.contains(e)) {
-                            selectedTag.remove(e);
-                          } else {
-                            selectedTag.add(e);
-                          }
-                        }))
+                  if (selectedTag.contains(e)) {
+                    selectedTag.remove(e);
+                  } else {
+                    selectedTag.add(e);
+                  }
+                }))
                     .toList(growable: false),
               ),
             ),
@@ -366,6 +375,9 @@ class _PeerCardState extends State<_PeerCard> {
       );
     });
   }
+
+  @override
+  bool get wantKeepAlive => true;
 }
 
 abstract class BasePeerCard extends StatelessWidget {

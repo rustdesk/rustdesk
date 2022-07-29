@@ -16,7 +16,6 @@ import '../../mobile/pages/home_page.dart';
 import '../../mobile/pages/scan_page.dart';
 import '../../mobile/pages/settings_page.dart';
 import '../../models/model.dart';
-import '../../models/peer_model.dart';
 
 enum RemoteType { recently, favorite, discovered, addressBook }
 
@@ -60,7 +59,7 @@ class _ConnectionPageState extends State<ConnectionPage> {
   Widget build(BuildContext context) {
     if (_idController.text.isEmpty) _idController.text = gFFI.getId();
     return Container(
-      decoration: BoxDecoration(color: MyTheme.grayBg),
+      decoration: BoxDecoration(color: isDarkTheme() ? null : MyTheme.grayBg),
       child: Column(
           mainAxisAlignment: MainAxisAlignment.start,
           mainAxisSize: MainAxisSize.max,
@@ -83,7 +82,6 @@ class _ConnectionPageState extends State<ConnectionPage> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       TabBar(
-                          labelColor: Colors.black87,
                           isScrollable: true,
                           indicatorSize: TabBarIndicatorSize.label,
                           tabs: [
@@ -205,7 +203,7 @@ class _ConnectionPageState extends State<ConnectionPage> {
       width: 500,
       padding: EdgeInsets.symmetric(horizontal: 16, vertical: 24),
       decoration: BoxDecoration(
-        color: MyTheme.white,
+        color: isDarkTheme() ? null : MyTheme.white,
         borderRadius: const BorderRadius.all(Radius.circular(13)),
       ),
       child: Ink(
@@ -235,13 +233,11 @@ class _ConnectionPageState extends State<ConnectionPage> {
                         helperStyle: TextStyle(
                           fontWeight: FontWeight.bold,
                           fontSize: 16,
-                          color: MyTheme.dark,
                         ),
                         labelStyle: TextStyle(
                           fontWeight: FontWeight.w600,
                           fontSize: 26,
                           letterSpacing: 0.2,
-                          color: MyTheme.dark,
                         ),
                       ),
                       controller: _idController,
@@ -269,7 +265,6 @@ class _ConnectionPageState extends State<ConnectionPage> {
                         translate(
                           "Transfer File",
                         ),
-                        style: TextStyle(color: MyTheme.dark),
                       ),
                     ),
                   ),
@@ -528,7 +523,6 @@ class _ConnectionPageState extends State<ConnectionPage> {
           shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(20),
               side: BorderSide(color: MyTheme.grayBg)),
-          color: Colors.white,
           child: Container(
             width: 200,
             height: double.infinity,
