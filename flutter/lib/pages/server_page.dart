@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/models/model.dart';
 import 'package:flutter_hbb/widgets/dialog.dart';
@@ -28,32 +30,56 @@ class ServerPage extends StatelessWidget implements PageShape {
               enabled: false,
             ),
             PopupMenuItem(
-              child: Text(translate("Set your own password")),
-              value: "changePW",
-              enabled: FFI.serverModel.isStart,
+              child: Text(translate("Set permanent password")),
+              value: "setPermanentPassword",
+              enabled:
+                  FFI.serverModel.verificationMethod != kUseTemporaryPassword,
             ),
             PopupMenuItem(
-              child: Text(translate("Refresh random password")),
-              value: "refreshPW",
-              enabled: FFI.serverModel.isStart,
-            )
+              child: Text(translate("Set temporary password length")),
+              value: "setTemporaryPasswordLength",
+              enabled:
+                  FFI.serverModel.verificationMethod != kUsePermanentPassword,
+            ),
+            const PopupMenuDivider(),
+            CheckedPopupMenuItem(
+              checked:
+                  FFI.serverModel.verificationMethod == kUseTemporaryPassword,
+              padding: EdgeInsets.all(0),
+              value: kUseTemporaryPassword,
+              child: Text(translate("Use temporary password")),
+            ),
+            CheckedPopupMenuItem(
+              checked:
+                  FFI.serverModel.verificationMethod == kUsePermanentPassword,
+              padding: EdgeInsets.all(0),
+              value: kUsePermanentPassword,
+              child: Text(translate("Use permanent password")),
+            ),
+            CheckedPopupMenuItem(
+              checked: FFI.serverModel.verificationMethod !=
+                      kUseTemporaryPassword &&
+                  FFI.serverModel.verificationMethod != kUsePermanentPassword,
+              padding: EdgeInsets.all(0),
+              value: kUseBothPasswords,
+              child: Text(translate("Use both passwords")),
+            ),
           ];
         },
         onSelected: (value) {
           if (value == "changeID") {
             // TODO
-          } else if (value == "changePW") {
-            updatePasswordDialog();
-          } else if (value == "refreshPW") {
-            () async {
-              showLoading(translate("Waiting"));
-              if (await FFI.serverModel.updatePassword("")) {
-                showSuccess();
-              } else {
-                showError();
-              }
-              debugPrint("end updatePassword");
-            }();
+          } else if (value == "setPermanentPassword") {
+            setPermanentPasswordDialog();
+          } else if (value == "setTemporaryPasswordLength") {
+            setTemporaryPasswordLengthDialog();
+          } else if (value == kUsePermanentPassword ||
+              value == kUseTemporaryPassword ||
+              value == kUseBothPasswords) {
+            Map<String, String> msg = Map()
+              ..["name"] = "verification-method"
+              ..["value"] = value;
+            FFI.setByName('option', jsonEncode(msg));
           }
         })
   ];
@@ -90,17 +116,13 @@ void checkService() async {
   }
 }
 
-class ServerInfo extends StatefulWidget {
-  @override
-  _ServerInfoState createState() => _ServerInfoState();
-}
-
-class _ServerInfoState extends State<ServerInfo> {
+class ServerInfo extends StatelessWidget {
   final model = FFI.serverModel;
-  var _passwdShow = false;
+  final emptyController = TextEditingController(text: "-");
 
   @override
   Widget build(BuildContext context) {
+    final isPermanent = model.verificationMethod == kUsePermanentPassword;
     return model.isStart
         ? PaddingCard(
             child: Column(
@@ -123,24 +145,23 @@ class _ServerInfoState extends State<ServerInfo> {
               ),
               TextFormField(
                 readOnly: true,
-                obscureText: !_passwdShow,
                 style: TextStyle(
                     fontSize: 25.0,
                     fontWeight: FontWeight.bold,
                     color: MyTheme.accent),
-                controller: model.serverPasswd,
+                controller: isPermanent ? emptyController : model.serverPasswd,
                 decoration: InputDecoration(
                     icon: const Icon(Icons.lock),
                     labelText: translate("Password"),
                     labelStyle: TextStyle(
                         fontWeight: FontWeight.bold, color: MyTheme.accent50),
-                    suffix: IconButton(
-                        icon: Icon(Icons.visibility),
-                        onPressed: () {
-                          setState(() {
-                            _passwdShow = !_passwdShow;
-                          });
-                        })),
+                    suffix: isPermanent
+                        ? null
+                        : IconButton(
+                            icon: const Icon(Icons.refresh),
+                            onPressed: () {
+                              FFI.setByName("temporary_password");
+                            })),
                 onSaved: (String? value) {},
               ),
             ],

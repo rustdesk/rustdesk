@@ -9,6 +9,10 @@ import 'model.dart';
 const loginDialogTag = "LOGIN";
 final _emptyIdShow = translate("Generating ...");
 
+const kUseTemporaryPassword = "use-temporary-password";
+const kUsePermanentPassword = "use-permanent-password";
+const kUseBothPasswords = "use-both-passwords";
+
 class ServerModel with ChangeNotifier {
   bool _isStart = false; // Android MainService status
   bool _mediaOk = false;
@@ -16,6 +20,7 @@ class ServerModel with ChangeNotifier {
   bool _audioOk = false;
   bool _fileOk = false;
   int _connectStatus = 0; // Rendezvous Server status
+  String _verificationMethod = "";
 
   final _serverId = TextEditingController(text: _emptyIdShow);
   final _serverPasswd = TextEditingController(text: "");
@@ -33,6 +38,8 @@ class ServerModel with ChangeNotifier {
   bool get fileOk => _fileOk;
 
   int get connectStatus => _connectStatus;
+
+  String get verificationMethod => _verificationMethod;
 
   TextEditingController get serverId => _serverId;
 
@@ -82,19 +89,37 @@ class ServerModel with ChangeNotifier {
     }();
 
     Timer.periodic(Duration(seconds: 1), (timer) {
+      var update = false;
       var status = int.tryParse(FFI.getByName('connect_statue')) ?? 0;
       if (status > 0) {
         status = 1;
       }
       if (status != _connectStatus) {
         _connectStatus = status;
-        notifyListeners();
+        update = true;
       }
       final res =
           FFI.getByName('check_clients_length', _clients.length.toString());
       if (res.isNotEmpty) {
         debugPrint("clients not match!");
         updateClientState(res);
+      }
+
+      final temporaryPassword = FFI.getByName("temporary_password");
+      final verificationMethod = FFI.getByName("option", "verification-method");
+      if (_serverPasswd.text != temporaryPassword) {
+        _serverPasswd.text = temporaryPassword;
+        update = true;
+      }
+
+      if (_verificationMethod != verificationMethod) {
+        debugPrint("_verificationMethod changed: $verificationMethod");
+        _verificationMethod = verificationMethod;
+        update = true;
+      }
+
+      if (update) {
+        notifyListeners();
       }
     });
   }
@@ -195,7 +220,7 @@ class ServerModel with ChangeNotifier {
     FFI.ffiModel.updateEventListener("");
     await FFI.invokeMethod("init_service");
     FFI.setByName("start_service");
-    getIDPasswd();
+    _fetchID();
     updateClientState();
     Wakelock.enable();
   }
@@ -213,54 +238,33 @@ class ServerModel with ChangeNotifier {
     await FFI.invokeMethod("init_input");
   }
 
-  Future<bool> updatePassword(String pw) async {
-    final oldPasswd = _serverPasswd.text;
-    FFI.setByName("update_password", pw);
+  Future<bool> setPermanentPassword(String newPW) async {
+    FFI.setByName("permanent_password", newPW);
     await Future.delayed(Duration(milliseconds: 500));
-    await getIDPasswd(force: true);
-
-    // check result
-    if (pw == "") {
-      if (_serverPasswd.text.isNotEmpty && _serverPasswd.text != oldPasswd) {
-        return true;
-      } else {
-        return false;
-      }
+    final pw = FFI.getByName("permanent_password", newPW);
+    if (newPW == pw) {
+      return true;
     } else {
-      if (_serverPasswd.text == pw) {
-        return true;
-      } else {
-        return false;
-      }
+      return false;
     }
   }
 
-  getIDPasswd({bool force = false}) async {
-    if (!force && _serverId.text != _emptyIdShow && _serverPasswd.text != "") {
-      return;
-    }
+  _fetchID() async {
+    final old = _serverId.text;
     var count = 0;
     const maxCount = 10;
     while (count < maxCount) {
       await Future.delayed(Duration(seconds: 1));
       final id = FFI.getByName("server_id");
-      final passwd = FFI.getByName("server_password");
       if (id.isEmpty) {
         continue;
       } else {
         _serverId.text = id;
       }
 
-      if (passwd.isEmpty) {
-        continue;
-      } else {
-        _serverPasswd.text = passwd;
-      }
-
-      debugPrint(
-          "fetch id & passwd again at $count:id:${_serverId.text},passwd:${_serverPasswd.text}");
+      debugPrint("fetch id again at $count:id:${_serverId.text}");
       count++;
-      if (_serverId.text != _emptyIdShow && _serverPasswd.text.isNotEmpty) {
+      if (_serverId.text != old) {
         break;
       }
     }
