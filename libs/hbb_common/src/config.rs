@@ -1,6 +1,6 @@
 use crate::{
     log,
-    password_security::config::{
+    password_security::{
         decrypt_str_or_original, decrypt_vec_or_original, encrypt_str_or_original,
         encrypt_vec_or_original,
     },
@@ -46,6 +46,7 @@ lazy_static::lazy_static! {
     pub static ref ONLINE: Arc<Mutex<HashMap<String, i64>>> = Default::default();
     pub static ref PROD_RENDEZVOUS_SERVER: Arc<RwLock<String>> = Default::default();
     pub static ref APP_NAME: Arc<RwLock<String>> = Arc::new(RwLock::new("RustDesk".to_owned()));
+    static ref KEY_PAIR: Arc<Mutex<Option<(Vec<u8>, Vec<u8>)>>> = Default::default();
 }
 #[cfg(target_os = "android")]
 lazy_static::lazy_static! {
@@ -229,13 +230,6 @@ impl Config2 {
         config
     }
 
-    pub fn decrypt_password(&mut self) {
-        if let Some(mut socks) = self.socks.clone() {
-            socks.password = decrypt_str_or_original(&socks.password, PASSWORD_ENC_VERSION).0;
-            self.socks = Some(socks);
-        }
-    }
-
     pub fn file() -> PathBuf {
         Config::file_("2")
     }
@@ -277,6 +271,11 @@ pub fn load_path<T: serde::Serialize + serde::de::DeserializeOwned + Default + s
     cfg
 }
 
+#[inline]
+pub fn store_path<T: serde::Serialize>(path: PathBuf, cfg: T) -> crate::ResultType<()> {
+    Ok(confy::store_path(path, cfg)?)
+}
+
 impl Config {
     fn load_<T: serde::Serialize + serde::de::DeserializeOwned + Default + std::fmt::Debug>(
         suffix: &str,
@@ -292,7 +291,7 @@ impl Config {
 
     fn store_<T: serde::Serialize>(config: &T, suffix: &str) {
         let file = Self::file_(suffix);
-        if let Err(err) = confy::store_path(file, config) {
+        if let Err(err) = store_path(file, config) {
             log::error!("Failed to store config: {}", err);
         }
     }
@@ -305,10 +304,6 @@ impl Config {
             config.store();
         }
         config
-    }
-
-    pub fn decrypt_password(&mut self) {
-        self.password = decrypt_str_or_original(&self.password, PASSWORD_ENC_VERSION).0;
     }
 
     fn store(&self) {
@@ -587,36 +582,26 @@ impl Config {
         config.store();
     }
 
-    pub fn set_key_pair(pair: (Vec<u8>, Vec<u8>)) {
-        let mut config = CONFIG.write().unwrap();
-        if config.key_pair == pair {
-            return;
-        }
-        config.key_pair = pair;
-        config.store();
-    }
-
-    // * Manually make sure no gen_keypair more than once 
-    // for uuid, avoid deadlock  
-    pub fn get_key_pair_without_lock() -> (Vec<u8>, Vec<u8>) {
-        let mut config = Config::load_::<Config>("");
-        if config.key_pair.0.is_empty() {
-            let (pk, sk) = sign::gen_keypair();
-            config.key_pair = (sk.0.to_vec(), pk.0.into());
-            Config::store_(&config, "");
-        }
-        config.key_pair.clone()
-    }
-
     pub fn get_key_pair() -> (Vec<u8>, Vec<u8>) {
         // lock here to make sure no gen_keypair more than once
-        let mut config = CONFIG.write().unwrap();
+        // no use of CONFIG directly here to ensure no recursive calling in Config::load because of password dec which calling this function
+        let mut lock = KEY_PAIR.lock().unwrap();
+        if let Some(p) = lock.as_ref() {
+            return p.clone();
+        }
+        let mut config = Config::load();
         if config.key_pair.0.is_empty() {
             let (pk, sk) = sign::gen_keypair();
-            config.key_pair = (sk.0.to_vec(), pk.0.into());
-            config.store();
+            let key_pair = (sk.0.to_vec(), pk.0.into());
+            config.key_pair = key_pair.clone();
+            std::thread::spawn(|| {
+                let mut config = CONFIG.write().unwrap();
+                config.key_pair = key_pair;
+                config.store();
+            });
         }
-        config.key_pair.clone()
+        *lock = Some(config.key_pair.clone());
+        return config.key_pair;
     }
 
     pub fn get_id() -> String {
@@ -805,7 +790,7 @@ impl PeerConfig {
             .options
             .get_mut("os-password")
             .map(|v| *v = encrypt_str_or_original(v, PASSWORD_ENC_VERSION));
-        if let Err(err) = confy::store_path(Self::path(id), config) {
+        if let Err(err) = store_path(Self::path(id), config) {
             log::error!("Failed to store config: {}", err);
         }
     }
@@ -975,7 +960,7 @@ impl LanPeers {
         let f = LanPeers {
             peers: peers.clone(),
         };
-        if let Err(err) = confy::store_path(Config::file_("_lan_peers"), f) {
+        if let Err(err) = store_path(Config::file_("_lan_peers"), f) {
             log::error!("Failed to store lan peers: {}", err);
         }
     }

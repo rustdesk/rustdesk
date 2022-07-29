@@ -1,12 +1,12 @@
 pub mod compress;
-pub mod protos;
 pub mod platform;
-pub use  protos::message as message_proto;
-pub use  protos::rendezvous as rendezvous_proto;
+pub mod protos;
 pub use bytes;
 use config::Config;
 pub use futures;
 pub use protobuf;
+pub use protos::message as message_proto;
+pub use protos::rendezvous as rendezvous_proto;
 use std::{
     fs::File,
     io::{self, BufRead},
@@ -38,10 +38,6 @@ pub use tokio_socks;
 pub use tokio_socks::IntoTargetAddr;
 pub use tokio_socks::TargetAddr;
 pub mod password_security;
-
-lazy_static::lazy_static!{
-    static ref UUID: Vec<u8> = gen_uuid();
-}
 
 #[cfg(feature = "quic")]
 pub type Stream = quic::Connection;
@@ -206,23 +202,12 @@ pub fn get_modified_time(path: &std::path::Path) -> SystemTime {
         .unwrap_or(UNIX_EPOCH)
 }
 
-fn gen_uuid() -> Vec<u8> {
+pub fn get_uuid() -> Vec<u8> {
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     if let Ok(id) = machine_uid::get() {
-        id.into()
-    } else {
-        Config::get_key_pair().1
+        return id.into();
     }
-    #[cfg(any(target_os = "android", target_os = "ios"))]
-    Config::get_key_pair_without_lock().1
-}
-
-pub fn init_uuid() {
-    let _ = *UUID;
-}
-
-pub fn get_uuid() -> Vec<u8> {
-    UUID.to_owned()
+    Config::get_key_pair().1
 }
 
 #[cfg(test)]

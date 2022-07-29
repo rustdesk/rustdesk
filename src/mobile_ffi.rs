@@ -1,13 +1,11 @@
 use crate::client::file_trait::FileManager;
+use crate::common::make_fd_to_json;
 use crate::mobile::connection_manager::{self, get_clients_length, get_clients_state};
 use crate::mobile::{self, Session};
-use crate::common::{make_fd_to_json};
 use flutter_rust_bridge::{StreamSink, ZeroCopyBuffer};
-use hbb_common::{ResultType, init_uuid};
-use hbb_common::password_security::password;
 use hbb_common::{
     config::{self, Config, LocalConfig, PeerConfig, ONLINE},
-    fs, log,
+    fs, log, password_security as password, ResultType,
 };
 use serde_json::{Number, Value};
 use std::{
@@ -31,7 +29,6 @@ fn initialize(app_dir: &str) {
         init_from_env(Env::default().filter_or(DEFAULT_FILTER_ENV, "debug"));
     }
     *config::APP_DIR.write().unwrap() = app_dir.to_owned();
-    init_uuid();
     crate::common::test_rendezvous_server();
     crate::common::test_nat_type();
     #[cfg(target_os = "android")]
@@ -462,9 +459,7 @@ unsafe extern "C" fn set_by_name(name: *const c_char, value: *const c_char) {
                     }
                 }
                 // Server Side
-                "permanent_password" => {
-                    Config::set_permanent_password(value)
-                }
+                "permanent_password" => Config::set_permanent_password(value),
                 "temporary_password" => {
                     password::update_temporary_password();
                 }
