@@ -1010,6 +1010,14 @@ class FFI {
     return bind.mainSetLocalOption(key: key, value: value);
   }
 
+  Future<String> getPeerOption(String id, String key) {
+    return bind.mainGetPeerOption(id: id, key: key);
+  }
+
+  Future<void> setPeerOption(String id, String key, String value) {
+    return bind.mainSetPeerOption(id: id, key: key, value: value);
+  }
+
   void setOption(String name, String value) {
     Map<String, String> res = Map()
       ..["name"] = name

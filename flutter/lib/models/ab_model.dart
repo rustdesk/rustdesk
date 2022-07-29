@@ -141,6 +141,16 @@ class AbModel with ChangeNotifier {
     }
   }
 
+  void setPeerOption(String id, String key, String value) {
+    final it = peers.where((p0) => p0['id'] == id);
+    if (it.isEmpty) {
+      debugPrint("${id} is not exists");
+      return;
+    } else {
+      it.first[key] = value;
+    }
+  }
+
   void clear() {
     peers.clear();
     tags.clear();

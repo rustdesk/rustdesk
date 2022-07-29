@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_hbb/desktop/pages/desktop_home_page.dart';
 import 'package:flutter_hbb/utils/multi_window_manager.dart';
 import 'package:get/get.dart';
 import 'package:contextmenu/contextmenu.dart';
@@ -8,12 +9,18 @@ import '../../models/model.dart';
 import '../../models/peer_model.dart';
 
 typedef PopupMenuItemsFunc = Future<List<PopupMenuItem<String>>> Function();
+enum PeerType { recent, fav, discovered, ab }
 
 class _PeerCard extends StatefulWidget {
   final Peer peer;
   final PopupMenuItemsFunc popupMenuItemsFunc;
+  final PeerType type;
 
-  _PeerCard({required this.peer, required this.popupMenuItemsFunc, Key? key})
+  _PeerCard(
+      {required this.peer,
+      required this.popupMenuItemsFunc,
+      Key? key,
+      required this.type})
       : super(key: key);
 
   @override
@@ -78,15 +85,28 @@ class _PeerCardState extends State<_PeerCard> {
                           Row(
                             children: [
                               Expanded(
-                                child: Tooltip(
-                                  message: '${peer.username}@${peer.hostname}',
-                                  child: Text(
-                                    '${peer.username}@${peer.hostname}',
-                                    style: TextStyle(
-                                        color: Colors.white70, fontSize: 12),
-                                    textAlign: TextAlign.center,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
+                                child: FutureBuilder<String>(
+                                  future: gFFI.getPeerOption(peer.id, 'alias'),
+                                  builder: (_, snapshot) {
+                                    if (snapshot.hasData) {
+                                      final name = snapshot.data!.isEmpty
+                                          ? '${peer.username}@${peer.hostname}'
+                                          : snapshot.data!;
+                                      return Tooltip(
+                                        message: name,
+                                        child: Text(
+                                          name,
+                                          style: TextStyle(
+                                              color: Colors.white70,
+                                              fontSize: 12),
+                                          textAlign: TextAlign.center,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      );
+                                    } else {
+                                      return Text(translate("Loading"));
+                                    }
+                                  },
                                 ),
                               ),
                             ],
@@ -169,6 +189,8 @@ class _PeerCardState extends State<_PeerCard> {
       setState(() {});
     } else if (value == 'ab-edit-tag') {
       _abEditTag(id);
+    } else if (value == 'rename') {
+      _rename(id);
     }
   }
 
@@ -265,15 +287,101 @@ class _PeerCardState extends State<_PeerCard> {
       );
     });
   }
+
+  void _rename(String id) async {
+    var isInProgress = false;
+    var name = await gFFI.getPeerOption(id, 'alias');
+    if (widget.type == PeerType.ab) {
+      final peer = gFFI.abModel.peers.firstWhere((p) => id == p['id']);
+      if (peer == null) {
+        // this should not happen
+      } else {
+        name = peer['alias'] ?? "";
+      }
+    }
+    final k = GlobalKey<FormState>();
+    DialogManager.show((setState, close) {
+      return CustomAlertDialog(
+        title: Text(translate("Rename")),
+        content: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              padding: EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+              child: Form(
+                key: k,
+                child: TextFormField(
+                  controller: TextEditingController(text: name),
+                  decoration: InputDecoration(border: OutlineInputBorder()),
+                  onChanged: (newStr) {
+                    name = newStr;
+                  },
+                  validator: (s) {
+                    if (s == null || s.isEmpty) {
+                      return translate("Empty");
+                    }
+                    return null;
+                  },
+                  onSaved: (s) {
+                    name = s ?? "unnamed";
+                  },
+                ),
+              ),
+            ),
+            Offstage(offstage: !isInProgress, child: LinearProgressIndicator())
+          ],
+        ),
+        actions: [
+          TextButton(
+              onPressed: () {
+                close();
+              },
+              child: Text(translate("Cancel"))),
+          TextButton(
+              onPressed: () async {
+                setState(() {
+                  isInProgress = true;
+                });
+                if (k.currentState != null) {
+                  if (k.currentState!.validate()) {
+                    k.currentState!.save();
+                    await gFFI.setPeerOption(id, 'alias', name);
+                    if (widget.type == PeerType.ab) {
+                      gFFI.abModel.setPeerOption(id, 'alias', name);
+                      await gFFI.abModel.updateAb();
+                    } else {
+                      Future.delayed(Duration.zero, () {
+                        this.setState(() {});
+                      });
+                    }
+                    close();
+                  }
+                }
+                setState(() {
+                  isInProgress = false;
+                });
+              },
+              child: Text(translate("OK"))),
+        ],
+      );
+    });
+  }
 }
 
 abstract class BasePeerCard extends StatelessWidget {
   final Peer peer;
-  BasePeerCard({required this.peer, Key? key}) : super(key: key);
+  final PeerType type;
+
+  BasePeerCard({required this.peer, required this.type, Key? key})
+      : super(key: key);
 
   @override
   Widget build(BuildContext context) {
-    return _PeerCard(peer: peer, popupMenuItemsFunc: _getPopupMenuItems);
+    return _PeerCard(
+      peer: peer,
+      popupMenuItemsFunc: _getPopupMenuItems,
+      type: type,
+    );
   }
 
   @protected
@@ -281,7 +389,8 @@ abstract class BasePeerCard extends StatelessWidget {
 }
 
 class RecentPeerCard extends BasePeerCard {
-  RecentPeerCard({required Peer peer, Key? key}) : super(peer: peer, key: key);
+  RecentPeerCard({required Peer peer, Key? key})
+      : super(peer: peer, key: key, type: PeerType.recent);
 
   Future<List<PopupMenuItem<String>>> _getPopupMenuItems() async {
     debugPrint("call RecentPeerCard _getPopupMenuItems");
@@ -297,15 +406,13 @@ class RecentPeerCard extends BasePeerCard {
       PopupMenuItem<String>(
           child: Text(translate('Unremember Password')),
           value: 'unremember-password'),
-      PopupMenuItem<String>(
-          child: Text(translate('Edit Tag')), value: 'ab-edit-tag'),
     ];
   }
 }
 
 class FavoritePeerCard extends BasePeerCard {
   FavoritePeerCard({required Peer peer, Key? key})
-      : super(peer: peer, key: key);
+      : super(peer: peer, key: key, type: PeerType.fav);
 
   Future<List<PopupMenuItem<String>>> _getPopupMenuItems() async {
     debugPrint("call FavoritePeerCard _getPopupMenuItems");
@@ -329,7 +436,7 @@ class FavoritePeerCard extends BasePeerCard {
 
 class DiscoveredPeerCard extends BasePeerCard {
   DiscoveredPeerCard({required Peer peer, Key? key})
-      : super(peer: peer, key: key);
+      : super(peer: peer, key: key, type: PeerType.discovered);
 
   Future<List<PopupMenuItem<String>>> _getPopupMenuItems() async {
     debugPrint("call DiscoveredPeerCard _getPopupMenuItems");
@@ -345,15 +452,13 @@ class DiscoveredPeerCard extends BasePeerCard {
       PopupMenuItem<String>(
           child: Text(translate('Unremember Password')),
           value: 'unremember-password'),
-      PopupMenuItem<String>(
-          child: Text(translate('Edit Tag')), value: 'ab-edit-tag'),
     ];
   }
 }
 
 class AddressBookPeerCard extends BasePeerCard {
   AddressBookPeerCard({required Peer peer, Key? key})
-      : super(peer: peer, key: key);
+      : super(peer: peer, key: key, type: PeerType.ab);
 
   Future<List<PopupMenuItem<String>>> _getPopupMenuItems() async {
     debugPrint("call AddressBookPeerCard _getPopupMenuItems");
@@ -372,6 +477,8 @@ class AddressBookPeerCard extends BasePeerCard {
           value: 'unremember-password'),
       PopupMenuItem<String>(
           child: Text(translate('Add to Favorites')), value: 'add-fav'),
+      PopupMenuItem<String>(
+          child: Text(translate('Edit Tag')), value: 'ab-edit-tag'),
     ];
   }
 }
