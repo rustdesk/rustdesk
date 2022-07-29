@@ -4,6 +4,7 @@ use crate::mobile::{self, Session};
 use crate::common::{make_fd_to_json};
 use flutter_rust_bridge::{StreamSink, ZeroCopyBuffer};
 use hbb_common::{ResultType, init_uuid};
+use hbb_common::password_security::password;
 use hbb_common::{
     config::{self, Config, LocalConfig, PeerConfig, ONLINE},
     fs, log,
@@ -115,22 +116,6 @@ unsafe extern "C" fn get_by_name(name: *const c_char, arg: *const c_char) -> *co
                     res = Session::get_option(arg);
                 }
             }
-            "server_id" => {
-                res = Config::get_id();
-            }
-            "server_password" => {
-                todo!()
-            }
-            "connect_statue" => {
-                res = ONLINE
-                    .lock()
-                    .unwrap()
-                    .values()
-                    .max()
-                    .unwrap_or(&0)
-                    .clone()
-                    .to_string();
-            }
             // File Action
             "get_home_dir" => {
                 res = fs::get_home_as_string();
@@ -151,6 +136,25 @@ unsafe extern "C" fn get_by_name(name: *const c_char, arg: *const c_char) -> *co
                 }
             }
             // Server Side
+            "server_id" => {
+                res = Config::get_id();
+            }
+            "permanent_password" => {
+                res = Config::get_permanent_password();
+            }
+            "temporary_password" => {
+                res = password::temporary_password();
+            }
+            "connect_statue" => {
+                res = ONLINE
+                    .lock()
+                    .unwrap()
+                    .values()
+                    .max()
+                    .unwrap_or(&0)
+                    .clone()
+                    .to_string();
+            }
             #[cfg(target_os = "android")]
             "clients_state" => {
                 res = get_clients_state();
@@ -458,8 +462,11 @@ unsafe extern "C" fn set_by_name(name: *const c_char, value: *const c_char) {
                     }
                 }
                 // Server Side
-                "update_password" => {
-                    todo!()
+                "permanent_password" => {
+                    Config::set_permanent_password(value)
+                }
+                "temporary_password" => {
+                    password::update_temporary_password();
                 }
                 #[cfg(target_os = "android")]
                 "chat_server_mode" => {
