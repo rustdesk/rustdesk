@@ -87,6 +87,7 @@ pub enum FS {
     },
 }
 
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(tag = "t", content = "c")]
 pub enum DataKeyboard {
@@ -103,6 +104,7 @@ pub enum DataKeyboardResponse {
     GetKeyState(bool),
 }
 
+#[cfg(not(any(target_os = "android", target_os = "ios", feature = "cli")))]
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(tag = "t", content = "c")]
 pub enum DataMouse {
@@ -171,8 +173,11 @@ pub enum Data {
     ClipboardFileEnabled(bool),
     PrivacyModeState((i32, PrivacyModeState)),
     TestRendezvousServer,
+    #[cfg(not(any(target_os = "android", target_os = "ios", feature = "cli")))]
     Keyboard(DataKeyboard),
+    #[cfg(not(any(target_os = "android", target_os = "ios", feature = "cli")))]
     KeyboardResponse(DataKeyboardResponse),
+    #[cfg(not(any(target_os = "android", target_os = "ios", feature = "cli")))]
     Mouse(DataMouse),
     Control(DataControl),
     Empty,

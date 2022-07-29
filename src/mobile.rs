@@ -478,8 +478,8 @@ impl Interface for Session {
         }
     }
 
-    async fn handle_hash(&mut self, hash: Hash, peer: &mut Stream) {
-        handle_hash(self.lc.clone(), hash, self, peer).await;
+    async fn handle_hash(&mut self, pass: &str, hash: Hash, peer: &mut Stream) {
+        handle_hash(self.lc.clone(), pass, hash, self, peer).await;
     }
 
     async fn handle_login_from_ui(&mut self, password: String, remember: bool, peer: &mut Stream) {
@@ -611,7 +611,7 @@ impl Connection {
                     }
                 }
                 Some(message::Union::Hash(hash)) => {
-                    self.session.handle_hash(hash, peer).await;
+                    self.session.handle_hash("", hash, peer).await;
                 }
                 Some(message::Union::LoginResponse(lr)) => match lr.union {
                     Some(login_response::Union::Error(err)) => {
@@ -629,7 +629,7 @@ impl Connection {
                         let content = if cb.compress {
                             decompress(&cb.content)
                         } else {
-                            cb.content
+                            cb.content.into()
                         };
                         if let Ok(content) = String::from_utf8(content) {
                             self.session
@@ -1212,15 +1212,13 @@ pub mod connection_manager {
                 Some(Data::Login {
                     id,
                     is_file_transfer,
-                    port_forward,
                     peer_id,
                     name,
                     authorized,
                     keyboard,
                     clipboard,
                     audio,
-                    file,
-                    file_transfer_enabled,
+                    ..
                 }) => {
                     current_id = id;
                     let mut client = Client {

@@ -3,7 +3,7 @@ use crate::mobile::connection_manager::{self, get_clients_length, get_clients_st
 use crate::mobile::{self, Session};
 use crate::common::{make_fd_to_json};
 use flutter_rust_bridge::{StreamSink, ZeroCopyBuffer};
-use hbb_common::ResultType;
+use hbb_common::{ResultType, init_uuid};
 use hbb_common::{
     config::{self, Config, LocalConfig, PeerConfig, ONLINE},
     fs, log,
@@ -16,7 +16,6 @@ use std::{
 };
 
 fn initialize(app_dir: &str) {
-    *config::APP_DIR.write().unwrap() = app_dir.to_owned();
     #[cfg(target_os = "android")]
     {
         android_logger::init_once(
@@ -30,6 +29,8 @@ fn initialize(app_dir: &str) {
         use hbb_common::env_logger::*;
         init_from_env(Env::default().filter_or(DEFAULT_FILTER_ENV, "debug"));
     }
+    *config::APP_DIR.write().unwrap() = app_dir.to_owned();
+    init_uuid();
     crate::common::test_rendezvous_server();
     crate::common::test_nat_type();
     #[cfg(target_os = "android")]
@@ -118,7 +119,7 @@ unsafe extern "C" fn get_by_name(name: *const c_char, arg: *const c_char) -> *co
                 res = Config::get_id();
             }
             "server_password" => {
-                res = Config::get_password();
+                todo!()
             }
             "connect_statue" => {
                 res = ONLINE
@@ -163,7 +164,7 @@ unsafe extern "C" fn get_by_name(name: *const c_char, arg: *const c_char) -> *co
                 }
             }
             "uuid" => {
-                res = base64::encode(crate::get_uuid());
+                res = base64::encode(hbb_common::get_uuid());
             }
             _ => {
                 log::error!("Unknown name of get_by_name: {}", name);
@@ -458,11 +459,7 @@ unsafe extern "C" fn set_by_name(name: *const c_char, value: *const c_char) {
                 }
                 // Server Side
                 "update_password" => {
-                    if value.is_empty() {
-                        Config::set_password(&Config::get_auto_password());
-                    } else {
-                        Config::set_password(value);
-                    }
+                    todo!()
                 }
                 #[cfg(target_os = "android")]
                 "chat_server_mode" => {
