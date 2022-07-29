@@ -209,9 +209,16 @@ pub fn get_modified_time(path: &std::path::Path) -> SystemTime {
 fn gen_uuid() -> Vec<u8> {
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     if let Ok(id) = machine_uid::get() {
-        return id.into();
+        id.into()
+    } else {
+        Config::get_key_pair().1
     }
-    Config::get_sk_uuid()
+    #[cfg(any(target_os = "android", target_os = "ios"))]
+    Config::get_key_pair_without_lock().1
+}
+
+pub fn init_uuid() {
+    let _ = *UUID;
 }
 
 pub fn get_uuid() -> Vec<u8> {

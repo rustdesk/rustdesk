@@ -584,15 +584,16 @@ impl Config {
         config.store();
     }
 
-    pub fn get_sk_uuid() -> Vec<u8> {
-        // for uuid, avoid deadlock
+    // * Manually make sure no gen_keypair more than once 
+    // for uuid, avoid deadlock  
+    pub fn get_key_pair_without_lock() -> (Vec<u8>, Vec<u8>) {
         let mut config = Config::load_::<Config>("");
         if config.key_pair.0.is_empty() {
             let (pk, sk) = sign::gen_keypair();
             config.key_pair = (sk.0.to_vec(), pk.0.into());
             Config::store_(&config, "");
         }
-        config.key_pair.1
+        config.key_pair.clone()
     }
 
     pub fn get_key_pair() -> (Vec<u8>, Vec<u8>) {
