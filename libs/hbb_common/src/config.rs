@@ -89,7 +89,7 @@ pub struct Config {
     #[serde(default)]
     salt: String,
     #[serde(default)]
-    pub key_pair: (Vec<u8>, Vec<u8>), // sk, pk
+    key_pair: (Vec<u8>, Vec<u8>), // sk, pk
     #[serde(default)]
     key_confirmed: bool,
     #[serde(default)]
@@ -319,6 +319,10 @@ impl Config {
     fn file_(suffix: &str) -> PathBuf {
         let name = format!("{}{}", *APP_NAME.read().unwrap(), suffix);
         Config::with_extension(Self::path(name))
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.id.is_empty() || self.key_pair.0.is_empty()
     }
 
     pub fn get_home() -> PathBuf {

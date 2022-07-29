@@ -172,7 +172,7 @@ fn import_config(path: &str) {
     let path = std::path::Path::new(path);
     log::info!("import config from {:?} and {:?}", path, path2);
     let config: Config = load_path(path.into());
-    if config.id.is_empty() || config.key_pair.0.is_empty() {
+    if config.is_empty() {
         log::info!("Empty source config, skipped");
         return;
     }
