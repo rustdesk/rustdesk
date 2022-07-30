@@ -44,7 +44,7 @@ fn get_display_server_of_session(session: &str) -> String {
             }
         } else {
             // loginctl has not given the expected output.  try something else.
-            if let OK(sestype) = std::env::var("XDG_SESSION_TYPE") {
+            if let Ok(sestype) = std::env::var("XDG_SESSION_TYPE") {
                 return sestype.to_owned();
             }
             // If the session is not a tty, then just return the type as usual
