@@ -162,6 +162,8 @@ class FfiModel with ChangeNotifier {
         FFI.serverModel.onClientAuthorized(evt);
       } else if (name == 'on_client_remove') {
         FFI.serverModel.onClientRemove(evt);
+      } else if (name == 'update_quality_status') {
+        FFI.qualityMonitorModel.updateQualityStatus(evt);
       }
     };
     PlatformFFI.setEventCallback(cb);
@@ -655,6 +657,44 @@ class CursorModel with ChangeNotifier {
   }
 }
 
+class QualityMonitorData {
+  String? speed;
+  String? fps;
+  String? delay;
+  String? targetBitrate;
+  String? codecFormat;
+}
+
+class QualityMonitorModel with ChangeNotifier {
+  var _show = FFI.getByName('toggle_option', 'show-quality-monitor') == 'true';
+  final _data = QualityMonitorData();
+
+  bool get show => _show;
+  QualityMonitorData get data => _data;
+
+  checkShowQualityMonitor() {
+    final show =
+        FFI.getByName('toggle_option', 'show-quality-monitor') == 'true';
+    if (_show != show) {
+      _show = show;
+      notifyListeners();
+    }
+  }
+
+  updateQualityStatus(Map<String, dynamic> evt) {
+    try {
+      if ((evt["speed"] as String).isNotEmpty) _data.speed = evt["speed"];
+      if ((evt["fps"] as String).isNotEmpty) _data.fps = evt["fps"];
+      if ((evt["delay"] as String).isNotEmpty) _data.delay = evt["delay"];
+      if ((evt["target_bitrate"] as String).isNotEmpty)
+        _data.targetBitrate = evt["target_bitrate"];
+      if ((evt["codec_format"] as String).isNotEmpty)
+        _data.codecFormat = evt["codec_format"];
+      notifyListeners();
+    } catch (e) {}
+  }
+}
+
 enum MouseButtons { left, right, wheel }
 
 extension ToString on MouseButtons {
@@ -684,6 +724,7 @@ class FFI {
   static final serverModel = ServerModel();
   static final chatModel = ChatModel();
   static final fileModel = FileModel();
+  static final qualityMonitorModel = QualityMonitorModel();
 
   static String getId() {
     return getByName('remote_id');

@@ -239,15 +239,6 @@ impl sciter::EventHandler for Handler {
     }
 }
 
-#[derive(Debug, Default)]
-struct QualityStatus {
-    speed: Option<String>,
-    fps: Option<i32>,
-    delay: Option<i32>,
-    target_bitrate: Option<i32>,
-    codec_format: Option<CodecFormat>,
-}
-
 impl Handler {
     pub fn new(cmd: String, id: String, password: String, args: Vec<String>) -> Self {
         let me = Self {

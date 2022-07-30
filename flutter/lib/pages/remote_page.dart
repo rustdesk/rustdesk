@@ -592,6 +592,7 @@ class _RemotePageState extends State<RemotePage> {
         child: Stack(children: [
           ImagePaint(),
           CursorPaint(),
+          QualityMonitor(),
           getHelpTools(),
           SizedBox(
             width: 0,
@@ -948,6 +949,47 @@ class ImagePainter extends CustomPainter {
   }
 }
 
+class QualityMonitor extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) => ChangeNotifierProvider.value(
+      value: FFI.qualityMonitorModel,
+      child: Consumer<QualityMonitorModel>(
+          builder: (context, qualityMonitorModel, child) => Positioned(
+              top: 10,
+              right: 10,
+              child: qualityMonitorModel.show
+                  ? Container(
+                      padding: EdgeInsets.all(8),
+                      color: MyTheme.canvasColor.withAlpha(120),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            "Speed: ${qualityMonitorModel.data.speed}",
+                            style: TextStyle(color: MyTheme.grayBg),
+                          ),
+                          Text(
+                            "FPS: ${qualityMonitorModel.data.fps}",
+                            style: TextStyle(color: MyTheme.grayBg),
+                          ),
+                          Text(
+                            "Delay: ${qualityMonitorModel.data.delay} ms",
+                            style: TextStyle(color: MyTheme.grayBg),
+                          ),
+                          Text(
+                            "Target Bitrate: ${qualityMonitorModel.data.targetBitrate}kb",
+                            style: TextStyle(color: MyTheme.grayBg),
+                          ),
+                          Text(
+                            "Codec: ${qualityMonitorModel.data.codecFormat}",
+                            style: TextStyle(color: MyTheme.grayBg),
+                          ),
+                        ],
+                      ),
+                    )
+                  : SizedBox.shrink())));
+}
+
 CheckboxListTile getToggle(
     void Function(void Function()) setState, option, name) {
   return CheckboxListTile(
@@ -956,6 +998,9 @@ CheckboxListTile getToggle(
         setState(() {
           FFI.setByName('toggle_option', option);
         });
+        if (option == "show-quality-monitor") {
+          FFI.qualityMonitorModel.checkShowQualityMonitor();
+        }
       },
       dense: true,
       title: Text(translate(name)));
