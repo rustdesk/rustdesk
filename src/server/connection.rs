@@ -7,15 +7,14 @@ use crate::video_service;
 #[cfg(any(target_os = "android", target_os = "ios"))]
 use crate::{common::MOBILE_INFO2, mobile::connection_manager::start_channel};
 use crate::{ipc, VERSION};
-use hbb_common::fs::can_enable_overwrite_detection;
-use hbb_common::password_security::password;
 use hbb_common::{
     config::Config,
     fs,
+    fs::can_enable_overwrite_detection,
     futures::{SinkExt, StreamExt},
     get_version_number,
     message_proto::{option_message::BoolOption, permission_info::Permission},
-    sleep, timeout,
+    password_security as password, sleep, timeout,
     tokio::{
         net::TcpStream,
         sync::mpsc,

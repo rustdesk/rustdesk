@@ -313,3 +313,15 @@ class PermissionManager {
     _current = "";
   }
 }
+
+RadioListTile<T> getRadio<T>(
+    String name, T toValue, T curValue, void Function(T?) onChange) {
+  return RadioListTile<T>(
+    controlAffinity: ListTileControlAffinity.trailing,
+    title: Text(translate(name)),
+    value: toValue,
+    groupValue: curValue,
+    onChanged: onChange,
+    dense: true,
+  );
+}

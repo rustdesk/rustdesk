@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
@@ -20,9 +21,10 @@ void showError({Duration duration = SEC1}) {
   showToast(translate("Error"), duration: SEC1);
 }
 
-void updatePasswordDialog() {
-  final p0 = TextEditingController();
-  final p1 = TextEditingController();
+void setPermanentPasswordDialog() {
+  final pw = FFI.getByName("permanent_password");
+  final p0 = TextEditingController(text: pw);
+  final p1 = TextEditingController(text: pw);
   var validateLength = false;
   var validateSame = false;
   DialogManager.show((setState, close) {
@@ -86,7 +88,7 @@ void updatePasswordDialog() {
               ? () async {
                   close();
                   showLoading(translate("Waiting"));
-                  if (await FFI.serverModel.updatePassword(p0.text)) {
+                  if (await FFI.serverModel.setPermanentPassword(p0.text)) {
                     showSuccess();
                   } else {
                     showError();
@@ -98,6 +100,41 @@ void updatePasswordDialog() {
       ],
     );
   });
+}
+
+void setTemporaryPasswordLengthDialog() {
+  List<String> lengths = ['6', '8', '10'];
+  String length = FFI.getByName('option', 'temporary-password-length');
+  var index = lengths.indexOf(length);
+  if (index < 0) index = 0;
+  length = lengths[index];
+  DialogManager.show((setState, close) {
+    final setLength = (newValue) {
+      final oldValue = length;
+      if (oldValue == newValue) return;
+      setState(() {
+        length = newValue;
+      });
+      Map<String, String> msg = Map()
+        ..["name"] = "temporary-password-length"
+        ..["value"] = newValue;
+      FFI.setByName("option", jsonEncode(msg));
+      FFI.setByName("temporary_password");
+      Future.delayed(Duration(milliseconds: 200), () {
+        close();
+        showSuccess();
+      });
+    };
+    return CustomAlertDialog(
+      title: Text(translate("Set temporary password length")),
+      content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children:
+              lengths.map((e) => getRadio(e, e, length, setLength)).toList()),
+      actions: [],
+      contentPadding: 14,
+    );
+  }, backDismiss: true, clickMaskDismiss: true);
 }
 
 void enterPasswordDialog(String id) {

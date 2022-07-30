@@ -644,7 +644,7 @@ pub fn handle_one_frame_encoded(
     })?;
     let mut send_conn_ids: HashSet<i32> = Default::default();
     let vp9_frame = EncodedVideoFrame {
-        data: frame.to_vec(),
+        data: frame.to_vec().into(),
         key: true,
         pts: ms,
         ..Default::default()

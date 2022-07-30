@@ -1,12 +1,11 @@
 use crate::client::file_trait::FileManager;
+use crate::common::make_fd_to_json;
 use crate::mobile::connection_manager::{self, get_clients_length, get_clients_state};
 use crate::mobile::{self, Session};
-use crate::common::{make_fd_to_json};
 use flutter_rust_bridge::{StreamSink, ZeroCopyBuffer};
-use hbb_common::ResultType;
 use hbb_common::{
     config::{self, Config, LocalConfig, PeerConfig, ONLINE},
-    fs, log,
+    fs, log, password_security as password, ResultType,
 };
 use serde_json::{Number, Value};
 use std::{
@@ -16,7 +15,6 @@ use std::{
 };
 
 fn initialize(app_dir: &str) {
-    *config::APP_DIR.write().unwrap() = app_dir.to_owned();
     #[cfg(target_os = "android")]
     {
         android_logger::init_once(
@@ -30,6 +28,7 @@ fn initialize(app_dir: &str) {
         use hbb_common::env_logger::*;
         init_from_env(Env::default().filter_or(DEFAULT_FILTER_ENV, "debug"));
     }
+    *config::APP_DIR.write().unwrap() = app_dir.to_owned();
     crate::common::test_rendezvous_server();
     crate::common::test_nat_type();
     #[cfg(target_os = "android")]
@@ -114,22 +113,6 @@ unsafe extern "C" fn get_by_name(name: *const c_char, arg: *const c_char) -> *co
                     res = Session::get_option(arg);
                 }
             }
-            "server_id" => {
-                res = Config::get_id();
-            }
-            "server_password" => {
-                res = Config::get_password();
-            }
-            "connect_statue" => {
-                res = ONLINE
-                    .lock()
-                    .unwrap()
-                    .values()
-                    .max()
-                    .unwrap_or(&0)
-                    .clone()
-                    .to_string();
-            }
             // File Action
             "get_home_dir" => {
                 res = fs::get_home_as_string();
@@ -150,6 +133,25 @@ unsafe extern "C" fn get_by_name(name: *const c_char, arg: *const c_char) -> *co
                 }
             }
             // Server Side
+            "server_id" => {
+                res = Config::get_id();
+            }
+            "permanent_password" => {
+                res = Config::get_permanent_password();
+            }
+            "temporary_password" => {
+                res = password::temporary_password();
+            }
+            "connect_statue" => {
+                res = ONLINE
+                    .lock()
+                    .unwrap()
+                    .values()
+                    .max()
+                    .unwrap_or(&0)
+                    .clone()
+                    .to_string();
+            }
             #[cfg(target_os = "android")]
             "clients_state" => {
                 res = get_clients_state();
@@ -163,7 +165,7 @@ unsafe extern "C" fn get_by_name(name: *const c_char, arg: *const c_char) -> *co
                 }
             }
             "uuid" => {
-                res = base64::encode(crate::get_uuid());
+                res = base64::encode(hbb_common::get_uuid());
             }
             _ => {
                 log::error!("Unknown name of get_by_name: {}", name);
@@ -457,12 +459,9 @@ unsafe extern "C" fn set_by_name(name: *const c_char, value: *const c_char) {
                     }
                 }
                 // Server Side
-                "update_password" => {
-                    if value.is_empty() {
-                        Config::set_password(&Config::get_auto_password());
-                    } else {
-                        Config::set_password(value);
-                    }
+                "permanent_password" => Config::set_permanent_password(value),
+                "temporary_password" => {
+                    password::update_temporary_password();
                 }
                 #[cfg(target_os = "android")]
                 "chat_server_mode" => {
