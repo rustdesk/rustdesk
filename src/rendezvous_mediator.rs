@@ -501,12 +501,13 @@ async fn direct_server(server: ServerPtr) {
                         addr,
                         err
                     );
-                    loop {
-                        if port != get_direct_port() {
-                            break;
-                        }
-                        sleep(1.).await;
-                    }
+                    // loop {
+                    //     if port != get_direct_port() {
+                    //         break;
+                    //     }
+                    //     sleep(1.).await;
+                    // }
+                    sleep(1.).await;
                 }
             }
         }
