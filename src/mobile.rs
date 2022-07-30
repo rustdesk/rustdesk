@@ -478,8 +478,8 @@ impl Interface for Session {
         }
     }
 
-    async fn handle_hash(&mut self, hash: Hash, peer: &mut Stream) {
-        handle_hash(self.lc.clone(), hash, self, peer).await;
+    async fn handle_hash(&mut self, pass: &str, hash: Hash, peer: &mut Stream) {
+        handle_hash(self.lc.clone(), pass, hash, self, peer).await;
     }
 
     async fn handle_login_from_ui(&mut self, password: String, remember: bool, peer: &mut Stream) {
@@ -611,7 +611,7 @@ impl Connection {
                     }
                 }
                 Some(message::Union::Hash(hash)) => {
-                    self.session.handle_hash(hash, peer).await;
+                    self.session.handle_hash("", hash, peer).await;
                 }
                 Some(message::Union::LoginResponse(lr)) => match lr.union {
                     Some(login_response::Union::Error(err)) => {
@@ -629,7 +629,7 @@ impl Connection {
                         let content = if cb.compress {
                             decompress(&cb.content)
                         } else {
-                            cb.content
+                            cb.content.into()
                         };
                         if let Ok(content) = String::from_utf8(content) {
                             self.session
@@ -870,8 +870,7 @@ impl Connection {
                 allow_err!(peer.send(&msg).await);
             }
             Data::SendFiles((id, path, to, file_num, include_hidden, is_remote)) => {
-                // in mobile, can_enable_override_detection is always true
-                let od = true;
+                let od = can_enable_overwrite_detection(self.session.lc.read().unwrap().version);
                 if is_remote {
                     log::debug!("New job {}, write to {} from remote {}", id, to, path);
                     self.write_jobs.push(fs::TransferJob::new_write(
@@ -882,7 +881,7 @@ impl Connection {
                         include_hidden,
                         is_remote,
                         Vec::new(),
-                        true,
+                        od,
                     ));
                     allow_err!(
                         peer.send(&fs::new_send(id, path, file_num, include_hidden))
@@ -896,7 +895,7 @@ impl Connection {
                         file_num,
                         include_hidden,
                         is_remote,
-                        true,
+                        od,
                     ) {
                         Err(err) => {
                             self.handle_job_status(id, -1, Some(err.to_string()));
@@ -1213,15 +1212,13 @@ pub mod connection_manager {
                 Some(Data::Login {
                     id,
                     is_file_transfer,
-                    port_forward,
                     peer_id,
                     name,
                     authorized,
                     keyboard,
                     clipboard,
                     audio,
-                    file,
-                    file_transfer_enabled,
+                    ..
                 }) => {
                     current_id = id;
                     let mut client = Client {

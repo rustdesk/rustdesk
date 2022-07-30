@@ -961,18 +961,6 @@ CheckboxListTile getToggle(
       title: Text(translate(name)));
 }
 
-RadioListTile<String> getRadio(String name, String toValue, String curValue,
-    void Function(String?) onChange) {
-  return RadioListTile<String>(
-    controlAffinity: ListTileControlAffinity.trailing,
-    title: Text(translate(name)),
-    value: toValue,
-    groupValue: curValue,
-    onChanged: onChange,
-    dense: true,
-  );
-}
-
 void showOptions() {
   String quality = FFI.getByName('image_quality');
   if (quality == '') quality = 'balanced';

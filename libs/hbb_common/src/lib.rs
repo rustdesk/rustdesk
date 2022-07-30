@@ -1,12 +1,12 @@
 pub mod compress;
-pub mod protos;
 pub mod platform;
-pub use  protos::message as message_proto;
-pub use  protos::rendezvous as rendezvous_proto;
+pub mod protos;
 pub use bytes;
 use config::Config;
 pub use futures;
 pub use protobuf;
+pub use protos::message as message_proto;
+pub use protos::rendezvous as rendezvous_proto;
 use std::{
     fs::File,
     io::{self, BufRead},
