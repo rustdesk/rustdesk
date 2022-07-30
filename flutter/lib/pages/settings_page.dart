@@ -26,11 +26,11 @@ class SettingsPage extends StatefulWidget implements PageShape {
   _SettingsState createState() => _SettingsState();
 }
 
-class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
-  static const url = 'https://rustdesk.com/';
-  final _hasIgnoreBattery = androidVersion >= 26;
-  var _ignoreBatteryOpt = false;
+const url = 'https://rustdesk.com/';
+final _hasIgnoreBattery = androidVersion >= 26;
+var _ignoreBatteryOpt = false;
 
+class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
   @override
   void initState() {
     super.initState();
