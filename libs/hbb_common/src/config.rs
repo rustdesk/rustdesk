@@ -593,7 +593,7 @@ impl Config {
         if let Some(p) = lock.as_ref() {
             return p.clone();
         }
-        let mut config = Config::load();
+        let mut config = Config::load_::<Config>("");
         if config.key_pair.0.is_empty() {
             let (pk, sk) = sign::gen_keypair();
             let key_pair = (sk.0.to_vec(), pk.0.into());
