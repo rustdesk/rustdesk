@@ -68,7 +68,7 @@ class FfiModel with ChangeNotifier {
 
   void updatePermission(Map<String, dynamic> evt) {
     evt.forEach((k, v) {
-      if (k == 'name') return;
+      if (k == 'name' || k.isEmpty) return;
       _permissions[k] = v == 'true';
     });
     print('$_permissions');
@@ -195,14 +195,17 @@ class FfiModel with ChangeNotifier {
       wrongPasswordDialog(id);
     } else if (type == 'input-password') {
       enterPasswordDialog(id);
+    } else if (type == 'restarting') {
+      showMsgBox(type, title, text, false, hasCancel: false);
     } else {
       var hasRetry = evt['hasRetry'] == 'true';
       showMsgBox(type, title, text, hasRetry);
     }
   }
 
-  void showMsgBox(String type, String title, String text, bool hasRetry) {
-    msgBox(type, title, text);
+  void showMsgBox(String type, String title, String text, bool hasRetry,
+      {bool? hasCancel}) {
+    msgBox(type, title, text, hasCancel: hasCancel);
     _timer?.cancel();
     if (hasRetry) {
       _timer = Timer(Duration(seconds: _reconnects), () {

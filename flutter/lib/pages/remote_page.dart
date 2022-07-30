@@ -694,6 +694,13 @@ class _RemotePageState extends State<RemotePage> {
             value: 'block-input'));
       }
     }
+    if (FFI.ffiModel.permissions["restart"] != false &&
+        (pi.platform == "Linux" ||
+            pi.platform == "Windows" ||
+            pi.platform == "Mac OS")) {
+      more.add(PopupMenuItem<String>(
+          child: Text(translate('Restart Remote Device')), value: 'restart'));
+    }
     () async {
       var value = await showMenu(
         context: context,
@@ -727,6 +734,8 @@ class _RemotePageState extends State<RemotePage> {
         }
       } else if (value == 'reset_canvas') {
         FFI.cursorModel.reset();
+      } else if (value == 'restart') {
+        showRestartRemoteDevice(pi, widget.id);
       }
     }();
   }
@@ -1101,6 +1110,27 @@ void showOptions() {
       contentPadding: 0,
     );
   }, clickMaskDismiss: true, backDismiss: true);
+}
+
+void showRestartRemoteDevice(PeerInfo pi, String id) async {
+  final res =
+      await DialogManager.show<bool>((setState, close) => CustomAlertDialog(
+            title: Row(children: [
+              Icon(Icons.warning_amber_sharp,
+                  color: Colors.redAccent, size: 28),
+              SizedBox(width: 10),
+              Text(translate("Restart Remote Device")),
+            ]),
+            content: Text(
+                "${translate('Are you sure you want to restart')} \n${pi.username}@${pi.hostname}($id) ?"),
+            actions: [
+              TextButton(
+                  onPressed: () => close(), child: Text(translate("Cancel"))),
+              ElevatedButton(
+                  onPressed: () => close(true), child: Text(translate("OK"))),
+            ],
+          ));
+  if (res == true) FFI.setByName('restart_remote_device');
 }
 
 void showSetOSPassword(bool login) {

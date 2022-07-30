@@ -629,8 +629,9 @@ impl Handler {
     }
 
     fn restart_remote_device(&mut self) {
-        self.lc.write().unwrap().restarting_remote_device = true;
-        let msg = self.lc.write().unwrap().restart_remote_device();
+        let mut lc = self.lc.write().unwrap();
+        lc.restarting_remote_device = true;
+        let msg = lc.restart_remote_device();
         self.send(Data::Message(msg));
     }
 

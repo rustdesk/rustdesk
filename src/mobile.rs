@@ -88,6 +88,15 @@ impl Session {
         }
     }
 
+    pub fn restart_remote_device() {
+        if let Some(session) = SESSION.write().unwrap().as_ref() {
+            let mut lc = session.lc.write().unwrap();
+            lc.restarting_remote_device = true;
+            let msg = lc.restart_remote_device();
+            session.send(Data::Message(msg));
+        }
+    }
+
     fn send(data: Data) {
         if let Some(session) = SESSION.read().unwrap().as_ref() {
             session.send(data);
@@ -605,8 +614,13 @@ impl Connection {
                                     }
                                 }
                             } else {
-                                log::info!("Reset by the peer");
-                                session.msgbox("error", "Connection Error", "Reset by the peer");
+                                if session.lc.read().unwrap().restarting_remote_device {
+                                    log::info!("Restart remote device");
+                                    session.msgbox("restarting", "Restarting Remote Device", "remote_restarting_tip");
+                                } else {
+                                    log::info!("Reset by the peer");
+                                    session.msgbox("error", "Connection Error", "Reset by the peer");
+                                }
                                 break;
                             }
                         }
@@ -876,6 +890,7 @@ impl Connection {
                                     Permission::Keyboard => "keyboard",
                                     Permission::Clipboard => "clipboard",
                                     Permission::Audio => "audio",
+                                    Permission::Restart => "restart",
                                     _ => "",
                                 },
                                 &p.enabled.to_string(),
