@@ -1,7 +1,7 @@
 use crate::client::*;
 use hbb_common::{
     allow_err, bail,
-    config::CONNECT_TIMEOUT,
+    config::READ_TIMEOUT,
     futures::{SinkExt, StreamExt},
     log,
     message_proto::*,
@@ -106,21 +106,60 @@ async fn connect_and_login(
     token: &str,
     is_rdp: bool,
 ) -> ResultType<Option<Stream>> {
+    let mut res = connect_and_login_2(
+        id,
+        password,
+        ui_receiver,
+        interface.clone(),
+        forward,
+        key,
+        token,
+        is_rdp,
+    )
+    .await;
+    if res.is_err() && interface.is_force_relay() {
+        res = connect_and_login_2(
+            id,
+            password,
+            ui_receiver,
+            interface,
+            forward,
+            key,
+            token,
+            is_rdp,
+        )
+        .await;
+    }
+    res
+}
+
+async fn connect_and_login_2(
+    id: &str,
+    password: &str,
+    ui_receiver: &mut mpsc::UnboundedReceiver<Data>,
+    interface: impl Interface,
+    forward: &mut Framed<TcpStream, BytesCodec>,
+    key: &str,
+    token: &str,
+    is_rdp: bool,
+) -> ResultType<Option<Stream>> {
     let conn_type = if is_rdp {
         ConnType::RDP
     } else {
         ConnType::PORT_FORWARD
     };
-    let (mut stream, _) = Client::start(id, key, token, conn_type).await?;
+    let (mut stream, direct) = Client::start(id, key, token, conn_type, interface.clone()).await?;
     let mut interface = interface;
     let mut buffer = Vec::new();
+    let mut received = false;
     loop {
         tokio::select! {
-            res = timeout(CONNECT_TIMEOUT, stream.next()) => match res {
+            res = timeout(READ_TIMEOUT, stream.next()) => match res {
                 Err(_) => {
                     bail!("Timeout");
                 }
                 Ok(Some(Ok(bytes))) => {
+                    received = true;
                     let msg_in = Message::parse_from_bytes(&bytes)?;
                     match msg_in.union {
                         Some(message::Union::Hash(hash)) => {
@@ -142,6 +181,11 @@ async fn connect_and_login(
                         }
                         _ => {}
                     }
+                }
+                Ok(Some(Err(err))) => {
+                    log::error!("Connection closed: {}", err);
+                    interface.set_force_relay(direct, received);
+                    bail!("Connection closed: {}", err);
                 }
                 _ => {
                     bail!("Reset by the peer");

@@ -24,7 +24,10 @@ use hbb_common::{
     allow_err,
     anyhow::{anyhow, Context},
     bail,
-    config::{Config, PeerConfig, PeerInfoSerde, CONNECT_TIMEOUT, RELAY_PORT, RENDEZVOUS_TIMEOUT},
+    config::{
+        Config, PeerConfig, PeerInfoSerde, CONNECT_TIMEOUT, READ_TIMEOUT, RELAY_PORT,
+        RENDEZVOUS_TIMEOUT,
+    },
     log,
     message_proto::{option_message::BoolOption, *},
     protobuf::Message as _,
@@ -116,8 +119,9 @@ impl Client {
         key: &str,
         token: &str,
         conn_type: ConnType,
+        interface: impl Interface,
     ) -> ResultType<(Stream, bool)> {
-        match Self::_start(peer, key, token, conn_type).await {
+        match Self::_start(peer, key, token, conn_type, interface).await {
             Err(err) => {
                 let err_str = err.to_string();
                 if err_str.starts_with("Failed") {
@@ -135,6 +139,7 @@ impl Client {
         key: &str,
         token: &str,
         conn_type: ConnType,
+        interface: impl Interface,
     ) -> ResultType<(Stream, bool)> {
         // to-do: remember the port for each peer, so that we can retry easier
         let any_addr = Config::get_any_listen_addr();
@@ -181,7 +186,11 @@ impl Client {
             log::info!("#{} punch attempt with {}, id: {}", i, my_addr, peer);
             let mut msg_out = RendezvousMessage::new();
             use hbb_common::protobuf::Enum;
-            let nat_type = NatType::from_i32(my_nat_type).unwrap_or(NatType::UNKNOWN_NAT);
+            let nat_type = if interface.is_force_relay() {
+                NatType::SYMMETRIC
+            } else {
+                NatType::from_i32(my_nat_type).unwrap_or(NatType::UNKNOWN_NAT)
+            };
             msg_out.set_punch_hole_request(PunchHoleRequest {
                 id: peer.to_owned(),
                 token: token.to_owned(),
@@ -233,7 +242,15 @@ impl Client {
                             let mut conn =
                                 Self::create_relay(peer, rr.uuid, rr.relay_server, key, conn_type)
                                     .await?;
-                            Self::secure_connection(peer, signed_id_pk, key, &mut conn).await?;
+                            Self::secure_connection(
+                                peer,
+                                signed_id_pk,
+                                key,
+                                &mut conn,
+                                false,
+                                interface,
+                            )
+                            .await?;
                             return Ok((conn, false));
                         }
                         _ => {
@@ -274,6 +291,7 @@ impl Client {
             key,
             token,
             conn_type,
+            interface,
         )
         .await
     }
@@ -292,6 +310,7 @@ impl Client {
         key: &str,
         token: &str,
         conn_type: ConnType,
+        interface: impl Interface,
     ) -> ResultType<(Stream, bool)> {
         let direct_failures = PeerConfig::load(peer_id).direct_failures;
         let mut connect_timeout = 0;
@@ -329,8 +348,8 @@ impl Client {
         let start = std::time::Instant::now();
         // NOTICE: Socks5 is be used event in intranet. Which may be not a good way.
         let mut conn = socket_client::connect_tcp(peer, local_addr, connect_timeout).await;
-        let direct = !conn.is_err();
-        if conn.is_err() {
+        let mut direct = !conn.is_err();
+        if interface.is_force_relay() || conn.is_err() {
             if !relay_server.is_empty() {
                 conn = Self::request_relay(
                     peer_id,
@@ -348,6 +367,7 @@ impl Client {
                         conn.err().unwrap()
                     );
                 }
+                direct = false;
             } else {
                 bail!("Failed to make direct connection to remote desktop");
             }
@@ -360,7 +380,7 @@ impl Client {
         }
         let mut conn = conn?;
         log::info!("{:?} used to establish connection", start.elapsed());
-        Self::secure_connection(peer_id, signed_id_pk, key, &mut conn).await?;
+        Self::secure_connection(peer_id, signed_id_pk, key, &mut conn, direct, interface).await?;
         Ok((conn, direct))
     }
 
@@ -369,6 +389,8 @@ impl Client {
         signed_id_pk: Vec<u8>,
         key: &str,
         conn: &mut Stream,
+        direct: bool,
+        mut interface: impl Interface,
     ) -> ResultType<()> {
         let rs_pk = get_rs_pk(if key.is_empty() {
             hbb_common::config::RS_PUB_KEY
@@ -394,9 +416,15 @@ impl Client {
                 return Ok(());
             }
         };
-        match timeout(CONNECT_TIMEOUT, conn.next()).await? {
+        match timeout(READ_TIMEOUT, conn.next()).await? {
             Some(res) => {
-                let bytes = res?;
+                let bytes = match res {
+                    Ok(bytes) => bytes,
+                    Err(err) => {
+                        interface.set_force_relay(direct, false);
+                        bail!("{}", err);
+                    }
+                };
                 if let Ok(msg_in) = Message::parse_from_bytes(&bytes) {
                     if let Some(message::Union::SignedId(si)) = msg_in.union {
                         if let Ok((id, their_pk_b)) = decode_id_pk(&si.id, &sign_pk) {
@@ -786,6 +814,7 @@ pub struct LoginConfigHandler {
     session_id: u64,
     pub supported_encoding: Option<(bool, bool)>,
     pub restarting_remote_device: bool,
+    pub force_relay: bool,
 }
 
 impl Deref for LoginConfigHandler {
@@ -812,6 +841,7 @@ impl LoginConfigHandler {
         self.session_id = rand::random();
         self.supported_encoding = None;
         self.restarting_remote_device = false;
+        self.force_relay = false;
     }
 
     pub fn should_auto_login(&self) -> String {
@@ -1418,6 +1448,8 @@ pub trait Interface: Send + Clone + 'static + Sized {
     fn msgbox(&self, msgtype: &str, title: &str, text: &str);
     fn handle_login_error(&mut self, err: &str) -> bool;
     fn handle_peer_info(&mut self, pi: PeerInfo);
+    fn set_force_relay(&mut self, direct: bool, received: bool);
+    fn is_force_relay(&self) -> bool;
     async fn handle_hash(&mut self, pass: &str, hash: Hash, peer: &mut Stream);
     async fn handle_login_from_ui(&mut self, password: String, remember: bool, peer: &mut Stream);
     async fn handle_test_delay(&mut self, t: TestDelay, peer: &mut Stream);
@@ -1579,14 +1611,16 @@ lazy_static::lazy_static! {
 pub fn check_if_retry(msgtype: &str, title: &str, text: &str) -> bool {
     msgtype == "error"
         && title == "Connection Error"
-        && !text.to_lowercase().contains("offline")
-        && !text.to_lowercase().contains("exist")
-        && !text.to_lowercase().contains("handshake")
-        && !text.to_lowercase().contains("failed")
-        && !text.to_lowercase().contains("resolve")
-        && !text.to_lowercase().contains("mismatch")
-        && !text.to_lowercase().contains("manually")
-        && !text.to_lowercase().contains("not allowed")
+        && (text.contains("10054")
+            || text.contains("104")
+            || (!text.to_lowercase().contains("offline")
+                && !text.to_lowercase().contains("exist")
+                && !text.to_lowercase().contains("handshake")
+                && !text.to_lowercase().contains("failed")
+                && !text.to_lowercase().contains("resolve")
+                && !text.to_lowercase().contains("mismatch")
+                && !text.to_lowercase().contains("manually")
+                && !text.to_lowercase().contains("not allowed")))
 }
 
 #[inline]

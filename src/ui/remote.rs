@@ -53,6 +53,7 @@ use crate::{
     client::*,
     common::{self, check_clipboard, update_clipboard, ClipboardContext, CLIPBOARD_INTERVAL},
 };
+use errno;
 
 type Video = AssetPtr<video_destination>;
 
@@ -1456,12 +1457,21 @@ impl Remote {
     async fn io_loop(&mut self, key: &str, token: &str) {
         let stop_clipboard = self.start_clipboard();
         let mut last_recv_time = Instant::now();
+        let mut received = false;
         let conn_type = if self.handler.is_file_transfer() {
             ConnType::FILE_TRANSFER
         } else {
             ConnType::default()
         };
-        match Client::start(&self.handler.id, key, token, conn_type).await {
+        match Client::start(
+            &self.handler.id,
+            key,
+            token,
+            conn_type,
+            self.handler.clone(),
+        )
+        .await
+        {
             Ok((mut peer, direct)) => {
                 SERVER_KEYBOARD_ENABLED.store(true, Ordering::SeqCst);
                 SERVER_CLIPBOARD_ENABLED.store(true, Ordering::SeqCst);
@@ -1484,11 +1494,13 @@ impl Remote {
                                 match res {
                                     Err(err) => {
                                         log::error!("Connection closed: {}", err);
+                                        self.handler.set_force_relay(direct, received);
                                         self.handler.msgbox("error", "Connection Error", &err.to_string());
                                         break;
                                     }
                                     Ok(ref bytes) => {
                                         last_recv_time = Instant::now();
+                                        received = true;
                                         self.data_count.fetch_add(bytes.len(), Ordering::Relaxed);
                                         if !self.handle_msg_from_peer(bytes, &mut peer).await {
                                             break
@@ -2694,6 +2706,23 @@ impl Interface for Handler {
             });
             handle_test_delay(t, peer).await;
         }
+    }
+
+    fn set_force_relay(&mut self, direct: bool, received: bool) {
+        let mut lc = self.lc.write().unwrap();
+        lc.force_relay = false;
+        if direct && !received {
+            let errno = errno::errno().0;
+            log::info!("errno is {}", errno);
+            // TODO
+            if cfg!(windows) && errno == 10054 || !cfg!(windows) && errno == 104 {
+                lc.force_relay = true;
+            }
+        }
+    }
+
+    fn is_force_relay(&self) -> bool {
+        self.lc.read().unwrap().force_relay
     }
 }
 
