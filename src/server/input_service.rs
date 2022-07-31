@@ -819,6 +819,11 @@ fn legacy_keyboard_mode(evt: &KeyEvent) {
     }
 }
 
+fn translate_keyboard_mode(evt: &KeyEvent) {
+    dbg!(evt.chr());
+    let chr = char::from_u32(evt.chr()).unwrap_or_default();
+    rdev::simulate_char(chr, evt.down);
+}
 
 fn handle_key_(evt: &KeyEvent) {
     if EXITING.load(Ordering::SeqCst) {
@@ -831,6 +836,9 @@ fn handle_key_(evt: &KeyEvent) {
         }
         KeyboardMode::Map => {
             map_keyboard_mode(evt);
+        }
+        KeyboardMode::Translate => {
+            translate_keyboard_mode(evt);
         }
         _ => {
             legacy_keyboard_mode(evt);
