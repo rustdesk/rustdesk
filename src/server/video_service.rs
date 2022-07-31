@@ -583,7 +583,7 @@ fn check_privacy_mode_changed(sp: &GenericService, privacy_mode_id: i32) -> Resu
     if privacy_mode_id != privacy_mode_id_2 {
         if privacy_mode_id_2 != 0 {
             let msg_out = crate::common::make_privacy_mode_msg(
-                back_notification::PrivacyModeState::OnByOther,
+                back_notification::PrivacyModeState::PrvOnByOther,
             );
             sp.send_to_others(msg_out, privacy_mode_id_2);
         }
