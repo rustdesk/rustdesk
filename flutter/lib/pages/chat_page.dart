@@ -6,8 +6,6 @@ import 'package:provider/provider.dart';
 import '../models/model.dart';
 import 'home_page.dart';
 
-ChatPage chatPage = ChatPage();
-
 class ChatPage extends StatelessWidget implements PageShape {
   @override
   final title = translate("Chat");

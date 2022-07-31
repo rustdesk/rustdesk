@@ -146,6 +146,12 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
               leading: Icon(Icons.cloud),
               onPressed: (context) {
                 showServerSettings();
+              }),
+          SettingsTile.navigation(
+              title: Text(translate('Language')),
+              leading: Icon(Icons.translate),
+              onPressed: (context) {
+                showLanguageSettings();
               })
         ]),
         SettingsSection(
@@ -183,6 +189,42 @@ void showServerSettings() {
   final api = FFI.getByName('option', 'api-server');
   final key = FFI.getByName('option', 'key');
   showServerSettingsWithValue(id, relay, key, api);
+}
+
+void showLanguageSettings() {
+  try {
+    final langs = json.decode(FFI.getByName('langs')) as List<dynamic>;
+    var lang = FFI.getByName('local_option', 'lang');
+    DialogManager.show((setState, close) {
+      final setLang = (v) {
+        if (lang != v) {
+          setState(() {
+            lang = v;
+          });
+          final msg = Map()
+            ..['name'] = 'lang'
+            ..['value'] = v;
+          FFI.setByName('local_option', json.encode(msg));
+          homeKey.currentState?.refreshPages();
+          Future.delayed(Duration(milliseconds: 200), close);
+        }
+      };
+      return CustomAlertDialog(
+          title: SizedBox.shrink(),
+          content: Column(
+            children: [
+                  getRadio('Default', '', lang, setLang),
+                  Divider(color: MyTheme.border),
+                ] +
+                langs.map((e) {
+                  final key = e[0] as String;
+                  final name = e[1] as String;
+                  return getRadio(name, key, lang, setLang);
+                }).toList(),
+          ),
+          actions: []);
+    }, backDismiss: true, clickMaskDismiss: true);
+  } catch (_e) {}
 }
 
 void showAbout() {

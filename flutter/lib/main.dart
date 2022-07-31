@@ -39,7 +39,7 @@ class App extends StatelessWidget {
             primarySwatch: Colors.blue,
             visualDensity: VisualDensity.adaptivePlatformDensity,
           ),
-          home: !isAndroid ? WebHomePage() : HomePage(),
+          home: !isAndroid ? WebHomePage() : HomePage(key: homeKey),
           navigatorObservers: [
             FirebaseAnalyticsObserver(analytics: analytics),
             FlutterSmartDialog.observer

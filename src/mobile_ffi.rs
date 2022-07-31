@@ -113,6 +113,14 @@ unsafe extern "C" fn get_by_name(name: *const c_char, arg: *const c_char) -> *co
                     res = Session::get_option(arg);
                 }
             }
+            "local_option" => {
+                if let Ok(arg) = arg.to_str() {
+                    res = LocalConfig::get_option(arg);
+                }
+            }
+            "langs" => {
+                res = crate::lang::LANGS.to_string();
+            }
             // File Action
             "get_home_dir" => {
                 res = fs::get_home_as_string();
@@ -307,6 +315,15 @@ unsafe extern "C" fn set_by_name(name: *const c_char, value: *const c_char) {
                         if let Some(name) = m.get("name") {
                             if let Some(value) = m.get("value") {
                                 Session::set_option(name.to_owned(), value.to_owned());
+                            }
+                        }
+                    }
+                }
+                "local_option" => {
+                    if let Ok(m) = serde_json::from_str::<HashMap<String, String>>(value) {
+                        if let Some(name) = m.get("name") {
+                            if let Some(value) = m.get("value") {
+                                LocalConfig::set_option(name.to_owned(), value.to_owned());
                             }
                         }
                     }
