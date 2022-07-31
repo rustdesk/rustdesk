@@ -1543,7 +1543,7 @@ mod privacy_mode {
         }
         #[cfg(not(windows))]
         {
-            crate::common::make_privacy_mode_msg(back_notification::PrivacyModeState::OffFailed)
+            crate::common::make_privacy_mode_msg(back_notification::PrivacyModeState::PrvOffFailed)
         }
     }
 
