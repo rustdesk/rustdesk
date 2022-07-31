@@ -314,6 +314,9 @@ unsafe extern "C" fn set_by_name(name: *const c_char, value: *const c_char) {
                 "input_os_password" => {
                     Session::input_os_password(value.to_owned(), true);
                 }
+                "restart_remote_device" => {
+                    Session::restart_remote_device();
+                }
                 // File Action
                 "read_remote_dir" => {
                     if let Ok(m) = serde_json::from_str::<HashMap<String, String>>(value) {
