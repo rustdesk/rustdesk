@@ -12,11 +12,6 @@ use cpal::{
     Device, Host, StreamConfig,
 };
 use magnum_opus::{Channels::*, Decoder as AudioDecoder};
-use scrap::{
-    codec::{Decoder, DecoderCfg},
-    VpxDecoderConfig, VpxVideoCodecId,
-};
-
 use sha2::{Digest, Sha256};
 use uuid::Uuid;
 
@@ -38,14 +33,18 @@ use hbb_common::{
     AddrMangle, ResultType, Stream,
 };
 pub use helper::LatencyController;
-use scrap::{Decoder, Image, VideoCodecId};
+pub use helper::*;
+use scrap::Image;
+use scrap::{
+    codec::{Decoder, DecoderCfg},
+    VpxDecoderConfig, VpxVideoCodecId,
+};
 
 pub use super::lang::*;
 
 pub mod file_trait;
 pub mod helper;
 
-pub use helper::*;
 pub const SEC30: Duration = Duration::from_secs(30);
 
 /// Client of the remote desktop.
@@ -784,25 +783,25 @@ impl VideoHandler {
     }
 
     /// Handle a VP9S frame.
-    pub fn handle_vp9s(&mut self, vp9s: &VP9s) -> ResultType<bool> {
-        let mut last_frame = Image::new();
-        for vp9 in vp9s.frames.iter() {
-            for frame in self.decoder.decode(&vp9.data)? {
-                drop(last_frame);
-                last_frame = frame;
-            }
-        }
-        for frame in self.decoder.flush()? {
-            drop(last_frame);
-            last_frame = frame;
-        }
-        if last_frame.is_null() {
-            Ok(false)
-        } else {
-            last_frame.rgb(1, true, &mut self.rgb);
-            Ok(true)
-        }
-    }
+    // pub fn handle_vp9s(&mut self, vp9s: &VP9s) -> ResultType<bool> {
+    //     let mut last_frame = Image::new();
+    //     for vp9 in vp9s.frames.iter() {
+    //         for frame in self.decoder.decode(&vp9.data)? {
+    //             drop(last_frame);
+    //             last_frame = frame;
+    //         }
+    //     }
+    //     for frame in self.decoder.flush()? {
+    //         drop(last_frame);
+    //         last_frame = frame;
+    //     }
+    //     if last_frame.is_null() {
+    //         Ok(false)
+    //     } else {
+    //         last_frame.rgb(1, true, &mut self.rgb);
+    //         Ok(true)
+    //     }
+    // }
 
     /// Reset the decoder.
     pub fn reset(&mut self) {

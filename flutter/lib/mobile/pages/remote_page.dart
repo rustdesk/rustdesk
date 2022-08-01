@@ -516,10 +516,10 @@ class _RemotePageState extends State<RemotePage> {
         },
         onLongPress: () {
           if (touchMode) {
-            FFI.cursorModel
+            gFFI.cursorModel
                 .move(_cacheLongPressPosition.dx, _cacheLongPressPosition.dy);
           }
-          FFI.tap(MouseButtons.right);
+          gFFI.tap(MouseButtons.right);
         },
         onDoubleFinerTap: (d) {
           if (!touchMode) {
@@ -546,13 +546,13 @@ class _RemotePageState extends State<RemotePage> {
             gFFI.cursorModel.move(d.localPosition.dx, d.localPosition.dy);
             gFFI.sendMouse('down', MouseButtons.left);
           } else {
-            final cursorX = FFI.cursorModel.x;
-            final cursorY = FFI.cursorModel.y;
+            final cursorX = gFFI.cursorModel.x;
+            final cursorY = gFFI.cursorModel.y;
             final visible =
-                FFI.cursorModel.getVisibleRect().inflate(1); // extend edges
+                gFFI.cursorModel.getVisibleRect().inflate(1); // extend edges
             final size = MediaQueryData.fromWindow(ui.window).size;
             if (!visible.contains(Offset(cursorX, cursorY))) {
-              FFI.cursorModel.move(size.width / 2, size.height / 2);
+              gFFI.cursorModel.move(size.width / 2, size.height / 2);
             }
           }
         },

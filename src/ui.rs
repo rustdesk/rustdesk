@@ -1,25 +1,12 @@
 use std::{
     collections::HashMap,
     iter::FromIterator,
+    process::Child,
     sync::{Arc, Mutex},
 };
 
 use sciter::Value;
 
-use hbb_common::{allow_err, config::PeerConfig, log};
-
-use crate::ui_interface::*;
-
-mod cm;
-#[cfg(feature = "inline")]
-mod inline;
-#[cfg(target_os = "macos")]
-mod macos;
-pub mod remote;
-#[cfg(target_os = "windows")]
-pub mod win_privacy;
-use crate::common::SOFTWARE_UPDATE_URL;
-use crate::ipc;
 use hbb_common::{
     allow_err,
     config::{self, Config, LocalConfig, PeerConfig, RENDEZVOUS_PORT, RENDEZVOUS_TIMEOUT},
@@ -31,13 +18,33 @@ use hbb_common::{
     tcp::FramedStream,
     tokio::{self, sync::mpsc, time},
 };
-use sciter::Value;
-use std::{
-    collections::HashMap,
-    iter::FromIterator,
-    process::Child,
-    sync::{Arc, Mutex},
+
+use crate::common::{get_app_name, SOFTWARE_UPDATE_URL};
+use crate::ui_interface::{
+    check_mouse_time, closing, create_shortcut, current_is_wayland, fix_login_wayland,
+    forget_password, get_api_server, get_async_job_status, get_connect_status, get_error, get_fav,
+    get_icon, get_lan_peers, get_license, get_local_option, get_mouse_time, get_new_version,
+    get_option, get_options, get_peer, get_peer_option, get_recent_sessions, get_remote_id,
+    get_size, get_socks, get_software_ext, get_software_store_path, get_software_update_url,
+    get_uuid, get_version, goto_install, has_rendezvous_service, install_me, install_path,
+    is_can_screen_recording, is_installed, is_installed_daemon, is_installed_lower_version,
+    is_login_wayland, is_ok_change_id, is_process_trusted, is_rdp_service_open, is_share_rdp,
+    is_xfce, modify_default_login, new_remote, open_url, peer_has_password, permanent_password,
+    post_request, recent_sessions_updated, remove_peer, run_without_install, set_local_option,
+    set_option, set_options, set_peer_option, set_remote_id, set_share_rdp, set_socks,
+    show_run_without_install, store_fav, t, temporary_password, test_if_valid_server, update_me,
+    update_temporary_password, using_public_server,
 };
+use crate::{discover, ipc};
+
+mod cm;
+#[cfg(feature = "inline")]
+mod inline;
+#[cfg(target_os = "macos")]
+mod macos;
+pub mod remote;
+#[cfg(target_os = "windows")]
+pub mod win_privacy;
 
 type Message = RendezvousMessage;
 
@@ -79,7 +86,7 @@ pub fn start(args: &mut [String]) {
     }
     #[cfg(windows)]
     if args.len() > 0 && args[0] == "--tray" {
-        let options = OPTIONS.clone();
+        let options = check_connect_status(false).1;
         crate::tray::start_tray(options);
         return;
     }
@@ -105,8 +112,8 @@ pub fn start(args: &mut [String]) {
         args[1] = id;
     }
     if args.is_empty() {
-        let cloned = CHILDS.clone();
-        std::thread::spawn(move || check_zombie(cloned));
+        let child: Childs = Default::default();
+        std::thread::spawn(move || check_zombie(child));
         crate::common::check_software_update();
         frame.event_handler(UI {});
         frame.sciter_handler(UIHostHandler {});
@@ -177,45 +184,24 @@ pub fn start(args: &mut [String]) {
 struct UI {}
 
 impl UI {
-    fn new(childs: Childs) -> Self {
-        let res = check_connect_status(true);
-        Self(childs, res.0, res.1, Default::default(), res.2, res.3)
-    }
-
-    fn recent_sessions_updated(&mut self) -> bool {
-        let mut lock = self.0.lock().unwrap();
-        if lock.0 {
-            lock.0 = false;
-            true
-        } else {
-            false
-        }
     fn recent_sessions_updated(&self) -> bool {
         recent_sessions_updated()
     }
 
     fn get_id(&self) -> String {
-        get_id()
-    }
-
-    fn get_password(&mut self) -> String {
-        get_password()
+        ipc::get_id()
     }
 
     fn temporary_password(&mut self) -> String {
-        self.5.lock().unwrap().clone()
+        temporary_password()
     }
 
     fn update_temporary_password(&self) {
-        allow_err!(ipc::update_temporary_password());
-    }
-
-    fn update_password(&mut self, password: String) {
-        update_password(password)
+        update_temporary_password()
     }
 
     fn permanent_password(&self) -> String {
-        ipc::get_permanent_password()
+        permanent_password()
     }
 
     fn set_permanent_password(&self, password: String) {
@@ -507,7 +493,7 @@ impl UI {
     }
 
     fn discover(&self) {
-        discover()
+        discover();
     }
 
     fn get_lan_peers(&self) -> String {
@@ -523,7 +509,8 @@ impl UI {
     }
 
     fn change_id(&self, id: String) {
-        change_id(id)
+        let old_id = self.get_id();
+        change_id(id, old_id);
     }
 
     fn post_request(&self, url: String, body: String, header: String) {

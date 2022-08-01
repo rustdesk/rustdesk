@@ -1,21 +1,4 @@
-use crate::server::{check_zombie, new as new_server, ServerPtr};
-use hbb_common::{
-    allow_err,
-    anyhow::bail,
-    config::{Config, REG_INTERVAL, RENDEZVOUS_PORT, RENDEZVOUS_TIMEOUT},
-    futures::future::join_all,
-    log,
-    protobuf::Message as _,
-    rendezvous_proto::*,
-    sleep, socket_client,
-    tcp::FramedStream,
-    tokio::{
-        self, select,
-        time::{interval, Duration},
-    },
-    udp::FramedSocket,
-    AddrMangle, IntoTargetAddr, ResultType, TargetAddr,
-};
+use std::collections::HashMap;
 use std::{
     net::SocketAddr,
     sync::{
@@ -24,7 +7,30 @@ use std::{
     },
     time::Instant,
 };
+
 use uuid::Uuid;
+
+use hbb_common::config::DiscoveryPeer;
+use hbb_common::tcp::FramedStream;
+use hbb_common::{
+    allow_err,
+    anyhow::bail,
+    config,
+    config::{Config, REG_INTERVAL, RENDEZVOUS_PORT, RENDEZVOUS_TIMEOUT},
+    futures::future::join_all,
+    log,
+    protobuf::Message as _,
+    rendezvous_proto::*,
+    sleep, socket_client,
+    tokio::{
+        self, select,
+        time::{interval, Duration},
+    },
+    udp::FramedSocket,
+    AddrMangle, IntoTargetAddr, ResultType, TargetAddr,
+};
+
+use crate::server::{check_zombie, new as new_server, ServerPtr};
 
 type Message = RendezvousMessage;
 
@@ -354,7 +360,14 @@ impl RendezvousMediator {
         {
             let uuid = Uuid::new_v4().to_string();
             return self
-                .create_relay(ph.socket_addr.into(), relay_server, uuid, server, true, true)
+                .create_relay(
+                    ph.socket_addr.into(),
+                    relay_server,
+                    uuid,
+                    server,
+                    true,
+                    true,
+                )
                 .await;
         }
         let peer_addr = AddrMangle::decode(&ph.socket_addr);
@@ -568,7 +581,7 @@ fn lan_discovery() -> ResultType<()> {
         if let Ok((len, addr)) = socket.recv_from(&mut buf) {
             if let Ok(msg_in) = Message::parse_from_bytes(&buf[0..len]) {
                 match msg_in.union {
-                    Some(rendezvous_message::Union::peer_discovery(p)) => {
+                    Some(rendezvous_message::Union::PeerDiscovery(p)) => {
                         if p.cmd == "ping" {
                             let mut msg_out = Message::new();
                             let peer = PeerDiscovery {
@@ -616,11 +629,22 @@ pub fn discover() -> ResultType<()> {
         if let Ok((len, _)) = socket.recv_from(&mut buf) {
             if let Ok(msg_in) = Message::parse_from_bytes(&buf[0..len]) {
                 match msg_in.union {
-                    Some(rendezvous_message::Union::peer_discovery(p)) => {
+                    Some(rendezvous_message::Union::PeerDiscovery(p)) => {
                         last_recv_time = Instant::now();
                         if p.cmd == "pong" {
                             if p.mac != mac {
-                                peers.push((p.id, p.username, p.hostname, p.platform));
+                                let dp = DiscoveryPeer {
+                                    id: "".to_string(),
+                                    ip_mac: HashMap::from([
+                                        // TODO: addr ip
+                                        (addr.ip().to_string(), p.mac.clone()),
+                                    ]),
+                                    username: p.username,
+                                    hostname: p.hostname,
+                                    platform: p.platform,
+                                    online: true,
+                                };
+                                peers.push(dp);
                             }
                         }
                     }
@@ -629,7 +653,7 @@ pub fn discover() -> ResultType<()> {
             }
         }
         if last_write_time.elapsed().as_millis() > 300 && last_write_n != peers.len() {
-            config::LanPeers::store(serde_json::to_string(&peers)?);
+            config::LanPeers::store(&peers);
             last_write_time = Instant::now();
             last_write_n = peers.len();
         }
@@ -638,7 +662,7 @@ pub fn discover() -> ResultType<()> {
         }
     }
     log::info!("discover ping done");
-    config::LanPeers::store(serde_json::to_string(&peers)?);
+    config::LanPeers::store(&peers);
     Ok(())
 }
 
@@ -678,7 +702,7 @@ pub async fn query_online_states<F: FnOnce(Vec<String>, Vec<String>)>(ids: Vec<S
 }
 
 async fn create_online_stream() -> ResultType<FramedStream> {
-    let rendezvous_server = crate::get_rendezvous_server(1_000).await;
+    let (mut rendezvous_server, servers, contained) = crate::get_rendezvous_server(1_000).await;
     let tmp: Vec<&str> = rendezvous_server.split(":").collect();
     if tmp.len() != 2 {
         bail!("Invalid server address: {}", rendezvous_server);
@@ -722,7 +746,7 @@ async fn query_online_states_(
             Some(Ok(bytes)) => {
                 if let Ok(msg_in) = RendezvousMessage::parse_from_bytes(&bytes) {
                     match msg_in.union {
-                        Some(rendezvous_message::Union::online_response(online_response)) => {
+                        Some(rendezvous_message::Union::OnlineResponse(online_response)) => {
                             let states = online_response.states;
                             let mut onlines = Vec::new();
                             let mut offlines = Vec::new();

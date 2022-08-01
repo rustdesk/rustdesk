@@ -14,7 +14,7 @@ use hbb_common::{
     rendezvous_proto::*,
     sleep,
     tcp::FramedStream,
-    tokio::{self, sync::mpsc, time},
+    tokio::{self, sync::mpsc, time}, password_security,
 };
 
 use crate::common::SOFTWARE_UPDATE_URL;
@@ -31,6 +31,7 @@ lazy_static::lazy_static! {
     pub static ref OPTIONS : Arc<Mutex<HashMap<String, String>>> = Arc::new(Mutex::new(Config::get_options()));
     pub static ref ASYNC_JOB_STATUS : Arc<Mutex<String>> = Default::default();
     pub static ref SENDER : Mutex<mpsc::UnboundedSender<ipc::Data>> = Mutex::new(check_connect_status(true));
+    pub static ref TEMPORARY_PASSWD : Arc<Mutex<String>> = Arc::new(Mutex::new("".to_owned()));
 }
 
 pub fn recent_sessions_updated() -> bool {
@@ -45,18 +46,6 @@ pub fn recent_sessions_updated() -> bool {
 
 pub fn get_id() -> String {
     ipc::get_id()
-}
-
-pub fn get_password() -> String {
-    ipc::get_password()
-}
-
-pub fn update_password(password: String) {
-    if password.is_empty() {
-        allow_err!(ipc::set_password(Config::get_auto_password()));
-    } else {
-        allow_err!(ipc::set_password(password));
-    }
 }
 
 pub fn get_remote_id() -> String {
@@ -369,6 +358,18 @@ pub fn get_connect_status() -> Status {
     res
 }
 
+pub fn update_temporary_password() {
+    allow_err!(ipc::update_temporary_password());
+}
+
+pub fn permanent_password() -> String {
+    ipc::get_permanent_password()
+}
+
+pub fn temporary_password() -> String {
+    password_security::temporary_password()
+}
+
 pub fn get_peer(id: String) -> PeerConfig {
     PeerConfig::load(&id)
 }
@@ -542,11 +543,11 @@ pub fn discover() {
 }
 
 pub fn get_lan_peers() -> String {
-    config::LanPeers::load().peers
+    serde_json::to_string(&config::LanPeers::load().peers).unwrap_or_default()
 }
 
 pub fn get_uuid() -> String {
-    base64::encode(crate::get_uuid())
+    base64::encode(hbb_common::get_uuid())
 }
 
 #[cfg(not(any(target_os = "android", target_os = "ios", feature = "cli")))]
@@ -762,7 +763,7 @@ async fn check_id(
             if let Some(Ok(bytes)) = socket.next_timeout(3_000).await {
                 if let Ok(msg_in) = RendezvousMessage::parse_from_bytes(&bytes) {
                     match msg_in.union {
-                        Some(rendezvous_message::Union::register_pk_response(rpr)) => {
+                        Some(rendezvous_message::Union::RegisterPkResponse(rpr)) => {
                             match rpr.result.enum_value_or_default() {
                                 register_pk_response::Result::OK => {
                                     ok = true;

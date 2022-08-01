@@ -306,7 +306,7 @@ class PermissionManager {
     if (!permissions.contains(type))
       return Future.error("Wrong permission!$type");
 
-    FFI.invokeMethod("request_permission", type);
+    gFFI.invokeMethod("request_permission", type);
     if (type == "ignore_battery_optimizations") {
       return Future.value(false);
     }

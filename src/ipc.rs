@@ -1,9 +1,8 @@
-use crate::rendezvous_mediator::RendezvousMediator;
-use bytes::Bytes;
 use std::{collections::HashMap, sync::atomic::Ordering};
 #[cfg(not(windows))]
 use std::{fs::File, io::prelude::*};
 
+use bytes::Bytes;
 use parity_tokio_ipc::{
     Connection as Conn, ConnectionClient as ConnClient, Endpoint, Incoming, SecurityAttributes,
 };

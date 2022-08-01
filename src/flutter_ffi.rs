@@ -7,7 +7,7 @@ use std::{
 use flutter_rust_bridge::{StreamSink, SyncReturn, ZeroCopyBuffer};
 use serde_json::{json, Number, Value};
 
-use hbb_common::ResultType;
+use hbb_common::{ResultType, password_security};
 use hbb_common::{
     config::{self, Config, LocalConfig, PeerConfig, ONLINE},
     fs, log,
@@ -24,7 +24,8 @@ use crate::ui_interface::{
     get_async_job_status, get_connect_status, get_fav, get_id, get_lan_peers, get_license,
     get_local_option, get_options, get_peer, get_peer_option, get_socks, get_sound_inputs,
     get_uuid, get_version, has_rendezvous_service, is_ok_change_id, post_request, set_local_option,
-    set_options, set_peer_option, set_socks, store_fav, test_if_valid_server, using_public_server,
+    set_options, set_peer_option, set_socks, store_fav, temporary_password, test_if_valid_server,
+    using_public_server,
 };
 
 fn initialize(app_dir: &str) {
@@ -581,8 +582,8 @@ unsafe extern "C" fn get_by_name(name: *const c_char, arg: *const c_char) -> *co
             "server_id" => {
                 res = ui_interface::get_id();
             }
-            "server_password" => {
-                res = Config::get_password();
+            "temporary_password" => {
+                res = password_security::temporary_password();
             }
             "connect_statue" => {
                 res = ONLINE
@@ -627,7 +628,7 @@ unsafe extern "C" fn get_by_name(name: *const c_char, arg: *const c_char) -> *co
                 }
             }
             "uuid" => {
-                res = base64::encode(crate::get_uuid());
+                res = base64::encode(get_uuid());
             }
             _ => {
                 log::error!("Unknown name of get_by_name: {}", name);
@@ -942,13 +943,13 @@ unsafe extern "C" fn set_by_name(name: *const c_char, value: *const c_char) {
                 //     }
                 // }
                 // Server Side
-                "update_password" => {
-                    if value.is_empty() {
-                        Config::set_password(&Config::get_auto_password());
-                    } else {
-                        Config::set_password(value);
-                    }
-                }
+                // "update_password" => {
+                //     if value.is_empty() {
+                //         Config::set_password(&Config::get_auto_password());
+                //     } else {
+                //         Config::set_password(value);
+                //     }
+                // }
                 #[cfg(target_os = "android")]
                 "chat_server_mode" => {
                     if let Ok(m) = serde_json::from_str::<HashMap<String, Value>>(value) {

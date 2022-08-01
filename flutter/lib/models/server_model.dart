@@ -126,8 +126,9 @@ class ServerModel with ChangeNotifier {
 
   updatePasswordModel() {
     var update = false;
-    final temporaryPassword = FFI.getByName("temporary_password");
-    final verificationMethod = FFI.getByName("option", "verification-method");
+    final temporaryPassword = gFFI.getByName("temporary_password");
+    print("tempo passwd: ${temporaryPassword}");
+    final verificationMethod = gFFI.getByName("option", "verification-method");
     if (_serverPasswd.text != temporaryPassword) {
       _serverPasswd.text = temporaryPassword;
       update = true;
@@ -286,7 +287,7 @@ class ServerModel with ChangeNotifier {
     const maxCount = 10;
     while (count < maxCount) {
       await Future.delayed(Duration(seconds: 1));
-      final id = parent.target?.getByName("server_id");
+      final id = parent.target?.getByName("server_id") ?? "";
       if (id.isEmpty) {
         continue;
       } else {

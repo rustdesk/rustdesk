@@ -23,7 +23,7 @@ void showError({Duration duration = SEC1}) {
 }
 
 void setPermanentPasswordDialog() {
-  final pw = FFI.getByName("permanent_password");
+  final pw = gFFI.getByName("permanent_password");
   final p0 = TextEditingController(text: pw);
   final p1 = TextEditingController(text: pw);
   var validateLength = false;
@@ -105,7 +105,7 @@ void setPermanentPasswordDialog() {
 
 void setTemporaryPasswordLengthDialog() {
   List<String> lengths = ['6', '8', '10'];
-  String length = FFI.getByName('option', 'temporary-password-length');
+  String length = gFFI.getByName('option', 'temporary-password-length');
   var index = lengths.indexOf(length);
   if (index < 0) index = 0;
   length = lengths[index];
@@ -119,8 +119,8 @@ void setTemporaryPasswordLengthDialog() {
       Map<String, String> msg = Map()
         ..["name"] = "temporary-password-length"
         ..["value"] = newValue;
-      FFI.setByName("option", jsonEncode(msg));
-      FFI.setByName("temporary_password");
+      gFFI.setByName("option", jsonEncode(msg));
+      gFFI.setByName("temporary_password");
       Future.delayed(Duration(milliseconds: 200), () {
         close();
         showSuccess();

@@ -1,9 +1,4 @@
 import 'dart:async';
-
-import 'package:settings_ui/settings_ui.dart';
-import 'package:flutter/material.dart';
-import 'package:url_launcher/url_launcher.dart';
-import 'package:provider/provider.dart';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -75,7 +70,7 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
   Widget build(BuildContext context) {
     Provider.of<FfiModel>(context);
     final username = getUsername();
-    final enableAbr = FFI.getByName("option", "enable-abr") != 'N';
+    final enableAbr = gFFI.getByName("option", "enable-abr") != 'N';
     final enhancementsTiles = [
       SettingsTile.switchTile(
         title: Text(translate('Adaptive Bitrate') + '(beta)'),
@@ -87,7 +82,7 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
           if (!v) {
             msg["value"] = "N";
           }
-          FFI.setByName("option", json.encode(msg));
+          gFFI.setByName("option", json.encode(msg));
           setState(() {});
         },
       )
