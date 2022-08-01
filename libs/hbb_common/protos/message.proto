@@ -64,6 +64,7 @@ message LoginRequest {
   }
   bool video_ack_required = 9;
   uint64 session_id = 10;
+  string version = 11;
 }
 
 message ChatMessage { string text = 1; }
