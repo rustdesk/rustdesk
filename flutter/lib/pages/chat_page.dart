@@ -1,12 +1,10 @@
-import 'package:dash_chat/dash_chat.dart';
+import 'package:dash_chat_2/dash_chat_2.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/common.dart';
 import 'package:flutter_hbb/models/chat_model.dart';
 import 'package:provider/provider.dart';
 import '../models/model.dart';
 import 'home_page.dart';
-
-ChatPage chatPage = ChatPage();
 
 class ChatPage extends StatelessWidget implements PageShape {
   @override
@@ -25,7 +23,7 @@ class ChatPage extends StatelessWidget implements PageShape {
             final id = entry.key;
             final user = entry.value.chatUser;
             return PopupMenuItem<int>(
-              child: Text("${user.name}   ${user.uid}"),
+              child: Text("${user.firstName}   ${user.id}"),
               value: id,
             );
           }).toList();
@@ -46,19 +44,24 @@ class ChatPage extends StatelessWidget implements PageShape {
               return Stack(
                 children: [
                   DashChat(
-                    inputContainerStyle: BoxDecoration(color: Colors.white70),
-                    sendOnEnter: false,
-                    // if true,reload keyboard everytime,need fix
                     onSend: (chatMsg) {
                       chatModel.send(chatMsg);
                     },
-                    user: chatModel.me,
+                    currentUser: chatModel.me,
                     messages:
                         chatModel.messages[chatModel.currentID]?.chatMessages ??
                             [],
-                    // default scrollToBottom has bug https://github.com/fayeed/dash_chat/issues/53
-                    scrollToBottom: false,
-                    scrollController: chatModel.scroller,
+                    messageOptions: MessageOptions(
+                        showOtherUsersAvatar: false,
+                        showTime: true,
+                        messageDecorationBuilder: (_, __, ___) =>
+                            defaultMessageDecoration(
+                              color: MyTheme.accent80,
+                              borderTopLeft: 8,
+                              borderTopRight: 8,
+                              borderBottomRight: 8,
+                              borderBottomLeft: 8,
+                            )),
                   ),
                   chatModel.currentID == ChatModel.clientModeID
                       ? SizedBox.shrink()
@@ -70,7 +73,7 @@ class ChatPage extends StatelessWidget implements PageShape {
                                   color: MyTheme.accent80),
                               SizedBox(width: 5),
                               Text(
-                                "${currentUser.name ?? ""}   ${currentUser.uid ?? ""}",
+                                "${currentUser.firstName}   ${currentUser.id}",
                                 style: TextStyle(color: MyTheme.accent50),
                               ),
                             ],
