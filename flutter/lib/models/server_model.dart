@@ -23,6 +23,7 @@ class ServerModel with ChangeNotifier {
   bool _fileOk = false;
   int _connectStatus = 0; // Rendezvous Server status
   String _verificationMethod = "";
+  String _temporaryPasswordLength = "";
 
   late String _emptyIdShow;
   late final TextEditingController _serverId;
@@ -42,7 +43,35 @@ class ServerModel with ChangeNotifier {
 
   int get connectStatus => _connectStatus;
 
-  String get verificationMethod => _verificationMethod;
+  String get verificationMethod {
+    final index = [
+      kUseTemporaryPassword,
+      kUsePermanentPassword,
+      kUseBothPasswords
+    ].indexOf(_verificationMethod);
+    if (index < 0) {
+      _verificationMethod = kUseBothPasswords;
+    }
+    return _verificationMethod;
+  }
+
+  set verificationMethod(String method) {
+    _verificationMethod = method;
+    gFFI.setOption("verification-method", method);
+  }
+
+  String get temporaryPasswordLength {
+    final lengthIndex = ["6", "8", "10"].indexOf(_temporaryPasswordLength);
+    if (lengthIndex < 0) {
+      _temporaryPasswordLength = "6";
+    }
+    return _temporaryPasswordLength;
+  }
+
+  set temporaryPasswordLength(String length) {
+    _temporaryPasswordLength = length;
+    gFFI.setOption("temporary-password-length", length);
+  }
 
   TextEditingController get serverId => _serverId;
 
@@ -127,14 +156,24 @@ class ServerModel with ChangeNotifier {
   updatePasswordModel() {
     var update = false;
     final temporaryPassword = gFFI.getByName("temporary_password");
-    final verificationMethod = gFFI.getByName("option", "verification-method");
+    final verificationMethod = gFFI.getOption("verification-method");
+    final temporaryPasswordLength = gFFI.getOption("temporary-password-length");
+    final oldPwdText = _serverPasswd.text;
     if (_serverPasswd.text != temporaryPassword) {
       _serverPasswd.text = temporaryPassword;
+    }
+    if (verificationMethod == kUsePermanentPassword) {
+      _serverPasswd.text = '-';
+    }
+    if (oldPwdText != _serverPasswd.text) {
       update = true;
     }
-
     if (_verificationMethod != verificationMethod) {
       _verificationMethod = verificationMethod;
+      update = true;
+    }
+    if (_temporaryPasswordLength != temporaryPasswordLength) {
+      _temporaryPasswordLength = temporaryPasswordLength;
       update = true;
     }
     if (update) {
@@ -272,7 +311,7 @@ class ServerModel with ChangeNotifier {
   Future<bool> setPermanentPassword(String newPW) async {
     parent.target?.setByName("permanent_password", newPW);
     await Future.delayed(Duration(milliseconds: 500));
-    final pw = parent.target?.getByName("permanent_password", newPW);
+    final pw = parent.target?.getByName("permanent_password");
     if (newPW == pw) {
       return true;
     } else {
