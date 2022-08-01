@@ -3,17 +3,18 @@ use super::{input_service::*, *};
 use crate::clipboard_file::*;
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use crate::common::update_clipboard;
+use crate::video_service;
 #[cfg(any(target_os = "android", target_os = "ios"))]
 use crate::{common::MOBILE_INFO2, flutter::connection_manager::start_channel};
 use crate::{ipc, VERSION};
-use hbb_common::fs::can_enable_overwrite_detection;
 use hbb_common::{
     config::Config,
     fs,
+    fs::can_enable_overwrite_detection,
     futures::{SinkExt, StreamExt},
     get_version_number,
     message_proto::{option_message::BoolOption, permission_info::Permission},
-    sleep, timeout,
+    password_security as password, sleep, timeout,
     tokio::{
         net::TcpStream,
         sync::mpsc,
@@ -29,11 +30,14 @@ use std::sync::{
     atomic::{AtomicI64, Ordering},
     mpsc as std_mpsc,
 };
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+use system_shutdown;
 
 pub type Sender = mpsc::UnboundedSender<(Instant, Arc<Message>)>;
 
 lazy_static::lazy_static! {
     static ref LOGIN_FAILURES: Arc::<Mutex<HashMap<String, (i32, i32, i32)>>> = Default::default();
+    static ref SESSIONS: Arc::<Mutex<HashMap<String, Session>>> = Default::default();
 }
 pub static CLICK_TIME: AtomicI64 = AtomicI64::new(0);
 pub static MOUSE_MOVE_TIME: AtomicI64 = AtomicI64::new(0);
@@ -52,6 +56,14 @@ enum MessageInput {
     BlockOff,
 }
 
+#[derive(Clone, Debug)]
+struct Session {
+    name: String,
+    session_id: u64,
+    last_recv_time: Arc<Mutex<Instant>>,
+    random_password: String,
+}
+
 pub struct Connection {
     inner: ConnInner,
     stream: super::Stream,
@@ -68,8 +80,8 @@ pub struct Connection {
     clipboard: bool,
     audio: bool,
     file: bool,
+    restart: bool,
     last_test_delay: i64,
-    image_quality: i32,
     lock_after_session_end: bool,
     show_remote_cursor: bool, // by peer
     ip: String,
@@ -80,6 +92,8 @@ pub struct Connection {
     video_ack_required: bool,
     peer_info: (String, String),
     api_server: String,
+    lr: LoginRequest,
+    last_recv_time: Arc<Mutex<Instant>>,
 }
 
 impl Subscriber for ConnInner {
@@ -91,7 +105,7 @@ impl Subscriber for ConnInner {
     #[inline]
     fn send(&mut self, msg: Arc<Message>) {
         match &msg.union {
-            Some(message::Union::video_frame(_)) => {
+            Some(message::Union::VideoFrame(_)) => {
                 self.tx_video.as_mut().map(|tx| {
                     allow_err!(tx.send((Instant::now(), msg)));
                 });
@@ -105,12 +119,13 @@ impl Subscriber for ConnInner {
     }
 }
 
-const TEST_DELAY_TIMEOUT: Duration = Duration::from_secs(3);
+const TEST_DELAY_TIMEOUT: Duration = Duration::from_secs(1);
 const SEC30: Duration = Duration::from_secs(30);
 const H1: Duration = Duration::from_secs(3600);
 const MILLI1: Duration = Duration::from_millis(1);
 const SEND_TIMEOUT_VIDEO: u64 = 12_000;
 const SEND_TIMEOUT_OTHER: u64 = SEND_TIMEOUT_VIDEO * 10;
+const SESSION_TIMEOUT: Duration = Duration::from_secs(30);
 
 impl Connection {
     pub async fn start(
@@ -121,7 +136,7 @@ impl Connection {
     ) {
         let hash = Hash {
             salt: Config::get_salt(),
-            challenge: Config::get_auto_password(),
+            challenge: Config::get_auto_password(6),
             ..Default::default()
         };
         let (tx_from_cm_holder, mut rx_from_cm) = mpsc::unbounded_channel::<ipc::Data>();
@@ -153,8 +168,8 @@ impl Connection {
             clipboard: Config::get_option("enable-clipboard").is_empty(),
             audio: Config::get_option("enable-audio").is_empty(),
             file: Config::get_option("enable-file-transfer").is_empty(),
+            restart: Config::get_option("enable-remote-restart").is_empty(),
             last_test_delay: 0,
-            image_quality: ImageQuality::Balanced.value(),
             lock_after_session_end: false,
             show_remote_cursor: false,
             ip: "".to_owned(),
@@ -165,6 +180,8 @@ impl Connection {
             video_ack_required: false,
             peer_info: Default::default(),
             api_server: "".to_owned(),
+            lr: Default::default(),
+            last_recv_time: Arc::new(Mutex::new(Instant::now())),
         };
         #[cfg(not(any(target_os = "android", target_os = "ios")))]
         tokio::spawn(async move {
@@ -189,6 +206,9 @@ impl Connection {
         }
         if !conn.file {
             conn.send_permission(Permission::File, false).await;
+        }
+        if !conn.restart {
+            conn.send_permission(Permission::Restart, false).await;
         }
         let mut test_delay_timer =
             time::interval_at(Instant::now() + TEST_DELAY_TIMEOUT, TEST_DELAY_TIMEOUT);
@@ -223,7 +243,8 @@ impl Connection {
                             let mut msg_out = Message::new();
                             msg_out.set_misc(misc);
                             conn.send(msg_out).await;
-                            conn.on_close("Close requested from connection manager", false);
+                            conn.on_close("Close requested from connection manager", false).await;
+                            SESSIONS.lock().unwrap().remove(&conn.lr.my_id);
                             break;
                         }
                         ipc::Data::ChatMessage{text} => {
@@ -266,6 +287,9 @@ impl Connection {
                                 conn.file = enabled;
                                 conn.send_permission(Permission::File, enabled).await;
                                 conn.send_to_cm(ipc::Data::ClipboardFileEnabled(conn.file_transfer_enabled()));
+                            } else if &name == "restart" {
+                                conn.restart = enabled;
+                                conn.send_permission(Permission::Restart, enabled).await;
                             }
                         }
                         ipc::Data::RawMessage(bytes) => {
@@ -282,24 +306,24 @@ impl Connection {
                                 ipc::PrivacyModeState::OffSucceeded => {
                                     video_service::set_privacy_mode_conn_id(0);
                                     crate::common::make_privacy_mode_msg(
-                                        back_notification::PrivacyModeState::OffSucceeded,
+                                        back_notification::PrivacyModeState::PrvOffSucceeded,
                                     )
                                 }
                                 ipc::PrivacyModeState::OffFailed => {
                                     crate::common::make_privacy_mode_msg(
-                                        back_notification::PrivacyModeState::OffFailed,
+                                        back_notification::PrivacyModeState::PrvOffFailed,
                                     )
                                 }
                                 ipc::PrivacyModeState::OffByPeer => {
                                     video_service::set_privacy_mode_conn_id(0);
                                     crate::common::make_privacy_mode_msg(
-                                        back_notification::PrivacyModeState::OffByPeer,
+                                        back_notification::PrivacyModeState::PrvOffByPeer,
                                     )
                                 }
                                 ipc::PrivacyModeState::OffUnknown => {
                                     video_service::set_privacy_mode_conn_id(0);
                                      crate::common::make_privacy_mode_msg(
-                                        back_notification::PrivacyModeState::OffUnknown,
+                                        back_notification::PrivacyModeState::PrvOffUnknown,
                                     )
                                 }
                             };
@@ -312,11 +336,12 @@ impl Connection {
                     if let Some(res) = res {
                         match res {
                             Err(err) => {
-                                conn.on_close(&err.to_string(), true);
+                                conn.on_close(&err.to_string(), true).await;
                                 break;
                             },
                             Ok(bytes) => {
                                 last_recv_time = Instant::now();
+                                *conn.last_recv_time.lock().unwrap() = Instant::now();
                                 if let Ok(msg_in) = Message::parse_from_bytes(&bytes) {
                                     if !conn.on_message(msg_in).await {
                                         break;
@@ -325,14 +350,14 @@ impl Connection {
                             }
                         }
                     } else {
-                        conn.on_close("Reset by the peer", true);
+                        conn.on_close("Reset by the peer", true).await;
                         break;
                     }
                 },
                 _ = conn.timer.tick() => {
                     if !conn.read_jobs.is_empty() {
                         if let Err(err) = fs::handle_read_jobs(&mut conn.read_jobs, &mut conn.stream).await {
-                            conn.on_close(&err.to_string(), false);
+                            conn.on_close(&err.to_string(), false).await;
                             break;
                         }
                     } else {
@@ -345,7 +370,7 @@ impl Connection {
                         video_service::notify_video_frame_feched(id, Some(instant.into()));
                     }
                     if let Err(err) = conn.stream.send(&value as &Message).await {
-                        conn.on_close(&err.to_string(), false);
+                        conn.on_close(&err.to_string(), false).await;
                         break;
                     }
                 },
@@ -355,7 +380,7 @@ impl Connection {
 
                     if latency > 1000 {
                         match &msg.union {
-                            Some(message::Union::audio_frame(_)) => {
+                            Some(message::Union::AudioFrame(_)) => {
                                 // log::info!("audio frame latency {}", instant.elapsed().as_secs_f32());
                                 continue;
                             }
@@ -363,21 +388,24 @@ impl Connection {
                         }
                     }
                     if let Err(err) = conn.stream.send(msg).await {
-                        conn.on_close(&err.to_string(), false);
+                        conn.on_close(&err.to_string(), false).await;
                         break;
                     }
                 },
                 _ = test_delay_timer.tick() => {
                     if last_recv_time.elapsed() >= SEC30 {
-                        conn.on_close("Timeout", true);
+                        conn.on_close("Timeout", true).await;
                         break;
                     }
                     let time = crate::get_time();
                     if time > 0 && conn.last_test_delay == 0 {
                         conn.last_test_delay = time;
                         let mut msg_out = Message::new();
+                        let qos = video_service::VIDEO_QOS.lock().unwrap();
                         msg_out.set_test_delay(TestDelay{
                             time,
+                            last_delay:qos.current_delay,
+                            target_bitrate:qos.target_bitrate,
                             ..Default::default()
                         });
                         conn.inner.send(msg_out.into());
@@ -394,10 +422,13 @@ impl Connection {
             let _ = privacy_mode::turn_off_privacy(0);
         }
         video_service::notify_video_frame_feched(id, None);
-        video_service::update_test_latency(id, 0);
-        video_service::update_image_quality(id, None);
+        scrap::codec::Encoder::update_video_encoder(id, scrap::codec::EncoderUpdate::Remove);
+        video_service::VIDEO_QOS.lock().unwrap().reset();
+        if conn.authorized {
+            password::update_temporary_password();
+        }
         if let Err(err) = conn.try_port_forward_loop(&mut rx_from_cm).await {
-            conn.on_close(&err.to_string(), false);
+            conn.on_close(&err.to_string(), false).await;
         }
 
         conn.post_audit(json!({
@@ -432,7 +463,7 @@ impl Connection {
                         } else {
                             Self::send_block_input_error(
                                 &tx,
-                                back_notification::BlockInputState::OnFailed,
+                                back_notification::BlockInputState::BlkOnFailed,
                             );
                         }
                     }
@@ -442,7 +473,7 @@ impl Connection {
                         } else {
                             Self::send_block_input_error(
                                 &tx,
-                                back_notification::BlockInputState::OffFailed,
+                                back_notification::BlockInputState::BlkOffFailed,
                             );
                         }
                     }
@@ -490,7 +521,7 @@ impl Connection {
                     res = self.stream.next() => {
                         if let Some(res) = res {
                             last_recv_time = Instant::now();
-                            timeout(SEND_TIMEOUT_OTHER, forward.send(res?.into())).await??;
+                            timeout(SEND_TIMEOUT_OTHER, forward.send(res?)).await??;
                         } else {
                             bail!("Stream reset by the peer");
                         }
@@ -569,7 +600,7 @@ impl Connection {
         let url = self.api_server.clone();
         let mut v = v;
         v["id"] = json!(Config::get_id());
-        v["uuid"] = json!(base64::encode(crate::get_uuid()));
+        v["uuid"] = json!(base64::encode(hbb_common::get_uuid()));
         v["Id"] = json!(self.inner.id);
         tokio::spawn(async move {
             allow_err!(Self::post_audit_async(url, v).await);
@@ -615,6 +646,16 @@ impl Connection {
             pi.hostname = MOBILE_INFO2.lock().unwrap().clone();
             pi.platform = "Android".into();
         }
+        #[cfg(feature = "hwcodec")]
+        {
+            let (h264, h265) = scrap::codec::Encoder::supported_encoding();
+            pi.encoding = Some(SupportedEncoding {
+                h264,
+                h265,
+                ..Default::default()
+            })
+            .into();
+        }
 
         if self.port_forward_socket.is_some() {
             let mut msg_out = Message::new();
@@ -626,9 +667,9 @@ impl Connection {
         #[cfg(target_os = "linux")]
         if !self.file_transfer.is_some() && !self.port_forward_socket.is_some() {
             let dtype = crate::platform::linux::get_display_server();
-            if dtype != "x11" {
+            if dtype != "x11" && dtype != "wayland" {
                 res.set_error(format!(
-                    "Unsupported display server type {}, x11 expected",
+                    "Unsupported display server type {}, x11 or wayland expected",
                     dtype
                 ));
                 let mut msg_out = Message::new();
@@ -664,7 +705,7 @@ impl Connection {
             res.set_peer_info(pi);
         } else {
             try_activate_screen();
-            match super::video_service::get_displays() {
+            match super::video_service::get_displays().await {
                 Err(err) => {
                     res.set_error(format!("X11 error: {}", err));
                 }
@@ -734,6 +775,7 @@ impl Connection {
             audio: self.audio,
             file: self.file,
             file_transfer_enabled: self.file_transfer_enabled(),
+            restart: self.restart,
         });
     }
 
@@ -776,17 +818,99 @@ impl Connection {
         self.tx_input.send(MessageInput::Key((msg, press))).ok();
     }
 
+    fn validate_one_password(&self, password: String) -> bool {
+        if password.len() == 0 {
+            return false;
+        }
+        let mut hasher = Sha256::new();
+        hasher.update(password);
+        hasher.update(&self.hash.salt);
+        let mut hasher2 = Sha256::new();
+        hasher2.update(&hasher.finalize()[..]);
+        hasher2.update(&self.hash.challenge);
+        hasher2.finalize()[..] == self.lr.password[..]
+    }
+
+    fn validate_password(&mut self) -> bool {
+        if password::temporary_enabled() {
+            let password = password::temporary_password();
+            if self.validate_one_password(password.clone()) {
+                SESSIONS.lock().unwrap().insert(
+                    self.lr.my_id.clone(),
+                    Session {
+                        name: self.lr.my_name.clone(),
+                        session_id: self.lr.session_id,
+                        last_recv_time: self.last_recv_time.clone(),
+                        random_password: password,
+                    },
+                );
+                return true;
+            }
+        }
+        if password::permanent_enabled() {
+            if self.validate_one_password(Config::get_permanent_password()) {
+                return true;
+            }
+        }
+        false
+    }
+
+    fn is_of_recent_session(&mut self) -> bool {
+        let session = SESSIONS
+            .lock()
+            .unwrap()
+            .get(&self.lr.my_id)
+            .map(|s| s.to_owned());
+        if let Some(session) = session {
+            if session.name == self.lr.my_name
+                && session.session_id == self.lr.session_id
+                && !self.lr.password.is_empty()
+                && self.validate_one_password(session.random_password.clone())
+                && session.last_recv_time.lock().unwrap().elapsed() < SESSION_TIMEOUT
+            {
+                SESSIONS.lock().unwrap().insert(
+                    self.lr.my_id.clone(),
+                    Session {
+                        name: self.lr.my_name.clone(),
+                        session_id: self.lr.session_id,
+                        last_recv_time: self.last_recv_time.clone(),
+                        random_password: session.random_password,
+                    },
+                );
+                return true;
+            }
+        }
+        false
+    }
+
     async fn on_message(&mut self, msg: Message) -> bool {
-        if let Some(message::Union::login_request(lr)) = msg.union {
+        if let Some(message::Union::LoginRequest(lr)) = msg.union {
+            self.lr = lr.clone();
             if let Some(o) = lr.option.as_ref() {
                 self.update_option(o).await;
+                if let Some(q) = o.video_codec_state.clone().take() {
+                    scrap::codec::Encoder::update_video_encoder(
+                        self.inner.id(),
+                        scrap::codec::EncoderUpdate::State(q),
+                    );
+                } else {
+                    scrap::codec::Encoder::update_video_encoder(
+                        self.inner.id(),
+                        scrap::codec::EncoderUpdate::DisableHwIfNotExist,
+                    );
+                }
+            } else {
+                scrap::codec::Encoder::update_video_encoder(
+                    self.inner.id(),
+                    scrap::codec::EncoderUpdate::DisableHwIfNotExist,
+                );
             }
             self.video_ack_required = lr.video_ack_required;
             if self.authorized {
                 return true;
             }
             match lr.union {
-                Some(login_request::Union::file_transfer(ft)) => {
+                Some(login_request::Union::FileTransfer(ft)) => {
                     if !Config::get_option("enable-file-transfer").is_empty() {
                         self.send_login_error("No permission of file transfer")
                             .await;
@@ -795,7 +919,7 @@ impl Connection {
                     }
                     self.file_transfer = Some((ft.dir, ft.show_hidden));
                 }
-                Some(login_request::Union::port_forward(mut pf)) => {
+                Some(login_request::Union::PortForward(mut pf)) => {
                     if !Config::get_option("enable-tunnel").is_empty() {
                         self.send_login_error("No permission of IP tunneling").await;
                         sleep(1.).await;
@@ -832,15 +956,19 @@ impl Connection {
             }
             if !crate::is_ip(&lr.username) && lr.username != Config::get_id() {
                 self.send_login_error("Offline").await;
+            } else if self.is_of_recent_session() {
+                self.try_start_cm(lr.my_id, lr.my_name, true);
+                self.send_logon_response().await;
+                if self.port_forward_socket.is_some() {
+                    return false;
+                }
             } else if lr.password.is_empty() {
                 self.try_start_cm(lr.my_id, lr.my_name, false);
             } else {
-                let mut hasher = Sha256::new();
-                hasher.update(&Config::get_password());
-                hasher.update(&self.hash.salt);
-                let mut hasher2 = Sha256::new();
-                hasher2.update(&hasher.finalize()[..]);
-                hasher2.update(&self.hash.challenge);
+                if !password::has_valid_password() {
+                    self.send_login_error("Connection not allowed").await;
+                    return false;
+                }
                 let mut failure = LOGIN_FAILURES
                     .lock()
                     .unwrap()
@@ -853,7 +981,7 @@ impl Connection {
                         .await;
                 } else if time == failure.0 && failure.1 > 6 {
                     self.send_login_error("Please try 1 minute later").await;
-                } else if hasher2.finalize()[..] != lr.password[..] {
+                } else if !self.validate_password() {
                     if failure.0 == time {
                         failure.1 += 1;
                         failure.2 += 1;
@@ -879,21 +1007,22 @@ impl Connection {
                     }
                 }
             }
-        } else if let Some(message::Union::test_delay(t)) = msg.union {
+        } else if let Some(message::Union::TestDelay(t)) = msg.union {
             if t.from_client {
                 let mut msg_out = Message::new();
                 msg_out.set_test_delay(t);
                 self.inner.send(msg_out.into());
             } else {
                 self.last_test_delay = 0;
-                let latency = crate::get_time() - t.time;
-                if latency > 0 {
-                    super::video_service::update_test_latency(self.inner.id(), latency);
-                }
+                let new_delay = (crate::get_time() - t.time) as u32;
+                video_service::VIDEO_QOS
+                    .lock()
+                    .unwrap()
+                    .update_network_delay(new_delay);
             }
         } else if self.authorized {
             match msg.union {
-                Some(message::Union::mouse_event(me)) => {
+                Some(message::Union::MouseEvent(me)) => {
                     #[cfg(any(target_os = "android", target_os = "ios"))]
                     if let Err(e) = call_main_service_mouse_input(me.mask, me.x, me.y) {
                         log::debug!("call_main_service_mouse_input fail:{}", e);
@@ -908,7 +1037,7 @@ impl Connection {
                         self.input_mouse(me, self.inner.id());
                     }
                 }
-                Some(message::Union::key_event(me)) => {
+                Some(message::Union::KeyEvent(me)) => {
                     #[cfg(not(any(target_os = "android", target_os = "ios")))]
                     if self.keyboard {
                         if is_enter(&me) {
@@ -924,8 +1053,8 @@ impl Connection {
                         };
                         if is_press {
                             match me.union {
-                                Some(key_event::Union::unicode(_))
-                                | Some(key_event::Union::seq(_)) => {
+                                Some(key_event::Union::Unicode(_))
+                                | Some(key_event::Union::Seq(_)) => {
                                     self.input_key(me, false);
                                 }
                                 _ => {
@@ -937,14 +1066,14 @@ impl Connection {
                         }
                     }
                 }
-                Some(message::Union::clipboard(cb)) =>
+                Some(message::Union::Clipboard(cb)) =>
                 {
                     #[cfg(not(any(target_os = "android", target_os = "ios")))]
                     if self.clipboard {
                         update_clipboard(cb, None);
                     }
                 }
-                Some(message::Union::cliprdr(_clip)) => {
+                Some(message::Union::Cliprdr(_clip)) => {
                     if self.file_transfer_enabled() {
                         #[cfg(windows)]
                         if let Some(clip) = msg_2_clip(_clip) {
@@ -952,13 +1081,13 @@ impl Connection {
                         }
                     }
                 }
-                Some(message::Union::file_action(fa)) => {
+                Some(message::Union::FileAction(fa)) => {
                     if self.file_transfer.is_some() {
                         match fa.union {
-                            Some(file_action::Union::read_dir(rd)) => {
+                            Some(file_action::Union::ReadDir(rd)) => {
                                 self.read_dir(&rd.path, rd.include_hidden);
                             }
-                            Some(file_action::Union::all_files(f)) => {
+                            Some(file_action::Union::AllFiles(f)) => {
                                 match fs::get_recursive_files(&f.path, f.include_hidden) {
                                     Err(err) => {
                                         self.send(fs::new_error(f.id, err, -1)).await;
@@ -968,7 +1097,7 @@ impl Connection {
                                     }
                                 }
                             }
-                            Some(file_action::Union::send(s)) => {
+                            Some(file_action::Union::Send(s)) => {
                                 let id = s.id;
                                 let od =
                                     can_enable_overwrite_detection(get_version_number(VERSION));
@@ -993,7 +1122,7 @@ impl Connection {
                                     }
                                 }
                             }
-                            Some(file_action::Union::receive(r)) => {
+                            Some(file_action::Union::Receive(r)) => {
                                 self.send_fs(ipc::FS::NewWrite {
                                     path: r.path,
                                     id: r.id,
@@ -1006,31 +1135,31 @@ impl Connection {
                                         .collect(),
                                 });
                             }
-                            Some(file_action::Union::remove_dir(d)) => {
+                            Some(file_action::Union::RemoveDir(d)) => {
                                 self.send_fs(ipc::FS::RemoveDir {
                                     path: d.path,
                                     id: d.id,
                                     recursive: d.recursive,
                                 });
                             }
-                            Some(file_action::Union::remove_file(f)) => {
+                            Some(file_action::Union::RemoveFile(f)) => {
                                 self.send_fs(ipc::FS::RemoveFile {
                                     path: f.path,
                                     id: f.id,
                                     file_num: f.file_num,
                                 });
                             }
-                            Some(file_action::Union::create(c)) => {
+                            Some(file_action::Union::Create(c)) => {
                                 self.send_fs(ipc::FS::CreateDir {
                                     path: c.path,
                                     id: c.id,
                                 });
                             }
-                            Some(file_action::Union::cancel(c)) => {
+                            Some(file_action::Union::Cancel(c)) => {
                                 self.send_fs(ipc::FS::CancelWrite { id: c.id });
                                 fs::remove_job(c.id, &mut self.read_jobs);
                             }
-                            Some(file_action::Union::send_confirm(r)) => {
+                            Some(file_action::Union::SendConfirm(r)) => {
                                 if let Some(job) = fs::get_job(r.id, &mut self.read_jobs) {
                                     job.confirm(&r);
                                 }
@@ -1039,8 +1168,8 @@ impl Connection {
                         }
                     }
                 }
-                Some(message::Union::file_response(fr)) => match fr.union {
-                    Some(file_response::Union::block(block)) => {
+                Some(message::Union::FileResponse(fr)) => match fr.union {
+                    Some(file_response::Union::Block(block)) => {
                         self.send_fs(ipc::FS::WriteBlock {
                             id: block.id,
                             file_num: block.file_num,
@@ -1048,13 +1177,13 @@ impl Connection {
                             compressed: block.compressed,
                         });
                     }
-                    Some(file_response::Union::done(d)) => {
+                    Some(file_response::Union::Done(d)) => {
                         self.send_fs(ipc::FS::WriteDone {
                             id: d.id,
                             file_num: d.file_num,
                         });
                     }
-                    Some(file_response::Union::digest(d)) => self.send_fs(ipc::FS::CheckDigest {
+                    Some(file_response::Union::Digest(d)) => self.send_fs(ipc::FS::CheckDigest {
                         id: d.id,
                         file_num: d.file_num,
                         file_size: d.file_size,
@@ -1063,26 +1192,42 @@ impl Connection {
                     }),
                     _ => {}
                 },
-                Some(message::Union::misc(misc)) => match misc.union {
-                    Some(misc::Union::switch_display(s)) => {
-                        super::video_service::switch_display(s.display);
+                Some(message::Union::Misc(misc)) => match misc.union {
+                    Some(misc::Union::SwitchDisplay(s)) => {
+                        video_service::switch_display(s.display).await;
                     }
-                    Some(misc::Union::chat_message(c)) => {
+                    Some(misc::Union::ChatMessage(c)) => {
                         self.send_to_cm(ipc::Data::ChatMessage { text: c.text });
                     }
-                    Some(misc::Union::option(o)) => {
+                    Some(misc::Union::Option(o)) => {
                         self.update_option(&o).await;
                     }
-                    Some(misc::Union::refresh_video(r)) => {
+                    Some(misc::Union::RefreshVideo(r)) => {
                         if r {
                             super::video_service::refresh();
                         }
                     }
-                    Some(misc::Union::video_received(_)) => {
+                    Some(misc::Union::VideoReceived(_)) => {
                         video_service::notify_video_frame_feched(
                             self.inner.id,
                             Some(Instant::now().into()),
                         );
+                    }
+                    Some(misc::Union::CloseReason(_)) => {
+                        self.on_close("Peer close", true).await;
+                        SESSIONS.lock().unwrap().remove(&self.lr.my_id);
+                        return false;
+                    }
+
+                    Some(misc::Union::RestartRemoteDevice(_)) =>
+                    {
+                        #[cfg(not(any(target_os = "android", target_os = "ios")))]
+                        if self.restart {
+                            match system_shutdown::reboot() {
+                                Ok(_) => log::info!("Restart by the peer"),
+                                Err(e) => log::error!("Failed to restart:{}", e),
+                            }
+                        }
                     }
                     _ => {}
                 },
@@ -1095,13 +1240,20 @@ impl Connection {
     async fn update_option(&mut self, o: &OptionMessage) {
         log::info!("Option update: {:?}", o);
         if let Ok(q) = o.image_quality.enum_value() {
-            self.image_quality = q.value();
-            super::video_service::update_image_quality(self.inner.id(), Some(q.value()));
-        }
-        let q = o.custom_image_quality;
-        if q > 0 {
-            self.image_quality = q;
-            super::video_service::update_image_quality(self.inner.id(), Some(q));
+            let image_quality;
+            if let ImageQuality::NotSet = q {
+                if o.custom_image_quality > 0 {
+                    image_quality = o.custom_image_quality;
+                } else {
+                    image_quality = ImageQuality::Balanced.value();
+                }
+            } else {
+                image_quality = q.value();
+            }
+            video_service::VIDEO_QOS
+                .lock()
+                .unwrap()
+                .update_image_quality(image_quality);
         }
         if let Ok(q) = o.lock_after_session_end.enum_value() {
             if q != BoolOption::NotSet {
@@ -1164,7 +1316,7 @@ impl Connection {
                     BoolOption::Yes => {
                         let msg_out = if !video_service::is_privacy_mode_supported() {
                             crate::common::make_privacy_mode_msg(
-                                back_notification::PrivacyModeState::NotSupported,
+                                back_notification::PrivacyModeState::PrvNotSupported,
                             )
                         } else {
                             match privacy_mode::turn_on_privacy(self.inner.id) {
@@ -1172,7 +1324,7 @@ impl Connection {
                                     if video_service::test_create_capturer(self.inner.id, 5_000) {
                                         video_service::set_privacy_mode_conn_id(self.inner.id);
                                         crate::common::make_privacy_mode_msg(
-                                            back_notification::PrivacyModeState::OnSucceeded,
+                                            back_notification::PrivacyModeState::PrvOnSucceeded,
                                         )
                                     } else {
                                         log::error!(
@@ -1181,12 +1333,12 @@ impl Connection {
                                         video_service::set_privacy_mode_conn_id(0);
                                         let _ = privacy_mode::turn_off_privacy(self.inner.id);
                                         crate::common::make_privacy_mode_msg(
-                                            back_notification::PrivacyModeState::OnFailed,
+                                            back_notification::PrivacyModeState::PrvOnFailed,
                                         )
                                     }
                                 }
                                 Ok(false) => crate::common::make_privacy_mode_msg(
-                                    back_notification::PrivacyModeState::OnFailedPlugin,
+                                    back_notification::PrivacyModeState::PrvOnFailedPlugin,
                                 ),
                                 Err(e) => {
                                     log::error!("Failed to turn on privacy mode. {}", e);
@@ -1194,7 +1346,7 @@ impl Connection {
                                         let _ = privacy_mode::turn_off_privacy(0);
                                     }
                                     crate::common::make_privacy_mode_msg(
-                                        back_notification::PrivacyModeState::OnFailed,
+                                        back_notification::PrivacyModeState::PrvOnFailed,
                                     )
                                 }
                             }
@@ -1204,7 +1356,7 @@ impl Connection {
                     BoolOption::No => {
                         let msg_out = if !video_service::is_privacy_mode_supported() {
                             crate::common::make_privacy_mode_msg(
-                                back_notification::PrivacyModeState::NotSupported,
+                                back_notification::PrivacyModeState::PrvNotSupported,
                             )
                         } else {
                             video_service::set_privacy_mode_conn_id(0);
@@ -1229,16 +1381,22 @@ impl Connection {
                 }
             }
         }
+        if let Some(q) = o.video_codec_state.clone().take() {
+            scrap::codec::Encoder::update_video_encoder(
+                self.inner.id(),
+                scrap::codec::EncoderUpdate::State(q),
+            );
+        }
     }
 
-    fn on_close(&mut self, reason: &str, lock: bool) {
+    async fn on_close(&mut self, reason: &str, lock: bool) {
         if let Some(s) = self.server.upgrade() {
             s.write().unwrap().remove_connection(&self.inner);
         }
         log::info!("#{} Connection closed: {}", self.inner.id(), reason);
         if lock && self.lock_after_session_end && self.keyboard {
             #[cfg(not(any(target_os = "android", target_os = "ios")))]
-            lock_screen();
+            lock_screen().await;
         }
         self.tx_to_cm.send(ipc::Data::Close).ok();
         self.port_forward_socket.take();
@@ -1337,7 +1495,7 @@ async fn start_ipc(
                             file_num,
                             data,
                             compressed}) = data {
-                                stream.send(&Data::FS(ipc::FS::WriteBlock{id, file_num, data: Vec::new(), compressed})).await?;
+                                stream.send(&Data::FS(ipc::FS::WriteBlock{id, file_num, data: Bytes::new(), compressed})).await?;
                                 stream.send_raw(data).await?;
                         } else {
                             stream.send(&data).await?;
@@ -1373,19 +1531,19 @@ mod privacy_mode {
             let res = turn_off_privacy(_conn_id, None);
             match res {
                 Ok(_) => crate::common::make_privacy_mode_msg(
-                    back_notification::PrivacyModeState::OffSucceeded,
+                    back_notification::PrivacyModeState::PrvOffSucceeded,
                 ),
                 Err(e) => {
                     log::error!("Failed to turn off privacy mode {}", e);
                     crate::common::make_privacy_mode_msg(
-                        back_notification::PrivacyModeState::OffFailed,
+                        back_notification::PrivacyModeState::PrvOffFailed,
                     )
                 }
             }
         }
         #[cfg(not(windows))]
         {
-            crate::common::make_privacy_mode_msg(back_notification::PrivacyModeState::OffFailed)
+            crate::common::make_privacy_mode_msg(back_notification::PrivacyModeState::PrvOffFailed)
         }
     }
 

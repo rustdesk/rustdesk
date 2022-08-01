@@ -7,7 +7,7 @@ use hbb_common::{
     config::{Config, Config2, CONNECT_TIMEOUT, RELAY_PORT},
     log,
     message_proto::*,
-    protobuf::{Message as _, ProtobufEnum},
+    protobuf::{Enum, Message as _},
     rendezvous_proto::*,
     socket_client,
     sodiumoxide::crypto::{box_, secretbox, sign},
@@ -20,10 +20,16 @@ use std::{
     sync::{Arc, Mutex, RwLock, Weak},
     time::Duration,
 };
+use bytes::Bytes;
+
 pub mod audio_service;
 cfg_if::cfg_if! {
 if #[cfg(not(any(target_os = "android", target_os = "ios")))] {
 mod clipboard_service;
+#[cfg(target_os = "linux")]
+mod wayland;
+#[cfg(target_os = "linux")]
+pub mod uinput;
 pub mod input_service;
 } else {
 mod clipboard_service {
@@ -38,6 +44,7 @@ pub const NAME_POS: &'static str = "";
 
 mod connection;
 mod service;
+mod video_qos;
 pub mod video_service;
 
 use hbb_common::tcp::new_listener;
@@ -94,7 +101,7 @@ async fn accept_connection_(server: ServerPtr, socket: Stream, secure: bool) -> 
 async fn check_privacy_mode_on(stream: &mut Stream) -> ResultType<()> {
     if video_service::get_privacy_mode_conn_id() > 0 {
         let msg_out =
-            crate::common::make_privacy_mode_msg(back_notification::PrivacyModeState::OnByOther);
+            crate::common::make_privacy_mode_msg(back_notification::PrivacyModeState::PrvOnByOther);
         timeout(CONNECT_TIMEOUT, stream.send(&msg_out)).await??;
     }
     Ok(())
@@ -125,13 +132,13 @@ pub async fn create_tcp_connection(
             id: sign::sign(
                 &IdPk {
                     id: Config::get_id(),
-                    pk: our_pk_b.0.to_vec(),
+                    pk: Bytes::from(our_pk_b.0.to_vec()),
                     ..Default::default()
                 }
                 .write_to_bytes()
                 .unwrap_or_default(),
                 &sk,
-            ),
+            ).into(),
             ..Default::default()
         });
         timeout(CONNECT_TIMEOUT, stream.send(&msg_out)).await??;
@@ -139,7 +146,7 @@ pub async fn create_tcp_connection(
             Some(res) => {
                 let bytes = res?;
                 if let Ok(msg_in) = Message::parse_from_bytes(&bytes) {
-                    if let Some(message::Union::public_key(pk)) = msg_in.union {
+                    if let Some(message::Union::PublicKey(pk)) = msg_in.union {
                         if pk.asymmetric_value.len() == box_::PUBLICKEYBYTES {
                             let nonce = box_::Nonce([0u8; box_::NONCEBYTES]);
                             let mut pk_ = [0u8; box_::PUBLICKEYBYTES];
@@ -278,6 +285,8 @@ impl Drop for Server {
         for s in self.services.values() {
             s.join();
         }
+        #[cfg(target_os = "linux")]
+        wayland::clear();
     }
 }
 
@@ -325,6 +334,14 @@ pub async fn start_server(is_server: bool) {
     {
         log::info!("DISPLAY={:?}", std::env::var("DISPLAY"));
         log::info!("XAUTHORITY={:?}", std::env::var("XAUTHORITY"));
+    }
+    #[cfg(feature = "hwcodec")]
+    {
+        use std::sync::Once;
+        static ONCE: Once = Once::new();
+        ONCE.call_once(|| {
+            scrap::hwcodec::check_config_process(false);
+        })
     }
 
     if is_server {

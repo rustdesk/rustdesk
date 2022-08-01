@@ -1,20 +1,48 @@
+use serde_json::{json, value::Value};
 use std::ops::Deref;
 
 mod cn;
 mod cs;
 mod da;
-mod sk;
 mod de;
 mod en;
-mod es;
 mod eo;
+mod es;
+mod hu;
 mod fr;
 mod id;
 mod it;
 mod ptbr;
 mod ru;
+mod sk;
 mod tr;
 mod tw;
+mod vn;
+mod pl;
+
+lazy_static::lazy_static! {
+    pub static ref LANGS: Value =
+        json!(vec![
+            ("en", "English"),
+            ("it", "Italiano"),
+            ("fr", "Français"),
+            ("de", "Deutsch"),
+            ("cn", "简体中文"),
+            ("tw", "繁體中文"),
+            ("pt", "Português"),
+            ("es", "Español"),
+            ("hu", "Magyar"),
+            ("ru", "Русский"),
+            ("sk", "Slovenčina"),
+            ("id", "Indonesia"),
+            ("cs", "Čeština"),
+            ("da", "Dansk"),
+            ("eo", "Esperanto"),
+            ("tr", "Türkçe"),
+            ("vn", "Tiếng Việt"),
+            ("pl", "Polski"),
+        ]);
+}
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub fn translate(name: String) -> String {
@@ -46,6 +74,7 @@ pub fn translate_locale(name: String, locale: &str) -> String {
         "tw" => tw::T.deref(),
         "de" => de::T.deref(),
         "es" => es::T.deref(),
+        "hu" => hu::T.deref(),
         "ru" => ru::T.deref(),
         "eo" => eo::T.deref(),
         "id" => id::T.deref(),
@@ -56,6 +85,8 @@ pub fn translate_locale(name: String, locale: &str) -> String {
         "cs" => cs::T.deref(),
         "da" => da::T.deref(),
         "sk" => sk::T.deref(),
+        "vn" => vn::T.deref(),
+        "pl" => pl::T.deref(),
         _ => en::T.deref(),
     };
     if let Some(v) = m.get(&name as &str) {

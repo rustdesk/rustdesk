@@ -24,6 +24,7 @@ use hbb_common::{
     log,
     message_proto::{option_message::BoolOption, *},
     protobuf::Message as _,
+    rand,
     rendezvous_proto::*,
     socket_client,
     sodiumoxide::crypto::{box_, secretbox, sign},
@@ -32,7 +33,12 @@ use hbb_common::{
     AddrMangle, ResultType, Stream,
 };
 pub use helper::LatencyController;
-use scrap::{Decoder, Image, VideoCodecId};
+pub use helper::*;
+use scrap::Image;
+use scrap::{
+    codec::{Decoder, DecoderCfg},
+    VpxDecoderConfig, VpxVideoCodecId,
+};
 
 pub use super::lang::*;
 
@@ -149,11 +155,25 @@ impl Client {
                 true,
             ));
         }
-        let rendezvous_server = crate::get_rendezvous_server(1_000).await;
-        log::info!("rendezvous server: {}", rendezvous_server);
-
+        let (mut rendezvous_server, servers, contained) = crate::get_rendezvous_server(1_000).await;
         let mut socket =
-            socket_client::connect_tcp(&*rendezvous_server, any_addr, RENDEZVOUS_TIMEOUT).await?;
+            socket_client::connect_tcp(&*rendezvous_server, any_addr, RENDEZVOUS_TIMEOUT).await;
+        debug_assert!(!servers.contains(&rendezvous_server));
+        if socket.is_err() && !servers.is_empty() {
+            log::info!("try the other servers: {:?}", servers);
+            for server in servers {
+                socket = socket_client::connect_tcp(&*server, any_addr, RENDEZVOUS_TIMEOUT).await;
+                if socket.is_ok() {
+                    rendezvous_server = server;
+                    break;
+                }
+            }
+            crate::refresh_rendezvous_server();
+        } else if !contained {
+            crate::refresh_rendezvous_server();
+        }
+        log::info!("rendezvous server: {}", rendezvous_server);
+        let mut socket = socket?;
         let my_addr = socket.local_addr();
         let mut signed_id_pk = Vec::new();
         let mut relay_server = "".to_owned();
@@ -166,7 +186,7 @@ impl Client {
         for i in 1..=3 {
             log::info!("#{} punch attempt with {}, id: {}", i, my_addr, peer);
             let mut msg_out = RendezvousMessage::new();
-            use hbb_common::protobuf::ProtobufEnum;
+            use hbb_common::protobuf::Enum;
             let nat_type = NatType::from_i32(my_nat_type).unwrap_or(NatType::UNKNOWN_NAT);
             msg_out.set_punch_hole_request(PunchHoleRequest {
                 id: peer.to_owned(),
@@ -180,7 +200,7 @@ impl Client {
             if let Some(Ok(bytes)) = socket.next_timeout(i * 6000).await {
                 if let Ok(msg_in) = RendezvousMessage::parse_from_bytes(&bytes) {
                     match msg_in.union {
-                        Some(rendezvous_message::Union::punch_hole_response(ph)) => {
+                        Some(rendezvous_message::Union::PunchHoleResponse(ph)) => {
                             if ph.socket_addr.is_empty() {
                                 if !ph.other_failure.is_empty() {
                                     bail!(ph.other_failure);
@@ -200,22 +220,22 @@ impl Client {
                                     }
                                 }
                             } else {
-                                peer_nat_type = ph.get_nat_type();
-                                is_local = ph.get_is_local();
-                                signed_id_pk = ph.pk;
+                                peer_nat_type = ph.nat_type();
+                                is_local = ph.is_local();
+                                signed_id_pk = ph.pk.into();
                                 relay_server = ph.relay_server;
                                 peer_addr = AddrMangle::decode(&ph.socket_addr);
                                 log::info!("Hole Punched {} = {}", peer, peer_addr);
                                 break;
                             }
                         }
-                        Some(rendezvous_message::Union::relay_response(rr)) => {
+                        Some(rendezvous_message::Union::RelayResponse(rr)) => {
                             log::info!(
                                 "relay requested from peer, time used: {:?}, relay_server: {}",
                                 start.elapsed(),
                                 rr.relay_server
                             );
-                            signed_id_pk = rr.get_pk().into();
+                            signed_id_pk = rr.pk().into();
                             let mut conn =
                                 Self::create_relay(peer, rr.uuid, rr.relay_server, key, conn_type)
                                     .await?;
@@ -359,7 +379,7 @@ impl Client {
         conn: &mut Stream,
     ) -> ResultType<()> {
         let rs_pk = get_rs_pk(if key.is_empty() {
-            "OeVuKk5nlHiXp+APNn0Y3pC1Iwpwn44JGqrQCsWqmBw="
+            hbb_common::config::RS_PUB_KEY
         } else {
             key
         });
@@ -386,7 +406,7 @@ impl Client {
             Some(res) => {
                 let bytes = res?;
                 if let Ok(msg_in) = Message::parse_from_bytes(&bytes) {
-                    if let Some(message::Union::signed_id(si)) = msg_in.union {
+                    if let Some(message::Union::SignedId(si)) = msg_in.union {
                         if let Ok((id, their_pk_b)) = decode_id_pk(&si.id, &sign_pk) {
                             if id == peer_id {
                                 let their_pk_b = box_::PublicKey(their_pk_b);
@@ -396,8 +416,8 @@ impl Client {
                                 let sealed_key = box_::seal(&key.0, &nonce, &their_pk_b, &out_sk_b);
                                 let mut msg_out = Message::new();
                                 msg_out.set_public_key(PublicKey {
-                                    asymmetric_value: our_pk_b.0.into(),
-                                    symmetric_value: sealed_key,
+                                    asymmetric_value: Vec::from(our_pk_b.0).into(),
+                                    symmetric_value: sealed_key.into(),
                                     ..Default::default()
                                 });
                                 timeout(CONNECT_TIMEOUT, conn.send(&msg_out)).await??;
@@ -470,7 +490,7 @@ impl Client {
             socket.send(&msg_out).await?;
             if let Some(Ok(bytes)) = socket.next_timeout(CONNECT_TIMEOUT).await {
                 if let Ok(msg_in) = RendezvousMessage::parse_from_bytes(&bytes) {
-                    if let Some(rendezvous_message::Union::relay_response(rs)) = msg_in.union {
+                    if let Some(rendezvous_message::Union::RelayResponse(rs)) = msg_in.union {
                         if !rs.refuse_reason.is_empty() {
                             bail!(rs.refuse_reason);
                         }
@@ -736,7 +756,12 @@ impl VideoHandler {
     /// Create a new video handler.
     pub fn new(latency_controller: Arc<Mutex<LatencyController>>) -> Self {
         VideoHandler {
-            decoder: Decoder::new(VideoCodecId::VP9, (num_cpus::get() / 2) as _).unwrap(),
+            decoder: Decoder::new(DecoderCfg {
+                vpx: VpxDecoderConfig {
+                    codec: VpxVideoCodecId::VP9,
+                    num_threads: (num_cpus::get() / 2) as _,
+                },
+            }),
             latency_controller,
             rgb: Default::default(),
         }
@@ -752,35 +777,40 @@ impl VideoHandler {
                 .update_video(vf.timestamp);
         }
         match &vf.union {
-            Some(video_frame::Union::vp9s(vp9s)) => self.handle_vp9s(vp9s),
+            Some(frame) => self.decoder.handle_video_frame(frame, &mut self.rgb),
             _ => Ok(false),
         }
     }
 
     /// Handle a VP9S frame.
-    pub fn handle_vp9s(&mut self, vp9s: &VP9s) -> ResultType<bool> {
-        let mut last_frame = Image::new();
-        for vp9 in vp9s.frames.iter() {
-            for frame in self.decoder.decode(&vp9.data)? {
-                drop(last_frame);
-                last_frame = frame;
-            }
-        }
-        for frame in self.decoder.flush()? {
-            drop(last_frame);
-            last_frame = frame;
-        }
-        if last_frame.is_null() {
-            Ok(false)
-        } else {
-            last_frame.rgb(1, true, &mut self.rgb);
-            Ok(true)
-        }
-    }
+    // pub fn handle_vp9s(&mut self, vp9s: &VP9s) -> ResultType<bool> {
+    //     let mut last_frame = Image::new();
+    //     for vp9 in vp9s.frames.iter() {
+    //         for frame in self.decoder.decode(&vp9.data)? {
+    //             drop(last_frame);
+    //             last_frame = frame;
+    //         }
+    //     }
+    //     for frame in self.decoder.flush()? {
+    //         drop(last_frame);
+    //         last_frame = frame;
+    //     }
+    //     if last_frame.is_null() {
+    //         Ok(false)
+    //     } else {
+    //         last_frame.rgb(1, true, &mut self.rgb);
+    //         Ok(true)
+    //     }
+    // }
 
     /// Reset the decoder.
     pub fn reset(&mut self) {
-        self.decoder = Decoder::new(VideoCodecId::VP9, 1).unwrap();
+        self.decoder = Decoder::new(DecoderCfg {
+            vpx: VpxDecoderConfig {
+                codec: VpxVideoCodecId::VP9,
+                num_threads: 1,
+            },
+        });
     }
 }
 
@@ -798,6 +828,9 @@ pub struct LoginConfigHandler {
     pub version: i64,
     pub conn_id: i32,
     features: Option<Features>,
+    session_id: u64,
+    pub supported_encoding: Option<(bool, bool)>,
+    pub restarting_remote_device: bool,
 }
 
 impl Deref for LoginConfigHandler {
@@ -833,6 +866,9 @@ impl LoginConfigHandler {
         let config = self.load_config();
         self.remember = !config.password.is_empty();
         self.config = config;
+        self.session_id = rand::random();
+        self.supported_encoding = None;
+        self.restarting_remote_device = false;
     }
 
     /// Check if the client should auto login.
@@ -946,6 +982,8 @@ impl LoginConfigHandler {
             option.block_input = BoolOption::Yes.into();
         } else if name == "unblock-input" {
             option.block_input = BoolOption::No.into();
+        } else if name == "show-quality-monitor" {
+            config.show_quality_monitor = !config.show_quality_monitor;
         } else {
             let v = self.options.get(&name).is_some();
             if v {
@@ -984,15 +1022,8 @@ impl LoginConfigHandler {
             n += 1;
         } else if q == "custom" {
             let config = PeerConfig::load(&self.id);
-            let mut it = config.custom_image_quality.iter();
-            let bitrate = it.next();
-            let quantizer = it.next();
-            if let Some(bitrate) = bitrate {
-                if let Some(quantizer) = quantizer {
-                    msg.custom_image_quality = bitrate << 8 | quantizer;
-                    n += 1;
-                }
-            }
+            msg.custom_image_quality = config.custom_image_quality[0] << 8;
+            n += 1;
         }
         if self.get_toggle_option("show-remote-cursor") {
             msg.show_remote_cursor = BoolOption::Yes.into();
@@ -1018,6 +1049,10 @@ impl LoginConfigHandler {
             msg.disable_clipboard = BoolOption::Yes.into();
             n += 1;
         }
+        let state = Decoder::video_codec_state(&self.id);
+        msg.video_codec_state = hbb_common::protobuf::MessageField::some(state);
+        n += 1;
+
         if n > 0 {
             Some(msg)
         } else {
@@ -1066,6 +1101,8 @@ impl LoginConfigHandler {
             self.config.disable_audio
         } else if name == "disable-clipboard" {
             self.config.disable_clipboard
+        } else if name == "show-quality-monitor" {
+            self.config.show_quality_monitor
         } else {
             !self.get_option(name).is_empty()
         }
@@ -1094,17 +1131,17 @@ impl LoginConfigHandler {
     ///
     /// * `bitrate` - The given bitrate.
     /// * `quantizer` - The given quantizer.
-    pub fn save_custom_image_quality(&mut self, bitrate: i32, quantizer: i32) -> Message {
+    pub fn save_custom_image_quality(&mut self, image_quality: i32) -> Message {
         let mut misc = Misc::new();
         misc.set_option(OptionMessage {
-            custom_image_quality: bitrate << 8 | quantizer,
+            custom_image_quality: image_quality << 8,
             ..Default::default()
         });
         let mut msg_out = Message::new();
         msg_out.set_misc(misc);
         let mut config = self.load_config();
         config.image_quality = "custom".to_owned();
-        config.custom_image_quality = vec![bitrate, quantizer];
+        config.custom_image_quality = vec![image_quality as _];
         self.save_config(config);
         msg_out
     }
@@ -1202,6 +1239,10 @@ impl LoginConfigHandler {
         self.conn_id = pi.conn_id;
         // no matter if change, for update file time
         self.save_config(config);
+        #[cfg(feature = "hwcodec")]
+        {
+            self.supported_encoding = Some((pi.encoding.h264, pi.encoding.h265));
+        }
     }
 
     pub fn get_remote_dir(&self) -> String {
@@ -1231,10 +1272,11 @@ impl LoginConfigHandler {
         let my_id = Config::get_id();
         let mut lr = LoginRequest {
             username: self.id.clone(),
-            password,
+            password: password.into(),
             my_id,
             my_name: crate::username(),
             option: self.get_option_message(true).into(),
+            session_id: self.session_id,
             ..Default::default()
         };
         if self.is_file_transfer {
@@ -1252,6 +1294,26 @@ impl LoginConfigHandler {
         }
         let mut msg_out = Message::new();
         msg_out.set_login_request(lr);
+        msg_out
+    }
+
+    pub fn change_prefer_codec(&self) -> Message {
+        let state = scrap::codec::Decoder::video_codec_state(&self.id);
+        let mut misc = Misc::new();
+        misc.set_option(OptionMessage {
+            video_codec_state: hbb_common::protobuf::MessageField::some(state),
+            ..Default::default()
+        });
+        let mut msg_out = Message::new();
+        msg_out.set_misc(misc);
+        msg_out
+    }
+
+    pub fn restart_remote_device(&self) -> Message {
+        let mut misc = Misc::new();
+        misc.set_restart_remote_device(true);
+        let mut msg_out = Message::new();
+        msg_out.set_misc(misc);
         msg_out
     }
 }
@@ -1282,9 +1344,11 @@ where
 
     let latency_controller = LatencyController::new();
     let latency_controller_cl = latency_controller.clone();
+    // Create video_handler out of the thread below to ensure that the handler exists before client start.
+    // It will take a few tenths of a second for the first time, and then tens of milliseconds.
+    let mut video_handler = VideoHandler::new(latency_controller);
 
     std::thread::spawn(move || {
-        let mut video_handler = VideoHandler::new(latency_controller);
         loop {
             if let Ok(data) = video_receiver.recv() {
                 match data {
@@ -1459,11 +1523,21 @@ fn _input_os_password(p: String, activate: bool, interface: impl Interface) {
 /// * `peer` - [`Stream`] for communicating with peer.
 pub async fn handle_hash(
     lc: Arc<RwLock<LoginConfigHandler>>,
+    password_preset: &str,
     hash: Hash,
     interface: &impl Interface,
     peer: &mut Stream,
 ) {
     let mut password = lc.read().unwrap().password.clone();
+    if password.is_empty() {
+        if !password_preset.is_empty() {
+            let mut hasher = Sha256::new();
+            hasher.update(password_preset);
+            hasher.update(&hash.salt);
+            let res = hasher.finalize();
+            password = res[..].into();
+        }
+    }
     if password.is_empty() {
         password = lc.read().unwrap().config.password.clone();
     }
@@ -1525,7 +1599,7 @@ pub trait Interface: Send + Clone + 'static + Sized {
     fn msgbox(&self, msgtype: &str, title: &str, text: &str);
     fn handle_login_error(&mut self, err: &str) -> bool;
     fn handle_peer_info(&mut self, pi: PeerInfo);
-    async fn handle_hash(&mut self, hash: Hash, peer: &mut Stream);
+    async fn handle_hash(&mut self, pass: &str, hash: Hash, peer: &mut Stream);
     async fn handle_login_from_ui(&mut self, password: String, remember: bool, peer: &mut Stream);
     async fn handle_test_delay(&mut self, t: TestDelay, peer: &mut Stream);
 }

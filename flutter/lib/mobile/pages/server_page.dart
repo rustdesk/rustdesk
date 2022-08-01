@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/mobile/widgets/dialog.dart';
 import 'package:flutter_hbb/models/model.dart';
@@ -24,36 +26,84 @@ class ServerPage extends StatelessWidget implements PageShape {
           return [
             PopupMenuItem(
               child: Text(translate("Change ID")),
+              padding: EdgeInsets.symmetric(horizontal: 16.0),
               value: "changeID",
               enabled: false,
             ),
             PopupMenuItem(
-              child: Text(translate("Set your own password")),
-              value: "changePW",
-              enabled: gFFI.serverModel.isStart,
+              child: Text(translate("Set permanent password")),
+              padding: EdgeInsets.symmetric(horizontal: 16.0),
+              value: "setPermanentPassword",
+              enabled:
+                  gFFI.serverModel.verificationMethod != kUseTemporaryPassword,
             ),
             PopupMenuItem(
-              child: Text(translate("Refresh random password")),
-              value: "refreshPW",
-              enabled: gFFI.serverModel.isStart,
-            )
+              child: Text(translate("Set temporary password length")),
+              padding: EdgeInsets.symmetric(horizontal: 16.0),
+              value: "setTemporaryPasswordLength",
+              enabled:
+                  gFFI.serverModel.verificationMethod != kUsePermanentPassword,
+            ),
+            const PopupMenuDivider(),
+            PopupMenuItem(
+              padding: EdgeInsets.symmetric(horizontal: 0.0),
+              value: kUseTemporaryPassword,
+              child: Container(
+                  child: ListTile(
+                      title: Text(translate("Use temporary password")),
+                      trailing: Icon(
+                        Icons.check,
+                        color: gFFI.serverModel.verificationMethod ==
+                                kUseTemporaryPassword
+                            ? null
+                            : Color(0xFFFFFFFF),
+                      ))),
+            ),
+            PopupMenuItem(
+              padding: EdgeInsets.symmetric(horizontal: 0.0),
+              value: kUsePermanentPassword,
+              child: ListTile(
+                  title: Text(translate("Use permanent password")),
+                  trailing: Icon(
+                    Icons.check,
+                    color: gFFI.serverModel.verificationMethod ==
+                            kUsePermanentPassword
+                        ? null
+                        : Color(0xFFFFFFFF),
+                  )),
+            ),
+            PopupMenuItem(
+              padding: EdgeInsets.symmetric(horizontal: 0.0),
+              value: kUseBothPasswords,
+              child: ListTile(
+                  title: Text(translate("Use both passwords")),
+                  trailing: Icon(
+                    Icons.check,
+                    color: gFFI.serverModel.verificationMethod !=
+                                kUseTemporaryPassword &&
+                            gFFI.serverModel.verificationMethod !=
+                                kUsePermanentPassword
+                        ? null
+                        : Color(0xFFFFFFFF),
+                  )),
+            ),
           ];
         },
         onSelected: (value) {
           if (value == "changeID") {
             // TODO
-          } else if (value == "changePW") {
-            updatePasswordDialog();
-          } else if (value == "refreshPW") {
-            () async {
-              showLoading(translate("Waiting"));
-              if (await gFFI.serverModel.updatePassword("")) {
-                showSuccess();
-              } else {
-                showError();
-              }
-              debugPrint("end updatePassword");
-            }();
+          } else if (value == "setPermanentPassword") {
+            setPermanentPasswordDialog();
+          } else if (value == "setTemporaryPasswordLength") {
+            setTemporaryPasswordLengthDialog();
+          } else if (value == kUsePermanentPassword ||
+              value == kUseTemporaryPassword ||
+              value == kUseBothPasswords) {
+            Map<String, String> msg = Map()
+              ..["name"] = "verification-method"
+              ..["value"] = value;
+            gFFI.setByName('option', jsonEncode(msg));
+            gFFI.serverModel.updatePasswordModel();
           }
         })
   ];
@@ -90,17 +140,13 @@ void checkService() async {
   }
 }
 
-class ServerInfo extends StatefulWidget {
-  @override
-  _ServerInfoState createState() => _ServerInfoState();
-}
-
-class _ServerInfoState extends State<ServerInfo> {
+class ServerInfo extends StatelessWidget {
   final model = gFFI.serverModel;
-  var _passwdShow = false;
+  final emptyController = TextEditingController(text: "-");
 
   @override
   Widget build(BuildContext context) {
+    final isPermanent = model.verificationMethod == kUsePermanentPassword;
     return model.isStart
         ? PaddingCard(
             child: Column(
@@ -123,24 +169,23 @@ class _ServerInfoState extends State<ServerInfo> {
               ),
               TextFormField(
                 readOnly: true,
-                obscureText: !_passwdShow,
                 style: TextStyle(
                     fontSize: 25.0,
                     fontWeight: FontWeight.bold,
                     color: MyTheme.accent),
-                controller: model.serverPasswd,
+                controller: isPermanent ? emptyController : model.serverPasswd,
                 decoration: InputDecoration(
                     icon: const Icon(Icons.lock),
                     labelText: translate("Password"),
                     labelStyle: TextStyle(
                         fontWeight: FontWeight.bold, color: MyTheme.accent50),
-                    suffix: IconButton(
-                        icon: Icon(Icons.visibility),
-                        onPressed: () {
-                          setState(() {
-                            _passwdShow = !_passwdShow;
-                          });
-                        })),
+                    suffix: isPermanent
+                        ? null
+                        : IconButton(
+                            icon: const Icon(Icons.refresh),
+                            onPressed: () {
+                              gFFI.setByName("temporary_password");
+                            })),
                 onSaved: (String? value) {},
               ),
             ],

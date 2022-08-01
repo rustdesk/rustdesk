@@ -1,21 +1,4 @@
-use crate::server::{check_zombie, new as new_server, ServerPtr};
-use hbb_common::{
-    allow_err,
-    anyhow::bail,
-    config::{self, Config, REG_INTERVAL, RENDEZVOUS_PORT, RENDEZVOUS_TIMEOUT},
-    futures::future::join_all,
-    log,
-    protobuf::Message as _,
-    rendezvous_proto::*,
-    sleep, socket_client,
-    tcp::FramedStream,
-    tokio::{
-        self, select,
-        time::{interval, Duration},
-    },
-    udp::FramedSocket,
-    AddrMangle, IntoTargetAddr, ResultType, TargetAddr,
-};
+use std::collections::HashMap;
 use std::{
     net::SocketAddr,
     sync::{
@@ -24,7 +7,30 @@ use std::{
     },
     time::Instant,
 };
+
 use uuid::Uuid;
+
+use hbb_common::config::DiscoveryPeer;
+use hbb_common::tcp::FramedStream;
+use hbb_common::{
+    allow_err,
+    anyhow::bail,
+    config,
+    config::{Config, REG_INTERVAL, RENDEZVOUS_PORT, RENDEZVOUS_TIMEOUT},
+    futures::future::join_all,
+    log,
+    protobuf::Message as _,
+    rendezvous_proto::*,
+    sleep, socket_client,
+    tokio::{
+        self, select,
+        time::{interval, Duration},
+    },
+    udp::FramedSocket,
+    AddrMangle, IntoTargetAddr, ResultType, TargetAddr,
+};
+
+use crate::server::{check_zombie, new as new_server, ServerPtr};
 
 type Message = RendezvousMessage;
 
@@ -52,8 +58,11 @@ impl RendezvousMediator {
         check_zombie();
         let server = new_server();
         if Config::get_nat_type() == NatType::UNKNOWN_NAT as i32 {
-            crate::common::test_nat_type();
+            crate::test_nat_type();
             nat_tested = true;
+        }
+        if !Config::get_option("stop-service").is_empty() {
+            crate::test_rendezvous_server();
         }
         let server_cloned = server.clone();
         tokio::spawn(async move {
@@ -62,14 +71,14 @@ impl RendezvousMediator {
         #[cfg(not(any(target_os = "android", target_os = "ios")))]
         if crate::platform::is_installed() {
             std::thread::spawn(move || {
-                allow_err!(lan_discovery());
+                allow_err!(super::lan::start_listening());
             });
         }
         loop {
             Config::reset_online();
             if Config::get_option("stop-service").is_empty() {
                 if !nat_tested {
-                    crate::common::test_nat_type();
+                    crate::test_nat_type();
                     nat_tested = true;
                 }
                 let mut futs = Vec::new();
@@ -158,7 +167,7 @@ impl RendezvousMediator {
                         Some(Ok((bytes, _))) => {
                             if let Ok(msg_in) = Message::parse_from_bytes(&bytes) {
                                 match msg_in.union {
-                                    Some(rendezvous_message::Union::register_peer_response(rpr)) => {
+                                    Some(rendezvous_message::Union::RegisterPeerResponse(rpr)) => {
                                         update_latency();
                                         if rpr.request_pk {
                                             log::info!("request_pk received from {}", host);
@@ -166,7 +175,7 @@ impl RendezvousMediator {
                                             continue;
                                         }
                                     }
-                                    Some(rendezvous_message::Union::register_pk_response(rpr)) => {
+                                    Some(rendezvous_message::Union::RegisterPkResponse(rpr)) => {
                                         update_latency();
                                         match rpr.result.enum_value_or_default() {
                                             register_pk_response::Result::OK => {
@@ -180,28 +189,28 @@ impl RendezvousMediator {
                                             _ => {}
                                         }
                                     }
-                                    Some(rendezvous_message::Union::punch_hole(ph)) => {
+                                    Some(rendezvous_message::Union::PunchHole(ph)) => {
                                         let rz = rz.clone();
                                         let server = server.clone();
                                         tokio::spawn(async move {
                                             allow_err!(rz.handle_punch_hole(ph, server).await);
                                         });
                                     }
-                                    Some(rendezvous_message::Union::request_relay(rr)) => {
+                                    Some(rendezvous_message::Union::RequestRelay(rr)) => {
                                         let rz = rz.clone();
                                         let server = server.clone();
                                         tokio::spawn(async move {
                                             allow_err!(rz.handle_request_relay(rr, server).await);
                                         });
                                     }
-                                    Some(rendezvous_message::Union::fetch_local_addr(fla)) => {
+                                    Some(rendezvous_message::Union::FetchLocalAddr(fla)) => {
                                         let rz = rz.clone();
                                         let server = server.clone();
                                         tokio::spawn(async move {
                                             allow_err!(rz.handle_intranet(fla, server).await);
                                         });
                                     }
-                                    Some(rendezvous_message::Union::configure_update(cu)) => {
+                                    Some(rendezvous_message::Union::ConfigureUpdate(cu)) => {
                                         let v0 = Config::get_rendezvous_servers();
                                         Config::set_option("rendezvous-servers".to_owned(), cu.rendezvous_servers.join(","));
                                         Config::set_serial(cu.serial);
@@ -264,7 +273,7 @@ impl RendezvousMediator {
 
     async fn handle_request_relay(&self, rr: RequestRelay, server: ServerPtr) -> ResultType<()> {
         self.create_relay(
-            rr.socket_addr,
+            rr.socket_addr.into(),
             rr.relay_server,
             rr.uuid,
             server,
@@ -301,7 +310,7 @@ impl RendezvousMediator {
 
         let mut msg_out = Message::new();
         let mut rr = RelayResponse {
-            socket_addr,
+            socket_addr: socket_addr.into(),
             version: crate::VERSION.to_owned(),
             ..Default::default()
         };
@@ -332,8 +341,8 @@ impl RendezvousMediator {
         let relay_server = self.get_relay_server(fla.relay_server);
         msg_out.set_local_addr(LocalAddr {
             id: Config::get_id(),
-            socket_addr: AddrMangle::encode(peer_addr),
-            local_addr: AddrMangle::encode(local_addr),
+            socket_addr: AddrMangle::encode(peer_addr).into(),
+            local_addr: AddrMangle::encode(local_addr).into(),
             relay_server,
             version: crate::VERSION.to_owned(),
             ..Default::default()
@@ -351,7 +360,14 @@ impl RendezvousMediator {
         {
             let uuid = Uuid::new_v4().to_string();
             return self
-                .create_relay(ph.socket_addr, relay_server, uuid, server, true, true)
+                .create_relay(
+                    ph.socket_addr.into(),
+                    relay_server,
+                    uuid,
+                    server,
+                    true,
+                    true,
+                )
                 .await;
         }
         let peer_addr = AddrMangle::decode(&ph.socket_addr);
@@ -368,7 +384,7 @@ impl RendezvousMediator {
             socket
         };
         let mut msg_out = Message::new();
-        use hbb_common::protobuf::ProtobufEnum;
+        use hbb_common::protobuf::Enum;
         let nat_type = NatType::from_i32(Config::get_nat_type()).unwrap_or(NatType::UNKNOWN_NAT);
         msg_out.set_punch_hole_sent(PunchHoleSent {
             socket_addr: ph.socket_addr,
@@ -387,13 +403,13 @@ impl RendezvousMediator {
     async fn register_pk(&mut self, socket: &mut FramedSocket) -> ResultType<()> {
         let mut msg_out = Message::new();
         let pk = Config::get_key_pair().1;
-        let uuid = crate::get_uuid();
+        let uuid = hbb_common::get_uuid();
         let id = Config::get_id();
         self.last_id_pk_registry = id.clone();
         msg_out.set_register_pk(RegisterPk {
             id,
-            uuid,
-            pk,
+            uuid: uuid.into(),
+            pk: pk.into(),
             ..Default::default()
         });
         socket.send(&msg_out, self.addr.to_owned()).await?;
@@ -565,7 +581,7 @@ fn lan_discovery() -> ResultType<()> {
         if let Ok((len, addr)) = socket.recv_from(&mut buf) {
             if let Ok(msg_in) = Message::parse_from_bytes(&buf[0..len]) {
                 match msg_in.union {
-                    Some(rendezvous_message::Union::peer_discovery(p)) => {
+                    Some(rendezvous_message::Union::PeerDiscovery(p)) => {
                         if p.cmd == "ping" {
                             let mut msg_out = Message::new();
                             let peer = PeerDiscovery {
@@ -613,11 +629,22 @@ pub fn discover() -> ResultType<()> {
         if let Ok((len, _)) = socket.recv_from(&mut buf) {
             if let Ok(msg_in) = Message::parse_from_bytes(&buf[0..len]) {
                 match msg_in.union {
-                    Some(rendezvous_message::Union::peer_discovery(p)) => {
+                    Some(rendezvous_message::Union::PeerDiscovery(p)) => {
                         last_recv_time = Instant::now();
                         if p.cmd == "pong" {
                             if p.mac != mac {
-                                peers.push((p.id, p.username, p.hostname, p.platform));
+                                let dp = DiscoveryPeer {
+                                    id: "".to_string(),
+                                    ip_mac: HashMap::from([
+                                        // TODO: addr ip
+                                        (addr.ip().to_string(), p.mac.clone()),
+                                    ]),
+                                    username: p.username,
+                                    hostname: p.hostname,
+                                    platform: p.platform,
+                                    online: true,
+                                };
+                                peers.push(dp);
                             }
                         }
                     }
@@ -626,7 +653,7 @@ pub fn discover() -> ResultType<()> {
             }
         }
         if last_write_time.elapsed().as_millis() > 300 && last_write_n != peers.len() {
-            config::LanPeers::store(serde_json::to_string(&peers)?);
+            config::LanPeers::store(&peers);
             last_write_time = Instant::now();
             last_write_n = peers.len();
         }
@@ -635,7 +662,7 @@ pub fn discover() -> ResultType<()> {
         }
     }
     log::info!("discover ping done");
-    config::LanPeers::store(serde_json::to_string(&peers)?);
+    config::LanPeers::store(&peers);
     Ok(())
 }
 
@@ -675,7 +702,7 @@ pub async fn query_online_states<F: FnOnce(Vec<String>, Vec<String>)>(ids: Vec<S
 }
 
 async fn create_online_stream() -> ResultType<FramedStream> {
-    let rendezvous_server = crate::get_rendezvous_server(1_000).await;
+    let (mut rendezvous_server, servers, contained) = crate::get_rendezvous_server(1_000).await;
     let tmp: Vec<&str> = rendezvous_server.split(":").collect();
     if tmp.len() != 2 {
         bail!("Invalid server address: {}", rendezvous_server);
@@ -719,7 +746,7 @@ async fn query_online_states_(
             Some(Ok(bytes)) => {
                 if let Ok(msg_in) = RendezvousMessage::parse_from_bytes(&bytes) {
                     match msg_in.union {
-                        Some(rendezvous_message::Union::online_response(online_response)) => {
+                        Some(rendezvous_message::Union::OnlineResponse(online_response)) => {
                             let states = online_response.states;
                             let mut onlines = Vec::new();
                             let mut offlines = Vec::new();

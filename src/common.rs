@@ -11,8 +11,8 @@ use hbb_common::{
     config::{self, Config, COMPRESS_LEVEL, RENDEZVOUS_TIMEOUT},
     get_version_number, log,
     message_proto::*,
+    protobuf::Enum,
     protobuf::Message as _,
-    protobuf::ProtobufEnum,
     rendezvous_proto::*,
     sleep, socket_client, tokio, ResultType,
 };
@@ -34,7 +34,7 @@ lazy_static::lazy_static! {
 
 #[inline]
 pub fn valid_for_numlock(evt: &KeyEvent) -> bool {
-    if let Some(key_event::Union::control_key(ck)) = evt.union {
+    if let Some(key_event::Union::ControlKey(ck)) = evt.union {
         let v = ck.value();
         (v >= ControlKey::Numpad0.value() && v <= ControlKey::Numpad9.value())
             || v == ControlKey::Decimal.value()
@@ -51,7 +51,7 @@ pub fn create_clipboard_msg(content: String) -> Message {
     let mut msg = Message::new();
     msg.set_clipboard(Clipboard {
         compress,
-        content,
+        content: content.into(),
         ..Default::default()
     });
     msg
@@ -82,7 +82,7 @@ pub fn update_clipboard(clipboard: Clipboard, old: Option<&Arc<Mutex<String>>>) 
     let content = if clipboard.compress {
         decompress(&clipboard.content)
     } else {
-        clipboard.content
+        clipboard.content.into()
     };
     if let Ok(content) = String::from_utf8(content) {
         if content.is_empty() {
@@ -249,7 +249,7 @@ async fn test_nat_type_() -> ResultType<bool> {
         return Ok(true);
     }
     let start = std::time::Instant::now();
-    let rendezvous_server = get_rendezvous_server(1_000).await;
+    let (rendezvous_server, _, _) = get_rendezvous_server(1_000).await;
     let server1 = rendezvous_server;
     let tmp: Vec<&str> = server1.split(":").collect();
     if tmp.len() != 2 {
@@ -286,7 +286,7 @@ async fn test_nat_type_() -> ResultType<bool> {
         socket.send(&msg_out).await?;
         if let Some(Ok(bytes)) = socket.next_timeout(RENDEZVOUS_TIMEOUT).await {
             if let Ok(msg_in) = RendezvousMessage::parse_from_bytes(&bytes) {
-                if let Some(rendezvous_message::Union::test_nat_response(tnr)) = msg_in.union {
+                if let Some(rendezvous_message::Union::TestNatResponse(tnr)) = msg_in.union {
                     if i == 0 {
                         port1 = tnr.port;
                     } else {
@@ -318,21 +318,53 @@ async fn test_nat_type_() -> ResultType<bool> {
     Ok(ok)
 }
 
-#[cfg(any(target_os = "android", target_os = "ios"))]
-pub async fn get_rendezvous_server(_ms_timeout: u64) -> String {
-    Config::get_rendezvous_server()
+pub async fn get_rendezvous_server(ms_timeout: u64) -> (String, Vec<String>, bool) {
+    #[cfg(any(target_os = "android", target_os = "ios"))]
+    let (mut a, mut b) = get_rendezvous_server_(ms_timeout);
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    let (mut a, mut b) = get_rendezvous_server_(ms_timeout).await;
+    let mut b: Vec<String> = b
+        .drain(..)
+        .map(|x| {
+            if !x.contains(":") {
+                format!("{}:{}", x, config::RENDEZVOUS_PORT)
+            } else {
+                x
+            }
+        })
+        .collect();
+    let c = if b.contains(&a) {
+        b = b.drain(..).filter(|x| x != &a).collect();
+        true
+    } else {
+        a = b.pop().unwrap_or(a);
+        false
+    };
+    (a, b, c)
 }
 
+#[inline]
+#[cfg(any(target_os = "android", target_os = "ios"))]
+fn get_rendezvous_server_(_ms_timeout: u64) -> (String, Vec<String>) {
+    (
+        Config::get_rendezvous_server(),
+        Config::get_rendezvous_servers(),
+    )
+}
+
+#[inline]
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
-pub async fn get_rendezvous_server(ms_timeout: u64) -> String {
+async fn get_rendezvous_server_(ms_timeout: u64) -> (String, Vec<String>) {
     crate::ipc::get_rendezvous_server(ms_timeout).await
 }
 
+#[inline]
 #[cfg(any(target_os = "android", target_os = "ios"))]
 pub async fn get_nat_type(_ms_timeout: u64) -> i32 {
     Config::get_nat_type()
 }
 
+#[inline]
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub async fn get_nat_type(ms_timeout: u64) -> i32 {
     crate::ipc::get_nat_type(ms_timeout).await
@@ -342,7 +374,7 @@ pub async fn get_nat_type(ms_timeout: u64) -> i32 {
 #[tokio::main(flavor = "current_thread")]
 async fn test_rendezvous_server_() {
     let servers = Config::get_rendezvous_servers();
-    hbb_common::config::ONLINE.lock().unwrap().clear();
+    Config::reset_online();
     let mut futs = Vec::new();
     for host in servers {
         futs.push(tokio::spawn(async move {
@@ -368,6 +400,17 @@ async fn test_rendezvous_server_() {
 // #[cfg(any(target_os = "android", target_os = "ios", feature = "cli"))]
 pub fn test_rendezvous_server() {
     std::thread::spawn(test_rendezvous_server_);
+}
+
+pub fn refresh_rendezvous_server() {
+    #[cfg(any(target_os = "android", target_os = "ios", feature = "cli"))]
+    test_rendezvous_server();
+    #[cfg(not(any(target_os = "android", target_os = "ios", feature = "cli")))]
+    std::thread::spawn(|| {
+        if crate::ipc::test_rendezvous_server().is_err() {
+            test_rendezvous_server();
+        }
+    });
 }
 
 #[inline]
@@ -414,7 +457,7 @@ pub const POSTFIX_SERVICE: &'static str = "_service";
 
 #[inline]
 pub fn is_control_key(evt: &KeyEvent, key: &ControlKey) -> bool {
-    if let Some(key_event::Union::control_key(ck)) = evt.union {
+    if let Some(key_event::Union::ControlKey(ck)) = evt.union {
         ck.value() == key.value()
     } else {
         false
@@ -423,7 +466,7 @@ pub fn is_control_key(evt: &KeyEvent, key: &ControlKey) -> bool {
 
 #[inline]
 pub fn is_modifier(evt: &KeyEvent) -> bool {
-    if let Some(key_event::Union::control_key(ck)) = evt.union {
+    if let Some(key_event::Union::ControlKey(ck)) = evt.union {
         let v = ck.value();
         v == ControlKey::Alt.value()
             || v == ControlKey::Shift.value()
@@ -439,14 +482,15 @@ pub fn is_modifier(evt: &KeyEvent) -> bool {
 }
 
 pub fn check_software_update() {
-    std::thread::spawn(move || allow_err!(_check_software_update()));
+    std::thread::spawn(move || allow_err!(check_software_update_()));
 }
 
 #[tokio::main(flavor = "current_thread")]
-async fn _check_software_update() -> hbb_common::ResultType<()> {
+async fn check_software_update_() -> hbb_common::ResultType<()> {
     sleep(3.).await;
 
-    let rendezvous_server = socket_client::get_target_addr(&get_rendezvous_server(1_000).await)?;
+    let rendezvous_server =
+        socket_client::get_target_addr(&format!("rs-sg.rustdesk.com:{}", config::RENDEZVOUS_PORT))?;
     let mut socket =
         socket_client::new_udp(Config::get_any_listen_addr(), RENDEZVOUS_TIMEOUT).await?;
 
@@ -459,7 +503,7 @@ async fn _check_software_update() -> hbb_common::ResultType<()> {
     use hbb_common::protobuf::Message;
     if let Some(Ok((bytes, _))) = socket.next_timeout(30_000).await {
         if let Ok(msg_in) = RendezvousMessage::parse_from_bytes(&bytes) {
-            if let Some(rendezvous_message::Union::software_update(su)) = msg_in.union {
+            if let Some(rendezvous_message::Union::SoftwareUpdate(su)) = msg_in.union {
                 let version = hbb_common::get_version_from_url(&su.url);
                 if get_version_number(&version) > get_version_number(crate::VERSION) {
                     *SOFTWARE_UPDATE_URL.lock().unwrap() = su.url;
@@ -496,14 +540,6 @@ pub fn is_ip(id: &str) -> bool {
 
 pub fn is_setup(name: &str) -> bool {
     name.to_lowercase().ends_with("setdown.exe") || name.to_lowercase().ends_with("安装.exe")
-}
-
-pub fn get_uuid() -> Vec<u8> {
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    if let Ok(id) = machine_uid::get() {
-        return id.into();
-    }
-    Config::get_key_pair().1
 }
 
 pub fn get_custom_rendezvous_server(custom: String) -> String {

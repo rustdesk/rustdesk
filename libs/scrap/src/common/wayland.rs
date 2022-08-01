@@ -1,6 +1,6 @@
-use crate::common::x11::Frame;
+use crate::common::{x11::Frame, TraitCapturer};
 use crate::wayland::{capturable::*, *};
-use std::io;
+use std::{io, time::Duration};
 
 pub struct Capturer(Display, Box<dyn Recorder>, bool, Vec<u8>);
 
@@ -21,9 +21,15 @@ impl Capturer {
     pub fn height(&self) -> usize {
         self.0.height()
     }
+}
 
-    pub fn frame<'a>(&'a mut self, timeout_ms: u32) -> io::Result<Frame<'a>> {
-        match self.1.capture(timeout_ms as _).map_err(map_err)? {
+impl TraitCapturer for Capturer {
+    fn set_use_yuv(&mut self, use_yuv: bool) {
+        self.2 = use_yuv;
+    }
+
+    fn frame<'a>(&'a mut self, timeout: Duration) -> io::Result<Frame<'a>> {
+        match self.1.capture(timeout.as_millis() as _).map_err(map_err)? {
             PixelProvider::BGR0(w, h, x) => Ok(Frame(if self.2 {
                 crate::common::bgra_to_i420(w as _, h as _, &x, &mut self.3);
                 &self.3[..]
