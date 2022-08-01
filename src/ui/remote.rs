@@ -2398,14 +2398,14 @@ impl Remote {
         match notification.union {
             Some(back_notification::Union::BlockInputState(state)) => {
                 self.handle_back_msg_block_input(
-                    state.enum_value_or(back_notification::BlockInputState::StateUnknown),
+                    state.enum_value_or(back_notification::BlockInputState::BlkStateUnknown),
                 )
                 .await;
             }
             Some(back_notification::Union::PrivacyModeState(state)) => {
                 if !self
                     .handle_back_msg_privacy_mode(
-                        state.enum_value_or(back_notification::PrivacyModeState::StateUnknown),
+                        state.enum_value_or(back_notification::PrivacyModeState::PrvStateUnknown),
                     )
                     .await
                 {
@@ -2424,18 +2424,18 @@ impl Remote {
 
     async fn handle_back_msg_block_input(&mut self, state: back_notification::BlockInputState) {
         match state {
-            back_notification::BlockInputState::OnSucceeded => {
+            back_notification::BlockInputState::BlkOnSucceeded => {
                 self.update_block_input_state(true);
             }
-            back_notification::BlockInputState::OnFailed => {
+            back_notification::BlockInputState::BlkOnFailed => {
                 self.handler
                     .msgbox("custom-error", "Block user input", "Failed");
                 self.update_block_input_state(false);
             }
-            back_notification::BlockInputState::OffSucceeded => {
+            back_notification::BlockInputState::BlkOffSucceeded => {
                 self.update_block_input_state(false);
             }
-            back_notification::BlockInputState::OffFailed => {
+            back_notification::BlockInputState::BlkOffFailed => {
                 self.handler
                     .msgbox("custom-error", "Unblock user input", "Failed");
             }
@@ -2457,7 +2457,7 @@ impl Remote {
         state: back_notification::PrivacyModeState,
     ) -> bool {
         match state {
-            back_notification::PrivacyModeState::OnByOther => {
+            back_notification::PrivacyModeState::PrvOnByOther => {
                 self.handler.msgbox(
                     "error",
                     "Connecting...",
@@ -2465,46 +2465,46 @@ impl Remote {
                 );
                 return false;
             }
-            back_notification::PrivacyModeState::NotSupported => {
+            back_notification::PrivacyModeState::PrvNotSupported => {
                 self.handler
                     .msgbox("custom-error", "Privacy mode", "Unsupported");
                 self.update_privacy_mode(false);
             }
-            back_notification::PrivacyModeState::OnSucceeded => {
+            back_notification::PrivacyModeState::PrvOnSucceeded => {
                 self.handler
                     .msgbox("custom-nocancel", "Privacy mode", "In privacy mode");
                 self.update_privacy_mode(true);
             }
-            back_notification::PrivacyModeState::OnFailedDenied => {
+            back_notification::PrivacyModeState::PrvOnFailedDenied => {
                 self.handler
                     .msgbox("custom-error", "Privacy mode", "Peer denied");
                 self.update_privacy_mode(false);
             }
-            back_notification::PrivacyModeState::OnFailedPlugin => {
+            back_notification::PrivacyModeState::PrvOnFailedPlugin => {
                 self.handler
                     .msgbox("custom-error", "Privacy mode", "Please install plugins");
                 self.update_privacy_mode(false);
             }
-            back_notification::PrivacyModeState::OnFailed => {
+            back_notification::PrivacyModeState::PrvOnFailed => {
                 self.handler
                     .msgbox("custom-error", "Privacy mode", "Failed");
                 self.update_privacy_mode(false);
             }
-            back_notification::PrivacyModeState::OffSucceeded => {
+            back_notification::PrivacyModeState::PrvOffSucceeded => {
                 self.handler
                     .msgbox("custom-nocancel", "Privacy mode", "Out privacy mode");
                 self.update_privacy_mode(false);
             }
-            back_notification::PrivacyModeState::OffByPeer => {
+            back_notification::PrivacyModeState::PrvOffByPeer => {
                 self.handler
                     .msgbox("custom-error", "Privacy mode", "Peer exit");
                 self.update_privacy_mode(false);
             }
-            back_notification::PrivacyModeState::OffFailed => {
+            back_notification::PrivacyModeState::PrvOffFailed => {
                 self.handler
                     .msgbox("custom-error", "Privacy mode", "Failed to turn off");
             }
-            back_notification::PrivacyModeState::OffUnknown => {
+            back_notification::PrivacyModeState::PrvOffUnknown => {
                 self.handler
                     .msgbox("custom-error", "Privacy mode", "Turned off");
                 // log::error!("Privacy mode is turned off with unknown reason");

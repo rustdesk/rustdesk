@@ -1151,6 +1151,7 @@ impl LoginConfigHandler {
             my_name: crate::username(),
             option: self.get_option_message(true).into(),
             session_id: self.session_id,
+            version: crate::VERSION.to_string(),
             ..Default::default()
         };
         if self.is_file_transfer {

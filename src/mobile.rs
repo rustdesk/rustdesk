@@ -1377,9 +1377,8 @@ pub mod connection_manager {
                 id,
                 file_num,
                 mut files,
+                overwrite_detection
             } => {
-                // in mobile, can_enable_override_detection is always true
-                let od = true;
                 WRITE_JOBS.lock().unwrap().push(fs::TransferJob::new_write(
                     id,
                     "".to_string(),
@@ -1395,7 +1394,7 @@ pub mod connection_manager {
                             ..Default::default()
                         })
                         .collect(),
-                    true,
+                    overwrite_detection
                 ));
             }
             ipc::FS::CancelWrite { id } => {
