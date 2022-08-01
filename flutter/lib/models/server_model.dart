@@ -127,7 +127,6 @@ class ServerModel with ChangeNotifier {
   updatePasswordModel() {
     var update = false;
     final temporaryPassword = gFFI.getByName("temporary_password");
-    print("tempo passwd: ${temporaryPassword}");
     final verificationMethod = gFFI.getByName("option", "verification-method");
     if (_serverPasswd.text != temporaryPassword) {
       _serverPasswd.text = temporaryPassword;
