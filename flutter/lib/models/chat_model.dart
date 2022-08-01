@@ -1,6 +1,6 @@
 import 'dart:convert';
 
-import 'package:dash_chat/dash_chat.dart';
+import 'package:dash_chat_2/dash_chat_2.dart';
 import 'package:flutter/material.dart';
 
 import '../widgets/overlay.dart';
@@ -11,8 +11,8 @@ class MessageBody {
   List<ChatMessage> chatMessages;
   MessageBody(this.chatUser, this.chatMessages);
 
-  void add(ChatMessage cm) {
-    this.chatMessages.add(cm);
+  void insert(ChatMessage cm) {
+    this.chatMessages.insert(0, cm);
   }
 
   void clear() {
@@ -24,18 +24,14 @@ class ChatModel with ChangeNotifier {
   static final clientModeID = -1;
 
   final ChatUser me = ChatUser(
-    uid: "",
-    name: "Me",
+    id: "",
+    firstName: "Me",
   );
 
   late final Map<int, MessageBody> _messages = Map()
     ..[clientModeID] = MessageBody(me, []);
 
-  final _scroller = ScrollController();
-
   var _currentID = clientModeID;
-
-  ScrollController get scroller => _scroller;
 
   Map<int, MessageBody> get messages => _messages;
 
@@ -62,8 +58,8 @@ class ChatModel with ChangeNotifier {
             "Failed to changeCurrentID,remote user doesn't exist");
       }
       final chatUser = ChatUser(
-        uid: client.peerId,
-        name: client.name,
+        id: client.peerId,
+        firstName: client.name,
       );
       _messages[id] = MessageBody(chatUser, []);
       _currentID = id;
@@ -80,48 +76,39 @@ class ChatModel with ChangeNotifier {
     late final chatUser;
     if (id == clientModeID) {
       chatUser = ChatUser(
-        name: FFI.ffiModel.pi.username,
-        uid: FFI.getId(),
+        firstName: FFI.ffiModel.pi.username,
+        id: FFI.getId(),
       );
     } else {
       final client = FFI.serverModel.clients[id];
       if (client == null) {
         return debugPrint("Failed to receive msg,user doesn't exist");
       }
-      chatUser = ChatUser(uid: client.peerId, name: client.name);
+      chatUser = ChatUser(id: client.peerId, firstName: client.name);
     }
 
     if (!_messages.containsKey(id)) {
       _messages[id] = MessageBody(chatUser, []);
     }
-    _messages[id]!.add(ChatMessage(text: text, user: chatUser));
+    _messages[id]!.insert(
+        ChatMessage(text: text, user: chatUser, createdAt: DateTime.now()));
     _currentID = id;
     notifyListeners();
-    scrollToBottom();
-  }
-
-  scrollToBottom() {
-    Future.delayed(Duration(milliseconds: 500), () {
-      _scroller.animateTo(_scroller.position.maxScrollExtent,
-          duration: Duration(milliseconds: 200),
-          curve: Curves.fastLinearToSlowEaseIn);
-    });
   }
 
   send(ChatMessage message) {
-    if (message.text != null && message.text!.isNotEmpty) {
-      _messages[_currentID]?.add(message);
+    if (message.text.isNotEmpty) {
+      _messages[_currentID]?.insert(message);
       if (_currentID == clientModeID) {
-        FFI.setByName("chat_client_mode", message.text!);
+        FFI.setByName("chat_client_mode", message.text);
       } else {
         final msg = Map()
           ..["id"] = _currentID
-          ..["text"] = message.text!;
+          ..["text"] = message.text;
         FFI.setByName("chat_server_mode", jsonEncode(msg));
       }
     }
     notifyListeners();
-    scrollToBottom();
   }
 
   close() {
