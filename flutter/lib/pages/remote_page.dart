@@ -659,7 +659,7 @@ class _RemotePageState extends State<RemotePage> {
     more.add(PopupMenuItem<String>(
         child: Row(
             children: ([
-          Container(width: 100.0, child: Text(translate('OS Password'))),
+          Text(translate('OS Password')),
           TextButton(
             style: flatButtonStyle,
             onPressed: () {
