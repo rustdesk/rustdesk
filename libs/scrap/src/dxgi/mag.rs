@@ -282,7 +282,11 @@ impl CapturerMag {
             let y = GetSystemMetrics(SM_YVIRTUALSCREEN);
             let w = GetSystemMetrics(SM_CXVIRTUALSCREEN);
             let h = GetSystemMetrics(SM_CYVIRTUALSCREEN);
-            if !(origin.0 == x as _ && origin.1 == y as _ && width == w as _ && height == h as _) {
+            if !(origin.0 == x as i32
+                && origin.1 == y as i32
+                && width == w as usize
+                && height == h as usize)
+            {
                 return Err(Error::new(
                     ErrorKind::Other,
                     format!(
@@ -442,6 +446,10 @@ impl CapturerMag {
         Ok(s)
     }
 
+    pub(crate) fn set_use_yuv(&mut self, use_yuv: bool) {
+        self.use_yuv = use_yuv;
+    }
+
     pub(crate) fn exclude(&mut self, cls: &str, name: &str) -> Result<bool> {
         let name_c = CString::new(name).unwrap();
         unsafe {
@@ -510,10 +518,10 @@ impl CapturerMag {
             let y = GetSystemMetrics(SM_YVIRTUALSCREEN);
             let w = GetSystemMetrics(SM_CXVIRTUALSCREEN);
             let h = GetSystemMetrics(SM_CYVIRTUALSCREEN);
-            if !(self.rect.left == x as _
-                && self.rect.top == y as _
-                && self.rect.right == (x + w) as _
-                && self.rect.bottom == (y + h) as _)
+            if !(self.rect.left == x as i32
+                && self.rect.top == y as i32
+                && self.rect.right == (x + w) as i32
+                && self.rect.bottom == (y + h) as i32)
             {
                 return Err(Error::new(
                     ErrorKind::Other,

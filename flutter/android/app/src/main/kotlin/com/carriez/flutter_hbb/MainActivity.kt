@@ -192,7 +192,6 @@ class MainActivity : FlutterActivity() {
     override fun onResume() {
         super.onResume()
         val inputPer = InputService.isOpen
-        Log.d(logTag, "onResume inputPer:$inputPer")
         activity.runOnUiThread {
             flutterMethodChannel.invokeMethod(
                 "on_state_changed",

@@ -18,6 +18,32 @@ mod macos;
 pub mod remote;
 #[cfg(target_os = "windows")]
 pub mod win_privacy;
+use crate::common::SOFTWARE_UPDATE_URL;
+use crate::ipc;
+use hbb_common::{
+    allow_err,
+    config::{self, Config, LocalConfig, PeerConfig, RENDEZVOUS_PORT, RENDEZVOUS_TIMEOUT},
+    futures::future::join_all,
+    log,
+    protobuf::Message as _,
+    rendezvous_proto::*,
+    sleep,
+    tcp::FramedStream,
+    tokio::{self, sync::mpsc, time},
+};
+use sciter::Value;
+use std::{
+    collections::HashMap,
+    iter::FromIterator,
+    process::Child,
+    sync::{Arc, Mutex},
+};
+
+type Message = RendezvousMessage;
+
+pub type Childs = Arc<Mutex<(bool, HashMap<(String, String), Child>)>>;
+type Status = (i32, bool, i64, String);
+
 lazy_static::lazy_static! {
     // stupid workaround for https://sciter.com/forums/topic/crash-on-latest-tis-mac-sdk-sometimes/
     static ref STUPID_VALUES: Mutex<Vec<Arc<Vec<Value>>>> = Default::default();
@@ -108,10 +134,16 @@ pub fn start(args: &mut [String]) {
         let mut iter = args.iter();
         let cmd = iter.next().unwrap().clone();
         let id = iter.next().unwrap().clone();
+        let pass = iter.next().unwrap_or(&"".to_owned()).clone();
         let args: Vec<String> = iter.map(|x| x.clone()).collect();
         frame.set_title(&id);
         frame.register_behavior("native-remote", move || {
-            Box::new(remote::Handler::new(cmd.clone(), id.clone(), args.clone()))
+            Box::new(remote::Handler::new(
+                cmd.clone(),
+                id.clone(),
+                pass.clone(),
+                args.clone(),
+            ))
         });
         page = "remote.html";
     } else {
@@ -145,6 +177,19 @@ pub fn start(args: &mut [String]) {
 struct UI {}
 
 impl UI {
+    fn new(childs: Childs) -> Self {
+        let res = check_connect_status(true);
+        Self(childs, res.0, res.1, Default::default(), res.2, res.3)
+    }
+
+    fn recent_sessions_updated(&mut self) -> bool {
+        let mut lock = self.0.lock().unwrap();
+        if lock.0 {
+            lock.0 = false;
+            true
+        } else {
+            false
+        }
     fn recent_sessions_updated(&self) -> bool {
         recent_sessions_updated()
     }
@@ -157,8 +202,24 @@ impl UI {
         get_password()
     }
 
+    fn temporary_password(&mut self) -> String {
+        self.5.lock().unwrap().clone()
+    }
+
+    fn update_temporary_password(&self) {
+        allow_err!(ipc::update_temporary_password());
+    }
+
     fn update_password(&mut self, password: String) {
         update_password(password)
+    }
+
+    fn permanent_password(&self) -> String {
+        ipc::get_permanent_password()
+    }
+
+    fn set_permanent_password(&self, password: String) {
+        allow_err!(ipc::set_permanent_password(password));
     }
 
     fn get_remote_id(&mut self) -> String {
@@ -371,6 +432,16 @@ impl UI {
         remove_peer(id)
     }
 
+    fn remove_discovered(&mut self, id: String) {
+        let mut peers = config::LanPeers::load().peers;
+        peers.retain(|x| x.id != id);
+        config::LanPeers::store(&peers);
+    }
+
+    fn send_wol(&mut self, id: String) {
+        crate::lan::send_wol(id)
+    }
+
     fn new_remote(&mut self, id: String, remote_type: String) {
         new_remote(id, remote_type)
     }
@@ -478,6 +549,17 @@ impl UI {
     fn get_api_server(&self) -> String {
         get_api_server()
     }
+
+    fn has_hwcodec(&self) -> bool {
+        #[cfg(not(feature = "hwcodec"))]
+        return false;
+        #[cfg(feature = "hwcodec")]
+        return true;
+    }
+
+    fn get_langs(&self) -> String {
+        crate::lang::LANGS.to_string()
+    }
 }
 
 impl sciter::EventHandler for UI {
@@ -487,14 +569,18 @@ impl sciter::EventHandler for UI {
         fn is_xfce();
         fn using_public_server();
         fn get_id();
-        fn get_password();
-        fn update_password(String);
+        fn temporary_password();
+        fn update_temporary_password();
+        fn permanent_password();
+        fn set_permanent_password(String);
         fn get_remote_id();
         fn set_remote_id(String);
         fn closing(i32, i32, i32, i32);
         fn get_size();
         fn new_remote(String, bool);
+        fn send_wol(String);
         fn remove_peer(String);
+        fn remove_discovered(String);
         fn get_connect_status();
         fn get_mouse_time();
         fn check_mouse_time();
@@ -554,6 +640,8 @@ impl sciter::EventHandler for UI {
         fn discover();
         fn get_lan_peers();
         fn get_uuid();
+        fn has_hwcodec();
+        fn get_langs();
     }
 }
 
@@ -561,6 +649,243 @@ impl sciter::host::HostHandler for UIHostHandler {
     fn on_graphics_critical_failure(&mut self) {
         log::error!("Critical rendering error: e.g. DirectX gfx driver error. Most probably bad gfx drivers.");
     }
+}
+
+pub fn check_zombie(childs: Childs) {
+    let mut deads = Vec::new();
+    loop {
+        let mut lock = childs.lock().unwrap();
+        let mut n = 0;
+        for (id, c) in lock.1.iter_mut() {
+            if let Ok(Some(_)) = c.try_wait() {
+                deads.push(id.clone());
+                n += 1;
+            }
+        }
+        for ref id in deads.drain(..) {
+            lock.1.remove(id);
+        }
+        if n > 0 {
+            lock.0 = true;
+        }
+        drop(lock);
+        std::thread::sleep(std::time::Duration::from_millis(100));
+    }
+}
+
+// notice: avoiding create ipc connecton repeatly,
+// because windows named pipe has serious memory leak issue.
+#[tokio::main(flavor = "current_thread")]
+async fn check_connect_status_(
+    reconnect: bool,
+    status: Arc<Mutex<Status>>,
+    options: Arc<Mutex<HashMap<String, String>>>,
+    rx: mpsc::UnboundedReceiver<ipc::Data>,
+    password: Arc<Mutex<String>>,
+) {
+    let mut key_confirmed = false;
+    let mut rx = rx;
+    let mut mouse_time = 0;
+    let mut id = "".to_owned();
+    loop {
+        if let Ok(mut c) = ipc::connect(1000, "").await {
+            let mut timer = time::interval(time::Duration::from_secs(1));
+            loop {
+                tokio::select! {
+                    res = c.next() => {
+                        match res {
+                            Err(err) => {
+                                log::error!("ipc connection closed: {}", err);
+                                break;
+                            }
+                            Ok(Some(ipc::Data::MouseMoveTime(v))) => {
+                                mouse_time = v;
+                                status.lock().unwrap().2 = v;
+                            }
+                            Ok(Some(ipc::Data::Options(Some(v)))) => {
+                                *options.lock().unwrap() = v
+                            }
+                            Ok(Some(ipc::Data::Config((name, Some(value))))) => {
+                                if name == "id" {
+                                    id = value;
+                                } else if name == "temporary-password" {
+                                    *password.lock().unwrap() = value;
+                                }
+                            }
+                            Ok(Some(ipc::Data::OnlineStatus(Some((mut x, c))))) => {
+                                if x > 0 {
+                                    x = 1
+                                }
+                                key_confirmed = c;
+                                *status.lock().unwrap() = (x as _, key_confirmed, mouse_time, id.clone());
+                            }
+                            _ => {}
+                        }
+                    }
+                    Some(data) = rx.recv() => {
+                        allow_err!(c.send(&data).await);
+                    }
+                    _ = timer.tick() => {
+                        c.send(&ipc::Data::OnlineStatus(None)).await.ok();
+                        c.send(&ipc::Data::Options(None)).await.ok();
+                        c.send(&ipc::Data::Config(("id".to_owned(), None))).await.ok();
+                        c.send(&ipc::Data::Config(("temporary-password".to_owned(), None))).await.ok();
+                    }
+                }
+            }
+        }
+        if !reconnect {
+            options
+                .lock()
+                .unwrap()
+                .insert("ipc-closed".to_owned(), "Y".to_owned());
+            break;
+        }
+        *status.lock().unwrap() = (-1, key_confirmed, mouse_time, id.clone());
+        sleep(1.).await;
+    }
+}
+
+#[cfg(not(target_os = "linux"))]
+fn get_sound_inputs() -> Vec<String> {
+    let mut out = Vec::new();
+    use cpal::traits::{DeviceTrait, HostTrait};
+    let host = cpal::default_host();
+    if let Ok(devices) = host.devices() {
+        for device in devices {
+            if device.default_input_config().is_err() {
+                continue;
+            }
+            if let Ok(name) = device.name() {
+                out.push(name);
+            }
+        }
+    }
+    out
+}
+
+#[cfg(target_os = "linux")]
+fn get_sound_inputs() -> Vec<String> {
+    crate::platform::linux::get_pa_sources()
+        .drain(..)
+        .map(|x| x.1)
+        .collect()
+}
+
+fn check_connect_status(
+    reconnect: bool,
+) -> (
+    Arc<Mutex<Status>>,
+    Arc<Mutex<HashMap<String, String>>>,
+    mpsc::UnboundedSender<ipc::Data>,
+    Arc<Mutex<String>>,
+) {
+    let status = Arc::new(Mutex::new((0, false, 0, "".to_owned())));
+    let options = Arc::new(Mutex::new(Config::get_options()));
+    let cloned = status.clone();
+    let cloned_options = options.clone();
+    let (tx, rx) = mpsc::unbounded_channel::<ipc::Data>();
+    let password = Arc::new(Mutex::new(String::default()));
+    let cloned_password = password.clone();
+    std::thread::spawn(move || {
+        check_connect_status_(reconnect, cloned, cloned_options, rx, cloned_password)
+    });
+    (status, options, tx, password)
+}
+
+const INVALID_FORMAT: &'static str = "Invalid format";
+const UNKNOWN_ERROR: &'static str = "Unknown error";
+
+#[tokio::main(flavor = "current_thread")]
+async fn change_id(id: String, old_id: String) -> &'static str {
+    if !hbb_common::is_valid_custom_id(&id) {
+        return INVALID_FORMAT;
+    }
+    let uuid = machine_uid::get().unwrap_or("".to_owned());
+    if uuid.is_empty() {
+        return UNKNOWN_ERROR;
+    }
+    let rendezvous_servers = crate::ipc::get_rendezvous_servers(1_000).await;
+    let mut futs = Vec::new();
+    let err: Arc<Mutex<&str>> = Default::default();
+    for rendezvous_server in rendezvous_servers {
+        let err = err.clone();
+        let id = id.to_owned();
+        let uuid = uuid.clone();
+        let old_id = old_id.clone();
+        futs.push(tokio::spawn(async move {
+            let tmp = check_id(rendezvous_server, old_id, id, uuid).await;
+            if !tmp.is_empty() {
+                *err.lock().unwrap() = tmp;
+            }
+        }));
+    }
+    join_all(futs).await;
+    let err = *err.lock().unwrap();
+    if err.is_empty() {
+        crate::ipc::set_config_async("id", id.to_owned()).await.ok();
+    }
+    err
+}
+
+async fn check_id(
+    rendezvous_server: String,
+    old_id: String,
+    id: String,
+    uuid: String,
+) -> &'static str {
+    let any_addr = Config::get_any_listen_addr();
+    if let Ok(mut socket) = FramedStream::new(
+        crate::check_port(rendezvous_server, RENDEZVOUS_PORT),
+        any_addr,
+        RENDEZVOUS_TIMEOUT,
+    )
+    .await
+    {
+        let mut msg_out = Message::new();
+        msg_out.set_register_pk(RegisterPk {
+            old_id,
+            id,
+            uuid: uuid.into(),
+            ..Default::default()
+        });
+        let mut ok = false;
+        if socket.send(&msg_out).await.is_ok() {
+            if let Some(Ok(bytes)) = socket.next_timeout(3_000).await {
+                if let Ok(msg_in) = RendezvousMessage::parse_from_bytes(&bytes) {
+                    match msg_in.union {
+                        Some(rendezvous_message::Union::RegisterPkResponse(rpr)) => {
+                            match rpr.result.enum_value_or_default() {
+                                register_pk_response::Result::OK => {
+                                    ok = true;
+                                }
+                                register_pk_response::Result::ID_EXISTS => {
+                                    return "Not available";
+                                }
+                                register_pk_response::Result::TOO_FREQUENT => {
+                                    return "Too frequent";
+                                }
+                                register_pk_response::Result::NOT_SUPPORT => {
+                                    return "server_not_support";
+                                }
+                                register_pk_response::Result::INVALID_ID_FORMAT => {
+                                    return INVALID_FORMAT;
+                                }
+                                _ => {}
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+            }
+        }
+        if !ok {
+            return UNKNOWN_ERROR;
+        }
+    } else {
+        return "Failed to connect to rendezvous server";
+    }
+    ""
 }
 
 // sacrifice some memory

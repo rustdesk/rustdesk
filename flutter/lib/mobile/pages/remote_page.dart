@@ -264,7 +264,6 @@ class _RemotePageState extends State<RemotePage> {
                             : SafeArea(child:
                             OrientationBuilder(builder: (ctx, orientation) {
                                 if (_currentOrientation != orientation) {
-                                  debugPrint("on orientation changed");
                                   Timer(Duration(milliseconds: 200), () {
                                     resetMobileActionsOverlay();
                                     _currentOrientation = orientation;
@@ -345,9 +344,14 @@ class _RemotePageState extends State<RemotePage> {
                     onKey: (data, e) {
                       final key = e.logicalKey;
                       if (e is RawKeyDownEvent) {
-                        if (e.repeat) {
+                        if (e.repeat &&
+                            !e.isAltPressed &&
+                            !e.isControlPressed &&
+                            !e.isShiftPressed &&
+                            !e.isMetaPressed) {
                           sendRawKey(e, press: true);
                         } else {
+                          sendRawKey(e, down: true);
                           if (e.isAltPressed && !gFFI.alt) {
                             gFFI.alt = true;
                           } else if (e.isControlPressed && !gFFI.ctrl) {
@@ -357,7 +361,6 @@ class _RemotePageState extends State<RemotePage> {
                           } else if (e.isMetaPressed && !gFFI.command) {
                             gFFI.command = true;
                           }
-                          sendRawKey(e, down: true);
                         }
                       }
                       // [!_showEdit] workaround for soft-keyboard's control_key like Backspace / Enter
@@ -483,6 +486,7 @@ class _RemotePageState extends State<RemotePage> {
   ///   DoubleFiner -> right click
   ///   HoldDrag -> left drag
 
+  Offset _cacheLongPressPosition = Offset(0, 0);
   Widget getBodyForMobileWithGesture() {
     final touchMode = gFFI.ffiModel.touchMode;
     return getMixinGestureDetector(
@@ -507,10 +511,15 @@ class _RemotePageState extends State<RemotePage> {
         onLongPressDown: (d) {
           if (touchMode) {
             gFFI.cursorModel.move(d.localPosition.dx, d.localPosition.dy);
+            _cacheLongPressPosition = d.localPosition;
           }
         },
         onLongPress: () {
-          gFFI.tap(MouseButtons.right);
+          if (touchMode) {
+            FFI.cursorModel
+                .move(_cacheLongPressPosition.dx, _cacheLongPressPosition.dy);
+          }
+          FFI.tap(MouseButtons.right);
         },
         onDoubleFinerTap: (d) {
           if (!touchMode) {
@@ -536,6 +545,15 @@ class _RemotePageState extends State<RemotePage> {
           if (touchMode) {
             gFFI.cursorModel.move(d.localPosition.dx, d.localPosition.dy);
             gFFI.sendMouse('down', MouseButtons.left);
+          } else {
+            final cursorX = FFI.cursorModel.x;
+            final cursorY = FFI.cursorModel.y;
+            final visible =
+                FFI.cursorModel.getVisibleRect().inflate(1); // extend edges
+            final size = MediaQueryData.fromWindow(ui.window).size;
+            if (!visible.contains(Offset(cursorX, cursorY))) {
+              FFI.cursorModel.move(size.width / 2, size.height / 2);
+            }
           }
         },
         onOneFingerPanUpdate: (d) {
@@ -946,18 +964,6 @@ CheckboxListTile getToggle(void Function(void Function()) setState, option, name
       title: Text(translate(name)));
 }
 
-RadioListTile<String> getRadio(String name, String toValue, String curValue,
-    void Function(String?) onChange) {
-  return RadioListTile<String>(
-    controlAffinity: ListTileControlAffinity.trailing,
-    title: Text(translate(name)),
-    value: toValue,
-    groupValue: curValue,
-    onChanged: onChange,
-    dense: true,
-  );
-}
-
 void showOptions() {
   String quality = gFFI.getByName('image_quality');
   if (quality == '') quality = 'balanced';
@@ -1045,6 +1051,8 @@ void showOptions() {
                 getRadio('Optimize reaction time', 'low', quality, setQuality),
                 Divider(color: MyTheme.border),
                 getToggle(setState, 'show-remote-cursor', 'Show remote cursor'),
+                getToggle(
+                    setState, 'show-quality-monitor', 'Show quality monitor'),
               ] +
               more),
       actions: [],

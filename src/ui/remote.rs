@@ -2,7 +2,7 @@ use std::{
     collections::HashMap,
     ops::Deref,
     sync::{
-        atomic::{AtomicBool, Ordering},
+        atomic::{AtomicBool, AtomicUsize, Ordering},
         Arc, Mutex, RwLock,
     },
 };
@@ -87,6 +87,7 @@ pub struct Handler {
     inner: Arc<RwLock<HandlerInner>>,
     cmd: String,
     id: String,
+    password: String,
     args: Vec<String>,
     lc: Arc<RwLock<LoginConfigHandler>>,
 }
@@ -223,7 +224,7 @@ impl sciter::EventHandler for Handler {
         fn get_custom_image_quality();
         fn save_view_style(String);
         fn save_image_quality(String);
-        fn save_custom_image_quality(i32, i32);
+        fn save_custom_image_quality(i32);
         fn refresh_video();
         fn get_toggle_option(String);
         fn is_privacy_mode_supported();
@@ -231,14 +232,28 @@ impl sciter::EventHandler for Handler {
         fn get_remember();
         fn peer_platform();
         fn set_write_override(i32, i32, bool, bool, bool);
+        fn has_hwcodec();
+        fn supported_hwcodec();
+        fn change_prefer_codec();
+        fn restart_remote_device();
     }
 }
 
+#[derive(Debug, Default)]
+struct QualityStatus {
+    speed: Option<String>,
+    fps: Option<i32>,
+    delay: Option<i32>,
+    target_bitrate: Option<i32>,
+    codec_format: Option<CodecFormat>,
+}
+
 impl Handler {
-    pub fn new(cmd: String, id: String, args: Vec<String>) -> Self {
+    pub fn new(cmd: String, id: String, password: String, args: Vec<String>) -> Self {
         let me = Self {
             cmd,
             id: id.clone(),
+            password: password.clone(),
             args,
             ..Default::default()
         };
@@ -247,6 +262,21 @@ impl Handler {
             .unwrap()
             .initialize(id, me.is_file_transfer(), me.is_port_forward());
         me
+    }
+
+    fn update_quality_status(&self, status: QualityStatus) {
+        self.call2(
+            "updateQualityStatus",
+            &make_args!(
+                status.speed.map_or(Value::null(), |it| it.into()),
+                status.fps.map_or(Value::null(), |it| it.into()),
+                status.delay.map_or(Value::null(), |it| it.into()),
+                status.target_bitrate.map_or(Value::null(), |it| it.into()),
+                status
+                    .codec_format
+                    .map_or(Value::null(), |it| it.to_string().into())
+            ),
+        );
     }
 
     fn start_keyboard_hook(&self) {
@@ -533,12 +563,12 @@ impl Handler {
         self.send(Data::Message(LoginConfigHandler::refresh()));
     }
 
-    fn save_custom_image_quality(&mut self, bitrate: i32, quantizer: i32) {
+    fn save_custom_image_quality(&mut self, custom_image_quality: i32) {
         let msg = self
             .lc
             .write()
             .unwrap()
-            .save_custom_image_quality(bitrate, quantizer);
+            .save_custom_image_quality(custom_image_quality);
         self.send(Data::Message(msg));
     }
 
@@ -569,6 +599,52 @@ impl Handler {
             is_upload,
         )));
         true
+    }
+
+    fn has_hwcodec(&self) -> bool {
+        #[cfg(not(feature = "hwcodec"))]
+        return false;
+        #[cfg(feature = "hwcodec")]
+        return true;
+    }
+
+    fn supported_hwcodec(&self) -> Value {
+        #[cfg(feature = "hwcodec")]
+        {
+            let mut v = Value::array(0);
+            let decoder = scrap::codec::Decoder::video_codec_state(&self.id);
+            let mut h264 = decoder.score_h264 > 0;
+            let mut h265 = decoder.score_h265 > 0;
+            if let Some((encoding_264, encoding_265)) = self.lc.read().unwrap().supported_encoding {
+                h264 = h264 && encoding_264;
+                h265 = h265 && encoding_265;
+            }
+            v.push(h264);
+            v.push(h265);
+            v
+        }
+        #[cfg(not(feature = "hwcodec"))]
+        {
+            let mut v = Value::array(0);
+            v.push(false);
+            v.push(false);
+            v
+        }
+    }
+
+    fn change_prefer_codec(&self) {
+        let msg = self.lc.write().unwrap().change_prefer_codec();
+        self.send(Data::Message(msg));
+    }
+
+    fn restart_remote_device(&mut self) {
+        self.lc.write().unwrap().restarting_remote_device = true;
+        let msg = self.lc.write().unwrap().restart_remote_device();
+        self.send(Data::Message(msg));
+    }
+
+    pub fn is_restarting_remote_device(&self) -> bool {
+        self.lc.read().unwrap().restarting_remote_device
     }
 
     fn t(&self, name: String) -> String {
@@ -1043,7 +1119,7 @@ impl Handler {
     fn get_char(&mut self, name: String, code: i32) -> String {
         if let Some(key_event) = self.get_key_event(1, &name, code) {
             match key_event.union {
-                Some(key_event::Union::chr(chr)) => {
+                Some(key_event::Union::Chr(chr)) => {
                     if let Some(chr) = std::char::from_u32(chr as _) {
                         return chr.to_string();
                     }
@@ -1074,7 +1150,7 @@ impl Handler {
 
     fn transfer_file(&mut self) {
         let id = self.get_id();
-        let args = vec!["--file-transfer", &id];
+        let args = vec!["--file-transfer", &id, &self.password];
         if let Err(err) = crate::run_me(args) {
             log::error!("Failed to spawn file transfer: {}", err);
         }
@@ -1082,7 +1158,7 @@ impl Handler {
 
     fn tunnel(&mut self) {
         let id = self.get_id();
-        let args = vec!["--port-forward", &id];
+        let args = vec!["--port-forward", &id, &self.password];
         if let Err(err) = crate::run_me(args) {
             log::error!("Failed to spawn IP tunneling: {}", err);
         }
@@ -1188,6 +1264,7 @@ async fn start_one_port_forward(
     handler.lc.write().unwrap().port_forward = (remote_host, remote_port);
     if let Err(err) = crate::port_forward::listen(
         handler.id.clone(),
+        handler.password.clone(),
         port,
         handler.clone(),
         receiver,
@@ -1296,7 +1373,10 @@ async fn io_loop(handler: Handler) {
         }
         return;
     }
-    let (video_sender, audio_sender) = start_video_audio_threads(|data: &[u8]| {
+    let frame_count = Arc::new(AtomicUsize::new(0));
+    let frame_count_cl = frame_count.clone();
+    let (video_sender, audio_sender) = start_video_audio_threads(move |data: &[u8]| {
+        frame_count_cl.fetch_add(1, Ordering::Relaxed);
         VIDEO
             .lock()
             .unwrap()
@@ -1319,6 +1399,9 @@ async fn io_loop(handler: Handler) {
         first_frame: false,
         #[cfg(windows)]
         clipboard_file_context: None,
+        data_count: Arc::new(AtomicUsize::new(0)),
+        frame_count,
+        video_format: CodecFormat::Unknown,
     };
     remote.io_loop(&key, &token).await;
     remote.sync_jobs_status_to_local().await;
@@ -1369,6 +1452,9 @@ struct Remote {
     first_frame: bool,
     #[cfg(windows)]
     clipboard_file_context: Option<Box<CliprdrClientContext>>,
+    data_count: Arc<AtomicUsize>,
+    frame_count: Arc<AtomicUsize>,
+    video_format: CodecFormat,
 }
 
 impl Remote {
@@ -1394,6 +1480,8 @@ impl Remote {
                 #[cfg(windows)]
                 let mut rx_clip_client = get_rx_clip_client().lock().await;
 
+                let mut status_timer = time::interval(Duration::new(1, 0));
+
                 loop {
                     tokio::select! {
                         res = peer.next() => {
@@ -1406,14 +1494,20 @@ impl Remote {
                                     }
                                     Ok(ref bytes) => {
                                         last_recv_time = Instant::now();
+                                        self.data_count.fetch_add(bytes.len(), Ordering::Relaxed);
                                         if !self.handle_msg_from_peer(bytes, &mut peer).await {
                                             break
                                         }
                                     }
                                 }
                             } else {
-                                log::info!("Reset by the peer");
-                                self.handler.msgbox("error", "Connection Error", "Reset by the peer");
+                                if self.handler.is_restarting_remote_device() {
+                                    log::info!("Restart remote device");
+                                    self.handler.msgbox("restarting", "Restarting Remote Device", "remote_restarting_tip");
+                                } else {
+                                    log::info!("Reset by the peer");
+                                    self.handler.msgbox("error", "Connection Error", "Reset by the peer");
+                                }
                                 break;
                             }
                         }
@@ -1449,6 +1543,16 @@ impl Remote {
                             } else {
                                 self.timer = time::interval_at(Instant::now() + SEC30, SEC30);
                             }
+                        }
+                        _ = status_timer.tick() => {
+                            let speed = self.data_count.swap(0, Ordering::Relaxed);
+                            let speed = format!("{:.2}kB/s", speed as f32 / 1024 as f32);
+                            let fps = self.frame_count.swap(0, Ordering::Relaxed) as _;
+                            self.handler.update_quality_status(QualityStatus {
+                                speed:Some(speed),
+                                fps:Some(fps),
+                                ..Default::default()
+                            });
                         }
                     }
                 }
@@ -1584,9 +1688,13 @@ impl Remote {
     }
 
     async fn handle_msg_from_ui(&mut self, data: Data, peer: &mut Stream) -> bool {
-        // log::info!("new msg from ui, {}",data);
         match data {
             Data::Close => {
+                let mut misc = Misc::new();
+                misc.set_close_reason("".to_owned());
+                let mut msg = Message::new();
+                msg.set_misc(misc);
+                allow_err!(peer.send(&msg).await);
                 return false;
             }
             Data::Login((password, remember)) => {
@@ -1764,9 +1872,9 @@ impl Remote {
                             id,
                             file_num,
                             union: if need_override {
-                                Some(file_transfer_send_confirm_request::Union::offset_blk(0))
+                                Some(file_transfer_send_confirm_request::Union::OffsetBlk(0))
                             } else {
-                                Some(file_transfer_send_confirm_request::Union::skip(true))
+                                Some(file_transfer_send_confirm_request::Union::Skip(true))
                             },
                             ..Default::default()
                         });
@@ -1782,9 +1890,9 @@ impl Remote {
                             id,
                             file_num,
                             union: if need_override {
-                                Some(file_transfer_send_confirm_request::Union::offset_blk(0))
+                                Some(file_transfer_send_confirm_request::Union::OffsetBlk(0))
                             } else {
-                                Some(file_transfer_send_confirm_request::Union::skip(true))
+                                Some(file_transfer_send_confirm_request::Union::Skip(true))
                             },
                             ..Default::default()
                         });
@@ -1955,11 +2063,11 @@ impl Remote {
         let mut config: PeerConfig = self.handler.load_config();
         let mut transfer_metas = TransferSerde::default();
         for job in self.read_jobs.iter() {
-            let json_str = serde_json::to_string(&job.gen_meta()).unwrap();
+            let json_str = serde_json::to_string(&job.gen_meta()).unwrap_or_default();
             transfer_metas.read_jobs.push(json_str);
         }
         for job in self.write_jobs.iter() {
-            let json_str = serde_json::to_string(&job.gen_meta()).unwrap();
+            let json_str = serde_json::to_string(&job.gen_meta()).unwrap_or_default();
             transfer_metas.write_jobs.push(json_str);
         }
         log::info!("meta: {:?}", transfer_metas);
@@ -1971,24 +2079,34 @@ impl Remote {
     async fn handle_msg_from_peer(&mut self, data: &[u8], peer: &mut Stream) -> bool {
         if let Ok(msg_in) = Message::parse_from_bytes(&data) {
             match msg_in.union {
-                Some(message::Union::video_frame(vf)) => {
+                Some(message::Union::VideoFrame(vf)) => {
                     if !self.first_frame {
                         self.first_frame = true;
                         self.handler.call2("closeSuccess", &make_args!());
                         self.handler.call("adaptSize", &make_args!());
                     }
+                    let incomming_format = CodecFormat::from(&vf);
+                    if self.video_format != incomming_format {
+                        self.video_format = incomming_format.clone();
+                        self.handler.update_quality_status(QualityStatus {
+                            codec_format: Some(incomming_format),
+                            ..Default::default()
+                        })
+                    };
                     self.video_sender.send(MediaData::VideoFrame(vf)).ok();
                 }
-                Some(message::Union::hash(hash)) => {
-                    self.handler.handle_hash(hash, peer).await;
+                Some(message::Union::Hash(hash)) => {
+                    self.handler
+                        .handle_hash(&self.handler.password.clone(), hash, peer)
+                        .await;
                 }
-                Some(message::Union::login_response(lr)) => match lr.union {
-                    Some(login_response::Union::error(err)) => {
+                Some(message::Union::LoginResponse(lr)) => match lr.union {
+                    Some(login_response::Union::Error(err)) => {
                         if !self.handler.handle_login_error(&err) {
                             return false;
                         }
                     }
-                    Some(login_response::Union::peer_info(pi)) => {
+                    Some(login_response::Union::PeerInfo(pi)) => {
                         self.handler.handle_peer_info(pi);
                         self.check_clipboard_file_context();
                         if !(self.handler.is_file_transfer()
@@ -2015,22 +2133,22 @@ impl Remote {
                     }
                     _ => {}
                 },
-                Some(message::Union::cursor_data(cd)) => {
+                Some(message::Union::CursorData(cd)) => {
                     self.handler.set_cursor_data(cd);
                 }
-                Some(message::Union::cursor_id(id)) => {
+                Some(message::Union::CursorId(id)) => {
                     self.handler.set_cursor_id(id.to_string());
                 }
-                Some(message::Union::cursor_position(cp)) => {
+                Some(message::Union::CursorPosition(cp)) => {
                     self.handler.set_cursor_position(cp);
                 }
-                Some(message::Union::clipboard(cb)) => {
+                Some(message::Union::Clipboard(cb)) => {
                     if !self.handler.lc.read().unwrap().disable_clipboard {
                         update_clipboard(cb, Some(&self.old_clipboard));
                     }
                 }
                 #[cfg(windows)]
-                Some(message::Union::cliprdr(clip)) => {
+                Some(message::Union::Cliprdr(clip)) => {
                     if !self.handler.lc.read().unwrap().disable_clipboard {
                         if let Some(context) = &mut self.clipboard_file_context {
                             if let Some(clip) = msg_2_clip(clip) {
@@ -2039,9 +2157,9 @@ impl Remote {
                         }
                     }
                 }
-                Some(message::Union::file_response(fr)) => {
+                Some(message::Union::FileResponse(fr)) => {
                     match fr.union {
-                        Some(file_response::Union::dir(fd)) => {
+                        Some(file_response::Union::Dir(fd)) => {
                             #[cfg(windows)]
                             let entries = fd.entries.to_vec();
                             #[cfg(not(windows))]
@@ -2064,7 +2182,7 @@ impl Remote {
                                 job.files = entries;
                             }
                         }
-                        Some(file_response::Union::digest(digest)) => {
+                        Some(file_response::Union::Digest(digest)) => {
                             if digest.is_upload {
                                 if let Some(job) = fs::get_job(digest.id, &mut self.read_jobs) {
                                     if let Some(file) = job.files().get(digest.file_num as usize) {
@@ -2075,9 +2193,9 @@ impl Remote {
                                                 id: digest.id,
                                                 file_num: digest.file_num,
                                                 union: Some(if overwrite {
-                                                    file_transfer_send_confirm_request::Union::offset_blk(0)
+                                                    file_transfer_send_confirm_request::Union::OffsetBlk(0)
                                                 } else {
-                                                    file_transfer_send_confirm_request::Union::skip(
+                                                    file_transfer_send_confirm_request::Union::Skip(
                                                         true,
                                                     )
                                                 }),
@@ -2110,7 +2228,7 @@ impl Remote {
                                                     let msg= new_send_confirm(FileTransferSendConfirmRequest {
                                                         id: digest.id,
                                                         file_num: digest.file_num,
-                                                        union: Some(file_transfer_send_confirm_request::Union::skip(true)),
+                                                        union: Some(file_transfer_send_confirm_request::Union::Skip(true)),
                                                         ..Default::default()
                                                     });
                                                     allow_err!(peer.send(&msg).await);
@@ -2122,9 +2240,9 @@ impl Remote {
                                                                 id: digest.id,
                                                                 file_num: digest.file_num,
                                                                 union: Some(if overwrite {
-                                                                    file_transfer_send_confirm_request::Union::offset_blk(0)
+                                                                    file_transfer_send_confirm_request::Union::OffsetBlk(0)
                                                                 } else {
-                                                                    file_transfer_send_confirm_request::Union::skip(true)
+                                                                    file_transfer_send_confirm_request::Union::Skip(true)
                                                                 }),
                                                                 ..Default::default()
                                                             },
@@ -2147,7 +2265,7 @@ impl Remote {
                                                     FileTransferSendConfirmRequest {
                                                         id: digest.id,
                                                         file_num: digest.file_num,
-                                                        union: Some(file_transfer_send_confirm_request::Union::offset_blk(0)),
+                                                        union: Some(file_transfer_send_confirm_request::Union::OffsetBlk(0)),
                                                         ..Default::default()
                                                     },
                                                 );
@@ -2162,7 +2280,7 @@ impl Remote {
                                 }
                             }
                         }
-                        Some(file_response::Union::block(block)) => {
+                        Some(file_response::Union::Block(block)) => {
                             log::info!(
                                 "file response block, file id:{}, file num: {}",
                                 block.id,
@@ -2175,27 +2293,27 @@ impl Remote {
                                 self.update_jobs_status();
                             }
                         }
-                        Some(file_response::Union::done(d)) => {
+                        Some(file_response::Union::Done(d)) => {
                             if let Some(job) = fs::get_job(d.id, &mut self.write_jobs) {
                                 job.modify_time();
                                 fs::remove_job(d.id, &mut self.write_jobs);
                             }
                             self.handle_job_status(d.id, d.file_num, None);
                         }
-                        Some(file_response::Union::error(e)) => {
+                        Some(file_response::Union::Error(e)) => {
                             self.handle_job_status(e.id, e.file_num, Some(e.error));
                         }
                         _ => {}
                     }
                 }
-                Some(message::Union::misc(misc)) => match misc.union {
-                    Some(misc::Union::audio_format(f)) => {
+                Some(message::Union::Misc(misc)) => match misc.union {
+                    Some(misc::Union::AudioFormat(f)) => {
                         self.audio_sender.send(MediaData::AudioFormat(f)).ok();
                     }
-                    Some(misc::Union::chat_message(c)) => {
+                    Some(misc::Union::ChatMessage(c)) => {
                         self.handler.call("newMessage", &make_args!(c.text));
                     }
-                    Some(misc::Union::permission_info(p)) => {
+                    Some(misc::Union::PermissionInfo(p)) => {
                         log::info!("Change permission {:?} -> {}", p.permission, p.enabled);
                         match p.permission.enum_value_or_default() {
                             Permission::Keyboard => {
@@ -2221,9 +2339,13 @@ impl Remote {
                                 self.handler
                                     .call2("setPermission", &make_args!("file", p.enabled));
                             }
+                            Permission::Restart => {
+                                self.handler
+                                    .call2("setPermission", &make_args!("restart", p.enabled));
+                            }
                         }
                     }
-                    Some(misc::Union::switch_display(s)) => {
+                    Some(misc::Union::SwitchDisplay(s)) => {
                         self.handler.call("switchDisplay", &make_args!(s.display));
                         self.video_sender.send(MediaData::Reset).ok();
                         if s.width > 0 && s.height > 0 {
@@ -2239,27 +2361,27 @@ impl Remote {
                             self.handler.set_display(s.x, s.y, s.width, s.height);
                         }
                     }
-                    Some(misc::Union::close_reason(c)) => {
+                    Some(misc::Union::CloseReason(c)) => {
                         self.handler.msgbox("error", "Connection Error", &c);
                         return false;
                     }
-                    Some(misc::Union::back_notification(notification)) => {
+                    Some(misc::Union::BackNotification(notification)) => {
                         if !self.handle_back_notification(notification).await {
                             return false;
                         }
                     }
                     _ => {}
                 },
-                Some(message::Union::test_delay(t)) => {
+                Some(message::Union::TestDelay(t)) => {
                     self.handler.handle_test_delay(t, peer).await;
                 }
-                Some(message::Union::audio_frame(frame)) => {
+                Some(message::Union::AudioFrame(frame)) => {
                     if !self.handler.lc.read().unwrap().disable_audio {
                         self.audio_sender.send(MediaData::AudioFrame(frame)).ok();
                     }
                 }
-                Some(message::Union::file_action(action)) => match action.union {
-                    Some(file_action::Union::send_confirm(c)) => {
+                Some(message::Union::FileAction(action)) => match action.union {
+                    Some(file_action::Union::SendConfirm(c)) => {
                         if let Some(job) = fs::get_job(c.id, &mut self.read_jobs) {
                             job.confirm(&c);
                         }
@@ -2274,16 +2396,16 @@ impl Remote {
 
     async fn handle_back_notification(&mut self, notification: BackNotification) -> bool {
         match notification.union {
-            Some(back_notification::Union::block_input_state(state)) => {
+            Some(back_notification::Union::BlockInputState(state)) => {
                 self.handle_back_msg_block_input(
-                    state.enum_value_or(back_notification::BlockInputState::StateUnknown),
+                    state.enum_value_or(back_notification::BlockInputState::BlkStateUnknown),
                 )
                 .await;
             }
-            Some(back_notification::Union::privacy_mode_state(state)) => {
+            Some(back_notification::Union::PrivacyModeState(state)) => {
                 if !self
                     .handle_back_msg_privacy_mode(
-                        state.enum_value_or(back_notification::PrivacyModeState::StateUnknown),
+                        state.enum_value_or(back_notification::PrivacyModeState::PrvStateUnknown),
                     )
                     .await
                 {
@@ -2302,18 +2424,18 @@ impl Remote {
 
     async fn handle_back_msg_block_input(&mut self, state: back_notification::BlockInputState) {
         match state {
-            back_notification::BlockInputState::OnSucceeded => {
+            back_notification::BlockInputState::BlkOnSucceeded => {
                 self.update_block_input_state(true);
             }
-            back_notification::BlockInputState::OnFailed => {
+            back_notification::BlockInputState::BlkOnFailed => {
                 self.handler
                     .msgbox("custom-error", "Block user input", "Failed");
                 self.update_block_input_state(false);
             }
-            back_notification::BlockInputState::OffSucceeded => {
+            back_notification::BlockInputState::BlkOffSucceeded => {
                 self.update_block_input_state(false);
             }
-            back_notification::BlockInputState::OffFailed => {
+            back_notification::BlockInputState::BlkOffFailed => {
                 self.handler
                     .msgbox("custom-error", "Unblock user input", "Failed");
             }
@@ -2335,7 +2457,7 @@ impl Remote {
         state: back_notification::PrivacyModeState,
     ) -> bool {
         match state {
-            back_notification::PrivacyModeState::OnByOther => {
+            back_notification::PrivacyModeState::PrvOnByOther => {
                 self.handler.msgbox(
                     "error",
                     "Connecting...",
@@ -2343,46 +2465,46 @@ impl Remote {
                 );
                 return false;
             }
-            back_notification::PrivacyModeState::NotSupported => {
+            back_notification::PrivacyModeState::PrvNotSupported => {
                 self.handler
                     .msgbox("custom-error", "Privacy mode", "Unsupported");
                 self.update_privacy_mode(false);
             }
-            back_notification::PrivacyModeState::OnSucceeded => {
+            back_notification::PrivacyModeState::PrvOnSucceeded => {
                 self.handler
                     .msgbox("custom-nocancel", "Privacy mode", "In privacy mode");
                 self.update_privacy_mode(true);
             }
-            back_notification::PrivacyModeState::OnFailedDenied => {
+            back_notification::PrivacyModeState::PrvOnFailedDenied => {
                 self.handler
                     .msgbox("custom-error", "Privacy mode", "Peer denied");
                 self.update_privacy_mode(false);
             }
-            back_notification::PrivacyModeState::OnFailedPlugin => {
+            back_notification::PrivacyModeState::PrvOnFailedPlugin => {
                 self.handler
                     .msgbox("custom-error", "Privacy mode", "Please install plugins");
                 self.update_privacy_mode(false);
             }
-            back_notification::PrivacyModeState::OnFailed => {
+            back_notification::PrivacyModeState::PrvOnFailed => {
                 self.handler
                     .msgbox("custom-error", "Privacy mode", "Failed");
                 self.update_privacy_mode(false);
             }
-            back_notification::PrivacyModeState::OffSucceeded => {
+            back_notification::PrivacyModeState::PrvOffSucceeded => {
                 self.handler
                     .msgbox("custom-nocancel", "Privacy mode", "Out privacy mode");
                 self.update_privacy_mode(false);
             }
-            back_notification::PrivacyModeState::OffByPeer => {
+            back_notification::PrivacyModeState::PrvOffByPeer => {
                 self.handler
                     .msgbox("custom-error", "Privacy mode", "Peer exit");
                 self.update_privacy_mode(false);
             }
-            back_notification::PrivacyModeState::OffFailed => {
+            back_notification::PrivacyModeState::PrvOffFailed => {
                 self.handler
                     .msgbox("custom-error", "Privacy mode", "Failed to turn off");
             }
-            back_notification::PrivacyModeState::OffUnknown => {
+            back_notification::PrivacyModeState::PrvOffUnknown => {
                 self.handler
                     .msgbox("custom-error", "Privacy mode", "Turned off");
                 // log::error!("Privacy mode is turned off with unknown reason");
@@ -2540,8 +2662,8 @@ impl Interface for Handler {
         self.start_keyboard_hook();
     }
 
-    async fn handle_hash(&mut self, hash: Hash, peer: &mut Stream) {
-        handle_hash(self.lc.clone(), hash, self, peer).await;
+    async fn handle_hash(&mut self, pass: &str, hash: Hash, peer: &mut Stream) {
+        handle_hash(self.lc.clone(), pass, hash, self, peer).await;
     }
 
     async fn handle_login_from_ui(&mut self, password: String, remember: bool, peer: &mut Stream) {
@@ -2549,7 +2671,14 @@ impl Interface for Handler {
     }
 
     async fn handle_test_delay(&mut self, t: TestDelay, peer: &mut Stream) {
-        handle_test_delay(t, peer).await;
+        if !t.from_client {
+            self.update_quality_status(QualityStatus {
+                delay: Some(t.last_delay as _),
+                target_bitrate: Some(t.target_bitrate as _),
+                ..Default::default()
+            });
+            handle_test_delay(t, peer).await;
+        }
     }
 }
 

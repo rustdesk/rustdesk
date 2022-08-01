@@ -1,4 +1,5 @@
 use super::{CursorData, ResultType};
+pub use hbb_common::platform::linux::*;
 use hbb_common::{allow_err, bail, log};
 use libc::{c_char, c_int, c_void};
 use std::{
@@ -8,6 +9,7 @@ use std::{
         Arc,
     },
 };
+
 type Xdo = *const c_void;
 
 pub const PA_SAMPLE_RATE: u32 = 48000;
@@ -109,7 +111,8 @@ pub fn get_cursor_data(hcursor: u64) -> ResultType<CursorData> {
                         cd.id = (*img).cursor_serial as _;
                         let pixels =
                             std::slice::from_raw_parts((*img).pixels, (cd.width * cd.height) as _);
-                        cd.colors.resize(pixels.len() * 4, 0);
+                        // cd.colors.resize(pixels.len() * 4, 0);
+                        let mut cd_colors = vec![0_u8; pixels.len() * 4];
                         for y in 0..cd.height {
                             for x in 0..cd.width {
                                 let pos = (y * cd.width + x) as usize;
@@ -122,12 +125,13 @@ pub fn get_cursor_data(hcursor: u64) -> ResultType<CursorData> {
                                     continue;
                                 }
                                 let pos = pos * 4;
-                                cd.colors[pos] = r as _;
-                                cd.colors[pos + 1] = g as _;
-                                cd.colors[pos + 2] = b as _;
-                                cd.colors[pos + 3] = a as _;
+                                cd_colors[pos] = r as _;
+                                cd_colors[pos + 1] = g as _;
+                                cd_colors[pos + 2] = b as _;
+                                cd_colors[pos + 3] = a as _;
                             }
                         }
+                        cd.colors = cd_colors.into();
                         res = Some(cd);
                     }
                     if !img.is_null() {
@@ -143,7 +147,75 @@ pub fn get_cursor_data(hcursor: u64) -> ResultType<CursorData> {
     }
 }
 
+fn start_uinput_service() {
+    use crate::server::uinput::service;
+    std::thread::spawn(|| {
+        service::start_service_control();
+    });
+    std::thread::spawn(|| {
+        service::start_service_keyboard();
+    });
+    std::thread::spawn(|| {
+        service::start_service_mouse();
+    });
+}
+
+fn try_start_user_service(username: &str) {
+    if username == "" || username == "root" {
+        return;
+    }
+
+    if let Ok(mut cur_username) =
+        run_cmds("ps -ef | grep -E 'rustdesk +--server' | awk '{print $1}' | head -1".to_owned())
+    {
+        cur_username = cur_username.trim().to_owned();
+        if cur_username != "root" && cur_username != username {
+            let _ = run_cmds(format!(
+                "systemctl --machine={}@.host --user stop rustdesk",
+                &cur_username
+            ));
+        } else if cur_username == username {
+            return;
+        }
+    }
+
+    let _ = run_cmds(format!(
+        "systemctl --machine={}@.host --user start rustdesk",
+        username
+    ));
+}
+
+fn try_stop_user_service() {
+    if let Ok(mut username) =
+        run_cmds("ps -ef | grep -E 'rustdesk +--server' | awk '{print $1}' | head -1".to_owned())
+    {
+        username = username.trim().to_owned();
+        if username != "root" {
+            let _ = run_cmds(format!(
+                "systemctl --machine={}@.host --user stop rustdesk",
+                &username
+            ));
+        }
+    }
+}
+
+fn stop_server(server: &mut Option<std::process::Child>) {
+    if let Some(mut ps) = server.take() {
+        allow_err!(ps.kill());
+        std::thread::sleep(std::time::Duration::from_millis(30));
+        match ps.try_wait() {
+            Ok(Some(_status)) => {}
+            Ok(None) => {
+                let _res = ps.wait();
+            }
+            Err(e) => log::error!("error attempting to wait: {e}"),
+        }
+    }
+}
+
 pub fn start_os_service() {
+    start_uinput_service();
+
     let running = Arc::new(AtomicBool::new(true));
     let r = running.clone();
     let mut uid = "".to_owned();
@@ -157,85 +229,106 @@ pub fn start_os_service() {
     let mut cm0 = false;
     let mut last_restart = std::time::Instant::now();
     while running.load(Ordering::SeqCst) {
-        let cm = get_cm();
-        let tmp = get_active_userid();
-        let mut start_new = false;
-        if tmp != uid && !tmp.is_empty() {
-            uid = tmp;
-            log::info!("uid of seat0: {}", uid);
-            let gdm = format!("/run/user/{}/gdm/Xauthority", uid);
-            let mut auth = get_env_tries("XAUTHORITY", &uid, 10);
-            if auth.is_empty() {
-                auth = if std::path::Path::new(&gdm).exists() {
-                    gdm
-                } else {
-                    let username = get_active_username();
-                    if username == "root" {
-                        format!("/{}/.Xauthority", username)
+        let username = get_active_username();
+        let is_wayland = current_is_wayland();
+
+        if username == "root" || !is_wayland {
+            // try stop user service
+            try_stop_user_service();
+
+            // try start subprocess "--server"
+            let cm = get_cm();
+            let tmp = get_active_userid();
+            let mut start_new = false;
+            if tmp != uid && !tmp.is_empty() {
+                uid = tmp;
+                log::info!("uid of seat0: {}", uid);
+                let gdm = format!("/run/user/{}/gdm/Xauthority", uid);
+                let mut auth = get_env_tries("XAUTHORITY", &uid, 10);
+                if auth.is_empty() {
+                    auth = if std::path::Path::new(&gdm).exists() {
+                        gdm
                     } else {
-                        let tmp = format!("/home/{}/.Xauthority", username);
-                        if std::path::Path::new(&tmp).exists() {
-                            tmp
+                        let username = get_active_username();
+                        if username == "root" {
+                            format!("/{}/.Xauthority", username)
                         } else {
-                            format!("/var/lib/{}/.Xauthority", username)
+                            let tmp = format!("/home/{}/.Xauthority", username);
+                            if std::path::Path::new(&tmp).exists() {
+                                tmp
+                            } else {
+                                format!("/var/lib/{}/.Xauthority", username)
+                            }
                         }
-                    }
-                };
-            }
-            let mut d = get_env("DISPLAY", &uid);
-            if d.is_empty() {
-                d = get_display();
-            }
-            if d.is_empty() {
-                d = ":0".to_owned();
-            }
-            d = d.replace(&whoami::hostname(), "").replace("localhost", "");
-            log::info!("DISPLAY: {}", d);
-            log::info!("XAUTHORITY: {}", auth);
-            std::env::set_var("XAUTHORITY", auth);
-            std::env::set_var("DISPLAY", d);
-            if let Some(ps) = server.as_mut() {
-                allow_err!(ps.kill());
-                std::thread::sleep(std::time::Duration::from_millis(30));
-                last_restart = std::time::Instant::now();
-            }
-        } else if !cm
-            && ((cm0 && last_restart.elapsed().as_secs() > 60)
-                || last_restart.elapsed().as_secs() > 3600)
-        {
-            // restart server if new connections all closed, or every one hour,
-            // as a workaround to resolve "SpotUdp" (dns resolve)
-            // and x server get displays failure issue
-            if let Some(ps) = server.as_mut() {
-                allow_err!(ps.kill());
-                std::thread::sleep(std::time::Duration::from_millis(30));
-                last_restart = std::time::Instant::now();
-                log::info!("restart server");
-            }
-        }
-        if let Some(ps) = server.as_mut() {
-            match ps.try_wait() {
-                Ok(Some(_)) => {
-                    server = None;
-                    start_new = true;
+                    };
                 }
-                _ => {}
+                let mut d = get_env("DISPLAY", &uid);
+                if d.is_empty() {
+                    d = get_display();
+                }
+                if d.is_empty() {
+                    d = ":0".to_owned();
+                }
+                d = d.replace(&whoami::hostname(), "").replace("localhost", "");
+                log::info!("DISPLAY: {}", d);
+                log::info!("XAUTHORITY: {}", auth);
+                std::env::set_var("XAUTHORITY", auth);
+                std::env::set_var("DISPLAY", d);
+                if let Some(ps) = server.as_mut() {
+                    allow_err!(ps.kill());
+                    std::thread::sleep(std::time::Duration::from_millis(30));
+                    last_restart = std::time::Instant::now();
+                }
+            } else if !cm
+                && ((cm0 && last_restart.elapsed().as_secs() > 60)
+                    || last_restart.elapsed().as_secs() > 3600)
+            {
+                // restart server if new connections all closed, or every one hour,
+                // as a workaround to resolve "SpotUdp" (dns resolve)
+                // and x server get displays failure issue
+                if let Some(ps) = server.as_mut() {
+                    allow_err!(ps.kill());
+                    std::thread::sleep(std::time::Duration::from_millis(30));
+                    last_restart = std::time::Instant::now();
+                    log::info!("restart server");
+                }
+            }
+            if let Some(ps) = server.as_mut() {
+                match ps.try_wait() {
+                    Ok(Some(_)) => {
+                        server = None;
+                        start_new = true;
+                    }
+                    _ => {}
+                }
+            } else {
+                start_new = true;
+            }
+            if start_new {
+                match crate::run_me(vec!["--server"]) {
+                    Ok(ps) => server = Some(ps),
+                    Err(err) => {
+                        log::error!("Failed to start server: {}", err);
+                    }
+                }
+            }
+            cm0 = cm;
+        } else if username != "" {
+            if username != "gdm" {
+                // try kill subprocess "--server"
+                stop_server(&mut server);
+
+                // try start user service
+                try_start_user_service(&username);
             }
         } else {
-            start_new = true;
+            try_stop_user_service();
+            stop_server(&mut server);
         }
-        if start_new {
-            match crate::run_me(vec!["--server"]) {
-                Ok(ps) => server = Some(ps),
-                Err(err) => {
-                    log::error!("Failed to start server: {}", err);
-                }
-            }
-        }
-        cm0 = cm;
         std::thread::sleep(std::time::Duration::from_millis(super::SERVICE_INTERVAL));
     }
 
+    try_stop_user_service();
     if let Some(ps) = server.take().as_mut() {
         allow_err!(ps.kill());
     }
@@ -244,17 +337,6 @@ pub fn start_os_service() {
 
 pub fn get_active_userid() -> String {
     get_value_of_seat0(1)
-}
-
-fn is_active(sid: &str) -> bool {
-    if let Ok(output) = std::process::Command::new("loginctl")
-        .args(vec!["show-session", "-p", "State", sid])
-        .output()
-    {
-        String::from_utf8_lossy(&output.stdout).contains("active")
-    } else {
-        false
-    }
 }
 
 fn get_cm() -> bool {
@@ -310,89 +392,6 @@ fn get_display() -> String {
         }
     }
     last
-}
-
-fn get_value_of_seat0(i: usize) -> String {
-    if let Ok(output) = std::process::Command::new("loginctl").output() {
-        for line in String::from_utf8_lossy(&output.stdout).lines() {
-            if line.contains("seat0") {
-                if let Some(sid) = line.split_whitespace().nth(0) {
-                    if is_active(sid) {
-                        if let Some(uid) = line.split_whitespace().nth(i) {
-                            return uid.to_owned();
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    // some case, there is no seat0 https://github.com/rustdesk/rustdesk/issues/73
-    if let Ok(output) = std::process::Command::new("loginctl").output() {
-        for line in String::from_utf8_lossy(&output.stdout).lines() {
-            if let Some(sid) = line.split_whitespace().nth(0) {
-                let d = get_display_server_of_session(sid);
-                if is_active(sid) && d != "tty" {
-                    if let Some(uid) = line.split_whitespace().nth(i) {
-                        return uid.to_owned();
-                    }
-                }
-            }
-        }
-    }
-
-    return "".to_owned();
-}
-
-pub fn get_display_server() -> String {
-    let session = get_value_of_seat0(0);
-    get_display_server_of_session(&session)
-}
-
-fn get_display_server_of_session(session: &str) -> String {
-    if let Ok(output) = std::process::Command::new("loginctl")
-        .args(vec!["show-session", "-p", "Type", session])
-        .output()
-    // Check session type of the session
-    {
-        let display_server = String::from_utf8_lossy(&output.stdout)
-            .replace("Type=", "")
-            .trim_end()
-            .into();
-        if display_server == "tty" {
-            // If the type is tty...
-            if let Ok(output) = std::process::Command::new("loginctl")
-                .args(vec!["show-session", "-p", "TTY", session])
-                .output()
-            // Get the tty number
-            {
-                let tty: String = String::from_utf8_lossy(&output.stdout)
-                    .replace("TTY=", "")
-                    .trim_end()
-                    .into();
-                if let Ok(xorg_results) = run_cmds(format!("ps -e | grep \"{}.\\\\+Xorg\"", tty))
-                // And check if Xorg is running on that tty
-                {
-                    if xorg_results.trim_end().to_string() != "" {
-                        // If it is, manually return "x11", otherwise return tty
-                        "x11".to_owned()
-                    } else {
-                        display_server
-                    }
-                } else {
-                    // If any of these commands fail just fall back to the display server
-                    display_server
-                }
-            } else {
-                display_server
-            }
-        } else {
-            // If the session is not a tty, then just return the type as usual
-            display_server
-        }
-    } else {
-        "".to_owned()
-    }
 }
 
 pub fn is_login_wayland() -> bool {
@@ -599,13 +598,6 @@ pub fn block_input(_v: bool) -> bool {
 
 pub fn is_installed() -> bool {
     true
-}
-
-pub fn run_cmds(cmds: String) -> ResultType<String> {
-    let output = std::process::Command::new("sh")
-        .args(vec!["-c", &cmds])
-        .output()?;
-    Ok(String::from_utf8_lossy(&output.stdout).to_string())
 }
 
 fn get_env_tries(name: &str, uid: &str, n: usize) -> String {

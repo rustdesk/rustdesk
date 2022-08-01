@@ -50,8 +50,14 @@ impl Capturer {
     pub fn height(&self) -> usize {
         self.inner.height()
     }
+}
 
-    pub fn frame<'a>(&'a mut self, _timeout_ms: u32) -> io::Result<Frame<'a>> {
+impl crate::TraitCapturer for Capturer {
+    fn set_use_yuv(&mut self, use_yuv: bool) {
+        self.use_yuv = use_yuv;
+    }
+
+    fn frame<'a>(&'a mut self, _timeout_ms: std::time::Duration) -> io::Result<Frame<'a>> {
         match self.frame.try_lock() {
             Ok(mut handle) => {
                 let mut frame = None;

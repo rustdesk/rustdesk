@@ -6,7 +6,7 @@ use std::io::ErrorKind::WouldBlock;
 use std::thread;
 use std::time::Duration;
 
-use scrap::{i420_to_rgb, Capturer, Display};
+use scrap::{i420_to_rgb, Capturer, Display, TraitCapturer};
 
 fn main() {
     let n = Display::all().unwrap().len();
@@ -34,7 +34,7 @@ fn record(i: usize) {
     loop {
         // Wait until there's a frame.
 
-        let buffer = match capturer.frame(0) {
+        let buffer = match capturer.frame(Duration::from_millis(0)) {
             Ok(buffer) => buffer,
             Err(error) => {
                 if error.kind() == WouldBlock {
@@ -83,7 +83,7 @@ fn record(i: usize) {
     loop {
         // Wait until there's a frame.
 
-        let buffer = match capturer.frame(0) {
+        let buffer = match capturer.frame(Duration::from_millis(0)) {
             Ok(buffer) => buffer,
             Err(error) => {
                 if error.kind() == WouldBlock {

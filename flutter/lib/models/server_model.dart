@@ -11,6 +11,10 @@ import 'model.dart';
 
 const loginDialogTag = "LOGIN";
 
+const kUseTemporaryPassword = "use-temporary-password";
+const kUsePermanentPassword = "use-permanent-password";
+const kUseBothPasswords = "use-both-passwords";
+
 class ServerModel with ChangeNotifier {
   bool _isStart = false; // Android MainService status
   bool _mediaOk = false;
@@ -18,6 +22,7 @@ class ServerModel with ChangeNotifier {
   bool _audioOk = false;
   bool _fileOk = false;
   int _connectStatus = 0; // Rendezvous Server status
+  String _verificationMethod = "";
 
   late String _emptyIdShow;
   late final TextEditingController _serverId;
@@ -36,6 +41,8 @@ class ServerModel with ChangeNotifier {
   bool get fileOk => _fileOk;
 
   int get connectStatus => _connectStatus;
+
+  String get verificationMethod => _verificationMethod;
 
   TextEditingController get serverId => _serverId;
 
@@ -112,7 +119,27 @@ class ServerModel with ChangeNotifier {
         debugPrint("clients not match!");
         updateClientState(res);
       }
+
+      updatePasswordModel();
     });
+  }
+
+  updatePasswordModel() {
+    var update = false;
+    final temporaryPassword = FFI.getByName("temporary_password");
+    final verificationMethod = FFI.getByName("option", "verification-method");
+    if (_serverPasswd.text != temporaryPassword) {
+      _serverPasswd.text = temporaryPassword;
+      update = true;
+    }
+
+    if (_verificationMethod != verificationMethod) {
+      _verificationMethod = verificationMethod;
+      update = true;
+    }
+    if (update) {
+      notifyListeners();
+    }
   }
 
   toggleAudio() async {
@@ -216,7 +243,7 @@ class ServerModel with ChangeNotifier {
     parent.target?.ffiModel.updateEventListener("");
     await parent.target?.invokeMethod("init_service");
     parent.target?.setByName("start_service");
-    getIDPasswd();
+    _fetchID();
     updateClientState();
     if (!Platform.isLinux) {
       // current linux is not supported
@@ -242,54 +269,33 @@ class ServerModel with ChangeNotifier {
     await parent.target?.invokeMethod("init_input");
   }
 
-  Future<bool> updatePassword(String pw) async {
-    final oldPasswd = _serverPasswd.text;
-    parent.target?.setByName("update_password", pw);
+  Future<bool> setPermanentPassword(String newPW) async {
+    parent.target?.setByName("permanent_password", newPW);
     await Future.delayed(Duration(milliseconds: 500));
-    await getIDPasswd(force: true);
-
-    // check result
-    if (pw == "") {
-      if (_serverPasswd.text.isNotEmpty && _serverPasswd.text != oldPasswd) {
-        return true;
-      } else {
-        return false;
-      }
+    final pw = parent.target?.getByName("permanent_password", newPW);
+    if (newPW == pw) {
+      return true;
     } else {
-      if (_serverPasswd.text == pw) {
-        return true;
-      } else {
-        return false;
-      }
+      return false;
     }
   }
 
-  getIDPasswd({bool force = false}) async {
-    if (!force && _serverId.text != _emptyIdShow && _serverPasswd.text != "") {
-      return;
-    }
+  _fetchID() async {
+    final old = _serverId.text;
     var count = 0;
     const maxCount = 10;
     while (count < maxCount) {
       await Future.delayed(Duration(seconds: 1));
-      final id = parent.target?.getByName("server_id") ?? "";
-      final passwd = parent.target?.getByName("server_password") ?? "";
+      final id = parent.target?.getByName("server_id");
       if (id.isEmpty) {
         continue;
       } else {
         _serverId.text = id;
       }
 
-      if (passwd.isEmpty) {
-        continue;
-      } else {
-        _serverPasswd.text = passwd;
-      }
-
-      debugPrint(
-          "fetch id & passwd again at $count:id:${_serverId.text},passwd:${_serverPasswd.text}");
+      debugPrint("fetch id again at $count:id:${_serverId.text}");
       count++;
-      if (_serverId.text != _emptyIdShow && _serverPasswd.text.isNotEmpty) {
+      if (_serverId.text != old) {
         break;
       }
     }

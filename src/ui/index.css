@@ -403,3 +403,18 @@ div.remote-session svg#menu {
     background: none;
     color: white;
 }
+
+svg#refresh-password {
+    display: inline-block;
+    stroke:#ddd;
+}
+
+svg#refresh-password:hover {
+    stroke:color(text);
+}
+
+li:disabled, li:disabled:hover {
+    color: color(lighter-text);
+    background: color(menu);
+}
+

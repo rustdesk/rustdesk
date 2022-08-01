@@ -1,4 +1,11 @@
-use crate::log;
+use crate::{
+    log,
+    password_security::{
+        decrypt_str_or_original, decrypt_vec_or_original, encrypt_str_or_original,
+        encrypt_vec_or_original,
+    },
+};
+use anyhow::Result;
 use directories_next::ProjectDirs;
 use rand::Rng;
 use serde_derive::{Deserialize, Serialize};
@@ -17,6 +24,7 @@ pub const CONNECT_TIMEOUT: u64 = 18_000;
 pub const REG_INTERVAL: i64 = 12_000;
 pub const COMPRESS_LEVEL: i32 = 3;
 const SERIAL: i32 = 3;
+const PASSWORD_ENC_VERSION: &'static str = "00";
 // 128x128
 #[cfg(target_os = "macos")] // 128x128 on 160x160 canvas, then shrink to 128, mac looks better with padding
 pub const ICON: &str = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAIAAAACACAMAAAD04JH5AAAAyVBMVEUAAAAAcf8Acf8Acf8Acv8Acf8Acf8Acf8Acf8AcP8Acf8Ab/8AcP8Acf////8AaP/z+f/o8v/k7v/5/v/T5f8AYP/u9v/X6f+hx/+Kuv95pP8Aef/B1/+TwP9xoP8BdP/g6P+Irv9ZmP8Bgf/E3f98q/9sn/+01f+Es/9nm/9Jif8hhv8off/M4P+syP+avP86iP/c7f+xy/9yqf9Om/9hk/9Rjv+60P99tv9fpf88lv8yjf8Tgf8deP+kvP8BiP8NeP8hkP80gP8oj2VLAAAADXRSTlMA7o7qLvnaxZ1FOxYPjH9HWgAABHJJREFUeNrtm+tW4jAQgBfwuu7MtIUWsOUiCCioIIgLiqvr+z/UHq/LJKVkmwTcc/r9E2nzlU4mSTP9lpGRkZGR8VX5cZjfL+yCEXYL+/nDH//U/Pd8DgyTy39Xbv7oIAcWyB0cqbW/sweW2NtRaj8H1sgpGOwUIAH7Bkd7YJW9dXFwAJY5WNP/cmCZQnJvzIN18on5LwfWySXlxEPYAIcad8D6PdiHDbCfIFCADVBIENiFDbCbIACKPPXrZ+cP8E6/0znvP4EymgIEravIRcTxu8HxNSJ60a8W0AYECKrlAN+YwAthCd9wm1Ug6wKzIn5SgRduXfwkqDasCjx0XFzi9PV6zwNcIuhcWBOg+ikySq8C9UD4dEKWBCoOcspvAuLHTo9sCDQiFPHotRM48j8G5gVur1FdAN2uaYEuiz7xFsgEJ2RUoMUakXuBTHHoGxQYOBhHjeUBAefEnMAowFhaLBOKuOemBBbxLRQrH2PBCgMvNCPQGMeevTb9zLrPxz2Mo+QbEaijzPUcOOHMQZkKGRAIPem39+bypREMPTkQW/oCfk866zAkiIFG4yIKRE/aAnfiSd0WrORY6pFdXQEqi9mvAQm0RIOSnoCcZ8vJoz3diCnjRk+g8VP4/fuQDJ2Lxr6WwG0gXs9aTpDzW0vgDBlVUpixR8gYk44AD8FrUKHr8JQJGgIDnoDqoALxmWPQSi9AVVzm8gKUuEPGr/QCvptwJkbSYT/TC4S8C96DGjTj86aHtAI0x2WaBIq0eSYYpRa4EsdWVVwWu9O0Aj6f6dyBMnwEraeOgSYu0wZlauzA47QCbT7DgAQSE+hZWoEBF/BBmWOewNMK3BsSqKUW4MGcWqCSVmDkbvkXGKQOwg6PAUO9oL3xXhA20yaiCjuwYygRVQlUOTWTCf2SuNJTxeFjgaHByGuAIvd8ItdPLTDhS7IuqEE1YSKVOgbayLhSFQhMzYh8hwfBs1r7c505YVIQYEdNoKwxK06MJiyrpUFHiF0NAfCQUVHoiRclIXJIR6C2fqG37pBHvcWpgwzvAtYwkR5UGV2e42UISdBJETl3mg8ouo54Rcnti1/vaT+iuUQBt500Cgo4U10BeHSkk57FB0JjWkKRMWgLUA0lLodtImAQdaMiiri3+gIAPZQoutHNsgKF1aaDMhMyIdBf8Th+Bh8MTjGWCpl5Wv43tDmnF+IUVMrcZgRoiAxhtrloYizNkZaAnF5leglbNhj0wYCAbCDvGb0mP4nib7O7ZlcYQ2m1gPtIZgVgGNNMeaVAaWR+57TrqgtUnm3sHQ+kYeE6fufUubG1ez50FXbPnWgBlgSABmN3TTcsRl2yWkHRrwbiunvk/W2+Mg1hPZplPDeXRbZzStFH15s1QIVd3UImP5z/bHpeeQLvRJ7XLFUffQIlCvqlXETQbgN9/rlYABGosv+Vi9m2Xs639YLGrZd0br+odetlvdsvbN56abfd4vbCzv9Q3v/ygoOV21A4OPpfXvH4Ai+5ZGRkZGRkbJA/t/I0QMzoMiEAAAAASUVORK5CYII=
@@ -38,10 +46,18 @@ lazy_static::lazy_static! {
     pub static ref ONLINE: Arc<Mutex<HashMap<String, i64>>> = Default::default();
     pub static ref PROD_RENDEZVOUS_SERVER: Arc<RwLock<String>> = Default::default();
     pub static ref APP_NAME: Arc<RwLock<String>> = Arc::new(RwLock::new("RustDesk".to_owned()));
+    static ref KEY_PAIR: Arc<Mutex<Option<(Vec<u8>, Vec<u8>)>>> = Default::default();
+}
+#[cfg(target_os = "android")]
+lazy_static::lazy_static! {
+    pub static ref APP_DIR: Arc<RwLock<String>> = Arc::new(RwLock::new("/data/user/0/com.carriez.flutter_hbb/app_flutter".to_owned()));
+}
+#[cfg(target_os = "ios")]
+lazy_static::lazy_static! {
+    pub static ref APP_DIR: Arc<RwLock<String>> = Default::default();
 }
 // #[cfg(any(target_os = "android", target_os = "ios"))]
 lazy_static::lazy_static! {
-    pub static ref APP_DIR: Arc<RwLock<String>> = Default::default();
     pub static ref APP_HOME_DIR: Arc<RwLock<String>> = Default::default();
 }
 const CHARS: &'static [char] = &[
@@ -54,6 +70,7 @@ pub const RENDEZVOUS_SERVERS: &'static [&'static str] = &[
     "rs-sg.rustdesk.com",
     "rs-cn.rustdesk.com",
 ];
+pub const RS_PUB_KEY: &'static str = "OeVuKk5nlHiXp+APNn0Y3pC1Iwpwn44JGqrQCsWqmBw=";
 pub const RENDEZVOUS_PORT: i32 = 21116;
 pub const RELAY_PORT: i32 = 21117;
 
@@ -72,7 +89,7 @@ pub struct Config {
     #[serde(default)]
     salt: String,
     #[serde(default)]
-    pub key_pair: (Vec<u8>, Vec<u8>), // sk, pk
+    key_pair: (Vec<u8>, Vec<u8>), // sk, pk
     #[serde(default)]
     key_confirmed: bool,
     #[serde(default)]
@@ -107,7 +124,7 @@ pub struct Config2 {
     pub options: HashMap<String, String>,
 }
 
-#[derive(Debug, Default, Serialize, Deserialize, Clone)]
+#[derive(Debug, Default, Serialize, Deserialize, Clone, PartialEq)]
 pub struct PeerConfig {
     #[serde(default)]
     pub password: Vec<u8>,
@@ -139,6 +156,8 @@ pub struct PeerConfig {
     pub disable_clipboard: bool,
     #[serde(default)]
     pub enable_file_transfer: bool,
+    #[serde(default)]
+    pub show_quality_monitor: bool,
 
     // the other scalar value must before this
     #[serde(default)]
@@ -159,7 +178,7 @@ pub struct PeerInfoSerde {
     pub platform: String,
 }
 
-#[derive(Debug, Default, Serialize, Deserialize, Clone)]
+#[derive(Debug, Default, Serialize, Deserialize, Clone, PartialEq)]
 pub struct TransferSerde {
     #[serde(default)]
     pub write_jobs: Vec<String>,
@@ -198,7 +217,17 @@ fn patch(path: PathBuf) -> PathBuf {
 
 impl Config2 {
     fn load() -> Config2 {
-        Config::load_::<Config2>("2")
+        let mut config = Config::load_::<Config2>("2");
+        if let Some(mut socks) = config.socks {
+            let (password, _, store) =
+                decrypt_str_or_original(&socks.password, PASSWORD_ENC_VERSION);
+            socks.password = password;
+            config.socks = Some(socks);
+            if store {
+                config.store();
+            }
+        }
+        config
     }
 
     pub fn file() -> PathBuf {
@@ -206,7 +235,12 @@ impl Config2 {
     }
 
     fn store(&self) {
-        Config::store_(self, "2");
+        let mut config = self.clone();
+        if let Some(mut socks) = config.socks {
+            socks.password = encrypt_str_or_original(&socks.password, PASSWORD_ENC_VERSION);
+            config.socks = Some(socks);
+        }
+        Config::store_(&config, "2");
     }
 
     pub fn get() -> Config2 {
@@ -237,6 +271,11 @@ pub fn load_path<T: serde::Serialize + serde::de::DeserializeOwned + Default + s
     cfg
 }
 
+#[inline]
+pub fn store_path<T: serde::Serialize>(path: PathBuf, cfg: T) -> crate::ResultType<()> {
+    Ok(confy::store_path(path, cfg)?)
+}
+
 impl Config {
     fn load_<T: serde::Serialize + serde::de::DeserializeOwned + Default + std::fmt::Debug>(
         suffix: &str,
@@ -252,17 +291,25 @@ impl Config {
 
     fn store_<T: serde::Serialize>(config: &T, suffix: &str) {
         let file = Self::file_(suffix);
-        if let Err(err) = confy::store_path(file, config) {
+        if let Err(err) = store_path(file, config) {
             log::error!("Failed to store config: {}", err);
         }
     }
 
     fn load() -> Config {
-        Config::load_::<Config>("")
+        let mut config = Config::load_::<Config>("");
+        let (password, _, store) = decrypt_str_or_original(&config.password, PASSWORD_ENC_VERSION);
+        config.password = password;
+        if store {
+            config.store();
+        }
+        config
     }
 
     fn store(&self) {
-        Config::store_(self, "");
+        let mut config = self.clone();
+        config.password = encrypt_str_or_original(&config.password, PASSWORD_ENC_VERSION);
+        Config::store_(&config, "");
     }
 
     pub fn file() -> PathBuf {
@@ -272,6 +319,10 @@ impl Config {
     fn file_(suffix: &str) -> PathBuf {
         let name = format!("{}{}", *APP_NAME.read().unwrap(), suffix);
         Config::with_extension(Self::path(name))
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.id.is_empty() || self.key_pair.0.is_empty()
     }
 
     pub fn get_home() -> PathBuf {
@@ -495,9 +546,9 @@ impl Config {
         }
     }
 
-    pub fn get_auto_password() -> String {
+    pub fn get_auto_password(length: usize) -> String {
         let mut rng = rand::thread_rng();
-        (0..6)
+        (0..length)
             .map(|_| CHARS[rng.gen::<usize>() % CHARS.len()])
             .collect()
     }
@@ -535,24 +586,26 @@ impl Config {
         config.store();
     }
 
-    pub fn set_key_pair(pair: (Vec<u8>, Vec<u8>)) {
-        let mut config = CONFIG.write().unwrap();
-        if config.key_pair == pair {
-            return;
-        }
-        config.key_pair = pair;
-        config.store();
-    }
-
     pub fn get_key_pair() -> (Vec<u8>, Vec<u8>) {
         // lock here to make sure no gen_keypair more than once
-        let mut config = CONFIG.write().unwrap();
+        // no use of CONFIG directly here to ensure no recursive calling in Config::load because of password dec which calling this function
+        let mut lock = KEY_PAIR.lock().unwrap();
+        if let Some(p) = lock.as_ref() {
+            return p.clone();
+        }
+        let mut config = Config::load_::<Config>("");
         if config.key_pair.0.is_empty() {
             let (pk, sk) = sign::gen_keypair();
-            config.key_pair = (sk.0.to_vec(), pk.0.into());
-            config.store();
+            let key_pair = (sk.0.to_vec(), pk.0.into());
+            config.key_pair = key_pair.clone();
+            std::thread::spawn(|| {
+                let mut config = CONFIG.write().unwrap();
+                config.key_pair = key_pair;
+                config.store();
+            });
         }
-        config.key_pair.clone()
+        *lock = Some(config.key_pair.clone());
+        return config.key_pair;
     }
 
     pub fn get_id() -> String {
@@ -618,7 +671,7 @@ impl Config {
         log::info!("id updated from {} to {}", id, new_id);
     }
 
-    pub fn set_password(password: &str) {
+    pub fn set_permanent_password(password: &str) {
         let mut config = CONFIG.write().unwrap();
         if password == config.password {
             return;
@@ -627,13 +680,8 @@ impl Config {
         config.store();
     }
 
-    pub fn get_password() -> String {
-        let mut password = CONFIG.read().unwrap().password.clone();
-        if password.is_empty() {
-            password = Config::get_auto_password();
-            Config::set_password(&password);
-        }
-        password
+    pub fn get_permanent_password() -> String {
+        CONFIG.read().unwrap().password.clone()
     }
 
     pub fn set_salt(salt: &str) {
@@ -648,7 +696,7 @@ impl Config {
     pub fn get_salt() -> String {
         let mut salt = CONFIG.read().unwrap().salt.clone();
         if salt.is_empty() {
-            salt = Config::get_auto_password();
+            salt = Config::get_auto_password(6);
             Config::set_salt(&salt);
         }
         salt
@@ -705,7 +753,28 @@ impl PeerConfig {
     pub fn load(id: &str) -> PeerConfig {
         let _ = CONFIG.read().unwrap(); // for lock
         match confy::load_path(&Self::path(id)) {
-            Ok(config) => config,
+            Ok(config) => {
+                let mut config: PeerConfig = config;
+                let mut store = false;
+                let (password, _, store2) =
+                    decrypt_vec_or_original(&config.password, PASSWORD_ENC_VERSION);
+                config.password = password;
+                store = store || store2;
+                config.options.get_mut("rdp_password").map(|v| {
+                    let (password, _, store2) = decrypt_str_or_original(v, PASSWORD_ENC_VERSION);
+                    *v = password;
+                    store = store || store2;
+                });
+                config.options.get_mut("os-password").map(|v| {
+                    let (password, _, store2) = decrypt_str_or_original(v, PASSWORD_ENC_VERSION);
+                    *v = password;
+                    store = store || store2;
+                });
+                if store {
+                    config.store(id);
+                }
+                config
+            }
             Err(err) => {
                 log::error!("Failed to load config: {}", err);
                 Default::default()
@@ -715,7 +784,17 @@ impl PeerConfig {
 
     pub fn store(&self, id: &str) {
         let _ = CONFIG.read().unwrap(); // for lock
-        if let Err(err) = confy::store_path(Self::path(id), self) {
+        let mut config = self.clone();
+        config.password = encrypt_vec_or_original(&config.password, PASSWORD_ENC_VERSION);
+        config
+            .options
+            .get_mut("rdp_password")
+            .map(|v| *v = encrypt_str_or_original(v, PASSWORD_ENC_VERSION));
+        config
+            .options
+            .get_mut("os-password")
+            .map(|v| *v = encrypt_str_or_original(v, PASSWORD_ENC_VERSION));
+        if let Err(err) = store_path(Self::path(id), config) {
             log::error!("Failed to store config: {}", err);
         }
     }
@@ -848,9 +927,25 @@ impl LocalConfig {
 }
 
 #[derive(Debug, Default, Serialize, Deserialize, Clone)]
+pub struct DiscoveryPeer {
+    pub id: String,
+    #[serde(with = "serde_with::rust::map_as_tuple_list")]
+    pub ip_mac: HashMap<String, String>,
+    pub username: String,
+    pub hostname: String,
+    pub platform: String,
+    pub online: bool,
+}
+
+impl DiscoveryPeer {
+    pub fn is_same_peer(&self, other: &DiscoveryPeer) -> bool {
+        self.id == other.id && self.username == other.username
+    }
+}
+
+#[derive(Debug, Default, Serialize, Deserialize, Clone)]
 pub struct LanPeers {
-    #[serde(default)]
-    pub peers: String,
+    pub peers: Vec<DiscoveryPeer>,
 }
 
 impl LanPeers {
@@ -865,9 +960,11 @@ impl LanPeers {
         }
     }
 
-    pub fn store(peers: String) {
-        let f = LanPeers { peers };
-        if let Err(err) = confy::store_path(Config::file_("_lan_peers"), f) {
+    pub fn store(peers: &Vec<DiscoveryPeer>) {
+        let f = LanPeers {
+            peers: peers.clone(),
+        };
+        if let Err(err) = store_path(Config::file_("_lan_peers"), f) {
             log::error!("Failed to store lan peers: {}", err);
         }
     }
@@ -878,6 +975,26 @@ impl LanPeers {
             .modified()?
             .duration_since(SystemTime::UNIX_EPOCH)?
             .as_millis() as _)
+    }
+}
+
+#[derive(Debug, Default, Serialize, Deserialize, Clone)]
+pub struct HwCodecConfig {
+    #[serde(default)]
+    pub options: HashMap<String, String>,
+}
+
+impl HwCodecConfig {
+    pub fn load() -> HwCodecConfig {
+        Config::load_::<HwCodecConfig>("_hwcodec")
+    }
+
+    pub fn store(&self) {
+        Config::store_(self, "_hwcodec");
+    }
+
+    pub fn remove() {
+        std::fs::remove_file(Config::file_("_hwcodec")).ok();
     }
 }
 

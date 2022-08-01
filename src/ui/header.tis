@@ -145,6 +145,9 @@ class Header: Reactor.Component {
     }
 
     function renderDisplayPop() {
+        var codecs = handler.supported_hwcodec();
+        var show_codec = handler.has_hwcodec() && (codecs[0] || codecs[1]);
+
         return <popup>
             <menu.context #display-options>
                 <li #adjust-window style="display:none">{translate('Adjust Window')}</li> 
@@ -157,8 +160,16 @@ class Header: Reactor.Component {
                 <li #balanced type="image-quality"><span>{svg_checkmark}</span>{translate('Balanced')}</li> 
                 <li #low type="image-quality"><span>{svg_checkmark}</span>{translate('Optimize reaction time')}</li> 
                 <li #custom type="image-quality"><span>{svg_checkmark}</span>{translate('Custom')}</li>
+                {show_codec ? <div>
+                <div .separator />
+                <li #auto type="codec-preference"><span>{svg_checkmark}</span>Auto</li>
+                <li #vp9 type="codec-preference"><span>{svg_checkmark}</span>VP9</li>
+                {codecs[0] ? <li #h264 type="codec-preference"><span>{svg_checkmark}</span>H264</li> : ""}
+                {codecs[1] ? <li #h265 type="codec-preference"><span>{svg_checkmark}</span>H265</li> : ""}
+                </div> : ""}
                 <div .separator />
                 <li #show-remote-cursor .toggle-option><span>{svg_checkmark}</span>{translate('Show remote cursor')}</li> 
+                <li #show-quality-monitor .toggle-option><span>{svg_checkmark}</span>{translate('Show quality monitor')}</li> 
                 {audio_enabled ? <li #disable-audio .toggle-option><span>{svg_checkmark}</span>{translate('Mute')}</li> : ""}
                 {is_win && pi.platform == 'Windows' && file_enabled ? <li #enable-file-transfer .toggle-option><span>{svg_checkmark}</span>{translate('Allow file copy and paste')}</li> : ""}
                 {keyboard_enabled && clipboard_enabled ? <li #disable-clipboard .toggle-option><span>{svg_checkmark}</span>{translate('Disable clipboard')}</li> : ""} 
@@ -177,6 +188,7 @@ class Header: Reactor.Component {
                 {handler.get_audit_server() && <li #note>{translate('Note')}</li>}
                 <div .separator />
                 {keyboard_enabled && (pi.platform == "Linux" || pi.sas_enabled) ? <li #ctrl-alt-del>{translate('Insert')} Ctrl + Alt + Del</li> : ""}
+                {restart_enabled && (pi.platform == "Linux" || pi.platform == "Windows" || pi.platform == "Mac OS") ? <li #restart_remote_device>{translate('Restart Remote Device')}</li> : ""}
                 {keyboard_enabled ? <li #lock-screen>{translate('Insert Lock')}</li> : ""}
                 {keyboard_enabled && pi.platform == "Windows" && pi.sas_enabled ? <li #block-input>{translate("Block user input")}</li> : ""}
                 <li #refresh>{translate('Refresh')}</li>
@@ -290,6 +302,12 @@ class Header: Reactor.Component {
         handler.ctrl_alt_del();
     }
 
+    event click $(#restart_remote_device) {
+        msgbox("restart-confirmation", translate("Restart Remote Device"), translate("Are you sure you want to restart") + " " + pi.username + "@" + pi.hostname + "(" + get_id() + ") ?", function(res=null) {
+            if (res != null) handler.restart_remote_device();
+        });
+    }
+
     event click $(#lock-screen) {
         handler.lock_screen();
     }
@@ -310,12 +328,14 @@ class Header: Reactor.Component {
         }
     }
 
-    event click $(menu#display-options>li) (_, me) {
+    event click $(menu#display-options li) (_, me) {
         if (me.id == "custom") {
             handle_custom_image_quality();
         } else if (me.id == "privacy-mode") {
             togglePrivacyMode(me.id);
-        } else if (me.attributes.hasClass("toggle-option")) {
+        } else if (me.id == "show-quality-monitor") {
+            toggleQualityMonitor(me.id);
+        }else if (me.attributes.hasClass("toggle-option")) {
             handler.toggle_option(me.id);
             toggleMenuState();
         } else if (!me.attributes.hasClass("selected")) {
@@ -325,6 +345,9 @@ class Header: Reactor.Component {
             } else if (type == "view-style") {
                 handler.save_view_style(me.id);
                 adaptDisplay();
+            } else if (type == "codec-preference") {
+                handler.set_option("codec-preference", me.id);
+                handler.change_prefer_codec();
             }
             toggleMenuState();
         }
@@ -333,15 +356,13 @@ class Header: Reactor.Component {
 
 function handle_custom_image_quality() {
     var tmp = handler.get_custom_image_quality();
-    var bitrate0 = tmp[0] || 50;
-    var quantizer0 = tmp.length > 1 ? tmp[1] : 100;
+    var bitrate = (tmp[0] || 50);
     msgbox("custom", "Custom Image Quality", "<div .form> \
-          <div><input type=\"hslider\" style=\"width: 50%\" name=\"bitrate\" max=\"100\" min=\"10\" value=\"" + bitrate0 + "\"/ buddy=\"bitrate-buddy\"><b #bitrate-buddy>x</b>% bitrate</div> \
-          <div><input type=\"hslider\" style=\"width: 50%\" name=\"quantizer\" max=\"100\" min=\"0\" value=\"" + quantizer0 + "\"/ buddy=\"quantizer-buddy\"><b #quantizer-buddy>x</b>% quantizer</div> \
+          <div><input type=\"hslider\" style=\"width: 50%\" name=\"bitrate\" max=\"100\" min=\"10\" value=\"" + bitrate + "\"/ buddy=\"bitrate-buddy\"><b #bitrate-buddy>x</b>% Bitrate</div> \
       </div>", function(res=null) {
         if (!res) return;
         if (!res.bitrate) return;
-        handler.save_custom_image_quality(res.bitrate, res.quantizer);
+        handler.save_custom_image_quality(res.bitrate);
         toggleMenuState();
       });
 }
@@ -354,10 +375,13 @@ function toggleMenuState() {
     var s = handler.get_view_style();
     if (!s) s = "original";
     values.push(s);
-    for (var el in $$(menu#display-options>li)) {
+    var c = handler.get_option("codec-preference");
+    if (!c) c = "auto";
+    values.push(c);
+    for (var el in $$(menu#display-options li)) {
         el.attributes.toggleClass("selected", values.indexOf(el.id) >= 0);
     }
-    for (var id in ["show-remote-cursor", "disable-audio", "enable-file-transfer", "disable-clipboard", "lock-after-session-end"]) {
+    for (var id in ["show-remote-cursor", "show-quality-monitor", "disable-audio", "enable-file-transfer", "disable-clipboard", "lock-after-session-end"]) {
         var el = self.select('#' + id);
         if (el) {
             var value = handler.get_toggle_option(id);
@@ -423,6 +447,17 @@ function togglePrivacyMode(privacy_id) {
     } else {
         handler.toggle_option(privacy_id);
     }
+}
+
+function toggleQualityMonitor(name) {
+    var show = handler.get_toggle_option(name);
+    if (show) {
+        $(#quality-monitor).style.set{ display: "none" };
+    } else {
+        $(#quality-monitor).style.set{ display: "block" };
+    }
+    handler.toggle_option(name);
+    toggleMenuState();
 }
 
 handler.updateBlockInputState = function(input_blocked) {

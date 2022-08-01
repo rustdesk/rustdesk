@@ -282,7 +282,12 @@ class PermissionManager {
   static Timer? _timer;
   static var _current = "";
 
-  static final permissions = ["audio", "file"];
+  static final permissions = [
+    "audio",
+    "file",
+    "ignore_battery_optimizations",
+    "application_details_settings"
+  ];
 
   static bool isWaitingFile() {
     if (_completer != null) {
@@ -301,6 +306,10 @@ class PermissionManager {
     if (!permissions.contains(type))
       return Future.error("Wrong permission!$type");
 
+    FFI.invokeMethod("request_permission", type);
+    if (type == "ignore_battery_optimizations") {
+      return Future.value(false);
+    }
     _current = type;
     _completer = Completer<bool>();
     gFFI.invokeMethod("request_permission", type);
@@ -326,6 +335,18 @@ class PermissionManager {
     _completer?.complete(res);
     _current = "";
   }
+}
+
+RadioListTile<T> getRadio<T>(
+    String name, T toValue, T curValue, void Function(T?) onChange) {
+  return RadioListTile<T>(
+    controlAffinity: ListTileControlAffinity.trailing,
+    title: Text(translate(name)),
+    value: toValue,
+    groupValue: curValue,
+    onChanged: onChange,
+    dense: true,
+  );
 }
 
 /// find ffi, tag is Remote ID

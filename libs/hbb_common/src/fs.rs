@@ -573,7 +573,7 @@ impl TransferJob {
             log::info!("file num truncated, ignoring");
         } else {
             match r.union {
-                Some(file_transfer_send_confirm_request::Union::skip(s)) => {
+                Some(file_transfer_send_confirm_request::Union::Skip(s)) => {
                     if s {
                         log::debug!("skip file id:{}, file_num:{}", r.id, r.file_num);
                         self.skip_current_file();
@@ -581,7 +581,7 @@ impl TransferJob {
                         self.set_file_confirmed(true);
                     }
                 }
-                Some(file_transfer_send_confirm_request::Union::offset_blk(_offset)) => {
+                Some(file_transfer_send_confirm_request::Union::OffsetBlk(_offset)) => {
                     self.set_file_confirmed(true);
                 }
                 _ => {}

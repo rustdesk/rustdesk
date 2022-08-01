@@ -192,7 +192,7 @@ pub fn make_menubar(host: Rc<Host>, is_index: bool) {
             app_menu.addItem_(new_item);
         } else {
             // When app launched without argument, is the main panel.
-            let about_item = make_menu_item("About", "a", SHOW_ABOUT_TAG);
+            let about_item = make_menu_item("About", "", SHOW_ABOUT_TAG);
             app_menu.addItem_(about_item);
             let separator = NSMenuItem::separatorItem(nil).autorelease();
             app_menu.addItem_(separator);
@@ -258,10 +258,10 @@ pub fn check_main_window() {
     let app = format!("/Applications/{}.app", crate::get_app_name());
     let my_uid = sys
         .process((std::process::id() as i32).into())
-        .map(|x| x.uid)
+        .map(|x| x.user_id())
         .unwrap_or_default();
     for (_, p) in sys.processes().iter() {
-        if p.cmd().len() == 1 && p.uid == my_uid && p.cmd()[0].contains(&app) {
+        if p.cmd().len() == 1 && p.user_id() == my_uid && p.cmd()[0].contains(&app) {
             return;
         }
     }
