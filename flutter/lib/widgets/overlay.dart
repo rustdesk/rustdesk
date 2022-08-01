@@ -27,7 +27,7 @@ class DraggableChatWindow extends StatelessWidget {
         height: height,
         builder: (_, onPanUpdate) {
           return isIOS
-              ? chatPage
+              ? ChatPage()
               : Scaffold(
                   resizeToAvoidBottomInset: false,
                   appBar: CustomAppBar(
@@ -68,7 +68,7 @@ class DraggableChatWindow extends StatelessWidget {
                       ),
                     ),
                   ),
-                  body: chatPage,
+                  body: ChatPage(),
                 );
         });
   }

@@ -12,6 +12,8 @@ abstract class PageShape extends Widget {
   final List<Widget> appBarActions = [];
 }
 
+final homeKey = GlobalKey<_HomePageState>();
+
 class HomePage extends StatefulWidget {
   HomePage({Key? key}) : super(key: key);
 
@@ -23,12 +25,23 @@ class _HomePageState extends State<HomePage> {
   var _selectedIndex = 0;
   final List<PageShape> _pages = [];
 
+  void refreshPages() {
+    setState(() {
+      initPages();
+    });
+  }
+
   @override
   void initState() {
     super.initState();
+    initPages();
+  }
+
+  void initPages() {
+    _pages.clear();
     _pages.add(ConnectionPage());
     if (isAndroid) {
-      _pages.addAll([chatPage, ServerPage()]);
+      _pages.addAll([ChatPage(), ServerPage()]);
     }
     _pages.add(SettingsPage());
   }

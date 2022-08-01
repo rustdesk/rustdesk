@@ -946,10 +946,6 @@ impl LoginConfigHandler {
             msg.lock_after_session_end = BoolOption::Yes.into();
             n += 1;
         }
-        if self.get_toggle_option("privacy-mode") {
-            msg.privacy_mode = BoolOption::Yes.into();
-            n += 1;
-        }
         if self.get_toggle_option("disable-audio") {
             msg.disable_audio = BoolOption::Yes.into();
             n += 1;
@@ -966,6 +962,23 @@ impl LoginConfigHandler {
         msg.video_codec_state = hbb_common::protobuf::MessageField::some(state);
         n += 1;
 
+        if n > 0 {
+            Some(msg)
+        } else {
+            None
+        }
+    }
+
+    pub fn get_option_message_after_login(&self) -> Option<OptionMessage> {
+        if self.is_port_forward || self.is_file_transfer {
+            return None;
+        }
+        let mut n = 0;
+        let mut msg = OptionMessage::new();
+        if self.get_toggle_option("privacy-mode") {
+            msg.privacy_mode = BoolOption::Yes.into();
+            n += 1;
+        }
         if n > 0 {
             Some(msg)
         } else {
