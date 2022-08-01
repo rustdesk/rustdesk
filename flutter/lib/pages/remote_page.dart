@@ -592,6 +592,7 @@ class _RemotePageState extends State<RemotePage> {
         child: Stack(children: [
           ImagePaint(),
           CursorPaint(),
+          QualityMonitor(),
           getHelpTools(),
           SizedBox(
             width: 0,
@@ -658,7 +659,7 @@ class _RemotePageState extends State<RemotePage> {
     more.add(PopupMenuItem<String>(
         child: Row(
             children: ([
-          Container(width: 100.0, child: Text(translate('OS Password'))),
+          Text(translate('OS Password')),
           TextButton(
             style: flatButtonStyle,
             onPressed: () {
@@ -693,6 +694,13 @@ class _RemotePageState extends State<RemotePage> {
             value: 'block-input'));
       }
     }
+    if (FFI.ffiModel.permissions["restart"] != false &&
+        (pi.platform == "Linux" ||
+            pi.platform == "Windows" ||
+            pi.platform == "Mac OS")) {
+      more.add(PopupMenuItem<String>(
+          child: Text(translate('Restart Remote Device')), value: 'restart'));
+    }
     () async {
       var value = await showMenu(
         context: context,
@@ -726,6 +734,8 @@ class _RemotePageState extends State<RemotePage> {
         }
       } else if (value == 'reset_canvas') {
         FFI.cursorModel.reset();
+      } else if (value == 'restart') {
+        showRestartRemoteDevice(pi, widget.id);
       }
     }();
   }
@@ -948,6 +958,47 @@ class ImagePainter extends CustomPainter {
   }
 }
 
+class QualityMonitor extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) => ChangeNotifierProvider.value(
+      value: FFI.qualityMonitorModel,
+      child: Consumer<QualityMonitorModel>(
+          builder: (context, qualityMonitorModel, child) => Positioned(
+              top: 10,
+              right: 10,
+              child: qualityMonitorModel.show
+                  ? Container(
+                      padding: EdgeInsets.all(8),
+                      color: MyTheme.canvasColor.withAlpha(120),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            "Speed: ${qualityMonitorModel.data.speed}",
+                            style: TextStyle(color: MyTheme.grayBg),
+                          ),
+                          Text(
+                            "FPS: ${qualityMonitorModel.data.fps}",
+                            style: TextStyle(color: MyTheme.grayBg),
+                          ),
+                          Text(
+                            "Delay: ${qualityMonitorModel.data.delay} ms",
+                            style: TextStyle(color: MyTheme.grayBg),
+                          ),
+                          Text(
+                            "Target Bitrate: ${qualityMonitorModel.data.targetBitrate}kb",
+                            style: TextStyle(color: MyTheme.grayBg),
+                          ),
+                          Text(
+                            "Codec: ${qualityMonitorModel.data.codecFormat}",
+                            style: TextStyle(color: MyTheme.grayBg),
+                          ),
+                        ],
+                      ),
+                    )
+                  : SizedBox.shrink())));
+}
+
 CheckboxListTile getToggle(
     void Function(void Function()) setState, option, name) {
   return CheckboxListTile(
@@ -956,6 +1007,9 @@ CheckboxListTile getToggle(
         setState(() {
           FFI.setByName('toggle_option', option);
         });
+        if (option == "show-quality-monitor") {
+          FFI.qualityMonitorModel.checkShowQualityMonitor();
+        }
       },
       dense: true,
       title: Text(translate(name)));
@@ -1056,6 +1110,27 @@ void showOptions() {
       contentPadding: 0,
     );
   }, clickMaskDismiss: true, backDismiss: true);
+}
+
+void showRestartRemoteDevice(PeerInfo pi, String id) async {
+  final res =
+      await DialogManager.show<bool>((setState, close) => CustomAlertDialog(
+            title: Row(children: [
+              Icon(Icons.warning_amber_sharp,
+                  color: Colors.redAccent, size: 28),
+              SizedBox(width: 10),
+              Text(translate("Restart Remote Device")),
+            ]),
+            content: Text(
+                "${translate('Are you sure you want to restart')} \n${pi.username}@${pi.hostname}($id) ?"),
+            actions: [
+              TextButton(
+                  onPressed: () => close(), child: Text(translate("Cancel"))),
+              ElevatedButton(
+                  onPressed: () => close(true), child: Text(translate("OK"))),
+            ],
+          ));
+  if (res == true) FFI.setByName('restart_remote_device');
 }
 
 void showSetOSPassword(bool login) {

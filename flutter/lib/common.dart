@@ -199,7 +199,7 @@ const G = M * K;
 
 String readableFileSize(double size) {
   if (size < K) {
-    return size.toString() + " B";
+    return size.toStringAsFixed(2) + " B";
   } else if (size < M) {
     return (size / K).toStringAsFixed(2) + " KB";
   } else if (size < G) {

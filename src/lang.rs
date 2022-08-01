@@ -8,17 +8,17 @@ mod de;
 mod en;
 mod eo;
 mod es;
-mod hu;
 mod fr;
+mod hu;
 mod id;
 mod it;
+mod pl;
 mod ptbr;
 mod ru;
 mod sk;
 mod tr;
 mod tw;
 mod vn;
-mod pl;
 
 lazy_static::lazy_static! {
     pub static ref LANGS: Value =
@@ -90,13 +90,15 @@ pub fn translate_locale(name: String, locale: &str) -> String {
         _ => en::T.deref(),
     };
     if let Some(v) = m.get(&name as &str) {
-        v.to_string()
-    } else {
-        if lang != "en" {
-            if let Some(v) = en::T.get(&name as &str) {
-                return v.to_string();
+        if v.is_empty() {
+            if lang != "en" {
+                if let Some(v) = en::T.get(&name as &str) {
+                    return v.to_string();
+                }
             }
+        } else {
+            return v.to_string();
         }
-        name
     }
+    name
 }
