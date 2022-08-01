@@ -2076,6 +2076,22 @@ impl Remote {
         true
     }
 
+    async fn send_opts_after_login(&self, peer: &mut Stream) {
+        if let Some(opts) = self
+        .handler
+        .lc
+        .read()
+        .unwrap()
+        .get_option_message_after_login()
+    {
+        let mut misc = Misc::new();
+        misc.set_option(opts);
+        let mut msg_out = Message::new();
+        msg_out.set_misc(misc);
+        allow_err!(peer.send(&msg_out).await);
+    }
+    }
+
     async fn handle_msg_from_peer(&mut self, data: &[u8], peer: &mut Stream) -> bool {
         if let Ok(msg_in) = Message::parse_from_bytes(&data) {
             match msg_in.union {
@@ -2084,6 +2100,7 @@ impl Remote {
                         self.first_frame = true;
                         self.handler.call2("closeSuccess", &make_args!());
                         self.handler.call("adaptSize", &make_args!());
+                        self.send_opts_after_login(peer).await;
                     }
                     let incomming_format = CodecFormat::from(&vf);
                     if self.video_format != incomming_format {
