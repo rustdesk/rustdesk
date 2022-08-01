@@ -160,8 +160,8 @@ impl ConnectionManager {
                     id,
                     file_num,
                     mut files,
+                    overwrite_detection
                 } => {
-                    let od = can_enable_overwrite_detection(get_version_number(VERSION));
                     // cm has no show_hidden context
                     // dummy remote, show_hidden, is_remote
                     write_jobs.push(fs::TransferJob::new_write(
@@ -179,7 +179,7 @@ impl ConnectionManager {
                                 ..Default::default()
                             })
                             .collect(),
-                        od,
+                        overwrite_detection,
                     ));
                 }
                 ipc::FS::CancelWrite { id } => {

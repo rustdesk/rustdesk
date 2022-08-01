@@ -57,6 +57,7 @@ pub enum FS {
         id: i32,
         file_num: i32,
         files: Vec<(String, u64)>,
+        overwrite_detection: bool,
     },
     CancelWrite {
         id: i32,
