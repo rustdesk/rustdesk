@@ -8,6 +8,7 @@ import 'package:flutter_hbb/common.dart';
 import 'package:flutter_hbb/desktop/pages/connection_page.dart';
 import 'package:flutter_hbb/desktop/widgets/titlebar_widget.dart';
 import 'package:flutter_hbb/models/model.dart';
+import 'package:flutter_hbb/models/server_model.dart';
 import 'package:get/get.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -127,9 +128,8 @@ class _DesktopHomePageState extends State<DesktopHomePage> with TrayListener {
                   ),
                   TextFormField(
                     controller: model.serverId,
-                    decoration: InputDecoration(
-                      enabled: false,
-                    ),
+                    enableInteractiveSelection: true,
+                    readOnly: true,
                   ),
                 ],
               ),
@@ -248,8 +248,34 @@ class _DesktopHomePageState extends State<DesktopHomePage> with TrayListener {
                     translate("Password"),
                     style: TextStyle(fontSize: 18, fontWeight: FontWeight.w500),
                   ),
-                  TextFormField(
-                    controller: model.serverPasswd,
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextFormField(
+                          controller: model.serverPasswd,
+                          enableInteractiveSelection: true,
+                          readOnly: true,
+                        ),
+                      ),
+                      IconButton(
+                        icon: Icon(Icons.refresh),
+                        onPressed: () {
+                          gFFI.setByName("temporary_password");
+                        },
+                      ),
+                      FutureBuilder<Widget>(
+                          future: buildPasswordPopupMenu(context),
+                          builder: (context, snapshot) {
+                            if (snapshot.hasError) {
+                              print("${snapshot.error}");
+                            }
+                            if (snapshot.hasData) {
+                              return snapshot.data!;
+                            } else {
+                              return Offstage();
+                            }
+                          })
+                    ],
                   ),
                 ],
               ),
@@ -258,6 +284,83 @@ class _DesktopHomePageState extends State<DesktopHomePage> with TrayListener {
         ],
       ),
     );
+  }
+
+  Future<Widget> buildPasswordPopupMenu(BuildContext context) async {
+    var position;
+    return GestureDetector(
+        onTapDown: (detail) {
+          final x = detail.globalPosition.dx;
+          final y = detail.globalPosition.dy;
+          position = RelativeRect.fromLTRB(x, y, x, y);
+        },
+        onTap: () async {
+          var method = (String text, String value) => PopupMenuItem(
+                child: Row(
+                  children: [
+                    Offstage(
+                        offstage: gFFI.serverModel.verificationMethod != value,
+                        child: Icon(Icons.check)),
+                    Text(
+                      text,
+                    ),
+                  ],
+                ),
+                value: value,
+                onTap: () => gFFI.serverModel.verificationMethod = value,
+              );
+          final temporary_enabled =
+              gFFI.serverModel.verificationMethod != kUsePermanentPassword;
+          var menu = [
+            method(translate("Use temporary password"), kUseTemporaryPassword),
+            method(translate("Use permanent password"), kUsePermanentPassword),
+            method(translate("Use both passwords"), kUseBothPasswords),
+            PopupMenuItem(
+                child: Text(translate("Set permanent password")),
+                value: 'set-permanent-password',
+                enabled: gFFI.serverModel.verificationMethod !=
+                    kUseTemporaryPassword),
+            PopupMenuItem(
+                child: PopupMenuButton(
+                  child: Text("Set temporary password length"),
+                  itemBuilder: (context) => ["6", "8", "10"]
+                      .map((e) => PopupMenuItem(
+                            child: Row(
+                              children: [
+                                Offstage(
+                                    offstage: gFFI.serverModel
+                                            .temporaryPasswordLength !=
+                                        e,
+                                    child: Icon(Icons.check)),
+                                Text(
+                                  e,
+                                ),
+                              ],
+                            ),
+                            value: e,
+                            onTap: () {
+                              if (gFFI.serverModel.temporaryPasswordLength !=
+                                  e) {
+                                gFFI.serverModel.temporaryPasswordLength = e;
+                                gFFI.setByName("temporary_password");
+                              }
+                            },
+                          ))
+                      .toList(),
+                  enabled: temporary_enabled,
+                ),
+                value: 'set-temporary-password-length',
+                enabled: temporary_enabled),
+          ];
+          final v =
+              await showMenu(context: context, position: position, items: menu);
+          if (v != null) {
+            if (v == "set-permanent-password") {
+              setPasswordDialog();
+            }
+          }
+        },
+        child: Icon(Icons.edit));
   }
 
   buildTip(BuildContext context) {
@@ -295,15 +398,15 @@ class _DesktopHomePageState extends State<DesktopHomePage> with TrayListener {
           Text(translate("Control Remote Desktop")),
           Form(
               child: Column(
-                children: [
-                  TextFormField(
-                    controller: TextEditingController(),
-                    inputFormatters: [
-                      FilteringTextInputFormatter.allow(RegExp(r"[0-9]"))
-                    ],
-                  )
+            children: [
+              TextFormField(
+                controller: TextEditingController(),
+                inputFormatters: [
+                  FilteringTextInputFormatter.allow(RegExp(r"[0-9]"))
                 ],
-              ))
+              )
+            ],
+          ))
         ],
       ),
     );
@@ -320,7 +423,7 @@ class _DesktopHomePageState extends State<DesktopHomePage> with TrayListener {
       case "quit":
         exit(0);
       case "show":
-      // windowManager.show();
+        // windowManager.show();
         break;
       default:
         break;
@@ -398,7 +501,7 @@ class _DesktopHomePageState extends State<DesktopHomePage> with TrayListener {
     return isPositive
         ? TextStyle()
         : TextStyle(
-        color: Colors.redAccent, decoration: TextDecoration.lineThrough);
+            color: Colors.redAccent, decoration: TextDecoration.lineThrough);
   }
 
   PopupMenuItem<String> genAudioInputPopupMenuItem() {
@@ -410,29 +513,29 @@ class _DesktopHomePageState extends State<DesktopHomePage> with TrayListener {
         future: gFFI.getAudioInputs(),
         builder: (context, snapshot) {
           if (snapshot.hasData) {
-            final inputs = snapshot.data!;
+            final inputs = snapshot.data!.toList();
             if (Platform.isWindows) {
               inputs.insert(0, translate("System Sound"));
             }
             var inputList = inputs
                 .map((e) => PopupMenuItem(
-              child: Row(
-                children: [
-                  Obx(() => Offstage(
-                      offstage: defaultInput.value != e,
-                      child: Icon(Icons.check))),
-                  Expanded(
-                      child: Tooltip(
-                          message: e,
-                          child: Text(
-                            "$e",
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ))),
-                ],
-              ),
-              value: e,
-            ))
+                      child: Row(
+                        children: [
+                          Obx(() => Offstage(
+                              offstage: defaultInput.value != e,
+                              child: Icon(Icons.check))),
+                          Expanded(
+                              child: Tooltip(
+                                  message: e,
+                                  child: Text(
+                                    "$e",
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ))),
+                        ],
+                      ),
+                      value: e,
+                    ))
                 .toList();
             inputList.insert(
                 0,
@@ -553,7 +656,7 @@ class _DesktopHomePageState extends State<DesktopHomePage> with TrayListener {
 
   void changeServer() async {
     Map<String, dynamic> oldOptions =
-    jsonDecode(await gFFI.bind.mainGetOptions());
+        jsonDecode(await gFFI.bind.mainGetOptions());
     print("${oldOptions}");
     String idServer = oldOptions['custom-rendezvous-server'] ?? "";
     var idServerMsg = "";
@@ -592,7 +695,7 @@ class _DesktopHomePageState extends State<DesktopHomePage> with TrayListener {
                       decoration: InputDecoration(
                           border: OutlineInputBorder(),
                           errorText:
-                          idServerMsg.isNotEmpty ? idServerMsg : null),
+                              idServerMsg.isNotEmpty ? idServerMsg : null),
                       controller: TextEditingController(text: idServer),
                     ),
                   ),
@@ -645,7 +748,7 @@ class _DesktopHomePageState extends State<DesktopHomePage> with TrayListener {
                       decoration: InputDecoration(
                           border: OutlineInputBorder(),
                           errorText:
-                          apiServerMsg.isNotEmpty ? apiServerMsg : null),
+                              apiServerMsg.isNotEmpty ? apiServerMsg : null),
                       controller: TextEditingController(text: apiServer),
                     ),
                   ),
@@ -761,7 +864,7 @@ class _DesktopHomePageState extends State<DesktopHomePage> with TrayListener {
 
   void changeWhiteList() async {
     Map<String, dynamic> oldOptions =
-    jsonDecode(await gFFI.bind.mainGetOptions());
+        jsonDecode(await gFFI.bind.mainGetOptions());
     var newWhiteList = ((oldOptions['whitelist'] ?? "") as String).split(',');
     var newWhiteListField = newWhiteList.join('\n');
     var msg = "";
@@ -817,7 +920,7 @@ class _DesktopHomePageState extends State<DesktopHomePage> with TrayListener {
                   // pass
                 } else {
                   final ips =
-                  newWhiteListField.trim().split(RegExp(r"[\s,;\n]+"));
+                      newWhiteListField.trim().split(RegExp(r"[\s,;\n]+"));
                   // test ip
                   final ipMatch = RegExp(r"^\d+\.\d+\.\d+\.\d+$");
                   for (final ip in ips) {
@@ -977,7 +1080,8 @@ class _DesktopHomePageState extends State<DesktopHomePage> with TrayListener {
                     return;
                   }
                 }
-                await gFFI.bind.mainSetSocks(proxy: proxy, username: username, password: password);
+                await gFFI.bind.mainSetSocks(
+                    proxy: proxy, username: username, password: password);
                 close();
               },
               child: Text(translate("OK"))),
@@ -1204,4 +1308,107 @@ Future<bool> loginDialog() async {
     );
   });
   return completer.future;
+}
+
+void setPasswordDialog() {
+  final pw = gFFI.getByName("permanent_password");
+  final p0 = TextEditingController(text: pw);
+  final p1 = TextEditingController(text: pw);
+  var errMsg0 = "";
+  var errMsg1 = "";
+
+  DialogManager.show((setState, close) {
+    return CustomAlertDialog(
+      title: Text(translate("Set Password")),
+      content: ConstrainedBox(
+        constraints: BoxConstraints(minWidth: 500),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SizedBox(
+              height: 8.0,
+            ),
+            Row(
+              children: [
+                ConstrainedBox(
+                    constraints: BoxConstraints(minWidth: 100),
+                    child: Text(
+                      "${translate('Password')}:",
+                      textAlign: TextAlign.start,
+                    ).marginOnly(bottom: 16.0)),
+                SizedBox(
+                  width: 24.0,
+                ),
+                Expanded(
+                  child: TextField(
+                    obscureText: true,
+                    decoration: InputDecoration(
+                        border: OutlineInputBorder(),
+                        errorText: errMsg0.isNotEmpty ? errMsg0 : null),
+                    controller: p0,
+                  ),
+                ),
+              ],
+            ),
+            SizedBox(
+              height: 8.0,
+            ),
+            Row(
+              children: [
+                ConstrainedBox(
+                    constraints: BoxConstraints(minWidth: 100),
+                    child: Text("${translate('Confirmation')}:")
+                        .marginOnly(bottom: 16.0)),
+                SizedBox(
+                  width: 24.0,
+                ),
+                Expanded(
+                  child: TextField(
+                    obscureText: true,
+                    decoration: InputDecoration(
+                        border: OutlineInputBorder(),
+                        errorText: errMsg1.isNotEmpty ? errMsg1 : null),
+                    controller: p1,
+                  ),
+                ),
+              ],
+            ),
+            SizedBox(
+              height: 4.0,
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+            onPressed: () {
+              close();
+            },
+            child: Text(translate("Cancel"))),
+        TextButton(
+            onPressed: () {
+              setState(() {
+                errMsg0 = "";
+                errMsg1 = "";
+              });
+              final pass = p0.text.trim();
+              if (pass.length < 6) {
+                setState(() {
+                  errMsg0 = translate("Too short, at least 6 characters.");
+                });
+                return;
+              }
+              if (p1.text.trim() != pass) {
+                setState(() {
+                  errMsg1 = translate("The confirmation is not identical.");
+                });
+                return;
+              }
+              gFFI.setByName("permanent_password", pass);
+              close();
+            },
+            child: Text(translate("OK"))),
+      ],
+    );
+  });
 }

@@ -32,9 +32,9 @@ use crate::ui_interface::{
     is_login_wayland, is_ok_change_id, is_process_trusted, is_rdp_service_open, is_share_rdp,
     is_xfce, modify_default_login, new_remote, open_url, peer_has_password, permanent_password,
     post_request, recent_sessions_updated, remove_peer, run_without_install, set_local_option,
-    set_option, set_options, set_peer_option, set_remote_id, set_share_rdp, set_socks,
-    show_run_without_install, store_fav, t, temporary_password, test_if_valid_server, update_me,
-    update_temporary_password, using_public_server,
+    set_option, set_options, set_peer_option, set_permanent_password, set_remote_id, set_share_rdp,
+    set_socks, show_run_without_install, store_fav, t, temporary_password, test_if_valid_server,
+    update_me, update_temporary_password, using_public_server,
 };
 
 mod cm;
@@ -205,7 +205,7 @@ impl UI {
     }
 
     fn set_permanent_password(&self, password: String) {
-        allow_err!(ipc::set_permanent_password(password));
+        set_permanent_password(password);
     }
 
     fn get_remote_id(&mut self) -> String {

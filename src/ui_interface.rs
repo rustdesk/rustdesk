@@ -5,11 +5,13 @@ use std::{
     time::SystemTime,
 };
 
+#[cfg(any(target_os = "android", target_os = "ios"))]
+use hbb_common::password_security;
 use hbb_common::{
     allow_err,
     config::{self, Config, LocalConfig, PeerConfig, RENDEZVOUS_PORT, RENDEZVOUS_TIMEOUT},
     futures::future::join_all,
-    log, password_security,
+    log,
     protobuf::Message as _,
     rendezvous_proto::*,
     sleep,
@@ -129,7 +131,10 @@ pub fn get_license() -> String {
 }
 
 pub fn get_option(key: String) -> String {
-    get_option_(&key)
+    #[cfg(any(target_os = "android", target_os = "ios"))]
+    return Config::get_option(arg);
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    return get_option_(&key);
 }
 
 fn get_option_(key: &str) -> String {
@@ -243,20 +248,25 @@ pub fn set_options(m: HashMap<String, String>) {
 }
 
 pub fn set_option(key: String, value: String) {
-    let mut options = OPTIONS.lock().unwrap();
-    #[cfg(target_os = "macos")]
-    if &key == "stop-service" {
-        let is_stop = value == "Y";
-        if is_stop && crate::platform::macos::uninstall() {
-            return;
+    #[cfg(any(target_os = "android", target_os = "ios"))]
+    Config::set_option(name.to_owned(), value.to_owned());
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    {
+        let mut options = OPTIONS.lock().unwrap();
+        #[cfg(target_os = "macos")]
+        if &key == "stop-service" {
+            let is_stop = value == "Y";
+            if is_stop && crate::platform::macos::uninstall() {
+                return;
+            }
         }
+        if value.is_empty() {
+            options.remove(&key);
+        } else {
+            options.insert(key.clone(), value.clone());
+        }
+        ipc::set_options(options.clone()).ok();
     }
-    if value.is_empty() {
-        options.remove(&key);
-    } else {
-        options.insert(key.clone(), value.clone());
-    }
-    ipc::set_options(options.clone()).ok();
 }
 
 pub fn install_path() -> String {
@@ -358,16 +368,32 @@ pub fn get_connect_status() -> Status {
     res
 }
 
+pub fn temporary_password() -> String {
+    #[cfg(any(target_os = "android", target_os = "ios"))]
+    return password_security::temporary_password();
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    return TEMPORARY_PASSWD.lock().unwrap().clone();
+}
+
 pub fn update_temporary_password() {
+    #[cfg(any(target_os = "android", target_os = "ios"))]
+    password_security::update_temporary_password();
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
     allow_err!(ipc::update_temporary_password());
 }
 
 pub fn permanent_password() -> String {
-    ipc::get_permanent_password()
+    #[cfg(any(target_os = "android", target_os = "ios"))]
+    return Config::get_permanent_password();
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    return ipc::get_permanent_password();
 }
 
-pub fn temporary_password() -> String {
-    password_security::temporary_password()
+pub fn set_permanent_password(password: String) {
+    #[cfg(any(target_os = "android", target_os = "ios"))]
+    Config::set_permanent_password(&password);
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    allow_err!(ipc::set_permanent_password(password));
 }
 
 pub fn get_peer(id: String) -> PeerConfig {
@@ -680,6 +706,8 @@ async fn check_connect_status_(reconnect: bool, rx: mpsc::UnboundedReceiver<ipc:
                             Ok(Some(ipc::Data::Config((name, Some(value))))) => {
                                 if name == "id" {
                                     id = value;
+                                } else if name == "temporary-password" {
+                                    *TEMPORARY_PASSWD.lock().unwrap() = value;
                                 }
                             }
                             Ok(Some(ipc::Data::OnlineStatus(Some((mut x, c))))) => {
@@ -699,6 +727,7 @@ async fn check_connect_status_(reconnect: bool, rx: mpsc::UnboundedReceiver<ipc:
                         c.send(&ipc::Data::OnlineStatus(None)).await.ok();
                         c.send(&ipc::Data::Options(None)).await.ok();
                         c.send(&ipc::Data::Config(("id".to_owned(), None))).await.ok();
+                        c.send(&ipc::Data::Config(("temporary-password".to_owned(), None))).await.ok();
                     }
                 }
             }

@@ -24,8 +24,7 @@ use crate::ui_interface::{
     get_async_job_status, get_connect_status, get_fav, get_id, get_lan_peers, get_license,
     get_local_option, get_options, get_peer, get_peer_option, get_socks, get_sound_inputs,
     get_uuid, get_version, has_rendezvous_service, is_ok_change_id, post_request, set_local_option,
-    set_options, set_peer_option, set_socks, store_fav, temporary_password, test_if_valid_server,
-    using_public_server,
+    set_options, set_peer_option, set_socks, store_fav, test_if_valid_server, using_public_server,
 };
 
 fn initialize(app_dir: &str) {
@@ -613,7 +612,7 @@ unsafe extern "C" fn get_by_name(name: *const c_char, arg: *const c_char) -> *co
             }
             "option" => {
                 if let Ok(arg) = arg.to_str() {
-                    res = Config::get_option(arg);
+                    res = ui_interface::get_option(arg.to_owned());
                 }
             }
             // "image_quality" => {
@@ -642,7 +641,10 @@ unsafe extern "C" fn get_by_name(name: *const c_char, arg: *const c_char) -> *co
                 res = ui_interface::get_id();
             }
             "temporary_password" => {
-                res = password_security::temporary_password();
+                res = ui_interface::temporary_password();
+            }
+            "permanent_password" => {
+                res = ui_interface::permanent_password();
             }
             "connect_statue" => {
                 res = ONLINE
@@ -829,7 +831,7 @@ unsafe extern "C" fn set_by_name(name: *const c_char, value: *const c_char) {
                     if let Ok(m) = serde_json::from_str::<HashMap<String, String>>(value) {
                         if let Some(name) = m.get("name") {
                             if let Some(value) = m.get("value") {
-                                Config::set_option(name.to_owned(), value.to_owned());
+                                ui_interface::set_option(name.to_owned(), value.to_owned());
                                 if name == "custom-rendezvous-server" {
                                     #[cfg(target_os = "android")]
                                     crate::rendezvous_mediator::RendezvousMediator::restart();
@@ -1048,6 +1050,12 @@ unsafe extern "C" fn set_by_name(name: *const c_char, value: *const c_char) {
                     if let Ok(id) = value.parse::<i32>() {
                         connection_manager::close_conn(id);
                     };
+                }
+                "temporary_password" => {
+                    ui_interface::update_temporary_password();
+                }
+                "permanent_password" => {
+                    ui_interface::set_permanent_password(value.to_owned());
                 }
                 _ => {
                     log::error!("Unknown name of set_by_name: {}", name);
