@@ -1081,7 +1081,7 @@ impl Handler {
                 let is_dead = keyboard.last_is_dead;
                 #[cfg(target_os = "linux")]
                 let is_dead = keyboard.is_dead();
-                if is_dead && string == "" {
+                if is_dead && string == "" && down_or_up == true {
                     return;
                 }
                 string
