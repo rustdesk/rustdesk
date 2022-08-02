@@ -1077,7 +1077,17 @@ impl Handler {
         let string = match KEYBOARD.lock() {
             Ok(mut keyboard) => {
                 let string = keyboard.add(&evt.event_type).unwrap_or_default();
-                if keyboard.last_is_dead && string == "" {
+                #[cfg(target_os = "windows")]
+                let is_dead = keyboard.last_is_dead;
+                #[cfg(target_os = "linux")]
+                let is_dead = unsafe {
+                    CStr::from_ptr(XKeysymToString(*keyboard.keysym))
+                        .to_str()
+                        .unwrap_or_default()
+                        .to_owned()
+                        .starts_with("dead")
+                };
+                if is_dead && string == "" {
                     return;
                 }
                 string
