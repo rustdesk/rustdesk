@@ -12,6 +12,7 @@ mod fr;
 mod hu;
 mod id;
 mod it;
+mod ja;
 mod pl;
 mod ptbr;
 mod ru;
@@ -41,6 +42,7 @@ lazy_static::lazy_static! {
             ("tr", "Türkçe"),
             ("vn", "Tiếng Việt"),
             ("pl", "Polski"),
+            ("ja", "日本語"),
         ]);
 }
 
@@ -87,6 +89,7 @@ pub fn translate_locale(name: String, locale: &str) -> String {
         "sk" => sk::T.deref(),
         "vn" => vn::T.deref(),
         "pl" => pl::T.deref(),
+        "ja" => ja::T.deref(),
         _ => en::T.deref(),
     };
     if let Some(v) = m.get(&name as &str) {
