@@ -1028,6 +1028,7 @@ class FFI {
   RustdeskImpl get bind => ffiModel.platformFFI.ffiBind;
 
   handleMouse(Map<String, dynamic> evt) {
+    debugPrint("mouse ${evt.toString()}");
     var type = '';
     var isMove = false;
     switch (evt['type']) {
@@ -1045,7 +1046,7 @@ class FFI {
     }
     evt['type'] = type;
     var x = evt['x'];
-    var y = evt['y'];
+    var y = max(0.0, (evt['y'] as double) - 50.0);
     if (isMove) {
       canvasModel.moveDesktopMouse(x, y);
     }

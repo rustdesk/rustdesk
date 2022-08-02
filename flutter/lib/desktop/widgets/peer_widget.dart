@@ -15,15 +15,13 @@ typedef OffstageFunc = bool Function(Peer peer);
 typedef PeerCardWidgetFunc = Widget Function(Peer peer);
 
 class _PeerWidget extends StatefulWidget {
-  late final _name;
   late final _peers;
   late final OffstageFunc _offstageFunc;
   late final PeerCardWidgetFunc _peerCardWidgetFunc;
-  _PeerWidget(String name, List<Peer> peers, OffstageFunc offstageFunc,
+  _PeerWidget(Peers peers, OffstageFunc offstageFunc,
       PeerCardWidgetFunc peerCardWidgetFunc,
       {Key? key})
       : super(key: key) {
-    _name = name;
     _peers = peers;
     _offstageFunc = offstageFunc;
     _peerCardWidgetFunc = peerCardWidgetFunc;
@@ -70,7 +68,7 @@ class _PeerWidgetState extends State<_PeerWidget> with WindowListener {
   Widget build(BuildContext context) {
     final space = 8.0;
     return ChangeNotifierProvider<Peers>(
-      create: (context) => Peers(super.widget._name, super.widget._peers),
+      create: (context) => super.widget._peers,
       child: SingleChildScrollView(
           child: Consumer<Peers>(
               builder: (context, peers, child) => Wrap(
@@ -136,83 +134,69 @@ class _PeerWidgetState extends State<_PeerWidget> with WindowListener {
 
 abstract class BasePeerWidget extends StatelessWidget {
   late final _name;
+  late final _loadEvent;
   late final OffstageFunc _offstageFunc;
   late final PeerCardWidgetFunc _peerCardWidgetFunc;
+  late final List<Peer> _initPeers;
 
   BasePeerWidget({Key? key}) : super(key: key) {}
 
   @override
   Widget build(BuildContext context) {
-    return FutureBuilder<Widget>(future: () async {
-      return _PeerWidget(
-          _name, await _loadPeers(), _offstageFunc, _peerCardWidgetFunc);
-    }(), builder: (context, snapshot) {
-      if (snapshot.hasData) {
-        return snapshot.data!;
-      } else {
-        return Offstage();
-      }
-    });
+    return _PeerWidget(Peers(_name, _loadEvent, _initPeers), _offstageFunc,
+        _peerCardWidgetFunc);
   }
-
-  @protected
-  Future<List<Peer>> _loadPeers();
 }
 
 class RecentPeerWidget extends BasePeerWidget {
   RecentPeerWidget({Key? key}) : super(key: key) {
     super._name = "recent peer";
+    super._loadEvent = "load_recent_peers";
     super._offstageFunc = (Peer _peer) => false;
     super._peerCardWidgetFunc = (Peer peer) => RecentPeerCard(peer: peer);
+    super._initPeers = [];
   }
 
-  Future<List<Peer>> _loadPeers() async {
-    debugPrint("call RecentPeerWidget _loadPeers");
-    return gFFI.peers();
+  @override
+  Widget build(BuildContext context) {
+    final widget = super.build(context);
+    gFFI.bind.mainLoadRecentPeers();
+    return widget;
   }
 }
 
 class FavoritePeerWidget extends BasePeerWidget {
   FavoritePeerWidget({Key? key}) : super(key: key) {
     super._name = "favorite peer";
+    super._loadEvent = "load_fav_peers";
     super._offstageFunc = (Peer _peer) => false;
     super._peerCardWidgetFunc = (Peer peer) => FavoritePeerCard(peer: peer);
+    super._initPeers = [];
   }
 
   @override
-  Future<List<Peer>> _loadPeers() async {
-    debugPrint("call FavoritePeerWidget _loadPeers");
-    return await gFFI.bind.mainGetFav().then((peers) async {
-      final peersEntities = await Future.wait(peers
-              .map((id) => gFFI.bind.mainGetPeers(id: id))
-              .toList(growable: false))
-          .then((peers_str) {
-        final len = peers_str.length;
-        final ps = List<Peer>.empty(growable: true);
-        for (var i = 0; i < len; i++) {
-          print("${peers[i]}: ${peers_str[i]}");
-          ps.add(Peer.fromJson(peers[i], jsonDecode(peers_str[i])['info']));
-        }
-        return ps;
-      });
-      return peersEntities;
-    });
+  Widget build(BuildContext context) {
+    final widget = super.build(context);
+    gFFI.bind.mainLoadFavPeers();
+    return widget;
   }
 }
 
 class DiscoveredPeerWidget extends BasePeerWidget {
   DiscoveredPeerWidget({Key? key}) : super(key: key) {
     super._name = "discovered peer";
+    super._loadEvent = "load_lan_peers";
     super._offstageFunc = (Peer _peer) => false;
     super._peerCardWidgetFunc = (Peer peer) => DiscoveredPeerCard(peer: peer);
+    super._initPeers = [];
   }
 
-  Future<List<Peer>> _loadPeers() async {
-    debugPrint("call DiscoveredPeerWidget _loadPeers");
-    return await gFFI.bind.mainGetLanPeers().then((peers_string) {
-      debugPrint(peers_string);
-      return [];
-    });
+  @override
+  Widget build(BuildContext context) {
+    debugPrint("DiscoveredPeerWidget build");
+    final widget = super.build(context);
+    gFFI.bind.mainLoadLanPeers();
+    return widget;
   }
 }
 
@@ -222,10 +206,10 @@ class AddressBookPeerWidget extends BasePeerWidget {
     super._offstageFunc =
         (Peer peer) => !_hitTag(gFFI.abModel.selectedTags, peer.tags);
     super._peerCardWidgetFunc = (Peer peer) => AddressBookPeerCard(peer: peer);
+    super._initPeers = _loadPeers();
   }
 
-  Future<List<Peer>> _loadPeers() async {
-    debugPrint("call AddressBookPeerWidget _loadPeers");
+  List<Peer> _loadPeers() {
     return gFFI.abModel.peers.map((e) {
       return Peer.fromJson(e['id'], e);
     }).toList();

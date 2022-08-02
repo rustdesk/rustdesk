@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import '../../common.dart';
 
@@ -35,15 +36,20 @@ class Peer {
 
 class Peers extends ChangeNotifier {
   late String _name;
-  late var _peers;
-  static const cbQueryOnlines = 'callback_query_onlines';
+  late List<Peer> _peers;
+  late final _loadEvent;
+  static const _cbQueryOnlines = 'callback_query_onlines';
 
-  Peers(String name, List<Peer> peers) {
+  Peers(String name, String loadEvent, List<Peer> _initPeers) {
     _name = name;
-    _peers = peers;
-    gFFI.ffiModel.platformFFI.registerEventHandler(cbQueryOnlines, _name,
+    _loadEvent = loadEvent;
+    _peers = _initPeers;
+    gFFI.ffiModel.platformFFI.registerEventHandler(_cbQueryOnlines, _name,
         (evt) {
       _updateOnlineState(evt);
+    });
+    gFFI.ffiModel.platformFFI.registerEventHandler(_loadEvent, _name, (evt) {
+      _updatePeers(evt);
     });
   }
 
@@ -51,7 +57,8 @@ class Peers extends ChangeNotifier {
 
   @override
   void dispose() {
-    gFFI.ffiModel.platformFFI.unregisterEventHandler(cbQueryOnlines, _name);
+    gFFI.ffiModel.platformFFI.unregisterEventHandler(_cbQueryOnlines, _name);
+    gFFI.ffiModel.platformFFI.unregisterEventHandler(_loadEvent, _name);
     super.dispose();
   }
 
@@ -85,5 +92,38 @@ class Peers extends ChangeNotifier {
     });
 
     notifyListeners();
+  }
+
+  void _updatePeers(Map<String, dynamic> evt) {
+    final onlineStates = _getOnlineStates();
+    _peers = _decodePeers(evt['peers']);
+    _peers.forEach((peer) {
+      final state = onlineStates[peer.id];
+      peer.online = state != null && state != false;
+    });
+    notifyListeners();
+  }
+
+  Map<String, bool> _getOnlineStates() {
+    var onlineStates = new Map<String, bool>();
+    _peers.forEach((peer) {
+      onlineStates[peer.id] = peer.online;
+    });
+    return onlineStates;
+  }
+
+  List<Peer> _decodePeers(String peersStr) {
+    try {
+      if (peersStr == "") return [];
+      List<dynamic> peers = json.decode(peersStr);
+      return peers
+          .map((s) => s as List<dynamic>)
+          .map((s) =>
+              Peer.fromJson(s[0] as String, s[1] as Map<String, dynamic>))
+          .toList();
+    } catch (e) {
+      print('peers(): $e');
+    }
+    return [];
   }
 }

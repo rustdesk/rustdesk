@@ -9,12 +9,12 @@ use hbb_common::{
     allow_err,
     config::{self, Config, LocalConfig, PeerConfig, RENDEZVOUS_PORT, RENDEZVOUS_TIMEOUT},
     futures::future::join_all,
-    log,
+    log, password_security,
     protobuf::Message as _,
     rendezvous_proto::*,
     sleep,
     tcp::FramedStream,
-    tokio::{self, sync::mpsc, time}, password_security,
+    tokio::{self, sync::mpsc, time},
 };
 
 use crate::common::SOFTWARE_UPDATE_URL;
@@ -538,12 +538,26 @@ pub fn create_shortcut(_id: String) {
 
 pub fn discover() {
     std::thread::spawn(move || {
-        allow_err!(crate::rendezvous_mediator::discover());
+        allow_err!(crate::lan::discover());
     });
 }
 
 pub fn get_lan_peers() -> String {
-    serde_json::to_string(&config::LanPeers::load().peers).unwrap_or_default()
+    let peers: Vec<(String, config::PeerInfoSerde)> = config::LanPeers::load()
+        .peers
+        .iter()
+        .map(|peer| {
+            (
+                peer.id.clone(),
+                config::PeerInfoSerde {
+                    username: peer.username.clone(),
+                    hostname: peer.hostname.clone(),
+                    platform: peer.platform.clone(),
+                },
+            )
+        })
+        .collect();
+    serde_json::to_string(&peers).unwrap_or_default()
 }
 
 pub fn get_uuid() -> String {
