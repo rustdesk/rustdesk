@@ -63,7 +63,7 @@ wol-rs = "0.9.1"
 
 [target.'cfg(not(target_os = "linux"))'.dependencies]
 #reqwest = { version = "0.11", features = ["json", "rustls-tls"], default-features=false }
-reqwest = { git = "https://github.com/sj6219/reqwest", branch = "0.11.11_alpha" }
+reqwest = { git = "https://github.com/sj6219/reqwest", branch = "0.11.11_alpha", features = ["json", "rustls-tls"], default-features=false }
 
 [target.'cfg(not(any(target_os = "android", target_os = "linux")))'.dependencies]
 cpal = "0.13.5"
