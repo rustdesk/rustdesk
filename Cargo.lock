@@ -3795,7 +3795,7 @@ dependencies = [
 [[package]]
 name = "rdev"
 version = "0.5.0-2"
-source = "git+https://github.com/asur4s/rdev#c1175a394d811473e87ea79cb9a511a0f9b71764"
+source = "git+https://github.com/asur4s/rdev#d6499d2e582bf3549aa4ba33cfd3fbbdfce10947"
 dependencies = [
  "cocoa",
  "core-foundation 0.9.3",
@@ -4760,10 +4760,11 @@ checksum = "b1141d4d61095b28419e22cb0bbf02755f5e54e0526f97f1e3d1d160e60885fb"
 [[package]]
 name = "tfc"
 version = "0.6.1"
-source = "git+https://github.com/asur4s/The-Fat-Controller#35ed0bc8dd8516bdb99e45ebfc94409637a92c6b"
+source = "git+https://github.com/asur4s/The-Fat-Controller#6587681075fa312a0d69587721d1ff84d8fa2970"
 dependencies = [
  "core-graphics 0.22.3",
  "unicode-segmentation",
+ "winapi 0.3.9",
 ]
 
 [[package]]

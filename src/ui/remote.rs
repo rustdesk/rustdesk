@@ -1034,10 +1034,10 @@ impl Handler {
         }
     }
 
-    fn map_keyboard_mode(&mut self, down_or_up: bool, key: RdevKey, evt: Option<Event>) {
+    fn map_keyboard_mode(&mut self, down_or_up: bool, key: RdevKey, _evt: Option<Event>) {
         // map mode(1): Send keycode according to the peer platform.
         #[cfg(target_os = "windows")]
-        let key = if let Some(e) = evt {
+        let key = if let Some(e) = _evt {
             rdev::get_win_key(e.code.into(), e.scan_code)
         } else {
             key
@@ -1080,13 +1080,7 @@ impl Handler {
                 #[cfg(target_os = "windows")]
                 let is_dead = keyboard.last_is_dead;
                 #[cfg(target_os = "linux")]
-                let is_dead = unsafe {
-                    CStr::from_ptr(XKeysymToString(*keyboard.keysym))
-                        .to_str()
-                        .unwrap_or_default()
-                        .to_owned()
-                        .starts_with("dead")
-                };
+                let is_dead = keyboard.is_dead();
                 if is_dead && string == "" {
                     return;
                 }
