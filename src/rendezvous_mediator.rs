@@ -604,68 +604,6 @@ fn lan_discovery() -> ResultType<()> {
     }
 }
 
-pub fn discover() -> ResultType<()> {
-    let addr = SocketAddr::from(([0, 0, 0, 0], 0));
-    let socket = std::net::UdpSocket::bind(addr)?;
-    socket.set_broadcast(true)?;
-    let mut msg_out = Message::new();
-    let peer = PeerDiscovery {
-        cmd: "ping".to_owned(),
-        ..Default::default()
-    };
-    msg_out.set_peer_discovery(peer);
-    let maddr = SocketAddr::from(([255, 255, 255, 255], get_broadcast_port()));
-    socket.send_to(&msg_out.write_to_bytes()?, maddr)?;
-    log::info!("discover ping sent");
-    let mut last_recv_time = Instant::now();
-    let mut last_write_time = Instant::now();
-    let mut last_write_n = 0;
-    // to-do: load saved peers, and update incrementally (then we can see offline)
-    let mut peers = Vec::new();
-    let mac = get_mac();
-    socket.set_read_timeout(Some(std::time::Duration::from_millis(10)))?;
-    loop {
-        let mut buf = [0; 2048];
-        if let Ok((len, _)) = socket.recv_from(&mut buf) {
-            if let Ok(msg_in) = Message::parse_from_bytes(&buf[0..len]) {
-                match msg_in.union {
-                    Some(rendezvous_message::Union::PeerDiscovery(p)) => {
-                        last_recv_time = Instant::now();
-                        if p.cmd == "pong" {
-                            if p.mac != mac {
-                                let dp = DiscoveryPeer {
-                                    id: "".to_string(),
-                                    ip_mac: HashMap::from([
-                                        // TODO: addr ip
-                                        (addr.ip().to_string(), p.mac.clone()),
-                                    ]),
-                                    username: p.username,
-                                    hostname: p.hostname,
-                                    platform: p.platform,
-                                    online: true,
-                                };
-                                peers.push(dp);
-                            }
-                        }
-                    }
-                    _ => {}
-                }
-            }
-        }
-        if last_write_time.elapsed().as_millis() > 300 && last_write_n != peers.len() {
-            config::LanPeers::store(&peers);
-            last_write_time = Instant::now();
-            last_write_n = peers.len();
-        }
-        if last_recv_time.elapsed().as_millis() > 3_000 {
-            break;
-        }
-    }
-    log::info!("discover ping done");
-    config::LanPeers::store(&peers);
-    Ok(())
-}
-
 #[tokio::main(flavor = "current_thread")]
 pub async fn query_online_states<F: FnOnce(Vec<String>, Vec<String>)>(ids: Vec<String>, f: F) {
     let test = false;

@@ -20,6 +20,7 @@ use hbb_common::{
 };
 
 use crate::common::{get_app_name, SOFTWARE_UPDATE_URL};
+use crate::ipc;
 use crate::ui_interface::{
     check_mouse_time, closing, create_shortcut, current_is_wayland, fix_login_wayland,
     forget_password, get_api_server, get_async_job_status, get_connect_status, get_error, get_fav,
@@ -35,7 +36,6 @@ use crate::ui_interface::{
     show_run_without_install, store_fav, t, temporary_password, test_if_valid_server, update_me,
     update_temporary_password, using_public_server,
 };
-use crate::{discover, ipc};
 
 mod cm;
 #[cfg(feature = "inline")]
@@ -493,7 +493,9 @@ impl UI {
     }
 
     fn discover(&self) {
-        discover();
+        std::thread::spawn(move || {
+            allow_err!(crate::lan::discover());
+        });
     }
 
     fn get_lan_peers(&self) -> String {

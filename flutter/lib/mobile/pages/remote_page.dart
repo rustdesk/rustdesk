@@ -125,10 +125,10 @@ class _RemotePageState extends State<RemotePage> {
       oldValue = oldValue.substring(j + 1);
       var common = 0;
       for (;
-      common < oldValue.length &&
-          common < newValue.length &&
-          newValue[common] == oldValue[common];
-      ++common) {}
+          common < oldValue.length &&
+              common < newValue.length &&
+              newValue[common] == oldValue[common];
+          ++common) {}
       for (i = 0; i < oldValue.length - common; ++i) {
         gFFI.inputKey('VK_BACK');
       }
@@ -235,13 +235,13 @@ class _RemotePageState extends State<RemotePage> {
               floatingActionButton: !showActionButton
                   ? null
                   : FloatingActionButton(
-                  mini: !hideKeyboard,
-                  child: Icon(
-                      hideKeyboard ? Icons.expand_more : Icons.expand_less),
-                  backgroundColor: MyTheme.accent,
-                  onPressed: () {
-                    setState(() {
-                      if (hideKeyboard) {
+                      mini: !hideKeyboard,
+                      child: Icon(
+                          hideKeyboard ? Icons.expand_more : Icons.expand_less),
+                      backgroundColor: MyTheme.accent,
+                      onPressed: () {
+                        setState(() {
+                          if (hideKeyboard) {
                             _showEdit = false;
                             gFFI.invokeMethod("enable_soft_keyboard", false);
                             _mobileFocusNode.unfocus();
@@ -250,7 +250,7 @@ class _RemotePageState extends State<RemotePage> {
                             _showBar = !_showBar;
                           }
                         });
-                  }),
+                      }),
               bottomNavigationBar: _showBar && pi.displays.length > 0
                   ? getBottomAppBar(keyboard)
                   : null,
@@ -262,7 +262,7 @@ class _RemotePageState extends State<RemotePage> {
                         child: isWebDesktop
                             ? getBodyForDesktopWithListener(keyboard)
                             : SafeArea(child:
-                            OrientationBuilder(builder: (ctx, orientation) {
+                                OrientationBuilder(builder: (ctx, orientation) {
                                 if (_currentOrientation != orientation) {
                                   Timer(Duration(milliseconds: 200), () {
                                     resetMobileActionsOverlay();
@@ -271,10 +271,10 @@ class _RemotePageState extends State<RemotePage> {
                                   });
                                 }
                                 return Container(
-                                color: MyTheme.canvasColor,
-                                child: _isPhysicalMouse
-                                    ? getBodyForMobile()
-                                    : getBodyForMobileWithGesture());
+                                    color: MyTheme.canvasColor,
+                                    child: _isPhysicalMouse
+                                        ? getBodyForMobile()
+                                        : getBodyForMobileWithGesture());
                               })));
                   })
                 ],
@@ -395,14 +395,14 @@ class _RemotePageState extends State<RemotePage> {
         children: <Widget>[
           Row(
               children: <Widget>[
-                IconButton(
-                  color: Colors.white,
-                  icon: Icon(Icons.clear),
-                  onPressed: () {
-                    clientClose();
-                  },
-                )
-              ] +
+                    IconButton(
+                      color: Colors.white,
+                      icon: Icon(Icons.clear),
+                      onPressed: () {
+                        clientClose();
+                      },
+                    )
+                  ] +
                   <Widget>[
                     IconButton(
                       color: Colors.white,
@@ -441,20 +441,20 @@ class _RemotePageState extends State<RemotePage> {
                                     : Icons.mouse),
                                 onPressed: changeTouchMode,
                               ),
-                  ]) +
+                            ]) +
                   (isWeb
                       ? []
                       : <Widget>[
-                    IconButton(
-                      color: Colors.white,
-                      icon: Icon(Icons.message),
-                      onPressed: () {
+                          IconButton(
+                            color: Colors.white,
+                            icon: Icon(Icons.message),
+                            onPressed: () {
                               gFFI.chatModel
                                   .changeCurrentID(ChatModel.clientModeID);
                               toggleChatOverlay();
                             },
-                    )
-                  ]) +
+                          )
+                        ]) +
                   [
                     IconButton(
                       color: Colors.white,
@@ -602,17 +602,17 @@ class _RemotePageState extends State<RemotePage> {
             child: !_showEdit
                 ? Container()
                 : TextFormField(
-              textInputAction: TextInputAction.newline,
-              autocorrect: false,
-              enableSuggestions: false,
-              autofocus: true,
-              focusNode: _mobileFocusNode,
-              maxLines: null,
-              initialValue: _value,
-              // trick way to make backspace work always
-              keyboardType: TextInputType.multiline,
-              onChanged: handleInput,
-            ),
+                    textInputAction: TextInputAction.newline,
+                    autocorrect: false,
+                    enableSuggestions: false,
+                    autofocus: true,
+                    focusNode: _mobileFocusNode,
+                    maxLines: null,
+                    initialValue: _value,
+                    // trick way to make backspace work always
+                    keyboardType: TextInputType.multiline,
+                    onChanged: handleInput,
+                  ),
           ),
         ]));
   }
@@ -697,7 +697,7 @@ class _RemotePageState extends State<RemotePage> {
             value: 'block-input'));
       }
     }
-        () async {
+    () async {
       var value = await showMenu(
         context: context,
         position: RelativeRect.fromLTRB(x, y, x, y),
@@ -715,7 +715,7 @@ class _RemotePageState extends State<RemotePage> {
       } else if (value == 'refresh') {
         gFFI.setByName('refresh');
       } else if (value == 'paste') {
-            () async {
+        () async {
           ClipboardData? data = await Clipboard.getData(Clipboard.kTextPlain);
           if (data != null && data.text != null) {
             gFFI.setByName('input_string', '${data.text}');
@@ -803,25 +803,25 @@ class _RemotePageState extends State<RemotePage> {
     final keys = <Widget>[
       wrap(
           ' Fn ',
-              () => setState(
+          () => setState(
                 () {
-              _fn = !_fn;
-              if (_fn) {
-                _more = false;
-              }
-            },
-          ),
+                  _fn = !_fn;
+                  if (_fn) {
+                    _more = false;
+                  }
+                },
+              ),
           _fn),
       wrap(
           ' ... ',
-              () => setState(
+          () => setState(
                 () {
-              _more = !_more;
-              if (_more) {
-                _fn = false;
-              }
-            },
-          ),
+                  _more = !_more;
+                  if (_more) {
+                    _fn = false;
+                  }
+                },
+              ),
           _more),
     ];
     final fn = <Widget>[
@@ -952,7 +952,8 @@ class ImagePainter extends CustomPainter {
   }
 }
 
-CheckboxListTile getToggle(void Function(void Function()) setState, option, name) {
+CheckboxListTile getToggle(
+    void Function(void Function()) setState, option, name) {
   return CheckboxListTile(
       value: gFFI.getByName('toggle_option', option) == 'true',
       onChanged: (v) {

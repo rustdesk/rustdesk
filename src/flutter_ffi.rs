@@ -7,11 +7,11 @@ use std::{
 use flutter_rust_bridge::{StreamSink, SyncReturn, ZeroCopyBuffer};
 use serde_json::{json, Number, Value};
 
-use hbb_common::{ResultType, password_security};
 use hbb_common::{
     config::{self, Config, LocalConfig, PeerConfig, ONLINE},
     fs, log,
 };
+use hbb_common::{password_security, ResultType};
 
 use crate::client::file_trait::FileManager;
 use crate::common::make_fd_to_json;
@@ -20,7 +20,7 @@ use crate::flutter::{self, Session, SESSIONS};
 use crate::start_server;
 use crate::ui_interface;
 use crate::ui_interface::{
-    change_id, check_connect_status, forget_password, get_api_server, get_app_name,
+    change_id, check_connect_status, discover, forget_password, get_api_server, get_app_name,
     get_async_job_status, get_connect_status, get_fav, get_id, get_lan_peers, get_license,
     get_local_option, get_options, get_peer, get_peer_option, get_socks, get_sound_inputs,
     get_uuid, get_version, has_rendezvous_service, is_ok_change_id, post_request, set_local_option,
@@ -469,6 +469,10 @@ pub fn main_is_using_public_server() -> bool {
     using_public_server()
 }
 
+pub fn main_discover() {
+    discover();
+}
+
 pub fn main_has_rendezvous_service() -> bool {
     has_rendezvous_service()
 }
@@ -507,6 +511,61 @@ pub fn main_set_peer_option(id: String, key: String, value: String) {
 
 pub fn main_forget_password(id: String) {
     forget_password(id)
+}
+
+pub fn main_load_recent_peers() {
+    if !config::APP_DIR.read().unwrap().is_empty() {
+        let peers: Vec<(String, config::PeerInfoSerde)> = PeerConfig::peers()
+            .drain(..)
+            .map(|(id, _, p)| (id, p.info))
+            .collect();
+        if let Some(s) = flutter::GLOBAL_EVENT_STREAM.read().unwrap().as_ref() {
+            let data = HashMap::from([
+                ("name", "load_recent_peers".to_owned()),
+                (
+                    "peers",
+                    serde_json::ser::to_string(&peers).unwrap_or("".to_owned()),
+                ),
+            ]);
+            s.add(serde_json::ser::to_string(&data).unwrap_or("".to_owned()));
+        };
+    }
+}
+
+pub fn main_load_fav_peers() {
+    if !config::APP_DIR.read().unwrap().is_empty() {
+        let favs = get_fav();
+        let peers: Vec<(String, config::PeerInfoSerde)> = PeerConfig::peers()
+            .into_iter()
+            .filter_map(|(id, _, peer)| {
+                if favs.contains(&id) {
+                    Some((id, peer.info))
+                } else {
+                    None
+                }
+            })
+            .collect();
+        if let Some(s) = flutter::GLOBAL_EVENT_STREAM.read().unwrap().as_ref() {
+            let data = HashMap::from([
+                ("name", "load_fav_peers".to_owned()),
+                (
+                    "peers",
+                    serde_json::ser::to_string(&peers).unwrap_or("".to_owned()),
+                ),
+            ]);
+            s.add(serde_json::ser::to_string(&data).unwrap_or("".to_owned()));
+        };
+    }
+}
+
+pub fn main_load_lan_peers() {
+    if let Some(s) = flutter::GLOBAL_EVENT_STREAM.read().unwrap().as_ref() {
+        let data = HashMap::from([
+            ("name", "load_lan_peers".to_owned()),
+            ("peers", get_lan_peers()),
+        ]);
+        s.add(serde_json::ser::to_string(&data).unwrap_or("".to_owned()));
+    };
 }
 
 /// FFI for **get** commands which are idempotent.

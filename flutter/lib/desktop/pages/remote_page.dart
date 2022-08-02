@@ -296,6 +296,7 @@ class _RemotePageState extends State<RemotePage>
   Widget getRawPointerAndKeyBody(bool keyboard, Widget child) {
     return Listener(
         onPointerHover: (e) {
+          debugPrint("onPointerHover ${e}");
           if (e.kind != ui.PointerDeviceKind.mouse) return;
           if (!_isPhysicalMouse) {
             setState(() {
@@ -307,6 +308,7 @@ class _RemotePageState extends State<RemotePage>
           }
         },
         onPointerDown: (e) {
+          debugPrint("onPointerDown ${e}");
           if (e.kind != ui.PointerDeviceKind.mouse) {
             if (_isPhysicalMouse) {
               setState(() {
@@ -319,18 +321,21 @@ class _RemotePageState extends State<RemotePage>
           }
         },
         onPointerUp: (e) {
+          debugPrint("onPointerUp ${e}");
           if (e.kind != ui.PointerDeviceKind.mouse) return;
           if (_isPhysicalMouse) {
             _ffi.handleMouse(getEvent(e, 'mouseup'));
           }
         },
         onPointerMove: (e) {
+          debugPrint("onPointerMove ${e}");
           if (e.kind != ui.PointerDeviceKind.mouse) return;
           if (_isPhysicalMouse) {
             _ffi.handleMouse(getEvent(e, 'mousemove'));
           }
         },
         onPointerSignal: (e) {
+          debugPrint("onPointerSignal ${e}");
           if (e is PointerScrollEvent) {
             var dx = e.scrollDelta.dx;
             var dy = e.scrollDelta.dy;

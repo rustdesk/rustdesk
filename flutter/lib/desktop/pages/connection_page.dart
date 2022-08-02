@@ -17,7 +17,7 @@ import '../../mobile/pages/scan_page.dart';
 import '../../mobile/pages/settings_page.dart';
 import '../../models/model.dart';
 
-enum RemoteType { recently, favorite, discovered, addressBook }
+// enum RemoteType { recently, favorite, discovered, addressBook }
 
 /// Connection page for connecting to a remote peer.
 class ConnectionPage extends StatefulWidget implements PageShape {
@@ -76,74 +76,57 @@ class _ConnectionPageState extends State<ConnectionPage> {
               thickness: 1,
             ),
             Expanded(
-              child: DefaultTabController(
-                  length: 4,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      TabBar(
-                          isScrollable: true,
-                          indicatorSize: TabBarIndicatorSize.label,
-                          tabs: [
-                            Tab(
-                              child: Text(translate("Recent Sessions")),
-                            ),
-                            Tab(
-                              child: Text(translate("Favorites")),
-                            ),
-                            Tab(
-                              child: Text(translate("Discovered")),
-                            ),
-                            Tab(
-                              child: Text(translate("Address Book")),
-                            ),
-                          ]),
-                      Expanded(
-                          child: TabBarView(children: [
-                        RecentPeerWidget(),
-                        FavoritePeerWidget(),
-                        DiscoveredPeerWidget(),
-                        // AddressBookPeerWidget(),
-                        // FutureBuilder<Widget>(
-                        //     future: getPeers(rType: RemoteType.recently),
-                        //     builder: (context, snapshot) {
-                        //       if (snapshot.hasData) {
-                        //         return snapshot.data!;
-                        //       } else {
-                        //         return Offstage();
-                        //       }
-                        //     }),
-                        // FutureBuilder<Widget>(
-                        //     future: getPeers(rType: RemoteType.favorite),
-                        //     builder: (context, snapshot) {
-                        //       if (snapshot.hasData) {
-                        //         return snapshot.data!;
-                        //       } else {
-                        //         return Offstage();
-                        //       }
-                        //     }),
-                        // FutureBuilder<Widget>(
-                        //     future: getPeers(rType: RemoteType.discovered),
-                        //     builder: (context, snapshot) {
-                        //       if (snapshot.hasData) {
-                        //         return snapshot.data!;
-                        //       } else {
-                        //         return Offstage();
-                        //       }
-                        //     }),
-                        FutureBuilder<Widget>(
-                            future: buildAddressBook(context),
-                            builder: (context, snapshot) {
-                              if (snapshot.hasData) {
-                                return snapshot.data!;
-                              } else {
-                                return Offstage();
-                              }
-                            }),
-                      ]).paddingSymmetric(horizontal: 12.0, vertical: 4.0))
-                    ],
-                  )),
-            ),
+                // TODO: move all tab info into _PeerTabbedPage
+                child: _PeerTabbedPage(
+              tabs: [
+                translate('Recent Sessions'),
+                translate('Favorites'),
+                translate('Discovered'),
+                translate('Address Book')
+              ],
+              children: [
+                RecentPeerWidget(),
+                FavoritePeerWidget(),
+                DiscoveredPeerWidget(),
+                // AddressBookPeerWidget(),
+                // FutureBuilder<Widget>(
+                //     future: getPeers(rType: RemoteType.recently),
+                //     builder: (context, snapshot) {
+                //       if (snapshot.hasData) {
+                //         return snapshot.data!;
+                //       } else {
+                //         return Offstage();
+                //       }
+                //     }),
+                // FutureBuilder<Widget>(
+                //     future: getPeers(rType: RemoteType.favorite),
+                //     builder: (context, snapshot) {
+                //       if (snapshot.hasData) {
+                //         return snapshot.data!;
+                //       } else {
+                //         return Offstage();
+                //       }
+                //     }),
+                // FutureBuilder<Widget>(
+                //     future: getPeers(rType: RemoteType.discovered),
+                //     builder: (context, snapshot) {
+                //       if (snapshot.hasData) {
+                //         return snapshot.data!;
+                //       } else {
+                //         return Offstage();
+                //       }
+                //     }),
+                FutureBuilder<Widget>(
+                    future: buildAddressBook(context),
+                    builder: (context, snapshot) {
+                      if (snapshot.hasData) {
+                        return snapshot.data!;
+                      } else {
+                        return Offstage();
+                      }
+                    }),
+              ],
+            )),
             Divider(),
             SizedBox(height: 50, child: Obx(() => buildStatus()))
                 .paddingSymmetric(horizontal: 12.0)
@@ -329,61 +312,61 @@ class _ConnectionPageState extends State<ConnectionPage> {
     return true;
   }
 
-  /// Show the peer menu and handle user's choice.
-  /// User might remove the peer or send a file to the peer.
-  void showPeerMenu(BuildContext context, String id, RemoteType rType) async {
-    var items = [
-      PopupMenuItem<String>(
-          child: Text(translate('Connect')), value: 'connect'),
-      PopupMenuItem<String>(
-          child: Text(translate('Transfer File')), value: 'file'),
-      PopupMenuItem<String>(
-          child: Text(translate('TCP Tunneling')), value: 'tcp-tunnel'),
-      PopupMenuItem<String>(child: Text(translate('Rename')), value: 'rename'),
-      rType == RemoteType.addressBook
-          ? PopupMenuItem<String>(
-              child: Text(translate('Remove')), value: 'ab-delete')
-          : PopupMenuItem<String>(
-              child: Text(translate('Remove')), value: 'remove'),
-      PopupMenuItem<String>(
-          child: Text(translate('Unremember Password')),
-          value: 'unremember-password'),
-    ];
-    if (rType == RemoteType.favorite) {
-      items.add(PopupMenuItem<String>(
-          child: Text(translate('Remove from Favorites')),
-          value: 'remove-fav'));
-    } else if (rType != RemoteType.addressBook) {
-      items.add(PopupMenuItem<String>(
-          child: Text(translate('Add to Favorites')), value: 'add-fav'));
-    } else {
-      items.add(PopupMenuItem<String>(
-          child: Text(translate('Edit Tag')), value: 'ab-edit-tag'));
-    }
-    var value = await showMenu(
-      context: context,
-      position: this._menuPos,
-      items: items,
-      elevation: 8,
-    );
-    if (value == 'remove') {
-      setState(() => gFFI.setByName('remove', '$id'));
-      () async {
-        removePreference(id);
-      }();
-    } else if (value == 'file') {
-      connect(id, isFileTransfer: true);
-    } else if (value == 'add-fav') {
-    } else if (value == 'connect') {
-      connect(id, isFileTransfer: false);
-    } else if (value == 'ab-delete') {
-      gFFI.abModel.deletePeer(id);
-      await gFFI.abModel.updateAb();
-      setState(() {});
-    } else if (value == 'ab-edit-tag') {
-      abEditTag(id);
-    }
-  }
+  // /// Show the peer menu and handle user's choice.
+  // /// User might remove the peer or send a file to the peer.
+  // void showPeerMenu(BuildContext context, String id, RemoteType rType) async {
+  //   var items = [
+  //     PopupMenuItem<String>(
+  //         child: Text(translate('Connect')), value: 'connect'),
+  //     PopupMenuItem<String>(
+  //         child: Text(translate('Transfer File')), value: 'file'),
+  //     PopupMenuItem<String>(
+  //         child: Text(translate('TCP Tunneling')), value: 'tcp-tunnel'),
+  //     PopupMenuItem<String>(child: Text(translate('Rename')), value: 'rename'),
+  //     rType == RemoteType.addressBook
+  //         ? PopupMenuItem<String>(
+  //             child: Text(translate('Remove')), value: 'ab-delete')
+  //         : PopupMenuItem<String>(
+  //             child: Text(translate('Remove')), value: 'remove'),
+  //     PopupMenuItem<String>(
+  //         child: Text(translate('Unremember Password')),
+  //         value: 'unremember-password'),
+  //   ];
+  //   if (rType == RemoteType.favorite) {
+  //     items.add(PopupMenuItem<String>(
+  //         child: Text(translate('Remove from Favorites')),
+  //         value: 'remove-fav'));
+  //   } else if (rType != RemoteType.addressBook) {
+  //     items.add(PopupMenuItem<String>(
+  //         child: Text(translate('Add to Favorites')), value: 'add-fav'));
+  //   } else {
+  //     items.add(PopupMenuItem<String>(
+  //         child: Text(translate('Edit Tag')), value: 'ab-edit-tag'));
+  //   }
+  //   var value = await showMenu(
+  //     context: context,
+  //     position: this._menuPos,
+  //     items: items,
+  //     elevation: 8,
+  //   );
+  //   if (value == 'remove') {
+  //     setState(() => gFFI.setByName('remove', '$id'));
+  //     () async {
+  //       removePreference(id);
+  //     }();
+  //   } else if (value == 'file') {
+  //     connect(id, isFileTransfer: true);
+  //   } else if (value == 'add-fav') {
+  //   } else if (value == 'connect') {
+  //     connect(id, isFileTransfer: false);
+  //   } else if (value == 'ab-delete') {
+  //     gFFI.abModel.deletePeer(id);
+  //     await gFFI.abModel.updateAb();
+  //     setState(() {});
+  //   } else if (value == 'ab-edit-tag') {
+  //     abEditTag(id);
+  //   }
+  // }
 
   var svcStopped = false.obs;
   var svcStatusCode = 0.obs;
@@ -894,5 +877,88 @@ class _WebMenuState extends State<WebMenu> {
             );
           }
         });
+  }
+}
+
+class _PeerTabbedPage extends StatefulWidget {
+  final List<String> tabs;
+  final List<Widget> children;
+  const _PeerTabbedPage({required this.tabs, required this.children, Key? key})
+      : super(key: key);
+  @override
+  _PeerTabbedPageState createState() => _PeerTabbedPageState();
+}
+
+class _PeerTabbedPageState extends State<_PeerTabbedPage>
+    with SingleTickerProviderStateMixin {
+  late TabController _tabController;
+
+  @override
+  void initState() {
+    super.initState();
+    _tabController =
+        TabController(vsync: this, length: super.widget.tabs.length);
+    _tabController.addListener(_handleTabSelection);
+  }
+
+  // hard code for now
+  void _handleTabSelection() {
+    if (_tabController.indexIsChanging) {
+      switch (_tabController.index) {
+        case 0:
+          break;
+        case 1:
+          break;
+        case 2:
+          gFFI.bind.mainDiscover();
+          break;
+        case 3:
+          break;
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    _tabController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // return DefaultTabController(
+    //     length: 4,
+    //     child: Column(
+    //       crossAxisAlignment: CrossAxisAlignment.start,
+    //       children: [
+    //         _createTabBar(),
+    //         _createTabBarView(),
+    //       ],
+    //     ));
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _createTabBar(),
+        _createTabBarView(),
+      ],
+    );
+  }
+
+  Widget _createTabBar() {
+    return TabBar(
+        isScrollable: true,
+        indicatorSize: TabBarIndicatorSize.label,
+        controller: _tabController,
+        tabs: super.widget.tabs.map((t) {
+          return Tab(child: Text(t));
+        }).toList());
+  }
+
+  Widget _createTabBarView() {
+    return Expanded(
+        child: TabBarView(
+                controller: _tabController, children: super.widget.children)
+            .paddingSymmetric(horizontal: 12.0, vertical: 4.0));
   }
 }

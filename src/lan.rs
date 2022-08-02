@@ -277,6 +277,9 @@ async fn handle_received_peers(mut rx: UnboundedReceiver<config::DiscoveryPeer>)
                     if last_write_time.elapsed().as_millis() > 300 {
                         config::LanPeers::store(&peers);
                         last_write_time = Instant::now();
+
+                        #[cfg(feature = "flutter")]
+                        crate::flutter_ffi::main_load_lan_peers();
                     }
                 }
                 None => {
