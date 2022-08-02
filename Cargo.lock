@@ -4053,6 +4053,7 @@ dependencies = [
  "mouce",
  "num_cpus",
  "objc",
+ "once_cell",
  "parity-tokio-ipc",
  "rdev",
  "repng",
@@ -4071,6 +4072,7 @@ dependencies = [
  "simple_rc",
  "sys-locale",
  "sysinfo",
+ "tfc",
  "tray-item",
  "trayicon",
  "uuid",
@@ -4754,6 +4756,15 @@ name = "textwrap"
 version = "0.15.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b1141d4d61095b28419e22cb0bbf02755f5e54e0526f97f1e3d1d160e60885fb"
+
+[[package]]
+name = "tfc"
+version = "0.6.1"
+source = "git+https://github.com/asur4s/The-Fat-Controller#35ed0bc8dd8516bdb99e45ebfc94409637a92c6b"
+dependencies = [
+ "core-graphics 0.22.3",
+ "unicode-segmentation",
+]
 
 [[package]]
 name = "thiserror"

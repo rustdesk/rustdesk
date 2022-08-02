@@ -9,6 +9,7 @@ use std::{
     sync::atomic::{AtomicBool, Ordering},
     time::Instant,
 };
+use tfc::{traits::*, Context};
 
 #[derive(Default)]
 struct StateCursor {
@@ -179,6 +180,7 @@ lazy_static::lazy_static! {
     };
     static ref KEYS_DOWN: Arc<Mutex<HashMap<u64, Instant>>> = Default::default();
     static ref LATEST_INPUT: Arc<Mutex<Input>> = Default::default();
+    static ref KBD_CONTEXT: Mutex<Context> = Mutex::new(Context::new().expect("kbd context error"));
 }
 static EXITING: AtomicBool = AtomicBool::new(false);
 
@@ -820,9 +822,12 @@ fn legacy_keyboard_mode(evt: &KeyEvent) {
 }
 
 fn translate_keyboard_mode(evt: &KeyEvent) {
-    dbg!(evt.chr());
     let chr = char::from_u32(evt.chr()).unwrap_or_default();
-    rdev::simulate_char(chr, evt.down);
+    if evt.down {
+        KBD_CONTEXT.lock().unwrap().unicode_char_down(chr).expect("unicode_char_down error");
+    } else {
+        KBD_CONTEXT.lock().unwrap().unicode_char_up(chr).expect("unicode_char_up error");
+    }
 }
 
 fn handle_key_(evt: &KeyEvent) {
