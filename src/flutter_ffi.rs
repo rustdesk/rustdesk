@@ -19,12 +19,14 @@ use crate::flutter::connection_manager::{self, get_clients_length, get_clients_s
 use crate::flutter::{self, Session, SESSIONS};
 use crate::start_server;
 use crate::ui_interface;
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+use crate::ui_interface::{change_id, check_connect_status, is_ok_change_id};
 use crate::ui_interface::{
-    change_id, check_connect_status, discover, forget_password, get_api_server, get_app_name,
-    get_async_job_status, get_connect_status, get_fav, get_id, get_lan_peers, get_license,
-    get_local_option, get_options, get_peer, get_peer_option, get_socks, get_sound_inputs,
-    get_uuid, get_version, has_rendezvous_service, is_ok_change_id, post_request, set_local_option,
-    set_options, set_peer_option, set_socks, store_fav, test_if_valid_server, using_public_server,
+    discover, forget_password, get_api_server, get_app_name, get_async_job_status,
+    get_connect_status, get_fav, get_id, get_lan_peers, get_license, get_local_option, get_options,
+    get_peer, get_peer_option, get_socks, get_sound_inputs, get_uuid, get_version,
+    has_rendezvous_service, post_request, set_local_option, set_options, set_peer_option,
+    set_socks, store_fav, test_if_valid_server, using_public_server,
 };
 
 fn initialize(app_dir: &str) {
@@ -67,7 +69,10 @@ fn initialize(app_dir: &str) {
 /// Return true if the app should continue running with UI(possibly Flutter), false if the app should exit.
 #[no_mangle]
 pub extern "C" fn rustdesk_core_main() -> bool {
-    crate::core_main::core_main()
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    return crate::core_main::core_main();
+    #[cfg(any(target_os = "android", target_os = "ios"))]
+    false
 }
 
 pub enum EventToUI {
@@ -390,6 +395,7 @@ pub fn main_get_sound_inputs() -> Vec<String> {
 }
 
 pub fn main_change_id(new_id: String) {
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
     change_id(new_id)
 }
 
@@ -461,6 +467,7 @@ pub fn main_get_connect_status() -> String {
 }
 
 pub fn main_check_connect_status() {
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
     check_connect_status(true);
 }
 
@@ -1042,8 +1049,13 @@ unsafe extern "C" fn set_by_name(name: *const c_char, value: *const c_char) {
                     crate::rendezvous_mediator::RendezvousMediator::restart();
                 }
                 "start_service" => {
-                    Config::set_option("stop-service".into(), "".into());
-                    start_server(false);
+                    #[cfg(target_os = "android")]
+                    {
+                        Config::set_option("stop-service".into(), "".into());
+                        crate::rendezvous_mediator::RendezvousMediator::restart();
+                    }
+                    #[cfg(not(target_os = "android"))]
+                    std::thread::spawn(move || start_server(true));
                 }
                 #[cfg(target_os = "android")]
                 "close_conn" => {

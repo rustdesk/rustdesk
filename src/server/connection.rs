@@ -5,7 +5,7 @@ use crate::clipboard_file::*;
 use crate::common::update_clipboard;
 use crate::video_service;
 #[cfg(any(target_os = "android", target_os = "ios"))]
-use crate::{common::MOBILE_INFO2, flutter::connection_manager::start_channel};
+use crate::{common::FLUTTER_INFO2, flutter::connection_manager::start_channel};
 use crate::{ipc, VERSION};
 use hbb_common::{
     config::Config,
@@ -643,7 +643,7 @@ impl Connection {
         }
         #[cfg(target_os = "android")]
         {
-            pi.hostname = MOBILE_INFO2.lock().unwrap().clone();
+            pi.hostname = FLUTTER_INFO2.lock().unwrap().clone();
             pi.platform = "Android".into();
         }
         #[cfg(feature = "hwcodec")]
