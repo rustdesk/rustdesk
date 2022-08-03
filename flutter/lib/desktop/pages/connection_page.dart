@@ -906,8 +906,10 @@ class _PeerTabbedPageState extends State<_PeerTabbedPage>
     if (_tabController.indexIsChanging) {
       switch (_tabController.index) {
         case 0:
+          gFFI.bind.mainLoadRecentPeers();
           break;
         case 1:
+          gFFI.bind.mainLoadFavPeers();
           break;
         case 2:
           gFFI.bind.mainDiscover();

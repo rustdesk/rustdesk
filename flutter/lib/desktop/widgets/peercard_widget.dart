@@ -405,7 +405,6 @@ class RecentPeerCard extends BasePeerCard {
       : super(peer: peer, key: key, type: PeerType.recent);
 
   Future<List<PopupMenuItem<String>>> _getPopupMenuItems() async {
-    debugPrint("call RecentPeerCard _getPopupMenuItems");
     return [
       PopupMenuItem<String>(
           child: Text(translate('Connect')), value: 'connect'),
@@ -427,7 +426,6 @@ class FavoritePeerCard extends BasePeerCard {
       : super(peer: peer, key: key, type: PeerType.fav);
 
   Future<List<PopupMenuItem<String>>> _getPopupMenuItems() async {
-    debugPrint("call FavoritePeerCard _getPopupMenuItems");
     return [
       PopupMenuItem<String>(
           child: Text(translate('Connect')), value: 'connect'),
@@ -451,7 +449,6 @@ class DiscoveredPeerCard extends BasePeerCard {
       : super(peer: peer, key: key, type: PeerType.discovered);
 
   Future<List<PopupMenuItem<String>>> _getPopupMenuItems() async {
-    debugPrint("call DiscoveredPeerCard _getPopupMenuItems");
     return [
       PopupMenuItem<String>(
           child: Text(translate('Connect')), value: 'connect'),
@@ -473,7 +470,6 @@ class AddressBookPeerCard extends BasePeerCard {
       : super(peer: peer, key: key, type: PeerType.ab);
 
   Future<List<PopupMenuItem<String>>> _getPopupMenuItems() async {
-    debugPrint("call AddressBookPeerCard _getPopupMenuItems");
     return [
       PopupMenuItem<String>(
           child: Text(translate('Connect')), value: 'connect'),

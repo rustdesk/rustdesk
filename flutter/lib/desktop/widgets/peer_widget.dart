@@ -65,6 +65,11 @@ class _PeerWidgetState extends State<_PeerWidget> with WindowListener {
   }
 
   @override
+  void onWindowMinimize() {
+    _queryCoun = _maxQueryCount;
+  }
+
+  @override
   Widget build(BuildContext context) {
     final space = 8.0;
     return ChangeNotifierProvider<Peers>(
@@ -110,19 +115,23 @@ class _PeerWidgetState extends State<_PeerWidget> with WindowListener {
         final now = DateTime.now();
         if (!setEquals(_curPeers, _lastQueryPeers)) {
           if (now.difference(_lastChangeTime) > Duration(seconds: 1)) {
-            gFFI.ffiModel.platformFFI.ffiBind
-                .queryOnlines(ids: _curPeers.toList(growable: false));
-            _lastQueryPeers = {..._curPeers};
-            _lastQueryTime = DateTime.now();
-            _queryCoun = 0;
+            if (_curPeers.length > 0) {
+              gFFI.ffiModel.platformFFI.ffiBind
+                  .queryOnlines(ids: _curPeers.toList(growable: false));
+              _lastQueryPeers = {..._curPeers};
+              _lastQueryTime = DateTime.now();
+              _queryCoun = 0;
+            }
           }
         } else {
           if (_queryCoun < _maxQueryCount) {
             if (now.difference(_lastQueryTime) > Duration(seconds: 20)) {
-              gFFI.ffiModel.platformFFI.ffiBind
-                  .queryOnlines(ids: _curPeers.toList(growable: false));
-              _lastQueryTime = DateTime.now();
-              _queryCoun += 1;
+              if (_curPeers.length > 0) {
+                gFFI.ffiModel.platformFFI.ffiBind
+                    .queryOnlines(ids: _curPeers.toList(growable: false));
+                _lastQueryTime = DateTime.now();
+                _queryCoun += 1;
+              }
             }
           }
         }
@@ -193,7 +202,6 @@ class DiscoveredPeerWidget extends BasePeerWidget {
 
   @override
   Widget build(BuildContext context) {
-    debugPrint("DiscoveredPeerWidget build");
     final widget = super.build(context);
     gFFI.bind.mainLoadLanPeers();
     return widget;

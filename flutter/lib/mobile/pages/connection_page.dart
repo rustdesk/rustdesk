@@ -213,13 +213,13 @@ class _ConnectionPageState extends State<ConnectionPage> {
 
   /// Get all the saved peers.
   Widget getPeers() {
-    final size = MediaQuery.of(context).size;
+    final windowWidth = MediaQuery.of(context).size.width;
     final space = 8.0;
-    var width = size.width - 2 * space;
+    var width = windowWidth - 2 * space;
     final minWidth = 320.0;
-    if (size.width > minWidth + 2 * space) {
-      final n = (size.width / (minWidth + 2 * space)).floor();
-      width = size.width / n - 2 * space;
+    if (windowWidth > minWidth + 2 * space) {
+      final n = (windowWidth / (minWidth + 2 * space)).floor();
+      width = windowWidth / n - 2 * space;
     }
     final cards = <Widget>[];
     var peers = gFFI.peers();

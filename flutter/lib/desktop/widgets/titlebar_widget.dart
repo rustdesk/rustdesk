@@ -22,7 +22,8 @@ class DesktopTitleBar extends StatelessWidget {
       child: Row(
         children: [
           Expanded(
-              child: child ?? Offstage(),)
+            child: child ?? Offstage(),
+          )
           // const WindowButtons()
         ],
       ),
