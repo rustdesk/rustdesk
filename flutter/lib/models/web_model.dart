@@ -20,7 +20,12 @@ class PlatformFFI {
     context.callMethod('setByName', [name, value]);
   }
 
-  static Future<Null> init() async {
+  PlatformFFI._();
+  static final PlatformFFI instance = PlatformFFI._();
+
+  static get localeName => window.navigator.language;
+
+  static Future<Null> init(String _appType) async {
     isWeb = true;
     isWebDesktop = !context.callMethod('isMobile');
     context.callMethod('init');
@@ -68,5 +73,3 @@ class PlatformFFI {
     return true;
   }
 }
-
-final localeName = window.navigator.language;

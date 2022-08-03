@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/models/model.dart';
+import 'package:flutter_hbb/models/platform_model.dart';
 import 'package:get/get.dart';
 import 'package:http/http.dart' as http;
 
@@ -46,7 +47,7 @@ class AbModel with ChangeNotifier {
   }
 
   Future<String> getApiServer() async {
-    return await _ffi?.bind.mainGetApiServer() ?? "";
+    return await bind.mainGetApiServer() ?? "";
   }
 
   void reset() {

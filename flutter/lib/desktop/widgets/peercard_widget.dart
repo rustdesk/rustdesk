@@ -5,9 +5,11 @@ import 'package:get/get.dart';
 
 import '../../common.dart';
 import '../../models/model.dart';
+import '../../models/platform_model.dart';
 import '../../models/peer_model.dart';
 
 typedef PopupMenuItemsFunc = Future<List<PopupMenuItem<String>>> Function();
+
 enum PeerType { recent, fav, discovered, ab }
 
 class _PeerCard extends StatefulWidget {
@@ -15,10 +17,11 @@ class _PeerCard extends StatefulWidget {
   final PopupMenuItemsFunc popupMenuItemsFunc;
   final PeerType type;
 
-  _PeerCard({required this.peer,
-    required this.popupMenuItemsFunc,
-    Key? key,
-    required this.type})
+  _PeerCard(
+      {required this.peer,
+      required this.popupMenuItemsFunc,
+      Key? key,
+      required this.type})
       : super(key: key);
 
   @override
@@ -54,9 +57,10 @@ class _PeerCardState extends State<_PeerCard>
         ));
   }
 
-  Widget _buildPeerTile(BuildContext context, Peer peer, Rx<BoxDecoration?> deco) {
+  Widget _buildPeerTile(
+      BuildContext context, Peer peer, Rx<BoxDecoration?> deco) {
     return Obx(
-          () => Container(
+      () => Container(
         decoration: deco.value,
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -135,7 +139,7 @@ class _PeerCardState extends State<_PeerCard>
                       child: CircleAvatar(
                           radius: 5,
                           backgroundColor:
-                          peer.online ? Colors.green : Colors.yellow)),
+                              peer.online ? Colors.green : Colors.yellow)),
                   Text('${peer.id}')
                 ]),
                 InkWell(
@@ -183,12 +187,13 @@ class _PeerCardState extends State<_PeerCard>
     );
     if (value == 'remove') {
       setState(() => gFFI.setByName('remove', '$id'));
-          () async {
+      () async {
         removePreference(id);
       }();
     } else if (value == 'file') {
       _connect(id, isFileTransfer: true);
-    } else if (value == 'add-fav') {} else if (value == 'connect') {
+    } else if (value == 'add-fav') {
+    } else if (value == 'connect') {
       _connect(id, isFileTransfer: false);
     } else if (value == 'ab-delete') {
       gFFI.abModel.deletePeer(id);
@@ -199,7 +204,7 @@ class _PeerCardState extends State<_PeerCard>
     } else if (value == 'rename') {
       _rename(id);
     } else if (value == 'unremember-password') {
-      await gFFI.bind.mainForgetPassword(id: id);
+      await bind.mainForgetPassword(id: id);
     }
   }
 
@@ -220,7 +225,7 @@ class _PeerCardState extends State<_PeerCard>
       child: GestureDetector(
         onTap: onTap,
         child: Obx(
-              () => Container(
+          () => Container(
             decoration: BoxDecoration(
                 color: rxTags.contains(tagName) ? Colors.blue : null,
                 border: Border.all(color: MyTheme.darkGray),
@@ -264,12 +269,12 @@ class _PeerCardState extends State<_PeerCard>
               child: Wrap(
                 children: tags
                     .map((e) => _buildTag(e, selectedTag, onTap: () {
-                  if (selectedTag.contains(e)) {
-                    selectedTag.remove(e);
-                  } else {
-                    selectedTag.add(e);
-                  }
-                }))
+                          if (selectedTag.contains(e)) {
+                            selectedTag.remove(e);
+                          } else {
+                            selectedTag.add(e);
+                          }
+                        }))
                     .toList(growable: false),
               ),
             ),

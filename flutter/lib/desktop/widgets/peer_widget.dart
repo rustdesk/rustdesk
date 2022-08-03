@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
@@ -8,6 +7,7 @@ import 'package:visibility_detector/visibility_detector.dart';
 import 'package:window_manager/window_manager.dart';
 
 import '../../models/peer_model.dart';
+import '../../models/platform_model.dart';
 import '../../common.dart';
 import 'peercard_widget.dart';
 
@@ -116,7 +116,7 @@ class _PeerWidgetState extends State<_PeerWidget> with WindowListener {
         if (!setEquals(_curPeers, _lastQueryPeers)) {
           if (now.difference(_lastChangeTime) > Duration(seconds: 1)) {
             if (_curPeers.length > 0) {
-              gFFI.ffiModel.platformFFI.ffiBind
+              platformFFI.ffiBind
                   .queryOnlines(ids: _curPeers.toList(growable: false));
               _lastQueryPeers = {..._curPeers};
               _lastQueryTime = DateTime.now();
@@ -127,7 +127,7 @@ class _PeerWidgetState extends State<_PeerWidget> with WindowListener {
           if (_queryCoun < _maxQueryCount) {
             if (now.difference(_lastQueryTime) > Duration(seconds: 20)) {
               if (_curPeers.length > 0) {
-                gFFI.ffiModel.platformFFI.ffiBind
+                platformFFI.ffiBind
                     .queryOnlines(ids: _curPeers.toList(growable: false));
                 _lastQueryTime = DateTime.now();
                 _queryCoun += 1;
@@ -169,7 +169,7 @@ class RecentPeerWidget extends BasePeerWidget {
   @override
   Widget build(BuildContext context) {
     final widget = super.build(context);
-    gFFI.bind.mainLoadRecentPeers();
+    bind.mainLoadRecentPeers();
     return widget;
   }
 }
@@ -186,7 +186,7 @@ class FavoritePeerWidget extends BasePeerWidget {
   @override
   Widget build(BuildContext context) {
     final widget = super.build(context);
-    gFFI.bind.mainLoadFavPeers();
+    bind.mainLoadFavPeers();
     return widget;
   }
 }
@@ -203,7 +203,7 @@ class DiscoveredPeerWidget extends BasePeerWidget {
   @override
   Widget build(BuildContext context) {
     final widget = super.build(context);
-    gFFI.bind.mainLoadLanPeers();
+    bind.mainLoadLanPeers();
     return widget;
   }
 }

@@ -8,6 +8,7 @@ import 'package:flutter_hbb/common.dart';
 import 'package:flutter_hbb/desktop/pages/connection_page.dart';
 import 'package:flutter_hbb/desktop/widgets/titlebar_widget.dart';
 import 'package:flutter_hbb/models/model.dart';
+import 'package:flutter_hbb/models/platform_model.dart';
 import 'package:flutter_hbb/models/server_model.dart';
 import 'package:get/get.dart';
 import 'package:provider/provider.dart';
@@ -630,13 +631,13 @@ class _DesktopHomePageState extends State<DesktopHomePage> with TrayListener {
                 setState(() {
                   msg = "";
                   isInProgress = true;
-                  gFFI.bind.mainChangeId(newId: newId);
+                  bind.mainChangeId(newId: newId);
                 });
 
-                var status = await gFFI.bind.mainGetAsyncStatus();
+                var status = await bind.mainGetAsyncStatus();
                 while (status == " ") {
                   await Future.delayed(Duration(milliseconds: 100));
-                  status = await gFFI.bind.mainGetAsyncStatus();
+                  status = await bind.mainGetAsyncStatus();
                 }
                 if (status.isEmpty) {
                   // ok
@@ -655,8 +656,7 @@ class _DesktopHomePageState extends State<DesktopHomePage> with TrayListener {
   }
 
   void changeServer() async {
-    Map<String, dynamic> oldOptions =
-        jsonDecode(await gFFI.bind.mainGetOptions());
+    Map<String, dynamic> oldOptions = jsonDecode(await bind.mainGetOptions());
     print("${oldOptions}");
     String idServer = oldOptions['custom-rendezvous-server'] ?? "";
     var idServerMsg = "";
@@ -814,7 +814,7 @@ class _DesktopHomePageState extends State<DesktopHomePage> with TrayListener {
 
                 if (idServer.isNotEmpty) {
                   idServerMsg = translate(
-                      await gFFI.bind.mainTestIfValidServer(server: idServer));
+                      await bind.mainTestIfValidServer(server: idServer));
                   if (idServerMsg.isEmpty) {
                     oldOptions['custom-rendezvous-server'] = idServer;
                   } else {
@@ -826,8 +826,8 @@ class _DesktopHomePageState extends State<DesktopHomePage> with TrayListener {
                 }
 
                 if (relayServer.isNotEmpty) {
-                  relayServerMsg = translate(await gFFI.bind
-                      .mainTestIfValidServer(server: relayServer));
+                  relayServerMsg = translate(
+                      await bind.mainTestIfValidServer(server: relayServer));
                   if (relayServerMsg.isEmpty) {
                     oldOptions['relay-server'] = relayServer;
                   } else {
@@ -853,7 +853,7 @@ class _DesktopHomePageState extends State<DesktopHomePage> with TrayListener {
                 }
                 // ok
                 oldOptions['key'] = key;
-                await gFFI.bind.mainSetOptions(json: jsonEncode(oldOptions));
+                await bind.mainSetOptions(json: jsonEncode(oldOptions));
                 close();
               },
               child: Text(translate("OK"))),
@@ -863,8 +863,7 @@ class _DesktopHomePageState extends State<DesktopHomePage> with TrayListener {
   }
 
   void changeWhiteList() async {
-    Map<String, dynamic> oldOptions =
-        jsonDecode(await gFFI.bind.mainGetOptions());
+    Map<String, dynamic> oldOptions = jsonDecode(await bind.mainGetOptions());
     var newWhiteList = ((oldOptions['whitelist'] ?? "") as String).split(',');
     var newWhiteListField = newWhiteList.join('\n');
     var msg = "";
@@ -935,7 +934,7 @@ class _DesktopHomePageState extends State<DesktopHomePage> with TrayListener {
                   newWhiteList = ips.join(',');
                 }
                 oldOptions['whitelist'] = newWhiteList;
-                await gFFI.bind.mainSetOptions(json: jsonEncode(oldOptions));
+                await bind.mainSetOptions(json: jsonEncode(oldOptions));
                 close();
               },
               child: Text(translate("OK"))),
@@ -945,7 +944,7 @@ class _DesktopHomePageState extends State<DesktopHomePage> with TrayListener {
   }
 
   void changeSocks5Proxy() async {
-    var socks = await gFFI.bind.mainGetSocks();
+    var socks = await bind.mainGetSocks();
 
     String proxy = "";
     String proxyMsg = "";
@@ -1072,7 +1071,7 @@ class _DesktopHomePageState extends State<DesktopHomePage> with TrayListener {
 
                 if (proxy.isNotEmpty) {
                   proxyMsg = translate(
-                      await gFFI.bind.mainTestIfValidServer(server: proxy));
+                      await bind.mainTestIfValidServer(server: proxy));
                   if (proxyMsg.isEmpty) {
                     // ignore
                   } else {
@@ -1080,7 +1079,7 @@ class _DesktopHomePageState extends State<DesktopHomePage> with TrayListener {
                     return;
                   }
                 }
-                await gFFI.bind.mainSetSocks(
+                await bind.mainSetSocks(
                     proxy: proxy, username: username, password: password);
                 close();
               },
@@ -1091,9 +1090,9 @@ class _DesktopHomePageState extends State<DesktopHomePage> with TrayListener {
   }
 
   void about() async {
-    final appName = await gFFI.bind.mainGetAppName();
-    final license = await gFFI.bind.mainGetLicense();
-    final version = await gFFI.bind.mainGetVersion();
+    final appName = await bind.mainGetAppName();
+    final license = await bind.mainGetLicense();
+    final version = await bind.mainGetVersion();
     final linkStyle = TextStyle(decoration: TextDecoration.underline);
     DialogManager.show((setState, close) {
       return CustomAlertDialog(

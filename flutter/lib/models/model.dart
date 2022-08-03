@@ -20,8 +20,8 @@ import 'package:tuple/tuple.dart';
 import '../common.dart';
 import '../mobile/widgets/dialog.dart';
 import '../mobile/widgets/overlay.dart';
-import 'native_model.dart' if (dart.library.html) 'web_model.dart';
 import 'peer_model.dart';
+import 'platform_model.dart';
 
 typedef HandleMsgBox = void Function(Map<String, dynamic> evt, String id);
 bool _waitForImage = false;
@@ -29,7 +29,6 @@ bool _waitForImage = false;
 class FfiModel with ChangeNotifier {
   PeerInfo _pi = PeerInfo();
   Display _display = Display();
-  PlatformFFI _platformFFI = PlatformFFI();
 
   var _inputBlocked = false;
   final _permissions = Map<String, bool>();
@@ -43,12 +42,6 @@ class FfiModel with ChangeNotifier {
   Map<String, bool> get permissions => _permissions;
 
   Display get display => _display;
-
-  PlatformFFI get platformFFI => _platformFFI;
-
-  set platformFFI(PlatformFFI value) {
-    _platformFFI = value;
-  }
 
   bool? get secure => _secure;
 
@@ -69,10 +62,6 @@ class FfiModel with ChangeNotifier {
   FfiModel(this.parent) {
     Translator.call = translate;
     clear();
-  }
-
-  Future<void> init() async {
-    await _platformFFI.init();
   }
 
   void toggleTouchMode() {
@@ -280,7 +269,7 @@ class FfiModel with ChangeNotifier {
     _timer?.cancel();
     if (hasRetry) {
       _timer = Timer(Duration(seconds: _reconnects), () {
-        parent.target?.bind.sessionReconnect(id: id);
+        bind.sessionReconnect(id: id);
         clearPermissions();
         showLoading(translate('Connecting...'));
       });
@@ -306,9 +295,8 @@ class FfiModel with ChangeNotifier {
         Timer(Duration(milliseconds: 100), showMobileActionsOverlay);
       }
     } else {
-      _touchMode = await parent.target?.bind
-              .getSessionOption(id: peerId, arg: "touch-mode") !=
-          '';
+      _touchMode =
+          await bind.getSessionOption(id: peerId, arg: "touch-mode") != '';
     }
 
     if (evt['is_file_transfer'] == "true") {
@@ -387,8 +375,7 @@ class ImageModel with ChangeNotifier {
       }
       Future.delayed(Duration(milliseconds: 1), () {
         if (parent.target?.ffiModel.isPeerAndroid ?? false) {
-          parent.target?.bind
-              .sessionPeerOption(id: _id, name: "view-style", value: "shrink");
+          bind.sessionPeerOption(id: _id, name: "view-style", value: "shrink");
           parent.target?.canvasModel.updateViewStyle();
         }
       });
@@ -439,8 +426,7 @@ class CanvasModel with ChangeNotifier {
   double get tabBarHeight => _tabBarHeight;
 
   void updateViewStyle() async {
-    final s =
-        await parent.target?.bind.getSessionOption(id: id, arg: 'view-style');
+    final s = await bind.getSessionOption(id: id, arg: 'view-style');
     if (s == null) {
       return;
     }
@@ -844,13 +830,6 @@ class FFI {
     this.userModel = UserModel(WeakReference(this));
   }
 
-  static FFI newFFI() {
-    final ffi = FFI();
-    // keep platformFFI only once
-    ffi.ffiModel.platformFFI = gFFI.ffiModel.platformFFI;
-    return ffi;
-  }
-
   /// Get the remote id for current client.
   String getId() {
     return getByName('remote_id'); // TODO
@@ -1008,16 +987,16 @@ class FFI {
   /// Send **get** command to the Rust core based on [name] and [arg].
   /// Return the result as a string.
   String getByName(String name, [String arg = '']) {
-    return ffiModel.platformFFI.getByName(name, arg);
+    return platformFFI.getByName(name, arg);
   }
 
   /// Send **set** command to the Rust core based on [name] and [value].
   void setByName(String name, [String value = '']) {
-    ffiModel.platformFFI.setByName(name, value);
+    platformFFI.setByName(name, value);
   }
 
   String getOption(String name) {
-    return ffiModel.platformFFI.getByName("option", name);
+    return platformFFI.getByName("option", name);
   }
 
   Future<String> getLocalOption(String name) {
@@ -1040,10 +1019,8 @@ class FFI {
     Map<String, String> res = Map()
       ..["name"] = name
       ..["value"] = value;
-    return ffiModel.platformFFI.setByName('option', jsonEncode(res));
+    return platformFFI.setByName('option', jsonEncode(res));
   }
-
-  RustdeskImpl get bind => ffiModel.platformFFI.ffiBind;
 
   handleMouse(Map<String, dynamic> evt, {double tabBarHeight = 0.0}) {
     var type = '';
@@ -1102,18 +1079,18 @@ class FFI {
 
   listenToMouse(bool yesOrNo) {
     if (yesOrNo) {
-      ffiModel.platformFFI.startDesktopWebListener();
+      platformFFI.startDesktopWebListener();
     } else {
-      ffiModel.platformFFI.stopDesktopWebListener();
+      platformFFI.stopDesktopWebListener();
     }
   }
 
   void setMethodCallHandler(FMethod callback) {
-    ffiModel.platformFFI.setMethodCallHandler(callback);
+    platformFFI.setMethodCallHandler(callback);
   }
 
   Future<bool> invokeMethod(String method, [dynamic arguments]) async {
-    return await ffiModel.platformFFI.invokeMethod(method, arguments);
+    return await platformFFI.invokeMethod(method, arguments);
   }
 
   Future<List<String>> getAudioInputs() async {

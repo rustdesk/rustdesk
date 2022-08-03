@@ -16,10 +16,10 @@ import 'package:wakelock/wakelock.dart';
 // import 'package:window_manager/window_manager.dart';
 
 import '../../common.dart';
-import '../../consts.dart';
 import '../../mobile/widgets/dialog.dart';
 import '../../mobile/widgets/overlay.dart';
 import '../../models/model.dart';
+import '../../models/platform_model.dart';
 
 final initText = '\1' * 1024;
 
@@ -59,8 +59,6 @@ class _RemotePageState extends State<RemotePage>
     var ffitmp = FFI();
     ffitmp.canvasModel.tabBarHeight = super.widget.tabBarHeight;
     final ffi = Get.put(ffitmp, tag: widget.id);
-    // note: a little trick
-    ffi.ffiModel.platformFFI = gFFI.ffiModel.platformFFI;
     ffi.connect(widget.id, tabBarHeight: super.widget.tabBarHeight);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual, overlays: []);
@@ -157,7 +155,7 @@ class _RemotePageState extends State<RemotePage>
       if (newValue.length > common) {
         var s = newValue.substring(common);
         if (s.length > 1) {
-          _ffi.bind.sessionInputString(id: widget.id, value: s);
+          bind.sessionInputString(id: widget.id, value: s);
         } else {
           inputChar(s);
         }
@@ -191,11 +189,11 @@ class _RemotePageState extends State<RemotePage>
                 content == '（）' ||
                 content == '【】')) {
           // can not only input content[0], because when input ], [ are also auo insert, which cause ] never be input
-          _ffi.bind.sessionInputString(id: widget.id, value: content);
+          bind.sessionInputString(id: widget.id, value: content);
           openKeyboard();
           return;
         }
-        _ffi.bind.sessionInputString(id: widget.id, value: content);
+        bind.sessionInputString(id: widget.id, value: content);
       } else {
         inputChar(content);
       }
@@ -509,8 +507,8 @@ class _RemotePageState extends State<RemotePage>
         id: widget.id,
       )
     ];
-    final cursor = _ffi.bind
-        .getSessionToggleOptionSync(id: widget.id, arg: 'show-remote-cursor');
+    final cursor = bind.getSessionToggleOptionSync(
+        id: widget.id, arg: 'show-remote-cursor');
     if (keyboard || cursor) {
       paints.add(CursorPaint(
         id: widget.id,
@@ -519,10 +517,10 @@ class _RemotePageState extends State<RemotePage>
     paints.add(getHelpTools());
     return MouseRegion(
         onEnter: (evt) {
-          _ffi.bind.hostStopSystemKeyPropagate(stopped: false);
+          bind.hostStopSystemKeyPropagate(stopped: false);
         },
         onExit: (evt) {
-          _ffi.bind.hostStopSystemKeyPropagate(stopped: true);
+          bind.hostStopSystemKeyPropagate(stopped: true);
         },
         child: Container(
           color: MyTheme.canvasColor,
@@ -601,7 +599,7 @@ class _RemotePageState extends State<RemotePage>
       more.add(PopupMenuItem<String>(
           child: Text(translate('Insert Lock')), value: 'lock'));
       if (pi.platform == 'Windows' &&
-          await _ffi.bind.getSessionToggleOption(id: id, arg: 'privacy-mode') !=
+          await bind.getSessionToggleOption(id: id, arg: 'privacy-mode') !=
               true) {
         more.add(PopupMenuItem<String>(
             child: Text(translate((_ffi.ffiModel.inputBlocked ? 'Unb' : 'B') +
@@ -617,28 +615,27 @@ class _RemotePageState extends State<RemotePage>
         elevation: 8,
       );
       if (value == 'cad') {
-        _ffi.bind.sessionCtrlAltDel(id: widget.id);
+        bind.sessionCtrlAltDel(id: widget.id);
       } else if (value == 'lock') {
-        _ffi.bind.sessionLockScreen(id: widget.id);
+        bind.sessionLockScreen(id: widget.id);
       } else if (value == 'block-input') {
-        _ffi.bind.sessionToggleOption(
+        bind.sessionToggleOption(
             id: widget.id,
             value: (_ffi.ffiModel.inputBlocked ? 'un' : '') + 'block-input');
         _ffi.ffiModel.inputBlocked = !_ffi.ffiModel.inputBlocked;
       } else if (value == 'refresh') {
-        _ffi.bind.sessionRefresh(id: widget.id);
+        bind.sessionRefresh(id: widget.id);
       } else if (value == 'paste') {
         () async {
           ClipboardData? data = await Clipboard.getData(Clipboard.kTextPlain);
           if (data != null && data.text != null) {
-            _ffi.bind.sessionInputString(id: widget.id, value: data.text ?? "");
+            bind.sessionInputString(id: widget.id, value: data.text ?? "");
           }
         }();
       } else if (value == 'enter_os_password') {
-        var password =
-            await _ffi.bind.getSessionOption(id: id, arg: "os-password");
+        var password = await bind.getSessionOption(id: id, arg: "os-password");
         if (password != null) {
-          _ffi.bind.sessionInputOsPassword(id: widget.id, value: password);
+          bind.sessionInputOsPassword(id: widget.id, value: password);
         } else {
           showSetOSPassword(widget.id, true);
         }
@@ -666,7 +663,7 @@ class _RemotePageState extends State<RemotePage>
                       onTouchModeChange: (t) {
                         _ffi.ffiModel.toggleTouchMode();
                         final v = _ffi.ffiModel.touchMode ? 'Y' : '';
-                        _ffi.bind.sessionPeerOption(
+                        bind.sessionPeerOption(
                             id: widget.id, name: "touch-mode", value: v);
                       }));
             }));
@@ -892,12 +889,12 @@ class ImagePainter extends CustomPainter {
 
 CheckboxListTile getToggle(
     String id, void Function(void Function()) setState, option, name) {
-  final opt = ffi(id).bind.getSessionToggleOptionSync(id: id, arg: option);
+  final opt = bind.getSessionToggleOptionSync(id: id, arg: option);
   return CheckboxListTile(
       value: opt,
       onChanged: (v) {
         setState(() {
-          ffi(id).bind.sessionToggleOption(id: id, value: option);
+          bind.sessionToggleOption(id: id, value: option);
         });
       },
       dense: true,
@@ -917,11 +914,10 @@ RadioListTile<String> getRadio(String name, String toValue, String curValue,
 }
 
 void showOptions(String id) async {
-  String quality =
-      await ffi(id).bind.getSessionImageQuality(id: id) ?? 'balanced';
+  String quality = await bind.getSessionImageQuality(id: id) ?? 'balanced';
   if (quality == '') quality = 'balanced';
   String viewStyle =
-      await ffi(id).bind.getSessionOption(id: id, arg: 'view-style') ?? '';
+      await bind.getSessionOption(id: id, arg: 'view-style') ?? '';
   var displays = <Widget>[];
   final pi = ffi(id).ffiModel.pi;
   final image = ffi(id).ffiModel.getConnectionImage();
@@ -934,7 +930,7 @@ void showOptions(String id) async {
       children.add(InkWell(
           onTap: () {
             if (i == cur) return;
-            ffi(id).bind.sessionSwitchDisplay(id: id, value: i);
+            bind.sessionSwitchDisplay(id: id, value: i);
             SmartDialog.dismiss();
           },
           child: Ink(
@@ -979,16 +975,14 @@ void showOptions(String id) async {
       if (value == null) return;
       setState(() {
         quality = value;
-        ffi(id).bind.sessionSetImageQuality(id: id, value: value);
+        bind.sessionSetImageQuality(id: id, value: value);
       });
     };
     var setViewStyle = (String? value) {
       if (value == null) return;
       setState(() {
         viewStyle = value;
-        ffi(id)
-            .bind
-            .sessionPeerOption(id: id, name: "view-style", value: value);
+        bind.sessionPeerOption(id: id, name: "view-style", value: value);
         ffi(id).canvasModel.updateViewStyle();
       });
     };
@@ -1018,10 +1012,8 @@ void showOptions(String id) async {
 
 void showSetOSPassword(String id, bool login) async {
   final controller = TextEditingController();
-  var password =
-      await ffi(id).bind.getSessionOption(id: id, arg: "os-password") ?? "";
-  var autoLogin =
-      await ffi(id).bind.getSessionOption(id: id, arg: "auto-login") != "";
+  var password = await bind.getSessionOption(id: id, arg: "os-password") ?? "";
+  var autoLogin = await bind.getSessionOption(id: id, arg: "auto-login") != "";
   controller.text = password;
   DialogManager.show((setState, close) {
     return CustomAlertDialog(
@@ -1054,13 +1046,11 @@ void showSetOSPassword(String id, bool login) async {
             style: flatButtonStyle,
             onPressed: () {
               var text = controller.text.trim();
-              ffi(id)
-                  .bind
-                  .sessionPeerOption(id: id, name: "os-password", value: text);
-              ffi(id).bind.sessionPeerOption(
+              bind.sessionPeerOption(id: id, name: "os-password", value: text);
+              bind.sessionPeerOption(
                   id: id, name: "auto-login", value: autoLogin ? 'Y' : '');
               if (text != "" && login) {
-                ffi(id).bind.sessionInputOsPassword(id: id, value: text);
+                bind.sessionInputOsPassword(id: id, value: text);
               }
               close();
             },

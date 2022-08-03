@@ -27,16 +27,23 @@ typedef HandleEvent = void Function(Map<String, dynamic> evt);
 /// FFI wrapper around the native Rust core.
 /// Hides the platform differences.
 class PlatformFFI {
-  Pointer<RgbaFrame>? _lastRgbaFrame;
   String _dir = '';
   String _homeDir = '';
   F2? _getByName;
   F3? _setByName;
   var _eventHandlers = Map<String, Map<String, HandleEvent>>();
   late RustdeskImpl _ffiBind;
+  late String _appType;
   void Function(Map<String, dynamic>)? _eventCallback;
 
+  PlatformFFI._();
+
+  static final PlatformFFI instance = PlatformFFI._();
+  final _toAndroidChannel = MethodChannel("mChannel");
+
   RustdeskImpl get ffiBind => _ffiBind;
+
+  static get localeName => Platform.localeName;
 
   static Future<String> getVersion() async {
     PackageInfo packageInfo = await PackageInfo.fromPlatform();
@@ -94,10 +101,8 @@ class PlatformFFI {
   }
 
   /// Init the FFI class, loads the native Rust core library.
-  Future<Null> init() async {
-    isIOS = Platform.isIOS;
-    isAndroid = Platform.isAndroid;
-    isDesktop = Platform.isWindows || Platform.isMacOS || Platform.isLinux;
+  Future<Null> init(String appType) async {
+    _appType = appType;
     // if (isDesktop) {
     //   // TODO
     //   return;
@@ -111,7 +116,7 @@ class PlatformFFI {
                 : Platform.isMacOS
                     ? DynamicLibrary.open("librustdesk.dylib")
                     : DynamicLibrary.process();
-    print('initializing FFI');
+    debugPrint('initializing FFI ${_appType}');
     try {
       _getByName = dylib.lookupFunction<F2, F2>('get_by_name');
       _setByName =
@@ -155,7 +160,8 @@ class PlatformFFI {
         name = macOsInfo.computerName;
         id = macOsInfo.systemGUID ?? "";
       }
-      print("info1-id:$id,info2-name:$name,dir:$_dir,homeDir:$_homeDir");
+      print(
+          "_appType:$_appType,info1-id:$id,info2-name:$name,dir:$_dir,homeDir:$_homeDir");
       setByName('info1', id);
       setByName('info2', name);
       setByName('home_dir', _homeDir);
@@ -185,17 +191,18 @@ class PlatformFFI {
   /// Start listening to the Rust core's events and frames.
   void _startListenEvent(RustdeskImpl rustdeskImpl) {
     () async {
-      await for (final message in rustdeskImpl.startGlobalEventStream()) {
-        if (_eventCallback != null) {
-          try {
-            Map<String, dynamic> event = json.decode(message);
-            // _tryHandle here may be more flexible than _eventCallback
-            if (!_tryHandle(event)) {
+      await for (final message
+          in rustdeskImpl.startGlobalEventStream(appType: _appType)) {
+        try {
+          Map<String, dynamic> event = json.decode(message);
+          // _tryHandle here may be more flexible than _eventCallback
+          if (!_tryHandle(event)) {
+            if (_eventCallback != null) {
               _eventCallback!(event);
             }
-          } catch (e) {
-            print('json.decode fail(): $e');
           }
+        } catch (e) {
+          print('json.decode fail(): $e');
         }
       }
     }();
@@ -212,7 +219,7 @@ class PlatformFFI {
   void stopDesktopWebListener() {}
 
   void setMethodCallHandler(FMethod callback) {
-    toAndroidChannel.setMethodCallHandler((call) async {
+    _toAndroidChannel.setMethodCallHandler((call) async {
       callback(call.method, call.arguments);
       return null;
     });
@@ -220,9 +227,6 @@ class PlatformFFI {
 
   invokeMethod(String method, [dynamic arguments]) async {
     if (!isAndroid) return Future<bool>(() => false);
-    return await toAndroidChannel.invokeMethod(method, arguments);
+    return await _toAndroidChannel.invokeMethod(method, arguments);
   }
 }
-
-final localeName = Platform.localeName;
-final toAndroidChannel = MethodChannel("mChannel");

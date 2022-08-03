@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
@@ -7,15 +8,16 @@ import 'package:get/instance_manager.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'models/model.dart';
+import 'models/platform_model.dart';
 
 final globalKey = GlobalKey<NavigatorState>();
 final navigationBarKey = GlobalKey();
 
-var isAndroid = false;
-var isIOS = false;
+var isAndroid = Platform.isAndroid;
+var isIOS = Platform.isIOS;
 var isWeb = false;
 var isWebDesktop = false;
-var isDesktop = false;
+var isDesktop = Platform.isWindows || Platform.isMacOS || Platform.isLinux;
 var version = "";
 int androidVersion = 0;
 
@@ -119,9 +121,9 @@ class DialogManager {
 
   static Future<T?> show<T>(DialogBuilder builder,
       {bool clickMaskDismiss = false,
-        bool backDismiss = false,
-        String? tag,
-        bool useAnimation = true}) async {
+      bool backDismiss = false,
+      String? tag,
+      bool useAnimation = true}) async {
     final t;
     if (tag != null) {
       t = tag;
@@ -146,10 +148,11 @@ class DialogManager {
 }
 
 class CustomAlertDialog extends StatelessWidget {
-  CustomAlertDialog({required this.title,
-    required this.content,
-    required this.actions,
-    this.contentPadding});
+  CustomAlertDialog(
+      {required this.title,
+      required this.content,
+      required this.actions,
+      this.contentPadding});
 
   final Widget title;
   final Widget content;
@@ -162,7 +165,7 @@ class CustomAlertDialog extends StatelessWidget {
       scrollable: true,
       title: title,
       contentPadding:
-      EdgeInsets.symmetric(horizontal: contentPadding ?? 25, vertical: 10),
+          EdgeInsets.symmetric(horizontal: contentPadding ?? 25, vertical: 10),
       content: content,
       actions: actions,
     );
@@ -364,9 +367,8 @@ Future<void> initGlobalFFI() async {
   _globalFFI = FFI();
   // after `put`, can also be globally found by Get.find<FFI>();
   Get.put(_globalFFI, permanent: true);
-  await _globalFFI.ffiModel.init();
   // trigger connection status updater
-  await _globalFFI.bind.mainCheckConnectStatus();
+  await bind.mainCheckConnectStatus();
   // global shared preference
   await Get.putAsync(() => SharedPreferences.getInstance());
 }

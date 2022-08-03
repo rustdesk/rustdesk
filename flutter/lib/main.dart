@@ -13,6 +13,8 @@ import 'package:provider/provider.dart';
 // import 'package:window_manager/window_manager.dart';
 
 import 'common.dart';
+import 'consts.dart';
+import 'models/platform_model.dart';
 import 'mobile/pages/home_page.dart';
 import 'mobile/pages/server_page.dart';
 import 'mobile/pages/settings_page.dart';
@@ -21,25 +23,9 @@ int? windowId;
 
 Future<Null> main(List<String> args) async {
   WidgetsFlutterBinding.ensureInitialized();
-  // global FFI, use this **ONLY** for global configuration
-  // for convenience, use global FFI on mobile platform
-  // focus on multi-ffi on desktop first
-  await initGlobalFFI();
-  // await Firebase.initializeApp();
-  if (isAndroid) {
-    toAndroidChannelInit();
-  }
-  refreshCurrentUser();
-  runRustDeskApp(args);
-}
 
-ThemeData getCurrentTheme() {
-  return isDarkTheme() ? MyTheme.darkTheme : MyTheme.darkTheme;
-}
-
-void runRustDeskApp(List<String> args) async {
   if (!isDesktop) {
-    runApp(App());
+    runMainApp(false);
     return;
   }
   // main window
@@ -52,28 +38,62 @@ void runRustDeskApp(List<String> args) async {
     WindowType wType = type.windowType;
     switch (wType) {
       case WindowType.RemoteDesktop:
-        runApp(GetMaterialApp(
-          theme: getCurrentTheme(),
-          home: DesktopRemoteScreen(
-            params: argument,
-          ),
-        ));
+        runRemoteScreen(argument);
         break;
       case WindowType.FileTransfer:
-        runApp(GetMaterialApp(
-            theme: getCurrentTheme(),
-            home: DesktopFileTransferScreen(params: argument)));
+        runFileTransferScreen(argument);
         break;
       default:
         break;
     }
   } else {
+    runMainApp(true);
+  }
+}
+
+ThemeData getCurrentTheme() {
+  return isDarkTheme() ? MyTheme.darkTheme : MyTheme.darkTheme;
+}
+
+Future<void> initEnv(String appType) async {
+  await platformFFI.init(appType);
+  // global FFI, use this **ONLY** for global configuration
+  // for convenience, use global FFI on mobile platform
+  // focus on multi-ffi on desktop first
+  await initGlobalFFI();
+  // await Firebase.initializeApp();
+  if (isAndroid) {
+    toAndroidChannelInit();
+  }
+  refreshCurrentUser();
+}
+
+void runMainApp(bool startService) async {
+  await initEnv(kAppTypeMain);
+  if (startService) {
     // await windowManager.ensureInitialized();
     // disable tray
     // initTray();
     gFFI.serverModel.startService();
-    runApp(App());
   }
+  runApp(App());
+}
+
+void runRemoteScreen(Map<String, dynamic> argument) async {
+  await initEnv(kAppTypeDesktopRemote);
+  runApp(GetMaterialApp(
+    theme: getCurrentTheme(),
+    home: DesktopRemoteScreen(
+      params: argument,
+    ),
+  ));
+}
+
+void runFileTransferScreen(Map<String, dynamic> argument) async {
+  await initEnv(kAppTypeDesktopFileTransfer);
+  runApp(GetMaterialApp(
+      theme: getCurrentTheme(),
+      home: DesktopFileTransferScreen(params: argument)));
 }
 
 class App extends StatelessWidget {
@@ -108,8 +128,8 @@ class App extends StatelessWidget {
           builder: FlutterSmartDialog.init(
               builder: isAndroid
                   ? (_, child) => AccessibilityListener(
-                child: child,
-              )
+                        child: child,
+                      )
                   : null)),
     );
   }
