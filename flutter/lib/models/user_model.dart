@@ -18,7 +18,7 @@ class UserModel extends ChangeNotifier {
     if (userName.isNotEmpty) {
       return userName.value;
     }
-    final userInfo = await bind.mainGetLocalOption(key: 'user_info') ?? "{}";
+    final userInfo = await bind.mainGetLocalOption(key: 'user_info');
     if (userInfo.trim().isEmpty) {
       return "";
     }

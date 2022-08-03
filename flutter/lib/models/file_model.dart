@@ -292,14 +292,12 @@ class FileModel extends ChangeNotifier {
   onReady() async {
     _localOption.home = _ffi.target?.getByName("get_home_dir") ?? "";
     _localOption.showHidden = (await bind.sessionGetPeerOption(
-                id: _ffi.target?.id ?? "", name: "local_show_hidden"))
-            ?.isNotEmpty ??
-        false;
+            id: _ffi.target?.id ?? "", name: "local_show_hidden"))
+        .isNotEmpty;
 
     _remoteOption.showHidden = (await bind.sessionGetPeerOption(
-                id: _ffi.target?.id ?? "", name: "remote_show_hidden"))
-            ?.isNotEmpty ??
-        false;
+            id: _ffi.target?.id ?? "", name: "remote_show_hidden"))
+        .isNotEmpty;
     _remoteOption.isWindows = _ffi.target?.ffiModel.pi.platform == "Windows";
 
     debugPrint("remote platform: ${_ffi.target?.ffiModel.pi.platform}");
@@ -307,11 +305,9 @@ class FileModel extends ChangeNotifier {
     await Future.delayed(Duration(milliseconds: 100));
 
     final local = (await bind.sessionGetPeerOption(
-            id: _ffi.target?.id ?? "", name: "local_dir")) ??
-        "";
+        id: _ffi.target?.id ?? "", name: "local_dir"));
     final remote = (await bind.sessionGetPeerOption(
-            id: _ffi.target?.id ?? "", name: "remote_dir")) ??
-        "";
+        id: _ffi.target?.id ?? "", name: "remote_dir"));
     openDirectory(local.isEmpty ? _localOption.home : local, isLocal: true);
     openDirectory(remote.isEmpty ? _remoteOption.home : remote, isLocal: false);
     await Future.delayed(Duration(seconds: 1));

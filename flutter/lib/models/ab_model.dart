@@ -47,7 +47,7 @@ class AbModel with ChangeNotifier {
   }
 
   Future<String> getApiServer() async {
-    return await bind.mainGetApiServer() ?? "";
+    return await bind.mainGetApiServer();
   }
 
   void reset() {
