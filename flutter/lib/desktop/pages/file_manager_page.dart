@@ -11,6 +11,7 @@ import 'package:wakelock/wakelock.dart';
 
 import '../../common.dart';
 import '../../models/model.dart';
+import '../../models/platform_model.dart';
 
 class FileManagerPage extends StatefulWidget {
   FileManagerPage({Key? key, required this.id}) : super(key: key);
@@ -37,7 +38,7 @@ class _FileManagerPageState extends State<FileManagerPage>
   @override
   void initState() {
     super.initState();
-    Get.put(FFI.newFFI()..connect(widget.id, isFileTransfer: true),
+    Get.put(FFI()..connect(widget.id, isFileTransfer: true),
         tag: 'ft_${widget.id}');
     // _ffi.ffiModel.updateEventListener(widget.id);
     if (!Platform.isLinux) {
@@ -464,13 +465,15 @@ class _FileManagerPageState extends State<FileManagerPage>
                       decoration: BoxDecoration(color: Colors.blue),
                       padding: EdgeInsets.all(8.0),
                       child: FutureBuilder<String>(
-                          future: _ffi.bind.sessionGetPlatform(
+                          future: bind.sessionGetPlatform(
                               id: _ffi.id, isRemote: !isLocal),
                           builder: (context, snapshot) {
                             if (snapshot.hasData && snapshot.data!.isNotEmpty) {
                               return getPlatformImage('${snapshot.data}');
                             } else {
-                              return CircularProgressIndicator(color: Colors.white,);
+                              return CircularProgressIndicator(
+                                color: Colors.white,
+                              );
                             }
                           })),
                   Text(isLocal
@@ -505,21 +508,25 @@ class _FileManagerPageState extends State<FileManagerPage>
                           border: Border.all(color: Colors.black12)),
                       child: TextField(
                         decoration: InputDecoration(
-                          border: InputBorder.none,
-                          isDense: true,
-                          prefix: Padding(padding: EdgeInsets.only(left: 4.0)),
-                          suffix: DropdownButton<String>(
-                              isDense: true,
-                              underline: Offstage(),
-                              items: [
-                            // TODO: favourite
-                            DropdownMenuItem(child: Text('/'), value: '/',)
-                          ], onChanged: (path) {
-                            if (path is String && path.isNotEmpty){
-                              model.openDirectory(path, isLocal: isLocal);
-                            }
-                          })
-                        ),
+                            border: InputBorder.none,
+                            isDense: true,
+                            prefix:
+                                Padding(padding: EdgeInsets.only(left: 4.0)),
+                            suffix: DropdownButton<String>(
+                                isDense: true,
+                                underline: Offstage(),
+                                items: [
+                                  // TODO: favourite
+                                  DropdownMenuItem(
+                                    child: Text('/'),
+                                    value: '/',
+                                  )
+                                ],
+                                onChanged: (path) {
+                                  if (path is String && path.isNotEmpty) {
+                                    model.openDirectory(path, isLocal: isLocal);
+                                  }
+                                })),
                         controller: TextEditingController(
                             text: isLocal
                                 ? model.currentLocalDir.path

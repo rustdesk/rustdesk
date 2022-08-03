@@ -6,6 +6,7 @@ import 'package:get/get.dart';
 import 'package:http/http.dart' as http;
 
 import 'model.dart';
+import 'platform_model.dart';
 
 class UserModel extends ChangeNotifier {
   var userName = "".obs;
@@ -17,8 +18,7 @@ class UserModel extends ChangeNotifier {
     if (userName.isNotEmpty) {
       return userName.value;
     }
-    final userInfo =
-        await parent.target?.bind.mainGetLocalOption(key: 'user_info') ?? "{}";
+    final userInfo = await bind.mainGetLocalOption(key: 'user_info');
     if (userInfo.trim().isEmpty) {
       return "";
     }
@@ -29,10 +29,6 @@ class UserModel extends ChangeNotifier {
 
   Future<void> logOut() async {
     debugPrint("start logout");
-    final bind = parent.target?.bind;
-    if (bind == null) {
-      return;
-    }
     final url = await bind.mainGetApiServer();
     final _ = await http.post(Uri.parse("$url/api/logout"),
         body: {
@@ -55,10 +51,6 @@ class UserModel extends ChangeNotifier {
   }
 
   Future<Map<String, dynamic>> login(String userName, String pass) async {
-    final bind = parent.target?.bind;
-    if (bind == null) {
-      return {"error": "no context"};
-    }
     final url = await bind.mainGetApiServer();
     try {
       final resp = await http.post(Uri.parse("$url/api/login"),

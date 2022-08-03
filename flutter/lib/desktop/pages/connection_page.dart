@@ -16,6 +16,7 @@ import '../../mobile/pages/home_page.dart';
 import '../../mobile/pages/scan_page.dart';
 import '../../mobile/pages/settings_page.dart';
 import '../../models/model.dart';
+import '../../models/platform_model.dart';
 
 // enum RemoteType { recently, favorite, discovered, addressBook }
 
@@ -428,10 +429,10 @@ class _ConnectionPageState extends State<ConnectionPage> {
 
   updateStatus() async {
     svcStopped.value = gFFI.getOption("stop-service") == "Y";
-    final status = jsonDecode(await gFFI.bind.mainGetConnectStatus())
-        as Map<String, dynamic>;
+    final status =
+        jsonDecode(await bind.mainGetConnectStatus()) as Map<String, dynamic>;
     svcStatusCode.value = status["status_num"];
-    svcIsUsingPublicServer.value = await gFFI.bind.mainIsUsingPublicServer();
+    svcIsUsingPublicServer.value = await bind.mainIsUsingPublicServer();
   }
 
   handleLogin() {
@@ -906,13 +907,13 @@ class _PeerTabbedPageState extends State<_PeerTabbedPage>
     if (_tabController.indexIsChanging) {
       switch (_tabController.index) {
         case 0:
-          gFFI.bind.mainLoadRecentPeers();
+          bind.mainLoadRecentPeers();
           break;
         case 1:
-          gFFI.bind.mainLoadFavPeers();
+          bind.mainLoadFavPeers();
           break;
         case 2:
-          gFFI.bind.mainDiscover();
+          bind.mainDiscover();
           break;
         case 3:
           break;

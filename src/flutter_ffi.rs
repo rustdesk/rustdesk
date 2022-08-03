@@ -75,9 +75,15 @@ pub enum EventToUI {
     Rgba(ZeroCopyBuffer<Vec<u8>>),
 }
 
-pub fn start_global_event_stream(s: StreamSink<String>) -> ResultType<()> {
-    let _ = flutter::GLOBAL_EVENT_STREAM.write().unwrap().insert(s);
+pub fn start_global_event_stream(s: StreamSink<String>, app_type: String) -> ResultType<()> {
+    if let Some(_) = flutter::GLOBAL_EVENT_STREAM.write().unwrap().insert(app_type.clone(), s) {
+        log::warn!("Global event stream of type {} is started before, but now removed", app_type);
+    }
     Ok(())
+}
+
+pub fn stop_global_event_stream(app_type: String) {
+    let _ = flutter::GLOBAL_EVENT_STREAM.write().unwrap().remove(&app_type);
 }
 
 pub fn host_stop_system_key_propagate(stopped: bool) {
@@ -518,7 +524,7 @@ pub fn main_load_recent_peers() {
             .drain(..)
             .map(|(id, _, p)| (id, p.info))
             .collect();
-        if let Some(s) = flutter::GLOBAL_EVENT_STREAM.read().unwrap().as_ref() {
+        if let Some(s) = flutter::GLOBAL_EVENT_STREAM.read().unwrap().get(flutter::APP_TYPE_MAIN) {
             let data = HashMap::from([
                 ("name", "load_recent_peers".to_owned()),
                 (
@@ -544,7 +550,7 @@ pub fn main_load_fav_peers() {
                 }
             })
             .collect();
-        if let Some(s) = flutter::GLOBAL_EVENT_STREAM.read().unwrap().as_ref() {
+        if let Some(s) = flutter::GLOBAL_EVENT_STREAM.read().unwrap().get(flutter::APP_TYPE_MAIN) {
             let data = HashMap::from([
                 ("name", "load_fav_peers".to_owned()),
                 (
@@ -558,7 +564,7 @@ pub fn main_load_fav_peers() {
 }
 
 pub fn main_load_lan_peers() {
-    if let Some(s) = flutter::GLOBAL_EVENT_STREAM.read().unwrap().as_ref() {
+    if let Some(s) = flutter::GLOBAL_EVENT_STREAM.read().unwrap().get(flutter::APP_TYPE_MAIN) {
         let data = HashMap::from([
             ("name", "load_lan_peers".to_owned()),
             ("peers", get_lan_peers()),
@@ -1066,7 +1072,7 @@ unsafe extern "C" fn set_by_name(name: *const c_char, value: *const c_char) {
 }
 
 fn handle_query_onlines(onlines: Vec<String>, offlines: Vec<String>) {
-    if let Some(s) = flutter::GLOBAL_EVENT_STREAM.read().unwrap().as_ref() {
+    if let Some(s) = flutter::GLOBAL_EVENT_STREAM.read().unwrap().get(flutter::APP_TYPE_MAIN) {
         let data = HashMap::from([
             ("name", "callback_query_onlines".to_owned()),
             ("onlines", onlines.join(",")),

@@ -1,6 +1,6 @@
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
-import '../../common.dart';
+import 'platform_model.dart';
 
 class Peer {
   final String id;
@@ -44,11 +44,10 @@ class Peers extends ChangeNotifier {
     _name = name;
     _loadEvent = loadEvent;
     _peers = _initPeers;
-    gFFI.ffiModel.platformFFI.registerEventHandler(_cbQueryOnlines, _name,
-        (evt) {
+    platformFFI.registerEventHandler(_cbQueryOnlines, _name, (evt) {
       _updateOnlineState(evt);
     });
-    gFFI.ffiModel.platformFFI.registerEventHandler(_loadEvent, _name, (evt) {
+    platformFFI.registerEventHandler(_loadEvent, _name, (evt) {
       _updatePeers(evt);
     });
   }
@@ -57,8 +56,8 @@ class Peers extends ChangeNotifier {
 
   @override
   void dispose() {
-    gFFI.ffiModel.platformFFI.unregisterEventHandler(_cbQueryOnlines, _name);
-    gFFI.ffiModel.platformFFI.unregisterEventHandler(_loadEvent, _name);
+    platformFFI.unregisterEventHandler(_cbQueryOnlines, _name);
+    platformFFI.unregisterEventHandler(_loadEvent, _name);
     super.dispose();
   }
 
