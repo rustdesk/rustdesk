@@ -151,6 +151,7 @@ class Header: Reactor.Component {
             <menu.context #keyboard-options>
                 <li #legacy><span>{svg_checkmark}</span>{translate('Legacy mode')}</li> 
                 <li #map><span>{svg_checkmark}</span>{translate('Map mode')}</li> 
+                <li #translate><span>{svg_checkmark}</span>{translate('Translate mode')}</li> 
             </menu>
         </popup>;
     }
@@ -367,6 +368,8 @@ class Header: Reactor.Component {
             handler.save_keyboard_mode("legacy");
         } else if (me.id == "map") {
             handler.save_keyboard_mode("map");
+        } else if (me.id == "translate") {
+            handler.save_keyboard_mode("translate");
         }
         toggleMenuState()
     }
