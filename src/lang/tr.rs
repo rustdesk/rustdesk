@@ -299,5 +299,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Are you sure you want to restart", "Yeniden başlatmak istediğinize emin misin?"),
         ("Restarting Remote Device", "Uzaktan yeniden başlatılıyor"),
         ("remote_restarting_tip", ""),
+        ("Copied", ""),
     ].iter().cloned().collect();
 }

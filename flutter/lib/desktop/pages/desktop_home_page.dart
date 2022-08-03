@@ -127,11 +127,16 @@ class _DesktopHomePageState extends State<DesktopHomePage> with TrayListener {
                           })
                     ],
                   ),
-                  TextFormField(
-                    controller: model.serverId,
-                    enableInteractiveSelection: true,
-                    readOnly: true,
-                  ),
+                  GestureDetector(
+                      onDoubleTap: () {
+                        Clipboard.setData(
+                            ClipboardData(text: model.serverId.text));
+                        showToast(translate("Copied"));
+                      },
+                      child: TextFormField(
+                        controller: model.serverId,
+                        readOnly: true,
+                      )),
                 ],
               ),
             ),
@@ -151,7 +156,7 @@ class _DesktopHomePageState extends State<DesktopHomePage> with TrayListener {
         },
         onTap: () async {
           final userName = await gFFI.userModel.getUserName();
-          var menu = [
+          var menu = <PopupMenuEntry>[
             genEnablePopupMenuItem(
               translate("Enable Keyboard/Mouse"),
               'enable-keyboard',
@@ -169,6 +174,7 @@ class _DesktopHomePageState extends State<DesktopHomePage> with TrayListener {
               'enable-tunnel',
             ),
             genAudioInputPopupMenuItem(),
+            PopupMenuDivider(),
             PopupMenuItem(
               child: Text(translate("ID/Relay Server")),
               value: 'custom-server',
@@ -181,7 +187,7 @@ class _DesktopHomePageState extends State<DesktopHomePage> with TrayListener {
               child: Text(translate("Socks5 Proxy")),
               value: 'socks5-proxy',
             ),
-            // sep
+            PopupMenuDivider(),
             genEnablePopupMenuItem(
               translate("Enable Service"),
               'stop-service',
@@ -195,6 +201,7 @@ class _DesktopHomePageState extends State<DesktopHomePage> with TrayListener {
               translate("Start ID/relay service"),
               'stop-rendezvous-service',
             ),
+            PopupMenuDivider(),
             userName.isEmpty
                 ? PopupMenuItem(
                     child: Text(translate("Login")),
@@ -208,6 +215,7 @@ class _DesktopHomePageState extends State<DesktopHomePage> with TrayListener {
               child: Text(translate("Change ID")),
               value: 'change-id',
             ),
+            PopupMenuDivider(),
             genEnablePopupMenuItem(
               translate("Dark Theme"),
               'allow-darktheme',
@@ -252,10 +260,16 @@ class _DesktopHomePageState extends State<DesktopHomePage> with TrayListener {
                   Row(
                     children: [
                       Expanded(
-                        child: TextFormField(
-                          controller: model.serverPasswd,
-                          enableInteractiveSelection: true,
-                          readOnly: true,
+                        child: GestureDetector(
+                          onDoubleTap: () {
+                            Clipboard.setData(
+                                ClipboardData(text: model.serverPasswd.text));
+                            showToast(translate("Copied"));
+                          },
+                          child: TextFormField(
+                            controller: model.serverPasswd,
+                            readOnly: true,
+                          ),
                         ),
                       ),
                       IconButton(
@@ -307,15 +321,15 @@ class _DesktopHomePageState extends State<DesktopHomePage> with TrayListener {
                     ),
                   ],
                 ),
-                value: value,
                 onTap: () => gFFI.serverModel.verificationMethod = value,
               );
           final temporary_enabled =
               gFFI.serverModel.verificationMethod != kUsePermanentPassword;
-          var menu = [
+          var menu = <PopupMenuEntry>[
             method(translate("Use temporary password"), kUseTemporaryPassword),
             method(translate("Use permanent password"), kUsePermanentPassword),
             method(translate("Use both passwords"), kUseBothPasswords),
+            PopupMenuDivider(),
             PopupMenuItem(
                 child: Text(translate("Set permanent password")),
                 value: 'set-permanent-password',
@@ -323,7 +337,10 @@ class _DesktopHomePageState extends State<DesktopHomePage> with TrayListener {
                     kUseTemporaryPassword),
             PopupMenuItem(
                 child: PopupMenuButton(
-                  child: Text("Set temporary password length"),
+                  padding: EdgeInsets.zero,
+                  child: Text(
+                    translate("Set temporary password length"),
+                  ),
                   itemBuilder: (context) => ["6", "8", "10"]
                       .map((e) => PopupMenuItem(
                             child: Row(
@@ -338,7 +355,6 @@ class _DesktopHomePageState extends State<DesktopHomePage> with TrayListener {
                                 ),
                               ],
                             ),
-                            value: e,
                             onTap: () {
                               if (gFFI.serverModel.temporaryPasswordLength !=
                                   e) {
@@ -350,15 +366,12 @@ class _DesktopHomePageState extends State<DesktopHomePage> with TrayListener {
                       .toList(),
                   enabled: temporary_enabled,
                 ),
-                value: 'set-temporary-password-length',
                 enabled: temporary_enabled),
           ];
           final v =
               await showMenu(context: context, position: position, items: menu);
-          if (v != null) {
-            if (v == "set-permanent-password") {
-              setPasswordDialog();
-            }
+          if (v == "set-permanent-password") {
+            setPasswordDialog();
           }
         },
         child: Icon(Icons.edit));
@@ -1371,9 +1384,6 @@ void setPasswordDialog() {
                   ),
                 ),
               ],
-            ),
-            SizedBox(
-              height: 4.0,
             ),
           ],
         ),
