@@ -3,9 +3,11 @@ import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/common.dart';
+import 'package:flutter_hbb/consts.dart';
 import 'package:flutter_hbb/desktop/pages/remote_page.dart';
 import 'package:flutter_hbb/desktop/widgets/titlebar_widget.dart';
 import 'package:flutter_hbb/utils/multi_window_manager.dart';
+import 'package:provider/provider.dart';
 import 'package:get/get.dart';
 
 import '../../models/model.dart';
@@ -70,6 +72,42 @@ class _ConnectionTabPageState extends State<ConnectionTabPage>
 
   @override
   Widget build(BuildContext context) {
+    final tabBar = TabBar(
+        isScrollable: true,
+        labelColor: Colors.white,
+        physics: NeverScrollableScrollPhysics(),
+        indicatorColor: Colors.white,
+        tabs: connectionIds
+            .map((e) => Tab(
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      Text(e),
+                      SizedBox(
+                        width: 4,
+                      ),
+                      InkWell(
+                          onTap: () {
+                            onRemoveId(e);
+                          },
+                          child: Icon(
+                            Icons.highlight_remove,
+                            size: 20,
+                          ))
+                    ],
+                  ),
+                ))
+            .toList());
+    final tabBarView = TabBarView(
+        children: connectionIds
+            .map((e) => Container(
+                    child: RemotePage(
+                  key: ValueKey(e),
+                  id: e,
+                  tabBarHeight: kDesktopRemoteTabBarHeight,
+                ))) //RemotePage(key: ValueKey(e), id: e))
+            .toList());
     return Scaffold(
       body: DefaultTabController(
         initialIndex: initialIndex,
@@ -78,43 +116,9 @@ class _ConnectionTabPageState extends State<ConnectionTabPage>
         child: Column(
           children: [
             DesktopTitleBar(
-              child: TabBar(
-                  isScrollable: true,
-                  labelColor: Colors.white,
-                  physics: NeverScrollableScrollPhysics(),
-                  indicatorColor: Colors.white,
-                  tabs: connectionIds
-                      .map((e) => Tab(
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              crossAxisAlignment: CrossAxisAlignment.center,
-                              children: [
-                                Text(e),
-                                SizedBox(
-                                  width: 4,
-                                ),
-                                InkWell(
-                                    onTap: () {
-                                      onRemoveId(e);
-                                    },
-                                    child: Icon(
-                                      Icons.highlight_remove,
-                                      size: 20,
-                                    ))
-                              ],
-                            ),
-                          ))
-                      .toList()),
+              child: Container(height: kDesktopRemoteTabBarHeight, child: tabBar),
             ),
-            Expanded(
-              child: TabBarView(
-                  children: connectionIds
-                      .map((e) => Container(
-                          child: RemotePage(
-                              key: ValueKey(e),
-                              id: e))) //RemotePage(key: ValueKey(e), id: e))
-                      .toList()),
-            )
+            Expanded(child: tabBarView),
           ],
         ),
       ),

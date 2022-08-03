@@ -16,6 +16,7 @@ import 'package:wakelock/wakelock.dart';
 // import 'package:window_manager/window_manager.dart';
 
 import '../../common.dart';
+import '../../consts.dart';
 import '../../mobile/widgets/dialog.dart';
 import '../../mobile/widgets/overlay.dart';
 import '../../models/model.dart';
@@ -23,9 +24,11 @@ import '../../models/model.dart';
 final initText = '\1' * 1024;
 
 class RemotePage extends StatefulWidget {
-  RemotePage({Key? key, required this.id}) : super(key: key);
+  RemotePage({Key? key, required this.id, required this.tabBarHeight})
+      : super(key: key);
 
   final String id;
+  final double tabBarHeight;
 
   @override
   _RemotePageState createState() => _RemotePageState();
@@ -53,10 +56,12 @@ class _RemotePageState extends State<RemotePage>
   @override
   void initState() {
     super.initState();
-    final ffi = Get.put(FFI(), tag: widget.id);
+    var ffitmp = FFI();
+    ffitmp.canvasModel.tabBarHeight = super.widget.tabBarHeight;
+    final ffi = Get.put(ffitmp, tag: widget.id);
     // note: a little trick
     ffi.ffiModel.platformFFI = gFFI.ffiModel.platformFFI;
-    ffi.connect(widget.id);
+    ffi.connect(widget.id, tabBarHeight: super.widget.tabBarHeight);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual, overlays: []);
       showLoading(translate('Connecting...'));
@@ -236,11 +241,12 @@ class _RemotePageState extends State<RemotePage>
   @override
   Widget build(BuildContext context) {
     super.build(context);
+    Provider.of<CanvasModel>(context, listen: false).tabBarHeight =
+        super.widget.tabBarHeight;
     final pi = Provider.of<FfiModel>(context).pi;
     final hideKeyboard = isKeyboardShown() && _showEdit;
     final showActionButton = !_showBar || hideKeyboard;
     final keyboard = _ffi.ffiModel.permissions['keyboard'] != false;
-
     return WillPopScope(
         onWillPop: () async {
           clientClose();
@@ -296,7 +302,6 @@ class _RemotePageState extends State<RemotePage>
   Widget getRawPointerAndKeyBody(bool keyboard, Widget child) {
     return Listener(
         onPointerHover: (e) {
-          debugPrint("onPointerHover ${e}");
           if (e.kind != ui.PointerDeviceKind.mouse) return;
           if (!_isPhysicalMouse) {
             setState(() {
@@ -304,11 +309,11 @@ class _RemotePageState extends State<RemotePage>
             });
           }
           if (_isPhysicalMouse) {
-            _ffi.handleMouse(getEvent(e, 'mousemove'));
+            _ffi.handleMouse(getEvent(e, 'mousemove'),
+                tabBarHeight: super.widget.tabBarHeight);
           }
         },
         onPointerDown: (e) {
-          debugPrint("onPointerDown ${e}");
           if (e.kind != ui.PointerDeviceKind.mouse) {
             if (_isPhysicalMouse) {
               setState(() {
@@ -317,25 +322,25 @@ class _RemotePageState extends State<RemotePage>
             }
           }
           if (_isPhysicalMouse) {
-            _ffi.handleMouse(getEvent(e, 'mousedown'));
+            _ffi.handleMouse(getEvent(e, 'mousedown'),
+                tabBarHeight: super.widget.tabBarHeight);
           }
         },
         onPointerUp: (e) {
-          debugPrint("onPointerUp ${e}");
           if (e.kind != ui.PointerDeviceKind.mouse) return;
           if (_isPhysicalMouse) {
-            _ffi.handleMouse(getEvent(e, 'mouseup'));
+            _ffi.handleMouse(getEvent(e, 'mouseup'),
+                tabBarHeight: super.widget.tabBarHeight);
           }
         },
         onPointerMove: (e) {
-          debugPrint("onPointerMove ${e}");
           if (e.kind != ui.PointerDeviceKind.mouse) return;
           if (_isPhysicalMouse) {
-            _ffi.handleMouse(getEvent(e, 'mousemove'));
+            _ffi.handleMouse(getEvent(e, 'mousemove'),
+                tabBarHeight: super.widget.tabBarHeight);
           }
         },
         onPointerSignal: (e) {
-          debugPrint("onPointerSignal ${e}");
           if (e is PointerScrollEvent) {
             var dx = e.scrollDelta.dx;
             var dy = e.scrollDelta.dy;
@@ -557,7 +562,7 @@ class _RemotePageState extends State<RemotePage>
   void showActions(String id) async {
     final size = MediaQuery.of(context).size;
     final x = 120.0;
-    final y = size.height;
+    final y = size.height - super.widget.tabBarHeight;
     final more = <PopupMenuItem<String>>[];
     final pi = _ffi.ffiModel.pi;
     final perms = _ffi.ffiModel.permissions;
@@ -672,7 +677,6 @@ class _RemotePageState extends State<RemotePage>
     if (!keyboard) {
       return SizedBox();
     }
-    final size = MediaQuery.of(context).size;
     var wrap = (String text, void Function() onPressed,
         [bool? active, IconData? icon]) {
       return TextButton(
@@ -788,7 +792,7 @@ class _RemotePageState extends State<RemotePage>
         sendPrompt(widget.id, isMac, 'VK_S');
       }),
     ];
-    final space = size.width > 320 ? 4.0 : 2.0;
+    final space = MediaQuery.of(context).size.width > 320 ? 4.0 : 2.0;
     return Container(
         color: Color(0xAA000000),
         padding: EdgeInsets.only(

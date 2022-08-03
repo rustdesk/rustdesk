@@ -349,7 +349,7 @@ class ImageModel with ChangeNotifier {
 
   ImageModel(this.parent);
 
-  void onRgba(Uint8List rgba) {
+  void onRgba(Uint8List rgba, double tabBarHeight) {
     if (_waitForImage) {
       _waitForImage = false;
       SmartDialog.dismiss();
@@ -363,22 +363,24 @@ class ImageModel with ChangeNotifier {
       if (parent.target?.id != pid) return;
       try {
         // my throw exception, because the listener maybe already dispose
-        update(image);
+        update(image, tabBarHeight);
       } catch (e) {
         print('update image: $e');
       }
     });
   }
 
-  void update(ui.Image? image) {
+  void update(ui.Image? image, double tabBarHeight) {
     if (_image == null && image != null) {
       if (isWebDesktop) {
         parent.target?.canvasModel.updateViewStyle();
       } else {
         final size = MediaQueryData.fromWindow(ui.window).size;
-        final xscale = size.width / image.width;
-        final yscale = size.height / image.height;
-        parent.target?.canvasModel.scale = max(xscale, yscale);
+        final canvasWidth = size.width;
+        final canvasHeight = size.height - tabBarHeight;
+        final xscale = canvasWidth / image.width;
+        final yscale = canvasHeight / image.height;
+        parent.target?.canvasModel.scale = min(xscale, yscale);
       }
       if (parent.target != null) {
         initializeCursorAndCanvas(parent.target!);
@@ -395,6 +397,8 @@ class ImageModel with ChangeNotifier {
     if (image != null) notifyListeners();
   }
 
+  // mobile only
+  // for desktop, height should minus tabbar height
   double get maxScale {
     if (_image == null) return 1.5;
     final size = MediaQueryData.fromWindow(ui.window).size;
@@ -403,6 +407,8 @@ class ImageModel with ChangeNotifier {
     return max(1.5, max(xscale, yscale));
   }
 
+  // mobile only
+  // for desktop, height should minus tabbar height
   double get minScale {
     if (_image == null) return 1.5;
     final size = MediaQueryData.fromWindow(ui.window).size;
@@ -416,6 +422,7 @@ class CanvasModel with ChangeNotifier {
   double _x = 0;
   double _y = 0;
   double _scale = 1.0;
+  double _tabBarHeight = 0.0;
   String id = ""; // TODO multi canvas model
 
   WeakReference<FFI> parent;
@@ -428,6 +435,9 @@ class CanvasModel with ChangeNotifier {
 
   double get scale => _scale;
 
+  set tabBarHeight(double h) => _tabBarHeight = h;
+  double get tabBarHeight => _tabBarHeight;
+
   void updateViewStyle() async {
     final s =
         await parent.target?.bind.getSessionOption(id: id, arg: 'view-style');
@@ -435,8 +445,10 @@ class CanvasModel with ChangeNotifier {
       return;
     }
     final size = MediaQueryData.fromWindow(ui.window).size;
-    final s1 = size.width / (parent.target?.ffiModel.display.width ?? 720);
-    final s2 = size.height / (parent.target?.ffiModel.display.height ?? 1280);
+    final canvasWidth = size.width;
+    final canvasHeight = size.height - _tabBarHeight;
+    final s1 = canvasWidth / (parent.target?.ffiModel.display.width ?? 720);
+    final s2 = canvasHeight / (parent.target?.ffiModel.display.height ?? 1280);
     // Closure to perform shrink operation.
     final shrinkOp = () {
       final s = s1 < s2 ? s1 : s2;
@@ -467,8 +479,8 @@ class CanvasModel with ChangeNotifier {
         defaultOp();
       }
     }
-    _x = (size.width - getDisplayWidth() * _scale) / 2;
-    _y = (size.height - getDisplayHeight() * _scale) / 2;
+    _x = (canvasWidth - getDisplayWidth() * _scale) / 2;
+    _y = (canvasHeight - getDisplayHeight() * _scale) / 2;
     notifyListeners();
   }
 
@@ -491,15 +503,17 @@ class CanvasModel with ChangeNotifier {
     // On mobile platforms, move the canvas with the cursor.
     if (!isDesktop) {
       final size = MediaQueryData.fromWindow(ui.window).size;
+      final canvasWidth = size.width;
+      final canvasHeight = size.height - _tabBarHeight;
       final dw = getDisplayWidth() * _scale;
       final dh = getDisplayHeight() * _scale;
       var dxOffset = 0;
       var dyOffset = 0;
-      if (dw > size.width) {
-        dxOffset = (x - dw * (x / size.width) - _x).toInt();
+      if (dw > canvasWidth) {
+        dxOffset = (x - dw * (x / canvasWidth) - _x).toInt();
       }
-      if (dh > size.height) {
-        dyOffset = (y - dh * (y / size.height) - _y).toInt();
+      if (dh > canvasHeight) {
+        dyOffset = (y - dh * (y / canvasHeight) - _y).toInt();
       }
       _x += dxOffset;
       _y += dyOffset;
@@ -524,8 +538,11 @@ class CanvasModel with ChangeNotifier {
     if (isWebDesktop) {
       updateViewStyle();
     } else {
-      _x = 0;
-      _y = 0;
+      final size = MediaQueryData.fromWindow(ui.window).size;
+      final canvasWidth = size.width;
+      final canvasHeight = size.height - _tabBarHeight;
+      _x = (canvasWidth - getDisplayWidth() * _scale) / 2;
+      _y = (canvasHeight - getDisplayHeight() * _scale) / 2;
     }
     notifyListeners();
   }
@@ -933,7 +950,8 @@ class FFI {
   }
 
   /// Connect with the given [id]. Only transfer file if [isFileTransfer].
-  void connect(String id, {bool isFileTransfer = false}) {
+  void connect(String id,
+      {bool isFileTransfer = false, double tabBarHeight = 0.0}) {
     if (!isFileTransfer) {
       chatModel.resetClientMode();
       canvasModel.id = id;
@@ -954,7 +972,7 @@ class FFI {
             print('json.decode fail(): $e');
           }
         } else if (message is Rgba) {
-          imageModel.onRgba(message.field0);
+          imageModel.onRgba(message.field0, tabBarHeight);
         }
       }
     }();
@@ -979,7 +997,7 @@ class FFI {
     }
     bind.sessionClose(id: id);
     id = "";
-    imageModel.update(null);
+    imageModel.update(null, 0.0);
     cursorModel.clear();
     ffiModel.clear();
     canvasModel.clear();
@@ -1027,8 +1045,7 @@ class FFI {
 
   RustdeskImpl get bind => ffiModel.platformFFI.ffiBind;
 
-  handleMouse(Map<String, dynamic> evt) {
-    debugPrint("mouse ${evt.toString()}");
+  handleMouse(Map<String, dynamic> evt, {double tabBarHeight = 0.0}) {
     var type = '';
     var isMove = false;
     switch (evt['type']) {
@@ -1046,7 +1063,7 @@ class FFI {
     }
     evt['type'] = type;
     var x = evt['x'];
-    var y = max(0.0, (evt['y'] as double) - 50.0);
+    var y = max(0.0, (evt['y'] as double) - tabBarHeight);
     if (isMove) {
       canvasModel.moveDesktopMouse(x, y);
     }
