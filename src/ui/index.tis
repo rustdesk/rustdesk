@@ -3,7 +3,7 @@ stdout.println("current platform:", OS);
 stdout.println("is_xfce: ", is_xfce);
 
 // html min-width, min-height not working on mac, below works for all
-view.windowMinSize = (scaleIt(500), scaleIt(300));
+view.windowMinSize = (scaleIt(560), scaleIt(300));
 
 var app;
 var tmp = handler.get_connect_status();
