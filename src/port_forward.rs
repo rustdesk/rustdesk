@@ -42,6 +42,7 @@ fn run_rdp(port: u16) {
 
 pub async fn listen(
     id: String,
+    password: String,
     port: i32,
     interface: impl Interface,
     ui_receiver: mpsc::UnboundedReceiver<Data>,
@@ -61,8 +62,9 @@ pub async fn listen(
             Ok((forward, addr)) = listener.accept() => {
                 log::info!("new connection from {:?}", addr);
                 let id = id.clone();
+                let password = password.clone();
                 let mut forward = Framed::new(forward, BytesCodec::new());
-                match connect_and_login(&id, &mut ui_receiver, interface.clone(), &mut forward, key, token, is_rdp).await {
+                match connect_and_login(&id, &password, &mut ui_receiver, interface.clone(), &mut forward, key, token, is_rdp).await {
                     Ok(Some(stream)) => {
                         let interface = interface.clone();
                         tokio::spawn(async move {
@@ -96,6 +98,7 @@ pub async fn listen(
 
 async fn connect_and_login(
     id: &str,
+    password: &str,
     ui_receiver: &mut mpsc::UnboundedReceiver<Data>,
     interface: impl Interface,
     forward: &mut Framed<TcpStream, BytesCodec>,
@@ -121,7 +124,7 @@ async fn connect_and_login(
                     let msg_in = Message::parse_from_bytes(&bytes)?;
                     match msg_in.union {
                         Some(message::Union::Hash(hash)) => {
-                            interface.handle_hash(hash, &mut stream).await;
+                            interface.handle_hash(password, hash, &mut stream).await;
                         }
                         Some(message::Union::LoginResponse(lr)) => match lr.union {
                             Some(login_response::Union::Error(err)) => {

@@ -32,7 +32,7 @@ dependencies:
   ffi: ^1.1.2
   path_provider: ^2.0.2
   external_path: ^1.0.1
-  provider: ^5.0.0
+  provider: ^6.0.3
   tuple: ^2.0.0
   wakelock: ^0.5.2
   device_info: ^2.0.2 
@@ -41,15 +41,12 @@ dependencies:
   url_launcher: ^6.0.9
   shared_preferences: ^2.0.6
   toggle_switch: ^1.4.0
-  dash_chat: ^1.1.16
+  dash_chat_2: ^0.0.12
   draggable_float_widget: ^0.0.2
   settings_ui: ^2.0.2
   flutter_breadcrumb: ^1.0.1
   http: ^0.13.4
-  qr_code_scanner:
-    git:
-      url: https://github.com/Heap-Hop/qr_code_scanner.git
-      ref: fix_break_changes_platform
+  qr_code_scanner: ^1.0.0
   zxing2: ^0.1.0
   image_picker: ^0.8.5
   image: ^3.1.3

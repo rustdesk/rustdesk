@@ -76,6 +76,7 @@ rdev = { git = "https://github.com/asur4s/rdev" }
 ctrlc = "3.2"
 arboard = "2.0"
 #minreq = { version = "2.4", features = ["punycode", "https-native"] }
+system_shutdown = "3.0.0"
 
 [target.'cfg(target_os = "windows")'.dependencies]
 #systray = { git = "https://github.com/open-trade/systray-rs" }

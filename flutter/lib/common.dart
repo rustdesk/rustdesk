@@ -199,7 +199,7 @@ const G = M * K;
 
 String readableFileSize(double size) {
   if (size < K) {
-    return size.toString() + " B";
+    return size.toStringAsFixed(2) + " B";
   } else if (size < M) {
     return (size / K).toStringAsFixed(2) + " KB";
   } else if (size < G) {
@@ -312,4 +312,16 @@ class PermissionManager {
     _completer?.complete(res);
     _current = "";
   }
+}
+
+RadioListTile<T> getRadio<T>(
+    String name, T toValue, T curValue, void Function(T?) onChange) {
+  return RadioListTile<T>(
+    controlAffinity: ListTileControlAffinity.trailing,
+    title: Text(translate(name)),
+    value: toValue,
+    groupValue: curValue,
+    onChanged: onChange,
+    dense: true,
+  );
 }

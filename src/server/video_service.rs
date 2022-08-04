@@ -378,7 +378,6 @@ fn run(sp: GenericService) -> ResultType<()> {
     let mut c = get_capturer(true)?;
 
     let mut video_qos = VIDEO_QOS.lock().unwrap();
-
     video_qos.set_size(c.width as _, c.height as _);
     let mut spf = video_qos.spf();
     let bitrate = video_qos.generate_bitrate()?;
@@ -441,18 +440,17 @@ fn run(sp: GenericService) -> ResultType<()> {
         #[cfg(windows)]
         check_uac_switch(c.privacy_mode_id, c._captuerer_privacy_mode_id)?;
 
-        {
-            let mut video_qos = VIDEO_QOS.lock().unwrap();
-            if video_qos.check_if_updated() {
-                log::debug!(
-                    "qos is updated, target_bitrate:{}, fps:{}",
-                    video_qos.target_bitrate,
-                    video_qos.fps
-                );
-                encoder.set_bitrate(video_qos.target_bitrate).unwrap();
-                spf = video_qos.spf();
-            }
+        let mut video_qos = VIDEO_QOS.lock().unwrap();
+        if video_qos.check_if_updated() {
+            log::debug!(
+                "qos is updated, target_bitrate:{}, fps:{}",
+                video_qos.target_bitrate,
+                video_qos.fps
+            );
+            encoder.set_bitrate(video_qos.target_bitrate).unwrap();
+            spf = video_qos.spf();
         }
+        drop(video_qos);
 
         if *SWITCH.lock().unwrap() {
             bail!("SWITCH");
@@ -585,7 +583,7 @@ fn check_privacy_mode_changed(sp: &GenericService, privacy_mode_id: i32) -> Resu
     if privacy_mode_id != privacy_mode_id_2 {
         if privacy_mode_id_2 != 0 {
             let msg_out = crate::common::make_privacy_mode_msg(
-                back_notification::PrivacyModeState::OnByOther,
+                back_notification::PrivacyModeState::PrvOnByOther,
             );
             sp.send_to_others(msg_out, privacy_mode_id_2);
         }
@@ -646,7 +644,7 @@ pub fn handle_one_frame_encoded(
     })?;
     let mut send_conn_ids: HashSet<i32> = Default::default();
     let vp9_frame = EncodedVideoFrame {
-        data: frame.to_vec(),
+        data: frame.to_vec().into(),
         key: true,
         pts: ms,
         ..Default::default()

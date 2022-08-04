@@ -371,7 +371,7 @@ impl Client {
         conn: &mut Stream,
     ) -> ResultType<()> {
         let rs_pk = get_rs_pk(if key.is_empty() {
-            "OeVuKk5nlHiXp+APNn0Y3pC1Iwpwn44JGqrQCsWqmBw="
+            hbb_common::config::RS_PUB_KEY
         } else {
             key
         });
@@ -785,6 +785,7 @@ pub struct LoginConfigHandler {
     features: Option<Features>,
     session_id: u64,
     pub supported_encoding: Option<(bool, bool)>,
+    pub restarting_remote_device: bool,
 }
 
 impl Deref for LoginConfigHandler {
@@ -810,6 +811,7 @@ impl LoginConfigHandler {
         self.config = config;
         self.session_id = rand::random();
         self.supported_encoding = None;
+        self.restarting_remote_device = false;
     }
 
     pub fn should_auto_login(&self) -> String {
@@ -944,10 +946,6 @@ impl LoginConfigHandler {
             msg.lock_after_session_end = BoolOption::Yes.into();
             n += 1;
         }
-        if self.get_toggle_option("privacy-mode") {
-            msg.privacy_mode = BoolOption::Yes.into();
-            n += 1;
-        }
         if self.get_toggle_option("disable-audio") {
             msg.disable_audio = BoolOption::Yes.into();
             n += 1;
@@ -964,6 +962,23 @@ impl LoginConfigHandler {
         msg.video_codec_state = hbb_common::protobuf::MessageField::some(state);
         n += 1;
 
+        if n > 0 {
+            Some(msg)
+        } else {
+            None
+        }
+    }
+
+    pub fn get_option_message_after_login(&self) -> Option<OptionMessage> {
+        if self.is_port_forward || self.is_file_transfer {
+            return None;
+        }
+        let mut n = 0;
+        let mut msg = OptionMessage::new();
+        if self.get_toggle_option("privacy-mode") {
+            msg.privacy_mode = BoolOption::Yes.into();
+            n += 1;
+        }
         if n > 0 {
             Some(msg)
         } else {
@@ -1144,11 +1159,12 @@ impl LoginConfigHandler {
         let my_id = Config::get_id();
         let mut lr = LoginRequest {
             username: self.id.clone(),
-            password:password.into(),
+            password: password.into(),
             my_id,
             my_name: crate::username(),
             option: self.get_option_message(true).into(),
             session_id: self.session_id,
+            version: crate::VERSION.to_string(),
             ..Default::default()
         };
         if self.is_file_transfer {
@@ -1176,6 +1192,14 @@ impl LoginConfigHandler {
             video_codec_state: hbb_common::protobuf::MessageField::some(state),
             ..Default::default()
         });
+        let mut msg_out = Message::new();
+        msg_out.set_misc(misc);
+        msg_out
+    }
+
+    pub fn restart_remote_device(&self) -> Message {
+        let mut misc = Misc::new();
+        misc.set_restart_remote_device(true);
         let mut msg_out = Message::new();
         msg_out.set_misc(misc);
         msg_out
@@ -1334,11 +1358,21 @@ fn _input_os_password(p: String, activate: bool, interface: impl Interface) {
 
 pub async fn handle_hash(
     lc: Arc<RwLock<LoginConfigHandler>>,
+    password_preset: &str,
     hash: Hash,
     interface: &impl Interface,
     peer: &mut Stream,
 ) {
     let mut password = lc.read().unwrap().password.clone();
+    if password.is_empty() {
+        if !password_preset.is_empty() {
+            let mut hasher = Sha256::new();
+            hasher.update(password_preset);
+            hasher.update(&hash.salt);
+            let res = hasher.finalize();
+            password = res[..].into();
+        }
+    }
     if password.is_empty() {
         password = lc.read().unwrap().config.password.clone();
     }
@@ -1384,7 +1418,7 @@ pub trait Interface: Send + Clone + 'static + Sized {
     fn msgbox(&self, msgtype: &str, title: &str, text: &str);
     fn handle_login_error(&mut self, err: &str) -> bool;
     fn handle_peer_info(&mut self, pi: PeerInfo);
-    async fn handle_hash(&mut self, hash: Hash, peer: &mut Stream);
+    async fn handle_hash(&mut self, pass: &str, hash: Hash, peer: &mut Stream);
     async fn handle_login_from_ui(&mut self, password: String, remember: bool, peer: &mut Stream);
     async fn handle_test_delay(&mut self, t: TestDelay, peer: &mut Stream);
 }

@@ -64,6 +64,7 @@ message LoginRequest {
   }
   bool video_ack_required = 9;
   uint64 session_id = 10;
+  string version = 11;
 }
 
 message ChatMessage { string text = 1; }
@@ -434,6 +435,7 @@ message PermissionInfo {
     Clipboard = 2;
     Audio = 3;
     File = 4;
+    Restart = 5;
   }
 
   Permission permission = 1;
@@ -506,33 +508,33 @@ message AudioFrame {
 message BackNotification {
   // no need to consider block input by someone else
   enum BlockInputState {
-    StateUnknown = 1;
-    OnSucceeded = 2;
-    OnFailed = 3;
-    OffSucceeded = 4;
-    OffFailed = 5;
+    BlkStateUnknown = 0;
+    BlkOnSucceeded = 2;
+    BlkOnFailed = 3;
+    BlkOffSucceeded = 4;
+    BlkOffFailed = 5;
   }
   enum PrivacyModeState {
-    StateUnknown = 1;
+    PrvStateUnknown = 0;
     // Privacy mode on by someone else
-    OnByOther = 2;
+    PrvOnByOther = 2;
     // Privacy mode is not supported on the remote side
-    NotSupported = 3;
+    PrvNotSupported = 3;
     // Privacy mode on by self
-    OnSucceeded = 4;
+    PrvOnSucceeded = 4;
     // Privacy mode on by self, but denied
-    OnFailedDenied = 5;
+    PrvOnFailedDenied = 5;
     // Some plugins are not found
-    OnFailedPlugin = 6;
+    PrvOnFailedPlugin = 6;
     // Privacy mode on by self, but failed
-    OnFailed = 7;
+    PrvOnFailed = 7;
     // Privacy mode off by self
-    OffSucceeded = 8;
+    PrvOffSucceeded = 8;
     // Ctrl + P
-    OffByPeer = 9;
+    PrvOffByPeer = 9;
     // Privacy mode off by self, but failed
-    OffFailed = 10;
-    OffUnknown = 11;
+    PrvOffFailed = 10;
+    PrvOffUnknown = 11;
   }
 
   oneof union {
@@ -552,6 +554,7 @@ message Misc {
     bool refresh_video = 10;
     bool video_received = 12;
     BackNotification back_notification = 13;
+    bool restart_remote_device = 14;
   }
 }
 
