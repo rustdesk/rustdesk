@@ -39,7 +39,6 @@ use hbb_common::{
     Stream,
 };
 use hbb_common::{config::TransferSerde, fs::TransferJobMeta};
-use rdev::{Event, EventType::*, Key as RdevKey};
 use hbb_common::{
     fs::{
         can_enable_overwrite_detection, get_job, get_string, new_send_confirm, DigestCheckResult,
@@ -47,6 +46,7 @@ use hbb_common::{
     },
     get_version_number,
 };
+use rdev::{Event, EventType::*, Key as RdevKey, Keyboard as RdevKeyboard, KeyboardState};
 
 #[cfg(windows)]
 use crate::clipboard_file::*;
@@ -61,6 +61,7 @@ lazy_static::lazy_static! {
     static ref ENIGO: Arc<Mutex<Enigo>> = Arc::new(Mutex::new(Enigo::new()));
     static ref VIDEO: Arc<Mutex<Option<Video>>> = Default::default();
     static ref TO_RELEASE: Arc<Mutex<HashSet<RdevKey>>> = Arc::new(Mutex::new(HashSet::<RdevKey>::new()));
+    static ref KEYBOARD: Arc<Mutex<RdevKeyboard>> = Arc::new(Mutex::new(RdevKeyboard::new().unwrap()));
 }
 
 fn get_key_state(key: enigo::Key) -> bool {
@@ -329,9 +330,6 @@ impl Handler {
                     }
                     _ => return,
                 };
-
-                #[cfg(target_os = "windows")]
-                let _key = rdev::get_win_key(evt.code.into(), evt.scan_code);
 
                 me.key_down_or_up(down, _key, evt);
             };
@@ -793,7 +791,7 @@ impl Handler {
 
     fn leave(&mut self) {
         for key in TO_RELEASE.lock().unwrap().iter() {
-            self.map_keyboard_mode(false, *key)
+            self.map_keyboard_mode(false, *key, None)
         }
         #[cfg(windows)]
         crate::platform::windows::stop_system_key_propagate(false);
@@ -1044,8 +1042,15 @@ impl Handler {
         }
     }
 
-    fn map_keyboard_mode(&mut self, down_or_up: bool, key: RdevKey) {
+    fn map_keyboard_mode(&mut self, down_or_up: bool, key: RdevKey, _evt: Option<Event>) {
         // map mode(1): Send keycode according to the peer platform.
+        #[cfg(target_os = "windows")]
+        let key = if let Some(e) = _evt {
+            rdev::get_win_key(e.code.into(), e.scan_code)
+        } else {
+            key
+        };
+
         let peer = self.peer_platform();
 
         let mut key_event = KeyEvent::new();
@@ -1073,9 +1078,66 @@ impl Handler {
         self.send_key_event(key_event, KeyboardMode::Map);
     }
 
-    // fn translate_keyboard_mode(&mut self, down_or_up: bool, key: RdevKey) {
-    //     // translate mode(2): locally generated characters are send to the peer.
-    // }
+    fn translate_keyboard_mode(&mut self, down_or_up: bool, key: RdevKey, evt: Event) {
+        // translate mode(2): locally generated characters are send to the peer.
+
+        // get char
+        let string = match KEYBOARD.lock() {
+            Ok(mut keyboard) => {
+                let string = keyboard.add(&evt.event_type).unwrap_or_default();
+                #[cfg(target_os = "windows")]
+                let is_dead = keyboard.last_is_dead;
+                #[cfg(target_os = "linux")]
+                let is_dead = keyboard.is_dead();
+                if is_dead && string == "" && down_or_up == true {
+                    return;
+                }
+                string
+            }
+            Err(_) => "".to_owned(),
+        };
+
+        // maybe two string
+        let chars = if string == "" {
+            None
+        } else {
+            let chars: Vec<char> = string.chars().collect();
+            Some(chars)
+        };
+
+        if let Some(chars) = chars {
+            for chr in chars {
+                dbg!(chr);
+
+                let mut key_event = KeyEvent::new();
+                key_event.set_chr(chr as _);
+                key_event.down = true;
+                self.send_key_event(key_event, KeyboardMode::Translate);
+
+                let mut key_event = KeyEvent::new();
+                key_event.set_chr(chr as _);
+                key_event.down = false;
+                self.send_key_event(key_event, KeyboardMode::Translate);
+            }
+        } else {
+            if down_or_up == true {
+                TO_RELEASE.lock().unwrap().insert(key);
+            } else {
+                TO_RELEASE.lock().unwrap().remove(&key);
+            }
+            // algr without action
+            // Control left
+            if key == RdevKey::AltGr || evt.scan_code == 541 {
+                return;
+            }
+            // Caps affects the keycode map of the peer system(Linux).
+            if key == RdevKey::CapsLock {
+                return;
+            }
+            dbg!(key);
+            self.map_keyboard_mode(down_or_up, key, None);
+        }
+    }
 
     fn legacy_modifiers(
         &self,
@@ -1335,6 +1397,7 @@ impl Handler {
         let mode = match self.get_keyboard_mode().as_str() {
             "map" => KeyboardMode::Map,
             "legacy" => KeyboardMode::Legacy,
+            "translate" => KeyboardMode::Translate,
             _ => KeyboardMode::Legacy,
         };
 
@@ -1345,9 +1408,12 @@ impl Handler {
                 } else {
                     TO_RELEASE.lock().unwrap().remove(&key);
                 }
-                self.map_keyboard_mode(down_or_up, key);
+                self.map_keyboard_mode(down_or_up, key, Some(evt));
             }
             KeyboardMode::Legacy => self.legacy_keyboard_mode(down_or_up, key, evt),
+            KeyboardMode::Translate => {
+                self.translate_keyboard_mode(down_or_up, key, evt);
+            }
             _ => self.legacy_keyboard_mode(down_or_up, key, evt),
         }
     }

@@ -9,6 +9,7 @@ use std::{
     sync::atomic::{AtomicBool, Ordering},
     time::Instant,
 };
+use tfc::{traits::*, Context};
 
 #[derive(Default)]
 struct StateCursor {
@@ -179,6 +180,7 @@ lazy_static::lazy_static! {
     };
     static ref KEYS_DOWN: Arc<Mutex<HashMap<u64, Instant>>> = Default::default();
     static ref LATEST_INPUT: Arc<Mutex<Input>> = Default::default();
+    static ref KBD_CONTEXT: Mutex<Context> = Mutex::new(Context::new().expect("kbd context error"));
 }
 static EXITING: AtomicBool = AtomicBool::new(false);
 
@@ -819,6 +821,19 @@ fn legacy_keyboard_mode(evt: &KeyEvent) {
     }
 }
 
+fn translate_keyboard_mode(evt: &KeyEvent) {
+    // Caps affects the keycode map of the peer system(Linux).
+    let mut en = ENIGO.lock().unwrap();
+    if en.get_key_state(Key::CapsLock){
+        rdev_key_click(RdevKey::CapsLock);
+    }
+    let chr = char::from_u32(evt.chr()).unwrap_or_default();
+    if evt.down {
+        KBD_CONTEXT.lock().unwrap().unicode_char_down(chr).expect("unicode_char_down error");
+    } else {
+        KBD_CONTEXT.lock().unwrap().unicode_char_up(chr).expect("unicode_char_up error");
+    }
+}
 
 fn handle_key_(evt: &KeyEvent) {
     if EXITING.load(Ordering::SeqCst) {
@@ -831,6 +846,9 @@ fn handle_key_(evt: &KeyEvent) {
         }
         KeyboardMode::Map => {
             map_keyboard_mode(evt);
+        }
+        KeyboardMode::Translate => {
+            translate_keyboard_mode(evt);
         }
         _ => {
             legacy_keyboard_mode(evt);
