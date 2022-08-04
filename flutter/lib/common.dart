@@ -364,7 +364,9 @@ late FFI _globalFFI;
 FFI get gFFI => _globalFFI;
 
 Future<void> initGlobalFFI() async {
+  debugPrint("_globalFFI init");
   _globalFFI = FFI();
+  debugPrint("_globalFFI init end");
   // after `put`, can also be globally found by Get.find<FFI>();
   Get.put(_globalFFI, permanent: true);
   // trigger connection status updater

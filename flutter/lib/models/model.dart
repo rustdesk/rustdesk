@@ -73,7 +73,7 @@ class FfiModel with ChangeNotifier {
 
   void updatePermission(Map<String, dynamic> evt) {
     evt.forEach((k, v) {
-      if (k == 'name') return;
+      if (k == 'name' || k.isEmpty) return;
       _permissions[k] = v == 'true';
     });
     print('$_permissions');
@@ -224,6 +224,8 @@ class FfiModel with ChangeNotifier {
         parent.target?.serverModel.onClientAuthorized(evt);
       } else if (name == 'on_client_remove') {
         parent.target?.serverModel.onClientRemove(evt);
+      } else if (name == 'update_quality_status') {
+        parent.target?.qualityMonitorModel.updateQualityStatus(evt);
       }
     };
     platformFFI.setEventCallback(cb);
@@ -256,6 +258,8 @@ class FfiModel with ChangeNotifier {
       wrongPasswordDialog(id);
     } else if (type == 'input-password') {
       enterPasswordDialog(id);
+    } else if (type == 'restarting') {
+      showMsgBox(id, type, title, text, false, hasCancel: false);
     } else {
       var hasRetry = evt['hasRetry'] == 'true';
       showMsgBox(id, type, title, text, hasRetry);
@@ -264,8 +268,9 @@ class FfiModel with ChangeNotifier {
 
   /// Show a message box with [type], [title] and [text].
   void showMsgBox(
-      String id, String type, String title, String text, bool hasRetry) {
-    msgBox(type, title, text);
+      String id, String type, String title, String text, bool hasRetry,
+      {bool? hasCancel}) {
+    msgBox(type, title, text, hasCancel: hasCancel);
     _timer?.cancel();
     if (hasRetry) {
       _timer = Timer(Duration(seconds: _reconnects), () {
@@ -784,6 +789,47 @@ class CursorModel with ChangeNotifier {
   }
 }
 
+class QualityMonitorData {
+  String? speed;
+  String? fps;
+  String? delay;
+  String? targetBitrate;
+  String? codecFormat;
+}
+
+class QualityMonitorModel with ChangeNotifier {
+  WeakReference<FFI> parent;
+
+  QualityMonitorModel(this.parent);
+  var _show = false;
+  final _data = QualityMonitorData();
+
+  bool get show => _show;
+  QualityMonitorData get data => _data;
+
+  checkShowQualityMonitor() {
+    final show =
+        gFFI.getByName('toggle_option', 'show-quality-monitor') == 'true';
+    if (_show != show) {
+      _show = show;
+      notifyListeners();
+    }
+  }
+
+  updateQualityStatus(Map<String, dynamic> evt) {
+    try {
+      if ((evt["speed"] as String).isNotEmpty) _data.speed = evt["speed"];
+      if ((evt["fps"] as String).isNotEmpty) _data.fps = evt["fps"];
+      if ((evt["delay"] as String).isNotEmpty) _data.delay = evt["delay"];
+      if ((evt["target_bitrate"] as String).isNotEmpty)
+        _data.targetBitrate = evt["target_bitrate"];
+      if ((evt["codec_format"] as String).isNotEmpty)
+        _data.codecFormat = evt["codec_format"];
+      notifyListeners();
+    } catch (e) {}
+  }
+}
+
 /// Mouse button enum.
 enum MouseButtons { left, right, wheel }
 
@@ -817,6 +863,7 @@ class FFI {
   late final FileModel fileModel;
   late final AbModel abModel;
   late final UserModel userModel;
+  late final QualityMonitorModel qualityMonitorModel;
 
   FFI() {
     this.imageModel = ImageModel(WeakReference(this));
@@ -828,6 +875,7 @@ class FFI {
     this.fileModel = FileModel(WeakReference(this));
     this.abModel = AbModel(WeakReference(this));
     this.userModel = UserModel(WeakReference(this));
+    this.qualityMonitorModel = QualityMonitorModel(WeakReference(this));
   }
 
   /// Get the remote id for current client.

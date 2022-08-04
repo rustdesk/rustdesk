@@ -32,8 +32,12 @@ lazy_static::lazy_static! {
     pub static ref UI_STATUS : Arc<Mutex<Status>> = Arc::new(Mutex::new((0, false, 0, "".to_owned())));
     pub static ref OPTIONS : Arc<Mutex<HashMap<String, String>>> = Arc::new(Mutex::new(Config::get_options()));
     pub static ref ASYNC_JOB_STATUS : Arc<Mutex<String>> = Default::default();
-    pub static ref SENDER : Mutex<mpsc::UnboundedSender<ipc::Data>> = Mutex::new(check_connect_status(true));
     pub static ref TEMPORARY_PASSWD : Arc<Mutex<String>> = Arc::new(Mutex::new("".to_owned()));
+}
+
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+lazy_static::lazy_static! {
+    pub static ref SENDER : Mutex<mpsc::UnboundedSender<ipc::Data>> = Mutex::new(check_connect_status(true));
 }
 
 pub fn recent_sessions_updated() -> bool {
@@ -47,7 +51,10 @@ pub fn recent_sessions_updated() -> bool {
 }
 
 pub fn get_id() -> String {
-    ipc::get_id()
+    #[cfg(any(target_os = "android", target_os = "ios"))]
+    return Config::get_id();
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    return ipc::get_id();
 }
 
 pub fn get_remote_id() -> String {
@@ -132,7 +139,7 @@ pub fn get_license() -> String {
 
 pub fn get_option(key: String) -> String {
     #[cfg(any(target_os = "android", target_os = "ios"))]
-    return Config::get_option(arg);
+    return Config::get_option(&key);
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     return get_option_(&key);
 }
@@ -243,13 +250,16 @@ pub fn get_sound_inputs() -> Vec<String> {
 }
 
 pub fn set_options(m: HashMap<String, String>) {
-    *OPTIONS.lock().unwrap() = m.clone();
-    ipc::set_options(m).ok();
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    {
+        *OPTIONS.lock().unwrap() = m.clone();
+        ipc::set_options(m).ok();
+    }
 }
 
 pub fn set_option(key: String, value: String) {
     #[cfg(any(target_os = "android", target_os = "ios"))]
-    Config::set_option(name.to_owned(), value.to_owned());
+    Config::set_option(key, value);
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     {
         let mut options = OPTIONS.lock().unwrap();
@@ -277,20 +287,26 @@ pub fn install_path() -> String {
 }
 
 pub fn get_socks() -> Vec<String> {
-    let s = ipc::get_socks();
-    match s {
-        None => Vec::new(),
-        Some(s) => {
-            let mut v = Vec::new();
-            v.push(s.proxy);
-            v.push(s.username);
-            v.push(s.password);
-            v
+    #[cfg(any(target_os = "android", target_os = "ios"))]
+    return Vec::new();
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    {
+        let s = ipc::get_socks();
+        match s {
+            None => Vec::new(),
+            Some(s) => {
+                let mut v = Vec::new();
+                v.push(s.proxy);
+                v.push(s.username);
+                v.push(s.password);
+                v
+            }
         }
     }
 }
 
 pub fn set_socks(proxy: String, username: String, password: String) {
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
     ipc::set_socks(config::Socks5Server {
         proxy,
         username,
@@ -357,6 +373,7 @@ pub fn get_mouse_time() -> f64 {
     return res;
 }
 
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub fn check_mouse_time() {
     let sender = SENDER.lock().unwrap();
     allow_err!(sender.send(ipc::Data::MouseMoveTime(0)));

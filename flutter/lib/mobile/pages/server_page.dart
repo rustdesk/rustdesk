@@ -200,7 +200,8 @@ class ServerInfo extends StatelessWidget {
                   Icon(Icons.warning_amber_sharp,
                       color: Colors.redAccent, size: 24),
                   SizedBox(width: 10),
-                  Text(
+                  Expanded(
+                      child: Text(
                     translate("Service is not running"),
                     style: TextStyle(
                       fontFamily: 'WorkSans',
@@ -208,7 +209,7 @@ class ServerInfo extends StatelessWidget {
                       fontSize: 18,
                       color: MyTheme.accent80,
                     ),
-                  )
+                  ))
                 ],
               )),
               SizedBox(height: 5),
@@ -316,30 +317,35 @@ class PermissionRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Row(
-          children: [
-            SizedBox(
-                width: 140,
+        Expanded(
+            flex: 5,
+            child: FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerLeft,
                 child: Text(name,
-                    style: TextStyle(fontSize: 16.0, color: MyTheme.accent50))),
-            SizedBox(
-              width: 50,
+                    style:
+                        TextStyle(fontSize: 16.0, color: MyTheme.accent50)))),
+        Expanded(
+          flex: 2,
+          child: FittedBox(
+              fit: BoxFit.scaleDown,
               child: Text(isOk ? translate("ON") : translate("OFF"),
                   style: TextStyle(
                       fontSize: 16.0,
-                      color: isOk ? Colors.green : Colors.grey)),
-            )
-          ],
+                      color: isOk ? Colors.green : Colors.grey))),
         ),
-        TextButton(
-            onPressed: onPressed,
-            child: Text(
-              translate(isOk ? "CLOSE" : "OPEN"),
-              style: TextStyle(fontWeight: FontWeight.bold),
-            )),
-        const Divider(height: 0)
+        Expanded(
+            flex: 3,
+            child: FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerRight,
+                child: TextButton(
+                    onPressed: onPressed,
+                    child: Text(
+                      translate(isOk ? "CLOSE" : "OPEN"),
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    )))),
       ],
     );
   }

@@ -3,7 +3,10 @@ use std::{
     time::Instant,
 };
 
-use hbb_common::{log, message_proto::{VideoFrame, video_frame}};
+use hbb_common::{
+    log,
+    message_proto::{video_frame, VideoFrame},
+};
 
 const MAX_LATENCY: i64 = 500;
 const MIN_LATENCY: i64 = 100;
@@ -88,4 +91,13 @@ impl ToString for CodecFormat {
             CodecFormat::Unknown => "Unknow".into(),
         }
     }
+}
+
+#[derive(Debug, Default)]
+pub struct QualityStatus {
+    pub speed: Option<String>,
+    pub fps: Option<i32>,
+    pub delay: Option<i32>,
+    pub target_bitrate: Option<i32>,
+    pub codec_format: Option<CodecFormat>,
 }

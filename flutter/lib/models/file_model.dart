@@ -323,6 +323,7 @@ class FileModel extends ChangeNotifier {
 
   onClose() {
     SmartDialog.dismiss();
+    jobReset();
 
     // save config
     Map<String, String> msgMap = Map();

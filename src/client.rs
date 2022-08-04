@@ -1033,10 +1033,6 @@ impl LoginConfigHandler {
             msg.lock_after_session_end = BoolOption::Yes.into();
             n += 1;
         }
-        if self.get_toggle_option("privacy-mode") {
-            msg.privacy_mode = BoolOption::Yes.into();
-            n += 1;
-        }
         if self.get_toggle_option("disable-audio") {
             msg.disable_audio = BoolOption::Yes.into();
             n += 1;
@@ -1053,6 +1049,23 @@ impl LoginConfigHandler {
         msg.video_codec_state = hbb_common::protobuf::MessageField::some(state);
         n += 1;
 
+        if n > 0 {
+            Some(msg)
+        } else {
+            None
+        }
+    }
+
+    pub fn get_option_message_after_login(&self) -> Option<OptionMessage> {
+        if self.is_port_forward || self.is_file_transfer {
+            return None;
+        }
+        let mut n = 0;
+        let mut msg = OptionMessage::new();
+        if self.get_toggle_option("privacy-mode") {
+            msg.privacy_mode = BoolOption::Yes.into();
+            n += 1;
+        }
         if n > 0 {
             Some(msg)
         } else {
@@ -1267,7 +1280,7 @@ impl LoginConfigHandler {
     /// Create a [`Message`] for login.
     fn create_login_msg(&self, password: Vec<u8>) -> Message {
         #[cfg(any(target_os = "android", target_os = "ios"))]
-        let my_id = Config::get_id_or(crate::common::MOBILE_INFO1.lock().unwrap().clone());
+        let my_id = Config::get_id_or(crate::common::FLUTTER_INFO1.lock().unwrap().clone());
         #[cfg(not(any(target_os = "android", target_os = "ios")))]
         let my_id = Config::get_id();
         let mut lr = LoginRequest {
@@ -1277,6 +1290,7 @@ impl LoginConfigHandler {
             my_name: crate::username(),
             option: self.get_option_message(true).into(),
             session_id: self.session_id,
+            version: crate::VERSION.to_string(),
             ..Default::default()
         };
         if self.is_file_transfer {

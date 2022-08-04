@@ -23,10 +23,6 @@ use clipboard::{
     get_rx_clip_client, server_clip_file,
 };
 use enigo::{self, Enigo, KeyboardControllable};
-use hbb_common::fs::{
-    can_enable_overwrite_detection, get_job, get_string, new_send_confirm, DigestCheckResult,
-    RemoveJobMeta,
-};
 use hbb_common::{
     allow_err,
     config::{Config, LocalConfig, PeerConfig},
@@ -43,6 +39,13 @@ use hbb_common::{
     Stream,
 };
 use hbb_common::{config::TransferSerde, fs::TransferJobMeta};
+use hbb_common::{
+    fs::{
+        can_enable_overwrite_detection, get_job, get_string, new_send_confirm, DigestCheckResult,
+        RemoveJobMeta,
+    },
+    get_version_number,
+};
 
 #[cfg(windows)]
 use crate::clipboard_file::*;
@@ -237,15 +240,6 @@ impl sciter::EventHandler for Handler {
         fn change_prefer_codec();
         fn restart_remote_device();
     }
-}
-
-#[derive(Debug, Default)]
-struct QualityStatus {
-    speed: Option<String>,
-    fps: Option<i32>,
-    delay: Option<i32>,
-    target_bitrate: Option<i32>,
-    codec_format: Option<CodecFormat>,
 }
 
 impl Handler {
@@ -638,8 +632,9 @@ impl Handler {
     }
 
     fn restart_remote_device(&mut self) {
-        self.lc.write().unwrap().restarting_remote_device = true;
-        let msg = self.lc.write().unwrap().restart_remote_device();
+        let mut lc = self.lc.write().unwrap();
+        lc.restarting_remote_device = true;
+        let msg = lc.restart_remote_device();
         self.send(Data::Message(msg));
     }
 
@@ -2076,6 +2071,22 @@ impl Remote {
         true
     }
 
+    async fn send_opts_after_login(&self, peer: &mut Stream) {
+        if let Some(opts) = self
+        .handler
+        .lc
+        .read()
+        .unwrap()
+        .get_option_message_after_login()
+    {
+        let mut misc = Misc::new();
+        misc.set_option(opts);
+        let mut msg_out = Message::new();
+        msg_out.set_misc(misc);
+        allow_err!(peer.send(&msg_out).await);
+    }
+    }
+
     async fn handle_msg_from_peer(&mut self, data: &[u8], peer: &mut Stream) -> bool {
         if let Ok(msg_in) = Message::parse_from_bytes(&data) {
             match msg_in.union {
@@ -2084,6 +2095,7 @@ impl Remote {
                         self.first_frame = true;
                         self.handler.call2("closeSuccess", &make_args!());
                         self.handler.call("adaptSize", &make_args!());
+                        self.send_opts_after_login(peer).await;
                     }
                     let incomming_format = CodecFormat::from(&vf);
                     if self.video_format != incomming_format {
@@ -2595,6 +2607,9 @@ impl Interface for Handler {
         pi_sciter.set_item("hostname", pi.hostname.clone());
         pi_sciter.set_item("platform", pi.platform.clone());
         pi_sciter.set_item("sas_enabled", pi.sas_enabled);
+        if get_version_number(&pi.version) < get_version_number("1.1.10") {
+            self.call2("setPermission", &make_args!("restart", false));
+        }
         if self.is_file_transfer() {
             if pi.username.is_empty() {
                 self.on_error("No active console user logged on, please connect and logon first.");

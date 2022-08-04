@@ -441,7 +441,7 @@ pub fn username() -> String {
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     return whoami::username().trim_end_matches('\0').to_owned();
     #[cfg(any(target_os = "android", target_os = "ios"))]
-    return MOBILE_INFO2.lock().unwrap().clone();
+    return FLUTTER_INFO2.lock().unwrap().clone();
 }
 
 #[inline]
