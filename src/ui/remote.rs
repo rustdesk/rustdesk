@@ -1189,7 +1189,7 @@ impl Handler {
         let alt = get_key_state(enigo::Key::Alt);
         #[cfg(windows)]
         let ctrl = {
-            let mut tmp = get_key_state(enigo::Key::Control);
+            let mut tmp = get_key_state(enigo::Key::Control) || get_key_state(enigo::Key::RightControl);
             unsafe {
                 if IS_ALT_GR {
                     if alt || key == RdevKey::AltGr {
@@ -1204,8 +1204,8 @@ impl Handler {
             tmp
         };
         #[cfg(not(windows))]
-        let ctrl = get_key_state(enigo::Key::Control);
-        let shift = get_key_state(enigo::Key::Shift);
+        let ctrl = get_key_state(enigo::Key::Control) || get_key_state(enigo::Key::RightControl);
+        let shift = get_key_state(enigo::Key::Shift) || get_key_state(enigo::Key::RightShift);
         #[cfg(windows)]
         let command = crate::platform::windows::get_win_key_state();
         #[cfg(not(windows))]
@@ -1389,6 +1389,7 @@ impl Handler {
         if down_or_up == true {
             key_event.down = true;
         }
+        dbg!(&key_event);
         self.send_key_event(key_event, KeyboardMode::Legacy)
     }
 

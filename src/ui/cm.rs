@@ -1,5 +1,4 @@
 use crate::ipc::{self, new_listener, Connection, Data};
-use crate::VERSION;
 #[cfg(windows)]
 use clipboard::{
     create_cliprdr_context, empty_clipboard, get_rx_clip_client, server_clip_file, set_conn_enabled,
