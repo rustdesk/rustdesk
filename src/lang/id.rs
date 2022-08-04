@@ -302,6 +302,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Connection not allowed", ""),
         ("Legacy mode", ""),
         ("Map mode", ""),
+        ("Translate mode", ""),
         ("Connection not allowed", "Koneksi tidak dijinkan"),
         ("Use temporary password", "Gunakan kata sandi sementara"),
         ("Use permanent password", "Gunakan kata sandi permanaen"),
