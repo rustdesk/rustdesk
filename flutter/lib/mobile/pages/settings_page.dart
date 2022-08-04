@@ -27,11 +27,11 @@ class SettingsPage extends StatefulWidget implements PageShape {
   _SettingsState createState() => _SettingsState();
 }
 
-class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
-  static const url = 'https://rustdesk.com/';
-  final _hasIgnoreBattery = androidVersion >= 26;
-  var _ignoreBatteryOpt = false;
+const url = 'https://rustdesk.com/';
+final _hasIgnoreBattery = androidVersion >= 26;
+var _ignoreBatteryOpt = false;
 
+class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
   @override
   void initState() {
     super.initState();
@@ -147,6 +147,12 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
               leading: Icon(Icons.cloud),
               onPressed: (context) {
                 showServerSettings();
+              }),
+          SettingsTile.navigation(
+              title: Text(translate('Language')),
+              leading: Icon(Icons.translate),
+              onPressed: (context) {
+                showLanguageSettings();
               })
         ]),
         SettingsSection(
@@ -184,6 +190,42 @@ void showServerSettings() {
   final api = gFFI.getByName('option', 'api-server');
   final key = gFFI.getByName('option', 'key');
   showServerSettingsWithValue(id, relay, key, api);
+}
+
+void showLanguageSettings() {
+  try {
+    final langs = json.decode(gFFI.getByName('langs')) as List<dynamic>;
+    var lang = gFFI.getByName('local_option', 'lang');
+    DialogManager.show((setState, close) {
+      final setLang = (v) {
+        if (lang != v) {
+          setState(() {
+            lang = v;
+          });
+          final msg = Map()
+            ..['name'] = 'lang'
+            ..['value'] = v;
+          gFFI.setByName('local_option', json.encode(msg));
+          homeKey.currentState?.refreshPages();
+          Future.delayed(Duration(milliseconds: 200), close);
+        }
+      };
+      return CustomAlertDialog(
+          title: SizedBox.shrink(),
+          content: Column(
+            children: [
+                  getRadio('Default', '', lang, setLang),
+                  Divider(color: MyTheme.border),
+                ] +
+                langs.map((e) {
+                  final key = e[0] as String;
+                  final name = e[1] as String;
+                  return getRadio(name, key, lang, setLang);
+                }).toList(),
+          ),
+          actions: []);
+    }, backDismiss: true, clickMaskDismiss: true);
+  } catch (_e) {}
 }
 
 void showAbout() {

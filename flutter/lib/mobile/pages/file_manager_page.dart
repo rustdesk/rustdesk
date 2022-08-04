@@ -29,6 +29,7 @@ class _FileManagerPageState extends State<FileManagerPage> {
   void initState() {
     super.initState();
     gFFI.connect(widget.id, isFileTransfer: true);
+    showLoading(translate('Connecting...'));
     gFFI.ffiModel.updateEventListener(widget.id);
     Wakelock.enable();
   }

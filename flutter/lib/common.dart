@@ -119,9 +119,9 @@ class DialogManager {
 
   static Future<T?> show<T>(DialogBuilder builder,
       {bool clickMaskDismiss = false,
-        bool backDismiss = false,
-        String? tag,
-        bool useAnimation = true}) async {
+      bool backDismiss = false,
+      String? tag,
+      bool useAnimation = true}) async {
     final t;
     if (tag != null) {
       t = tag;
@@ -146,10 +146,11 @@ class DialogManager {
 }
 
 class CustomAlertDialog extends StatelessWidget {
-  CustomAlertDialog({required this.title,
-    required this.content,
-    required this.actions,
-    this.contentPadding});
+  CustomAlertDialog(
+      {required this.title,
+      required this.content,
+      required this.actions,
+      this.contentPadding});
 
   final Widget title;
   final Widget content;
@@ -162,7 +163,7 @@ class CustomAlertDialog extends StatelessWidget {
       scrollable: true,
       title: title,
       contentPadding:
-      EdgeInsets.symmetric(horizontal: contentPadding ?? 25, vertical: 10),
+          EdgeInsets.symmetric(horizontal: contentPadding ?? 25, vertical: 10),
       content: content,
       actions: actions,
     );
@@ -361,7 +362,9 @@ late FFI _globalFFI;
 FFI get gFFI => _globalFFI;
 
 Future<void> initGlobalFFI() async {
+  debugPrint("_globalFFI init");
   _globalFFI = FFI();
+  debugPrint("_globalFFI init end");
   // after `put`, can also be globally found by Get.find<FFI>();
   Get.put(_globalFFI, permanent: true);
   await _globalFFI.ffiModel.init();

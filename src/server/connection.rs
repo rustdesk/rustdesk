@@ -1099,8 +1099,9 @@ impl Connection {
                             }
                             Some(file_action::Union::Send(s)) => {
                                 let id = s.id;
-                                let od =
-                                    can_enable_overwrite_detection(get_version_number(VERSION));
+                                let od = can_enable_overwrite_detection(get_version_number(
+                                    &self.lr.version,
+                                ));
                                 let path = s.path.clone();
                                 match fs::TransferJob::new_read(
                                     id,
@@ -1123,6 +1124,11 @@ impl Connection {
                                 }
                             }
                             Some(file_action::Union::Receive(r)) => {
+                                // note: 1.1.10 introduced identical file detection, which breaks original logic of send/recv files
+                                // whenever got send/recv request, check peer version to ensure old version of rustdesk
+                                let od = can_enable_overwrite_detection(get_version_number(
+                                    &self.lr.version,
+                                ));
                                 self.send_fs(ipc::FS::NewWrite {
                                     path: r.path,
                                     id: r.id,
@@ -1133,6 +1139,7 @@ impl Connection {
                                         .drain(..)
                                         .map(|f| (f.name, f.modified_time))
                                         .collect(),
+                                    overwrite_detection: od,
                                 });
                             }
                             Some(file_action::Union::RemoveDir(d)) => {

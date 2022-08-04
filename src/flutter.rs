@@ -1,6 +1,9 @@
 use std::{
     collections::{HashMap, VecDeque},
-    sync::{Arc, Mutex, RwLock},
+    sync::{
+        atomic::{AtomicUsize, Ordering},
+        Arc, Mutex, RwLock,
+    },
 };
 
 use flutter_rust_bridge::{StreamSink, ZeroCopyBuffer};
@@ -114,6 +117,9 @@ impl Session {
         }
         lc.set_option(name, value);
     }
+    // TODO
+    // input_os_password
+    // restart_remote_device
 
     /// Input the OS password.
     pub fn input_os_password(&self, pass: String, activate: bool) {
@@ -505,6 +511,26 @@ impl Session {
             }
         }
     }
+
+    fn update_quality_status(&self, status: QualityStatus) {
+        const NULL: String = String::new();
+        self.push_event(
+            "update_quality_status",
+            vec![
+                ("speed", &status.speed.map_or(NULL, |it| it)),
+                ("fps", &status.fps.map_or(NULL, |it| it.to_string())),
+                ("delay", &status.delay.map_or(NULL, |it| it.to_string())),
+                (
+                    "target_bitrate",
+                    &status.target_bitrate.map_or(NULL, |it| it.to_string()),
+                ),
+                (
+                    "codec_format",
+                    &status.codec_format.map_or(NULL, |it| it.to_string()),
+                ),
+            ],
+        );
+    }
 }
 
 impl FileManager for Session {}
@@ -599,7 +625,14 @@ impl Interface for Session {
     }
 
     async fn handle_test_delay(&mut self, t: TestDelay, peer: &mut Stream) {
-        handle_test_delay(t, peer).await;
+        if !t.from_client {
+            self.update_quality_status(QualityStatus {
+                delay: Some(t.last_delay as _),
+                target_bitrate: Some(t.target_bitrate as _),
+                ..Default::default()
+            });
+            handle_test_delay(t, peer).await;
+        }
     }
 }
 
@@ -614,6 +647,9 @@ struct Connection {
     write_jobs: Vec<fs::TransferJob>,
     timer: Interval,
     last_update_jobs_status: (Instant, HashMap<i32, u64>),
+    data_count: Arc<AtomicUsize>,
+    frame_count: Arc<AtomicUsize>,
+    video_format: CodecFormat,
 }
 
 impl Connection {
@@ -646,6 +682,9 @@ impl Connection {
             write_jobs: Vec::new(),
             timer: time::interval(SEC30),
             last_update_jobs_status: (Instant::now(), Default::default()),
+            data_count: Arc::new(AtomicUsize::new(0)),
+            frame_count: Arc::new(AtomicUsize::new(0)),
+            video_format: CodecFormat::Unknown,
         };
         let key = Config::get_option("key");
         let token = Config::get_option("access_token");
@@ -659,6 +698,9 @@ impl Connection {
                         ("direct", &direct.to_string()),
                     ],
                 );
+
+                let mut status_timer = time::interval(Duration::new(1, 0));
+
                 loop {
                     tokio::select! {
                         res = peer.next() => {
@@ -671,14 +713,20 @@ impl Connection {
                                     }
                                     Ok(ref bytes) => {
                                         last_recv_time = Instant::now();
+                                        conn.data_count.fetch_add(bytes.len(), Ordering::Relaxed);
                                         if !conn.handle_msg_from_peer(bytes, &mut peer).await {
                                             break
                                         }
                                     }
                                 }
                             } else {
-                                log::info!("Reset by the peer");
-                                session.msgbox("error", "Connection Error", "Reset by the peer");
+                                if session.lc.read().unwrap().restarting_remote_device {
+                                    log::info!("Restart remote device");
+                                    session.msgbox("restarting", "Restarting Remote Device", "remote_restarting_tip");
+                                } else {
+                                    log::info!("Reset by the peer");
+                                    session.msgbox("error", "Connection Error", "Reset by the peer");
+                                }
                                 break;
                             }
                         }
@@ -704,6 +752,16 @@ impl Connection {
                                 conn.timer = time::interval_at(Instant::now() + SEC30, SEC30);
                             }
                         }
+                        _ = status_timer.tick() => {
+                            let speed = conn.data_count.swap(0, Ordering::Relaxed);
+                            let speed = format!("{:.2}kB/s", speed as f32 / 1024 as f32);
+                            let fps = conn.frame_count.swap(0, Ordering::Relaxed) as _;
+                            conn.session.update_quality_status(QualityStatus {
+                                speed:Some(speed),
+                                fps:Some(fps),
+                                ..Default::default()
+                            });
+                        }
                     }
                 }
                 log::debug!("Exit io_loop of id={}", session.id);
@@ -725,6 +783,14 @@ impl Connection {
                     if !self.first_frame {
                         self.first_frame = true;
                     }
+                    let incomming_format = CodecFormat::from(&vf);
+                    if self.video_format != incomming_format {
+                        self.video_format = incomming_format.clone();
+                        self.session.update_quality_status(QualityStatus {
+                            codec_format: Some(incomming_format),
+                            ..Default::default()
+                        })
+                    };
                     if let Ok(true) = self.video_handler.handle_frame(vf) {
                         let stream = self.session.events2ui.read().unwrap();
                         stream.add(EventToUI::Rgba(ZeroCopyBuffer(
@@ -786,113 +852,114 @@ impl Connection {
                         vec![("x", &cp.x.to_string()), ("y", &cp.y.to_string())],
                     );
                 }
-                Some(message::Union::FileResponse(fr)) => match fr.union {
-                    Some(file_response::Union::Dir(fd)) => {
-                        let mut entries = fd.entries.to_vec();
-                        if self.session.peer_platform() == "Windows" {
-                            fs::transform_windows_path(&mut entries);
-                        }
-                        let id = fd.id;
-                        self.session.push_event(
-                            "file_dir",
-                            vec![("value", &make_fd_to_json(fd)), ("is_local", "false")],
-                        );
-                        if let Some(job) = fs::get_job(id, &mut self.write_jobs) {
-                            job.set_files(entries);
-                        }
-                    }
-                    Some(file_response::Union::Block(block)) => {
-                        if let Some(job) = fs::get_job(block.id, &mut self.write_jobs) {
-                            if let Err(_err) = job.write(block, None).await {
-                                // to-do: add "skip" for writing job
+                Some(message::Union::FileResponse(fr)) => {
+                    match fr.union {
+                        Some(file_response::Union::Dir(fd)) => {
+                            let mut entries = fd.entries.to_vec();
+                            if self.session.peer_platform() == "Windows" {
+                                fs::transform_windows_path(&mut entries);
                             }
-                            self.update_jobs_status();
+                            let id = fd.id;
+                            self.session.push_event(
+                                "file_dir",
+                                vec![("value", &make_fd_to_json(fd)), ("is_local", "false")],
+                            );
+                            if let Some(job) = fs::get_job(id, &mut self.write_jobs) {
+                                job.set_files(entries);
+                            }
                         }
-                    }
-                    Some(file_response::Union::Done(d)) => {
-                        if let Some(job) = fs::get_job(d.id, &mut self.write_jobs) {
-                            job.modify_time();
-                            fs::remove_job(d.id, &mut self.write_jobs);
+                        Some(file_response::Union::Block(block)) => {
+                            if let Some(job) = fs::get_job(block.id, &mut self.write_jobs) {
+                                if let Err(_err) = job.write(block, None).await {
+                                    // to-do: add "skip" for writing job
+                                }
+                                self.update_jobs_status();
+                            }
                         }
-                        self.handle_job_status(d.id, d.file_num, None);
-                    }
-                    Some(file_response::Union::Error(e)) => {
-                        self.handle_job_status(e.id, e.file_num, Some(e.error));
-                    }
-                    Some(file_response::Union::Digest(digest)) => {
-                        if digest.is_upload {
-                            if let Some(job) = fs::get_job(digest.id, &mut self.read_jobs) {
-                                if let Some(file) = job.files().get(digest.file_num as usize) {
-                                    let read_path = get_string(&job.join(&file.name));
-                                    let overwrite_strategy = job.default_overwrite_strategy();
-                                    if let Some(overwrite) = overwrite_strategy {
-                                        let req = FileTransferSendConfirmRequest {
-                                            id: digest.id,
-                                            file_num: digest.file_num,
-                                            union: Some(if overwrite {
-                                                file_transfer_send_confirm_request::Union::OffsetBlk(0)
-                                            } else {
-                                                file_transfer_send_confirm_request::Union::Skip(
-                                                    true,
-                                                )
-                                            }),
-                                            ..Default::default()
-                                        };
-                                        job.confirm(&req);
-                                        let msg = new_send_confirm(req);
-                                        allow_err!(peer.send(&msg).await);
-                                    } else {
-                                        self.handle_override_file_confirm(
-                                            digest.id,
-                                            digest.file_num,
-                                            read_path,
-                                            true,
-                                        );
+                        Some(file_response::Union::Done(d)) => {
+                            if let Some(job) = fs::get_job(d.id, &mut self.write_jobs) {
+                                job.modify_time();
+                                fs::remove_job(d.id, &mut self.write_jobs);
+                            }
+                            self.handle_job_status(d.id, d.file_num, None);
+                        }
+                        Some(file_response::Union::Error(e)) => {
+                            self.handle_job_status(e.id, e.file_num, Some(e.error));
+                        }
+                        Some(file_response::Union::Digest(digest)) => {
+                            if digest.is_upload {
+                                if let Some(job) = fs::get_job(digest.id, &mut self.read_jobs) {
+                                    if let Some(file) = job.files().get(digest.file_num as usize) {
+                                        let read_path = get_string(&job.join(&file.name));
+                                        let overwrite_strategy = job.default_overwrite_strategy();
+                                        if let Some(overwrite) = overwrite_strategy {
+                                            let req = FileTransferSendConfirmRequest {
+                                                id: digest.id,
+                                                file_num: digest.file_num,
+                                                union: Some(if overwrite {
+                                                    file_transfer_send_confirm_request::Union::OffsetBlk(0)
+                                                } else {
+                                                    file_transfer_send_confirm_request::Union::Skip(
+                                                        true,
+                                                    )
+                                                }),
+                                                ..Default::default()
+                                            };
+                                            job.confirm(&req);
+                                            let msg = new_send_confirm(req);
+                                            allow_err!(peer.send(&msg).await);
+                                        } else {
+                                            self.handle_override_file_confirm(
+                                                digest.id,
+                                                digest.file_num,
+                                                read_path,
+                                                true,
+                                            );
+                                        }
                                     }
                                 }
-                            }
-                        } else {
-                            if let Some(job) = fs::get_job(digest.id, &mut self.write_jobs) {
-                                if let Some(file) = job.files().get(digest.file_num as usize) {
-                                    let write_path = get_string(&job.join(&file.name));
-                                    let overwrite_strategy = job.default_overwrite_strategy();
-                                    match fs::is_write_need_confirmation(&write_path, &digest) {
-                                        Ok(res) => match res {
-                                            DigestCheckResult::IsSame => {
-                                                let msg= new_send_confirm(FileTransferSendConfirmRequest {
+                            } else {
+                                if let Some(job) = fs::get_job(digest.id, &mut self.write_jobs) {
+                                    if let Some(file) = job.files().get(digest.file_num as usize) {
+                                        let write_path = get_string(&job.join(&file.name));
+                                        let overwrite_strategy = job.default_overwrite_strategy();
+                                        match fs::is_write_need_confirmation(&write_path, &digest) {
+                                            Ok(res) => match res {
+                                                DigestCheckResult::IsSame => {
+                                                    let msg= new_send_confirm(FileTransferSendConfirmRequest {
                                                     id: digest.id,
                                                     file_num: digest.file_num,
                                                     union: Some(file_transfer_send_confirm_request::Union::Skip(true)),
                                                     ..Default::default()
                                                 });
-                                                self.session.send_msg(msg);
-                                            }
-                                            DigestCheckResult::NeedConfirm(digest) => {
-                                                if let Some(overwrite) = overwrite_strategy {
-                                                    let msg = new_send_confirm(
-                                                        FileTransferSendConfirmRequest {
-                                                            id: digest.id,
-                                                            file_num: digest.file_num,
-                                                            union: Some(if overwrite {
-                                                                file_transfer_send_confirm_request::Union::OffsetBlk(0)
-                                                            } else {
-                                                                file_transfer_send_confirm_request::Union::Skip(true)
-                                                            }),
-                                                            ..Default::default()
-                                                        },
-                                                    );
                                                     self.session.send_msg(msg);
-                                                } else {
-                                                    self.handle_override_file_confirm(
-                                                        digest.id,
-                                                        digest.file_num,
-                                                        write_path.to_string(),
-                                                        false,
-                                                    );
                                                 }
-                                            }
-                                            DigestCheckResult::NoSuchFile => {
-                                                let msg = new_send_confirm(
+                                                DigestCheckResult::NeedConfirm(digest) => {
+                                                    if let Some(overwrite) = overwrite_strategy {
+                                                        let msg = new_send_confirm(
+                                                            FileTransferSendConfirmRequest {
+                                                                id: digest.id,
+                                                                file_num: digest.file_num,
+                                                                union: Some(if overwrite {
+                                                                    file_transfer_send_confirm_request::Union::OffsetBlk(0)
+                                                                } else {
+                                                                    file_transfer_send_confirm_request::Union::Skip(true)
+                                                                }),
+                                                                ..Default::default()
+                                                            },
+                                                        );
+                                                        self.session.send_msg(msg);
+                                                    } else {
+                                                        self.handle_override_file_confirm(
+                                                            digest.id,
+                                                            digest.file_num,
+                                                            write_path.to_string(),
+                                                            false,
+                                                        );
+                                                    }
+                                                }
+                                                DigestCheckResult::NoSuchFile => {
+                                                    let msg = new_send_confirm(
                                                     FileTransferSendConfirmRequest {
                                                         id: digest.id,
                                                         file_num: digest.file_num,
@@ -900,19 +967,20 @@ impl Connection {
                                                         ..Default::default()
                                                     },
                                                 );
-                                                self.session.send_msg(msg);
+                                                    self.session.send_msg(msg);
+                                                }
+                                            },
+                                            Err(err) => {
+                                                println!("error recving digest: {}", err);
                                             }
-                                        },
-                                        Err(err) => {
-                                            println!("error recving digest: {}", err);
                                         }
                                     }
                                 }
                             }
                         }
+                        _ => {}
                     }
-                    _ => {}
-                },
+                }
                 Some(message::Union::Misc(misc)) => match misc.union {
                     Some(misc::Union::AudioFormat(f)) => {
                         self.audio_handler.handle_format(f); //
@@ -931,6 +999,7 @@ impl Connection {
                                     Permission::Keyboard => "keyboard",
                                     Permission::Clipboard => "clipboard",
                                     Permission::Audio => "audio",
+                                    Permission::Restart => "restart",
                                     _ => "",
                                 },
                                 &p.enabled.to_string(),
@@ -1608,8 +1677,8 @@ pub mod connection_manager {
                 id,
                 file_num,
                 mut files,
+                overwrite_detection,
             } => {
-                // in mobile, can_enable_override_detection is always true
                 WRITE_JOBS.lock().unwrap().push(fs::TransferJob::new_write(
                     id,
                     "".to_string(),
@@ -1625,7 +1694,7 @@ pub mod connection_manager {
                             ..Default::default()
                         })
                         .collect(),
-                    true,
+                    overwrite_detection,
                 ));
             }
             ipc::FS::CancelWrite { id } => {
