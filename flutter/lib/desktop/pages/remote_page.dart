@@ -241,7 +241,7 @@ class _RemotePageState extends State<RemotePage>
     super.build(context);
     Provider.of<CanvasModel>(context, listen: false).tabBarHeight =
         super.widget.tabBarHeight;
-    final pi = Provider.of<FfiModel>(context).pi;
+    final hasDisplays = _ffi.ffiModel.pi.displays.length > 0;
     final hideKeyboard = isKeyboardShown() && _showEdit;
     final showActionButton = !_showBar || hideKeyboard;
     final keyboard = _ffi.ffiModel.permissions['keyboard'] != false;
@@ -282,7 +282,7 @@ class _RemotePageState extends State<RemotePage>
                               }
                             });
                           }),
-                  bottomNavigationBar: _showBar && pi.displays.length > 0
+                  bottomNavigationBar: _showBar && hasDisplays
                       ? getBottomAppBar(keyboard)
                       : null,
                   body: Overlay(
@@ -878,7 +878,14 @@ class ImagePainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     if (image == null) return;
     canvas.scale(scale, scale);
-    canvas.drawImage(image!, new Offset(x, y), new Paint());
+    // https://github.com/flutter/flutter/issues/76187#issuecomment-784628161
+    var paint = new Paint();
+    if (scale > 1.00001) {
+      paint.filterQuality = FilterQuality.high;
+    } else if (scale < 0.99999) {
+      paint.filterQuality = FilterQuality.medium;
+    }
+    canvas.drawImage(image!, new Offset(x, y), paint);
   }
 
   @override
