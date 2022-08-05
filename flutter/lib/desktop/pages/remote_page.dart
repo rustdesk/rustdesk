@@ -77,7 +77,7 @@ class _RemotePageState extends State<RemotePage>
 
   @override
   void dispose() {
-    print("remote page dispose");
+    print("REMOTE PAGE dispose ${widget.id}");
     hideMobileActionsOverlay();
     _ffi.listenToMouse(false);
     _ffi.invokeMethod("enable_soft_keyboard", true);
