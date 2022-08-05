@@ -8,18 +8,18 @@ mod de;
 mod en;
 mod eo;
 mod es;
-mod hu;
 mod fr;
+mod hu;
 mod id;
 mod it;
-mod nl;
+mod ja;
+mod pl;
 mod ptbr;
 mod ru;
 mod sk;
 mod tr;
 mod tw;
 mod vn;
-mod pl;
 
 lazy_static::lazy_static! {
     pub static ref LANGS: Value =
@@ -28,7 +28,6 @@ lazy_static::lazy_static! {
             ("it", "Italiano"),
             ("fr", "Français"),
             ("de", "Deutsch"),
-	    ("nl","Nederlands"),
             ("cn", "简体中文"),
             ("tw", "繁體中文"),
             ("pt", "Português"),
@@ -43,6 +42,7 @@ lazy_static::lazy_static! {
             ("tr", "Türkçe"),
             ("vn", "Tiếng Việt"),
             ("pl", "Polski"),
+            ("ja", "日本語"),
         ]);
 }
 
@@ -89,16 +89,19 @@ pub fn translate_locale(name: String, locale: &str) -> String {
         "sk" => sk::T.deref(),
         "vn" => vn::T.deref(),
         "pl" => pl::T.deref(),
+        "ja" => ja::T.deref(),
         _ => en::T.deref(),
     };
     if let Some(v) = m.get(&name as &str) {
-        v.to_string()
-    } else {
-        if lang != "en" {
-            if let Some(v) = en::T.get(&name as &str) {
-                return v.to_string();
+        if v.is_empty() {
+            if lang != "en" {
+                if let Some(v) = en::T.get(&name as &str) {
+                    return v.to_string();
+                }
             }
+        } else {
+            return v.to_string();
         }
-        name
     }
+    name
 }
