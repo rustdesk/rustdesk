@@ -299,5 +299,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Are you sure you want to restart", "Möchten Sie das entfernte Gerät wirklich neu starten?"),
         ("Restarting Remote Device", "Entferntes Gerät wird neu gestartet"),
         ("remote_restarting_tip", "Entferntes Gerät startet neu, bitte schließen Sie diese Meldung und verbinden Sie sich mit dem dauerhaften Passwort erneut."),
+        ("Copied", ""),
     ].iter().cloned().collect();
 }

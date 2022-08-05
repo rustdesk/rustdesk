@@ -299,5 +299,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Are you sure you want to restart", "Вы уверены, что хотите выполнить перезапуск?"),
         ("Restarting Remote Device", "Перезагрузка удаленного устройства"),
         ("remote_restarting_tip", "Удаленное устройство перезапускается. Пожалуйста, закройте это сообщение и через некоторое время переподключитесь, используя постоянный пароль."),
+        ("Copied", ""),
     ].iter().cloned().collect();
 }

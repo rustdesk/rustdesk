@@ -299,5 +299,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Are you sure you want to restart", "确定要重启"),
         ("Restarting Remote Device", "正在重启远程设备"),
         ("remote_restarting_tip", "远程设备正在重启, 请关闭当前提示框, 并在一段时间后使用永久密码重新连接"),
+        ("Copied", "已复制"),
     ].iter().cloned().collect();
 }

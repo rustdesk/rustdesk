@@ -299,5 +299,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Are you sure you want to restart", "Bạn có chắc bạn muốn khởi động lại không"),
         ("Restarting Remote Device", "Đang khởi động lại thiết bị từ xa"),
         ("remote_restarting_tip", "Thiết bị từ xa đang khởi động lại, hãy đóng cửa sổ tin nhắn này và kết nối lại với mật khẩu vĩnh viễn sau một khoảng thời gian"),
+        ("Copied", ""),
     ].iter().cloned().collect();
 }
