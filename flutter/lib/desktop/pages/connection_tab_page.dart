@@ -7,7 +7,6 @@ import 'package:flutter_hbb/consts.dart';
 import 'package:flutter_hbb/desktop/pages/remote_page.dart';
 import 'package:flutter_hbb/desktop/widgets/titlebar_widget.dart';
 import 'package:flutter_hbb/utils/multi_window_manager.dart';
-import 'package:provider/provider.dart';
 import 'package:get/get.dart';
 
 import '../../models/model.dart';
@@ -22,11 +21,14 @@ class ConnectionTabPage extends StatefulWidget {
 }
 
 class _ConnectionTabPageState extends State<ConnectionTabPage>
-    with SingleTickerProviderStateMixin {
+    with TickerProviderStateMixin {
   // refactor List<int> when using multi-tab
   // this singleton is only for test
-  List<String> connectionIds = List.empty(growable: true);
+  var connectionIds = RxList.empty(growable: true);
   var initialIndex = 0;
+  late Rx<TabController> tabController;
+
+  var connectionMap = RxList<Widget>.empty(growable: true);
 
   _ConnectionTabPageState(Map<String, dynamic> params) {
     if (params['id'] != null) {
@@ -37,26 +39,27 @@ class _ConnectionTabPageState extends State<ConnectionTabPage>
   @override
   void initState() {
     super.initState();
+    tabController =
+        TabController(length: connectionIds.length, vsync: this).obs;
     rustDeskWinManager.setMethodHandler((call, fromWindowId) async {
       print(
           "call ${call.method} with args ${call.arguments} from window ${fromWindowId}");
       // for simplify, just replace connectionId
       if (call.method == "new_remote_desktop") {
-        setState(() {
-          final args = jsonDecode(call.arguments);
-          final id = args['id'];
-          final indexOf = connectionIds.indexOf(id);
-          if (indexOf >= 0) {
-            setState(() {
-              initialIndex = indexOf;
-            });
-          } else {
-            connectionIds.add(id);
-            setState(() {
-              initialIndex = connectionIds.length - 1;
-            });
-          }
-        });
+        final args = jsonDecode(call.arguments);
+        final id = args['id'];
+        final indexOf = connectionIds.indexOf(id);
+        if (indexOf >= 0) {
+          initialIndex = indexOf;
+          tabController.value.animateTo(initialIndex, duration: Duration.zero);
+        } else {
+          connectionIds.add(id);
+          initialIndex = connectionIds.length - 1;
+          tabController.value = TabController(
+              length: connectionIds.length,
+              vsync: this,
+              initialIndex: initialIndex);
+        }
       } else if (call.method == "onDestroy") {
         print("executing onDestroy hook, closing ${connectionIds}");
         connectionIds.forEach((id) {
@@ -72,55 +75,52 @@ class _ConnectionTabPageState extends State<ConnectionTabPage>
 
   @override
   Widget build(BuildContext context) {
-    final tabBar = TabBar(
-        isScrollable: true,
-        labelColor: Colors.white,
-        physics: NeverScrollableScrollPhysics(),
-        indicatorColor: Colors.white,
-        tabs: connectionIds
-            .map((e) => Tab(
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    children: [
-                      Text(e),
-                      SizedBox(
-                        width: 4,
-                      ),
-                      InkWell(
-                          onTap: () {
-                            onRemoveId(e);
-                          },
-                          child: Icon(
-                            Icons.highlight_remove,
-                            size: 20,
-                          ))
-                    ],
-                  ),
-                ))
-            .toList());
-    final tabBarView = TabBarView(
-        children: connectionIds
-            .map((e) => Container(
-                    child: RemotePage(
-                  key: ValueKey(e),
-                  id: e,
-                  tabBarHeight: kDesktopRemoteTabBarHeight,
-                ))) //RemotePage(key: ValueKey(e), id: e))
-            .toList());
     return Scaffold(
-      body: DefaultTabController(
-        initialIndex: initialIndex,
-        length: connectionIds.length,
-        animationDuration: Duration.zero,
-        child: Column(
-          children: [
-            DesktopTitleBar(
-              child: Container(height: kDesktopRemoteTabBarHeight, child: tabBar),
-            ),
-            Expanded(child: tabBarView),
-          ],
-        ),
+      body: Column(
+        children: [
+          DesktopTitleBar(
+            child: Container(
+                height: kDesktopRemoteTabBarHeight,
+                child: Obx(() => TabBar(
+                    isScrollable: true,
+                    labelColor: Colors.white,
+                    physics: NeverScrollableScrollPhysics(),
+                    indicatorColor: Colors.white,
+                    controller: tabController.value,
+                    tabs: connectionIds
+                        .map((e) => Tab(
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                crossAxisAlignment: CrossAxisAlignment.center,
+                                children: [
+                                  Text(e),
+                                  SizedBox(
+                                    width: 4,
+                                  ),
+                                  InkWell(
+                                      onTap: () {
+                                        onRemoveId(e);
+                                      },
+                                      child: Icon(
+                                        Icons.highlight_remove,
+                                        size: 20,
+                                      ))
+                                ],
+                              ),
+                            ))
+                        .toList()))),
+          ),
+          Expanded(
+              child: Obx(() => TabBarView(
+                  controller: tabController.value,
+                  children: connectionIds
+                      .map((e) => RemotePage(
+                            key: ValueKey(e),
+                            id: e,
+                            tabBarHeight: kDesktopRemoteTabBarHeight,
+                          )) //RemotePage(key: ValueKey(e), id: e))
+                      .toList()))),
+        ],
       ),
     );
   }
@@ -130,9 +130,9 @@ class _ConnectionTabPageState extends State<ConnectionTabPage>
     if (indexOf == -1) {
       return;
     }
-    setState(() {
-      connectionIds.removeAt(indexOf);
-      initialIndex = max(0, initialIndex - 1);
-    });
+    connectionIds.removeAt(indexOf);
+    initialIndex = max(0, initialIndex - 1);
+    tabController.value = TabController(
+        length: connectionIds.length, vsync: this, initialIndex: initialIndex);
   }
 }
