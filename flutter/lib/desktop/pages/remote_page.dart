@@ -887,32 +887,6 @@ class ImagePainter extends CustomPainter {
   }
 }
 
-CheckboxListTile getToggle(
-    String id, void Function(void Function()) setState, option, name) {
-  final opt = bind.getSessionToggleOptionSync(id: id, arg: option);
-  return CheckboxListTile(
-      value: opt,
-      onChanged: (v) {
-        setState(() {
-          bind.sessionToggleOption(id: id, value: option);
-        });
-      },
-      dense: true,
-      title: Text(translate(name)));
-}
-
-RadioListTile<String> getRadio(String name, String toValue, String curValue,
-    void Function(String?) onChange) {
-  return RadioListTile<String>(
-    controlAffinity: ListTileControlAffinity.trailing,
-    title: Text(translate(name)),
-    value: toValue,
-    groupValue: curValue,
-    onChanged: onChange,
-    dense: true,
-  );
-}
-
 void showOptions(String id) async {
   String quality = await bind.getSessionImageQuality(id: id) ?? 'balanced';
   if (quality == '') quality = 'balanced';

@@ -171,6 +171,8 @@ class FfiModel with ChangeNotifier {
         parent.target?.serverModel.onClientAuthorized(evt);
       } else if (name == 'on_client_remove') {
         parent.target?.serverModel.onClientRemove(evt);
+      } else if (name == 'update_quality_status') {
+        parent.target?.qualityMonitorModel.updateQualityStatus(evt);
       }
     };
   }
@@ -807,9 +809,10 @@ class QualityMonitorModel with ChangeNotifier {
   bool get show => _show;
   QualityMonitorData get data => _data;
 
-  checkShowQualityMonitor() {
-    final show =
-        gFFI.getByName('toggle_option', 'show-quality-monitor') == 'true';
+  checkShowQualityMonitor(String id) async {
+    final show = await bind.getSessionToggleOption(
+            id: id, arg: 'show-quality-monitor') ==
+        true;
     if (_show != show) {
       _show = show;
       notifyListeners();

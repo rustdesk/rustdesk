@@ -9,6 +9,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../common.dart';
 import '../../models/model.dart';
+import '../../models/platform_model.dart';
 import '../widgets/dialog.dart';
 import 'home_page.dart';
 import 'scan_page.dart';
@@ -192,21 +193,18 @@ void showServerSettings() {
   showServerSettingsWithValue(id, relay, key, api);
 }
 
-void showLanguageSettings() {
+void showLanguageSettings() async {
   try {
     final langs = json.decode(gFFI.getByName('langs')) as List<dynamic>;
-    var lang = gFFI.getByName('local_option', 'lang');
+    var lang = await bind.mainGetLocalOption(key: "lang");
     DialogManager.show((setState, close) {
       final setLang = (v) {
         if (lang != v) {
           setState(() {
             lang = v;
           });
-          final msg = Map()
-            ..['name'] = 'lang'
-            ..['value'] = v;
-          gFFI.setByName('local_option', json.encode(msg));
-          homeKey.currentState?.refreshPages();
+          bind.mainSetLocalOption(key: "lang", value: v);
+          HomePage.homeKey.currentState?.refreshPages();
           Future.delayed(Duration(milliseconds: 200), close);
         }
       };
@@ -277,8 +275,8 @@ fetch('http://localhost:21114/api/login', {
   final body = {
     'username': name,
     'password': pass,
-    'id': gFFI.getByName('server_id'),
-    'uuid': gFFI.getByName('uuid')
+    'id': bind.mainGetMyId(),
+    'uuid': bind.mainGetUuid()
   };
   try {
     final response = await http.post(Uri.parse('$url/api/login'),
@@ -314,10 +312,7 @@ void refreshCurrentUser() async {
   final token = gFFI.getByName("option", "access_token");
   if (token == '') return;
   final url = getUrl();
-  final body = {
-    'id': gFFI.getByName('server_id'),
-    'uuid': gFFI.getByName('uuid')
-  };
+  final body = {'id': bind.mainGetMyId(), 'uuid': bind.mainGetUuid()};
   try {
     final response = await http.post(Uri.parse('$url/api/currentUser'),
         headers: {
@@ -340,10 +335,7 @@ void logout() async {
   final token = gFFI.getByName("option", "access_token");
   if (token == '') return;
   final url = getUrl();
-  final body = {
-    'id': gFFI.getByName('server_id'),
-    'uuid': gFFI.getByName('uuid')
-  };
+  final body = {'id': bind.mainGetMyId(), 'uuid': bind.mainGetUuid()};
   try {
     await http.post(Uri.parse('$url/api/logout'),
         headers: {
