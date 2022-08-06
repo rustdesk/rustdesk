@@ -58,6 +58,8 @@ class _ConnectionPageState extends State<ConnectionPage> {
 
   @override
   Widget build(BuildContext context) {
+    Provider.of<FfiModel>(context);
+
     if (_idController.text.isEmpty) _idController.text = gFFI.getId();
     return Container(
       decoration: BoxDecoration(color: isDarkTheme() ? null : MyTheme.grayBg),
