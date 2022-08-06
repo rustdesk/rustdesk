@@ -71,6 +71,7 @@ pub fn translate_locale(name: String, locale: &str) -> String {
     let lang = lang.to_lowercase();
     let m = match lang.as_str() {
         "fr" => fr::T.deref(),
+	"nl" => nl::T.deref(),    
         "cn" => cn::T.deref(),
         "it" => it::T.deref(),
         "tw" => tw::T.deref(),
