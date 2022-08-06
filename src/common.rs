@@ -14,6 +14,8 @@ use hbb_common::{
 };
 use hbb_common::{config::RENDEZVOUS_PORT, futures::future::join_all};
 use std::sync::{Arc, Mutex};
+#[cfg(target_os = "android")]
+use scrap::android::call_main_service_set_clip_text;
 
 pub const CLIPBOARD_NAME: &'static str = "clipboard";
 pub const CLIPBOARD_INTERVAL: u64 = 333;
@@ -74,7 +76,7 @@ pub fn check_clipboard(
     None
 }
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(not(target_os = "ios"))]
 pub fn update_clipboard(clipboard: Clipboard, old: Option<&Arc<Mutex<String>>>) {
     let content = if clipboard.compress {
         decompress(&clipboard.content)
@@ -86,6 +88,16 @@ pub fn update_clipboard(clipboard: Clipboard, old: Option<&Arc<Mutex<String>>>) 
             // ctx.set_text may crash if content is empty
             return;
         }
+        #[cfg(target_os = "android")]
+        {
+            let old = if let Some(old) = old { old } else { &CONTENT };
+            *old.lock().unwrap() = content.clone();
+            if let Err(e) = call_main_service_set_clip_text(&content)
+            {
+                log::debug!("call_service_set_clip_text fail,{}", e);
+            }
+        }
+        #[cfg(not(target_os = "android"))]
         match ClipboardContext::new() {
             Ok(mut ctx) => {
                 let side = if old.is_none() { "host" } else { "client" };

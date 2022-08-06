@@ -165,6 +165,26 @@ pub fn call_main_service_mouse_input(mask: i32, x: i32, y: i32) -> JniResult<()>
     }
 }
 
+pub fn call_main_service_set_clip_text(name: &str) -> JniResult<()> {
+    if let (Some(jvm), Some(ctx)) = (
+        JVM.read().unwrap().as_ref(),
+        MAIN_SERVICE_CTX.read().unwrap().as_ref(),
+    ) {
+        let env = jvm.attach_current_thread_as_daemon()?;
+        let name = env.new_string(name)?;
+        env.call_method(
+            ctx,
+            "rustSetClipText",
+            "(Ljava/lang/String;)V",
+            &[JValue::Object(name.into())],
+        )?;
+        return Ok(());
+    } else {
+        return Err(JniError::ThrowFailed(-1));
+    }
+
+}
+
 pub fn call_main_service_get_by_name(name: &str) -> JniResult<String> {
     if let (Some(jvm), Some(ctx)) = (
         JVM.read().unwrap().as_ref(),

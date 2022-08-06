@@ -42,6 +42,8 @@ import org.json.JSONObject
 import java.nio.ByteBuffer
 import kotlin.math.max
 import kotlin.math.min
+import android.content.ClipboardManager
+import android.content.ClipData
 
 const val EXTRA_MP_DATA = "mp_intent"
 const val INIT_SERVICE = "init_service"
@@ -86,6 +88,11 @@ class MainService : Service() {
         } else {
             InputService.ctx?.onMouseInput(mask,x,y)
         }
+    }
+
+    @Keep
+    fun rustSetClipText(name: String) {
+        clipboardManager.setPrimaryClip(ClipData.newPlainText("label", name))
     }
 
     @Keep
@@ -157,7 +164,8 @@ class MainService : Service() {
 
     private val powerManager: PowerManager by lazy { applicationContext.getSystemService(Context.POWER_SERVICE) as PowerManager }
     private val wakeLock: PowerManager.WakeLock by lazy { powerManager.newWakeLock(PowerManager.ACQUIRE_CAUSES_WAKEUP or PowerManager.SCREEN_BRIGHT_WAKE_LOCK, "rustdesk:wakelock")}
-
+    private val clipboardManager: ClipboardManager by lazy { applicationContext.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager }
+    
     // jvm call rust
     private external fun init(ctx: Context)
     private external fun startServer()
