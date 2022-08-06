@@ -236,68 +236,66 @@ class _RemotePageState extends State<RemotePage>
     _ffi.inputKey(label, down: down, press: press ?? false);
   }
 
+  Widget buildBody(FfiModel ffiModel) {
+    final hasDisplays = ffiModel.pi.displays.length > 0;
+    final hideKeyboard = isKeyboardShown() && _showEdit;
+    final showActionButton = !_showBar || hideKeyboard;
+    final keyboard = ffiModel.permissions['keyboard'] != false;
+    return Scaffold(
+        // resizeToAvoidBottomInset: true,
+        floatingActionButton: !showActionButton
+            ? null
+            : FloatingActionButton(
+                mini: !hideKeyboard,
+                child:
+                    Icon(hideKeyboard ? Icons.expand_more : Icons.expand_less),
+                backgroundColor: MyTheme.accent,
+                onPressed: () {
+                  setState(() {
+                    if (hideKeyboard) {
+                      _showEdit = false;
+                      _ffi.invokeMethod("enable_soft_keyboard", false);
+                      _mobileFocusNode.unfocus();
+                      _physicalFocusNode.requestFocus();
+                    } else {
+                      _showBar = !_showBar;
+                    }
+                  });
+                }),
+        bottomNavigationBar: _showBar && hasDisplays ? getBottomAppBar() : null,
+        body: Overlay(
+          initialEntries: [
+            OverlayEntry(builder: (context) {
+              return Container(
+                  color: Colors.black,
+                  child: getBodyForDesktopWithListener(keyboard));
+            })
+          ],
+        ));
+  }
+
   @override
   Widget build(BuildContext context) {
     super.build(context);
     Provider.of<CanvasModel>(context, listen: false).tabBarHeight =
         super.widget.tabBarHeight;
-    final hasDisplays = _ffi.ffiModel.pi.displays.length > 0;
-    final hideKeyboard = isKeyboardShown() && _showEdit;
-    final showActionButton = !_showBar || hideKeyboard;
-    final keyboard = _ffi.ffiModel.permissions['keyboard'] != false;
     return WillPopScope(
         onWillPop: () async {
           clientClose();
           return false;
         },
         child: MultiProvider(
-          providers: [
-            ChangeNotifierProvider.value(value: _ffi.ffiModel),
-            ChangeNotifierProvider.value(value: _ffi.imageModel),
-            ChangeNotifierProvider.value(value: _ffi.cursorModel),
-            ChangeNotifierProvider.value(value: _ffi.canvasModel),
-          ],
-          child: getRawPointerAndKeyBody(
-              keyboard,
-              Scaffold(
-                  // resizeToAvoidBottomInset: true,
-                  floatingActionButton: !showActionButton
-                      ? null
-                      : FloatingActionButton(
-                          mini: !hideKeyboard,
-                          child: Icon(hideKeyboard
-                              ? Icons.expand_more
-                              : Icons.expand_less),
-                          backgroundColor: MyTheme.accent,
-                          onPressed: () {
-                            setState(() {
-                              if (hideKeyboard) {
-                                _showEdit = false;
-                                _ffi.invokeMethod(
-                                    "enable_soft_keyboard", false);
-                                _mobileFocusNode.unfocus();
-                                _physicalFocusNode.requestFocus();
-                              } else {
-                                _showBar = !_showBar;
-                              }
-                            });
-                          }),
-                  bottomNavigationBar: _showBar && hasDisplays
-                      ? getBottomAppBar(keyboard)
-                      : null,
-                  body: Overlay(
-                    initialEntries: [
-                      OverlayEntry(builder: (context) {
-                        return Container(
-                            color: Colors.black,
-                            child: getBodyForDesktopWithListener(keyboard));
-                      })
-                    ],
-                  ))),
-        ));
+            providers: [
+              ChangeNotifierProvider.value(value: _ffi.ffiModel),
+              ChangeNotifierProvider.value(value: _ffi.imageModel),
+              ChangeNotifierProvider.value(value: _ffi.cursorModel),
+              ChangeNotifierProvider.value(value: _ffi.canvasModel),
+            ],
+            child: getRawPointerAndKeyBody(Consumer<FfiModel>(
+                builder: (context, ffiModel, _child) => buildBody(ffiModel)))));
   }
 
-  Widget getRawPointerAndKeyBody(bool keyboard, Widget child) {
+  Widget getRawPointerAndKeyBody(Widget child) {
     return Listener(
         onPointerHover: (e) {
           if (e.kind != ui.PointerDeviceKind.mouse) return;
@@ -352,55 +350,58 @@ class _RemotePageState extends State<RemotePage>
                 '{"id": "${widget.id}", "type": "wheel", "x": "$dx", "y": "$dy"}');
           }
         },
-        child: MouseRegion(
-            cursor: keyboard ? SystemMouseCursors.none : MouseCursor.defer,
-            child: FocusScope(
-                autofocus: true,
-                child: Focus(
+        child: Consumer<FfiModel>(
+            builder: (context, FfiModel, _child) => MouseRegion(
+                cursor: FfiModel.permissions['keyboard'] != false
+                    ? SystemMouseCursors.none
+                    : MouseCursor.defer,
+                child: FocusScope(
                     autofocus: true,
-                    canRequestFocus: true,
-                    focusNode: _physicalFocusNode,
-                    onKey: (data, e) {
-                      final key = e.logicalKey;
-                      if (e is RawKeyDownEvent) {
-                        if (e.repeat) {
-                          sendRawKey(e, press: true);
-                        } else {
-                          if (e.isAltPressed && !_ffi.alt) {
-                            _ffi.alt = true;
-                          } else if (e.isControlPressed && !_ffi.ctrl) {
-                            _ffi.ctrl = true;
-                          } else if (e.isShiftPressed && !_ffi.shift) {
-                            _ffi.shift = true;
-                          } else if (e.isMetaPressed && !_ffi.command) {
-                            _ffi.command = true;
+                    child: Focus(
+                        autofocus: true,
+                        canRequestFocus: true,
+                        focusNode: _physicalFocusNode,
+                        onKey: (data, e) {
+                          final key = e.logicalKey;
+                          if (e is RawKeyDownEvent) {
+                            if (e.repeat) {
+                              sendRawKey(e, press: true);
+                            } else {
+                              if (e.isAltPressed && !_ffi.alt) {
+                                _ffi.alt = true;
+                              } else if (e.isControlPressed && !_ffi.ctrl) {
+                                _ffi.ctrl = true;
+                              } else if (e.isShiftPressed && !_ffi.shift) {
+                                _ffi.shift = true;
+                              } else if (e.isMetaPressed && !_ffi.command) {
+                                _ffi.command = true;
+                              }
+                              sendRawKey(e, down: true);
+                            }
                           }
-                          sendRawKey(e, down: true);
-                        }
-                      }
-                      // [!_showEdit] workaround for soft-keyboard's control_key like Backspace / Enter
-                      if (!_showEdit && e is RawKeyUpEvent) {
-                        if (key == LogicalKeyboardKey.altLeft ||
-                            key == LogicalKeyboardKey.altRight) {
-                          _ffi.alt = false;
-                        } else if (key == LogicalKeyboardKey.controlLeft ||
-                            key == LogicalKeyboardKey.controlRight) {
-                          _ffi.ctrl = false;
-                        } else if (key == LogicalKeyboardKey.shiftRight ||
-                            key == LogicalKeyboardKey.shiftLeft) {
-                          _ffi.shift = false;
-                        } else if (key == LogicalKeyboardKey.metaLeft ||
-                            key == LogicalKeyboardKey.metaRight) {
-                          _ffi.command = false;
-                        }
-                        sendRawKey(e);
-                      }
-                      return KeyEventResult.handled;
-                    },
-                    child: child))));
+                          // [!_showEdit] workaround for soft-keyboard's control_key like Backspace / Enter
+                          if (!_showEdit && e is RawKeyUpEvent) {
+                            if (key == LogicalKeyboardKey.altLeft ||
+                                key == LogicalKeyboardKey.altRight) {
+                              _ffi.alt = false;
+                            } else if (key == LogicalKeyboardKey.controlLeft ||
+                                key == LogicalKeyboardKey.controlRight) {
+                              _ffi.ctrl = false;
+                            } else if (key == LogicalKeyboardKey.shiftRight ||
+                                key == LogicalKeyboardKey.shiftLeft) {
+                              _ffi.shift = false;
+                            } else if (key == LogicalKeyboardKey.metaLeft ||
+                                key == LogicalKeyboardKey.metaRight) {
+                              _ffi.command = false;
+                            }
+                            sendRawKey(e);
+                          }
+                          return KeyEventResult.handled;
+                        },
+                        child: child)))));
   }
 
-  Widget getBottomAppBar(bool keyboard) {
+  Widget? getBottomAppBar() {
     return BottomAppBar(
       elevation: 10,
       color: MyTheme.accent,
@@ -515,6 +516,7 @@ class _RemotePageState extends State<RemotePage>
       ));
     }
     paints.add(getHelpTools());
+
     return MouseRegion(
         onEnter: (evt) {
           bind.hostStopSystemKeyPropagate(stopped: false);
