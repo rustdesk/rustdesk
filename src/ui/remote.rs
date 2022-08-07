@@ -1085,11 +1085,7 @@ impl Handler {
         let string = match KEYBOARD.lock() {
             Ok(mut keyboard) => {
                 let string = keyboard.add(&evt.event_type).unwrap_or_default();
-                #[cfg(target_os = "windows")]
-                let is_dead = keyboard.last_is_dead;
-                #[cfg(target_os = "linux")]
-                let is_dead = keyboard.is_dead();
-                if is_dead && string == "" && down_or_up == true {
+                if keyboard.is_dead() && string == "" && down_or_up == true {
                     return;
                 }
                 string

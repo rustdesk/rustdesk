@@ -1310,16 +1310,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "epoll"
-version = "4.3.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "20df693c700404f7e19d4d6fae6b15215d2913c27955d2b9d6f2c0f537511cd0"
-dependencies = [
- "bitflags",
- "libc",
-]
-
-[[package]]
 name = "err-derive"
 version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1351,29 +1341,6 @@ dependencies = [
  "bitvec",
  "libc",
  "nix 0.23.1",
-]
-
-[[package]]
-name = "evdev-rs"
-version = "0.5.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d7db51abf6b3205a6e6e8dd68d7a5414d7c50d61736a6f4c9b97df86ef5567cf"
-dependencies = [
- "bitflags",
- "evdev-sys",
- "libc",
- "log",
-]
-
-[[package]]
-name = "evdev-sys"
-version = "0.2.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "14ead42b547b15d47089c1243d907bcf0eb94e457046d3b315a26ac9c9e9ea6d"
-dependencies = [
- "cc",
- "libc",
- "pkg-config",
 ]
 
 [[package]]
@@ -2346,28 +2313,6 @@ checksum = "10a35a97730320ffe8e2d410b5d3b69279b98d2c14bdb8b70ea89ecf7888d41e"
 dependencies = [
  "autocfg 1.1.0",
  "hashbrown",
-]
-
-[[package]]
-name = "inotify"
-version = "0.10.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "abf888f9575c290197b2c948dc9e9ff10bd1a39ad1ea8585f734585fa6b9d3f9"
-dependencies = [
- "bitflags",
- "futures-core",
- "inotify-sys",
- "libc",
- "tokio",
-]
-
-[[package]]
-name = "inotify-sys"
-version = "0.1.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e05c02b5e89bff3b946cedeca278abc628fe811e604f027c45a8aa3cf793d0eb"
-dependencies = [
- "libc",
 ]
 
 [[package]]
@@ -3795,16 +3740,13 @@ dependencies = [
 [[package]]
 name = "rdev"
 version = "0.5.0-2"
-source = "git+https://github.com/asur4s/rdev#d6499d2e582bf3549aa4ba33cfd3fbbdfce10947"
+source = "git+https://github.com/asur4s/rdev#3b440f7ff9d622b08eb83146ea3e5e529769a6c2"
 dependencies = [
  "cocoa",
  "core-foundation 0.9.3",
  "core-foundation-sys 0.8.3",
  "core-graphics 0.22.3",
  "enum-map",
- "epoll",
- "evdev-rs",
- "inotify",
  "lazy_static",
  "libc",
  "widestring 1.0.2",
