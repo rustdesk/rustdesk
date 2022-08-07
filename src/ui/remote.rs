@@ -1125,16 +1125,10 @@ impl Handler {
             } else {
                 TO_RELEASE.lock().unwrap().remove(&key);
             }
-            // algr without action
-            // Control left
+            // AltGr && LeftControl(SpecialKey) without action
             if key == RdevKey::AltGr || evt.scan_code == 541 {
                 return;
             }
-            // Caps affects the keycode map of the peer system(Linux).
-            if key == RdevKey::CapsLock {
-                return;
-            }
-            dbg!(key);
             self.map_keyboard_mode(down_or_up, key, None);
         }
     }
