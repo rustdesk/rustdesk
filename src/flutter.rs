@@ -1,7 +1,7 @@
 use std::{
     collections::{HashMap, VecDeque},
     sync::{
-        atomic::{AtomicUsize, Ordering},
+        atomic::{AtomicBool, AtomicUsize, Ordering},
         Arc, Mutex, RwLock,
     },
 };
@@ -31,7 +31,10 @@ use hbb_common::{
     Stream,
 };
 
-use crate::common::make_fd_to_json;
+use crate::common::{
+    self, check_clipboard, make_fd_to_json, update_clipboard, ClipboardContext, CLIPBOARD_INTERVAL,
+};
+
 use crate::{client::*, flutter_ffi::EventToUI, make_fd_flutter};
 
 pub(super) const APP_TYPE_MAIN: &str = "main";
@@ -43,6 +46,9 @@ lazy_static::lazy_static! {
     pub static ref SESSIONS: RwLock<HashMap<String,Session>> = Default::default();
     pub static ref GLOBAL_EVENT_STREAM: RwLock<HashMap<String, StreamSink<String>>> = Default::default(); // rust to dart event channel
 }
+
+static SERVER_CLIPBOARD_ENABLED: AtomicBool = AtomicBool::new(true);
+static SERVER_KEYBOARD_ENABLED: AtomicBool = AtomicBool::new(true);
 
 // pub fn get_session<'a>(id: &str) -> Option<&'a Session> {
 //     SESSIONS.read().unwrap().get(id)
@@ -657,6 +663,43 @@ struct Connection {
 }
 
 impl Connection {
+    fn start_clipboard(
+        tx_protobuf: mpsc::UnboundedSender<Data>,
+        lc: Arc<RwLock<LoginConfigHandler>>,
+    ) -> Option<std::sync::mpsc::Sender<()>> {
+        let (tx, rx) = std::sync::mpsc::channel();
+        match ClipboardContext::new() {
+            Ok(mut ctx) => {
+                let old_clipboard: Arc<Mutex<String>> = Default::default();
+                // ignore clipboard update before service start
+                check_clipboard(&mut ctx, Some(&old_clipboard));
+                std::thread::spawn(move || loop {
+                    std::thread::sleep(Duration::from_millis(CLIPBOARD_INTERVAL));
+                    match rx.try_recv() {
+                        Ok(_) | Err(std::sync::mpsc::TryRecvError::Disconnected) => {
+                            log::debug!("Exit clipboard service of client");
+                            break;
+                        }
+                        _ => {}
+                    }
+                    if !SERVER_CLIPBOARD_ENABLED.load(Ordering::SeqCst)
+                        || !SERVER_KEYBOARD_ENABLED.load(Ordering::SeqCst)
+                        || lc.read().unwrap().disable_clipboard
+                    {
+                        continue;
+                    }
+                    if let Some(msg) = check_clipboard(&mut ctx, Some(&old_clipboard)) {
+                        tx_protobuf.send(Data::Message(msg)).ok();
+                    }
+                });
+            }
+            Err(err) => {
+                log::error!("Failed to start clipboard service of client: {}", err);
+            }
+        }
+        Some(tx)
+    }
+
     /// Create a new connection.
     ///
     /// # Arguments
@@ -667,6 +710,10 @@ impl Connection {
     async fn start(session: Session, is_file_transfer: bool) {
         let mut last_recv_time = Instant::now();
         let (sender, mut receiver) = mpsc::unbounded_channel::<Data>();
+        let mut stop_clipboard = None;
+        if !is_file_transfer {
+            stop_clipboard = Self::start_clipboard(sender.clone(), session.lc.clone());
+        }
         *session.sender.write().unwrap() = Some(sender);
         let conn_type = if is_file_transfer {
             session.lc.write().unwrap().is_file_transfer = true;
@@ -695,6 +742,9 @@ impl Connection {
 
         match Client::start(&session.id, &key, &token, conn_type).await {
             Ok((mut peer, direct)) => {
+                SERVER_KEYBOARD_ENABLED.store(true, Ordering::SeqCst);
+                SERVER_CLIPBOARD_ENABLED.store(true, Ordering::SeqCst);
+
                 session.push_event(
                     "connection_ready",
                     vec![
@@ -774,6 +824,12 @@ impl Connection {
                 session.msgbox("error", "Connection Error", &err.to_string());
             }
         }
+
+        if let Some(stop) = stop_clipboard {
+            stop.send(()).ok();
+        }
+        SERVER_KEYBOARD_ENABLED.store(false, Ordering::SeqCst);
+        SERVER_CLIPBOARD_ENABLED.store(false, Ordering::SeqCst);
     }
 
     /// Handle message from peer.
