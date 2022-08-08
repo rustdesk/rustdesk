@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_hbb/models/platform_model.dart';
 import 'package:wakelock/wakelock.dart';
 
 import '../common.dart';
@@ -57,7 +58,7 @@ class ServerModel with ChangeNotifier {
 
   set verificationMethod(String method) {
     _verificationMethod = method;
-    gFFI.setOption("verification-method", method);
+    bind.mainSetOption(key: "verification-method", value: method);
   }
 
   String get temporaryPasswordLength {
@@ -70,7 +71,7 @@ class ServerModel with ChangeNotifier {
 
   set temporaryPasswordLength(String length) {
     _temporaryPasswordLength = length;
-    gFFI.setOption("temporary-password-length", length);
+    bind.mainSetOption(key: "temporary-password-length", value: length);
   }
 
   TextEditingController get serverId => _serverId;
@@ -85,7 +86,7 @@ class ServerModel with ChangeNotifier {
 
   ServerModel(this.parent) {
     () async {
-      _emptyIdShow = translate("Generating ...", ffi: this.parent.target);
+      _emptyIdShow = translate("Generating ...");
       _serverId = TextEditingController(text: this._emptyIdShow);
       /**
        * 1. check android permission
@@ -153,11 +154,13 @@ class ServerModel with ChangeNotifier {
     });
   }
 
-  updatePasswordModel() {
+  updatePasswordModel() async {
     var update = false;
     final temporaryPassword = gFFI.getByName("temporary_password");
-    final verificationMethod = gFFI.getOption("verification-method");
-    final temporaryPasswordLength = gFFI.getOption("temporary-password-length");
+    final verificationMethod =
+        await bind.mainGetOption(key: "verification-method");
+    final temporaryPasswordLength =
+        await bind.mainGetOption(key: "temporary-password-length");
     final oldPwdText = _serverPasswd.text;
     if (_serverPasswd.text != temporaryPassword) {
       _serverPasswd.text = temporaryPassword;
@@ -325,7 +328,7 @@ class ServerModel with ChangeNotifier {
     const maxCount = 10;
     while (count < maxCount) {
       await Future.delayed(Duration(seconds: 1));
-      final id = parent.target?.getByName("server_id") ?? "";
+      final id = await bind.mainGetMyId();
       if (id.isEmpty) {
         continue;
       } else {

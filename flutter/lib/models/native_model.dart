@@ -29,6 +29,7 @@ typedef HandleEvent = void Function(Map<String, dynamic> evt);
 class PlatformFFI {
   String _dir = '';
   String _homeDir = '';
+  F2? _translate;
   F2? _getByName;
   F3? _setByName;
   var _eventHandlers = Map<String, Map<String, HandleEvent>>();
@@ -75,6 +76,19 @@ class PlatformFFI {
     }
   }
 
+  String translate(String name, String locale) {
+    if (_translate == null) return '';
+    var a = name.toNativeUtf8();
+    var b = locale.toNativeUtf8();
+    var p = _translate!(a, b);
+    assert(p != nullptr);
+    final res = p.toDartString();
+    calloc.free(p);
+    calloc.free(a);
+    calloc.free(b);
+    return res;
+  }
+
   /// Send **get** command to the Rust core based on [name] and [arg].
   /// Return the result as a string.
   String getByName(String name, [String arg = '']) {
@@ -118,6 +132,7 @@ class PlatformFFI {
                     : DynamicLibrary.process();
     debugPrint('initializing FFI ${_appType}');
     try {
+      _translate = dylib.lookupFunction<F2, F2>('translate');
       _getByName = dylib.lookupFunction<F2, F2>('get_by_name');
       _setByName =
           dylib.lookupFunction<Void Function(Pointer<Utf8>, Pointer<Utf8>), F3>(

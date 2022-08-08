@@ -391,3 +391,10 @@ Future<void> initGlobalFFI() async {
   // global shared preference
   await Get.putAsync(() => SharedPreferences.getInstance());
 }
+
+String translate(String name) {
+  if (name.startsWith('Failed to') && name.contains(': ')) {
+    return name.split(': ').map((x) => translate(x)).join(': ');
+  }
+  return platformFFI.translate(name, localeName);
+}

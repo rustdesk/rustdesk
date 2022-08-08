@@ -44,13 +44,22 @@ class _ConnectionPageState extends State<ConnectionPage> {
 
   /// Update url. If it's not null, means an update is available.
   var _updateUrl = '';
-  var _menuPos;
 
   Timer? _updateTimer;
 
   @override
   void initState() {
     super.initState();
+    if (_idController.text.isEmpty) {
+      () async {
+        final lastRemoteId = await bind.mainGetLastRemoteId();
+        if (lastRemoteId != _idController.text) {
+          setState(() {
+            _idController.text = lastRemoteId;
+          });
+        }
+      }();
+    }
     _updateTimer = Timer.periodic(Duration(seconds: 1), (timer) {
       updateStatus();
     });
@@ -58,7 +67,6 @@ class _ConnectionPageState extends State<ConnectionPage> {
 
   @override
   Widget build(BuildContext context) {
-    if (_idController.text.isEmpty) _idController.text = gFFI.getId();
     return Container(
       decoration: BoxDecoration(color: isDarkTheme() ? null : MyTheme.grayBg),
       child: Column(
@@ -428,7 +436,7 @@ class _ConnectionPageState extends State<ConnectionPage> {
   }
 
   updateStatus() async {
-    svcStopped.value = gFFI.getOption("stop-service") == "Y";
+    svcStopped.value = bind.mainGetOption(key: "stop-service") == "Y";
     final status =
         jsonDecode(await bind.mainGetConnectStatus()) as Map<String, dynamic>;
     svcStatusCode.value = status["status_num"];
@@ -444,7 +452,7 @@ class _ConnectionPageState extends State<ConnectionPage> {
   }
 
   Future<Widget> buildAddressBook(BuildContext context) async {
-    final token = await gFFI.getLocalOption('access_token');
+    final token = await bind.mainGetLocalOption(key: 'access_token');
     if (token.trim().isEmpty) {
       return Center(
         child: InkWell(

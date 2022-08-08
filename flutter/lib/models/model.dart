@@ -881,11 +881,6 @@ class FFI {
     this.qualityMonitorModel = QualityMonitorModel(WeakReference(this));
   }
 
-  /// Get the remote id for current client.
-  String getId() {
-    return getByName('remote_id'); // TODO
-  }
-
   /// Send a mouse tap event(down and up).
   void tap(MouseButtons button) {
     sendMouse('down', button);
@@ -963,9 +958,9 @@ class FFI {
   }
 
   /// List the saved peers.
-  List<Peer> peers() {
+  Future<List<Peer>> peers() async {
     try {
-      var str = getByName('peers'); // TODO
+      var str = await bind.mainGetRecentPeers();
       if (str == "") return [];
       List<dynamic> peers = json.decode(str);
       return peers
@@ -1046,33 +1041,6 @@ class FFI {
     platformFFI.setByName(name, value);
   }
 
-  String getOption(String name) {
-    return platformFFI.getByName("option", name);
-  }
-
-  Future<String> getLocalOption(String name) {
-    return bind.mainGetLocalOption(key: name);
-  }
-
-  Future<void> setLocalOption(String key, String value) {
-    return bind.mainSetLocalOption(key: key, value: value);
-  }
-
-  Future<String> getPeerOption(String id, String key) {
-    return bind.mainGetPeerOption(id: id, key: key);
-  }
-
-  Future<void> setPeerOption(String id, String key, String value) {
-    return bind.mainSetPeerOption(id: id, key: key, value: value);
-  }
-
-  void setOption(String name, String value) {
-    Map<String, String> res = Map()
-      ..["name"] = name
-      ..["value"] = value;
-    return platformFFI.setByName('option', jsonEncode(res));
-  }
-
   handleMouse(Map<String, dynamic> evt, {double tabBarHeight = 0.0}) {
     var type = '';
     var isMove = false;
@@ -1148,8 +1116,8 @@ class FFI {
     return await bind.mainGetSoundInputs();
   }
 
-  String getDefaultAudioInput() {
-    final input = getOption('audio-input');
+  Future<String> getDefaultAudioInput() async {
+    final input = await bind.mainGetOption(key: 'audio-input');
     if (input.isEmpty && Platform.isWindows) {
       return "System Sound";
     }
@@ -1157,11 +1125,14 @@ class FFI {
   }
 
   void setDefaultAudioInput(String input) {
-    setOption('audio-input', input);
+    bind.mainSetOption(key: 'audio-input', value: input);
   }
 
   Future<Map<String, String>> getHttpHeaders() async {
-    return {"Authorization": "Bearer " + await getLocalOption("access_token")};
+    return {
+      "Authorization":
+          "Bearer " + await bind.mainGetLocalOption(key: "access_token")
+    };
   }
 }
 
@@ -1233,11 +1204,12 @@ void initializeCursorAndCanvas(FFI ffi) async {
 /// Translate text based on the pre-defined dictionary.
 /// note: params [FFI?] can be used to replace global FFI implementation
 /// for example: during global initialization, gFFI not exists yet.
-String translate(String name, {FFI? ffi}) {
-  if (name.startsWith('Failed to') && name.contains(': ')) {
-    return name.split(': ').map((x) => translate(x)).join(': ');
-  }
-  var a = 'translate';
-  var b = '{"locale": "$localeName", "text": "$name"}';
-  return (ffi ?? gFFI).getByName(a, b);
-}
+// String translate(String name, {FFI? ffi}) {
+//   if (name.startsWith('Failed to') && name.contains(': ')) {
+//     return name.split(': ').map((x) => translate(x)).join(': ');
+//   }
+//   var a = 'translate';
+//   var b = '{"locale": "$localeName", "text": "$name"}';
+//
+//   return (ffi ?? gFFI).getByName(a, b);
+// }

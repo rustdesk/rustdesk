@@ -7,6 +7,8 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../common.dart';
 import '../../models/model.dart';
+import '../../models/peer_model.dart';
+import '../../models/platform_model.dart';
 import 'home_page.dart';
 import 'remote_page.dart';
 import 'scan_page.dart';
@@ -41,6 +43,16 @@ class _ConnectionPageState extends State<ConnectionPage> {
   @override
   void initState() {
     super.initState();
+    if (_idController.text.isEmpty) {
+      () async {
+        final lastRemoteId = await bind.mainGetLastRemoteId();
+        if (lastRemoteId != _idController.text) {
+          setState(() {
+            _idController.text = lastRemoteId;
+          });
+        }
+      }();
+    }
     if (isAndroid) {
       Timer(Duration(seconds: 5), () {
         _updateUrl = gFFI.getByName('software_update_url');
@@ -52,7 +64,6 @@ class _ConnectionPageState extends State<ConnectionPage> {
   @override
   Widget build(BuildContext context) {
     Provider.of<FfiModel>(context);
-    if (_idController.text.isEmpty) _idController.text = gFFI.getId();
     return SingleChildScrollView(
       child: Column(
           mainAxisAlignment: MainAxisAlignment.start,
@@ -221,44 +232,52 @@ class _ConnectionPageState extends State<ConnectionPage> {
       final n = (windowWidth / (minWidth + 2 * space)).floor();
       width = windowWidth / n - 2 * space;
     }
-    final cards = <Widget>[];
-    var peers = gFFI.peers();
-    peers.forEach((p) {
-      cards.add(Container(
-          width: width,
-          child: Card(
-              child: GestureDetector(
-                  onTap: !isWebDesktop ? () => connect('${p.id}') : null,
-                  onDoubleTap: isWebDesktop ? () => connect('${p.id}') : null,
-                  onLongPressStart: (details) {
-                    final x = details.globalPosition.dx;
-                    final y = details.globalPosition.dy;
-                    _menuPos = RelativeRect.fromLTRB(x, y, x, y);
-                    showPeerMenu(context, p.id);
-                  },
-                  child: ListTile(
-                    contentPadding: const EdgeInsets.only(left: 12),
-                    subtitle: Text('${p.username}@${p.hostname}'),
-                    title: Text('${p.id}'),
-                    leading: Container(
-                        padding: const EdgeInsets.all(6),
-                        child: getPlatformImage('${p.platform}'),
-                        color: str2color('${p.id}${p.platform}', 0x7f)),
-                    trailing: InkWell(
-                        child: Padding(
-                            padding: const EdgeInsets.all(12),
-                            child: Icon(Icons.more_vert)),
-                        onTapDown: (e) {
-                          final x = e.globalPosition.dx;
-                          final y = e.globalPosition.dy;
-                          _menuPos = RelativeRect.fromLTRB(x, y, x, y);
-                        },
-                        onTap: () {
-                          showPeerMenu(context, p.id);
-                        }),
-                  )))));
-    });
-    return Wrap(children: cards, spacing: space, runSpacing: space);
+    return FutureBuilder<List<Peer>>(
+        future: gFFI.peers(),
+        builder: (context, snapshot) {
+          final cards = <Widget>[];
+          if (snapshot.hasData) {
+            final peers = snapshot.data!;
+            peers.forEach((p) {
+              cards.add(Container(
+                  width: width,
+                  child: Card(
+                      child: GestureDetector(
+                          onTap:
+                              !isWebDesktop ? () => connect('${p.id}') : null,
+                          onDoubleTap:
+                              isWebDesktop ? () => connect('${p.id}') : null,
+                          onLongPressStart: (details) {
+                            final x = details.globalPosition.dx;
+                            final y = details.globalPosition.dy;
+                            _menuPos = RelativeRect.fromLTRB(x, y, x, y);
+                            showPeerMenu(context, p.id);
+                          },
+                          child: ListTile(
+                            contentPadding: const EdgeInsets.only(left: 12),
+                            subtitle: Text('${p.username}@${p.hostname}'),
+                            title: Text('${p.id}'),
+                            leading: Container(
+                                padding: const EdgeInsets.all(6),
+                                child: getPlatformImage('${p.platform}'),
+                                color: str2color('${p.id}${p.platform}', 0x7f)),
+                            trailing: InkWell(
+                                child: Padding(
+                                    padding: const EdgeInsets.all(12),
+                                    child: Icon(Icons.more_vert)),
+                                onTapDown: (e) {
+                                  final x = e.globalPosition.dx;
+                                  final y = e.globalPosition.dy;
+                                  _menuPos = RelativeRect.fromLTRB(x, y, x, y);
+                                },
+                                onTap: () {
+                                  showPeerMenu(context, p.id);
+                                }),
+                          )))));
+            });
+          }
+          return Wrap(children: cards, spacing: space, runSpacing: space);
+        });
   }
 
   /// Show the peer menu and handle user's choice.

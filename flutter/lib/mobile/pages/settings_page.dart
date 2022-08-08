@@ -185,11 +185,12 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
   }
 }
 
-void showServerSettings() {
-  final id = gFFI.getByName('option', 'custom-rendezvous-server');
-  final relay = gFFI.getByName('option', 'relay-server');
-  final api = gFFI.getByName('option', 'api-server');
-  final key = gFFI.getByName('option', 'key');
+void showServerSettings() async {
+  Map<String, dynamic> options = jsonDecode(await bind.mainGetOptions());
+  String id = options['custom-rendezvous-server'] ?? "";
+  String relay = options['relay-server'] ?? "";
+  String api = options['api-server'] ?? "";
+  String key = options['key'] ?? "";
   showServerSettingsWithValue(id, relay, key, api);
 }
 

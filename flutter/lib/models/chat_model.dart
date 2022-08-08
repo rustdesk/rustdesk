@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:dash_chat_2/dash_chat_2.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_hbb/models/platform_model.dart';
 
 import '../../mobile/widgets/overlay.dart';
 import 'model.dart';
@@ -72,7 +73,7 @@ class ChatModel with ChangeNotifier {
     }
   }
 
-  receive(int id, String text) {
+  receive(int id, String text) async {
     if (text.isEmpty) return;
     // first message show overlay icon
     if (chatIconOverlayEntry == null) {
@@ -82,7 +83,7 @@ class ChatModel with ChangeNotifier {
     if (id == clientModeID) {
       chatUser = ChatUser(
         firstName: _ffi.target?.ffiModel.pi.username,
-        id: _ffi.target?.getId() ?? "",
+        id: await bind.mainGetLastRemoteId(),
       );
     } else {
       final client = _ffi.target?.serverModel.clients[id];
