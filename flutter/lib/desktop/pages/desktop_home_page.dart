@@ -275,9 +275,7 @@ class _DesktopHomePageState extends State<DesktopHomePage> with TrayListener {
                       ),
                       IconButton(
                         icon: Icon(Icons.refresh),
-                        onPressed: () {
-                          gFFI.setByName("temporary_password");
-                        },
+                        onPressed: () => bind.mainUpdateTemporaryPassword(),
                       ),
                       FutureBuilder<Widget>(
                           future: buildPasswordPopupMenu(context),
@@ -360,7 +358,7 @@ class _DesktopHomePageState extends State<DesktopHomePage> with TrayListener {
                               if (gFFI.serverModel.temporaryPasswordLength !=
                                   e) {
                                 gFFI.serverModel.temporaryPasswordLength = e;
-                                gFFI.setByName("temporary_password");
+                                bind.mainUpdateTemporaryPassword();
                               }
                             },
                           ))
@@ -1336,8 +1334,8 @@ Future<bool> loginDialog() async {
   return completer.future;
 }
 
-void setPasswordDialog() {
-  final pw = gFFI.getByName("permanent_password");
+void setPasswordDialog() async {
+  final pw = await bind.mainGetPermanentPassword();
   final p0 = TextEditingController(text: pw);
   final p1 = TextEditingController(text: pw);
   var errMsg0 = "";
@@ -1427,7 +1425,7 @@ void setPasswordDialog() {
                 });
                 return;
               }
-              gFFI.setByName("permanent_password", pass);
+              bind.mainSetPermanentPassword(password: pass);
               close();
             },
             child: Text(translate("OK"))),

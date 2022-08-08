@@ -330,8 +330,9 @@ class _RemotePageState extends State<RemotePage> {
             if (dy > 0)
               dy = -1;
             else if (dy < 0) dy = 1;
-            gFFI.setByName(
-                'send_mouse', '{"type": "wheel", "x": "$dx", "y": "$dy"}');
+            bind.sessionSendMouse(
+                id: widget.id,
+                msg: '{"type": "wheel", "x": "$dx", "y": "$dy"}');
           }
         },
         child: MouseRegion(
@@ -1124,7 +1125,7 @@ void showRestartRemoteDevice(PeerInfo pi, String id) async {
                   onPressed: () => close(true), child: Text(translate("OK"))),
             ],
           ));
-  if (res == true) gFFI.setByName('restart_remote_device');
+  if (res == true) bind.sessionRestartRemoteDevice(id: id);
 }
 
 void showSetOSPassword(String id, bool login) async {

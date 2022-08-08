@@ -1,11 +1,9 @@
 import 'dart:async';
-import 'dart:convert';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
 
 import '../../common.dart';
-import '../../models/model.dart';
+import '../../models/platform_model.dart';
 
 void clientClose() {
   msgBox('', 'Close', 'Are you sure to close the connection?');
@@ -22,8 +20,8 @@ void showError({Duration duration = SEC1}) {
   showToast(translate("Error"), duration: SEC1);
 }
 
-void setPermanentPasswordDialog() {
-  final pw = gFFI.getByName("permanent_password");
+void setPermanentPasswordDialog() async {
+  final pw = await bind.mainGetPermanentPassword();
   final p0 = TextEditingController(text: pw);
   final p1 = TextEditingController(text: pw);
   var validateLength = false;
@@ -103,9 +101,9 @@ void setPermanentPasswordDialog() {
   });
 }
 
-void setTemporaryPasswordLengthDialog() {
+void setTemporaryPasswordLengthDialog() async {
   List<String> lengths = ['6', '8', '10'];
-  String length = gFFI.getByName('option', 'temporary-password-length');
+  String length = await bind.mainGetOption(key: "temporary-password-length");
   var index = lengths.indexOf(length);
   if (index < 0) index = 0;
   length = lengths[index];
@@ -116,11 +114,8 @@ void setTemporaryPasswordLengthDialog() {
       setState(() {
         length = newValue;
       });
-      Map<String, String> msg = Map()
-        ..["name"] = "temporary-password-length"
-        ..["value"] = newValue;
-      gFFI.setByName("option", jsonEncode(msg));
-      gFFI.setByName("temporary_password");
+      bind.mainSetOption(key: "temporary-password-length", value: newValue);
+      bind.mainUpdateTemporaryPassword();
       Future.delayed(Duration(milliseconds: 200), () {
         close();
         showSuccess();
@@ -138,9 +133,9 @@ void setTemporaryPasswordLengthDialog() {
   }, backDismiss: true, clickMaskDismiss: true);
 }
 
-void enterPasswordDialog(String id) {
+void enterPasswordDialog(String id) async {
   final controller = TextEditingController();
-  var remember = gFFI.getByName('remember', id) == 'true';
+  var remember = await bind.getSessionRemember(id: id) ?? false;
   DialogManager.show((setState, close) {
     return CustomAlertDialog(
       title: Text(translate('Password Required')),

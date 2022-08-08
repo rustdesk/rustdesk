@@ -290,7 +290,7 @@ class FileModel extends ChangeNotifier {
   }
 
   onReady() async {
-    _localOption.home = _ffi.target?.getByName("get_home_dir") ?? "";
+    _localOption.home = await bind.mainGetHomeDir();
     _localOption.showHidden = (await bind.sessionGetPeerOption(
             id: _ffi.target?.id ?? "", name: "local_show_hidden"))
         .isNotEmpty;

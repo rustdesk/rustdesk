@@ -31,15 +31,38 @@ class SettingsPage extends StatefulWidget implements PageShape {
 const url = 'https://rustdesk.com/';
 final _hasIgnoreBattery = androidVersion >= 26;
 var _ignoreBatteryOpt = false;
+var _enableAbr = false;
 
 class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
+  String? username;
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    if (_hasIgnoreBattery) {
-      updateIgnoreBatteryStatus();
-    }
+
+    () async {
+      var update = false;
+      if (_hasIgnoreBattery) {
+        update = await updateIgnoreBatteryStatus();
+      }
+
+      final usernameRes = await getUsername();
+      if (usernameRes != username) {
+        update = true;
+        username = usernameRes;
+      }
+
+      final enableAbrRes = await bind.mainGetOption(key: "enable-abr") != "N";
+      if (enableAbrRes != _enableAbr) {
+        update = true;
+        _enableAbr = enableAbrRes;
+      }
+
+      if (update) {
+        setState(() {});
+      }
+    }();
   }
 
   @override
@@ -51,16 +74,18 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
-      updateIgnoreBatteryStatus();
+      () async {
+        if (await updateIgnoreBatteryStatus()) {
+          setState(() {});
+        }
+      }();
     }
   }
 
   Future<bool> updateIgnoreBatteryStatus() async {
     final res = await PermissionManager.check("ignore_battery_optimizations");
     if (_ignoreBatteryOpt != res) {
-      setState(() {
-        _ignoreBatteryOpt = res;
-      });
+      _ignoreBatteryOpt = res;
       return true;
     } else {
       return false;
@@ -70,21 +95,15 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
   @override
   Widget build(BuildContext context) {
     Provider.of<FfiModel>(context);
-    final username = getUsername();
-    final enableAbr = gFFI.getByName("option", "enable-abr") != 'N';
     final enhancementsTiles = [
       SettingsTile.switchTile(
-        title: Text(translate('Adaptive Bitrate') + '(beta)'),
-        initialValue: enableAbr,
+        title: Text(translate('Adaptive Bitrate') + ' (beta)'),
+        initialValue: _enableAbr,
         onToggle: (v) {
-          final msg = Map()
-            ..["name"] = "enable-abr"
-            ..["value"] = "";
-          if (!v) {
-            msg["value"] = "N";
-          }
-          gFFI.setByName("option", json.encode(msg));
-          setState(() {});
+          bind.mainSetOption(key: "enable-abr", value: v ? "" : "N");
+          setState(() {
+            _enableAbr = !_enableAbr;
+          });
         },
       )
     ];
@@ -196,7 +215,7 @@ void showServerSettings() async {
 
 void showLanguageSettings() async {
   try {
-    final langs = json.decode(gFFI.getByName('langs')) as List<dynamic>;
+    final langs = json.decode(await bind.mainGetLangs()) as List<dynamic>;
     var lang = await bind.mainGetLocalOption(key: "lang");
     DialogManager.show((setState, close) {
       final setLang = (v) {
@@ -297,20 +316,19 @@ String parseResp(String body) {
   }
   final token = data['access_token'];
   if (token != null) {
-    gFFI.setByName('option', '{"name": "access_token", "value": "$token"}');
+    bind.mainSetOption(key: "access_token", value: token);
   }
   final info = data['user'];
   if (info != null) {
     final value = json.encode(info);
-    gFFI.setByName(
-        'option', json.encode({"name": "user_info", "value": value}));
+    bind.mainSetOption(key: "user_info", value: value);
     gFFI.ffiModel.updateUser();
   }
   return '';
 }
 
 void refreshCurrentUser() async {
-  final token = gFFI.getByName("option", "access_token");
+  final token = await bind.mainGetOption(key: "access_token");
   if (token == '') return;
   final url = getUrl();
   final body = {'id': bind.mainGetMyId(), 'uuid': bind.mainGetUuid()};
@@ -333,7 +351,7 @@ void refreshCurrentUser() async {
 }
 
 void logout() async {
-  final token = gFFI.getByName("option", "access_token");
+  final token = await bind.mainGetOption(key: "access_token");
   if (token == '') return;
   final url = getUrl();
   final body = {'id': bind.mainGetMyId(), 'uuid': bind.mainGetUuid()};
@@ -350,16 +368,16 @@ void logout() async {
   resetToken();
 }
 
-void resetToken() {
-  gFFI.setByName('option', '{"name": "access_token", "value": ""}');
-  gFFI.setByName('option', '{"name": "user_info", "value": ""}');
+void resetToken() async {
+  await bind.mainSetOption(key: "access_token", value: "");
+  await bind.mainSetOption(key: "user_info", value: "");
   gFFI.ffiModel.updateUser();
 }
 
-String getUrl() {
-  var url = gFFI.getByName('option', 'api-server');
+Future<String> getUrl() async {
+  var url = await bind.mainGetOption(key: "api-server");
   if (url == '') {
-    url = gFFI.getByName('option', 'custom-rendezvous-server');
+    url = await bind.mainGetOption(key: "custom-rendezvous-server");
     if (url != '') {
       if (url.contains(':')) {
         final tmp = url.split(':');
@@ -448,11 +466,11 @@ void showLogin() {
   });
 }
 
-String? getUsername() {
-  final token = gFFI.getByName("option", "access_token");
+Future<String?> getUsername() async {
+  final token = await bind.mainGetOption(key: "access_token");
   String? username;
   if (token != "") {
-    final info = gFFI.getByName("option", "user_info");
+    final info = await bind.mainGetOption(key: "user_info");
     if (info != "") {
       try {
         Map<String, dynamic> tmp = json.decode(info);

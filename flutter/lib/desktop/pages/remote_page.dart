@@ -348,8 +348,9 @@ class _RemotePageState extends State<RemotePage>
             if (dy > 0)
               dy = -1;
             else if (dy < 0) dy = 1;
-            _ffi.setByName('send_mouse',
-                '{"id": "${widget.id}", "type": "wheel", "x": "$dx", "y": "$dy"}');
+            bind.sessionSendMouse(
+                id: widget.id,
+                msg: '{"type": "wheel", "x": "$dx", "y": "$dy"}');
           }
         },
         child: MouseRegion(

@@ -1280,7 +1280,7 @@ impl LoginConfigHandler {
     /// Create a [`Message`] for login.
     fn create_login_msg(&self, password: Vec<u8>) -> Message {
         #[cfg(any(target_os = "android", target_os = "ios"))]
-        let my_id = Config::get_id_or(crate::common::FLUTTER_INFO1.lock().unwrap().clone());
+        let my_id = Config::get_id_or(crate::common::DEVICE_ID.lock().unwrap().clone());
         #[cfg(not(any(target_os = "android", target_os = "ios")))]
         let my_id = Config::get_id();
         let mut lr = LoginRequest {

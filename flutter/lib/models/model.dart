@@ -889,8 +889,10 @@ class FFI {
 
   /// Send scroll event with scroll distance [y].
   void scroll(int y) {
-    setByName('send_mouse',
-        json.encode(modify({'id': id, 'type': 'wheel', 'y': y.toString()})));
+    bind.sessionSendMouse(
+        id: id,
+        msg: json
+            .encode(modify({'id': id, 'type': 'wheel', 'y': y.toString()})));
   }
 
   /// Reconnect to the remote peer.
@@ -916,8 +918,9 @@ class FFI {
   /// Send mouse press event.
   void sendMouse(String type, MouseButtons button) {
     if (!ffiModel.keyboard()) return;
-    setByName('send_mouse',
-        json.encode(modify({'id': id, 'type': type, 'buttons': button.value})));
+    bind.sessionSendMouse(
+        id: id,
+        msg: json.encode(modify({'type': type, 'buttons': button.value})));
   }
 
   /// Send key stroke event.
@@ -953,8 +956,8 @@ class FFI {
     if (!ffiModel.keyboard()) return;
     var x2 = x.toInt();
     var y2 = y.toInt();
-    setByName(
-        'send_mouse', json.encode(modify({'id': id, 'x': '$x2', 'y': '$y2'})));
+    bind.sessionSendMouse(
+        id: id, msg: json.encode(modify({'x': '$x2', 'y': '$y2'})));
   }
 
   /// List the saved peers.
@@ -1032,14 +1035,14 @@ class FFI {
 
   /// Send **get** command to the Rust core based on [name] and [arg].
   /// Return the result as a string.
-  String getByName(String name, [String arg = '']) {
-    return platformFFI.getByName(name, arg);
-  }
+  // String getByName(String name, [String arg = '']) {
+  //   return platformFFI.getByName(name, arg);
+  // }
 
   /// Send **set** command to the Rust core based on [name] and [value].
-  void setByName(String name, [String value = '']) {
-    platformFFI.setByName(name, value);
-  }
+  // void setByName(String name, [String value = '']) {
+  //   platformFFI.setByName(name, value);
+  // }
 
   handleMouse(Map<String, dynamic> evt, {double tabBarHeight = 0.0}) {
     var type = '';
@@ -1092,8 +1095,7 @@ class FFI {
         break;
     }
     evt['buttons'] = buttons;
-    evt['id'] = id;
-    setByName('send_mouse', json.encode(evt));
+    bind.sessionSendMouse(id: id, msg: json.encode(evt));
   }
 
   listenToMouse(bool yesOrNo) {

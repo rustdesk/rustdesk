@@ -825,10 +825,34 @@ class WebMenu extends StatefulWidget {
 }
 
 class _WebMenuState extends State<WebMenu> {
+  String? username;
+  String url = "";
+
+  @override
+  void initState() {
+    super.initState();
+    () async {
+      final usernameRes = await getUsername();
+      final urlRes = await getUrl();
+      var update = false;
+      if (usernameRes != username) {
+        username = usernameRes;
+        update = true;
+      }
+      if (urlRes != url) {
+        url = urlRes;
+        update = true;
+      }
+
+      if (update) {
+        setState(() {});
+      }
+    }();
+  }
+
   @override
   Widget build(BuildContext context) {
     Provider.of<FfiModel>(context);
-    final username = getUsername();
     return PopupMenuButton<String>(
         icon: Icon(Icons.more_vert),
         itemBuilder: (context) {
@@ -846,7 +870,7 @@ class _WebMenuState extends State<WebMenu> {
                   value: "server",
                 )
               ] +
-              (getUrl().contains('admin.rustdesk.com')
+              (url.contains('admin.rustdesk.com')
                   ? <PopupMenuItem<String>>[]
                   : [
                       PopupMenuItem(

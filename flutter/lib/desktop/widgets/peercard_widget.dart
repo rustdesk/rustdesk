@@ -187,7 +187,7 @@ class _PeerCardState extends State<_PeerCard>
       elevation: 8,
     );
     if (value == 'remove') {
-      setState(() => gFFI.setByName('remove', '$id'));
+      setState(() => bind.mainRemovePeer(id: id));
       () async {
         removePreference(id);
       }();

@@ -99,42 +99,29 @@ class ServerModel with ChangeNotifier {
       // audio
       if (androidVersion < 30 || !await PermissionManager.check("audio")) {
         _audioOk = false;
-        parent.target?.setByName(
-            'option',
-            jsonEncode(Map()
-              ..["name"] = "enable-audio"
-              ..["value"] = "N"));
+        bind.mainSetOption(key: "enable-audio", value: "N");
       } else {
-        final audioOption = parent.target?.getByName('option', 'enable-audio');
-        _audioOk = audioOption?.isEmpty ?? false;
+        final audioOption = await bind.mainGetOption(key: 'enable-audio');
+        _audioOk = audioOption.isEmpty;
       }
 
       // file
       if (!await PermissionManager.check("file")) {
         _fileOk = false;
-        parent.target?.setByName(
-            'option',
-            jsonEncode(Map()
-              ..["name"] = "enable-file-transfer"
-              ..["value"] = "N"));
+        bind.mainSetOption(key: "enable-file-transfer", value: "N");
       } else {
         final fileOption =
-            parent.target?.getByName('option', 'enable-file-transfer');
-        _fileOk = fileOption?.isEmpty ?? false;
+            await bind.mainGetOption(key: 'enable-file-transfer');
+        _fileOk = fileOption.isEmpty;
       }
 
-      // input (mouse control)
-      Map<String, String> res = Map()
-        ..["name"] = "enable-keyboard"
-        ..["value"] = 'N';
-      parent.target
-          ?.setByName('option', jsonEncode(res)); // input false by default
+      // input (mouse control) false by default
+      bind.mainSetOption(key: "enable-keyboard", value: "N");
       notifyListeners();
     }();
 
-    Timer.periodic(Duration(seconds: 1), (timer) {
-      var status =
-          int.tryParse(parent.target?.getByName('connect_statue') ?? "") ?? 0;
+    Timer.periodic(Duration(seconds: 1), (timer) async {
+      var status = await bind.mainGetOnlineStatue();
       if (status > 0) {
         status = 1;
       }
@@ -142,10 +129,8 @@ class ServerModel with ChangeNotifier {
         _connectStatus = status;
         notifyListeners();
       }
-      final res = parent.target
-              ?.getByName('check_clients_length', _clients.length.toString()) ??
-          "";
-      if (res.isNotEmpty) {
+      final res = await bind.mainCheckClientsLength(length: _clients.length);
+      if (res != null) {
         debugPrint("clients not match!");
         updateClientState(res);
       }
@@ -156,7 +141,7 @@ class ServerModel with ChangeNotifier {
 
   updatePasswordModel() async {
     var update = false;
-    final temporaryPassword = gFFI.getByName("temporary_password");
+    final temporaryPassword = await bind.mainGetTemporaryPassword();
     final verificationMethod =
         await bind.mainGetOption(key: "verification-method");
     final temporaryPasswordLength =
@@ -194,10 +179,7 @@ class ServerModel with ChangeNotifier {
     }
 
     _audioOk = !_audioOk;
-    Map<String, String> res = Map()
-      ..["name"] = "enable-audio"
-      ..["value"] = _audioOk ? '' : 'N';
-    parent.target?.setByName('option', jsonEncode(res));
+    bind.mainSetOption(key: "enable-audio", value: _audioOk ? '' : 'N');
     notifyListeners();
   }
 
@@ -211,10 +193,7 @@ class ServerModel with ChangeNotifier {
     }
 
     _fileOk = !_fileOk;
-    Map<String, String> res = Map()
-      ..["name"] = "enable-file-transfer"
-      ..["value"] = _fileOk ? '' : 'N';
-    parent.target?.setByName('option', jsonEncode(res));
+    bind.mainSetOption(key: "enable-file-transfer", value: _fileOk ? '' : 'N');
     notifyListeners();
   }
 
@@ -284,7 +263,7 @@ class ServerModel with ChangeNotifier {
     // TODO
     parent.target?.ffiModel.updateEventListener("");
     await parent.target?.invokeMethod("init_service");
-    parent.target?.setByName("start_service");
+    await bind.mainStartService();
     _fetchID();
     updateClientState();
     if (!Platform.isLinux) {
@@ -299,7 +278,7 @@ class ServerModel with ChangeNotifier {
     // TODO
     parent.target?.serverModel.closeAll();
     await parent.target?.invokeMethod("stop_service");
-    parent.target?.setByName("stop_service");
+    await bind.mainStopService();
     notifyListeners();
     if (!Platform.isLinux) {
       // current linux is not supported
@@ -312,9 +291,9 @@ class ServerModel with ChangeNotifier {
   }
 
   Future<bool> setPermanentPassword(String newPW) async {
-    parent.target?.setByName("permanent_password", newPW);
+    await bind.mainSetPermanentPassword(password: newPW);
     await Future.delayed(Duration(milliseconds: 500));
-    final pw = parent.target?.getByName("permanent_password");
+    final pw = await bind.mainGetPermanentPassword();
     if (newPW == pw) {
       return true;
     } else {
@@ -355,10 +334,7 @@ class ServerModel with ChangeNotifier {
         break;
       case "input":
         if (_inputOk != value) {
-          Map<String, String> res = Map()
-            ..["name"] = "enable-keyboard"
-            ..["value"] = value ? '' : 'N';
-          parent.target?.setByName('option', jsonEncode(res));
+          bind.mainSetOption(key: "enable-keyboard", value: value ? '' : 'N');
         }
         _inputOk = value;
         break;
@@ -368,8 +344,8 @@ class ServerModel with ChangeNotifier {
     notifyListeners();
   }
 
-  updateClientState([String? json]) {
-    var res = json ?? parent.target?.getByName("clients_state") ?? "";
+  updateClientState([String? json]) async {
+    var res = await bind.mainGetClientsState();
     try {
       final List clientsJson = jsonDecode(res);
       for (var clientJson in clientsJson) {
@@ -451,12 +427,9 @@ class ServerModel with ChangeNotifier {
     });
   }
 
-  void sendLoginResponse(Client client, bool res) {
-    final Map<String, dynamic> response = Map();
-    response["id"] = client.id;
-    response["res"] = res;
+  void sendLoginResponse(Client client, bool res) async {
     if (res) {
-      parent.target?.setByName("login_res", jsonEncode(response));
+      bind.serverLoginRes(connId: client.id, res: res);
       if (!client.isFileTransfer) {
         parent.target?.invokeMethod("start_capture");
       }
@@ -464,7 +437,7 @@ class ServerModel with ChangeNotifier {
       _clients[client.id]?.authorized = true;
       notifyListeners();
     } else {
-      parent.target?.setByName("login_res", jsonEncode(response));
+      bind.serverLoginRes(connId: client.id, res: res);
       parent.target?.invokeMethod("cancel_notification", client.id);
       _clients.remove(client.id);
     }
@@ -496,7 +469,7 @@ class ServerModel with ChangeNotifier {
 
   closeAll() {
     _clients.forEach((id, client) {
-      parent.target?.setByName("close_conn", id.toString());
+      bind.serverCloseConnection(connId: id);
     });
     _clients.clear();
   }

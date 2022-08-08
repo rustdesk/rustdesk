@@ -30,8 +30,6 @@ class PlatformFFI {
   String _dir = '';
   String _homeDir = '';
   F2? _translate;
-  F2? _getByName;
-  F3? _setByName;
   var _eventHandlers = Map<String, Map<String, HandleEvent>>();
   late RustdeskImpl _ffiBind;
   late String _appType;
@@ -89,31 +87,6 @@ class PlatformFFI {
     return res;
   }
 
-  /// Send **get** command to the Rust core based on [name] and [arg].
-  /// Return the result as a string.
-  String getByName(String name, [String arg = '']) {
-    if (_getByName == null) return '';
-    var a = name.toNativeUtf8();
-    var b = arg.toNativeUtf8();
-    var p = _getByName!(a, b);
-    assert(p != nullptr);
-    var res = p.toDartString();
-    calloc.free(p);
-    calloc.free(a);
-    calloc.free(b);
-    return res;
-  }
-
-  /// Send **set** command to the Rust core based on [name] and [value].
-  void setByName(String name, [String value = '']) {
-    if (_setByName == null) return;
-    var a = name.toNativeUtf8();
-    var b = value.toNativeUtf8();
-    _setByName!(a, b);
-    calloc.free(a);
-    calloc.free(b);
-  }
-
   /// Init the FFI class, loads the native Rust core library.
   Future<Null> init(String appType) async {
     _appType = appType;
@@ -133,10 +106,6 @@ class PlatformFFI {
     debugPrint('initializing FFI ${_appType}');
     try {
       _translate = dylib.lookupFunction<F2, F2>('translate');
-      _getByName = dylib.lookupFunction<F2, F2>('get_by_name');
-      _setByName =
-          dylib.lookupFunction<Void Function(Pointer<Utf8>, Pointer<Utf8>), F3>(
-              'set_by_name');
       _dir = (await getApplicationDocumentsDirectory()).path;
       _ffiBind = RustdeskImpl(dylib);
       _startListenEvent(_ffiBind); // global event
@@ -177,10 +146,10 @@ class PlatformFFI {
       }
       print(
           "_appType:$_appType,info1-id:$id,info2-name:$name,dir:$_dir,homeDir:$_homeDir");
-      setByName('info1', id);
-      setByName('info2', name);
-      setByName('home_dir', _homeDir);
-      setByName('init', _dir);
+      await _ffiBind.mainDeviceId(id: id);
+      await _ffiBind.mainDeviceName(name: name);
+      await _ffiBind.mainSetHomeDir(home: _homeDir);
+      await _ffiBind.mainInit(appDir: _dir);
     } catch (e) {
       print(e);
     }
