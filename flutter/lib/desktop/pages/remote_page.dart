@@ -277,8 +277,7 @@ class _RemotePageState extends State<RemotePage>
   @override
   Widget build(BuildContext context) {
     super.build(context);
-    Provider.of<CanvasModel>(context, listen: false).tabBarHeight =
-        super.widget.tabBarHeight;
+    _ffi.canvasModel.tabBarHeight = super.widget.tabBarHeight;
     return WillPopScope(
         onWillPop: () async {
           clientClose();
@@ -882,11 +881,11 @@ class ImagePainter extends CustomPainter {
     if (image == null) return;
     canvas.scale(scale, scale);
     // https://github.com/flutter/flutter/issues/76187#issuecomment-784628161
+    // https://api.flutter-io.cn/flutter/dart-ui/FilterQuality.html
     var paint = new Paint();
-    if (scale > 1.00001) {
+    paint.filterQuality = FilterQuality.medium;
+    if (scale > 10.00000) {
       paint.filterQuality = FilterQuality.high;
-    } else if (scale < 0.99999) {
-      paint.filterQuality = FilterQuality.medium;
     }
     canvas.drawImage(image!, new Offset(x, y), paint);
   }
