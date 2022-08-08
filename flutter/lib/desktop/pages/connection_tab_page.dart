@@ -5,7 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_hbb/common.dart';
 import 'package:flutter_hbb/consts.dart';
 import 'package:flutter_hbb/desktop/pages/remote_page.dart';
-import 'package:flutter_hbb/desktop/widgets/titlebar_widget.dart';
+import 'package:flutter_hbb/desktop/widgets/tabbar_widget.dart';
 import 'package:flutter_hbb/utils/multi_window_manager.dart';
 import 'package:get/get.dart';
 
@@ -24,9 +24,10 @@ class _ConnectionTabPageState extends State<ConnectionTabPage>
     with TickerProviderStateMixin {
   // refactor List<int> when using multi-tab
   // this singleton is only for test
-  var connectionIds = RxList.empty(growable: true);
+  var connectionIds = RxList<String>.empty(growable: true);
   var initialIndex = 0;
   late Rx<TabController> tabController;
+  static final Rx<int> _selected = 0.obs;
 
   var connectionMap = RxList<Widget>.empty(growable: true);
 
@@ -60,6 +61,7 @@ class _ConnectionTabPageState extends State<ConnectionTabPage>
               vsync: this,
               initialIndex: initialIndex);
         }
+        _selected.value = initialIndex;
       } else if (call.method == "onDestroy") {
         print("executing onDestroy hook, closing ${connectionIds}");
         connectionIds.forEach((id) {
@@ -78,38 +80,13 @@ class _ConnectionTabPageState extends State<ConnectionTabPage>
     return Scaffold(
       body: Column(
         children: [
-          DesktopTitleBar(
-            child: Container(
-                height: kDesktopRemoteTabBarHeight,
-                child: Obx(() => TabBar(
-                    isScrollable: true,
-                    labelColor: Colors.white,
-                    physics: NeverScrollableScrollPhysics(),
-                    indicatorColor: Colors.white,
-                    controller: tabController.value,
-                    tabs: connectionIds
-                        .map((e) => Tab(
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                crossAxisAlignment: CrossAxisAlignment.center,
-                                children: [
-                                  Text(e),
-                                  SizedBox(
-                                    width: 4,
-                                  ),
-                                  InkWell(
-                                      onTap: () {
-                                        onRemoveId(e);
-                                      },
-                                      child: Icon(
-                                        Icons.highlight_remove,
-                                        size: 20,
-                                      ))
-                                ],
-                              ),
-                            ))
-                        .toList()))),
-          ),
+          Obx(() => DesktopTabBar(
+                controller: tabController,
+                tabs: connectionIds.toList(),
+                onTabClose: onRemoveId,
+                tabIcon: Icons.desktop_windows_sharp,
+                selected: _selected,
+              )),
           Expanded(
               child: Obx(() => TabBarView(
                   controller: tabController.value,

@@ -4,7 +4,7 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/common.dart';
 import 'package:flutter_hbb/desktop/pages/file_manager_page.dart';
-import 'package:flutter_hbb/desktop/widgets/titlebar_widget.dart';
+import 'package:flutter_hbb/desktop/widgets/tabbar_widget.dart';
 import 'package:flutter_hbb/models/model.dart';
 import 'package:flutter_hbb/utils/multi_window_manager.dart';
 import 'package:get/get.dart';
@@ -26,6 +26,7 @@ class _FileManagerTabPageState extends State<FileManagerTabPage>
   var connectionIds = List<String>.empty(growable: true).obs;
   var initialIndex = 0;
   late Rx<TabController> tabController;
+  static final Rx<int> _selected = 0.obs;
 
   _FileManagerTabPageState(Map<String, dynamic> params) {
     if (params['id'] != null) {
@@ -57,6 +58,7 @@ class _FileManagerTabPageState extends State<FileManagerTabPage>
               initialIndex: initialIndex,
               vsync: this);
         }
+        _selected.value = initialIndex;
       } else if (call.method == "onDestroy") {
         print("executing onDestroy hook, closing ${connectionIds}");
         connectionIds.forEach((id) {
@@ -75,37 +77,13 @@ class _FileManagerTabPageState extends State<FileManagerTabPage>
     return Scaffold(
       body: Column(
         children: [
-          DesktopTitleBar(
-            child: Obx(
-              () => TabBar(
-                  controller: tabController.value,
-                  isScrollable: true,
-                  labelColor: Colors.white,
-                  physics: NeverScrollableScrollPhysics(),
-                  indicatorColor: Colors.white,
-                  tabs: connectionIds
-                      .map((e) => Tab(
-                            key: Key('T$e'),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              crossAxisAlignment: CrossAxisAlignment.center,
-                              children: [
-                                Text(e),
-                                SizedBox(
-                                  width: 4,
-                                ),
-                                InkWell(
-                                    onTap: () {
-                                      onRemoveId(e);
-                                    },
-                                    child: Icon(
-                                      Icons.highlight_remove,
-                                      size: 20,
-                                    ))
-                              ],
-                            ),
-                          ))
-                      .toList()),
+          Obx(
+            () => DesktopTabBar(
+              controller: tabController,
+              tabs: connectionIds.toList(),
+              onTabClose: onRemoveId,
+              tabIcon: Icons.file_copy_sharp,
+              selected: _selected,
             ),
           ),
           Expanded(
