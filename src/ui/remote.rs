@@ -25,8 +25,12 @@ use clipboard::{
 use enigo::{self, Enigo, KeyboardControllable};
 use hbb_common::{
     allow_err,
-    config::{Config, LocalConfig, PeerConfig},
-    fs, log,
+    config::{Config, LocalConfig, PeerConfig, TransferSerde},
+    fs::{
+        self, can_enable_overwrite_detection, get_job, get_string, new_send_confirm,
+        DigestCheckResult, RemoveJobMeta, TransferJobMeta,
+    },
+    get_version_number, log,
     message_proto::{permission_info::Permission, *},
     protobuf::Message as _,
     rendezvous_proto::ConnType,
@@ -37,14 +41,6 @@ use hbb_common::{
         time::{self, Duration, Instant, Interval},
     },
     Stream,
-};
-use hbb_common::{config::TransferSerde, fs::TransferJobMeta};
-use hbb_common::{
-    fs::{
-        can_enable_overwrite_detection, get_job, get_string, new_send_confirm, DigestCheckResult,
-        RemoveJobMeta,
-    },
-    get_version_number,
 };
 
 #[cfg(windows)]
@@ -2071,22 +2067,6 @@ impl Remote {
         true
     }
 
-    async fn send_opts_after_login(&self, peer: &mut Stream) {
-        if let Some(opts) = self
-        .handler
-        .lc
-        .read()
-        .unwrap()
-        .get_option_message_after_login()
-    {
-        let mut misc = Misc::new();
-        misc.set_option(opts);
-        let mut msg_out = Message::new();
-        msg_out.set_misc(misc);
-        allow_err!(peer.send(&msg_out).await);
-    }
-    }
-
     async fn handle_msg_from_peer(&mut self, data: &[u8], peer: &mut Stream) -> bool {
         if let Ok(msg_in) = Message::parse_from_bytes(&data) {
             match msg_in.union {
@@ -2095,7 +2075,7 @@ impl Remote {
                         self.first_frame = true;
                         self.handler.call2("closeSuccess", &make_args!());
                         self.handler.call("adaptSize", &make_args!());
-                        self.send_opts_after_login(peer).await;
+                        common::send_opts_after_login(&self.handler.lc.read().unwrap(), peer).await;
                     }
                     let incomming_format = CodecFormat::from(&vf);
                     if self.video_format != incomming_format {

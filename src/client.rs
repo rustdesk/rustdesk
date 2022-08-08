@@ -1004,6 +1004,13 @@ impl LoginConfigHandler {
         Some(msg_out)
     }
 
+    /// Get [`PeerConfig`] of the current [`LoginConfigHandler`].
+    ///
+    /// # Arguments
+    pub fn get_config(&mut self) -> &mut PeerConfig {
+        &mut self.config
+    }
+
     /// Get [`OptionMessage`] of the current [`LoginConfigHandler`].
     /// Return `None` if there's no option, for example, when the session is only for file transfer.
     ///

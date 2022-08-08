@@ -604,8 +604,12 @@ class _RemotePageState extends State<RemotePage>
           await bind.getSessionToggleOption(id: id, arg: 'privacy-mode') !=
               true) {
         more.add(PopupMenuItem<String>(
-            child: Text(translate((_ffi.ffiModel.inputBlocked ? 'Unb' : 'B') +
-                'lock user input')),
+            child: Consumer<FfiModel>(
+                builder: (_context, ffiModel, _child) => () {
+                      return Text(translate(
+                          (ffiModel.inputBlocked ? 'Unb' : 'B') +
+                              'lock user input'));
+                    }()),
             value: 'block-input'));
       }
     }
@@ -951,7 +955,11 @@ void showOptions(String id) async {
       more.add(getToggle(
           id, setState, 'lock-after-session-end', 'Lock after session end'));
       if (pi.platform == 'Windows') {
-        more.add(getToggle(id, setState, 'privacy-mode', 'Privacy mode'));
+        more.add(Consumer<FfiModel>(
+            builder: (_context, _ffiModel, _child) => () {
+                  return getToggle(
+                      id, setState, 'privacy-mode', 'Privacy mode');
+                }()));
       }
     }
     var setQuality = (String? value) {

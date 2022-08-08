@@ -76,7 +76,7 @@ impl Session {
         // TODO close
         // Self::close();
         let events2ui = Arc::new(RwLock::new(events2ui));
-        let mut session = Session {
+        let session = Session {
             id: session_id.clone(),
             sender: Default::default(),
             lc: Default::default(),
@@ -663,6 +663,8 @@ struct Connection {
 }
 
 impl Connection {
+    // TODO: Similar to remote::start_clipboard
+    // merge the code
     fn start_clipboard(
         tx_protobuf: mpsc::UnboundedSender<Data>,
         lc: Arc<RwLock<LoginConfigHandler>>,
@@ -842,6 +844,7 @@ impl Connection {
                 Some(message::Union::VideoFrame(vf)) => {
                     if !self.first_frame {
                         self.first_frame = true;
+                        common::send_opts_after_login(&self.session.lc.read().unwrap(), peer).await;
                     }
                     let incomming_format = CodecFormat::from(&vf);
                     if self.video_format != incomming_format {
@@ -1083,6 +1086,11 @@ impl Connection {
                         self.session.msgbox("error", "Connection Error", &c);
                         return false;
                     }
+                    Some(misc::Union::BackNotification(notification)) => {
+                        if !self.handle_back_notification(notification).await {
+                            return false;
+                        }
+                    }
                     _ => {}
                 },
                 Some(message::Union::TestDelay(t)) => {
@@ -1103,6 +1111,130 @@ impl Connection {
                 },
                 _ => {}
             }
+        }
+        true
+    }
+
+    async fn handle_back_notification(&mut self, notification: BackNotification) -> bool {
+        match notification.union {
+            Some(back_notification::Union::BlockInputState(state)) => {
+                self.handle_back_msg_block_input(
+                    state.enum_value_or(back_notification::BlockInputState::BlkStateUnknown),
+                )
+                .await;
+            }
+            Some(back_notification::Union::PrivacyModeState(state)) => {
+                if !self
+                    .handle_back_msg_privacy_mode(
+                        state.enum_value_or(back_notification::PrivacyModeState::PrvStateUnknown),
+                    )
+                    .await
+                {
+                    return false;
+                }
+            }
+            _ => {}
+        }
+        true
+    }
+
+    #[inline(always)]
+    fn update_block_input_state(&mut self, on: bool) {
+        self.session.push_event(
+            "update_block_input_state",
+            [("input_state", if on { "on" } else { "off" })].into(),
+        );
+    }
+
+    async fn handle_back_msg_block_input(&mut self, state: back_notification::BlockInputState) {
+        match state {
+            back_notification::BlockInputState::BlkOnSucceeded => {
+                self.update_block_input_state(true);
+            }
+            back_notification::BlockInputState::BlkOnFailed => {
+                self.session
+                    .msgbox("custom-error", "Block user input", "Failed");
+                self.update_block_input_state(false);
+            }
+            back_notification::BlockInputState::BlkOffSucceeded => {
+                self.update_block_input_state(false);
+            }
+            back_notification::BlockInputState::BlkOffFailed => {
+                self.session
+                    .msgbox("custom-error", "Unblock user input", "Failed");
+            }
+            _ => {}
+        }
+    }
+
+    #[inline(always)]
+    fn update_privacy_mode(&mut self, on: bool) {
+        let mut config = self.session.load_config();
+        config.privacy_mode = on;
+        self.session.save_config(&config);
+        self.session.lc.write().unwrap().get_config().privacy_mode = on;
+        self.session.push_event("update_privacy_mode", [].into());
+    }
+
+    async fn handle_back_msg_privacy_mode(
+        &mut self,
+        state: back_notification::PrivacyModeState,
+    ) -> bool {
+        match state {
+            back_notification::PrivacyModeState::PrvOnByOther => {
+                self.session.msgbox(
+                    "error",
+                    "Connecting...",
+                    "Someone turns on privacy mode, exit",
+                );
+                return false;
+            }
+            back_notification::PrivacyModeState::PrvNotSupported => {
+                self.session
+                    .msgbox("custom-error", "Privacy mode", "Unsupported");
+                self.update_privacy_mode(false);
+            }
+            back_notification::PrivacyModeState::PrvOnSucceeded => {
+                self.session
+                    .msgbox("custom-nocancel", "Privacy mode", "In privacy mode");
+                self.update_privacy_mode(true);
+            }
+            back_notification::PrivacyModeState::PrvOnFailedDenied => {
+                self.session
+                    .msgbox("custom-error", "Privacy mode", "Peer denied");
+                self.update_privacy_mode(false);
+            }
+            back_notification::PrivacyModeState::PrvOnFailedPlugin => {
+                self.session
+                    .msgbox("custom-error", "Privacy mode", "Please install plugins");
+                self.update_privacy_mode(false);
+            }
+            back_notification::PrivacyModeState::PrvOnFailed => {
+                self.session
+                    .msgbox("custom-error", "Privacy mode", "Failed");
+                self.update_privacy_mode(false);
+            }
+            back_notification::PrivacyModeState::PrvOffSucceeded => {
+                self.session
+                    .msgbox("custom-nocancel", "Privacy mode", "Out privacy mode");
+                self.update_privacy_mode(false);
+            }
+            back_notification::PrivacyModeState::PrvOffByPeer => {
+                self.session
+                    .msgbox("custom-error", "Privacy mode", "Peer exit");
+                self.update_privacy_mode(false);
+            }
+            back_notification::PrivacyModeState::PrvOffFailed => {
+                self.session
+                    .msgbox("custom-error", "Privacy mode", "Failed to turn off");
+            }
+            back_notification::PrivacyModeState::PrvOffUnknown => {
+                self.session
+                    .msgbox("custom-error", "Privacy mode", "Turned off");
+                // log::error!("Privacy mode is turned off with unknown reason");
+                self.update_privacy_mode(false);
+            }
+            _ => {}
         }
         true
     }

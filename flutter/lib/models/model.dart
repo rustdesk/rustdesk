@@ -173,6 +173,10 @@ class FfiModel with ChangeNotifier {
         parent.target?.serverModel.onClientRemove(evt);
       } else if (name == 'update_quality_status') {
         parent.target?.qualityMonitorModel.updateQualityStatus(evt);
+      } else if (name == 'update_block_input_state') {
+        updateBlockInputState(evt);
+      } else if (name == 'update_privacy_mode') {
+        updatePrivacyMode(evt);
       }
     };
   }
@@ -228,6 +232,10 @@ class FfiModel with ChangeNotifier {
         parent.target?.serverModel.onClientRemove(evt);
       } else if (name == 'update_quality_status') {
         parent.target?.qualityMonitorModel.updateQualityStatus(evt);
+      } else if (name == 'update_block_input_state') {
+        updateBlockInputState(evt);
+      } else if (name == 'update_privacy_mode') {
+        updatePrivacyMode(evt);
       }
     };
     platformFFI.setEventCallback(cb);
@@ -329,6 +337,15 @@ class FfiModel with ChangeNotifier {
         _reconnects = 1;
       }
     }
+    notifyListeners();
+  }
+
+  updateBlockInputState(Map<String, dynamic> evt) {
+    _inputBlocked = evt['input_state'] == 'on';
+    notifyListeners();
+  }
+
+  updatePrivacyMode(Map<String, dynamic> evt) {
     notifyListeners();
   }
 }
