@@ -8,7 +8,7 @@ import '../../models/platform_model.dart';
 import '../../models/server_model.dart';
 import 'home_page.dart';
 
-class ServerPage extends StatelessWidget implements PageShape {
+class ServerPage extends StatefulWidget implements PageShape {
   @override
   final title = translate("Share Screen");
 
@@ -101,6 +101,17 @@ class ServerPage extends StatelessWidget implements PageShape {
           }
         })
   ];
+
+  @override
+  State<StatefulWidget> createState() => _ServerPageState();
+}
+
+class _ServerPageState extends State<ServerPage> {
+  @override
+  void initState() {
+    super.initState();
+    gFFI.serverModel.checkAndroidPermission();
+  }
 
   @override
   Widget build(BuildContext context) {

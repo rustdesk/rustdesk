@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:desktop_multi_window/desktop_multi_window.dart';
 import 'package:flutter/material.dart' hide MenuItem;
 import 'package:flutter/services.dart';
 import 'package:flutter_hbb/common.dart';
@@ -27,8 +26,8 @@ class DesktopHomePage extends StatefulWidget {
 
 const borderColor = Color(0xFF2F65BA);
 
-class _DesktopHomePageState extends State<DesktopHomePage> with TrayListener, WindowListener {
-
+class _DesktopHomePageState extends State<DesktopHomePage>
+    with TrayListener, WindowListener {
   @override
   void onWindowClose() async {
     super.onWindowClose();
@@ -132,18 +131,7 @@ class _DesktopHomePageState extends State<DesktopHomePage> with TrayListener, Wi
                         style: TextStyle(
                             fontSize: 18, fontWeight: FontWeight.w500),
                       ),
-                      FutureBuilder<Widget>(
-                          future: buildPopupMenu(context),
-                          builder: (context, snapshot) {
-                            if (snapshot.hasError) {
-                              print("${snapshot.error}");
-                            }
-                            if (snapshot.hasData) {
-                              return snapshot.data!;
-                            } else {
-                              return Offstage();
-                            }
-                          })
+                      buildPopupMenu(context)
                     ],
                   ),
                   GestureDetector(
@@ -165,7 +153,7 @@ class _DesktopHomePageState extends State<DesktopHomePage> with TrayListener, Wi
     );
   }
 
-  Future<Widget> buildPopupMenu(BuildContext context) async {
+  Widget buildPopupMenu(BuildContext context) {
     var position;
     return GestureDetector(
         onTapDown: (detail) {
@@ -178,19 +166,19 @@ class _DesktopHomePageState extends State<DesktopHomePage> with TrayListener, Wi
           final enabledInput = await bind.mainGetOption(key: 'enable-audio');
           final defaultInput = await gFFI.getDefaultAudioInput();
           var menu = <PopupMenuEntry>[
-            genEnablePopupMenuItem(
+            await genEnablePopupMenuItem(
               translate("Enable Keyboard/Mouse"),
               'enable-keyboard',
             ),
-            genEnablePopupMenuItem(
+            await genEnablePopupMenuItem(
               translate("Enable Clipboard"),
               'enable-clipboard',
             ),
-            genEnablePopupMenuItem(
+            await genEnablePopupMenuItem(
               translate("Enable File Transfer"),
               'enable-file-transfer',
             ),
-            genEnablePopupMenuItem(
+            await genEnablePopupMenuItem(
               translate("Enable TCP Tunneling"),
               'enable-tunnel',
             ),
@@ -209,16 +197,16 @@ class _DesktopHomePageState extends State<DesktopHomePage> with TrayListener, Wi
               value: 'socks5-proxy',
             ),
             PopupMenuDivider(),
-            genEnablePopupMenuItem(
+            await genEnablePopupMenuItem(
               translate("Enable Service"),
               'stop-service',
             ),
             // TODO: direct server
-            genEnablePopupMenuItem(
+            await genEnablePopupMenuItem(
               translate("Always connected via relay"),
               'allow-always-relay',
             ),
-            genEnablePopupMenuItem(
+            await genEnablePopupMenuItem(
               translate("Start ID/relay service"),
               'stop-rendezvous-service',
             ),
@@ -237,7 +225,7 @@ class _DesktopHomePageState extends State<DesktopHomePage> with TrayListener, Wi
               value: 'change-id',
             ),
             PopupMenuDivider(),
-            genEnablePopupMenuItem(
+            await genEnablePopupMenuItem(
               translate("Dark Theme"),
               'allow-darktheme',
             ),
@@ -522,30 +510,22 @@ class _DesktopHomePageState extends State<DesktopHomePage> with TrayListener, Wi
     }
   }
 
-  PopupMenuItem<String> genEnablePopupMenuItem(String label, String key) {
-    Future<bool> getOptionEnable(String key) async {
-      final v = await bind.mainGetOption(key: key);
-      return key.startsWith('enable-') ? v != "N" : v == "Y";
-    }
+  Future<PopupMenuItem<String>> genEnablePopupMenuItem(
+      String label, String key) async {
+    final v = await bind.mainGetOption(key: key);
+    bool enable = v != "N";
 
     return PopupMenuItem(
-      child: FutureBuilder<bool>(
-          future: getOptionEnable(key),
-          builder: (context, snapshot) {
-            var enable = false;
-            if (snapshot.hasData && snapshot.data!) {
-              enable = true;
-            }
-            return Row(
-              children: [
-                Offstage(offstage: !enable, child: Icon(Icons.check)),
-                Text(
-                  label,
-                  style: genTextStyle(enable),
-                ),
-              ],
-            );
-          }),
+      child: Row(
+        children: [
+          Icon(Icons.check,
+              color: enable ? null : MyTheme.accent.withAlpha(00)),
+          Text(
+            label,
+            style: genTextStyle(enable),
+          ),
+        ],
+      ),
       value: key,
     );
   }

@@ -85,40 +85,8 @@ class ServerModel with ChangeNotifier {
   WeakReference<FFI> parent;
 
   ServerModel(this.parent) {
-    () async {
-      _emptyIdShow = translate("Generating ...");
-      _serverId = TextEditingController(text: this._emptyIdShow);
-      /**
-       * 1. check android permission
-       * 2. check config
-       * audio true by default (if permission on) (false default < Android 10)
-       * file true by default (if permission on)
-       */
-      await Future.delayed(Duration(seconds: 1));
-
-      // audio
-      if (androidVersion < 30 || !await PermissionManager.check("audio")) {
-        _audioOk = false;
-        bind.mainSetOption(key: "enable-audio", value: "N");
-      } else {
-        final audioOption = await bind.mainGetOption(key: 'enable-audio');
-        _audioOk = audioOption.isEmpty;
-      }
-
-      // file
-      if (!await PermissionManager.check("file")) {
-        _fileOk = false;
-        bind.mainSetOption(key: "enable-file-transfer", value: "N");
-      } else {
-        final fileOption =
-            await bind.mainGetOption(key: 'enable-file-transfer');
-        _fileOk = fileOption.isEmpty;
-      }
-
-      // input (mouse control) false by default
-      bind.mainSetOption(key: "enable-keyboard", value: "N");
-      notifyListeners();
-    }();
+    _emptyIdShow = translate("Generating ...");
+    _serverId = TextEditingController(text: this._emptyIdShow);
 
     Timer.periodic(Duration(seconds: 1), (timer) async {
       var status = await bind.mainGetOnlineStatue();
@@ -137,6 +105,34 @@ class ServerModel with ChangeNotifier {
 
       updatePasswordModel();
     });
+  }
+
+  /// 1. check android permission
+  /// 2. check config
+  /// audio true by default (if permission on) (false default < Android 10)
+  /// file true by default (if permission on)
+  checkAndroidPermission() async {
+    // audio
+    if (androidVersion < 30 || !await PermissionManager.check("audio")) {
+      _audioOk = false;
+      bind.mainSetOption(key: "enable-audio", value: "N");
+    } else {
+      final audioOption = await bind.mainGetOption(key: 'enable-audio');
+      _audioOk = audioOption.isEmpty;
+    }
+
+    // file
+    if (!await PermissionManager.check("file")) {
+      _fileOk = false;
+      bind.mainSetOption(key: "enable-file-transfer", value: "N");
+    } else {
+      final fileOption = await bind.mainGetOption(key: 'enable-file-transfer');
+      _fileOk = fileOption.isEmpty;
+    }
+
+    // input (mouse control) false by default
+    bind.mainSetOption(key: "enable-keyboard", value: "N");
+    notifyListeners();
   }
 
   updatePasswordModel() async {
