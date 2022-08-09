@@ -12,10 +12,10 @@ abstract class PageShape extends Widget {
   final List<Widget> appBarActions = [];
 }
 
-final homeKey = GlobalKey<_HomePageState>();
-
 class HomePage extends StatefulWidget {
-  HomePage({Key? key}) : super(key: key);
+  static final homeKey = GlobalKey<_HomePageState>();
+
+  HomePage() : super(key: homeKey);
 
   @override
   _HomePageState createState() => _HomePageState();

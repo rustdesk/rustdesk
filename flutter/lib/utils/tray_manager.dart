@@ -1,7 +1,8 @@
 import 'dart:io';
 
-import 'package:flutter_hbb/models/model.dart';
 import 'package:tray_manager/tray_manager.dart';
+
+import '../common.dart';
 
 Future<void> initTray({List<MenuItem>? extra_item}) async {
   List<MenuItem> items = [

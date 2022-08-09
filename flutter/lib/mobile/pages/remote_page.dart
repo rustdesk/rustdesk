@@ -12,6 +12,7 @@ import 'package:wakelock/wakelock.dart';
 
 import '../../common.dart';
 import '../../models/model.dart';
+import '../../models/platform_model.dart';
 import '../widgets/dialog.dart';
 import '../widgets/gestures.dart';
 import '../widgets/overlay.dart';
@@ -135,7 +136,7 @@ class _RemotePageState extends State<RemotePage> {
       if (newValue.length > common) {
         var s = newValue.substring(common);
         if (s.length > 1) {
-          gFFI.setByName('input_string', s);
+          bind.sessionInputString(id: widget.id, value: s);
         } else {
           inputChar(s);
         }
@@ -169,11 +170,11 @@ class _RemotePageState extends State<RemotePage> {
                 content == '（）' ||
                 content == '【】')) {
           // can not only input content[0], because when input ], [ are also auo insert, which cause ] never be input
-          gFFI.setByName('input_string', content);
+          bind.sessionInputString(id: widget.id, value: content);
           openKeyboard();
           return;
         }
-        gFFI.setByName('input_string', content);
+        bind.sessionInputString(id: widget.id, value: content);
       } else {
         inputChar(content);
       }
@@ -329,8 +330,9 @@ class _RemotePageState extends State<RemotePage> {
             if (dy > 0)
               dy = -1;
             else if (dy < 0) dy = 1;
-            gFFI.setByName(
-                'send_mouse', '{"type": "wheel", "x": "$dx", "y": "$dy"}');
+            bind.sessionSendMouse(
+                id: widget.id,
+                msg: '{"type": "wheel", "x": "$dx", "y": "$dy"}');
           }
         },
         child: MouseRegion(
@@ -409,7 +411,7 @@ class _RemotePageState extends State<RemotePage> {
                       icon: Icon(Icons.tv),
                       onPressed: () {
                         setState(() => _showEdit = false);
-                        showOptions();
+                        showOptions(widget.id);
                       },
                     )
                   ] +
@@ -461,7 +463,7 @@ class _RemotePageState extends State<RemotePage> {
                       icon: Icon(Icons.more_vert),
                       onPressed: () {
                         setState(() => _showEdit = false);
-                        showActions();
+                        showActions(widget.id);
                       },
                     ),
                   ]),
@@ -573,7 +575,7 @@ class _RemotePageState extends State<RemotePage> {
         },
         onTwoFingerScaleEnd: (d) {
           _scale = 1;
-          gFFI.setByName('peer_option', '{"name": "view-style", "value": ""}');
+          bind.sessionPeerOption(id: widget.id, name: "view-style", value: "");
         },
         onThreeFingerVerticalDragUpdate: gFFI.ffiModel.isPeerAndroid
             ? null
@@ -620,8 +622,9 @@ class _RemotePageState extends State<RemotePage> {
 
   Widget getBodyForDesktopWithListener(bool keyboard) {
     var paints = <Widget>[ImagePaint()];
-    if (keyboard ||
-        gFFI.getByName('toggle_option', 'show-remote-cursor') == 'true') {
+    final cursor = bind.getSessionToggleOptionSync(
+        id: widget.id, arg: 'show-remote-cursor');
+    if (keyboard || cursor) {
       paints.add(CursorPaint());
     }
     return Container(
@@ -649,7 +652,7 @@ class _RemotePageState extends State<RemotePage> {
     return out;
   }
 
-  void showActions() {
+  void showActions(String id) async {
     final size = MediaQuery.of(context).size;
     final x = 120.0;
     final y = size.height;
@@ -668,7 +671,7 @@ class _RemotePageState extends State<RemotePage> {
             style: flatButtonStyle,
             onPressed: () {
               Navigator.pop(context);
-              showSetOSPassword(false);
+              showSetOSPassword(id, false);
             },
             child: Icon(Icons.edit, color: MyTheme.accent),
           )
@@ -691,7 +694,8 @@ class _RemotePageState extends State<RemotePage> {
       more.add(PopupMenuItem<String>(
           child: Text(translate('Insert Lock')), value: 'lock'));
       if (pi.platform == 'Windows' &&
-          gFFI.getByName('toggle_option', 'privacy-mode') != 'true') {
+          await bind.getSessionToggleOption(id: id, arg: 'privacy-mode') !=
+              true) {
         more.add(PopupMenuItem<String>(
             child: Text(translate((gFFI.ffiModel.inputBlocked ? 'Unb' : 'B') +
                 'lock user input')),
@@ -713,28 +717,29 @@ class _RemotePageState extends State<RemotePage> {
         elevation: 8,
       );
       if (value == 'cad') {
-        gFFI.setByName('ctrl_alt_del');
+        bind.sessionCtrlAltDel(id: widget.id);
       } else if (value == 'lock') {
-        gFFI.setByName('lock_screen');
+        bind.sessionLockScreen(id: widget.id);
       } else if (value == 'block-input') {
-        gFFI.setByName('toggle_option',
-            (gFFI.ffiModel.inputBlocked ? 'un' : '') + 'block-input');
+        bind.sessionToggleOption(
+            id: widget.id,
+            value: (gFFI.ffiModel.inputBlocked ? 'un' : '') + 'block-input');
         gFFI.ffiModel.inputBlocked = !gFFI.ffiModel.inputBlocked;
       } else if (value == 'refresh') {
-        gFFI.setByName('refresh');
+        bind.sessionRefresh(id: widget.id);
       } else if (value == 'paste') {
         () async {
           ClipboardData? data = await Clipboard.getData(Clipboard.kTextPlain);
           if (data != null && data.text != null) {
-            gFFI.setByName('input_string', '${data.text}');
+            bind.sessionInputString(id: widget.id, value: data.text ?? "");
           }
         }();
       } else if (value == 'enter_os_password') {
-        var password = gFFI.getByName('peer_option', "os-password");
-        if (password != "") {
-          gFFI.setByName('input_os_password', password);
+        var password = await bind.getSessionOption(id: id, arg: "os-password");
+        if (password != null) {
+          bind.sessionInputOsPassword(id: widget.id, value: password);
         } else {
-          showSetOSPassword(true);
+          showSetOSPassword(id, true);
         }
       } else if (value == 'reset_canvas') {
         gFFI.cursorModel.reset();
@@ -762,8 +767,8 @@ class _RemotePageState extends State<RemotePage> {
                       onTouchModeChange: (t) {
                         gFFI.ffiModel.toggleTouchMode();
                         final v = gFFI.ffiModel.touchMode ? 'Y' : '';
-                        gFFI.setByName('peer_option',
-                            '{"name": "touch-mode", "value": "$v"}');
+                        bind.sessionPeerOption(
+                            id: widget.id, name: "touch", value: v);
                       }));
             }));
   }
@@ -978,23 +983,23 @@ class QualityMonitor extends StatelessWidget {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            "Speed: ${qualityMonitorModel.data.speed}",
+                            "Speed: ${qualityMonitorModel.data.speed ?? ''}",
                             style: TextStyle(color: MyTheme.grayBg),
                           ),
                           Text(
-                            "FPS: ${qualityMonitorModel.data.fps}",
+                            "FPS: ${qualityMonitorModel.data.fps ?? ''}",
                             style: TextStyle(color: MyTheme.grayBg),
                           ),
                           Text(
-                            "Delay: ${qualityMonitorModel.data.delay} ms",
+                            "Delay: ${qualityMonitorModel.data.delay ?? ''} ms",
                             style: TextStyle(color: MyTheme.grayBg),
                           ),
                           Text(
-                            "Target Bitrate: ${qualityMonitorModel.data.targetBitrate}kb",
+                            "Target Bitrate: ${qualityMonitorModel.data.targetBitrate ?? ''}kb",
                             style: TextStyle(color: MyTheme.grayBg),
                           ),
                           Text(
-                            "Codec: ${qualityMonitorModel.data.codecFormat}",
+                            "Codec: ${qualityMonitorModel.data.codecFormat ?? ''}",
                             style: TextStyle(color: MyTheme.grayBg),
                           ),
                         ],
@@ -1003,26 +1008,11 @@ class QualityMonitor extends StatelessWidget {
                   : SizedBox.shrink())));
 }
 
-CheckboxListTile getToggle(
-    void Function(void Function()) setState, option, name) {
-  return CheckboxListTile(
-      value: gFFI.getByName('toggle_option', option) == 'true',
-      onChanged: (v) {
-        setState(() {
-          gFFI.setByName('toggle_option', option);
-        });
-        if (option == "show-quality-monitor") {
-          gFFI.qualityMonitorModel.checkShowQualityMonitor();
-        }
-      },
-      dense: true,
-      title: Text(translate(name)));
-}
-
-void showOptions() {
-  String quality = gFFI.getByName('image_quality');
+void showOptions(String id) async {
+  String quality = await bind.getSessionImageQuality(id: id) ?? 'balanced';
   if (quality == '') quality = 'balanced';
-  String viewStyle = gFFI.getByName('peer_option', 'view-style');
+  String viewStyle =
+      await bind.getSessionOption(id: id, arg: 'view-style') ?? '';
   var displays = <Widget>[];
   final pi = gFFI.ffiModel.pi;
   final image = gFFI.ffiModel.getConnectionImage();
@@ -1035,7 +1025,7 @@ void showOptions() {
       children.add(InkWell(
           onTap: () {
             if (i == cur) return;
-            gFFI.setByName('switch_display', i.toString());
+            bind.sessionSwitchDisplay(id: id, value: i);
             SmartDialog.dismiss();
           },
           child: Ink(
@@ -1064,30 +1054,30 @@ void showOptions() {
   DialogManager.show((setState, close) {
     final more = <Widget>[];
     if (perms['audio'] != false) {
-      more.add(getToggle(setState, 'disable-audio', 'Mute'));
+      more.add(getToggle(id, setState, 'disable-audio', 'Mute'));
     }
     if (perms['keyboard'] != false) {
       if (perms['clipboard'] != false)
-        more.add(getToggle(setState, 'disable-clipboard', 'Disable clipboard'));
+        more.add(
+            getToggle(id, setState, 'disable-clipboard', 'Disable clipboard'));
       more.add(getToggle(
-          setState, 'lock-after-session-end', 'Lock after session end'));
+          id, setState, 'lock-after-session-end', 'Lock after session end'));
       if (pi.platform == 'Windows') {
-        more.add(getToggle(setState, 'privacy-mode', 'Privacy mode'));
+        more.add(getToggle(id, setState, 'privacy-mode', 'Privacy mode'));
       }
     }
     var setQuality = (String? value) {
       if (value == null) return;
       setState(() {
         quality = value;
-        gFFI.setByName('image_quality', value);
+        bind.sessionSetImageQuality(id: id, value: value);
       });
     };
     var setViewStyle = (String? value) {
       if (value == null) return;
       setState(() {
         viewStyle = value;
-        gFFI.setByName(
-            'peer_option', '{"name": "view-style", "value": "$value"}');
+        bind.sessionPeerOption(id: id, name: "view-style", value: value);
         gFFI.canvasModel.updateViewStyle();
       });
     };
@@ -1105,9 +1095,10 @@ void showOptions() {
                 getRadio('Balanced', 'balanced', quality, setQuality),
                 getRadio('Optimize reaction time', 'low', quality, setQuality),
                 Divider(color: MyTheme.border),
-                getToggle(setState, 'show-remote-cursor', 'Show remote cursor'),
                 getToggle(
-                    setState, 'show-quality-monitor', 'Show quality monitor'),
+                    id, setState, 'show-remote-cursor', 'Show remote cursor'),
+                getToggle(id, setState, 'show-quality-monitor',
+                    'Show quality monitor'),
               ] +
               more),
       actions: [],
@@ -1134,13 +1125,13 @@ void showRestartRemoteDevice(PeerInfo pi, String id) async {
                   onPressed: () => close(true), child: Text(translate("OK"))),
             ],
           ));
-  if (res == true) gFFI.setByName('restart_remote_device');
+  if (res == true) bind.sessionRestartRemoteDevice(id: id);
 }
 
-void showSetOSPassword(bool login) {
+void showSetOSPassword(String id, bool login) async {
   final controller = TextEditingController();
-  var password = gFFI.getByName('peer_option', "os-password");
-  var autoLogin = gFFI.getByName('peer_option', "auto-login") != "";
+  var password = await bind.getSessionOption(id: id, arg: "os-password") ?? "";
+  var autoLogin = await bind.getSessionOption(id: id, arg: "auto-login") != "";
   controller.text = password;
   DialogManager.show((setState, close) {
     return CustomAlertDialog(
@@ -1173,12 +1164,11 @@ void showSetOSPassword(bool login) {
             style: flatButtonStyle,
             onPressed: () {
               var text = controller.text.trim();
-              gFFI.setByName(
-                  'peer_option', '{"name": "os-password", "value": "$text"}');
-              gFFI.setByName('peer_option',
-                  '{"name": "auto-login", "value": "${autoLogin ? 'Y' : ''}"}');
+              bind.sessionPeerOption(id: id, name: "os-password", value: text);
+              bind.sessionPeerOption(
+                  id: id, name: "auto-login", value: autoLogin ? 'Y' : '');
               if (text != "" && login) {
-                gFFI.setByName('input_os_password', text);
+                bind.sessionInputOsPassword(id: id, value: text);
               }
               close();
             },

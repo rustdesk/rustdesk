@@ -9,7 +9,7 @@ import 'package:qr_code_scanner/qr_code_scanner.dart';
 import 'package:zxing2/qrcode.dart';
 
 import '../../common.dart';
-import '../../models/model.dart';
+import '../../models/platform_model.dart';
 
 class ScanPage extends StatefulWidget {
   @override
@@ -153,54 +153,80 @@ class _ScanPageState extends State<ScanPage> {
 }
 
 void showServerSettingsWithValue(
-    String id, String relay, String key, String api) {
-  final formKey = GlobalKey<FormState>();
-  final id0 = gFFI.getByName('option', 'custom-rendezvous-server');
-  final relay0 = gFFI.getByName('option', 'relay-server');
-  final api0 = gFFI.getByName('option', 'api-server');
-  final key0 = gFFI.getByName('option', 'key');
+    String id, String relay, String key, String api) async {
+  Map<String, dynamic> oldOptions = jsonDecode(await bind.mainGetOptions());
+  String id0 = oldOptions['custom-rendezvous-server'] ?? "";
+  String relay0 = oldOptions['relay-server'] ?? "";
+  String api0 = oldOptions['api-server'] ?? "";
+  String key0 = oldOptions['key'] ?? "";
+  var isInProgress = false;
+  final idController = TextEditingController(text: id);
+  final relayController = TextEditingController(text: relay);
+  final apiController = TextEditingController(text: api);
+
+  String? idServerMsg;
+  String? relayServerMsg;
+  String? apiServerMsg;
+
   DialogManager.show((setState, close) {
+    Future<bool> validate() async {
+      if (idController.text != id) {
+        final res = await validateAsync(idController.text);
+        setState(() => idServerMsg = res);
+        if (idServerMsg != null) return false;
+        id = idController.text;
+      }
+      if (relayController.text != relay) {
+        relayServerMsg = await validateAsync(relayController.text);
+        if (relayServerMsg != null) return false;
+        relay = relayController.text;
+      }
+      if (apiController.text != relay) {
+        apiServerMsg = await validateAsync(apiController.text);
+        if (apiServerMsg != null) return false;
+        api = apiController.text;
+      }
+      return true;
+    }
+
     return CustomAlertDialog(
       title: Text(translate('ID/Relay Server')),
       content: Form(
-          key: formKey,
           child: Column(
               mainAxisSize: MainAxisSize.min,
               children: <Widget>[
                     TextFormField(
-                      initialValue: id,
+                      controller: idController,
                       decoration: InputDecoration(
-                        labelText: translate('ID Server'),
-                      ),
-                      validator: validate,
-                      onSaved: (String? value) {
-                        if (value != null) id = value.trim();
-                      },
+                          labelText: translate('ID Server'),
+                          errorText: idServerMsg),
                     )
                   ] +
                   (isAndroid
                       ? [
                           TextFormField(
-                            initialValue: relay,
+                            controller: relayController,
                             decoration: InputDecoration(
-                              labelText: translate('Relay Server'),
-                            ),
-                            validator: validate,
-                            onSaved: (String? value) {
-                              if (value != null) relay = value.trim();
-                            },
+                                labelText: translate('Relay Server'),
+                                errorText: relayServerMsg),
                           )
                         ]
                       : []) +
                   [
                     TextFormField(
-                      initialValue: api,
+                      controller: apiController,
                       decoration: InputDecoration(
                         labelText: translate('API Server'),
                       ),
-                      validator: validate,
-                      onSaved: (String? value) {
-                        if (value != null) api = value.trim();
+                      autovalidateMode: AutovalidateMode.onUserInteraction,
+                      validator: (v) {
+                        if (v != null && v.length > 0) {
+                          if (!(v.startsWith('http://') ||
+                              v.startsWith("https://"))) {
+                            return translate("invalid_http");
+                          }
+                        }
+                        return apiServerMsg;
                       },
                     ),
                     TextFormField(
@@ -208,11 +234,13 @@ void showServerSettingsWithValue(
                       decoration: InputDecoration(
                         labelText: 'Key',
                       ),
-                      validator: null,
-                      onSaved: (String? value) {
+                      onChanged: (String? value) {
                         if (value != null) key = value.trim();
                       },
                     ),
+                    Offstage(
+                        offstage: !isInProgress,
+                        child: LinearProgressIndicator())
                   ])),
       actions: [
         TextButton(
@@ -224,24 +252,28 @@ void showServerSettingsWithValue(
         ),
         TextButton(
           style: flatButtonStyle,
-          onPressed: () {
-            if (formKey.currentState != null &&
-                formKey.currentState!.validate()) {
-              formKey.currentState!.save();
-              if (id != id0)
-                gFFI.setByName('option',
-                    '{"name": "custom-rendezvous-server", "value": "$id"}');
+          onPressed: () async {
+            setState(() {
+              idServerMsg = null;
+              relayServerMsg = null;
+              apiServerMsg = null;
+              isInProgress = true;
+            });
+            if (await validate()) {
+              if (id != id0) {
+                bind.mainSetOption(key: "custom-rendezvous-server", value: id);
+              }
               if (relay != relay0)
-                gFFI.setByName(
-                    'option', '{"name": "relay-server", "value": "$relay"}');
-              if (key != key0)
-                gFFI.setByName('option', '{"name": "key", "value": "$key"}');
+                bind.mainSetOption(key: "relay-server", value: relay);
+              if (key != key0) bind.mainSetOption(key: "key", value: key);
               if (api != api0)
-                gFFI.setByName(
-                    'option', '{"name": "api-server", "value": "$api"}');
+                bind.mainSetOption(key: "api-server", value: api);
               gFFI.ffiModel.updateUser();
               close();
             }
+            setState(() {
+              isInProgress = false;
+            });
           },
           child: Text(translate('OK')),
         ),
@@ -250,11 +282,11 @@ void showServerSettingsWithValue(
   });
 }
 
-String? validate(value) {
+Future<String?> validateAsync(String value) async {
   value = value.trim();
   if (value.isEmpty) {
     return null;
   }
-  final res = gFFI.getByName('test_if_valid_server', value);
+  final res = await bind.mainTestIfValidServer(server: value);
   return res.isEmpty ? null : res;
 }

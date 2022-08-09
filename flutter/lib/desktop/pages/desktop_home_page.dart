@@ -7,7 +7,6 @@ import 'package:flutter/services.dart';
 import 'package:flutter_hbb/common.dart';
 import 'package:flutter_hbb/desktop/pages/connection_page.dart';
 import 'package:flutter_hbb/desktop/widgets/titlebar_widget.dart';
-import 'package:flutter_hbb/models/model.dart';
 import 'package:flutter_hbb/models/platform_model.dart';
 import 'package:flutter_hbb/models/server_model.dart';
 import 'package:get/get.dart';
@@ -156,6 +155,8 @@ class _DesktopHomePageState extends State<DesktopHomePage> with TrayListener {
         },
         onTap: () async {
           final userName = await gFFI.userModel.getUserName();
+          final enabledInput = await bind.mainGetOption(key: 'enable-audio');
+          final defaultInput = await gFFI.getDefaultAudioInput();
           var menu = <PopupMenuEntry>[
             genEnablePopupMenuItem(
               translate("Enable Keyboard/Mouse"),
@@ -173,7 +174,7 @@ class _DesktopHomePageState extends State<DesktopHomePage> with TrayListener {
               translate("Enable TCP Tunneling"),
               'enable-tunnel',
             ),
-            genAudioInputPopupMenuItem(),
+            genAudioInputPopupMenuItem(enabledInput != "N", defaultInput),
             PopupMenuDivider(),
             PopupMenuItem(
               child: Text(translate("ID/Relay Server")),
@@ -274,9 +275,7 @@ class _DesktopHomePageState extends State<DesktopHomePage> with TrayListener {
                       ),
                       IconButton(
                         icon: Icon(Icons.refresh),
-                        onPressed: () {
-                          gFFI.setByName("temporary_password");
-                        },
+                        onPressed: () => bind.mainUpdateTemporaryPassword(),
                       ),
                       FutureBuilder<Widget>(
                           future: buildPasswordPopupMenu(context),
@@ -359,7 +358,7 @@ class _DesktopHomePageState extends State<DesktopHomePage> with TrayListener {
                               if (gFFI.serverModel.temporaryPasswordLength !=
                                   e) {
                                 gFFI.serverModel.temporaryPasswordLength = e;
-                                gFFI.setByName("temporary_password");
+                                bind.mainUpdateTemporaryPassword();
                               }
                             },
                           ))
@@ -465,49 +464,60 @@ class _DesktopHomePageState extends State<DesktopHomePage> with TrayListener {
     Get.find<SharedPreferences>().setString("darkTheme", choice);
   }
 
-  void onSelectMenu(String value) {
-    if (value.startsWith('enable-')) {
-      final option = gFFI.getOption(value);
-      gFFI.setOption(value, option == "N" ? "" : "N");
-    } else if (value.startsWith('allow-')) {
-      final option = gFFI.getOption(value);
+  void onSelectMenu(String key) async {
+    if (key.startsWith('enable-')) {
+      final option = await bind.mainGetOption(key: key);
+      bind.mainSetOption(key: key, value: option == "N" ? "" : "N");
+    } else if (key.startsWith('allow-')) {
+      final option = await bind.mainGetOption(key: key);
       final choice = option == "Y" ? "" : "Y";
-      gFFI.setOption(value, choice);
+      bind.mainSetOption(key: key, value: choice);
       changeTheme(choice);
-    } else if (value == "stop-service") {
-      final option = gFFI.getOption(value);
-      gFFI.setOption(value, option == "Y" ? "" : "Y");
-    } else if (value == "change-id") {
+    } else if (key == "stop-service") {
+      final option = await bind.mainGetOption(key: key);
+      bind.mainSetOption(key: key, value: option == "Y" ? "" : "Y");
+    } else if (key == "change-id") {
       changeId();
-    } else if (value == "custom-server") {
+    } else if (key == "custom-server") {
       changeServer();
-    } else if (value == "whitelist") {
+    } else if (key == "whitelist") {
       changeWhiteList();
-    } else if (value == "socks5-proxy") {
+    } else if (key == "socks5-proxy") {
       changeSocks5Proxy();
-    } else if (value == "about") {
+    } else if (key == "about") {
       about();
-    } else if (value == "logout") {
+    } else if (key == "logout") {
       logOut();
-    } else if (value == "login") {
+    } else if (key == "login") {
       login();
     }
   }
 
-  PopupMenuItem<String> genEnablePopupMenuItem(String label, String value) {
-    final v = gFFI.getOption(value);
-    final isEnable = value.startsWith('enable-') ? v != "N" : v == "Y";
+  PopupMenuItem<String> genEnablePopupMenuItem(String label, String key) {
+    Future<bool> getOptionEnable(String key) async {
+      final v = await bind.mainGetOption(key: key);
+      return key.startsWith('enable-') ? v != "N" : v == "Y";
+    }
+
     return PopupMenuItem(
-      child: Row(
-        children: [
-          Offstage(offstage: !isEnable, child: Icon(Icons.check)),
-          Text(
-            label,
-            style: genTextStyle(isEnable),
-          ),
-        ],
-      ),
-      value: value,
+      child: FutureBuilder<bool>(
+          future: getOptionEnable(key),
+          builder: (context, snapshot) {
+            var enable = false;
+            if (snapshot.hasData && snapshot.data!) {
+              enable = true;
+            }
+            return Row(
+              children: [
+                Offstage(offstage: !enable, child: Icon(Icons.check)),
+                Text(
+                  label,
+                  style: genTextStyle(enable),
+                ),
+              ],
+            );
+          }),
+      value: key,
     );
   }
 
@@ -518,10 +528,11 @@ class _DesktopHomePageState extends State<DesktopHomePage> with TrayListener {
             color: Colors.redAccent, decoration: TextDecoration.lineThrough);
   }
 
-  PopupMenuItem<String> genAudioInputPopupMenuItem() {
-    final _enabledInput = gFFI.getOption('enable-audio');
-    var defaultInput = gFFI.getDefaultAudioInput().obs;
-    var enabled = (_enabledInput != "N").obs;
+  PopupMenuItem<String> genAudioInputPopupMenuItem(
+      bool enableInput, String defaultAudioInput) {
+    final defaultInput = defaultAudioInput.obs;
+    final enabled = enableInput.obs;
+
     return PopupMenuItem(
       child: FutureBuilder<List<String>>(
         future: gFFI.getAudioInputs(),
@@ -569,12 +580,13 @@ class _DesktopHomePageState extends State<DesktopHomePage> with TrayListener {
                   alignment: Alignment.centerLeft,
                   child: Text(translate("Audio Input"))),
               itemBuilder: (context) => inputList,
-              onSelected: (dev) {
+              onSelected: (dev) async {
                 if (dev == "Mute") {
-                  gFFI.setOption(
-                      'enable-audio', _enabledInput == 'N' ? '' : 'N');
-                  enabled.value = gFFI.getOption('enable-audio') != 'N';
-                } else if (dev != gFFI.getDefaultAudioInput()) {
+                  await bind.mainSetOption(
+                      key: 'enable-audio', value: enabled.value ? '' : 'N');
+                  enabled.value =
+                      await bind.mainGetOption(key: 'enable-audio') != 'N';
+                } else if (dev != await gFFI.getDefaultAudioInput()) {
                   gFFI.setDefaultAudioInput(dev);
                   defaultInput.value = dev;
                 }
@@ -1322,8 +1334,8 @@ Future<bool> loginDialog() async {
   return completer.future;
 }
 
-void setPasswordDialog() {
-  final pw = gFFI.getByName("permanent_password");
+void setPasswordDialog() async {
+  final pw = await bind.mainGetPermanentPassword();
   final p0 = TextEditingController(text: pw);
   final p1 = TextEditingController(text: pw);
   var errMsg0 = "";
@@ -1413,7 +1425,7 @@ void setPasswordDialog() {
                 });
                 return;
               }
-              gFFI.setByName("permanent_password", pass);
+              bind.mainSetPermanentPassword(password: pass);
               close();
             },
             child: Text(translate("OK"))),
