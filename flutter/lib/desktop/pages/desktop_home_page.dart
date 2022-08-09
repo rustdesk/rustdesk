@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:desktop_multi_window/desktop_multi_window.dart';
 import 'package:flutter/material.dart' hide MenuItem;
 import 'package:flutter/services.dart';
 import 'package:flutter_hbb/common.dart';
@@ -15,6 +16,7 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:tray_manager/tray_manager.dart';
 import 'package:url_launcher/url_launcher_string.dart';
+import 'package:window_manager/window_manager.dart';
 
 class DesktopHomePage extends StatefulWidget {
   DesktopHomePage({Key? key}) : super(key: key);
@@ -25,7 +27,24 @@ class DesktopHomePage extends StatefulWidget {
 
 const borderColor = Color(0xFF2F65BA);
 
-class _DesktopHomePageState extends State<DesktopHomePage> with TrayListener {
+class _DesktopHomePageState extends State<DesktopHomePage> with TrayListener, WindowListener {
+
+  @override
+  void onWindowClose() async {
+    super.onWindowClose();
+    // close all sub windows
+    if (await windowManager.isPreventClose()) {
+      try {
+        await rustDeskWinManager.closeAllSubWindows();
+      } catch (err) {
+        debugPrint("$err");
+      } finally {
+        await windowManager.setPreventClose(false);
+        await windowManager.close();
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -448,6 +467,7 @@ class _DesktopHomePageState extends State<DesktopHomePage> with TrayListener {
   void initState() {
     super.initState();
     trayManager.addListener(this);
+    windowManager.addListener(this);
     rustDeskWinManager.setMethodHandler((call, fromWindowId) async {
       print(
           "call ${call.method} with args ${call.arguments} from window ${fromWindowId}");
@@ -460,6 +480,7 @@ class _DesktopHomePageState extends State<DesktopHomePage> with TrayListener {
   @override
   void dispose() {
     trayManager.removeListener(this);
+    windowManager.removeListener(this);
     super.dispose();
   }
 

@@ -9,6 +9,7 @@ import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
 import 'package:get/get.dart';
 import 'package:get/route_manager.dart';
 import 'package:provider/provider.dart';
+import 'package:window_manager/window_manager.dart';
 
 // import 'package:window_manager/window_manager.dart';
 
@@ -47,6 +48,8 @@ Future<Null> main(List<String> args) async {
         break;
     }
   } else {
+    await windowManager.ensureInitialized();
+    windowManager.setPreventClose(true);
     runMainApp(true);
   }
 }
