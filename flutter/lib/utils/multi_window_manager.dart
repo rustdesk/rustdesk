@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:ui';
 
 import 'package:desktop_multi_window/desktop_multi_window.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 /// must keep the order
@@ -113,6 +114,31 @@ class RustDeskMultiWindowManager {
   void setMethodHandler(
       Future<dynamic> Function(MethodCall call, int fromWindowId)? handler) {
     DesktopMultiWindow.setMethodHandler(handler);
+  }
+
+  Future<void> closeAllSubWindows() async {
+    await Future.wait(WindowType.values.map((e) => closeWindows(e)));
+  }
+
+  Future<void> closeWindows(WindowType type) async  {
+    if (type == WindowType.Main) {
+      // skip main window, use window manager instead
+      return;
+    }
+    int? wId = findWindowByType(type);
+    if (wId != null) {
+      debugPrint("closing multi window: ${type.toString()}");
+      try {
+        final ids = await DesktopMultiWindow.getAllSubWindowIds();
+        if (!ids.contains(wId)) {
+          // no such window already
+          return;
+        }
+        await WindowController.fromWindowId(wId).close();
+      } on Error {
+        return;
+      }
+    }
   }
 }
 

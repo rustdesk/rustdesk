@@ -9,15 +9,16 @@ import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
 import 'package:get/get.dart';
 import 'package:get/route_manager.dart';
 import 'package:provider/provider.dart';
+import 'package:window_manager/window_manager.dart';
 
 // import 'package:window_manager/window_manager.dart';
 
 import 'common.dart';
 import 'consts.dart';
-import 'models/platform_model.dart';
 import 'mobile/pages/home_page.dart';
 import 'mobile/pages/server_page.dart';
 import 'mobile/pages/settings_page.dart';
+import 'models/platform_model.dart';
 
 int? windowId;
 
@@ -47,12 +48,14 @@ Future<Null> main(List<String> args) async {
         break;
     }
   } else {
+    await windowManager.ensureInitialized();
+    windowManager.setPreventClose(true);
     runMainApp(true);
   }
 }
 
 ThemeData getCurrentTheme() {
-  return isDarkTheme() ? MyTheme.darkTheme : MyTheme.darkTheme;
+  return isDarkTheme() ? MyTheme.darkTheme : MyTheme.lightTheme;
 }
 
 Future<void> initEnv(String appType) async {
