@@ -28,13 +28,13 @@ dependencies:
     # The following adds the Cupertino Icons font to your application.
     # Use with the CupertinoIcons class for iOS style icons.
     cupertino_icons: ^1.0.3
-    ffi: ^1.1.2
+    ffi: ^2.0.1
     path_provider: ^2.0.2
     external_path: ^1.0.1
     provider: ^6.0.3
     tuple: ^2.0.0
     wakelock: ^0.5.2
-    device_info_plus: ^3.2.3
+    device_info_plus: ^4.0.2
     firebase_analytics: ^9.1.5
     package_info_plus: ^1.4.2
     url_launcher: ^6.0.9
@@ -58,7 +58,7 @@ dependencies:
     window_manager:
         git:
             url: https://github.com/Kingtous/rustdesk_window_manager
-            ref: 1871cf2
+            ref: 028a7f6
     desktop_multi_window:
         git:
             url: https://github.com/Kingtous/rustdesk_desktop_multi_window
