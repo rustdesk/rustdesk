@@ -236,8 +236,8 @@ packages:
     dependency: "direct main"
     description:
       path: "."
-      ref: "7cd2d885e58397766f3f03a1e632299944580aac"
-      resolved-ref: "7cd2d885e58397766f3f03a1e632299944580aac"
+      ref: ce9e333d822fe6cbf91c8634bae023bf78700d94
+      resolved-ref: ce9e333d822fe6cbf91c8634bae023bf78700d94
       url: "https://github.com/Kingtous/rustdesk_desktop_multi_window"
     source: git
     version: "0.1.0"
@@ -1211,9 +1211,11 @@ packages:
   window_manager:
     dependency: "direct main"
     description:
-      name: window_manager
-      url: "https://pub.dartlang.org"
-    source: hosted
+      path: "."
+      ref: "1871cf2"
+      resolved-ref: "1871cf2857925d28db64b2151bc10b8dac714846"
+      url: "https://github.com/Kingtous/rustdesk_window_manager"
+    source: git
     version: "0.2.5"
   xdg_directories:
     dependency: transitive
