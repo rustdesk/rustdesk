@@ -118,7 +118,9 @@ void window_on_top(int? id) {
     windowManager.show();
     windowManager.focus();
   } else {
-    WindowController.fromWindowId(id)..focus()..show();
+    WindowController.fromWindowId(id)
+      ..focus()
+      ..show();
   }
 }
 

@@ -479,6 +479,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
       Get.changeTheme(MyTheme.lightTheme);
     }
     Get.find<SharedPreferences>().setString("darkTheme", choice);
+    Get.forceAppUpdate();
   }
 
   void onSelectMenu(String key) async {
@@ -489,7 +490,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
       final option = await bind.mainGetOption(key: key);
       final choice = option == "Y" ? "" : "Y";
       bind.mainSetOption(key: key, value: choice);
-      changeTheme(choice);
+      if (key == "allow-darktheme") changeTheme(choice);
     } else if (key == "stop-service") {
       final option = await bind.mainGetOption(key: key);
       bind.mainSetOption(key: key, value: option == "Y" ? "" : "Y");
@@ -516,6 +517,8 @@ class _DesktopHomePageState extends State<DesktopHomePage>
     bool enable;
     if (key == "stop-service") {
       enable = v != "Y";
+    } else if (key.startsWith("allow-")) {
+      enable = v == "Y";
     } else {
       enable = v != "N";
     }
