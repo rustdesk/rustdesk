@@ -9,7 +9,6 @@ import 'package:flutter_hbb/desktop/pages/remote_page.dart';
 import 'package:flutter_hbb/desktop/widgets/tabbar_widget.dart';
 import 'package:flutter_hbb/utils/multi_window_manager.dart';
 import 'package:get/get.dart';
-import 'package:window_manager/window_manager.dart';
 
 import '../../models/model.dart';
 
@@ -89,6 +88,7 @@ class _ConnectionTabPageState extends State<ConnectionTabPage>
                 onTabClose: onRemoveId,
                 tabIcon: Icons.desktop_windows_sharp,
                 selected: _selected,
+                dark: isDarkTheme(),
               )),
           Expanded(
               child: Obx(() => TabBarView(

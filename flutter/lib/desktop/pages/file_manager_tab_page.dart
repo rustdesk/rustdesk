@@ -9,7 +9,6 @@ import 'package:flutter_hbb/desktop/widgets/tabbar_widget.dart';
 import 'package:flutter_hbb/models/model.dart';
 import 'package:flutter_hbb/utils/multi_window_manager.dart';
 import 'package:get/get.dart';
-import 'package:window_manager/window_manager.dart';
 
 /// File Transfer for multi tabs
 class FileManagerTabPage extends StatefulWidget {
@@ -87,6 +86,7 @@ class _FileManagerTabPageState extends State<FileManagerTabPage>
               onTabClose: onRemoveId,
               tabIcon: Icons.file_copy_sharp,
               selected: _selected,
+              dark: isDarkTheme(),
             ),
           ),
           Expanded(

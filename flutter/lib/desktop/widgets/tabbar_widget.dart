@@ -6,18 +6,6 @@ import 'package:flutter_hbb/consts.dart';
 import 'package:flutter_hbb/utils/multi_window_manager.dart';
 import 'package:get/get.dart';
 
-const Color _bgColor = Color.fromARGB(255, 231, 234, 237);
-const Color _tabUnselectedColor = Color.fromARGB(255, 240, 240, 240);
-const Color _tabHoverColor = Color.fromARGB(255, 245, 245, 245);
-const Color _tabSelectedColor = Color.fromARGB(255, 255, 255, 255);
-const Color _tabIconColor = MyTheme.accent50;
-const Color _tabindicatorColor = _tabIconColor;
-const Color _textColor = Color.fromARGB(255, 108, 111, 145);
-const Color _iconColor = Color.fromARGB(255, 102, 106, 109);
-const Color _iconHoverColor = Colors.black12;
-const Color _iconPressedColor = Colors.black26;
-const Color _dividerColor = Colors.black12;
-
 const double _kTabBarHeight = kDesktopRemoteTabBarHeight;
 const double _kTabFixedWidth = 150;
 const double _kIconSize = 18;
@@ -30,6 +18,8 @@ class DesktopTabBar extends StatelessWidget {
   late final Function(String) onTabClose;
   late final IconData tabIcon;
   late final Rx<int> selected;
+  late final bool dark;
+  late final _Theme _theme;
 
   DesktopTabBar(
       {Key? key,
@@ -37,21 +27,23 @@ class DesktopTabBar extends StatelessWidget {
       required this.tabs,
       required this.onTabClose,
       required this.tabIcon,
-      required this.selected})
-      : super(key: key);
+      required this.selected,
+      required this.dark})
+      : _theme = dark ? _Theme.dark() : _Theme.light(),
+        super(key: key);
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      color: _bgColor,
+      color: _theme.bgColor,
       height: _kTabBarHeight,
       child: Row(
         children: [
           Flexible(
             child: Obx(() => TabBar(
-                indicatorColor: _tabindicatorColor,
+                indicatorColor: _theme.tabindicatorColor,
                 indicatorSize: TabBarIndicatorSize.tab,
-                indicatorWeight: 4,
+                indicatorWeight: 1,
                 labelPadding:
                     const EdgeInsets.symmetric(vertical: 0, horizontal: 0),
                 indicatorPadding: EdgeInsets.zero,
@@ -68,22 +60,26 @@ class DesktopTabBar extends StatelessWidget {
                           selected: selected.value,
                           onClose: () {
                             onTabClose(e.value);
-                            // TODO
                             if (e.key <= selected.value) {
                               selected.value = max(0, selected.value - 1);
                             }
-                            controller.value.animateTo(selected.value);
+                            controller.value.animateTo(selected.value,
+                                duration: Duration.zero);
                           },
                           onSelected: () {
                             selected.value = e.key;
-                            controller.value.animateTo(e.key);
+                            controller.value
+                                .animateTo(e.key, duration: Duration.zero);
                           },
+                          theme: _theme,
                         ))
                     .toList())),
           ),
           Padding(
             padding: EdgeInsets.only(left: 10),
-            child: _AddButton(),
+            child: _AddButton(
+              theme: _theme,
+            ),
           ),
         ],
       ),
@@ -99,16 +95,18 @@ class _Tab extends StatelessWidget {
   late final Function() onClose;
   late final Function() onSelected;
   final RxBool _hover = false.obs;
+  late final _Theme theme;
 
-  _Tab({
-    Key? key,
-    required this.index,
-    required this.text,
-    required this.icon,
-    required this.selected,
-    required this.onClose,
-    required this.onSelected,
-  }) : super(key: key);
+  _Tab(
+      {Key? key,
+      required this.index,
+      required this.text,
+      required this.icon,
+      required this.selected,
+      required this.onClose,
+      required this.onSelected,
+      required this.theme})
+      : super(key: key);
 
   @override
   Widget build(BuildContext context) {
@@ -122,10 +120,10 @@ class _Tab extends StatelessWidget {
               width: _kTabFixedWidth,
               decoration: BoxDecoration(
                 color: is_selected
-                    ? _tabSelectedColor
+                    ? theme.tabSelectedColor
                     : _hover.value
-                        ? _tabHoverColor
-                        : _tabUnselectedColor,
+                        ? theme.tabHoverColor
+                        : theme.tabUnselectedColor,
               ),
               child: Row(
                 children: [
@@ -140,30 +138,36 @@ class _Tab extends StatelessWidget {
                                 child: Icon(
                                   icon,
                                   size: _kIconSize,
-                                  color: _tabIconColor,
+                                  color: theme.tabIconColor,
                                 ),
                               ),
                               Expanded(
                                 child: Text(
                                   text,
-                                  style: const TextStyle(color: _textColor),
+                                  style: TextStyle(
+                                      color: is_selected
+                                          ? theme.selectedTextColor
+                                          : theme.unSelectedTextColor),
                                 ),
                               ),
                               _CloseButton(
                                 tabHovered: _hover.value,
+                                tabSelected: is_selected,
                                 onClose: () => onClose(),
+                                theme: theme,
                               ),
                             ])),
                   ),
-                  show_divider
-                      ? VerticalDivider(
-                          width: 1,
-                          indent: _kDividerIndent,
-                          endIndent: _kDividerIndent,
-                          color: _dividerColor,
-                          thickness: 1,
-                        )
-                      : Container(),
+                  Offstage(
+                    offstage: !show_divider,
+                    child: VerticalDivider(
+                      width: 1,
+                      indent: _kDividerIndent,
+                      endIndent: _kDividerIndent,
+                      color: theme.dividerColor,
+                      thickness: 1,
+                    ),
+                  )
                 ],
               ),
             ),
@@ -175,9 +179,11 @@ class _Tab extends StatelessWidget {
 class _AddButton extends StatelessWidget {
   final RxBool _hover = false.obs;
   final RxBool _pressed = false.obs;
+  late final _Theme theme;
 
   _AddButton({
     Key? key,
+    required this.theme,
   }) : super(key: key);
 
   @override
@@ -192,14 +198,14 @@ class _AddButton extends StatelessWidget {
             decoration: ShapeDecoration(
               shape: const CircleBorder(),
               color: _pressed.value
-                  ? _iconPressedColor
+                  ? theme.iconPressedBgColor
                   : _hover.value
-                      ? _iconHoverColor
+                      ? theme.iconHoverBgColor
                       : Colors.transparent,
             ),
-            child: const Icon(
+            child: Icon(
               Icons.add_sharp,
-              color: _iconColor,
+              color: theme.unSelectedIconColor,
               size: _kAddIconSize,
             ),
           ))),
@@ -209,14 +215,18 @@ class _AddButton extends StatelessWidget {
 
 class _CloseButton extends StatelessWidget {
   final bool tabHovered;
+  final bool tabSelected;
   final Function onClose;
   final RxBool _hover = false.obs;
   final RxBool _pressed = false.obs;
+  late final _Theme theme;
 
   _CloseButton({
     Key? key,
     required this.tabHovered,
+    required this.tabSelected,
     required this.onClose,
+    required this.theme,
   }) : super(key: key);
 
   @override
@@ -224,26 +234,28 @@ class _CloseButton extends StatelessWidget {
     return Padding(
         padding: const EdgeInsets.symmetric(horizontal: 5),
         child: SizedBox(
-          width: _kIconSize,
-          child: tabHovered
-              ? Obx((() => _Hoverable(
+            width: _kIconSize,
+            child: Offstage(
+              offstage: !tabHovered,
+              child: Obx((() => _Hoverable(
                     onHover: (hover) => _hover.value = hover,
                     onPressed: (pressed) => _pressed.value = pressed,
                     onTapUp: () => onClose(),
                     child: Container(
                         color: _pressed.value
-                            ? _iconPressedColor
+                            ? theme.iconPressedBgColor
                             : _hover.value
-                                ? _iconHoverColor
+                                ? theme.iconHoverBgColor
                                 : Colors.transparent,
-                        child: const Icon(
+                        child: Icon(
                           Icons.close,
                           size: _kIconSize,
-                          color: _iconColor,
+                          color: tabSelected
+                              ? theme.selectedIconColor
+                              : theme.unSelectedIconColor,
                         )),
-                  )))
-              : Container(),
-        ));
+                  ))),
+            )));
   }
 }
 
@@ -276,5 +288,53 @@ class _Hoverable extends StatelessWidget {
                 },
                 child: child,
               ));
+  }
+}
+
+class _Theme {
+  late Color bgColor;
+  late Color tabUnselectedColor;
+  late Color tabHoverColor;
+  late Color tabSelectedColor;
+  late Color tabIconColor;
+  late Color tabindicatorColor;
+  late Color selectedTextColor;
+  late Color unSelectedTextColor;
+  late Color selectedIconColor;
+  late Color unSelectedIconColor;
+  late Color iconHoverBgColor;
+  late Color iconPressedBgColor;
+  late Color dividerColor;
+
+  _Theme.light() {
+    bgColor = Color.fromARGB(255, 253, 253, 253);
+    tabUnselectedColor = Color.fromARGB(255, 253, 253, 253);
+    tabHoverColor = Color.fromARGB(255, 245, 245, 245);
+    tabSelectedColor = MyTheme.grayBg;
+    tabIconColor = MyTheme.accent50;
+    tabindicatorColor = MyTheme.grayBg;
+    selectedTextColor = Color.fromARGB(255, 26, 26, 26);
+    unSelectedTextColor = Color.fromARGB(255, 96, 96, 96);
+    selectedIconColor = Color.fromARGB(255, 26, 26, 26);
+    unSelectedIconColor = Color.fromARGB(255, 96, 96, 96);
+    iconHoverBgColor = Color.fromARGB(255, 224, 224, 224);
+    iconPressedBgColor = Color.fromARGB(255, 215, 215, 215);
+    dividerColor = Color.fromARGB(255, 238, 238, 238);
+  }
+
+  _Theme.dark() {
+    bgColor = Color.fromARGB(255, 50, 50, 50);
+    tabUnselectedColor = Color.fromARGB(255, 50, 50, 50);
+    tabHoverColor = Color.fromARGB(255, 59, 59, 59);
+    tabSelectedColor = MyTheme.canvasColor;
+    tabIconColor = Color.fromARGB(255, 84, 197, 248);
+    tabindicatorColor = MyTheme.canvasColor;
+    selectedTextColor = Color.fromARGB(255, 255, 255, 255);
+    unSelectedTextColor = Color.fromARGB(255, 207, 207, 207);
+    selectedIconColor = Color.fromARGB(255, 215, 215, 215);
+    unSelectedIconColor = Color.fromARGB(255, 255, 255, 255);
+    iconHoverBgColor = Color.fromARGB(255, 67, 67, 67);
+    iconPressedBgColor = Color.fromARGB(255, 73, 73, 73);
+    dividerColor = Color.fromARGB(255, 64, 64, 64);
   }
 }
