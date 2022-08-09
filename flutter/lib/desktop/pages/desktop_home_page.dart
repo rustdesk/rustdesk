@@ -472,7 +472,7 @@ class _DesktopHomePageState extends State<DesktopHomePage> with TrayListener, Wi
       print(
           "call ${call.method} with args ${call.arguments} from window ${fromWindowId}");
       if (call.method == "main_window_on_top") {
-        window_on_top();
+        window_on_top(null);
       }
     });
   }

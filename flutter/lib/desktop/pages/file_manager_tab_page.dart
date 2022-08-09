@@ -46,9 +46,9 @@ class _FileManagerTabPageState extends State<FileManagerTabPage>
           "call ${call.method} with args ${call.arguments} from window ${fromWindowId}");
       // for simplify, just replace connectionId
       if (call.method == "new_file_transfer") {
-        window_on_top();
         final args = jsonDecode(call.arguments);
         final id = args['id'];
+        window_on_top(windowId());
         final indexOf = connectionIds.indexOf(id);
         if (indexOf >= 0) {
           initialIndex = indexOf;
