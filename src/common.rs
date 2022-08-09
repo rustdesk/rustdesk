@@ -104,6 +104,19 @@ pub fn update_clipboard(clipboard: Clipboard, old: Option<&Arc<Mutex<String>>>) 
     }
 }
 
+pub async fn send_opts_after_login(
+    config: &crate::client::LoginConfigHandler,
+    peer: &mut hbb_common::tcp::FramedStream,
+) {
+    if let Some(opts) = config.get_option_message_after_login() {
+        let mut misc = Misc::new();
+        misc.set_option(opts);
+        let mut msg_out = Message::new();
+        msg_out.set_misc(misc);
+        allow_err!(peer.send(&msg_out).await);
+    }
+}
+
 #[cfg(feature = "use_rubato")]
 pub fn resample_channels(
     data: &[f32],

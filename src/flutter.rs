@@ -1,7 +1,7 @@
 use std::{
     collections::{HashMap, VecDeque},
     sync::{
-        atomic::{AtomicUsize, Ordering},
+        atomic::{AtomicBool, AtomicUsize, Ordering},
         Arc, Mutex, RwLock,
     },
 };
@@ -31,7 +31,10 @@ use hbb_common::{
     Stream,
 };
 
-use crate::common::make_fd_to_json;
+use crate::common::{
+    self, check_clipboard, make_fd_to_json, update_clipboard, ClipboardContext, CLIPBOARD_INTERVAL,
+};
+
 use crate::{client::*, flutter_ffi::EventToUI, make_fd_flutter};
 
 pub(super) const APP_TYPE_MAIN: &str = "main";
@@ -43,6 +46,9 @@ lazy_static::lazy_static! {
     pub static ref SESSIONS: RwLock<HashMap<String,Session>> = Default::default();
     pub static ref GLOBAL_EVENT_STREAM: RwLock<HashMap<String, StreamSink<String>>> = Default::default(); // rust to dart event channel
 }
+
+static SERVER_CLIPBOARD_ENABLED: AtomicBool = AtomicBool::new(true);
+static SERVER_KEYBOARD_ENABLED: AtomicBool = AtomicBool::new(true);
 
 // pub fn get_session<'a>(id: &str) -> Option<&'a Session> {
 //     SESSIONS.read().unwrap().get(id)
@@ -70,7 +76,7 @@ impl Session {
         // TODO close
         // Self::close();
         let events2ui = Arc::new(RwLock::new(events2ui));
-        let mut session = Session {
+        let session = Session {
             id: session_id.clone(),
             sender: Default::default(),
             lc: Default::default(),
@@ -657,6 +663,45 @@ struct Connection {
 }
 
 impl Connection {
+    // TODO: Similar to remote::start_clipboard
+    // merge the code
+    fn start_clipboard(
+        tx_protobuf: mpsc::UnboundedSender<Data>,
+        lc: Arc<RwLock<LoginConfigHandler>>,
+    ) -> Option<std::sync::mpsc::Sender<()>> {
+        let (tx, rx) = std::sync::mpsc::channel();
+        match ClipboardContext::new() {
+            Ok(mut ctx) => {
+                let old_clipboard: Arc<Mutex<String>> = Default::default();
+                // ignore clipboard update before service start
+                check_clipboard(&mut ctx, Some(&old_clipboard));
+                std::thread::spawn(move || loop {
+                    std::thread::sleep(Duration::from_millis(CLIPBOARD_INTERVAL));
+                    match rx.try_recv() {
+                        Ok(_) | Err(std::sync::mpsc::TryRecvError::Disconnected) => {
+                            log::debug!("Exit clipboard service of client");
+                            break;
+                        }
+                        _ => {}
+                    }
+                    if !SERVER_CLIPBOARD_ENABLED.load(Ordering::SeqCst)
+                        || !SERVER_KEYBOARD_ENABLED.load(Ordering::SeqCst)
+                        || lc.read().unwrap().disable_clipboard
+                    {
+                        continue;
+                    }
+                    if let Some(msg) = check_clipboard(&mut ctx, Some(&old_clipboard)) {
+                        tx_protobuf.send(Data::Message(msg)).ok();
+                    }
+                });
+            }
+            Err(err) => {
+                log::error!("Failed to start clipboard service of client: {}", err);
+            }
+        }
+        Some(tx)
+    }
+
     /// Create a new connection.
     ///
     /// # Arguments
@@ -667,6 +712,10 @@ impl Connection {
     async fn start(session: Session, is_file_transfer: bool) {
         let mut last_recv_time = Instant::now();
         let (sender, mut receiver) = mpsc::unbounded_channel::<Data>();
+        let mut stop_clipboard = None;
+        if !is_file_transfer {
+            stop_clipboard = Self::start_clipboard(sender.clone(), session.lc.clone());
+        }
         *session.sender.write().unwrap() = Some(sender);
         let conn_type = if is_file_transfer {
             session.lc.write().unwrap().is_file_transfer = true;
@@ -695,6 +744,9 @@ impl Connection {
 
         match Client::start(&session.id, &key, &token, conn_type).await {
             Ok((mut peer, direct)) => {
+                SERVER_KEYBOARD_ENABLED.store(true, Ordering::SeqCst);
+                SERVER_CLIPBOARD_ENABLED.store(true, Ordering::SeqCst);
+
                 session.push_event(
                     "connection_ready",
                     vec![
@@ -774,6 +826,12 @@ impl Connection {
                 session.msgbox("error", "Connection Error", &err.to_string());
             }
         }
+
+        if let Some(stop) = stop_clipboard {
+            stop.send(()).ok();
+        }
+        SERVER_KEYBOARD_ENABLED.store(false, Ordering::SeqCst);
+        SERVER_CLIPBOARD_ENABLED.store(false, Ordering::SeqCst);
     }
 
     /// Handle message from peer.
@@ -786,6 +844,7 @@ impl Connection {
                 Some(message::Union::VideoFrame(vf)) => {
                     if !self.first_frame {
                         self.first_frame = true;
+                        common::send_opts_after_login(&self.session.lc.read().unwrap(), peer).await;
                     }
                     let incomming_format = CodecFormat::from(&vf);
                     if self.video_format != incomming_format {
@@ -1027,6 +1086,11 @@ impl Connection {
                         self.session.msgbox("error", "Connection Error", &c);
                         return false;
                     }
+                    Some(misc::Union::BackNotification(notification)) => {
+                        if !self.handle_back_notification(notification).await {
+                            return false;
+                        }
+                    }
                     _ => {}
                 },
                 Some(message::Union::TestDelay(t)) => {
@@ -1047,6 +1111,130 @@ impl Connection {
                 },
                 _ => {}
             }
+        }
+        true
+    }
+
+    async fn handle_back_notification(&mut self, notification: BackNotification) -> bool {
+        match notification.union {
+            Some(back_notification::Union::BlockInputState(state)) => {
+                self.handle_back_msg_block_input(
+                    state.enum_value_or(back_notification::BlockInputState::BlkStateUnknown),
+                )
+                .await;
+            }
+            Some(back_notification::Union::PrivacyModeState(state)) => {
+                if !self
+                    .handle_back_msg_privacy_mode(
+                        state.enum_value_or(back_notification::PrivacyModeState::PrvStateUnknown),
+                    )
+                    .await
+                {
+                    return false;
+                }
+            }
+            _ => {}
+        }
+        true
+    }
+
+    #[inline(always)]
+    fn update_block_input_state(&mut self, on: bool) {
+        self.session.push_event(
+            "update_block_input_state",
+            [("input_state", if on { "on" } else { "off" })].into(),
+        );
+    }
+
+    async fn handle_back_msg_block_input(&mut self, state: back_notification::BlockInputState) {
+        match state {
+            back_notification::BlockInputState::BlkOnSucceeded => {
+                self.update_block_input_state(true);
+            }
+            back_notification::BlockInputState::BlkOnFailed => {
+                self.session
+                    .msgbox("custom-error", "Block user input", "Failed");
+                self.update_block_input_state(false);
+            }
+            back_notification::BlockInputState::BlkOffSucceeded => {
+                self.update_block_input_state(false);
+            }
+            back_notification::BlockInputState::BlkOffFailed => {
+                self.session
+                    .msgbox("custom-error", "Unblock user input", "Failed");
+            }
+            _ => {}
+        }
+    }
+
+    #[inline(always)]
+    fn update_privacy_mode(&mut self, on: bool) {
+        let mut config = self.session.load_config();
+        config.privacy_mode = on;
+        self.session.save_config(&config);
+        self.session.lc.write().unwrap().get_config().privacy_mode = on;
+        self.session.push_event("update_privacy_mode", [].into());
+    }
+
+    async fn handle_back_msg_privacy_mode(
+        &mut self,
+        state: back_notification::PrivacyModeState,
+    ) -> bool {
+        match state {
+            back_notification::PrivacyModeState::PrvOnByOther => {
+                self.session.msgbox(
+                    "error",
+                    "Connecting...",
+                    "Someone turns on privacy mode, exit",
+                );
+                return false;
+            }
+            back_notification::PrivacyModeState::PrvNotSupported => {
+                self.session
+                    .msgbox("custom-error", "Privacy mode", "Unsupported");
+                self.update_privacy_mode(false);
+            }
+            back_notification::PrivacyModeState::PrvOnSucceeded => {
+                self.session
+                    .msgbox("custom-nocancel", "Privacy mode", "In privacy mode");
+                self.update_privacy_mode(true);
+            }
+            back_notification::PrivacyModeState::PrvOnFailedDenied => {
+                self.session
+                    .msgbox("custom-error", "Privacy mode", "Peer denied");
+                self.update_privacy_mode(false);
+            }
+            back_notification::PrivacyModeState::PrvOnFailedPlugin => {
+                self.session
+                    .msgbox("custom-error", "Privacy mode", "Please install plugins");
+                self.update_privacy_mode(false);
+            }
+            back_notification::PrivacyModeState::PrvOnFailed => {
+                self.session
+                    .msgbox("custom-error", "Privacy mode", "Failed");
+                self.update_privacy_mode(false);
+            }
+            back_notification::PrivacyModeState::PrvOffSucceeded => {
+                self.session
+                    .msgbox("custom-nocancel", "Privacy mode", "Out privacy mode");
+                self.update_privacy_mode(false);
+            }
+            back_notification::PrivacyModeState::PrvOffByPeer => {
+                self.session
+                    .msgbox("custom-error", "Privacy mode", "Peer exit");
+                self.update_privacy_mode(false);
+            }
+            back_notification::PrivacyModeState::PrvOffFailed => {
+                self.session
+                    .msgbox("custom-error", "Privacy mode", "Failed to turn off");
+            }
+            back_notification::PrivacyModeState::PrvOffUnknown => {
+                self.session
+                    .msgbox("custom-error", "Privacy mode", "Turned off");
+                // log::error!("Privacy mode is turned off with unknown reason");
+                self.update_privacy_mode(false);
+            }
+            _ => {}
         }
         true
     }

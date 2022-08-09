@@ -194,19 +194,33 @@ void msgBox(String type, String title, String text, {bool? hasCancel}) {
               style: TextStyle(color: MyTheme.accent))));
 
   SmartDialog.dismiss();
-  final buttons = [
-    wrap(Translator.call('OK'), () {
-      SmartDialog.dismiss();
-      backToHome();
-    })
-  ];
+  List<Widget> buttons = [];
+  if (type != "connecting" && type != "success" && type.indexOf("nook") < 0) {
+    buttons.insert(
+        0,
+        wrap(Translator.call('OK'), () {
+          SmartDialog.dismiss();
+          backToHome();
+        }));
+  }
   if (hasCancel == null) {
-    hasCancel = type != 'error';
+    // hasCancel = type != 'error';
+    hasCancel = type.indexOf("error") < 0 &&
+        type.indexOf("nocancel") < 0 &&
+        type != "restarting";
   }
   if (hasCancel) {
     buttons.insert(
         0,
         wrap(Translator.call('Cancel'), () {
+          SmartDialog.dismiss();
+        }));
+  }
+  // TODO: test this button
+  if (type.indexOf("hasclose") >= 0) {
+    buttons.insert(
+        0,
+        wrap(Translator.call('Close'), () {
           SmartDialog.dismiss();
         }));
   }

@@ -277,8 +277,7 @@ class _RemotePageState extends State<RemotePage>
   @override
   Widget build(BuildContext context) {
     super.build(context);
-    Provider.of<CanvasModel>(context, listen: false).tabBarHeight =
-        super.widget.tabBarHeight;
+    _ffi.canvasModel.tabBarHeight = super.widget.tabBarHeight;
     return WillPopScope(
         onWillPop: () async {
           clientClose();
@@ -605,8 +604,12 @@ class _RemotePageState extends State<RemotePage>
           await bind.getSessionToggleOption(id: id, arg: 'privacy-mode') !=
               true) {
         more.add(PopupMenuItem<String>(
-            child: Text(translate((_ffi.ffiModel.inputBlocked ? 'Unb' : 'B') +
-                'lock user input')),
+            child: Consumer<FfiModel>(
+                builder: (_context, ffiModel, _child) => () {
+                      return Text(translate(
+                          (ffiModel.inputBlocked ? 'Unb' : 'B') +
+                              'lock user input'));
+                    }()),
             value: 'block-input'));
       }
     }
@@ -882,11 +885,11 @@ class ImagePainter extends CustomPainter {
     if (image == null) return;
     canvas.scale(scale, scale);
     // https://github.com/flutter/flutter/issues/76187#issuecomment-784628161
+    // https://api.flutter-io.cn/flutter/dart-ui/FilterQuality.html
     var paint = new Paint();
-    if (scale > 1.00001) {
+    paint.filterQuality = FilterQuality.medium;
+    if (scale > 10.00000) {
       paint.filterQuality = FilterQuality.high;
-    } else if (scale < 0.99999) {
-      paint.filterQuality = FilterQuality.medium;
     }
     canvas.drawImage(image!, new Offset(x, y), paint);
   }
@@ -952,7 +955,11 @@ void showOptions(String id) async {
       more.add(getToggle(
           id, setState, 'lock-after-session-end', 'Lock after session end'));
       if (pi.platform == 'Windows') {
-        more.add(getToggle(id, setState, 'privacy-mode', 'Privacy mode'));
+        more.add(Consumer<FfiModel>(
+            builder: (_context, _ffiModel, _child) => () {
+                  return getToggle(
+                      id, setState, 'privacy-mode', 'Privacy mode');
+                }()));
       }
     }
     var setQuality = (String? value) {
