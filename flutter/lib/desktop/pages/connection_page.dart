@@ -376,13 +376,20 @@ class _ConnectionPageState extends State<ConnectionPage> {
       width: 8,
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(20),
-        color: Colors.green,
+        color: svcStopped.value ? Colors.redAccent : Colors.green,
       ),
-    ).paddingSymmetric(horizontal: 8.0);
+    ).paddingSymmetric(horizontal: 10.0);
     if (svcStopped.value) {
       return Row(
         crossAxisAlignment: CrossAxisAlignment.center,
-        children: [light, Text(translate("Service is not running"))],
+        children: [
+          light,
+          Text(translate("Service is not running")),
+          TextButton(
+              onPressed: () =>
+                  bind.mainSetOption(key: "stop-service", value: ""),
+              child: Text(translate("Start Service")))
+        ],
       );
     } else {
       if (svcStatusCode.value == 0) {
@@ -425,7 +432,7 @@ class _ConnectionPageState extends State<ConnectionPage> {
   }
 
   updateStatus() async {
-    svcStopped.value = bind.mainGetOption(key: "stop-service") == "Y";
+    svcStopped.value = await bind.mainGetOption(key: "stop-service") == "Y";
     final status =
         jsonDecode(await bind.mainGetConnectStatus()) as Map<String, dynamic>;
     svcStatusCode.value = status["status_num"];

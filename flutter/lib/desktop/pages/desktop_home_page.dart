@@ -513,7 +513,12 @@ class _DesktopHomePageState extends State<DesktopHomePage>
   Future<PopupMenuItem<String>> genEnablePopupMenuItem(
       String label, String key) async {
     final v = await bind.mainGetOption(key: key);
-    bool enable = v != "N";
+    bool enable;
+    if (key == "stop-service") {
+      enable = v != "Y";
+    } else {
+      enable = v != "N";
+    }
 
     return PopupMenuItem(
       child: Row(
