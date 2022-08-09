@@ -171,6 +171,8 @@ class FfiModel with ChangeNotifier {
         parent.target?.serverModel.onClientAuthorized(evt);
       } else if (name == 'on_client_remove') {
         parent.target?.serverModel.onClientRemove(evt);
+      } else if (name == 'update_quality_status') {
+        parent.target?.qualityMonitorModel.updateQualityStatus(evt);
       }
     };
   }
@@ -807,9 +809,10 @@ class QualityMonitorModel with ChangeNotifier {
   bool get show => _show;
   QualityMonitorData get data => _data;
 
-  checkShowQualityMonitor() {
-    final show =
-        gFFI.getByName('toggle_option', 'show-quality-monitor') == 'true';
+  checkShowQualityMonitor(String id) async {
+    final show = await bind.getSessionToggleOption(
+            id: id, arg: 'show-quality-monitor') ==
+        true;
     if (_show != show) {
       _show = show;
       notifyListeners();
@@ -878,11 +881,6 @@ class FFI {
     this.qualityMonitorModel = QualityMonitorModel(WeakReference(this));
   }
 
-  /// Get the remote id for current client.
-  String getId() {
-    return getByName('remote_id'); // TODO
-  }
-
   /// Send a mouse tap event(down and up).
   void tap(MouseButtons button) {
     sendMouse('down', button);
@@ -891,8 +889,10 @@ class FFI {
 
   /// Send scroll event with scroll distance [y].
   void scroll(int y) {
-    setByName('send_mouse',
-        json.encode(modify({'id': id, 'type': 'wheel', 'y': y.toString()})));
+    bind.sessionSendMouse(
+        id: id,
+        msg: json
+            .encode(modify({'id': id, 'type': 'wheel', 'y': y.toString()})));
   }
 
   /// Reconnect to the remote peer.
@@ -918,8 +918,9 @@ class FFI {
   /// Send mouse press event.
   void sendMouse(String type, MouseButtons button) {
     if (!ffiModel.keyboard()) return;
-    setByName('send_mouse',
-        json.encode(modify({'id': id, 'type': type, 'buttons': button.value})));
+    bind.sessionSendMouse(
+        id: id,
+        msg: json.encode(modify({'type': type, 'buttons': button.value})));
   }
 
   /// Send key stroke event.
@@ -955,14 +956,14 @@ class FFI {
     if (!ffiModel.keyboard()) return;
     var x2 = x.toInt();
     var y2 = y.toInt();
-    setByName(
-        'send_mouse', json.encode(modify({'id': id, 'x': '$x2', 'y': '$y2'})));
+    bind.sessionSendMouse(
+        id: id, msg: json.encode(modify({'x': '$x2', 'y': '$y2'})));
   }
 
   /// List the saved peers.
-  List<Peer> peers() {
+  Future<List<Peer>> peers() async {
     try {
-      var str = getByName('peers'); // TODO
+      var str = await bind.mainGetRecentPeers();
       if (str == "") return [];
       List<dynamic> peers = json.decode(str);
       return peers
@@ -1034,41 +1035,14 @@ class FFI {
 
   /// Send **get** command to the Rust core based on [name] and [arg].
   /// Return the result as a string.
-  String getByName(String name, [String arg = '']) {
-    return platformFFI.getByName(name, arg);
-  }
+  // String getByName(String name, [String arg = '']) {
+  //   return platformFFI.getByName(name, arg);
+  // }
 
   /// Send **set** command to the Rust core based on [name] and [value].
-  void setByName(String name, [String value = '']) {
-    platformFFI.setByName(name, value);
-  }
-
-  String getOption(String name) {
-    return platformFFI.getByName("option", name);
-  }
-
-  Future<String> getLocalOption(String name) {
-    return bind.mainGetLocalOption(key: name);
-  }
-
-  Future<void> setLocalOption(String key, String value) {
-    return bind.mainSetLocalOption(key: key, value: value);
-  }
-
-  Future<String> getPeerOption(String id, String key) {
-    return bind.mainGetPeerOption(id: id, key: key);
-  }
-
-  Future<void> setPeerOption(String id, String key, String value) {
-    return bind.mainSetPeerOption(id: id, key: key, value: value);
-  }
-
-  void setOption(String name, String value) {
-    Map<String, String> res = Map()
-      ..["name"] = name
-      ..["value"] = value;
-    return platformFFI.setByName('option', jsonEncode(res));
-  }
+  // void setByName(String name, [String value = '']) {
+  //   platformFFI.setByName(name, value);
+  // }
 
   handleMouse(Map<String, dynamic> evt, {double tabBarHeight = 0.0}) {
     var type = '';
@@ -1121,8 +1095,7 @@ class FFI {
         break;
     }
     evt['buttons'] = buttons;
-    evt['id'] = id;
-    setByName('send_mouse', json.encode(evt));
+    bind.sessionSendMouse(id: id, msg: json.encode(evt));
   }
 
   listenToMouse(bool yesOrNo) {
@@ -1145,8 +1118,8 @@ class FFI {
     return await bind.mainGetSoundInputs();
   }
 
-  String getDefaultAudioInput() {
-    final input = getOption('audio-input');
+  Future<String> getDefaultAudioInput() async {
+    final input = await bind.mainGetOption(key: 'audio-input');
     if (input.isEmpty && Platform.isWindows) {
       return "System Sound";
     }
@@ -1154,11 +1127,14 @@ class FFI {
   }
 
   void setDefaultAudioInput(String input) {
-    setOption('audio-input', input);
+    bind.mainSetOption(key: 'audio-input', value: input);
   }
 
   Future<Map<String, String>> getHttpHeaders() async {
-    return {"Authorization": "Bearer " + await getLocalOption("access_token")};
+    return {
+      "Authorization":
+          "Bearer " + await bind.mainGetLocalOption(key: "access_token")
+    };
   }
 }
 
@@ -1230,11 +1206,12 @@ void initializeCursorAndCanvas(FFI ffi) async {
 /// Translate text based on the pre-defined dictionary.
 /// note: params [FFI?] can be used to replace global FFI implementation
 /// for example: during global initialization, gFFI not exists yet.
-String translate(String name, {FFI? ffi}) {
-  if (name.startsWith('Failed to') && name.contains(': ')) {
-    return name.split(': ').map((x) => translate(x)).join(': ');
-  }
-  var a = 'translate';
-  var b = '{"locale": "$localeName", "text": "$name"}';
-  return (ffi ?? gFFI).getByName(a, b);
-}
+// String translate(String name, {FFI? ffi}) {
+//   if (name.startsWith('Failed to') && name.contains(': ')) {
+//     return name.split(': ').map((x) => translate(x)).join(': ');
+//   }
+//   var a = 'translate';
+//   var b = '{"locale": "$localeName", "text": "$name"}';
+//
+//   return (ffi ?? gFFI).getByName(a, b);
+// }

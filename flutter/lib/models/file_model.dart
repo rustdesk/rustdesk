@@ -290,7 +290,7 @@ class FileModel extends ChangeNotifier {
   }
 
   onReady() async {
-    _localOption.home = _ffi.target?.getByName("get_home_dir") ?? "";
+    _localOption.home = await bind.mainGetHomeDir();
     _localOption.showHidden = (await bind.sessionGetPeerOption(
             id: _ffi.target?.id ?? "", name: "local_show_hidden"))
         .isNotEmpty;
@@ -444,7 +444,7 @@ class FileModel extends ChangeNotifier {
       items.items.forEach((from) async {
         _jobId++;
         await bind.sessionSendFiles(
-            id: '${_ffi.target?.getId()}',
+            id: await bind.mainGetLastRemoteId(),
             actId: _jobId,
             path: from.path,
             to: PathUtil.join(toPath, from.name, isWindows),

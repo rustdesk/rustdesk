@@ -23,10 +23,11 @@ use crate::ui_interface;
 use crate::ui_interface::{change_id, check_connect_status, is_ok_change_id};
 use crate::ui_interface::{
     discover, forget_password, get_api_server, get_app_name, get_async_job_status,
-    get_connect_status, get_fav, get_id, get_lan_peers, get_license, get_local_option, get_options,
-    get_peer, get_peer_option, get_socks, get_sound_inputs, get_uuid, get_version,
-    has_rendezvous_service, post_request, set_local_option, set_options, set_peer_option,
-    set_socks, store_fav, test_if_valid_server, using_public_server,
+    get_connect_status, get_fav, get_id, get_lan_peers, get_license, get_local_option, get_option,
+    get_options, get_peer, get_peer_option, get_socks, get_sound_inputs, get_uuid, get_version,
+    has_rendezvous_service, post_request, set_local_option, set_option, set_options,
+    set_peer_option, set_permanent_password, set_socks, store_fav, test_if_valid_server,
+    update_temporary_password, using_public_server,
 };
 
 fn initialize(app_dir: &str) {
@@ -81,14 +82,24 @@ pub enum EventToUI {
 }
 
 pub fn start_global_event_stream(s: StreamSink<String>, app_type: String) -> ResultType<()> {
-    if let Some(_) = flutter::GLOBAL_EVENT_STREAM.write().unwrap().insert(app_type.clone(), s) {
-        log::warn!("Global event stream of type {} is started before, but now removed", app_type);
+    if let Some(_) = flutter::GLOBAL_EVENT_STREAM
+        .write()
+        .unwrap()
+        .insert(app_type.clone(), s)
+    {
+        log::warn!(
+            "Global event stream of type {} is started before, but now removed",
+            app_type
+        );
     }
     Ok(())
 }
 
 pub fn stop_global_event_stream(app_type: String) {
-    let _ = flutter::GLOBAL_EVENT_STREAM.write().unwrap().remove(&app_type);
+    let _ = flutter::GLOBAL_EVENT_STREAM
+        .write()
+        .unwrap()
+        .remove(&app_type);
 }
 
 pub fn host_stop_system_key_propagate(stopped: bool) {
@@ -113,7 +124,6 @@ pub fn get_session_remember(id: String) -> Option<bool> {
     }
 }
 
-// TODO sync
 pub fn get_session_toggle_option(id: String, arg: String) -> Option<bool> {
     if let Some(session) = SESSIONS.read().unwrap().get(&id) {
         Some(session.get_toggle_option(&arg))
@@ -143,7 +153,6 @@ pub fn get_session_option(id: String, arg: String) -> Option<String> {
     }
 }
 
-// void
 pub fn session_login(id: String, password: String, remember: bool) {
     if let Some(session) = SESSIONS.read().unwrap().get(&id) {
         session.login(&password, remember);
@@ -224,38 +233,6 @@ pub fn session_input_string(id: String, value: String) {
 pub fn session_send_chat(id: String, text: String) {
     if let Some(session) = SESSIONS.read().unwrap().get(&id) {
         session.send_chat(text);
-    }
-}
-
-// if let Some(_type) = m.get("type") {
-//             mask = match _type.as_str() {
-//                 "down" => 1,
-//                 "up" => 2,
-//                 "wheel" => 3,
-//                 _ => 0,
-//             };
-//         }
-// if let Some(buttons) = m.get("buttons") {
-//             mask |= match buttons.as_str() {
-//                 "left" => 1,
-//                 "right" => 2,
-//                 "wheel" => 4,
-//                 _ => 0,
-//             } << 3;
-//         }
-// TODO
-pub fn session_send_mouse(
-    id: String,
-    mask: i32,
-    x: i32,
-    y: i32,
-    alt: bool,
-    ctrl: bool,
-    shift: bool,
-    command: bool,
-) {
-    if let Some(session) = SESSIONS.read().unwrap().get(&id) {
-        session.send_mouse(mask, x, y, alt, ctrl, shift, command);
     }
 }
 
@@ -409,6 +386,22 @@ pub fn main_get_async_status() -> String {
     get_async_job_status()
 }
 
+pub fn main_get_option(key: String) -> String {
+    get_option(key)
+}
+
+pub fn main_set_option(key: String, value: String) {
+    if key.eq("custom-rendezvous-server") {
+        set_option(key, value);
+        #[cfg(target_os = "android")]
+        crate::rendezvous_mediator::RendezvousMediator::restart();
+        #[cfg(any(target_os = "android", target_os = "ios", feature = "cli"))]
+        crate::common::test_rendezvous_server();
+    } else {
+        set_option(key, value);
+    }
+}
+
 pub fn main_get_options() -> String {
     get_options()
 }
@@ -452,7 +445,7 @@ pub fn main_store_fav(favs: Vec<String>) {
     store_fav(favs)
 }
 
-pub fn main_get_peers(id: String) -> String {
+pub fn main_get_peer(id: String) -> String {
     let conf = get_peer(id);
     serde_json::to_string(&conf).unwrap_or("".to_string())
 }
@@ -525,13 +518,30 @@ pub fn main_forget_password(id: String) {
     forget_password(id)
 }
 
+// TODO APP_DIR & ui_interface
+pub fn main_get_recent_peers() -> String {
+    if !config::APP_DIR.read().unwrap().is_empty() {
+        let peers: Vec<(String, config::PeerInfoSerde)> = PeerConfig::peers()
+            .drain(..)
+            .map(|(id, _, p)| (id, p.info))
+            .collect();
+        serde_json::ser::to_string(&peers).unwrap_or("".to_owned())
+    } else {
+        String::new()
+    }
+}
+
 pub fn main_load_recent_peers() {
     if !config::APP_DIR.read().unwrap().is_empty() {
         let peers: Vec<(String, config::PeerInfoSerde)> = PeerConfig::peers()
             .drain(..)
             .map(|(id, _, p)| (id, p.info))
             .collect();
-        if let Some(s) = flutter::GLOBAL_EVENT_STREAM.read().unwrap().get(flutter::APP_TYPE_MAIN) {
+        if let Some(s) = flutter::GLOBAL_EVENT_STREAM
+            .read()
+            .unwrap()
+            .get(flutter::APP_TYPE_MAIN)
+        {
             let data = HashMap::from([
                 ("name", "load_recent_peers".to_owned()),
                 (
@@ -557,7 +567,11 @@ pub fn main_load_fav_peers() {
                 }
             })
             .collect();
-        if let Some(s) = flutter::GLOBAL_EVENT_STREAM.read().unwrap().get(flutter::APP_TYPE_MAIN) {
+        if let Some(s) = flutter::GLOBAL_EVENT_STREAM
+            .read()
+            .unwrap()
+            .get(flutter::APP_TYPE_MAIN)
+        {
             let data = HashMap::from([
                 ("name", "load_fav_peers".to_owned()),
                 (
@@ -571,7 +585,11 @@ pub fn main_load_fav_peers() {
 }
 
 pub fn main_load_lan_peers() {
-    if let Some(s) = flutter::GLOBAL_EVENT_STREAM.read().unwrap().get(flutter::APP_TYPE_MAIN) {
+    if let Some(s) = flutter::GLOBAL_EVENT_STREAM
+        .read()
+        .unwrap()
+        .get(flutter::APP_TYPE_MAIN)
+    {
         let data = HashMap::from([
             ("name", "load_lan_peers".to_owned()),
             ("peers", get_lan_peers()),
@@ -580,532 +598,168 @@ pub fn main_load_lan_peers() {
     };
 }
 
-/// FFI for **get** commands which are idempotent.
-/// Return result in c string.
-///
-/// # Arguments
-///
-/// * `name` - name of the command
-/// * `arg` - argument of the command
-#[no_mangle]
-unsafe extern "C" fn get_by_name(name: *const c_char, arg: *const c_char) -> *const c_char {
-    let mut res = "".to_owned();
-    let arg: &CStr = CStr::from_ptr(arg);
-    let name: &CStr = CStr::from_ptr(name);
-    if let Ok(name) = name.to_str() {
-        match name {
-            "peers" => {
-                if !config::APP_DIR.read().unwrap().is_empty() {
-                    let peers: Vec<(String, config::PeerInfoSerde)> = PeerConfig::peers()
-                        .drain(..)
-                        .map(|(id, _, p)| (id, p.info))
-                        .collect();
-                    res = serde_json::ser::to_string(&peers).unwrap_or("".to_owned());
-                }
-            }
-            "remote_id" => {
-                if !config::APP_DIR.read().unwrap().is_empty() {
-                    res = LocalConfig::get_remote_id();
-                }
-            }
-            // "remember" => {
-            //     res = Session::get_remember().to_string();
-            // }
-            // "toggle_option" => {
-            //     if let Ok(arg) = arg.to_str() {
-            //         if let Some(v) = Session::get_toggle_option(arg) {
-            //             res = v.to_string();
-            //         }
-            //     }
-            // }
-            "test_if_valid_server" => {
-                if let Ok(arg) = arg.to_str() {
-                    res = hbb_common::socket_client::test_if_valid_server(arg);
-                }
-            }
-            "option" => {
-                if let Ok(arg) = arg.to_str() {
-                    res = ui_interface::get_option(arg.to_owned());
-                }
-            }
-            // "image_quality" => {
-            //     res = Session::get_image_quality();
-            // }
-            "software_update_url" => {
-                res = crate::common::SOFTWARE_UPDATE_URL.lock().unwrap().clone()
-            }
-            "translate" => {
-                if let Ok(arg) = arg.to_str() {
-                    if let Ok(m) = serde_json::from_str::<HashMap<String, String>>(arg) {
-                        if let Some(locale) = m.get("locale") {
-                            if let Some(text) = m.get("text") {
-                                res = crate::client::translate_locale(text.to_owned(), locale);
-                            }
-                        }
-                    }
-                }
-            }
-            // "peer_option" => {
-            //     if let Ok(arg) = arg.to_str() {
-            //         res = Session::get_option(arg);
-            //     }
-            // }
-            // File Action
-            "get_home_dir" => {
-                res = fs::get_home_as_string();
-            }
-            // "read_local_dir_sync" => {
-            //     if let Ok(value) = arg.to_str() {
-            //         if let Ok(m) = serde_json::from_str::<HashMap<String, String>>(value) {
-            //             if let (Some(path), Some(show_hidden)) =
-            //                 (m.get("path"), m.get("show_hidden"))
-            //             {
-            //                 if let Ok(fd) =
-            //                     fs::read_dir(&fs::get_path(path), show_hidden.eq("true"))
-            //                 {
-            //                     res = make_fd_to_json(fd);
-            //                 }
-            //             }
-            //         }
-            //     }
-            // }
-            // Server Side
-            "local_option" => {
-                if let Ok(arg) = arg.to_str() {
-                    res = LocalConfig::get_option(arg);
-                }
-            }
-            "langs" => {
-                res = crate::lang::LANGS.to_string();
-            }
-            "server_id" => {
-                res = ui_interface::get_id();
-            }
-            "temporary_password" => {
-                res = ui_interface::temporary_password();
-            }
-            "permanent_password" => {
-                res = ui_interface::permanent_password();
-            }
-            "connect_statue" => {
-                res = ONLINE
-                    .lock()
-                    .unwrap()
-                    .values()
-                    .max()
-                    .unwrap_or(&0)
-                    .clone()
-                    .to_string();
-            }
-            #[cfg(not(any(target_os = "ios")))]
-            "clients_state" => {
-                res = get_clients_state();
-            }
-            #[cfg(not(any(target_os = "ios")))]
-            "check_clients_length" => {
-                if let Ok(value) = arg.to_str() {
-                    if value.parse::<usize>().unwrap_or(usize::MAX) != get_clients_length() {
-                        res = get_clients_state()
-                    }
-                }
-            }
-            "uuid" => {
-                res = base64::encode(get_uuid());
-            }
-            _ => {
-                log::error!("Unknown name of get_by_name: {}", name);
-            }
+pub fn main_get_last_remote_id() -> String {
+    // if !config::APP_DIR.read().unwrap().is_empty() {
+    //     res = LocalConfig::get_remote_id();
+    // }
+    LocalConfig::get_remote_id()
+}
+
+pub fn main_get_software_update_url() -> String {
+    crate::common::SOFTWARE_UPDATE_URL.lock().unwrap().clone()
+}
+
+pub fn main_get_home_dir() -> String {
+    fs::get_home_as_string()
+}
+
+pub fn main_get_langs() -> String {
+    crate::lang::LANGS.to_string()
+}
+
+pub fn main_get_temporary_password() -> String {
+    ui_interface::temporary_password()
+}
+
+pub fn main_get_permanent_password() -> String {
+    ui_interface::permanent_password()
+}
+
+pub fn main_get_online_statue() -> i64 {
+    ONLINE.lock().unwrap().values().max().unwrap_or(&0).clone()
+}
+
+pub fn main_get_clients_state() -> String {
+    get_clients_state()
+}
+
+pub fn main_check_clients_length(length: usize) -> Option<String> {
+    if length != get_clients_length() {
+        Some(get_clients_state())
+    } else {
+        None
+    }
+}
+
+pub fn main_init(app_dir: String) {
+    initialize(&app_dir);
+}
+
+pub fn main_device_id(id: String) {
+    *crate::common::DEVICE_ID.lock().unwrap() = id;
+}
+
+pub fn main_device_name(name: String) {
+    *crate::common::DEVICE_NAME.lock().unwrap() = name;
+}
+
+pub fn main_remove_peer(id: String) {
+    PeerConfig::remove(&id);
+}
+
+// TODO
+pub fn session_send_mouse(id: String, msg: String) {
+    if let Ok(m) = serde_json::from_str::<HashMap<String, String>>(&msg) {
+        let alt = m.get("alt").is_some();
+        let ctrl = m.get("ctrl").is_some();
+        let shift = m.get("shift").is_some();
+        let command = m.get("command").is_some();
+        let x = m
+            .get("x")
+            .map(|x| x.parse::<i32>().unwrap_or(0))
+            .unwrap_or(0);
+        let y = m
+            .get("y")
+            .map(|x| x.parse::<i32>().unwrap_or(0))
+            .unwrap_or(0);
+        let mut mask = 0;
+        if let Some(_type) = m.get("type") {
+            mask = match _type.as_str() {
+                "down" => 1,
+                "up" => 2,
+                "wheel" => 3,
+                _ => 0,
+            };
+        }
+        if let Some(buttons) = m.get("buttons") {
+            mask |= match buttons.as_str() {
+                "left" => 1,
+                "right" => 2,
+                "wheel" => 4,
+                _ => 0,
+            } << 3;
+        }
+        if let Some(session) = SESSIONS.read().unwrap().get(&id) {
+            session.send_mouse(mask, x, y, alt, ctrl, shift, command);
         }
     }
+}
+
+pub fn session_restart_remote_device(id: String) {
+    // TODO
+    // Session::restart_remote_device();
+}
+
+pub fn main_set_home_dir(home: String) {
+    *config::APP_HOME_DIR.write().unwrap() = home;
+}
+
+pub fn main_stop_service() {
+    #[cfg(target_os = "android")]
+    {
+        Config::set_option("stop-service".into(), "Y".into());
+        crate::rendezvous_mediator::RendezvousMediator::restart();
+    }
+}
+
+pub fn main_start_service() {
+    #[cfg(target_os = "android")]
+    {
+        Config::set_option("stop-service".into(), "".into());
+        crate::rendezvous_mediator::RendezvousMediator::restart();
+    }
+    #[cfg(not(target_os = "android"))]
+    std::thread::spawn(move || start_server(true));
+}
+
+pub fn main_update_temporary_password() {
+    update_temporary_password();
+}
+
+pub fn main_set_permanent_password(password: String) {
+    set_permanent_password(password);
+}
+
+pub fn server_send_chat(conn_id: i32, msg: String) {
+    connection_manager::send_chat(conn_id, msg);
+}
+
+pub fn server_login_res(conn_id: i32, res: bool) {
+    connection_manager::on_login_res(conn_id, res);
+}
+
+pub fn server_close_connection(conn_id: i32) {
+    connection_manager::close_conn(conn_id);
+}
+
+#[no_mangle]
+unsafe extern "C" fn translate(name: *const c_char, locale: *const c_char) -> *const c_char {
+    let name = CStr::from_ptr(name);
+    let locale = CStr::from_ptr(locale);
+    let res = if let (Ok(name), Ok(locale)) = (name.to_str(), locale.to_str()) {
+        crate::client::translate_locale(name.to_owned(), locale)
+    } else {
+        String::new()
+    };
     CString::from_vec_unchecked(res.into_bytes()).into_raw()
 }
 
-/// FFI for **set** commands which are not idempotent.
-///
-/// # Arguments
-///
-/// * `name` - name of the command
-/// * `arg` - argument of the command
-#[no_mangle]
-unsafe extern "C" fn set_by_name(name: *const c_char, value: *const c_char) {
-    let value: &CStr = CStr::from_ptr(value);
-    if let Ok(value) = value.to_str() {
-        let name: &CStr = CStr::from_ptr(name);
-        if let Ok(name) = name.to_str() {
-            match name {
-                "init" => {
-                    initialize(value);
-                }
-                "info1" => {
-                    *crate::common::FLUTTER_INFO1.lock().unwrap() = value.to_owned();
-                }
-                "info2" => {
-                    *crate::common::FLUTTER_INFO2.lock().unwrap() = value.to_owned();
-                }
-                // "connect" => {
-                //     Session::start(value, false);
-                // }
-                // "connect_file_transfer" => {
-                //     Session::start(value, true);
-                // }
-                // "login" => {
-                //     if let Ok(m) = serde_json::from_str::<HashMap<String, String>>(value) {
-                //         if let Some(password) = m.get("password") {
-                //             if let Some(remember) = m.get("remember") {
-                //                 Session::login(password, remember == "true");
-                //             }
-                //         }
-                //     }
-                // }
-                // "close" => {
-                //     Session::close();
-                // }
-                // "refresh" => {
-                //     Session::refresh();
-                // }
-                // "reconnect" => {
-                //     Session::reconnect();
-                // }
-                // "toggle_option" => {
-                //     Session::toggle_option(value);
-                // }
-                // "image_quality" => {
-                //     Session::set_image_quality(value);
-                // }
-                // "lock_screen" => {
-                //     Session::lock_screen();
-                // }
-                // "ctrl_alt_del" => {
-                //     Session::ctrl_alt_del();
-                // }
-                // "switch_display" => {
-                //     if let Ok(v) = value.parse::<i32>() {
-                //         Session::switch_display(v);
-                //     }
-                // }
-                "remove" => {
-                    PeerConfig::remove(value);
-                }
-                // "input_key" => {
-                //     if let Ok(m) = serde_json::from_str::<HashMap<String, String>>(value) {
-                //         let alt = m.get("alt").is_some();
-                //         let ctrl = m.get("ctrl").is_some();
-                //         let shift = m.get("shift").is_some();
-                //         let command = m.get("command").is_some();
-                //         let down = m.get("down").is_some();
-                //         let press = m.get("press").is_some();
-                //         if let Some(name) = m.get("name") {
-                //             Session::input_key(name, down, press, alt, ctrl, shift, command);
-                //         }
-                //     }
-                // }
-                // "input_string" => {
-                //     Session::input_string(value);
-                // }
-                // "chat_client_mode" => {
-                //     Session::send_chat(value.to_owned());
-                // }
-
-                // TODO
-                "send_mouse" => {
-                    if let Ok(m) = serde_json::from_str::<HashMap<String, String>>(value) {
-                        let id = m.get("id");
-                        if id.is_none() {
-                            return;
-                        }
-                        let id = id.unwrap();
-                        let alt = m.get("alt").is_some();
-                        let ctrl = m.get("ctrl").is_some();
-                        let shift = m.get("shift").is_some();
-                        let command = m.get("command").is_some();
-                        let x = m
-                            .get("x")
-                            .map(|x| x.parse::<i32>().unwrap_or(0))
-                            .unwrap_or(0);
-                        let y = m
-                            .get("y")
-                            .map(|x| x.parse::<i32>().unwrap_or(0))
-                            .unwrap_or(0);
-                        let mut mask = 0;
-                        if let Some(_type) = m.get("type") {
-                            mask = match _type.as_str() {
-                                "down" => 1,
-                                "up" => 2,
-                                "wheel" => 3,
-                                _ => 0,
-                            };
-                        }
-                        if let Some(buttons) = m.get("buttons") {
-                            mask |= match buttons.as_str() {
-                                "left" => 1,
-                                "right" => 2,
-                                "wheel" => 4,
-                                _ => 0,
-                            } << 3;
-                        }
-                        if let Some(session) = SESSIONS.read().unwrap().get(id) {
-                            session.send_mouse(mask, x, y, alt, ctrl, shift, command);
-                        }
-                    }
-                }
-                "option" => {
-                    if let Ok(m) = serde_json::from_str::<HashMap<String, String>>(value) {
-                        if let Some(name) = m.get("name") {
-                            if let Some(value) = m.get("value") {
-                                ui_interface::set_option(name.to_owned(), value.to_owned());
-                                if name == "custom-rendezvous-server" {
-                                    #[cfg(target_os = "android")]
-                                    crate::rendezvous_mediator::RendezvousMediator::restart();
-                                    #[cfg(any(
-                                        target_os = "android",
-                                        target_os = "ios",
-                                        feature = "cli"
-                                    ))]
-                                    crate::common::test_rendezvous_server();
-                                }
-                            }
-                        }
-                    }
-                }
-                // "peer_option" => {
-                //     if let Ok(m) = serde_json::from_str::<HashMap<String, String>>(value) {
-                //         if let Some(name) = m.get("name") {
-                //             if let Some(value) = m.get("value") {
-                //                 Session::set_option(name.to_owned(), value.to_owned());
-                //             }
-                //         }
-                //     }
-                // }
-                "local_option" => {
-                    if let Ok(m) = serde_json::from_str::<HashMap<String, String>>(value) {
-                        if let Some(name) = m.get("name") {
-                            if let Some(value) = m.get("value") {
-                                LocalConfig::set_option(name.to_owned(), value.to_owned());
-                            }
-                        }
-                    }
-                }
-                // "input_os_password" => {
-                //     Session::input_os_password(value.to_owned(), true);
-                // }
-                "restart_remote_device" => {
-                    // TODO
-                    // Session::restart_remote_device();
-                }
-                // // File Action
-                // "read_remote_dir" => {
-                //     if let Ok(m) = serde_json::from_str::<HashMap<String, String>>(value) {
-                //         if let (Some(path), Some(show_hidden), Some(session)) = (
-                //             m.get("path"),
-                //             m.get("show_hidden"),
-                //             Session::get().read().unwrap().as_ref(),
-                //         ) {
-                //             session.read_remote_dir(path.to_owned(), show_hidden.eq("true"));
-                //         }
-                //     }
-                // }
-                // "send_files" => {
-                //     if let Ok(m) = serde_json::from_str::<HashMap<String, String>>(value) {
-                //         if let (
-                //             Some(id),
-                //             Some(path),
-                //             Some(to),
-                //             Some(file_num),
-                //             Some(show_hidden),
-                //             Some(is_remote),
-                //         ) = (
-                //             m.get("id"),
-                //             m.get("path"),
-                //             m.get("to"),
-                //             m.get("file_num"),
-                //             m.get("show_hidden"),
-                //             m.get("is_remote"),
-                //         ) {
-                //             Session::send_files(
-                //                 id.parse().unwrap_or(0),
-                //                 path.to_owned(),
-                //                 to.to_owned(),
-                //                 file_num.parse().unwrap_or(0),
-                //                 show_hidden.eq("true"),
-                //                 is_remote.eq("true"),
-                //             );
-                //         }
-                //     }
-                // }
-                // "set_confirm_override_file" => {
-                //     if let Ok(m) = serde_json::from_str::<HashMap<String, String>>(value) {
-                //         if let (
-                //             Some(id),
-                //             Some(file_num),
-                //             Some(need_override),
-                //             Some(remember),
-                //             Some(is_upload),
-                //         ) = (
-                //             m.get("id"),
-                //             m.get("file_num"),
-                //             m.get("need_override"),
-                //             m.get("remember"),
-                //             m.get("is_upload"),
-                //         ) {
-                //             Session::set_confirm_override_file(
-                //                 id.parse().unwrap_or(0),
-                //                 file_num.parse().unwrap_or(0),
-                //                 need_override.eq("true"),
-                //                 remember.eq("true"),
-                //                 is_upload.eq("true"),
-                //             );
-                //         }
-                //     }
-                // }
-                // ** TODO ** continue
-                // "remove_file" => {
-                //     if let Ok(m) = serde_json::from_str::<HashMap<String, String>>(value) {
-                //         if let (
-                //             Some(id),
-                //             Some(path),
-                //             Some(file_num),
-                //             Some(is_remote),
-                //             Some(session),
-                //         ) = (
-                //             m.get("id"),
-                //             m.get("path"),
-                //             m.get("file_num"),
-                //             m.get("is_remote"),
-                //             Session::get().write().unwrap().as_mut(),
-                //         ) {
-                //             session.remove_file(
-                //                 id.parse().unwrap_or(0),
-                //                 path.to_owned(),
-                //                 file_num.parse().unwrap_or(0),
-                //                 is_remote.eq("true"),
-                //             );
-                //         }
-                //     }
-                // }
-                // "read_dir_recursive" => {
-                //     if let Ok(m) = serde_json::from_str::<HashMap<String, String>>(value) {
-                //         if let (Some(id), Some(path), Some(is_remote), Some(session)) = (
-                //             m.get("id"),
-                //             m.get("path"),
-                //             m.get("is_remote"),
-                //             Session::get().write().unwrap().as_mut(),
-                //         ) {
-                //             session.remove_dir_all(
-                //                 id.parse().unwrap_or(0),
-                //                 path.to_owned(),
-                //                 is_remote.eq("true"),
-                //             );
-                //         }
-                //     }
-                // }
-                // "remove_all_empty_dirs" => {
-                //     if let Ok(m) = serde_json::from_str::<HashMap<String, String>>(value) {
-                //         if let (Some(id), Some(path), Some(is_remote), Some(session)) = (
-                //             m.get("id"),
-                //             m.get("path"),
-                //             m.get("is_remote"),
-                //             Session::get().write().unwrap().as_mut(),
-                //         ) {
-                //             session.remove_dir(
-                //                 id.parse().unwrap_or(0),
-                //                 path.to_owned(),
-                //                 is_remote.eq("true"),
-                //             );
-                //         }
-                //     }
-                // }
-                // "cancel_job" => {
-                //     if let (Ok(id), Some(session)) =
-                //         (value.parse(), Session::get().write().unwrap().as_mut())
-                //     {
-                //         session.cancel_job(id);
-                //     }
-                // }
-                // "create_dir" => {
-                //     if let Ok(m) = serde_json::from_str::<HashMap<String, String>>(value) {
-                //         if let (Some(id), Some(path), Some(is_remote), Some(session)) = (
-                //             m.get("id"),
-                //             m.get("path"),
-                //             m.get("is_remote"),
-                //             Session::get().write().unwrap().as_mut(),
-                //         ) {
-                //             session.create_dir(
-                //                 id.parse().unwrap_or(0),
-                //                 path.to_owned(),
-                //                 is_remote.eq("true"),
-                //             );
-                //         }
-                //     }
-                // }
-                // Server Side
-                // "update_password" => {
-                //     if value.is_empty() {
-                //         Config::set_password(&Config::get_auto_password());
-                //     } else {
-                //         Config::set_password(value);
-                //     }
-                // }
-                #[cfg(target_os = "android")]
-                "chat_server_mode" => {
-                    if let Ok(m) = serde_json::from_str::<HashMap<String, Value>>(value) {
-                        if let (Some(Value::Number(id)), Some(Value::String(text))) =
-                            (m.get("id"), m.get("text"))
-                        {
-                            let id = id.as_i64().unwrap_or(0);
-                            connection_manager::send_chat(id as i32, text.to_owned());
-                        }
-                    }
-                }
-                "home_dir" => {
-                    *config::APP_HOME_DIR.write().unwrap() = value.to_owned();
-                }
-                #[cfg(target_os = "android")]
-                "login_res" => {
-                    if let Ok(m) = serde_json::from_str::<HashMap<String, Value>>(value) {
-                        if let (Some(Value::Number(id)), Some(Value::Bool(res))) =
-                            (m.get("id"), m.get("res"))
-                        {
-                            let id = id.as_i64().unwrap_or(0);
-                            connection_manager::on_login_res(id as i32, *res);
-                        }
-                    }
-                }
-                #[cfg(target_os = "android")]
-                "stop_service" => {
-                    Config::set_option("stop-service".into(), "Y".into());
-                    crate::rendezvous_mediator::RendezvousMediator::restart();
-                }
-                "start_service" => {
-                    #[cfg(target_os = "android")]
-                    {
-                        Config::set_option("stop-service".into(), "".into());
-                        crate::rendezvous_mediator::RendezvousMediator::restart();
-                    }
-                    #[cfg(not(target_os = "android"))]
-                    std::thread::spawn(move || start_server(true));
-                }
-                #[cfg(target_os = "android")]
-                "close_conn" => {
-                    if let Ok(id) = value.parse::<i32>() {
-                        connection_manager::close_conn(id);
-                    };
-                }
-                "temporary_password" => {
-                    ui_interface::update_temporary_password();
-                }
-                "permanent_password" => {
-                    ui_interface::set_permanent_password(value.to_owned());
-                }
-                _ => {
-                    log::error!("Unknown name of set_by_name: {}", name);
-                }
-            }
-        }
-    }
-}
-
 fn handle_query_onlines(onlines: Vec<String>, offlines: Vec<String>) {
-    if let Some(s) = flutter::GLOBAL_EVENT_STREAM.read().unwrap().get(flutter::APP_TYPE_MAIN) {
+    if let Some(s) = flutter::GLOBAL_EVENT_STREAM
+        .read()
+        .unwrap()
+        .get(flutter::APP_TYPE_MAIN)
+    {
         let data = HashMap::from([
             ("name", "callback_query_onlines".to_owned()),
             ("onlines", onlines.join(",")),

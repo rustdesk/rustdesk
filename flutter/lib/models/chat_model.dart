@@ -1,7 +1,6 @@
-import 'dart:convert';
-
 import 'package:dash_chat_2/dash_chat_2.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_hbb/models/platform_model.dart';
 
 import '../../mobile/widgets/overlay.dart';
 import 'model.dart';
@@ -72,7 +71,7 @@ class ChatModel with ChangeNotifier {
     }
   }
 
-  receive(int id, String text) {
+  receive(int id, String text) async {
     if (text.isEmpty) return;
     // first message show overlay icon
     if (chatIconOverlayEntry == null) {
@@ -82,7 +81,7 @@ class ChatModel with ChangeNotifier {
     if (id == clientModeID) {
       chatUser = ChatUser(
         firstName: _ffi.target?.ffiModel.pi.username,
-        id: _ffi.target?.getId() ?? "",
+        id: await bind.mainGetLastRemoteId(),
       );
     } else {
       final client = _ffi.target?.serverModel.clients[id];
@@ -105,12 +104,11 @@ class ChatModel with ChangeNotifier {
     if (message.text.isNotEmpty) {
       _messages[_currentID]?.insert(message);
       if (_currentID == clientModeID) {
-        _ffi.target?.setByName("chat_client_mode", message.text);
+        if (_ffi.target != null) {
+          bind.sessionSendChat(id: _ffi.target!.id, text: message.text);
+        }
       } else {
-        final msg = Map()
-          ..["id"] = _currentID
-          ..["text"] = message.text;
-        _ffi.target?.setByName("chat_server_mode", jsonEncode(msg));
+        bind.serverSendChat(connId: _currentID, msg: message.text);
       }
     }
     notifyListeners();

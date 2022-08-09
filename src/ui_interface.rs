@@ -138,10 +138,11 @@ pub fn get_license() -> String {
 }
 
 pub fn get_option(key: String) -> String {
-    #[cfg(any(target_os = "android", target_os = "ios"))]
-    return Config::get_option(&key);
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    return get_option_(&key);
+    get_option_(&key)
+    // #[cfg(any(target_os = "android", target_os = "ios"))]
+    // return Config::get_option(&key);
+    // #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    // return get_option_(&key);
 }
 
 fn get_option_(key: &str) -> String {
@@ -250,33 +251,31 @@ pub fn get_sound_inputs() -> Vec<String> {
 }
 
 pub fn set_options(m: HashMap<String, String>) {
+    *OPTIONS.lock().unwrap() = m.clone();
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    {
-        *OPTIONS.lock().unwrap() = m.clone();
-        ipc::set_options(m).ok();
-    }
+    ipc::set_options(m).ok();
+    #[cfg(any(target_os = "android", target_os = "ios"))]
+    Config::set_options(m);
 }
 
 pub fn set_option(key: String, value: String) {
+    let mut options = OPTIONS.lock().unwrap();
+    #[cfg(target_os = "macos")]
+    if &key == "stop-service" {
+        let is_stop = value == "Y";
+        if is_stop && crate::platform::macos::uninstall() {
+            return;
+        }
+    }
+    if value.is_empty() {
+        options.remove(&key);
+    } else {
+        options.insert(key.clone(), value.clone());
+    }
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    ipc::set_options(options.clone()).ok();
     #[cfg(any(target_os = "android", target_os = "ios"))]
     Config::set_option(key, value);
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    {
-        let mut options = OPTIONS.lock().unwrap();
-        #[cfg(target_os = "macos")]
-        if &key == "stop-service" {
-            let is_stop = value == "Y";
-            if is_stop && crate::platform::macos::uninstall() {
-                return;
-            }
-        }
-        if value.is_empty() {
-            options.remove(&key);
-        } else {
-            options.insert(key.clone(), value.clone());
-        }
-        ipc::set_options(options.clone()).ok();
-    }
 }
 
 pub fn install_path() -> String {

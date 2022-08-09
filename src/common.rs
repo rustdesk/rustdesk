@@ -28,8 +28,8 @@ lazy_static::lazy_static! {
 }
 
 lazy_static::lazy_static! {
-    pub static ref FLUTTER_INFO1: Arc<Mutex<String>> = Default::default();
-    pub static ref FLUTTER_INFO2: Arc<Mutex<String>> = Default::default();
+    pub static ref DEVICE_ID: Arc<Mutex<String>> = Default::default();
+    pub static ref DEVICE_NAME: Arc<Mutex<String>> = Default::default();
 }
 
 #[inline]
@@ -441,7 +441,7 @@ pub fn username() -> String {
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     return whoami::username().trim_end_matches('\0').to_owned();
     #[cfg(any(target_os = "android", target_os = "ios"))]
-    return FLUTTER_INFO2.lock().unwrap().clone();
+    return DEVICE_NAME.lock().unwrap().clone();
 }
 
 #[inline]

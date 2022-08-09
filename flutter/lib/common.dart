@@ -352,6 +352,23 @@ RadioListTile<T> getRadio<T>(
   );
 }
 
+CheckboxListTile getToggle(
+    String id, void Function(void Function()) setState, option, name) {
+  final opt = bind.getSessionToggleOptionSync(id: id, arg: option);
+  return CheckboxListTile(
+      value: opt,
+      onChanged: (v) {
+        setState(() {
+          bind.sessionToggleOption(id: id, value: option);
+        });
+        if (option == "show-quality-monitor") {
+          gFFI.qualityMonitorModel.checkShowQualityMonitor(id);
+        }
+      },
+      dense: true,
+      title: Text(translate(name)));
+}
+
 /// find ffi, tag is Remote ID
 /// for session specific usage
 FFI ffi(String? tag) {
@@ -373,4 +390,11 @@ Future<void> initGlobalFFI() async {
   await bind.mainCheckConnectStatus();
   // global shared preference
   await Get.putAsync(() => SharedPreferences.getInstance());
+}
+
+String translate(String name) {
+  if (name.startsWith('Failed to') && name.contains(': ')) {
+    return name.split(': ').map((x) => translate(x)).join(': ');
+  }
+  return platformFFI.translate(name, localeName);
 }

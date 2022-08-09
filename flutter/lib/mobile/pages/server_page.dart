@@ -1,13 +1,10 @@
-import 'dart:convert';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/mobile/widgets/dialog.dart';
-import 'package:flutter_hbb/models/model.dart';
 import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
 import 'package:provider/provider.dart';
 
 import '../../common.dart';
-import '../../models/model.dart';
+import '../../models/platform_model.dart';
 import '../../models/server_model.dart';
 import 'home_page.dart';
 
@@ -99,10 +96,7 @@ class ServerPage extends StatelessWidget implements PageShape {
           } else if (value == kUsePermanentPassword ||
               value == kUseTemporaryPassword ||
               value == kUseBothPasswords) {
-            Map<String, String> msg = Map()
-              ..["name"] = "verification-method"
-              ..["value"] = value;
-            gFFI.setByName('option', jsonEncode(msg));
+            bind.mainSetOption(key: "verification-method", value: value);
             gFFI.serverModel.updatePasswordModel();
           }
         })
@@ -183,9 +177,8 @@ class ServerInfo extends StatelessWidget {
                         ? null
                         : IconButton(
                             icon: const Icon(Icons.refresh),
-                            onPressed: () {
-                              gFFI.setByName("temporary_password");
-                            })),
+                            onPressed: () =>
+                                bind.mainUpdateTemporaryPassword())),
                 onSaved: (String? value) {},
               ),
             ],
@@ -406,8 +399,7 @@ class ConnectionManager extends StatelessWidget {
                                     MaterialStateProperty.all(Colors.red)),
                             icon: Icon(Icons.close),
                             onPressed: () {
-                              gFFI.setByName(
-                                  "close_conn", entry.key.toString());
+                              bind.serverCloseConnection(connId: entry.key);
                               gFFI.invokeMethod(
                                   "cancel_notification", entry.key);
                             },

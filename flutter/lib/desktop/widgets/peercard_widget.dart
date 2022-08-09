@@ -89,7 +89,8 @@ class _PeerCardState extends State<_PeerCard>
                             children: [
                               Expanded(
                                 child: FutureBuilder<String>(
-                                  future: gFFI.getPeerOption(peer.id, 'alias'),
+                                  future: bind.mainGetPeerOption(
+                                      id: peer.id, key: 'alias'),
                                   builder: (_, snapshot) {
                                     if (snapshot.hasData) {
                                       final name = snapshot.data!.isEmpty
@@ -186,7 +187,7 @@ class _PeerCardState extends State<_PeerCard>
       elevation: 8,
     );
     if (value == 'remove') {
-      setState(() => gFFI.setByName('remove', '$id'));
+      setState(() => bind.mainRemovePeer(id: id));
       () async {
         removePreference(id);
       }();
@@ -304,7 +305,7 @@ class _PeerCardState extends State<_PeerCard>
 
   void _rename(String id) async {
     var isInProgress = false;
-    var name = await gFFI.getPeerOption(id, 'alias');
+    var name = await bind.mainGetPeerOption(id: id, key: 'alias');
     if (widget.type == PeerType.ab) {
       final peer = gFFI.abModel.peers.firstWhere((p) => id == p['id']);
       if (peer == null) {
@@ -359,7 +360,8 @@ class _PeerCardState extends State<_PeerCard>
                 if (k.currentState != null) {
                   if (k.currentState!.validate()) {
                     k.currentState!.save();
-                    await gFFI.setPeerOption(id, 'alias', name);
+                    await bind.mainSetPeerOption(
+                        id: id, key: 'alias', value: name);
                     if (widget.type == PeerType.ab) {
                       gFFI.abModel.setPeerOption(id, 'alias', name);
                       await gFFI.abModel.updateAb();

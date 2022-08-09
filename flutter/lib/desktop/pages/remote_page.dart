@@ -346,8 +346,9 @@ class _RemotePageState extends State<RemotePage>
             if (dy > 0)
               dy = -1;
             else if (dy < 0) dy = 1;
-            _ffi.setByName('send_mouse',
-                '{"id": "${widget.id}", "type": "wheel", "x": "$dx", "y": "$dy"}');
+            bind.sessionSendMouse(
+                id: widget.id,
+                msg: '{"type": "wheel", "x": "$dx", "y": "$dy"}');
           }
         },
         child: Consumer<FfiModel>(
@@ -894,32 +895,6 @@ class ImagePainter extends CustomPainter {
   bool shouldRepaint(CustomPainter oldDelegate) {
     return oldDelegate != this;
   }
-}
-
-CheckboxListTile getToggle(
-    String id, void Function(void Function()) setState, option, name) {
-  final opt = bind.getSessionToggleOptionSync(id: id, arg: option);
-  return CheckboxListTile(
-      value: opt,
-      onChanged: (v) {
-        setState(() {
-          bind.sessionToggleOption(id: id, value: option);
-        });
-      },
-      dense: true,
-      title: Text(translate(name)));
-}
-
-RadioListTile<String> getRadio(String name, String toValue, String curValue,
-    void Function(String?) onChange) {
-  return RadioListTile<String>(
-    controlAffinity: ListTileControlAffinity.trailing,
-    title: Text(translate(name)),
-    value: toValue,
-    groupValue: curValue,
-    onChanged: onChange,
-    dense: true,
-  );
 }
 
 void showOptions(String id) async {
