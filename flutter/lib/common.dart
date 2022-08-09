@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:desktop_multi_window/desktop_multi_window.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
@@ -110,10 +111,15 @@ backToHome() {
   Navigator.popUntil(globalKey.currentContext!, ModalRoute.withName("/"));
 }
 
-void window_on_top() {
-  windowManager.restore();
-  windowManager.show();
-  windowManager.focus();
+void window_on_top(int? id) {
+  if (id == null) {
+    // main window
+    windowManager.restore();
+    windowManager.show();
+    windowManager.focus();
+  } else {
+    WindowController.fromWindowId(id)..focus()..show();
+  }
 }
 
 typedef DialogBuilder = CustomAlertDialog Function(
