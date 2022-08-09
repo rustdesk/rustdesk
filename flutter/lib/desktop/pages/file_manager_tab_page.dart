@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:math';
 
+import 'package:desktop_multi_window/desktop_multi_window.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/common.dart';
 import 'package:flutter_hbb/desktop/pages/file_manager_page.dart';
@@ -114,7 +115,11 @@ class _FileManagerTabPageState extends State<FileManagerTabPage>
     tabController.value = TabController(
         length: connectionIds.length, initialIndex: initialIndex, vsync: this);
     if (connectionIds.length == 0) {
-      windowManager.close();
+      WindowController.fromWindowId(windowId()).close();
     }
+  }
+
+  int windowId() {
+    return widget.params["windowId"];
   }
 }

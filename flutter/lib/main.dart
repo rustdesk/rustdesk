@@ -36,6 +36,7 @@ Future<Null> main(List<String> args) async {
         ? Map<String, dynamic>()
         : jsonDecode(args[2]) as Map<String, dynamic>;
     int type = argument['type'] ?? -1;
+    argument['windowId'] = windowId;
     WindowType wType = type.windowType;
     switch (wType) {
       case WindowType.RemoteDesktop:

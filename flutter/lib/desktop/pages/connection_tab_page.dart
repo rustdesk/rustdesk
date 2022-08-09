@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:math';
 
+import 'package:desktop_multi_window/desktop_multi_window.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/common.dart';
 import 'package:flutter_hbb/consts.dart';
@@ -114,7 +115,11 @@ class _ConnectionTabPageState extends State<ConnectionTabPage>
     tabController.value = TabController(
         length: connectionIds.length, vsync: this, initialIndex: initialIndex);
     if (connectionIds.length == 0) {
-      windowManager.close();
+      WindowController.fromWindowId(windowId()).close();
     }
+  }
+
+  int windowId() {
+    return widget.params["windowId"];
   }
 }
