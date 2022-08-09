@@ -8,6 +8,7 @@ import 'package:flutter_hbb/desktop/widgets/tabbar_widget.dart';
 import 'package:flutter_hbb/models/model.dart';
 import 'package:flutter_hbb/utils/multi_window_manager.dart';
 import 'package:get/get.dart';
+import 'package:window_manager/window_manager.dart';
 
 /// File Transfer for multi tabs
 class FileManagerTabPage extends StatefulWidget {
@@ -44,6 +45,7 @@ class _FileManagerTabPageState extends State<FileManagerTabPage>
           "call ${call.method} with args ${call.arguments} from window ${fromWindowId}");
       // for simplify, just replace connectionId
       if (call.method == "new_file_transfer") {
+        window_on_top();
         final args = jsonDecode(call.arguments);
         final id = args['id'];
         final indexOf = connectionIds.indexOf(id);
@@ -111,5 +113,8 @@ class _FileManagerTabPageState extends State<FileManagerTabPage>
     initialIndex = max(0, initialIndex - 1);
     tabController.value = TabController(
         length: connectionIds.length, initialIndex: initialIndex, vsync: this);
+    if (connectionIds.length == 0) {
+      windowManager.close();
+    }
   }
 }

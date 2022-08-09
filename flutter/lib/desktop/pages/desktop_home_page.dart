@@ -9,6 +9,7 @@ import 'package:flutter_hbb/desktop/pages/connection_page.dart';
 import 'package:flutter_hbb/desktop/widgets/titlebar_widget.dart';
 import 'package:flutter_hbb/models/platform_model.dart';
 import 'package:flutter_hbb/models/server_model.dart';
+import 'package:flutter_hbb/utils/multi_window_manager.dart';
 import 'package:get/get.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -447,6 +448,13 @@ class _DesktopHomePageState extends State<DesktopHomePage> with TrayListener {
   void initState() {
     super.initState();
     trayManager.addListener(this);
+    rustDeskWinManager.setMethodHandler((call, fromWindowId) async {
+      print(
+          "call ${call.method} with args ${call.arguments} from window ${fromWindowId}");
+      if (call.method == "main_window_on_top") {
+        window_on_top();
+      }
+    });
   }
 
   @override
