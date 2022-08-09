@@ -8,6 +8,7 @@ import 'package:flutter_hbb/desktop/pages/remote_page.dart';
 import 'package:flutter_hbb/desktop/widgets/tabbar_widget.dart';
 import 'package:flutter_hbb/utils/multi_window_manager.dart';
 import 'package:get/get.dart';
+import 'package:window_manager/window_manager.dart';
 
 import '../../models/model.dart';
 
@@ -47,6 +48,7 @@ class _ConnectionTabPageState extends State<ConnectionTabPage>
           "call ${call.method} with args ${call.arguments} from window ${fromWindowId}");
       // for simplify, just replace connectionId
       if (call.method == "new_remote_desktop") {
+        window_on_top();
         final args = jsonDecode(call.arguments);
         final id = args['id'];
         final indexOf = connectionIds.indexOf(id);
@@ -111,5 +113,8 @@ class _ConnectionTabPageState extends State<ConnectionTabPage>
     initialIndex = max(0, initialIndex - 1);
     tabController.value = TabController(
         length: connectionIds.length, vsync: this, initialIndex: initialIndex);
+    if (connectionIds.length == 0) {
+      windowManager.close();
+    }
   }
 }

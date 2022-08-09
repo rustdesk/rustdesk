@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
 import 'package:get/instance_manager.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:window_manager/window_manager.dart';
 
 import 'models/model.dart';
 import 'models/platform_model.dart';
@@ -107,6 +108,12 @@ void showLoading(String text, {bool clickMaskDismiss = false}) {
 
 backToHome() {
   Navigator.popUntil(globalKey.currentContext!, ModalRoute.withName("/"));
+}
+
+void window_on_top() {
+  windowManager.restore();
+  windowManager.show();
+  windowManager.focus();
 }
 
 typedef DialogBuilder = CustomAlertDialog Function(

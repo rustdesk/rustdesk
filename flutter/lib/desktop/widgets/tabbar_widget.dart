@@ -3,6 +3,7 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/common.dart';
 import 'package:flutter_hbb/consts.dart';
+import 'package:flutter_hbb/utils/multi_window_manager.dart';
 import 'package:get/get.dart';
 
 const Color _bgColor = Color.fromARGB(255, 231, 234, 237);
@@ -184,7 +185,8 @@ class _AddButton extends StatelessWidget {
     return _Hoverable(
       onHover: (hover) => _hover.value = hover,
       onPressed: (pressed) => _pressed.value = pressed,
-      onTapUp: () => debugPrint('+'), // TODO
+      onTapUp: () =>
+          rustDeskWinManager.call(WindowType.Main, "main_window_on_top", ""),
       child: Obx((() => Container(
             height: _kTabBarHeight,
             decoration: ShapeDecoration(

@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'dart:ui';
 
 import 'package:desktop_multi_window/desktop_multi_window.dart';
 import 'package:flutter/services.dart';
@@ -97,7 +96,7 @@ class RustDeskMultiWindowManager {
   int? findWindowByType(WindowType type) {
     switch (type) {
       case WindowType.Main:
-        break;
+        return 0;
       case WindowType.RemoteDesktop:
         return _remoteDesktopWindowId;
       case WindowType.FileTransfer:
