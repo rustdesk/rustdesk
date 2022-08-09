@@ -15,10 +15,10 @@ import 'package:window_manager/window_manager.dart';
 
 import 'common.dart';
 import 'consts.dart';
-import 'models/platform_model.dart';
 import 'mobile/pages/home_page.dart';
 import 'mobile/pages/server_page.dart';
 import 'mobile/pages/settings_page.dart';
+import 'models/platform_model.dart';
 
 int? windowId;
 
@@ -56,7 +56,7 @@ Future<Null> main(List<String> args) async {
 }
 
 ThemeData getCurrentTheme() {
-  return isDarkTheme() ? MyTheme.darkTheme : MyTheme.darkTheme;
+  return isDarkTheme() ? MyTheme.darkTheme : MyTheme.lightTheme;
 }
 
 Future<void> initEnv(String appType) async {
