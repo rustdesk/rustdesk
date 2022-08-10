@@ -898,6 +898,15 @@ fn get_after_install(exe: &str) -> String {
     reg add HKEY_CLASSES_ROOT\\.{ext}\\shell\\open /f
     reg add HKEY_CLASSES_ROOT\\.{ext}\\shell\\open\\command /f
     reg add HKEY_CLASSES_ROOT\\.{ext}\\shell\\open\\command /f /ve /t REG_SZ /d \"\\\"{exe}\\\" --play \\\"%%1\\\"\"
+    reg add HKEY_CLASSES_ROOT\\RustDesk /f
+    reg add HKEY_CLASSES_ROOT\\RustDesk /f /ve /t REG_SZ /d \"URL:RustDesk Protocol\"
+    reg add HKEY_CLASSES_ROOT\\RustDesk /f /v \"URL Protocol\" /t REG_SZ /d \"\"
+    reg add HKEY_CLASSES_ROOT\\RustDesk\\DefaultIcon /f
+    reg add HKEY_CLASSES_ROOT\\RustDesk\\DefaultIcon /f /ve /t REG_SZ  /d \"\\\"{exe}\\\",0\"
+    reg add HKEY_CLASSES_ROOT\\RustDesk\\shell /f
+    reg add HKEY_CLASSES_ROOT\\RustDesk\\shell\\open /f
+    reg add HKEY_CLASSES_ROOT\\RustDesk\\shell\\open\\command /f
+    reg add HKEY_CLASSES_ROOT\\RustDesk\\shell\\open\\command /f /ve /t REG_SZ /d \"\\\"{exe}\\\" \\\"--connect\\\" \\\"%1\\\"\"
     sc create {app_name} binpath= \"\\\"{exe}\\\" --service\" start= auto DisplayName= \"{app_name} Service\"
     netsh advfirewall firewall add rule name=\"{app_name} Service\" dir=in action=allow program=\"{exe}\" enable=yes
     sc start {app_name}
