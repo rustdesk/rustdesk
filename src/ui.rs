@@ -132,7 +132,9 @@ pub fn start(args: &mut [String]) {
         }
         let mut iter = args.iter();
         let cmd = iter.next().unwrap().clone();
-        let id = iter.next().unwrap().clone();
+        let id_raw = iter.next().unwrap().clone();
+        let re = Regex::new(r"^rustdesk:").unwrap();
+        let id = re.replace_all(id_raw, "").to_string();
         let pass = iter.next().unwrap_or(&"".to_owned()).clone();
         let args: Vec<String> = iter.map(|x| x.clone()).collect();
         frame.set_title(&id);

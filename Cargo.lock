@@ -4001,6 +4001,7 @@ dependencies = [
  "objc",
  "parity-tokio-ipc",
  "rdev",
+ "regex",
  "repng",
  "reqwest",
  "rpassword 7.0.0",
