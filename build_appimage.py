@@ -12,7 +12,10 @@ if __name__ == '__main__':
     # check version
     version = get_version()
     os.chdir("appimage")
-    os.system("sed -i 's/^Version=.*/Version=%s/g' rustdesk.desktop" % version)
+
+    # https://specifications.freedesktop.org/desktop-entry-spec/desktop-entry-spec-latest.html
+    # os.system("sed -i 's/^Version=.*/Version=%s/g' rustdesk.desktop" % version)
+
     os.system("sed -i 's/^    version: .*/    version: %s/g' AppImageBuilder.yml" % version)
     # build appimage
     ret = os.system("appimage-builder --recipe AppImageBuilder.yml --skip-test")
