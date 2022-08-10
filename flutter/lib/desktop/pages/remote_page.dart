@@ -14,6 +14,7 @@ import 'package:wakelock/wakelock.dart';
 // import 'package:window_manager/window_manager.dart';
 
 import '../../common.dart';
+import '../../consts.dart';
 import '../../mobile/widgets/dialog.dart';
 import '../../mobile/widgets/overlay.dart';
 import '../../models/model.dart';
@@ -822,18 +823,58 @@ class _RemotePageState extends State<RemotePage>
 
 class ImagePaint extends StatelessWidget {
   final String id;
+  final ScrollController _horizontal = ScrollController();
+  final ScrollController _vertical = ScrollController();
 
-  const ImagePaint({Key? key, required this.id}) : super(key: key);
+  ImagePaint({Key? key, required this.id}) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
     final m = Provider.of<ImageModel>(context);
     final c = Provider.of<CanvasModel>(context);
     var s = c.scale;
-    return CustomPaint(
-      painter:
-          new ImagePainter(image: m.image, x: c.x / s, y: c.y / s, scale: s),
-    );
+    final paintChild = SizedBox(
+        width: (m.image?.width ?? kDefaultDisplayWidth) * s,
+        height: (m.image?.height ?? kDefaultDisplayHeight) * s,
+        child: CustomPaint(
+          painter: new ImagePainter(
+              // image: m.image, x: c.x / s, y: c.y / s, scale: s),
+              image: m.image,
+              x: 0,
+              y: 0,
+              scale: s),
+        ));
+
+    if (c.scrollStyle == ScrollStyle.scrollbar) {
+      return Center(
+          child: Scrollbar(
+        controller: _vertical,
+        thumbVisibility: true,
+        trackVisibility: true,
+        child: Scrollbar(
+          controller: _horizontal,
+          thumbVisibility: true,
+          trackVisibility: true,
+          notificationPredicate: (notif) => notif.depth == 1,
+          child: SingleChildScrollView(
+            controller: _vertical,
+            child: SingleChildScrollView(
+                controller: _horizontal,
+                scrollDirection: Axis.horizontal,
+                child: paintChild),
+          ),
+        ),
+      ));
+    } else {
+      return Center(
+          child: InteractiveViewer(
+        // boundaryMargin: const EdgeInsets.all(20.0),
+        // minScale: 0.1,
+        // maxScale: 1.6,
+        scaleEnabled: false,
+        child: paintChild,
+      ));
+    }
   }
 }
 
@@ -896,6 +937,8 @@ void showOptions(String id, OverlayDialogManager dialogManager) async {
   if (quality == '') quality = 'balanced';
   String viewStyle =
       await bind.getSessionOption(id: id, arg: 'view-style') ?? '';
+  String scrollStyle =
+      await bind.getSessionOption(id: id, arg: 'scroll-style') ?? '';
   var displays = <Widget>[];
   final pi = ffi(id).ffiModel.pi;
   final image = ffi(id).ffiModel.getConnectionImage();
@@ -968,6 +1011,14 @@ void showOptions(String id, OverlayDialogManager dialogManager) async {
         ffi(id).canvasModel.updateViewStyle();
       });
     };
+    var setScrollStyle = (String? value) {
+      if (value == null) return;
+      setState(() {
+        scrollStyle = value;
+        bind.sessionPeerOption(id: id, name: "scroll-style", value: value);
+        ffi(id).canvasModel.updateScrollStyle();
+      });
+    };
     return CustomAlertDialog(
       title: SizedBox.shrink(),
       content: Column(
@@ -977,6 +1028,10 @@ void showOptions(String id, OverlayDialogManager dialogManager) async {
                 getRadio('Original', 'original', viewStyle, setViewStyle),
                 getRadio('Shrink', 'shrink', viewStyle, setViewStyle),
                 getRadio('Stretch', 'stretch', viewStyle, setViewStyle),
+                Divider(color: MyTheme.border),
+                getRadio('Scrollbar', 'scrollbar', scrollStyle, setScrollStyle),
+                getRadio(
+                    'ScrollMouse', 'scrollmouse', scrollStyle, setScrollStyle),
                 Divider(color: MyTheme.border),
                 getRadio('Good image quality', 'best', quality, setQuality),
                 getRadio('Balanced', 'balanced', quality, setQuality),

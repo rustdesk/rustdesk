@@ -432,22 +432,27 @@ class ImageModel with ChangeNotifier {
   }
 }
 
+enum ScrollStyle {
+  scrollbar,
+  scrollmouse,
+}
+
 class CanvasModel with ChangeNotifier {
   double _x = 0;
   double _y = 0;
   double _scale = 1.0;
   double _tabBarHeight = 0.0;
   String id = ""; // TODO multi canvas model
+  ScrollStyle _scrollStyle = ScrollStyle.scrollbar;
 
   WeakReference<FFI> parent;
 
   CanvasModel(this.parent);
 
   double get x => _x;
-
   double get y => _y;
-
   double get scale => _scale;
+  ScrollStyle get scrollStyle => _scrollStyle;
 
   set tabBarHeight(double h) => _tabBarHeight = h;
   double get tabBarHeight => _tabBarHeight;
@@ -494,6 +499,16 @@ class CanvasModel with ChangeNotifier {
     }
     _x = (canvasWidth - getDisplayWidth() * _scale) / 2;
     _y = (canvasHeight - getDisplayHeight() * _scale) / 2;
+    notifyListeners();
+  }
+
+  void updateScrollStyle() async {
+    final s = await bind.getSessionOption(id: id, arg: 'scroll-style');
+    if (s == 'scrollmouse') {
+      _scrollStyle = ScrollStyle.scrollmouse;
+    } else {
+      _scrollStyle = ScrollStyle.scrollbar;
+    }
     notifyListeners();
   }
 
