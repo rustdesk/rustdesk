@@ -1,5 +1,4 @@
 [Desktop Entry]
-Version=1.2.0
 Name=RustDesk
 GenericName=Remote Desktop
 Comment=Remote Desktop
@@ -11,9 +10,24 @@ StartupNotify=true
 Categories=Other;
 Keywords=internet;
 Actions=new-window;
+Version=1.5
+TryExec=rustdesk
+
 
 X-Desktop-File-Install-Version=0.23
 
 [Desktop Action new-window]
 Name=Open a New Window
 
+# rustdesk: url handler
+[Desktop Entry]
+Name=RustDesk
+NoDisplay=True
+MimeType=x-scheme-handler/rustdesk;
+TryExec=rustdesk
+Exec=rustdesk-link %u
+Icon=rustdesk
+Terminal=false
+Type=Application
+StartupNotify=false
+Version=1.5
