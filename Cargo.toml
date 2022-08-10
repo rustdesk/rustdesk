@@ -95,6 +95,7 @@ core-foundation = "0.9"
 core-graphics = "0.22"
 include_dir = "0.7.2"
 tray-item = "0.7" # looks better than trayicon
+dark-light = "0.2"
 
 [target.'cfg(target_os = "linux")'.dependencies]
 psimple = { package = "libpulse-simple-binding", version = "2.25" }
@@ -138,7 +139,7 @@ identifier = "com.carriez.rustdesk"
 icon = ["32x32.png", "128x128.png", "128x128@2x.png"]
 deb_depends = ["libgtk-3-0", "libxcb-randr0", "libxdo3", "libxfixes3", "libxcb-shape0", "libxcb-xfixes0", "libasound2", "libsystemd0", "pulseaudio", "python3-pip", "curl"]
 osx_minimum_system_version = "10.14"
-resources = ["mac-tray.png"]
+resources = ["mac-tray-light.png","mac-tray-dark.png"]
 
 #https://github.com/johnthagen/min-sized-rust
 [profile.release]
