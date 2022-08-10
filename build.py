@@ -219,6 +219,7 @@ rcodesign notarize --api-issuer 69a6de7d-2907-47e3-e053-5b8c7c11a4d1 --api-key 9
                 'cp rustdesk.service.user tmpdeb/usr/share/rustdesk/files/systemd/')
             os.system('cp pynput_service.py tmpdeb/usr/share/rustdesk/files/')
             os.system('cp -a DEBIAN/* tmpdeb/DEBIAN/')
+            os.system('cp rustdesk-link tmpdeb/usr/bin/')
             os.system('strip tmpdeb/usr/bin/rustdesk')
             os.system('mkdir -p tmpdeb/usr/lib/rustdesk')
             os.system('cp libsciter-gtk.so tmpdeb/usr/lib/rustdesk/')
