@@ -23,7 +23,6 @@ md5sums=() #generate with 'makepkg -g'
 
 package() {
 	install -Dm 755 ${HBB}/target/release/${pkgname} -t "${pkgdir}/usr/bin"
-	install -Dm 755 ${HBB}/rustdesk-link -t "${pkgdir}/usr/bin"
 	install -Dm 644 ${HBB}/libsciter-gtk.so -t "${pkgdir}/usr/lib/rustdesk"
   install -Dm 644 $HBB/rustdesk.service -t "${pkgdir}/usr/share/rustdesk/files"
   install -Dm 644 $HBB/rustdesk.desktop -t "${pkgdir}/usr/share/rustdesk/files"

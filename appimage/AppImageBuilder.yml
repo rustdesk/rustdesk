@@ -15,7 +15,6 @@ script:
   - pushd .. && python3 inline-sciter.py && cargo build --features inline,appimage --release && popd
   - mkdir -p AppDir/usr/bin
   - cp ../target/release/rustdesk  AppDir/usr/bin/rustdesk
-  - cp rustdesk-link  AppDir/usr/bin/rustdesk-link
   # Make usr and icons dirs
   - mkdir -p AppDir/usr/share/icons/hicolor/128x128 && cp ../128x128.png AppDir/usr/share/icons/hicolor/128x128/rustdesk.png
   - mkdir -p AppDir/usr/share/icons/hicolor/32x32 && cp ../32x32.png AppDir/usr/share/icons/hicolor/32x32/rustdesk.png
