@@ -8,11 +8,9 @@ import 'package:flutter_hbb/desktop/widgets/peer_widget.dart';
 import 'package:flutter_hbb/utils/multi_window_manager.dart';
 import 'package:get/get.dart';
 import 'package:provider/provider.dart';
-import 'package:url_launcher/url_launcher.dart';
 import 'package:url_launcher/url_launcher_string.dart';
 
 import '../../common.dart';
-import '../../mobile/pages/home_page.dart';
 import '../../mobile/pages/scan_page.dart';
 import '../../mobile/pages/settings_page.dart';
 import '../../models/model.dart';
@@ -21,17 +19,8 @@ import '../../models/platform_model.dart';
 // enum RemoteType { recently, favorite, discovered, addressBook }
 
 /// Connection page for connecting to a remote peer.
-class ConnectionPage extends StatefulWidget implements PageShape {
+class ConnectionPage extends StatefulWidget {
   ConnectionPage({Key? key}) : super(key: key);
-
-  @override
-  final icon = Icon(Icons.connected_tv);
-
-  @override
-  final title = translate("Connection");
-
-  @override
-  final appBarActions = !isAndroid ? <Widget>[WebMenu()] : <Widget>[];
 
   @override
   _ConnectionPageState createState() => _ConnectionPageState();
@@ -174,8 +163,8 @@ class _ConnectionPageState extends State<ConnectionPage> {
         : InkWell(
             onTap: () async {
               final url = _updateUrl + '.apk';
-              if (await canLaunch(url)) {
-                await launch(url);
+              if (await canLaunchUrlString(url)) {
+                await launchUrlString(url);
               }
             },
             child: Container(
@@ -387,13 +376,20 @@ class _ConnectionPageState extends State<ConnectionPage> {
       width: 8,
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(20),
-        color: Colors.green,
+        color: svcStopped.value ? Colors.redAccent : Colors.green,
       ),
-    ).paddingSymmetric(horizontal: 8.0);
+    ).paddingSymmetric(horizontal: 10.0);
     if (svcStopped.value) {
       return Row(
         crossAxisAlignment: CrossAxisAlignment.center,
-        children: [light, Text(translate("Service is not running"))],
+        children: [
+          light,
+          Text(translate("Service is not running")),
+          TextButton(
+              onPressed: () =>
+                  bind.mainSetOption(key: "stop-service", value: ""),
+              child: Text(translate("Start Service")))
+        ],
       );
     } else {
       if (svcStatusCode.value == 0) {
@@ -436,7 +432,7 @@ class _ConnectionPageState extends State<ConnectionPage> {
   }
 
   updateStatus() async {
-    svcStopped.value = bind.mainGetOption(key: "stop-service") == "Y";
+    svcStopped.value = await bind.mainGetOption(key: "stop-service") == "Y";
     final status =
         jsonDecode(await bind.mainGetConnectStatus()) as Map<String, dynamic>;
     svcStatusCode.value = status["status_num"];

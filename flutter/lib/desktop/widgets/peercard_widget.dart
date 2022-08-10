@@ -187,10 +187,9 @@ class _PeerCardState extends State<_PeerCard>
       elevation: 8,
     );
     if (value == 'remove') {
-      setState(() => bind.mainRemovePeer(id: id));
-      () async {
-        removePreference(id);
-      }();
+      await bind.mainRemovePeer(id: id);
+      removePreference(id);
+      Get.forceAppUpdate(); // TODO use inner model / state
     } else if (value == 'file') {
       _connect(id, isFileTransfer: true);
     } else if (value == 'add-fav') {
