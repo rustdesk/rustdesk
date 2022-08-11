@@ -20,27 +20,11 @@ class DesktopFileTransferScreen extends StatelessWidget {
         ChangeNotifierProvider.value(value: gFFI.cursorModel),
         ChangeNotifierProvider.value(value: gFFI.canvasModel),
       ],
-      child: MaterialApp(
-          navigatorKey: globalKey,
-          debugShowCheckedModeBanner: false,
-          title: 'RustDesk - File Transfer',
-          theme: ThemeData(
-            primarySwatch: Colors.blue,
-            visualDensity: VisualDensity.adaptivePlatformDensity,
-          ),
-          home: FileManagerTabPage(
-            params: params,
-          ),
-          navigatorObservers: [
-            // FirebaseAnalyticsObserver(analytics: analytics),
-            FlutterSmartDialog.observer
-          ],
-          builder: FlutterSmartDialog.init(
-              builder: isAndroid
-                  ? (_, child) => AccessibilityListener(
-                        child: child,
-                      )
-                  : null)),
+      child: Scaffold(
+        body: FileManagerTabPage(
+          params: params,
+        ),
+      ),
     );
   }
 }

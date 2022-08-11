@@ -12,76 +12,109 @@ const double _kIconSize = 18;
 const double _kDividerIndent = 10;
 const double _kAddIconSize = _kTabBarHeight - 15;
 
+class TabInfo {
+  late final String label;
+  late final IconData icon;
+  late final bool closable;
+
+  TabInfo({required this.label, required this.icon, this.closable = true});
+}
+
 class DesktopTabBar extends StatelessWidget {
   late final Rx<TabController> controller;
-  late final List<String> tabs;
+  late final List<TabInfo> tabs;
   late final Function(String) onTabClose;
-  late final IconData tabIcon;
   late final Rx<int> selected;
   late final bool dark;
   late final _Theme _theme;
+  late final bool mainTab;
+  late final Function()? onMenu;
 
-  DesktopTabBar(
-      {Key? key,
-      required this.controller,
-      required this.tabs,
-      required this.onTabClose,
-      required this.tabIcon,
-      required this.selected,
-      required this.dark})
-      : _theme = dark ? _Theme.dark() : _Theme.light(),
+  DesktopTabBar({
+    Key? key,
+    required this.controller,
+    required this.tabs,
+    required this.onTabClose,
+    required this.selected,
+    required this.dark,
+    required this.mainTab,
+    this.onMenu,
+  })  : _theme = dark ? _Theme.dark() : _Theme.light(),
         super(key: key);
 
   @override
   Widget build(BuildContext context) {
     return Container(
       height: _kTabBarHeight,
-      child: Scaffold(
-        backgroundColor: _theme.bgColor,
-        body: Row(
-          children: [
-            Flexible(
-              child: Obx(() => TabBar(
-                  indicator: BoxDecoration(),
-                  indicatorColor: Colors.transparent,
-                  labelPadding:
-                      const EdgeInsets.symmetric(vertical: 0, horizontal: 0),
-                  isScrollable: true,
-                  physics: BouncingScrollPhysics(),
-                  controller: controller.value,
-                  tabs: tabs
-                      .asMap()
-                      .entries
-                      .map((e) => _Tab(
-                            index: e.key,
-                            text: e.value,
-                            icon: tabIcon,
-                            selected: selected.value,
-                            onClose: () {
-                              onTabClose(e.value);
-                              if (e.key <= selected.value) {
-                                selected.value = max(0, selected.value - 1);
-                              }
-                              controller.value.animateTo(selected.value,
-                                  duration: Duration.zero);
-                            },
-                            onSelected: () {
-                              selected.value = e.key;
-                              controller.value
-                                  .animateTo(e.key, duration: Duration.zero);
-                            },
-                            theme: _theme,
-                          ))
-                      .toList())),
+      child: Row(
+        children: [
+          Expanded(
+            child: Row(
+              children: [
+                Offstage(
+                  offstage: !mainTab,
+                  child: Row(children: [
+                    Image.asset('assets/logo.ico'),
+                    Text("RustDesk"),
+                  ]).paddingSymmetric(horizontal: 12, vertical: 5),
+                ),
+                Flexible(
+                  child: Obx(() => TabBar(
+                      indicator: BoxDecoration(),
+                      indicatorColor: Colors.transparent,
+                      labelPadding: const EdgeInsets.symmetric(
+                          vertical: 0, horizontal: 0),
+                      isScrollable: true,
+                      indicatorWeight: 0.1,
+                      physics: BouncingScrollPhysics(),
+                      controller: controller.value,
+                      tabs: tabs.asMap().entries.map((e) {
+                        int index = e.key;
+                        String label = e.value.label;
+
+                        return _Tab(
+                          index: index,
+                          label: label,
+                          icon: e.value.icon,
+                          closable: e.value.closable,
+                          selected: selected.value,
+                          onClose: () {
+                            onTabClose(label);
+                            if (index <= selected.value) {
+                              selected.value = max(0, selected.value - 1);
+                            }
+                            controller.value.animateTo(selected.value,
+                                duration: Duration.zero);
+                          },
+                          onSelected: () {
+                            selected.value = index;
+                            controller.value
+                                .animateTo(index, duration: Duration.zero);
+                          },
+                          theme: _theme,
+                        );
+                      }).toList())),
+                ),
+                Offstage(
+                  offstage: mainTab,
+                  child: _AddButton(
+                    theme: _theme,
+                  ).paddingOnly(left: 10),
+                )
+              ],
             ),
-            Padding(
-              padding: EdgeInsets.only(left: 10),
-              child: _AddButton(
-                theme: _theme,
+          ),
+          Offstage(
+            offstage: onMenu == null,
+            child: InkWell(
+              child: Icon(
+                Icons.menu,
+                color: _theme.unSelectedIconColor,
               ),
-            ),
-          ],
-        ),
+              onTap: () => onMenu?.call(),
+            ).paddingOnly(right: 10),
+          )
+        ],
       ),
     );
   }
@@ -89,8 +122,9 @@ class DesktopTabBar extends StatelessWidget {
 
 class _Tab extends StatelessWidget {
   late final int index;
-  late final String text;
+  late final String label;
   late final IconData icon;
+  late final bool closable;
   late final int selected;
   late final Function() onClose;
   late final Function() onSelected;
@@ -100,8 +134,9 @@ class _Tab extends StatelessWidget {
   _Tab(
       {Key? key,
       required this.index,
-      required this.text,
+      required this.label,
       required this.icon,
+      required this.closable,
       required this.selected,
       required this.onClose,
       required this.onSelected,
@@ -114,7 +149,6 @@ class _Tab extends StatelessWidget {
     bool show_divider = index != selected - 1 && index != selected;
     return Ink(
       width: _kTabFixedWidth,
-      color: is_selected ? theme.tabSelectedColor : null,
       child: InkWell(
         onHover: (hover) => _hover.value = hover,
         onTap: () => onSelected(),
@@ -126,17 +160,16 @@ class _Tab extends StatelessWidget {
                   child: Row(
                       crossAxisAlignment: CrossAxisAlignment.center,
                       children: [
-                        Padding(
-                          padding: EdgeInsets.symmetric(horizontal: 5),
-                          child: Icon(
-                            icon,
-                            size: _kIconSize,
-                            color: theme.tabIconColor,
-                          ),
-                        ),
+                        Icon(
+                          icon,
+                          size: _kIconSize,
+                          color: is_selected
+                              ? theme.selectedtabIconColor
+                              : theme.unSelectedtabIconColor,
+                        ).paddingSymmetric(horizontal: 5),
                         Expanded(
                           child: Text(
-                            text,
+                            label,
                             style: TextStyle(
                                 color: is_selected
                                     ? theme.selectedTextColor
@@ -144,7 +177,7 @@ class _Tab extends StatelessWidget {
                           ),
                         ),
                         Obx((() => _CloseButton(
-                              tabHovered: _hover.value,
+                              visiable: _hover.value && closable,
                               tabSelected: is_selected,
                               onClose: () => onClose(),
                               theme: theme,
@@ -195,14 +228,14 @@ class _AddButton extends StatelessWidget {
 }
 
 class _CloseButton extends StatelessWidget {
-  final bool tabHovered;
+  final bool visiable;
   final bool tabSelected;
   final Function onClose;
   late final _Theme theme;
 
   _CloseButton({
     Key? key,
-    required this.tabHovered,
+    required this.visiable,
     required this.tabSelected,
     required this.onClose,
     required this.theme,
@@ -210,31 +243,28 @@ class _CloseButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 5),
-        child: SizedBox(
-            width: _kIconSize,
-            child: Offstage(
-              offstage: !tabHovered,
-              child: InkWell(
-                customBorder: RoundedRectangleBorder(),
-                onTap: () => onClose(),
-                child: Icon(
-                  Icons.close,
-                  size: _kIconSize,
-                  color: tabSelected
-                      ? theme.selectedIconColor
-                      : theme.unSelectedIconColor,
-                ),
-              ),
-            )));
+    return SizedBox(
+        width: _kIconSize,
+        child: Offstage(
+          offstage: !visiable,
+          child: InkWell(
+            customBorder: RoundedRectangleBorder(),
+            onTap: () => onClose(),
+            child: Icon(
+              Icons.close,
+              size: _kIconSize,
+              color: tabSelected
+                  ? theme.selectedIconColor
+                  : theme.unSelectedIconColor,
+            ),
+          ),
+        )).paddingSymmetric(horizontal: 5);
   }
 }
 
 class _Theme {
-  late Color bgColor;
-  late Color tabSelectedColor;
-  late Color tabIconColor;
+  late Color unSelectedtabIconColor;
+  late Color selectedtabIconColor;
   late Color selectedTextColor;
   late Color unSelectedTextColor;
   late Color selectedIconColor;
@@ -242,9 +272,8 @@ class _Theme {
   late Color dividerColor;
 
   _Theme.light() {
-    bgColor = Color.fromARGB(255, 253, 253, 253);
-    tabSelectedColor = MyTheme.grayBg;
-    tabIconColor = MyTheme.accent50;
+    unSelectedtabIconColor = Color.fromARGB(255, 162, 203, 241);
+    selectedtabIconColor = MyTheme.accent;
     selectedTextColor = Color.fromARGB(255, 26, 26, 26);
     unSelectedTextColor = Color.fromARGB(255, 96, 96, 96);
     selectedIconColor = Color.fromARGB(255, 26, 26, 26);
@@ -253,9 +282,8 @@ class _Theme {
   }
 
   _Theme.dark() {
-    bgColor = Color.fromARGB(255, 50, 50, 50);
-    tabSelectedColor = MyTheme.canvasColor;
-    tabIconColor = Color.fromARGB(255, 84, 197, 248);
+    unSelectedtabIconColor = Color.fromARGB(255, 30, 65, 98);
+    selectedtabIconColor = MyTheme.accent;
     selectedTextColor = Color.fromARGB(255, 255, 255, 255);
     unSelectedTextColor = Color.fromARGB(255, 207, 207, 207);
     selectedIconColor = Color.fromARGB(255, 215, 215, 215);

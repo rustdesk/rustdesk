@@ -82,11 +82,13 @@ class _FileManagerTabPageState extends State<FileManagerTabPage>
           Obx(
             () => DesktopTabBar(
               controller: tabController,
-              tabs: connectionIds.toList(),
+              tabs: connectionIds
+                  .map((e) => TabInfo(label: e, icon: Icons.file_copy_sharp))
+                  .toList(),
               onTabClose: onRemoveId,
-              tabIcon: Icons.file_copy_sharp,
               selected: _selected,
               dark: isDarkTheme(),
+              mainTab: false,
             ),
           ),
           Expanded(

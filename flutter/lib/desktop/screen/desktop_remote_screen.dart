@@ -13,33 +13,16 @@ class DesktopRemoteScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MultiProvider(
-      providers: [
-        ChangeNotifierProvider.value(value: gFFI.ffiModel),
-        ChangeNotifierProvider.value(value: gFFI.imageModel),
-        ChangeNotifierProvider.value(value: gFFI.cursorModel),
-        ChangeNotifierProvider.value(value: gFFI.canvasModel),
-      ],
-      child: MaterialApp(
-          navigatorKey: globalKey,
-          debugShowCheckedModeBanner: false,
-          title: 'RustDesk - Remote Desktop',
-          theme: ThemeData(
-            primarySwatch: Colors.blue,
-            visualDensity: VisualDensity.adaptivePlatformDensity,
-          ),
-          home: ConnectionTabPage(
+        providers: [
+          ChangeNotifierProvider.value(value: gFFI.ffiModel),
+          ChangeNotifierProvider.value(value: gFFI.imageModel),
+          ChangeNotifierProvider.value(value: gFFI.cursorModel),
+          ChangeNotifierProvider.value(value: gFFI.canvasModel),
+        ],
+        child: Scaffold(
+          body: ConnectionTabPage(
             params: params,
           ),
-          navigatorObservers: [
-            // FirebaseAnalyticsObserver(analytics: analytics),
-            FlutterSmartDialog.observer
-          ],
-          builder: FlutterSmartDialog.init(
-              builder: isAndroid
-                  ? (_, child) => AccessibilityListener(
-                        child: child,
-                      )
-                  : null)),
-    );
+        ));
   }
 }

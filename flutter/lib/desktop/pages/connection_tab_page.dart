@@ -84,11 +84,14 @@ class _ConnectionTabPageState extends State<ConnectionTabPage>
         children: [
           Obx(() => DesktopTabBar(
                 controller: tabController,
-                tabs: connectionIds.toList(),
+                tabs: connectionIds
+                    .map((e) =>
+                        TabInfo(label: e, icon: Icons.desktop_windows_sharp))
+                    .toList(),
                 onTabClose: onRemoveId,
-                tabIcon: Icons.desktop_windows_sharp,
                 selected: _selected,
                 dark: isDarkTheme(),
+                mainTab: false,
               )),
           Expanded(
               child: Obx(() => TabBarView(
