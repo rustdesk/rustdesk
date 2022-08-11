@@ -13,21 +13,7 @@ Actions=new-window;
 Version=1.5
 TryExec=rustdesk
 
-
 X-Desktop-File-Install-Version=0.23
 
 [Desktop Action new-window]
 Name=Open a New Window
-
-# rustdesk: url handler
-[Desktop Entry]
-Name=RustDesk
-NoDisplay=True
-MimeType=x-scheme-handler/rustdesk;
-TryExec=rustdesk
-Exec=rustdesk --connect %u
-Icon=rustdesk
-Terminal=false
-Type=Application
-StartupNotify=false
-Version=1.5

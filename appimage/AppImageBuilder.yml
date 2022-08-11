@@ -19,6 +19,7 @@ script:
   - mkdir -p AppDir/usr/share/icons/hicolor/128x128 && cp ../128x128.png AppDir/usr/share/icons/hicolor/128x128/rustdesk.png
   - mkdir -p AppDir/usr/share/icons/hicolor/32x32 && cp ../32x32.png AppDir/usr/share/icons/hicolor/32x32/rustdesk.png
   - cp rustdesk.desktop AppDir/
+  - cp rustdesk-link.desktop AppDir/  
 
 AppDir:
   path: ./AppDir
