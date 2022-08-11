@@ -3,7 +3,6 @@ import 'package:flutter_hbb/mobile/pages/chat_page.dart';
 import 'package:flutter_hbb/mobile/pages/server_page.dart';
 import 'package:flutter_hbb/mobile/pages/settings_page.dart';
 import '../../common.dart';
-import '../widgets/overlay.dart';
 import 'connection_page.dart';
 
 abstract class PageShape extends Widget {
@@ -79,8 +78,8 @@ class _HomePageState extends State<HomePage> {
             onTap: (index) => setState(() {
               // close chat overlay when go chat page
               if (index == 1 && _selectedIndex != index) {
-                hideChatIconOverlay();
-                hideChatWindowOverlay();
+                gFFI.chatModel.hideChatIconOverlay();
+                gFFI.chatModel.hideChatWindowOverlay();
               }
               _selectedIndex = index;
             }),

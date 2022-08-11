@@ -1,22 +1,23 @@
-import 'package:draggable_float_widget/draggable_float_widget.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/common.dart';
 
+import '../../models/chat_model.dart';
 import '../../models/model.dart';
 import '../pages/chat_page.dart';
-
-OverlayEntry? chatIconOverlayEntry;
-OverlayEntry? chatWindowOverlayEntry;
 
 OverlayEntry? mobileActionsOverlayEntry;
 
 class DraggableChatWindow extends StatelessWidget {
   DraggableChatWindow(
-      {this.position = Offset.zero, required this.width, required this.height});
+      {this.position = Offset.zero,
+      required this.width,
+      required this.height,
+      required this.chatModel});
 
   final Offset position;
   final double width;
   final double height;
+  final ChatModel chatModel;
 
   @override
   Widget build(BuildContext context) {
@@ -27,7 +28,7 @@ class DraggableChatWindow extends StatelessWidget {
         height: height,
         builder: (_, onPanUpdate) {
           return isIOS
-              ? ChatPage()
+              ? ChatPage(chatModel: chatModel)
               : Scaffold(
                   resizeToAvoidBottomInset: false,
                   appBar: CustomAppBar(
@@ -53,13 +54,13 @@ class DraggableChatWindow extends StatelessWidget {
                             children: [
                               IconButton(
                                   onPressed: () {
-                                    hideChatWindowOverlay();
+                                    chatModel.hideChatWindowOverlay();
                                   },
                                   icon: Icon(Icons.keyboard_arrow_down)),
                               IconButton(
                                   onPressed: () {
-                                    hideChatWindowOverlay();
-                                    hideChatIconOverlay();
+                                    chatModel.hideChatWindowOverlay();
+                                    chatModel.hideChatIconOverlay();
                                   },
                                   icon: Icon(Icons.close))
                             ],
@@ -68,7 +69,7 @@ class DraggableChatWindow extends StatelessWidget {
                       ),
                     ),
                   ),
-                  body: ChatPage(),
+                  body: ChatPage(chatModel: chatModel),
                 );
         });
   }
@@ -89,81 +90,6 @@ class CustomAppBar extends StatelessWidget implements PreferredSizeWidget {
 
   @override
   Size get preferredSize => new Size.fromHeight(kToolbarHeight);
-}
-
-showChatIconOverlay({Offset offset = const Offset(200, 50)}) {
-  if (chatIconOverlayEntry != null) {
-    chatIconOverlayEntry!.remove();
-  }
-  if (globalKey.currentState == null || globalKey.currentState!.overlay == null)
-    return;
-  final bar = navigationBarKey.currentWidget;
-  if (bar != null) {
-    if ((bar as BottomNavigationBar).currentIndex == 1) {
-      return;
-    }
-  }
-  final globalOverlayState = globalKey.currentState!.overlay!;
-
-  final overlay = OverlayEntry(builder: (context) {
-    return DraggableFloatWidget(
-        config: DraggableFloatWidgetBaseConfig(
-          initPositionYInTop: false,
-          initPositionYMarginBorder: 100,
-          borderTopContainTopBar: true,
-        ),
-        child: FloatingActionButton(
-            onPressed: () {
-              if (chatWindowOverlayEntry == null) {
-                showChatWindowOverlay();
-              } else {
-                hideChatWindowOverlay();
-              }
-            },
-            child: Icon(Icons.message)));
-  });
-  globalOverlayState.insert(overlay);
-  chatIconOverlayEntry = overlay;
-}
-
-hideChatIconOverlay() {
-  if (chatIconOverlayEntry != null) {
-    chatIconOverlayEntry!.remove();
-    chatIconOverlayEntry = null;
-  }
-}
-
-showChatWindowOverlay() {
-  if (chatWindowOverlayEntry != null) return;
-  if (globalKey.currentState == null || globalKey.currentState!.overlay == null)
-    return;
-  final globalOverlayState = globalKey.currentState!.overlay!;
-
-  final overlay = OverlayEntry(builder: (context) {
-    return DraggableChatWindow(
-        position: Offset(20, 80), width: 250, height: 350);
-  });
-  globalOverlayState.insert(overlay);
-  chatWindowOverlayEntry = overlay;
-}
-
-hideChatWindowOverlay() {
-  if (chatWindowOverlayEntry != null) {
-    chatWindowOverlayEntry!.remove();
-    chatWindowOverlayEntry = null;
-    return;
-  }
-}
-
-toggleChatOverlay() {
-  if (chatIconOverlayEntry == null || chatWindowOverlayEntry == null) {
-    gFFI.invokeMethod("enable_soft_keyboard", true);
-    showChatIconOverlay();
-    showChatWindowOverlay();
-  } else {
-    hideChatIconOverlay();
-    hideChatWindowOverlay();
-  }
 }
 
 /// floating buttons of back/home/recent actions for android

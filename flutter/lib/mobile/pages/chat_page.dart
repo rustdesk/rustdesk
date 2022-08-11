@@ -4,10 +4,15 @@ import 'package:flutter_hbb/common.dart';
 import 'package:flutter_hbb/models/chat_model.dart';
 import 'package:provider/provider.dart';
 
-import '../../models/model.dart';
 import 'home_page.dart';
 
 class ChatPage extends StatelessWidget implements PageShape {
+  late final ChatModel chatModel;
+
+  ChatPage({ChatModel? chatModel}) {
+    this.chatModel = chatModel ?? gFFI.chatModel;
+  }
+
   @override
   final title = translate("Chat");
 
@@ -19,6 +24,7 @@ class ChatPage extends StatelessWidget implements PageShape {
     PopupMenuButton<int>(
         icon: Icon(Icons.group),
         itemBuilder: (context) {
+          // only mobile need [appBarActions], just bind gFFI.chatModel
           final chatModel = gFFI.chatModel;
           return chatModel.messages.entries.map((entry) {
             final id = entry.key;
@@ -37,7 +43,7 @@ class ChatPage extends StatelessWidget implements PageShape {
   @override
   Widget build(BuildContext context) {
     return ChangeNotifierProvider.value(
-        value: gFFI.chatModel,
+        value: chatModel,
         child: Container(
             color: MyTheme.grayBg,
             child: Consumer<ChatModel>(builder: (context, chatModel, child) {
