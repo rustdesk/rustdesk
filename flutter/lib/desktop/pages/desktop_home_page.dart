@@ -249,9 +249,12 @@ class _DesktopHomePageState extends State<DesktopHomePage>
                       Expanded(
                         child: GestureDetector(
                           onDoubleTap: () {
-                            Clipboard.setData(
-                                ClipboardData(text: model.serverPasswd.text));
-                            showToast(translate("Copied"));
+                            if (model.verificationMethod !=
+                                kUsePermanentPassword) {
+                              Clipboard.setData(
+                                  ClipboardData(text: model.serverPasswd.text));
+                              showToast(translate("Copied"));
+                            }
                           },
                           child: TextFormField(
                             controller: model.serverPasswd,
