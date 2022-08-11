@@ -22,13 +22,13 @@ class TabInfo {
 
 class DesktopTabBar extends StatelessWidget {
   late final Rx<TabController> controller;
-  late final List<TabInfo> tabs;
+  late final RxList<TabInfo> tabs;
   late final Function(String) onTabClose;
   late final Rx<int> selected;
   late final bool dark;
   late final _Theme _theme;
   late final bool mainTab;
-  late final Function()? onMenu;
+  late final Function()? onAddSetting;
 
   DesktopTabBar({
     Key? key,
@@ -38,7 +38,7 @@ class DesktopTabBar extends StatelessWidget {
     required this.selected,
     required this.dark,
     required this.mainTab,
-    this.onMenu,
+    this.onAddSetting,
   })  : _theme = dark ? _Theme.dark() : _Theme.light(),
         super(key: key);
 
@@ -105,18 +105,49 @@ class DesktopTabBar extends StatelessWidget {
             ),
           ),
           Offstage(
-            offstage: onMenu == null,
-            child: InkWell(
-              child: Icon(
-                Icons.menu,
-                color: _theme.unSelectedIconColor,
-              ),
-              onTap: () => onMenu?.call(),
-            ).paddingOnly(right: 10),
+            offstage: onAddSetting == null,
+            child: Tooltip(
+              message: translate("Settings"),
+              child: InkWell(
+                child: Icon(
+                  Icons.menu,
+                  color: _theme.unSelectedIconColor,
+                ),
+                onTap: () => onAddSetting?.call(),
+              ).paddingOnly(right: 10),
+            ),
           )
         ],
       ),
     );
+  }
+
+  static onClose(
+    TickerProvider vsync,
+    Rx<TabController> controller,
+    RxList<TabInfo> tabs,
+    String label,
+  ) {
+    tabs.removeWhere((tab) => tab.label == label);
+    controller.value = TabController(
+        length: tabs.length,
+        vsync: vsync,
+        initialIndex: max(0, tabs.length - 1));
+  }
+
+  static onAdd(TickerProvider vsync, Rx<TabController> controller,
+      RxList<TabInfo> tabs, Rx<int> selected, TabInfo tab) {
+    int index = tabs.indexWhere((e) => e.label == tab.label);
+    if (index >= 0) {
+      controller.value.animateTo(index, duration: Duration.zero);
+      selected.value = index;
+    } else {
+      tabs.add(tab);
+      controller.value = TabController(
+          length: tabs.length, vsync: vsync, initialIndex: tabs.length - 1);
+      controller.value.animateTo(tabs.length - 1, duration: Duration.zero);
+      selected.value = tabs.length - 1;
+    }
   }
 }
 
@@ -169,7 +200,7 @@ class _Tab extends StatelessWidget {
                         ).paddingSymmetric(horizontal: 5),
                         Expanded(
                           child: Text(
-                            label,
+                            translate(label),
                             style: TextStyle(
                                 color: is_selected
                                     ? theme.selectedTextColor

@@ -1,5 +1,3 @@
-import 'dart:math';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/common.dart';
 import 'package:flutter_hbb/consts.dart';
@@ -36,15 +34,15 @@ class _DesktopTabPageState extends State<DesktopTabPage>
     return Scaffold(
       body: Column(
         children: [
-          Obx((() => DesktopTabBar(
-                controller: tabController,
-                tabs: tabs.toList(),
-                onTabClose: onTabClose,
-                selected: _selected,
-                dark: isDarkTheme(),
-                mainTab: true,
-                onMenu: onTabbarMenu,
-              ))),
+          DesktopTabBar(
+            controller: tabController,
+            tabs: tabs,
+            onTabClose: onTabClose,
+            selected: _selected,
+            dark: isDarkTheme(),
+            mainTab: true,
+            onAddSetting: onAddSetting,
+          ),
           Obx((() => Expanded(
                 child: TabBarView(
                     controller: tabController.value,
@@ -65,24 +63,11 @@ class _DesktopTabPageState extends State<DesktopTabPage>
   }
 
   void onTabClose(String label) {
-    tabs.removeWhere((tab) => tab.label == label);
-    tabController.value = TabController(
-        length: tabs.length,
-        vsync: this,
-        initialIndex: max(0, tabs.length - 1));
+    DesktopTabBar.onClose(this, tabController, tabs, label);
   }
 
-  void onTabbarMenu() {
-    int index = tabs.indexWhere((tab) => tab.label == kTabLabelSettingPage);
-    if (index >= 0) {
-      tabController.value.animateTo(index, duration: Duration.zero);
-      _selected.value = index;
-    } else {
-      tabs.add(TabInfo(label: kTabLabelSettingPage, icon: Icons.settings));
-      tabController.value = TabController(
-          length: tabs.length, vsync: this, initialIndex: tabs.length - 1);
-      tabController.value.animateTo(tabs.length - 1, duration: Duration.zero);
-      _selected.value = tabs.length - 1;
-    }
+  void onAddSetting() {
+    DesktopTabBar.onAdd(this, tabController, tabs, _selected,
+        TabInfo(label: kTabLabelSettingPage, icon: Icons.settings));
   }
 }
