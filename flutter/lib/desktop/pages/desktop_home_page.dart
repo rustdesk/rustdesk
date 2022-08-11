@@ -6,7 +6,6 @@ import 'package:flutter/material.dart' hide MenuItem;
 import 'package:flutter/services.dart';
 import 'package:flutter_hbb/common.dart';
 import 'package:flutter_hbb/desktop/pages/connection_page.dart';
-import 'package:flutter_hbb/desktop/widgets/titlebar_widget.dart';
 import 'package:flutter_hbb/models/platform_model.dart';
 import 'package:flutter_hbb/models/server_model.dart';
 import 'package:flutter_hbb/utils/multi_window_manager.dart';
@@ -46,38 +45,17 @@ class _DesktopHomePageState extends State<DesktopHomePage>
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      body: Column(
-        children: [
-          DesktopTitleBar(
-            child: Center(
-              child: Text(
-                "RustDesk",
-                style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold),
-              ),
-            ),
-          ),
-          Expanded(
-            child: Container(
-              child: Row(
-                children: [
-                  Flexible(
-                    child: buildServerInfo(context),
-                    flex: 1,
-                  ),
-                  Flexible(
-                    child: buildServerBoard(context),
-                    flex: 4,
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ],
-      ),
+    return Row(
+      children: [
+        Flexible(
+          child: buildServerInfo(context),
+          flex: 1,
+        ),
+        Flexible(
+          child: buildServerBoard(context),
+          flex: 4,
+        ),
+      ],
     );
   }
 

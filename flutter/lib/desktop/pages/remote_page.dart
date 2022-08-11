@@ -263,7 +263,6 @@ class _RemotePageState extends State<RemotePage>
             OverlayEntry(builder: (context) {
               _ffi.chatModel.setOverlayState(Overlay.of(context));
               return Container(
-                  color: Colors.black,
                   child: getRawPointerAndKeyBody(getBodyForDesktop(keyboard)));
             })
           ],
@@ -500,25 +499,20 @@ class _RemotePageState extends State<RemotePage>
 
   Widget getBodyForDesktop(bool keyboard) {
     var paints = <Widget>[
-      MouseRegion(
-          onEnter: (evt) {
-            bind.hostStopSystemKeyPropagate(stopped: false);
-          },
-          onExit: (evt) {
-            bind.hostStopSystemKeyPropagate(stopped: true);
-          },
-          child: Container(
-            color: MyTheme.canvasColor,
-            child: LayoutBuilder(builder: (context, constraints) {
-              Future.delayed(Duration.zero, () {
-                Provider.of<CanvasModel>(context, listen: false)
-                    .updateViewStyle();
-              });
-              return ImagePaint(
-                id: widget.id,
-              );
-            }),
-          ))
+      MouseRegion(onEnter: (evt) {
+        bind.hostStopSystemKeyPropagate(stopped: false);
+      }, onExit: (evt) {
+        bind.hostStopSystemKeyPropagate(stopped: true);
+      }, child: Container(
+        child: LayoutBuilder(builder: (context, constraints) {
+          Future.delayed(Duration.zero, () {
+            Provider.of<CanvasModel>(context, listen: false).updateViewStyle();
+          });
+          return ImagePaint(
+            id: widget.id,
+          );
+        }),
+      ))
     ];
     final cursor = bind.getSessionToggleOptionSync(
         id: widget.id, arg: 'show-remote-cursor');

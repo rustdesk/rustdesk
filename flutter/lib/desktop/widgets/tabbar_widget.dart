@@ -6,275 +6,319 @@ import 'package:flutter_hbb/consts.dart';
 import 'package:flutter_hbb/utils/multi_window_manager.dart';
 import 'package:get/get.dart';
 
-const Color _bgColor = Color.fromARGB(255, 231, 234, 237);
-const Color _tabUnselectedColor = Color.fromARGB(255, 240, 240, 240);
-const Color _tabHoverColor = Color.fromARGB(255, 245, 245, 245);
-const Color _tabSelectedColor = Color.fromARGB(255, 255, 255, 255);
-const Color _tabIconColor = MyTheme.accent50;
-const Color _tabindicatorColor = _tabIconColor;
-const Color _textColor = Color.fromARGB(255, 108, 111, 145);
-const Color _iconColor = Color.fromARGB(255, 102, 106, 109);
-const Color _iconHoverColor = Colors.black12;
-const Color _iconPressedColor = Colors.black26;
-const Color _dividerColor = Colors.black12;
-
 const double _kTabBarHeight = kDesktopRemoteTabBarHeight;
 const double _kTabFixedWidth = 150;
 const double _kIconSize = 18;
 const double _kDividerIndent = 10;
 const double _kAddIconSize = _kTabBarHeight - 15;
 
+class TabInfo {
+  late final String label;
+  late final IconData icon;
+  late final bool closable;
+
+  TabInfo({required this.label, required this.icon, this.closable = true});
+}
+
 class DesktopTabBar extends StatelessWidget {
   late final Rx<TabController> controller;
-  late final List<String> tabs;
+  late final RxList<TabInfo> tabs;
   late final Function(String) onTabClose;
-  late final IconData tabIcon;
   late final Rx<int> selected;
+  late final bool dark;
+  late final _Theme _theme;
+  late final bool mainTab;
+  late final Function()? onAddSetting;
 
-  DesktopTabBar(
-      {Key? key,
-      required this.controller,
-      required this.tabs,
-      required this.onTabClose,
-      required this.tabIcon,
-      required this.selected})
-      : super(key: key);
+  DesktopTabBar({
+    Key? key,
+    required this.controller,
+    required this.tabs,
+    required this.onTabClose,
+    required this.selected,
+    required this.dark,
+    required this.mainTab,
+    this.onAddSetting,
+  })  : _theme = dark ? _Theme.dark() : _Theme.light(),
+        super(key: key);
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      color: _bgColor,
       height: _kTabBarHeight,
       child: Row(
         children: [
-          Flexible(
-            child: Obx(() => TabBar(
-                indicatorColor: _tabindicatorColor,
-                indicatorSize: TabBarIndicatorSize.tab,
-                indicatorWeight: 4,
-                labelPadding:
-                    const EdgeInsets.symmetric(vertical: 0, horizontal: 0),
-                indicatorPadding: EdgeInsets.zero,
-                isScrollable: true,
-                physics: BouncingScrollPhysics(),
-                controller: controller.value,
-                tabs: tabs
-                    .asMap()
-                    .entries
-                    .map((e) => _Tab(
-                          index: e.key,
-                          text: e.value,
-                          icon: tabIcon,
+          Expanded(
+            child: Row(
+              children: [
+                Offstage(
+                  offstage: !mainTab,
+                  child: Row(children: [
+                    Image.asset('assets/logo.ico'),
+                    Text("RustDesk"),
+                  ]).paddingSymmetric(horizontal: 12, vertical: 5),
+                ),
+                Flexible(
+                  child: Obx(() => TabBar(
+                      indicator: BoxDecoration(),
+                      indicatorColor: Colors.transparent,
+                      labelPadding: const EdgeInsets.symmetric(
+                          vertical: 0, horizontal: 0),
+                      isScrollable: true,
+                      indicatorWeight: 0.1,
+                      physics: BouncingScrollPhysics(),
+                      controller: controller.value,
+                      tabs: tabs.asMap().entries.map((e) {
+                        int index = e.key;
+                        String label = e.value.label;
+
+                        return _Tab(
+                          index: index,
+                          label: label,
+                          icon: e.value.icon,
+                          closable: e.value.closable,
                           selected: selected.value,
                           onClose: () {
-                            onTabClose(e.value);
-                            // TODO
-                            if (e.key <= selected.value) {
+                            onTabClose(label);
+                            if (index <= selected.value) {
                               selected.value = max(0, selected.value - 1);
                             }
-                            controller.value.animateTo(selected.value);
+                            controller.value.animateTo(selected.value,
+                                duration: Duration.zero);
                           },
                           onSelected: () {
-                            selected.value = e.key;
-                            controller.value.animateTo(e.key);
+                            selected.value = index;
+                            controller.value
+                                .animateTo(index, duration: Duration.zero);
                           },
-                        ))
-                    .toList())),
+                          theme: _theme,
+                        );
+                      }).toList())),
+                ),
+                Offstage(
+                  offstage: mainTab,
+                  child: _AddButton(
+                    theme: _theme,
+                  ).paddingOnly(left: 10),
+                )
+              ],
+            ),
           ),
-          Padding(
-            padding: EdgeInsets.only(left: 10),
-            child: _AddButton(),
-          ),
+          Offstage(
+            offstage: onAddSetting == null,
+            child: Tooltip(
+              message: translate("Settings"),
+              child: InkWell(
+                child: Icon(
+                  Icons.menu,
+                  color: _theme.unSelectedIconColor,
+                ),
+                onTap: () => onAddSetting?.call(),
+              ).paddingOnly(right: 10),
+            ),
+          )
         ],
       ),
     );
+  }
+
+  static onClose(
+    TickerProvider vsync,
+    Rx<TabController> controller,
+    RxList<TabInfo> tabs,
+    String label,
+  ) {
+    tabs.removeWhere((tab) => tab.label == label);
+    controller.value = TabController(
+        length: tabs.length,
+        vsync: vsync,
+        initialIndex: max(0, tabs.length - 1));
+  }
+
+  static onAdd(TickerProvider vsync, Rx<TabController> controller,
+      RxList<TabInfo> tabs, Rx<int> selected, TabInfo tab) {
+    int index = tabs.indexWhere((e) => e.label == tab.label);
+    if (index >= 0) {
+      controller.value.animateTo(index, duration: Duration.zero);
+      selected.value = index;
+    } else {
+      tabs.add(tab);
+      controller.value = TabController(
+          length: tabs.length, vsync: vsync, initialIndex: tabs.length - 1);
+      controller.value.animateTo(tabs.length - 1, duration: Duration.zero);
+      selected.value = tabs.length - 1;
+    }
   }
 }
 
 class _Tab extends StatelessWidget {
   late final int index;
-  late final String text;
+  late final String label;
   late final IconData icon;
+  late final bool closable;
   late final int selected;
   late final Function() onClose;
   late final Function() onSelected;
   final RxBool _hover = false.obs;
+  late final _Theme theme;
 
-  _Tab({
-    Key? key,
-    required this.index,
-    required this.text,
-    required this.icon,
-    required this.selected,
-    required this.onClose,
-    required this.onSelected,
-  }) : super(key: key);
+  _Tab(
+      {Key? key,
+      required this.index,
+      required this.label,
+      required this.icon,
+      required this.closable,
+      required this.selected,
+      required this.onClose,
+      required this.onSelected,
+      required this.theme})
+      : super(key: key);
 
   @override
   Widget build(BuildContext context) {
     bool is_selected = index == selected;
     bool show_divider = index != selected - 1 && index != selected;
-    return Obx(
-      (() => _Hoverable(
-            onHover: (hover) => _hover.value = hover,
-            onTapUp: () => onSelected(),
-            child: Container(
-              width: _kTabFixedWidth,
-              decoration: BoxDecoration(
-                color: is_selected
-                    ? _tabSelectedColor
-                    : _hover.value
-                        ? _tabHoverColor
-                        : _tabUnselectedColor,
-              ),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Tab(
-                        key: this.key,
-                        child: Row(
-                            crossAxisAlignment: CrossAxisAlignment.center,
-                            children: [
-                              Padding(
-                                padding: EdgeInsets.symmetric(horizontal: 5),
-                                child: Icon(
-                                  icon,
-                                  size: _kIconSize,
-                                  color: _tabIconColor,
-                                ),
-                              ),
-                              Expanded(
-                                child: Text(
-                                  text,
-                                  style: const TextStyle(color: _textColor),
-                                ),
-                              ),
-                              _CloseButton(
-                                tabHovered: _hover.value,
-                                onClose: () => onClose(),
-                              ),
-                            ])),
-                  ),
-                  show_divider
-                      ? VerticalDivider(
-                          width: 1,
-                          indent: _kDividerIndent,
-                          endIndent: _kDividerIndent,
-                          color: _dividerColor,
-                          thickness: 1,
-                        )
-                      : Container(),
-                ],
-              ),
+    return Ink(
+      width: _kTabFixedWidth,
+      child: InkWell(
+        onHover: (hover) => _hover.value = hover,
+        onTap: () => onSelected(),
+        child: Row(
+          children: [
+            Expanded(
+              child: Tab(
+                  key: this.key,
+                  child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        Icon(
+                          icon,
+                          size: _kIconSize,
+                          color: is_selected
+                              ? theme.selectedtabIconColor
+                              : theme.unSelectedtabIconColor,
+                        ).paddingSymmetric(horizontal: 5),
+                        Expanded(
+                          child: Text(
+                            translate(label),
+                            style: TextStyle(
+                                color: is_selected
+                                    ? theme.selectedTextColor
+                                    : theme.unSelectedTextColor),
+                          ),
+                        ),
+                        Obx((() => _CloseButton(
+                              visiable: _hover.value && closable,
+                              tabSelected: is_selected,
+                              onClose: () => onClose(),
+                              theme: theme,
+                            ))),
+                      ])),
             ),
-          )),
+            Offstage(
+              offstage: !show_divider,
+              child: VerticalDivider(
+                width: 1,
+                indent: _kDividerIndent,
+                endIndent: _kDividerIndent,
+                color: theme.dividerColor,
+                thickness: 1,
+              ),
+            )
+          ],
+        ),
+      ),
     );
   }
 }
 
 class _AddButton extends StatelessWidget {
-  final RxBool _hover = false.obs;
-  final RxBool _pressed = false.obs;
+  late final _Theme theme;
 
   _AddButton({
     Key? key,
+    required this.theme,
   }) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
-    return _Hoverable(
-      onHover: (hover) => _hover.value = hover,
-      onPressed: (pressed) => _pressed.value = pressed,
-      onTapUp: () =>
-          rustDeskWinManager.call(WindowType.Main, "main_window_on_top", ""),
-      child: Obx((() => Container(
-            height: _kTabBarHeight,
-            decoration: ShapeDecoration(
-              shape: const CircleBorder(),
-              color: _pressed.value
-                  ? _iconPressedColor
-                  : _hover.value
-                      ? _iconHoverColor
-                      : Colors.transparent,
-            ),
-            child: const Icon(
-              Icons.add_sharp,
-              color: _iconColor,
-              size: _kAddIconSize,
-            ),
-          ))),
+    return Ink(
+      height: _kTabBarHeight,
+      child: InkWell(
+        customBorder: const CircleBorder(),
+        onTap: () =>
+            rustDeskWinManager.call(WindowType.Main, "main_window_on_top", ""),
+        child: Icon(
+          Icons.add_sharp,
+          size: _kAddIconSize,
+          color: theme.unSelectedIconColor,
+        ),
+      ),
     );
   }
 }
 
 class _CloseButton extends StatelessWidget {
-  final bool tabHovered;
+  final bool visiable;
+  final bool tabSelected;
   final Function onClose;
-  final RxBool _hover = false.obs;
-  final RxBool _pressed = false.obs;
+  late final _Theme theme;
 
   _CloseButton({
     Key? key,
-    required this.tabHovered,
+    required this.visiable,
+    required this.tabSelected,
     required this.onClose,
+    required this.theme,
   }) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 5),
-        child: SizedBox(
-          width: _kIconSize,
-          child: tabHovered
-              ? Obx((() => _Hoverable(
-                    onHover: (hover) => _hover.value = hover,
-                    onPressed: (pressed) => _pressed.value = pressed,
-                    onTapUp: () => onClose(),
-                    child: Container(
-                        color: _pressed.value
-                            ? _iconPressedColor
-                            : _hover.value
-                                ? _iconHoverColor
-                                : Colors.transparent,
-                        child: const Icon(
-                          Icons.close,
-                          size: _kIconSize,
-                          color: _iconColor,
-                        )),
-                  )))
-              : Container(),
-        ));
+    return SizedBox(
+        width: _kIconSize,
+        child: Offstage(
+          offstage: !visiable,
+          child: InkWell(
+            customBorder: RoundedRectangleBorder(),
+            onTap: () => onClose(),
+            child: Icon(
+              Icons.close,
+              size: _kIconSize,
+              color: tabSelected
+                  ? theme.selectedIconColor
+                  : theme.unSelectedIconColor,
+            ),
+          ),
+        )).paddingSymmetric(horizontal: 5);
   }
 }
 
-class _Hoverable extends StatelessWidget {
-  final Widget child;
-  final Function(bool hover) onHover;
-  final Function(bool pressed)? onPressed;
-  final Function()? onTapUp;
+class _Theme {
+  late Color unSelectedtabIconColor;
+  late Color selectedtabIconColor;
+  late Color selectedTextColor;
+  late Color unSelectedTextColor;
+  late Color selectedIconColor;
+  late Color unSelectedIconColor;
+  late Color dividerColor;
 
-  const _Hoverable(
-      {Key? key,
-      required this.child,
-      required this.onHover,
-      this.onPressed,
-      this.onTapUp})
-      : super(key: key);
+  _Theme.light() {
+    unSelectedtabIconColor = Color.fromARGB(255, 162, 203, 241);
+    selectedtabIconColor = MyTheme.accent;
+    selectedTextColor = Color.fromARGB(255, 26, 26, 26);
+    unSelectedTextColor = Color.fromARGB(255, 96, 96, 96);
+    selectedIconColor = Color.fromARGB(255, 26, 26, 26);
+    unSelectedIconColor = Color.fromARGB(255, 96, 96, 96);
+    dividerColor = Color.fromARGB(255, 238, 238, 238);
+  }
 
-  @override
-  Widget build(BuildContext context) {
-    return MouseRegion(
-        onEnter: (_) => onHover(true),
-        onExit: (_) => onHover(false),
-        child: onPressed == null && onTapUp == null
-            ? child
-            : GestureDetector(
-                onTapDown: (details) => onPressed?.call(true),
-                onTapUp: (details) {
-                  onPressed?.call(false);
-                  onTapUp?.call();
-                },
-                child: child,
-              ));
+  _Theme.dark() {
+    unSelectedtabIconColor = Color.fromARGB(255, 30, 65, 98);
+    selectedtabIconColor = MyTheme.accent;
+    selectedTextColor = Color.fromARGB(255, 255, 255, 255);
+    unSelectedTextColor = Color.fromARGB(255, 207, 207, 207);
+    selectedIconColor = Color.fromARGB(255, 215, 215, 215);
+    unSelectedIconColor = Color.fromARGB(255, 255, 255, 255);
+    dividerColor = Color.fromARGB(255, 64, 64, 64);
   }
 }

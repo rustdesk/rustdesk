@@ -1,7 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
-import 'package:flutter_hbb/desktop/pages/desktop_home_page.dart';
+import 'package:flutter_hbb/desktop/pages/desktop_tab_page.dart';
 import 'package:flutter_hbb/desktop/screen/desktop_file_transfer_screen.dart';
 import 'package:flutter_hbb/desktop/screen/desktop_remote_screen.dart';
 import 'package:flutter_hbb/utils/multi_window_manager.dart';
@@ -86,18 +86,44 @@ void runMainApp(bool startService) async {
 void runRemoteScreen(Map<String, dynamic> argument) async {
   await initEnv(kAppTypeDesktopRemote);
   runApp(GetMaterialApp(
+    navigatorKey: globalKey,
+    debugShowCheckedModeBanner: false,
+    title: 'RustDesk - Remote Desktop',
     theme: getCurrentTheme(),
     home: DesktopRemoteScreen(
       params: argument,
     ),
+    navigatorObservers: [
+      // FirebaseAnalyticsObserver(analytics: analytics),
+      FlutterSmartDialog.observer
+    ],
+    builder: FlutterSmartDialog.init(
+        builder: isAndroid
+            ? (_, child) => AccessibilityListener(
+                  child: child,
+                )
+            : null),
   ));
 }
 
 void runFileTransferScreen(Map<String, dynamic> argument) async {
   await initEnv(kAppTypeDesktopFileTransfer);
   runApp(GetMaterialApp(
+      navigatorKey: globalKey,
+      debugShowCheckedModeBanner: false,
+      title: 'RustDesk - File Transfer',
       theme: getCurrentTheme(),
-      home: DesktopFileTransferScreen(params: argument)));
+      home: DesktopFileTransferScreen(params: argument),
+      navigatorObservers: [
+        // FirebaseAnalyticsObserver(analytics: analytics),
+        FlutterSmartDialog.observer
+      ],
+      builder: FlutterSmartDialog.init(
+          builder: isAndroid
+              ? (_, child) => AccessibilityListener(
+                    child: child,
+                  )
+              : null)));
 }
 
 class App extends StatelessWidget {
@@ -121,7 +147,7 @@ class App extends StatelessWidget {
           title: 'RustDesk',
           theme: getCurrentTheme(),
           home: isDesktop
-              ? DesktopHomePage()
+              ? DesktopTabPage()
               : !isAndroid
                   ? WebHomePage()
                   : HomePage(),
