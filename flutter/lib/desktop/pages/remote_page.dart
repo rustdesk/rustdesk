@@ -115,11 +115,6 @@ class _RemotePageState extends State<RemotePage>
         if (v < 100) {
           SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual,
               overlays: []);
-          // [pi.version.isNotEmpty] -> check ready or not,avoid login without soft-keyboard
-          if (chatWindowOverlayEntry == null &&
-              _ffi.ffiModel.pi.version.isNotEmpty) {
-            _ffi.invokeMethod("enable_soft_keyboard", false);
-          }
         }
       });
     }
@@ -266,9 +261,10 @@ class _RemotePageState extends State<RemotePage>
         body: Overlay(
           initialEntries: [
             OverlayEntry(builder: (context) {
+              _ffi.chatModel.setOverlayState(Overlay.of(context));
               return Container(
                   color: Colors.black,
-                  child: getBodyForDesktopWithListener(keyboard));
+                  child: getRawPointerAndKeyBody(getBodyForDesktop(keyboard)));
             })
           ],
         ));
@@ -290,8 +286,8 @@ class _RemotePageState extends State<RemotePage>
               ChangeNotifierProvider.value(value: _ffi.cursorModel),
               ChangeNotifierProvider.value(value: _ffi.canvasModel),
             ],
-            child: getRawPointerAndKeyBody(Consumer<FfiModel>(
-                builder: (context, ffiModel, _child) => buildBody(ffiModel)))));
+            child: Consumer<FfiModel>(
+                builder: (context, ffiModel, _child) => buildBody(ffiModel))));
   }
 
   Widget getRawPointerAndKeyBody(Widget child) {
@@ -467,7 +463,7 @@ class _RemotePageState extends State<RemotePage>
                             onPressed: () {
                               _ffi.chatModel
                                   .changeCurrentID(ChatModel.clientModeID);
-                              toggleChatOverlay();
+                              _ffi.chatModel.toggleChatOverlay();
                             },
                           )
                         ]) +
@@ -502,11 +498,27 @@ class _RemotePageState extends State<RemotePage>
   ///   DoubleFiner -> right click
   ///   HoldDrag -> left drag
 
-  Widget getBodyForDesktopWithListener(bool keyboard) {
+  Widget getBodyForDesktop(bool keyboard) {
     var paints = <Widget>[
-      ImagePaint(
-        id: widget.id,
-      )
+      MouseRegion(
+          onEnter: (evt) {
+            bind.hostStopSystemKeyPropagate(stopped: false);
+          },
+          onExit: (evt) {
+            bind.hostStopSystemKeyPropagate(stopped: true);
+          },
+          child: Container(
+            color: MyTheme.canvasColor,
+            child: LayoutBuilder(builder: (context, constraints) {
+              Future.delayed(Duration.zero, () {
+                Provider.of<CanvasModel>(context, listen: false)
+                    .updateViewStyle();
+              });
+              return ImagePaint(
+                id: widget.id,
+              );
+            }),
+          ))
     ];
     final cursor = bind.getSessionToggleOptionSync(
         id: widget.id, arg: 'show-remote-cursor');
@@ -516,26 +528,9 @@ class _RemotePageState extends State<RemotePage>
       ));
     }
     paints.add(getHelpTools());
-
-    return MouseRegion(
-        onEnter: (evt) {
-          bind.hostStopSystemKeyPropagate(stopped: false);
-        },
-        onExit: (evt) {
-          bind.hostStopSystemKeyPropagate(stopped: true);
-        },
-        child: Container(
-          color: MyTheme.canvasColor,
-          child: LayoutBuilder(builder: (context, constraints) {
-            Future.delayed(Duration.zero, () {
-              Provider.of<CanvasModel>(context, listen: false)
-                  .updateViewStyle();
-            });
-            return Stack(
-              children: paints,
-            );
-          }),
-        ));
+    return Stack(
+      children: paints,
+    );
   }
 
   int lastMouseDownButtons = 0;

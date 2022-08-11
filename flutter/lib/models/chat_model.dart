@@ -1,8 +1,10 @@
 import 'package:dash_chat_2/dash_chat_2.dart';
+import 'package:draggable_float_widget/draggable_float_widget.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/models/platform_model.dart';
 
 import '../../mobile/widgets/overlay.dart';
+import '../common.dart';
 import 'model.dart';
 
 class MessageBody {
@@ -21,6 +23,14 @@ class MessageBody {
 
 class ChatModel with ChangeNotifier {
   static final clientModeID = -1;
+
+  /// _overlayState:
+  /// Desktop: store session overlay by using [setOverlayState].
+  /// Mobile: always null, use global overlay.
+  /// see [_getOverlayState] in [showChatIconOverlay] or [showChatWindowOverlay]
+  OverlayState? _overlayState;
+  OverlayEntry? chatIconOverlayEntry;
+  OverlayEntry? chatWindowOverlayEntry;
 
   final ChatUser me = ChatUser(
     id: "",
@@ -48,6 +58,94 @@ class ChatModel with ChangeNotifier {
       return me;
     } else {
       return user;
+    }
+  }
+
+  setOverlayState(OverlayState? os) {
+    _overlayState = os;
+  }
+
+  OverlayState? _getOverlayState() {
+    if (_overlayState == null) {
+      if (globalKey.currentState == null ||
+          globalKey.currentState!.overlay == null) return null;
+      return globalKey.currentState!.overlay;
+    } else {
+      return _overlayState;
+    }
+  }
+
+  showChatIconOverlay({Offset offset = const Offset(200, 50)}) {
+    if (chatIconOverlayEntry != null) {
+      chatIconOverlayEntry!.remove();
+    }
+    // mobile check navigationBar
+    final bar = navigationBarKey.currentWidget;
+    if (bar != null) {
+      if ((bar as BottomNavigationBar).currentIndex == 1) {
+        return;
+      }
+    }
+
+    final overlayState = _getOverlayState();
+    if (overlayState == null) return;
+
+    final overlay = OverlayEntry(builder: (context) {
+      return DraggableFloatWidget(
+          config: DraggableFloatWidgetBaseConfig(
+            initPositionYInTop: false,
+            initPositionYMarginBorder: 100,
+            borderTopContainTopBar: true,
+          ),
+          child: FloatingActionButton(
+              onPressed: () {
+                if (chatWindowOverlayEntry == null) {
+                  showChatWindowOverlay();
+                } else {
+                  hideChatWindowOverlay();
+                }
+              },
+              child: Icon(Icons.message)));
+    });
+    overlayState.insert(overlay);
+    chatIconOverlayEntry = overlay;
+  }
+
+  hideChatIconOverlay() {
+    if (chatIconOverlayEntry != null) {
+      chatIconOverlayEntry!.remove();
+      chatIconOverlayEntry = null;
+    }
+  }
+
+  showChatWindowOverlay() {
+    if (chatWindowOverlayEntry != null) return;
+    final overlayState = _getOverlayState();
+    if (overlayState == null) return;
+    final overlay = OverlayEntry(builder: (context) {
+      return DraggableChatWindow(
+          position: Offset(20, 80), width: 250, height: 350, chatModel: this);
+    });
+    overlayState.insert(overlay);
+    chatWindowOverlayEntry = overlay;
+  }
+
+  hideChatWindowOverlay() {
+    if (chatWindowOverlayEntry != null) {
+      chatWindowOverlayEntry!.remove();
+      chatWindowOverlayEntry = null;
+      return;
+    }
+  }
+
+  toggleChatOverlay() {
+    if (chatIconOverlayEntry == null || chatWindowOverlayEntry == null) {
+      gFFI.invokeMethod("enable_soft_keyboard", true);
+      showChatIconOverlay();
+      showChatWindowOverlay();
+    } else {
+      hideChatIconOverlay();
+      hideChatWindowOverlay();
     }
   }
 
@@ -117,6 +215,7 @@ class ChatModel with ChangeNotifier {
   close() {
     hideChatIconOverlay();
     hideChatWindowOverlay();
+    _overlayState = null;
     notifyListeners();
   }
 
