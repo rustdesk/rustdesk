@@ -1,32 +1,31 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
 
 import '../../common.dart';
 import '../../models/platform_model.dart';
 
-void clientClose() {
-  msgBox('', 'Close', 'Are you sure to close the connection?');
+void clientClose(OverlayDialogManager dialogManager) {
+  msgBox('', 'Close', 'Are you sure to close the connection?', dialogManager);
 }
 
 const SEC1 = Duration(seconds: 1);
 void showSuccess({Duration duration = SEC1}) {
-  SmartDialog.dismiss();
-  showToast(translate("Successful"), duration: SEC1);
+  // TODO
+  // showToast(translate("Successful"), duration: SEC1);
 }
 
 void showError({Duration duration = SEC1}) {
-  SmartDialog.dismiss();
-  showToast(translate("Error"), duration: SEC1);
+  // TODO
+  // showToast(translate("Error"), duration: SEC1);
 }
 
-void setPermanentPasswordDialog() async {
+void setPermanentPasswordDialog(OverlayDialogManager dialogManager) async {
   final pw = await bind.mainGetPermanentPassword();
   final p0 = TextEditingController(text: pw);
   final p1 = TextEditingController(text: pw);
   var validateLength = false;
   var validateSame = false;
-  DialogManager.show((setState, close) {
+  dialogManager.show((setState, close) {
     return CustomAlertDialog(
       title: Text(translate('Set your own password')),
       content: Form(
@@ -86,7 +85,7 @@ void setPermanentPasswordDialog() async {
           onPressed: (validateLength && validateSame)
               ? () async {
                   close();
-                  showLoading(translate("Waiting"));
+                  dialogManager.showLoading(translate("Waiting"));
                   if (await gFFI.serverModel.setPermanentPassword(p0.text)) {
                     showSuccess();
                   } else {
@@ -101,13 +100,14 @@ void setPermanentPasswordDialog() async {
   });
 }
 
-void setTemporaryPasswordLengthDialog() async {
+void setTemporaryPasswordLengthDialog(
+    OverlayDialogManager dialogManager) async {
   List<String> lengths = ['6', '8', '10'];
   String length = await bind.mainGetOption(key: "temporary-password-length");
   var index = lengths.indexOf(length);
   if (index < 0) index = 0;
   length = lengths[index];
-  DialogManager.show((setState, close) {
+  dialogManager.show((setState, close) {
     final setLength = (newValue) {
       final oldValue = length;
       if (oldValue == newValue) return;
@@ -133,10 +133,11 @@ void setTemporaryPasswordLengthDialog() async {
   }, backDismiss: true, clickMaskDismiss: true);
 }
 
-void enterPasswordDialog(String id) async {
+void enterPasswordDialog(String id, OverlayDialogManager dialogManager) async {
   final controller = TextEditingController();
   var remember = await bind.getSessionRemember(id: id) ?? false;
-  DialogManager.show((setState, close) {
+  dialogManager.dismissAll();
+  dialogManager.show((setState, close) {
     return CustomAlertDialog(
       title: Text(translate('Password Required')),
       content: Column(mainAxisSize: MainAxisSize.min, children: [
@@ -161,7 +162,7 @@ void enterPasswordDialog(String id) async {
           style: flatButtonStyle,
           onPressed: () {
             close();
-            backToHome();
+            backToHomePage();
           },
           child: Text(translate('Cancel')),
         ),
@@ -172,7 +173,8 @@ void enterPasswordDialog(String id) async {
             if (text == '') return;
             gFFI.login(id, text, remember);
             close();
-            showLoading(translate('Logging in...'));
+            dialogManager.showLoading(translate('Logging in...'),
+                cancelToClose: true);
           },
           child: Text(translate('OK')),
         ),
@@ -181,8 +183,8 @@ void enterPasswordDialog(String id) async {
   });
 }
 
-void wrongPasswordDialog(String id) {
-  DialogManager.show((setState, close) => CustomAlertDialog(
+void wrongPasswordDialog(String id, OverlayDialogManager dialogManager) {
+  dialogManager.show((setState, close) => CustomAlertDialog(
           title: Text(translate('Wrong Password')),
           content: Text(translate('Do you want to enter again?')),
           actions: [
@@ -190,14 +192,14 @@ void wrongPasswordDialog(String id) {
               style: flatButtonStyle,
               onPressed: () {
                 close();
-                backToHome();
+                backToHomePage();
               },
               child: Text(translate('Cancel')),
             ),
             TextButton(
               style: flatButtonStyle,
               onPressed: () {
-                enterPasswordDialog(id);
+                enterPasswordDialog(id, dialogManager);
               },
               child: Text(translate('Retry')),
             ),
@@ -239,8 +241,8 @@ class _PasswordWidgetState extends State<PasswordWidget> {
       //This will obscure text dynamically
       keyboardType: TextInputType.visiblePassword,
       decoration: InputDecoration(
-        labelText: Translator.call('Password'),
-        hintText: Translator.call('Enter your password'),
+        labelText: translate('Password'),
+        hintText: translate('Enter your password'),
         // Here is key idea
         suffixIcon: IconButton(
           icon: Icon(

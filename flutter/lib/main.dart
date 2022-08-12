@@ -5,7 +5,6 @@ import 'package:flutter_hbb/desktop/pages/desktop_tab_page.dart';
 import 'package:flutter_hbb/desktop/screen/desktop_file_transfer_screen.dart';
 import 'package:flutter_hbb/desktop/screen/desktop_remote_screen.dart';
 import 'package:flutter_hbb/utils/multi_window_manager.dart';
-import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
 import 'package:get/get.dart';
 import 'package:get/route_manager.dart';
 import 'package:provider/provider.dart';
@@ -95,14 +94,7 @@ void runRemoteScreen(Map<String, dynamic> argument) async {
     ),
     navigatorObservers: [
       // FirebaseAnalyticsObserver(analytics: analytics),
-      FlutterSmartDialog.observer
     ],
-    builder: FlutterSmartDialog.init(
-        builder: isAndroid
-            ? (_, child) => AccessibilityListener(
-                  child: child,
-                )
-            : null),
   ));
 }
 
@@ -116,14 +108,7 @@ void runFileTransferScreen(Map<String, dynamic> argument) async {
       home: DesktopFileTransferScreen(params: argument),
       navigatorObservers: [
         // FirebaseAnalyticsObserver(analytics: analytics),
-        FlutterSmartDialog.observer
-      ],
-      builder: FlutterSmartDialog.init(
-          builder: isAndroid
-              ? (_, child) => AccessibilityListener(
-                    child: child,
-                  )
-              : null)));
+      ]));
 }
 
 class App extends StatelessWidget {
@@ -153,14 +138,12 @@ class App extends StatelessWidget {
                   : HomePage(),
           navigatorObservers: [
             // FirebaseAnalyticsObserver(analytics: analytics),
-            FlutterSmartDialog.observer
           ],
-          builder: FlutterSmartDialog.init(
-              builder: isAndroid
-                  ? (_, child) => AccessibilityListener(
-                        child: child,
-                      )
-                  : null)),
+          builder: isAndroid
+              ? (_, child) => AccessibilityListener(
+                    child: child,
+                  )
+              : null),
     );
   }
 }

@@ -258,7 +258,7 @@ class _PeerCardState extends State<_PeerCard>
     final tags = List.of(gFFI.abModel.tags);
     var selectedTag = gFFI.abModel.getPeerTags(id).obs;
 
-    DialogManager.show((setState, close) {
+    gFFI.dialogManager.show((setState, close) {
       return CustomAlertDialog(
         title: Text(translate("Edit Tag")),
         content: Column(
@@ -314,7 +314,7 @@ class _PeerCardState extends State<_PeerCard>
       }
     }
     final k = GlobalKey<FormState>();
-    DialogManager.show((setState, close) {
+    gFFI.dialogManager.show((setState, close) {
       return CustomAlertDialog(
         title: Text(translate("Rename")),
         content: Column(

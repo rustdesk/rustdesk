@@ -10,7 +10,7 @@ import '../common.dart';
 import '../mobile/pages/server_page.dart';
 import 'model.dart';
 
-const loginDialogTag = "LOGIN";
+const KLoginDialogTag = "LOGIN";
 
 const kUseTemporaryPassword = "use-temporary-password";
 const kUsePermanentPassword = "use-permanent-password";
@@ -206,8 +206,8 @@ class ServerModel with ChangeNotifier {
   /// Toggle the screen sharing service.
   toggleService() async {
     if (_isStart) {
-      final res =
-          await DialogManager.show<bool>((setState, close) => CustomAlertDialog(
+      final res = await parent.target?.dialogManager
+          .show<bool>((setState, close) => CustomAlertDialog(
                 title: Row(children: [
                   Icon(Icons.warning_amber_sharp,
                       color: Colors.redAccent, size: 28),
@@ -228,8 +228,8 @@ class ServerModel with ChangeNotifier {
         stopService();
       }
     } else {
-      final res =
-          await DialogManager.show<bool>((setState, close) => CustomAlertDialog(
+      final res = await parent.target?.dialogManager
+          .show<bool>((setState, close) => CustomAlertDialog(
                 title: Row(children: [
                   Icon(Icons.warning_amber_sharp,
                       color: Colors.redAccent, size: 28),
@@ -272,7 +272,7 @@ class ServerModel with ChangeNotifier {
   Future<Null> stopService() async {
     _isStart = false;
     // TODO
-    parent.target?.serverModel.closeAll();
+    closeAll();
     await parent.target?.invokeMethod("stop_service");
     await bind.mainStopService();
     notifyListeners();
@@ -370,7 +370,7 @@ class ServerModel with ChangeNotifier {
   }
 
   void showLoginDialog(Client client) {
-    DialogManager.show(
+    parent.target?.dialogManager.show(
         (setState, close) => CustomAlertDialog(
               title: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -442,7 +442,7 @@ class ServerModel with ChangeNotifier {
   void onClientAuthorized(Map<String, dynamic> evt) {
     try {
       final client = Client.fromJson(jsonDecode(evt['client']));
-      DialogManager.dismissByTag(getLoginDialogTag(client.id));
+      parent.target?.dialogManager.dismissByTag(getLoginDialogTag(client.id));
       _clients[client.id] = client;
       scrollToBottom();
       notifyListeners();
@@ -454,7 +454,7 @@ class ServerModel with ChangeNotifier {
       final id = int.parse(evt['id'] as String);
       if (_clients.containsKey(id)) {
         _clients.remove(id);
-        DialogManager.dismissByTag(getLoginDialogTag(id));
+        parent.target?.dialogManager.dismissByTag(getLoginDialogTag(id));
         parent.target?.invokeMethod("cancel_notification", id);
       }
       notifyListeners();
@@ -510,11 +510,11 @@ class Client {
 }
 
 String getLoginDialogTag(int id) {
-  return loginDialogTag + id.toString();
+  return KLoginDialogTag + id.toString();
 }
 
 showInputWarnAlert(FFI ffi) {
-  DialogManager.show((setState, close) => CustomAlertDialog(
+  ffi.dialogManager.show((setState, close) => CustomAlertDialog(
         title: Text(translate("How to get Android input permission?")),
         content: Column(
           mainAxisSize: MainAxisSize.min,

@@ -4,7 +4,6 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/common.dart';
 import 'package:flutter_hbb/mobile/pages/file_manager_page.dart';
-import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
 import 'package:get/get.dart';
 import 'package:path/path.dart' as Path;
 
@@ -126,9 +125,9 @@ class FileModel extends ChangeNotifier {
 
   final _jobResultListener = JobResultListener<Map<String, dynamic>>();
 
-  final WeakReference<FFI> _ffi;
+  final WeakReference<FFI> parent;
 
-  FileModel(this._ffi);
+  FileModel(this.parent);
 
   toggleSelectMode() {
     if (jobState == JobState.inProgress) {
@@ -275,7 +274,7 @@ class FileModel extends ChangeNotifier {
         need_override = true;
       }
       bind.sessionSetConfirmOverrideFile(
-          id: _ffi.target?.id ?? "",
+          id: parent.target?.id ?? "",
           actId: id,
           fileNum: int.parse(evt['file_num']),
           needOverride: need_override,
@@ -292,22 +291,22 @@ class FileModel extends ChangeNotifier {
   onReady() async {
     _localOption.home = await bind.mainGetHomeDir();
     _localOption.showHidden = (await bind.sessionGetPeerOption(
-            id: _ffi.target?.id ?? "", name: "local_show_hidden"))
+            id: parent.target?.id ?? "", name: "local_show_hidden"))
         .isNotEmpty;
 
     _remoteOption.showHidden = (await bind.sessionGetPeerOption(
-            id: _ffi.target?.id ?? "", name: "remote_show_hidden"))
+            id: parent.target?.id ?? "", name: "remote_show_hidden"))
         .isNotEmpty;
-    _remoteOption.isWindows = _ffi.target?.ffiModel.pi.platform == "Windows";
+    _remoteOption.isWindows = parent.target?.ffiModel.pi.platform == "Windows";
 
-    debugPrint("remote platform: ${_ffi.target?.ffiModel.pi.platform}");
+    debugPrint("remote platform: ${parent.target?.ffiModel.pi.platform}");
 
     await Future.delayed(Duration(milliseconds: 100));
 
     final local = (await bind.sessionGetPeerOption(
-        id: _ffi.target?.id ?? "", name: "local_dir"));
+        id: parent.target?.id ?? "", name: "local_dir"));
     final remote = (await bind.sessionGetPeerOption(
-        id: _ffi.target?.id ?? "", name: "remote_dir"));
+        id: parent.target?.id ?? "", name: "remote_dir"));
     openDirectory(local.isEmpty ? _localOption.home : local, isLocal: true);
     openDirectory(remote.isEmpty ? _remoteOption.home : remote, isLocal: false);
     await Future.delayed(Duration(seconds: 1));
@@ -318,11 +317,11 @@ class FileModel extends ChangeNotifier {
       openDirectory(_remoteOption.home, isLocal: false);
     }
     // load last transfer jobs
-    await bind.sessionLoadLastTransferJobs(id: '${_ffi.target?.id}');
+    await bind.sessionLoadLastTransferJobs(id: '${parent.target?.id}');
   }
 
   onClose() {
-    SmartDialog.dismiss();
+    parent.target?.dialogManager.dismissAll();
     jobReset();
 
     // save config
@@ -332,7 +331,7 @@ class FileModel extends ChangeNotifier {
     msgMap["local_show_hidden"] = _localOption.showHidden ? "Y" : "";
     msgMap["remote_dir"] = _currentRemoteDir.path;
     msgMap["remote_show_hidden"] = _remoteOption.showHidden ? "Y" : "";
-    final id = _ffi.target?.id ?? "";
+    final id = parent.target?.id ?? "";
     for (final msg in msgMap.entries) {
       bind.sessionPeerOption(id: id, name: msg.key, value: msg.value);
     }
@@ -419,7 +418,7 @@ class FileModel extends ChangeNotifier {
           ..id = jobId
           ..isRemote = isRemote);
         bind.sessionSendFiles(
-            id: '${_ffi.target?.id}',
+            id: '${parent.target?.id}',
             actId: _jobId,
             path: from.path,
             to: PathUtil.join(toPath, from.name, isWindows),
@@ -477,14 +476,14 @@ class FileModel extends ChangeNotifier {
         entries = [item];
       } else if (item.isDirectory) {
         title = translate("Not an empty directory");
-        showLoading(translate("Waiting"));
+        parent.target?.dialogManager.showLoading(translate("Waiting"));
         final fd = await _fileFetcher.fetchDirectoryRecursive(
             _jobId, item.path, items.isLocal!, true);
         if (fd.path.isEmpty) {
           fd.path = item.path;
         }
         fd.format(isWindows);
-        SmartDialog.dismiss();
+        parent.target?.dialogManager.dismissAll();
         if (fd.entries.isEmpty) {
           final confirm = await showRemoveDialog(
               translate(
@@ -543,7 +542,7 @@ class FileModel extends ChangeNotifier {
 
   Future<bool?> showRemoveDialog(
       String title, String content, bool showCheckbox) async {
-    return await DialogManager.show<bool>(
+    return await parent.target?.dialogManager.show<bool>(
         (setState, Function(bool v) close) => CustomAlertDialog(
                 title: Row(
                   children: [
@@ -594,7 +593,7 @@ class FileModel extends ChangeNotifier {
   Future<bool?> showFileConfirmDialog(
       String title, String content, bool showCheckbox) async {
     fileConfirmCheckboxRemember = false;
-    return await DialogManager.show<bool?>(
+    return await parent.target?.dialogManager.show<bool?>(
         (setState, Function(bool? v) close) => CustomAlertDialog(
                 title: Row(
                   children: [
@@ -648,7 +647,7 @@ class FileModel extends ChangeNotifier {
 
   sendRemoveFile(String path, int fileNum, bool isLocal) {
     bind.sessionRemoveFile(
-        id: '${_ffi.target?.id}',
+        id: '${parent.target?.id}',
         actId: _jobId,
         path: path,
         isRemote: !isLocal,
@@ -657,7 +656,7 @@ class FileModel extends ChangeNotifier {
 
   sendRemoveEmptyDir(String path, int fileNum, bool isLocal) {
     bind.sessionRemoveAllEmptyDirs(
-        id: '${_ffi.target?.id}',
+        id: '${parent.target?.id}',
         actId: _jobId,
         path: path,
         isRemote: !isLocal);
@@ -667,14 +666,14 @@ class FileModel extends ChangeNotifier {
     isLocal = isLocal ?? this.isLocal;
     _jobId++;
     bind.sessionCreateDir(
-        id: '${_ffi.target?.id}',
+        id: '${parent.target?.id}',
         actId: _jobId,
         path: path,
         isRemote: !isLocal);
   }
 
   cancelJob(int id) async {
-    bind.sessionCancelJob(id: '${_ffi.target?.id}', actId: id);
+    bind.sessionCancelJob(id: '${parent.target?.id}', actId: id);
     jobReset();
   }
 
@@ -701,7 +700,7 @@ class FileModel extends ChangeNotifier {
   }
 
   initFileFetcher() {
-    _fileFetcher.id = _ffi.target?.id;
+    _fileFetcher.id = parent.target?.id;
   }
 
   void updateFolderFiles(Map<String, dynamic> evt) {
@@ -742,7 +741,7 @@ class FileModel extends ChangeNotifier {
       ..state = JobState.paused;
     jobTable.add(jobProgress);
     bind.sessionAddJob(
-      id: '${_ffi.target?.id}',
+      id: '${parent.target?.id}',
       isRemote: isRemote,
       includeHidden: showHidden,
       actId: currJobId,
@@ -757,7 +756,7 @@ class FileModel extends ChangeNotifier {
     if (jobIndex != -1) {
       final job = jobTable[jobIndex];
       bind.sessionResumeJob(
-          id: '${_ffi.target?.id}', actId: job.id, isRemote: job.isRemote);
+          id: '${parent.target?.id}', actId: job.id, isRemote: job.isRemote);
       job.state = JobState.inProgress;
     } else {
       debugPrint("jobId ${jobId} is not exists");

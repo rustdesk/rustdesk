@@ -49,7 +49,7 @@ dependencies:
     zxing2: ^0.1.0
     image_picker: ^0.8.5
     image: ^3.1.3
-    flutter_smart_dialog: ^4.3.1
+    back_button_interceptor: ^6.0.1
     flutter_rust_bridge:
         git:
             url: https://github.com/SoLongAndThanksForAllThePizza/flutter_rust_bridge

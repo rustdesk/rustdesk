@@ -119,8 +119,8 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
                 if (v) {
                   PermissionManager.request("ignore_battery_optimizations");
                 } else {
-                  final res = await DialogManager.show<bool>(
-                      (setState, close) => CustomAlertDialog(
+                  final res = await gFFI.dialogManager
+                      .show<bool>((setState, close) => CustomAlertDialog(
                             title: Text(translate("Open System Setting")),
                             content: Text(translate(
                                 "android_open_battery_optimizations_tip")),
@@ -153,9 +153,9 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
               leading: Icon(Icons.person),
               onPressed: (context) {
                 if (username == null) {
-                  showLogin();
+                  showLogin(gFFI.dialogManager);
                 } else {
-                  logout();
+                  logout(gFFI.dialogManager);
                 }
               },
             ),
@@ -166,13 +166,13 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
               title: Text(translate('ID/Relay Server')),
               leading: Icon(Icons.cloud),
               onPressed: (context) {
-                showServerSettings();
+                showServerSettings(gFFI.dialogManager);
               }),
           SettingsTile.navigation(
               title: Text(translate('Language')),
               leading: Icon(Icons.translate),
               onPressed: (context) {
-                showLanguageSettings();
+                showLanguageSettings(gFFI.dialogManager);
               })
         ]),
         SettingsSection(
@@ -204,20 +204,20 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
   }
 }
 
-void showServerSettings() async {
+void showServerSettings(OverlayDialogManager dialogManager) async {
   Map<String, dynamic> options = jsonDecode(await bind.mainGetOptions());
   String id = options['custom-rendezvous-server'] ?? "";
   String relay = options['relay-server'] ?? "";
   String api = options['api-server'] ?? "";
   String key = options['key'] ?? "";
-  showServerSettingsWithValue(id, relay, key, api);
+  showServerSettingsWithValue(id, relay, key, api, dialogManager);
 }
 
-void showLanguageSettings() async {
+void showLanguageSettings(OverlayDialogManager dialogManager) async {
   try {
     final langs = json.decode(await bind.mainGetLangs()) as List<dynamic>;
     var lang = await bind.mainGetLocalOption(key: "lang");
-    DialogManager.show((setState, close) {
+    dialogManager.show((setState, close) {
       final setLang = (v) {
         if (lang != v) {
           setState(() {
@@ -246,8 +246,8 @@ void showLanguageSettings() async {
   } catch (_e) {}
 }
 
-void showAbout() {
-  DialogManager.show((setState, close) {
+void showAbout(OverlayDialogManager dialogManager) {
+  dialogManager.show((setState, close) {
     return CustomAlertDialog(
       title: Text(translate('About') + ' RustDesk'),
       content: Wrap(direction: Axis.vertical, spacing: 12, children: [
@@ -350,7 +350,7 @@ void refreshCurrentUser() async {
   }
 }
 
-void logout() async {
+void logout(OverlayDialogManager dialogManager) async {
   final token = await bind.mainGetOption(key: "access_token");
   if (token == '') return;
   final url = getUrl();
@@ -363,7 +363,7 @@ void logout() async {
         },
         body: json.encode(body));
   } catch (e) {
-    showToast('Failed to access $url');
+    dialogManager.showToast('Failed to access $url');
   }
   resetToken();
 }
@@ -396,12 +396,12 @@ Future<String> getUrl() async {
   return url;
 }
 
-void showLogin() {
+void showLogin(OverlayDialogManager dialogManager) {
   final passwordController = TextEditingController();
   final nameController = TextEditingController();
   var loading = false;
   var error = '';
-  DialogManager.show((setState, close) {
+  dialogManager.show((setState, close) {
     return CustomAlertDialog(
       title: Text(translate('Login')),
       content: Column(mainAxisSize: MainAxisSize.min, children: [

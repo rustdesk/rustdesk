@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/mobile/widgets/dialog.dart';
-import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
 import 'package:provider/provider.dart';
 
 import '../../common.dart';
@@ -90,9 +89,9 @@ class ServerPage extends StatefulWidget implements PageShape {
           if (value == "changeID") {
             // TODO
           } else if (value == "setPermanentPassword") {
-            setPermanentPasswordDialog();
+            setPermanentPasswordDialog(gFFI.dialogManager);
           } else if (value == "setTemporaryPasswordLength") {
-            setTemporaryPasswordLengthDialog();
+            setTemporaryPasswordLengthDialog(gFFI.dialogManager);
           } else if (value == kUsePermanentPassword ||
               value == kUseTemporaryPassword ||
               value == kUseBothPasswords) {
@@ -522,7 +521,7 @@ void toAndroidChannelInit() {
       switch (method) {
         case "start_capture":
           {
-            SmartDialog.dismiss();
+            gFFI.dialogManager.dismissAll();
             gFFI.serverModel.updateClientState();
             break;
           }

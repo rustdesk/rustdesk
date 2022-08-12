@@ -63,7 +63,7 @@ class _ScanPageState extends State<ScanPage> {
                       var result = reader.decode(bitmap);
                       showServerSettingFromQr(result.text);
                     } catch (e) {
-                      showToast('No QR code found');
+                      gFFI.dialogManager.showToast('No QR code found');
                     }
                   }
                 }),
@@ -121,7 +121,7 @@ class _ScanPageState extends State<ScanPage> {
 
   void _onPermissionSet(BuildContext context, QRViewController ctrl, bool p) {
     if (!p) {
-      showToast('No permisssion');
+      gFFI.dialogManager.showToast('No permisssion');
     }
   }
 
@@ -132,10 +132,10 @@ class _ScanPageState extends State<ScanPage> {
   }
 
   void showServerSettingFromQr(String data) async {
-    backToHome();
+    backToHomePage();
     await controller?.pauseCamera();
     if (!data.startsWith('config=')) {
-      showToast('Invalid QR code');
+      gFFI.dialogManager.showToast('Invalid QR code');
       return;
     }
     try {
@@ -144,16 +144,16 @@ class _ScanPageState extends State<ScanPage> {
       var key = values['key'] != null ? values['key'] as String : '';
       var api = values['api'] != null ? values['api'] as String : '';
       Timer(Duration(milliseconds: 60), () {
-        showServerSettingsWithValue(host, '', key, api);
+        showServerSettingsWithValue(host, '', key, api, gFFI.dialogManager);
       });
     } catch (e) {
-      showToast('Invalid QR code');
+      gFFI.dialogManager.showToast('Invalid QR code');
     }
   }
 }
 
-void showServerSettingsWithValue(
-    String id, String relay, String key, String api) async {
+void showServerSettingsWithValue(String id, String relay, String key,
+    String api, OverlayDialogManager dialogManager) async {
   Map<String, dynamic> oldOptions = jsonDecode(await bind.mainGetOptions());
   String id0 = oldOptions['custom-rendezvous-server'] ?? "";
   String relay0 = oldOptions['relay-server'] ?? "";
@@ -168,7 +168,7 @@ void showServerSettingsWithValue(
   String? relayServerMsg;
   String? apiServerMsg;
 
-  DialogManager.show((setState, close) {
+  dialogManager.show((setState, close) {
     Future<bool> validate() async {
       if (idController.text != id) {
         final res = await validateAsync(idController.text);

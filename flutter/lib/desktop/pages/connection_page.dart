@@ -625,7 +625,7 @@ class _ConnectionPageState extends State<ConnectionPage> {
     var field = "";
     var msg = "";
     var isInProgress = false;
-    DialogManager.show((setState, close) {
+    gFFI.dialogManager.show((setState, close) {
       return CustomAlertDialog(
         title: Text(translate("Add ID")),
         content: Column(
@@ -698,7 +698,7 @@ class _ConnectionPageState extends State<ConnectionPage> {
     var field = "";
     var msg = "";
     var isInProgress = false;
-    DialogManager.show((setState, close) {
+    gFFI.dialogManager.show((setState, close) {
       return CustomAlertDialog(
         title: Text(translate("Add Tag")),
         content: Column(
@@ -769,7 +769,7 @@ class _ConnectionPageState extends State<ConnectionPage> {
     final tags = List.of(gFFI.abModel.tags);
     var selectedTag = gFFI.abModel.getPeerTags(id).obs;
 
-    DialogManager.show((setState, close) {
+    gFFI.dialogManager.show((setState, close) {
       return CustomAlertDialog(
         title: Text(translate("Edit Tag")),
         content: Column(
@@ -884,16 +884,16 @@ class _WebMenuState extends State<WebMenu> {
         },
         onSelected: (value) {
           if (value == 'server') {
-            showServerSettings();
+            showServerSettings(gFFI.dialogManager);
           }
           if (value == 'about') {
-            showAbout();
+            showAbout(gFFI.dialogManager);
           }
           if (value == 'login') {
             if (username == null) {
-              showLogin();
+              showLogin(gFFI.dialogManager);
             } else {
-              logout();
+              logout(gFFI.dialogManager);
             }
           }
           if (value == 'scan') {

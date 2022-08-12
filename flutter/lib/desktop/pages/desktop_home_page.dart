@@ -116,7 +116,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
                       onDoubleTap: () {
                         Clipboard.setData(
                             ClipboardData(text: model.serverId.text));
-                        showToast(translate("Copied"));
+                        gFFI.dialogManager.showToast(translate("Copied"));
                       },
                       child: TextFormField(
                         controller: model.serverId,
@@ -253,7 +253,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
                                 kUsePermanentPassword) {
                               Clipboard.setData(
                                   ClipboardData(text: model.serverPasswd.text));
-                              showToast(translate("Copied"));
+                              gFFI.dialogManager.showToast(translate("Copied"));
                             }
                           },
                           child: TextFormField(
@@ -604,7 +604,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
     var newId = "";
     var msg = "";
     var isInProgress = false;
-    DialogManager.show((setState, close) {
+    gFFI.dialogManager.show((setState, close) {
       return CustomAlertDialog(
         title: Text(translate("Change ID")),
         content: Column(
@@ -690,7 +690,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
     var key = oldOptions['key'] ?? "";
 
     var isInProgress = false;
-    DialogManager.show((setState, close) {
+    gFFI.dialogManager.show((setState, close) {
       return CustomAlertDialog(
         title: Text(translate("ID/Relay Server")),
         content: ConstrainedBox(
@@ -891,7 +891,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
     var newWhiteListField = newWhiteList.join('\n');
     var msg = "";
     var isInProgress = false;
-    DialogManager.show((setState, close) {
+    gFFI.dialogManager.show((setState, close) {
       return CustomAlertDialog(
         title: Text(translate("IP Whitelisting")),
         content: Column(
@@ -980,7 +980,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
     }
 
     var isInProgress = false;
-    DialogManager.show((setState, close) {
+    gFFI.dialogManager.show((setState, close) {
       return CustomAlertDialog(
         title: Text(translate("Socks5 Proxy")),
         content: ConstrainedBox(
@@ -1117,7 +1117,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
     final license = await bind.mainGetLicense();
     final version = await bind.mainGetVersion();
     final linkStyle = TextStyle(decoration: TextDecoration.underline);
-    DialogManager.show((setState, close) {
+    gFFI.dialogManager.show((setState, close) {
       return CustomAlertDialog(
         title: Text("About $appName"),
         content: ConstrainedBox(
@@ -1208,7 +1208,7 @@ Future<bool> loginDialog() async {
 
   var isInProgress = false;
   var completer = Completer<bool>();
-  DialogManager.show((setState, close) {
+  gFFI.dialogManager.show((setState, close) {
     return CustomAlertDialog(
       title: Text(translate("Login")),
       content: ConstrainedBox(
@@ -1339,7 +1339,7 @@ void setPasswordDialog() async {
   var errMsg0 = "";
   var errMsg1 = "";
 
-  DialogManager.show((setState, close) {
+  gFFI.dialogManager.show((setState, close) {
     return CustomAlertDialog(
       title: Text(translate("Set Password")),
       content: ConstrainedBox(

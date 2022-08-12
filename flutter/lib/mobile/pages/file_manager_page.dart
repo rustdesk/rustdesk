@@ -3,13 +3,11 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_breadcrumb/flutter_breadcrumb.dart';
 import 'package:flutter_hbb/models/file_model.dart';
-import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
 import 'package:provider/provider.dart';
 import 'package:toggle_switch/toggle_switch.dart';
 import 'package:wakelock/wakelock.dart';
 
 import '../../common.dart';
-import '../../models/model.dart';
 import '../widgets/dialog.dart';
 
 class FileManagerPage extends StatefulWidget {
@@ -29,7 +27,10 @@ class _FileManagerPageState extends State<FileManagerPage> {
   void initState() {
     super.initState();
     gFFI.connect(widget.id, isFileTransfer: true);
-    showLoading(translate('Connecting...'));
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      gFFI.dialogManager
+          .showLoading(translate('Connecting...'), cancelToClose: true);
+    });
     gFFI.ffiModel.updateEventListener(widget.id);
     Wakelock.enable();
   }
@@ -38,7 +39,7 @@ class _FileManagerPageState extends State<FileManagerPage> {
   void dispose() {
     model.onClose();
     gFFI.close();
-    SmartDialog.dismiss();
+    gFFI.dialogManager.dismissAll();
     Wakelock.disable();
     super.dispose();
   }
@@ -60,7 +61,9 @@ class _FileManagerPageState extends State<FileManagerPage> {
               backgroundColor: MyTheme.grayBg,
               appBar: AppBar(
                 leading: Row(children: [
-                  IconButton(icon: Icon(Icons.close), onPressed: clientClose),
+                  IconButton(
+                      icon: Icon(Icons.close),
+                      onPressed: () => clientClose(gFFI.dialogManager)),
                 ]),
                 centerTitle: true,
                 title: ToggleSwitch(
@@ -141,8 +144,8 @@ class _FileManagerPageState extends State<FileManagerPage> {
                           model.toggleSelectMode();
                         } else if (v == "folder") {
                           final name = TextEditingController();
-                          DialogManager.show(
-                              (setState, close) => CustomAlertDialog(
+                          gFFI.dialogManager
+                              .show((setState, close) => CustomAlertDialog(
                                       title: Text(translate("Create Folder")),
                                       content: Column(
                                         mainAxisSize: MainAxisSize.min,

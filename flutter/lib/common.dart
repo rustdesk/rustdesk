@@ -4,10 +4,10 @@ import 'dart:io';
 import 'package:desktop_multi_window/desktop_multi_window.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
 import 'package:get/instance_manager.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:window_manager/window_manager.dart';
+import 'package:back_button_interceptor/back_button_interceptor.dart';
 
 import 'models/model.dart';
 import 'models/platform_model.dart';
@@ -25,10 +25,6 @@ int androidVersion = 0;
 
 typedef F = String Function(String);
 typedef FMethod = String Function(String, dynamic);
-
-class Translator {
-  static late F call;
-}
 
 class MyTheme {
   MyTheme._();
@@ -71,44 +67,12 @@ final ButtonStyle flatButtonStyle = TextButton.styleFrom(
   ),
 );
 
-void showToast(String text, {Duration? duration}) {
-  SmartDialog.showToast(text, displayTime: duration);
-}
-
-void showLoading(String text, {bool clickMaskDismiss = false}) {
-  SmartDialog.dismiss();
-  SmartDialog.showLoading(
-      clickMaskDismiss: false,
-      builder: (context) {
-        return Container(
-            color: MyTheme.white,
-            constraints: BoxConstraints(maxWidth: 240),
-            child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  SizedBox(height: 30),
-                  Center(child: CircularProgressIndicator()),
-                  SizedBox(height: 20),
-                  Center(
-                      child: Text(Translator.call(text),
-                          style: TextStyle(fontSize: 15))),
-                  SizedBox(height: 20),
-                  Center(
-                      child: TextButton(
-                          style: flatButtonStyle,
-                          onPressed: () {
-                            SmartDialog.dismiss();
-                            backToHome();
-                          },
-                          child: Text(Translator.call('Cancel'),
-                              style: TextStyle(color: MyTheme.accent))))
-                ]));
-      });
-}
-
-backToHome() {
-  Navigator.popUntil(globalKey.currentContext!, ModalRoute.withName("/"));
+backToHomePage() {
+  if (isAndroid || isIOS) {
+    Navigator.popUntil(globalKey.currentContext!, ModalRoute.withName("/"));
+  } else {
+    // TODO desktop
+  }
 }
 
 void window_on_top(int? id) {
@@ -127,51 +91,140 @@ void window_on_top(int? id) {
 typedef DialogBuilder = CustomAlertDialog Function(
     StateSetter setState, void Function([dynamic]) close);
 
-class DialogManager {
-  static int _tag = 0;
+class Dialog<T> {
+  OverlayEntry? entry;
+  Completer<T?> completer = Completer<T>();
 
-  static dismissByTag(String tag, [result]) {
-    SmartDialog.dismiss(tag: tag, result: result);
+  Dialog();
+
+  void complete(T? res) {
+    try {
+      if (!completer.isCompleted) {
+        completer.complete(res);
+      }
+      entry?.remove();
+    } catch (e) {
+      debugPrint("Dialog complete catch error: $e");
+    }
+  }
+}
+
+class OverlayDialogManager {
+  OverlayState? _overlayState;
+  Map<String, Dialog> _dialogs = Map();
+  int _tagCount = 0;
+
+  /// By default OverlayDialogManager use global overlay
+  OverlayDialogManager() {
+    _overlayState = globalKey.currentState?.overlay;
   }
 
-  static Future<T?> show<T>(DialogBuilder builder,
+  void setOverlayState(OverlayState? overlayState) {
+    _overlayState = overlayState;
+  }
+
+  void dismissAll() {
+    _dialogs.forEach((key, value) {
+      value.complete(null);
+      BackButtonInterceptor.removeByName(key);
+    });
+    _dialogs.clear();
+  }
+
+  void dismissByTag(String tag) {
+    _dialogs[tag]?.complete(null);
+    _dialogs.remove(tag);
+    BackButtonInterceptor.removeByName(tag);
+  }
+
+  // TODO clickMaskDismiss
+  Future<T?> show<T>(DialogBuilder builder,
       {bool clickMaskDismiss = false,
       bool backDismiss = false,
       String? tag,
-      bool useAnimation = true}) async {
-    final t;
-    if (tag != null) {
-      t = tag;
-    } else {
-      _tag += 1;
-      t = _tag.toString();
+      bool useAnimation = true,
+      bool forceGlobal = false}) {
+    final overlayState =
+        forceGlobal ? globalKey.currentState?.overlay : _overlayState;
+
+    if (overlayState == null) {
+      return Future.error(
+          "[OverlayDialogManager] Failed to show dialog, _overlayState is null, call [setOverlayState] first");
     }
-    SmartDialog.dismiss(status: SmartStatus.allToast);
-    SmartDialog.dismiss(status: SmartStatus.loading);
+
+    final _tag;
+    if (tag != null) {
+      _tag = tag;
+    } else {
+      _tag = _tagCount.toString();
+      _tagCount++;
+    }
+
+    final dialog = Dialog<T>();
+    _dialogs[_tag] = dialog;
+
     final close = ([res]) {
-      SmartDialog.dismiss(tag: t, result: res);
+      _dialogs.remove(_tag);
+      dialog.complete(res);
+      BackButtonInterceptor.removeByName(_tag);
     };
-    final res = await SmartDialog.show<T>(
-        tag: t,
-        clickMaskDismiss: clickMaskDismiss,
-        backDismiss: backDismiss,
-        useAnimation: useAnimation,
-        builder: (_) => StatefulBuilder(
-            builder: (_, setState) => builder(setState, close)));
-    return res;
+    dialog.entry = OverlayEntry(builder: (_) {
+      return Container(
+          color: Colors.transparent,
+          child: StatefulBuilder(
+              builder: (_, setState) => builder(setState, close)));
+    });
+    overlayState.insert(dialog.entry!);
+    BackButtonInterceptor.add((stopDefaultButtonEvent, routeInfo) {
+      if (backDismiss) {
+        close();
+      }
+      return true;
+    }, name: _tag);
+    return dialog.completer.future;
+  }
+
+  void showLoading(String text,
+      {bool clickMaskDismiss = false, bool cancelToClose = false}) {
+    show((setState, close) => CustomAlertDialog(
+        content: Container(
+            color: MyTheme.white,
+            constraints: BoxConstraints(maxWidth: 240),
+            child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  SizedBox(height: 30),
+                  Center(child: CircularProgressIndicator()),
+                  SizedBox(height: 20),
+                  Center(
+                      child: Text(translate(text),
+                          style: TextStyle(fontSize: 15))),
+                  SizedBox(height: 20),
+                  Center(
+                      child: TextButton(
+                          style: flatButtonStyle,
+                          onPressed: () {
+                            dismissAll();
+                            if (cancelToClose) backToHomePage();
+                          },
+                          child: Text(translate('Cancel'),
+                              style: TextStyle(color: MyTheme.accent))))
+                ]))));
+  }
+
+  void showToast(String text) {
+    // TODO
   }
 }
 
 class CustomAlertDialog extends StatelessWidget {
   CustomAlertDialog(
-      {required this.title,
-      required this.content,
-      required this.actions,
-      this.contentPadding});
+      {this.title, required this.content, this.actions, this.contentPadding});
 
-  final Widget title;
+  final Widget? title;
   final Widget content;
-  final List<Widget> actions;
+  final List<Widget>? actions;
   final double? contentPadding;
 
   @override
@@ -187,7 +240,9 @@ class CustomAlertDialog extends StatelessWidget {
   }
 }
 
-void msgBox(String type, String title, String text, {bool? hasCancel}) {
+void msgBox(
+    String type, String title, String text, OverlayDialogManager dialogManager,
+    {bool? hasCancel}) {
   var wrap = (String text, void Function() onPressed) => ButtonTheme(
       padding: EdgeInsets.symmetric(horizontal: 20, vertical: 10),
       materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
@@ -198,17 +253,17 @@ void msgBox(String type, String title, String text, {bool? hasCancel}) {
       child: TextButton(
           style: flatButtonStyle,
           onPressed: onPressed,
-          child: Text(Translator.call(text),
-              style: TextStyle(color: MyTheme.accent))));
+          child:
+              Text(translate(text), style: TextStyle(color: MyTheme.accent))));
 
-  SmartDialog.dismiss();
+  dialogManager.dismissAll();
   List<Widget> buttons = [];
   if (type != "connecting" && type != "success" && type.indexOf("nook") < 0) {
     buttons.insert(
         0,
-        wrap(Translator.call('OK'), () {
-          SmartDialog.dismiss();
-          backToHome();
+        wrap(translate('OK'), () {
+          dialogManager.dismissAll();
+          backToHomePage();
         }));
   }
   if (hasCancel == null) {
@@ -220,21 +275,21 @@ void msgBox(String type, String title, String text, {bool? hasCancel}) {
   if (hasCancel) {
     buttons.insert(
         0,
-        wrap(Translator.call('Cancel'), () {
-          SmartDialog.dismiss();
+        wrap(translate('Cancel'), () {
+          dialogManager.dismissAll();
         }));
   }
   // TODO: test this button
   if (type.indexOf("hasclose") >= 0) {
     buttons.insert(
         0,
-        wrap(Translator.call('Close'), () {
-          SmartDialog.dismiss();
+        wrap(translate('Close'), () {
+          dialogManager.dismissAll();
         }));
   }
-  DialogManager.show((setState, close) => CustomAlertDialog(
+  dialogManager.show((setState, close) => CustomAlertDialog(
       title: Text(translate(title), style: TextStyle(fontSize: 21)),
-      content: Text(Translator.call(text), style: TextStyle(fontSize: 15)),
+      content: Text(translate(text), style: TextStyle(fontSize: 15)),
       actions: buttons));
 }
 
