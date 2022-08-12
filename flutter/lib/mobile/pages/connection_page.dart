@@ -380,16 +380,16 @@ class _WebMenuState extends State<WebMenu> {
         },
         onSelected: (value) {
           if (value == 'server') {
-            showServerSettings();
+            showServerSettings(gFFI.dialogManager);
           }
           if (value == 'about') {
-            showAbout();
+            showAbout(gFFI.dialogManager);
           }
           if (value == 'login') {
             if (username == null) {
-              showLogin();
+              showLogin(gFFI.dialogManager);
             } else {
-              logout();
+              logout(gFFI.dialogManager);
             }
           }
           if (value == 'scan') {

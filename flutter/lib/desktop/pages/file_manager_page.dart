@@ -4,7 +4,6 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/mobile/pages/file_manager_page.dart';
 import 'package:flutter_hbb/models/file_model.dart';
-import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
 import 'package:get/get.dart';
 import 'package:provider/provider.dart';
 import 'package:wakelock/wakelock.dart';
@@ -26,8 +25,7 @@ class _FileManagerPageState extends State<FileManagerPage>
   final _localSelectedItems = SelectedItems();
   final _remoteSelectedItems = SelectedItems();
 
-  /// FFI with name file_transfer_id
-  FFI get _ffi => ffi('ft_${widget.id}');
+  late FFI _ffi;
 
   FileModel get model => _ffi.fileModel;
 
@@ -38,8 +36,9 @@ class _FileManagerPageState extends State<FileManagerPage>
   @override
   void initState() {
     super.initState();
-    Get.put(FFI()..connect(widget.id, isFileTransfer: true),
-        tag: 'ft_${widget.id}');
+    _ffi = FFI();
+    _ffi.connect(widget.id, isFileTransfer: true);
+    Get.put(_ffi, tag: 'ft_${widget.id}');
     // _ffi.ffiModel.updateEventListener(widget.id);
     if (!Platform.isLinux) {
       Wakelock.enable();
@@ -51,7 +50,7 @@ class _FileManagerPageState extends State<FileManagerPage>
   void dispose() {
     model.onClose();
     _ffi.close();
-    SmartDialog.dismiss();
+    _ffi.dialogManager.dismissAll();
     if (!Platform.isLinux) {
       Wakelock.disable();
     }
@@ -552,7 +551,7 @@ class _FileManagerPageState extends State<FileManagerPage>
                     IconButton(
                         onPressed: () {
                           final name = TextEditingController();
-                          DialogManager.show((setState, close) =>
+                          _ffi.dialogManager.show((setState, close) =>
                               CustomAlertDialog(
                                   title: Text(translate("Create Folder")),
                                   content: Column(

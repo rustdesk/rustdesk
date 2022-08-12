@@ -7,9 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_hbb/mobile/widgets/gesture_help.dart';
 import 'package:flutter_hbb/models/chat_model.dart';
-import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
 import 'package:get/get.dart';
-import 'package:get/route_manager.dart';
 import 'package:provider/provider.dart';
 import 'package:wakelock/wakelock.dart';
 
@@ -51,18 +49,19 @@ class _RemotePageState extends State<RemotePage>
   var _showEdit = false; // use soft keyboard
   var _isPhysicalMouse = false;
 
-  FFI get _ffi => ffi(widget.id);
+  late FFI _ffi;
 
   @override
   void initState() {
     super.initState();
-    var ffitmp = FFI();
-    ffitmp.canvasModel.tabBarHeight = super.widget.tabBarHeight;
-    final ffi = Get.put(ffitmp, tag: widget.id);
-    ffi.connect(widget.id, tabBarHeight: super.widget.tabBarHeight);
+    _ffi = FFI();
+    _ffi.canvasModel.tabBarHeight = super.widget.tabBarHeight;
+    Get.put(_ffi, tag: widget.id);
+    _ffi.connect(widget.id, tabBarHeight: super.widget.tabBarHeight);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual, overlays: []);
-      showLoading(translate('Connecting...'));
+      _ffi.dialogManager
+          .showLoading(translate('Connecting...'), cancelToClose: true);
       _interval =
           Timer.periodic(Duration(milliseconds: 30), (timer) => interval());
     });
@@ -70,8 +69,8 @@ class _RemotePageState extends State<RemotePage>
       Wakelock.enable();
     }
     _physicalFocusNode.requestFocus();
-    ffi.ffiModel.updateEventListener(widget.id);
-    ffi.listenToMouse(true);
+    _ffi.ffiModel.updateEventListener(widget.id);
+    _ffi.listenToMouse(true);
     // WindowManager.instance.addListener(this);
   }
 
@@ -86,7 +85,7 @@ class _RemotePageState extends State<RemotePage>
     _ffi.close();
     _interval?.cancel();
     _timer?.cancel();
-    SmartDialog.dismiss();
+    _ffi.dialogManager.dismissAll();
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual,
         overlays: SystemUiOverlay.values);
     if (!Platform.isLinux) {
@@ -262,8 +261,11 @@ class _RemotePageState extends State<RemotePage>
           initialEntries: [
             OverlayEntry(builder: (context) {
               _ffi.chatModel.setOverlayState(Overlay.of(context));
+              _ffi.dialogManager.setOverlayState(Overlay.of(context));
               return Container(
-                  child: getRawPointerAndKeyBody(getBodyForDesktop(keyboard)));
+                  color: Colors.black,
+                  child: getRawPointerAndKeyBody(
+                      getBodyForDesktop(context, keyboard)));
             })
           ],
         ));
@@ -275,7 +277,7 @@ class _RemotePageState extends State<RemotePage>
     _ffi.canvasModel.tabBarHeight = super.widget.tabBarHeight;
     return WillPopScope(
         onWillPop: () async {
-          clientClose();
+          clientClose(_ffi.dialogManager);
           return false;
         },
         child: MultiProvider(
@@ -410,7 +412,7 @@ class _RemotePageState extends State<RemotePage>
                       color: Colors.white,
                       icon: Icon(Icons.clear),
                       onPressed: () {
-                        clientClose();
+                        clientClose(_ffi.dialogManager);
                       },
                     )
                   ] +
@@ -420,7 +422,7 @@ class _RemotePageState extends State<RemotePage>
                       icon: Icon(Icons.tv),
                       onPressed: () {
                         setState(() => _showEdit = false);
-                        showOptions(widget.id);
+                        showOptions(widget.id, _ffi.dialogManager);
                       },
                     )
                   ] +
@@ -497,7 +499,7 @@ class _RemotePageState extends State<RemotePage>
   ///   DoubleFiner -> right click
   ///   HoldDrag -> left drag
 
-  Widget getBodyForDesktop(bool keyboard) {
+  Widget getBodyForDesktop(BuildContext context, bool keyboard) {
     var paints = <Widget>[
       MouseRegion(onEnter: (evt) {
         bind.hostStopSystemKeyPropagate(stopped: false);
@@ -567,7 +569,7 @@ class _RemotePageState extends State<RemotePage>
             style: flatButtonStyle,
             onPressed: () {
               Navigator.pop(context);
-              showSetOSPassword(widget.id, false);
+              showSetOSPassword(widget.id, false, _ffi.dialogManager);
             },
             child: Icon(Icons.edit, color: MyTheme.accent),
           )
@@ -632,7 +634,7 @@ class _RemotePageState extends State<RemotePage>
         if (password != null) {
           bind.sessionInputOsPassword(id: widget.id, value: password);
         } else {
-          showSetOSPassword(widget.id, true);
+          showSetOSPassword(widget.id, true, _ffi.dialogManager);
         }
       } else if (value == 'reset_canvas') {
         _ffi.cursorModel.reset();
@@ -889,7 +891,7 @@ class ImagePainter extends CustomPainter {
   }
 }
 
-void showOptions(String id) async {
+void showOptions(String id, OverlayDialogManager dialogManager) async {
   String quality = await bind.getSessionImageQuality(id: id) ?? 'balanced';
   if (quality == '') quality = 'balanced';
   String viewStyle =
@@ -907,7 +909,7 @@ void showOptions(String id) async {
           onTap: () {
             if (i == cur) return;
             bind.sessionSwitchDisplay(id: id, value: i);
-            SmartDialog.dismiss();
+            dialogManager.dismissAll();
           },
           child: Ink(
               width: 40,
@@ -932,7 +934,7 @@ void showOptions(String id) async {
   }
   final perms = ffi(id).ffiModel.permissions;
 
-  DialogManager.show((setState, close) {
+  dialogManager.show((setState, close) {
     final more = <Widget>[];
     if (perms['audio'] != false) {
       more.add(getToggle(id, setState, 'disable-audio', 'Mute'));
@@ -990,12 +992,13 @@ void showOptions(String id) async {
   }, clickMaskDismiss: true, backDismiss: true);
 }
 
-void showSetOSPassword(String id, bool login) async {
+void showSetOSPassword(
+    String id, bool login, OverlayDialogManager dialogManager) async {
   final controller = TextEditingController();
   var password = await bind.getSessionOption(id: id, arg: "os-password") ?? "";
   var autoLogin = await bind.getSessionOption(id: id, arg: "auto-login") != "";
   controller.text = password;
-  DialogManager.show((setState, close) {
+  dialogManager.show((setState, close) {
     return CustomAlertDialog(
         title: Text(translate('OS Password')),
         content: Column(mainAxisSize: MainAxisSize.min, children: [

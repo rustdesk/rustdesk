@@ -75,7 +75,7 @@ class PlatformFFI {
   }
 
   String translate(String name, String locale) {
-    if (_translate == null) return '';
+    if (_translate == null) return name;
     var a = name.toNativeUtf8();
     var b = locale.toNativeUtf8();
     var p = _translate!(a, b);

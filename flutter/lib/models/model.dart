@@ -13,7 +13,6 @@ import 'package:flutter_hbb/models/chat_model.dart';
 import 'package:flutter_hbb/models/file_model.dart';
 import 'package:flutter_hbb/models/server_model.dart';
 import 'package:flutter_hbb/models/user_model.dart';
-import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:tuple/tuple.dart';
 
@@ -60,7 +59,6 @@ class FfiModel with ChangeNotifier {
   }
 
   FfiModel(this.parent) {
-    Translator.call = translate;
     clear();
   }
 
@@ -261,32 +259,35 @@ class FfiModel with ChangeNotifier {
 
   /// Handle the message box event based on [evt] and [id].
   void handleMsgBox(Map<String, dynamic> evt, String id) {
+    if (parent.target == null) return;
+    final dialogManager = parent.target!.dialogManager;
     var type = evt['type'];
     var title = evt['title'];
     var text = evt['text'];
     if (type == 're-input-password') {
-      wrongPasswordDialog(id);
+      wrongPasswordDialog(id, dialogManager);
     } else if (type == 'input-password') {
-      enterPasswordDialog(id);
+      enterPasswordDialog(id, dialogManager);
     } else if (type == 'restarting') {
-      showMsgBox(id, type, title, text, false, hasCancel: false);
+      showMsgBox(id, type, title, text, false, dialogManager, hasCancel: false);
     } else {
       var hasRetry = evt['hasRetry'] == 'true';
-      showMsgBox(id, type, title, text, hasRetry);
+      showMsgBox(id, type, title, text, hasRetry, dialogManager);
     }
   }
 
   /// Show a message box with [type], [title] and [text].
-  void showMsgBox(
-      String id, String type, String title, String text, bool hasRetry,
+  void showMsgBox(String id, String type, String title, String text,
+      bool hasRetry, OverlayDialogManager dialogManager,
       {bool? hasCancel}) {
-    msgBox(type, title, text, hasCancel: hasCancel);
+    msgBox(type, title, text, dialogManager, hasCancel: hasCancel);
     _timer?.cancel();
     if (hasRetry) {
       _timer = Timer(Duration(seconds: _reconnects), () {
         bind.sessionReconnect(id: id);
         clearPermissions();
-        showLoading(translate('Connecting...'));
+        dialogManager.showLoading(translate('Connecting...'),
+            cancelToClose: true);
       });
       _reconnects *= 2;
     } else {
@@ -296,7 +297,7 @@ class FfiModel with ChangeNotifier {
 
   /// Handle the peer info event based on [evt].
   void handlePeerInfo(Map<String, dynamic> evt, String peerId) async {
-    SmartDialog.dismiss();
+    parent.target?.dialogManager.dismissAll();
     _pi.version = evt['version'];
     _pi.username = evt['username'];
     _pi.hostname = evt['hostname'];
@@ -332,7 +333,9 @@ class FfiModel with ChangeNotifier {
         _display = _pi.displays[_pi.currentDisplay];
       }
       if (displays.length > 0) {
-        showLoading(translate('Connected, waiting for image...'));
+        parent.target?.dialogManager.showLoading(
+            translate('Connected, waiting for image...'),
+            cancelToClose: true);
         _waitForImage = true;
         _reconnects = 1;
       }
@@ -364,7 +367,7 @@ class ImageModel with ChangeNotifier {
   void onRgba(Uint8List rgba, double tabBarHeight) {
     if (_waitForImage) {
       _waitForImage = false;
-      SmartDialog.dismiss();
+      parent.target?.dialogManager.dismissAll();
     }
     final pid = parent.target?.id;
     ui.decodeImageFromPixels(
@@ -874,16 +877,20 @@ class FFI {
   var alt = false;
   var command = false;
   var version = "";
-  late final ImageModel imageModel;
-  late final FfiModel ffiModel;
-  late final CursorModel cursorModel;
-  late final CanvasModel canvasModel;
-  late final ServerModel serverModel;
-  late final ChatModel chatModel;
-  late final FileModel fileModel;
-  late final AbModel abModel;
-  late final UserModel userModel;
-  late final QualityMonitorModel qualityMonitorModel;
+
+  /// dialogManager use late to ensure init after main page binding [globalKey]
+  late final dialogManager = OverlayDialogManager();
+
+  late final ImageModel imageModel; // session
+  late final FfiModel ffiModel; // session
+  late final CursorModel cursorModel; // session
+  late final CanvasModel canvasModel; // session
+  late final ServerModel serverModel; // global
+  late final ChatModel chatModel; // session
+  late final FileModel fileModel; // session
+  late final AbModel abModel; // global
+  late final UserModel userModel; // global
+  late final QualityMonitorModel qualityMonitorModel; // session
 
   FFI() {
     this.imageModel = ImageModel(WeakReference(this));
