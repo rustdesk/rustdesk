@@ -7,7 +7,6 @@ import 'package:flutter_hbb/utils/multi_window_manager.dart';
 import 'package:get/get.dart';
 
 const double _kTabBarHeight = kDesktopRemoteTabBarHeight;
-const double _kTabFixedWidth = 150;
 const double _kIconSize = 18;
 const double _kDividerIndent = 10;
 const double _kAddIconSize = _kTabBarHeight - 15;
@@ -55,17 +54,16 @@ class DesktopTabBar extends StatelessWidget {
                   offstage: !mainTab,
                   child: Row(children: [
                     Image.asset('assets/logo.ico'),
-                    Text("RustDesk"),
+                    Text("RustDesk").paddingOnly(left: 5),
                   ]).paddingSymmetric(horizontal: 12, vertical: 5),
                 ),
                 Flexible(
                   child: Obx(() => TabBar(
-                      indicator: BoxDecoration(),
-                      indicatorColor: Colors.transparent,
+                      indicatorColor: _theme.indicatorColor,
                       labelPadding: const EdgeInsets.symmetric(
                           vertical: 0, horizontal: 0),
                       isScrollable: true,
-                      indicatorWeight: 0.1,
+                      indicatorPadding: EdgeInsets.only(bottom: 2),
                       physics: BouncingScrollPhysics(),
                       controller: controller.value,
                       tabs: tabs.asMap().entries.map((e) {
@@ -179,42 +177,45 @@ class _Tab extends StatelessWidget {
     bool is_selected = index == selected;
     bool show_divider = index != selected - 1 && index != selected;
     return Ink(
-      width: _kTabFixedWidth,
       child: InkWell(
         onHover: (hover) => _hover.value = hover,
         onTap: () => onSelected(),
         child: Row(
           children: [
-            Expanded(
-              child: Tab(
-                  key: this.key,
-                  child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.center,
-                      children: [
-                        Icon(
-                          icon,
-                          size: _kIconSize,
-                          color: is_selected
-                              ? theme.selectedtabIconColor
-                              : theme.unSelectedtabIconColor,
-                        ).paddingSymmetric(horizontal: 5),
-                        Expanded(
-                          child: Text(
-                            translate(label),
-                            style: TextStyle(
-                                color: is_selected
-                                    ? theme.selectedTextColor
-                                    : theme.unSelectedTextColor),
-                          ),
-                        ),
-                        Obx((() => _CloseButton(
-                              visiable: _hover.value && closable,
-                              tabSelected: is_selected,
-                              onClose: () => onClose(),
-                              theme: theme,
-                            ))),
-                      ])),
-            ),
+            Tab(
+                child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        icon,
+                        size: _kIconSize,
+                        color: is_selected
+                            ? theme.selectedtabIconColor
+                            : theme.unSelectedtabIconColor,
+                      ).paddingOnly(right: 5),
+                      Text(
+                        translate(label),
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                            color: is_selected
+                                ? theme.selectedTextColor
+                                : theme.unSelectedTextColor),
+                      ),
+                    ],
+                  ),
+                  Offstage(
+                    offstage: !closable,
+                    child: Obx((() => _CloseButton(
+                          visiable: _hover.value,
+                          tabSelected: is_selected,
+                          onClose: () => onClose(),
+                          theme: theme,
+                        ))),
+                  )
+                ])).paddingSymmetric(horizontal: 10),
             Offstage(
               offstage: !show_divider,
               child: VerticalDivider(
@@ -289,7 +290,7 @@ class _CloseButton extends StatelessWidget {
                   : theme.unSelectedIconColor,
             ),
           ),
-        )).paddingSymmetric(horizontal: 5);
+        )).paddingOnly(left: 5);
   }
 }
 
@@ -301,6 +302,7 @@ class _Theme {
   late Color selectedIconColor;
   late Color unSelectedIconColor;
   late Color dividerColor;
+  late Color indicatorColor;
 
   _Theme.light() {
     unSelectedtabIconColor = Color.fromARGB(255, 162, 203, 241);
@@ -310,6 +312,7 @@ class _Theme {
     selectedIconColor = Color.fromARGB(255, 26, 26, 26);
     unSelectedIconColor = Color.fromARGB(255, 96, 96, 96);
     dividerColor = Color.fromARGB(255, 238, 238, 238);
+    indicatorColor = MyTheme.accent;
   }
 
   _Theme.dark() {
@@ -320,5 +323,6 @@ class _Theme {
     selectedIconColor = Color.fromARGB(255, 215, 215, 215);
     unSelectedIconColor = Color.fromARGB(255, 255, 255, 255);
     dividerColor = Color.fromARGB(255, 64, 64, 64);
+    indicatorColor = MyTheme.accent;
   }
 }
