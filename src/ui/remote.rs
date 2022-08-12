@@ -1108,11 +1108,8 @@ impl Handler {
                 let mut key_event = KeyEvent::new();
                 key_event.set_chr(chr as _);
                 key_event.down = true;
-                self.send_key_event(key_event, KeyboardMode::Translate);
-
-                let mut key_event = KeyEvent::new();
-                key_event.set_chr(chr as _);
-                key_event.down = false;
+                key_event.press = false;
+                
                 self.send_key_event(key_event, KeyboardMode::Translate);
             }
         } else {

@@ -822,16 +822,10 @@ fn legacy_keyboard_mode(evt: &KeyEvent) {
 }
 
 fn translate_keyboard_mode(evt: &KeyEvent) {
-    // Caps affects the keycode map of the peer system(Linux).
-    let mut en = ENIGO.lock().unwrap();
-    if en.get_key_state(Key::CapsLock){
-        rdev_key_click(RdevKey::CapsLock);
-    }
     let chr = char::from_u32(evt.chr()).unwrap_or_default();
-    if evt.down {
-        KBD_CONTEXT.lock().unwrap().unicode_char_down(chr).expect("unicode_char_down error");
-    } else {
-        KBD_CONTEXT.lock().unwrap().unicode_char_up(chr).expect("unicode_char_up error");
+    // down(true)->press && press(false)-> release
+    if evt.down && !evt.press {
+        KBD_CONTEXT.lock().unwrap().unicode_char(chr).expect("unicode_char_down error");
     }
 }
 
