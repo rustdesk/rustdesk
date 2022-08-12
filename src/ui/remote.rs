@@ -301,6 +301,8 @@ impl Handler {
                     m.insert(RdevKey::ControlRight, false);
                     m.insert(RdevKey::Alt, false);
                     m.insert(RdevKey::AltGr, false);
+                    m.insert(RdevKey::MetaLeft, false);
+                    m.insert(RdevKey::MetaRight, false);
                     Mutex::new(m)
                 };
             }
@@ -816,7 +818,7 @@ impl Handler {
                 command = true;
             }
         }
-
+        
         send_mouse(mask, x, y, alt, ctrl, shift, command, self);
         // on macos, ctrl + left button down = right button down, up won't emit, so we need to
         // emit up myself if peer is not macos
@@ -1379,7 +1381,6 @@ impl Handler {
         if down_or_up == true {
             key_event.down = true;
         }
-        dbg!(&key_event);
         self.send_key_event(key_event, KeyboardMode::Legacy)
     }
 
