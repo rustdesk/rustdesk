@@ -434,10 +434,14 @@ class ImageModel with ChangeNotifier {
 
 enum ScrollStyle {
   scrollbar,
-  scrollmouse,
+  scrollauto,
 }
 
 class CanvasModel with ChangeNotifier {
+  // scroll offset x percent
+  double _scrollX = 0.0;
+  // scroll offset y percent
+  double _scrollY = 0.0;
   double _x = 0;
   double _y = 0;
   double _scale = 1.0;
@@ -454,6 +458,14 @@ class CanvasModel with ChangeNotifier {
   double get scale => _scale;
   ScrollStyle get scrollStyle => _scrollStyle;
 
+  setScrollPercent(double x, double y) {
+    _scrollX = x;
+    _scrollY = y;
+  }
+
+  double get scrollX => _scrollX;
+  double get scrollY => _scrollY;
+
   set tabBarHeight(double h) => _tabBarHeight = h;
   double get tabBarHeight => _tabBarHeight;
 
@@ -462,11 +474,8 @@ class CanvasModel with ChangeNotifier {
     if (s == null) {
       return;
     }
-    final size = MediaQueryData.fromWindow(ui.window).size;
-    final canvasWidth = size.width;
-    final canvasHeight = size.height - _tabBarHeight;
-    final s1 = canvasWidth / (parent.target?.ffiModel.display.width ?? 720);
-    final s2 = canvasHeight / (parent.target?.ffiModel.display.height ?? 1280);
+    final s1 = size.width / (parent.target?.ffiModel.display.width ?? 720);
+    final s2 = size.height / (parent.target?.ffiModel.display.height ?? 1280);
     // Closure to perform shrink operation.
     final shrinkOp = () {
       final s = s1 < s2 ? s1 : s2;
@@ -476,7 +485,7 @@ class CanvasModel with ChangeNotifier {
     };
     // Closure to perform stretch operation.
     final stretchOp = () {
-      final s = s1 > s2 ? s1 : s2;
+      final s = s1 < s2 ? s1 : s2;
       if (s > 1) {
         _scale = s;
       }
@@ -485,31 +494,39 @@ class CanvasModel with ChangeNotifier {
     final defaultOp = () {
       _scale = 1.0;
     };
+
+    // // On desktop, shrink is the default behavior.
+    // if (isDesktop) {
+    //   shrinkOp();
+    // } else {
+    defaultOp();
+    // }
+
     if (s == 'shrink') {
       shrinkOp();
     } else if (s == 'stretch') {
       stretchOp();
-    } else {
-      // On desktop, shrink is the default behavior.
-      if (isDesktop) {
-        shrinkOp();
-      } else {
-        defaultOp();
-      }
     }
-    _x = (canvasWidth - getDisplayWidth() * _scale) / 2;
-    _y = (canvasHeight - getDisplayHeight() * _scale) / 2;
+
+    _x = (size.width - getDisplayWidth() * _scale) / 2;
+    _y = (size.height - getDisplayHeight() * _scale) / 2;
     notifyListeners();
   }
 
-  void updateScrollStyle() async {
+  updateScrollStyle() async {
     final s = await bind.getSessionOption(id: id, arg: 'scroll-style');
-    if (s == 'scrollmouse') {
-      _scrollStyle = ScrollStyle.scrollmouse;
+    setScrollStyle(s);
+    notifyListeners();
+  }
+
+  setScrollStyle(String? style) {
+    if (style == 'scrollauto') {
+      _scrollStyle = ScrollStyle.scrollauto;
     } else {
       _scrollStyle = ScrollStyle.scrollbar;
+      _scrollX = 0.0;
+      _scrollY = 0.0;
     }
-    notifyListeners();
   }
 
   void update(double x, double y, double scale) {
@@ -527,28 +544,30 @@ class CanvasModel with ChangeNotifier {
     return parent.target?.ffiModel.display.height ?? 720;
   }
 
+  Size get size {
+    final size = MediaQueryData.fromWindow(ui.window).size;
+    return Size(size.width, size.height - _tabBarHeight);
+  }
+
   void moveDesktopMouse(double x, double y) {
     // On mobile platforms, move the canvas with the cursor.
-    if (!isDesktop) {
-      final size = MediaQueryData.fromWindow(ui.window).size;
-      final canvasWidth = size.width;
-      final canvasHeight = size.height - _tabBarHeight;
-      final dw = getDisplayWidth() * _scale;
-      final dh = getDisplayHeight() * _scale;
-      var dxOffset = 0;
-      var dyOffset = 0;
-      if (dw > canvasWidth) {
-        dxOffset = (x - dw * (x / canvasWidth) - _x).toInt();
-      }
-      if (dh > canvasHeight) {
-        dyOffset = (y - dh * (y / canvasHeight) - _y).toInt();
-      }
-      _x += dxOffset;
-      _y += dyOffset;
-      if (dxOffset != 0 || dyOffset != 0) {
-        notifyListeners();
-      }
+    //if (!isDesktop) {
+    final dw = getDisplayWidth() * _scale;
+    final dh = getDisplayHeight() * _scale;
+    var dxOffset = 0;
+    var dyOffset = 0;
+    if (dw > size.width) {
+      dxOffset = (x - dw * (x / size.width) - _x).toInt();
     }
+    if (dh > size.height) {
+      dyOffset = (y - dh * (y / size.height) - _y).toInt();
+    }
+    _x += dxOffset;
+    _y += dyOffset;
+    if (dxOffset != 0 || dyOffset != 0) {
+      notifyListeners();
+    }
+    //}
     parent.target?.cursorModel.moveLocal(x, y);
   }
 
@@ -1106,13 +1125,23 @@ class FFI {
       canvasModel.moveDesktopMouse(x, y);
     }
     final d = ffiModel.display;
-    x -= canvasModel.x;
-    y -= canvasModel.y;
+    if (canvasModel.scrollStyle == ScrollStyle.scrollbar) {
+      final imageWidth = d.width * canvasModel.scale;
+      final imageHeight = d.height * canvasModel.scale;
+      x += imageWidth * canvasModel.scrollX;
+      y += imageHeight * canvasModel.scrollY;
+    } else {
+      x -= canvasModel.x;
+      y -= canvasModel.y;
+    }
+
     if (!isMove && (x < 0 || x > d.width || y < 0 || y > d.height)) {
       return;
     }
+
     x /= canvasModel.scale;
     y /= canvasModel.scale;
+
     x += d.x;
     y += d.y;
     if (type != '') {

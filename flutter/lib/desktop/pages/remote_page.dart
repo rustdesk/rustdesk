@@ -831,49 +831,52 @@ class ImagePaint extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final m = Provider.of<ImageModel>(context);
-    final c = Provider.of<CanvasModel>(context);
-    var s = c.scale;
-    final paintChild = SizedBox(
-        width: (m.image?.width ?? kDefaultDisplayWidth) * s,
-        height: (m.image?.height ?? kDefaultDisplayHeight) * s,
-        child: CustomPaint(
-          painter: new ImagePainter(
-              // image: m.image, x: c.x / s, y: c.y / s, scale: s),
-              image: m.image,
-              x: 0,
-              y: 0,
-              scale: s),
-        ));
-
+    var c = Provider.of<CanvasModel>(context);
+    final s = c.scale;
     if (c.scrollStyle == ScrollStyle.scrollbar) {
       return Center(
-          child: Scrollbar(
-        controller: _vertical,
-        thumbVisibility: true,
-        trackVisibility: true,
+          child: NotificationListener<ScrollNotification>(
+        onNotification: (_notification) {
+          final percentX = _horizontal.position.extentBefore /
+              (_horizontal.position.extentBefore +
+                  _horizontal.position.extentInside +
+                  _horizontal.position.extentAfter);
+          final percentY = _vertical.position.extentBefore /
+              (_vertical.position.extentBefore +
+                  _vertical.position.extentInside +
+                  _vertical.position.extentAfter);
+          c.setScrollPercent(percentX, percentY);
+          return false;
+        },
         child: Scrollbar(
-          controller: _horizontal,
-          thumbVisibility: true,
-          trackVisibility: true,
-          notificationPredicate: (notif) => notif.depth == 1,
-          child: SingleChildScrollView(
             controller: _vertical,
-            child: SingleChildScrollView(
-                controller: _horizontal,
-                scrollDirection: Axis.horizontal,
-                child: paintChild),
-          ),
-        ),
+            thumbVisibility: true,
+            trackVisibility: true,
+            child: Scrollbar(
+              controller: _horizontal,
+              thumbVisibility: true,
+              trackVisibility: true,
+              notificationPredicate: (notif) => notif.depth == 1,
+              child: SingleChildScrollView(
+                controller: _vertical,
+                child: SingleChildScrollView(
+                    controller: _horizontal,
+                    scrollDirection: Axis.horizontal,
+                    child: SizedBox(
+                        width: c.getDisplayWidth() * s,
+                        height: c.getDisplayHeight() * s,
+                        child: CustomPaint(
+                          painter: new ImagePainter(
+                              image: m.image, x: 0, y: 0, scale: s),
+                        ))),
+              ),
+            )),
       ));
     } else {
-      return Center(
-          child: InteractiveViewer(
-        // boundaryMargin: const EdgeInsets.all(20.0),
-        // minScale: 0.1,
-        // maxScale: 1.6,
-        scaleEnabled: false,
-        child: paintChild,
-      ));
+      return CustomPaint(
+        painter:
+            new ImagePainter(image: m.image, x: c.x / s, y: c.y / s, scale: s),
+      );
     }
   }
 }
@@ -939,6 +942,8 @@ void showOptions(String id, OverlayDialogManager dialogManager) async {
       await bind.getSessionOption(id: id, arg: 'view-style') ?? '';
   String scrollStyle =
       await bind.getSessionOption(id: id, arg: 'scroll-style') ?? '';
+  ffi(id).canvasModel.setScrollStyle(scrollStyle);
+
   var displays = <Widget>[];
   final pi = ffi(id).ffiModel.pi;
   final image = ffi(id).ffiModel.getConnectionImage();
@@ -1031,7 +1036,7 @@ void showOptions(String id, OverlayDialogManager dialogManager) async {
                 Divider(color: MyTheme.border),
                 getRadio('Scrollbar', 'scrollbar', scrollStyle, setScrollStyle),
                 getRadio(
-                    'ScrollMouse', 'scrollmouse', scrollStyle, setScrollStyle),
+                    'ScrollAuto', 'scrollauto', scrollStyle, setScrollStyle),
                 Divider(color: MyTheme.border),
                 getRadio('Good image quality', 'best', quality, setQuality),
                 getRadio('Balanced', 'balanced', quality, setQuality),
