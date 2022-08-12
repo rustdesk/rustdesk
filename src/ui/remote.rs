@@ -1113,16 +1113,19 @@ impl Handler {
                 self.send_key_event(key_event, KeyboardMode::Translate);
             }
         } else {
-            if down_or_up == true {
-                TO_RELEASE.lock().unwrap().insert(key);
+            let success = if down_or_up == true {
+                TO_RELEASE.lock().unwrap().insert(key)
             } else {
-                TO_RELEASE.lock().unwrap().remove(&key);
-            }
+                TO_RELEASE.lock().unwrap().remove(&key)
+            };
+            
             // AltGr && LeftControl(SpecialKey) without action
             if key == RdevKey::AltGr || evt.scan_code == 541 {
                 return;
             }
-            self.map_keyboard_mode(down_or_up, key, None);
+            if success{
+                self.map_keyboard_mode(down_or_up, key, None);
+            }
         }
     }
 
