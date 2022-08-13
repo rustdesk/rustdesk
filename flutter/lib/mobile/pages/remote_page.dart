@@ -735,6 +735,9 @@ class _RemotePageState extends State<RemotePage> {
           }
         }();
       } else if (value == 'enter_os_password') {
+        // FIXME:
+        // null means no session of id
+        // empty string means no password
         var password = await bind.getSessionOption(id: id, arg: "os-password");
         if (password != null) {
           bind.sessionInputOsPassword(id: widget.id, value: password);

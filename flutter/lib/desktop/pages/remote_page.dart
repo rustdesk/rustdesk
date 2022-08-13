@@ -14,7 +14,6 @@ import 'package:wakelock/wakelock.dart';
 // import 'package:window_manager/window_manager.dart';
 
 import '../../common.dart';
-import '../../consts.dart';
 import '../../mobile/widgets/dialog.dart';
 import '../../mobile/widgets/overlay.dart';
 import '../../models/model.dart';
@@ -275,7 +274,6 @@ class _RemotePageState extends State<RemotePage>
   @override
   Widget build(BuildContext context) {
     super.build(context);
-    _ffi.canvasModel.tabBarHeight = super.widget.tabBarHeight;
     return WillPopScope(
         onWillPop: () async {
           clientClose(_ffi.dialogManager);
@@ -631,6 +629,9 @@ class _RemotePageState extends State<RemotePage>
           }
         }();
       } else if (value == 'enter_os_password') {
+        // FIXME:
+        // null means no session of id
+        // empty string means no password
         var password = await bind.getSessionOption(id: id, arg: "os-password");
         if (password != null) {
           bind.sessionInputOsPassword(id: widget.id, value: password);
@@ -862,22 +863,47 @@ class ImagePaint extends StatelessWidget {
                 child: SingleChildScrollView(
                     controller: _horizontal,
                     scrollDirection: Axis.horizontal,
-                    child: SizedBox(
+                    child: buildListener(SizedBox(
                         width: c.getDisplayWidth() * s,
                         height: c.getDisplayHeight() * s,
                         child: CustomPaint(
                           painter: new ImagePainter(
                               image: m.image, x: 0, y: 0, scale: s),
-                        ))),
+                        )))),
               ),
             )),
       ));
     } else {
-      return CustomPaint(
+      return buildListener(CustomPaint(
         painter:
             new ImagePainter(image: m.image, x: c.x / s, y: c.y / s, scale: s),
-      );
+      ));
     }
+  }
+
+  Widget buildListener(Widget child) {
+    return Listener(
+        onPointerHover: (e) {
+          debugPrint(
+              'REMOVE ME ======================== 4444  onPointerHover ${e.position}');
+        },
+        onPointerDown: (e) {
+          debugPrint(
+              'REMOVE ME ======================== 4444  onPointerDown ${e.position}');
+        },
+        onPointerUp: (e) {
+          debugPrint(
+              'REMOVE ME ======================== 4444  onPointerUp ${e.position}');
+        },
+        onPointerMove: (e) {
+          debugPrint(
+              'REMOVE ME ======================== 4444  onPointerMove ${e.position}');
+        },
+        onPointerSignal: (e) {
+          debugPrint(
+              'REMOVE ME ======================== 3333  onPointerSignal ${e.position}');
+        },
+        child: child);
   }
 }
 
@@ -942,8 +968,6 @@ void showOptions(String id, OverlayDialogManager dialogManager) async {
       await bind.getSessionOption(id: id, arg: 'view-style') ?? '';
   String scrollStyle =
       await bind.getSessionOption(id: id, arg: 'scroll-style') ?? '';
-  ffi(id).canvasModel.setScrollStyle(scrollStyle);
-
   var displays = <Widget>[];
   final pi = ffi(id).ffiModel.pi;
   final image = ffi(id).ffiModel.getConnectionImage();

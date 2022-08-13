@@ -387,8 +387,9 @@ class ImageModel with ChangeNotifier {
 
   void update(ui.Image? image, double tabBarHeight) {
     if (_image == null && image != null) {
-      if (isWebDesktop) {
+      if (isWebDesktop || isDesktop) {
         parent.target?.canvasModel.updateViewStyle();
+        parent.target?.canvasModel.updateScrollStyle();
       } else {
         final size = MediaQueryData.fromWindow(ui.window).size;
         final canvasWidth = size.width;
@@ -447,7 +448,7 @@ class CanvasModel with ChangeNotifier {
   double _scale = 1.0;
   double _tabBarHeight = 0.0;
   String id = ""; // TODO multi canvas model
-  ScrollStyle _scrollStyle = ScrollStyle.scrollbar;
+  ScrollStyle _scrollStyle = ScrollStyle.scrollauto;
 
   WeakReference<FFI> parent;
 
@@ -470,12 +471,14 @@ class CanvasModel with ChangeNotifier {
   double get tabBarHeight => _tabBarHeight;
 
   void updateViewStyle() async {
-    final s = await bind.getSessionOption(id: id, arg: 'view-style');
-    if (s == null) {
+    final style = await bind.getSessionOption(id: id, arg: 'view-style');
+    if (style == null) {
       return;
     }
+
     final s1 = size.width / (parent.target?.ffiModel.display.width ?? 720);
     final s2 = size.height / (parent.target?.ffiModel.display.height ?? 1280);
+
     // Closure to perform shrink operation.
     final shrinkOp = () {
       final s = s1 < s2 ? s1 : s2;
@@ -502,9 +505,9 @@ class CanvasModel with ChangeNotifier {
     defaultOp();
     // }
 
-    if (s == 'shrink') {
+    if (style == 'shrink') {
       shrinkOp();
-    } else if (s == 'stretch') {
+    } else if (style == 'stretch') {
       stretchOp();
     }
 
@@ -514,19 +517,15 @@ class CanvasModel with ChangeNotifier {
   }
 
   updateScrollStyle() async {
-    final s = await bind.getSessionOption(id: id, arg: 'scroll-style');
-    setScrollStyle(s);
-    notifyListeners();
-  }
-
-  setScrollStyle(String? style) {
-    if (style == 'scrollauto') {
-      _scrollStyle = ScrollStyle.scrollauto;
-    } else {
+    final style = await bind.getSessionOption(id: id, arg: 'scroll-style');
+    if (style == 'scrollbar') {
       _scrollStyle = ScrollStyle.scrollbar;
       _scrollX = 0.0;
       _scrollY = 0.0;
+    } else {
+      _scrollStyle = ScrollStyle.scrollauto;
     }
+    notifyListeners();
   }
 
   void update(double x, double y, double scale) {
@@ -1130,6 +1129,14 @@ class FFI {
       final imageHeight = d.height * canvasModel.scale;
       x += imageWidth * canvasModel.scrollX;
       y += imageHeight * canvasModel.scrollY;
+
+      // boxed size is a center widget
+      if (canvasModel.size.width > imageWidth) {
+        x -= ((canvasModel.size.width - imageWidth) / 2);
+      }
+      if (canvasModel.size.height > imageHeight) {
+        y -= ((canvasModel.size.height - imageHeight) / 2);
+      }
     } else {
       x -= canvasModel.x;
       y -= canvasModel.y;
@@ -1138,10 +1145,8 @@ class FFI {
     if (!isMove && (x < 0 || x > d.width || y < 0 || y > d.height)) {
       return;
     }
-
     x /= canvasModel.scale;
     y /= canvasModel.scale;
-
     x += d.x;
     y += d.y;
     if (type != '') {
