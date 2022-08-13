@@ -533,10 +533,10 @@ class _RemotePageState extends State<RemotePage>
             Provider.of<CanvasModel>(context, listen: false).updateViewStyle();
           });
           return ImagePaint(
-        id: widget.id,
-        cursorOverImage: _cursorOverImage,
-        listenerBuilder: _buildImageListener,
-      );
+            id: widget.id,
+            cursorOverImage: _cursorOverImage,
+            listenerBuilder: _buildImageListener,
+          );
         }),
       ))
     ];
@@ -1086,9 +1086,9 @@ void showOptions(String id, OverlayDialogManager dialogManager) async {
                 getRadio('Shrink', 'shrink', viewStyle, setViewStyle),
                 getRadio('Stretch', 'stretch', viewStyle, setViewStyle),
                 Divider(color: MyTheme.border),
-                getRadio('Scrollbar', 'scrollbar', scrollStyle, setScrollStyle),
                 getRadio(
                     'ScrollAuto', 'scrollauto', scrollStyle, setScrollStyle),
+                getRadio('Scrollbar', 'scrollbar', scrollStyle, setScrollStyle),
                 Divider(color: MyTheme.border),
                 getRadio('Good image quality', 'best', quality, setQuality),
                 getRadio('Balanced', 'balanced', quality, setQuality),

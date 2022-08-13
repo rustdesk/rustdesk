@@ -103,6 +103,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Original", "Eredeti"),
         ("Shrink", "Zsugorított"),
         ("Stretch", "Nyújtott"),
+        ("Scrollbar", "Görgetősáv"),
+        ("ScrollAuto", "Görgessen Auto"),
         ("Good image quality", "Jó képminőség"),
         ("Balanced", "Balanszolt"),
         ("Optimize reaction time", "Válaszidő optimializálása"),

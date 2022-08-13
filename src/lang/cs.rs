@@ -103,6 +103,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Original", "Původní"),
         ("Shrink", "Oříznout"),
         ("Stretch", "Roztáhnout"),
+        ("Scrollbar", "Posuvník"),
+        ("ScrollAuto", "Rolovať Auto"),
         ("Good image quality", "Dobrá kvalita obrazu"),
         ("Balanced", "Vyvážené"),
         ("Optimize reaction time", "Optimalizovat pro co nejnižší prodlevu odezvy"),
