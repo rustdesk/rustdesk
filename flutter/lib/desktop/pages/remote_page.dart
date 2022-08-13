@@ -41,6 +41,7 @@ class _RemotePageState extends State<RemotePage>
   String _value = '';
   double _scale = 1;
   double _mouseScrollIntegral = 0; // mouse scroll speed controller
+  var _cursorOverImage = false.obs;
 
   var _more = true;
   var _fn = false;
@@ -291,114 +292,61 @@ class _RemotePageState extends State<RemotePage>
   }
 
   Widget getRawPointerAndKeyBody(Widget child) {
-    return Listener(
-        onPointerHover: (e) {
-          if (e.kind != ui.PointerDeviceKind.mouse) return;
-          if (!_isPhysicalMouse) {
-            setState(() {
-              _isPhysicalMouse = true;
-            });
-          }
-          if (_isPhysicalMouse) {
-            _ffi.handleMouse(getEvent(e, 'mousemove'),
-                tabBarHeight: super.widget.tabBarHeight);
-          }
-        },
-        onPointerDown: (e) {
-          if (e.kind != ui.PointerDeviceKind.mouse) {
-            if (_isPhysicalMouse) {
-              setState(() {
-                _isPhysicalMouse = false;
-              });
-            }
-          }
-          if (_isPhysicalMouse) {
-            _ffi.handleMouse(getEvent(e, 'mousedown'),
-                tabBarHeight: super.widget.tabBarHeight);
-          }
-        },
-        onPointerUp: (e) {
-          if (e.kind != ui.PointerDeviceKind.mouse) return;
-          if (_isPhysicalMouse) {
-            _ffi.handleMouse(getEvent(e, 'mouseup'),
-                tabBarHeight: super.widget.tabBarHeight);
-          }
-        },
-        onPointerMove: (e) {
-          if (e.kind != ui.PointerDeviceKind.mouse) return;
-          if (_isPhysicalMouse) {
-            _ffi.handleMouse(getEvent(e, 'mousemove'),
-                tabBarHeight: super.widget.tabBarHeight);
-          }
-        },
-        onPointerSignal: (e) {
-          if (e is PointerScrollEvent) {
-            var dx = e.scrollDelta.dx;
-            var dy = e.scrollDelta.dy;
-            if (dx > 0)
-              dx = -1;
-            else if (dx < 0) dx = 1;
-            if (dy > 0)
-              dy = -1;
-            else if (dy < 0) dy = 1;
-            bind.sessionSendMouse(
-                id: widget.id,
-                msg: '{"type": "wheel", "x": "$dx", "y": "$dy"}');
-          }
-        },
-        child: Consumer<FfiModel>(
-            builder: (context, FfiModel, _child) => MouseRegion(
-                cursor: FfiModel.permissions['keyboard'] != false
-                    ? SystemMouseCursors.none
-                    : MouseCursor.defer,
-                child: FocusScope(
+    return Consumer<FfiModel>(
+        builder: (context, FfiModel, _child) => MouseRegion(
+            cursor: FfiModel.permissions['keyboard'] != false
+                ? SystemMouseCursors.none
+                : MouseCursor.defer,
+            child: FocusScope(
+                autofocus: true,
+                child: Focus(
                     autofocus: true,
-                    child: Focus(
-                        autofocus: true,
-                        canRequestFocus: true,
-                        focusNode: _physicalFocusNode,
-                        onKey: (data, e) {
-                          final key = e.logicalKey;
-                          if (e is RawKeyDownEvent) {
-                            if (e.repeat) {
-                              sendRawKey(e, press: true);
-                            } else {
-                              if (e.isAltPressed && !_ffi.alt) {
-                                _ffi.alt = true;
-                              } else if (e.isControlPressed && !_ffi.ctrl) {
-                                _ffi.ctrl = true;
-                              } else if (e.isShiftPressed && !_ffi.shift) {
-                                _ffi.shift = true;
-                              } else if (e.isMetaPressed && !_ffi.command) {
-                                _ffi.command = true;
-                              }
-                              sendRawKey(e, down: true);
-                            }
+                    canRequestFocus: true,
+                    focusNode: _physicalFocusNode,
+                    onKey: (data, e) {
+                      final key = e.logicalKey;
+                      if (e is RawKeyDownEvent) {
+                        if (e.repeat) {
+                          sendRawKey(e, press: true);
+                        } else {
+                          if (e.isAltPressed && !_ffi.alt) {
+                            _ffi.alt = true;
+                          } else if (e.isControlPressed && !_ffi.ctrl) {
+                            _ffi.ctrl = true;
+                          } else if (e.isShiftPressed && !_ffi.shift) {
+                            _ffi.shift = true;
+                          } else if (e.isMetaPressed && !_ffi.command) {
+                            _ffi.command = true;
                           }
-                          // [!_showEdit] workaround for soft-keyboard's control_key like Backspace / Enter
-                          if (!_showEdit && e is RawKeyUpEvent) {
-                            if (key == LogicalKeyboardKey.altLeft ||
-                                key == LogicalKeyboardKey.altRight) {
-                              _ffi.alt = false;
-                            } else if (key == LogicalKeyboardKey.controlLeft ||
-                                key == LogicalKeyboardKey.controlRight) {
-                              _ffi.ctrl = false;
-                            } else if (key == LogicalKeyboardKey.shiftRight ||
-                                key == LogicalKeyboardKey.shiftLeft) {
-                              _ffi.shift = false;
-                            } else if (key == LogicalKeyboardKey.metaLeft ||
-                                key == LogicalKeyboardKey.metaRight) {
-                              _ffi.command = false;
-                            }
-                            sendRawKey(e);
-                          }
-                          return KeyEventResult.handled;
-                        },
-                        child: child)))));
+                          sendRawKey(e, down: true);
+                        }
+                      }
+                      // [!_showEdit] workaround for soft-keyboard's control_key like Backspace / Enter
+                      if (!_showEdit && e is RawKeyUpEvent) {
+                        if (key == LogicalKeyboardKey.altLeft ||
+                            key == LogicalKeyboardKey.altRight) {
+                          _ffi.alt = false;
+                        } else if (key == LogicalKeyboardKey.controlLeft ||
+                            key == LogicalKeyboardKey.controlRight) {
+                          _ffi.ctrl = false;
+                        } else if (key == LogicalKeyboardKey.shiftRight ||
+                            key == LogicalKeyboardKey.shiftLeft) {
+                          _ffi.shift = false;
+                        } else if (key == LogicalKeyboardKey.metaLeft ||
+                            key == LogicalKeyboardKey.metaRight) {
+                          _ffi.command = false;
+                        }
+                        sendRawKey(e);
+                      }
+                      return KeyEventResult.handled;
+                    },
+                    child: child))));
   }
 
   Widget? getBottomAppBar() {
-    return BottomAppBar(
+    return MouseRegion(
+        cursor: SystemMouseCursors.basic,
+        child: BottomAppBar(
       elevation: 10,
       color: MyTheme.accent,
       child: Row(
@@ -429,40 +377,40 @@ class _RemotePageState extends State<RemotePage>
                       ? []
                       : _ffi.ffiModel.isPeerAndroid
                           ? [
+                                  IconButton(
+                                    color: Colors.white,
+                                    icon: Icon(Icons.build),
+                                    onPressed: () {
+                                      if (mobileActionsOverlayEntry == null) {
+                                        showMobileActionsOverlay();
+                                      } else {
+                                        hideMobileActionsOverlay();
+                                      }
+                                    },
+                                  )
+                                ]
+                              : [
+                                  IconButton(
+                                      color: Colors.white,
+                                      icon: Icon(Icons.keyboard),
+                                      onPressed: openKeyboard),
+                                  IconButton(
+                                    color: Colors.white,
+                                    icon: Icon(_ffi.ffiModel.touchMode
+                                        ? Icons.touch_app
+                                        : Icons.mouse),
+                                    onPressed: changeTouchMode,
+                                  ),
+                                ]) +
+                      (isWeb
+                          ? []
+                          : <Widget>[
                               IconButton(
                                 color: Colors.white,
-                                icon: Icon(Icons.build),
+                                icon: Icon(Icons.message),
                                 onPressed: () {
-                                  if (mobileActionsOverlayEntry == null) {
-                                    showMobileActionsOverlay();
-                                  } else {
-                                    hideMobileActionsOverlay();
-                                  }
-                                },
-                              )
-                            ]
-                          : [
-                              IconButton(
-                                  color: Colors.white,
-                                  icon: Icon(Icons.keyboard),
-                                  onPressed: openKeyboard),
-                              IconButton(
-                                color: Colors.white,
-                                icon: Icon(_ffi.ffiModel.touchMode
-                                    ? Icons.touch_app
-                                    : Icons.mouse),
-                                onPressed: changeTouchMode,
-                              ),
-                            ]) +
-                  (isWeb
-                      ? []
-                      : <Widget>[
-                          IconButton(
-                            color: Colors.white,
-                            icon: Icon(Icons.message),
-                            onPressed: () {
-                              _ffi.chatModel
-                                  .changeCurrentID(ChatModel.clientModeID);
+                                  _ffi.chatModel
+                                      .changeCurrentID(ChatModel.clientModeID);
                               _ffi.chatModel.toggleChatOverlay();
                             },
                           )
@@ -497,6 +445,81 @@ class _RemotePageState extends State<RemotePage>
   /// mouseMode only:
   ///   DoubleFiner -> right click
   ///   HoldDrag -> left drag
+
+  void _onPointHoverImage(PointerHoverEvent e) {
+    if (e.kind != ui.PointerDeviceKind.mouse) return;
+    if (!_isPhysicalMouse) {
+      setState(() {
+        _isPhysicalMouse = true;
+      });
+    }
+    if (_isPhysicalMouse) {
+      _ffi.handleMouse(getEvent(e, 'mousemove'),
+          tabBarHeight: super.widget.tabBarHeight);
+    }
+  }
+
+  void _onPointDownImage(PointerDownEvent e) {
+    if (e.kind != ui.PointerDeviceKind.mouse) {
+      if (_isPhysicalMouse) {
+        setState(() {
+          _isPhysicalMouse = false;
+        });
+      }
+    }
+    if (_isPhysicalMouse) {
+      _ffi.handleMouse(getEvent(e, 'mousedown'),
+          tabBarHeight: super.widget.tabBarHeight);
+    }
+  }
+
+  void _onPointUpImage(PointerUpEvent e) {
+    if (e.kind != ui.PointerDeviceKind.mouse) return;
+    if (_isPhysicalMouse) {
+      _ffi.handleMouse(getEvent(e, 'mouseup'),
+          tabBarHeight: super.widget.tabBarHeight);
+    }
+  }
+
+  void _onPointMoveImage(PointerMoveEvent e) {
+    if (e.kind != ui.PointerDeviceKind.mouse) return;
+    if (_isPhysicalMouse) {
+      _ffi.handleMouse(getEvent(e, 'mousemove'),
+          tabBarHeight: super.widget.tabBarHeight);
+    }
+  }
+
+  void _onPointerSignalImage(PointerSignalEvent e) {
+    if (e is PointerScrollEvent) {
+      var dx = e.scrollDelta.dx;
+      var dy = e.scrollDelta.dy;
+      if (dx > 0)
+        dx = -1;
+      else if (dx < 0) dx = 1;
+      if (dy > 0)
+        dy = -1;
+      else if (dy < 0) dy = 1;
+      bind.sessionSendMouse(
+          id: widget.id, msg: '{"type": "wheel", "x": "$dx", "y": "$dy"}');
+    }
+  }
+
+  Widget _buildImageListener(Widget child) {
+    return Listener(
+        onPointerHover: _onPointHoverImage,
+        onPointerDown: _onPointDownImage,
+        onPointerUp: _onPointUpImage,
+        onPointerMove: _onPointMoveImage,
+        onPointerSignal: _onPointerSignalImage,
+        child: MouseRegion(
+            onEnter: (evt) {
+              _cursorOverImage.value = true;
+            },
+            onExit: (evt) {
+              _cursorOverImage.value = false;
+            },
+            child: child));
+  }
 
   Widget getBodyForDesktop(BuildContext context, bool keyboard) {
     var paints = <Widget>[
@@ -824,10 +847,17 @@ class _RemotePageState extends State<RemotePage>
 
 class ImagePaint extends StatelessWidget {
   final String id;
+  final Rx<bool> cursorOverImage;
+  final Widget Function(Widget)? listenerBuilder;
   final ScrollController _horizontal = ScrollController();
   final ScrollController _vertical = ScrollController();
 
-  ImagePaint({Key? key, required this.id}) : super(key: key);
+  ImagePaint(
+      {Key? key,
+      required this.id,
+      required this.cursorOverImage,
+      this.listenerBuilder = null})
+      : super(key: key);
 
   @override
   Widget build(BuildContext context) {
@@ -835,6 +865,12 @@ class ImagePaint extends StatelessWidget {
     var c = Provider.of<CanvasModel>(context);
     final s = c.scale;
     if (c.scrollStyle == ScrollStyle.scrollbar) {
+      final imageWidget = SizedBox(
+          width: c.getDisplayWidth() * s,
+          height: c.getDisplayHeight() * s,
+          child: CustomPaint(
+            painter: new ImagePainter(image: m.image, x: 0, y: 0, scale: s),
+          ));
       return Center(
           child: NotificationListener<ScrollNotification>(
         onNotification: (_notification) {
@@ -849,61 +885,51 @@ class ImagePaint extends StatelessWidget {
           c.setScrollPercent(percentX, percentY);
           return false;
         },
-        child: Scrollbar(
-            controller: _vertical,
-            thumbVisibility: true,
-            trackVisibility: true,
-            child: Scrollbar(
-              controller: _horizontal,
-              thumbVisibility: true,
-              trackVisibility: true,
-              notificationPredicate: (notif) => notif.depth == 1,
-              child: SingleChildScrollView(
-                controller: _vertical,
-                child: SingleChildScrollView(
-                    controller: _horizontal,
-                    scrollDirection: Axis.horizontal,
-                    child: buildListener(SizedBox(
-                        width: c.getDisplayWidth() * s,
-                        height: c.getDisplayHeight() * s,
-                        child: CustomPaint(
-                          painter: new ImagePainter(
-                              image: m.image, x: 0, y: 0, scale: s),
-                        )))),
-              ),
-            )),
+        child: Obx(() => MouseRegion(
+            cursor: cursorOverImage.value
+                ? SystemMouseCursors.none
+                : SystemMouseCursors.basic,
+            child: _buildCrossScrollbar(_buildListener(imageWidget)))),
       ));
     } else {
-      return buildListener(CustomPaint(
-        painter:
-            new ImagePainter(image: m.image, x: c.x / s, y: c.y / s, scale: s),
-      ));
+      final imageWidget = SizedBox(
+          width: c.size.width,
+          height: c.size.height,
+          child: CustomPaint(
+            painter: new ImagePainter(
+                image: m.image, x: c.x / s, y: c.y / s, scale: s),
+          ));
+      return _buildListener(imageWidget);
     }
   }
 
-  Widget buildListener(Widget child) {
-    return Listener(
-        onPointerHover: (e) {
-          debugPrint(
-              'REMOVE ME ======================== 4444  onPointerHover ${e.position}');
-        },
-        onPointerDown: (e) {
-          debugPrint(
-              'REMOVE ME ======================== 4444  onPointerDown ${e.position}');
-        },
-        onPointerUp: (e) {
-          debugPrint(
-              'REMOVE ME ======================== 4444  onPointerUp ${e.position}');
-        },
-        onPointerMove: (e) {
-          debugPrint(
-              'REMOVE ME ======================== 4444  onPointerMove ${e.position}');
-        },
-        onPointerSignal: (e) {
-          debugPrint(
-              'REMOVE ME ======================== 3333  onPointerSignal ${e.position}');
-        },
-        child: child);
+  Widget _buildCrossScrollbar(Widget child) {
+    return Scrollbar(
+        controller: _vertical,
+        thumbVisibility: true,
+        trackVisibility: true,
+        child: Scrollbar(
+          controller: _horizontal,
+          thumbVisibility: true,
+          trackVisibility: true,
+          notificationPredicate: (notif) => notif.depth == 1,
+          child: SingleChildScrollView(
+            controller: _vertical,
+            child: SingleChildScrollView(
+              controller: _horizontal,
+              scrollDirection: Axis.horizontal,
+              child: child,
+            ),
+          ),
+        ));
+  }
+
+  Widget _buildListener(Widget child) {
+    if (listenerBuilder != null) {
+      return listenerBuilder!(child);
+    } else {
+      return child;
+    }
   }
 }
 
