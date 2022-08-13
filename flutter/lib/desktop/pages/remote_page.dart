@@ -347,36 +347,36 @@ class _RemotePageState extends State<RemotePage>
     return MouseRegion(
         cursor: SystemMouseCursors.basic,
         child: BottomAppBar(
-      elevation: 10,
-      color: MyTheme.accent,
-      child: Row(
-        mainAxisSize: MainAxisSize.max,
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: <Widget>[
-          Row(
-              children: <Widget>[
-                    IconButton(
-                      color: Colors.white,
-                      icon: Icon(Icons.clear),
-                      onPressed: () {
-                        clientClose(_ffi.dialogManager);
-                      },
-                    )
-                  ] +
-                  <Widget>[
-                    IconButton(
-                      color: Colors.white,
-                      icon: Icon(Icons.tv),
-                      onPressed: () {
-                        setState(() => _showEdit = false);
-                        showOptions(widget.id, _ffi.dialogManager);
-                      },
-                    )
-                  ] +
-                  (isWebDesktop
-                      ? []
-                      : _ffi.ffiModel.isPeerAndroid
-                          ? [
+          elevation: 10,
+          color: MyTheme.accent,
+          child: Row(
+            mainAxisSize: MainAxisSize.max,
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: <Widget>[
+              Row(
+                  children: <Widget>[
+                        IconButton(
+                          color: Colors.white,
+                          icon: Icon(Icons.clear),
+                          onPressed: () {
+                            clientClose(_ffi.dialogManager);
+                          },
+                        )
+                      ] +
+                      <Widget>[
+                        IconButton(
+                          color: Colors.white,
+                          icon: Icon(Icons.tv),
+                          onPressed: () {
+                            setState(() => _showEdit = false);
+                            showOptions(widget.id, _ffi.dialogManager);
+                          },
+                        )
+                      ] +
+                      (isWebDesktop
+                          ? []
+                          : _ffi.ffiModel.isPeerAndroid
+                              ? [
                                   IconButton(
                                     color: Colors.white,
                                     icon: Icon(Icons.build),
@@ -411,29 +411,29 @@ class _RemotePageState extends State<RemotePage>
                                 onPressed: () {
                                   _ffi.chatModel
                                       .changeCurrentID(ChatModel.clientModeID);
-                              _ffi.chatModel.toggleChatOverlay();
-                            },
-                          )
-                        ]) +
-                  [
-                    IconButton(
-                      color: Colors.white,
-                      icon: Icon(Icons.more_vert),
-                      onPressed: () {
-                        setState(() => _showEdit = false);
-                        showActions(widget.id);
-                      },
-                    ),
-                  ]),
-          IconButton(
-              color: Colors.white,
-              icon: Icon(Icons.expand_more),
-              onPressed: () {
-                setState(() => _showBar = !_showBar);
-              }),
-        ],
-      ),
-    );
+                                  _ffi.chatModel.toggleChatOverlay();
+                                },
+                              )
+                            ]) +
+                      [
+                        IconButton(
+                          color: Colors.white,
+                          icon: Icon(Icons.more_vert),
+                          onPressed: () {
+                            setState(() => _showEdit = false);
+                            showActions(widget.id);
+                          },
+                        ),
+                      ]),
+              IconButton(
+                  color: Colors.white,
+                  icon: Icon(Icons.expand_more),
+                  onPressed: () {
+                    setState(() => _showBar = !_showBar);
+                  }),
+            ],
+          ),
+        ));
   }
 
   /// touchMode only:
@@ -533,8 +533,10 @@ class _RemotePageState extends State<RemotePage>
             Provider.of<CanvasModel>(context, listen: false).updateViewStyle();
           });
           return ImagePaint(
-            id: widget.id,
-          );
+        id: widget.id,
+        cursorOverImage: _cursorOverImage,
+        listenerBuilder: _buildImageListener,
+      );
         }),
       ))
     ];
