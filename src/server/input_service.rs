@@ -683,6 +683,14 @@ fn legacy_keyboard_mode(evt: &KeyEvent) {
     let mut disable_numlock = false;
     #[cfg(target_os = "macos")]
     en.reset_flag();
+    // When long-pressed the command key, then press and release 
+    // the Tab key, there should be CGEventFlagCommand in the flag.
+    #[cfg(target_os = "macos")]
+    for ck in evt.modifiers.iter(){
+        if let Some(key) = KEY_MAP.get(&ck.value()){
+            en.add_flag(key);
+        }
+    }
     #[cfg(not(target_os = "macos"))]
     let mut to_release = Vec::new();
     #[cfg(not(target_os = "macos"))]
@@ -710,8 +718,6 @@ fn legacy_keyboard_mode(evt: &KeyEvent) {
                         continue;
                     }
                 }
-                #[cfg(target_os = "macos")]
-                en.add_flag(key);
                 #[cfg(not(target_os = "macos"))]
                 {
                     if key == &Key::CapsLock {
