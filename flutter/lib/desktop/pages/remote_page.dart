@@ -257,7 +257,8 @@ class _RemotePageState extends State<RemotePage>
                     }
                   });
                 }),
-        bottomNavigationBar: _showBar && hasDisplays ? getBottomAppBar() : null,
+        bottomNavigationBar:
+            _showBar && hasDisplays ? getBottomAppBar(ffiModel) : null,
         body: Overlay(
           initialEntries: [
             OverlayEntry(builder: (context) {
@@ -343,7 +344,7 @@ class _RemotePageState extends State<RemotePage>
                     child: child))));
   }
 
-  Widget? getBottomAppBar() {
+  Widget? getBottomAppBar(FfiModel ffiModel) {
     return MouseRegion(
         cursor: SystemMouseCursors.basic,
         child: BottomAppBar(
@@ -421,7 +422,7 @@ class _RemotePageState extends State<RemotePage>
                           icon: Icon(Icons.more_vert),
                           onPressed: () {
                             setState(() => _showEdit = false);
-                            showActions(widget.id);
+                            showActions(widget.id, ffiModel);
                           },
                         ),
                       ]),
@@ -574,7 +575,7 @@ class _RemotePageState extends State<RemotePage>
     return out;
   }
 
-  void showActions(String id) async {
+  void showActions(String id, FfiModel ffiModel) async {
     final size = MediaQuery.of(context).size;
     final x = 120.0;
     final y = size.height - super.widget.tabBarHeight;
@@ -619,12 +620,8 @@ class _RemotePageState extends State<RemotePage>
           await bind.getSessionToggleOption(id: id, arg: 'privacy-mode') !=
               true) {
         more.add(PopupMenuItem<String>(
-            child: Consumer<FfiModel>(
-                builder: (_context, ffiModel, _child) => () {
-                      return Text(translate(
-                          (ffiModel.inputBlocked ? 'Unb' : 'B') +
-                              'lock user input'));
-                    }()),
+            child: Text(translate(
+                (ffiModel.inputBlocked ? 'Unb' : 'B') + 'lock user input')),
             value: 'block-input'));
       }
     }
