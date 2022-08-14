@@ -906,54 +906,30 @@ class ImagePaint extends StatelessWidget {
   }
 
   Widget _buildCrossScrollbar(Widget child) {
-    debugPrint(
-        'REMOVE ME ==================================== _buildCrossScrollbar ${cursorOverImage.value}');
-    // final physicsVertical =
-    //     cursorOverImage.value ? const NeverScrollableScrollPhysics() : null;
-    // final physicsHorizontal =
-    //     cursorOverImage.value ? const NeverScrollableScrollPhysics() : null;
-
-    if (cursorOverImage.value) {
-      return Scrollbar(
-          controller: _vertical,
+    final physicsVertical =
+        cursorOverImage.value ? const NeverScrollableScrollPhysics() : null;
+    final physicsHorizontal =
+        cursorOverImage.value ? const NeverScrollableScrollPhysics() : null;
+    return Scrollbar(
+        controller: _vertical,
+        thumbVisibility: true,
+        trackVisibility: true,
+        child: Scrollbar(
+          controller: _horizontal,
           thumbVisibility: true,
           trackVisibility: true,
-          child: Scrollbar(
-            controller: _horizontal,
-            thumbVisibility: true,
-            trackVisibility: true,
-            notificationPredicate: (notif) => notif.depth == 1,
+          notificationPredicate: (notif) => notif.depth == 1,
+          child: SingleChildScrollView(
+            controller: _vertical,
+            physics: physicsVertical,
             child: SingleChildScrollView(
-              controller: _vertical,
-              physics: const NeverScrollableScrollPhysics(),
-              child: SingleChildScrollView(
-                controller: _horizontal,
-                scrollDirection: Axis.horizontal,
-                physics: const NeverScrollableScrollPhysics(),
-                child: child,
-              ),
+              controller: _horizontal,
+              scrollDirection: Axis.horizontal,
+              physics: physicsHorizontal,
+              child: child,
             ),
-          ));
-    } else {
-      return Scrollbar(
-          controller: _vertical,
-          thumbVisibility: true,
-          trackVisibility: true,
-          child: Scrollbar(
-            controller: _horizontal,
-            thumbVisibility: true,
-            trackVisibility: true,
-            notificationPredicate: (notif) => notif.depth == 1,
-            child: SingleChildScrollView(
-              controller: _vertical,
-              child: SingleChildScrollView(
-                controller: _horizontal,
-                scrollDirection: Axis.horizontal,
-                child: child,
-              ),
-            ),
-          ));
-    }
+          ),
+        ));
   }
 
   Widget _buildListener(Widget child) {
