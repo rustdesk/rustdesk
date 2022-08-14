@@ -41,6 +41,7 @@ class _RemotePageState extends State<RemotePage>
   String _value = '';
   double _scale = 1;
   double _mouseScrollIntegral = 0; // mouse scroll speed controller
+  var _cursorOverImage = false.obs;
 
   var _more = true;
   var _fn = false;
@@ -256,7 +257,8 @@ class _RemotePageState extends State<RemotePage>
                     }
                   });
                 }),
-        bottomNavigationBar: _showBar && hasDisplays ? getBottomAppBar() : null,
+        bottomNavigationBar:
+            _showBar && hasDisplays ? getBottomAppBar(ffiModel) : null,
         body: Overlay(
           initialEntries: [
             OverlayEntry(builder: (context) {
@@ -274,7 +276,6 @@ class _RemotePageState extends State<RemotePage>
   @override
   Widget build(BuildContext context) {
     super.build(context);
-    _ffi.canvasModel.tabBarHeight = super.widget.tabBarHeight;
     return WillPopScope(
         onWillPop: () async {
           clientClose(_ffi.dialogManager);
@@ -292,201 +293,148 @@ class _RemotePageState extends State<RemotePage>
   }
 
   Widget getRawPointerAndKeyBody(Widget child) {
-    return Listener(
-        onPointerHover: (e) {
-          if (e.kind != ui.PointerDeviceKind.mouse) return;
-          if (!_isPhysicalMouse) {
-            setState(() {
-              _isPhysicalMouse = true;
-            });
-          }
-          if (_isPhysicalMouse) {
-            _ffi.handleMouse(getEvent(e, 'mousemove'),
-                tabBarHeight: super.widget.tabBarHeight);
-          }
-        },
-        onPointerDown: (e) {
-          if (e.kind != ui.PointerDeviceKind.mouse) {
-            if (_isPhysicalMouse) {
-              setState(() {
-                _isPhysicalMouse = false;
-              });
-            }
-          }
-          if (_isPhysicalMouse) {
-            _ffi.handleMouse(getEvent(e, 'mousedown'),
-                tabBarHeight: super.widget.tabBarHeight);
-          }
-        },
-        onPointerUp: (e) {
-          if (e.kind != ui.PointerDeviceKind.mouse) return;
-          if (_isPhysicalMouse) {
-            _ffi.handleMouse(getEvent(e, 'mouseup'),
-                tabBarHeight: super.widget.tabBarHeight);
-          }
-        },
-        onPointerMove: (e) {
-          if (e.kind != ui.PointerDeviceKind.mouse) return;
-          if (_isPhysicalMouse) {
-            _ffi.handleMouse(getEvent(e, 'mousemove'),
-                tabBarHeight: super.widget.tabBarHeight);
-          }
-        },
-        onPointerSignal: (e) {
-          if (e is PointerScrollEvent) {
-            var dx = e.scrollDelta.dx;
-            var dy = e.scrollDelta.dy;
-            if (dx > 0)
-              dx = -1;
-            else if (dx < 0) dx = 1;
-            if (dy > 0)
-              dy = -1;
-            else if (dy < 0) dy = 1;
-            bind.sessionSendMouse(
-                id: widget.id,
-                msg: '{"type": "wheel", "x": "$dx", "y": "$dy"}');
-          }
-        },
-        child: Consumer<FfiModel>(
-            builder: (context, FfiModel, _child) => MouseRegion(
-                cursor: FfiModel.permissions['keyboard'] != false
-                    ? SystemMouseCursors.none
-                    : MouseCursor.defer,
-                child: FocusScope(
+    return Consumer<FfiModel>(
+        builder: (context, FfiModel, _child) => MouseRegion(
+            cursor: FfiModel.permissions['keyboard'] != false
+                ? SystemMouseCursors.none
+                : MouseCursor.defer,
+            child: FocusScope(
+                autofocus: true,
+                child: Focus(
                     autofocus: true,
-                    child: Focus(
-                        autofocus: true,
-                        canRequestFocus: true,
-                        focusNode: _physicalFocusNode,
-                        onKey: (data, e) {
-                          final key = e.logicalKey;
-                          if (e is RawKeyDownEvent) {
-                            if (e.repeat) {
-                              sendRawKey(e, press: true);
-                            } else {
-                              if (e.isAltPressed && !_ffi.alt) {
-                                _ffi.alt = true;
-                              } else if (e.isControlPressed && !_ffi.ctrl) {
-                                _ffi.ctrl = true;
-                              } else if (e.isShiftPressed && !_ffi.shift) {
-                                _ffi.shift = true;
-                              } else if (e.isMetaPressed && !_ffi.command) {
-                                _ffi.command = true;
-                              }
-                              sendRawKey(e, down: true);
-                            }
+                    canRequestFocus: true,
+                    focusNode: _physicalFocusNode,
+                    onKey: (data, e) {
+                      final key = e.logicalKey;
+                      if (e is RawKeyDownEvent) {
+                        if (e.repeat) {
+                          sendRawKey(e, press: true);
+                        } else {
+                          if (e.isAltPressed && !_ffi.alt) {
+                            _ffi.alt = true;
+                          } else if (e.isControlPressed && !_ffi.ctrl) {
+                            _ffi.ctrl = true;
+                          } else if (e.isShiftPressed && !_ffi.shift) {
+                            _ffi.shift = true;
+                          } else if (e.isMetaPressed && !_ffi.command) {
+                            _ffi.command = true;
                           }
-                          // [!_showEdit] workaround for soft-keyboard's control_key like Backspace / Enter
-                          if (!_showEdit && e is RawKeyUpEvent) {
-                            if (key == LogicalKeyboardKey.altLeft ||
-                                key == LogicalKeyboardKey.altRight) {
-                              _ffi.alt = false;
-                            } else if (key == LogicalKeyboardKey.controlLeft ||
-                                key == LogicalKeyboardKey.controlRight) {
-                              _ffi.ctrl = false;
-                            } else if (key == LogicalKeyboardKey.shiftRight ||
-                                key == LogicalKeyboardKey.shiftLeft) {
-                              _ffi.shift = false;
-                            } else if (key == LogicalKeyboardKey.metaLeft ||
-                                key == LogicalKeyboardKey.metaRight) {
-                              _ffi.command = false;
-                            }
-                            sendRawKey(e);
-                          }
-                          return KeyEventResult.handled;
-                        },
-                        child: child)))));
+                          sendRawKey(e, down: true);
+                        }
+                      }
+                      // [!_showEdit] workaround for soft-keyboard's control_key like Backspace / Enter
+                      if (!_showEdit && e is RawKeyUpEvent) {
+                        if (key == LogicalKeyboardKey.altLeft ||
+                            key == LogicalKeyboardKey.altRight) {
+                          _ffi.alt = false;
+                        } else if (key == LogicalKeyboardKey.controlLeft ||
+                            key == LogicalKeyboardKey.controlRight) {
+                          _ffi.ctrl = false;
+                        } else if (key == LogicalKeyboardKey.shiftRight ||
+                            key == LogicalKeyboardKey.shiftLeft) {
+                          _ffi.shift = false;
+                        } else if (key == LogicalKeyboardKey.metaLeft ||
+                            key == LogicalKeyboardKey.metaRight) {
+                          _ffi.command = false;
+                        }
+                        sendRawKey(e);
+                      }
+                      return KeyEventResult.handled;
+                    },
+                    child: child))));
   }
 
-  Widget? getBottomAppBar() {
-    return BottomAppBar(
-      elevation: 10,
-      color: MyTheme.accent,
-      child: Row(
-        mainAxisSize: MainAxisSize.max,
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: <Widget>[
-          Row(
-              children: <Widget>[
-                    IconButton(
-                      color: Colors.white,
-                      icon: Icon(Icons.clear),
-                      onPressed: () {
-                        clientClose(_ffi.dialogManager);
-                      },
-                    )
-                  ] +
-                  <Widget>[
-                    IconButton(
-                      color: Colors.white,
-                      icon: Icon(Icons.tv),
-                      onPressed: () {
-                        setState(() => _showEdit = false);
-                        showOptions(widget.id, _ffi.dialogManager);
-                      },
-                    )
-                  ] +
-                  (isWebDesktop
-                      ? []
-                      : _ffi.ffiModel.isPeerAndroid
-                          ? [
+  Widget? getBottomAppBar(FfiModel ffiModel) {
+    return MouseRegion(
+        cursor: SystemMouseCursors.basic,
+        child: BottomAppBar(
+          elevation: 10,
+          color: MyTheme.accent,
+          child: Row(
+            mainAxisSize: MainAxisSize.max,
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: <Widget>[
+              Row(
+                  children: <Widget>[
+                        IconButton(
+                          color: Colors.white,
+                          icon: Icon(Icons.clear),
+                          onPressed: () {
+                            clientClose(_ffi.dialogManager);
+                          },
+                        )
+                      ] +
+                      <Widget>[
+                        IconButton(
+                          color: Colors.white,
+                          icon: Icon(Icons.tv),
+                          onPressed: () {
+                            setState(() => _showEdit = false);
+                            showOptions(widget.id, _ffi.dialogManager);
+                          },
+                        )
+                      ] +
+                      (isWebDesktop
+                          ? []
+                          : _ffi.ffiModel.isPeerAndroid
+                              ? [
+                                  IconButton(
+                                    color: Colors.white,
+                                    icon: Icon(Icons.build),
+                                    onPressed: () {
+                                      if (mobileActionsOverlayEntry == null) {
+                                        showMobileActionsOverlay();
+                                      } else {
+                                        hideMobileActionsOverlay();
+                                      }
+                                    },
+                                  )
+                                ]
+                              : [
+                                  IconButton(
+                                      color: Colors.white,
+                                      icon: Icon(Icons.keyboard),
+                                      onPressed: openKeyboard),
+                                  IconButton(
+                                    color: Colors.white,
+                                    icon: Icon(_ffi.ffiModel.touchMode
+                                        ? Icons.touch_app
+                                        : Icons.mouse),
+                                    onPressed: changeTouchMode,
+                                  ),
+                                ]) +
+                      (isWeb
+                          ? []
+                          : <Widget>[
                               IconButton(
                                 color: Colors.white,
-                                icon: Icon(Icons.build),
+                                icon: Icon(Icons.message),
                                 onPressed: () {
-                                  if (mobileActionsOverlayEntry == null) {
-                                    showMobileActionsOverlay();
-                                  } else {
-                                    hideMobileActionsOverlay();
-                                  }
+                                  _ffi.chatModel
+                                      .changeCurrentID(ChatModel.clientModeID);
+                                  _ffi.chatModel.toggleChatOverlay();
                                 },
                               )
-                            ]
-                          : [
-                              IconButton(
-                                  color: Colors.white,
-                                  icon: Icon(Icons.keyboard),
-                                  onPressed: openKeyboard),
-                              IconButton(
-                                color: Colors.white,
-                                icon: Icon(_ffi.ffiModel.touchMode
-                                    ? Icons.touch_app
-                                    : Icons.mouse),
-                                onPressed: changeTouchMode,
-                              ),
                             ]) +
-                  (isWeb
-                      ? []
-                      : <Widget>[
-                          IconButton(
-                            color: Colors.white,
-                            icon: Icon(Icons.message),
-                            onPressed: () {
-                              _ffi.chatModel
-                                  .changeCurrentID(ChatModel.clientModeID);
-                              _ffi.chatModel.toggleChatOverlay();
-                            },
-                          )
-                        ]) +
-                  [
-                    IconButton(
-                      color: Colors.white,
-                      icon: Icon(Icons.more_vert),
-                      onPressed: () {
-                        setState(() => _showEdit = false);
-                        showActions(widget.id);
-                      },
-                    ),
-                  ]),
-          IconButton(
-              color: Colors.white,
-              icon: Icon(Icons.expand_more),
-              onPressed: () {
-                setState(() => _showBar = !_showBar);
-              }),
-        ],
-      ),
-    );
+                      [
+                        IconButton(
+                          color: Colors.white,
+                          icon: Icon(Icons.more_vert),
+                          onPressed: () {
+                            setState(() => _showEdit = false);
+                            showActions(widget.id, ffiModel);
+                          },
+                        ),
+                      ]),
+              IconButton(
+                  color: Colors.white,
+                  icon: Icon(Icons.expand_more),
+                  onPressed: () {
+                    setState(() => _showBar = !_showBar);
+                  }),
+            ],
+          ),
+        ));
   }
 
   /// touchMode only:
@@ -498,6 +446,81 @@ class _RemotePageState extends State<RemotePage>
   /// mouseMode only:
   ///   DoubleFiner -> right click
   ///   HoldDrag -> left drag
+
+  void _onPointHoverImage(PointerHoverEvent e) {
+    if (e.kind != ui.PointerDeviceKind.mouse) return;
+    if (!_isPhysicalMouse) {
+      setState(() {
+        _isPhysicalMouse = true;
+      });
+    }
+    if (_isPhysicalMouse) {
+      _ffi.handleMouse(getEvent(e, 'mousemove'),
+          tabBarHeight: super.widget.tabBarHeight);
+    }
+  }
+
+  void _onPointDownImage(PointerDownEvent e) {
+    if (e.kind != ui.PointerDeviceKind.mouse) {
+      if (_isPhysicalMouse) {
+        setState(() {
+          _isPhysicalMouse = false;
+        });
+      }
+    }
+    if (_isPhysicalMouse) {
+      _ffi.handleMouse(getEvent(e, 'mousedown'),
+          tabBarHeight: super.widget.tabBarHeight);
+    }
+  }
+
+  void _onPointUpImage(PointerUpEvent e) {
+    if (e.kind != ui.PointerDeviceKind.mouse) return;
+    if (_isPhysicalMouse) {
+      _ffi.handleMouse(getEvent(e, 'mouseup'),
+          tabBarHeight: super.widget.tabBarHeight);
+    }
+  }
+
+  void _onPointMoveImage(PointerMoveEvent e) {
+    if (e.kind != ui.PointerDeviceKind.mouse) return;
+    if (_isPhysicalMouse) {
+      _ffi.handleMouse(getEvent(e, 'mousemove'),
+          tabBarHeight: super.widget.tabBarHeight);
+    }
+  }
+
+  void _onPointerSignalImage(PointerSignalEvent e) {
+    if (e is PointerScrollEvent) {
+      var dx = e.scrollDelta.dx.toInt();
+      var dy = e.scrollDelta.dy.toInt();
+      if (dx > 0)
+        dx = -1;
+      else if (dx < 0) dx = 1;
+      if (dy > 0)
+        dy = -1;
+      else if (dy < 0) dy = 1;
+      bind.sessionSendMouse(
+          id: widget.id, msg: '{"type": "wheel", "x": "$dx", "y": "$dy"}');
+    }
+  }
+
+  Widget _buildImageListener(Widget child) {
+    return Listener(
+        onPointerHover: _onPointHoverImage,
+        onPointerDown: _onPointDownImage,
+        onPointerUp: _onPointUpImage,
+        onPointerMove: _onPointMoveImage,
+        onPointerSignal: _onPointerSignalImage,
+        child: MouseRegion(
+            onEnter: (evt) {
+              _cursorOverImage.value = true;
+            },
+            onExit: (evt) {
+              _cursorOverImage.value = false;
+            },
+            child: child));
+  }
 
   Widget getBodyForDesktop(BuildContext context, bool keyboard) {
     var paints = <Widget>[
@@ -512,6 +535,8 @@ class _RemotePageState extends State<RemotePage>
           });
           return ImagePaint(
             id: widget.id,
+            cursorOverImage: _cursorOverImage,
+            listenerBuilder: _buildImageListener,
           );
         }),
       ))
@@ -550,7 +575,7 @@ class _RemotePageState extends State<RemotePage>
     return out;
   }
 
-  void showActions(String id) async {
+  void showActions(String id, FfiModel ffiModel) async {
     final size = MediaQuery.of(context).size;
     final x = 120.0;
     final y = size.height - super.widget.tabBarHeight;
@@ -595,12 +620,8 @@ class _RemotePageState extends State<RemotePage>
           await bind.getSessionToggleOption(id: id, arg: 'privacy-mode') !=
               true) {
         more.add(PopupMenuItem<String>(
-            child: Consumer<FfiModel>(
-                builder: (_context, ffiModel, _child) => () {
-                      return Text(translate(
-                          (ffiModel.inputBlocked ? 'Unb' : 'B') +
-                              'lock user input'));
-                    }()),
+            child: Text(translate(
+                (ffiModel.inputBlocked ? 'Unb' : 'B') + 'lock user input')),
             value: 'block-input'));
       }
     }
@@ -630,6 +651,9 @@ class _RemotePageState extends State<RemotePage>
           }
         }();
       } else if (value == 'enter_os_password') {
+        // FIXME:
+        // null means no session of id
+        // empty string means no password
         var password = await bind.getSessionOption(id: id, arg: "os-password");
         if (password != null) {
           bind.sessionInputOsPassword(id: widget.id, value: password);
@@ -822,18 +846,95 @@ class _RemotePageState extends State<RemotePage>
 
 class ImagePaint extends StatelessWidget {
   final String id;
+  final Rx<bool> cursorOverImage;
+  final Widget Function(Widget)? listenerBuilder;
+  final ScrollController _horizontal = ScrollController();
+  final ScrollController _vertical = ScrollController();
 
-  const ImagePaint({Key? key, required this.id}) : super(key: key);
+  ImagePaint(
+      {Key? key,
+      required this.id,
+      required this.cursorOverImage,
+      this.listenerBuilder = null})
+      : super(key: key);
 
   @override
   Widget build(BuildContext context) {
     final m = Provider.of<ImageModel>(context);
-    final c = Provider.of<CanvasModel>(context);
-    var s = c.scale;
-    return CustomPaint(
-      painter:
-          new ImagePainter(image: m.image, x: c.x / s, y: c.y / s, scale: s),
-    );
+    var c = Provider.of<CanvasModel>(context);
+    final s = c.scale;
+    if (c.scrollStyle == ScrollStyle.scrollbar) {
+      final imageWidget = SizedBox(
+          width: c.getDisplayWidth() * s,
+          height: c.getDisplayHeight() * s,
+          child: CustomPaint(
+            painter: new ImagePainter(image: m.image, x: 0, y: 0, scale: s),
+          ));
+      return Center(
+          child: NotificationListener<ScrollNotification>(
+        onNotification: (_notification) {
+          final percentX = _horizontal.position.extentBefore /
+              (_horizontal.position.extentBefore +
+                  _horizontal.position.extentInside +
+                  _horizontal.position.extentAfter);
+          final percentY = _vertical.position.extentBefore /
+              (_vertical.position.extentBefore +
+                  _vertical.position.extentInside +
+                  _vertical.position.extentAfter);
+          c.setScrollPercent(percentX, percentY);
+          return false;
+        },
+        child: Obx(() => MouseRegion(
+            cursor: cursorOverImage.value
+                ? SystemMouseCursors.none
+                : SystemMouseCursors.basic,
+            child: _buildCrossScrollbar(_buildListener(imageWidget)))),
+      ));
+    } else {
+      final imageWidget = SizedBox(
+          width: c.size.width,
+          height: c.size.height,
+          child: CustomPaint(
+            painter: new ImagePainter(
+                image: m.image, x: c.x / s, y: c.y / s, scale: s),
+          ));
+      return _buildListener(imageWidget);
+    }
+  }
+
+  Widget _buildCrossScrollbar(Widget child) {
+    final physicsVertical =
+        cursorOverImage.value ? const NeverScrollableScrollPhysics() : null;
+    final physicsHorizontal =
+        cursorOverImage.value ? const NeverScrollableScrollPhysics() : null;
+    return Scrollbar(
+        controller: _vertical,
+        thumbVisibility: true,
+        trackVisibility: true,
+        child: Scrollbar(
+          controller: _horizontal,
+          thumbVisibility: true,
+          trackVisibility: true,
+          notificationPredicate: (notif) => notif.depth == 1,
+          child: SingleChildScrollView(
+            controller: _vertical,
+            physics: physicsVertical,
+            child: SingleChildScrollView(
+              controller: _horizontal,
+              scrollDirection: Axis.horizontal,
+              physics: physicsHorizontal,
+              child: child,
+            ),
+          ),
+        ));
+  }
+
+  Widget _buildListener(Widget child) {
+    if (listenerBuilder != null) {
+      return listenerBuilder!(child);
+    } else {
+      return child;
+    }
   }
 }
 
@@ -896,6 +997,8 @@ void showOptions(String id, OverlayDialogManager dialogManager) async {
   if (quality == '') quality = 'balanced';
   String viewStyle =
       await bind.getSessionOption(id: id, arg: 'view-style') ?? '';
+  String scrollStyle =
+      await bind.getSessionOption(id: id, arg: 'scroll-style') ?? '';
   var displays = <Widget>[];
   final pi = ffi(id).ffiModel.pi;
   final image = ffi(id).ffiModel.getConnectionImage();
@@ -968,6 +1071,14 @@ void showOptions(String id, OverlayDialogManager dialogManager) async {
         ffi(id).canvasModel.updateViewStyle();
       });
     };
+    var setScrollStyle = (String? value) {
+      if (value == null) return;
+      setState(() {
+        scrollStyle = value;
+        bind.sessionPeerOption(id: id, name: "scroll-style", value: value);
+        ffi(id).canvasModel.updateScrollStyle();
+      });
+    };
     return CustomAlertDialog(
       title: SizedBox.shrink(),
       content: Column(
@@ -977,6 +1088,10 @@ void showOptions(String id, OverlayDialogManager dialogManager) async {
                 getRadio('Original', 'original', viewStyle, setViewStyle),
                 getRadio('Shrink', 'shrink', viewStyle, setViewStyle),
                 getRadio('Stretch', 'stretch', viewStyle, setViewStyle),
+                Divider(color: MyTheme.border),
+                getRadio(
+                    'ScrollAuto', 'scrollauto', scrollStyle, setScrollStyle),
+                getRadio('Scrollbar', 'scrollbar', scrollStyle, setScrollStyle),
                 Divider(color: MyTheme.border),
                 getRadio('Good image quality', 'best', quality, setQuality),
                 getRadio('Balanced', 'balanced', quality, setQuality),
