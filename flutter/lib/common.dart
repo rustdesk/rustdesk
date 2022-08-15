@@ -55,7 +55,6 @@ class MyTheme {
 
 bool isDarkTheme() {
   final isDark = "Y" == Get.find<SharedPreferences>().getString("darkTheme");
-  debugPrint("current is dark theme: $isDark");
   return isDark;
 }
 
@@ -481,4 +480,36 @@ String translate(String name) {
     return name.split(': ').map((x) => translate(x)).join(': ');
   }
   return platformFFI.translate(name, localeName);
+}
+
+bool option2bool(String key, String value) {
+  bool res;
+  if (key.startsWith("enable-")) {
+    res = value != "N";
+  } else if (key.startsWith("allow-") ||
+      key == "stop-service" ||
+      key == "direct-server" ||
+      key == "stop-rendezvous-service") {
+    res = value == "Y";
+  } else {
+    assert(false);
+    res = value != "N";
+  }
+  return res;
+}
+
+String bool2option(String key, bool option) {
+  String res;
+  if (key.startsWith('enable-')) {
+    res = option ? '' : 'N';
+  } else if (key.startsWith('allow-') ||
+      key == "stop-service" ||
+      key == "direct-server" ||
+      key == "stop-rendezvous-service") {
+    res = option ? 'Y' : '';
+  } else {
+    assert(false);
+    res = option ? 'Y' : 'N';
+  }
+  return res;
 }

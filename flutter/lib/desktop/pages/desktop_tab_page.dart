@@ -68,6 +68,6 @@ class _DesktopTabPageState extends State<DesktopTabPage>
 
   void onAddSetting() {
     DesktopTabBar.onAdd(this, tabController, tabs, _selected,
-        TabInfo(label: kTabLabelSettingPage, icon: Icons.settings));
+        TabInfo(label: kTabLabelSettingPage, icon: Icons.build));
   }
 }

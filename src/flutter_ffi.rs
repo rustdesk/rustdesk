@@ -23,9 +23,9 @@ use crate::ui_interface;
 use crate::ui_interface::{change_id, check_connect_status, is_ok_change_id};
 use crate::ui_interface::{
     discover, forget_password, get_api_server, get_app_name, get_async_job_status,
-    get_connect_status, get_fav, get_id, get_lan_peers, get_license, get_local_option, get_option,
-    get_options, get_peer, get_peer_option, get_socks, get_sound_inputs, get_uuid, get_version,
-    has_rendezvous_service, post_request, set_local_option, set_option, set_options,
+    get_connect_status, get_fav, get_id, get_lan_peers, get_langs, get_license, get_local_option,
+    get_option, get_options, get_peer, get_peer_option, get_socks, get_sound_inputs, get_uuid,
+    get_version, has_rendezvous_service, post_request, set_local_option, set_option, set_options,
     set_peer_option, set_permanent_password, set_socks, store_fav, test_if_valid_server,
     update_temporary_password, using_public_server,
 };
@@ -614,7 +614,7 @@ pub fn main_get_home_dir() -> String {
 }
 
 pub fn main_get_langs() -> String {
-    crate::lang::LANGS.to_string()
+    get_langs()
 }
 
 pub fn main_get_temporary_password() -> String {

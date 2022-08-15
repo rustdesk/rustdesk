@@ -51,26 +51,24 @@ class ServerModel with ChangeNotifier {
       kUseBothPasswords
     ].indexOf(_verificationMethod);
     if (index < 0) {
-      _verificationMethod = kUseBothPasswords;
+      return kUseBothPasswords;
     }
     return _verificationMethod;
   }
 
   set verificationMethod(String method) {
-    _verificationMethod = method;
     bind.mainSetOption(key: "verification-method", value: method);
   }
 
   String get temporaryPasswordLength {
     final lengthIndex = ["6", "8", "10"].indexOf(_temporaryPasswordLength);
     if (lengthIndex < 0) {
-      _temporaryPasswordLength = "6";
+      return "6";
     }
     return _temporaryPasswordLength;
   }
 
   set temporaryPasswordLength(String length) {
-    _temporaryPasswordLength = length;
     bind.mainSetOption(key: "temporary-password-length", value: length);
   }
 

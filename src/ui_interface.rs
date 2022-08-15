@@ -654,6 +654,10 @@ pub fn t(name: String) -> String {
     crate::client::translate(name)
 }
 
+pub fn get_langs() -> String {
+    crate::lang::LANGS.to_string()
+}
+
 pub fn is_xfce() -> bool {
     crate::platform::is_xfce()
 }
