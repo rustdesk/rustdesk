@@ -200,7 +200,6 @@ class OverlayDialogManager {
       VoidCallback? onCancel}) {
     show((setState, close) => CustomAlertDialog(
         content: Container(
-            color: MyTheme.white,
             constraints: BoxConstraints(maxWidth: 240),
             child: Column(
                 mainAxisSize: MainAxisSize.min,

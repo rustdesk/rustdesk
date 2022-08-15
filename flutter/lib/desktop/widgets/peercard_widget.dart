@@ -53,7 +53,9 @@ class _PeerCardState extends State<_PeerCard>
                 border: Border.all(color: Colors.transparent, width: 1.0),
                 borderRadius: BorderRadius.circular(20));
           },
-          child: _buildPeerTile(context, peer, deco),
+          child: GestureDetector(
+              onDoubleTap: () => _connect(peer.id),
+              child: _buildPeerTile(context, peer, deco)),
         ));
   }
 
