@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart' hide MenuItem;
@@ -120,7 +119,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
                       onDoubleTap: () {
                         Clipboard.setData(
                             ClipboardData(text: model.serverId.text));
-                        gFFI.dialogManager.showToast(translate("Copied"));
+                        showToast(translate("Copied"));
                       },
                       child: TextFormField(
                         controller: model.serverId,
@@ -257,7 +256,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
                                 kUsePermanentPassword) {
                               Clipboard.setData(
                                   ClipboardData(text: model.serverPasswd.text));
-                              gFFI.dialogManager.showToast(translate("Copied"));
+                              showToast(translate("Copied"));
                             }
                           },
                           child: TextFormField(

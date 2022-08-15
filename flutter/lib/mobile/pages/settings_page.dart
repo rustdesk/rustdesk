@@ -363,7 +363,7 @@ void logout(OverlayDialogManager dialogManager) async {
         },
         body: json.encode(body));
   } catch (e) {
-    dialogManager.showToast('Failed to access $url');
+    showToast('Failed to access $url');
   }
   resetToken();
 }

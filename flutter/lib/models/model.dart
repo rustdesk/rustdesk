@@ -287,7 +287,7 @@ class FfiModel with ChangeNotifier {
         bind.sessionReconnect(id: id);
         clearPermissions();
         dialogManager.showLoading(translate('Connecting...'),
-            cancelToClose: true);
+            onCancel: backToHomePage);
       });
       _reconnects *= 2;
     } else {
@@ -335,7 +335,7 @@ class FfiModel with ChangeNotifier {
       if (displays.length > 0) {
         parent.target?.dialogManager.showLoading(
             translate('Connected, waiting for image...'),
-            cancelToClose: true);
+            onCancel: backToHomePage);
         _waitForImage = true;
         _reconnects = 1;
       }

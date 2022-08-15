@@ -29,7 +29,7 @@ class _FileManagerPageState extends State<FileManagerPage> {
     gFFI.connect(widget.id, isFileTransfer: true);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       gFFI.dialogManager
-          .showLoading(translate('Connecting...'), cancelToClose: true);
+          .showLoading(translate('Connecting...'), onCancel: backToHomePage);
     });
     gFFI.ffiModel.updateEventListener(widget.id);
     Wakelock.enable();
