@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_hbb/mobile/widgets/dialog.dart';
-import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
+// import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
 import 'package:provider/provider.dart';
 
 import '../../common.dart';
@@ -90,9 +89,9 @@ class DesktopServerPage extends StatefulWidget implements PageShape {
           if (value == "changeID") {
             // TODO
           } else if (value == "setPermanentPassword") {
-            setPermanentPasswordDialog();
+            // setPermanentPasswordDialog();
           } else if (value == "setTemporaryPasswordLength") {
-            setTemporaryPasswordLengthDialog();
+            // setTemporaryPasswordLengthDialog();
           } else if (value == kUsePermanentPassword ||
               value == kUseTemporaryPassword ||
               value == kUseBothPasswords) {
@@ -107,15 +106,9 @@ class DesktopServerPage extends StatefulWidget implements PageShape {
 }
 
 class _DesktopServerPageState extends State<DesktopServerPage> {
-  @override
-  void initState() {
-    super.initState();
-    gFFI.serverModel.checkAndroidPermission();
-  }
 
   @override
   Widget build(BuildContext context) {
-    checkService();
     return ChangeNotifierProvider.value(
         value: gFFI.serverModel,
         child: Consumer<ServerModel>(
@@ -125,233 +118,12 @@ class _DesktopServerPageState extends State<DesktopServerPage> {
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.start,
                       children: [
-                        ServerInfo(),
-                        PermissionChecker(),
                         ConnectionManager(),
                         SizedBox.fromSize(size: Size(0, 15.0)),
                       ],
                     ),
                   ),
                 )));
-  }
-}
-
-void checkService() async {
-  gFFI.invokeMethod("check_service"); // jvm
-  // for Android 10/11,MANAGE_EXTERNAL_STORAGE permission from a system setting page
-  if (PermissionManager.isWaitingFile() && !gFFI.serverModel.fileOk) {
-    PermissionManager.complete("file", await PermissionManager.check("file"));
-    debugPrint("file permission finished");
-  }
-}
-
-class ServerInfo extends StatelessWidget {
-  final model = gFFI.serverModel;
-  final emptyController = TextEditingController(text: "-");
-
-  @override
-  Widget build(BuildContext context) {
-    final isPermanent = model.verificationMethod == kUsePermanentPassword;
-    return model.isStart
-        ? PaddingCard(
-            child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextFormField(
-                readOnly: true,
-                style: TextStyle(
-                    fontSize: 25.0,
-                    fontWeight: FontWeight.bold,
-                    color: MyTheme.accent),
-                controller: model.serverId,
-                decoration: InputDecoration(
-                  icon: const Icon(Icons.perm_identity),
-                  labelText: translate("ID"),
-                  labelStyle: TextStyle(
-                      fontWeight: FontWeight.bold, color: MyTheme.accent50),
-                ),
-                onSaved: (String? value) {},
-              ),
-              TextFormField(
-                readOnly: true,
-                style: TextStyle(
-                    fontSize: 25.0,
-                    fontWeight: FontWeight.bold,
-                    color: MyTheme.accent),
-                controller: isPermanent ? emptyController : model.serverPasswd,
-                decoration: InputDecoration(
-                    icon: const Icon(Icons.lock),
-                    labelText: translate("Password"),
-                    labelStyle: TextStyle(
-                        fontWeight: FontWeight.bold, color: MyTheme.accent50),
-                    suffix: isPermanent
-                        ? null
-                        : IconButton(
-                            icon: const Icon(Icons.refresh),
-                            onPressed: () =>
-                                bind.mainUpdateTemporaryPassword())),
-                onSaved: (String? value) {},
-              ),
-            ],
-          ))
-        : PaddingCard(
-            child: Column(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              Center(
-                  child: Row(
-                children: [
-                  Icon(Icons.warning_amber_sharp,
-                      color: Colors.redAccent, size: 24),
-                  SizedBox(width: 10),
-                  Expanded(
-                      child: Text(
-                    translate("Service is not running"),
-                    style: TextStyle(
-                      fontFamily: 'WorkSans',
-                      fontWeight: FontWeight.bold,
-                      fontSize: 18,
-                      color: MyTheme.accent80,
-                    ),
-                  ))
-                ],
-              )),
-              SizedBox(height: 5),
-              Center(
-                  child: Text(
-                translate("android_start_service_tip"),
-                style: TextStyle(fontSize: 12, color: MyTheme.darkGray),
-              ))
-            ],
-          ));
-  }
-}
-
-class PermissionChecker extends StatefulWidget {
-  @override
-  _PermissionCheckerState createState() => _PermissionCheckerState();
-}
-
-class _PermissionCheckerState extends State<PermissionChecker> {
-  @override
-  Widget build(BuildContext context) {
-    final serverModel = Provider.of<ServerModel>(context);
-    final hasAudioPermission = androidVersion >= 30;
-    final status;
-    if (serverModel.connectStatus == -1) {
-      status = 'not_ready_status';
-    } else if (serverModel.connectStatus == 0) {
-      status = 'connecting_status';
-    } else {
-      status = 'Ready';
-    }
-    return PaddingCard(
-        title: translate("Permissions"),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            PermissionRow(translate("Screen Capture"), serverModel.mediaOk,
-                serverModel.toggleService),
-            PermissionRow(translate("Input Control"), serverModel.inputOk,
-                serverModel.toggleInput),
-            PermissionRow(translate("Transfer File"), serverModel.fileOk,
-                serverModel.toggleFile),
-            hasAudioPermission
-                ? PermissionRow(translate("Audio Capture"), serverModel.audioOk,
-                    serverModel.toggleAudio)
-                : Text(
-                    "* ${translate("android_version_audio_tip")}",
-                    style: TextStyle(color: MyTheme.darkGray),
-                  ),
-            SizedBox(height: 8),
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                Expanded(
-                    flex: 0,
-                    child: serverModel.mediaOk
-                        ? ElevatedButton.icon(
-                            style: ButtonStyle(
-                                backgroundColor:
-                                    MaterialStateProperty.all(Colors.red)),
-                            icon: Icon(Icons.stop),
-                            onPressed: serverModel.toggleService,
-                            label: Text(translate("Stop service")))
-                        : ElevatedButton.icon(
-                            icon: Icon(Icons.play_arrow),
-                            onPressed: serverModel.toggleService,
-                            label: Text(translate("Start Service")))),
-                Expanded(
-                    child: serverModel.mediaOk
-                        ? Row(
-                            children: [
-                              Expanded(
-                                  flex: 0,
-                                  child: Padding(
-                                      padding:
-                                          EdgeInsets.only(left: 20, right: 5),
-                                      child: Icon(Icons.circle,
-                                          color: serverModel.connectStatus > 0
-                                              ? Colors.greenAccent
-                                              : Colors.deepOrangeAccent,
-                                          size: 10))),
-                              Expanded(
-                                  child: Text(translate(status),
-                                      softWrap: true,
-                                      style: TextStyle(
-                                          fontSize: 14.0,
-                                          color: MyTheme.accent50)))
-                            ],
-                          )
-                        : SizedBox.shrink())
-              ],
-            ),
-          ],
-        ));
-  }
-}
-
-class PermissionRow extends StatelessWidget {
-  PermissionRow(this.name, this.isOk, this.onPressed);
-
-  final String name;
-  final bool isOk;
-  final VoidCallback onPressed;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Expanded(
-            flex: 5,
-            child: FittedBox(
-                fit: BoxFit.scaleDown,
-                alignment: Alignment.centerLeft,
-                child: Text(name,
-                    style:
-                        TextStyle(fontSize: 16.0, color: MyTheme.accent50)))),
-        Expanded(
-          flex: 2,
-          child: FittedBox(
-              fit: BoxFit.scaleDown,
-              child: Text(isOk ? translate("ON") : translate("OFF"),
-                  style: TextStyle(
-                      fontSize: 16.0,
-                      color: isOk ? Colors.green : Colors.grey))),
-        ),
-        Expanded(
-            flex: 3,
-            child: FittedBox(
-                fit: BoxFit.scaleDown,
-                alignment: Alignment.centerRight,
-                child: TextButton(
-                    onPressed: onPressed,
-                    child: Text(
-                      translate(isOk ? "CLOSE" : "OPEN"),
-                      style: TextStyle(fontWeight: FontWeight.bold),
-                    )))),
-      ],
-    );
   }
 }
 
@@ -513,43 +285,4 @@ Widget clientInfo(Client client) {
           ],
         ),
       ]));
-}
-
-void toAndroidChannelInit() {
-  gFFI.setMethodCallHandler((method, arguments) {
-    debugPrint("flutter got android msg,$method,$arguments");
-    try {
-      switch (method) {
-        case "start_capture":
-          {
-            SmartDialog.dismiss();
-            gFFI.serverModel.updateClientState();
-            break;
-          }
-        case "on_state_changed":
-          {
-            var name = arguments["name"] as String;
-            var value = arguments["value"] as String == "true";
-            debugPrint("from jvm:on_state_changed,$name:$value");
-            gFFI.serverModel.changeStatue(name, value);
-            break;
-          }
-        case "on_android_permission_result":
-          {
-            var type = arguments["type"] as String;
-            var result = arguments["result"] as bool;
-            PermissionManager.complete(type, result);
-            break;
-          }
-        case "on_media_projection_canceled":
-          {
-            gFFI.serverModel.stopService();
-            break;
-          }
-      }
-    } catch (e) {
-      debugPrint("MethodCallHandler err:$e");
-    }
-    return "";
-  });
 }

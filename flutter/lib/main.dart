@@ -1,8 +1,8 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
-import 'package:flutter_hbb/desktop/pages/cm.dart';
 import 'package:flutter_hbb/desktop/pages/desktop_tab_page.dart';
+import 'package:flutter_hbb/desktop/pages/server_page.dart';
 import 'package:flutter_hbb/desktop/screen/desktop_file_transfer_screen.dart';
 import 'package:flutter_hbb/desktop/screen/desktop_remote_screen.dart';
 import 'package:flutter_hbb/utils/multi_window_manager.dart';
@@ -117,12 +117,10 @@ void runFileTransferScreen(Map<String, dynamic> argument) async {
 
 void runConnectionManagerScreen() async {
   await initEnv(kAppTypeConnectionManager);
-  windowManager.setAlwaysOnTop(true);
-  windowManager.setSize(Size(400, 600)).then((_) {
-    windowManager.setAlignment(Alignment.topRight);
-  });
-  runApp(
-      GetMaterialApp(theme: getCurrentTheme(), home: ConnectionManagerPage()));
+  await windowManager.setAlwaysOnTop(true);
+  await windowManager.setSize(Size(400, 600));
+  await windowManager.setAlignment(Alignment.topRight);
+  runApp(GetMaterialApp(theme: getCurrentTheme(), home: DesktopServerPage()));
 }
 
 class App extends StatelessWidget {
