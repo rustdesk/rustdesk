@@ -92,7 +92,7 @@ typedef DialogBuilder = CustomAlertDialog Function(
 
 class Dialog<T> {
   OverlayEntry? entry;
-  Completer<T?> completer = Completer<T>();
+  Completer<T?> completer = Completer<T?>();
 
   Dialog();
 
@@ -101,9 +101,10 @@ class Dialog<T> {
       if (!completer.isCompleted) {
         completer.complete(res);
       }
-      entry?.remove();
     } catch (e) {
       debugPrint("Dialog complete catch error: $e");
+    } finally {
+      entry?.remove();
     }
   }
 }
@@ -200,7 +201,6 @@ class OverlayDialogManager {
       VoidCallback? onCancel}) {
     show((setState, close) => CustomAlertDialog(
         content: Container(
-            color: MyTheme.white,
             constraints: BoxConstraints(maxWidth: 240),
             child: Column(
                 mainAxisSize: MainAxisSize.min,
@@ -480,7 +480,8 @@ RadioListTile<T> getRadio<T>(
 }
 
 CheckboxListTile getToggle(
-    String id, void Function(void Function()) setState, option, name) {
+    String id, void Function(void Function()) setState, option, name,
+    {FFI? ffi}) {
   final opt = bind.getSessionToggleOptionSync(id: id, arg: option);
   return CheckboxListTile(
       value: opt,
@@ -489,7 +490,7 @@ CheckboxListTile getToggle(
           bind.sessionToggleOption(id: id, value: option);
         });
         if (option == "show-quality-monitor") {
-          gFFI.qualityMonitorModel.checkShowQualityMonitor(id);
+          (ffi ?? gFFI).qualityMonitorModel.checkShowQualityMonitor(id);
         }
       },
       dense: true,

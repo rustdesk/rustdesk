@@ -59,6 +59,7 @@ class _RemotePageState extends State<RemotePage> {
     _physicalFocusNode.requestFocus();
     gFFI.ffiModel.updateEventListener(widget.id);
     gFFI.listenToMouse(true);
+    gFFI.qualityMonitorModel.checkShowQualityMonitor(widget.id);
   }
 
   @override
@@ -670,7 +671,6 @@ class _RemotePageState extends State<RemotePage> {
           TextButton(
             style: flatButtonStyle,
             onPressed: () {
-              Navigator.pop(context);
               showSetOSPassword(id, false, gFFI.dialogManager);
             },
             child: Icon(Icons.edit, color: MyTheme.accent),
@@ -1108,28 +1108,6 @@ void showOptions(String id, OverlayDialogManager dialogManager) async {
       contentPadding: 0,
     );
   }, clickMaskDismiss: true, backDismiss: true);
-}
-
-void showRestartRemoteDevice(
-    PeerInfo pi, String id, OverlayDialogManager dialogManager) async {
-  final res =
-      await dialogManager.show<bool>((setState, close) => CustomAlertDialog(
-            title: Row(children: [
-              Icon(Icons.warning_amber_sharp,
-                  color: Colors.redAccent, size: 28),
-              SizedBox(width: 10),
-              Text(translate("Restart Remote Device")),
-            ]),
-            content: Text(
-                "${translate('Are you sure you want to restart')} \n${pi.username}@${pi.hostname}($id) ?"),
-            actions: [
-              TextButton(
-                  onPressed: () => close(), child: Text(translate("Cancel"))),
-              ElevatedButton(
-                  onPressed: () => close(true), child: Text(translate("OK"))),
-            ],
-          ));
-  if (res == true) bind.sessionRestartRemoteDevice(id: id);
 }
 
 void showSetOSPassword(
