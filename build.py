@@ -185,6 +185,19 @@ def main():
                 fh.write(txt.replace("</dict>", """
   <key>LSUIElement</key>
   <string>1</string>
+  <key>CFBundleURLTypes</key>
+  <array>
+    <dict>
+      <key>CFBundleURLName</key>
+      <string>com.carriez.rustdesk.url</string>
+      <key>CFBundleTypeRole</key>
+      <string>Editor</string>
+      <key>CFBundleURLSchemes</key>
+      <array>
+        <string>rustdesk</string>
+      </array>
+    </dict>
+  </array>
 </dict>"""))
             pa = os.environ.get('P')
             if pa:
