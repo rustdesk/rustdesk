@@ -5,7 +5,6 @@ import 'dart:ui' as ui;
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_hbb/mobile/widgets/gesture_help.dart';
 import 'package:flutter_hbb/models/chat_model.dart';
 import 'package:get/get.dart';
 import 'package:provider/provider.dart';
@@ -34,20 +33,13 @@ class RemotePage extends StatefulWidget {
 
 class _RemotePageState extends State<RemotePage>
     with AutomaticKeepAliveClientMixin {
-  Timer? _interval;
   Timer? _timer;
   bool _showBar = !isWebDesktop;
-  double _bottom = 0;
   String _value = '';
-  double _scale = 1;
-  double _mouseScrollIntegral = 0; // mouse scroll speed controller
   var _cursorOverImage = false.obs;
 
-  var _more = true;
-  var _fn = false;
   final FocusNode _mobileFocusNode = FocusNode();
   final FocusNode _physicalFocusNode = FocusNode();
-  var _showEdit = false; // use soft keyboard
   var _isPhysicalMouse = false;
 
   late FFI _ffi;
@@ -63,8 +55,6 @@ class _RemotePageState extends State<RemotePage>
       SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual, overlays: []);
       _ffi.dialogManager
           .showLoading(translate('Connecting...'), onCancel: backToHomePage);
-      _interval =
-          Timer.periodic(Duration(milliseconds: 30), (timer) => interval());
     });
     if (!Platform.isLinux) {
       Wakelock.enable();
@@ -72,6 +62,7 @@ class _RemotePageState extends State<RemotePage>
     _physicalFocusNode.requestFocus();
     _ffi.ffiModel.updateEventListener(widget.id);
     _ffi.listenToMouse(true);
+    _ffi.qualityMonitorModel.checkShowQualityMonitor(widget.id);
     // WindowManager.instance.addListener(this);
   }
 
@@ -80,11 +71,9 @@ class _RemotePageState extends State<RemotePage>
     print("REMOTE PAGE dispose ${widget.id}");
     hideMobileActionsOverlay();
     _ffi.listenToMouse(false);
-    _ffi.invokeMethod("enable_soft_keyboard", true);
     _mobileFocusNode.dispose();
     _physicalFocusNode.dispose();
     _ffi.close();
-    _interval?.cancel();
     _timer?.cancel();
     _ffi.dialogManager.dismissAll();
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual,
@@ -99,31 +88,6 @@ class _RemotePageState extends State<RemotePage>
 
   void resetTool() {
     _ffi.resetModifiers();
-  }
-
-  bool isKeyboardShown() {
-    return _bottom >= 100;
-  }
-
-  // crash on web before widget initiated.
-  void intervalUnsafe() {
-    var v = MediaQuery.of(context).viewInsets.bottom;
-    if (v != _bottom) {
-      resetTool();
-      setState(() {
-        _bottom = v;
-        if (v < 100) {
-          SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual,
-              overlays: []);
-        }
-      });
-    }
-  }
-
-  void interval() {
-    try {
-      intervalUnsafe();
-    } catch (e) {}
   }
 
   // handle mobile virtual keyboard
@@ -185,7 +149,6 @@ class _RemotePageState extends State<RemotePage>
                 content == '【】')) {
           // can not only input content[0], because when input ], [ are also auo insert, which cause ] never be input
           bind.sessionInputString(id: widget.id, value: content);
-          openKeyboard();
           return;
         }
         bind.sessionInputString(id: widget.id, value: content);
@@ -204,25 +167,6 @@ class _RemotePageState extends State<RemotePage>
     _ffi.inputKey(char);
   }
 
-  void openKeyboard() {
-    _ffi.invokeMethod("enable_soft_keyboard", true);
-    // destroy first, so that our _value trick can work
-    _value = initText;
-    setState(() => _showEdit = false);
-    _timer?.cancel();
-    _timer = Timer(Duration(milliseconds: 30), () {
-      // show now, and sleep a while to requestFocus to
-      // make sure edit ready, so that keyboard wont show/hide/show/hide happen
-      setState(() => _showEdit = true);
-      _timer?.cancel();
-      _timer = Timer(Duration(milliseconds: 30), () {
-        SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual,
-            overlays: SystemUiOverlay.values);
-        _mobileFocusNode.requestFocus();
-      });
-    });
-  }
-
   void sendRawKey(RawKeyEvent e, {bool? down, bool? press}) {
     // for maximum compatibility
     final label = _logicalKeyMap[e.logicalKey.keyId] ??
@@ -233,28 +177,18 @@ class _RemotePageState extends State<RemotePage>
 
   Widget buildBody(FfiModel ffiModel) {
     final hasDisplays = ffiModel.pi.displays.length > 0;
-    final hideKeyboard = isKeyboardShown() && _showEdit;
-    final showActionButton = !_showBar || hideKeyboard;
     final keyboard = ffiModel.permissions['keyboard'] != false;
     return Scaffold(
         // resizeToAvoidBottomInset: true,
-        floatingActionButton: !showActionButton
+        floatingActionButton: _showBar
             ? null
             : FloatingActionButton(
-                mini: !hideKeyboard,
-                child:
-                    Icon(hideKeyboard ? Icons.expand_more : Icons.expand_less),
+                mini: true,
+                child: Icon(Icons.expand_less),
                 backgroundColor: MyTheme.accent,
                 onPressed: () {
                   setState(() {
-                    if (hideKeyboard) {
-                      _showEdit = false;
-                      _ffi.invokeMethod("enable_soft_keyboard", false);
-                      _mobileFocusNode.unfocus();
-                      _physicalFocusNode.requestFocus();
-                    } else {
-                      _showBar = !_showBar;
-                    }
+                    _showBar = !_showBar;
                   });
                 }),
         bottomNavigationBar:
@@ -322,8 +256,7 @@ class _RemotePageState extends State<RemotePage>
                           sendRawKey(e, down: true);
                         }
                       }
-                      // [!_showEdit] workaround for soft-keyboard's control_key like Backspace / Enter
-                      if (!_showEdit && e is RawKeyUpEvent) {
+                      if (e is RawKeyUpEvent) {
                         if (key == LogicalKeyboardKey.altLeft ||
                             key == LogicalKeyboardKey.altRight) {
                           _ffi.alt = false;
@@ -369,8 +302,8 @@ class _RemotePageState extends State<RemotePage>
                           color: Colors.white,
                           icon: Icon(Icons.tv),
                           onPressed: () {
-                            setState(() => _showEdit = false);
-                            showOptions(widget.id, _ffi.dialogManager);
+                            _ffi.dialogManager.dismissAll();
+                            showOptions(widget.id);
                           },
                         )
                       ] +
@@ -390,19 +323,7 @@ class _RemotePageState extends State<RemotePage>
                                     },
                                   )
                                 ]
-                              : [
-                                  IconButton(
-                                      color: Colors.white,
-                                      icon: Icon(Icons.keyboard),
-                                      onPressed: openKeyboard),
-                                  IconButton(
-                                    color: Colors.white,
-                                    icon: Icon(_ffi.ffiModel.touchMode
-                                        ? Icons.touch_app
-                                        : Icons.mouse),
-                                    onPressed: changeTouchMode,
-                                  ),
-                                ]) +
+                              : []) +
                       (isWeb
                           ? []
                           : <Widget>[
@@ -421,7 +342,6 @@ class _RemotePageState extends State<RemotePage>
                           color: Colors.white,
                           icon: Icon(Icons.more_vert),
                           onPressed: () {
-                            setState(() => _showEdit = false);
                             showActions(widget.id, ffiModel);
                           },
                         ),
@@ -548,7 +468,7 @@ class _RemotePageState extends State<RemotePage>
         id: widget.id,
       ));
     }
-    paints.add(getHelpTools());
+    paints.add(QualityMonitor(_ffi.qualityMonitorModel));
     return Stack(
       children: paints,
     );
@@ -673,165 +593,6 @@ class _RemotePageState extends State<RemotePage>
         showRestartRemoteDevice(pi, widget.id, gFFI.dialogManager);
       }
     }();
-  }
-
-  void changeTouchMode() {
-    setState(() => _showEdit = false);
-    showModalBottomSheet(
-        backgroundColor: MyTheme.grayBg,
-        isScrollControlled: true,
-        context: context,
-        shape: const RoundedRectangleBorder(
-            borderRadius: BorderRadius.vertical(top: Radius.circular(5))),
-        builder: (context) => DraggableScrollableSheet(
-            expand: false,
-            builder: (context, scrollController) {
-              return SingleChildScrollView(
-                  padding: EdgeInsets.symmetric(vertical: 10),
-                  child: GestureHelp(
-                      touchMode: _ffi.ffiModel.touchMode,
-                      onTouchModeChange: (t) {
-                        _ffi.ffiModel.toggleTouchMode();
-                        final v = _ffi.ffiModel.touchMode ? 'Y' : '';
-                        bind.sessionPeerOption(
-                            id: widget.id, name: "touch-mode", value: v);
-                      }));
-            }));
-  }
-
-  Widget getHelpTools() {
-    final keyboard = isKeyboardShown();
-    if (!keyboard) {
-      return SizedBox();
-    }
-    var wrap = (String text, void Function() onPressed,
-        [bool? active, IconData? icon]) {
-      return TextButton(
-          style: TextButton.styleFrom(
-            minimumSize: Size(0, 0),
-            padding: EdgeInsets.symmetric(vertical: 10, horizontal: 9.75),
-            //adds padding inside the button
-            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-            //limits the touch area to the button area
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(5.0),
-            ),
-            backgroundColor: active == true ? MyTheme.accent80 : null,
-          ),
-          child: icon != null
-              ? Icon(icon, size: 17, color: Colors.white)
-              : Text(translate(text),
-                  style: TextStyle(color: Colors.white, fontSize: 11)),
-          onPressed: onPressed);
-    };
-    final pi = _ffi.ffiModel.pi;
-    final isMac = pi.platform == "Mac OS";
-    final modifiers = <Widget>[
-      wrap('Ctrl ', () {
-        setState(() => _ffi.ctrl = !_ffi.ctrl);
-      }, _ffi.ctrl),
-      wrap(' Alt ', () {
-        setState(() => _ffi.alt = !_ffi.alt);
-      }, _ffi.alt),
-      wrap('Shift', () {
-        setState(() => _ffi.shift = !_ffi.shift);
-      }, _ffi.shift),
-      wrap(isMac ? ' Cmd ' : ' Win ', () {
-        setState(() => _ffi.command = !_ffi.command);
-      }, _ffi.command),
-    ];
-    final keys = <Widget>[
-      wrap(
-          ' Fn ',
-          () => setState(
-                () {
-                  _fn = !_fn;
-                  if (_fn) {
-                    _more = false;
-                  }
-                },
-              ),
-          _fn),
-      wrap(
-          ' ... ',
-          () => setState(
-                () {
-                  _more = !_more;
-                  if (_more) {
-                    _fn = false;
-                  }
-                },
-              ),
-          _more),
-    ];
-    final fn = <Widget>[
-      SizedBox(width: 9999),
-    ];
-    for (var i = 1; i <= 12; ++i) {
-      final name = 'F' + i.toString();
-      fn.add(wrap(name, () {
-        _ffi.inputKey('VK_' + name);
-      }));
-    }
-    final more = <Widget>[
-      SizedBox(width: 9999),
-      wrap('Esc', () {
-        _ffi.inputKey('VK_ESCAPE');
-      }),
-      wrap('Tab', () {
-        _ffi.inputKey('VK_TAB');
-      }),
-      wrap('Home', () {
-        _ffi.inputKey('VK_HOME');
-      }),
-      wrap('End', () {
-        _ffi.inputKey('VK_END');
-      }),
-      wrap('Del', () {
-        _ffi.inputKey('VK_DELETE');
-      }),
-      wrap('PgUp', () {
-        _ffi.inputKey('VK_PRIOR');
-      }),
-      wrap('PgDn', () {
-        _ffi.inputKey('VK_NEXT');
-      }),
-      SizedBox(width: 9999),
-      wrap('', () {
-        _ffi.inputKey('VK_LEFT');
-      }, false, Icons.keyboard_arrow_left),
-      wrap('', () {
-        _ffi.inputKey('VK_UP');
-      }, false, Icons.keyboard_arrow_up),
-      wrap('', () {
-        _ffi.inputKey('VK_DOWN');
-      }, false, Icons.keyboard_arrow_down),
-      wrap('', () {
-        _ffi.inputKey('VK_RIGHT');
-      }, false, Icons.keyboard_arrow_right),
-      wrap(isMac ? 'Cmd+C' : 'Ctrl+C', () {
-        sendPrompt(widget.id, isMac, 'VK_C');
-      }),
-      wrap(isMac ? 'Cmd+V' : 'Ctrl+V', () {
-        sendPrompt(widget.id, isMac, 'VK_V');
-      }),
-      wrap(isMac ? 'Cmd+S' : 'Ctrl+S', () {
-        sendPrompt(widget.id, isMac, 'VK_S');
-      }),
-    ];
-    final space = MediaQuery.of(context).size.width > 320 ? 4.0 : 2.0;
-    return Container(
-        color: Color(0xAA000000),
-        padding: EdgeInsets.only(
-            top: keyboard ? 24 : 4, left: 0, right: 0, bottom: 8),
-        child: Wrap(
-          spacing: space,
-          runSpacing: space,
-          children: <Widget>[SizedBox(width: 9999)] +
-              (keyboard
-                  ? modifiers + keys + (_fn ? fn : []) + (_more ? more : [])
-                  : modifiers),
-        ));
   }
 
   @override
@@ -1001,7 +762,52 @@ class ImagePainter extends CustomPainter {
   }
 }
 
-void showOptions(String id, OverlayDialogManager dialogManager) async {
+class QualityMonitor extends StatelessWidget {
+  final QualityMonitorModel qualityMonitorModel;
+  QualityMonitor(this.qualityMonitorModel);
+
+  @override
+  Widget build(BuildContext context) => ChangeNotifierProvider.value(
+      value: qualityMonitorModel,
+      child: Consumer<QualityMonitorModel>(
+          builder: (context, qualityMonitorModel, child) => Positioned(
+              top: 10,
+              right: 10,
+              child: qualityMonitorModel.show
+                  ? Container(
+                      padding: EdgeInsets.all(8),
+                      color: MyTheme.canvasColor.withAlpha(120),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            "Speed: ${qualityMonitorModel.data.speed ?? ''}",
+                            style: TextStyle(color: MyTheme.grayBg),
+                          ),
+                          Text(
+                            "FPS: ${qualityMonitorModel.data.fps ?? ''}",
+                            style: TextStyle(color: MyTheme.grayBg),
+                          ),
+                          Text(
+                            "Delay: ${qualityMonitorModel.data.delay ?? ''} ms",
+                            style: TextStyle(color: MyTheme.grayBg),
+                          ),
+                          Text(
+                            "Target Bitrate: ${qualityMonitorModel.data.targetBitrate ?? ''}kb",
+                            style: TextStyle(color: MyTheme.grayBg),
+                          ),
+                          Text(
+                            "Codec: ${qualityMonitorModel.data.codecFormat ?? ''}",
+                            style: TextStyle(color: MyTheme.grayBg),
+                          ),
+                        ],
+                      ),
+                    )
+                  : SizedBox.shrink())));
+}
+
+void showOptions(String id) async {
+  final _ffi = ffi(id);
   String quality = await bind.getSessionImageQuality(id: id) ?? 'balanced';
   if (quality == '') quality = 'balanced';
   String viewStyle =
@@ -1009,8 +815,8 @@ void showOptions(String id, OverlayDialogManager dialogManager) async {
   String scrollStyle =
       await bind.getSessionOption(id: id, arg: 'scroll-style') ?? '';
   var displays = <Widget>[];
-  final pi = ffi(id).ffiModel.pi;
-  final image = ffi(id).ffiModel.getConnectionImage();
+  final pi = _ffi.ffiModel.pi;
+  final image = _ffi.ffiModel.getConnectionImage();
   if (image != null)
     displays.add(Padding(padding: const EdgeInsets.only(top: 8), child: image));
   if (pi.displays.length > 1) {
@@ -1021,7 +827,7 @@ void showOptions(String id, OverlayDialogManager dialogManager) async {
           onTap: () {
             if (i == cur) return;
             bind.sessionSwitchDisplay(id: id, value: i);
-            dialogManager.dismissAll();
+            _ffi.dialogManager.dismissAll();
           },
           child: Ink(
               width: 40,
@@ -1044,9 +850,9 @@ void showOptions(String id, OverlayDialogManager dialogManager) async {
   if (displays.isNotEmpty) {
     displays.add(Divider(color: MyTheme.border));
   }
-  final perms = ffi(id).ffiModel.permissions;
+  final perms = _ffi.ffiModel.permissions;
 
-  dialogManager.show((setState, close) {
+  _ffi.dialogManager.show((setState, close) {
     final more = <Widget>[];
     if (perms['audio'] != false) {
       more.add(getToggle(id, setState, 'disable-audio', 'Mute'));
@@ -1077,7 +883,7 @@ void showOptions(String id, OverlayDialogManager dialogManager) async {
       setState(() {
         viewStyle = value;
         bind.sessionPeerOption(id: id, name: "view-style", value: value);
-        ffi(id).canvasModel.updateViewStyle();
+        _ffi.canvasModel.updateViewStyle();
       });
     };
     var setScrollStyle = (String? value) {
@@ -1085,7 +891,7 @@ void showOptions(String id, OverlayDialogManager dialogManager) async {
       setState(() {
         scrollStyle = value;
         bind.sessionPeerOption(id: id, name: "scroll-style", value: value);
-        ffi(id).canvasModel.updateScrollStyle();
+        _ffi.canvasModel.updateScrollStyle();
       });
     };
     return CustomAlertDialog(
@@ -1108,6 +914,9 @@ void showOptions(String id, OverlayDialogManager dialogManager) async {
                 Divider(color: MyTheme.border),
                 getToggle(
                     id, setState, 'show-remote-cursor', 'Show remote cursor'),
+                getToggle(id, setState, 'show-quality-monitor',
+                    'Show quality monitor',
+                    ffi: _ffi),
               ] +
               more),
       actions: [],

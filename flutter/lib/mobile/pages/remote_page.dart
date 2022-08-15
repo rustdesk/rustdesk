@@ -59,6 +59,7 @@ class _RemotePageState extends State<RemotePage> {
     _physicalFocusNode.requestFocus();
     gFFI.ffiModel.updateEventListener(widget.id);
     gFFI.listenToMouse(true);
+    gFFI.qualityMonitorModel.checkShowQualityMonitor(widget.id);
   }
 
   @override

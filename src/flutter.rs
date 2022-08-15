@@ -850,6 +850,7 @@ impl Connection {
                     };
                     if let Ok(true) = self.video_handler.handle_frame(vf) {
                         let stream = self.session.events2ui.read().unwrap();
+                        self.frame_count.fetch_add(1, Ordering::Relaxed);
                         stream.add(EventToUI::Rgba(ZeroCopyBuffer(
                             self.video_handler.rgb.clone(),
                         )));

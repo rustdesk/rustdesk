@@ -480,7 +480,8 @@ RadioListTile<T> getRadio<T>(
 }
 
 CheckboxListTile getToggle(
-    String id, void Function(void Function()) setState, option, name) {
+    String id, void Function(void Function()) setState, option, name,
+    {FFI? ffi}) {
   final opt = bind.getSessionToggleOptionSync(id: id, arg: option);
   return CheckboxListTile(
       value: opt,
@@ -489,7 +490,7 @@ CheckboxListTile getToggle(
           bind.sessionToggleOption(id: id, value: option);
         });
         if (option == "show-quality-monitor") {
-          gFFI.qualityMonitorModel.checkShowQualityMonitor(id);
+          (ffi ?? gFFI).qualityMonitorModel.checkShowQualityMonitor(id);
         }
       },
       dense: true,
