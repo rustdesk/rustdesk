@@ -84,8 +84,10 @@ void setPermanentPasswordDialog(OverlayDialogManager dialogManager) async {
                   close();
                   dialogManager.showLoading(translate("Waiting"));
                   if (await gFFI.serverModel.setPermanentPassword(p0.text)) {
+                    dialogManager.dismissAll();
                     showSuccess();
                   } else {
+                    dialogManager.dismissAll();
                     showError();
                   }
                 }
