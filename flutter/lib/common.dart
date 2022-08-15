@@ -527,14 +527,14 @@ String translate(String name) {
   return platformFFI.translate(name, localeName);
 }
 
-bool option2bool(String key, String value) {
+bool option2bool(String option, String value) {
   bool res;
-  if (key.startsWith("enable-")) {
+  if (option.startsWith("enable-")) {
     res = value != "N";
-  } else if (key.startsWith("allow-") ||
-      key == "stop-service" ||
-      key == "direct-server" ||
-      key == "stop-rendezvous-service") {
+  } else if (option.startsWith("allow-") ||
+      option == "stop-service" ||
+      option == "direct-server" ||
+      option == "stop-rendezvous-service") {
     res = value == "Y";
   } else {
     assert(false);
@@ -543,18 +543,18 @@ bool option2bool(String key, String value) {
   return res;
 }
 
-String bool2option(String key, bool option) {
+String bool2option(String option, bool b) {
   String res;
-  if (key.startsWith('enable-')) {
-    res = option ? '' : 'N';
-  } else if (key.startsWith('allow-') ||
-      key == "stop-service" ||
-      key == "direct-server" ||
-      key == "stop-rendezvous-service") {
-    res = option ? 'Y' : '';
+  if (option.startsWith('enable-')) {
+    res = b ? '' : 'N';
+  } else if (option.startsWith('allow-') ||
+      option == "stop-service" ||
+      option == "direct-server" ||
+      option == "stop-rendezvous-service") {
+    res = b ? 'Y' : '';
   } else {
     assert(false);
-    res = option ? 'Y' : 'N';
+    res = b ? 'Y' : 'N';
   }
   return res;
 }
