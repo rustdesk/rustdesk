@@ -92,7 +92,7 @@ typedef DialogBuilder = CustomAlertDialog Function(
 
 class Dialog<T> {
   OverlayEntry? entry;
-  Completer<T?> completer = Completer<T>();
+  Completer<T?> completer = Completer<T?>();
 
   Dialog();
 
@@ -101,9 +101,10 @@ class Dialog<T> {
       if (!completer.isCompleted) {
         completer.complete(res);
       }
-      entry?.remove();
     } catch (e) {
       debugPrint("Dialog complete catch error: $e");
+    } finally {
+      entry?.remove();
     }
   }
 }

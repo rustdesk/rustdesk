@@ -589,11 +589,10 @@ class _RemotePageState extends State<RemotePage>
     more.add(PopupMenuItem<String>(
         child: Row(
             children: ([
-          Container(width: 100.0, child: Text(translate('OS Password'))),
+          Text(translate('OS Password')),
           TextButton(
             style: flatButtonStyle,
             onPressed: () {
-              Navigator.pop(context);
               showSetOSPassword(widget.id, false, _ffi.dialogManager);
             },
             child: Icon(Icons.edit, color: MyTheme.accent),
@@ -625,6 +624,13 @@ class _RemotePageState extends State<RemotePage>
             value: 'block-input'));
       }
     }
+    if (gFFI.ffiModel.permissions["restart"] != false &&
+        (pi.platform == "Linux" ||
+            pi.platform == "Windows" ||
+            pi.platform == "Mac OS")) {
+      more.add(PopupMenuItem<String>(
+          child: Text(translate('Restart Remote Device')), value: 'restart'));
+    }
     () async {
       var value = await showMenu(
         context: context,
@@ -652,6 +658,7 @@ class _RemotePageState extends State<RemotePage>
         }();
       } else if (value == 'enter_os_password') {
         // FIXME:
+        // TODO icon diff
         // null means no session of id
         // empty string means no password
         var password = await bind.getSessionOption(id: id, arg: "os-password");
@@ -662,6 +669,8 @@ class _RemotePageState extends State<RemotePage>
         }
       } else if (value == 'reset_canvas') {
         _ffi.cursorModel.reset();
+      } else if (value == 'restart') {
+        showRestartRemoteDevice(pi, widget.id, gFFI.dialogManager);
       }
     }();
   }

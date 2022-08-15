@@ -31,9 +31,10 @@ use hbb_common::{
     Stream,
 };
 
-use crate::common::{
-    self, check_clipboard, make_fd_to_json, update_clipboard, ClipboardContext, CLIPBOARD_INTERVAL,
-};
+use crate::common::{self, make_fd_to_json, CLIPBOARD_INTERVAL};
+
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+use crate::common::{check_clipboard, update_clipboard, ClipboardContext};
 
 use crate::{client::*, flutter_ffi::EventToUI, make_fd_flutter};
 
@@ -127,26 +128,18 @@ impl Session {
         }
         lc.set_option(name, value);
     }
-    // TODO
-    // input_os_password
-    // restart_remote_device
 
     /// Input the OS password.
     pub fn input_os_password(&self, pass: String, activate: bool) {
         input_os_password(pass, activate, self.clone());
     }
 
-    // impl Interface
-    /// Send message to the remote session.
-    ///
-    /// # Arguments
-    ///
-    /// * `data` - The data to send. See [`Data`] for more details.
-    // fn send(data: Data) {
-    //     if let Some(session) = SESSION.read().unwrap().as_ref() {
-    //         session.send(data);
-    //     }
-    // }
+    pub fn restart_remote_device(&self) {
+        let mut lc = self.lc.write().unwrap();
+        lc.restarting_remote_device = true;
+        let msg = lc.restart_remote_device();
+        self.send_msg(msg);
+    }
 
     /// Toggle an option.
     pub fn toggle_option(&self, name: &str) {
@@ -670,6 +663,7 @@ impl Connection {
         lc: Arc<RwLock<LoginConfigHandler>>,
     ) -> Option<std::sync::mpsc::Sender<()>> {
         let (tx, rx) = std::sync::mpsc::channel();
+        #[cfg(not(any(target_os = "android", target_os = "ios")))]
         match ClipboardContext::new() {
             Ok(mut ctx) => {
                 let old_clipboard: Arc<Mutex<String>> = Default::default();

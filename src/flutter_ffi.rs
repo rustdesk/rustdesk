@@ -696,8 +696,9 @@ pub fn session_send_mouse(id: String, msg: String) {
 }
 
 pub fn session_restart_remote_device(id: String) {
-    // TODO
-    // Session::restart_remote_device();
+    if let Some(session) = SESSIONS.read().unwrap().get(&id) {
+        session.restart_remote_device();
+    }
 }
 
 pub fn main_set_home_dir(home: String) {

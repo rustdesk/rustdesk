@@ -1050,7 +1050,6 @@ class FFI {
       await for (final message in stream) {
         if (message is Event) {
           try {
-            debugPrint("event:${message.field0}");
             Map<String, dynamic> event = json.decode(message.field0);
             cb(event);
           } catch (e) {
