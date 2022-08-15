@@ -136,7 +136,6 @@ class OverlayDialogManager {
     BackButtonInterceptor.removeByName(tag);
   }
 
-  // TODO clickMaskDismiss
   Future<T?> show<T>(DialogBuilder builder,
       {bool clickMaskDismiss = false,
       bool backDismiss = false,
@@ -168,10 +167,22 @@ class OverlayDialogManager {
       BackButtonInterceptor.removeByName(_tag);
     };
     dialog.entry = OverlayEntry(builder: (_) {
-      return Container(
-          color: Colors.transparent,
-          child: StatefulBuilder(
-              builder: (_, setState) => builder(setState, close)));
+      bool innerClicked = false;
+      return Listener(
+          onPointerUp: (_) {
+            if (!innerClicked && clickMaskDismiss) {
+              close();
+            }
+            innerClicked = false;
+          },
+          child: Container(
+              color: Colors.black12,
+              child: StatefulBuilder(builder: (context, setState) {
+                return Listener(
+                  onPointerUp: (_) => innerClicked = true,
+                  child: builder(setState, close),
+                );
+              })));
     });
     overlayState.insert(dialog.entry!);
     BackButtonInterceptor.add((stopDefaultButtonEvent, routeInfo) {
@@ -184,7 +195,9 @@ class OverlayDialogManager {
   }
 
   void showLoading(String text,
-      {bool clickMaskDismiss = false, bool cancelToClose = false}) {
+      {bool clickMaskDismiss = false,
+      bool showCancel = true,
+      VoidCallback? onCancel}) {
     show((setState, close) => CustomAlertDialog(
         content: Container(
             color: MyTheme.white,
@@ -200,21 +213,52 @@ class OverlayDialogManager {
                       child: Text(translate(text),
                           style: TextStyle(fontSize: 15))),
                   SizedBox(height: 20),
-                  Center(
-                      child: TextButton(
-                          style: flatButtonStyle,
-                          onPressed: () {
-                            dismissAll();
-                            if (cancelToClose) backToHomePage();
-                          },
-                          child: Text(translate('Cancel'),
-                              style: TextStyle(color: MyTheme.accent))))
+                  Offstage(
+                      offstage: !showCancel,
+                      child: Center(
+                          child: TextButton(
+                              style: flatButtonStyle,
+                              onPressed: () {
+                                dismissAll();
+                                if (onCancel != null) {
+                                  onCancel();
+                                }
+                              },
+                              child: Text(translate('Cancel'),
+                                  style: TextStyle(color: MyTheme.accent)))))
                 ]))));
   }
+}
 
-  void showToast(String text) {
-    // TODO
-  }
+void showToast(String text, {Duration timeout = const Duration(seconds: 2)}) {
+  final overlayState = globalKey.currentState?.overlay;
+  if (overlayState == null) return;
+  final entry = OverlayEntry(builder: (_) {
+    return IgnorePointer(
+        child: Align(
+            alignment: Alignment(0.0, 0.8),
+            child: Container(
+              decoration: BoxDecoration(
+                color: Colors.black.withOpacity(0.6),
+                borderRadius: BorderRadius.all(
+                  Radius.circular(20),
+                ),
+              ),
+              padding: EdgeInsets.symmetric(horizontal: 20, vertical: 5),
+              child: Text(
+                text,
+                style: TextStyle(
+                    decoration: TextDecoration.none,
+                    fontWeight: FontWeight.w300,
+                    fontSize: 18,
+                    color: Colors.white),
+              ),
+            )));
+  });
+  overlayState.insert(entry);
+  Future.delayed(timeout, () {
+    entry.remove();
+  });
 }
 
 class CustomAlertDialog extends StatelessWidget {

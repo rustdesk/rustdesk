@@ -63,7 +63,7 @@ class _ScanPageState extends State<ScanPage> {
                       var result = reader.decode(bitmap);
                       showServerSettingFromQr(result.text);
                     } catch (e) {
-                      gFFI.dialogManager.showToast('No QR code found');
+                      showToast('No QR code found');
                     }
                   }
                 }),
@@ -121,7 +121,7 @@ class _ScanPageState extends State<ScanPage> {
 
   void _onPermissionSet(BuildContext context, QRViewController ctrl, bool p) {
     if (!p) {
-      gFFI.dialogManager.showToast('No permisssion');
+      showToast('No permission');
     }
   }
 
@@ -135,7 +135,7 @@ class _ScanPageState extends State<ScanPage> {
     backToHomePage();
     await controller?.pauseCamera();
     if (!data.startsWith('config=')) {
-      gFFI.dialogManager.showToast('Invalid QR code');
+      showToast('Invalid QR code');
       return;
     }
     try {
@@ -147,7 +147,7 @@ class _ScanPageState extends State<ScanPage> {
         showServerSettingsWithValue(host, '', key, api, gFFI.dialogManager);
       });
     } catch (e) {
-      gFFI.dialogManager.showToast('Invalid QR code');
+      showToast('Invalid QR code');
     }
   }
 }

@@ -62,7 +62,7 @@ class _RemotePageState extends State<RemotePage>
     WidgetsBinding.instance.addPostFrameCallback((_) {
       SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual, overlays: []);
       _ffi.dialogManager
-          .showLoading(translate('Connecting...'), cancelToClose: true);
+          .showLoading(translate('Connecting...'), onCancel: backToHomePage);
       _interval =
           Timer.periodic(Duration(milliseconds: 30), (timer) => interval());
     });

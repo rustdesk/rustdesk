@@ -8,15 +8,12 @@ void clientClose(OverlayDialogManager dialogManager) {
   msgBox('', 'Close', 'Are you sure to close the connection?', dialogManager);
 }
 
-const SEC1 = Duration(seconds: 1);
-void showSuccess({Duration duration = SEC1}) {
-  // TODO
-  // showToast(translate("Successful"), duration: SEC1);
+void showSuccess() {
+  showToast(translate("Successful"));
 }
 
-void showError({Duration duration = SEC1}) {
-  // TODO
-  // showToast(translate("Error"), duration: SEC1);
+void showError() {
+  showToast(translate("Error"));
 }
 
 void setPermanentPasswordDialog(OverlayDialogManager dialogManager) async {
@@ -174,7 +171,7 @@ void enterPasswordDialog(String id, OverlayDialogManager dialogManager) async {
             gFFI.login(id, text, remember);
             close();
             dialogManager.showLoading(translate('Logging in...'),
-                cancelToClose: true);
+                onCancel: backToHomePage);
           },
           child: Text(translate('OK')),
         ),
