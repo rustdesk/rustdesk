@@ -2,11 +2,11 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/desktop/pages/desktop_tab_page.dart';
+import 'package:flutter_hbb/desktop/pages/server_page.dart';
 import 'package:flutter_hbb/desktop/screen/desktop_file_transfer_screen.dart';
 import 'package:flutter_hbb/desktop/screen/desktop_remote_screen.dart';
 import 'package:flutter_hbb/utils/multi_window_manager.dart';
 import 'package:get/get.dart';
-import 'package:get/route_manager.dart';
 import 'package:provider/provider.dart';
 import 'package:window_manager/window_manager.dart';
 
@@ -23,6 +23,7 @@ int? windowId;
 
 Future<Null> main(List<String> args) async {
   WidgetsFlutterBinding.ensureInitialized();
+  print("launch args: $args");
 
   if (!isDesktop) {
     runMainApp(false);
@@ -47,6 +48,9 @@ Future<Null> main(List<String> args) async {
       default:
         break;
     }
+  } else if (args.isNotEmpty && args.first == '--cm') {
+    await windowManager.ensureInitialized();
+    runConnectionManagerScreen();
   } else {
     await windowManager.ensureInitialized();
     windowManager.setPreventClose(true);
@@ -109,6 +113,14 @@ void runFileTransferScreen(Map<String, dynamic> argument) async {
       navigatorObservers: [
         // FirebaseAnalyticsObserver(analytics: analytics),
       ]));
+}
+
+void runConnectionManagerScreen() async {
+  await initEnv(kAppTypeConnectionManager);
+  await windowManager.setAlwaysOnTop(true);
+  await windowManager.setSize(Size(400, 600));
+  await windowManager.setAlignment(Alignment.topRight);
+  runApp(GetMaterialApp(theme: getCurrentTheme(), home: DesktopServerPage()));
 }
 
 class App extends StatelessWidget {
