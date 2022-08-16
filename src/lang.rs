@@ -92,7 +92,7 @@ pub fn translate_locale(name: String, locale: &str) -> String {
         "vn" => vn::T.deref(),
         "pl" => pl::T.deref(),
         "ja" => ja::T.deref(),
-        "ja" => ko::T.deref(),
+        "ko" => ko::T.deref(),
         _ => en::T.deref(),
     };
     if let Some(v) = m.get(&name as &str) {
