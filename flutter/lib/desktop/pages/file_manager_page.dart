@@ -163,28 +163,33 @@ class _FileManagerPageState extends State<FileManagerPage>
           children: [
             Expanded(
               child: SingleChildScrollView(
-                child: Obx(
-                  () {
-                    final searchText =
-                        isLocal ? _searchTextLocal : _searchTextRemote;
-                    final filteredEntries = entries.where((element) {
-                      if (searchText.isEmpty) {
-                        return true;
-                      } else {
-                        return element.name.contains(searchText.value);
-                      }
-                    }).toList(growable: false);
-                    return DataTable(
-                      key: ValueKey(isLocal ? 0 : 1),
-                      showCheckboxColumn: true,
-                      dataRowHeight: 25,
-                      headingRowHeight: 30,
-                      columnSpacing: 8,
-                      showBottomBorder: true,
-                      sortColumnIndex: sortIndex,
-                      sortAscending: sortAscending,
-                      columns: [
-                        DataColumn(label: Text(translate(" "))), // icon
+                child: entries.isEmpty
+                    ? Offstage()
+                    : Obx(
+                        () {
+                          final searchText =
+                              isLocal ? _searchTextLocal : _searchTextRemote;
+                          final filteredEntries = searchText.isEmpty
+                              ? entries.where((element) {
+                                  if (searchText.isEmpty) {
+                                    return true;
+                                  } else {
+                                    return element.name
+                                        .contains(searchText.value);
+                                  }
+                                }).toList(growable: false)
+                              : entries;
+                          return DataTable(
+                            key: ValueKey(isLocal ? 0 : 1),
+                            showCheckboxColumn: true,
+                            dataRowHeight: 25,
+                            headingRowHeight: 30,
+                            columnSpacing: 8,
+                            showBottomBorder: true,
+                            sortColumnIndex: sortIndex,
+                            sortAscending: sortAscending,
+                            columns: [
+                              DataColumn(label: Text(translate(" "))), // icon
                         DataColumn(
                             label: Text(
                               translate("Name"),
@@ -264,18 +269,20 @@ class _FileManagerPageState extends State<FileManagerPage>
                                     .lastModified()
                                     .toString()
                                     .replaceAll(".000", "") +
-                                    "   ",
-                                style: TextStyle(
-                                    fontSize: 12, color: MyTheme.darkGray),
-                              )),
-                              DataCell(Text(
-                                sizeStr,
-                                style: TextStyle(
-                                    fontSize: 12, color: MyTheme.darkGray),
-                              )),
-                            ]);
-                      }).toList(),
-                    );
+                                          "   ",
+                                      style: TextStyle(
+                                          fontSize: 12,
+                                          color: MyTheme.darkGray),
+                                    )),
+                                    DataCell(Text(
+                                      sizeStr,
+                                      style: TextStyle(
+                                          fontSize: 12,
+                                          color: MyTheme.darkGray),
+                                    )),
+                                  ]);
+                            }).toList(growable: false),
+                          );
                   },
                 ),
               ),
@@ -753,20 +760,21 @@ class _FileManagerPageState extends State<FileManagerPage>
   }
 
   Widget buildBread(bool isLocal) {
-    final directory = model.getCurrentDir(isLocal);
-    print(directory.path);
-    return BreadCrumb(
-      items: getPathBreadCrumbItems(isLocal, (list) {
-        var path = "";
-        for (var item in list) {
-          path = PathUtil.join(path, item, model.getCurrentIsWindows(isLocal));
-        }
-        openDirectory(path, isLocal: isLocal);
-      }),
-      divider: Text("/").paddingSymmetric(horizontal: 4.0),
-      overflow: ScrollableOverflow(
-          controller: getBreadCrumbScrollController(isLocal)),
-    );
+    final items = getPathBreadCrumbItems(isLocal, (list) {
+      var path = "";
+      for (var item in list) {
+        path = PathUtil.join(path, item, model.getCurrentIsWindows(isLocal));
+      }
+      openDirectory(path, isLocal: isLocal);
+    });
+    return items.isEmpty
+        ? Offstage()
+        : BreadCrumb(
+            items: items,
+            divider: Text("/").paddingSymmetric(horizontal: 4.0),
+            overflow: ScrollableOverflow(
+                controller: getBreadCrumbScrollController(isLocal)),
+          );
   }
 
   List<BreadCrumbItem> getPathBreadCrumbItems(
