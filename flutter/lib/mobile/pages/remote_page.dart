@@ -623,7 +623,7 @@ class _RemotePageState extends State<RemotePage> {
 
   Widget getBodyForDesktopWithListener(bool keyboard) {
     var paints = <Widget>[ImagePaint()];
-    final cursor = bind.getSessionToggleOptionSync(
+    final cursor = bind.sessionGetToggleOptionSync(
         id: widget.id, arg: 'show-remote-cursor');
     if (keyboard || cursor) {
       paints.add(CursorPaint());
@@ -694,7 +694,7 @@ class _RemotePageState extends State<RemotePage> {
       more.add(PopupMenuItem<String>(
           child: Text(translate('Insert Lock')), value: 'lock'));
       if (pi.platform == 'Windows' &&
-          await bind.getSessionToggleOption(id: id, arg: 'privacy-mode') !=
+          await bind.sessionGetToggleOption(id: id, arg: 'privacy-mode') !=
               true) {
         more.add(PopupMenuItem<String>(
             child: Text(translate((gFFI.ffiModel.inputBlocked ? 'Unb' : 'B') +
@@ -738,7 +738,7 @@ class _RemotePageState extends State<RemotePage> {
         // FIXME:
         // null means no session of id
         // empty string means no password
-        var password = await bind.getSessionOption(id: id, arg: "os-password");
+        var password = await bind.sessionGetOption(id: id, arg: "os-password");
         if (password != null) {
           bind.sessionInputOsPassword(id: widget.id, value: password);
         } else {
@@ -1012,10 +1012,10 @@ class QualityMonitor extends StatelessWidget {
 }
 
 void showOptions(String id, OverlayDialogManager dialogManager) async {
-  String quality = await bind.getSessionImageQuality(id: id) ?? 'balanced';
+  String quality = await bind.sessionGetImageQuality(id: id) ?? 'balanced';
   if (quality == '') quality = 'balanced';
   String viewStyle =
-      await bind.getSessionOption(id: id, arg: 'view-style') ?? '';
+      await bind.sessionGetOption(id: id, arg: 'view-style') ?? '';
   var displays = <Widget>[];
   final pi = gFFI.ffiModel.pi;
   final image = gFFI.ffiModel.getConnectionImage();
@@ -1113,8 +1113,8 @@ void showOptions(String id, OverlayDialogManager dialogManager) async {
 void showSetOSPassword(
     String id, bool login, OverlayDialogManager dialogManager) async {
   final controller = TextEditingController();
-  var password = await bind.getSessionOption(id: id, arg: "os-password") ?? "";
-  var autoLogin = await bind.getSessionOption(id: id, arg: "auto-login") != "";
+  var password = await bind.sessionGetOption(id: id, arg: "os-password") ?? "";
+  var autoLogin = await bind.sessionGetOption(id: id, arg: "auto-login") != "";
   controller.text = password;
   dialogManager.show((setState, close) {
     return CustomAlertDialog(

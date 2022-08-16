@@ -482,7 +482,7 @@ RadioListTile<T> getRadio<T>(
 CheckboxListTile getToggle(
     String id, void Function(void Function()) setState, option, name,
     {FFI? ffi}) {
-  final opt = bind.getSessionToggleOptionSync(id: id, arg: option);
+  final opt = bind.sessionGetToggleOptionSync(id: id, arg: option);
   return CheckboxListTile(
       value: opt,
       onChanged: (v) {

@@ -116,7 +116,7 @@ pub fn session_connect(
     Ok(())
 }
 
-pub fn get_session_remember(id: String) -> Option<bool> {
+pub fn session_get_remember(id: String) -> Option<bool> {
     if let Some(session) = SESSIONS.read().unwrap().get(&id) {
         Some(session.get_remember())
     } else {
@@ -124,7 +124,7 @@ pub fn get_session_remember(id: String) -> Option<bool> {
     }
 }
 
-pub fn get_session_toggle_option(id: String, arg: String) -> Option<bool> {
+pub fn session_get_toggle_option(id: String, arg: String) -> Option<bool> {
     if let Some(session) = SESSIONS.read().unwrap().get(&id) {
         Some(session.get_toggle_option(&arg))
     } else {
@@ -132,12 +132,12 @@ pub fn get_session_toggle_option(id: String, arg: String) -> Option<bool> {
     }
 }
 
-pub fn get_session_toggle_option_sync(id: String, arg: String) -> SyncReturn<bool> {
-    let res = get_session_toggle_option(id, arg) == Some(true);
+pub fn session_get_toggle_option_sync(id: String, arg: String) -> SyncReturn<bool> {
+    let res = session_get_toggle_option(id, arg) == Some(true);
     SyncReturn(res)
 }
 
-pub fn get_session_image_quality(id: String) -> Option<String> {
+pub fn session_get_image_quality(id: String) -> Option<String> {
     if let Some(session) = SESSIONS.read().unwrap().get(&id) {
         Some(session.get_image_quality())
     } else {
@@ -145,7 +145,7 @@ pub fn get_session_image_quality(id: String) -> Option<String> {
     }
 }
 
-pub fn get_session_option(id: String, arg: String) -> Option<String> {
+pub fn session_get_option(id: String, arg: String) -> Option<String> {
     if let Some(session) = SESSIONS.read().unwrap().get(&id) {
         Some(session.get_option(&arg))
     } else {

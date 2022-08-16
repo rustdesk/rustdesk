@@ -157,7 +157,7 @@ void setTemporaryPasswordLengthDialog(
 
 void enterPasswordDialog(String id, OverlayDialogManager dialogManager) async {
   final controller = TextEditingController();
-  var remember = await bind.getSessionRemember(id: id) ?? false;
+  var remember = await bind.sessionGetRemember(id: id) ?? false;
   dialogManager.dismissAll();
   dialogManager.show((setState, close) {
     return CustomAlertDialog(
