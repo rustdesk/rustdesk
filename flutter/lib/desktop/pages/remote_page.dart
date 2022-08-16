@@ -325,7 +325,6 @@ class _RemotePageState extends State<RemotePage>
                                     ? Icons.fullscreen
                                     : Icons.close_fullscreen),
                                 onPressed: () {
-                                  setState(() => _showEdit = false);
                                   if (widget.fullscreenID.value.isEmpty) {
                                     widget.fullscreenID.value = widget.id;
                                   } else {
