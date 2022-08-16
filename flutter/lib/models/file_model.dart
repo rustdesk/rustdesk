@@ -68,6 +68,22 @@ class FileModel extends ChangeNotifier {
     return isLocal ? currentLocalDir : currentRemoteDir;
   }
 
+  String getCurrentShortPath(bool isLocal) {
+    final currentDir = getCurrentDir(isLocal);
+    final currentHome = getCurrentHome(isLocal);
+    if (currentDir.path.startsWith(currentHome)) {
+      var path = currentDir.path.replaceFirst(currentHome, "");
+      if (path.length == 0) return "";
+      if (path[0] == "/" || path[0] == "\\") {
+        // remove more '/' or '\'
+        path = path.replaceFirst(path[0], "");
+      }
+      return path;
+    } else {
+      return currentDir.path.replaceFirst(currentHome, "");
+    }
+  }
+
   String get currentHome => _isLocal ? _localOption.home : _remoteOption.home;
 
   String getCurrentHome(bool isLocal) {
@@ -716,6 +732,7 @@ class FileModel extends ChangeNotifier {
       job.totalSize = total_size.toInt();
     }
     debugPrint("update folder files: ${info}");
+    notifyListeners();
   }
 
   bool get remoteSortAscending => _remoteSortAscending;

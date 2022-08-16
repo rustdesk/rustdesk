@@ -69,6 +69,7 @@ dependencies:
     get: ^4.6.5
     visibility_detector: ^0.3.3
     contextmenu: ^3.0.0
+    desktop_drop: ^0.3.3
 
 dev_dependencies:
     flutter_launcher_icons: ^0.9.1
