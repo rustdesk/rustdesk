@@ -9,7 +9,6 @@ import 'package:flutter_hbb/models/chat_model.dart';
 import 'package:get/get.dart';
 import 'package:provider/provider.dart';
 import 'package:wakelock/wakelock.dart';
-import 'package:desktop_multi_window/desktop_multi_window.dart';
 
 // import 'package:window_manager/window_manager.dart';
 
