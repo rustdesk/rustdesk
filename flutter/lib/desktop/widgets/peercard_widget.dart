@@ -195,6 +195,17 @@ class _PeerCardState extends State<_PeerCard>
     } else if (value == 'file') {
       _connect(id, isFileTransfer: true);
     } else if (value == 'add-fav') {
+      final favs = (await bind.mainGetFav()).toList();
+      if (favs.indexOf(id) < 0) {
+        favs.add(id);
+        bind.mainStoreFav(favs: favs);
+      }
+    } else if (value == 'remove-fav') {
+      final favs = (await bind.mainGetFav()).toList();
+      if (favs.remove(id)) {
+        bind.mainStoreFav(favs: favs);
+        Get.forceAppUpdate(); // TODO use inner model / state
+      }
     } else if (value == 'connect') {
       _connect(id, isFileTransfer: false);
     } else if (value == 'ab-delete') {
@@ -425,6 +436,8 @@ class RecentPeerCard extends BasePeerCard {
       PopupMenuItem<String>(
           child: Text(translate('Unremember Password')),
           value: 'unremember-password'),
+      PopupMenuItem<String>(
+          child: Text(translate('Add to Favorites')), value: 'add-fav'),
     ];
   }
 }
@@ -469,6 +482,8 @@ class DiscoveredPeerCard extends BasePeerCard {
       PopupMenuItem<String>(
           child: Text(translate('Unremember Password')),
           value: 'unremember-password'),
+      PopupMenuItem<String>(
+          child: Text(translate('Add to Favorites')), value: 'add-fav'),
     ];
   }
 }
