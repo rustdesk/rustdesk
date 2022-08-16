@@ -60,7 +60,7 @@ class _RemotePageState extends State<RemotePage>
     WidgetsBinding.instance.addPostFrameCallback((_) {
       SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual, overlays: []);
       _ffi.dialogManager
-          .showLoading(translate('Connecting...'), onCancel: backToHomePage);
+          .showLoading(translate('Connecting...'), onCancel: closeConnection);
     });
     if (!Platform.isLinux) {
       Wakelock.enable();
