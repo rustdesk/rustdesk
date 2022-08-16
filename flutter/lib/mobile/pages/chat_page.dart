@@ -50,26 +50,29 @@ class ChatPage extends StatelessWidget implements PageShape {
               final currentUser = chatModel.currentUser;
               return Stack(
                 children: [
-                  DashChat(
-                    onSend: (chatMsg) {
-                      chatModel.send(chatMsg);
-                    },
-                    currentUser: chatModel.me,
-                    messages:
-                        chatModel.messages[chatModel.currentID]?.chatMessages ??
-                            [],
-                    messageOptions: MessageOptions(
-                        showOtherUsersAvatar: false,
-                        showTime: true,
-                        messageDecorationBuilder: (_, __, ___) =>
-                            defaultMessageDecoration(
-                              color: MyTheme.accent80,
-                              borderTopLeft: 8,
-                              borderTopRight: 8,
-                              borderBottomRight: 8,
-                              borderBottomLeft: 8,
-                            )),
-                  ),
+                  LayoutBuilder(builder: (context, constraints) {
+                    return DashChat(
+                      onSend: (chatMsg) {
+                        chatModel.send(chatMsg);
+                      },
+                      currentUser: chatModel.me,
+                      messages: chatModel
+                              .messages[chatModel.currentID]?.chatMessages ??
+                          [],
+                      messageOptions: MessageOptions(
+                          showOtherUsersAvatar: false,
+                          showTime: true,
+                          maxWidth: constraints.maxWidth * 0.7,
+                          messageDecorationBuilder: (_, __, ___) =>
+                              defaultMessageDecoration(
+                                color: MyTheme.accent80,
+                                borderTopLeft: 8,
+                                borderTopRight: 8,
+                                borderBottomRight: 8,
+                                borderBottomLeft: 8,
+                              )),
+                    );
+                  }),
                   chatModel.currentID == ChatModel.clientModeID
                       ? SizedBox.shrink()
                       : Padding(
