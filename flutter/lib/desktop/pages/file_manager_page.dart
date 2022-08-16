@@ -34,8 +34,14 @@ class _FileManagerPageState extends State<FileManagerPage>
       FocusNode(debugLabel: "locationNodeLocal");
   final FocusNode _locationNodeRemote =
       FocusNode(debugLabel: "locationNodeRemote");
-  final searchTextLocal = "".obs;
-  final searchTextRemote = "".obs;
+  final _searchTextLocal = "".obs;
+  final _searchTextRemote = "".obs;
+  final _breadCrumbScrollerLocal = ScrollController();
+  final _breadCrumbScrollerRemote = ScrollController();
+
+  ScrollController getBreadCrumbScrollController(bool isLocal) {
+    return isLocal ? _breadCrumbScrollerLocal : _breadCrumbScrollerRemote;
+  }
 
   late FFI _ffi;
 
@@ -159,19 +165,13 @@ class _FileManagerPageState extends State<FileManagerPage>
               child: SingleChildScrollView(
                 child: Obx(
                   () {
+                    final searchText =
+                        isLocal ? _searchTextLocal : _searchTextRemote;
                     final filteredEntries = entries.where((element) {
-                      if (isLocal) {
-                        if (searchTextLocal.isEmpty) {
-                          return true;
-                        } else {
-                          return element.name.contains(searchTextLocal.value);
-                        }
+                      if (searchText.isEmpty) {
+                        return true;
                       } else {
-                        if (searchTextRemote.isEmpty) {
-                          return true;
-                        } else {
-                          return element.name.contains(searchTextRemote.value);
-                        }
+                        return element.name.contains(searchText.value);
                       }
                     }).toList(growable: false);
                     return DataTable(
@@ -234,15 +234,14 @@ class _FileManagerPageState extends State<FileManagerPage>
                               DataCell(
                                   ConstrainedBox(
                                       constraints:
-                                          BoxConstraints(maxWidth: 100),
+                                      BoxConstraints(maxWidth: 100),
                                       child: Tooltip(
                                         message: entry.name,
                                         child: Text(entry.name,
                                             overflow: TextOverflow.ellipsis),
                                       )), onTap: () {
                                 if (entry.isDirectory) {
-                                  model.openDirectory(entry.path,
-                                      isLocal: isLocal);
+                                  openDirectory(entry.path, isLocal: isLocal);
                                   if (isLocal) {
                                     _localSelectedItems.clear();
                                   } else {
@@ -251,7 +250,7 @@ class _FileManagerPageState extends State<FileManagerPage>
                                 } else {
                                   // Perform file-related tasks.
                                   final _selectedItems =
-                                      getSelectedItem(isLocal);
+                                  getSelectedItem(isLocal);
                                   if (_selectedItems.contains(entry)) {
                                     _selectedItems.remove(entry);
                                   } else {
@@ -262,9 +261,9 @@ class _FileManagerPageState extends State<FileManagerPage>
                               }),
                               DataCell(Text(
                                 entry
-                                        .lastModified()
-                                        .toString()
-                                        .replaceAll(".000", "") +
+                                    .lastModified()
+                                    .toString()
+                                    .replaceAll(".000", "") +
                                     "   ",
                                 style: TextStyle(
                                     fontSize: 12, color: MyTheme.darkGray),
@@ -367,7 +366,7 @@ class _FileManagerPageState extends State<FileManagerPage>
         //             return;
         //           }
         //           if (entries[index].isDirectory) {
-        //             model.openDirectory(entries[index].path, isLocal: isLocal);
+        //             openDirectory(entries[index].path, isLocal: isLocal);
         //             breadCrumbScrollToEnd(isLocal);
         //           } else {
         //             // Perform file-related tasks.
@@ -492,7 +491,7 @@ class _FileManagerPageState extends State<FileManagerPage>
     final _locationStatus =
         isLocal ? _locationStatusLocal : _locationStatusRemote;
     final _locationFocus = isLocal ? _locationNodeLocal : _locationNodeRemote;
-    final _searchTextObs = isLocal ? searchTextLocal : searchTextRemote;
+    final _searchTextObs = isLocal ? _searchTextLocal : _searchTextRemote;
     return Container(
         child: Column(
       children: [
@@ -579,7 +578,7 @@ class _FileManagerPageState extends State<FileManagerPage>
                           ],
                           onChanged: (path) {
                             if (path is String && path.isNotEmpty) {
-                              model.openDirectory(path, isLocal: isLocal);
+                              openDirectory(path, isLocal: isLocal);
                             }
                           })
                     ],
@@ -762,9 +761,11 @@ class _FileManagerPageState extends State<FileManagerPage>
         for (var item in list) {
           path = PathUtil.join(path, item, model.getCurrentIsWindows(isLocal));
         }
-        model.openDirectory(path, isLocal: isLocal);
+        openDirectory(path, isLocal: isLocal);
       }),
       divider: Text("/").paddingSymmetric(horizontal: 4.0),
+      overflow: ScrollableOverflow(
+          controller: getBreadCrumbScrollController(isLocal)),
     );
   }
 
@@ -782,6 +783,16 @@ class _FileManagerPageState extends State<FileManagerPage>
     return breadCrumbList;
   }
 
+  breadCrumbScrollToEnd(bool isLocal) {
+    Future.delayed(Duration(milliseconds: 200), () {
+      final _breadCrumbScroller = getBreadCrumbScrollController(isLocal);
+      _breadCrumbScroller.animateTo(
+          _breadCrumbScroller.position.maxScrollExtent,
+          duration: Duration(milliseconds: 200),
+          curve: Curves.fastLinearToSlowEaseIn);
+    });
+  }
+
   Widget buildPathLocation(bool isLocal) {
     return TextField(
       focusNode: isLocal ? _locationNodeLocal : _locationNodeRemote,
@@ -793,16 +804,23 @@ class _FileManagerPageState extends State<FileManagerPage>
       controller:
           TextEditingController(text: model.getCurrentDir(isLocal).path),
       onSubmitted: (path) {
-        model.openDirectory(path, isLocal: isLocal);
+        openDirectory(path, isLocal: isLocal);
       },
     );
   }
 
   onSearchText(String searchText, bool isLocal) {
     if (isLocal) {
-      searchTextLocal.value = searchText;
+      _searchTextLocal.value = searchText;
     } else {
-      searchTextRemote.value = searchText;
+      _searchTextRemote.value = searchText;
     }
+  }
+
+  openDirectory(String path, {bool isLocal = false}) {
+    model.openDirectory(path, isLocal: isLocal).then((_) {
+      print("scroll");
+      breadCrumbScrollToEnd(isLocal);
+    });
   }
 }
