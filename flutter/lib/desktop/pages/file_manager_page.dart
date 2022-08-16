@@ -34,10 +34,8 @@ class _FileManagerPageState extends State<FileManagerPage>
       FocusNode(debugLabel: "locationNodeLocal");
   final FocusNode _locationNodeRemote =
       FocusNode(debugLabel: "locationNodeRemote");
-  final FocusNode _locationSearchLocal =
-      FocusNode(debugLabel: "locationSearchLocal");
-  final FocusNode _locationSearchRemote =
-      FocusNode(debugLabel: "locationSearchRemote");
+  final searchTextLocal = "".obs;
+  final searchTextRemote = "".obs;
 
   late FFI _ffi;
 
@@ -131,7 +129,7 @@ class _FileManagerPageState extends State<FileManagerPage>
   }
 
   Widget body({bool isLocal = false}) {
-    final fd = isLocal ? model.currentLocalDir : model.currentRemoteDir;
+    final fd = model.getCurrentDir(isLocal);
     final entries = fd.entries;
     final sortIndex = (SortBy style) {
       switch (style) {
@@ -159,103 +157,127 @@ class _FileManagerPageState extends State<FileManagerPage>
           children: [
             Expanded(
               child: SingleChildScrollView(
-                child: DataTable(
-                  key: ValueKey(isLocal ? 0 : 1),
-                  showCheckboxColumn: true,
-                  dataRowHeight: 25,
-                  headingRowHeight: 30,
-                  columnSpacing: 8,
-                  showBottomBorder: true,
-                  sortColumnIndex: sortIndex,
-                  sortAscending: sortAscending,
-                  columns: [
-                    DataColumn(label: Text(translate(" "))), // icon
-                    DataColumn(
-                        label: Text(
-                          translate("Name"),
-                        ),
-                        onSort: (columnIndex, ascending) {
-                          model.changeSortStyle(SortBy.Name,
-                              isLocal: isLocal, ascending: ascending);
-                        }),
-                    DataColumn(
-                        label: Text(
-                          translate("Modified"),
-                        ),
-                        onSort: (columnIndex, ascending) {
-                          model.changeSortStyle(SortBy.Modified,
-                              isLocal: isLocal, ascending: ascending);
-                        }),
-                    DataColumn(
-                        label: Text(translate("Size")),
-                        onSort: (columnIndex, ascending) {
-                          model.changeSortStyle(SortBy.Size,
-                              isLocal: isLocal, ascending: ascending);
-                        }),
-                  ],
-                  rows: entries.map((entry) {
-                    final sizeStr = entry.isFile
-                        ? readableFileSize(entry.size.toDouble())
-                        : "";
-                    return DataRow(
-                        key: ValueKey(entry.name),
-                        onSelectChanged: (s) {
-                          if (s != null) {
-                            if (s) {
-                              getSelectedItem(isLocal).add(isLocal, entry);
-                            } else {
-                              getSelectedItem(isLocal).remove(entry);
-                            }
-                            setState(() {});
-                          }
-                        },
-                        selected: getSelectedItem(isLocal).contains(entry),
-                        cells: [
-                          DataCell(Icon(
-                              entry.isFile ? Icons.feed_outlined : Icons.folder,
-                              size: 25)),
-                          DataCell(
-                              ConstrainedBox(
-                                  constraints: BoxConstraints(maxWidth: 100),
-                                  child: Tooltip(
-                                    message: entry.name,
-                                    child: Text(entry.name,
-                                        overflow: TextOverflow.ellipsis),
-                                  )), onTap: () {
-                            if (entry.isDirectory) {
-                              model.openDirectory(entry.path, isLocal: isLocal);
-                              if (isLocal) {
-                                _localSelectedItems.clear();
-                              } else {
-                                _remoteSelectedItems.clear();
+                child: Obx(
+                  () {
+                    final filteredEntries = entries.where((element) {
+                      if (isLocal) {
+                        if (searchTextLocal.isEmpty) {
+                          return true;
+                        } else {
+                          return element.name.contains(searchTextLocal.value);
+                        }
+                      } else {
+                        if (searchTextRemote.isEmpty) {
+                          return true;
+                        } else {
+                          return element.name.contains(searchTextRemote.value);
+                        }
+                      }
+                    }).toList(growable: false);
+                    return DataTable(
+                      key: ValueKey(isLocal ? 0 : 1),
+                      showCheckboxColumn: true,
+                      dataRowHeight: 25,
+                      headingRowHeight: 30,
+                      columnSpacing: 8,
+                      showBottomBorder: true,
+                      sortColumnIndex: sortIndex,
+                      sortAscending: sortAscending,
+                      columns: [
+                        DataColumn(label: Text(translate(" "))), // icon
+                        DataColumn(
+                            label: Text(
+                              translate("Name"),
+                            ),
+                            onSort: (columnIndex, ascending) {
+                              model.changeSortStyle(SortBy.Name,
+                                  isLocal: isLocal, ascending: ascending);
+                            }),
+                        DataColumn(
+                            label: Text(
+                              translate("Modified"),
+                            ),
+                            onSort: (columnIndex, ascending) {
+                              model.changeSortStyle(SortBy.Modified,
+                                  isLocal: isLocal, ascending: ascending);
+                            }),
+                        DataColumn(
+                            label: Text(translate("Size")),
+                            onSort: (columnIndex, ascending) {
+                              model.changeSortStyle(SortBy.Size,
+                                  isLocal: isLocal, ascending: ascending);
+                            }),
+                      ],
+                      rows: filteredEntries.map((entry) {
+                        final sizeStr = entry.isFile
+                            ? readableFileSize(entry.size.toDouble())
+                            : "";
+                        return DataRow(
+                            key: ValueKey(entry.name),
+                            onSelectChanged: (s) {
+                              if (s != null) {
+                                if (s) {
+                                  getSelectedItem(isLocal).add(isLocal, entry);
+                                } else {
+                                  getSelectedItem(isLocal).remove(entry);
+                                }
+                                setState(() {});
                               }
-                            } else {
-                              // Perform file-related tasks.
-                              final _selectedItems = getSelectedItem(isLocal);
-                              if (_selectedItems.contains(entry)) {
-                                _selectedItems.remove(entry);
-                              } else {
-                                _selectedItems.add(isLocal, entry);
-                              }
-                              setState(() {});
-                            }
-                          }),
-                          DataCell(Text(
-                            entry
-                                .lastModified()
-                                .toString()
-                                .replaceAll(".000", "") +
-                                "   ",
-                            style: TextStyle(
-                                fontSize: 12, color: MyTheme.darkGray),
-                          )),
-                          DataCell(Text(
-                            sizeStr,
-                            style: TextStyle(
-                                fontSize: 12, color: MyTheme.darkGray),
-                          )),
-                        ]);
-                  }).toList(),
+                            },
+                            selected: getSelectedItem(isLocal).contains(entry),
+                            cells: [
+                              DataCell(Icon(
+                                  entry.isFile
+                                      ? Icons.feed_outlined
+                                      : Icons.folder,
+                                  size: 25)),
+                              DataCell(
+                                  ConstrainedBox(
+                                      constraints:
+                                          BoxConstraints(maxWidth: 100),
+                                      child: Tooltip(
+                                        message: entry.name,
+                                        child: Text(entry.name,
+                                            overflow: TextOverflow.ellipsis),
+                                      )), onTap: () {
+                                if (entry.isDirectory) {
+                                  model.openDirectory(entry.path,
+                                      isLocal: isLocal);
+                                  if (isLocal) {
+                                    _localSelectedItems.clear();
+                                  } else {
+                                    _remoteSelectedItems.clear();
+                                  }
+                                } else {
+                                  // Perform file-related tasks.
+                                  final _selectedItems =
+                                      getSelectedItem(isLocal);
+                                  if (_selectedItems.contains(entry)) {
+                                    _selectedItems.remove(entry);
+                                  } else {
+                                    _selectedItems.add(isLocal, entry);
+                                  }
+                                  setState(() {});
+                                }
+                              }),
+                              DataCell(Text(
+                                entry
+                                        .lastModified()
+                                        .toString()
+                                        .replaceAll(".000", "") +
+                                    "   ",
+                                style: TextStyle(
+                                    fontSize: 12, color: MyTheme.darkGray),
+                              )),
+                              DataCell(Text(
+                                sizeStr,
+                                style: TextStyle(
+                                    fontSize: 12, color: MyTheme.darkGray),
+                              )),
+                            ]);
+                      }).toList(),
+                    );
+                  },
                 ),
               ),
             )
@@ -401,7 +423,6 @@ class _FileManagerPageState extends State<FileManagerPage>
                                   child: Text(
                                     '${item.jobName}',
                                     maxLines: 1,
-                                    style: TextStyle(color: Colors.black45),
                                     overflow: TextOverflow.ellipsis,
                                   )),
                               Wrap(
@@ -471,6 +492,7 @@ class _FileManagerPageState extends State<FileManagerPage>
     final _locationStatus =
         isLocal ? _locationStatusLocal : _locationStatusRemote;
     final _locationFocus = isLocal ? _locationNodeLocal : _locationNodeRemote;
+    final _searchTextObs = isLocal ? searchTextLocal : searchTextRemote;
     return Container(
         child: Column(
       children: [
@@ -570,7 +592,13 @@ class _FileManagerPageState extends State<FileManagerPage>
                     child: ConstrainedBox(
                       constraints: BoxConstraints(minWidth: 200),
                       child: TextField(
-                        decoration: InputDecoration(),
+                        controller:
+                            TextEditingController(text: _searchTextObs.value),
+                        autofocus: true,
+                        decoration:
+                            InputDecoration(prefixIcon: Icon(Icons.search)),
+                        onChanged: (searchText) =>
+                            onSearchText(searchText, isLocal),
                       ),
                     ))
               ],
@@ -768,5 +796,13 @@ class _FileManagerPageState extends State<FileManagerPage>
         model.openDirectory(path, isLocal: isLocal);
       },
     );
+  }
+
+  onSearchText(String searchText, bool isLocal) {
+    if (isLocal) {
+      searchTextLocal.value = searchText;
+    } else {
+      searchTextRemote.value = searchText;
+    }
   }
 }
