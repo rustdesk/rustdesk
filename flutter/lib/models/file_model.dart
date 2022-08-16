@@ -732,6 +732,7 @@ class FileModel extends ChangeNotifier {
       job.totalSize = total_size.toInt();
     }
     debugPrint("update folder files: ${info}");
+    notifyListeners();
   }
 
   bool get remoteSortAscending => _remoteSortAscending;

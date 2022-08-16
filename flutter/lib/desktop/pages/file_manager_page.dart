@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'dart:math';
 
+import 'package:desktop_drop/desktop_drop.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_breadcrumb/flutter_breadcrumb.dart';
 import 'package:flutter_hbb/mobile/pages/file_manager_page.dart';
@@ -38,6 +39,8 @@ class _FileManagerPageState extends State<FileManagerPage>
   final _searchTextRemote = "".obs;
   final _breadCrumbScrollerLocal = ScrollController();
   final _breadCrumbScrollerRemote = ScrollController();
+
+  final _dropMaskVisible = false.obs;
 
   ScrollController getBreadCrumbScrollController(bool isLocal) {
     return isLocal ? _breadCrumbScrollerLocal : _breadCrumbScrollerRemote;
@@ -155,243 +158,248 @@ class _FileManagerPageState extends State<FileManagerPage>
       decoration: BoxDecoration(border: Border.all(color: Colors.black26)),
       margin: const EdgeInsets.all(16.0),
       padding: const EdgeInsets.all(8.0),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        headTools(isLocal),
-        Expanded(
-            child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(
-              child: SingleChildScrollView(
-                child: entries.isEmpty
-                    ? Offstage()
-                    : Obx(
-                        () {
-                          final searchText =
-                              isLocal ? _searchTextLocal : _searchTextRemote;
-                          final filteredEntries = searchText.isEmpty
-                              ? entries.where((element) {
-                                  if (searchText.isEmpty) {
-                                    return true;
-                                  } else {
-                                    return element.name
-                                        .contains(searchText.value);
-                                  }
-                                }).toList(growable: false)
-                              : entries;
-                          return DataTable(
-                            key: ValueKey(isLocal ? 0 : 1),
-                            showCheckboxColumn: true,
-                            dataRowHeight: 25,
-                            headingRowHeight: 30,
-                            columnSpacing: 8,
-                            showBottomBorder: true,
-                            sortColumnIndex: sortIndex,
-                            sortAscending: sortAscending,
-                            columns: [
-                              DataColumn(label: Text(translate(" "))), // icon
-                        DataColumn(
-                            label: Text(
-                              translate("Name"),
-                            ),
-                            onSort: (columnIndex, ascending) {
-                              model.changeSortStyle(SortBy.Name,
-                                  isLocal: isLocal, ascending: ascending);
-                            }),
-                        DataColumn(
-                            label: Text(
-                              translate("Modified"),
-                            ),
-                            onSort: (columnIndex, ascending) {
-                              model.changeSortStyle(SortBy.Modified,
-                                  isLocal: isLocal, ascending: ascending);
-                            }),
-                        DataColumn(
-                            label: Text(translate("Size")),
-                            onSort: (columnIndex, ascending) {
-                              model.changeSortStyle(SortBy.Size,
-                                  isLocal: isLocal, ascending: ascending);
-                            }),
-                      ],
-                      rows: filteredEntries.map((entry) {
-                        final sizeStr = entry.isFile
-                            ? readableFileSize(entry.size.toDouble())
-                            : "";
-                        return DataRow(
-                            key: ValueKey(entry.name),
-                            onSelectChanged: (s) {
-                              if (s != null) {
-                                if (s) {
-                                  getSelectedItem(isLocal).add(isLocal, entry);
-                                } else {
-                                  getSelectedItem(isLocal).remove(entry);
-                                }
-                                setState(() {});
+      child: DropTarget(
+        onDragDone: (detail) => handleDragDone(detail, isLocal),
+        onDragEntered: (enter) {
+          _dropMaskVisible.value = true;
+        },
+        onDragExited: (exit) {
+          _dropMaskVisible.value = false;
+        },
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          headTools(isLocal),
+          Expanded(
+              child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: SingleChildScrollView(
+                  child: ObxValue<RxString>(
+                    (searchText) {
+                      final filteredEntries = searchText.isEmpty
+                          ? entries.where((element) {
+                              if (searchText.isEmpty) {
+                                return true;
+                              } else {
+                                return element.name.contains(searchText.value);
                               }
-                            },
-                            selected: getSelectedItem(isLocal).contains(entry),
-                            cells: [
-                              DataCell(Icon(
-                                  entry.isFile
-                                      ? Icons.feed_outlined
-                                      : Icons.folder,
-                                  size: 25)),
-                              DataCell(
-                                  ConstrainedBox(
-                                      constraints:
-                                      BoxConstraints(maxWidth: 100),
-                                      child: Tooltip(
-                                        message: entry.name,
-                                        child: Text(entry.name,
-                                            overflow: TextOverflow.ellipsis),
-                                      )), onTap: () {
-                                if (entry.isDirectory) {
-                                  openDirectory(entry.path, isLocal: isLocal);
-                                  if (isLocal) {
-                                    _localSelectedItems.clear();
+                            }).toList(growable: false)
+                          : entries;
+                      return DataTable(
+                        key: ValueKey(isLocal ? 0 : 1),
+                        showCheckboxColumn: true,
+                        dataRowHeight: 25,
+                        headingRowHeight: 30,
+                        columnSpacing: 8,
+                        showBottomBorder: true,
+                        sortColumnIndex: sortIndex,
+                        sortAscending: sortAscending,
+                        columns: [
+                          DataColumn(label: Text(translate(" "))), // icon
+                          DataColumn(
+                              label: Text(
+                                translate("Name"),
+                              ),
+                              onSort: (columnIndex, ascending) {
+                                model.changeSortStyle(SortBy.Name,
+                                    isLocal: isLocal, ascending: ascending);
+                              }),
+                          DataColumn(
+                              label: Text(
+                                translate("Modified"),
+                              ),
+                              onSort: (columnIndex, ascending) {
+                                model.changeSortStyle(SortBy.Modified,
+                                    isLocal: isLocal, ascending: ascending);
+                              }),
+                          DataColumn(
+                              label: Text(translate("Size")),
+                              onSort: (columnIndex, ascending) {
+                                model.changeSortStyle(SortBy.Size,
+                                    isLocal: isLocal, ascending: ascending);
+                              }),
+                        ],
+                        rows: filteredEntries.map((entry) {
+                          final sizeStr = entry.isFile
+                              ? readableFileSize(entry.size.toDouble())
+                              : "";
+                          return DataRow(
+                              key: ValueKey(entry.name),
+                              onSelectChanged: (s) {
+                                if (s != null) {
+                                  if (s) {
+                                    getSelectedItem(isLocal)
+                                        .add(isLocal, entry);
                                   } else {
-                                    _remoteSelectedItems.clear();
-                                  }
-                                } else {
-                                  // Perform file-related tasks.
-                                  final _selectedItems =
-                                  getSelectedItem(isLocal);
-                                  if (_selectedItems.contains(entry)) {
-                                    _selectedItems.remove(entry);
-                                  } else {
-                                    _selectedItems.add(isLocal, entry);
+                                    getSelectedItem(isLocal).remove(entry);
                                   }
                                   setState(() {});
                                 }
-                              }),
-                              DataCell(Text(
-                                entry
-                                    .lastModified()
-                                    .toString()
-                                    .replaceAll(".000", "") +
-                                          "   ",
-                                      style: TextStyle(
-                                          fontSize: 12,
-                                          color: MyTheme.darkGray),
-                                    )),
-                                    DataCell(Text(
-                                      sizeStr,
-                                      style: TextStyle(
-                                          fontSize: 12,
-                                          color: MyTheme.darkGray),
-                                    )),
-                                  ]);
-                            }).toList(growable: false),
-                          );
-                  },
+                              },
+                              selected:
+                                  getSelectedItem(isLocal).contains(entry),
+                              cells: [
+                                DataCell(Icon(
+                                    entry.isFile
+                                        ? Icons.feed_outlined
+                                        : Icons.folder,
+                                    size: 25)),
+                                DataCell(
+                                    ConstrainedBox(
+                                        constraints:
+                                            BoxConstraints(maxWidth: 100),
+                                        child: Tooltip(
+                                          message: entry.name,
+                                          child: Text(entry.name,
+                                              overflow: TextOverflow.ellipsis),
+                                        )), onTap: () {
+                                  if (entry.isDirectory) {
+                                    openDirectory(entry.path, isLocal: isLocal);
+                                    if (isLocal) {
+                                      _localSelectedItems.clear();
+                                    } else {
+                                      _remoteSelectedItems.clear();
+                                    }
+                                  } else {
+                                    // Perform file-related tasks.
+                                    final _selectedItems =
+                                        getSelectedItem(isLocal);
+                                    if (_selectedItems.contains(entry)) {
+                                      _selectedItems.remove(entry);
+                                    } else {
+                                      _selectedItems.add(isLocal, entry);
+                                    }
+                                    setState(() {});
+                                  }
+                                }),
+                                DataCell(Text(
+                                  entry
+                                          .lastModified()
+                                          .toString()
+                                          .replaceAll(".000", "") +
+                                      "   ",
+                                  style: TextStyle(
+                                      fontSize: 12, color: MyTheme.darkGray),
+                                )),
+                                DataCell(Text(
+                                  sizeStr,
+                                  style: TextStyle(
+                                      fontSize: 12, color: MyTheme.darkGray),
+                                )),
+                              ]);
+                        }).toList(growable: false),
+                      );
+                    },
+                    isLocal ? _searchTextLocal : _searchTextRemote,
+                  ),
                 ),
-              ),
-            )
-          ],
-        )),
-        // Center(child: listTail(isLocal: isLocal)),
-        // Expanded(
-        //     child: ListView.builder(
-        //   itemCount: entries.length + 1,
-        //   itemBuilder: (context, index) {
-        //     if (index >= entries.length) {
-        //       return listTail(isLocal: isLocal);
-        //     }
-        //     var selected = false;
-        //     if (model.selectMode) {
-        //       selected = _selectedItems.contains(entries[index]);
-        //     }
-        //
-        //     final sizeStr = entries[index].isFile
-        //         ? readableFileSize(entries[index].size.toDouble())
-        //         : "";
-        //     return Card(
-        //       child: ListTile(
-        //         leading: Icon(
-        //             entries[index].isFile ? Icons.feed_outlined : Icons.folder,
-        //             size: 40),
-        //         title: Text(entries[index].name),
-        //         selected: selected,
-        //         subtitle: Text(
-        //           entries[index]
-        //                   .lastModified()
-        //                   .toString()
-        //                   .replaceAll(".000", "") +
-        //               "   " +
-        //               sizeStr,
-        //           style: TextStyle(fontSize: 12, color: MyTheme.darkGray),
-        //         ),
-        //         trailing: needShowCheckBox()
-        //             ? Checkbox(
-        //                 value: selected,
-        //                 onChanged: (v) {
-        //                   if (v == null) return;
-        //                   if (v && !selected) {
-        //                     _selectedItems.add(isLocal, entries[index]);
-        //                   } else if (!v && selected) {
-        //                     _selectedItems.remove(entries[index]);
-        //                   }
-        //                   setState(() {});
-        //                 })
-        //             : PopupMenuButton<String>(
-        //                 icon: Icon(Icons.more_vert),
-        //                 itemBuilder: (context) {
-        //                   return [
-        //                     PopupMenuItem(
-        //                       child: Text(translate("Delete")),
-        //                       value: "delete",
-        //                     ),
-        //                     PopupMenuItem(
-        //                       child: Text(translate("Multi Select")),
-        //                       value: "multi_select",
-        //                     ),
-        //                     PopupMenuItem(
-        //                       child: Text(translate("Properties")),
-        //                       value: "properties",
-        //                       enabled: false,
-        //                     )
-        //                   ];
-        //                 },
-        //                 onSelected: (v) {
-        //                   if (v == "delete") {
-        //                     final items = SelectedItems();
-        //                     items.add(isLocal, entries[index]);
-        //                     model.removeAction(items);
-        //                   } else if (v == "multi_select") {
-        //                     _selectedItems.clear();
-        //                     model.toggleSelectMode();
-        //                   }
-        //                 }),
-        //         onTap: () {
-        //           if (model.selectMode && !_selectedItems.isOtherPage(isLocal)) {
-        //             if (selected) {
-        //               _selectedItems.remove(entries[index]);
-        //             } else {
-        //               _selectedItems.add(isLocal, entries[index]);
-        //             }
-        //             setState(() {});
-        //             return;
-        //           }
-        //           if (entries[index].isDirectory) {
-        //             openDirectory(entries[index].path, isLocal: isLocal);
-        //             breadCrumbScrollToEnd(isLocal);
-        //           } else {
-        //             // Perform file-related tasks.
-        //           }
-        //         },
-        //         onLongPress: () {
-        //           _selectedItems.clear();
-        //           model.toggleSelectMode();
-        //           if (model.selectMode) {
-        //             _selectedItems.add(isLocal, entries[index]);
-        //           }
-        //           setState(() {});
-        //         },
-        //       ),
-        //     );
-        //   },
-        // ))
-      ]),
+              )
+            ],
+          )),
+          // Center(child: listTail(isLocal: isLocal)),
+          // Expanded(
+          //     child: ListView.builder(
+          //   itemCount: entries.length + 1,
+          //   itemBuilder: (context, index) {
+          //     if (index >= entries.length) {
+          //       return listTail(isLocal: isLocal);
+          //     }
+          //     var selected = false;
+          //     if (model.selectMode) {
+          //       selected = _selectedItems.contains(entries[index]);
+          //     }
+          //
+          //     final sizeStr = entries[index].isFile
+          //         ? readableFileSize(entries[index].size.toDouble())
+          //         : "";
+          //     return Card(
+          //       child: ListTile(
+          //         leading: Icon(
+          //             entries[index].isFile ? Icons.feed_outlined : Icons.folder,
+          //             size: 40),
+          //         title: Text(entries[index].name),
+          //         selected: selected,
+          //         subtitle: Text(
+          //           entries[index]
+          //                   .lastModified()
+          //                   .toString()
+          //                   .replaceAll(".000", "") +
+          //               "   " +
+          //               sizeStr,
+          //           style: TextStyle(fontSize: 12, color: MyTheme.darkGray),
+          //         ),
+          //         trailing: needShowCheckBox()
+          //             ? Checkbox(
+          //                 value: selected,
+          //                 onChanged: (v) {
+          //                   if (v == null) return;
+          //                   if (v && !selected) {
+          //                     _selectedItems.add(isLocal, entries[index]);
+          //                   } else if (!v && selected) {
+          //                     _selectedItems.remove(entries[index]);
+          //                   }
+          //                   setState(() {});
+          //                 })
+          //             : PopupMenuButton<String>(
+          //                 icon: Icon(Icons.more_vert),
+          //                 itemBuilder: (context) {
+          //                   return [
+          //                     PopupMenuItem(
+          //                       child: Text(translate("Delete")),
+          //                       value: "delete",
+          //                     ),
+          //                     PopupMenuItem(
+          //                       child: Text(translate("Multi Select")),
+          //                       value: "multi_select",
+          //                     ),
+          //                     PopupMenuItem(
+          //                       child: Text(translate("Properties")),
+          //                       value: "properties",
+          //                       enabled: false,
+          //                     )
+          //                   ];
+          //                 },
+          //                 onSelected: (v) {
+          //                   if (v == "delete") {
+          //                     final items = SelectedItems();
+          //                     items.add(isLocal, entries[index]);
+          //                     model.removeAction(items);
+          //                   } else if (v == "multi_select") {
+          //                     _selectedItems.clear();
+          //                     model.toggleSelectMode();
+          //                   }
+          //                 }),
+          //         onTap: () {
+          //           if (model.selectMode && !_selectedItems.isOtherPage(isLocal)) {
+          //             if (selected) {
+          //               _selectedItems.remove(entries[index]);
+          //             } else {
+          //               _selectedItems.add(isLocal, entries[index]);
+          //             }
+          //             setState(() {});
+          //             return;
+          //           }
+          //           if (entries[index].isDirectory) {
+          //             openDirectory(entries[index].path, isLocal: isLocal);
+          //             breadCrumbScrollToEnd(isLocal);
+          //           } else {
+          //             // Perform file-related tasks.
+          //           }
+          //         },
+          //         onLongPress: () {
+          //           _selectedItems.clear();
+          //           model.toggleSelectMode();
+          //           if (model.selectMode) {
+          //             _selectedItems.add(isLocal, entries[index]);
+          //           }
+          //           setState(() {});
+          //         },
+          //       ),
+          //     );
+          //   },
+          // ))
+        ]),
+      ),
     );
   }
 
@@ -830,5 +838,24 @@ class _FileManagerPageState extends State<FileManagerPage>
       print("scroll");
       breadCrumbScrollToEnd(isLocal);
     });
+  }
+
+  void handleDragDone(DropDoneDetails details, bool isLocal) {
+    if (isLocal) {
+      // ignore local
+      return;
+    }
+    var items = SelectedItems();
+    details.files.forEach((file) {
+      final f = File(file.path);
+      items.add(
+          true,
+          Entry()
+            ..path = file.path
+            ..name = file.name
+            ..size =
+                FileSystemEntity.isDirectorySync(f.path) ? 0 : f.lengthSync());
+    });
+    model.sendFiles(items, isRemote: false);
   }
 }
