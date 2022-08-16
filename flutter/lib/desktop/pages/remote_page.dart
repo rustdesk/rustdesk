@@ -9,6 +9,7 @@ import 'package:flutter_hbb/models/chat_model.dart';
 import 'package:get/get.dart';
 import 'package:provider/provider.dart';
 import 'package:wakelock/wakelock.dart';
+import 'package:desktop_multi_window/desktop_multi_window.dart';
 
 // import 'package:window_manager/window_manager.dart';
 
@@ -21,11 +22,16 @@ import '../../models/platform_model.dart';
 final initText = '\1' * 1024;
 
 class RemotePage extends StatefulWidget {
-  RemotePage({Key? key, required this.id, required this.tabBarHeight})
+  RemotePage(
+      {Key? key,
+      required this.id,
+      required this.tabBarHeight,
+      required this.fullscreenID})
       : super(key: key);
 
   final String id;
   final double tabBarHeight;
+  final Rx<String> fullscreenID;
 
   @override
   _RemotePageState createState() => _RemotePageState();
@@ -41,6 +47,7 @@ class _RemotePageState extends State<RemotePage>
   final FocusNode _mobileFocusNode = FocusNode();
   final FocusNode _physicalFocusNode = FocusNode();
   var _isPhysicalMouse = false;
+  var _imageFocused = false;
 
   late FFI _ffi;
 
@@ -238,6 +245,9 @@ class _RemotePageState extends State<RemotePage>
                     autofocus: true,
                     canRequestFocus: true,
                     focusNode: _physicalFocusNode,
+                    onFocusChange: (bool v) {
+                      _imageFocused = v;
+                    },
                     onKey: (data, e) {
                       final key = e.logicalKey;
                       if (e is RawKeyDownEvent) {
@@ -307,6 +317,24 @@ class _RemotePageState extends State<RemotePage>
                           },
                         )
                       ] +
+                      (isWebDesktop
+                          ? []
+                          : <Widget>[
+                              IconButton(
+                                color: Colors.white,
+                                icon: Icon(widget.fullscreenID.value.isEmpty
+                                    ? Icons.fullscreen
+                                    : Icons.close_fullscreen),
+                                onPressed: () {
+                                  setState(() => _showEdit = false);
+                                  if (widget.fullscreenID.value.isEmpty) {
+                                    widget.fullscreenID.value = widget.id;
+                                  } else {
+                                    widget.fullscreenID.value = "";
+                                  }
+                                },
+                              )
+                            ]) +
                       (isWebDesktop
                           ? []
                           : _ffi.ffiModel.isPeerAndroid
@@ -434,6 +462,9 @@ class _RemotePageState extends State<RemotePage>
         onPointerSignal: _onPointerSignalImage,
         child: MouseRegion(
             onEnter: (evt) {
+              if (!_imageFocused) {
+                _physicalFocusNode.requestFocus();
+              }
               _cursorOverImage.value = true;
             },
             onExit: (evt) {
