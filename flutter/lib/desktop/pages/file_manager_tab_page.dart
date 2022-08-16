@@ -93,6 +93,7 @@ class _FileManagerTabPageState extends State<FileManagerTabPage>
 
   void onRemoveId(String id) {
     DesktopTabBar.onClose(this, tabController, tabs, id);
+    ffi(id).close();
     if (tabs.length == 0) {
       WindowController.fromWindowId(windowId()).close();
     }
