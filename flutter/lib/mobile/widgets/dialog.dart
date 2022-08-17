@@ -157,7 +157,7 @@ void setTemporaryPasswordLengthDialog(
 
 void enterPasswordDialog(String id, OverlayDialogManager dialogManager) async {
   final controller = TextEditingController();
-  var remember = await bind.getSessionRemember(id: id) ?? false;
+  var remember = await bind.sessionGetRemember(id: id) ?? false;
   dialogManager.dismissAll();
   dialogManager.show((setState, close) {
     return CustomAlertDialog(
@@ -184,7 +184,7 @@ void enterPasswordDialog(String id, OverlayDialogManager dialogManager) async {
           style: flatButtonStyle,
           onPressed: () {
             close();
-            backToHomePage();
+            closeConnection();
           },
           child: Text(translate('Cancel')),
         ),
@@ -196,7 +196,7 @@ void enterPasswordDialog(String id, OverlayDialogManager dialogManager) async {
             gFFI.login(id, text, remember);
             close();
             dialogManager.showLoading(translate('Logging in...'),
-                onCancel: backToHomePage);
+                onCancel: closeConnection);
           },
           child: Text(translate('OK')),
         ),
@@ -214,7 +214,7 @@ void wrongPasswordDialog(String id, OverlayDialogManager dialogManager) {
               style: flatButtonStyle,
               onPressed: () {
                 close();
-                backToHomePage();
+                closeConnection();
               },
               child: Text(translate('Cancel')),
             ),

@@ -10,6 +10,25 @@ const double _kTabBarHeight = kDesktopRemoteTabBarHeight;
 const double _kIconSize = 18;
 const double _kDividerIndent = 10;
 const double _kAddIconSize = _kTabBarHeight - 15;
+final tabBarKey = GlobalKey();
+
+void closeTab(String? id) {
+  final tabBar = tabBarKey.currentWidget as TabBar?;
+  if (tabBar == null) return;
+  final tabs = tabBar.tabs as List<_Tab>;
+  if (id == null) {
+    final current = tabBar.controller?.index;
+    if (current == null) return;
+    tabs[current].onClose();
+  } else {
+    for (final tab in tabs) {
+      if (tab.label == id) {
+        tab.onClose();
+        break;
+      }
+    }
+  }
+}
 
 class TabInfo {
   late final String label;
@@ -59,6 +78,7 @@ class DesktopTabBar extends StatelessWidget {
                 ),
                 Flexible(
                   child: Obx(() => TabBar(
+                      key: tabBarKey,
                       indicatorColor: _theme.indicatorColor,
                       labelPadding: const EdgeInsets.symmetric(
                           vertical: 0, horizontal: 0),

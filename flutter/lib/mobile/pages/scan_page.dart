@@ -132,7 +132,7 @@ class _ScanPageState extends State<ScanPage> {
   }
 
   void showServerSettingFromQr(String data) async {
-    backToHomePage();
+    closeConnection();
     await controller?.pauseCamera();
     if (!data.startsWith('config=')) {
       showToast('Invalid QR code');

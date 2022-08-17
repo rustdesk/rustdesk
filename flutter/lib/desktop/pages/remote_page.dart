@@ -60,7 +60,7 @@ class _RemotePageState extends State<RemotePage>
     WidgetsBinding.instance.addPostFrameCallback((_) {
       SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual, overlays: []);
       _ffi.dialogManager
-          .showLoading(translate('Connecting...'), onCancel: backToHomePage);
+          .showLoading(translate('Connecting...'), onCancel: closeConnection);
     });
     if (!Platform.isLinux) {
       Wakelock.enable();
@@ -490,7 +490,7 @@ class _RemotePageState extends State<RemotePage>
         }),
       ))
     ];
-    final cursor = bind.getSessionToggleOptionSync(
+    final cursor = bind.sessionGetToggleOptionSync(
         id: widget.id, arg: 'show-remote-cursor');
     if (keyboard || cursor) {
       paints.add(CursorPaint(
@@ -565,7 +565,7 @@ class _RemotePageState extends State<RemotePage>
       more.add(PopupMenuItem<String>(
           child: Text(translate('Insert Lock')), value: 'lock'));
       if (pi.platform == 'Windows' &&
-          await bind.getSessionToggleOption(id: id, arg: 'privacy-mode') !=
+          await bind.sessionGetToggleOption(id: id, arg: 'privacy-mode') !=
               true) {
         more.add(PopupMenuItem<String>(
             child: Text(translate(
@@ -610,7 +610,7 @@ class _RemotePageState extends State<RemotePage>
         // TODO icon diff
         // null means no session of id
         // empty string means no password
-        var password = await bind.getSessionOption(id: id, arg: "os-password");
+        var password = await bind.sessionGetOption(id: id, arg: "os-password");
         if (password != null) {
           bind.sessionInputOsPassword(id: widget.id, value: password);
         } else {
@@ -837,12 +837,12 @@ class QualityMonitor extends StatelessWidget {
 
 void showOptions(String id) async {
   final _ffi = ffi(id);
-  String quality = await bind.getSessionImageQuality(id: id) ?? 'balanced';
+  String quality = await bind.sessionGetImageQuality(id: id) ?? 'balanced';
   if (quality == '') quality = 'balanced';
   String viewStyle =
-      await bind.getSessionOption(id: id, arg: 'view-style') ?? '';
+      await bind.sessionGetOption(id: id, arg: 'view-style') ?? '';
   String scrollStyle =
-      await bind.getSessionOption(id: id, arg: 'scroll-style') ?? '';
+      await bind.sessionGetOption(id: id, arg: 'scroll-style') ?? '';
   var displays = <Widget>[];
   final pi = _ffi.ffiModel.pi;
   final image = _ffi.ffiModel.getConnectionImage();
@@ -957,8 +957,8 @@ void showOptions(String id) async {
 void showSetOSPassword(
     String id, bool login, OverlayDialogManager dialogManager) async {
   final controller = TextEditingController();
-  var password = await bind.getSessionOption(id: id, arg: "os-password") ?? "";
-  var autoLogin = await bind.getSessionOption(id: id, arg: "auto-login") != "";
+  var password = await bind.sessionGetOption(id: id, arg: "os-password") ?? "";
+  var autoLogin = await bind.sessionGetOption(id: id, arg: "auto-login") != "";
   controller.text = password;
   dialogManager.show((setState, close) {
     return CustomAlertDialog(

@@ -287,7 +287,7 @@ class FfiModel with ChangeNotifier {
         bind.sessionReconnect(id: id);
         clearPermissions();
         dialogManager.showLoading(translate('Connecting...'),
-            onCancel: backToHomePage);
+            onCancel: closeConnection);
       });
       _reconnects *= 2;
     } else {
@@ -312,7 +312,7 @@ class FfiModel with ChangeNotifier {
       }
     } else {
       _touchMode =
-          await bind.getSessionOption(id: peerId, arg: "touch-mode") != '';
+          await bind.sessionGetOption(id: peerId, arg: "touch-mode") != '';
     }
 
     if (evt['is_file_transfer'] == "true") {
@@ -335,7 +335,7 @@ class FfiModel with ChangeNotifier {
       if (displays.length > 0) {
         parent.target?.dialogManager.showLoading(
             translate('Connected, waiting for image...'),
-            onCancel: backToHomePage);
+            onCancel: closeConnection);
         _waitForImage = true;
         _reconnects = 1;
       }
@@ -471,7 +471,7 @@ class CanvasModel with ChangeNotifier {
   double get tabBarHeight => _tabBarHeight;
 
   void updateViewStyle() async {
-    final style = await bind.getSessionOption(id: id, arg: 'view-style');
+    final style = await bind.sessionGetOption(id: id, arg: 'view-style');
     if (style == null) {
       return;
     }
@@ -517,7 +517,7 @@ class CanvasModel with ChangeNotifier {
   }
 
   updateScrollStyle() async {
-    final style = await bind.getSessionOption(id: id, arg: 'scroll-style');
+    final style = await bind.sessionGetOption(id: id, arg: 'scroll-style');
     if (style == 'scrollbar') {
       _scrollStyle = ScrollStyle.scrollbar;
       _scrollX = 0.0;
@@ -863,7 +863,7 @@ class QualityMonitorModel with ChangeNotifier {
   QualityMonitorData get data => _data;
 
   checkShowQualityMonitor(String id) async {
-    final show = await bind.getSessionToggleOption(
+    final show = await bind.sessionGetToggleOption(
             id: id, arg: 'show-quality-monitor') ==
         true;
     if (_show != show) {

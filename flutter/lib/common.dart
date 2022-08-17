@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:desktop_multi_window/desktop_multi_window.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_hbb/desktop/widgets/tabbar_widget.dart';
 import 'package:get/instance_manager.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:window_manager/window_manager.dart';
@@ -66,11 +67,11 @@ final ButtonStyle flatButtonStyle = TextButton.styleFrom(
   ),
 );
 
-backToHomePage() {
+closeConnection({String? id}) {
   if (isAndroid || isIOS) {
     Navigator.popUntil(globalKey.currentContext!, ModalRoute.withName("/"));
   } else {
-    // TODO desktop
+    closeTab(id);
   }
 }
 
@@ -306,7 +307,7 @@ void msgBox(
         0,
         wrap(translate('OK'), () {
           dialogManager.dismissAll();
-          backToHomePage();
+          closeConnection();
         }));
   }
   if (hasCancel == null) {
@@ -482,7 +483,7 @@ RadioListTile<T> getRadio<T>(
 CheckboxListTile getToggle(
     String id, void Function(void Function()) setState, option, name,
     {FFI? ffi}) {
-  final opt = bind.getSessionToggleOptionSync(id: id, arg: option);
+  final opt = bind.sessionGetToggleOptionSync(id: id, arg: option);
   return CheckboxListTile(
       value: opt,
       onChanged: (v) {
