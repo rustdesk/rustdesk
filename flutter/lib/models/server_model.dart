@@ -97,8 +97,9 @@ class ServerModel with ChangeNotifier {
       }
       final res = await bind.mainCheckClientsLength(length: _clients.length);
       if (res != null) {
-        debugPrint("clients not match!");
-        updateClientState(res);
+        // for test
+        // debugPrint("clients not match!");
+        // updateClientState(res);
       }
 
       updatePasswordModel();
@@ -342,6 +343,7 @@ class ServerModel with ChangeNotifier {
     var res = await bind.mainGetClientsState();
     try {
       final List clientsJson = jsonDecode(res);
+      _clients.clear();
       for (var clientJson in clientsJson) {
         final client = Client.fromJson(clientJson);
         _clients[client.id] = client;
