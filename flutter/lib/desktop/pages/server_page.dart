@@ -106,9 +106,11 @@ class DesktopServerPage extends StatefulWidget implements PageShape {
   State<StatefulWidget> createState() => _DesktopServerPageState();
 }
 
-class _DesktopServerPageState extends State<DesktopServerPage> {
+class _DesktopServerPageState extends State<DesktopServerPage>
+    with AutomaticKeepAliveClientMixin {
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     return ChangeNotifierProvider.value(
         value: gFFI.serverModel,
         child: Consumer<ServerModel>(
@@ -124,6 +126,9 @@ class _DesktopServerPageState extends State<DesktopServerPage> {
                   ),
                 )));
   }
+
+  @override
+  bool get wantKeepAlive => true;
 }
 
 class ConnectionManager extends StatelessWidget {
@@ -131,20 +136,25 @@ class ConnectionManager extends StatelessWidget {
   Widget build(BuildContext context) {
     final serverModel = Provider.of<ServerModel>(context);
     // test case:
-    // serverModel.clients.clear();
-    // serverModel.clients[0] = Client(false, false, "Readmi-M21sdfsdf", "123123123", true, false, false);
-    return DefaultTabController(
-      length: serverModel.clients.length,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            height: kTextTabBarHeight,
-            child: TabBar(
-                isScrollable: true,
-                tabs: serverModel.clients.entries
-                    .map((entry) => buildTab(entry))
-                    .toList(growable: false)),
+    serverModel.clients.clear();
+    serverModel.clients[0] = Client(
+        false, false, "Readmi-M21sdfsdf", "123123123", true, false, false);
+    return serverModel.clients.isEmpty
+        ? Center(
+            child: Text(translate("Waiting")),
+          )
+        : DefaultTabController(
+            length: serverModel.clients.length,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                SizedBox(
+                  height: kTextTabBarHeight,
+                  child: TabBar(
+                      isScrollable: true,
+                      tabs: serverModel.clients.entries
+                          .map((entry) => buildTab(entry))
+                          .toList(growable: false)),
           ),
           Expanded(
             child: TabBarView(
@@ -321,10 +331,12 @@ class _CmControlPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return client.authorized ? buildAuthorized() : buildUnAuthorized();
+    return client.authorized
+        ? buildAuthorized(context)
+        : buildUnAuthorized(context);
   }
 
-  buildAuthorized() {
+  buildAuthorized(BuildContext context) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
@@ -334,7 +346,7 @@ class _CmControlPanel extends StatelessWidget {
           decoration: BoxDecoration(
               color: Colors.redAccent, borderRadius: BorderRadius.circular(10)),
           child: InkWell(
-              onTap: handleDisconnect,
+              onTap: () => handleDisconnect(context),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
@@ -349,7 +361,7 @@ class _CmControlPanel extends StatelessWidget {
     );
   }
 
-  buildUnAuthorized() {
+  buildUnAuthorized(BuildContext context) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
@@ -359,7 +371,7 @@ class _CmControlPanel extends StatelessWidget {
           decoration: BoxDecoration(
               color: MyTheme.accent, borderRadius: BorderRadius.circular(10)),
           child: InkWell(
-              onTap: handleAccept,
+              onTap: () => handleAccept(context),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
@@ -381,7 +393,7 @@ class _CmControlPanel extends StatelessWidget {
               borderRadius: BorderRadius.circular(10),
               border: Border.all(color: Colors.grey)),
           child: InkWell(
-              onTap: handleCancel,
+              onTap: () => handleDisconnect(context),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
@@ -396,11 +408,14 @@ class _CmControlPanel extends StatelessWidget {
     );
   }
 
-  void handleDisconnect() {}
+  void handleDisconnect(BuildContext context) {
+    bind.cmCloseConnection(connId: client.id);
+  }
 
-  void handleCancel() {}
-
-  void handleAccept() {}
+  void handleAccept(BuildContext context) {
+    final model = Provider.of<ServerModel>(context, listen: false);
+    model.sendLoginResponse(client, true);
+  }
 }
 
 class PaddingCard extends StatelessWidget {

@@ -97,9 +97,8 @@ class ServerModel with ChangeNotifier {
       }
       final res = await bind.mainCheckClientsLength(length: _clients.length);
       if (res != null) {
-        // for test
-        // debugPrint("clients not match!");
-        // updateClientState(res);
+        debugPrint("clients not match!");
+        updateClientState(res);
       }
 
       updatePasswordModel();
