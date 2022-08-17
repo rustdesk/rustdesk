@@ -206,7 +206,7 @@ class ChatModel with ChangeNotifier {
           bind.sessionSendChat(id: _ffi.target!.id, text: message.text);
         }
       } else {
-        bind.serverSendChat(connId: _currentID, msg: message.text);
+        bind.cmSendChat(connId: _currentID, msg: message.text);
       }
     }
     notifyListeners();

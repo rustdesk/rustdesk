@@ -735,16 +735,35 @@ pub fn main_set_permanent_password(password: String) {
     set_permanent_password(password);
 }
 
-pub fn server_send_chat(conn_id: i32, msg: String) {
+pub fn cm_send_chat(conn_id: i32, msg: String) {
     connection_manager::send_chat(conn_id, msg);
 }
 
-pub fn server_login_res(conn_id: i32, res: bool) {
+pub fn cm_login_res(conn_id: i32, res: bool) {
     connection_manager::on_login_res(conn_id, res);
 }
 
-pub fn server_close_connection(conn_id: i32) {
+pub fn cm_close_connection(conn_id: i32) {
     connection_manager::close_conn(conn_id);
+}
+
+pub fn cm_check_click_time(conn_id: i32) {
+    connection_manager::check_click_time(conn_id)
+}
+
+pub fn cm_get_click_time() -> f64 {
+    connection_manager::get_click_time() as _
+}
+
+pub fn cm_switch_permission(conn_id: i32, name: String, enabled: bool) {
+    connection_manager::switch_permission(conn_id, name, enabled)
+}
+
+pub fn main_get_icon() -> String {
+    #[cfg(not(any(target_os = "android", target_os = "ios", feature = "cli")))]
+    return ui_interface::get_icon();
+    #[cfg(any(target_os = "android", target_os = "ios", feature = "cli"))]
+    return String::new();
 }
 
 #[no_mangle]
