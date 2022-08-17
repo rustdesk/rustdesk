@@ -106,7 +106,6 @@ class DesktopServerPage extends StatefulWidget implements PageShape {
 }
 
 class _DesktopServerPageState extends State<DesktopServerPage> {
-
   @override
   Widget build(BuildContext context) {
     return ChangeNotifierProvider.value(
@@ -182,7 +181,7 @@ class ConnectionManager extends StatelessWidget {
                                     MaterialStateProperty.all(Colors.red)),
                             icon: Icon(Icons.close),
                             onPressed: () {
-                              bind.serverCloseConnection(connId: entry.key);
+                              bind.cmCloseConnection(connId: entry.key);
                               gFFI.invokeMethod(
                                   "cancel_notification", entry.key);
                             },

@@ -423,7 +423,7 @@ class ServerModel with ChangeNotifier {
 
   void sendLoginResponse(Client client, bool res) async {
     if (res) {
-      bind.serverLoginRes(connId: client.id, res: res);
+      bind.cmLoginRes(connId: client.id, res: res);
       if (!client.isFileTransfer) {
         parent.target?.invokeMethod("start_capture");
       }
@@ -431,7 +431,7 @@ class ServerModel with ChangeNotifier {
       _clients[client.id]?.authorized = true;
       notifyListeners();
     } else {
-      bind.serverLoginRes(connId: client.id, res: res);
+      bind.cmLoginRes(connId: client.id, res: res);
       parent.target?.invokeMethod("cancel_notification", client.id);
       _clients.remove(client.id);
     }
@@ -463,7 +463,7 @@ class ServerModel with ChangeNotifier {
 
   closeAll() {
     _clients.forEach((id, client) {
-      bind.serverCloseConnection(connId: id);
+      bind.cmCloseConnection(connId: id);
     });
     _clients.clear();
   }

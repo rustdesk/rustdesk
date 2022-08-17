@@ -1,5 +1,5 @@
 use std::{
-    collections::{HashMap, VecDeque},
+    collections::HashMap,
     sync::{
         atomic::{AtomicBool, AtomicUsize, Ordering},
         Arc, Mutex, RwLock,
@@ -9,7 +9,7 @@ use std::{
 use flutter_rust_bridge::{StreamSink, ZeroCopyBuffer};
 
 use hbb_common::config::{PeerConfig, TransferSerde};
-use hbb_common::fs::{get_job, TransferJobMeta};
+use hbb_common::fs::get_job;
 use hbb_common::{
     allow_err,
     compress::decompress,
@@ -451,7 +451,6 @@ impl Session {
                     key_event.set_chr(raw);
                 }
             }
-            _ => {}
         }
         if alt {
             key_event.modifiers.push(ControlKey::Alt.into());
@@ -794,7 +793,7 @@ impl Connection {
                             }
                             if !conn.read_jobs.is_empty() {
                                 if let Err(err) = fs::handle_read_jobs(&mut conn.read_jobs, &mut peer).await {
-                                    log::debug!("Connection Error");
+                                    log::debug!("Connection Error: {}", err);
                                     break;
                                 }
                                 conn.update_jobs_status();
@@ -915,7 +914,7 @@ impl Connection {
                         Some(file_response::Union::Dir(fd)) => {
                             let mut entries = fd.entries.to_vec();
                             if self.session.peer_platform() == "Windows" {
-                                fs::transform_windows_path(&mut entries);
+                                transform_windows_path(&mut entries);
                             }
                             let id = fd.id;
                             self.session.push_event(
@@ -1636,8 +1635,10 @@ pub mod connection_manager {
     use std::{
         collections::HashMap,
         iter::FromIterator,
-        rc::{Rc, Weak},
-        sync::{Mutex, RwLock},
+        sync::{
+            atomic::{AtomicI64, Ordering},
+            RwLock,
+        },
     };
 
     use serde_derive::Serialize;
@@ -1652,16 +1653,18 @@ pub mod connection_manager {
         protobuf::Message as _,
         tokio::{
             self,
-            sync::mpsc::{UnboundedReceiver, UnboundedSender},
+            sync::mpsc::{self, UnboundedReceiver, UnboundedSender},
             task::spawn_blocking,
         },
     };
     #[cfg(any(target_os = "android"))]
     use scrap::android::call_main_service_set_by_name;
 
-    use crate::ipc;
+    #[cfg(windows)]
+    use crate::ipc::start_clipboard_file;
+
     use crate::ipc::Data;
-    use crate::server::Connection as Conn;
+    use crate::ipc::{self, new_listener, Connection};
 
     use super::GLOBAL_EVENT_STREAM;
 
@@ -1681,76 +1684,184 @@ pub mod connection_manager {
 
     lazy_static::lazy_static! {
         static ref CLIENTS: RwLock<HashMap<i32,Client>> = Default::default();
-        static ref WRITE_JOBS: Mutex<Vec<fs::TransferJob>> = Mutex::new(Vec::new());
     }
 
+    static CLICK_TIME: AtomicI64 = AtomicI64::new(0);
+
+    enum ClipboardFileData {
+        #[cfg(windows)]
+        Clip((i32, ipc::ClipbaordFile)),
+        Enable((i32, bool)),
+    }
+
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    pub fn start_listen_ipc_thread() {
+        std::thread::spawn(move || start_ipc());
+    }
+
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    #[tokio::main(flavor = "current_thread")]
+    async fn start_ipc() {
+        let (tx_file, _rx_file) = mpsc::unbounded_channel::<ClipboardFileData>();
+        #[cfg(windows)]
+        let cm_clip = cm.clone();
+        #[cfg(windows)]
+        std::thread::spawn(move || start_clipboard_file(cm_clip, _rx_file));
+
+        #[cfg(windows)]
+        std::thread::spawn(move || {
+            log::info!("try create privacy mode window");
+            #[cfg(windows)]
+            {
+                if let Err(e) = crate::platform::windows::check_update_broker_process() {
+                    log::warn!(
+                        "Failed to check update broker process. Privacy mode may not work properly. {}",
+                        e
+                    );
+                }
+            }
+            allow_err!(crate::ui::win_privacy::start());
+        });
+
+        match new_listener("_cm").await {
+            Ok(mut incoming) => {
+                while let Some(result) = incoming.next().await {
+                    match result {
+                        Ok(stream) => {
+                            log::debug!("Got new connection");
+                            let mut stream = Connection::new(stream);
+                            let tx_file = tx_file.clone();
+                            tokio::spawn(async move {
+                                // for tmp use, without real conn id
+                                let conn_id_tmp = -1;
+                                let mut conn_id: i32 = 0;
+                                let (tx, mut rx) = mpsc::unbounded_channel::<Data>();
+                                let mut write_jobs: Vec<fs::TransferJob> = Vec::new();
+                                loop {
+                                    tokio::select! {
+                                        res = stream.next() => {
+                                            match res {
+                                                Err(err) => {
+                                                    log::info!("cm ipc connection closed: {}", err);
+                                                    break;
+                                                }
+                                                Ok(Some(data)) => {
+                                                    match data {
+                                                        Data::Login{id, is_file_transfer, port_forward, peer_id, name, authorized, keyboard, clipboard, audio, file, file_transfer_enabled, restart} => {
+                                                            log::debug!("conn_id: {}", id);
+                                                            conn_id = id;
+                                                            tx_file.send(ClipboardFileData::Enable((id, file_transfer_enabled))).ok();
+                                                            on_login(id, is_file_transfer, port_forward, peer_id, name, authorized, keyboard, clipboard, audio, file, restart, tx.clone());
+                                                        }
+                                                        Data::Close => {
+                                                            tx_file.send(ClipboardFileData::Enable((conn_id, false))).ok();
+                                                            log::info!("cm ipc connection closed from connection request");
+                                                            break;
+                                                        }
+                                                        Data::PrivacyModeState((_, _)) => {
+                                                            conn_id = conn_id_tmp;
+                                                            allow_err!(tx.send(data));
+                                                        }
+                                                        Data::ClickTime(ms) => {
+                                                            CLICK_TIME.store(ms, Ordering::SeqCst);
+                                                        }
+                                                        Data::ChatMessage { text } => {
+                                                            handle_chat(conn_id, text);
+                                                        }
+                                                        Data::FS(fs) => {
+                                                            handle_fs(fs, &mut write_jobs, &tx).await;
+                                                        }
+                                                        #[cfg(windows)]
+                                                        Data::ClipbaordFile(_clip) => {
+                                                            tx_file
+                                                                .send(ClipboardFileData::Clip((id, _clip)))
+                                                                .ok();
+                                                        }
+                                                        #[cfg(windows)]
+                                                        Data::ClipboardFileEnabled(enabled) => {
+                                                            tx_file
+                                                                .send(ClipboardFileData::Enable((id, enabled)))
+                                                                .ok();
+                                                        }
+                                                        _ => {}
+                                                    }
+                                                }
+                                                _ => {}
+                                            }
+                                        }
+                                        Some(data) = rx.recv() => {
+                                            if stream.send(&data).await.is_err() {
+                                                break;
+                                            }
+                                        }
+                                    }
+                                }
+                                if conn_id != conn_id_tmp {
+                                    remove_connection(conn_id);
+                                }
+                            });
+                        }
+                        Err(err) => {
+                            log::error!("Couldn't get cm client: {:?}", err);
+                        }
+                    }
+                }
+            }
+            Err(err) => {
+                log::error!("Failed to start cm ipc server: {}", err);
+            }
+        }
+        // crate::platform::quit_gui();
+        // TODO flutter quit_gui
+    }
+
+    #[cfg(target_os = "android")]
     pub fn start_channel(rx: UnboundedReceiver<Data>, tx: UnboundedSender<Data>) {
         std::thread::spawn(move || start_listen(rx, tx));
     }
 
+    #[cfg(target_os = "android")]
     #[tokio::main(flavor = "current_thread")]
     async fn start_listen(mut rx: UnboundedReceiver<Data>, tx: UnboundedSender<Data>) {
         let mut current_id = 0;
+        let mut write_jobs: Vec<fs::TransferJob> = Vec::new();
         loop {
             match rx.recv().await {
                 Some(Data::Login {
                     id,
                     is_file_transfer,
+                    port_forward,
                     peer_id,
                     name,
                     authorized,
                     keyboard,
                     clipboard,
                     audio,
+                    file,
+                    restart,
                     ..
                 }) => {
                     current_id = id;
-                    let mut client = Client {
+                    on_login(
                         id,
-                        authorized,
                         is_file_transfer,
-                        name: name.clone(),
-                        peer_id: peer_id.clone(),
+                        port_forward,
+                        peer_id,
+                        name,
+                        authorized,
                         keyboard,
                         clipboard,
                         audio,
-                        tx: tx.clone(),
-                    };
-                    if authorized {
-                        client.authorized = true;
-                        let client_json = serde_json::to_string(&client).unwrap_or("".into());
-                        // send to Android service,active notification no matter UI is shown or not.
-                        #[cfg(any(target_os = "android"))]
-                        if let Err(e) = call_main_service_set_by_name(
-                            "on_client_authorized",
-                            Some(&client_json),
-                            None,
-                        ) {
-                            log::debug!("call_service_set_by_name fail,{}", e);
-                        }
-                        // send to UI,refresh widget
-                        push_event("on_client_authorized", vec![("client", &client_json)]);
-                    } else {
-                        let client_json = serde_json::to_string(&client).unwrap_or("".into());
-                        // send to Android service,active notification no matter UI is shown or not.
-                        #[cfg(any(target_os = "android"))]
-                        if let Err(e) = call_main_service_set_by_name(
-                            "try_start_without_auth",
-                            Some(&client_json),
-                            None,
-                        ) {
-                            log::debug!("call_service_set_by_name fail,{}", e);
-                        }
-                        // send to UI,refresh widget
-                        push_event("try_start_without_auth", vec![("client", &client_json)]);
-                    }
-                    CLIENTS.write().unwrap().insert(id, client);
+                        file,
+                        restart,
+                        tx.clone(),
+                    );
                 }
                 Some(Data::ChatMessage { text }) => {
                     handle_chat(current_id, text);
                 }
                 Some(Data::FS(fs)) => {
-                    handle_fs(fs, &tx).await;
+                    handle_fs(fs, &mut write_jobs, &tx).await;
                 }
                 Some(Data::Close) => {
                     break;
@@ -1762,6 +1873,58 @@ pub mod connection_manager {
             }
         }
         remove_connection(current_id);
+    }
+
+    fn on_login(
+        id: i32,
+        is_file_transfer: bool,
+        _port_forward: String,
+        peer_id: String,
+        name: String,
+        authorized: bool,
+        keyboard: bool,
+        clipboard: bool,
+        audio: bool,
+        _file: bool,
+        _restart: bool,
+        tx: mpsc::UnboundedSender<Data>,
+    ) {
+        let mut client = Client {
+            id,
+            authorized,
+            is_file_transfer,
+            name: name.clone(),
+            peer_id: peer_id.clone(),
+            keyboard,
+            clipboard,
+            audio,
+            tx,
+        };
+        if authorized {
+            client.authorized = true;
+            let client_json = serde_json::to_string(&client).unwrap_or("".into());
+            // send to Android service, active notification no matter UI is shown or not.
+            #[cfg(any(target_os = "android"))]
+            if let Err(e) =
+                call_main_service_set_by_name("on_client_authorized", Some(&client_json), None)
+            {
+                log::debug!("call_service_set_by_name fail,{}", e);
+            }
+            // send to UI, refresh widget
+            push_event("on_client_authorized", vec![("client", &client_json)]);
+        } else {
+            let client_json = serde_json::to_string(&client).unwrap_or("".into());
+            // send to Android service, active notification no matter UI is shown or not.
+            #[cfg(any(target_os = "android"))]
+            if let Err(e) =
+                call_main_service_set_by_name("try_start_without_auth", Some(&client_json), None)
+            {
+                log::debug!("call_service_set_by_name fail,{}", e);
+            }
+            // send to UI, refresh widget
+            push_event("try_start_without_auth", vec![("client", &client_json)]);
+        }
+        CLIENTS.write().unwrap().insert(id, client);
     }
 
     fn push_event(name: &str, event: Vec<(&str, &str)>) {
@@ -1778,6 +1941,22 @@ pub mod connection_manager {
         };
     }
 
+    pub fn get_click_time() -> i64 {
+        CLICK_TIME.load(Ordering::SeqCst)
+    }
+
+    pub fn check_click_time(id: i32) {
+        if let Some(client) = CLIENTS.read().unwrap().get(&id) {
+            allow_err!(client.tx.send(Data::ClickTime(0)));
+        };
+    }
+
+    pub fn switch_permission(id: i32, name: String, enabled: bool) {
+        if let Some(client) = CLIENTS.read().unwrap().get(&id) {
+            allow_err!(client.tx.send(Data::SwitchPermission { name, enabled }));
+        };
+    }
+
     pub fn get_clients_state() -> String {
         let clients = CLIENTS.read().unwrap();
         let res = Vec::from_iter(clients.values().cloned());
@@ -1790,7 +1969,7 @@ pub mod connection_manager {
     }
 
     pub fn close_conn(id: i32) {
-        if let Some(client) = CLIENTS.write().unwrap().get(&id) {
+        if let Some(client) = CLIENTS.read().unwrap().get(&id) {
             allow_err!(client.tx.send(Data::Close));
         };
     }
@@ -1812,7 +1991,7 @@ pub mod connection_manager {
 
         if clients
             .iter()
-            .filter(|(k, v)| !v.is_file_transfer)
+            .filter(|(_k, v)| !v.is_file_transfer)
             .next()
             .is_none()
         {
@@ -1835,14 +2014,18 @@ pub mod connection_manager {
 
     // server mode send chat to peer
     pub fn send_chat(id: i32, text: String) {
-        let mut clients = CLIENTS.read().unwrap();
+        let clients = CLIENTS.read().unwrap();
         if let Some(client) = clients.get(&id) {
             allow_err!(client.tx.send(Data::ChatMessage { text }));
         }
     }
 
     // handle FS server
-    async fn handle_fs(fs: ipc::FS, tx: &UnboundedSender<Data>) {
+    async fn handle_fs(
+        fs: ipc::FS,
+        write_jobs: &mut Vec<fs::TransferJob>,
+        tx: &UnboundedSender<Data>,
+    ) {
         match fs {
             ipc::FS::ReadDir {
                 dir,
@@ -1870,7 +2053,7 @@ pub mod connection_manager {
                 mut files,
                 overwrite_detection,
             } => {
-                WRITE_JOBS.lock().unwrap().push(fs::TransferJob::new_write(
+                write_jobs.push(fs::TransferJob::new_write(
                     id,
                     "".to_string(),
                     path,
@@ -1889,14 +2072,12 @@ pub mod connection_manager {
                 ));
             }
             ipc::FS::CancelWrite { id } => {
-                let write_jobs = &mut *WRITE_JOBS.lock().unwrap();
                 if let Some(job) = fs::get_job(id, write_jobs) {
                     job.remove_download_file();
                     fs::remove_job(id, write_jobs);
                 }
             }
             ipc::FS::WriteDone { id, file_num } => {
-                let write_jobs = &mut *WRITE_JOBS.lock().unwrap();
                 if let Some(job) = fs::get_job(id, write_jobs) {
                     job.modify_time();
                     send_raw(fs::new_done(id, file_num), tx);
@@ -1909,7 +2090,7 @@ pub mod connection_manager {
                 data,
                 compressed,
             } => {
-                if let Some(job) = fs::get_job(id, &mut *WRITE_JOBS.lock().unwrap()) {
+                if let Some(job) = fs::get_job(id, write_jobs) {
                     if let Err(err) = job
                         .write(
                             FileTransferBlock {
@@ -1934,7 +2115,7 @@ pub mod connection_manager {
                 last_modified,
                 is_upload,
             } => {
-                if let Some(job) = fs::get_job(id, &mut *WRITE_JOBS.lock().unwrap()) {
+                if let Some(job) = fs::get_job(id, write_jobs) {
                     let mut req = FileTransferSendConfirmRequest {
                         id,
                         file_num,
