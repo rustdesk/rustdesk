@@ -342,6 +342,7 @@ class ServerModel with ChangeNotifier {
     var res = await bind.mainGetClientsState();
     try {
       final List clientsJson = jsonDecode(res);
+      _clients.clear();
       for (var clientJson in clientsJson) {
         final client = Client.fromJson(clientJson);
         _clients[client.id] = client;

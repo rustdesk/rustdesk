@@ -49,6 +49,7 @@ Future<Null> main(List<String> args) async {
         break;
     }
   } else if (args.isNotEmpty && args.first == '--cm') {
+    print("--cm started");
     await windowManager.ensureInitialized();
     runConnectionManagerScreen();
   } else {
@@ -117,7 +118,6 @@ void runFileTransferScreen(Map<String, dynamic> argument) async {
 
 void runConnectionManagerScreen() async {
   await initEnv(kAppTypeConnectionManager);
-  await windowManager.setAlwaysOnTop(true);
   await windowManager.setSize(Size(400, 600));
   await windowManager.setAlignment(Alignment.topRight);
   runApp(GetMaterialApp(theme: getCurrentTheme(), home: DesktopServerPage()));
