@@ -79,6 +79,15 @@ final ButtonStyle flatButtonStyle = TextButton.styleFrom(
   ),
 );
 
+String formatDurationToTime(Duration duration) {
+  var totalTime = duration.inSeconds;
+  final secs = totalTime % 60;
+  totalTime = (totalTime - secs) ~/ 60;
+  final mins = totalTime % 60;
+  totalTime = (totalTime - mins) ~/ 60;
+  return "${totalTime.toString().padLeft(2, "0")}:${mins.toString().padLeft(2, "0")}:${secs.toString().padLeft(2, "0")}";
+}
+
 closeConnection({String? id}) {
   if (isAndroid || isIOS) {
     Navigator.popUntil(globalKey.currentContext!, ModalRoute.withName("/"));
@@ -440,12 +449,18 @@ class PermissionManager {
   }
 
   static Future<bool> check(String type) {
+    if (isDesktop) {
+      return Future.value(true);
+    }
     if (!permissions.contains(type))
       return Future.error("Wrong permission!$type");
     return gFFI.invokeMethod("check_permission", type);
   }
 
   static Future<bool> request(String type) {
+    if (isDesktop) {
+      return Future.value(true);
+    }
     if (!permissions.contains(type))
       return Future.error("Wrong permission!$type");
 

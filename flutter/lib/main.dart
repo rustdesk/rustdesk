@@ -117,9 +117,12 @@ void runFileTransferScreen(Map<String, dynamic> argument) async {
 }
 
 void runConnectionManagerScreen() async {
-  await initEnv(kAppTypeConnectionManager);
-  await windowManager.setSize(Size(400, 600));
-  await windowManager.setAlignment(Alignment.topRight);
+  await Future.wait([
+    initEnv(kAppTypeConnectionManager),
+    windowManager
+        .setSize(Size(300, 400))
+        .then((value) => windowManager.setAlignment(Alignment.topRight))
+  ]);
   runApp(GetMaterialApp(theme: getCurrentTheme(), home: DesktopServerPage()));
 }
 

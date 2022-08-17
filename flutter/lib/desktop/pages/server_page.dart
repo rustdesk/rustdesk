@@ -1,5 +1,8 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
+
 // import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
 import 'package:provider/provider.dart';
 
@@ -32,14 +35,14 @@ class DesktopServerPage extends StatefulWidget implements PageShape {
               padding: EdgeInsets.symmetric(horizontal: 16.0),
               value: "setPermanentPassword",
               enabled:
-                  gFFI.serverModel.verificationMethod != kUseTemporaryPassword,
+              gFFI.serverModel.verificationMethod != kUseTemporaryPassword,
             ),
             PopupMenuItem(
               child: Text(translate("Set temporary password length")),
               padding: EdgeInsets.symmetric(horizontal: 16.0),
               value: "setTemporaryPasswordLength",
               enabled:
-                  gFFI.serverModel.verificationMethod != kUsePermanentPassword,
+              gFFI.serverModel.verificationMethod != kUsePermanentPassword,
             ),
             const PopupMenuDivider(),
             PopupMenuItem(
@@ -51,7 +54,7 @@ class DesktopServerPage extends StatefulWidget implements PageShape {
                       trailing: Icon(
                         Icons.check,
                         color: gFFI.serverModel.verificationMethod ==
-                                kUseTemporaryPassword
+                            kUseTemporaryPassword
                             ? null
                             : Color(0xFFFFFFFF),
                       ))),
@@ -64,7 +67,7 @@ class DesktopServerPage extends StatefulWidget implements PageShape {
                   trailing: Icon(
                     Icons.check,
                     color: gFFI.serverModel.verificationMethod ==
-                            kUsePermanentPassword
+                        kUsePermanentPassword
                         ? null
                         : Color(0xFFFFFFFF),
                   )),
@@ -77,9 +80,9 @@ class DesktopServerPage extends StatefulWidget implements PageShape {
                   trailing: Icon(
                     Icons.check,
                     color: gFFI.serverModel.verificationMethod !=
-                                kUseTemporaryPassword &&
-                            gFFI.serverModel.verificationMethod !=
-                                kUsePermanentPassword
+                        kUseTemporaryPassword &&
+                        gFFI.serverModel.verificationMethod !=
+                            kUsePermanentPassword
                         ? null
                         : Color(0xFFFFFFFF),
                   )),
@@ -115,16 +118,16 @@ class _DesktopServerPageState extends State<DesktopServerPage>
         value: gFFI.serverModel,
         child: Consumer<ServerModel>(
             builder: (context, serverModel, child) => Material(
-                  child: Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.start,
-                      children: [
-                        Expanded(child: ConnectionManager()),
-                        SizedBox.fromSize(size: Size(0, 15.0)),
-                      ],
-                    ),
-                  ),
-                )));
+              child: Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.start,
+                  children: [
+                    Expanded(child: ConnectionManager()),
+                    SizedBox.fromSize(size: Size(0, 15.0)),
+                  ],
+                ),
+              ),
+            )));
   }
 
   @override
@@ -136,9 +139,9 @@ class ConnectionManager extends StatelessWidget {
   Widget build(BuildContext context) {
     final serverModel = Provider.of<ServerModel>(context);
     // test case:
-    serverModel.clients.clear();
-    serverModel.clients[0] = Client(
-        false, false, "Readmi-M21sdfsdf", "123123123", true, false, false);
+    // serverModel.clients.clear();
+    // serverModel.clients[0] = Client(
+    //     false, false, "Readmi-M21sdfsdf", "123123123", true, false, false);
     return serverModel.clients.isEmpty
         ? Center(
             child: Text(translate("Waiting")),
@@ -150,11 +153,11 @@ class ConnectionManager extends StatelessWidget {
               children: [
                 SizedBox(
                   height: kTextTabBarHeight,
-                  child: TabBar(
-                      isScrollable: true,
-                      tabs: serverModel.clients.entries
-                          .map((entry) => buildTab(entry))
-                          .toList(growable: false)),
+            child: TabBar(
+                isScrollable: true,
+                tabs: serverModel.clients.entries
+                    .map((entry) => buildTab(entry))
+                    .toList(growable: false)),
           ),
           Expanded(
             child: TabBarView(
@@ -170,9 +173,10 @@ class ConnectionManager extends StatelessWidget {
   Widget buildConnectionCard(MapEntry<int, Client> entry) {
     final client = entry.value;
     return Column(
+      key: ValueKey(entry.key),
       children: [
         _CmHeader(client: client),
-        _PrivilegeBoard(client: client),
+        client.isFileTransfer ? Offstage() : _PrivilegeBoard(client: client),
         Expanded(
             child: Align(
           alignment: Alignment.bottomCenter,
@@ -200,13 +204,39 @@ class ConnectionManager extends StatelessWidget {
   }
 }
 
-class _CmHeader extends StatelessWidget {
+class _CmHeader extends StatefulWidget {
   final Client client;
 
   const _CmHeader({Key? key, required this.client}) : super(key: key);
 
   @override
+  State<_CmHeader> createState() => _CmHeaderState();
+}
+
+class _CmHeaderState extends State<_CmHeader>
+    with AutomaticKeepAliveClientMixin {
+  Client get client => widget.client;
+
+  var _time = 0.obs;
+  Timer? _timer;
+
+  @override
+  void initState() {
+    super.initState();
+    _timer = Timer.periodic(Duration(seconds: 1), (_) {
+      _time.value = _time.value + 1;
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
+    super.build(context);
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -242,13 +272,13 @@ class _CmHeader extends StatelessWidget {
               SizedBox(
                 height: 16.0,
               ),
-              Offstage(
-                  offstage: !client.authorized,
-                  child: Row(
-                    children: [
-                      Text("${translate("Connected")}"),
-                    ],
-                  ))
+              Row(
+                children: [
+                  Text("${translate("Connected")}").marginOnly(right: 8.0),
+                  Obx(() => Text(
+                      "${formatDurationToTime(Duration(seconds: _time.value))}"))
+                ],
+              )
             ],
           ),
         ),
@@ -264,6 +294,9 @@ class _CmHeader extends StatelessWidget {
   }
 
   void handleSendMsg() {}
+
+  @override
+  bool get wantKeepAlive => true;
 }
 
 class _PrivilegeBoard extends StatelessWidget {
@@ -277,7 +310,7 @@ class _PrivilegeBoard extends StatelessWidget {
       message: tooltip ?? "",
       child: Ink(
         decoration:
-            BoxDecoration(color: enabled ? MyTheme.accent80 : Colors.grey),
+        BoxDecoration(color: enabled ? MyTheme.accent80 : Colors.grey),
         padding: EdgeInsets.all(4.0),
         child: InkWell(
           onTap: () => onTap?.call(!enabled),
@@ -437,9 +470,9 @@ class PaddingCard extends StatelessWidget {
                 children: [
                   titleIcon != null
                       ? Padding(
-                          padding: EdgeInsets.only(right: 10),
-                          child: Icon(titleIcon,
-                              color: MyTheme.accent80, size: 30))
+                      padding: EdgeInsets.only(right: 10),
+                      child: Icon(titleIcon,
+                          color: MyTheme.accent80, size: 30))
                       : SizedBox.shrink(),
                   Text(
                     title!,
@@ -486,12 +519,12 @@ Widget clientInfo(Client client) {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                  Text(client.name,
-                      style: TextStyle(color: MyTheme.idColor, fontSize: 18)),
-                  SizedBox(width: 8),
-                  Text(client.peerId,
-                      style: TextStyle(color: MyTheme.idColor, fontSize: 10))
-                ]))
+                      Text(client.name,
+                          style: TextStyle(color: MyTheme.idColor, fontSize: 18)),
+                      SizedBox(width: 8),
+                      Text(client.peerId,
+                          style: TextStyle(color: MyTheme.idColor, fontSize: 10))
+                    ]))
           ],
         ),
       ]));
