@@ -83,7 +83,7 @@ class DesktopTabBar extends StatelessWidget {
                       labelPadding: const EdgeInsets.symmetric(
                           vertical: 0, horizontal: 0),
                       isScrollable: true,
-                      indicatorPadding: EdgeInsets.only(bottom: 2),
+                      indicatorPadding: EdgeInsets.zero,
                       physics: BouncingScrollPhysics(),
                       controller: controller.value,
                       tabs: tabs.asMap().entries.map((e) {

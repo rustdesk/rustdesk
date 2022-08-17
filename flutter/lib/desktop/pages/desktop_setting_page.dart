@@ -1,8 +1,8 @@
 import 'dart:convert';
-import 'dart:io' show Platform;
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_hbb/common.dart';
 import 'package:flutter_hbb/desktop/pages/desktop_home_page.dart';
 import 'package:flutter_hbb/models/platform_model.dart';
@@ -10,11 +10,28 @@ import 'package:flutter_hbb/models/server_model.dart';
 import 'package:get/get.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:url_launcher/url_launcher_string.dart';
 
-const double _kCardFixedWidth = 600;
-const double _kCardLeftPadding = 20;
-const double _kContentLeftPadding = 30;
-const double _kListViewBottomPadding = 30;
+const double _kTabWidth = 235;
+const double _kTabHeight = 42;
+const double _kCardFixedWidth = 560;
+const double _kCardLeftMargin = 15;
+const double _kContentHMargin = 15;
+const double _kContentHSubMargin = _kContentHMargin + 33;
+const double _kCheckBoxLeftMargin = 10;
+const double _kRadioLeftMargin = 10;
+const double _kListViewBottomMargin = 15;
+const double _kTitleFontSize = 20;
+const double _kContentFontSize = 15;
+const Color _accentColor = MyTheme.accent;
+
+class _TabInfo {
+  late final int index;
+  late final String label;
+  late final IconData unselected;
+  late final IconData selected;
+  _TabInfo(this.index, this.label, this.unselected, this.selected);
+}
 
 class DesktopSettingPage extends StatefulWidget {
   DesktopSettingPage({Key? key}) : super(key: key);
@@ -25,19 +42,21 @@ class DesktopSettingPage extends StatefulWidget {
 
 class _DesktopSettingPageState extends State<DesktopSettingPage>
     with TickerProviderStateMixin, AutomaticKeepAliveClientMixin {
-  final List<NavigationRailDestination> _destinations =
-      <NavigationRailDestination>[
-    _destination('Display', Icons.palette_outlined, Icons.palette),
-    _destination(
-        'Security', Icons.health_and_safety_outlined, Icons.health_and_safety),
-    _destination(
-        'Connection', Icons.settings_remote_outlined, Icons.settings_remote),
-    _destination('Video', Icons.videocam_outlined, Icons.videocam),
-    _destination('Audio', Icons.volume_up_outlined, Icons.volume_up),
+  final List<_TabInfo> _setting_tabs = <_TabInfo>[
+    _TabInfo(
+        0, 'User Interface', Icons.language_outlined, Icons.language_sharp),
+    _TabInfo(1, 'Security', Icons.enhanced_encryption_outlined,
+        Icons.enhanced_encryption_sharp),
+    _TabInfo(2, 'Display', Icons.desktop_windows_outlined,
+        Icons.desktop_windows_sharp),
+    _TabInfo(3, 'Audio', Icons.volume_up_outlined, Icons.volume_up_sharp),
+    _TabInfo(4, 'Connection', Icons.link_outlined, Icons.link_sharp),
   ];
+  final _TabInfo _about_tab =
+      _TabInfo(5, 'About RustDesk', Icons.info_outline, Icons.info_sharp);
 
-  late TabController controller;
-  int _selectedIndex = 0;
+  late PageController controller;
+  RxInt _selectedIndex = 0.obs;
 
   @override
   bool get wantKeepAlive => true;
@@ -45,7 +64,7 @@ class _DesktopSettingPageState extends State<DesktopSettingPage>
   @override
   void initState() {
     super.initState();
-    controller = TabController(length: _destinations.length, vsync: this);
+    controller = PageController();
   }
 
   @override
@@ -54,27 +73,30 @@ class _DesktopSettingPageState extends State<DesktopSettingPage>
     return Scaffold(
       body: Row(
         children: <Widget>[
-          NavigationRail(
-            selectedIndex: _selectedIndex,
-            onDestinationSelected: (int index) {
-              setState(() {
-                _selectedIndex = index;
-              });
-              controller.animateTo(index);
-            },
-            labelType: NavigationRailLabelType.all,
-            destinations: _destinations,
+          Container(
+            width: _kTabWidth,
+            child: Column(
+              children: [
+                _header(),
+                Flexible(child: _listView(tabs: _setting_tabs)),
+                _listItem(tab: _about_tab),
+                SizedBox(
+                  height: 120,
+                )
+              ],
+            ),
           ),
           const VerticalDivider(thickness: 1, width: 1),
           Expanded(
-            child: TabBarView(
+            child: PageView(
               controller: controller,
               children: [
-                _Display(),
+                _UserInterface(),
                 _Safety(),
-                _Connection(),
-                _Video(),
+                _Display(),
                 _Audio(),
+                _Connection(),
+                _About(),
               ],
             ),
           )
@@ -83,26 +105,81 @@ class _DesktopSettingPageState extends State<DesktopSettingPage>
     );
   }
 
-  static NavigationRailDestination _destination(
-      String label, IconData selected, IconData unSelected) {
-    return NavigationRailDestination(
-      icon: Icon(unSelected),
-      selectedIcon: Icon(selected),
-      label: Text(translate(label)),
+  Widget _header() {
+    return Row(
+      children: [
+        SizedBox(
+          height: 62,
+          child: Text(
+            translate('Settings'),
+            textAlign: TextAlign.left,
+            style: TextStyle(
+              color: _accentColor,
+              fontSize: _kTitleFontSize,
+              fontWeight: FontWeight.w400,
+            ),
+          ),
+        ).marginOnly(left: 20, top: 10),
+        Spacer(),
+      ],
     );
+  }
+
+  Widget _listView({required List<_TabInfo> tabs}) {
+    return ListView(
+      children: tabs.map((tab) => _listItem(tab: tab)).toList(),
+    );
+  }
+
+  Widget _listItem({required _TabInfo tab}) {
+    return Obx(() {
+      bool selected = tab.index == _selectedIndex.value;
+      return Container(
+        width: _kTabWidth,
+        height: _kTabHeight,
+        child: InkWell(
+          onTap: () {
+            if (_selectedIndex.value != tab.index) {
+              controller.jumpToPage(tab.index);
+            }
+            _selectedIndex.value = tab.index;
+          },
+          child: Row(children: [
+            Container(
+              width: 4,
+              height: _kTabHeight * 0.7,
+              color: selected ? _accentColor : null,
+            ),
+            Icon(
+              selected ? tab.selected : tab.unselected,
+              color: selected ? _accentColor : null,
+              size: 20,
+            ).marginOnly(left: 13, right: 10),
+            Text(
+              translate(tab.label),
+              style: TextStyle(
+                  color: selected ? _accentColor : null,
+                  fontWeight: FontWeight.w400,
+                  fontSize: _kContentFontSize),
+            ),
+          ]),
+        ),
+      );
+    });
   }
 }
 
 //#region pages
 
-class _Display extends StatefulWidget {
-  _Display({Key? key}) : super(key: key);
+class _UserInterface extends StatefulWidget {
+  _UserInterface({Key? key}) : super(key: key);
 
   @override
-  State<_Display> createState() => _DisplayState();
+  State<_UserInterface> createState() => _UserInterfaceState();
 }
 
-class _DisplayState extends State<_Display> with AutomaticKeepAliveClientMixin {
+class _UserInterfaceState extends State<_UserInterface>
+    with AutomaticKeepAliveClientMixin {
   @override
   bool get wantKeepAlive => true;
 
@@ -111,9 +188,10 @@ class _DisplayState extends State<_Display> with AutomaticKeepAliveClientMixin {
     super.build(context);
     return ListView(
       children: [
-        _Card(title: translate('Display'), children: [language(), theme()]),
+        _Card(title: 'Language', children: [language()]),
+        _Card(title: 'Theme', children: [theme()]),
       ],
-    ).paddingOnly(bottom: _kListViewBottomPadding);
+    ).marginOnly(bottom: _kListViewBottomMargin);
   }
 
   Widget language() {
@@ -133,31 +211,35 @@ class _DisplayState extends State<_Display> with AutomaticKeepAliveClientMixin {
       if (!keys.contains(currentKey)) {
         currentKey = "default";
       }
-      return _row(
-          'Language',
-          _ComboBox(
-            keys: keys,
-            values: values,
-            initialKey: currentKey,
-            onChanged: (key) async {
-              await bind.mainSetLocalOption(key: "lang", value: key);
-              Get.forceAppUpdate();
-            },
-          ));
+      return _ComboBox(
+        keys: keys,
+        values: values,
+        initialKey: currentKey,
+        onChanged: (key) async {
+          await bind.mainSetLocalOption(key: "lang", value: key);
+          Get.forceAppUpdate();
+        },
+      ).marginOnly(left: _kContentHMargin);
     });
   }
 
   Widget theme() {
-    return _row(
-        'Dark Theme',
-        Switch(
-            value: isDarkTheme(),
-            onChanged: ((dark) async {
-              Get.changeTheme(dark ? MyTheme.darkTheme : MyTheme.lightTheme);
-              Get.find<SharedPreferences>()
-                  .setString("darkTheme", dark ? "Y" : "");
-              Get.forceAppUpdate();
-            })));
+    var change = () {
+      bool dark = !isDarkTheme();
+      Get.changeTheme(dark ? MyTheme.darkTheme : MyTheme.lightTheme);
+      Get.find<SharedPreferences>().setString("darkTheme", dark ? "Y" : "");
+      Get.forceAppUpdate();
+    };
+
+    return GestureDetector(
+      child: Row(
+        children: [
+          Checkbox(value: isDarkTheme(), onChanged: (_) => change()),
+          Expanded(child: Text(translate('Dark Theme'))),
+        ],
+      ).marginOnly(left: _kCheckBoxLeftMargin),
+      onTap: change,
+    );
   }
 }
 
@@ -181,17 +263,17 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
         password(),
         whitelist(),
       ],
-    ).paddingOnly(bottom: _kListViewBottomPadding);
+    ).marginOnly(bottom: _kListViewBottomMargin);
   }
 
   Widget permissions() {
     return _Card(title: 'Permissions', children: [
-      _option_check('Enable Keyboard/Mouse', 'enable-keyboard'),
-      _option_check('Enable Clipboard', 'enable-clipboard'),
-      _option_check('Enable File Transfer', 'enable-file-transfer'),
-      _option_check('Enable Audio', 'enable-audio'),
-      _option_check('Enable Remote Restart', 'enable-remote-restart'),
-      _option_check('Enable remote configuration modification',
+      _OptionCheckBox('Enable Keyboard/Mouse', 'enable-keyboard'),
+      _OptionCheckBox('Enable Clipboard', 'enable-clipboard'),
+      _OptionCheckBox('Enable File Transfer', 'enable-file-transfer'),
+      _OptionCheckBox('Enable Audio', 'enable-audio'),
+      _OptionCheckBox('Enable Remote Restart', 'enable-remote-restart'),
+      _OptionCheckBox('Enable remote configuration modification',
           'allow-remote-config-modification'),
     ]);
   }
@@ -199,45 +281,72 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
   Widget password() {
     return ChangeNotifierProvider.value(
         value: gFFI.serverModel,
-        child: Consumer<ServerModel>(
-            builder: ((context, model, child) =>
-                _Card(title: 'Password', children: [
-                  _row(
-                      'Verification Method',
-                      _ComboBox(
-                          keys: [
-                            kUseTemporaryPassword,
-                            kUsePermanentPassword,
-                            kUseBothPasswords,
-                          ],
-                          values: [
-                            translate("Use temporary password"),
-                            translate("Use permanent password"),
-                            translate("Use both passwords"),
-                          ],
-                          initialKey: model.verificationMethod,
-                          onChanged: (key) => model.verificationMethod = key)),
-                  _row(
-                      'Temporary Password Length',
-                      _ComboBox(
-                        keys: ['6', '8', '10'],
-                        values: ['6', '8', '10'],
-                        initialKey: model.temporaryPasswordLength,
-                        onChanged: (key) => model.temporaryPasswordLength = key,
-                        enabled:
-                            model.verificationMethod != kUsePermanentPassword,
-                      )),
-                  _button(
-                      'permanent_password_tip',
-                      'Set permanent password',
-                      setPasswordDialog,
-                      model.verificationMethod != kUseTemporaryPassword)
-                ]))));
+        child: Consumer<ServerModel>(builder: ((context, model, child) {
+          List<String> keys = [
+            kUseTemporaryPassword,
+            kUsePermanentPassword,
+            kUseBothPasswords,
+          ];
+          List<String> values = [
+            translate("Use temporary password"),
+            translate("Use permanent password"),
+            translate("Use both passwords"),
+          ];
+          bool tmp_enabled = model.verificationMethod != kUsePermanentPassword;
+          bool perm_enabled = model.verificationMethod != kUseTemporaryPassword;
+          String currentValue = values[keys.indexOf(model.verificationMethod)];
+          List<Widget> radios = values
+              .map((value) => _Radio<String>(
+                  value: value,
+                  groupValue: currentValue,
+                  label: value,
+                  onChanged: ((value) {
+                    model.verificationMethod = keys[values.indexOf(value)];
+                  })))
+              .toList();
+
+          var onChanged = tmp_enabled
+              ? (value) {
+                  if (value != null)
+                    model.temporaryPasswordLength = value.toString();
+                }
+              : null;
+          List<Widget> lengthRadios = ['6', '8', '10']
+              .map((value) => GestureDetector(
+                    child: Row(
+                      children: [
+                        Radio(
+                            value: value,
+                            groupValue: model.temporaryPasswordLength,
+                            onChanged: onChanged),
+                        Text(value),
+                      ],
+                    ).paddingSymmetric(horizontal: 10),
+                    onTap: () => onChanged?.call(value),
+                  ))
+              .toList();
+
+          return _Card(title: 'Password', children: [
+            radios[0],
+            _SubLabeledWidget(
+                'Temporary Password Length',
+                Row(
+                  children: [
+                    ...lengthRadios,
+                  ],
+                ),
+                enabled: tmp_enabled),
+            radios[1],
+            _SubButton(
+                'Set permanent password', setPasswordDialog, perm_enabled),
+            radios[2],
+          ]);
+        })));
   }
 
   Widget whitelist() {
     return _Card(title: 'IP Whitelisting', children: [
-      _button('whitelist_tip', 'IP Whitelisting', changeWhiteList)
+      _Button('IP Whitelisting', changeWhiteList, tip: 'whitelist_tip')
     ]);
   }
 }
@@ -251,8 +360,6 @@ class _Connection extends StatefulWidget {
 
 class _ConnectionState extends State<_Connection>
     with AutomaticKeepAliveClientMixin {
-  final TextEditingController controller = TextEditingController();
-
   @override
   bool get wantKeepAlive => true;
 
@@ -262,73 +369,94 @@ class _ConnectionState extends State<_Connection>
     return ListView(
       children: [
         _Card(title: 'Server', children: [
-          _button('self-hosting_tip', 'ID/Relay Server', changeServer),
+          _Button('ID/Relay Server', changeServer),
         ]),
         _Card(title: 'Service', children: [
-          _option_check('Enable Service', 'stop-service', reverse: true),
+          _OptionCheckBox('Enable Service', 'stop-service', reverse: true),
           // TODO: Not implemented
           // _option_check('Always connected via relay', 'allow-always-relay'),
           // _option_check('Start ID/relay service', 'stop-rendezvous-service',
           //     reverse: true),
         ]),
         _Card(title: 'TCP Tunneling', children: [
-          _option_check('Enable TCP Tunneling', 'enable-tunnel'),
+          _OptionCheckBox('Enable TCP Tunneling', 'enable-tunnel'),
         ]),
         direct_ip(),
         _Card(title: 'Proxy', children: [
-          _button('socks5_proxy_tip', 'Socks5 Proxy', changeSocks5Proxy),
+          _Button('Socks5 Proxy', changeSocks5Proxy),
         ]),
       ],
-    ).paddingOnly(bottom: _kListViewBottomPadding);
+    ).marginOnly(bottom: _kListViewBottomMargin);
   }
 
   Widget direct_ip() {
+    TextEditingController controller = TextEditingController();
     var update = () => setState(() {});
+    RxBool apply_enabled = false.obs;
     return _Card(title: 'Direct IP Access', children: [
-      _option_check('Enable Direct IP Access', 'direct-server', update: update),
-      _row(
-        'Port',
-        _futureBuilder(
-          future: () async {
-            String enabled = await bind.mainGetOption(key: 'direct-server');
-            String port = await bind.mainGetOption(key: 'direct-access-port');
-            return {'enabled': enabled, 'port': port};
-          }(),
-          hasData: (data) {
-            bool enabled =
-                option2bool('direct-server', data['enabled'].toString());
-            String port = data['port'].toString();
-            int? iport = int.tryParse(port);
-            if (iport == null || iport < 1 || iport > 65535) {
-              port = '';
-            }
-            controller.text = port;
-            return TextField(
-              controller: controller,
-              enabled: enabled,
-              onChanged: (value) async {
-                await bind.mainSetOption(
-                    key: 'direct-access-port', value: controller.text);
-              },
-              decoration: InputDecoration(
-                hintText: '21118',
+      _OptionCheckBox('Enable Direct IP Access', 'direct-server',
+          update: update),
+      _futureBuilder(
+        future: () async {
+          String enabled = await bind.mainGetOption(key: 'direct-server');
+          String port = await bind.mainGetOption(key: 'direct-access-port');
+          return {'enabled': enabled, 'port': port};
+        }(),
+        hasData: (data) {
+          bool enabled =
+              option2bool('direct-server', data['enabled'].toString());
+          if (!enabled) apply_enabled.value = false;
+          controller.text = data['port'].toString();
+          return Row(children: [
+            _SubLabeledWidget(
+              'Port',
+              Container(
+                width: 80,
+                child: TextField(
+                  controller: controller,
+                  enabled: enabled,
+                  onChanged: (_) => apply_enabled.value = true,
+                  inputFormatters: [
+                    FilteringTextInputFormatter.allow(RegExp(
+                        '\^([0-9]|[1-9]\\d|[1-9]\\d{2}|[1-9]\\d{3}|[1-5]\\d{4}|6[0-4]\\d{3}|65[0-4]\\d{2}|655[0-2]\\d|6553[0-5])\$')),
+                  ],
+                  textAlign: TextAlign.end,
+                  decoration: InputDecoration(
+                    hintText: '21118',
+                    border: InputBorder.none,
+                    contentPadding: EdgeInsets.only(right: 5),
+                    isCollapsed: true,
+                  ),
+                ),
               ),
-            );
-          },
-        ),
+              enabled: enabled,
+            ),
+            Obx(() => ElevatedButton(
+                  onPressed: apply_enabled.value && enabled
+                      ? () async {
+                          apply_enabled.value = false;
+                          await bind.mainSetOption(
+                              key: 'direct-access-port',
+                              value: controller.text);
+                        }
+                      : null,
+                  child: Text(translate('Apply')),
+                ).marginOnly(left: 20))
+          ]);
+        },
       ),
     ]);
   }
 }
 
-class _Video extends StatefulWidget {
-  const _Video({Key? key}) : super(key: key);
+class _Display extends StatefulWidget {
+  const _Display({Key? key}) : super(key: key);
 
   @override
-  State<_Video> createState() => _VideoState();
+  State<_Display> createState() => _DisplayState();
 }
 
-class _VideoState extends State<_Video> with AutomaticKeepAliveClientMixin {
+class _DisplayState extends State<_Display> with AutomaticKeepAliveClientMixin {
   @override
   bool get wantKeepAlive => true;
 
@@ -338,10 +466,24 @@ class _VideoState extends State<_Video> with AutomaticKeepAliveClientMixin {
     return ListView(
       children: [
         _Card(title: 'Adaptive Bitrate', children: [
-          _option_check('Adaptive Bitrate', 'enable-abr'),
+          _OptionCheckBox('Adaptive Bitrate', 'enable-abr'),
         ]),
+        hwcodec(),
       ],
-    ).paddingOnly(bottom: _kListViewBottomPadding);
+    ).marginOnly(bottom: _kListViewBottomMargin);
+  }
+
+  Widget hwcodec() {
+    return _futureBuilder(
+        future: bind.mainHasHwcodec(),
+        hasData: (data) {
+          return Offstage(
+            offstage: !(data as bool),
+            child: _Card(title: 'Hardware Codec', children: [
+              _OptionCheckBox('Enable hardware codec', 'enable-hwcodec'),
+            ]),
+          );
+        });
   }
 }
 
@@ -352,6 +494,12 @@ class _Audio extends StatefulWidget {
   State<_Audio> createState() => _AudioState();
 }
 
+enum _AudioInputType {
+  Mute,
+  Standard,
+  Specify,
+}
+
 class _AudioState extends State<_Audio> with AutomaticKeepAliveClientMixin {
   @override
   bool get wantKeepAlive => true;
@@ -360,46 +508,161 @@ class _AudioState extends State<_Audio> with AutomaticKeepAliveClientMixin {
   Widget build(BuildContext context) {
     super.build(context);
     var update = () => setState(() {});
+    var set_enabled = (bool enabled) => bind.mainSetOption(
+        key: 'enable-audio', value: bool2option('enable-audio', enabled));
+    var set_device = (String device) =>
+        bind.mainSetOption(key: 'audio-input', value: device);
     return ListView(children: [
       _Card(
         title: 'Audio Input',
         children: [
-          _option_check('Mute', 'enable-audio', reverse: true, update: update),
-          _row(
-              'Audio device',
-              _futureBuilder(future: () async {
-                List<String> all = await bind.mainGetSoundInputs();
-                String current = await bind.mainGetOption(key: 'audio-input');
-                String enabled = await bind.mainGetOption(key: 'enable-audio');
-                return {'all': all, 'current': current, 'enabled': enabled};
-              }(), hasData: (data) {
-                List<String> keys = (data['all'] as List<String>).toList();
-                List<String> values = keys.toList();
-                if (Platform.isWindows) {
-                  keys.insert(0, '');
-                  values.insert(0, 'System Sound');
-                } else {
-                  keys.insert(0, ''); // TODO
-                  values.insert(0, 'None');
-                }
-                String initialKey = data['current'];
-                if (!keys.contains(initialKey)) {
-                  initialKey = '';
-                }
-                return _ComboBox(
-                  keys: keys,
-                  values: values,
-                  initialKey: initialKey,
-                  onChanged: (key) {
-                    bind.mainSetOption(key: 'audio-input', value: key);
+          _futureBuilder(future: () async {
+            List<String> devices = await bind.mainGetSoundInputs();
+            String current = await bind.mainGetOption(key: 'audio-input');
+            String enabled = await bind.mainGetOption(key: 'enable-audio');
+            return {'devices': devices, 'current': current, 'enabled': enabled};
+          }(), hasData: (data) {
+            bool mute =
+                !option2bool('enable-audio', data['enabled'].toString());
+            String currentDevice = data['current'];
+            List<String> devices = (data['devices'] as List<String>).toList();
+            _AudioInputType groupValue;
+            if (mute) {
+              groupValue = _AudioInputType.Mute;
+            } else if (devices.contains(currentDevice)) {
+              groupValue = _AudioInputType.Specify;
+            } else {
+              groupValue = _AudioInputType.Standard;
+            }
+            List deviceWidget = [].toList();
+            if (devices.isNotEmpty) {
+              var combo = _ComboBox(
+                keys: devices,
+                values: devices,
+                initialKey: devices.contains(currentDevice)
+                    ? currentDevice
+                    : devices[0],
+                onChanged: (key) {
+                  set_device(key);
+                },
+                enabled: groupValue == _AudioInputType.Specify,
+              );
+              deviceWidget.addAll([
+                _Radio<_AudioInputType>(
+                  value: _AudioInputType.Specify,
+                  groupValue: groupValue,
+                  label: 'Specify device',
+                  onChanged: (value) {
+                    set_device(combo.current);
+                    set_enabled(true);
+                    update();
                   },
-                  enabled:
-                      option2bool('enable-audio', data['enabled'].toString()),
-                );
-              })),
+                ),
+                combo.marginOnly(left: _kContentHSubMargin, top: 5),
+              ]);
+            }
+            return Column(children: [
+              _Radio<_AudioInputType>(
+                value: _AudioInputType.Mute,
+                groupValue: groupValue,
+                label: 'Mute',
+                onChanged: (value) {
+                  set_enabled(false);
+                  update();
+                },
+              ),
+              _Radio(
+                value: _AudioInputType.Standard,
+                groupValue: groupValue,
+                label: 'Use standard device',
+                onChanged: (value) {
+                  set_device('');
+                  set_enabled(true);
+                  update();
+                },
+              ),
+              ...deviceWidget,
+            ]);
+          }),
         ],
       )
-    ]).paddingOnly(bottom: _kListViewBottomPadding);
+    ]).marginOnly(bottom: _kListViewBottomMargin);
+  }
+}
+
+class _About extends StatefulWidget {
+  const _About({Key? key}) : super(key: key);
+
+  @override
+  State<_About> createState() => _AboutState();
+}
+
+class _AboutState extends State<_About> {
+  @override
+  Widget build(BuildContext context) {
+    return _futureBuilder(future: () async {
+      final license = await bind.mainGetLicense();
+      final version = await bind.mainGetVersion();
+      return {'license': license, 'version': version};
+    }(), hasData: (data) {
+      final license = data['license'].toString();
+      final version = data['version'].toString();
+      final linkStyle = TextStyle(decoration: TextDecoration.underline);
+      return ListView(children: [
+        _Card(title: "About Rustdesk", children: [
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              SizedBox(
+                height: 8.0,
+              ),
+              Text("Version: $version").marginSymmetric(vertical: 4.0),
+              InkWell(
+                  onTap: () {
+                    launchUrlString("https://rustdesk.com/privacy");
+                  },
+                  child: Text(
+                    "Privacy Statement",
+                    style: linkStyle,
+                  ).marginSymmetric(vertical: 4.0)),
+              InkWell(
+                  onTap: () {
+                    launchUrlString("https://rustdesk.com");
+                  },
+                  child: Text(
+                    "Website",
+                    style: linkStyle,
+                  ).marginSymmetric(vertical: 4.0)),
+              Container(
+                decoration: BoxDecoration(color: Color(0xFF2c8cff)),
+                padding: EdgeInsets.symmetric(vertical: 24, horizontal: 8),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            "Copyright &copy; 2022 Purslane Ltd.\n$license",
+                            style: TextStyle(color: Colors.white),
+                          ),
+                          Text(
+                            "Made with heart in this chaotic world!",
+                            style: TextStyle(
+                                fontWeight: FontWeight.w800,
+                                color: Colors.white),
+                          )
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ).marginSymmetric(vertical: 4.0)
+            ],
+          ).marginOnly(left: _kContentHMargin)
+        ]),
+      ]).marginOnly(left: _kCardLeftMargin);
+    });
   }
 }
 
@@ -421,92 +684,155 @@ Widget _Card({required String title, required List<Widget> children}) {
                     translate(title),
                     textAlign: TextAlign.start,
                     style: TextStyle(
-                      fontSize: 25,
+                      fontSize: _kTitleFontSize,
                     ),
                   ),
                   Spacer(),
                 ],
-              ).paddingOnly(left: _kContentLeftPadding, top: 10, bottom: 20),
-              ...children.map((e) => e.paddingOnly(top: 2)),
+              ).marginOnly(left: _kContentHMargin, top: 10, bottom: 10),
+              ...children
+                  .map((e) => e.marginOnly(top: 4, right: _kContentHMargin)),
             ],
-          ).paddingOnly(bottom: 10),
-        ).paddingOnly(left: _kCardLeftPadding, top: 20),
+          ).marginOnly(bottom: 10),
+        ).marginOnly(left: _kCardLeftMargin, top: 15),
       ),
     ],
   );
 }
 
-Widget _option_switch(String label, String key,
+Widget _OptionCheckBox(String label, String key,
     {Function()? update = null, bool reverse = false}) {
-  return _row(
-      label,
-      _futureBuilder(
-          future: bind.mainGetOption(key: key),
-          hasData: (data) {
-            bool value = option2bool(key, data.toString());
-            if (reverse) value = !value;
-            var ref = value.obs;
-            return Obx((() => Switch(
-                value: ref.value,
-                onChanged: ((option) async {
-                  ref.value = option;
-                  if (reverse) option = !option;
-                  String value = bool2option(key, option);
-                  bind.mainSetOption(key: key, value: value);
-                  update?.call();
-                }))));
-          }));
+  return _futureBuilder(
+      future: bind.mainGetOption(key: key),
+      hasData: (data) {
+        bool value = option2bool(key, data.toString());
+        if (reverse) value = !value;
+        var ref = value.obs;
+        var onChanged = (option) async {
+          if (option != null) {
+            ref.value = option;
+            if (reverse) option = !option;
+            String value = bool2option(key, option);
+            bind.mainSetOption(key: key, value: value);
+            update?.call();
+          }
+        };
+        return GestureDetector(
+          child: Obx(
+            () => Row(
+              children: [
+                Checkbox(value: ref.value, onChanged: onChanged)
+                    .marginOnly(right: 10),
+                Expanded(child: Text(translate(label)))
+              ],
+            ),
+          ).marginOnly(left: _kCheckBoxLeftMargin),
+          onTap: () {
+            onChanged(!ref.value);
+          },
+        );
+      });
 }
 
-Widget _option_check(String label, String key,
-    {Function()? update = null, bool reverse = false}) {
+Widget _Radio<T>({
+  required T value,
+  required T groupValue,
+  required String label,
+  required Function(T value) onChanged,
+}) {
+  var on_change = (T? value) {
+    if (value != null) {
+      onChanged(value);
+    }
+  };
+  return GestureDetector(
+    child: Row(
+      children: [
+        Radio<T>(value: value, groupValue: groupValue, onChanged: on_change),
+        Expanded(
+          child: Text(translate(label),
+                  style: TextStyle(fontSize: _kContentFontSize))
+              .marginOnly(left: 5),
+        ),
+      ],
+    ).marginOnly(left: _kRadioLeftMargin),
+    onTap: () => on_change(value),
+  );
+}
+
+Widget _Button(String label, Function() onPressed,
+    {bool enabled = true, String? tip}) {
+  var button = ElevatedButton(
+      onPressed: enabled ? onPressed : null,
+      child: Container(
+        child: Text(
+          translate(label),
+        ).marginSymmetric(horizontal: 15),
+      ));
+  var child;
+  if (tip == null) {
+    child = button;
+  } else {
+    child = Tooltip(message: translate(tip), child: button);
+  }
   return Row(children: [
-    _futureBuilder(
-        future: bind.mainGetOption(key: key),
-        hasData: (data) {
-          bool value = option2bool(key, data.toString());
-          if (reverse) value = !value;
-          var ref = value.obs;
-          return Obx((() => Checkbox(
-              value: ref.value,
-              onChanged: ((option) async {
-                if (option != null) {
-                  ref.value = option;
-                  if (reverse) option = !option;
-                  String value = bool2option(key, option);
-                  bind.mainSetOption(key: key, value: value);
-                  update?.call();
-                }
-              }))));
-        }).paddingOnly(right: 10),
-    Text(translate(label)),
-  ]).paddingOnly(left: _kContentLeftPadding);
+    child,
+  ]).marginOnly(left: _kContentHMargin);
 }
 
-Widget _button(String tip, String label, Function() onPressed,
-    [bool enabled = true]) {
-  return _row(
-      translate(tip),
-      OutlinedButton(
-          onPressed: enabled ? onPressed : null,
-          child: Text(
-            translate(label),
-          )));
-}
-
-Widget _row(String label, Widget widget) {
+Widget _SubButton(String label, Function() onPressed, [bool enabled = true]) {
   return Row(
     children: [
-      Expanded(
-          child: Text(
-        translate(label),
-      )),
-      SizedBox(
-        width: 40,
-      ),
-      Expanded(child: widget),
+      ElevatedButton(
+          onPressed: enabled ? onPressed : null,
+          child: Container(
+            child: Text(
+              translate(label),
+            ).marginSymmetric(horizontal: 15),
+          )),
     ],
-  ).paddingSymmetric(horizontal: _kContentLeftPadding);
+  ).marginOnly(left: _kContentHSubMargin);
+}
+
+Widget _SubLabeledWidget(String label, Widget child, {bool enabled = true}) {
+  RxBool hover = false.obs;
+  return Row(
+    children: [
+      MouseRegion(
+          onEnter: (_) => hover.value = true,
+          onExit: (_) => hover.value = false,
+          child: Obx(
+            () {
+              return Container(
+                  height: 32,
+                  decoration: BoxDecoration(
+                      border: Border.all(
+                          color: hover.value && enabled
+                              ? Colors.grey.withOpacity(0.8)
+                              : Colors.grey.withOpacity(0.5),
+                          width: hover.value && enabled ? 2 : 1)),
+                  child: Row(
+                    children: [
+                      Container(
+                        height: 28,
+                        color: (hover.value && enabled)
+                            ? Colors.grey.withOpacity(0.8)
+                            : Colors.grey.withOpacity(0.5),
+                        child: Text(
+                          label + ': ',
+                          style: TextStyle(),
+                        ),
+                        alignment: Alignment.center,
+                        padding:
+                            EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                      ).paddingAll(2),
+                      child,
+                    ],
+                  ));
+            },
+          )),
+    ],
+  ).marginOnly(left: _kContentHSubMargin);
 }
 
 Widget _futureBuilder(
@@ -525,12 +851,14 @@ Widget _futureBuilder(
       });
 }
 
+// ignore: must_be_immutable
 class _ComboBox extends StatelessWidget {
   late final List<String> keys;
   late final List<String> values;
   late final String initialKey;
   late final Function(String key) onChanged;
   late final bool enabled;
+  late String current;
 
   _ComboBox({
     Key? key,
@@ -549,34 +877,41 @@ class _ComboBox extends StatelessWidget {
       index = 0;
     }
     var ref = values[index].obs;
+    current = keys[index];
     return Container(
-      child: SizedBox(
-          child: Obx((() => DropdownButton<String>(
-                isExpanded: true,
-                value: ref.value,
-                elevation: 16,
-                underline: Container(
-                  height: 40,
-                ),
-                icon: Icon(
-                  Icons.arrow_drop_down_sharp,
-                  size: 35,
-                ),
-                onChanged: enabled
-                    ? (String? newValue) {
-                        if (newValue != null && newValue != ref.value) {
-                          ref.value = newValue;
-                          onChanged(keys[values.indexOf(newValue)]);
-                        }
-                      }
-                    : null,
-                items: values.map<DropdownMenuItem<String>>((String value) {
-                  return DropdownMenuItem<String>(
-                    value: value,
-                    child: Text(value),
-                  );
-                }).toList(),
-              )))),
+      decoration: BoxDecoration(border: Border.all(color: MyTheme.border)),
+      height: 30,
+      child: Obx(() => DropdownButton<String>(
+            isExpanded: true,
+            value: ref.value,
+            elevation: 16,
+            underline: Container(
+              height: 25,
+            ),
+            icon: Icon(
+              Icons.expand_more_sharp,
+              size: 20,
+            ),
+            onChanged: enabled
+                ? (String? newValue) {
+                    if (newValue != null && newValue != ref.value) {
+                      ref.value = newValue;
+                      current = newValue;
+                      onChanged(keys[values.indexOf(newValue)]);
+                    }
+                  }
+                : null,
+            items: values.map<DropdownMenuItem<String>>((String value) {
+              return DropdownMenuItem<String>(
+                value: value,
+                child: Text(
+                  value,
+                  style: TextStyle(fontSize: _kContentFontSize),
+                  overflow: TextOverflow.ellipsis,
+                ).marginOnly(left: 5),
+              );
+            }).toList(),
+          )),
     );
   }
 }

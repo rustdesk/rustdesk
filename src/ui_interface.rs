@@ -669,6 +669,13 @@ pub fn get_api_server() -> String {
     )
 }
 
+pub fn has_hwcodec() -> bool {
+    #[cfg(not(feature = "hwcodec"))]
+    return false;
+    #[cfg(feature = "hwcodec")]
+    return true;
+}
+
 pub fn check_zombie(childs: Childs) {
     let mut deads = Vec::new();
     loop {

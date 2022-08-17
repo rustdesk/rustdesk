@@ -25,9 +25,9 @@ use crate::ui_interface::{
     discover, forget_password, get_api_server, get_app_name, get_async_job_status,
     get_connect_status, get_fav, get_id, get_lan_peers, get_langs, get_license, get_local_option,
     get_option, get_options, get_peer, get_peer_option, get_socks, get_sound_inputs, get_uuid,
-    get_version, has_rendezvous_service, post_request, set_local_option, set_option, set_options,
-    set_peer_option, set_permanent_password, set_socks, store_fav, test_if_valid_server,
-    update_temporary_password, using_public_server,
+    get_version, has_hwcodec, has_rendezvous_service, post_request, set_local_option, set_option,
+    set_options, set_peer_option, set_permanent_password, set_socks, store_fav,
+    test_if_valid_server, update_temporary_password, using_public_server,
 };
 
 fn initialize(app_dir: &str) {
@@ -655,6 +655,10 @@ pub fn main_device_name(name: String) {
 
 pub fn main_remove_peer(id: String) {
     PeerConfig::remove(&id);
+}
+
+pub fn main_has_hwcodec() -> bool {
+    has_hwcodec()
 }
 
 // TODO
