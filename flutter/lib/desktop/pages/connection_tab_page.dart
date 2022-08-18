@@ -20,28 +20,28 @@ class ConnectionTabPage extends StatefulWidget {
   State<ConnectionTabPage> createState() => _ConnectionTabPageState(params);
 }
 
-class _ConnectionTabPageState extends State<ConnectionTabPage>
-    with TickerProviderStateMixin {
+class _ConnectionTabPageState extends State<ConnectionTabPage> {
   // refactor List<int> when using multi-tab
   // this singleton is only for test
   RxList<TabInfo> tabs = RxList<TabInfo>.empty(growable: true);
-  late Rx<TabController> tabController;
-  static final Rx<int> _selected = 0.obs;
   static final Rx<String> _fullscreenID = "".obs;
-  IconData icon = Icons.desktop_windows_sharp;
+  final IconData selectedIcon = Icons.desktop_windows_sharp;
+  final IconData unselectedIcon = Icons.desktop_windows_outlined;
 
   var connectionMap = RxList<Widget>.empty(growable: true);
 
   _ConnectionTabPageState(Map<String, dynamic> params) {
     if (params['id'] != null) {
-      tabs.add(TabInfo(label: params['id'], icon: icon));
+      tabs.add(TabInfo(
+          label: params['id'],
+          selectedIcon: selectedIcon,
+          unselectedIcon: unselectedIcon));
     }
   }
 
   @override
   void initState() {
     super.initState();
-    tabController = TabController(length: tabs.length, vsync: this).obs;
     rustDeskWinManager.setMethodHandler((call, fromWindowId) async {
       print(
           "call ${call.method} with args ${call.arguments} from window ${fromWindowId}");
@@ -50,8 +50,12 @@ class _ConnectionTabPageState extends State<ConnectionTabPage>
         final args = jsonDecode(call.arguments);
         final id = args['id'];
         window_on_top(windowId());
-        DesktopTabBar.onAdd(this, tabController, tabs, _selected,
-            TabInfo(label: id, icon: icon));
+        DesktopTabBar.onAdd(
+            tabs,
+            TabInfo(
+                label: id,
+                selectedIcon: selectedIcon,
+                unselectedIcon: unselectedIcon));
       } else if (call.method == "onDestroy") {
         print(
             "executing onDestroy hook, closing ${tabs.map((tab) => tab.label).toList()}");
@@ -74,18 +78,16 @@ class _ConnectionTabPageState extends State<ConnectionTabPage>
           Obx(() => Visibility(
               visible: _fullscreenID.value.isEmpty,
               child: DesktopTabBar(
-                controller: tabController,
                 tabs: tabs,
                 onTabClose: onRemoveId,
-                selected: _selected,
                 dark: isDarkTheme(),
                 mainTab: false,
               ))),
           Expanded(child: Obx(() {
             WindowController.fromWindowId(windowId())
                 .setFullscreen(_fullscreenID.value.isNotEmpty);
-            return TabBarView(
-                controller: tabController.value,
+            return PageView(
+                controller: DesktopTabBar.controller.value,
                 children: tabs
                     .map((tab) => RemotePage(
                           key: ValueKey(tab.label),
@@ -103,7 +105,6 @@ class _ConnectionTabPageState extends State<ConnectionTabPage>
   }
 
   void onRemoveId(String id) {
-    DesktopTabBar.onClose(this, tabController, tabs, id);
     ffi(id).close();
     if (tabs.length == 0) {
       WindowController.fromWindowId(windowId()).close();

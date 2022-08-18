@@ -8,21 +8,22 @@ import 'package:flutter_hbb/main.dart';
 import 'package:flutter_hbb/utils/multi_window_manager.dart';
 import 'package:get/get.dart';
 import 'package:window_manager/window_manager.dart';
+import 'package:scroll_pos/scroll_pos.dart';
 
 const double _kTabBarHeight = kDesktopRemoteTabBarHeight;
 const double _kIconSize = 18;
 const double _kDividerIndent = 10;
 const double _kAddIconSize = _kTabBarHeight - 15;
-final tabBarKey = GlobalKey();
+final _tabBarKey = GlobalKey();
 
 void closeTab(String? id) {
-  final tabBar = tabBarKey.currentWidget as TabBar?;
+  final tabBar = _tabBarKey.currentWidget as _ListView?;
   if (tabBar == null) return;
-  final tabs = tabBar.tabs as List<_Tab>;
+  final tabs = tabBar.tabs;
   if (id == null) {
-    final current = tabBar.controller?.index;
-    if (current == null) return;
-    tabs[current].onClose();
+    if (tabBar.selected.value < tabs.length) {
+      tabs[tabBar.selected.value].onClose();
+    }
   } else {
     for (final tab in tabs) {
       if (tab.label == id) {
@@ -35,33 +36,45 @@ void closeTab(String? id) {
 
 class TabInfo {
   late final String label;
-  late final IconData icon;
+  late final IconData selectedIcon;
+  late final IconData unselectedIcon;
   late final bool closable;
 
-  TabInfo({required this.label, required this.icon, this.closable = true});
+  TabInfo(
+      {required this.label,
+      required this.selectedIcon,
+      required this.unselectedIcon,
+      this.closable = true});
 }
 
 class DesktopTabBar extends StatelessWidget {
-  late final Rx<TabController> controller;
   late final RxList<TabInfo> tabs;
-  late final Function(String) onTabClose;
-  late final Rx<int> selected;
+  late final Function(String)? onTabClose;
   late final bool dark;
   late final _Theme _theme;
   late final bool mainTab;
   late final Function()? onAddSetting;
+  final ScrollPosController scrollController =
+      ScrollPosController(itemCount: 0);
+  static final Rx<PageController> controller = PageController().obs;
+  static final Rx<int> selected = 0.obs;
 
   DesktopTabBar({
     Key? key,
-    required this.controller,
     required this.tabs,
-    required this.onTabClose,
-    required this.selected,
+    this.onTabClose,
     required this.dark,
     required this.mainTab,
     this.onAddSetting,
   })  : _theme = dark ? _Theme.dark() : _Theme.light(),
-        super(key: key);
+        super(key: key) {
+    scrollController.itemCount = tabs.length;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      debugPrint("callback");
+      scrollController.scrollToItem(selected.value,
+          center: true, animate: true);
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -81,57 +94,29 @@ class DesktopTabBar extends StatelessWidget {
                 ),
                 Expanded(
                   child: GestureDetector(
-                    onPanStart: (_) {
-                      if (mainTab) {
-                        windowManager.startDragging();
-                      } else {
-                        WindowController.fromWindowId(windowId!)
-                            .startDragging();
-                      }
-                    },
-                    child: Obx(() => TabBar(
-                        key: tabBarKey,
-                        indicatorColor: _theme.indicatorColor,
-                        labelPadding: const EdgeInsets.symmetric(
-                            vertical: 0, horizontal: 0),
-                        isScrollable: true,
-                        indicatorPadding: EdgeInsets.zero,
-                        physics: BouncingScrollPhysics(),
-                        controller: controller.value,
-                        tabs: tabs.asMap().entries.map((e) {
-                          int index = e.key;
-                          String label = e.value.label;
-
-                          return _Tab(
-                            index: index,
-                            label: label,
-                            icon: e.value.icon,
-                            closable: e.value.closable,
-                            selected: selected.value,
-                            onClose: () {
-                              onTabClose(label);
-                              if (index <= selected.value) {
-                                selected.value = max(0, selected.value - 1);
-                              }
-                              controller.value.animateTo(selected.value,
-                                  duration: Duration.zero);
-                            },
-                            onSelected: () {
-                              selected.value = index;
-                              controller.value
-                                  .animateTo(index, duration: Duration.zero);
-                            },
-                            theme: _theme,
-                          );
-                        }).toList())),
-                  ),
+                      onPanStart: (_) {
+                        if (mainTab) {
+                          windowManager.startDragging();
+                        } else {
+                          WindowController.fromWindowId(windowId!)
+                              .startDragging();
+                        }
+                      },
+                      child: _ListView(
+                          key: _tabBarKey,
+                          controller: controller,
+                          scrollController: scrollController,
+                          tabInfos: tabs,
+                          selected: selected,
+                          onTabClose: onTabClose,
+                          theme: _theme)),
                 ),
                 Offstage(
                   offstage: mainTab,
                   child: _AddButton(
                     theme: _theme,
                   ).paddingOnly(left: 10),
-                )
+                ),
               ],
             ),
           ),
@@ -157,32 +142,16 @@ class DesktopTabBar extends StatelessWidget {
     );
   }
 
-  static onClose(
-    TickerProvider vsync,
-    Rx<TabController> controller,
-    RxList<TabInfo> tabs,
-    String label,
-  ) {
-    tabs.removeWhere((tab) => tab.label == label);
-    controller.value = TabController(
-        length: tabs.length,
-        vsync: vsync,
-        initialIndex: max(0, tabs.length - 1));
-  }
-
-  static onAdd(TickerProvider vsync, Rx<TabController> controller,
-      RxList<TabInfo> tabs, Rx<int> selected, TabInfo tab) {
+  static onAdd(RxList<TabInfo> tabs, TabInfo tab) {
     int index = tabs.indexWhere((e) => e.label == tab.label);
     if (index >= 0) {
-      controller.value.animateTo(index, duration: Duration.zero);
       selected.value = index;
     } else {
       tabs.add(tab);
-      controller.value = TabController(
-          length: tabs.length, vsync: vsync, initialIndex: tabs.length - 1);
-      controller.value.animateTo(tabs.length - 1, duration: Duration.zero);
       selected.value = tabs.length - 1;
+      assert(selected.value >= 0);
     }
+    controller.value.jumpToPage(selected.value);
   }
 }
 
@@ -265,10 +234,76 @@ class WindowActionPanel extends StatelessWidget {
   }
 }
 
+class _ListView extends StatelessWidget {
+  late Rx<PageController> controller;
+  final ScrollPosController scrollController;
+  final RxList<TabInfo> tabInfos;
+  final Rx<int> selected;
+  final Function(String label)? onTabClose;
+  final _Theme _theme;
+  late List<_Tab> tabs;
+
+  _ListView({
+    Key? key,
+    required this.controller,
+    required this.scrollController,
+    required this.tabInfos,
+    required this.selected,
+    required this.onTabClose,
+    required _Theme theme,
+  })  : _theme = theme,
+        super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    return Obx(() {
+      tabs = tabInfos.asMap().entries.map((e) {
+        int index = e.key;
+        String label = e.value.label;
+        return _Tab(
+          index: index,
+          label: label,
+          selectedIcon: e.value.selectedIcon,
+          unselectedIcon: e.value.unselectedIcon,
+          closable: e.value.closable,
+          selected: selected.value,
+          onClose: () {
+            tabInfos.removeWhere((tab) => tab.label == label);
+            onTabClose?.call(label);
+            if (index <= selected.value) {
+              selected.value = max(0, selected.value - 1);
+            }
+            assert(tabInfos.length == 0 || selected.value < tabInfos.length);
+            scrollController.itemCount = tabInfos.length;
+            if (tabInfos.length > 0) {
+              scrollController.scrollToItem(selected.value,
+                  center: true, animate: true);
+              controller.value.jumpToPage(selected.value);
+            }
+          },
+          onSelected: () {
+            selected.value = index;
+            scrollController.scrollToItem(index, center: true, animate: true);
+            controller.value.jumpToPage(index);
+          },
+          theme: _theme,
+        );
+      }).toList();
+      return ListView(
+          controller: scrollController,
+          scrollDirection: Axis.horizontal,
+          shrinkWrap: true,
+          physics: BouncingScrollPhysics(),
+          children: tabs);
+    });
+  }
+}
+
 class _Tab extends StatelessWidget {
   late final int index;
   late final String label;
-  late final IconData icon;
+  late final IconData selectedIcon;
+  late final IconData unselectedIcon;
   late final bool closable;
   late final int selected;
   late final Function() onClose;
@@ -280,7 +315,8 @@ class _Tab extends StatelessWidget {
       {Key? key,
       required this.index,
       required this.label,
-      required this.icon,
+      required this.selectedIcon,
+      required this.unselectedIcon,
       required this.closable,
       required this.selected,
       required this.onClose,
@@ -292,59 +328,74 @@ class _Tab extends StatelessWidget {
   Widget build(BuildContext context) {
     bool is_selected = index == selected;
     bool show_divider = index != selected - 1 && index != selected;
-    return Ink(
-      child: InkWell(
-        onHover: (hover) => _hover.value = hover,
-        onTap: () => onSelected(),
-        child: Row(
-          children: [
-            Tab(
-                child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(
-                        icon,
-                        size: _kIconSize,
-                        color: is_selected
-                            ? theme.selectedtabIconColor
-                            : theme.unSelectedtabIconColor,
-                      ).paddingOnly(right: 5),
-                      Text(
-                        translate(label),
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                            color: is_selected
-                                ? theme.selectedTextColor
-                                : theme.unSelectedTextColor),
-                      ),
-                    ],
+    return Stack(
+      children: [
+        Ink(
+          child: InkWell(
+            onHover: (hover) => _hover.value = hover,
+            onTap: () => onSelected(),
+            child: Row(
+              children: [
+                Container(
+                    height: _kTabBarHeight,
+                    child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(
+                                is_selected ? selectedIcon : unselectedIcon,
+                                size: _kIconSize,
+                                color: is_selected
+                                    ? theme.selectedtabIconColor
+                                    : theme.unSelectedtabIconColor,
+                              ).paddingOnly(right: 5),
+                              Text(
+                                translate(label),
+                                textAlign: TextAlign.center,
+                                style: TextStyle(
+                                    color: is_selected
+                                        ? theme.selectedTextColor
+                                        : theme.unSelectedTextColor),
+                              ),
+                            ],
+                          ),
+                          Offstage(
+                            offstage: !closable,
+                            child: Obx((() => _CloseButton(
+                                  visiable: _hover.value,
+                                  tabSelected: is_selected,
+                                  onClose: () => onClose(),
+                                  theme: theme,
+                                ))),
+                          )
+                        ])).paddingSymmetric(horizontal: 10),
+                Offstage(
+                  offstage: !show_divider,
+                  child: VerticalDivider(
+                    width: 1,
+                    indent: _kDividerIndent,
+                    endIndent: _kDividerIndent,
+                    color: theme.dividerColor,
+                    thickness: 1,
                   ),
-                  Offstage(
-                    offstage: !closable,
-                    child: Obx((() => _CloseButton(
-                          visiable: _hover.value,
-                          tabSelected: is_selected,
-                          onClose: () => onClose(),
-                          theme: theme,
-                        ))),
-                  )
-                ])).paddingSymmetric(horizontal: 10),
-            Offstage(
-              offstage: !show_divider,
-              child: VerticalDivider(
-                width: 1,
-                indent: _kDividerIndent,
-                endIndent: _kDividerIndent,
-                color: theme.dividerColor,
-                thickness: 1,
-              ),
-            )
-          ],
+                )
+              ],
+            ),
+          ),
         ),
-      ),
+        Positioned(
+            height: 2,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            child: Center(
+              child: Container(
+                  color:
+                      is_selected ? theme.indicatorColor : Colors.transparent),
+            ))
+      ],
     );
   }
 }

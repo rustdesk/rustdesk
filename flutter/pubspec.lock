@@ -49,7 +49,7 @@ packages:
       name: async
       url: "https://pub.flutter-io.cn"
     source: hosted
-    version: "2.8.2"
+    version: "2.9.0"
   back_button_interceptor:
     dependency: "direct main"
     description:
@@ -147,7 +147,7 @@ packages:
       name: characters
       url: "https://pub.flutter-io.cn"
     source: hosted
-    version: "1.2.0"
+    version: "1.2.1"
   charcode:
     dependency: transitive
     description:
@@ -168,7 +168,7 @@ packages:
       name: clock
       url: "https://pub.flutter-io.cn"
     source: hosted
-    version: "1.1.0"
+    version: "1.1.1"
   code_builder:
     dependency: transitive
     description:
@@ -235,15 +235,17 @@ packages:
   dash_chat_2:
     dependency: "direct main"
     description:
-      name: dash_chat_2
-      url: "https://pub.flutter-io.cn"
-    source: hosted
+      path: "."
+      ref: feat_maxWidth
+      resolved-ref: "3946ecf86d3600b54632fd80d0eb0ef0e74f2d6a"
+      url: "https://github.com/fufesou/Dash-Chat-2"
+    source: git
     version: "0.0.12"
   desktop_drop:
     dependency: "direct main"
     description:
       name: desktop_drop
-      url: "https://pub.dartlang.org"
+      url: "https://pub.flutter-io.cn"
     source: hosted
     version: "0.3.3"
   desktop_multi_window:
@@ -324,7 +326,7 @@ packages:
       name: fake_async
       url: "https://pub.flutter-io.cn"
     source: hosted
-    version: "1.3.0"
+    version: "1.3.1"
   ffi:
     dependency: "direct main"
     description:
@@ -607,14 +609,14 @@ packages:
       name: matcher
       url: "https://pub.flutter-io.cn"
     source: hosted
-    version: "0.12.11"
+    version: "0.12.12"
   material_color_utilities:
     dependency: transitive
     description:
       name: material_color_utilities
       url: "https://pub.flutter-io.cn"
     source: hosted
-    version: "0.1.4"
+    version: "0.1.5"
   menu_base:
     dependency: transitive
     description:
@@ -628,7 +630,7 @@ packages:
       name: meta
       url: "https://pub.flutter-io.cn"
     source: hosted
-    version: "1.7.0"
+    version: "1.8.0"
   mime:
     dependency: transitive
     description:
@@ -705,7 +707,7 @@ packages:
       name: path
       url: "https://pub.flutter-io.cn"
     source: hosted
-    version: "1.8.1"
+    version: "1.8.2"
   path_provider:
     dependency: "direct main"
     description:
@@ -846,6 +848,13 @@ packages:
       url: "https://pub.flutter-io.cn"
     source: hosted
     version: "0.1.2"
+  scroll_pos:
+    dependency: "direct main"
+    description:
+      name: scroll_pos
+      url: "https://pub.flutter-io.cn"
+    source: hosted
+    version: "0.3.0"
   settings_ui:
     dependency: "direct main"
     description:
@@ -948,7 +957,7 @@ packages:
       name: source_span
       url: "https://pub.flutter-io.cn"
     source: hosted
-    version: "1.8.2"
+    version: "1.9.0"
   sqflite:
     dependency: transitive
     description:
@@ -990,7 +999,7 @@ packages:
       name: string_scanner
       url: "https://pub.flutter-io.cn"
     source: hosted
-    version: "1.1.0"
+    version: "1.1.1"
   synchronized:
     dependency: transitive
     description:
@@ -1004,14 +1013,14 @@ packages:
       name: term_glyph
       url: "https://pub.flutter-io.cn"
     source: hosted
-    version: "1.2.0"
+    version: "1.2.1"
   test_api:
     dependency: transitive
     description:
       name: test_api
       url: "https://pub.flutter-io.cn"
     source: hosted
-    version: "0.4.9"
+    version: "0.4.12"
   timing:
     dependency: transitive
     description:
@@ -1029,10 +1038,12 @@ packages:
   tray_manager:
     dependency: "direct main"
     description:
-      name: tray_manager
-      url: "https://pub.flutter-io.cn"
-    source: hosted
-    version: "0.1.7"
+      path: "."
+      ref: "3aa37c86e47ea748e7b5507cbe59f2c54ebdb23a"
+      resolved-ref: "3aa37c86e47ea748e7b5507cbe59f2c54ebdb23a"
+      url: "https://github.com/Kingtous/rustdesk_tray_manager"
+    source: git
+    version: "0.1.8"
   tuple:
     dependency: "direct main"
     description:
