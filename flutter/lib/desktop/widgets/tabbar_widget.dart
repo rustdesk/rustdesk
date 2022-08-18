@@ -84,6 +84,9 @@ class DesktopTabBar extends StatelessWidget {
                     onPanStart: (_) {
                       if (mainTab) {
                         windowManager.startDragging();
+                      } else {
+                        WindowController.fromWindowId(windowId!)
+                            .startDragging();
                       }
                     },
                     child: Obx(() => TabBar(
@@ -201,16 +204,15 @@ class WindowActionPanel extends StatelessWidget {
             child: Icon(
               Icons.minimize,
               color: color,
-            ),
+            ).paddingSymmetric(horizontal: 5),
             onTap: () {
               if (mainTab) {
                 windowManager.minimize();
               } else {
-                // TODO
-                // WindowController.fromWindowId(windowId!).close();
+                WindowController.fromWindowId(windowId!).minimize();
               }
             },
-          ).paddingOnly(right: 10),
+          ),
         ),
         Tooltip(
           message: translate("Maximize"),
@@ -218,7 +220,8 @@ class WindowActionPanel extends StatelessWidget {
             child: Icon(
               Icons.rectangle_outlined,
               color: color,
-            ),
+              size: 20,
+            ).paddingSymmetric(horizontal: 5),
             onTap: () {
               if (mainTab) {
                 windowManager.isMaximized().then((maximized) {
@@ -229,11 +232,17 @@ class WindowActionPanel extends StatelessWidget {
                   }
                 });
               } else {
-                // TODO
-                // WindowController.fromWindowId(windowId!).();
+                final wc = WindowController.fromWindowId(windowId!);
+                wc.isMaximized().then((maximized) {
+                  if (maximized) {
+                    wc.unmaximize();
+                  } else {
+                    wc.maximize();
+                  }
+                });
               }
             },
-          ).paddingOnly(right: 10),
+          ),
         ),
         Tooltip(
           message: translate("Close"),
@@ -241,7 +250,7 @@ class WindowActionPanel extends StatelessWidget {
             child: Icon(
               Icons.close,
               color: color,
-            ),
+            ).paddingSymmetric(horizontal: 5),
             onTap: () {
               if (mainTab) {
                 windowManager.close();
@@ -249,7 +258,7 @@ class WindowActionPanel extends StatelessWidget {
                 WindowController.fromWindowId(windowId!).close();
               }
             },
-          ).paddingOnly(right: 10),
+          ),
         )
       ],
     );

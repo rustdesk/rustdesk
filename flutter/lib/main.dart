@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:desktop_multi_window/desktop_multi_window.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/desktop/pages/desktop_tab_page.dart';
 import 'package:flutter_hbb/desktop/pages/server_page.dart';
@@ -32,6 +33,7 @@ Future<Null> main(List<String> args) async {
   // main window
   if (args.isNotEmpty && args.first == 'multi_window') {
     windowId = int.parse(args[1]);
+    WindowController.fromWindowId(windowId!).showTitleBar(false);
     final argument = args[2].isEmpty
         ? Map<String, dynamic>()
         : jsonDecode(args[2]) as Map<String, dynamic>;
@@ -134,7 +136,6 @@ void runConnectionManagerScreen() async {
       await windowManager.focus();
     })
   ]);
-  ;
   runApp(GetMaterialApp(
       debugShowCheckedModeBanner: false,
       theme: getCurrentTheme(),
