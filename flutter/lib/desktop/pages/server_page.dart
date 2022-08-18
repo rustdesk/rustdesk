@@ -2,9 +2,9 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
-
 // import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
 import 'package:provider/provider.dart';
+import 'package:window_manager/window_manager.dart';
 
 import '../../common.dart';
 import '../../mobile/pages/home_page.dart';
@@ -143,8 +143,15 @@ class ConnectionManager extends StatelessWidget {
     // serverModel.clients[0] = Client(
     //     false, false, "Readmi-M21sdfsdf", "123123123", true, false, false);
     return serverModel.clients.isEmpty
-        ? Center(
-            child: Text(translate("Waiting")),
+        ? Column(
+            children: [
+              buildTitleBar(Offstage()),
+              Expanded(
+                child: Center(
+                  child: Text(translate("Waiting")),
+                ),
+              ),
+            ],
           )
         : DefaultTabController(
             length: serverModel.clients.length,
@@ -153,18 +160,37 @@ class ConnectionManager extends StatelessWidget {
               children: [
                 SizedBox(
                   height: kTextTabBarHeight,
-            child: TabBar(
-                isScrollable: true,
-                tabs: serverModel.clients.entries
-                    .map((entry) => buildTab(entry))
-                    .toList(growable: false)),
+                  child: buildTitleBar(TabBar(
+                      isScrollable: true,
+                      tabs: serverModel.clients.entries
+                          .map((entry) => buildTab(entry))
+                          .toList(growable: false))),
+                ),
+                Expanded(
+                  child: TabBarView(
+                      children: serverModel.clients.entries
+                          .map((entry) => buildConnectionCard(entry))
+                          .toList(growable: false)),
+                )
+              ],
+            ),
+          );
+  }
+
+  Widget buildTitleBar(Widget middle) {
+    return GestureDetector(
+      onPanDown: (d) {
+        windowManager.startDragging();
+      },
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          _AppIcon(),
+          Expanded(child: middle),
+          const SizedBox(
+            width: 4.0,
           ),
-          Expanded(
-            child: TabBarView(
-                children: serverModel.clients.entries
-                    .map((entry) => buildConnectionCard(entry))
-                    .toList(growable: false)),
-          )
+          _CloseButton()
         ],
       ),
     );
@@ -200,6 +226,40 @@ class ConnectionManager extends StatelessWidget {
               )),
         ],
       ),
+    );
+  }
+}
+
+class _AppIcon extends StatelessWidget {
+  const _AppIcon({Key? key}) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: EdgeInsets.symmetric(horizontal: 4.0),
+      child: Image.asset(
+        'assets/logo.ico',
+        width: 30,
+        height: 30,
+      ),
+    );
+  }
+}
+
+class _CloseButton extends StatelessWidget {
+  const _CloseButton({Key? key}) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    return Ink(
+      child: InkWell(
+          onTap: () {
+            windowManager.close();
+          },
+          child: Icon(
+            Icons.close,
+            size: 30,
+          )),
     );
   }
 }
