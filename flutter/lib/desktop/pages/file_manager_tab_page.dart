@@ -19,25 +19,25 @@ class FileManagerTabPage extends StatefulWidget {
   State<FileManagerTabPage> createState() => _FileManagerTabPageState(params);
 }
 
-class _FileManagerTabPageState extends State<FileManagerTabPage>
-    with TickerProviderStateMixin {
+class _FileManagerTabPageState extends State<FileManagerTabPage> {
   // refactor List<int> when using multi-tab
   // this singleton is only for test
   RxList<TabInfo> tabs = List<TabInfo>.empty(growable: true).obs;
-  late Rx<TabController> tabController;
-  static final Rx<int> _selected = 0.obs;
-  IconData icon = Icons.file_copy_sharp;
+  final IconData selectedIcon = Icons.file_copy_sharp;
+  final IconData unselectedIcon = Icons.file_copy_outlined;
 
   _FileManagerTabPageState(Map<String, dynamic> params) {
     if (params['id'] != null) {
-      tabs.add(TabInfo(label: params['id'], icon: icon));
+      tabs.add(TabInfo(
+          label: params['id'],
+          selectedIcon: selectedIcon,
+          unselectedIcon: unselectedIcon));
     }
   }
 
   @override
   void initState() {
     super.initState();
-    tabController = TabController(length: tabs.length, vsync: this).obs;
     rustDeskWinManager.setMethodHandler((call, fromWindowId) async {
       print(
           "call ${call.method} with args ${call.arguments} from window ${fromWindowId}");
@@ -46,8 +46,12 @@ class _FileManagerTabPageState extends State<FileManagerTabPage>
         final args = jsonDecode(call.arguments);
         final id = args['id'];
         window_on_top(windowId());
-        DesktopTabBar.onAdd(this, tabController, tabs, _selected,
-            TabInfo(label: id, icon: icon));
+        DesktopTabBar.onAdd(
+            tabs,
+            TabInfo(
+                label: id,
+                selectedIcon: selectedIcon,
+                unselectedIcon: unselectedIcon));
       } else if (call.method == "onDestroy") {
         print(
             "executing onDestroy hook, closing ${tabs.map((tab) => tab.label).toList()}");
@@ -68,17 +72,15 @@ class _FileManagerTabPageState extends State<FileManagerTabPage>
       body: Column(
         children: [
           DesktopTabBar(
-            controller: tabController,
             tabs: tabs,
             onTabClose: onRemoveId,
-            selected: _selected,
             dark: isDarkTheme(),
             mainTab: false,
           ),
           Expanded(
             child: Obx(
-              () => TabBarView(
-                  controller: tabController.value,
+              () => PageView(
+                  controller: DesktopTabBar.controller.value,
                   children: tabs
                       .map((tab) => FileManagerPage(
                           key: ValueKey(tab.label),
@@ -92,8 +94,7 @@ class _FileManagerTabPageState extends State<FileManagerTabPage>
   }
 
   void onRemoveId(String id) {
-    DesktopTabBar.onClose(this, tabController, tabs, id);
-    ffi(id).close();
+    ffi("ft_$id").close();
     if (tabs.length == 0) {
       WindowController.fromWindowId(windowId()).close();
     }

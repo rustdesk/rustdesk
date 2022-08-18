@@ -13,20 +13,19 @@ class DesktopTabPage extends StatefulWidget {
   State<DesktopTabPage> createState() => _DesktopTabPageState();
 }
 
-class _DesktopTabPageState extends State<DesktopTabPage>
-    with TickerProviderStateMixin {
-  late Rx<TabController> tabController;
+class _DesktopTabPageState extends State<DesktopTabPage> {
   late RxList<TabInfo> tabs;
-  static final Rx<int> _selected = 0.obs;
 
   @override
   void initState() {
     super.initState();
     tabs = RxList.from([
-      TabInfo(label: kTabLabelHomePage, icon: Icons.home_sharp, closable: false)
+      TabInfo(
+          label: kTabLabelHomePage,
+          selectedIcon: Icons.home_sharp,
+          unselectedIcon: Icons.home_outlined,
+          closable: false)
     ], growable: true);
-    tabController =
-        TabController(length: tabs.length, vsync: this, initialIndex: 0).obs;
   }
 
   @override
@@ -35,17 +34,14 @@ class _DesktopTabPageState extends State<DesktopTabPage>
       body: Column(
         children: [
           DesktopTabBar(
-            controller: tabController,
             tabs: tabs,
-            onTabClose: onTabClose,
-            selected: _selected,
             dark: isDarkTheme(),
             mainTab: true,
             onAddSetting: onAddSetting,
           ),
           Obx((() => Expanded(
-                child: TabBarView(
-                    controller: tabController.value,
+                child: PageView(
+                    controller: DesktopTabBar.controller.value,
                     children: tabs.map((tab) {
                       switch (tab.label) {
                         case kTabLabelHomePage:
@@ -62,12 +58,12 @@ class _DesktopTabPageState extends State<DesktopTabPage>
     );
   }
 
-  void onTabClose(String label) {
-    DesktopTabBar.onClose(this, tabController, tabs, label);
-  }
-
   void onAddSetting() {
-    DesktopTabBar.onAdd(this, tabController, tabs, _selected,
-        TabInfo(label: kTabLabelSettingPage, icon: Icons.build));
+    DesktopTabBar.onAdd(
+        tabs,
+        TabInfo(
+            label: kTabLabelSettingPage,
+            selectedIcon: Icons.build_sharp,
+            unselectedIcon: Icons.build_outlined));
   }
 }
