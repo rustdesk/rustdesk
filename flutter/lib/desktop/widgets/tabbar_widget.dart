@@ -1,10 +1,13 @@
 import 'dart:math';
 
+import 'package:desktop_multi_window/desktop_multi_window.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/common.dart';
 import 'package:flutter_hbb/consts.dart';
+import 'package:flutter_hbb/main.dart';
 import 'package:flutter_hbb/utils/multi_window_manager.dart';
 import 'package:get/get.dart';
+import 'package:window_manager/window_manager.dart';
 
 const double _kTabBarHeight = kDesktopRemoteTabBarHeight;
 const double _kIconSize = 18;
@@ -76,42 +79,52 @@ class DesktopTabBar extends StatelessWidget {
                     Text("RustDesk").paddingOnly(left: 5),
                   ]).paddingSymmetric(horizontal: 12, vertical: 5),
                 ),
-                Flexible(
-                  child: Obx(() => TabBar(
-                      key: tabBarKey,
-                      indicatorColor: _theme.indicatorColor,
-                      labelPadding: const EdgeInsets.symmetric(
-                          vertical: 0, horizontal: 0),
-                      isScrollable: true,
-                      indicatorPadding: EdgeInsets.zero,
-                      physics: BouncingScrollPhysics(),
-                      controller: controller.value,
-                      tabs: tabs.asMap().entries.map((e) {
-                        int index = e.key;
-                        String label = e.value.label;
+                Expanded(
+                  child: GestureDetector(
+                    onPanStart: (_) {
+                      if (mainTab) {
+                        windowManager.startDragging();
+                      } else {
+                        WindowController.fromWindowId(windowId!)
+                            .startDragging();
+                      }
+                    },
+                    child: Obx(() => TabBar(
+                        key: tabBarKey,
+                        indicatorColor: _theme.indicatorColor,
+                        labelPadding: const EdgeInsets.symmetric(
+                            vertical: 0, horizontal: 0),
+                        isScrollable: true,
+                        indicatorPadding: EdgeInsets.zero,
+                        physics: BouncingScrollPhysics(),
+                        controller: controller.value,
+                        tabs: tabs.asMap().entries.map((e) {
+                          int index = e.key;
+                          String label = e.value.label;
 
-                        return _Tab(
-                          index: index,
-                          label: label,
-                          icon: e.value.icon,
-                          closable: e.value.closable,
-                          selected: selected.value,
-                          onClose: () {
-                            onTabClose(label);
-                            if (index <= selected.value) {
-                              selected.value = max(0, selected.value - 1);
-                            }
-                            controller.value.animateTo(selected.value,
-                                duration: Duration.zero);
-                          },
-                          onSelected: () {
-                            selected.value = index;
-                            controller.value
-                                .animateTo(index, duration: Duration.zero);
-                          },
-                          theme: _theme,
-                        );
-                      }).toList())),
+                          return _Tab(
+                            index: index,
+                            label: label,
+                            icon: e.value.icon,
+                            closable: e.value.closable,
+                            selected: selected.value,
+                            onClose: () {
+                              onTabClose(label);
+                              if (index <= selected.value) {
+                                selected.value = max(0, selected.value - 1);
+                              }
+                              controller.value.animateTo(selected.value,
+                                  duration: Duration.zero);
+                            },
+                            onSelected: () {
+                              selected.value = index;
+                              controller.value
+                                  .animateTo(index, duration: Duration.zero);
+                            },
+                            theme: _theme,
+                          );
+                        }).toList())),
+                  ),
                 ),
                 Offstage(
                   offstage: mainTab,
@@ -134,6 +147,10 @@ class DesktopTabBar extends StatelessWidget {
                 onTap: () => onAddSetting?.call(),
               ).paddingOnly(right: 10),
             ),
+          ),
+          WindowActionPanel(
+            mainTab: mainTab,
+            color: _theme.unSelectedIconColor,
           )
         ],
       ),
@@ -166,6 +183,85 @@ class DesktopTabBar extends StatelessWidget {
       controller.value.animateTo(tabs.length - 1, duration: Duration.zero);
       selected.value = tabs.length - 1;
     }
+  }
+}
+
+class WindowActionPanel extends StatelessWidget {
+  final bool mainTab;
+  final Color color;
+
+  const WindowActionPanel(
+      {Key? key, required this.mainTab, required this.color})
+      : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Tooltip(
+          message: translate("Minimize"),
+          child: InkWell(
+            child: Icon(
+              Icons.minimize,
+              color: color,
+            ).paddingSymmetric(horizontal: 5),
+            onTap: () {
+              if (mainTab) {
+                windowManager.minimize();
+              } else {
+                WindowController.fromWindowId(windowId!).minimize();
+              }
+            },
+          ),
+        ),
+        Tooltip(
+          message: translate("Maximize"),
+          child: InkWell(
+            child: Icon(
+              Icons.rectangle_outlined,
+              color: color,
+              size: 20,
+            ).paddingSymmetric(horizontal: 5),
+            onTap: () {
+              if (mainTab) {
+                windowManager.isMaximized().then((maximized) {
+                  if (maximized) {
+                    windowManager.unmaximize();
+                  } else {
+                    windowManager.maximize();
+                  }
+                });
+              } else {
+                final wc = WindowController.fromWindowId(windowId!);
+                wc.isMaximized().then((maximized) {
+                  if (maximized) {
+                    wc.unmaximize();
+                  } else {
+                    wc.maximize();
+                  }
+                });
+              }
+            },
+          ),
+        ),
+        Tooltip(
+          message: translate("Close"),
+          child: InkWell(
+            child: Icon(
+              Icons.close,
+              color: color,
+            ).paddingSymmetric(horizontal: 5),
+            onTap: () {
+              if (mainTab) {
+                windowManager.close();
+              } else {
+                WindowController.fromWindowId(windowId!).close();
+              }
+            },
+          ),
+        )
+      ],
+    );
   }
 }
 

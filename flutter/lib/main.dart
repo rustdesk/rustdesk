@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:desktop_multi_window/desktop_multi_window.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/desktop/pages/desktop_tab_page.dart';
 import 'package:flutter_hbb/desktop/pages/server_page.dart';
@@ -32,6 +33,7 @@ Future<Null> main(List<String> args) async {
   // main window
   if (args.isNotEmpty && args.first == 'multi_window') {
     windowId = int.parse(args[1]);
+    WindowController.fromWindowId(windowId!).showTitleBar(false);
     final argument = args[2].isEmpty
         ? Map<String, dynamic>()
         : jsonDecode(args[2]) as Map<String, dynamic>;
@@ -77,7 +79,14 @@ Future<void> initEnv(String appType) async {
 }
 
 void runMainApp(bool startService) async {
-  await initEnv(kAppTypeMain);
+  WindowOptions windowOptions = getHiddenTitleBarWindowOptions(Size(1280, 720));
+  await Future.wait([
+    initEnv(kAppTypeMain),
+    windowManager.waitUntilReadyToShow(windowOptions, () async {
+      await windowManager.show();
+      await windowManager.focus();
+    })
+  ]);
   if (startService) {
     // await windowManager.ensureInitialized();
     // disable tray
@@ -118,13 +127,7 @@ void runFileTransferScreen(Map<String, dynamic> argument) async {
 
 void runConnectionManagerScreen() async {
   // initialize window
-  WindowOptions windowOptions = WindowOptions(
-    size: Size(300, 400),
-    center: true,
-    backgroundColor: Colors.transparent,
-    skipTaskbar: false,
-    titleBarStyle: TitleBarStyle.normal,
-  );
+  WindowOptions windowOptions = getHiddenTitleBarWindowOptions(Size(300, 400));
   await Future.wait([
     initEnv(kAppTypeConnectionManager),
     windowManager.waitUntilReadyToShow(windowOptions, () async {
@@ -133,8 +136,20 @@ void runConnectionManagerScreen() async {
       await windowManager.focus();
     })
   ]);
-  ;
-  runApp(GetMaterialApp(theme: getCurrentTheme(), home: DesktopServerPage()));
+  runApp(GetMaterialApp(
+      debugShowCheckedModeBanner: false,
+      theme: getCurrentTheme(),
+      home: DesktopServerPage()));
+}
+
+WindowOptions getHiddenTitleBarWindowOptions(Size size) {
+  return WindowOptions(
+    size: size,
+    center: true,
+    backgroundColor: Colors.transparent,
+    skipTaskbar: false,
+    titleBarStyle: TitleBarStyle.hidden,
+  );
 }
 
 class App extends StatelessWidget {
