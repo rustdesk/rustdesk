@@ -117,12 +117,23 @@ void runFileTransferScreen(Map<String, dynamic> argument) async {
 }
 
 void runConnectionManagerScreen() async {
+  // initialize window
+  WindowOptions windowOptions = WindowOptions(
+    size: Size(300, 400),
+    center: true,
+    backgroundColor: Colors.transparent,
+    skipTaskbar: false,
+    titleBarStyle: TitleBarStyle.normal,
+  );
   await Future.wait([
     initEnv(kAppTypeConnectionManager),
-    windowManager
-        .setSize(Size(300, 400))
-        .then((value) => windowManager.setAlignment(Alignment.topRight))
+    windowManager.waitUntilReadyToShow(windowOptions, () async {
+      await windowManager.setAlignment(Alignment.topRight);
+      await windowManager.show();
+      await windowManager.focus();
+    })
   ]);
+  ;
   runApp(GetMaterialApp(theme: getCurrentTheme(), home: DesktopServerPage()));
 }
 
