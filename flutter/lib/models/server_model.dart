@@ -342,6 +342,10 @@ class ServerModel with ChangeNotifier {
     var res = await bind.mainGetClientsState();
     try {
       final List clientsJson = jsonDecode(res);
+      if (isDesktop && clientsJson.isEmpty && _clients.isNotEmpty) {
+        // exit cm when >1 peers to no peers
+        exit(0);
+      }
       _clients.clear();
       for (var clientJson in clientsJson) {
         final client = Client.fromJson(clientJson);

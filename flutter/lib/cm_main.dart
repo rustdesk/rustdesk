@@ -10,8 +10,8 @@ import 'desktop/pages/server_page.dart';
 void main(List<String> args) async {
   WidgetsFlutterBinding.ensureInitialized();
   await windowManager.ensureInitialized();
-  await initEnv(kAppTypeConnectionManager);
-  runApp(GetMaterialApp(theme: getCurrentTheme(), home: DesktopServerPage()));
   await windowManager.setSize(Size(400, 600));
   await windowManager.setAlignment(Alignment.topRight);
+  await initEnv(kAppTypeConnectionManager);
+  runApp(GetMaterialApp(theme: getCurrentTheme(), home: DesktopServerPage()));
 }
