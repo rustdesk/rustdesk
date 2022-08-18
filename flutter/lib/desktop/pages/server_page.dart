@@ -2,109 +2,14 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
-// import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
 import 'package:provider/provider.dart';
 import 'package:window_manager/window_manager.dart';
 
 import '../../common.dart';
-import '../../mobile/pages/home_page.dart';
 import '../../models/platform_model.dart';
 import '../../models/server_model.dart';
 
-class DesktopServerPage extends StatefulWidget implements PageShape {
-  @override
-  final title = translate("Share Screen");
-
-  @override
-  final icon = Icon(Icons.mobile_screen_share);
-
-  @override
-  final appBarActions = [
-    PopupMenuButton<String>(
-        icon: Icon(Icons.more_vert),
-        itemBuilder: (context) {
-          return [
-            PopupMenuItem(
-              child: Text(translate("Change ID")),
-              padding: EdgeInsets.symmetric(horizontal: 16.0),
-              value: "changeID",
-              enabled: false,
-            ),
-            PopupMenuItem(
-              child: Text(translate("Set permanent password")),
-              padding: EdgeInsets.symmetric(horizontal: 16.0),
-              value: "setPermanentPassword",
-              enabled:
-              gFFI.serverModel.verificationMethod != kUseTemporaryPassword,
-            ),
-            PopupMenuItem(
-              child: Text(translate("Set temporary password length")),
-              padding: EdgeInsets.symmetric(horizontal: 16.0),
-              value: "setTemporaryPasswordLength",
-              enabled:
-              gFFI.serverModel.verificationMethod != kUsePermanentPassword,
-            ),
-            const PopupMenuDivider(),
-            PopupMenuItem(
-              padding: EdgeInsets.symmetric(horizontal: 0.0),
-              value: kUseTemporaryPassword,
-              child: Container(
-                  child: ListTile(
-                      title: Text(translate("Use temporary password")),
-                      trailing: Icon(
-                        Icons.check,
-                        color: gFFI.serverModel.verificationMethod ==
-                            kUseTemporaryPassword
-                            ? null
-                            : Color(0xFFFFFFFF),
-                      ))),
-            ),
-            PopupMenuItem(
-              padding: EdgeInsets.symmetric(horizontal: 0.0),
-              value: kUsePermanentPassword,
-              child: ListTile(
-                  title: Text(translate("Use permanent password")),
-                  trailing: Icon(
-                    Icons.check,
-                    color: gFFI.serverModel.verificationMethod ==
-                        kUsePermanentPassword
-                        ? null
-                        : Color(0xFFFFFFFF),
-                  )),
-            ),
-            PopupMenuItem(
-              padding: EdgeInsets.symmetric(horizontal: 0.0),
-              value: kUseBothPasswords,
-              child: ListTile(
-                  title: Text(translate("Use both passwords")),
-                  trailing: Icon(
-                    Icons.check,
-                    color: gFFI.serverModel.verificationMethod !=
-                        kUseTemporaryPassword &&
-                        gFFI.serverModel.verificationMethod !=
-                            kUsePermanentPassword
-                        ? null
-                        : Color(0xFFFFFFFF),
-                  )),
-            ),
-          ];
-        },
-        onSelected: (value) {
-          if (value == "changeID") {
-            // TODO
-          } else if (value == "setPermanentPassword") {
-            // setPermanentPasswordDialog();
-          } else if (value == "setTemporaryPasswordLength") {
-            // setTemporaryPasswordLengthDialog();
-          } else if (value == kUsePermanentPassword ||
-              value == kUseTemporaryPassword ||
-              value == kUseBothPasswords) {
-            bind.mainSetOption(key: "verification-method", value: value);
-            gFFI.serverModel.updatePasswordModel();
-          }
-        })
-  ];
-
+class DesktopServerPage extends StatefulWidget {
   @override
   State<StatefulWidget> createState() => _DesktopServerPageState();
 }
@@ -112,22 +17,27 @@ class DesktopServerPage extends StatefulWidget implements PageShape {
 class _DesktopServerPageState extends State<DesktopServerPage>
     with AutomaticKeepAliveClientMixin {
   @override
+  void initState() {
+    gFFI.ffiModel.updateEventListener("");
+    super.initState();
+  }
+
   Widget build(BuildContext context) {
     super.build(context);
     return ChangeNotifierProvider.value(
         value: gFFI.serverModel,
         child: Consumer<ServerModel>(
             builder: (context, serverModel, child) => Material(
-              child: Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.start,
-                  children: [
-                    Expanded(child: ConnectionManager()),
-                    SizedBox.fromSize(size: Size(0, 15.0)),
-                  ],
-                ),
-              ),
-            )));
+                  child: Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.start,
+                      children: [
+                        Expanded(child: ConnectionManager()),
+                        SizedBox.fromSize(size: Size(0, 15.0)),
+                      ],
+                    ),
+                  ),
+                )));
   }
 
   @override
@@ -359,18 +269,24 @@ class _CmHeaderState extends State<_CmHeader>
   bool get wantKeepAlive => true;
 }
 
-class _PrivilegeBoard extends StatelessWidget {
+class _PrivilegeBoard extends StatefulWidget {
   final Client client;
 
   const _PrivilegeBoard({Key? key, required this.client}) : super(key: key);
 
+  @override
+  State<StatefulWidget> createState() => _PrivilegeBoardState();
+}
+
+class _PrivilegeBoardState extends State<_PrivilegeBoard> {
+  late final client = widget.client;
   Widget buildPermissionIcon(bool enabled, ImageProvider icon,
       Function(bool)? onTap, String? tooltip) {
     return Tooltip(
       message: tooltip ?? "",
       child: Ink(
         decoration:
-        BoxDecoration(color: enabled ? MyTheme.accent80 : Colors.grey),
+            BoxDecoration(color: enabled ? MyTheme.accent80 : Colors.grey),
         padding: EdgeInsets.all(4.0),
         child: InkWell(
           onTap: () => onTap?.call(!enabled),
@@ -401,14 +317,41 @@ class _PrivilegeBoard extends StatelessWidget {
           ),
           Row(
             children: [
-              buildPermissionIcon(
-                  client.keyboard, iconKeyboard, (enable) => null, null),
-              buildPermissionIcon(
-                  client.clipboard, iconClipboard, (enable) => null, null),
-              buildPermissionIcon(
-                  client.audio, iconAudio, (enable) => null, null),
-              // TODO: file transfer
-              buildPermissionIcon(false, iconFile, (enable) => null, null),
+              buildPermissionIcon(client.keyboard, iconKeyboard, (enabled) {
+                bind.cmSwitchPermission(
+                    connId: client.id, name: "keyboard", enabled: enabled);
+                setState(() {
+                  client.keyboard = enabled;
+                });
+              }, null),
+              buildPermissionIcon(client.clipboard, iconClipboard, (enabled) {
+                bind.cmSwitchPermission(
+                    connId: client.id, name: "clipboard", enabled: enabled);
+                setState(() {
+                  client.clipboard = enabled;
+                });
+              }, null),
+              buildPermissionIcon(client.audio, iconAudio, (enabled) {
+                bind.cmSwitchPermission(
+                    connId: client.id, name: "audio", enabled: enabled);
+                setState(() {
+                  client.audio = enabled;
+                });
+              }, null),
+              buildPermissionIcon(client.file, iconFile, (enabled) {
+                bind.cmSwitchPermission(
+                    connId: client.id, name: "file", enabled: enabled);
+                setState(() {
+                  client.file = enabled;
+                });
+              }, null),
+              buildPermissionIcon(client.restart, iconRestart, (enabled) {
+                bind.cmSwitchPermission(
+                    connId: client.id, name: "restart", enabled: enabled);
+                setState(() {
+                  client.restart = enabled;
+                });
+              }, null),
             ],
           ),
         ],
@@ -530,9 +473,9 @@ class PaddingCard extends StatelessWidget {
                 children: [
                   titleIcon != null
                       ? Padding(
-                      padding: EdgeInsets.only(right: 10),
-                      child: Icon(titleIcon,
-                          color: MyTheme.accent80, size: 30))
+                          padding: EdgeInsets.only(right: 10),
+                          child: Icon(titleIcon,
+                              color: MyTheme.accent80, size: 30))
                       : SizedBox.shrink(),
                   Text(
                     title!,
@@ -579,12 +522,12 @@ Widget clientInfo(Client client) {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Text(client.name,
-                          style: TextStyle(color: MyTheme.idColor, fontSize: 18)),
-                      SizedBox(width: 8),
-                      Text(client.peerId,
-                          style: TextStyle(color: MyTheme.idColor, fontSize: 10))
-                    ]))
+                  Text(client.name,
+                      style: TextStyle(color: MyTheme.idColor, fontSize: 18)),
+                  SizedBox(width: 8),
+                  Text(client.peerId,
+                      style: TextStyle(color: MyTheme.idColor, fontSize: 10))
+                ]))
           ],
         ),
       ]));

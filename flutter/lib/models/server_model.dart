@@ -366,7 +366,7 @@ class ServerModel with ChangeNotifier {
       _clients[client.id] = client;
       scrollToBottom();
       notifyListeners();
-      showLoginDialog(client);
+      if (isAndroid) showLoginDialog(client);
     } catch (e) {
       debugPrint("Failed to call loginRequest,error:$e");
     }
@@ -483,6 +483,8 @@ class Client {
   bool keyboard = false;
   bool clipboard = false;
   bool audio = false;
+  bool file = false;
+  bool restart = false;
 
   Client(this.authorized, this.isFileTransfer, this.name, this.peerId,
       this.keyboard, this.clipboard, this.audio);
@@ -496,6 +498,8 @@ class Client {
     keyboard = json['keyboard'];
     clipboard = json['clipboard'];
     audio = json['audio'];
+    file = json['file'];
+    restart = json['restart'];
   }
 
   Map<String, dynamic> toJson() {
