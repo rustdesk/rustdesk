@@ -109,6 +109,8 @@ class ConnectionManager extends StatelessWidget {
   Widget buildConnectionCard(MapEntry<int, Client> entry) {
     final client = entry.value;
     return Column(
+      mainAxisAlignment: MainAxisAlignment.start,
+      crossAxisAlignment: CrossAxisAlignment.start,
       key: ValueKey(entry.key),
       children: [
         _CmHeader(client: client),
@@ -212,14 +214,14 @@ class _CmHeaderState extends State<_CmHeader>
       children: [
         // icon
         Container(
-          width: 100,
-          height: 100,
+          width: 90,
+          height: 90,
           alignment: Alignment.center,
           decoration: BoxDecoration(color: str2color(client.name)),
           child: Text(
             "${client.name[0]}",
             style: TextStyle(
-                fontWeight: FontWeight.bold, color: Colors.white, fontSize: 75),
+                fontWeight: FontWeight.bold, color: Colors.white, fontSize: 65),
           ),
         ).marginOnly(left: 4.0, right: 8.0),
         Expanded(
@@ -227,7 +229,8 @@ class _CmHeaderState extends State<_CmHeader>
             mainAxisAlignment: MainAxisAlignment.start,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
+              FittedBox(
+                  child: Text(
                 "${client.name}",
                 style: TextStyle(
                   color: MyTheme.cmIdColor,
@@ -236,19 +239,22 @@ class _CmHeaderState extends State<_CmHeader>
                   overflow: TextOverflow.ellipsis,
                 ),
                 maxLines: 1,
-              ),
-              Text("(${client.peerId})",
-                  style: TextStyle(color: MyTheme.cmIdColor, fontSize: 14)),
+              )),
+              FittedBox(
+                  child: Text("(${client.peerId})",
+                      style:
+                          TextStyle(color: MyTheme.cmIdColor, fontSize: 14))),
               SizedBox(
                 height: 16.0,
               ),
-              Row(
+              FittedBox(
+                  child: Row(
                 children: [
                   Text("${translate("Connected")}").marginOnly(right: 8.0),
                   Obx(() => Text(
                       "${formatDurationToTime(Duration(seconds: _time.value))}"))
                 ],
-              )
+              ))
             ],
           ),
         ),
@@ -315,7 +321,8 @@ class _PrivilegeBoardState extends State<_PrivilegeBoard> {
           SizedBox(
             height: 8.0,
           ),
-          Row(
+          FittedBox(
+              child: Row(
             children: [
               buildPermissionIcon(client.keyboard, iconKeyboard, (enabled) {
                 bind.cmSwitchPermission(
@@ -353,7 +360,7 @@ class _PrivilegeBoardState extends State<_PrivilegeBoard> {
                 });
               }, null),
             ],
-          ),
+          )),
         ],
       ),
     );
