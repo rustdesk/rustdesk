@@ -32,7 +32,9 @@ RustDesk приветствует вклад каждого. Смотрите [`
 | --------- | ------------- | ------------------ |
 | Сеул | AWS lightsail | 1 VCPU / 0.5GB RAM |
 | Сингапур | Vultr | 1 VCPU / 1GB RAM |
-| Даллас | Vultr | 1 VCPU / 1GB RAM | |
+| Даллас | Vultr | 1 VCPU / 1GB RAM |
+| Germany | Hetzner | 2 VCPU / 4GB RAM |
+| Germany | Codext | 4 VCPU / 8GB RAM |
 
 ## Зависимости
 
