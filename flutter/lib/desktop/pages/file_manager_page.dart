@@ -108,6 +108,31 @@ class _FileManagerPageState extends State<FileManagerPage>
                 ),
               ));
         }));
+    return Overlay(initialEntries: [
+      OverlayEntry(builder: (context) {
+        _ffi.dialogManager.setOverlayState(Overlay.of(context));
+        return ChangeNotifierProvider.value(
+            value: _ffi.fileModel,
+            child: Consumer<FileModel>(builder: (_context, _model, _child) {
+              return WillPopScope(
+                  onWillPop: () async {
+                    if (model.selectMode) {
+                      model.toggleSelectMode();
+                    }
+                    return false;
+                  },
+                  child: Scaffold(
+                    body: Row(
+                      children: [
+                        Flexible(flex: 3, child: body(isLocal: true)),
+                        Flexible(flex: 3, child: body(isLocal: false)),
+                        Flexible(flex: 2, child: statusList())
+                      ],
+                    ),
+                  ));
+            }));
+      })
+    ]);
   }
 
   Widget menu({bool isLocal = false}) {
