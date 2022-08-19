@@ -61,7 +61,7 @@ dependencies:
     window_manager:
         git:
             url: https://github.com/Kingtous/rustdesk_window_manager
-            ref: 028a7f6
+            ref: 75a6c813babca461f359a586785d797f7806e390
     desktop_multi_window:
         # path: ../../rustdesk_desktop_multi_window
         git:
