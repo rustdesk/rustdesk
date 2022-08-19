@@ -70,7 +70,6 @@ class DesktopTabBar extends StatelessWidget {
         super(key: key) {
     scrollController.itemCount = tabs.length;
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      debugPrint("callback");
       scrollController.scrollToItem(selected.value,
           center: true, animate: true);
     });

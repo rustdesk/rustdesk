@@ -253,28 +253,47 @@ class _Safety extends StatefulWidget {
 class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
   @override
   bool get wantKeepAlive => true;
+  bool locked = true;
 
   @override
   Widget build(BuildContext context) {
     super.build(context);
     return ListView(
       children: [
-        permissions(),
-        password(),
-        whitelist(),
+        Column(
+          children: [
+            _lock(locked, 'Unlock Security Settings', () {
+              locked = false;
+              setState(() => {});
+            }),
+            AbsorbPointer(
+              absorbing: locked,
+              child: Column(children: [
+                permissions(),
+                password(),
+                whitelist(),
+              ]),
+            ),
+          ],
+        )
       ],
     ).marginOnly(bottom: _kListViewBottomMargin);
   }
 
   Widget permissions() {
+    bool enabled = !locked;
     return _Card(title: 'Permissions', children: [
-      _OptionCheckBox('Enable Keyboard/Mouse', 'enable-keyboard'),
-      _OptionCheckBox('Enable Clipboard', 'enable-clipboard'),
-      _OptionCheckBox('Enable File Transfer', 'enable-file-transfer'),
-      _OptionCheckBox('Enable Audio', 'enable-audio'),
-      _OptionCheckBox('Enable Remote Restart', 'enable-remote-restart'),
+      _OptionCheckBox('Enable Keyboard/Mouse', 'enable-keyboard',
+          enabled: enabled),
+      _OptionCheckBox('Enable Clipboard', 'enable-clipboard', enabled: enabled),
+      _OptionCheckBox('Enable File Transfer', 'enable-file-transfer',
+          enabled: enabled),
+      _OptionCheckBox('Enable Audio', 'enable-audio', enabled: enabled),
+      _OptionCheckBox('Enable Remote Restart', 'enable-remote-restart',
+          enabled: enabled),
       _OptionCheckBox('Enable remote configuration modification',
-          'allow-remote-config-modification'),
+          'allow-remote-config-modification',
+          enabled: enabled),
     ]);
   }
 
@@ -297,15 +316,17 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
           String currentValue = values[keys.indexOf(model.verificationMethod)];
           List<Widget> radios = values
               .map((value) => _Radio<String>(
-                  value: value,
-                  groupValue: currentValue,
-                  label: value,
-                  onChanged: ((value) {
-                    model.verificationMethod = keys[values.indexOf(value)];
-                  })))
+                    value: value,
+                    groupValue: currentValue,
+                    label: value,
+                    onChanged: ((value) {
+                      model.verificationMethod = keys[values.indexOf(value)];
+                    }),
+                    enabled: !locked,
+                  ))
               .toList();
 
-          var onChanged = tmp_enabled
+          var onChanged = tmp_enabled && !locked
               ? (value) {
                   if (value != null)
                     model.temporaryPasswordLength = value.toString();
@@ -319,7 +340,11 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
                             value: value,
                             groupValue: model.temporaryPasswordLength,
                             onChanged: onChanged),
-                        Text(value),
+                        Text(
+                          value,
+                          style: TextStyle(
+                              color: _disabledTextColor(onChanged != null)),
+                        ),
                       ],
                     ).paddingSymmetric(horizontal: 10),
                     onTap: () => onChanged?.call(value),
@@ -335,10 +360,10 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
                     ...lengthRadios,
                   ],
                 ),
-                enabled: tmp_enabled),
+                enabled: tmp_enabled && !locked),
             radios[1],
-            _SubButton(
-                'Set permanent password', setPasswordDialog, perm_enabled),
+            _SubButton('Set permanent password', setPasswordDialog,
+                perm_enabled && !locked),
             radios[2],
           ]);
         })));
@@ -346,7 +371,8 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
 
   Widget whitelist() {
     return _Card(title: 'IP Whitelisting', children: [
-      _Button('IP Whitelisting', changeWhiteList, tip: 'whitelist_tip')
+      _Button('IP Whitelisting', changeWhiteList,
+          tip: 'whitelist_tip', enabled: !locked)
     ]);
   }
 }
@@ -362,31 +388,46 @@ class _ConnectionState extends State<_Connection>
     with AutomaticKeepAliveClientMixin {
   @override
   bool get wantKeepAlive => true;
+  bool locked = true;
 
   @override
   Widget build(BuildContext context) {
     super.build(context);
-    return ListView(
-      children: [
-        _Card(title: 'Server', children: [
-          _Button('ID/Relay Server', changeServer),
-        ]),
-        _Card(title: 'Service', children: [
-          _OptionCheckBox('Enable Service', 'stop-service', reverse: true),
-          // TODO: Not implemented
-          // _option_check('Always connected via relay', 'allow-always-relay'),
-          // _option_check('Start ID/relay service', 'stop-rendezvous-service',
-          //     reverse: true),
-        ]),
-        _Card(title: 'TCP Tunneling', children: [
-          _OptionCheckBox('Enable TCP Tunneling', 'enable-tunnel'),
-        ]),
-        direct_ip(),
-        _Card(title: 'Proxy', children: [
-          _Button('Socks5 Proxy', changeSocks5Proxy),
-        ]),
-      ],
-    ).marginOnly(bottom: _kListViewBottomMargin);
+    bool enabled = !locked;
+    return ListView(children: [
+      Column(
+        children: [
+          _lock(locked, 'Unlock Connection Settings', () {
+            locked = false;
+            setState(() => {});
+          }),
+          AbsorbPointer(
+            absorbing: locked,
+            child: Column(children: [
+              _Card(title: 'Server', children: [
+                _Button('ID/Relay Server', changeServer, enabled: enabled),
+              ]),
+              _Card(title: 'Service', children: [
+                _OptionCheckBox('Enable Service', 'stop-service',
+                    reverse: true, enabled: enabled),
+                // TODO: Not implemented
+                // _option_check('Always connected via relay', 'allow-always-relay', enabled: enabled),
+                // _option_check('Start ID/relay service', 'stop-rendezvous-service',
+                //     reverse: true, enabled: enabled),
+              ]),
+              _Card(title: 'TCP Tunneling', children: [
+                _OptionCheckBox('Enable TCP Tunneling', 'enable-tunnel',
+                    enabled: enabled),
+              ]),
+              direct_ip(),
+              _Card(title: 'Proxy', children: [
+                _Button('Socks5 Proxy', changeSocks5Proxy, enabled: enabled),
+              ]),
+            ]),
+          ),
+        ],
+      )
+    ]).marginOnly(bottom: _kListViewBottomMargin);
   }
 
   Widget direct_ip() {
@@ -395,7 +436,7 @@ class _ConnectionState extends State<_Connection>
     RxBool apply_enabled = false.obs;
     return _Card(title: 'Direct IP Access', children: [
       _OptionCheckBox('Enable Direct IP Access', 'direct-server',
-          update: update),
+          update: update, enabled: !locked),
       _futureBuilder(
         future: () async {
           String enabled = await bind.mainGetOption(key: 'direct-server');
@@ -414,7 +455,7 @@ class _ConnectionState extends State<_Connection>
                 width: 80,
                 child: TextField(
                   controller: controller,
-                  enabled: enabled,
+                  enabled: enabled && !locked,
                   onChanged: (_) => apply_enabled.value = true,
                   inputFormatters: [
                     FilteringTextInputFormatter.allow(RegExp(
@@ -429,10 +470,10 @@ class _ConnectionState extends State<_Connection>
                   ),
                 ),
               ),
-              enabled: enabled,
-            ),
+              enabled: enabled && !locked,
+            ).marginOnly(left: 5),
             Obx(() => ElevatedButton(
-                  onPressed: apply_enabled.value && enabled
+                  onPressed: apply_enabled.value && enabled && !locked
                       ? () async {
                           apply_enabled.value = false;
                           await bind.mainSetOption(
@@ -440,7 +481,9 @@ class _ConnectionState extends State<_Connection>
                               value: controller.text);
                         }
                       : null,
-                  child: Text(translate('Apply')),
+                  child: Text(
+                    translate('Apply'),
+                  ),
                 ).marginOnly(left: 20))
           ]);
         },
@@ -700,8 +743,16 @@ Widget _Card({required String title, required List<Widget> children}) {
   );
 }
 
+Color? _disabledTextColor(bool enabled) {
+  return enabled
+      ? null
+      : isDarkTheme()
+          ? MyTheme.disabledTextDark
+          : MyTheme.disabledTextLight;
+}
+
 Widget _OptionCheckBox(String label, String key,
-    {Function()? update = null, bool reverse = false}) {
+    {Function()? update = null, bool reverse = false, bool enabled = true}) {
   return _futureBuilder(
       future: bind.mainGetOption(key: key),
       hasData: (data) {
@@ -721,9 +772,14 @@ Widget _OptionCheckBox(String label, String key,
           child: Obx(
             () => Row(
               children: [
-                Checkbox(value: ref.value, onChanged: onChanged)
+                Checkbox(
+                        value: ref.value, onChanged: enabled ? onChanged : null)
                     .marginOnly(right: 10),
-                Expanded(child: Text(translate(label)))
+                Expanded(
+                    child: Text(
+                  translate(label),
+                  style: TextStyle(color: _disabledTextColor(enabled)),
+                ))
               ],
             ),
           ).marginOnly(left: _kCheckBoxLeftMargin),
@@ -734,29 +790,33 @@ Widget _OptionCheckBox(String label, String key,
       });
 }
 
-Widget _Radio<T>({
-  required T value,
-  required T groupValue,
-  required String label,
-  required Function(T value) onChanged,
-}) {
-  var on_change = (T? value) {
-    if (value != null) {
-      onChanged(value);
-    }
-  };
+Widget _Radio<T>(
+    {required T value,
+    required T groupValue,
+    required String label,
+    required Function(T value) onChanged,
+    bool enabled = true}) {
+  var on_change = enabled
+      ? (T? value) {
+          if (value != null) {
+            onChanged(value);
+          }
+        }
+      : null;
   return GestureDetector(
     child: Row(
       children: [
         Radio<T>(value: value, groupValue: groupValue, onChanged: on_change),
         Expanded(
           child: Text(translate(label),
-                  style: TextStyle(fontSize: _kContentFontSize))
+                  style: TextStyle(
+                      fontSize: _kContentFontSize,
+                      color: _disabledTextColor(enabled)))
               .marginOnly(left: 5),
         ),
       ],
     ).marginOnly(left: _kRadioLeftMargin),
-    onTap: () => on_change(value),
+    onTap: () => on_change?.call(value),
   );
 }
 
@@ -808,19 +868,19 @@ Widget _SubLabeledWidget(String label, Widget child, {bool enabled = true}) {
                   decoration: BoxDecoration(
                       border: Border.all(
                           color: hover.value && enabled
-                              ? Colors.grey.withOpacity(0.8)
-                              : Colors.grey.withOpacity(0.5),
+                              ? Color(0xFFD7D7D7)
+                              : Color(0xFFCBCBCB),
                           width: hover.value && enabled ? 2 : 1)),
                   child: Row(
                     children: [
                       Container(
                         height: 28,
                         color: (hover.value && enabled)
-                            ? Colors.grey.withOpacity(0.8)
-                            : Colors.grey.withOpacity(0.5),
+                            ? Color(0xFFD7D7D7)
+                            : Color(0xFFCBCBCB),
                         child: Text(
                           label + ': ',
-                          style: TextStyle(),
+                          style: TextStyle(fontWeight: FontWeight.w300),
                         ),
                         alignment: Alignment.center,
                         padding:
@@ -849,6 +909,43 @@ Widget _futureBuilder(
           return Container();
         }
       });
+}
+
+Widget _lock(
+  bool locked,
+  String label,
+  Function() onUnlock,
+) {
+  return Offstage(
+      offstage: !locked,
+      child: Row(
+        children: [
+          Container(
+            width: _kCardFixedWidth,
+            child: Card(
+              child: ElevatedButton(
+                child: Container(
+                    height: 25,
+                    child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            Icons.security_sharp,
+                            size: 20,
+                          ),
+                          Text(translate(label)).marginOnly(left: 5),
+                        ]).marginSymmetric(vertical: 2)),
+                onPressed: () async {
+                  bool checked = await bind.mainCheckSuperUserPermission();
+                  if (checked) {
+                    onUnlock();
+                  }
+                },
+              ).marginSymmetric(horizontal: 2, vertical: 4),
+            ).marginOnly(left: _kCardLeftMargin),
+          ).marginOnly(top: 10),
+        ],
+      ));
 }
 
 // ignore: must_be_immutable

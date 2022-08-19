@@ -52,6 +52,8 @@ class MyTheme {
   static const Color darkGray = Color(0xFFB9BABC);
   static const Color cmIdColor = Color(0xFF21790B);
   static const Color dark = Colors.black87;
+  static const Color disabledTextLight = Color(0xFF888888);
+  static const Color disabledTextDark = Color(0xFF777777);
 
   static ThemeData lightTheme = ThemeData(
     brightness: Brightness.light,
