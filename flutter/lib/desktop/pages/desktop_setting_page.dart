@@ -71,6 +71,7 @@ class _DesktopSettingPageState extends State<DesktopSettingPage>
   Widget build(BuildContext context) {
     super.build(context);
     return Scaffold(
+      backgroundColor: MyTheme.color(context).bg,
       body: Row(
         children: <Widget>[
           Container(
@@ -88,16 +89,19 @@ class _DesktopSettingPageState extends State<DesktopSettingPage>
           ),
           const VerticalDivider(thickness: 1, width: 1),
           Expanded(
-            child: PageView(
-              controller: controller,
-              children: [
-                _UserInterface(),
-                _Safety(),
-                _Display(),
-                _Audio(),
-                _Connection(),
-                _About(),
-              ],
+            child: Container(
+              color: MyTheme.color(context).grayBg,
+              child: PageView(
+                controller: controller,
+                children: [
+                  _UserInterface(),
+                  _Safety(),
+                  _Display(),
+                  _Audio(),
+                  _Connection(),
+                  _About(),
+                ],
+              ),
             ),
           )
         ],
@@ -269,8 +273,8 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
             AbsorbPointer(
               absorbing: locked,
               child: Column(children: [
-                permissions(),
-                password(),
+                permissions(context),
+                password(context),
                 whitelist(),
               ]),
             ),
@@ -280,24 +284,26 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
     ).marginOnly(bottom: _kListViewBottomMargin);
   }
 
-  Widget permissions() {
+  Widget permissions(context) {
     bool enabled = !locked;
     return _Card(title: 'Permissions', children: [
-      _OptionCheckBox('Enable Keyboard/Mouse', 'enable-keyboard',
+      _OptionCheckBox(context, 'Enable Keyboard/Mouse', 'enable-keyboard',
           enabled: enabled),
-      _OptionCheckBox('Enable Clipboard', 'enable-clipboard', enabled: enabled),
-      _OptionCheckBox('Enable File Transfer', 'enable-file-transfer',
+      _OptionCheckBox(context, 'Enable Clipboard', 'enable-clipboard',
           enabled: enabled),
-      _OptionCheckBox('Enable Audio', 'enable-audio', enabled: enabled),
-      _OptionCheckBox('Enable Remote Restart', 'enable-remote-restart',
+      _OptionCheckBox(context, 'Enable File Transfer', 'enable-file-transfer',
           enabled: enabled),
-      _OptionCheckBox('Enable remote configuration modification',
+      _OptionCheckBox(context, 'Enable Audio', 'enable-audio',
+          enabled: enabled),
+      _OptionCheckBox(context, 'Enable Remote Restart', 'enable-remote-restart',
+          enabled: enabled),
+      _OptionCheckBox(context, 'Enable remote configuration modification',
           'allow-remote-config-modification',
           enabled: enabled),
     ]);
   }
 
-  Widget password() {
+  Widget password(BuildContext context) {
     return ChangeNotifierProvider.value(
         value: gFFI.serverModel,
         child: Consumer<ServerModel>(builder: ((context, model, child) {
@@ -316,6 +322,7 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
           String currentValue = values[keys.indexOf(model.verificationMethod)];
           List<Widget> radios = values
               .map((value) => _Radio<String>(
+                    context,
                     value: value,
                     groupValue: currentValue,
                     label: value,
@@ -343,7 +350,8 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
                         Text(
                           value,
                           style: TextStyle(
-                              color: _disabledTextColor(onChanged != null)),
+                              color: _disabledTextColor(
+                                  context, onChanged != null)),
                         ),
                       ],
                     ).paddingSymmetric(horizontal: 10),
@@ -408,7 +416,7 @@ class _ConnectionState extends State<_Connection>
                 _Button('ID/Relay Server', changeServer, enabled: enabled),
               ]),
               _Card(title: 'Service', children: [
-                _OptionCheckBox('Enable Service', 'stop-service',
+                _OptionCheckBox(context, 'Enable Service', 'stop-service',
                     reverse: true, enabled: enabled),
                 // TODO: Not implemented
                 // _option_check('Always connected via relay', 'allow-always-relay', enabled: enabled),
@@ -416,10 +424,11 @@ class _ConnectionState extends State<_Connection>
                 //     reverse: true, enabled: enabled),
               ]),
               _Card(title: 'TCP Tunneling', children: [
-                _OptionCheckBox('Enable TCP Tunneling', 'enable-tunnel',
+                _OptionCheckBox(
+                    context, 'Enable TCP Tunneling', 'enable-tunnel',
                     enabled: enabled),
               ]),
-              direct_ip(),
+              direct_ip(context),
               _Card(title: 'Proxy', children: [
                 _Button('Socks5 Proxy', changeSocks5Proxy, enabled: enabled),
               ]),
@@ -430,12 +439,12 @@ class _ConnectionState extends State<_Connection>
     ]).marginOnly(bottom: _kListViewBottomMargin);
   }
 
-  Widget direct_ip() {
+  Widget direct_ip(BuildContext context) {
     TextEditingController controller = TextEditingController();
     var update = () => setState(() {});
     RxBool apply_enabled = false.obs;
     return _Card(title: 'Direct IP Access', children: [
-      _OptionCheckBox('Enable Direct IP Access', 'direct-server',
+      _OptionCheckBox(context, 'Enable Direct IP Access', 'direct-server',
           update: update, enabled: !locked),
       _futureBuilder(
         future: () async {
@@ -509,7 +518,7 @@ class _DisplayState extends State<_Display> with AutomaticKeepAliveClientMixin {
     return ListView(
       children: [
         _Card(title: 'Adaptive Bitrate', children: [
-          _OptionCheckBox('Adaptive Bitrate', 'enable-abr'),
+          _OptionCheckBox(context, 'Adaptive Bitrate', 'enable-abr'),
         ]),
         hwcodec(),
       ],
@@ -523,7 +532,8 @@ class _DisplayState extends State<_Display> with AutomaticKeepAliveClientMixin {
           return Offstage(
             offstage: !(data as bool),
             child: _Card(title: 'Hardware Codec', children: [
-              _OptionCheckBox('Enable hardware codec', 'enable-hwcodec'),
+              _OptionCheckBox(
+                  context, 'Enable hardware codec', 'enable-hwcodec'),
             ]),
           );
         });
@@ -592,6 +602,7 @@ class _AudioState extends State<_Audio> with AutomaticKeepAliveClientMixin {
               );
               deviceWidget.addAll([
                 _Radio<_AudioInputType>(
+                  context,
                   value: _AudioInputType.Specify,
                   groupValue: groupValue,
                   label: 'Specify device',
@@ -606,6 +617,7 @@ class _AudioState extends State<_Audio> with AutomaticKeepAliveClientMixin {
             }
             return Column(children: [
               _Radio<_AudioInputType>(
+                context,
                 value: _AudioInputType.Mute,
                 groupValue: groupValue,
                 label: 'Mute',
@@ -615,6 +627,7 @@ class _AudioState extends State<_Audio> with AutomaticKeepAliveClientMixin {
                 },
               ),
               _Radio(
+                context,
                 value: _AudioInputType.Standard,
                 groupValue: groupValue,
                 label: 'Use standard device',
@@ -743,15 +756,11 @@ Widget _Card({required String title, required List<Widget> children}) {
   );
 }
 
-Color? _disabledTextColor(bool enabled) {
-  return enabled
-      ? null
-      : isDarkTheme()
-          ? MyTheme.disabledTextDark
-          : MyTheme.disabledTextLight;
+Color? _disabledTextColor(BuildContext context, bool enabled) {
+  return enabled ? null : MyTheme.color(context).lighterText;
 }
 
-Widget _OptionCheckBox(String label, String key,
+Widget _OptionCheckBox(BuildContext context, String label, String key,
     {Function()? update = null, bool reverse = false, bool enabled = true}) {
   return _futureBuilder(
       future: bind.mainGetOption(key: key),
@@ -778,7 +787,7 @@ Widget _OptionCheckBox(String label, String key,
                 Expanded(
                     child: Text(
                   translate(label),
-                  style: TextStyle(color: _disabledTextColor(enabled)),
+                  style: TextStyle(color: _disabledTextColor(context, enabled)),
                 ))
               ],
             ),
@@ -790,7 +799,7 @@ Widget _OptionCheckBox(String label, String key,
       });
 }
 
-Widget _Radio<T>(
+Widget _Radio<T>(BuildContext context,
     {required T value,
     required T groupValue,
     required String label,
@@ -811,7 +820,7 @@ Widget _Radio<T>(
           child: Text(translate(label),
                   style: TextStyle(
                       fontSize: _kContentFontSize,
-                      color: _disabledTextColor(enabled)))
+                      color: _disabledTextColor(context, enabled)))
               .marginOnly(left: 5),
         ),
       ],
