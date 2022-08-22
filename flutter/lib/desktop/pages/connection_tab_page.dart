@@ -33,6 +33,7 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
   _ConnectionTabPageState(Map<String, dynamic> params) {
     if (params['id'] != null) {
       tabs.add(TabInfo(
+          key: params['id'],
           label: params['id'],
           selectedIcon: selectedIcon,
           unselectedIcon: unselectedIcon));
@@ -53,6 +54,7 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
         DesktopTabBar.onAdd(
             tabs,
             TabInfo(
+                key: id,
                 label: id,
                 selectedIcon: selectedIcon,
                 unselectedIcon: unselectedIcon));

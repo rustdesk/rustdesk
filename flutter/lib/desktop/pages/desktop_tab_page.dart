@@ -22,6 +22,7 @@ class _DesktopTabPageState extends State<DesktopTabPage> {
     super.initState();
     tabs = RxList.from([
       TabInfo(
+          key: kTabLabelHomePage,
           label: kTabLabelHomePage,
           selectedIcon: Icons.home_sharp,
           unselectedIcon: Icons.home_outlined,
@@ -70,6 +71,7 @@ class _DesktopTabPageState extends State<DesktopTabPage> {
     DesktopTabBar.onAdd(
         tabs,
         TabInfo(
+            key: kTabLabelSettingPage,
             label: kTabLabelSettingPage,
             selectedIcon: Icons.build_sharp,
             unselectedIcon: Icons.build_outlined));

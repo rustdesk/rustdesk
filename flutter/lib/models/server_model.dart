@@ -4,9 +4,11 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/models/platform_model.dart';
+import 'package:get/get_rx/src/rx_types/rx_types.dart';
 import 'package:wakelock/wakelock.dart';
 
 import '../common.dart';
+import '../desktop/widgets/tabbar_widget.dart';
 import '../mobile/pages/server_page.dart';
 import 'model.dart';
 
@@ -30,7 +32,9 @@ class ServerModel with ChangeNotifier {
   late final TextEditingController _serverId;
   final _serverPasswd = TextEditingController(text: "");
 
-  Map<int, Client> _clients = {};
+  RxList<TabInfo> tabs = RxList<TabInfo>.empty(growable: true);
+
+  List<Client> _clients = [];
 
   bool get isStart => _isStart;
 
@@ -76,7 +80,7 @@ class ServerModel with ChangeNotifier {
 
   TextEditingController get serverPasswd => _serverPasswd;
 
-  Map<int, Client> get clients => _clients;
+  List<Client> get clients => _clients;
 
   final controller = ScrollController();
 
@@ -338,6 +342,7 @@ class ServerModel with ChangeNotifier {
     notifyListeners();
   }
 
+  // force
   updateClientState([String? json]) async {
     var res = await bind.mainGetClientsState();
     try {
@@ -347,9 +352,16 @@ class ServerModel with ChangeNotifier {
         exit(0);
       }
       _clients.clear();
+      tabs.clear();
       for (var clientJson in clientsJson) {
         final client = Client.fromJson(clientJson);
-        _clients[client.id] = client;
+        _clients.add(client);
+        DesktopTabBar.onAdd(
+            tabs,
+            TabInfo(
+                key: client.id.toString(),
+                label: client.name,
+                closable: false));
       }
       notifyListeners();
     } catch (e) {
@@ -360,13 +372,17 @@ class ServerModel with ChangeNotifier {
   void loginRequest(Map<String, dynamic> evt) {
     try {
       final client = Client.fromJson(jsonDecode(evt["client"]));
-      if (_clients.containsKey(client.id)) {
+      if (_clients.any((c) => c.id == client.id)) {
         return;
       }
-      _clients[client.id] = client;
+      _clients.add(client);
+      DesktopTabBar.onAdd(
+          tabs,
+          TabInfo(
+              key: client.id.toString(), label: client.name, closable: false));
       scrollToBottom();
       notifyListeners();
-      showLoginDialog(client);
+      if (isAndroid) showLoginDialog(client);
     } catch (e) {
       debugPrint("Failed to call loginRequest,error:$e");
     }
@@ -419,6 +435,7 @@ class ServerModel with ChangeNotifier {
   }
 
   scrollToBottom() {
+    if (isDesktop) return;
     Future.delayed(Duration(milliseconds: 200), () {
       controller.animateTo(controller.position.maxScrollExtent,
           duration: Duration(milliseconds: 200),
@@ -433,12 +450,14 @@ class ServerModel with ChangeNotifier {
         parent.target?.invokeMethod("start_capture");
       }
       parent.target?.invokeMethod("cancel_notification", client.id);
-      _clients[client.id]?.authorized = true;
+      client.authorized = true;
       notifyListeners();
     } else {
       bind.cmLoginRes(connId: client.id, res: res);
       parent.target?.invokeMethod("cancel_notification", client.id);
-      _clients.remove(client.id);
+      final index = _clients.indexOf(client);
+      DesktopTabBar.remove(tabs, index);
+      _clients.remove(client);
     }
   }
 
@@ -446,7 +465,11 @@ class ServerModel with ChangeNotifier {
     try {
       final client = Client.fromJson(jsonDecode(evt['client']));
       parent.target?.dialogManager.dismissByTag(getLoginDialogTag(client.id));
-      _clients[client.id] = client;
+      _clients.add(client);
+      DesktopTabBar.onAdd(
+          tabs,
+          TabInfo(
+              key: client.id.toString(), label: client.name, closable: false));
       scrollToBottom();
       notifyListeners();
     } catch (e) {}
@@ -455,8 +478,10 @@ class ServerModel with ChangeNotifier {
   void onClientRemove(Map<String, dynamic> evt) {
     try {
       final id = int.parse(evt['id'] as String);
-      if (_clients.containsKey(id)) {
-        _clients.remove(id);
+      if (_clients.any((c) => c.id == id)) {
+        final index = _clients.indexWhere((client) => client.id == id);
+        _clients.removeAt(index);
+        DesktopTabBar.remove(tabs, index);
         parent.target?.dialogManager.dismissByTag(getLoginDialogTag(id));
         parent.target?.invokeMethod("cancel_notification", id);
       }
@@ -467,10 +492,11 @@ class ServerModel with ChangeNotifier {
   }
 
   closeAll() {
-    _clients.forEach((id, client) {
-      bind.cmCloseConnection(connId: id);
+    _clients.forEach((client) {
+      bind.cmCloseConnection(connId: client.id);
     });
     _clients.clear();
+    tabs.clear();
   }
 }
 
@@ -483,8 +509,10 @@ class Client {
   bool keyboard = false;
   bool clipboard = false;
   bool audio = false;
+  bool file = false;
+  bool restart = false;
 
-  Client(this.authorized, this.isFileTransfer, this.name, this.peerId,
+  Client(this.id, this.authorized, this.isFileTransfer, this.name, this.peerId,
       this.keyboard, this.clipboard, this.audio);
 
   Client.fromJson(Map<String, dynamic> json) {
@@ -496,6 +524,8 @@ class Client {
     keyboard = json['keyboard'];
     clipboard = json['clipboard'];
     audio = json['audio'];
+    file = json['file'];
+    restart = json['restart'];
   }
 
   Map<String, dynamic> toJson() {

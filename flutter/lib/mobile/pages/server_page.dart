@@ -359,12 +359,12 @@ class ConnectionManager extends StatelessWidget {
   Widget build(BuildContext context) {
     final serverModel = Provider.of<ServerModel>(context);
     return Column(
-        children: serverModel.clients.entries
-            .map((entry) => PaddingCard(
-                title: translate(entry.value.isFileTransfer
+        children: serverModel.clients
+            .map((client) => PaddingCard(
+                title: translate(client.isFileTransfer
                     ? "File Connection"
                     : "Screen Connection"),
-                titleIcon: entry.value.isFileTransfer
+                titleIcon: client.isFileTransfer
                     ? Icons.folder_outlined
                     : Icons.mobile_screen_share,
                 child: Column(
@@ -373,16 +373,14 @@ class ConnectionManager extends StatelessWidget {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Expanded(child: clientInfo(entry.value)),
+                        Expanded(child: clientInfo(client)),
                         Expanded(
                             flex: -1,
-                            child: entry.value.isFileTransfer ||
-                                    !entry.value.authorized
+                            child: client.isFileTransfer || !client.authorized
                                 ? SizedBox.shrink()
                                 : IconButton(
                                     onPressed: () {
-                                      gFFI.chatModel
-                                          .changeCurrentID(entry.value.id);
+                                      gFFI.chatModel.changeCurrentID(client.id);
                                       final bar =
                                           navigationBarKey.currentWidget;
                                       if (bar != null) {
@@ -396,37 +394,35 @@ class ConnectionManager extends StatelessWidget {
                                     )))
                       ],
                     ),
-                    entry.value.authorized
+                    client.authorized
                         ? SizedBox.shrink()
                         : Text(
                             translate("android_new_connection_tip"),
                             style: TextStyle(color: Colors.black54),
                           ),
-                    entry.value.authorized
+                    client.authorized
                         ? ElevatedButton.icon(
                             style: ButtonStyle(
                                 backgroundColor:
                                     MaterialStateProperty.all(Colors.red)),
                             icon: Icon(Icons.close),
                             onPressed: () {
-                              bind.cmCloseConnection(connId: entry.key);
+                              bind.cmCloseConnection(connId: client.id);
                               gFFI.invokeMethod(
-                                  "cancel_notification", entry.key);
+                                  "cancel_notification", client.id);
                             },
                             label: Text(translate("Close")))
                         : Row(children: [
                             TextButton(
                                 child: Text(translate("Dismiss")),
                                 onPressed: () {
-                                  serverModel.sendLoginResponse(
-                                      entry.value, false);
+                                  serverModel.sendLoginResponse(client, false);
                                 }),
                             SizedBox(width: 20),
                             ElevatedButton(
                                 child: Text(translate("Accept")),
                                 onPressed: () {
-                                  serverModel.sendLoginResponse(
-                                      entry.value, true);
+                                  serverModel.sendLoginResponse(client, true);
                                 }),
                           ]),
                   ],

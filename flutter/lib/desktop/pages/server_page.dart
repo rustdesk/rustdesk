@@ -1,110 +1,18 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_hbb/desktop/widgets/tabbar_widget.dart';
+import 'package:flutter_hbb/mobile/pages/chat_page.dart';
+import 'package:flutter_hbb/models/chat_model.dart';
 import 'package:get/get.dart';
-// import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
 import 'package:provider/provider.dart';
 import 'package:window_manager/window_manager.dart';
 
 import '../../common.dart';
-import '../../mobile/pages/home_page.dart';
 import '../../models/platform_model.dart';
 import '../../models/server_model.dart';
 
-class DesktopServerPage extends StatefulWidget implements PageShape {
-  @override
-  final title = translate("Share Screen");
-
-  @override
-  final icon = Icon(Icons.mobile_screen_share);
-
-  @override
-  final appBarActions = [
-    PopupMenuButton<String>(
-        icon: Icon(Icons.more_vert),
-        itemBuilder: (context) {
-          return [
-            PopupMenuItem(
-              child: Text(translate("Change ID")),
-              padding: EdgeInsets.symmetric(horizontal: 16.0),
-              value: "changeID",
-              enabled: false,
-            ),
-            PopupMenuItem(
-              child: Text(translate("Set permanent password")),
-              padding: EdgeInsets.symmetric(horizontal: 16.0),
-              value: "setPermanentPassword",
-              enabled:
-              gFFI.serverModel.verificationMethod != kUseTemporaryPassword,
-            ),
-            PopupMenuItem(
-              child: Text(translate("Set temporary password length")),
-              padding: EdgeInsets.symmetric(horizontal: 16.0),
-              value: "setTemporaryPasswordLength",
-              enabled:
-              gFFI.serverModel.verificationMethod != kUsePermanentPassword,
-            ),
-            const PopupMenuDivider(),
-            PopupMenuItem(
-              padding: EdgeInsets.symmetric(horizontal: 0.0),
-              value: kUseTemporaryPassword,
-              child: Container(
-                  child: ListTile(
-                      title: Text(translate("Use temporary password")),
-                      trailing: Icon(
-                        Icons.check,
-                        color: gFFI.serverModel.verificationMethod ==
-                            kUseTemporaryPassword
-                            ? null
-                            : Color(0xFFFFFFFF),
-                      ))),
-            ),
-            PopupMenuItem(
-              padding: EdgeInsets.symmetric(horizontal: 0.0),
-              value: kUsePermanentPassword,
-              child: ListTile(
-                  title: Text(translate("Use permanent password")),
-                  trailing: Icon(
-                    Icons.check,
-                    color: gFFI.serverModel.verificationMethod ==
-                        kUsePermanentPassword
-                        ? null
-                        : Color(0xFFFFFFFF),
-                  )),
-            ),
-            PopupMenuItem(
-              padding: EdgeInsets.symmetric(horizontal: 0.0),
-              value: kUseBothPasswords,
-              child: ListTile(
-                  title: Text(translate("Use both passwords")),
-                  trailing: Icon(
-                    Icons.check,
-                    color: gFFI.serverModel.verificationMethod !=
-                        kUseTemporaryPassword &&
-                        gFFI.serverModel.verificationMethod !=
-                            kUsePermanentPassword
-                        ? null
-                        : Color(0xFFFFFFFF),
-                  )),
-            ),
-          ];
-        },
-        onSelected: (value) {
-          if (value == "changeID") {
-            // TODO
-          } else if (value == "setPermanentPassword") {
-            // setPermanentPasswordDialog();
-          } else if (value == "setTemporaryPasswordLength") {
-            // setTemporaryPasswordLengthDialog();
-          } else if (value == kUsePermanentPassword ||
-              value == kUseTemporaryPassword ||
-              value == kUseBothPasswords) {
-            bind.mainSetOption(key: "verification-method", value: value);
-            gFFI.serverModel.updatePasswordModel();
-          }
-        })
-  ];
-
+class DesktopServerPage extends StatefulWidget {
   @override
   State<StatefulWidget> createState() => _DesktopServerPageState();
 }
@@ -112,36 +20,58 @@ class DesktopServerPage extends StatefulWidget implements PageShape {
 class _DesktopServerPageState extends State<DesktopServerPage>
     with AutomaticKeepAliveClientMixin {
   @override
+  void initState() {
+    gFFI.ffiModel.updateEventListener("");
+    super.initState();
+  }
+
   Widget build(BuildContext context) {
     super.build(context);
-    return ChangeNotifierProvider.value(
-        value: gFFI.serverModel,
+    return MultiProvider(
+        providers: [
+          ChangeNotifierProvider.value(value: gFFI.serverModel),
+          ChangeNotifierProvider.value(value: gFFI.chatModel),
+        ],
         child: Consumer<ServerModel>(
             builder: (context, serverModel, child) => Material(
-              child: Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.start,
-                  children: [
-                    Expanded(child: ConnectionManager()),
-                    SizedBox.fromSize(size: Size(0, 15.0)),
-                  ],
-                ),
-              ),
-            )));
+                  child: Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.start,
+                      children: [
+                        Expanded(child: ConnectionManager()),
+                        SizedBox.fromSize(size: Size(0, 15.0)),
+                      ],
+                    ),
+                  ),
+                )));
   }
 
   @override
   bool get wantKeepAlive => true;
 }
 
-class ConnectionManager extends StatelessWidget {
+class ConnectionManager extends StatefulWidget {
+  @override
+  State<StatefulWidget> createState() => ConnectionManagerState();
+}
+
+class ConnectionManagerState extends State<ConnectionManager> {
+  @override
+  void initState() {
+    gFFI.serverModel.updateClientState();
+    // test
+    // gFFI.serverModel.clients.forEach((client) {
+    //   DesktopTabBar.onAdd(
+    //       gFFI.serverModel.tabs,
+    //       TabInfo(
+    //           key: client.id.toString(), label: client.name, closable: false));
+    // });
+    super.initState();
+  }
+
   @override
   Widget build(BuildContext context) {
     final serverModel = Provider.of<ServerModel>(context);
-    // test case:
-    // serverModel.clients.clear();
-    // serverModel.clients[0] = Client(
-    //     false, false, "Readmi-M21sdfsdf", "123123123", true, false, false);
     return serverModel.clients.isEmpty
         ? Column(
             children: [
@@ -153,27 +83,37 @@ class ConnectionManager extends StatelessWidget {
               ),
             ],
           )
-        : DefaultTabController(
-            length: serverModel.clients.length,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                SizedBox(
-                  height: kTextTabBarHeight,
-                  child: buildTitleBar(TabBar(
-                      isScrollable: true,
-                      tabs: serverModel.clients.entries
-                          .map((entry) => buildTab(entry))
-                          .toList(growable: false))),
-                ),
-                Expanded(
-                  child: TabBarView(
-                      children: serverModel.clients.entries
-                          .map((entry) => buildConnectionCard(entry))
-                          .toList(growable: false)),
-                )
-              ],
-            ),
+        : Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              SizedBox(
+                height: kTextTabBarHeight,
+                child: Obx(() => DesktopTabBar(
+                      dark: isDarkTheme(),
+                      mainTab: true,
+                      tabs: serverModel.tabs,
+                      showTitle: false,
+                      showMaximize: false,
+                      showMinimize: false,
+                      onSelected: (index) => gFFI.chatModel
+                          .changeCurrentID(serverModel.clients[index].id),
+                    )),
+              ),
+              Expanded(
+                child: Row(children: [
+                  Expanded(
+                      child: PageView(
+                          controller: DesktopTabBar.controller.value,
+                          children: serverModel.clients
+                              .map((client) => buildConnectionCard(client))
+                              .toList(growable: false))),
+                  Consumer<ChatModel>(
+                      builder: (_, model, child) => model.isShowChatPage
+                          ? Expanded(child: Scaffold(body: ChatPage()))
+                          : Offstage())
+                ]),
+              )
+            ],
           );
   }
 
@@ -196,10 +136,11 @@ class ConnectionManager extends StatelessWidget {
     );
   }
 
-  Widget buildConnectionCard(MapEntry<int, Client> entry) {
-    final client = entry.value;
+  Widget buildConnectionCard(Client client) {
     return Column(
-      key: ValueKey(entry.key),
+      mainAxisAlignment: MainAxisAlignment.start,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      key: ValueKey(client.id),
       children: [
         _CmHeader(client: client),
         client.isFileTransfer ? Offstage() : _PrivilegeBoard(client: client),
@@ -212,14 +153,14 @@ class ConnectionManager extends StatelessWidget {
     ).paddingSymmetric(vertical: 8.0, horizontal: 8.0);
   }
 
-  Widget buildTab(MapEntry<int, Client> entry) {
+  Widget buildTab(Client client) {
     return Tab(
       child: Row(
         children: [
           SizedBox(
               width: 80,
               child: Text(
-                "${entry.value.name}",
+                "${client.name}",
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 textAlign: TextAlign.center,
@@ -302,14 +243,14 @@ class _CmHeaderState extends State<_CmHeader>
       children: [
         // icon
         Container(
-          width: 100,
-          height: 100,
+          width: 90,
+          height: 90,
           alignment: Alignment.center,
           decoration: BoxDecoration(color: str2color(client.name)),
           child: Text(
             "${client.name[0]}",
             style: TextStyle(
-                fontWeight: FontWeight.bold, color: Colors.white, fontSize: 75),
+                fontWeight: FontWeight.bold, color: Colors.white, fontSize: 65),
           ),
         ).marginOnly(left: 4.0, right: 8.0),
         Expanded(
@@ -317,7 +258,8 @@ class _CmHeaderState extends State<_CmHeader>
             mainAxisAlignment: MainAxisAlignment.start,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
+              FittedBox(
+                  child: Text(
                 "${client.name}",
                 style: TextStyle(
                   color: MyTheme.cmIdColor,
@@ -326,26 +268,29 @@ class _CmHeaderState extends State<_CmHeader>
                   overflow: TextOverflow.ellipsis,
                 ),
                 maxLines: 1,
-              ),
-              Text("(${client.peerId})",
-                  style: TextStyle(color: MyTheme.cmIdColor, fontSize: 14)),
+              )),
+              FittedBox(
+                  child: Text("(${client.peerId})",
+                      style:
+                          TextStyle(color: MyTheme.cmIdColor, fontSize: 14))),
               SizedBox(
                 height: 16.0,
               ),
-              Row(
+              FittedBox(
+                  child: Row(
                 children: [
                   Text("${translate("Connected")}").marginOnly(right: 8.0),
                   Obx(() => Text(
                       "${formatDurationToTime(Duration(seconds: _time.value))}"))
                 ],
-              )
+              ))
             ],
           ),
         ),
         Offstage(
           offstage: client.isFileTransfer,
           child: IconButton(
-            onPressed: handleSendMsg,
+            onPressed: () => gFFI.chatModel.toggleCMChatPage(client.id),
             icon: Icon(Icons.message_outlined),
           ),
         )
@@ -353,24 +298,28 @@ class _CmHeaderState extends State<_CmHeader>
     );
   }
 
-  void handleSendMsg() {}
-
   @override
   bool get wantKeepAlive => true;
 }
 
-class _PrivilegeBoard extends StatelessWidget {
+class _PrivilegeBoard extends StatefulWidget {
   final Client client;
 
   const _PrivilegeBoard({Key? key, required this.client}) : super(key: key);
 
+  @override
+  State<StatefulWidget> createState() => _PrivilegeBoardState();
+}
+
+class _PrivilegeBoardState extends State<_PrivilegeBoard> {
+  late final client = widget.client;
   Widget buildPermissionIcon(bool enabled, ImageProvider icon,
       Function(bool)? onTap, String? tooltip) {
     return Tooltip(
       message: tooltip ?? "",
       child: Ink(
         decoration:
-        BoxDecoration(color: enabled ? MyTheme.accent80 : Colors.grey),
+            BoxDecoration(color: enabled ? MyTheme.accent80 : Colors.grey),
         padding: EdgeInsets.all(4.0),
         child: InkWell(
           onTap: () => onTap?.call(!enabled),
@@ -399,18 +348,46 @@ class _PrivilegeBoard extends StatelessWidget {
           SizedBox(
             height: 8.0,
           ),
-          Row(
+          FittedBox(
+              child: Row(
             children: [
-              buildPermissionIcon(
-                  client.keyboard, iconKeyboard, (enable) => null, null),
-              buildPermissionIcon(
-                  client.clipboard, iconClipboard, (enable) => null, null),
-              buildPermissionIcon(
-                  client.audio, iconAudio, (enable) => null, null),
-              // TODO: file transfer
-              buildPermissionIcon(false, iconFile, (enable) => null, null),
+              buildPermissionIcon(client.keyboard, iconKeyboard, (enabled) {
+                bind.cmSwitchPermission(
+                    connId: client.id, name: "keyboard", enabled: enabled);
+                setState(() {
+                  client.keyboard = enabled;
+                });
+              }, null),
+              buildPermissionIcon(client.clipboard, iconClipboard, (enabled) {
+                bind.cmSwitchPermission(
+                    connId: client.id, name: "clipboard", enabled: enabled);
+                setState(() {
+                  client.clipboard = enabled;
+                });
+              }, null),
+              buildPermissionIcon(client.audio, iconAudio, (enabled) {
+                bind.cmSwitchPermission(
+                    connId: client.id, name: "audio", enabled: enabled);
+                setState(() {
+                  client.audio = enabled;
+                });
+              }, null),
+              buildPermissionIcon(client.file, iconFile, (enabled) {
+                bind.cmSwitchPermission(
+                    connId: client.id, name: "file", enabled: enabled);
+                setState(() {
+                  client.file = enabled;
+                });
+              }, null),
+              buildPermissionIcon(client.restart, iconRestart, (enabled) {
+                bind.cmSwitchPermission(
+                    connId: client.id, name: "restart", enabled: enabled);
+                setState(() {
+                  client.restart = enabled;
+                });
+              }, null),
             ],
-          ),
+          )),
         ],
       ),
     );
@@ -530,9 +507,9 @@ class PaddingCard extends StatelessWidget {
                 children: [
                   titleIcon != null
                       ? Padding(
-                      padding: EdgeInsets.only(right: 10),
-                      child: Icon(titleIcon,
-                          color: MyTheme.accent80, size: 30))
+                          padding: EdgeInsets.only(right: 10),
+                          child: Icon(titleIcon,
+                              color: MyTheme.accent80, size: 30))
                       : SizedBox.shrink(),
                   Text(
                     title!,
@@ -579,12 +556,12 @@ Widget clientInfo(Client client) {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Text(client.name,
-                          style: TextStyle(color: MyTheme.idColor, fontSize: 18)),
-                      SizedBox(width: 8),
-                      Text(client.peerId,
-                          style: TextStyle(color: MyTheme.idColor, fontSize: 10))
-                    ]))
+                  Text(client.name,
+                      style: TextStyle(color: MyTheme.idColor, fontSize: 18)),
+                  SizedBox(width: 8),
+                  Text(client.peerId,
+                      style: TextStyle(color: MyTheme.idColor, fontSize: 10))
+                ]))
           ],
         ),
       ]));
