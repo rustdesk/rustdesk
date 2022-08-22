@@ -5,6 +5,7 @@ import 'package:flutter_hbb/desktop/pages/desktop_home_page.dart';
 import 'package:flutter_hbb/desktop/pages/desktop_setting_page.dart';
 import 'package:flutter_hbb/desktop/widgets/tabbar_widget.dart';
 import 'package:get/get.dart';
+import 'package:window_manager/window_manager.dart';
 
 class DesktopTabPage extends StatefulWidget {
   const DesktopTabPage({Key? key}) : super(key: key);
@@ -30,34 +31,36 @@ class _DesktopTabPageState extends State<DesktopTabPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-          border: Border.all(color: MyTheme.color(context).border!)),
-      child: Scaffold(
-        backgroundColor: MyTheme.color(context).bg,
-        body: Column(
-          children: [
-            DesktopTabBar(
-              tabs: tabs,
-              dark: isDarkTheme(),
-              mainTab: true,
-              onAddSetting: onAddSetting,
-            ),
-            Obx((() => Expanded(
-                  child: PageView(
-                      controller: DesktopTabBar.controller.value,
-                      children: tabs.map((tab) {
-                        switch (tab.label) {
-                          case kTabLabelHomePage:
-                            return DesktopHomePage(key: ValueKey(tab.label));
-                          case kTabLabelSettingPage:
-                            return DesktopSettingPage(key: ValueKey(tab.label));
-                          default:
-                            return Container();
-                        }
-                      }).toList()),
-                ))),
-          ],
+    return DragToResizeArea(
+      child: Container(
+        decoration: BoxDecoration(
+            border: Border.all(color: MyTheme.color(context).border!)),
+        child: Scaffold(
+          backgroundColor: MyTheme.color(context).bg,
+          body: Column(
+            children: [
+              DesktopTabBar(
+                tabs: tabs,
+                dark: isDarkTheme(),
+                mainTab: true,
+                onAddSetting: onAddSetting,
+              ),
+              Obx((() => Expanded(
+                    child: PageView(
+                        controller: DesktopTabBar.controller.value,
+                        children: tabs.map((tab) {
+                          switch (tab.label) {
+                            case kTabLabelHomePage:
+                              return DesktopHomePage(key: ValueKey(tab.label));
+                            case kTabLabelSettingPage:
+                              return DesktopSettingPage(key: ValueKey(tab.label));
+                            default:
+                              return Container();
+                          }
+                        }).toList()),
+                  ))),
+            ],
+          ),
         ),
       ),
     );
