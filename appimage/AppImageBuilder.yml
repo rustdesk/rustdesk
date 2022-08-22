@@ -40,12 +40,12 @@ AppDir:
     - sourceline: deb http://archive.ubuntu.com/ubuntu/ bionic-updates universe
     - sourceline: deb http://archive.ubuntu.com/ubuntu/ bionic multiverse
     - sourceline: deb http://archive.ubuntu.com/ubuntu/ bionic-updates multiverse
-    - sourceline: deb http://archive.ubuntu.com/ubuntu/ bionic-backports main restricted
-        universe multiverse
+    - sourceline: deb http://archive.ubuntu.com/ubuntu/ bionic-backports main restricted universe multiverse
     - sourceline: deb http://archive.ubuntu.com/ubuntu/ bionic-security main restricted
     - sourceline: deb http://archive.ubuntu.com/ubuntu/ bionic-security universe
     - sourceline: deb http://archive.ubuntu.com/ubuntu/ bionic-security multiverse
     include:
+    - libc6:amd64
     - libgcc1:amd64
     - libgcrypt20:amd64
     - libgtk-3-0:amd64

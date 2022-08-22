@@ -13,6 +13,7 @@ use objc::{
 };
 use sciter::{make_args, Host};
 use std::{ffi::c_void, rc::Rc};
+use dark_light;
 
 static APP_HANDLER_IVAR: &str = "GoDeskAppHandler";
 
@@ -233,7 +234,17 @@ pub fn make_tray() {
         set_delegate(None);
     }
     use tray_item::TrayItem;
-    if let Ok(mut tray) = TrayItem::new(&crate::get_app_name(), "mac-tray.png") {
+    let mode = dark_light::detect();
+    let mut icon_path = "";
+    match mode {
+        dark_light::Mode::Dark => {
+            icon_path = "mac-tray-light.png";
+        },
+        dark_light::Mode::Light => {
+            icon_path = "mac-tray-dark.png";
+        },
+    }
+    if let Ok(mut tray) = TrayItem::new(&crate::get_app_name(), icon_path) {
         tray.add_label(&format!(
             "{} {}",
             crate::get_app_name(),

@@ -26,7 +26,9 @@
 | --------- | ------------- | ------------------ |
 | Seoul | AWS lightsail | 1 VCPU / 0.5GB RAM |
 | Singapore | Vultr | 1 VCPU / 1GB RAM |
-| Dallas | Vultr | 1 VCPU / 1GB RAM | |
+| Dallas | Vultr | 1 VCPU / 1GB RAM |
+| Germany | Hetzner | 2 VCPU / 4GB RAM |
+| Germany | Codext | 4 VCPU / 8GB RAM |
 
 ## ഡിപെൻഡൻസികൾ
 
