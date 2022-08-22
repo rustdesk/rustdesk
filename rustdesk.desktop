@@ -8,7 +8,7 @@ Icon=/usr/share/rustdesk/files/rustdesk.png
 Terminal=false
 Type=Application
 StartupNotify=true
-Categories=Other;
+Categories=Network;RemoteAccess;GTK;
 Keywords=internet;
 Actions=new-window;
 

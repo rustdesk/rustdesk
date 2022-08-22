@@ -108,7 +108,7 @@ pub fn encrypt_vec_or_original(v: &[u8], version: &str) -> Vec<u8> {
     v.to_owned()
 }
 
-// String: password
+// Vec<u8>: password
 // bool: whether decryption is successful
 // bool: whether should store to re-encrypt when load
 pub fn decrypt_vec_or_original(v: &[u8], current_version: &str) -> (Vec<u8>, bool, bool) {
