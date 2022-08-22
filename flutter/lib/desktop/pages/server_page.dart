@@ -1,6 +1,9 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_hbb/desktop/widgets/tabbar_widget.dart';
+import 'package:flutter_hbb/mobile/pages/chat_page.dart';
+import 'package:flutter_hbb/models/chat_model.dart';
 import 'package:get/get.dart';
 import 'package:provider/provider.dart';
 import 'package:window_manager/window_manager.dart';
@@ -24,8 +27,11 @@ class _DesktopServerPageState extends State<DesktopServerPage>
 
   Widget build(BuildContext context) {
     super.build(context);
-    return ChangeNotifierProvider.value(
-        value: gFFI.serverModel,
+    return MultiProvider(
+        providers: [
+          ChangeNotifierProvider.value(value: gFFI.serverModel),
+          ChangeNotifierProvider.value(value: gFFI.chatModel),
+        ],
         child: Consumer<ServerModel>(
             builder: (context, serverModel, child) => Material(
                   child: Center(
@@ -44,14 +50,28 @@ class _DesktopServerPageState extends State<DesktopServerPage>
   bool get wantKeepAlive => true;
 }
 
-class ConnectionManager extends StatelessWidget {
+class ConnectionManager extends StatefulWidget {
+  @override
+  State<StatefulWidget> createState() => ConnectionManagerState();
+}
+
+class ConnectionManagerState extends State<ConnectionManager> {
+  @override
+  void initState() {
+    gFFI.serverModel.updateClientState();
+    // test
+    // gFFI.serverModel.clients.forEach((client) {
+    //   DesktopTabBar.onAdd(
+    //       gFFI.serverModel.tabs,
+    //       TabInfo(
+    //           key: client.id.toString(), label: client.name, closable: false));
+    // });
+    super.initState();
+  }
+
   @override
   Widget build(BuildContext context) {
     final serverModel = Provider.of<ServerModel>(context);
-    // test case:
-    // serverModel.clients.clear();
-    // serverModel.clients[0] = Client(
-    //     false, false, "Readmi-M21sdfsdf", "123123123", true, false, false);
     return serverModel.clients.isEmpty
         ? Column(
             children: [
@@ -63,27 +83,37 @@ class ConnectionManager extends StatelessWidget {
               ),
             ],
           )
-        : DefaultTabController(
-            length: serverModel.clients.length,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                SizedBox(
-                  height: kTextTabBarHeight,
-                  child: buildTitleBar(TabBar(
-                      isScrollable: true,
-                      tabs: serverModel.clients.entries
-                          .map((entry) => buildTab(entry))
-                          .toList(growable: false))),
-                ),
-                Expanded(
-                  child: TabBarView(
-                      children: serverModel.clients.entries
-                          .map((entry) => buildConnectionCard(entry))
-                          .toList(growable: false)),
-                )
-              ],
-            ),
+        : Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              SizedBox(
+                height: kTextTabBarHeight,
+                child: Obx(() => DesktopTabBar(
+                      dark: isDarkTheme(),
+                      mainTab: true,
+                      tabs: serverModel.tabs,
+                      showTitle: false,
+                      showMaximize: false,
+                      showMinimize: false,
+                      onSelected: (index) => gFFI.chatModel
+                          .changeCurrentID(serverModel.clients[index].id),
+                    )),
+              ),
+              Expanded(
+                child: Row(children: [
+                  Expanded(
+                      child: PageView(
+                          controller: DesktopTabBar.controller.value,
+                          children: serverModel.clients
+                              .map((client) => buildConnectionCard(client))
+                              .toList(growable: false))),
+                  Consumer<ChatModel>(
+                      builder: (_, model, child) => model.isShowChatPage
+                          ? Expanded(child: Scaffold(body: ChatPage()))
+                          : Offstage())
+                ]),
+              )
+            ],
           );
   }
 
@@ -106,12 +136,11 @@ class ConnectionManager extends StatelessWidget {
     );
   }
 
-  Widget buildConnectionCard(MapEntry<int, Client> entry) {
-    final client = entry.value;
+  Widget buildConnectionCard(Client client) {
     return Column(
       mainAxisAlignment: MainAxisAlignment.start,
       crossAxisAlignment: CrossAxisAlignment.start,
-      key: ValueKey(entry.key),
+      key: ValueKey(client.id),
       children: [
         _CmHeader(client: client),
         client.isFileTransfer ? Offstage() : _PrivilegeBoard(client: client),
@@ -124,14 +153,14 @@ class ConnectionManager extends StatelessWidget {
     ).paddingSymmetric(vertical: 8.0, horizontal: 8.0);
   }
 
-  Widget buildTab(MapEntry<int, Client> entry) {
+  Widget buildTab(Client client) {
     return Tab(
       child: Row(
         children: [
           SizedBox(
               width: 80,
               child: Text(
-                "${entry.value.name}",
+                "${client.name}",
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 textAlign: TextAlign.center,
@@ -261,15 +290,13 @@ class _CmHeaderState extends State<_CmHeader>
         Offstage(
           offstage: client.isFileTransfer,
           child: IconButton(
-            onPressed: handleSendMsg,
+            onPressed: () => gFFI.chatModel.toggleCMChatPage(client.id),
             icon: Icon(Icons.message_outlined),
           ),
         )
       ],
     );
   }
-
-  void handleSendMsg() {}
 
   @override
   bool get wantKeepAlive => true;

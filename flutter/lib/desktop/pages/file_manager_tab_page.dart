@@ -29,6 +29,7 @@ class _FileManagerTabPageState extends State<FileManagerTabPage> {
   _FileManagerTabPageState(Map<String, dynamic> params) {
     if (params['id'] != null) {
       tabs.add(TabInfo(
+          key: params['id'],
           label: params['id'],
           selectedIcon: selectedIcon,
           unselectedIcon: unselectedIcon));
@@ -49,6 +50,7 @@ class _FileManagerTabPageState extends State<FileManagerTabPage> {
         DesktopTabBar.onAdd(
             tabs,
             TabInfo(
+                key: id,
                 label: id,
                 selectedIcon: selectedIcon,
                 unselectedIcon: unselectedIcon));
