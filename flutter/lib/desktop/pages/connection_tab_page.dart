@@ -72,34 +72,37 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      body: Column(
-        children: [
-          Obx(() => Visibility(
-              visible: _fullscreenID.value.isEmpty,
-              child: DesktopTabBar(
-                tabs: tabs,
-                onTabClose: onRemoveId,
-                dark: isDarkTheme(),
-                mainTab: false,
-              ))),
-          Expanded(child: Obx(() {
-            WindowController.fromWindowId(windowId())
-                .setFullscreen(_fullscreenID.value.isNotEmpty);
-            return PageView(
-                controller: DesktopTabBar.controller.value,
-                children: tabs
-                    .map((tab) => RemotePage(
-                          key: ValueKey(tab.label),
-                          id: tab.label,
-                          tabBarHeight: _fullscreenID.value.isNotEmpty
-                              ? 0
-                              : kDesktopRemoteTabBarHeight,
-                          fullscreenID: _fullscreenID,
-                        )) //RemotePage(key: ValueKey(e), id: e))
-                    .toList());
-          })),
-        ],
+    return SubWindowDragToResizeArea(
+      windowId: windowId(),
+      child: Scaffold(
+        body: Column(
+          children: [
+            Obx(() => Visibility(
+                visible: _fullscreenID.value.isEmpty,
+                child: DesktopTabBar(
+                  tabs: tabs,
+                  onTabClose: onRemoveId,
+                  dark: isDarkTheme(),
+                  mainTab: false,
+                ))),
+            Expanded(child: Obx(() {
+              WindowController.fromWindowId(windowId())
+                  .setFullscreen(_fullscreenID.value.isNotEmpty);
+              return PageView(
+                  controller: DesktopTabBar.controller.value,
+                  children: tabs
+                      .map((tab) => RemotePage(
+                            key: ValueKey(tab.label),
+                            id: tab.label,
+                            tabBarHeight: _fullscreenID.value.isNotEmpty
+                                ? 0
+                                : kDesktopRemoteTabBarHeight,
+                            fullscreenID: _fullscreenID,
+                          )) //RemotePage(key: ValueKey(e), id: e))
+                      .toList());
+            })),
+          ],
+        ),
       ),
     );
   }

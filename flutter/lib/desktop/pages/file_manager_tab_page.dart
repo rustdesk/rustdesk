@@ -68,27 +68,31 @@ class _FileManagerTabPageState extends State<FileManagerTabPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      body: Column(
-        children: [
-          DesktopTabBar(
-            tabs: tabs,
-            onTabClose: onRemoveId,
-            dark: isDarkTheme(),
-            mainTab: false,
-          ),
-          Expanded(
-            child: Obx(
-              () => PageView(
-                  controller: DesktopTabBar.controller.value,
-                  children: tabs
-                      .map((tab) => FileManagerPage(
-                          key: ValueKey(tab.label),
-                          id: tab.label)) //RemotePage(key: ValueKey(e), id: e))
-                      .toList()),
+    return SubWindowDragToResizeArea(
+      windowId: windowId(),
+      child: Scaffold(
+        body: Column(
+          children: [
+            DesktopTabBar(
+              tabs: tabs,
+              onTabClose: onRemoveId,
+              dark: isDarkTheme(),
+              mainTab: false,
             ),
-          )
-        ],
+            Expanded(
+              child: Obx(
+                () => PageView(
+                    controller: DesktopTabBar.controller.value,
+                    children: tabs
+                        .map((tab) => FileManagerPage(
+                            key: ValueKey(tab.label),
+                            id: tab
+                                .label)) //RemotePage(key: ValueKey(e), id: e))
+                        .toList()),
+              ),
+            )
+          ],
+        ),
       ),
     );
   }
