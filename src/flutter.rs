@@ -1660,9 +1660,6 @@ pub mod connection_manager {
     #[cfg(any(target_os = "android"))]
     use scrap::android::call_main_service_set_by_name;
 
-    #[cfg(windows)]
-    use crate::ipc::start_clipboard_file;
-
     use crate::ipc::Data;
     use crate::ipc::{self, new_listener, Connection};
 
@@ -1688,11 +1685,12 @@ pub mod connection_manager {
 
     static CLICK_TIME: AtomicI64 = AtomicI64::new(0);
 
-    enum ClipboardFileData {
-        #[cfg(windows)]
-        Clip((i32, ipc::ClipbaordFile)),
-        Enable((i32, bool)),
-    }
+    // // TODO clipboard_file
+    // enum ClipboardFileData {
+    //     #[cfg(windows)]
+    //     Clip((i32, ipc::ClipbaordFile)),
+    //     Enable((i32, bool)),
+    // }
 
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     pub fn start_listen_ipc_thread() {
@@ -1702,11 +1700,12 @@ pub mod connection_manager {
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     #[tokio::main(flavor = "current_thread")]
     async fn start_ipc() {
-        let (tx_file, _rx_file) = mpsc::unbounded_channel::<ClipboardFileData>();
-        #[cfg(windows)]
-        let cm_clip = cm.clone();
-        #[cfg(windows)]
-        std::thread::spawn(move || start_clipboard_file(cm_clip, _rx_file));
+        // TODO clipboard_file
+        // let (tx_file, _rx_file) = mpsc::unbounded_channel::<ClipboardFileData>();
+        // #[cfg(windows)]
+        // let cm_clip = cm.clone();
+        // #[cfg(windows)]
+        // std::thread::spawn(move || start_clipboard_file(cm_clip, _rx_file));
 
         #[cfg(windows)]
         std::thread::spawn(move || {
@@ -1730,7 +1729,7 @@ pub mod connection_manager {
                         Ok(stream) => {
                             log::debug!("Got new connection");
                             let mut stream = Connection::new(stream);
-                            let tx_file = tx_file.clone();
+                            // let tx_file = tx_file.clone();
                             tokio::spawn(async move {
                                 // for tmp use, without real conn id
                                 let conn_id_tmp = -1;
@@ -1750,11 +1749,11 @@ pub mod connection_manager {
                                                         Data::Login{id, is_file_transfer, port_forward, peer_id, name, authorized, keyboard, clipboard, audio, file, file_transfer_enabled, restart} => {
                                                             log::debug!("conn_id: {}", id);
                                                             conn_id = id;
-                                                            tx_file.send(ClipboardFileData::Enable((id, file_transfer_enabled))).ok();
+                                                            // tx_file.send(ClipboardFileData::Enable((id, file_transfer_enabled))).ok();
                                                             on_login(id, is_file_transfer, port_forward, peer_id, name, authorized, keyboard, clipboard, audio, file, restart, tx.clone());
                                                         }
                                                         Data::Close => {
-                                                            tx_file.send(ClipboardFileData::Enable((conn_id, false))).ok();
+                                                            // tx_file.send(ClipboardFileData::Enable((conn_id, false))).ok();
                                                             log::info!("cm ipc connection closed from connection request");
                                                             break;
                                                         }
@@ -1771,18 +1770,19 @@ pub mod connection_manager {
                                                         Data::FS(fs) => {
                                                             handle_fs(fs, &mut write_jobs, &tx).await;
                                                         }
-                                                        #[cfg(windows)]
-                                                        Data::ClipbaordFile(_clip) => {
-                                                            tx_file
-                                                                .send(ClipboardFileData::Clip((id, _clip)))
-                                                                .ok();
-                                                        }
-                                                        #[cfg(windows)]
-                                                        Data::ClipboardFileEnabled(enabled) => {
-                                                            tx_file
-                                                                .send(ClipboardFileData::Enable((id, enabled)))
-                                                                .ok();
-                                                        }
+                                                        // TODO ClipbaordFile
+                                                        // #[cfg(windows)]
+                                                        // Data::ClipbaordFile(_clip) => {
+                                                        //     tx_file
+                                                        //         .send(ClipboardFileData::Clip((id, _clip)))
+                                                        //         .ok();
+                                                        // }
+                                                        // #[cfg(windows)]
+                                                        // Data::ClipboardFileEnabled(enabled) => {
+                                                        //     tx_file
+                                                        //         .send(ClipboardFileData::Enable((id, enabled)))
+                                                        //         .ok();
+                                                        // }
                                                         _ => {}
                                                     }
                                                 }
