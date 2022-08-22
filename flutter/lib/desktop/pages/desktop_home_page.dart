@@ -90,7 +90,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
   buildIDBoard(BuildContext context) {
     final model = gFFI.serverModel;
     return Container(
-      margin: EdgeInsets.symmetric(horizontal: 16),
+      margin: EdgeInsets.only(left: 20, right: 16),
       height: 52,
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.baseline,
@@ -133,11 +133,12 @@ class _DesktopHomePageState extends State<DesktopHomePage>
                         readOnly: true,
                         decoration: InputDecoration(
                           border: InputBorder.none,
+                          contentPadding: EdgeInsets.only(bottom: 8),
                         ),
                         style: TextStyle(
                           fontSize: 22,
                         ),
-                      ).marginOnly(bottom: 5),
+                      ),
                     ),
                   )
                 ],
@@ -240,7 +241,8 @@ class _DesktopHomePageState extends State<DesktopHomePage>
       child: Obx(
         () => Container(
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(90),
+            // borderRadius: BorderRadius.circular(10),
+            shape: BoxShape.circle,
             boxShadow: [
               BoxShadow(
                   color: hover.value
@@ -268,7 +270,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
     final model = gFFI.serverModel;
     RxBool refreshHover = false.obs;
     return Container(
-      margin: EdgeInsets.symmetric(vertical: 12, horizontal: 16.0),
+      margin: EdgeInsets.only(left: 20.0, right: 16, top: 13, bottom: 13),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.baseline,
         textBaseline: TextBaseline.alphabetic,
@@ -306,6 +308,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
                             readOnly: true,
                             decoration: InputDecoration(
                               border: InputBorder.none,
+                              contentPadding: EdgeInsets.only(bottom: 8),
                             ),
                             style: TextStyle(fontSize: 15),
                           ),
@@ -319,7 +322,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
                                 ? MyTheme.color(context).text
                                 : Color(0xFFDDDDDD),
                             size: 22,
-                          ).marginOnly(right: 5),
+                          ).marginOnly(right: 10, bottom: 8),
                         ),
                         onTap: () => bind.mainUpdateTemporaryPassword(),
                         onHover: (value) => refreshHover.value = value,
@@ -337,7 +340,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
                             }
                           })
                     ],
-                  ).marginOnly(bottom: 20),
+                  ),
                 ],
               ),
             ),
@@ -423,15 +426,17 @@ class _DesktopHomePageState extends State<DesktopHomePage>
         },
         onHover: (value) => editHover.value = value,
         child: Obx(() => Icon(Icons.edit,
-            size: 22,
-            color: editHover.value
-                ? MyTheme.color(context).text
-                : Color(0xFFDDDDDD))));
+                size: 22,
+                color: editHover.value
+                    ? MyTheme.color(context).text
+                    : Color(0xFFDDDDDD))
+            .marginOnly(bottom: 8)));
   }
 
   buildTip(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 16.0),
+      padding:
+          const EdgeInsets.only(left: 20.0, right: 16, top: 16.0, bottom: 14),
       child: Column(
         mainAxisAlignment: MainAxisAlignment.start,
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -441,51 +446,19 @@ class _DesktopHomePageState extends State<DesktopHomePage>
             style: TextStyle(fontWeight: FontWeight.normal, fontSize: 19),
           ),
           SizedBox(
-            height: 8.0,
+            height: 10.0,
           ),
           Text(
             translate("desk_tip"),
             overflow: TextOverflow.clip,
             style: TextStyle(
-                fontSize: 12, color: MyTheme.color(context).lighterText),
+                fontSize: 12,
+                color: MyTheme.color(context).lighterText,
+                height: 1.25),
           )
         ],
       ),
     );
-  }
-
-  buildControlPanel(BuildContext context) {
-    return Container(
-      width: 320,
-      decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(10), color: MyTheme.white),
-      padding: EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            translate("Control Remote Desktop"),
-            style: TextStyle(fontWeight: FontWeight.normal, fontSize: 19),
-          ),
-          Form(
-              child: Column(
-            children: [
-              TextFormField(
-                controller: TextEditingController(),
-                inputFormatters: [
-                  FilteringTextInputFormatter.allow(RegExp(r"[0-9]"))
-                ],
-                style: TextStyle(fontSize: 22, fontWeight: FontWeight.w400),
-              )
-            ],
-          ))
-        ],
-      ),
-    );
-  }
-
-  buildRecentSession(BuildContext context) {
-    return Center(child: Text("waiting implementation"));
   }
 
   @override

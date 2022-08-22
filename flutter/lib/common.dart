@@ -59,6 +59,7 @@ class ColorThemeExtension extends ThemeExtension<ColorThemeExtension> {
     required this.text,
     required this.lightText,
     required this.lighterText,
+    required this.placeholder,
     required this.border,
   });
 
@@ -67,6 +68,7 @@ class ColorThemeExtension extends ThemeExtension<ColorThemeExtension> {
   final Color? text;
   final Color? lightText;
   final Color? lighterText;
+  final Color? placeholder;
   final Color? border;
 
   static const light = ColorThemeExtension(
@@ -75,6 +77,7 @@ class ColorThemeExtension extends ThemeExtension<ColorThemeExtension> {
     text: Color(0xFF222222),
     lightText: Color(0xFF666666),
     lighterText: Color(0xFF888888),
+    placeholder: Color(0xFFAAAAAA),
     border: Color(0xFFCCCCCC),
   );
 
@@ -84,6 +87,7 @@ class ColorThemeExtension extends ThemeExtension<ColorThemeExtension> {
     text: Color(0xFFFFFFFF),
     lightText: Color(0xFF999999),
     lighterText: Color(0xFF777777),
+    placeholder: Color(0xFF555555),
     border: Color(0xFF555555),
   );
 
@@ -94,6 +98,7 @@ class ColorThemeExtension extends ThemeExtension<ColorThemeExtension> {
       Color? text,
       Color? lightText,
       Color? lighterText,
+      Color? placeholder,
       Color? border}) {
     return ColorThemeExtension(
       bg: bg ?? this.bg,
@@ -101,6 +106,7 @@ class ColorThemeExtension extends ThemeExtension<ColorThemeExtension> {
       text: text ?? this.text,
       lightText: lightText ?? this.lightText,
       lighterText: lighterText ?? this.lighterText,
+      placeholder: placeholder ?? this.placeholder,
       border: border ?? this.border,
     );
   }
@@ -117,6 +123,7 @@ class ColorThemeExtension extends ThemeExtension<ColorThemeExtension> {
       text: Color.lerp(text, other.text, t),
       lightText: Color.lerp(lightText, other.lightText, t),
       lighterText: Color.lerp(lighterText, other.lighterText, t),
+      placeholder: Color.lerp(placeholder, other.placeholder, t),
       border: Color.lerp(border, other.border, t),
     );
   }
@@ -136,6 +143,8 @@ class MyTheme {
   static const Color darkGray = Color(0xFFB9BABC);
   static const Color cmIdColor = Color(0xFF21790B);
   static const Color dark = Colors.black87;
+  static const Color button = Color(0xFF2C8CFF);
+  static const Color hoverBorder = Color(0xFF999999);
 
   static ThemeData lightTheme = ThemeData(
     brightness: Brightness.light,
@@ -144,7 +153,8 @@ class MyTheme {
     tabBarTheme: TabBarTheme(
       labelColor: Colors.black87,
     ),
-    // backgroundColor: Color(0xFFFFFFFF),
+    splashColor: Colors.transparent,
+    highlightColor: Colors.transparent,
   ).copyWith(
     extensions: <ThemeExtension<dynamic>>[
       ColorThemeExtension.light,
@@ -157,7 +167,8 @@ class MyTheme {
     tabBarTheme: TabBarTheme(
       labelColor: Colors.white70,
     ),
-    // backgroundColor: Color(0xFF252525)
+    splashColor: Colors.transparent,
+    highlightColor: Colors.transparent,
   ).copyWith(
     extensions: <ThemeExtension<dynamic>>[
       ColorThemeExtension.dark,

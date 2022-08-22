@@ -249,6 +249,7 @@ class WindowActionPanel extends StatelessWidget {
               },
               is_close: false,
             )),
+        // TODO: drag makes window restore
         Offstage(
             offstage: !showMaximize,
             child: FutureBuilder(builder: (context, snapshot) {
@@ -273,21 +274,15 @@ class WindowActionPanel extends StatelessWidget {
                       if (is_maximized.value) {
                         windowManager.unmaximize();
                       } else {
-                        WindowController.fromWindowId(windowId!).minimize();
+                        windowManager.maximize();
                       }
                     } else {
+                      // TODO: subwindow is maximized but first query result is not maximized.
                       final wc = WindowController.fromWindowId(windowId!);
                       if (is_maximized.value) {
                         wc.unmaximize();
                       } else {
-                        final wc = WindowController.fromWindowId(windowId!);
-                        wc.isMaximized().then((maximized) {
-                          if (maximized) {
-                            wc.unmaximize();
-                          } else {
-                            wc.maximize();
-                          }
-                        });
+                        wc.maximize();
                       }
                     }
                     is_maximized.value = !is_maximized.value;
