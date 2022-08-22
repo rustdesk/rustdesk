@@ -2,6 +2,7 @@ import 'package:dash_chat_2/dash_chat_2.dart';
 import 'package:draggable_float_widget/draggable_float_widget.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/models/platform_model.dart';
+import 'package:window_manager/window_manager.dart';
 
 import '../../mobile/widgets/overlay.dart';
 import '../common.dart';
@@ -41,10 +42,13 @@ class ChatModel with ChangeNotifier {
     ..[clientModeID] = MessageBody(me, []);
 
   var _currentID = clientModeID;
+  late bool _isShowChatPage = false;
 
   Map<int, MessageBody> get messages => _messages;
 
   int get currentID => _currentID;
+
+  bool get isShowChatPage => _isShowChatPage;
 
   WeakReference<FFI> _ffi;
 
@@ -149,12 +153,29 @@ class ChatModel with ChangeNotifier {
     }
   }
 
+  toggleCMChatPage(int id) async {
+    if (gFFI.chatModel.currentID != id) {
+      gFFI.chatModel.changeCurrentID(id);
+    }
+    if (_isShowChatPage) {
+      _isShowChatPage = !_isShowChatPage;
+      notifyListeners();
+      await windowManager.setSize(Size(400, 600));
+    } else {
+      await windowManager.setSize(Size(800, 600));
+      await Future.delayed(Duration(milliseconds: 100));
+      _isShowChatPage = !_isShowChatPage;
+      notifyListeners();
+    }
+  }
+
   changeCurrentID(int id) {
     if (_messages.containsKey(id)) {
       _currentID = id;
       notifyListeners();
     } else {
-      final client = _ffi.target?.serverModel.clients[id];
+      final client = _ffi.target?.serverModel.clients
+          .firstWhere((client) => client.id == id);
       if (client == null) {
         return debugPrint(
             "Failed to changeCurrentID,remote user doesn't exist");
@@ -171,10 +192,15 @@ class ChatModel with ChangeNotifier {
 
   receive(int id, String text) async {
     if (text.isEmpty) return;
-    // first message show overlay icon
+    // mobile: first message show overlay icon
     if (chatIconOverlayEntry == null) {
       showChatIconOverlay();
     }
+    // desktop: show chat page
+    if (!_isShowChatPage) {
+      toggleCMChatPage(id);
+    }
+
     late final chatUser;
     if (id == clientModeID) {
       chatUser = ChatUser(
