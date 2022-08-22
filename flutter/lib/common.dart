@@ -8,7 +8,7 @@ import 'package:desktop_multi_window/desktop_multi_window.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/desktop/widgets/tabbar_widget.dart';
-import 'package:get/instance_manager.dart';
+import 'package:get/get.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:window_manager/window_manager.dart';
 
@@ -38,6 +38,88 @@ final iconAudio = MemoryImage(Uint8List.fromList(base64Decode(
 final iconFile = MemoryImage(Uint8List.fromList(base64Decode(
     'iVBORw0KGgoAAAANSUhEUgAAAGAAAABgCAMAAADVRocKAAAAUVBMVEUAAAD///////////////////////////////////////////////////////////////////////////////////////////////////////8IN+deAAAAGnRSTlMAH+CAESEN8jyZkcIb5N/ONy3vmHhmiGjUm7UwS+YAAAHZSURBVGje7dnbboMwDIBhBwgQoFAO7Ta//4NOqCAXYZQstatq4r+r5ubrgQSpg8iyC4ZURa+PlIpQYGiwrzyeHtYZjAL8T05O4H8BbbKvFgRa4NoBU8pXeYEkDDgaaLQBcwJrmeErJQB/7wes3QBWGnCIX0+AQycL1PO6BMwPa0nA4ZxbgTvOjUYMGPHRnZkQAY4mxPZBjmy53E7ukSkFKYB/D4XsWZQx64sCeYebOogGsoOBYvv6/UCb8F0IOBZ0TlP6lEYdANY350AJqB9/qPVuOI5evw4A1hgLigAlepnyxW80bcCcwN++A2s82Vcu02ta+ceq9BoL5KGTTRwQPlpqA3gCnwWU2kCDgeWRQPj2jAPCDxgCMjhI6uZnToDpvd/BJeFrJQB/fsAa02gCt3mi1wNuy8GgBNDZlysBNNSrADVSjcJl6vCpUn6jOdx0kz0q6PMhQRa4465SFKhx35cgUCBTwj2/NHwZAb71qR8GEP2H1XcmAtBPTEO67GP6FUUAIKGABbDLQ0EArhN2sAIGesRO+iyy+RMAjckVTlMCKFVAbh/4Af9OPgG61SkDVco3BQGT3GXaDAnTIAcYZDuBTwGsAGDxuBFeAQqIqwoFMlAVLrHr/wId5MPt0nilGgAAAABJRU5ErkJggg==')));
 
+class IconFont {
+  static const _family = 'iconfont';
+  IconFont._();
+
+  static const IconData max = IconData(0xe606, fontFamily: _family);
+  static const IconData restore = IconData(0xe607, fontFamily: _family);
+  static const IconData close = IconData(0xe668, fontFamily: _family);
+  static const IconData min = IconData(0xe609, fontFamily: _family);
+  static const IconData add = IconData(0xe664, fontFamily: _family);
+  static const IconData menu = IconData(0xe628, fontFamily: _family);
+}
+
+class ColorThemeExtension extends ThemeExtension<ColorThemeExtension> {
+  const ColorThemeExtension({
+    required this.bg,
+    required this.grayBg,
+    required this.text,
+    required this.lightText,
+    required this.lighterText,
+    required this.border,
+  });
+
+  final Color? bg;
+  final Color? grayBg;
+  final Color? text;
+  final Color? lightText;
+  final Color? lighterText;
+  final Color? border;
+
+  static const light = ColorThemeExtension(
+    bg: Color(0xFFFFFFFF),
+    grayBg: Color(0xFFEEEEEE),
+    text: Color(0xFF222222),
+    lightText: Color(0xFF666666),
+    lighterText: Color(0xFF888888),
+    border: Color(0xFFCCCCCC),
+  );
+
+  static const dark = ColorThemeExtension(
+    bg: Color(0xFF252525),
+    grayBg: Color(0xFF141414),
+    text: Color(0xFFFFFFFF),
+    lightText: Color(0xFF999999),
+    lighterText: Color(0xFF777777),
+    border: Color(0xFF555555),
+  );
+
+  @override
+  ThemeExtension<ColorThemeExtension> copyWith(
+      {Color? bg,
+      Color? grayBg,
+      Color? text,
+      Color? lightText,
+      Color? lighterText,
+      Color? border}) {
+    return ColorThemeExtension(
+      bg: bg ?? this.bg,
+      grayBg: grayBg ?? this.grayBg,
+      text: text ?? this.text,
+      lightText: lightText ?? this.lightText,
+      lighterText: lighterText ?? this.lighterText,
+      border: border ?? this.border,
+    );
+  }
+
+  @override
+  ThemeExtension<ColorThemeExtension> lerp(
+      ThemeExtension<ColorThemeExtension>? other, double t) {
+    if (other is! ColorThemeExtension) {
+      return this;
+    }
+    return ColorThemeExtension(
+      bg: Color.lerp(bg, other.bg, t),
+      grayBg: Color.lerp(grayBg, other.grayBg, t),
+      text: Color.lerp(text, other.text, t),
+      lightText: Color.lerp(lightText, other.lightText, t),
+      lighterText: Color.lerp(lighterText, other.lighterText, t),
+      border: Color.lerp(border, other.border, t),
+    );
+  }
+}
+
 class MyTheme {
   MyTheme._();
 
@@ -57,13 +139,32 @@ class MyTheme {
     brightness: Brightness.light,
     primarySwatch: Colors.blue,
     visualDensity: VisualDensity.adaptivePlatformDensity,
-    tabBarTheme: TabBarTheme(labelColor: Colors.black87),
+    tabBarTheme: TabBarTheme(
+      labelColor: Colors.black87,
+    ),
+    // backgroundColor: Color(0xFFFFFFFF),
+  ).copyWith(
+    extensions: <ThemeExtension<dynamic>>[
+      ColorThemeExtension.light,
+    ],
   );
   static ThemeData darkTheme = ThemeData(
-      brightness: Brightness.dark,
-      primarySwatch: Colors.blue,
-      visualDensity: VisualDensity.adaptivePlatformDensity,
-      tabBarTheme: TabBarTheme(labelColor: Colors.white70));
+    brightness: Brightness.dark,
+    primarySwatch: Colors.blue,
+    visualDensity: VisualDensity.adaptivePlatformDensity,
+    tabBarTheme: TabBarTheme(
+      labelColor: Colors.white70,
+    ),
+    // backgroundColor: Color(0xFF252525)
+  ).copyWith(
+    extensions: <ThemeExtension<dynamic>>[
+      ColorThemeExtension.dark,
+    ],
+  );
+
+  static ColorThemeExtension color(BuildContext context) {
+    return Theme.of(context).extension<ColorThemeExtension>()!;
+  }
 }
 
 bool isDarkTheme() {

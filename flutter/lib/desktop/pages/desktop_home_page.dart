@@ -48,15 +48,16 @@ class _DesktopHomePageState extends State<DesktopHomePage>
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     return Row(
       children: [
-        Flexible(
-          child: buildServerInfo(context),
-          flex: 1,
+        buildServerInfo(context),
+        VerticalDivider(
+          width: 1,
+          thickness: 1,
         ),
-        Flexible(
+        Expanded(
           child: buildServerBoard(context),
-          flex: 4,
         ),
       ],
     );
@@ -66,6 +67,8 @@ class _DesktopHomePageState extends State<DesktopHomePage>
     return ChangeNotifierProvider.value(
       value: gFFI.serverModel,
       child: Container(
+        width: 200,
+        color: MyTheme.color(context).bg,
         child: Column(
           children: [
             buildTip(context),
@@ -78,44 +81,48 @@ class _DesktopHomePageState extends State<DesktopHomePage>
   }
 
   buildServerBoard(BuildContext context) {
-    return Column(
-      children: [
-        Expanded(child: ConnectionPage()),
-      ],
+    return Container(
+      color: MyTheme.color(context).grayBg,
+      child: ConnectionPage(),
     );
   }
 
   buildIDBoard(BuildContext context) {
     final model = gFFI.serverModel;
     return Container(
-      margin: EdgeInsets.symmetric(vertical: 4.0, horizontal: 16.0),
+      margin: EdgeInsets.symmetric(horizontal: 16),
+      height: 52,
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.baseline,
         textBaseline: TextBaseline.alphabetic,
         children: [
           Container(
-            width: 3,
-            height: 70,
+            width: 2,
             decoration: BoxDecoration(color: MyTheme.accent),
           ),
           Expanded(
             child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 8.0),
+              padding: const EdgeInsets.only(left: 8.0),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        translate("ID"),
-                        style: TextStyle(
-                            fontSize: 18, fontWeight: FontWeight.w500),
-                      ),
-                      buildPopupMenu(context)
-                    ],
+                  Container(
+                    height: 15,
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          translate("ID"),
+                          style: TextStyle(
+                              fontSize: 14,
+                              color: MyTheme.color(context).lightText),
+                        ),
+                        buildPopupMenu(context)
+                      ],
+                    ),
                   ),
-                  GestureDetector(
+                  Flexible(
+                    child: GestureDetector(
                       onDoubleTap: () {
                         Clipboard.setData(
                             ClipboardData(text: model.serverId.text));
@@ -124,7 +131,15 @@ class _DesktopHomePageState extends State<DesktopHomePage>
                       child: TextFormField(
                         controller: model.serverId,
                         readOnly: true,
-                      )),
+                        decoration: InputDecoration(
+                          border: InputBorder.none,
+                        ),
+                        style: TextStyle(
+                          fontSize: 22,
+                        ),
+                      ).marginOnly(bottom: 5),
+                    ),
+                  )
                 ],
               ),
             ),
@@ -136,116 +151,143 @@ class _DesktopHomePageState extends State<DesktopHomePage>
 
   Widget buildPopupMenu(BuildContext context) {
     var position;
-    return GestureDetector(
-        onTapDown: (detail) {
-          final x = detail.globalPosition.dx;
-          final y = detail.globalPosition.dy;
-          position = RelativeRect.fromLTRB(x, y, x, y);
-        },
-        onTap: () async {
-          final userName = await gFFI.userModel.getUserName();
-          final enabledInput = await bind.mainGetOption(key: 'enable-audio');
-          final defaultInput = await gFFI.getDefaultAudioInput();
-          var menu = <PopupMenuEntry>[
-            await genEnablePopupMenuItem(
-              translate("Enable Keyboard/Mouse"),
-              'enable-keyboard',
+    RxBool hover = false.obs;
+    return InkWell(
+      onTapDown: (detail) {
+        final x = detail.globalPosition.dx;
+        final y = detail.globalPosition.dy;
+        position = RelativeRect.fromLTRB(x, y, x, y);
+      },
+      onTap: () async {
+        final userName = await gFFI.userModel.getUserName();
+        final enabledInput = await bind.mainGetOption(key: 'enable-audio');
+        final defaultInput = await gFFI.getDefaultAudioInput();
+        var menu = <PopupMenuEntry>[
+          await genEnablePopupMenuItem(
+            translate("Enable Keyboard/Mouse"),
+            'enable-keyboard',
+          ),
+          await genEnablePopupMenuItem(
+            translate("Enable Clipboard"),
+            'enable-clipboard',
+          ),
+          await genEnablePopupMenuItem(
+            translate("Enable File Transfer"),
+            'enable-file-transfer',
+          ),
+          await genEnablePopupMenuItem(
+            translate("Enable TCP Tunneling"),
+            'enable-tunnel',
+          ),
+          genAudioInputPopupMenuItem(enabledInput != "N", defaultInput),
+          PopupMenuDivider(),
+          PopupMenuItem(
+            child: Text(translate("ID/Relay Server")),
+            value: 'custom-server',
+          ),
+          PopupMenuItem(
+            child: Text(translate("IP Whitelisting")),
+            value: 'whitelist',
+          ),
+          PopupMenuItem(
+            child: Text(translate("Socks5 Proxy")),
+            value: 'socks5-proxy',
+          ),
+          PopupMenuDivider(),
+          await genEnablePopupMenuItem(
+            translate("Enable Service"),
+            'stop-service',
+          ),
+          // TODO: direct server
+          await genEnablePopupMenuItem(
+            translate("Always connected via relay"),
+            'allow-always-relay',
+          ),
+          await genEnablePopupMenuItem(
+            translate("Start ID/relay service"),
+            'stop-rendezvous-service',
+          ),
+          PopupMenuDivider(),
+          userName.isEmpty
+              ? PopupMenuItem(
+                  child: Text(translate("Login")),
+                  value: 'login',
+                )
+              : PopupMenuItem(
+                  child: Text("${translate("Logout")} $userName"),
+                  value: 'logout',
+                ),
+          PopupMenuItem(
+            child: Text(translate("Change ID")),
+            value: 'change-id',
+          ),
+          PopupMenuDivider(),
+          await genEnablePopupMenuItem(
+            translate("Dark Theme"),
+            'allow-darktheme',
+          ),
+          PopupMenuItem(
+            child: Text(translate("About")),
+            value: 'about',
+          ),
+        ];
+        final v =
+            await showMenu(context: context, position: position, items: menu);
+        if (v != null) {
+          onSelectMenu(v);
+        }
+      },
+      child: Obx(
+        () => Container(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(90),
+            boxShadow: [
+              BoxShadow(
+                  color: hover.value
+                      ? MyTheme.color(context).grayBg!
+                      : MyTheme.color(context).bg!,
+                  spreadRadius: 2)
+            ],
+          ),
+          child: Center(
+            child: Icon(
+              Icons.more_vert_outlined,
+              size: 20,
+              color: hover.value
+                  ? MyTheme.color(context).text
+                  : MyTheme.color(context).lightText,
             ),
-            await genEnablePopupMenuItem(
-              translate("Enable Clipboard"),
-              'enable-clipboard',
-            ),
-            await genEnablePopupMenuItem(
-              translate("Enable File Transfer"),
-              'enable-file-transfer',
-            ),
-            await genEnablePopupMenuItem(
-              translate("Enable TCP Tunneling"),
-              'enable-tunnel',
-            ),
-            genAudioInputPopupMenuItem(enabledInput != "N", defaultInput),
-            PopupMenuDivider(),
-            PopupMenuItem(
-              child: Text(translate("ID/Relay Server")),
-              value: 'custom-server',
-            ),
-            PopupMenuItem(
-              child: Text(translate("IP Whitelisting")),
-              value: 'whitelist',
-            ),
-            PopupMenuItem(
-              child: Text(translate("Socks5 Proxy")),
-              value: 'socks5-proxy',
-            ),
-            PopupMenuDivider(),
-            await genEnablePopupMenuItem(
-              translate("Enable Service"),
-              'stop-service',
-            ),
-            // TODO: direct server
-            await genEnablePopupMenuItem(
-              translate("Always connected via relay"),
-              'allow-always-relay',
-            ),
-            await genEnablePopupMenuItem(
-              translate("Start ID/relay service"),
-              'stop-rendezvous-service',
-            ),
-            PopupMenuDivider(),
-            userName.isEmpty
-                ? PopupMenuItem(
-                    child: Text(translate("Login")),
-                    value: 'login',
-                  )
-                : PopupMenuItem(
-                    child: Text("${translate("Logout")} $userName"),
-                    value: 'logout',
-                  ),
-            PopupMenuItem(
-              child: Text(translate("Change ID")),
-              value: 'change-id',
-            ),
-            PopupMenuDivider(),
-            await genEnablePopupMenuItem(
-              translate("Dark Theme"),
-              'allow-darktheme',
-            ),
-            PopupMenuItem(
-              child: Text(translate("About")),
-              value: 'about',
-            ),
-          ];
-          final v =
-              await showMenu(context: context, position: position, items: menu);
-          if (v != null) {
-            onSelectMenu(v);
-          }
-        },
-        child: Icon(Icons.more_vert_outlined));
+          ),
+        ),
+      ),
+      onHover: (value) => hover.value = value,
+    );
   }
 
   buildPasswordBoard(BuildContext context) {
     final model = gFFI.serverModel;
+    RxBool refreshHover = false.obs;
     return Container(
-      margin: EdgeInsets.symmetric(vertical: 4.0, horizontal: 16.0),
+      margin: EdgeInsets.symmetric(vertical: 12, horizontal: 16.0),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.baseline,
         textBaseline: TextBaseline.alphabetic,
         children: [
           Container(
-            width: 3,
-            height: 70,
+            width: 2,
+            height: 52,
             decoration: BoxDecoration(color: MyTheme.accent),
           ),
           Expanded(
             child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 8.0),
+              padding: const EdgeInsets.only(left: 8.0),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
                     translate("Password"),
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.w500),
+                    style: TextStyle(
+                        fontSize: 14, color: MyTheme.color(context).lightText),
                   ),
                   Row(
                     children: [
@@ -262,12 +304,25 @@ class _DesktopHomePageState extends State<DesktopHomePage>
                           child: TextFormField(
                             controller: model.serverPasswd,
                             readOnly: true,
+                            decoration: InputDecoration(
+                              border: InputBorder.none,
+                            ),
+                            style: TextStyle(fontSize: 15),
                           ),
                         ),
                       ),
-                      IconButton(
-                        icon: Icon(Icons.refresh),
-                        onPressed: () => bind.mainUpdateTemporaryPassword(),
+                      InkWell(
+                        child: Obx(
+                          () => Icon(
+                            Icons.refresh,
+                            color: refreshHover.value
+                                ? MyTheme.color(context).text
+                                : Color(0xFFDDDDDD),
+                            size: 22,
+                          ).marginOnly(right: 5),
+                        ),
+                        onTap: () => bind.mainUpdateTemporaryPassword(),
+                        onHover: (value) => refreshHover.value = value,
                       ),
                       FutureBuilder<Widget>(
                           future: buildPasswordPopupMenu(context),
@@ -282,7 +337,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
                             }
                           })
                     ],
-                  ),
+                  ).marginOnly(bottom: 20),
                 ],
               ),
             ),
@@ -294,7 +349,8 @@ class _DesktopHomePageState extends State<DesktopHomePage>
 
   Future<Widget> buildPasswordPopupMenu(BuildContext context) async {
     var position;
-    return GestureDetector(
+    RxBool editHover = false.obs;
+    return InkWell(
         onTapDown: (detail) {
           final x = detail.globalPosition.dx;
           final y = detail.globalPosition.dy;
@@ -365,7 +421,12 @@ class _DesktopHomePageState extends State<DesktopHomePage>
             setPasswordDialog();
           }
         },
-        child: Icon(Icons.edit));
+        onHover: (value) => editHover.value = value,
+        child: Obx(() => Icon(Icons.edit,
+            size: 22,
+            color: editHover.value
+                ? MyTheme.color(context).text
+                : Color(0xFFDDDDDD))));
   }
 
   buildTip(BuildContext context) {
@@ -377,7 +438,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
         children: [
           Text(
             translate("Your Desktop"),
-            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 20),
+            style: TextStyle(fontWeight: FontWeight.normal, fontSize: 19),
           ),
           SizedBox(
             height: 8.0,
@@ -385,7 +446,8 @@ class _DesktopHomePageState extends State<DesktopHomePage>
           Text(
             translate("desk_tip"),
             overflow: TextOverflow.clip,
-            style: TextStyle(fontSize: 14),
+            style: TextStyle(
+                fontSize: 12, color: MyTheme.color(context).lighterText),
           )
         ],
       ),
@@ -394,13 +456,17 @@ class _DesktopHomePageState extends State<DesktopHomePage>
 
   buildControlPanel(BuildContext context) {
     return Container(
+      width: 320,
       decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(10), color: MyTheme.white),
       padding: EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(translate("Control Remote Desktop")),
+          Text(
+            translate("Control Remote Desktop"),
+            style: TextStyle(fontWeight: FontWeight.normal, fontSize: 19),
+          ),
           Form(
               child: Column(
             children: [
@@ -409,6 +475,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
                 inputFormatters: [
                   FilteringTextInputFormatter.allow(RegExp(r"[0-9]"))
                 ],
+                style: TextStyle(fontSize: 22, fontWeight: FontWeight.w400),
               )
             ],
           ))

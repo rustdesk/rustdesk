@@ -8,7 +8,7 @@ use hbb_common::{
 };
 use std::io::prelude::*;
 use std::{
-    ffi::OsString,
+    ffi::{CString, OsString},
     fs, io, mem,
     sync::{Arc, Mutex},
     time::{Duration, Instant},
@@ -17,7 +17,8 @@ use winapi::{
     shared::{minwindef::*, ntdef::NULL, windef::*},
     um::{
         errhandlingapi::GetLastError, handleapi::CloseHandle, minwinbase::STILL_ACTIVE,
-        processthreadsapi::GetExitCodeProcess, winbase::*, wingdi::*, winnt::HANDLE, winuser::*,
+        processthreadsapi::GetExitCodeProcess, shellapi::ShellExecuteA, winbase::*, wingdi::*,
+        winnt::HANDLE, winuser::*,
     },
 };
 use windows_service::{
@@ -1416,5 +1417,19 @@ pub fn get_user_token(session_id: u32, as_user: bool) -> HANDLE {
         } else {
             token
         }
+    }
+}
+
+pub fn check_super_user_permission() -> ResultType<bool> {
+    unsafe {
+        let ret = ShellExecuteA(
+            NULL as _,
+            CString::new("runas")?.as_ptr() as _,
+            CString::new("cmd")?.as_ptr() as _,
+            CString::new("/c /q")?.as_ptr() as _,
+            NULL as _,
+            SW_SHOWNORMAL,
+        );
+        return Ok(ret as i32 > 32);
     }
 }

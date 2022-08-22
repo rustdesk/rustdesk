@@ -629,3 +629,9 @@ extern "C" {
 pub fn quit_gui() {
     unsafe { gtk_main_quit() };
 }
+
+pub fn check_super_user_permission() -> ResultType<bool> {
+    // TODO: replace echo with a rustdesk's program, which is location-fixed and non-gui.
+    let status = std::process::Command::new("pkexec").arg("echo").status()?;
+    Ok(status.success() && status.code() == Some(0))
+}

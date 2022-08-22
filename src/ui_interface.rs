@@ -676,6 +676,13 @@ pub fn has_hwcodec() -> bool {
     return true;
 }
 
+pub fn check_super_user_permission() -> bool {
+    #[cfg(any(windows, target_os = "linux"))]
+    return crate::platform::check_super_user_permission().unwrap_or(false);
+    #[cfg(not(any(windows, target_os = "linux")))]
+    true
+}
+
 pub fn check_zombie(childs: Childs) {
     let mut deads = Vec::new();
     loop {

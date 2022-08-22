@@ -30,30 +30,35 @@ class _DesktopTabPageState extends State<DesktopTabPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      body: Column(
-        children: [
-          DesktopTabBar(
-            tabs: tabs,
-            dark: isDarkTheme(),
-            mainTab: true,
-            onAddSetting: onAddSetting,
-          ),
-          Obx((() => Expanded(
-                child: PageView(
-                    controller: DesktopTabBar.controller.value,
-                    children: tabs.map((tab) {
-                      switch (tab.label) {
-                        case kTabLabelHomePage:
-                          return DesktopHomePage(key: ValueKey(tab.label));
-                        case kTabLabelSettingPage:
-                          return DesktopSettingPage(key: ValueKey(tab.label));
-                        default:
-                          return Container();
-                      }
-                    }).toList()),
-              ))),
-        ],
+    return Container(
+      decoration: BoxDecoration(
+          border: Border.all(color: MyTheme.color(context).border!)),
+      child: Scaffold(
+        backgroundColor: MyTheme.color(context).bg,
+        body: Column(
+          children: [
+            DesktopTabBar(
+              tabs: tabs,
+              dark: isDarkTheme(),
+              mainTab: true,
+              onAddSetting: onAddSetting,
+            ),
+            Obx((() => Expanded(
+                  child: PageView(
+                      controller: DesktopTabBar.controller.value,
+                      children: tabs.map((tab) {
+                        switch (tab.label) {
+                          case kTabLabelHomePage:
+                            return DesktopHomePage(key: ValueKey(tab.label));
+                          case kTabLabelSettingPage:
+                            return DesktopSettingPage(key: ValueKey(tab.label));
+                          default:
+                            return Container();
+                        }
+                      }).toList()),
+                ))),
+          ],
+        ),
       ),
     );
   }

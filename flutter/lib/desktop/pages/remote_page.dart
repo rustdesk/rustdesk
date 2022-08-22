@@ -181,10 +181,11 @@ class _RemotePageState extends State<RemotePage>
     _ffi.inputKey(label, down: down, press: press ?? false);
   }
 
-  Widget buildBody(FfiModel ffiModel) {
+  Widget buildBody(BuildContext context, FfiModel ffiModel) {
     final hasDisplays = ffiModel.pi.displays.length > 0;
     final keyboard = ffiModel.permissions['keyboard'] != false;
     return Scaffold(
+        backgroundColor: MyTheme.color(context).bg,
         // resizeToAvoidBottomInset: true,
         floatingActionButton: _showBar
             ? null
@@ -229,7 +230,8 @@ class _RemotePageState extends State<RemotePage>
               ChangeNotifierProvider.value(value: _ffi.canvasModel),
             ],
             child: Consumer<FfiModel>(
-                builder: (context, ffiModel, _child) => buildBody(ffiModel))));
+                builder: (context, ffiModel, _child) =>
+                    buildBody(context, ffiModel))));
   }
 
   Widget getRawPointerAndKeyBody(Widget child) {
