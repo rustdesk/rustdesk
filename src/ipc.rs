@@ -1,7 +1,3 @@
-#[cfg(windows)]
-use clipboard::{
-    create_cliprdr_context, empty_clipboard, get_rx_clip_client, server_clip_file, set_conn_enabled,
-};
 use std::{collections::HashMap, sync::atomic::Ordering};
 #[cfg(not(windows))]
 use std::{fs::File, io::prelude::*};
@@ -490,80 +486,6 @@ pub async fn start_pa() {
         }
         Err(err) => {
             log::error!("Failed to start pa ipc server: {}", err);
-        }
-    }
-}
-
-#[cfg(windows)]
-#[tokio::main(flavor = "current_thread")]
-pub async fn start_clipboard_file(
-    cm: ConnectionManager,
-    mut rx: mpsc::UnboundedReceiver<ClipboardFileData>,
-) {
-    let mut cliprdr_context = None;
-    let mut rx_clip_client = get_rx_clip_client().lock().await;
-
-    loop {
-        tokio::select! {
-            clip_file = rx_clip_client.recv() => match clip_file {
-                Some((conn_id, clip)) => {
-                    cmd_inner_send(
-                        &cm,
-                        conn_id,
-                        Data::ClipbaordFile(clip)
-                    );
-                }
-                None => {
-                    //
-                }
-            },
-            server_msg = rx.recv() => match server_msg {
-                Some(ClipboardFileData::Clip((conn_id, clip))) => {
-                    if let Some(ctx) = cliprdr_context.as_mut() {
-                        server_clip_file(ctx, conn_id, clip);
-                    }
-                }
-                Some(ClipboardFileData::Enable((id, enabled))) => {
-                    if enabled && cliprdr_context.is_none() {
-                        cliprdr_context = Some(match create_cliprdr_context(true, false) {
-                            Ok(context) => {
-                                log::info!("clipboard context for file transfer created.");
-                                context
-                            }
-                            Err(err) => {
-                                log::error!(
-                                    "Create clipboard context for file transfer: {}",
-                                    err.to_string()
-                                );
-                                return;
-                            }
-                        });
-                    }
-                    set_conn_enabled(id, enabled);
-                    if !enabled {
-                        if let Some(ctx) = cliprdr_context.as_mut() {
-                            empty_clipboard(ctx, id);
-                        }
-                    }
-                }
-                None => {
-                    break
-                }
-            }
-        }
-    }
-}
-
-#[cfg(windows)]
-fn cmd_inner_send(cm: &ConnectionManager, id: i32, data: Data) {
-    let lock = cm.read().unwrap();
-    if id != 0 {
-        if let Some(s) = lock.senders.get(&id) {
-            allow_err!(s.send(data));
-        }
-    } else {
-        for s in lock.senders.values() {
-            allow_err!(s.send(data.clone()));
         }
     }
 }
