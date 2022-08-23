@@ -26,11 +26,10 @@ const double _kContentFontSize = 15;
 const Color _accentColor = MyTheme.accent;
 
 class _TabInfo {
-  late final int index;
   late final String label;
   late final IconData unselected;
   late final IconData selected;
-  _TabInfo(this.index, this.label, this.unselected, this.selected);
+  _TabInfo(this.label, this.unselected, this.selected);
 }
 
 class DesktopSettingPage extends StatefulWidget {
@@ -43,17 +42,15 @@ class DesktopSettingPage extends StatefulWidget {
 class _DesktopSettingPageState extends State<DesktopSettingPage>
     with TickerProviderStateMixin, AutomaticKeepAliveClientMixin {
   final List<_TabInfo> _setting_tabs = <_TabInfo>[
-    _TabInfo(
-        0, 'User Interface', Icons.language_outlined, Icons.language_sharp),
-    _TabInfo(1, 'Security', Icons.enhanced_encryption_outlined,
+    _TabInfo('User Interface', Icons.language_outlined, Icons.language_sharp),
+    _TabInfo('Security', Icons.enhanced_encryption_outlined,
         Icons.enhanced_encryption_sharp),
-    _TabInfo(2, 'Display', Icons.desktop_windows_outlined,
-        Icons.desktop_windows_sharp),
-    _TabInfo(3, 'Audio', Icons.volume_up_outlined, Icons.volume_up_sharp),
-    _TabInfo(4, 'Connection', Icons.link_outlined, Icons.link_sharp),
+    _TabInfo(
+        'Display', Icons.desktop_windows_outlined, Icons.desktop_windows_sharp),
+    _TabInfo('Audio', Icons.volume_up_outlined, Icons.volume_up_sharp),
+    _TabInfo('Connection', Icons.link_outlined, Icons.link_sharp),
+    _TabInfo('About RustDesk', Icons.info_outline, Icons.info_sharp)
   ];
-  final _TabInfo _about_tab =
-      _TabInfo(5, 'About RustDesk', Icons.info_outline, Icons.info_sharp);
 
   late PageController controller;
   RxInt _selectedIndex = 0.obs;
@@ -80,10 +77,6 @@ class _DesktopSettingPageState extends State<DesktopSettingPage>
               children: [
                 _header(),
                 Flexible(child: _listView(tabs: _setting_tabs)),
-                _listItem(tab: _about_tab),
-                SizedBox(
-                  height: 120,
-                )
               ],
             ),
           ),
@@ -131,22 +124,26 @@ class _DesktopSettingPageState extends State<DesktopSettingPage>
 
   Widget _listView({required List<_TabInfo> tabs}) {
     return ListView(
-      children: tabs.map((tab) => _listItem(tab: tab)).toList(),
+      children: tabs
+          .asMap()
+          .entries
+          .map((tab) => _listItem(tab: tab.value, index: tab.key))
+          .toList(),
     );
   }
 
-  Widget _listItem({required _TabInfo tab}) {
+  Widget _listItem({required _TabInfo tab, required int index}) {
     return Obx(() {
-      bool selected = tab.index == _selectedIndex.value;
+      bool selected = index == _selectedIndex.value;
       return Container(
         width: _kTabWidth,
         height: _kTabHeight,
         child: InkWell(
           onTap: () {
-            if (_selectedIndex.value != tab.index) {
-              controller.jumpToPage(tab.index);
+            if (_selectedIndex.value != index) {
+              controller.jumpToPage(index);
             }
-            _selectedIndex.value = tab.index;
+            _selectedIndex.value = index;
           },
           child: Row(children: [
             Container(
@@ -665,7 +662,7 @@ class _AboutState extends State<_About> {
       final version = data['version'].toString();
       final linkStyle = TextStyle(decoration: TextDecoration.underline);
       return ListView(children: [
-        _Card(title: "About Rustdesk", children: [
+        _Card(title: "About RustDesk", children: [
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
