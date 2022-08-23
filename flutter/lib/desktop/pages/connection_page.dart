@@ -186,9 +186,14 @@ class _ConnectionPageState extends State<ConnectionPage> {
     RxBool ftPressed = false.obs;
     RxBool connHover = false.obs;
     RxBool connPressed = false.obs;
+    RxBool inputFocused = false.obs;
+    FocusNode focusNode = FocusNode();
+    focusNode.addListener(() {
+      inputFocused.value = focusNode.hasFocus;
+    });
     var w = Container(
       width: 320 + 20 * 2,
-      padding: EdgeInsets.only(left: 20, right: 20, bottom: 22, top: 30),
+      padding: EdgeInsets.only(left: 20, right: 20, bottom: 22, top: 24),
       decoration: BoxDecoration(
         color: MyTheme.color(context).bg,
         borderRadius: const BorderRadius.all(Radius.circular(13)),
@@ -197,36 +202,45 @@ class _ConnectionPageState extends State<ConnectionPage> {
         child: Column(
           children: [
             Row(
-              children: <Widget>[
+              children: [
+                Text(
+                  translate('Control Remote Desktop'),
+                  style: TextStyle(fontSize: 19, height: 1),
+                ),
+              ],
+            ).marginOnly(bottom: 15),
+            Row(
+              children: [
                 Expanded(
-                  child: Container(
-                    child: TextField(
-                      autocorrect: false,
-                      enableSuggestions: false,
-                      keyboardType: TextInputType.visiblePassword,
-                      style: TextStyle(
-                        fontFamily: 'WorkSans',
-                        fontSize: 22,
-                      ),
-                      decoration: InputDecoration(
-                        labelText: translate('Control Remote Desktop'),
-                        border:
-                            OutlineInputBorder(borderRadius: BorderRadius.zero),
-                        helperStyle: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 16,
-                        ),
-                        labelStyle: TextStyle(
-                          fontWeight: FontWeight.w500,
-                          fontSize: 26,
-                          letterSpacing: 0.2,
-                        ),
-                      ),
-                      controller: _idController,
-                      onSubmitted: (s) {
-                        onConnect();
-                      },
+                  child: TextField(
+                    autocorrect: false,
+                    enableSuggestions: false,
+                    keyboardType: TextInputType.visiblePassword,
+                    style: TextStyle(
+                      fontFamily: 'WorkSans',
+                      fontSize: 22,
+                      height: 1,
                     ),
+                    decoration: InputDecoration(
+                        hintText: translate('Enter Remote ID'),
+                        hintStyle: TextStyle(
+                            color: MyTheme.color(context).placeholder),
+                        border: OutlineInputBorder(
+                            borderRadius: BorderRadius.zero,
+                            borderSide: BorderSide(
+                                color: MyTheme.color(context).placeholder!)),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.zero,
+                          borderSide:
+                              BorderSide(color: MyTheme.button, width: 3),
+                        ),
+                        isDense: true,
+                        contentPadding:
+                            EdgeInsets.symmetric(horizontal: 10, vertical: 12)),
+                    controller: _idController,
+                    onSubmitted: (s) {
+                      onConnect();
+                    },
                   ),
                 ),
               ],
