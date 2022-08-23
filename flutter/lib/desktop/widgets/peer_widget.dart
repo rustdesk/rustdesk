@@ -1,14 +1,15 @@
 import 'dart:async';
 
-import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
+import 'package:get/get.dart';
 import 'package:provider/provider.dart';
 import 'package:visibility_detector/visibility_detector.dart';
 import 'package:window_manager/window_manager.dart';
 
+import '../../common.dart';
 import '../../models/peer_model.dart';
 import '../../models/platform_model.dart';
-import '../../common.dart';
 import 'peercard_widget.dart';
 
 typedef OffstageFunc = bool Function(Peer peer);
@@ -82,21 +83,25 @@ class _PeerWidgetState extends State<_PeerWidget> with WindowListener {
                     peers.peers.forEach((peer) {
                       cards.add(Offstage(
                           offstage: super.widget._offstageFunc(peer),
-                          child: Container(
-                            width: 225,
-                            height: 150,
-                            child: VisibilityDetector(
-                              key: Key('${peer.id}'),
-                              onVisibilityChanged: (info) {
-                                final peerId = (info.key as ValueKey).value;
-                                if (info.visibleFraction > 0.00001) {
-                                  _curPeers.add(peerId);
-                                } else {
-                                  _curPeers.remove(peerId);
-                                }
-                                _lastChangeTime = DateTime.now();
-                              },
-                              child: super.widget._peerCardWidgetFunc(peer),
+                          child: Obx(
+                            () => Container(
+                              width: 225,
+                              height: peerCardUiType.value == PeerUiType.grid
+                                  ? 150
+                                  : 50,
+                              child: VisibilityDetector(
+                                key: Key('${peer.id}'),
+                                onVisibilityChanged: (info) {
+                                  final peerId = (info.key as ValueKey).value;
+                                  if (info.visibleFraction > 0.00001) {
+                                    _curPeers.add(peerId);
+                                  } else {
+                                    _curPeers.remove(peerId);
+                                  }
+                                  _lastChangeTime = DateTime.now();
+                                },
+                                child: super.widget._peerCardWidgetFunc(peer),
+                              ),
                             ),
                           )));
                     });
@@ -162,7 +167,9 @@ class RecentPeerWidget extends BasePeerWidget {
     super._name = "recent peer";
     super._loadEvent = "load_recent_peers";
     super._offstageFunc = (Peer _peer) => false;
-    super._peerCardWidgetFunc = (Peer peer) => RecentPeerCard(peer: peer);
+    super._peerCardWidgetFunc = (Peer peer) => RecentPeerCard(
+          peer: peer,
+        );
     super._initPeers = [];
   }
 
