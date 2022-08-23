@@ -15,10 +15,16 @@ import 'peercard_widget.dart';
 typedef OffstageFunc = bool Function(Peer peer);
 typedef PeerCardWidgetFunc = Widget Function(Peer peer);
 
+/// for peer search text, global obs value
+final peerSearchText = "".obs;
+final peerSearchTextController =
+    TextEditingController(text: peerSearchText.value);
+
 class _PeerWidget extends StatefulWidget {
   late final _peers;
   late final OffstageFunc _offstageFunc;
   late final PeerCardWidgetFunc _peerCardWidgetFunc;
+
   _PeerWidget(Peers peers, OffstageFunc offstageFunc,
       PeerCardWidgetFunc peerCardWidgetFunc,
       {Key? key})
@@ -72,15 +78,24 @@ class _PeerWidgetState extends State<_PeerWidget> with WindowListener {
 
   @override
   Widget build(BuildContext context) {
-    final space = 8.0;
+    final space = 12.0;
     return ChangeNotifierProvider<Peers>(
       create: (context) => super.widget._peers,
-      child: SingleChildScrollView(
-          child: Consumer<Peers>(
-              builder: (context, peers, child) => Wrap(
-                  children: () {
+      child: Consumer<Peers>(
+          builder: (context, peers, child) => peers.peers.isEmpty
+              ? Center(
+                  child: Text(translate("Empty")),
+                )
+              : SingleChildScrollView(
+                  child: ObxValue<RxString>((searchText) {
                     final cards = <Widget>[];
-                    peers.peers.forEach((peer) {
+                    peers.peers.where((peer) {
+                      if (searchText.isEmpty) {
+                        return true;
+                      } else {
+                        return peer.id.contains(peerSearchText.value);
+                      }
+                    }).forEach((peer) {
                       cards.add(Offstage(
                           offstage: super.widget._offstageFunc(peer),
                           child: Obx(
@@ -105,10 +120,10 @@ class _PeerWidgetState extends State<_PeerWidget> with WindowListener {
                             ),
                           )));
                     });
-                    return cards;
-                  }(),
-                  spacing: space,
-                  runSpacing: space))),
+                    return Wrap(
+                        children: cards, spacing: space, runSpacing: space);
+                  }, peerSearchText),
+                )),
     );
   }
 
