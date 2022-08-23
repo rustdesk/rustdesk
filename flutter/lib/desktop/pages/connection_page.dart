@@ -65,12 +65,14 @@ class _ConnectionPageState extends State<ConnectionPage> {
             getUpdateUI(),
             Row(
               children: [
-                getSearchBarUI(),
+                getSearchBarUI(context),
               ],
-            ).marginOnly(top: 16.0, left: 16.0),
+            ).marginOnly(top: 22, left: 22),
             SizedBox(height: 12),
             Divider(
               thickness: 1,
+              indent: 22,
+              endIndent: 22,
             ),
             Expanded(
                 // TODO: move all tab info into _PeerTabbedPage
@@ -123,7 +125,7 @@ class _ConnectionPageState extends State<ConnectionPage> {
                       }
                     }),
               ],
-            )),
+            ).marginSymmetric(horizontal: 6)),
             Divider(),
             SizedBox(height: 50, child: Obx(() => buildStatus()))
                 .paddingSymmetric(horizontal: 12.0)
@@ -178,12 +180,16 @@ class _ConnectionPageState extends State<ConnectionPage> {
 
   /// UI for the search bar.
   /// Search for a peer and connect to it if the id exists.
-  Widget getSearchBarUI() {
+  Widget getSearchBarUI(BuildContext context) {
+    RxBool ftHover = false.obs;
+    RxBool ftPressed = false.obs;
+    RxBool connHover = false.obs;
+    RxBool connPressed = false.obs;
     var w = Container(
-      width: 500,
-      padding: EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+      width: 320 + 20 * 2,
+      padding: EdgeInsets.only(left: 20, right: 20, bottom: 22, top: 30),
       decoration: BoxDecoration(
-        color: isDarkTheme() ? null : MyTheme.white,
+        color: MyTheme.color(context).bg,
         borderRadius: const BorderRadius.all(Radius.circular(13)),
       ),
       child: Ink(
@@ -197,17 +203,12 @@ class _ConnectionPageState extends State<ConnectionPage> {
                       autocorrect: false,
                       enableSuggestions: false,
                       keyboardType: TextInputType.visiblePassword,
-                      // keyboardType: TextInputType.number,
                       style: TextStyle(
                         fontFamily: 'WorkSans',
-                        fontWeight: FontWeight.bold,
-                        fontSize: 30,
-                        // color: MyTheme.idColor,
+                        fontSize: 22,
                       ),
                       decoration: InputDecoration(
                         labelText: translate('Control Remote Desktop'),
-                        // hintText: 'Enter your remote ID',
-                        // border: InputBorder.,
                         border:
                             OutlineInputBorder(borderRadius: BorderRadius.zero),
                         helperStyle: TextStyle(
@@ -215,7 +216,7 @@ class _ConnectionPageState extends State<ConnectionPage> {
                           fontSize: 16,
                         ),
                         labelStyle: TextStyle(
-                          fontWeight: FontWeight.w600,
+                          fontWeight: FontWeight.w500,
                           fontSize: 26,
                           letterSpacing: 0.2,
                         ),
@@ -230,41 +231,83 @@ class _ConnectionPageState extends State<ConnectionPage> {
               ],
             ),
             Padding(
-              padding: const EdgeInsets.only(top: 16.0),
+              padding: const EdgeInsets.only(top: 13.0),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.end,
                 children: [
-                  OutlinedButton(
-                    onPressed: () {
-                      onConnect(isFileTransfer: true);
-                    },
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(
-                          vertical: 8.0, horizontal: 8.0),
-                      child: Text(
-                        translate(
-                          "Transfer File",
+                  Obx(() => InkWell(
+                        onTapDown: (_) => ftPressed.value = true,
+                        onTapUp: (_) => ftPressed.value = false,
+                        onTapCancel: () => ftPressed.value = false,
+                        onHover: (value) => ftHover.value = value,
+                        onTap: () {
+                          onConnect(isFileTransfer: true);
+                        },
+                        child: Container(
+                          height: 24,
+                          width: 72,
+                          alignment: Alignment.center,
+                          decoration: BoxDecoration(
+                            color: ftPressed.value
+                                ? MyTheme.accent
+                                : Colors.transparent,
+                            border: Border.all(
+                              color: ftPressed.value
+                                  ? MyTheme.accent
+                                  : ftHover.value
+                                      ? MyTheme.hoverBorder
+                                      : MyTheme.border,
+                            ),
+                            borderRadius: BorderRadius.circular(5),
+                          ),
+                          child: Text(
+                            translate(
+                              "Transfer File",
+                            ),
+                            style: TextStyle(
+                                fontSize: 12,
+                                color: ftPressed.value
+                                    ? MyTheme.color(context).bg
+                                    : MyTheme.color(context).text),
+                          ),
                         ),
-                      ),
-                    ),
-                  ),
+                      )),
                   SizedBox(
-                    width: 30,
+                    width: 17,
                   ),
-                  OutlinedButton(
-                    onPressed: onConnect,
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(
-                          vertical: 8.0, horizontal: 16.0),
-                      child: Text(
-                        translate(
-                          "Connection",
+                  Obx(
+                    () => InkWell(
+                      onTapDown: (_) => connPressed.value = true,
+                      onTapUp: (_) => connPressed.value = false,
+                      onTapCancel: () => connPressed.value = false,
+                      onHover: (value) => connHover.value = value,
+                      onTap: onConnect,
+                      child: Container(
+                        height: 24,
+                        width: 65,
+                        decoration: BoxDecoration(
+                          color: connPressed.value
+                              ? MyTheme.accent
+                              : MyTheme.button,
+                          border: Border.all(
+                            color: connPressed.value
+                                ? MyTheme.accent
+                                : connHover.value
+                                    ? MyTheme.hoverBorder
+                                    : MyTheme.button,
+                          ),
+                          borderRadius: BorderRadius.circular(5),
                         ),
-                        style: TextStyle(color: MyTheme.white),
+                        child: Center(
+                          child: Text(
+                            translate(
+                              "Connection",
+                            ),
+                            style: TextStyle(
+                                fontSize: 12, color: MyTheme.color(context).bg),
+                          ),
+                        ),
                       ),
-                    ),
-                    style: OutlinedButton.styleFrom(
-                      backgroundColor: Colors.blueAccent,
                     ),
                   ),
                 ],
@@ -920,6 +963,7 @@ class _PeerTabbedPage extends StatefulWidget {
 class _PeerTabbedPageState extends State<_PeerTabbedPage>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
+  RxInt _tabIndex = 0.obs;
 
   @override
   void initState() {
@@ -932,6 +976,7 @@ class _PeerTabbedPageState extends State<_PeerTabbedPage>
   // hard code for now
   void _handleTabSelection() {
     if (_tabController.indexIsChanging) {
+      _tabIndex.value = _tabController.index;
       switch (_tabController.index) {
         case 0:
           bind.mainLoadRecentPeers();
@@ -969,19 +1014,37 @@ class _PeerTabbedPageState extends State<_PeerTabbedPage>
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _createTabBar(),
+        _createTabBar(context),
         _createTabBarView(),
       ],
     );
   }
 
-  Widget _createTabBar() {
+  Widget _createTabBar(BuildContext context) {
     return TabBar(
         isScrollable: true,
         indicatorSize: TabBarIndicatorSize.label,
+        indicatorColor: Colors.transparent,
+        indicatorWeight: 0.1,
         controller: _tabController,
-        tabs: super.widget.tabs.map((t) {
-          return Tab(child: Text(t));
+        labelPadding: EdgeInsets.zero,
+        padding: EdgeInsets.only(left: 16),
+        tabs: super.widget.tabs.asMap().entries.map((t) {
+          return Obx(() => Container(
+              padding: EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+              decoration: BoxDecoration(
+                color:
+                    _tabIndex.value == t.key ? MyTheme.color(context).bg : null,
+                borderRadius: BorderRadius.circular(2),
+              ),
+              child: Text(
+                t.value,
+                style: TextStyle(
+                    height: 1,
+                    color: _tabIndex.value == t.key
+                        ? MyTheme.color(context).text
+                        : MyTheme.color(context).lightText),
+              )));
         }).toList());
   }
 

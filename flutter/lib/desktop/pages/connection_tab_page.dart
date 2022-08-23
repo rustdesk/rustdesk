@@ -76,34 +76,39 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
   Widget build(BuildContext context) {
     return SubWindowDragToResizeArea(
       windowId: windowId(),
-      child: Scaffold(
-        body: Column(
-          children: [
-            Obx(() => Visibility(
-                visible: _fullscreenID.value.isEmpty,
-                child: DesktopTabBar(
-                  tabs: tabs,
-                  onTabClose: onRemoveId,
-                  dark: isDarkTheme(),
-                  mainTab: false,
-                ))),
-            Expanded(child: Obx(() {
-              WindowController.fromWindowId(windowId())
-                  .setFullscreen(_fullscreenID.value.isNotEmpty);
-              return PageView(
-                  controller: DesktopTabBar.controller.value,
-                  children: tabs
-                      .map((tab) => RemotePage(
-                            key: ValueKey(tab.label),
-                            id: tab.label,
-                            tabBarHeight: _fullscreenID.value.isNotEmpty
-                                ? 0
-                                : kDesktopRemoteTabBarHeight,
-                            fullscreenID: _fullscreenID,
-                          )) //RemotePage(key: ValueKey(e), id: e))
-                      .toList());
-            })),
-          ],
+      child: Container(
+        decoration: BoxDecoration(
+            border: Border.all(color: MyTheme.color(context).border!)),
+        child: Scaffold(
+          backgroundColor: MyTheme.color(context).bg,
+          body: Column(
+            children: [
+              Obx(() => Visibility(
+                  visible: _fullscreenID.value.isEmpty,
+                  child: DesktopTabBar(
+                    tabs: tabs,
+                    onTabClose: onRemoveId,
+                    dark: isDarkTheme(),
+                    mainTab: false,
+                  ))),
+              Expanded(child: Obx(() {
+                WindowController.fromWindowId(windowId())
+                    .setFullscreen(_fullscreenID.value.isNotEmpty);
+                return PageView(
+                    controller: DesktopTabBar.controller.value,
+                    children: tabs
+                        .map((tab) => RemotePage(
+                              key: ValueKey(tab.label),
+                              id: tab.label,
+                              tabBarHeight: _fullscreenID.value.isNotEmpty
+                                  ? 0
+                                  : kDesktopRemoteTabBarHeight,
+                              fullscreenID: _fullscreenID,
+                            )) //RemotePage(key: ValueKey(e), id: e))
+                        .toList());
+              })),
+            ],
+          ),
         ),
       ),
     );
