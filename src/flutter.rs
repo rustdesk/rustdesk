@@ -41,7 +41,6 @@ use crate::{client::*, flutter_ffi::EventToUI, make_fd_flutter};
 pub(super) const APP_TYPE_MAIN: &str = "main";
 pub(super) const APP_TYPE_DESKTOP_REMOTE: &str = "remote";
 pub(super) const APP_TYPE_DESKTOP_FILE_TRANSFER: &str = "file transfer";
-pub(super) const APP_TYPE_DESKTOP_CONNECTION_MANAGER: &str = "connection manager";
 
 lazy_static::lazy_static! {
     // static ref SESSION: Arc<RwLock<Option<Session>>> = Default::default();
@@ -1940,7 +1939,7 @@ pub mod connection_manager {
         if let Some(s) = GLOBAL_EVENT_STREAM
             .read()
             .unwrap()
-            .get(super::APP_TYPE_DESKTOP_CONNECTION_MANAGER)
+            .get(super::APP_TYPE_MAIN)
         {
             s.add(serde_json::ser::to_string(&h).unwrap_or("".to_owned()));
         };
