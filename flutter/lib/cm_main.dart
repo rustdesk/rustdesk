@@ -14,7 +14,7 @@ void main(List<String> args) async {
   await windowManager.ensureInitialized();
   await windowManager.setSize(Size(400, 600));
   await windowManager.setAlignment(Alignment.topRight);
-  await initEnv(kAppTypeConnectionManager);
+  await initEnv(kAppTypeMain);
   gFFI.serverModel.clients
       .add(Client(0, false, false, "UserA", "123123123", true, false, false));
   gFFI.serverModel.clients

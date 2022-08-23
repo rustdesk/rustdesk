@@ -132,7 +132,7 @@ void runConnectionManagerScreen() async {
   // initialize window
   WindowOptions windowOptions = getHiddenTitleBarWindowOptions(Size(300, 400));
   await Future.wait([
-    initEnv(kAppTypeConnectionManager),
+    initEnv(kAppTypeMain),
     windowManager.waitUntilReadyToShow(windowOptions, () async {
       await windowManager.setAlignment(Alignment.topRight);
       await windowManager.show();
