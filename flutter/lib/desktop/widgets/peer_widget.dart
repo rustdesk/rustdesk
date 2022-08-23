@@ -1,23 +1,30 @@
 import 'dart:async';
 
-import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
+import 'package:get/get.dart';
 import 'package:provider/provider.dart';
 import 'package:visibility_detector/visibility_detector.dart';
 import 'package:window_manager/window_manager.dart';
 
+import '../../common.dart';
 import '../../models/peer_model.dart';
 import '../../models/platform_model.dart';
-import '../../common.dart';
 import 'peercard_widget.dart';
 
 typedef OffstageFunc = bool Function(Peer peer);
 typedef PeerCardWidgetFunc = Widget Function(Peer peer);
 
+/// for peer search text, global obs value
+final peerSearchText = "".obs;
+final peerSearchTextController =
+    TextEditingController(text: peerSearchText.value);
+
 class _PeerWidget extends StatefulWidget {
   late final _peers;
   late final OffstageFunc _offstageFunc;
   late final PeerCardWidgetFunc _peerCardWidgetFunc;
+
   _PeerWidget(Peers peers, OffstageFunc offstageFunc,
       PeerCardWidgetFunc peerCardWidgetFunc,
       {Key? key})
@@ -71,39 +78,52 @@ class _PeerWidgetState extends State<_PeerWidget> with WindowListener {
 
   @override
   Widget build(BuildContext context) {
-    final space = 8.0;
+    final space = 12.0;
     return ChangeNotifierProvider<Peers>(
       create: (context) => super.widget._peers,
-      child: SingleChildScrollView(
-          child: Consumer<Peers>(
-              builder: (context, peers, child) => Wrap(
-                  children: () {
+      child: Consumer<Peers>(
+          builder: (context, peers, child) => peers.peers.isEmpty
+              ? Center(
+                  child: Text(translate("Empty")),
+                )
+              : SingleChildScrollView(
+                  child: ObxValue<RxString>((searchText) {
                     final cards = <Widget>[];
-                    peers.peers.forEach((peer) {
+                    peers.peers.where((peer) {
+                      if (searchText.isEmpty) {
+                        return true;
+                      } else {
+                        return peer.id.contains(peerSearchText.value);
+                      }
+                    }).forEach((peer) {
                       cards.add(Offstage(
                           offstage: super.widget._offstageFunc(peer),
-                          child: Container(
-                            width: 225,
-                            height: 150,
-                            child: VisibilityDetector(
-                              key: Key('${peer.id}'),
-                              onVisibilityChanged: (info) {
-                                final peerId = (info.key as ValueKey).value;
-                                if (info.visibleFraction > 0.00001) {
-                                  _curPeers.add(peerId);
-                                } else {
-                                  _curPeers.remove(peerId);
-                                }
-                                _lastChangeTime = DateTime.now();
-                              },
-                              child: super.widget._peerCardWidgetFunc(peer),
+                          child: Obx(
+                            () => Container(
+                              width: 225,
+                              height: peerCardUiType.value == PeerUiType.grid
+                                  ? 150
+                                  : 50,
+                              child: VisibilityDetector(
+                                key: Key('${peer.id}'),
+                                onVisibilityChanged: (info) {
+                                  final peerId = (info.key as ValueKey).value;
+                                  if (info.visibleFraction > 0.00001) {
+                                    _curPeers.add(peerId);
+                                  } else {
+                                    _curPeers.remove(peerId);
+                                  }
+                                  _lastChangeTime = DateTime.now();
+                                },
+                                child: super.widget._peerCardWidgetFunc(peer),
+                              ),
                             ),
                           )));
                     });
-                    return cards;
-                  }(),
-                  spacing: space,
-                  runSpacing: space))),
+                    return Wrap(
+                        children: cards, spacing: space, runSpacing: space);
+                  }, peerSearchText),
+                )),
     );
   }
 
@@ -162,7 +182,9 @@ class RecentPeerWidget extends BasePeerWidget {
     super._name = "recent peer";
     super._loadEvent = "load_recent_peers";
     super._offstageFunc = (Peer _peer) => false;
-    super._peerCardWidgetFunc = (Peer peer) => RecentPeerCard(peer: peer);
+    super._peerCardWidgetFunc = (Peer peer) => RecentPeerCard(
+          peer: peer,
+        );
     super._initPeers = [];
   }
 

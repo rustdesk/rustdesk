@@ -5,12 +5,16 @@ import 'package:get/get.dart';
 
 import '../../common.dart';
 import '../../models/model.dart';
-import '../../models/platform_model.dart';
 import '../../models/peer_model.dart';
+import '../../models/platform_model.dart';
 
 typedef PopupMenuItemsFunc = Future<List<PopupMenuItem<String>>> Function();
 
 enum PeerType { recent, fav, discovered, ab }
+
+enum PeerUiType { grid, list }
+
+final peerCardUiType = PeerUiType.grid.obs;
 
 class _PeerCard extends StatefulWidget {
   final Peer peer;
@@ -39,127 +43,234 @@ class _PeerCardState extends State<_PeerCard>
     final peer = super.widget.peer;
     var deco = Rx<BoxDecoration?>(BoxDecoration(
         border: Border.all(color: Colors.transparent, width: 1.0),
-        borderRadius: BorderRadius.circular(20)));
-    return Card(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        child: MouseRegion(
-          onEnter: (evt) {
-            deco.value = BoxDecoration(
-                border: Border.all(color: Colors.blue, width: 1.0),
-                borderRadius: BorderRadius.circular(20));
-          },
-          onExit: (evt) {
-            deco.value = BoxDecoration(
-                border: Border.all(color: Colors.transparent, width: 1.0),
-                borderRadius: BorderRadius.circular(20));
-          },
-          child: GestureDetector(
-              onDoubleTap: () => _connect(peer.id),
-              child: _buildPeerTile(context, peer, deco)),
-        ));
+        borderRadius: peerCardUiType.value == PeerUiType.grid
+            ? BorderRadius.circular(20)
+            : null));
+    return MouseRegion(
+      onEnter: (evt) {
+        deco.value = BoxDecoration(
+            border: Border.all(color: Colors.blue, width: 1.0),
+            borderRadius: peerCardUiType.value == PeerUiType.grid
+                ? BorderRadius.circular(20)
+                : null);
+      },
+      onExit: (evt) {
+        deco.value = BoxDecoration(
+            border: Border.all(color: Colors.transparent, width: 1.0),
+            borderRadius: peerCardUiType.value == PeerUiType.grid
+                ? BorderRadius.circular(20)
+                : null);
+      },
+      child: GestureDetector(
+          onDoubleTap: () => _connect(peer.id),
+          child: Obx(() => peerCardUiType.value == PeerUiType.grid
+              ? _buildPeerCard(context, peer, deco)
+              : _buildPeerTile(context, peer, deco))),
+    );
   }
 
   Widget _buildPeerTile(
       BuildContext context, Peer peer, Rx<BoxDecoration?> deco) {
+    final greyStyle = TextStyle(fontSize: 12, color: Colors.grey);
     return Obx(
       () => Container(
         decoration: deco.value,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          mainAxisAlignment: MainAxisAlignment.center,
+        child: Row(
+          mainAxisSize: MainAxisSize.max,
           children: [
+            Container(
+              height: 50,
+              width: 50,
+              decoration: BoxDecoration(
+                color: str2color('${peer.id}${peer.platform}', 0x7f),
+              ),
+              alignment: Alignment.center,
+              child: _getPlatformImage('${peer.platform}').paddingAll(8.0),
+            ),
             Expanded(
               child: Container(
-                decoration: BoxDecoration(
-                  color: str2color('${peer.id}${peer.platform}', 0x7f),
-                  borderRadius: BorderRadius.only(
-                    topLeft: Radius.circular(20),
-                    topRight: Radius.circular(20),
-                  ),
-                ),
+                decoration: BoxDecoration(color: Colors.white),
                 child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Expanded(
                       child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.center,
+                        mainAxisAlignment: MainAxisAlignment.spaceAround,
                         children: [
-                          Container(
-                            padding: const EdgeInsets.all(6),
-                            child: _getPlatformImage('${peer.platform}'),
-                          ),
-                          Row(
-                            children: [
-                              Expanded(
-                                child: FutureBuilder<String>(
-                                  future: bind.mainGetPeerOption(
-                                      id: peer.id, key: 'alias'),
-                                  builder: (_, snapshot) {
-                                    if (snapshot.hasData) {
-                                      final name = snapshot.data!.isEmpty
-                                          ? '${peer.username}@${peer.hostname}'
-                                          : snapshot.data!;
-                                      return Tooltip(
-                                        message: name,
-                                        child: Text(
-                                          name,
-                                          style: TextStyle(
-                                              color: Colors.white70,
-                                              fontSize: 12),
-                                          textAlign: TextAlign.center,
-                                          overflow: TextOverflow.ellipsis,
-                                        ),
-                                      );
-                                    } else {
-                                      // alias has not arrived
-                                      return Center(
-                                          child: Text(
-                                        '${peer.username}@${peer.hostname}',
-                                        style: TextStyle(
-                                            color: Colors.white70,
-                                            fontSize: 12),
-                                        textAlign: TextAlign.center,
-                                        overflow: TextOverflow.ellipsis,
-                                      ));
-                                    }
-                                  },
-                                ),
-                              ),
-                            ],
+                          Row(children: [
+                            Text(
+                              '${peer.id}',
+                              style: TextStyle(fontWeight: FontWeight.w400),
+                            ),
+                            Padding(
+                                padding: EdgeInsets.fromLTRB(4, 4, 8, 4),
+                                child: CircleAvatar(
+                                    radius: 5,
+                                    backgroundColor: peer.online
+                                        ? Colors.green
+                                        : Colors.yellow)),
+                          ]),
+                          Align(
+                            alignment: Alignment.centerLeft,
+                            child: FutureBuilder<String>(
+                              future: bind.mainGetPeerOption(
+                                  id: peer.id, key: 'alias'),
+                              builder: (_, snapshot) {
+                                if (snapshot.hasData) {
+                                  final name = snapshot.data!.isEmpty
+                                      ? '${peer.username}@${peer.hostname}'
+                                      : snapshot.data!;
+                                  return Tooltip(
+                                    message: name,
+                                    child: Text(
+                                      name,
+                                      style: greyStyle,
+                                      textAlign: TextAlign.start,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  );
+                                } else {
+                                  // alias has not arrived
+                                  return Text(
+                                    '${peer.username}@${peer.hostname}',
+                                    style: greyStyle,
+                                    textAlign: TextAlign.start,
+                                    overflow: TextOverflow.ellipsis,
+                                  );
+                                }
+                              },
+                            ),
                           ),
                         ],
-                      ).paddingAll(4.0),
+                      ),
                     ),
+                    InkWell(
+                        child: Icon(Icons.more_vert),
+                        onTapDown: (e) {
+                          final x = e.globalPosition.dx;
+                          final y = e.globalPosition.dy;
+                          _menuPos = RelativeRect.fromLTRB(x, y, x, y);
+                        },
+                        onTap: () {
+                          _showPeerMenu(context, peer.id);
+                        }),
                   ],
-                ),
+                ).paddingSymmetric(horizontal: 8.0),
               ),
-            ),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Row(children: [
-                  Padding(
-                      padding: EdgeInsets.fromLTRB(0, 4, 8, 4),
-                      child: CircleAvatar(
-                          radius: 5,
-                          backgroundColor:
-                              peer.online ? Colors.green : Colors.yellow)),
-                  Text('${peer.id}')
-                ]),
-                InkWell(
-                    child: Icon(Icons.more_vert),
-                    onTapDown: (e) {
-                      final x = e.globalPosition.dx;
-                      final y = e.globalPosition.dy;
-                      _menuPos = RelativeRect.fromLTRB(x, y, x, y);
-                    },
-                    onTap: () {
-                      _showPeerMenu(context, peer.id);
-                    }),
-              ],
-            ).paddingSymmetric(vertical: 8.0, horizontal: 12.0)
+            )
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildPeerCard(
+      BuildContext context, Peer peer, Rx<BoxDecoration?> deco) {
+    return Card(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      child: GestureDetector(
+          onDoubleTap: () => _connect(peer.id),
+          child: Obx(
+            () => Container(
+              decoration: deco.value,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Expanded(
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: str2color('${peer.id}${peer.platform}', 0x7f),
+                        borderRadius: BorderRadius.only(
+                          topLeft: Radius.circular(20),
+                          topRight: Radius.circular(20),
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.center,
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.all(6),
+                                  child: _getPlatformImage('${peer.platform}'),
+                                ),
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      child: FutureBuilder<String>(
+                                        future: bind.mainGetPeerOption(
+                                            id: peer.id, key: 'alias'),
+                                        builder: (_, snapshot) {
+                                          if (snapshot.hasData) {
+                                            final name = snapshot.data!.isEmpty
+                                                ? '${peer.username}@${peer.hostname}'
+                                                : snapshot.data!;
+                                            return Tooltip(
+                                              message: name,
+                                              child: Text(
+                                                name,
+                                                style: TextStyle(
+                                                    color: Colors.white70,
+                                                    fontSize: 12),
+                                                textAlign: TextAlign.center,
+                                                overflow: TextOverflow.ellipsis,
+                                              ),
+                                            );
+                                          } else {
+                                            // alias has not arrived
+                                            return Center(
+                                                child: Text(
+                                              '${peer.username}@${peer.hostname}',
+                                              style: TextStyle(
+                                                  color: Colors.white70,
+                                                  fontSize: 12),
+                                              textAlign: TextAlign.center,
+                                              overflow: TextOverflow.ellipsis,
+                                            ));
+                                          }
+                                        },
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ).paddingAll(4.0),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Row(children: [
+                        Padding(
+                            padding: EdgeInsets.fromLTRB(0, 4, 8, 4),
+                            child: CircleAvatar(
+                                radius: 5,
+                                backgroundColor: peer.online
+                                    ? Colors.green
+                                    : Colors.yellow)),
+                        Text('${peer.id}')
+                      ]),
+                      InkWell(
+                          child: Icon(Icons.more_vert),
+                          onTapDown: (e) {
+                            final x = e.globalPosition.dx;
+                            final y = e.globalPosition.dy;
+                            _menuPos = RelativeRect.fromLTRB(x, y, x, y);
+                          },
+                          onTap: () {
+                            _showPeerMenu(context, peer.id);
+                          }),
+                    ],
+                  ).paddingSymmetric(vertical: 8.0, horizontal: 12.0)
+                ],
+              ),
+            ),
+          )),
     );
   }
 

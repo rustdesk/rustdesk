@@ -5,6 +5,7 @@ import 'package:contextmenu/contextmenu.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/desktop/pages/desktop_home_page.dart';
 import 'package:flutter_hbb/desktop/widgets/peer_widget.dart';
+import 'package:flutter_hbb/desktop/widgets/peercard_widget.dart';
 import 'package:flutter_hbb/utils/multi_window_manager.dart';
 import 'package:get/get.dart';
 import 'package:provider/provider.dart';
@@ -976,6 +977,9 @@ class _PeerTabbedPageState extends State<_PeerTabbedPage>
   // hard code for now
   void _handleTabSelection() {
     if (_tabController.indexIsChanging) {
+      // reset search text
+      peerSearchText.value = "";
+      peerSearchTextController.clear();
       _tabIndex.value = _tabController.index;
       switch (_tabController.index) {
         case 0:
@@ -1014,7 +1018,13 @@ class _PeerTabbedPageState extends State<_PeerTabbedPage>
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _createTabBar(context),
+        Row(
+          children: [
+            Expanded(child: _createTabBar(context)),
+            _createSearchBar(context),
+            _createPeerViewTypeSwitch(context),
+          ],
+        ),
         _createTabBarView(),
       ],
     );
@@ -1053,5 +1063,73 @@ class _PeerTabbedPageState extends State<_PeerTabbedPage>
         child: TabBarView(
                 controller: _tabController, children: super.widget.children)
             .paddingSymmetric(horizontal: 12.0, vertical: 4.0));
+  }
+
+  _createSearchBar(BuildContext context) {
+    return Container(
+      width: 175,
+      height: 30,
+      margin: EdgeInsets.only(right: 16),
+      decoration: BoxDecoration(color: Colors.white),
+      child: Obx(
+        () => TextField(
+          controller: peerSearchTextController,
+          onChanged: (searchText) {
+            peerSearchText.value = searchText;
+          },
+          decoration: InputDecoration(
+            prefixIcon: Icon(
+              Icons.search,
+              size: 20,
+            ),
+            contentPadding: EdgeInsets.zero,
+            hintText: translate("Search ID"),
+            hintStyle: TextStyle(fontSize: 14),
+            border: OutlineInputBorder(),
+            isDense: true,
+          ),
+        ),
+      ),
+    );
+  }
+
+  _createPeerViewTypeSwitch(BuildContext context) {
+    final activeDeco = BoxDecoration(color: Colors.white);
+    return Row(
+      children: [
+        Obx(
+          () => Container(
+            padding: EdgeInsets.all(4.0),
+            decoration:
+                peerCardUiType.value == PeerUiType.grid ? activeDeco : null,
+            child: InkWell(
+                onTap: () {
+                  peerCardUiType.value = PeerUiType.grid;
+                },
+                child: Icon(
+                  Icons.grid_view_rounded,
+                  size: 20,
+                  color: Colors.black54,
+                )),
+          ),
+        ),
+        Obx(
+          () => Container(
+            padding: EdgeInsets.all(4.0),
+            decoration:
+                peerCardUiType.value == PeerUiType.list ? activeDeco : null,
+            child: InkWell(
+                onTap: () {
+                  peerCardUiType.value = PeerUiType.list;
+                },
+                child: Icon(
+                  Icons.list,
+                  size: 24,
+                  color: Colors.black54,
+                )),
+          ),
+        ),
+      ],
+    ).paddingOnly(right: 16.0);
   }
 }
