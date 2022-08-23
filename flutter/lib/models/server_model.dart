@@ -465,7 +465,12 @@ class ServerModel with ChangeNotifier {
     try {
       final client = Client.fromJson(jsonDecode(evt['client']));
       parent.target?.dialogManager.dismissByTag(getLoginDialogTag(client.id));
-      _clients.add(client);
+      final index = _clients.indexWhere((c) => c.id == client.id);
+      if (index < 0) {
+        _clients.add(client);
+      } else {
+        _clients[index].authorized = true;
+      }
       DesktopTabBar.onAdd(
           tabs,
           TabInfo(

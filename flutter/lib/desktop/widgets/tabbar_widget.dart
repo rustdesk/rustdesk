@@ -161,6 +161,7 @@ class DesktopTabBar extends StatelessWidget {
   }
 
   static onAdd(RxList<TabInfo> tabs, TabInfo tab) {
+    if (!isDesktop) return;
     int index = tabs.indexWhere((e) => e.key == tab.key);
     if (index >= 0) {
       selected.value = index;
@@ -178,6 +179,7 @@ class DesktopTabBar extends StatelessWidget {
   }
 
   static remove(RxList<TabInfo> tabs, int index) {
+    if (!isDesktop) return;
     if (index < 0) return;
     if (index == tabs.length - 1) {
       selected.value = max(0, selected.value - 1);
@@ -189,12 +191,14 @@ class DesktopTabBar extends StatelessWidget {
   }
 
   static void jumpTo(RxList<TabInfo> tabs, int index) {
+    if (!isDesktop) return;
     if (index < 0 || index >= tabs.length) return;
     selected.value = index;
     controller.value.jumpToPage(selected.value);
   }
 
   static void close(String? key) {
+    if (!isDesktop) return;
     final tabBar = _tabBarListViewKey.currentWidget as _ListView?;
     if (tabBar == null) return;
     final tabs = tabBar.tabs;
