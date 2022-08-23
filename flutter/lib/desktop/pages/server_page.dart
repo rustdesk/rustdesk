@@ -18,11 +18,25 @@ class DesktopServerPage extends StatefulWidget {
 }
 
 class _DesktopServerPageState extends State<DesktopServerPage>
-    with AutomaticKeepAliveClientMixin {
+    with WindowListener, AutomaticKeepAliveClientMixin {
   @override
   void initState() {
     gFFI.ffiModel.updateEventListener("");
+    windowManager.addListener(this);
     super.initState();
+  }
+
+  @override
+  void dispose() {
+    windowManager.removeListener(this);
+    super.dispose();
+  }
+
+  @override
+  void onWindowClose() {
+    gFFI.serverModel.closeAll();
+    gFFI.close();
+    super.onWindowClose();
   }
 
   Widget build(BuildContext context) {
