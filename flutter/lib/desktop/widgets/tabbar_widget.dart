@@ -5,10 +5,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_hbb/common.dart';
 import 'package:flutter_hbb/consts.dart';
 import 'package:flutter_hbb/main.dart';
-import 'package:flutter_hbb/utils/multi_window_manager.dart';
 import 'package:get/get.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:scroll_pos/scroll_pos.dart';
+
+import '../../utils/multi_window_manager.dart';
 
 const double _kTabBarHeight = kDesktopRemoteTabBarHeight;
 const double _kIconSize = 18;
@@ -16,210 +17,227 @@ const double _kDividerIndent = 10;
 const double _kActionIconSize = 12;
 
 class TabInfo {
-  late final String key;
-  late final String label;
-  late final IconData? selectedIcon;
-  late final IconData? unselectedIcon;
-  late final bool closable;
+  final String key;
+  final String label;
+  final IconData? selectedIcon;
+  final IconData? unselectedIcon;
+  final bool closable;
+  final Widget page;
 
   TabInfo(
       {required this.key,
       required this.label,
       this.selectedIcon,
       this.unselectedIcon,
-      this.closable = true});
+      this.closable = true,
+      required this.page});
 }
 
-class DesktopTabBar extends StatelessWidget {
-  late final RxList<TabInfo> tabs;
-  late final Function(String)? onTabClose;
-  late final bool dark;
-  late final _Theme _theme;
-  late final bool mainTab;
-  late final bool showLogo;
-  late final bool showTitle;
-  late final bool showMinimize;
-  late final bool showMaximize;
-  late final bool showClose;
-  late final void Function()? onAddSetting;
-  late final void Function(int)? onSelected;
+class DesktopTabState {
+  final List<TabInfo> tabs = [];
   final ScrollPosController scrollController =
       ScrollPosController(itemCount: 0);
-  static final Rx<PageController> controller = PageController().obs;
-  static final Rx<int> selected = 0.obs;
-  static final _tabBarListViewKey = GlobalKey();
+  final PageController pageController = PageController();
+  int selected = 0;
 
-  DesktopTabBar(
-      {Key? key,
-      required this.tabs,
+  DesktopTabState() {
+    scrollController.itemCount = tabs.length;
+  }
+}
+
+class DesktopTabController {
+  final state = DesktopTabState().obs;
+
+  /// index, key
+  Function(int, String)? onRemove;
+
+  Function(int)? onSelected;
+
+  void add(TabInfo tab) {
+    if (!isDesktop) return;
+    final index = state.value.tabs.indexWhere((e) => e.key == tab.key);
+    int toIndex;
+    if (index >= 0) {
+      toIndex = index;
+    } else {
+      state.update((val) {
+        val!.tabs.add(tab);
+      });
+      toIndex = state.value.tabs.length - 1;
+      assert(toIndex >= 0);
+    }
+    try {
+      jumpTo(toIndex);
+    } catch (e) {
+      // call before binding controller will throw
+      debugPrint("Failed to jumpTo: $e");
+    }
+  }
+
+  void remove(int index) {
+    if (!isDesktop) return;
+    final len = state.value.tabs.length;
+    if (index < 0 || index > len - 1) return;
+    final key = state.value.tabs[index].key;
+    final currentSelected = state.value.selected;
+    int toIndex = 0;
+    if (index == len - 1) {
+      toIndex = max(0, currentSelected - 1);
+    } else if (index < len - 1 && index < currentSelected) {
+      toIndex = max(0, currentSelected - 1);
+    }
+    state.value.tabs.removeAt(index);
+    state.value.scrollController.itemCount = state.value.tabs.length;
+    jumpTo(toIndex);
+    onRemove?.call(index, key);
+  }
+
+  void jumpTo(int index) {
+    state.update((val) {
+      val!.selected = index;
+      val.pageController.jumpToPage(index);
+      val.scrollController.scrollToItem(index, center: true, animate: true);
+    });
+    onSelected?.call(index);
+  }
+
+  void closeBy(String? key) {
+    if (!isDesktop) return;
+    assert(onRemove != null);
+    if (key == null) {
+      if (state.value.selected < state.value.tabs.length) {
+        remove(state.value.selected);
+      }
+    } else {
+      state.value.tabs.indexWhere((tab) => tab.key == key);
+      remove(state.value.selected);
+    }
+  }
+}
+
+class DesktopTab extends StatelessWidget {
+  final Function(String)? onTabClose;
+  final TarBarTheme theme;
+  final bool isMainWindow;
+  final bool showTabBar;
+  final bool showLogo;
+  final bool showTitle;
+  final bool showMinimize;
+  final bool showMaximize;
+  final bool showClose;
+  final Widget Function(Widget pageView)? pageViewBuilder;
+  final Widget? tail;
+
+  final DesktopTabController controller;
+  late final state = controller.state;
+
+  DesktopTab(
+      {required this.controller,
+      required this.isMainWindow,
+      this.theme = const TarBarTheme.light(),
       this.onTabClose,
-      required this.dark,
-      required this.mainTab,
-      this.onAddSetting,
-      this.onSelected,
+      this.showTabBar = true,
       this.showLogo = true,
       this.showTitle = true,
       this.showMinimize = true,
       this.showMaximize = true,
-      this.showClose = true})
-      : _theme = dark ? _Theme.dark() : _Theme.light(),
-        super(key: key) {
-    scrollController.itemCount = tabs.length;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      scrollController.scrollToItem(selected.value,
-          center: true, animate: true);
-    });
-  }
+      this.showClose = true,
+      this.pageViewBuilder,
+      this.tail});
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      height: _kTabBarHeight,
-      child: Column(
-        children: [
-          Container(
-            height: _kTabBarHeight - 1,
-            child: Row(
+    return Column(children: [
+      Offstage(
+          offstage: !showTabBar,
+          child: Container(
+            height: _kTabBarHeight,
+            child: Column(
               children: [
-                Expanded(
-                  child: Row(
-                    children: [
-                      Row(children: [
-                        Offstage(
-                            offstage: !showLogo,
-                            child: Image.asset(
-                              'assets/logo.ico',
-                              width: 20,
-                              height: 20,
-                            )),
-                        Offstage(
-                            offstage: !showTitle,
-                            child: Text(
-                              "RustDesk",
-                              style: TextStyle(fontSize: 13),
-                            ).marginOnly(left: 2))
-                      ]).marginOnly(
-                        left: 5,
-                        right: 10,
-                      ),
-                      Expanded(
-                        child: GestureDetector(
-                            onPanStart: (_) {
-                              if (mainTab) {
-                                windowManager.startDragging();
-                              } else {
-                                WindowController.fromWindowId(windowId!)
-                                    .startDragging();
-                              }
-                            },
-                            child: _ListView(
-                                key: _tabBarListViewKey,
-                                controller: controller,
-                                scrollController: scrollController,
-                                tabInfos: tabs,
-                                selected: selected,
-                                onTabClose: onTabClose,
-                                theme: _theme,
-                                onSelected: onSelected)),
-                      ),
-                      Offstage(
-                        offstage: mainTab,
-                        child: _AddButton(
-                          theme: _theme,
-                        ).paddingOnly(left: 10),
-                      ),
-                    ],
-                  ),
+                Container(
+                  height: _kTabBarHeight - 1,
+                  child: _buildBar(),
                 ),
-                Offstage(
-                  offstage: onAddSetting == null,
-                  child: _ActionIcon(
-                    message: 'Settings',
-                    icon: IconFont.menu,
-                    theme: _theme,
-                    onTap: () => onAddSetting?.call(),
-                    is_close: false,
-                  ),
+                Divider(
+                  height: 1,
+                  thickness: 1,
                 ),
-                WindowActionPanel(
-                  mainTab: mainTab,
-                  theme: _theme,
-                  showMinimize: showMinimize,
-                  showMaximize: showMaximize,
-                  showClose: showClose,
-                )
               ],
             ),
+          )),
+      Expanded(
+          child: pageViewBuilder != null
+              ? pageViewBuilder!(_buildPageView())
+              : _buildPageView())
+    ]);
+  }
+
+  Widget _buildPageView() {
+    return Obx(() => PageView(
+        controller: state.value.pageController,
+        children:
+            state.value.tabs.map((tab) => tab.page).toList(growable: false)));
+  }
+
+  Widget _buildBar() {
+    return Row(
+      children: [
+        Expanded(
+          child: Row(
+            children: [
+              Row(children: [
+                Offstage(
+                    offstage: !showLogo,
+                    child: Image.asset(
+                      'assets/logo.ico',
+                      width: 20,
+                      height: 20,
+                    )),
+                Offstage(
+                    offstage: !showTitle,
+                    child: Text(
+                      "RustDesk",
+                      style: TextStyle(fontSize: 13),
+                    ).marginOnly(left: 2))
+              ]).marginOnly(
+                left: 5,
+                right: 10,
+              ),
+              Expanded(
+                child: GestureDetector(
+                    onPanStart: (_) {
+                      if (isMainWindow) {
+                        windowManager.startDragging();
+                      } else {
+                        WindowController.fromWindowId(windowId!)
+                            .startDragging();
+                      }
+                    },
+                    child: _ListView(
+                      controller: controller,
+                      onTabClose: onTabClose,
+                      theme: theme,
+                    )),
+              ),
+            ],
           ),
-          Divider(
-            height: 1,
-            thickness: 1,
-          ),
-        ],
-      ),
+        ),
+        Offstage(offstage: tail == null, child: tail),
+        WindowActionPanel(
+          mainTab: isMainWindow,
+          theme: theme,
+          showMinimize: showMinimize,
+          showMaximize: showMaximize,
+          showClose: showClose,
+        )
+      ],
     );
-  }
-
-  static onAdd(RxList<TabInfo> tabs, TabInfo tab) {
-    if (!isDesktop) return;
-    int index = tabs.indexWhere((e) => e.key == tab.key);
-    if (index >= 0) {
-      selected.value = index;
-    } else {
-      tabs.add(tab);
-      selected.value = tabs.length - 1;
-      assert(selected.value >= 0);
-    }
-    try {
-      controller.value.jumpToPage(selected.value);
-    } catch (e) {
-      // call before binding controller will throw
-      debugPrint("Failed to jumpToPage: $e");
-    }
-  }
-
-  static remove(RxList<TabInfo> tabs, int index) {
-    if (!isDesktop) return;
-    if (index < 0) return;
-    if (index == tabs.length - 1) {
-      selected.value = max(0, selected.value - 1);
-    } else if (index < tabs.length - 1 && index < selected.value) {
-      selected.value = max(0, selected.value - 1);
-    }
-    tabs.removeAt(index);
-    controller.value.jumpToPage(selected.value);
-  }
-
-  static void jumpTo(RxList<TabInfo> tabs, int index) {
-    if (!isDesktop) return;
-    if (index < 0 || index >= tabs.length) return;
-    selected.value = index;
-    controller.value.jumpToPage(selected.value);
-  }
-
-  static void close(String? key) {
-    if (!isDesktop) return;
-    final tabBar = _tabBarListViewKey.currentWidget as _ListView?;
-    if (tabBar == null) return;
-    final tabs = tabBar.tabs;
-    if (key == null) {
-      if (tabBar.selected.value < tabs.length) {
-        tabs[tabBar.selected.value].onClose();
-      }
-    } else {
-      for (final tab in tabs) {
-        if (tab.key == key) {
-          tab.onClose();
-          break;
-        }
-      }
-    }
   }
 }
 
 class WindowActionPanel extends StatelessWidget {
   final bool mainTab;
-  final _Theme theme;
+  final TarBarTheme theme;
 
   final bool showMinimize;
   final bool showMaximize;
@@ -240,7 +258,7 @@ class WindowActionPanel extends StatelessWidget {
       children: [
         Offstage(
             offstage: !showMinimize,
-            child: _ActionIcon(
+            child: ActionIcon(
               message: 'Minimize',
               icon: IconFont.min,
               theme: theme,
@@ -269,7 +287,7 @@ class WindowActionPanel extends StatelessWidget {
                 });
               }
               return Obx(
-                () => _ActionIcon(
+                () => ActionIcon(
                   message: is_maximized.value ? "Restore" : "Maximize",
                   icon: is_maximized.value ? IconFont.restore : IconFont.max,
                   theme: theme,
@@ -297,7 +315,7 @@ class WindowActionPanel extends StatelessWidget {
             })),
         Offstage(
             offstage: !showClose,
-            child: _ActionIcon(
+            child: ActionIcon(
               message: 'Close',
               icon: IconFont.close,
               theme: theme,
@@ -317,69 +335,37 @@ class WindowActionPanel extends StatelessWidget {
 
 // ignore: must_be_immutable
 class _ListView extends StatelessWidget {
-  final Rx<PageController> controller;
-  final ScrollPosController scrollController;
-  final RxList<TabInfo> tabInfos;
-  final Rx<int> selected;
+  final DesktopTabController controller;
+  late final Rx<DesktopTabState> state;
   final Function(String key)? onTabClose;
-  final _Theme _theme;
-  late List<_Tab> tabs;
-  late final void Function(int)? onSelected;
+  final TarBarTheme theme;
 
   _ListView(
-      {Key? key,
-      required this.controller,
-      required this.scrollController,
-      required this.tabInfos,
-      required this.selected,
-      required this.onTabClose,
-      required _Theme theme,
-      this.onSelected})
-      : _theme = theme,
-        super(key: key);
+      {required this.controller, required this.onTabClose, required this.theme})
+      : this.state = controller.state;
 
   @override
   Widget build(BuildContext context) {
-    return Obx(() {
-      tabs = tabInfos.asMap().entries.map((e) {
-        int index = e.key;
-        return _Tab(
-          index: index,
-          label: e.value.label,
-          selectedIcon: e.value.selectedIcon,
-          unselectedIcon: e.value.unselectedIcon,
-          closable: e.value.closable,
-          selected: selected.value,
-          onClose: () {
-            tabInfos.removeWhere((tab) => tab.key == e.value.key);
-            onTabClose?.call(e.value.key);
-            if (index <= selected.value) {
-              selected.value = max(0, selected.value - 1);
-            }
-            assert(tabInfos.length == 0 || selected.value < tabInfos.length);
-            scrollController.itemCount = tabInfos.length;
-            if (tabInfos.length > 0) {
-              scrollController.scrollToItem(selected.value,
-                  center: true, animate: true);
-              controller.value.jumpToPage(selected.value);
-            }
-          },
-          onSelected: () {
-            selected.value = index;
-            scrollController.scrollToItem(index, center: true, animate: true);
-            controller.value.jumpToPage(index);
-            onSelected?.call(selected.value);
-          },
-          theme: _theme,
-        );
-      }).toList();
-      return ListView(
-          controller: scrollController,
-          scrollDirection: Axis.horizontal,
-          shrinkWrap: true,
-          physics: BouncingScrollPhysics(),
-          children: tabs);
-    });
+    return Obx(() => ListView(
+        controller: state.value.scrollController,
+        scrollDirection: Axis.horizontal,
+        shrinkWrap: true,
+        physics: BouncingScrollPhysics(),
+        children: state.value.tabs.asMap().entries.map((e) {
+          final index = e.key;
+          final tab = e.value;
+          return _Tab(
+            index: index,
+            label: tab.label,
+            selectedIcon: tab.selectedIcon,
+            unselectedIcon: tab.unselectedIcon,
+            closable: tab.closable,
+            selected: state.value.selected,
+            onClose: () => controller.remove(index),
+            onSelected: () => controller.jumpTo(index),
+            theme: theme,
+          );
+        }).toList()));
   }
 }
 
@@ -393,7 +379,7 @@ class _Tab extends StatelessWidget {
   late final Function() onClose;
   late final Function() onSelected;
   final RxBool _hover = false.obs;
-  late final _Theme theme;
+  late final TarBarTheme theme;
 
   _Tab(
       {Key? key,
@@ -473,31 +459,11 @@ class _Tab extends StatelessWidget {
   }
 }
 
-class _AddButton extends StatelessWidget {
-  late final _Theme theme;
-
-  _AddButton({
-    Key? key,
-    required this.theme,
-  }) : super(key: key);
-
-  @override
-  Widget build(BuildContext context) {
-    return _ActionIcon(
-        message: 'New Connection',
-        icon: IconFont.add,
-        theme: theme,
-        onTap: () =>
-            rustDeskWinManager.call(WindowType.Main, "main_window_on_top", ""),
-        is_close: false);
-  }
-}
-
 class _CloseButton extends StatelessWidget {
   final bool visiable;
   final bool tabSelected;
   final Function onClose;
-  late final _Theme theme;
+  late final TarBarTheme theme;
 
   _CloseButton({
     Key? key,
@@ -528,13 +494,13 @@ class _CloseButton extends StatelessWidget {
   }
 }
 
-class _ActionIcon extends StatelessWidget {
+class ActionIcon extends StatelessWidget {
   final String message;
   final IconData icon;
-  final _Theme theme;
+  final TarBarTheme theme;
   final Function() onTap;
   final bool is_close;
-  const _ActionIcon({
+  const ActionIcon({
     Key? key,
     required this.message,
     required this.icon,
@@ -568,35 +534,54 @@ class _ActionIcon extends StatelessWidget {
   }
 }
 
-class _Theme {
-  late Color unSelectedtabIconColor;
-  late Color selectedtabIconColor;
-  late Color selectedTextColor;
-  late Color unSelectedTextColor;
-  late Color selectedIconColor;
-  late Color unSelectedIconColor;
-  late Color dividerColor;
-  late Color hoverColor;
+class AddButton extends StatelessWidget {
+  late final TarBarTheme theme;
 
-  _Theme.light() {
-    unSelectedtabIconColor = Color.fromARGB(255, 162, 203, 241);
-    selectedtabIconColor = MyTheme.accent;
-    selectedTextColor = Color.fromARGB(255, 26, 26, 26);
-    unSelectedTextColor = Color.fromARGB(255, 96, 96, 96);
-    selectedIconColor = Color.fromARGB(255, 26, 26, 26);
-    unSelectedIconColor = Color.fromARGB(255, 96, 96, 96);
-    dividerColor = Color.fromARGB(255, 238, 238, 238);
-    hoverColor = Colors.grey.withOpacity(0.2);
-  }
+  AddButton({
+    Key? key,
+    required this.theme,
+  }) : super(key: key);
 
-  _Theme.dark() {
-    unSelectedtabIconColor = Color.fromARGB(255, 30, 65, 98);
-    selectedtabIconColor = MyTheme.accent;
-    selectedTextColor = Color.fromARGB(255, 255, 255, 255);
-    unSelectedTextColor = Color.fromARGB(255, 207, 207, 207);
-    selectedIconColor = Color.fromARGB(255, 215, 215, 215);
-    unSelectedIconColor = Color.fromARGB(255, 255, 255, 255);
-    dividerColor = Color.fromARGB(255, 64, 64, 64);
-    hoverColor = Colors.black26;
+  @override
+  Widget build(BuildContext context) {
+    return ActionIcon(
+        message: 'New Connection',
+        icon: IconFont.add,
+        theme: theme,
+        onTap: () =>
+            rustDeskWinManager.call(WindowType.Main, "main_window_on_top", ""),
+        is_close: false);
   }
+}
+
+class TarBarTheme {
+  final Color unSelectedtabIconColor;
+  final Color selectedtabIconColor;
+  final Color selectedTextColor;
+  final Color unSelectedTextColor;
+  final Color selectedIconColor;
+  final Color unSelectedIconColor;
+  final Color dividerColor;
+  final Color hoverColor;
+
+  const TarBarTheme.light()
+      : unSelectedtabIconColor = const Color.fromARGB(255, 162, 203, 241),
+        selectedtabIconColor = MyTheme.accent,
+        selectedTextColor = const Color.fromARGB(255, 26, 26, 26),
+        unSelectedTextColor = const Color.fromARGB(255, 96, 96, 96),
+        selectedIconColor = const Color.fromARGB(255, 26, 26, 26),
+        unSelectedIconColor = const Color.fromARGB(255, 96, 96, 96),
+        dividerColor = const Color.fromARGB(255, 238, 238, 238),
+        hoverColor = const Color.fromARGB(
+            51, 158, 158, 158); // Colors.grey; //0xFF9E9E9E
+
+  const TarBarTheme.dark()
+      : unSelectedtabIconColor = const Color.fromARGB(255, 30, 65, 98),
+        selectedtabIconColor = MyTheme.accent,
+        selectedTextColor = const Color.fromARGB(255, 255, 255, 255),
+        unSelectedTextColor = const Color.fromARGB(255, 207, 207, 207),
+        selectedIconColor = const Color.fromARGB(255, 215, 215, 215),
+        unSelectedIconColor = const Color.fromARGB(255, 255, 255, 255),
+        dividerColor = const Color.fromARGB(255, 64, 64, 64),
+        hoverColor = Colors.black26;
 }

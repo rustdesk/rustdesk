@@ -4,10 +4,10 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/models/platform_model.dart';
-import 'package:get/get_rx/src/rx_types/rx_types.dart';
 import 'package:wakelock/wakelock.dart';
 
 import '../common.dart';
+import '../desktop/pages/server_page.dart' as Desktop;
 import '../desktop/widgets/tabbar_widget.dart';
 import '../mobile/pages/server_page.dart';
 import 'model.dart';
@@ -32,7 +32,7 @@ class ServerModel with ChangeNotifier {
   late final TextEditingController _serverId;
   final _serverPasswd = TextEditingController(text: "");
 
-  RxList<TabInfo> tabs = RxList<TabInfo>.empty(growable: true);
+  final tabController = DesktopTabController();
 
   List<Client> _clients = [];
 
@@ -352,16 +352,15 @@ class ServerModel with ChangeNotifier {
         exit(0);
       }
       _clients.clear();
-      tabs.clear();
+      tabController.state.value.tabs.clear();
       for (var clientJson in clientsJson) {
         final client = Client.fromJson(clientJson);
         _clients.add(client);
-        DesktopTabBar.onAdd(
-            tabs,
-            TabInfo(
-                key: client.id.toString(),
-                label: client.name,
-                closable: false));
+        tabController.add(TabInfo(
+            key: client.id.toString(),
+            label: client.name,
+            closable: false,
+            page: Desktop.buildConnectionCard(client)));
       }
       notifyListeners();
     } catch (e) {
@@ -376,10 +375,11 @@ class ServerModel with ChangeNotifier {
         return;
       }
       _clients.add(client);
-      DesktopTabBar.onAdd(
-          tabs,
-          TabInfo(
-              key: client.id.toString(), label: client.name, closable: false));
+      tabController.add(TabInfo(
+          key: client.id.toString(),
+          label: client.name,
+          closable: false,
+          page: Desktop.buildConnectionCard(client)));
       scrollToBottom();
       notifyListeners();
       if (isAndroid) showLoginDialog(client);
@@ -456,7 +456,7 @@ class ServerModel with ChangeNotifier {
       bind.cmLoginRes(connId: client.id, res: res);
       parent.target?.invokeMethod("cancel_notification", client.id);
       final index = _clients.indexOf(client);
-      DesktopTabBar.remove(tabs, index);
+      tabController.remove(index);
       _clients.remove(client);
     }
   }
@@ -471,10 +471,11 @@ class ServerModel with ChangeNotifier {
       } else {
         _clients[index].authorized = true;
       }
-      DesktopTabBar.onAdd(
-          tabs,
-          TabInfo(
-              key: client.id.toString(), label: client.name, closable: false));
+      tabController.add(TabInfo(
+          key: client.id.toString(),
+          label: client.name,
+          closable: false,
+          page: Desktop.buildConnectionCard(client)));
       scrollToBottom();
       notifyListeners();
     } catch (e) {}
@@ -486,7 +487,7 @@ class ServerModel with ChangeNotifier {
       if (_clients.any((c) => c.id == id)) {
         final index = _clients.indexWhere((client) => client.id == id);
         _clients.removeAt(index);
-        DesktopTabBar.remove(tabs, index);
+        tabController.remove(index);
         parent.target?.dialogManager.dismissByTag(getLoginDialogTag(id));
         parent.target?.invokeMethod("cancel_notification", id);
       }
@@ -501,7 +502,12 @@ class ServerModel with ChangeNotifier {
       bind.cmCloseConnection(connId: client.id);
     });
     _clients.clear();
-    tabs.clear();
+    tabController.state.value.tabs.clear();
+  }
+
+  void jumpTo(int id) {
+    final index = _clients.indexWhere((client) => client.id == id);
+    tabController.jumpTo(index);
   }
 }
 

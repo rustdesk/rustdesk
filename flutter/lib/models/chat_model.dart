@@ -200,6 +200,7 @@ class ChatModel with ChangeNotifier {
     if (!_isShowChatPage) {
       toggleCMChatPage(id);
     }
+    _ffi.target?.serverModel.jumpTo(id);
 
     late final chatUser;
     if (id == clientModeID) {
