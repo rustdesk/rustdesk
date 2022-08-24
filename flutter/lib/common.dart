@@ -18,11 +18,11 @@ import 'models/platform_model.dart';
 final globalKey = GlobalKey<NavigatorState>();
 final navigationBarKey = GlobalKey();
 
-var isAndroid = Platform.isAndroid;
-var isIOS = Platform.isIOS;
+final isAndroid = Platform.isAndroid;
+final isIOS = Platform.isIOS;
+final isDesktop = Platform.isWindows || Platform.isMacOS || Platform.isLinux;
 var isWeb = false;
 var isWebDesktop = false;
-var isDesktop = Platform.isWindows || Platform.isMacOS || Platform.isLinux;
 var version = "";
 int androidVersion = 0;
 

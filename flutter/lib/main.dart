@@ -27,7 +27,7 @@ Future<Null> main(List<String> args) async {
   print("launch args: $args");
 
   if (!isDesktop) {
-    runMainApp(false);
+    runMobileApp();
     return;
   }
   // main window
@@ -72,9 +72,6 @@ Future<void> initEnv(String appType) async {
   // focus on multi-ffi on desktop first
   await initGlobalFFI();
   // await Firebase.initializeApp();
-  if (isAndroid) {
-    toAndroidChannelInit();
-  }
   refreshCurrentUser();
 }
 
@@ -93,6 +90,12 @@ void runMainApp(bool startService) async {
     // initTray();
     gFFI.serverModel.startService();
   }
+  runApp(App());
+}
+
+void runMobileApp() async {
+  await initEnv(kAppTypeMain);
+  if (isAndroid) androidChannelInit();
   runApp(App());
 }
 
@@ -129,7 +132,7 @@ void runConnectionManagerScreen() async {
   // initialize window
   WindowOptions windowOptions = getHiddenTitleBarWindowOptions(Size(300, 400));
   await Future.wait([
-    initEnv(kAppTypeConnectionManager),
+    initEnv(kAppTypeMain),
     windowManager.waitUntilReadyToShow(windowOptions, () async {
       await windowManager.setAlignment(Alignment.topRight);
       await windowManager.show();

@@ -62,7 +62,7 @@ class _PeerCardState extends State<_PeerCard>
                 : null);
       },
       child: GestureDetector(
-          onDoubleTap: () => _connect(peer.id),
+          onDoubleTapDown: (_) => _connect(peer.id),
           child: Obx(() => peerCardUiType.value == PeerUiType.grid
               ? _buildPeerCard(context, peer, deco)
               : _buildPeerTile(context, peer, deco))),
@@ -168,109 +168,106 @@ class _PeerCardState extends State<_PeerCard>
       BuildContext context, Peer peer, Rx<BoxDecoration?> deco) {
     return Card(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-      child: GestureDetector(
-          onDoubleTap: () => _connect(peer.id),
-          child: Obx(
-            () => Container(
-              decoration: deco.value,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Expanded(
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: str2color('${peer.id}${peer.platform}', 0x7f),
-                        borderRadius: BorderRadius.only(
-                          topLeft: Radius.circular(20),
-                          topRight: Radius.circular(20),
-                        ),
-                      ),
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.center,
-                              children: [
-                                Container(
-                                  padding: const EdgeInsets.all(6),
-                                  child: _getPlatformImage('${peer.platform}'),
-                                ),
-                                Row(
-                                  children: [
-                                    Expanded(
-                                      child: FutureBuilder<String>(
-                                        future: bind.mainGetPeerOption(
-                                            id: peer.id, key: 'alias'),
-                                        builder: (_, snapshot) {
-                                          if (snapshot.hasData) {
-                                            final name = snapshot.data!.isEmpty
-                                                ? '${peer.username}@${peer.hostname}'
-                                                : snapshot.data!;
-                                            return Tooltip(
-                                              message: name,
-                                              child: Text(
-                                                name,
-                                                style: TextStyle(
-                                                    color: Colors.white70,
-                                                    fontSize: 12),
-                                                textAlign: TextAlign.center,
-                                                overflow: TextOverflow.ellipsis,
-                                              ),
-                                            );
-                                          } else {
-                                            // alias has not arrived
-                                            return Center(
-                                                child: Text(
-                                              '${peer.username}@${peer.hostname}',
-                                              style: TextStyle(
-                                                  color: Colors.white70,
-                                                  fontSize: 12),
-                                              textAlign: TextAlign.center,
-                                              overflow: TextOverflow.ellipsis,
-                                            ));
-                                          }
-                                        },
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ],
-                            ).paddingAll(4.0),
-                          ),
-                        ],
-                      ),
+      child: Obx(
+        () => Container(
+          decoration: deco.value,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Expanded(
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: str2color('${peer.id}${peer.platform}', 0x7f),
+                    borderRadius: BorderRadius.only(
+                      topLeft: Radius.circular(20),
+                      topRight: Radius.circular(20),
                     ),
                   ),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  child: Row(
                     children: [
-                      Row(children: [
-                        Padding(
-                            padding: EdgeInsets.fromLTRB(0, 4, 8, 4),
-                            child: CircleAvatar(
-                                radius: 5,
-                                backgroundColor: peer.online
-                                    ? Colors.green
-                                    : Colors.yellow)),
-                        Text('${peer.id}')
-                      ]),
-                      InkWell(
-                          child: Icon(Icons.more_vert),
-                          onTapDown: (e) {
-                            final x = e.globalPosition.dx;
-                            final y = e.globalPosition.dy;
-                            _menuPos = RelativeRect.fromLTRB(x, y, x, y);
-                          },
-                          onTap: () {
-                            _showPeerMenu(context, peer.id);
-                          }),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.center,
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(6),
+                              child: _getPlatformImage('${peer.platform}'),
+                            ),
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: FutureBuilder<String>(
+                                    future: bind.mainGetPeerOption(
+                                        id: peer.id, key: 'alias'),
+                                    builder: (_, snapshot) {
+                                      if (snapshot.hasData) {
+                                        final name = snapshot.data!.isEmpty
+                                            ? '${peer.username}@${peer.hostname}'
+                                            : snapshot.data!;
+                                        return Tooltip(
+                                          message: name,
+                                          child: Text(
+                                            name,
+                                            style: TextStyle(
+                                                color: Colors.white70,
+                                                fontSize: 12),
+                                            textAlign: TextAlign.center,
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                        );
+                                      } else {
+                                        // alias has not arrived
+                                        return Center(
+                                            child: Text(
+                                          '${peer.username}@${peer.hostname}',
+                                          style: TextStyle(
+                                              color: Colors.white70,
+                                              fontSize: 12),
+                                          textAlign: TextAlign.center,
+                                          overflow: TextOverflow.ellipsis,
+                                        ));
+                                      }
+                                    },
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ).paddingAll(4.0),
+                      ),
                     ],
-                  ).paddingSymmetric(vertical: 8.0, horizontal: 12.0)
-                ],
+                  ),
+                ),
               ),
-            ),
-          )),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Row(children: [
+                    Padding(
+                        padding: EdgeInsets.fromLTRB(0, 4, 8, 4),
+                        child: CircleAvatar(
+                            radius: 5,
+                            backgroundColor:
+                                peer.online ? Colors.green : Colors.yellow)),
+                    Text('${peer.id}')
+                  ]),
+                  InkWell(
+                      child: Icon(Icons.more_vert),
+                      onTapDown: (e) {
+                        final x = e.globalPosition.dx;
+                        final y = e.globalPosition.dy;
+                        _menuPos = RelativeRect.fromLTRB(x, y, x, y);
+                      },
+                      onTap: () {
+                        _showPeerMenu(context, peer.id);
+                      }),
+                ],
+              ).paddingSymmetric(vertical: 8.0, horizontal: 12.0)
+            ],
+          ),
+        ),
+      ),
     );
   }
 

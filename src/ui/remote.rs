@@ -2639,7 +2639,7 @@ impl Interface for Handler {
         self.lc.write().unwrap().handle_peer_info(username, pi);
         self.call("updatePrivacyMode", &[]);
         self.call("updatePi", &make_args!(pi_sciter));
-        if self.is_file_transfer() {
+        if self.is_file_transfer() || self.is_port_forward()  {
             self.call2("closeSuccess", &make_args!());
         } else if !self.is_port_forward() {
             self.msgbox("success", "Successful", "Connected, waiting for image...");

@@ -510,7 +510,7 @@ Widget clientInfo(Client client) {
       ]));
 }
 
-void toAndroidChannelInit() {
+void androidChannelInit() {
   gFFI.setMethodCallHandler((method, arguments) {
     debugPrint("flutter got android msg,$method,$arguments");
     try {
