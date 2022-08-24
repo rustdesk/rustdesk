@@ -94,14 +94,20 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
             border: Border.all(color: MyTheme.color(context).border!)),
         child: Scaffold(
             backgroundColor: MyTheme.color(context).bg,
-            body: DesktopTab(
-              controller: tabController,
-              theme: theme,
-              isMainWindow: false,
-              tail: AddButton(
-                theme: theme,
-              ).paddingOnly(left: 10),
-            )),
+            body: Obx(() => DesktopTab(
+                  controller: tabController,
+                  theme: theme,
+                  isMainWindow: false,
+                  showTabBar: _fullscreenID.value.isEmpty,
+                  tail: AddButton(
+                    theme: theme,
+                  ).paddingOnly(left: 10),
+                  pageViewBuilder: (pageView) {
+                    WindowController.fromWindowId(windowId())
+                        .setFullscreen(_fullscreenID.value.isNotEmpty);
+                    return pageView;
+                  },
+                ))),
       ),
     );
   }

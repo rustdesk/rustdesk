@@ -118,6 +118,7 @@ class DesktopTab extends StatelessWidget {
   final Function(String)? onTabClose;
   final TarBarTheme theme;
   final bool isMainWindow;
+  final bool showTabBar;
   final bool showLogo;
   final bool showTitle;
   final bool showMinimize;
@@ -134,6 +135,7 @@ class DesktopTab extends StatelessWidget {
       required this.isMainWindow,
       this.theme = const TarBarTheme.light(),
       this.onTabClose,
+      this.showTabBar = true,
       this.showLogo = true,
       this.showTitle = true,
       this.showMinimize = true,
@@ -145,21 +147,23 @@ class DesktopTab extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Column(children: [
-      Container(
-        height: _kTabBarHeight,
-        child: Column(
-          children: [
-            Container(
-              height: _kTabBarHeight - 1,
-              child: _buildBar(),
+      Offstage(
+          offstage: !showTabBar,
+          child: Container(
+            height: _kTabBarHeight,
+            child: Column(
+              children: [
+                Container(
+                  height: _kTabBarHeight - 1,
+                  child: _buildBar(),
+                ),
+                Divider(
+                  height: 1,
+                  thickness: 1,
+                ),
+              ],
             ),
-            Divider(
-              height: 1,
-              thickness: 1,
-            ),
-          ],
-        ),
-      ),
+          )),
       Expanded(
           child: pageViewBuilder != null
               ? pageViewBuilder!(_buildPageView())
