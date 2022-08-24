@@ -58,6 +58,7 @@ num_cpus = "1.13"
 bytes = { version = "1.2", features = ["serde"] }
 default-net = "0.11.0"
 wol-rs = "0.9.1"
+errno = "0.2.8"
 
 [target.'cfg(not(target_os = "linux"))'.dependencies]
 reqwest = { version = "0.11", features = ["json", "rustls-tls"], default-features=false }
