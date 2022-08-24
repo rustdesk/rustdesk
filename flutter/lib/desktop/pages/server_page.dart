@@ -79,6 +79,8 @@ class ConnectionManagerState extends State<ConnectionManager> {
   @override
   void initState() {
     gFFI.serverModel.updateClientState();
+    gFFI.serverModel.tabController.onSelected = (index) =>
+        gFFI.chatModel.changeCurrentID(gFFI.serverModel.clients[index].id);
     // test
     // gFFI.serverModel.clients.forEach((client) {
     //   DesktopTabBar.onAdd(
@@ -103,38 +105,20 @@ class ConnectionManagerState extends State<ConnectionManager> {
               ),
             ],
           )
-        : Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              SizedBox(
-                height: kTextTabBarHeight,
-                child: Obx(() => DesktopTabBar(
-                      dark: isDarkTheme(),
-                      mainTab: true,
-                      tabs: serverModel.tabs,
-                      showTitle: false,
-                      showMaximize: false,
-                      showMinimize: false,
-                      onSelected: (index) => gFFI.chatModel
-                          .changeCurrentID(serverModel.clients[index].id),
-                    )),
-              ),
-              Expanded(
-                child: Row(children: [
-                  Expanded(
-                      child: PageView(
-                          controller: DesktopTabBar.controller.value,
-                          children: serverModel.clients
-                              .map((client) => buildConnectionCard(client))
-                              .toList(growable: false))),
+        : DesktopTab(
+            theme: isDarkTheme() ? TarBarTheme.dark() : TarBarTheme.light(),
+            showTitle: false,
+            showMaximize: false,
+            showMinimize: false,
+            controller: serverModel.tabController,
+            isMainWindow: true,
+            pageViewBuilder: (pageView) => Row(children: [
+                  Expanded(child: pageView),
                   Consumer<ChatModel>(
                       builder: (_, model, child) => model.isShowChatPage
                           ? Expanded(child: Scaffold(body: ChatPage()))
                           : Offstage())
-                ]),
-              )
-            ],
-          );
+                ]));
   }
 
   Widget buildTitleBar(Widget middle) {
@@ -156,23 +140,6 @@ class ConnectionManagerState extends State<ConnectionManager> {
     );
   }
 
-  Widget buildConnectionCard(Client client) {
-    return Column(
-      mainAxisAlignment: MainAxisAlignment.start,
-      crossAxisAlignment: CrossAxisAlignment.start,
-      key: ValueKey(client.id),
-      children: [
-        _CmHeader(client: client),
-        client.isFileTransfer ? Offstage() : _PrivilegeBoard(client: client),
-        Expanded(
-            child: Align(
-          alignment: Alignment.bottomCenter,
-          child: _CmControlPanel(client: client),
-        ))
-      ],
-    ).paddingSymmetric(vertical: 8.0, horizontal: 8.0);
-  }
-
   Widget buildTab(Client client) {
     return Tab(
       child: Row(
@@ -189,6 +156,23 @@ class ConnectionManagerState extends State<ConnectionManager> {
       ),
     );
   }
+}
+
+Widget buildConnectionCard(Client client) {
+  return Column(
+    mainAxisAlignment: MainAxisAlignment.start,
+    crossAxisAlignment: CrossAxisAlignment.start,
+    key: ValueKey(client.id),
+    children: [
+      _CmHeader(client: client),
+      client.isFileTransfer ? Offstage() : _PrivilegeBoard(client: client),
+      Expanded(
+          child: Align(
+        alignment: Alignment.bottomCenter,
+        child: _CmControlPanel(client: client),
+      ))
+    ],
+  ).paddingSymmetric(vertical: 8.0, horizontal: 8.0);
 }
 
 class _AppIcon extends StatelessWidget {
@@ -421,9 +405,11 @@ class _CmControlPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return client.authorized
-        ? buildAuthorized(context)
-        : buildUnAuthorized(context);
+    return Consumer<ServerModel>(builder: (_, model, child) {
+      return client.authorized
+          ? buildAuthorized(context)
+          : buildUnAuthorized(context);
+    });
   }
 
   buildAuthorized(BuildContext context) {

@@ -51,6 +51,8 @@ class DesktopTabController {
   /// index, key
   Function(int, String)? onRemove;
 
+  Function(int)? onSelected;
+
   void add(TabInfo tab) {
     if (!isDesktop) return;
     final index = state.value.tabs.indexWhere((e) => e.key == tab.key);
@@ -96,8 +98,7 @@ class DesktopTabController {
       val.pageController.jumpToPage(index);
       val.scrollController.scrollToItem(index, center: true, animate: true);
     });
-
-    // onSelected callback
+    onSelected?.call(index);
   }
 
   void closeBy(String? key) {
@@ -172,7 +173,6 @@ class DesktopTab extends StatelessWidget {
   }
 
   Widget _buildPageView() {
-    debugPrint("_buildPageView: ${state.value.tabs.length}");
     return Obx(() => PageView(
         controller: state.value.pageController,
         children:
