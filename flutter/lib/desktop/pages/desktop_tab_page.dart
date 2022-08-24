@@ -14,12 +14,12 @@ class DesktopTabPage extends StatefulWidget {
 }
 
 class _DesktopTabPageState extends State<DesktopTabPage> {
-  final tabBarController = DesktopTabBarController();
+  final tabController = DesktopTabController();
 
   @override
   void initState() {
     super.initState();
-    tabBarController.state.value.tabs.add(TabInfo(
+    tabController.state.value.tabs.add(TabInfo(
         key: kTabLabelHomePage,
         label: kTabLabelHomePage,
         selectedIcon: Icons.home_sharp,
@@ -38,7 +38,7 @@ class _DesktopTabPageState extends State<DesktopTabPage> {
         child: Scaffold(
             backgroundColor: MyTheme.color(context).bg,
             body: DesktopTab(
-              controller: tabBarController,
+              controller: tabController,
               theme: dark ? TarBarTheme.dark() : TarBarTheme.light(),
               isMainWindow: true,
               tail: ActionIcon(
@@ -54,7 +54,7 @@ class _DesktopTabPageState extends State<DesktopTabPage> {
   }
 
   void onAddSetting() {
-    tabBarController.add(TabInfo(
+    tabController.add(TabInfo(
         key: kTabLabelSettingPage,
         label: kTabLabelSettingPage,
         selectedIcon: Icons.build_sharp,

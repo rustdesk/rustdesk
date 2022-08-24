@@ -32,14 +32,14 @@ class TabInfo {
       required this.page});
 }
 
-class DesktopTabBarState {
+class DesktopTabState {
   final List<TabInfo> tabs = [];
   final ScrollPosController scrollController =
       ScrollPosController(itemCount: 0);
   final PageController pageController = PageController();
   int selected = 0;
 
-  DesktopTabBarState() {
+  DesktopTabState() {
     scrollController.itemCount = tabs.length;
     // TODO test
     // WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -49,8 +49,8 @@ class DesktopTabBarState {
   }
 }
 
-class DesktopTabBarController {
-  final state = DesktopTabBarState().obs;
+class DesktopTabController {
+  final state = DesktopTabState().obs;
 
   void add(TabInfo tab) {
     if (!isDesktop) return;
@@ -112,7 +112,7 @@ class DesktopTab extends StatelessWidget {
   final Widget Function(Widget pageView)? pageViewBuilder;
   final Widget? tail;
 
-  final DesktopTabBarController controller;
+  final DesktopTabController controller;
   late final state = controller.state;
 
   DesktopTab(
@@ -323,8 +323,8 @@ class WindowActionPanel extends StatelessWidget {
 
 // ignore: must_be_immutable
 class _ListView extends StatelessWidget {
-  final DesktopTabBarController controller;
-  late final Rx<DesktopTabBarState> state;
+  final DesktopTabController controller;
+  late final Rx<DesktopTabState> state;
   final Function(String key)? onTabClose;
   final TarBarTheme theme;
 
