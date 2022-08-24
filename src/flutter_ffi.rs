@@ -451,7 +451,7 @@ pub fn main_get_peer(id: String) -> String {
 }
 
 pub fn main_get_lan_peers() -> String {
-    get_lan_peers()
+    serde_json::to_string(&get_lan_peers()).unwrap_or_default()
 }
 
 pub fn main_get_connect_status() -> String {
@@ -592,7 +592,7 @@ pub fn main_load_lan_peers() {
     {
         let data = HashMap::from([
             ("name", "load_lan_peers".to_owned()),
-            ("peers", get_lan_peers()),
+            ("peers", serde_json::to_string(&get_lan_peers()).unwrap_or_default()),
         ]);
         s.add(serde_json::ser::to_string(&data).unwrap_or("".to_owned()));
     };
