@@ -584,8 +584,8 @@ pub fn discover() {
     });
 }
 
-pub fn get_lan_peers() -> String {
-    let peers: Vec<(String, config::PeerInfoSerde)> = config::LanPeers::load()
+pub fn get_lan_peers() -> Vec<(String, config::PeerInfoSerde)> {
+    config::LanPeers::load()
         .peers
         .iter()
         .map(|peer| {
@@ -598,8 +598,7 @@ pub fn get_lan_peers() -> String {
                 },
             )
         })
-        .collect();
-    serde_json::to_string(&peers).unwrap_or_default()
+        .collect()
 }
 
 pub fn get_uuid() -> String {

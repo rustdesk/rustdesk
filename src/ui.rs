@@ -500,7 +500,11 @@ impl UI {
     }
 
     fn get_lan_peers(&self) -> String {
-        get_lan_peers()
+        let peers = get_lan_peers()
+            .into_iter()
+            .map(|(id, peer)| (id, peer.username, peer.hostname, peer.platform))
+            .collect::<Vec<(String, String, String, String)>>();
+        serde_json::to_string(&peers).unwrap_or_default()
     }
 
     fn get_uuid(&self) -> String {
