@@ -21,28 +21,36 @@ class ConnectionTabPage extends StatefulWidget {
 }
 
 class _ConnectionTabPageState extends State<ConnectionTabPage> {
-  // refactor List<int> when using multi-tab
-  // this singleton is only for test
-  RxList<TabInfo> tabs = RxList<TabInfo>.empty(growable: true);
+  final tabController = Get.put(DesktopTabController());
   static final Rx<String> _fullscreenID = "".obs;
-  final IconData selectedIcon = Icons.desktop_windows_sharp;
-  final IconData unselectedIcon = Icons.desktop_windows_outlined;
+  static final IconData selectedIcon = Icons.desktop_windows_sharp;
+  static final IconData unselectedIcon = Icons.desktop_windows_outlined;
 
   var connectionMap = RxList<Widget>.empty(growable: true);
 
   _ConnectionTabPageState(Map<String, dynamic> params) {
     if (params['id'] != null) {
-      tabs.add(TabInfo(
+      tabController.state.value.tabs.add(TabInfo(
           key: params['id'],
           label: params['id'],
           selectedIcon: selectedIcon,
-          unselectedIcon: unselectedIcon));
+          unselectedIcon: unselectedIcon,
+          closable: false,
+          page: RemotePage(
+            id: params['id'],
+            tabBarHeight:
+                _fullscreenID.value.isNotEmpty ? 0 : kDesktopRemoteTabBarHeight,
+            fullscreenID: _fullscreenID,
+          )));
     }
   }
 
   @override
   void initState() {
     super.initState();
+
+    tabController.onRemove = (_, id) => onRemoveId(id);
+
     rustDeskWinManager.setMethodHandler((call, fromWindowId) async {
       print(
           "call ${call.method} with args ${call.arguments} from window ${fromWindowId}");
@@ -51,18 +59,23 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
         final args = jsonDecode(call.arguments);
         final id = args['id'];
         window_on_top(windowId());
-        DesktopTabBar.onAdd(
-            tabs,
-            TabInfo(
-                key: id,
-                label: id,
-                selectedIcon: selectedIcon,
-                unselectedIcon: unselectedIcon));
+        tabController.add(TabInfo(
+            key: id,
+            label: id,
+            selectedIcon: selectedIcon,
+            unselectedIcon: unselectedIcon,
+            closable: false,
+            page: RemotePage(
+              id: id,
+              tabBarHeight: _fullscreenID.value.isNotEmpty
+                  ? 0
+                  : kDesktopRemoteTabBarHeight,
+              fullscreenID: _fullscreenID,
+            )));
       } else if (call.method == "onDestroy") {
-        print(
-            "executing onDestroy hook, closing ${tabs.map((tab) => tab.label).toList()}");
-        tabs.forEach((tab) {
-          final tag = '${tab.label}';
+        tabController.state.value.tabs.forEach((tab) {
+          print("executing onDestroy hook, closing ${tab.label}}");
+          final tag = tab.label;
           ffi(tag).close().then((_) {
             Get.delete<FFI>(tag: tag);
           });
@@ -74,54 +87,54 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = isDarkTheme() ? TarBarTheme.dark() : TarBarTheme.light();
     return SubWindowDragToResizeArea(
       windowId: windowId(),
       child: Container(
         decoration: BoxDecoration(
             border: Border.all(color: MyTheme.color(context).border!)),
         child: Scaffold(
-          backgroundColor: MyTheme.color(context).bg,
-          body: Column(
-            children: [
-              Obx(() => Visibility(
-                  visible: _fullscreenID.value.isEmpty,
-                  child: DesktopTabBar(
-                    tabs: tabs,
-                    onTabClose: onRemoveId,
-                    dark: isDarkTheme(),
-                    mainTab: false,
-                  ))),
-              Expanded(child: Obx(() {
-                WindowController.fromWindowId(windowId())
-                    .setFullscreen(_fullscreenID.value.isNotEmpty);
-                return PageView(
-                    controller: DesktopTabBar.controller.value,
-                    children: tabs
-                        .map((tab) => RemotePage(
-                              key: ValueKey(tab.label),
-                              id: tab.label,
-                              tabBarHeight: _fullscreenID.value.isNotEmpty
-                                  ? 0
-                                  : kDesktopRemoteTabBarHeight,
-                              fullscreenID: _fullscreenID,
-                            )) //RemotePage(key: ValueKey(e), id: e))
-                        .toList());
-              })),
-            ],
-          ),
-        ),
+            backgroundColor: MyTheme.color(context).bg,
+            body: DesktopTab(
+              controller: tabController,
+              theme: theme,
+              isMainWindow: false,
+              tail: AddButton(
+                theme: theme,
+              ).paddingOnly(left: 10),
+            )),
       ),
     );
   }
 
   void onRemoveId(String id) {
     ffi(id).close();
-    if (tabs.length == 0) {
+    if (tabController.state.value.tabs.length == 0) {
       WindowController.fromWindowId(windowId()).close();
     }
   }
 
   int windowId() {
     return widget.params["windowId"];
+  }
+}
+
+class AddButton extends StatelessWidget {
+  late final TarBarTheme theme;
+
+  AddButton({
+    Key? key,
+    required this.theme,
+  }) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    return ActionIcon(
+        message: 'New Connection',
+        icon: IconFont.add,
+        theme: theme,
+        onTap: () =>
+            rustDeskWinManager.call(WindowType.Main, "main_window_on_top", ""),
+        is_close: false);
   }
 }

@@ -206,7 +206,8 @@ closeConnection({String? id}) {
   if (isAndroid || isIOS) {
     Navigator.popUntil(globalKey.currentContext!, ModalRoute.withName("/"));
   } else {
-    DesktopTabBar.close(id);
+    final controller = Get.find<DesktopTabController>();
+    controller.closeBy(id);
   }
 }
 

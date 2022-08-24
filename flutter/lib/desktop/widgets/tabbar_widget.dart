@@ -5,7 +5,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_hbb/common.dart';
 import 'package:flutter_hbb/consts.dart';
 import 'package:flutter_hbb/main.dart';
-import 'package:flutter_hbb/utils/multi_window_manager.dart';
 import 'package:get/get.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:scroll_pos/scroll_pos.dart';
@@ -52,6 +51,9 @@ class DesktopTabState {
 class DesktopTabController {
   final state = DesktopTabState().obs;
 
+  /// index, key
+  Function(int, String)? onRemove;
+
   void add(TabInfo tab) {
     if (!isDesktop) return;
     final index = state.value.tabs.indexWhere((e) => e.key == tab.key);
@@ -75,8 +77,9 @@ class DesktopTabController {
 
   void remove(int index) {
     if (!isDesktop) return;
-    if (index < 0) return;
     final len = state.value.tabs.length;
+    if (index < 0 || index > len - 1) return;
+    final key = state.value.tabs[index].key;
     final currentSelected = state.value.selected;
     int toIndex = 0;
     if (index == len - 1) {
@@ -87,6 +90,7 @@ class DesktopTabController {
     state.value.tabs.removeAt(index);
     state.value.scrollController.itemCount = state.value.tabs.length;
     jumpTo(toIndex);
+    onRemove?.call(index, key);
   }
 
   void jumpTo(int index) {
@@ -97,6 +101,19 @@ class DesktopTabController {
     });
 
     // onSelected callback
+  }
+
+  void closeBy(String? key) {
+    if (!isDesktop) return;
+    assert(onRemove != null);
+    if (key == null) {
+      if (state.value.selected < state.value.tabs.length) {
+        remove(state.value.selected);
+      }
+    } else {
+      state.value.tabs.indexWhere((tab) => tab.key == key);
+      remove(state.value.selected);
+    }
   }
 }
 
@@ -200,12 +217,6 @@ class DesktopTab extends StatelessWidget {
                       onTabClose: onTabClose,
                       theme: theme,
                     )),
-              ),
-              Offstage(
-                offstage: isMainWindow,
-                child: _AddButton(
-                  theme: theme,
-                ).paddingOnly(left: 10),
               ),
             ],
           ),
@@ -444,26 +455,6 @@ class _Tab extends StatelessWidget {
         ),
       ),
     );
-  }
-}
-
-class _AddButton extends StatelessWidget {
-  late final TarBarTheme theme;
-
-  _AddButton({
-    Key? key,
-    required this.theme,
-  }) : super(key: key);
-
-  @override
-  Widget build(BuildContext context) {
-    return ActionIcon(
-        message: 'New Connection',
-        icon: IconFont.add,
-        theme: theme,
-        onTap: () =>
-            rustDeskWinManager.call(WindowType.Main, "main_window_on_top", ""),
-        is_close: false);
   }
 }
 
