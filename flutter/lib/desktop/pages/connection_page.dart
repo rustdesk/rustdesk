@@ -63,70 +63,43 @@ class _ConnectionPageState extends State<ConnectionPage> {
           mainAxisSize: MainAxisSize.max,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
-            getUpdateUI(),
-            Row(
-              children: [
-                getSearchBarUI(context),
-              ],
-            ).marginOnly(top: 22, left: 22),
-            SizedBox(height: 12),
-            Divider(
-              thickness: 1,
-              indent: 22,
-              endIndent: 22,
-            ),
             Expanded(
-                // TODO: move all tab info into _PeerTabbedPage
-                child: _PeerTabbedPage(
-              tabs: [
-                translate('Recent Sessions'),
-                translate('Favorites'),
-                translate('Discovered'),
-                translate('Address Book')
-              ],
-              children: [
-                RecentPeerWidget(),
-                FavoritePeerWidget(),
-                DiscoveredPeerWidget(),
-                // AddressBookPeerWidget(),
-                // FutureBuilder<Widget>(
-                //     future: getPeers(rType: RemoteType.recently),
-                //     builder: (context, snapshot) {
-                //       if (snapshot.hasData) {
-                //         return snapshot.data!;
-                //       } else {
-                //         return Offstage();
-                //       }
-                //     }),
-                // FutureBuilder<Widget>(
-                //     future: getPeers(rType: RemoteType.favorite),
-                //     builder: (context, snapshot) {
-                //       if (snapshot.hasData) {
-                //         return snapshot.data!;
-                //       } else {
-                //         return Offstage();
-                //       }
-                //     }),
-                // FutureBuilder<Widget>(
-                //     future: getPeers(rType: RemoteType.discovered),
-                //     builder: (context, snapshot) {
-                //       if (snapshot.hasData) {
-                //         return snapshot.data!;
-                //       } else {
-                //         return Offstage();
-                //       }
-                //     }),
-                FutureBuilder<Widget>(
-                    future: buildAddressBook(context),
-                    builder: (context, snapshot) {
-                      if (snapshot.hasData) {
-                        return snapshot.data!;
-                      } else {
-                        return Offstage();
-                      }
-                    }),
-              ],
-            ).marginSymmetric(horizontal: 6)),
+              child: Column(
+                children: [
+                  getUpdateUI(),
+                  Row(
+                    children: [
+                      getSearchBarUI(context),
+                    ],
+                  ).marginOnly(top: 22),
+                  SizedBox(height: 12),
+                  Divider(),
+                  Expanded(
+                      child: _PeerTabbedPage(
+                    tabs: [
+                      translate('Recent Sessions'),
+                      translate('Favorites'),
+                      translate('Discovered'),
+                      translate('Address Book')
+                    ],
+                    children: [
+                      RecentPeerWidget(),
+                      FavoritePeerWidget(),
+                      DiscoveredPeerWidget(),
+                      FutureBuilder<Widget>(
+                          future: buildAddressBook(context),
+                          builder: (context, snapshot) {
+                            if (snapshot.hasData) {
+                              return snapshot.data!;
+                            } else {
+                              return Offstage();
+                            }
+                          }),
+                    ],
+                  )),
+                ],
+              ).marginSymmetric(horizontal: 22),
+            ),
             Divider(),
             SizedBox(height: 50, child: Obx(() => buildStatus()))
                 .paddingSymmetric(horizontal: 12.0)
@@ -193,7 +166,7 @@ class _ConnectionPageState extends State<ConnectionPage> {
     });
     var w = Container(
       width: 320 + 20 * 2,
-      padding: EdgeInsets.only(left: 20, right: 20, bottom: 22, top: 24),
+      padding: EdgeInsets.fromLTRB(20, 24, 20, 22),
       decoration: BoxDecoration(
         color: MyTheme.color(context).bg,
         borderRadius: const BorderRadius.all(Radius.circular(13)),
@@ -977,67 +950,57 @@ class _PeerTabbedPage extends StatefulWidget {
 
 class _PeerTabbedPageState extends State<_PeerTabbedPage>
     with SingleTickerProviderStateMixin {
-  late TabController _tabController;
+  late PageController _pageController = PageController();
   RxInt _tabIndex = 0.obs;
 
   @override
   void initState() {
     super.initState();
-    _tabController =
-        TabController(vsync: this, length: super.widget.tabs.length);
-    _tabController.addListener(_handleTabSelection);
   }
 
   // hard code for now
-  void _handleTabSelection() {
-    if (_tabController.indexIsChanging) {
-      // reset search text
-      peerSearchText.value = "";
-      peerSearchTextController.clear();
-      _tabIndex.value = _tabController.index;
-      switch (_tabController.index) {
-        case 0:
-          bind.mainLoadRecentPeers();
-          break;
-        case 1:
-          bind.mainLoadFavPeers();
-          break;
-        case 2:
-          bind.mainDiscover();
-          break;
-        case 3:
-          break;
-      }
+  void _handleTabSelection(int index) {
+    // reset search text
+    peerSearchText.value = "";
+    peerSearchTextController.clear();
+    _tabIndex.value = index;
+    _pageController.jumpToPage(index);
+    switch (index) {
+      case 0:
+        bind.mainLoadRecentPeers();
+        break;
+      case 1:
+        bind.mainLoadFavPeers();
+        break;
+      case 2:
+        bind.mainDiscover();
+        break;
+      case 3:
+        break;
     }
   }
 
   @override
   void dispose() {
-    _tabController.dispose();
+    _pageController.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    // return DefaultTabController(
-    //     length: 4,
-    //     child: Column(
-    //       crossAxisAlignment: CrossAxisAlignment.start,
-    //       children: [
-    //         _createTabBar(),
-    //         _createTabBarView(),
-    //       ],
-    //     ));
-
     return Column(
+      textBaseline: TextBaseline.ideographic,
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          children: [
-            Expanded(child: _createTabBar(context)),
-            _createSearchBar(context),
-            _createPeerViewTypeSwitch(context),
-          ],
+        Container(
+          height: 28,
+          child: Row(
+            children: [
+              Expanded(child: _createTabBar(context)),
+              _createSearchBar(context),
+              _createPeerViewTypeSwitch(context),
+            ],
+          ),
         ),
         _createTabBarView(),
       ],
@@ -1045,70 +1008,121 @@ class _PeerTabbedPageState extends State<_PeerTabbedPage>
   }
 
   Widget _createTabBar(BuildContext context) {
-    return TabBar(
-        isScrollable: true,
-        indicatorSize: TabBarIndicatorSize.label,
-        indicatorColor: Colors.transparent,
-        indicatorWeight: 0.1,
-        controller: _tabController,
-        labelPadding: EdgeInsets.zero,
-        padding: EdgeInsets.only(left: 16),
-        tabs: super.widget.tabs.asMap().entries.map((t) {
-          return Obx(() => Container(
-              padding: EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-              decoration: BoxDecoration(
-                color:
-                    _tabIndex.value == t.key ? MyTheme.color(context).bg : null,
-                borderRadius: BorderRadius.circular(2),
-              ),
-              child: Text(
-                t.value,
-                style: TextStyle(
-                    height: 1,
-                    color: _tabIndex.value == t.key
-                        ? MyTheme.color(context).text
-                        : MyTheme.color(context).lightText),
-              )));
+    return ListView(
+        scrollDirection: Axis.horizontal,
+        shrinkWrap: true,
+        children: super.widget.tabs.asMap().entries.map((t) {
+          return Obx(() => GestureDetector(
+                child: Container(
+                    padding: EdgeInsets.symmetric(horizontal: 8),
+                    decoration: BoxDecoration(
+                      color: _tabIndex.value == t.key
+                          ? MyTheme.color(context).bg
+                          : null,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                    child: Align(
+                      alignment: Alignment.center,
+                      child: Text(
+                        t.value,
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                            height: 1,
+                            fontSize: 14,
+                            color: _tabIndex.value == t.key
+                                ? MyTheme.color(context).text
+                                : MyTheme.color(context).lightText),
+                      ),
+                    )),
+                onTap: () => _handleTabSelection(t.key),
+              ));
         }).toList());
   }
 
   Widget _createTabBarView() {
     return Expanded(
-        child: TabBarView(
-                controller: _tabController, children: super.widget.children)
-            .paddingSymmetric(horizontal: 12.0, vertical: 4.0));
+        child: PageView(
+                controller: _pageController, children: super.widget.children)
+            .marginSymmetric(vertical: 12));
   }
 
   _createSearchBar(BuildContext context) {
+    RxBool focused = false.obs;
+    FocusNode focusNode = FocusNode();
+    focusNode.addListener(() => focused.value = focusNode.hasFocus);
+    RxBool rowHover = false.obs;
+    RxBool clearHover = false.obs;
     return Container(
-      width: 175,
-      height: 30,
-      margin: EdgeInsets.only(right: 16),
-      decoration: BoxDecoration(color: Colors.white),
-      child: Obx(
-        () => TextField(
-          controller: peerSearchTextController,
-          onChanged: (searchText) {
-            peerSearchText.value = searchText;
-          },
-          decoration: InputDecoration(
-            prefixIcon: Icon(
-              Icons.search,
-              size: 20,
-            ),
-            contentPadding: EdgeInsets.zero,
-            hintText: translate("Search ID"),
-            hintStyle: TextStyle(fontSize: 14),
-            border: OutlineInputBorder(),
-            isDense: true,
-          ),
-        ),
-      ),
+      width: 120,
+      height: 25,
+      margin: EdgeInsets.only(right: 13),
+      decoration: BoxDecoration(color: MyTheme.color(context).bg),
+      child: Obx(() => Row(
+            children: [
+              Expanded(
+                child: MouseRegion(
+                  onEnter: (_) => rowHover.value = true,
+                  onExit: (_) => rowHover.value = false,
+                  child: Row(
+                    children: [
+                      Icon(
+                        IconFont.search,
+                        size: 16,
+                        color: MyTheme.color(context).placeholder,
+                      ).marginSymmetric(horizontal: 4),
+                      Expanded(
+                        child: TextField(
+                          controller: peerSearchTextController,
+                          onChanged: (searchText) {
+                            peerSearchText.value = searchText;
+                          },
+                          focusNode: focusNode,
+                          textAlign: TextAlign.start,
+                          maxLines: 1,
+                          cursorColor: MyTheme.color(context).lightText,
+                          cursorHeight: 18,
+                          cursorWidth: 1,
+                          style: TextStyle(fontSize: 14),
+                          decoration: InputDecoration(
+                            contentPadding: EdgeInsets.symmetric(vertical: 6),
+                            hintText:
+                                focused.value ? null : translate("Search ID"),
+                            hintStyle: TextStyle(
+                                fontSize: 14,
+                                color: MyTheme.color(context).placeholder),
+                            border: InputBorder.none,
+                            isDense: true,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              Offstage(
+                offstage: !(peerSearchText.value.isNotEmpty &&
+                    (rowHover.value || clearHover.value)),
+                child: InkWell(
+                    onHover: (value) => clearHover.value = value,
+                    child: Icon(
+                      IconFont.round_close,
+                      size: 16,
+                      color: clearHover.value
+                          ? MyTheme.color(context).text
+                          : MyTheme.color(context).placeholder,
+                    ).marginSymmetric(horizontal: 4),
+                    onTap: () {
+                      peerSearchTextController.clear();
+                      peerSearchText.value = "";
+                    }),
+              )
+            ],
+          )),
     );
   }
 
   _createPeerViewTypeSwitch(BuildContext context) {
-    final activeDeco = BoxDecoration(color: Colors.white);
+    final activeDeco = BoxDecoration(color: MyTheme.color(context).bg);
     return Row(
       children: [
         Obx(
@@ -1122,8 +1136,10 @@ class _PeerTabbedPageState extends State<_PeerTabbedPage>
                 },
                 child: Icon(
                   Icons.grid_view_rounded,
-                  size: 20,
-                  color: Colors.black54,
+                  size: 18,
+                  color: peerCardUiType.value == PeerUiType.grid
+                      ? MyTheme.color(context).text
+                      : MyTheme.color(context).lightText,
                 )),
           ),
         ),
@@ -1138,12 +1154,14 @@ class _PeerTabbedPageState extends State<_PeerTabbedPage>
                 },
                 child: Icon(
                   Icons.list,
-                  size: 24,
-                  color: Colors.black54,
+                  size: 18,
+                  color: peerCardUiType.value == PeerUiType.list
+                      ? MyTheme.color(context).text
+                      : MyTheme.color(context).lightText,
                 )),
           ),
         ),
       ],
-    ).paddingOnly(right: 16.0);
+    );
   }
 }

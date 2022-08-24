@@ -514,8 +514,10 @@ class ActionIcon extends StatelessWidget {
     RxBool hover = false.obs;
     return Obx(() => Tooltip(
           message: translate(message),
+          waitDuration: Duration(seconds: 1),
           child: InkWell(
-            hoverColor: is_close ? Colors.red : theme.hoverColor,
+            hoverColor:
+                is_close ? Color.fromARGB(255, 196, 43, 28) : theme.hoverColor,
             onHover: (value) => hover.value = value,
             child: Container(
               height: _kTabBarHeight - 1,

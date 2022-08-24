@@ -41,15 +41,18 @@ late final iconRestart = MemoryImage(Uint8List.fromList(base64Decode(
     'iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAACXBIWXMAAB7BAAAewQHDaVRTAAAAGXRFWHRTb2Z0d2FyZQB3d3cuaW5rc2NhcGUub3Jnm+48GgAAAbhJREFUWIXVlrFqFGEUhb+7UYxaWCQKlrKKxaZSQVGDJih2tj6MD2DnMwiWvoAIRnENIpZiYxEro6IooiS7SPwsMgNLkk3mjmYmnmb45/73nMNwz/x/qH3gMu2gH6rAU+Blw+Lngau4jpmGxVF7qp1iPWjaQKnZ2WnXbuP/NqAeUPc3ZkA9XDwvqc+BVWCgPlJ7tRwUKThZce819b46VH+pfXVRXVO/q2cSul3VOgZUl0ejq86r39TXI8mqZKDuDEwCw3IREQvAbWAGmMsQZQ0sAl3gHPB1Q+0e8BuYzRDuy2yOiFVgaUxtRf0ETGc4syk4rc6PqU0Cx9j8Zf6dAeAK8Fi9sUXtFjABvEgxJlNwRP2svlNPjbw/q35U36oTFbnyMSwabxb/gB/qA3VBHagrauV7RW0DRfP1IvMlXqkXkhz1DYyQTKtHa/Z2VVMx3IiI+PI3/bCHjuOpFrSnAMpL6QfgTcMGesDx0kBr2BMzsNyi/vtQu8CJlgwsRbZDnWP90NkKaxHxJMOXMqAeAn5u0ydwMCKGY+qbkB3C2W3EKWoXk5zVoHbUZ+6Mh7tl4G4F8RJ3qvL+AfV3r5Vdpj70AAAAAElFTkSuQmCC')));
 
 class IconFont {
-  static const _family = 'iconfont';
+  static const _family1 = 'Tabbar';
+  static const _family2 = 'PeerSearchbar';
   IconFont._();
 
-  static const IconData max = IconData(0xe606, fontFamily: _family);
-  static const IconData restore = IconData(0xe607, fontFamily: _family);
-  static const IconData close = IconData(0xe668, fontFamily: _family);
-  static const IconData min = IconData(0xe609, fontFamily: _family);
-  static const IconData add = IconData(0xe664, fontFamily: _family);
-  static const IconData menu = IconData(0xe628, fontFamily: _family);
+  static const IconData max = IconData(0xe606, fontFamily: _family1);
+  static const IconData restore = IconData(0xe607, fontFamily: _family1);
+  static const IconData close = IconData(0xe668, fontFamily: _family1);
+  static const IconData min = IconData(0xe609, fontFamily: _family1);
+  static const IconData add = IconData(0xe664, fontFamily: _family1);
+  static const IconData menu = IconData(0xe628, fontFamily: _family1);
+  static const IconData search = IconData(0xe6a4, fontFamily: _family2);
+  static const IconData round_close = IconData(0xe6ed, fontFamily: _family2);
 }
 
 class ColorThemeExtension extends ThemeExtension<ColorThemeExtension> {
