@@ -20,25 +20,26 @@ class FileManagerTabPage extends StatefulWidget {
 }
 
 class _FileManagerTabPageState extends State<FileManagerTabPage> {
-  // refactor List<int> when using multi-tab
-  // this singleton is only for test
-  RxList<TabInfo> tabs = List<TabInfo>.empty(growable: true).obs;
-  final IconData selectedIcon = Icons.file_copy_sharp;
-  final IconData unselectedIcon = Icons.file_copy_outlined;
+  final tabController = Get.put(DesktopTabController());
+
+  static final IconData selectedIcon = Icons.file_copy_sharp;
+  static final IconData unselectedIcon = Icons.file_copy_outlined;
 
   _FileManagerTabPageState(Map<String, dynamic> params) {
-    if (params['id'] != null) {
-      tabs.add(TabInfo(
-          key: params['id'],
-          label: params['id'],
-          selectedIcon: selectedIcon,
-          unselectedIcon: unselectedIcon));
-    }
+    tabController.state.value.tabs.add(TabInfo(
+        key: params['id'],
+        label: params['id'],
+        selectedIcon: selectedIcon,
+        unselectedIcon: unselectedIcon,
+        page: FileManagerPage(id: params['id'])));
   }
 
   @override
   void initState() {
     super.initState();
+
+    tabController.onRemove = (_, id) => onRemoveId(id);
+
     rustDeskWinManager.setMethodHandler((call, fromWindowId) async {
       print(
           "call ${call.method} with args ${call.arguments} from window ${fromWindowId}");
@@ -47,18 +48,16 @@ class _FileManagerTabPageState extends State<FileManagerTabPage> {
         final args = jsonDecode(call.arguments);
         final id = args['id'];
         window_on_top(windowId());
-        DesktopTabBar.onAdd(
-            tabs,
-            TabInfo(
-                key: id,
-                label: id,
-                selectedIcon: selectedIcon,
-                unselectedIcon: unselectedIcon));
+        tabController.add(TabInfo(
+            key: id,
+            label: id,
+            selectedIcon: selectedIcon,
+            unselectedIcon: unselectedIcon,
+            page: FileManagerPage(id: id)));
       } else if (call.method == "onDestroy") {
-        print(
-            "executing onDestroy hook, closing ${tabs.map((tab) => tab.label).toList()}");
-        tabs.forEach((tab) {
-          final tag = 'ft_${tab.label}';
+        tabController.state.value.tabs.forEach((tab) {
+          print("executing onDestroy hook, closing ${tab.label}}");
+          final tag = tab.label;
           ffi(tag).close().then((_) {
             Get.delete<FFI>(tag: tag);
           });
@@ -70,43 +69,29 @@ class _FileManagerTabPageState extends State<FileManagerTabPage> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = isDarkTheme() ? TarBarTheme.dark() : TarBarTheme.light();
     return SubWindowDragToResizeArea(
       windowId: windowId(),
       child: Container(
         decoration: BoxDecoration(
             border: Border.all(color: MyTheme.color(context).border!)),
         child: Scaffold(
-          backgroundColor: MyTheme.color(context).bg,
-          body: Column(
-            children: [
-              DesktopTabBar(
-                tabs: tabs,
-                onTabClose: onRemoveId,
-                dark: isDarkTheme(),
-                mainTab: false,
-              ),
-              Expanded(
-                child: Obx(
-                  () => PageView(
-                      controller: DesktopTabBar.controller.value,
-                      children: tabs
-                          .map((tab) => FileManagerPage(
-                              key: ValueKey(tab.label),
-                              id: tab
-                                  .label)) //RemotePage(key: ValueKey(e), id: e))
-                          .toList()),
-                ),
-              )
-            ],
-          ),
-        ),
+            backgroundColor: MyTheme.color(context).bg,
+            body: DesktopTab(
+              controller: tabController,
+              theme: theme,
+              isMainWindow: false,
+              tail: AddButton(
+                theme: theme,
+              ).paddingOnly(left: 10),
+            )),
       ),
     );
   }
 
   void onRemoveId(String id) {
     ffi("ft_$id").close();
-    if (tabs.length == 0) {
+    if (tabController.state.value.tabs.length == 0) {
       WindowController.fromWindowId(windowId()).close();
     }
   }

@@ -35,7 +35,6 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
           label: params['id'],
           selectedIcon: selectedIcon,
           unselectedIcon: unselectedIcon,
-          closable: false,
           page: RemotePage(
             id: params['id'],
             tabBarHeight:
@@ -116,25 +115,5 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
 
   int windowId() {
     return widget.params["windowId"];
-  }
-}
-
-class AddButton extends StatelessWidget {
-  late final TarBarTheme theme;
-
-  AddButton({
-    Key? key,
-    required this.theme,
-  }) : super(key: key);
-
-  @override
-  Widget build(BuildContext context) {
-    return ActionIcon(
-        message: 'New Connection',
-        icon: IconFont.add,
-        theme: theme,
-        onTap: () =>
-            rustDeskWinManager.call(WindowType.Main, "main_window_on_top", ""),
-        is_close: false);
   }
 }

@@ -9,6 +9,8 @@ import 'package:get/get.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:scroll_pos/scroll_pos.dart';
 
+import '../../utils/multi_window_manager.dart';
+
 const double _kTabBarHeight = kDesktopRemoteTabBarHeight;
 const double _kIconSize = 18;
 const double _kDividerIndent = 10;
@@ -40,11 +42,6 @@ class DesktopTabState {
 
   DesktopTabState() {
     scrollController.itemCount = tabs.length;
-    // TODO test
-    // WidgetsBinding.instance.addPostFrameCallback((_) {
-    //   scrollController.scrollToItem(selected,
-    //       center: true, animate: true);
-    // });
   }
 }
 
@@ -530,6 +527,26 @@ class ActionIcon extends StatelessWidget {
             onTap: onTap,
           ),
         ));
+  }
+}
+
+class AddButton extends StatelessWidget {
+  late final TarBarTheme theme;
+
+  AddButton({
+    Key? key,
+    required this.theme,
+  }) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    return ActionIcon(
+        message: 'New Connection',
+        icon: IconFont.add,
+        theme: theme,
+        onTap: () =>
+            rustDeskWinManager.call(WindowType.Main, "main_window_on_top", ""),
+        is_close: false);
   }
 }
 
