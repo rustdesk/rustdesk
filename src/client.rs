@@ -841,7 +841,7 @@ impl LoginConfigHandler {
         self.session_id = rand::random();
         self.supported_encoding = None;
         self.restarting_remote_device = false;
-        self.force_relay = false;
+        self.force_relay = !self.get_option("force-always-relay").is_empty();
     }
 
     pub fn should_auto_login(&self) -> String {

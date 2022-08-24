@@ -2085,18 +2085,18 @@ impl Remote {
 
     async fn send_opts_after_login(&self, peer: &mut Stream) {
         if let Some(opts) = self
-        .handler
-        .lc
-        .read()
-        .unwrap()
-        .get_option_message_after_login()
-    {
-        let mut misc = Misc::new();
-        misc.set_option(opts);
-        let mut msg_out = Message::new();
-        msg_out.set_misc(misc);
-        allow_err!(peer.send(&msg_out).await);
-    }
+            .handler
+            .lc
+            .read()
+            .unwrap()
+            .get_option_message_after_login()
+        {
+            let mut misc = Misc::new();
+            misc.set_option(opts);
+            let mut msg_out = Message::new();
+            msg_out.set_misc(misc);
+            allow_err!(peer.send(&msg_out).await);
+        }
     }
 
     async fn handle_msg_from_peer(&mut self, data: &[u8], peer: &mut Stream) -> bool {
@@ -2714,9 +2714,10 @@ impl Interface for Handler {
         if direct && !received {
             let errno = errno::errno().0;
             log::info!("errno is {}", errno);
-            // TODO
+            // TODO: check mac and ios
             if cfg!(windows) && errno == 10054 || !cfg!(windows) && errno == 104 {
                 lc.force_relay = true;
+                lc.set_option("force-always-relay".to_owned(), "Y".to_owned());
             }
         }
     }
