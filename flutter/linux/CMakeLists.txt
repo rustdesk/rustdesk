@@ -74,6 +74,8 @@ corrosion_import_crate(MANIFEST_PATH ../../Cargo.toml
 #        [FEATURES <feature1> ... <featureN>]
 )
 
+set(BASE_RUSTDESK "librustdesk")
+
 # Define the application target. To change its name, change BINARY_NAME above,
 # not the value here, or `flutter run` will no longer work.
 #
@@ -91,8 +93,8 @@ apply_standard_settings(${BINARY_NAME})
 # Add dependency libraries. Add any application-specific dependencies here.
 target_link_libraries(${BINARY_NAME} PRIVATE flutter)
 target_link_libraries(${BINARY_NAME} PRIVATE PkgConfig::GTK)
-
-target_link_libraries(${BINARY_NAME} PRIVATE librustdesk)
+target_link_libraries(${BINARY_NAME} PRIVATE ${BASE_RUSTDESK})
+# target_link_libraries(${BINARY_NAME} PRIVATE librustdesk)
 
 # Run the Flutter tool portions of the build. This must not be removed.
 add_dependencies(${BINARY_NAME} flutter_assemble)
@@ -141,6 +143,8 @@ foreach(bundled_library ${PLUGIN_BUNDLED_LIBRARIES})
     DESTINATION "${INSTALL_BUNDLE_LIB_DIR}"
     COMPONENT Runtime)
 endforeach(bundled_library)
+
+install(FILES $<TARGET_FILE:${BASE_RUSTDESK}-shared> DESTINATION "${INSTALL_BUNDLE_LIB_DIR}" COMPONENT Runtime RENAME librustdesk.so)
 
 # Fully re-copy the assets directory on each build to avoid having stale files
 # from a previous install.

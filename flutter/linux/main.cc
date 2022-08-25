@@ -1,7 +1,8 @@
 #include <dlfcn.h>
 #include "my_application.h"
 
-#define RUSTDESK_LIB_PATH "/usr/lib/rustdesk/librustdesk.so"
+#define RUSTDESK_LIB_PATH "ibrustdesk.so"
+// #define RUSTDESK_LIB_PATH "/usr/lib/rustdesk/librustdesk.so"
 typedef bool (*RustDeskCoreMain)();
 
 bool flutter_rustdesk_core_main() {

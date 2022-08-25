@@ -471,7 +471,7 @@ impl Session {
         }
         let mut msg_out = Message::new();
         msg_out.set_key_event(key_event);
-        log::debug!("{:?}", msg_out);
+        // log::debug!("{:?}", msg_out);
         self.send_msg(msg_out);
     }
 
