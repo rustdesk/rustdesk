@@ -1,4 +1,6 @@
-use crate::ipc::{self, new_listener, Connection, Data, start_pa};
+use crate::ipc::{self, new_listener, Connection, Data};
+#[cfg(windows)]
+use crate::ipc::{start_pa};
 #[cfg(windows)]
 use crate::ipc::start_clipboard_file;
 use crate::VERSION;
