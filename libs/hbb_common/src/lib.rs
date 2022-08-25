@@ -202,6 +202,24 @@ pub fn get_modified_time(path: &std::path::Path) -> SystemTime {
         .unwrap_or(UNIX_EPOCH)
 }
 
+pub fn get_created_time(path: &std::path::Path) -> SystemTime {
+    std::fs::metadata(&path)
+        .map(|m| m.created().unwrap_or(UNIX_EPOCH))
+        .unwrap_or(UNIX_EPOCH)
+}
+
+pub fn get_exe_time() -> SystemTime {
+    std::env::current_exe().map_or(UNIX_EPOCH, |path| {
+        let m = get_modified_time(&path);
+        let c = get_created_time(&path);
+        if m > c {
+            m
+        } else {
+            c
+        }
+    })
+}
+
 pub fn get_uuid() -> Vec<u8> {
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     if let Ok(id) = machine_uid::get() {

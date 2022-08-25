@@ -618,6 +618,24 @@ impl Interface for Session {
         }
     }
 
+    fn set_force_relay(&mut self, direct: bool, received: bool) {
+        let mut lc = self.lc.write().unwrap();
+        lc.force_relay = false;
+        if direct && !received {
+            let errno = errno::errno().0;
+            log::info!("errno is {}", errno);
+            // TODO: check mac and ios
+            if cfg!(windows) && errno == 10054 || !cfg!(windows) && errno == 104 {
+                lc.force_relay = true;
+                lc.set_option("force-always-relay".to_owned(), "Y".to_owned());
+            }
+        }
+    }
+
+    fn is_force_relay(&self) -> bool {
+        self.lc.read().unwrap().force_relay
+    }
+
     async fn handle_hash(&mut self, pass: &str, hash: Hash, peer: &mut Stream) {
         handle_hash(self.lc.clone(), pass, hash, self, peer).await;
     }
@@ -735,7 +753,7 @@ impl Connection {
         let key = Config::get_option("key");
         let token = Config::get_option("access_token");
 
-        match Client::start(&session.id, &key, &token, conn_type).await {
+        match Client::start(&session.id, &key, &token, conn_type, session.clone()).await {
             Ok((mut peer, direct)) => {
                 SERVER_KEYBOARD_ENABLED.store(true, Ordering::SeqCst);
                 SERVER_CLIPBOARD_ENABLED.store(true, Ordering::SeqCst);
