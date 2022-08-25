@@ -107,9 +107,14 @@ flutter:
         - family: GestureIcons
           fonts:
               - asset: assets/gestures.ttf
-        - family: IconFont
+        - family: Tabbar
           fonts:
               - asset: assets/tabbar.ttf
+        - family: PeerSearchbar
+          fonts:
+              - asset: assets/peer_searchbar.ttf
+
+              
 
     # An image asset can refer to one or more resolution-specific "variants", see
     # https://flutter.dev/assets-and-images/#resolution-aware.

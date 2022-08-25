@@ -112,12 +112,14 @@ void runRemoteScreen(Map<String, dynamic> argument) async {
     navigatorObservers: [
       // FirebaseAnalyticsObserver(analytics: analytics),
     ],
+    builder: _keepScaleBuilder(),
   ));
 }
 
 void runFileTransferScreen(Map<String, dynamic> argument) async {
   await initEnv(kAppTypeDesktopFileTransfer);
-  runApp(GetMaterialApp(
+  runApp(
+    GetMaterialApp(
       navigatorKey: globalKey,
       debugShowCheckedModeBanner: false,
       title: 'RustDesk - File Transfer',
@@ -125,7 +127,10 @@ void runFileTransferScreen(Map<String, dynamic> argument) async {
       home: DesktopFileTransferScreen(params: argument),
       navigatorObservers: [
         // FirebaseAnalyticsObserver(analytics: analytics),
-      ]));
+      ],
+      builder: _keepScaleBuilder(),
+    ),
+  );
 }
 
 void runConnectionManagerScreen() async {
@@ -142,7 +147,8 @@ void runConnectionManagerScreen() async {
   runApp(GetMaterialApp(
       debugShowCheckedModeBanner: false,
       theme: getCurrentTheme(),
-      home: DesktopServerPage()));
+      home: DesktopServerPage(),
+      builder: _keepScaleBuilder()));
 }
 
 WindowOptions getHiddenTitleBarWindowOptions(Size size) {
@@ -171,23 +177,35 @@ class App extends StatelessWidget {
         ChangeNotifierProvider.value(value: gFFI.userModel),
       ],
       child: GetMaterialApp(
-          navigatorKey: globalKey,
-          debugShowCheckedModeBanner: false,
-          title: 'RustDesk',
-          theme: getCurrentTheme(),
-          home: isDesktop
-              ? DesktopTabPage()
-              : !isAndroid
-                  ? WebHomePage()
-                  : HomePage(),
-          navigatorObservers: [
-            // FirebaseAnalyticsObserver(analytics: analytics),
-          ],
-          builder: isAndroid
-              ? (_, child) => AccessibilityListener(
-                    child: child,
-                  )
-              : null),
+        navigatorKey: globalKey,
+        debugShowCheckedModeBanner: false,
+        title: 'RustDesk',
+        theme: getCurrentTheme(),
+        home: isDesktop
+            ? DesktopTabPage()
+            : !isAndroid
+                ? WebHomePage()
+                : HomePage(),
+        navigatorObservers: [
+          // FirebaseAnalyticsObserver(analytics: analytics),
+        ],
+        builder: isAndroid
+            ? (_, child) => AccessibilityListener(
+                  child: child,
+                )
+            : _keepScaleBuilder(),
+      ),
     );
   }
+}
+
+_keepScaleBuilder() {
+  return (BuildContext context, Widget? child) {
+    return MediaQuery(
+      data: MediaQuery.of(context).copyWith(
+        textScaleFactor: 1.0,
+      ),
+      child: child ?? Container(),
+    );
+  };
 }

@@ -107,9 +107,10 @@ class _DesktopHomePageState extends State<DesktopHomePage>
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Container(
-                    height: 15,
+                    height: 25,
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
                           translate("ID"),
@@ -133,7 +134,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
                         readOnly: true,
                         decoration: InputDecoration(
                           border: InputBorder.none,
-                          contentPadding: EdgeInsets.only(bottom: 8),
+                          contentPadding: EdgeInsets.only(bottom: 18),
                         ),
                         style: TextStyle(
                           fontSize: 22,
@@ -239,26 +240,17 @@ class _DesktopHomePageState extends State<DesktopHomePage>
         }
       },
       child: Obx(
-        () => Container(
-          decoration: BoxDecoration(
-            // borderRadius: BorderRadius.circular(10),
-            shape: BoxShape.circle,
-            boxShadow: [
-              BoxShadow(
-                  color: hover.value
-                      ? MyTheme.color(context).grayBg!
-                      : MyTheme.color(context).bg!,
-                  spreadRadius: 2)
-            ],
-          ),
-          child: Center(
-            child: Icon(
-              Icons.more_vert_outlined,
-              size: 20,
-              color: hover.value
-                  ? MyTheme.color(context).text
-                  : MyTheme.color(context).lightText,
-            ),
+        () => CircleAvatar(
+          radius: 12,
+          backgroundColor: hover.value
+              ? MyTheme.color(context).grayBg!
+              : MyTheme.color(context).bg!,
+          child: Icon(
+            Icons.more_vert_outlined,
+            size: 20,
+            color: hover.value
+                ? MyTheme.color(context).text
+                : MyTheme.color(context).lightText,
           ),
         ),
       ),

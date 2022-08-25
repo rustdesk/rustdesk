@@ -100,10 +100,10 @@ class _PeerWidgetState extends State<_PeerWidget> with WindowListener {
                           offstage: super.widget._offstageFunc(peer),
                           child: Obx(
                             () => Container(
-                              width: 225,
+                              width: 220,
                               height: peerCardUiType.value == PeerUiType.grid
-                                  ? 150
-                                  : 50,
+                                  ? 140
+                                  : 42,
                               child: VisibilityDetector(
                                 key: Key('${peer.id}'),
                                 onVisibilityChanged: (info) {
