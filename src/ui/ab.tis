@@ -316,7 +316,7 @@ class SessionList: Reactor.Component {
                     <li #connect>{translate('Connect')}</li>
                     <li #transfer>{translate('Transfer File')}</li>
                     <li #tunnel>{translate('TCP Tunneling')}</li>
-                    {false && !handler.using_public_server() && <li #force-always-relay><span>{svg_checkmark}</span>{translate('Always connect via relay')}</li>}
+                    <li #force-always-relay><span>{svg_checkmark}</span>{translate('Always connect via relay')}</li>
                     <li #rdp>RDP<EditRdpPort /></li>
                     <li #wol>{translate('WOL')}</li>
                     <div .separator />
@@ -396,7 +396,6 @@ class SessionList: Reactor.Component {
         if (el) {
           var force = handler.get_peer_option(id, "force-always-relay");
           el.attributes.toggleClass("selected", force == "Y");
-          el.attributes.toggleClass("line-through", force != "Y");
         }
         var conn = this.$(menu #connect);
         if (conn) {

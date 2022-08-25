@@ -26,6 +26,8 @@ Ci-dessous se trouvent les serveurs que vous utilisez gratuitement, cela peut ch
 - Séoul, AWS lightsail, 1 VCPU/0.5G RAM
 - Singapour, Vultr, 1 VCPU/1G RAM
 - Dallas, Vultr, 1 VCPU/1G RAM
+- Germany, Codext, 2 VCPU / 4GB RAM 
+- Germany, Hetzner, 4 VCPU / 8GB RAM
 
 ## Dépendances
 

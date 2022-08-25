@@ -49,6 +49,7 @@ use crate::{
     client::*,
     common::{self, check_clipboard, update_clipboard, ClipboardContext, CLIPBOARD_INTERVAL},
 };
+use errno;
 
 type Video = AssetPtr<video_destination>;
 
@@ -1452,12 +1453,21 @@ impl Remote {
     async fn io_loop(&mut self, key: &str, token: &str) {
         let stop_clipboard = self.start_clipboard();
         let mut last_recv_time = Instant::now();
+        let mut received = false;
         let conn_type = if self.handler.is_file_transfer() {
             ConnType::FILE_TRANSFER
         } else {
             ConnType::default()
         };
-        match Client::start(&self.handler.id, key, token, conn_type).await {
+        match Client::start(
+            &self.handler.id,
+            key,
+            token,
+            conn_type,
+            self.handler.clone(),
+        )
+        .await
+        {
             Ok((mut peer, direct)) => {
                 SERVER_KEYBOARD_ENABLED.store(true, Ordering::SeqCst);
                 SERVER_CLIPBOARD_ENABLED.store(true, Ordering::SeqCst);
@@ -1480,11 +1490,13 @@ impl Remote {
                                 match res {
                                     Err(err) => {
                                         log::error!("Connection closed: {}", err);
+                                        self.handler.set_force_relay(direct, received);
                                         self.handler.msgbox("error", "Connection Error", &err.to_string());
                                         break;
                                     }
                                     Ok(ref bytes) => {
                                         last_recv_time = Instant::now();
+                                        received = true;
                                         self.data_count.fetch_add(bytes.len(), Ordering::Relaxed);
                                         if !self.handle_msg_from_peer(bytes, &mut peer).await {
                                             break
@@ -2067,6 +2079,22 @@ impl Remote {
         true
     }
 
+    async fn send_opts_after_login(&self, peer: &mut Stream) {
+        if let Some(opts) = self
+            .handler
+            .lc
+            .read()
+            .unwrap()
+            .get_option_message_after_login()
+        {
+            let mut misc = Misc::new();
+            misc.set_option(opts);
+            let mut msg_out = Message::new();
+            msg_out.set_misc(misc);
+            allow_err!(peer.send(&msg_out).await);
+        }
+    }
+
     async fn handle_msg_from_peer(&mut self, data: &[u8], peer: &mut Stream) -> bool {
         if let Ok(msg_in) = Message::parse_from_bytes(&data) {
             match msg_in.union {
@@ -2075,7 +2103,7 @@ impl Remote {
                         self.first_frame = true;
                         self.handler.call2("closeSuccess", &make_args!());
                         self.handler.call("adaptSize", &make_args!());
-                        common::send_opts_after_login(&self.handler.lc.read().unwrap(), peer).await;
+                        self.send_opts_after_login(peer).await;
                     }
                     let incomming_format = CodecFormat::from(&vf);
                     if self.video_format != incomming_format {
@@ -2639,7 +2667,7 @@ impl Interface for Handler {
         self.lc.write().unwrap().handle_peer_info(username, pi);
         self.call("updatePrivacyMode", &[]);
         self.call("updatePi", &make_args!(pi_sciter));
-        if self.is_file_transfer() || self.is_port_forward()  {
+        if self.is_file_transfer() {
             self.call2("closeSuccess", &make_args!());
         } else if !self.is_port_forward() {
             self.msgbox("success", "Successful", "Connected, waiting for image...");
@@ -2674,6 +2702,24 @@ impl Interface for Handler {
             });
             handle_test_delay(t, peer).await;
         }
+    }
+
+    fn set_force_relay(&mut self, direct: bool, received: bool) {
+        let mut lc = self.lc.write().unwrap();
+        lc.force_relay = false;
+        if direct && !received {
+            let errno = errno::errno().0;
+            log::info!("errno is {}", errno);
+            // TODO: check mac and ios
+            if cfg!(windows) && errno == 10054 || !cfg!(windows) && errno == 104 {
+                lc.force_relay = true;
+                lc.set_option("force-always-relay".to_owned(), "Y".to_owned());
+            }
+        }
+    }
+
+    fn is_force_relay(&self) -> bool {
+        self.lc.read().unwrap().force_relay
     }
 }
 

@@ -166,7 +166,7 @@ fn main() {
 }
 
 fn import_config(path: &str) {
-    use hbb_common::{config::*, get_modified_time};
+    use hbb_common::{config::*, get_exe_time, get_modified_time};
     let path2 = path.replace(".toml", "2.toml");
     let path2 = std::path::Path::new(&path2);
     let path = std::path::Path::new(path);
@@ -176,7 +176,9 @@ fn import_config(path: &str) {
         log::info!("Empty source config, skipped");
         return;
     }
-    if get_modified_time(&path) > get_modified_time(&Config::file()) {
+    if get_modified_time(&path) > get_modified_time(&Config::file())
+        && get_modified_time(&path) < get_exe_time()
+    {
         if store_path(Config::file(), config).is_err() {
             log::info!("config written");
         }

@@ -119,7 +119,7 @@ packages:
       name: built_value
       url: "https://pub.flutter-io.cn"
     source: hosted
-    version: "8.4.0"
+    version: "8.4.1"
   cached_network_image:
     dependency: transitive
     description:
@@ -340,35 +340,35 @@ packages:
       name: file
       url: "https://pub.flutter-io.cn"
     source: hosted
-    version: "6.1.2"
+    version: "6.1.4"
   firebase_analytics:
     dependency: "direct main"
     description:
       name: firebase_analytics
       url: "https://pub.flutter-io.cn"
     source: hosted
-    version: "9.3.1"
+    version: "9.3.2"
   firebase_analytics_platform_interface:
     dependency: transitive
     description:
       name: firebase_analytics_platform_interface
       url: "https://pub.flutter-io.cn"
     source: hosted
-    version: "3.3.1"
+    version: "3.3.2"
   firebase_analytics_web:
     dependency: transitive
     description:
       name: firebase_analytics_web
       url: "https://pub.flutter-io.cn"
     source: hosted
-    version: "0.4.2+1"
+    version: "0.4.2+2"
   firebase_core:
     dependency: transitive
     description:
       name: firebase_core
       url: "https://pub.flutter-io.cn"
     source: hosted
-    version: "1.20.1"
+    version: "1.21.0"
   firebase_core_platform_interface:
     dependency: transitive
     description:
@@ -819,7 +819,7 @@ packages:
       name: pubspec_parse
       url: "https://pub.flutter-io.cn"
     source: hosted
-    version: "1.2.0"
+    version: "1.2.1"
   qr_code_scanner:
     dependency: "direct main"
     description:
@@ -1134,14 +1134,14 @@ packages:
       name: video_player
       url: "https://pub.flutter-io.cn"
     source: hosted
-    version: "2.4.6"
+    version: "2.4.7"
   video_player_android:
     dependency: transitive
     description:
       name: video_player_android
       url: "https://pub.flutter-io.cn"
     source: hosted
-    version: "2.3.8"
+    version: "2.3.9"
   video_player_avfoundation:
     dependency: transitive
     description:
@@ -1234,7 +1234,7 @@ packages:
       resolved-ref: "799ef079e87938c3f4340591b4330c2598f38bb9"
       url: "https://github.com/Kingtous/rustdesk_window_manager"
     source: git
-    version: "0.2.5"
+    version: "0.2.6"
   xdg_directories:
     dependency: transitive
     description:
