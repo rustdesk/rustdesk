@@ -19,6 +19,10 @@ pub fn core_main() -> bool {
             start_os_service();
             return false;
         }
+        if args[1] == "--server" {
+            // TODO: server
+            return false;
+        }
     }
     true
 }

@@ -66,6 +66,8 @@ def make_parser():
         default='',
         help='Integrate features, windows only.'
              'Available: IddDriver, PrivacyMode. Special value is "ALL" and empty "". Default is empty.')
+    parser.add_argument('--flutter', action='store_true',
+                        help='Build flutter package', default=False)
     parser.add_argument(
         '--hwcodec',
         action='store_true',
@@ -114,6 +116,8 @@ def get_features(args):
         features.extend(get_rc_features(args))
     if args.hwcodec:
         features.append('hwcodec')
+    if args.flutter:
+        features.append('flutter')
     print("features:", features)
     return features
 
@@ -135,6 +139,7 @@ def main():
         os.system('git checkout src/ui/common.tis')
     version = get_version()
     features = ",".join(get_features(args))
+    flutter = args.flutter
     if windows:
         os.system('cargo build --release --features ' + features)
         # os.system('upx.exe target/release/rustdesk.exe')
@@ -147,14 +152,26 @@ def main():
             print('Not signed')
         os.system(f'cp -rf target/release/RustDesk.exe rustdesk-{version}-setdown.exe')
     elif os.path.isfile('/usr/bin/pacman'):
-        os.system('cargo build --release --features ' + features)
-        os.system('git checkout src/ui/common.tis')
-        os.system('strip target/release/rustdesk')
-        os.system("sed -i 's/pkgver=.*/pkgver=%s/g' PKGBUILD" % version)
-        # pacman -S -needed base-devel
-        os.system('HBB=`pwd` makepkg -f')
-        os.system('mv rustdesk-%s-0-x86_64.pkg.tar.zst rustdesk-%s-manjaro-arch.pkg.tar.zst' % (version, version))
-        # pacman -U ./rustdesk.pkg.tar.zst
+        if flutter:
+            os.chdir('flutter')
+            os.system('flutter build linux --release')
+            os.system('strip build/linux/x64/release/liblibrustdesk.so')
+            os.system("sed -i 's/pkgver=.*/pkgver=%s/g' PKGBUILD" % version)
+            # pacman -S -needed base-devel
+            os.system('HBB=`pwd` makepkg -f')
+            os.system(
+                'mv rustdesk-%s-0-x86_64.pkg.tar.zst ../rustdesk-%s-manjaro-arch.pkg.tar.zst' % (version, version))
+            os.chdir('..')
+        else:
+            os.system('cargo build --release --features ' + features)
+            os.system('git checkout src/ui/common.tis')
+            os.system('strip target/release/rustdesk')
+            os.system("sed -i 's/pkgver=.*/pkgver=%s/g' PKGBUILD" % version)
+            # pacman -S -needed base-devel
+            os.system('HBB=`pwd` makepkg -f')
+            os.system(
+                'mv rustdesk-%s-0-x86_64.pkg.tar.zst rustdesk-%s-manjaro-arch.pkg.tar.zst' % (version, version))
+            # pacman -U ./rustdesk.pkg.tar.zst
     elif os.path.isfile('/usr/bin/yum'):
         os.system('cargo build --release --features ' + features)
         os.system('strip target/release/rustdesk')
@@ -210,6 +227,7 @@ rcodesign notarize --api-issuer 69a6de7d-2907-47e3-e053-5b8c7c11a4d1 --api-key 9
             else:
                 print('Not signed')
         else:
+            # buid deb package
             os.system('mv target/release/bundle/deb/rustdesk*.deb ./rustdesk.deb')
             os.system('dpkg-deb -R rustdesk.deb tmpdeb')
             os.system('mkdir -p tmpdeb/usr/share/rustdesk/files/systemd/')
