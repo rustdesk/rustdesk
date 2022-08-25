@@ -359,6 +359,17 @@ class _PeerCardState extends State<_PeerCard>
       _rename(id);
     } else if (value == 'unremember-password') {
       await bind.mainForgetPassword(id: id);
+    } else if (value == 'force-always-relay') {
+      String value;
+      String oldValue =
+          await bind.mainGetPeerOption(id: id, key: 'force-always-relay');
+      if (oldValue.isEmpty) {
+        value = 'Y';
+      } else {
+        value = '';
+      }
+      await bind.mainSetPeerOption(
+          id: id, key: 'force-always-relay', value: value);
     }
   }
 
@@ -572,6 +583,7 @@ class RecentPeerCard extends BasePeerCard {
           child: Text(translate('Transfer File')), value: 'file'),
       PopupMenuItem<String>(
           child: Text(translate('TCP Tunneling')), value: 'tcp-tunnel'),
+      await _forceAlwaysRelayMenuItem(peer.id),
       PopupMenuItem<String>(child: Text(translate('Rename')), value: 'rename'),
       PopupMenuItem<String>(child: Text(translate('Remove')), value: 'remove'),
       PopupMenuItem<String>(
@@ -595,6 +607,7 @@ class FavoritePeerCard extends BasePeerCard {
           child: Text(translate('Transfer File')), value: 'file'),
       PopupMenuItem<String>(
           child: Text(translate('TCP Tunneling')), value: 'tcp-tunnel'),
+      await _forceAlwaysRelayMenuItem(peer.id),
       PopupMenuItem<String>(child: Text(translate('Rename')), value: 'rename'),
       PopupMenuItem<String>(child: Text(translate('Remove')), value: 'remove'),
       PopupMenuItem<String>(
@@ -618,6 +631,7 @@ class DiscoveredPeerCard extends BasePeerCard {
           child: Text(translate('Transfer File')), value: 'file'),
       PopupMenuItem<String>(
           child: Text(translate('TCP Tunneling')), value: 'tcp-tunnel'),
+      await _forceAlwaysRelayMenuItem(peer.id),
       PopupMenuItem<String>(child: Text(translate('Rename')), value: 'rename'),
       PopupMenuItem<String>(child: Text(translate('Remove')), value: 'remove'),
       PopupMenuItem<String>(
@@ -641,6 +655,7 @@ class AddressBookPeerCard extends BasePeerCard {
           child: Text(translate('Transfer File')), value: 'file'),
       PopupMenuItem<String>(
           child: Text(translate('TCP Tunneling')), value: 'tcp-tunnel'),
+      await _forceAlwaysRelayMenuItem(peer.id),
       PopupMenuItem<String>(child: Text(translate('Rename')), value: 'rename'),
       PopupMenuItem<String>(
           child: Text(translate('Remove')), value: 'ab-delete'),
@@ -653,4 +668,21 @@ class AddressBookPeerCard extends BasePeerCard {
           child: Text(translate('Edit Tag')), value: 'ab-edit-tag'),
     ];
   }
+}
+
+Future<PopupMenuItem<String>> _forceAlwaysRelayMenuItem(String id) async {
+  bool force_always_relay =
+      (await bind.mainGetPeerOption(id: id, key: 'force-always-relay'))
+          .isNotEmpty;
+  return PopupMenuItem<String>(
+      child: Row(
+        children: [
+          Offstage(
+            offstage: !force_always_relay,
+            child: Icon(Icons.check),
+          ),
+          Text(translate('Always connect via relay')),
+        ],
+      ),
+      value: 'force-always-relay');
 }
