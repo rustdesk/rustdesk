@@ -6,7 +6,7 @@ use crate::common::update_clipboard;
 use crate::video_service;
 #[cfg(any(target_os = "android", target_os = "ios"))]
 use crate::{common::MOBILE_INFO2, mobile::connection_manager::start_channel};
-use crate::{ipc, VERSION};
+use crate::{ipc};
 use hbb_common::{
     config::Config,
     fs,
@@ -448,11 +448,12 @@ impl Connection {
                         handle_mouse(&msg, id);
                     }
                     MessageInput::Key((mut msg, press)) => {
-                        if press {
+                        // todo: press and down have similar meanings.
+                        if press && msg.mode.unwrap() == KeyboardMode::Legacy {
                             msg.down = true;
                         }
                         handle_key(&msg);
-                        if press {
+                        if press && msg.mode.unwrap() == KeyboardMode::Legacy {
                             msg.down = false;
                             handle_key(&msg);
                         }

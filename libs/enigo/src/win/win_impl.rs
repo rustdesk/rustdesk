@@ -1,9 +1,8 @@
-use winapi;
-
 use self::winapi::ctypes::c_int;
 use self::winapi::shared::{basetsd::ULONG_PTR, minwindef::*, windef::*};
 use self::winapi::um::winbase::*;
 use self::winapi::um::winuser::*;
+use winapi;
 
 use crate::win::keycodes::*;
 use crate::{Key, KeyboardControllable, MouseButton, MouseControllable};
@@ -200,7 +199,7 @@ impl KeyboardControllable for Enigo {
     fn key_down(&mut self, key: Key) -> crate::ResultType {
         let code = self.key_to_keycode(key);
         if code == 0 || code == 65535 {
-            return Err("".into()); 
+            return Err("".into());
         }
         let res = keybd_event(0, code, 0);
         if res == 0 {
@@ -227,7 +226,8 @@ impl KeyboardControllable for Enigo {
 }
 
 impl Enigo {
-    /// Gets the (width, height) of the main display in screen coordinates (pixels).
+    /// Gets the (width, height) of the main display in screen coordinates
+    /// (pixels).
     ///
     /// # Example
     ///

@@ -67,16 +67,16 @@ impl EnigoPynput {
             Key::Space => "space",
             Key::Tab => "Tab",
             Key::UpArrow => "Up",
-            Key::Numpad0 => "0",
-            Key::Numpad1 => "1",
-            Key::Numpad2 => "2",
-            Key::Numpad3 => "3",
-            Key::Numpad4 => "4",
-            Key::Numpad5 => "5",
-            Key::Numpad6 => "6",
-            Key::Numpad7 => "7",
-            Key::Numpad8 => "8",
-            Key::Numpad9 => "9",
+            Key::Numpad0 => "KP_0",
+            Key::Numpad1 => "KP_1",
+            Key::Numpad2 => "KP_2",
+            Key::Numpad3 => "KP_3",
+            Key::Numpad4 => "KP_4",
+            Key::Numpad5 => "KP_5",
+            Key::Numpad6 => "KP_6",
+            Key::Numpad7 => "KP_7",
+            Key::Numpad8 => "KP_8",
+            Key::Numpad9 => "KP_9",
             Key::Decimal => "KP_Decimal",
             Key::Cancel => "Cancel",
             Key::Clear => "Clear",
@@ -110,7 +110,6 @@ impl EnigoPynput {
                 return true;
             }
         };
-        log::info!("send pynput: {:?}", &s);
         return self.tx.send((PyMsg::Str(s), is_press)).is_ok();
     }
 }

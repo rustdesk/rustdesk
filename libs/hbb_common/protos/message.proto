@@ -105,6 +105,13 @@ message MouseEvent {
   repeated ControlKey modifiers = 4;
 }
 
+enum KeyboardMode{
+  Legacy = 0;
+  Map = 1;
+  Translate = 2;
+  Auto = 3;
+}
+
 enum ControlKey {
   Unknown = 0;
   Alt = 1;
@@ -198,6 +205,7 @@ message KeyEvent {
     string seq = 6;
   }
   repeated ControlKey modifiers = 8;
+  KeyboardMode mode = 9;
 }
 
 message CursorData {

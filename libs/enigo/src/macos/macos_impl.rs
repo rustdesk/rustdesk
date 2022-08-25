@@ -1,5 +1,4 @@
 use core_graphics;
-
 // TODO(dustin): use only the things i need
 
 use self::core_graphics::display::*;

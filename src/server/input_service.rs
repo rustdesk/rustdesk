@@ -3,11 +3,13 @@ use super::*;
 use dispatch::Queue;
 use enigo::{Enigo, Key, KeyboardControllable, MouseButton, MouseControllable};
 use hbb_common::{config::COMPRESS_LEVEL, protobuf::EnumOrUnknown};
+use rdev::{simulate, EventType, Key as RdevKey};
 use std::{
     convert::TryFrom,
     sync::atomic::{AtomicBool, Ordering},
     time::Instant,
 };
+use tfc::{traits::*, Context};
 
 #[derive(Default)]
 struct StateCursor {
@@ -145,7 +147,8 @@ fn run_cursor(sp: MouseCursorService, state: &mut StateCursor) -> ResultType<()>
                 msg = cached.clone();
             } else {
                 let mut data = crate::get_cursor_data(hcursor)?;
-                data.colors = hbb_common::compress::compress(&data.colors[..], COMPRESS_LEVEL).into();
+                data.colors =
+                    hbb_common::compress::compress(&data.colors[..], COMPRESS_LEVEL).into();
                 let mut tmp = Message::new();
                 tmp.set_cursor_data(data);
                 msg = Arc::new(tmp);
@@ -177,6 +180,7 @@ lazy_static::lazy_static! {
     };
     static ref KEYS_DOWN: Arc<Mutex<HashMap<u64, Instant>>> = Default::default();
     static ref LATEST_INPUT: Arc<Mutex<Input>> = Default::default();
+    static ref KBD_CONTEXT: Mutex<Context> = Mutex::new(Context::new().expect("kbd context error"));
 }
 static EXITING: AtomicBool = AtomicBool::new(false);
 
@@ -466,10 +470,14 @@ pub async fn lock_screen() {
         // loginctl lock-session also not work, they both work run rustdesk from cmd
         std::thread::spawn(|| {
             let mut key_event = KeyEvent::new();
-            key_event.down = true;
+
             key_event.set_chr('l' as _);
             key_event.modifiers.push(ControlKey::Meta.into());
+            key_event.mode = KeyboardMode::Legacy.into();
+
+            key_event.down = true;
             handle_key(&key_event);
+
             key_event.down = false;
             handle_key(&key_event);
         });
@@ -477,10 +485,13 @@ pub async fn lock_screen() {
         // CGSession -suspend not real lock screen, it is user switch
         std::thread::spawn(|| {
             let mut key_event = KeyEvent::new();
-            key_event.down = true;
+
             key_event.set_chr('q' as _);
             key_event.modifiers.push(ControlKey::Meta.into());
             key_event.modifiers.push(ControlKey::Control.into());
+            key_event.mode = KeyboardMode::Legacy.into();
+
+            key_event.down = true;
             handle_key(&key_event);
             key_event.down = false;
             handle_key(&key_event);
@@ -597,19 +608,89 @@ pub fn handle_key(evt: &KeyEvent) {
     handle_key_(evt);
 }
 
-fn handle_key_(evt: &KeyEvent) {
-    if EXITING.load(Ordering::SeqCst) {
-        return;
+fn rdev_key_down_or_up(key: RdevKey, down_or_up: bool) {
+    let event_type = match down_or_up {
+        true => EventType::KeyPress(key),
+        false => EventType::KeyRelease(key),
+    };
+    let delay = std::time::Duration::from_millis(20);
+    match simulate(&event_type) {
+        Ok(()) => (),
+        Err(_simulate_error) => {
+            log::error!("Could not send {:?}", &event_type);
+        }
     }
+    // Let ths OS catchup (at least MacOS)
+    std::thread::sleep(delay);
+}
+
+fn rdev_key_click(key: RdevKey) {
+    rdev_key_down_or_up(key, true);
+    rdev_key_down_or_up(key, false);
+}
+
+fn sync_status(evt: &KeyEvent) -> (bool, bool) {
+    let mut en = ENIGO.lock().unwrap();
+
+    // remote caps status
+    let caps_locking = evt
+        .modifiers
+        .iter()
+        .position(|&r| r == ControlKey::CapsLock.into())
+        .is_some();
+    // remote numpad status
+    let num_locking = evt
+        .modifiers
+        .iter()
+        .position(|&r| r == ControlKey::NumLock.into())
+        .is_some();
+
+    let click_capslock = (caps_locking && !en.get_key_state(enigo::Key::CapsLock))
+        || (!caps_locking && en.get_key_state(enigo::Key::CapsLock));
+    let click_numlock = (num_locking && !en.get_key_state(enigo::Key::NumLock))
+        || (!num_locking && en.get_key_state(enigo::Key::NumLock));
+    return (click_capslock, click_numlock);
+}
+
+fn map_keyboard_mode(evt: &KeyEvent) {
+    // map mode(1): Send keycode according to the peer platform.
+    let (click_capslock, click_numlock) = sync_status(evt);
+    if click_capslock {
+        rdev_key_click(RdevKey::CapsLock);
+    }
+    if click_numlock {
+        rdev_key_click(RdevKey::NumLock);
+    }
+    rdev_key_down_or_up(RdevKey::Unknown(evt.chr()), evt.down);
+    return;
+}
+
+fn legacy_keyboard_mode(evt: &KeyEvent) {
+    let (click_capslock, click_numlock) = sync_status(evt);
+
     #[cfg(windows)]
     crate::platform::windows::try_change_desktop();
     let mut en = ENIGO.lock().unwrap();
+    if click_capslock {
+        en.key_click(Key::CapsLock);
+    }
+    if click_numlock {
+        en.key_click(Key::NumLock);
+    }
     // disable numlock if press home etc when numlock is on,
     // because we will get numpad value (7,8,9 etc) if not
     #[cfg(windows)]
     let mut disable_numlock = false;
     #[cfg(target_os = "macos")]
     en.reset_flag();
+    // When long-pressed the command key, then press and release 
+    // the Tab key, there should be CGEventFlagCommand in the flag.
+    #[cfg(target_os = "macos")]
+    for ck in evt.modifiers.iter(){
+        if let Some(key) = KEY_MAP.get(&ck.value()){
+            en.add_flag(key);
+        }
+    }
     #[cfg(not(target_os = "macos"))]
     let mut to_release = Vec::new();
     #[cfg(not(target_os = "macos"))]
@@ -637,8 +718,6 @@ fn handle_key_(evt: &KeyEvent) {
                         continue;
                     }
                 }
-                #[cfg(target_os = "macos")]
-                en.add_flag(key);
                 #[cfg(not(target_os = "macos"))]
                 {
                     if key == &Key::CapsLock {
@@ -748,6 +827,35 @@ fn handle_key_(evt: &KeyEvent) {
     }
 }
 
+fn translate_keyboard_mode(evt: &KeyEvent) {
+    let chr = char::from_u32(evt.chr()).unwrap_or_default();
+    // down(true)->press && press(false)-> release
+    if evt.down && !evt.press {
+        KBD_CONTEXT.lock().unwrap().unicode_char(chr).expect("unicode_char_down error");
+    }
+}
+
+fn handle_key_(evt: &KeyEvent) {
+    if EXITING.load(Ordering::SeqCst) {
+        return;
+    }
+
+    match evt.mode.unwrap() {
+        KeyboardMode::Legacy => {
+            legacy_keyboard_mode(evt);
+        }
+        KeyboardMode::Map => {
+            map_keyboard_mode(evt);
+        }
+        KeyboardMode::Translate => {
+            translate_keyboard_mode(evt);
+        }
+        _ => {
+            legacy_keyboard_mode(evt);
+        }
+    }
+}
+
 #[tokio::main(flavor = "current_thread")]
 async fn lock_screen_2() {
     lock_screen().await;
@@ -758,4 +866,53 @@ async fn send_sas() -> ResultType<()> {
     let mut stream = crate::ipc::connect(1000, crate::POSTFIX_SERVICE).await?;
     timeout(1000, stream.send(&crate::ipc::Data::SAS)).await??;
     Ok(())
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use rdev::{listen, Event, EventType, Key};
+    use std::sync::mpsc;
+
+    #[test]
+    fn test_handle_key() {
+        // listen
+        let (tx, rx) = mpsc::channel();
+        std::thread::spawn(move || {
+            std::env::set_var("KEYBOARD_ONLY", "y");
+            let func = move |event: Event| {
+                tx.send(event).ok();
+            };
+            if let Err(error) = listen(func) {
+                println!("Error: {:?}", error);
+            }
+        });
+        // set key/char base on char
+        let mut evt = KeyEvent::new();
+        evt.set_chr(66);
+        evt.mode = KeyboardMode::Legacy.into();
+
+        evt.modifiers.push(ControlKey::CapsLock.into());
+
+        // press
+        evt.down = true;
+        handle_key(&evt);
+        if let Ok(listen_evt) = rx.recv() {
+            assert_eq!(listen_evt.event_type, EventType::KeyPress(Key::Num1))
+        }
+        // release
+        evt.down = false;
+        handle_key(&evt);
+        if let Ok(listen_evt) = rx.recv() {
+            assert_eq!(listen_evt.event_type, EventType::KeyRelease(Key::Num1))
+        }
+    }
+    #[test]
+    fn test_get_key_state() {
+        let mut en = ENIGO.lock().unwrap();
+        println!(
+            "[*] test_get_key_state: {:?}",
+            en.get_key_state(enigo::Key::NumLock)
+        );
+    }
 }

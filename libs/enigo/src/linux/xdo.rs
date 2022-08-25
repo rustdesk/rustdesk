@@ -370,4 +370,19 @@ impl KeyboardControllable for EnigoXdo {
             }
         }
     }
+
+    fn key_sequence_parse(&mut self, sequence: &str)
+    where
+        Self: Sized,
+    {
+        self.key_sequence_parse_try(sequence)
+            .expect("Could not parse sequence");
+    }
+
+    fn key_sequence_parse_try(&mut self, sequence: &str) -> Result<(), crate::dsl::ParseError>
+    where
+        Self: Sized,
+    {
+        crate::dsl::eval(self, sequence)
+    }
 }

@@ -299,5 +299,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Are you sure you want to restart", "Sei sicuro di voler riavviare?"),
         ("Restarting Remote Device", "Il dispositivo remoto si sta riavviando"),
         ("remote_restarting_tip", "Riavviare il dispositivo remoto"),
+        ("Legacy mode", ""),
+        ("Map mode", ""),
+        ("Translate mode", ""),
     ].iter().cloned().collect();
 }

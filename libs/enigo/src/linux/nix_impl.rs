@@ -167,12 +167,7 @@ impl KeyboardControllable for Enigo {
         }
     }
     fn key_click(&mut self, key: Key) {
-        if self.is_x11 {
-            self.xdo.key_click(key)
-        } else {
-            if let Some(keyboard) = &mut self.uinput_keyboard {
-                keyboard.key_click(key)
-            }
-        }
+        self.key_down(key).ok();
+        self.key_up(key);
     }
 }

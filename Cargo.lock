@@ -691,21 +691,6 @@ dependencies = [
 
 [[package]]
 name = "cocoa"
-version = "0.22.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "667fdc068627a2816b9ff831201dd9864249d6ee8d190b9532357f1fc0f61ea7"
-dependencies = [
- "bitflags",
- "block",
- "core-foundation 0.9.3",
- "core-graphics 0.21.0",
- "foreign-types",
- "libc",
- "objc",
-]
-
-[[package]]
-name = "cocoa"
 version = "0.24.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6f63902e9223530efb4e26ccd0cf55ec30d592d3b42e21a28defc42a9586e832"
@@ -817,18 +802,6 @@ checksum = "b3889374e6ea6ab25dba90bb5d96202f61108058361f6dc72e8b03e6f8bbe923"
 dependencies = [
  "bitflags",
  "core-foundation 0.7.0",
- "foreign-types",
- "libc",
-]
-
-[[package]]
-name = "core-graphics"
-version = "0.21.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "52a67c4378cf203eace8fb6567847eb641fd6ff933c1145a115c6ee820ebb978"
-dependencies = [
- "bitflags",
- "core-foundation 0.9.3",
  "foreign-types",
  "libc",
 ]
@@ -1394,10 +1367,31 @@ dependencies = [
  "log",
  "objc",
  "pkg-config",
+ "rdev",
  "serde 1.0.139",
  "serde_derive",
  "unicode-segmentation",
  "winapi 0.3.9",
+]
+
+[[package]]
+name = "enum-map"
+version = "2.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6ddfe61e8040145222887d0d32a939c70c8cae681490d72fb868305e9b40ced8"
+dependencies = [
+ "enum-map-derive",
+]
+
+[[package]]
+name = "enum-map-derive"
+version = "0.9.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "00d1c54e25a57236a790ecf051c2befbb57740c9b86c4273eac378ba84d620d6"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
 ]
 
 [[package]]
@@ -3921,15 +3915,17 @@ dependencies = [
 
 [[package]]
 name = "rdev"
-version = "0.5.0-1"
-source = "git+https://github.com/open-trade/rdev#a9b6ea462956f289b4a48e81f2ea7dda33cd8047"
+version = "0.5.0-2"
+source = "git+https://github.com/asur4s/rdev#895c8fb1a6106714793e8877d35d2b7a1c57ce9c"
 dependencies = [
- "cocoa 0.22.0",
- "core-foundation 0.7.0",
- "core-foundation-sys 0.7.0",
- "core-graphics 0.19.2",
+ "cocoa",
+ "core-foundation 0.9.3",
+ "core-foundation-sys 0.8.3",
+ "core-graphics 0.22.3",
+ "enum-map",
  "lazy_static",
  "libc",
+ "widestring 1.0.2",
  "winapi 0.3.9",
  "x11",
 ]
@@ -4158,7 +4154,7 @@ dependencies = [
  "cfg-if 1.0.0",
  "clap 3.2.12",
  "clipboard",
- "cocoa 0.24.0",
+ "cocoa",
  "core-foundation 0.9.3",
  "core-graphics 0.22.3",
  "cpal",
@@ -4186,6 +4182,7 @@ dependencies = [
  "mouce",
  "num_cpus",
  "objc",
+ "once_cell",
  "parity-tokio-ipc",
  "rdev",
  "repng",
@@ -4205,6 +4202,7 @@ dependencies = [
  "sys-locale",
  "sysinfo",
  "system_shutdown",
+ "tfc",
  "tray-item",
  "trayicon",
  "uuid",
@@ -4931,6 +4929,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b1141d4d61095b28419e22cb0bbf02755f5e54e0526f97f1e3d1d160e60885fb"
 
 [[package]]
+name = "tfc"
+version = "0.6.1"
+source = "git+https://github.com/asur4s/The-Fat-Controller#25bfa7ef1cb0bd0b522cc4155dea6b99673bcfd4"
+dependencies = [
+ "core-graphics 0.22.3",
+ "unicode-segmentation",
+ "winapi 0.3.9",
+]
+
+[[package]]
 name = "thiserror"
 version = "1.0.31"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5143,7 +5151,7 @@ version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "76863575f7842ed64fda361f417a787efa82811b4617267709066969cd4ccf3b"
 dependencies = [
- "cocoa 0.24.0",
+ "cocoa",
  "core-graphics 0.22.3",
  "gtk",
  "libappindicator",
@@ -5566,6 +5574,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c168940144dd21fd8046987c16a46a33d5fc84eec29ef9dcddc2ac9e31526b7c"
 
 [[package]]
+name = "widestring"
+version = "1.0.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "653f141f39ec16bba3c5abe400a0c60da7468261cc2cbf36805022876bc721a8"
+
+[[package]]
 name = "winapi"
 version = "0.2.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5638,7 +5652,7 @@ checksum = "0c643e10139d127d30d6d753398c8a6f0a43532e8370f6c9d29ebbff29b984ab"
 dependencies = [
  "bitflags",
  "err-derive",
- "widestring",
+ "widestring 0.4.3",
  "winapi 0.3.9",
 ]
 
@@ -5765,7 +5779,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9b43cc931d58b99461188607efd7acb2a093e65fc621f54cad78517a6063e73a"
 dependencies = [
  "bitflags",
- "cocoa 0.24.0",
+ "cocoa",
  "core-foundation 0.9.3",
  "core-graphics 0.22.3",
  "core-video-sys",

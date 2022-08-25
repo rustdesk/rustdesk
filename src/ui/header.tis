@@ -139,9 +139,21 @@ class Header: Reactor.Component {
             <span #chat>{svg_chat}</span>
             <span #action>{svg_action}</span>
             <span #display>{svg_display}</span>
+            <span #keyboard>{svg_keyboard}</span>
+            {this.renderKeyboardPop()}
             {this.renderDisplayPop()}
             {this.renderActionPop()}
         </div>;
+    }
+
+    function renderKeyboardPop(){
+        return <popup>
+            <menu.context #keyboard-options>
+                <li #legacy><span>{svg_checkmark}</span>{translate('Legacy mode')}</li> 
+                <li #map><span>{svg_checkmark}</span>{translate('Map mode')}</li> 
+                <li #translate><span>{svg_checkmark}</span>{translate('Translate mode')}</li> 
+            </menu>
+        </popup>;
     }
 
     function renderDisplayPop() {
@@ -263,6 +275,11 @@ class Header: Reactor.Component {
         me.popup(menu);
     }
 
+    event click $(#keyboard) (_, me) {
+        var menu = $(menu#keyboard-options);
+        me.popup(menu);
+    }
+
     event click $(#screen) (_, me) {
         if (pi.current_display == me.index) return;
         handler.switch_display(me.index);
@@ -352,6 +369,17 @@ class Header: Reactor.Component {
             toggleMenuState();
         }
     }
+
+    event click $(menu#keyboard-options>li) (_, me) {
+        if (me.id == "legacy") {
+            handler.save_keyboard_mode("legacy");
+        } else if (me.id == "map") {
+            handler.save_keyboard_mode("map");
+        } else if (me.id == "translate") {
+            handler.save_keyboard_mode("translate");
+        }
+        toggleMenuState()
+    }
 }
 
 function handle_custom_image_quality() {
@@ -375,10 +403,15 @@ function toggleMenuState() {
     var s = handler.get_view_style();
     if (!s) s = "original";
     values.push(s);
+    var k = handler.get_keyboard_mode();
+    values.push(k);
     var c = handler.get_option("codec-preference");
     if (!c) c = "auto";
     values.push(c);
     for (var el in $$(menu#display-options li)) {
+        el.attributes.toggleClass("selected", values.indexOf(el.id) >= 0);
+    }
+    for (var el in $$(menu#keyboard-options>li)) {
         el.attributes.toggleClass("selected", values.indexOf(el.id) >= 0);
     }
     for (var id in ["show-remote-cursor", "show-quality-monitor", "disable-audio", "enable-file-transfer", "disable-clipboard", "lock-after-session-end"]) {
