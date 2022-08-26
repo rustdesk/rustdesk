@@ -26,12 +26,12 @@ class _FileManagerTabPageState extends State<FileManagerTabPage> {
   static final IconData unselectedIcon = Icons.file_copy_outlined;
 
   _FileManagerTabPageState(Map<String, dynamic> params) {
-    tabController.state.value.tabs.add(TabInfo(
+    tabController.add(TabInfo(
         key: params['id'],
         label: params['id'],
         selectedIcon: selectedIcon,
         unselectedIcon: unselectedIcon,
-        page: FileManagerPage(id: params['id'])));
+        page: FileManagerPage(key: ValueKey(params['id']), id: params['id'])));
   }
 
   @override
@@ -53,7 +53,7 @@ class _FileManagerTabPageState extends State<FileManagerTabPage> {
             label: id,
             selectedIcon: selectedIcon,
             unselectedIcon: unselectedIcon,
-            page: FileManagerPage(id: id)));
+            page: FileManagerPage(key: ValueKey(id), id: id)));
       } else if (call.method == "onDestroy") {
         tabController.state.value.tabs.forEach((tab) {
           print("executing onDestroy hook, closing ${tab.label}}");

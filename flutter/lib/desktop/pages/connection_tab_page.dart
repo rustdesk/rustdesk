@@ -30,12 +30,13 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
 
   _ConnectionTabPageState(Map<String, dynamic> params) {
     if (params['id'] != null) {
-      tabController.state.value.tabs.add(TabInfo(
+      tabController.add(TabInfo(
           key: params['id'],
           label: params['id'],
           selectedIcon: selectedIcon,
           unselectedIcon: unselectedIcon,
           page: RemotePage(
+            key: ValueKey(params['id']),
             id: params['id'],
             tabBarHeight:
                 _fullscreenID.value.isNotEmpty ? 0 : kDesktopRemoteTabBarHeight,
@@ -63,8 +64,8 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
             label: id,
             selectedIcon: selectedIcon,
             unselectedIcon: unselectedIcon,
-            closable: false,
             page: RemotePage(
+              key: ValueKey(id),
               id: id,
               tabBarHeight: _fullscreenID.value.isNotEmpty
                   ? 0

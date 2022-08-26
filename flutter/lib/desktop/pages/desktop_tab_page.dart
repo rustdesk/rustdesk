@@ -19,13 +19,15 @@ class _DesktopTabPageState extends State<DesktopTabPage> {
   @override
   void initState() {
     super.initState();
-    tabController.state.value.tabs.add(TabInfo(
+    tabController.add(TabInfo(
         key: kTabLabelHomePage,
         label: kTabLabelHomePage,
         selectedIcon: Icons.home_sharp,
         unselectedIcon: Icons.home_outlined,
         closable: false,
-        page: DesktopHomePage()));
+        page: DesktopHomePage(
+          key: const ValueKey(kTabLabelHomePage),
+        )));
   }
 
   @override
@@ -59,6 +61,6 @@ class _DesktopTabPageState extends State<DesktopTabPage> {
         label: kTabLabelSettingPage,
         selectedIcon: Icons.build_sharp,
         unselectedIcon: Icons.build_outlined,
-        page: DesktopSettingPage()));
+        page: DesktopSettingPage(key: const ValueKey(kTabLabelSettingPage))));
   }
 }
