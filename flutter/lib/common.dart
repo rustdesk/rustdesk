@@ -725,6 +725,7 @@ Future<bool> matchPeer(String searchText, Peer peer) async {
 }
 
 Future<List<Peer>>? matchPeers(String searchText, List<Peer> peers) async {
+  searchText = searchText.trim();
   if (searchText.isEmpty) {
     return peers;
   }
