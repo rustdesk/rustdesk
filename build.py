@@ -66,6 +66,8 @@ def make_parser():
         default='',
         help='Integrate features, windows only.'
              'Available: IddDriver, PrivacyMode. Special value is "ALL" and empty "". Default is empty.')
+    parser.add_argument('--flutter', action='store_true',
+                        help='Build flutter package', default=False)
     parser.add_argument(
         '--hwcodec',
         action='store_true',
@@ -114,8 +116,57 @@ def get_features(args):
         features.extend(get_rc_features(args))
     if args.hwcodec:
         features.append('hwcodec')
+    if args.flutter:
+        features.append('flutter')
     print("features:", features)
     return features
+
+
+def build_flutter_deb(version):
+    os.chdir('flutter')
+    os.system('dpkg-deb -R rustdesk.deb tmpdeb')
+    # os.system('flutter build linux --release')
+    os.system('rm tmpdeb/usr/bin/rustdesk')
+    os.system('strip build/linux/x64/release/liblibrustdesk.so')
+    os.system('mkdir -p tmpdeb/usr/lib/rustdesk')
+    os.system('mkdir -p tmpdeb/usr/share/rustdesk/files/systemd/')
+    os.system(
+        'cp -r build/linux/x64/release/bundle/* tmpdeb/usr/lib/rustdesk/')
+    os.system(
+        'pushd tmpdeb && ln -s /usr/lib/rustdesk/flutter_hbb usr/bin/rustdesk && popd')
+    os.system(
+        'cp build/linux/x64/release/liblibrustdesk.so tmpdeb/usr/lib/rustdesk/librustdesk.so')
+    os.system(
+        'cp rustdesk.service tmpdeb/usr/share/rustdesk/files/systemd/')
+    os.system(
+        'cp rustdesk.service.user tmpdeb/usr/share/rustdesk/files/systemd/')
+    os.system(
+        'cp ../pynput_service.py tmpdeb/usr/share/rustdesk/files/')
+    os.system(
+        'cp ../128x128@2x.png tmpdeb/usr/share/rustdesk/files/rustdesk.png')
+    os.system(
+        'cp rustdesk.desktop tmpdeb/usr/share/applications/rustdesk.desktop')
+    os.system('mkdir -p tmpdeb/DEBIAN')
+    os.system('cp -a ../DEBIAN/* tmpdeb/DEBIAN/')
+    md5_file('usr/share/rustdesk/files/systemd/rustdesk.service')
+    md5_file('usr/share/rustdesk/files/systemd/rustdesk.service.user')
+    md5_file('usr/share/rustdesk/files/pynput_service.py')
+    os.system('dpkg-deb -b tmpdeb rustdesk.deb; /bin/rm -rf tmpdeb/')
+    os.rename('rustdesk.deb', '../rustdesk-%s.deb' % version)
+    os.chdir("..")
+
+
+def build_flutter_arch_manjaro(version):
+    os.chdir('flutter')
+    os.system('flutter build linux --release')
+    os.system('strip build/linux/x64/release/liblibrustdesk.so')
+    os.system("sed -i 's/pkgver=.*/pkgver=%s/g' PKGBUILD" % version)
+    # pacman -S -needed base-devel
+    os.system('HBB=`pwd` makepkg -f')
+    os.system(
+        'mv rustdesk-%s-0-x86_64.pkg.tar.zst ../rustdesk-%s-manjaro-arch.pkg.tar.zst' % (version, version))
+    os.chdir('..')
+
 
 def main():
     parser = make_parser()
@@ -135,6 +186,7 @@ def main():
         os.system('git checkout src/ui/common.tis')
     version = get_version()
     features = ",".join(get_features(args))
+    flutter = args.flutter
     if windows:
         os.system('cargo build --release --features ' + features)
         # os.system('upx.exe target/release/rustdesk.exe')
@@ -146,15 +198,19 @@ def main():
         else:
             print('Not signed')
         os.system(f'cp -rf target/release/RustDesk.exe rustdesk-{version}-setdown.exe')
-    elif os.path.isfile('/usr/bin/pacman'):
-        os.system('cargo build --release --features ' + features)
-        os.system('git checkout src/ui/common.tis')
-        os.system('strip target/release/rustdesk')
-        os.system("sed -i 's/pkgver=.*/pkgver=%s/g' PKGBUILD" % version)
-        # pacman -S -needed base-devel
-        os.system('HBB=`pwd` makepkg -f')
-        os.system('mv rustdesk-%s-0-x86_64.pkg.tar.zst rustdesk-%s-manjaro-arch.pkg.tar.zst' % (version, version))
-        # pacman -U ./rustdesk.pkg.tar.zst
+    elif os.path.isfile('/usr/bin/pacman1'):
+        if flutter:
+            build_flutter_arch_manjaro(version)
+        else:
+            # os.system('cargo build --release --features ' + features)
+            os.system('git checkout src/ui/common.tis')
+            os.system('strip target/release/rustdesk')
+            os.system("sed -i 's/pkgver=.*/pkgver=%s/g' PKGBUILD" % version)
+            # pacman -S -needed base-devel
+            os.system('HBB=`pwd` makepkg -f')
+            os.system(
+                'mv rustdesk-%s-0-x86_64.pkg.tar.zst rustdesk-%s-manjaro-arch.pkg.tar.zst' % (version, version))
+            # pacman -U ./rustdesk.pkg.tar.zst
     elif os.path.isfile('/usr/bin/yum'):
         os.system('cargo build --release --features ' + features)
         os.system('strip target/release/rustdesk')
@@ -172,62 +228,75 @@ def main():
         # yum localinstall rustdesk.rpm
     else:
         os.system('cargo bundle --release --features ' + features)
-        if osx:
-            os.system(
-                'strip target/release/bundle/osx/RustDesk.app/Contents/MacOS/rustdesk')
-            os.system(
-                'cp libsciter.dylib target/release/bundle/osx/RustDesk.app/Contents/MacOS/')
-            # https://github.com/sindresorhus/create-dmg
-            os.system('/bin/rm -rf *.dmg')
-            plist = "target/release/bundle/osx/RustDesk.app/Contents/Info.plist"
-            txt = open(plist).read()
-            with open(plist, "wt") as fh:
-                fh.write(txt.replace("</dict>", """
-  <key>LSUIElement</key>
-  <string>1</string>
-</dict>"""))
-            pa = os.environ.get('P')
-            if pa:
-                os.system('''
-# buggy: rcodesign sign ... path/*, have to sign one by one
-#rcodesign sign --p12-file ~/.p12/rustdesk-developer-id.p12 --p12-password-file ~/.p12/.cert-pass --code-signature-flags runtime ./target/release/bundle/osx/RustDesk.app/Contents/MacOS/rustdesk
-#rcodesign sign --p12-file ~/.p12/rustdesk-developer-id.p12 --p12-password-file ~/.p12/.cert-pass --code-signature-flags runtime ./target/release/bundle/osx/RustDesk.app/Contents/MacOS/libsciter.dylib
-#rcodesign sign --p12-file ~/.p12/rustdesk-developer-id.p12 --p12-password-file ~/.p12/.cert-pass --code-signature-flags runtime ./target/release/bundle/osx/RustDesk.app
-# goto "Keychain Access" -> "My Certificates" for below id which starts with "Developer ID Application:"
-codesign -s "Developer ID Application: {0}" --force --options runtime  ./target/release/bundle/osx/RustDesk.app/Contents/MacOS/*
-codesign -s "Developer ID Application: {0}" --force --options runtime  ./target/release/bundle/osx/RustDesk.app
-'''.format(pa))
-            os.system('create-dmg target/release/bundle/osx/RustDesk.app')
-            os.rename('RustDesk %s.dmg' % version, 'rustdesk-%s.dmg' % version)
-            if pa:
-                os.system('''
-#rcodesign sign --p12-file ~/.p12/rustdesk-developer-id.p12 --p12-password-file ~/.p12/.cert-pass --code-signature-flags runtime ./rustdesk-{1}.dmg
-codesign -s "Developer ID Application: {0}" --force --options runtime ./rustdesk-{1}.dmg
-# https://pyoxidizer.readthedocs.io/en/latest/apple_codesign_rcodesign.html
-rcodesign notarize --api-issuer 69a6de7d-2907-47e3-e053-5b8c7c11a4d1 --api-key 9JBRHG3JHT --staple ./rustdesk-{1}.dmg
-# verify:  spctl -a -t exec -v /Applications/RustDesk.app
-'''.format(pa, version))
+        if flutter:
+            if osx:
+                # todo: OSX build
+                pass
             else:
-                print('Not signed')
+                os.system(
+                    'mv target/release/bundle/deb/rustdesk*.deb ./flutter/rustdesk.deb')
+                build_flutter_deb(version)
         else:
-            os.system('mv target/release/bundle/deb/rustdesk*.deb ./rustdesk.deb')
-            os.system('dpkg-deb -R rustdesk.deb tmpdeb')
-            os.system('mkdir -p tmpdeb/usr/share/rustdesk/files/systemd/')
-            os.system(
-                'cp rustdesk.service tmpdeb/usr/share/rustdesk/files/systemd/')
-            os.system(
-                'cp rustdesk.service.user tmpdeb/usr/share/rustdesk/files/systemd/')
-            os.system('cp pynput_service.py tmpdeb/usr/share/rustdesk/files/')
-            os.system('cp -a DEBIAN/* tmpdeb/DEBIAN/')
-            os.system('strip tmpdeb/usr/bin/rustdesk')
-            os.system('mkdir -p tmpdeb/usr/lib/rustdesk')
-            os.system('cp libsciter-gtk.so tmpdeb/usr/lib/rustdesk/')
-            md5_file('usr/share/rustdesk/files/systemd/rustdesk.service')
-            md5_file('usr/share/rustdesk/files/systemd/rustdesk.service.user')
-            md5_file('usr/share/rustdesk/files/pynput_service.py')
-            md5_file('usr/lib/rustdesk/libsciter-gtk.so')
-            os.system('dpkg-deb -b tmpdeb rustdesk.deb; /bin/rm -rf tmpdeb/')
-            os.rename('rustdesk.deb', 'rustdesk-%s.deb' % version)
+            if osx:
+                os.system(
+                    'strip target/release/bundle/osx/RustDesk.app/Contents/MacOS/rustdesk')
+                os.system(
+                    'cp libsciter.dylib target/release/bundle/osx/RustDesk.app/Contents/MacOS/')
+                # https://github.com/sindresorhus/create-dmg
+                os.system('/bin/rm -rf *.dmg')
+                plist = "target/release/bundle/osx/RustDesk.app/Contents/Info.plist"
+                txt = open(plist).read()
+                with open(plist, "wt") as fh:
+                    fh.write(txt.replace("</dict>", """
+    <key>LSUIElement</key>
+    <string>1</string>
+    </dict>"""))
+                pa = os.environ.get('P')
+                if pa:
+                    os.system('''
+    # buggy: rcodesign sign ... path/*, have to sign one by one
+    #rcodesign sign --p12-file ~/.p12/rustdesk-developer-id.p12 --p12-password-file ~/.p12/.cert-pass --code-signature-flags runtime ./target/release/bundle/osx/RustDesk.app/Contents/MacOS/rustdesk
+    #rcodesign sign --p12-file ~/.p12/rustdesk-developer-id.p12 --p12-password-file ~/.p12/.cert-pass --code-signature-flags runtime ./target/release/bundle/osx/RustDesk.app/Contents/MacOS/libsciter.dylib
+    #rcodesign sign --p12-file ~/.p12/rustdesk-developer-id.p12 --p12-password-file ~/.p12/.cert-pass --code-signature-flags runtime ./target/release/bundle/osx/RustDesk.app
+    # goto "Keychain Access" -> "My Certificates" for below id which starts with "Developer ID Application:"
+    codesign -s "Developer ID Application: {0}" --force --options runtime  ./target/release/bundle/osx/RustDesk.app/Contents/MacOS/*
+    codesign -s "Developer ID Application: {0}" --force --options runtime  ./target/release/bundle/osx/RustDesk.app
+    '''.format(pa))
+                os.system('create-dmg target/release/bundle/osx/RustDesk.app')
+                os.rename('RustDesk %s.dmg' %
+                          version, 'rustdesk-%s.dmg' % version)
+                if pa:
+                    os.system('''
+    #rcodesign sign --p12-file ~/.p12/rustdesk-developer-id.p12 --p12-password-file ~/.p12/.cert-pass --code-signature-flags runtime ./rustdesk-{1}.dmg
+    codesign -s "Developer ID Application: {0}" --force --options runtime ./rustdesk-{1}.dmg
+    # https://pyoxidizer.readthedocs.io/en/latest/apple_codesign_rcodesign.html
+    rcodesign notarize --api-issuer 69a6de7d-2907-47e3-e053-5b8c7c11a4d1 --api-key 9JBRHG3JHT --staple ./rustdesk-{1}.dmg
+    # verify:  spctl -a -t exec -v /Applications/RustDesk.app
+    '''.format(pa, version))
+                else:
+                    print('Not signed')
+            else:
+                # buid deb package
+                os.system(
+                    'mv target/release/bundle/deb/rustdesk*.deb ./rustdesk.deb')
+                os.system('dpkg-deb -R rustdesk.deb tmpdeb')
+                os.system('mkdir -p tmpdeb/usr/share/rustdesk/files/systemd/')
+                os.system(
+                    'cp rustdesk.service tmpdeb/usr/share/rustdesk/files/systemd/')
+                os.system(
+                    'cp rustdesk.service.user tmpdeb/usr/share/rustdesk/files/systemd/')
+                os.system(
+                    'cp pynput_service.py tmpdeb/usr/share/rustdesk/files/')
+                os.system('cp -a DEBIAN/* tmpdeb/DEBIAN/')
+                os.system('strip tmpdeb/usr/bin/rustdesk')
+                os.system('mkdir -p tmpdeb/usr/lib/rustdesk')
+                os.system('cp libsciter-gtk.so tmpdeb/usr/lib/rustdesk/')
+                md5_file('usr/share/rustdesk/files/systemd/rustdesk.service')
+                md5_file('usr/share/rustdesk/files/systemd/rustdesk.service.user')
+                md5_file('usr/share/rustdesk/files/pynput_service.py')
+                md5_file('usr/lib/rustdesk/libsciter-gtk.so')
+                os.system('dpkg-deb -b tmpdeb rustdesk.deb; /bin/rm -rf tmpdeb/')
+                os.rename('rustdesk.deb', 'rustdesk-%s.deb' % version)
     os.system("mv Cargo.toml.bk Cargo.toml")
     os.system("mv src/main.rs.bk src/main.rs")
 

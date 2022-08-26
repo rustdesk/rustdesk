@@ -1,5 +1,5 @@
 pkgname=rustdesk
-pkgver=1.1.9
+pkgver=1.1.10
 pkgrel=0
 epoch=
 pkgdesc=""
@@ -27,5 +27,5 @@ package() {
   install -Dm 644 $HBB/rustdesk.service -t "${pkgdir}/usr/share/rustdesk/files"
   install -Dm 644 $HBB/rustdesk.desktop -t "${pkgdir}/usr/share/rustdesk/files"
   install -Dm 644 $HBB/pynput_service.py -t "${pkgdir}/usr/share/rustdesk/files"
-  install -Dm 644 $HBB/256-no-margin.png "${pkgdir}/usr/share/rustdesk/files/rustdesk.png"
+  install -Dm 644 $HBB/128x128@2x.png "${pkgdir}/usr/share/rustdesk/files/rustdesk.png"
 }
