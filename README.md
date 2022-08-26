@@ -47,8 +47,6 @@ Please download sciter dynamic library yourself.
 [Linux](https://raw.githubusercontent.com/c-smile/sciter-sdk/master/bin.lnx/x64/libsciter-gtk.so) |
 [MacOS](https://raw.githubusercontent.com/c-smile/sciter-sdk/master/bin.osx/libsciter.dylib)
 
-Mobile versions use Flutter. We will migrate desktop version from Sciter to Flutter.
-
 ## Raw steps to build
 
 - Prepare your Rust development env and C++ build env
