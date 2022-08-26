@@ -88,40 +88,53 @@ class _PeerWidgetState extends State<_PeerWidget> with WindowListener {
                 )
               : SingleChildScrollView(
                   child: ObxValue<RxString>((searchText) {
-                    final cards = <Widget>[];
-                    peers.peers.where((peer) {
-                      if (searchText.isEmpty) {
-                        return true;
-                      } else {
-                        return peer.id.contains(peerSearchText.value);
-                      }
-                    }).forEach((peer) {
-                      cards.add(Offstage(
-                          offstage: super.widget._offstageFunc(peer),
-                          child: Obx(
-                            () => Container(
-                              width: 220,
-                              height: peerCardUiType.value == PeerUiType.grid
-                                  ? 140
-                                  : 42,
-                              child: VisibilityDetector(
-                                key: Key('${peer.id}'),
-                                onVisibilityChanged: (info) {
-                                  final peerId = (info.key as ValueKey).value;
-                                  if (info.visibleFraction > 0.00001) {
-                                    _curPeers.add(peerId);
-                                  } else {
-                                    _curPeers.remove(peerId);
-                                  }
-                                  _lastChangeTime = DateTime.now();
-                                },
-                                child: super.widget._peerCardWidgetFunc(peer),
-                              ),
-                            ),
-                          )));
-                    });
-                    return Wrap(
-                        children: cards, spacing: space, runSpacing: space);
+                    return FutureBuilder<List<Peer>>(
+                      builder: (context, snapshot) {
+                        if (snapshot.hasData) {
+                          final peers = snapshot.data!;
+                          final cards = <Widget>[];
+                          for (final peer in peers) {
+                            cards.add(Offstage(
+                                key: ValueKey("off${peer.id}"),
+                                offstage: super.widget._offstageFunc(peer),
+                                child: Obx(
+                                  () => SizedBox(
+                                    width: 220,
+                                    height:
+                                        peerCardUiType.value == PeerUiType.grid
+                                            ? 140
+                                            : 42,
+                                    child: VisibilityDetector(
+                                      key: ValueKey(peer.id),
+                                      onVisibilityChanged: (info) {
+                                        final peerId =
+                                            (info.key as ValueKey).value;
+                                        if (info.visibleFraction > 0.00001) {
+                                          _curPeers.add(peerId);
+                                        } else {
+                                          _curPeers.remove(peerId);
+                                        }
+                                        _lastChangeTime = DateTime.now();
+                                      },
+                                      child: super
+                                          .widget
+                                          ._peerCardWidgetFunc(peer),
+                                    ),
+                                  ),
+                                )));
+                          }
+                          return Wrap(
+                              spacing: space,
+                              runSpacing: space,
+                              children: cards);
+                        } else {
+                          return const Center(
+                            child: CircularProgressIndicator(),
+                          );
+                        }
+                      },
+                      future: matchPeers(searchText.value, peers.peers),
+                    );
                   }, peerSearchText),
                 )),
     );
