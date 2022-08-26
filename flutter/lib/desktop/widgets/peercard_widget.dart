@@ -35,9 +35,10 @@ class _PeerCard extends StatefulWidget {
 /// State for the connection page.
 class _PeerCardState extends State<_PeerCard>
     with AutomaticKeepAliveClientMixin {
-  var _menuPos;
+  var _menuPos = RelativeRect.fill;
   final double _cardRadis = 20;
   final double _borderWidth = 2;
+  final RxBool _iconMoreHover = false.obs;
 
   @override
   Widget build(BuildContext context) {
@@ -64,7 +65,7 @@ class _PeerCardState extends State<_PeerCard>
                 : null);
       },
       child: GestureDetector(
-          onDoubleTapDown: (_) => _connect(peer.id),
+          onDoubleTap: () => _connect(peer.id),
           child: Obx(() => peerCardUiType.value == PeerUiType.grid
               ? _buildPeerCard(context, peer, deco)
               : _buildPeerTile(context, peer, deco))),
@@ -75,7 +76,6 @@ class _PeerCardState extends State<_PeerCard>
       BuildContext context, Peer peer, Rx<BoxDecoration?> deco) {
     final greyStyle =
         TextStyle(fontSize: 12, color: MyTheme.color(context).lighterText);
-    RxBool iconHover = false.obs;
     return Obx(
       () => Container(
         foregroundDecoration: deco.value,
@@ -147,30 +147,7 @@ class _PeerCardState extends State<_PeerCard>
                         ],
                       ),
                     ),
-                    InkWell(
-                      child: CircleAvatar(
-                        radius: 12,
-                        backgroundColor: iconHover.value
-                            ? MyTheme.color(context).grayBg!
-                            : MyTheme.color(context).bg!,
-                        child: Icon(
-                          Icons.more_vert,
-                          size: 18,
-                          color: iconHover.value
-                              ? MyTheme.color(context).text
-                              : MyTheme.color(context).lightText,
-                        ),
-                      ),
-                      onTapDown: (e) {
-                        final x = e.globalPosition.dx;
-                        final y = e.globalPosition.dy;
-                        _menuPos = RelativeRect.fromLTRB(x, y, x, y);
-                      },
-                      onTap: () {
-                        _showPeerMenu(context, peer.id);
-                      },
-                      onHover: (value) => iconHover.value = value,
-                    ),
+                    _actionMore(peer),
                   ],
                 ).paddingSymmetric(horizontal: 4.0),
               ),
@@ -183,7 +160,6 @@ class _PeerCardState extends State<_PeerCard>
 
   Widget _buildPeerCard(
       BuildContext context, Peer peer, Rx<BoxDecoration?> deco) {
-    RxBool iconHover = false.obs;
     return Card(
       color: Colors.transparent,
       elevation: 0,
@@ -272,29 +248,10 @@ class _PeerCardState extends State<_PeerCard>
                                     ? Colors.green
                                     : Colors.yellow)),
                         Text('${peer.id}')
-                      ]),
-                      InkWell(
-                          child: CircleAvatar(
-                              radius: 12,
-                              backgroundColor: iconHover.value
-                                  ? MyTheme.color(context).grayBg!
-                                  : MyTheme.color(context).bg!,
-                              child: Icon(Icons.more_vert,
-                                  size: 18,
-                                  color: iconHover.value
-                                      ? MyTheme.color(context).text
-                                      : MyTheme.color(context).lightText)),
-                          onTapDown: (e) {
-                            final x = e.globalPosition.dx;
-                            final y = e.globalPosition.dy;
-                            _menuPos = RelativeRect.fromLTRB(x, y, x, y);
-                          },
-                          onTap: () {
-                            _showPeerMenu(context, peer.id);
-                          },
-                          onHover: (value) => iconHover.value = value),
+                      ]).paddingSymmetric(vertical: 8),
+                      _actionMore(peer),
                     ],
-                  ).paddingSymmetric(vertical: 8.0, horizontal: 12.0),
+                  ).paddingSymmetric(horizontal: 12.0),
                 )
               ],
             ),
@@ -303,6 +260,27 @@ class _PeerCardState extends State<_PeerCard>
       ),
     );
   }
+
+  Widget _actionMore(Peer peer) => Listener(
+      onPointerDown: (e) {
+        final x = e.position.dx;
+        final y = e.position.dy;
+        _menuPos = RelativeRect.fromLTRB(x, y, x, y);
+      },
+      onPointerUp: (_) => _showPeerMenu(context, peer.id),
+      child: MouseRegion(
+          onEnter: (_) => _iconMoreHover.value = true,
+          onExit: (_) => _iconMoreHover.value = false,
+          child: CircleAvatar(
+              radius: 14,
+              backgroundColor: _iconMoreHover.value
+                  ? MyTheme.color(context).grayBg!
+                  : MyTheme.color(context).bg!,
+              child: Icon(Icons.more_vert,
+                  size: 18,
+                  color: _iconMoreHover.value
+                      ? MyTheme.color(context).text
+                      : MyTheme.color(context).lightText))));
 
   /// Connect to a peer with [id].
   /// If [isFileTransfer], starts a session only for file transfer.
@@ -325,7 +303,7 @@ class _PeerCardState extends State<_PeerCard>
   void _showPeerMenu(BuildContext context, String id) async {
     var value = await showMenu(
       context: context,
-      position: this._menuPos,
+      position: _menuPos,
       items: await super.widget.popupMenuItemsFunc(),
       elevation: 8,
     );
