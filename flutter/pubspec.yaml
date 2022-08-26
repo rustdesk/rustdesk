@@ -83,6 +83,8 @@ dev_dependencies:
         sdk: flutter
     build_runner: ^2.1.11
     freezed: ^2.0.3
+    flutter_lints: ^2.0.0
+
 # rerun: flutter pub run flutter_launcher_icons:main
 flutter_icons:
     android: "ic_launcher"
