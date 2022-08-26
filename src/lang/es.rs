@@ -302,5 +302,14 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Restarting Remote Device", "Reiniciando dispositivo remoto"),
         ("remote_restarting_tip", "Dispositivo remoto reiniciando, favor de cerrar este mensaje y reconectarse con la contraseña permamente despues de un momento."),
         ("Copied", ""),
+        ("Exit Fullscreen", "Salir de pantalla completa"),
+        ("Fullscreen", "Pantalla completa"),
+        ("Mobile Actions", "Acciones móviles"),
+        ("Select Monitor", "Seleccionar monitor"),
+        ("Control Actions", "Acciones de control"),
+        ("Display Settings", "Configuración de pantalla"),
+        ("Ratio", "Relación"),
+        ("Image Quality", "La calidad de imagen"),
+        ("Scroll Style", "Estilo de desplazamiento"),
     ].iter().cloned().collect();
 }

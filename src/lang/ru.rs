@@ -302,5 +302,14 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Restarting Remote Device", "Перезагрузка удаленного устройства"),
         ("remote_restarting_tip", "Удаленное устройство перезапускается. Пожалуйста, закройте это сообщение и через некоторое время переподключитесь, используя постоянный пароль."),
         ("Copied", ""),
+        ("Exit Fullscreen", "Выйти из полноэкранного режима"),
+        ("Fullscreen", "Полноэкранный"),
+        ("Mobile Actions", "Мобильные действия"),
+        ("Select Monitor", "Выберите монитор"),
+        ("Control Actions", "Действия по управлению"),
+        ("Display Settings", "Настройки отображения"),
+        ("Ratio", "Соотношение"),
+        ("Image Quality", "Качество изображения"),
+        ("Scroll Style", "Стиль прокрутки"),
     ].iter().cloned().collect();
 }

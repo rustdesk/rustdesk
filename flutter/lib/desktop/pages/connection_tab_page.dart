@@ -22,26 +22,25 @@ class ConnectionTabPage extends StatefulWidget {
 
 class _ConnectionTabPageState extends State<ConnectionTabPage> {
   final tabController = Get.put(DesktopTabController());
-  static final Rx<String> _fullscreenID = "".obs;
   static final IconData selectedIcon = Icons.desktop_windows_sharp;
   static final IconData unselectedIcon = Icons.desktop_windows_outlined;
 
   var connectionMap = RxList<Widget>.empty(growable: true);
 
   _ConnectionTabPageState(Map<String, dynamic> params) {
+    final RxBool fullscreen = Get.find(tag: 'fullscreen');
     if (params['id'] != null) {
       tabController.add(TabInfo(
           key: params['id'],
           label: params['id'],
           selectedIcon: selectedIcon,
           unselectedIcon: unselectedIcon,
-          page: RemotePage(
-            key: ValueKey(params['id']),
-            id: params['id'],
-            tabBarHeight:
-                _fullscreenID.value.isNotEmpty ? 0 : kDesktopRemoteTabBarHeight,
-            fullscreenID: _fullscreenID,
-          )));
+          page: Obx(() => RemotePage(
+	        key: ValueKey(params['id']),
+                id: params['id'],
+                tabBarHeight:
+                    fullscreen.isTrue ? 0 : kDesktopRemoteTabBarHeight,
+              ))));
     }
   }
 
@@ -54,6 +53,8 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
     rustDeskWinManager.setMethodHandler((call, fromWindowId) async {
       print(
           "call ${call.method} with args ${call.arguments} from window ${fromWindowId}");
+
+      final RxBool fullscreen = Get.find(tag: 'fullscreen');
       // for simplify, just replace connectionId
       if (call.method == "new_remote_desktop") {
         final args = jsonDecode(call.arguments);
@@ -64,14 +65,13 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
             label: id,
             selectedIcon: selectedIcon,
             unselectedIcon: unselectedIcon,
-            page: RemotePage(
-              key: ValueKey(id),
-              id: id,
-              tabBarHeight: _fullscreenID.value.isNotEmpty
-                  ? 0
-                  : kDesktopRemoteTabBarHeight,
-              fullscreenID: _fullscreenID,
-            )));
+            closable: false,
+            page: Obx(() => RemotePage(
+                  key: ValueKey(id),
+                  id: id,
+                  tabBarHeight:
+                      fullscreen.isTrue ? 0 : kDesktopRemoteTabBarHeight,
+                ))));
       } else if (call.method == "onDestroy") {
         tabController.state.value.tabs.forEach((tab) {
           print("executing onDestroy hook, closing ${tab.label}}");
@@ -88,29 +88,31 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
   @override
   Widget build(BuildContext context) {
     final theme = isDarkTheme() ? TarBarTheme.dark() : TarBarTheme.light();
-    return SubWindowDragToResizeArea(
-      windowId: windowId(),
-      child: Container(
-        decoration: BoxDecoration(
-            border: Border.all(color: MyTheme.color(context).border!)),
-        child: Scaffold(
-            backgroundColor: MyTheme.color(context).bg,
-            body: Obx(() => DesktopTab(
-                  controller: tabController,
-                  theme: theme,
-                  isMainWindow: false,
-                  showTabBar: _fullscreenID.value.isEmpty,
-                  tail: AddButton(
-                    theme: theme,
-                  ).paddingOnly(left: 10),
-                  pageViewBuilder: (pageView) {
-                    WindowController.fromWindowId(windowId())
-                        .setFullscreen(_fullscreenID.value.isNotEmpty);
-                    return pageView;
-                  },
-                ))),
-      ),
-    );
+    final RxBool fullscreen = Get.find(tag: 'fullscreen');
+    return Obx(() => SubWindowDragToResizeArea(
+          resizeEdgeSize: fullscreen.value ? 1.0 : 8.0,
+          windowId: windowId(),
+          child: Container(
+            decoration: BoxDecoration(
+                border: Border.all(color: MyTheme.color(context).border!)),
+            child: Scaffold(
+                backgroundColor: MyTheme.color(context).bg,
+                body: Obx(() => DesktopTab(
+                      controller: tabController,
+                      theme: theme,
+                      isMainWindow: false,
+                      showTabBar: fullscreen.isFalse,
+                      tail: AddButton(
+                        theme: theme,
+                      ).paddingOnly(left: 10),
+                      pageViewBuilder: (pageView) {
+                        WindowController.fromWindowId(windowId())
+                            .setFullscreen(fullscreen.isTrue);
+                        return pageView;
+                      },
+                    ))),
+          ),
+        ));
   }
 
   void onRemoveId(String id) {

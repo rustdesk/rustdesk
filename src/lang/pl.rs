@@ -303,5 +303,14 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Set security password", "Ustaw hasło zabezpieczające"),
         ("Connection not allowed", "Połączenie niedozwolone"),
         ("Copied", ""),
+        ("Exit Fullscreen", "Wyłączyć tryb pełnoekranowy"),
+        ("Fullscreen", "Pełny ekran"),
+        ("Mobile Actions", "Działania mobilne"),
+        ("Select Monitor", "Wybierz Monitor"),
+        ("Control Actions", "Działania kontrolne"),
+        ("Display Settings", "Ustawienia wyświetlania"),
+        ("Ratio", "Stosunek"),
+        ("Image Quality", "Jakość obrazu"),
+        ("Scroll Style", "Styl przewijania"),
     ].iter().cloned().collect();
 }
