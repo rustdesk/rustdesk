@@ -39,7 +39,9 @@ Below are the servers you are using for free, it may change along the time. If y
 
 ## Dependencies
 
-Desktop versions use [sciter](https://sciter.com/) for GUI, please download sciter dynamic library yourself.
+Desktop versions use [sciter](https://sciter.com/) or Flutter for GUI, this tutorial is for Sciter only. 
+
+Please download sciter dynamic library yourself.
 
 [Windows](https://raw.githubusercontent.com/c-smile/sciter-sdk/master/bin.win/x64/sciter.dll) |
 [Linux](https://raw.githubusercontent.com/c-smile/sciter-sdk/master/bin.lnx/x64/libsciter-gtk.so) |
