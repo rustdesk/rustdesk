@@ -1,5 +1,6 @@
 import 'package:contextmenu/contextmenu.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_hbb/utils/multi_window_manager.dart';
 import 'package:get/get.dart';
 
@@ -284,11 +285,20 @@ class _PeerCardState extends State<_PeerCard>
 
   /// Connect to a peer with [id].
   /// If [isFileTransfer], starts a session only for file transfer.
-  void _connect(String id, {bool isFileTransfer = false}) async {
+  /// If [isTcpTunneling], starts a session only for tcp tunneling.
+  /// If [isRDP], starts a session only for rdp.
+  void _connect(String id,
+      {bool isFileTransfer = false,
+      bool isTcpTunneling = false,
+      bool isRDP = false}) async {
     if (id == '') return;
     id = id.replaceAll(' ', '');
+    assert(!(isFileTransfer && isTcpTunneling && isRDP),
+        "more than one connect type");
     if (isFileTransfer) {
       await rustDeskWinManager.new_file_transfer(id);
+    } else if (isTcpTunneling || isRDP) {
+      await rustDeskWinManager.new_port_forward(id, isRDP);
     } else {
       await rustDeskWinManager.new_remote_desktop(id);
     }
@@ -307,12 +317,18 @@ class _PeerCardState extends State<_PeerCard>
       items: await super.widget.popupMenuItemsFunc(),
       elevation: 8,
     );
-    if (value == 'remove') {
+    if (value == 'connect') {
+      _connect(id);
+    } else if (value == 'file') {
+      _connect(id, isFileTransfer: true);
+    } else if (value == 'tcp-tunnel') {
+      _connect(id, isTcpTunneling: true);
+    } else if (value == 'RDP') {
+      _connect(id, isRDP: true);
+    } else if (value == 'remove') {
       await bind.mainRemovePeer(id: id);
       removePreference(id);
       Get.forceAppUpdate(); // TODO use inner model / state
-    } else if (value == 'file') {
-      _connect(id, isFileTransfer: true);
     } else if (value == 'add-fav') {
       final favs = (await bind.mainGetFav()).toList();
       if (favs.indexOf(id) < 0) {
@@ -325,8 +341,6 @@ class _PeerCardState extends State<_PeerCard>
         bind.mainStoreFav(favs: favs);
         Get.forceAppUpdate(); // TODO use inner model / state
       }
-    } else if (value == 'connect') {
-      _connect(id, isFileTransfer: false);
     } else if (value == 'ab-delete') {
       gFFI.abModel.deletePeer(id);
       await gFFI.abModel.updateAb();
@@ -554,7 +568,7 @@ class RecentPeerCard extends BasePeerCard {
       : super(peer: peer, key: key, type: PeerType.recent);
 
   Future<List<PopupMenuItem<String>>> _getPopupMenuItems() async {
-    return [
+    var items = [
       PopupMenuItem<String>(
           child: Text(translate('Connect')), value: 'connect'),
       PopupMenuItem<String>(
@@ -570,6 +584,10 @@ class RecentPeerCard extends BasePeerCard {
       PopupMenuItem<String>(
           child: Text(translate('Add to Favorites')), value: 'add-fav'),
     ];
+    if (peer.platform == 'Windows') {
+      items.insert(3, _rdpMenuItem(peer.id));
+    }
+    return items;
   }
 }
 
@@ -578,7 +596,7 @@ class FavoritePeerCard extends BasePeerCard {
       : super(peer: peer, key: key, type: PeerType.fav);
 
   Future<List<PopupMenuItem<String>>> _getPopupMenuItems() async {
-    return [
+    var items = [
       PopupMenuItem<String>(
           child: Text(translate('Connect')), value: 'connect'),
       PopupMenuItem<String>(
@@ -594,6 +612,10 @@ class FavoritePeerCard extends BasePeerCard {
       PopupMenuItem<String>(
           child: Text(translate('Remove from Favorites')), value: 'remove-fav'),
     ];
+    if (peer.platform == 'Windows') {
+      items.insert(3, _rdpMenuItem(peer.id));
+    }
+    return items;
   }
 }
 
@@ -602,7 +624,7 @@ class DiscoveredPeerCard extends BasePeerCard {
       : super(peer: peer, key: key, type: PeerType.discovered);
 
   Future<List<PopupMenuItem<String>>> _getPopupMenuItems() async {
-    return [
+    var items = [
       PopupMenuItem<String>(
           child: Text(translate('Connect')), value: 'connect'),
       PopupMenuItem<String>(
@@ -618,6 +640,10 @@ class DiscoveredPeerCard extends BasePeerCard {
       PopupMenuItem<String>(
           child: Text(translate('Add to Favorites')), value: 'add-fav'),
     ];
+    if (peer.platform == 'Windows') {
+      items.insert(3, _rdpMenuItem(peer.id));
+    }
+    return items;
   }
 }
 
@@ -626,7 +652,7 @@ class AddressBookPeerCard extends BasePeerCard {
       : super(peer: peer, key: key, type: PeerType.ab);
 
   Future<List<PopupMenuItem<String>>> _getPopupMenuItems() async {
-    return [
+    var items = [
       PopupMenuItem<String>(
           child: Text(translate('Connect')), value: 'connect'),
       PopupMenuItem<String>(
@@ -645,6 +671,10 @@ class AddressBookPeerCard extends BasePeerCard {
       PopupMenuItem<String>(
           child: Text(translate('Edit Tag')), value: 'ab-edit-tag'),
     ];
+    if (peer.platform == 'Windows') {
+      items.insert(3, _rdpMenuItem(peer.id));
+    }
+    return items;
   }
 }
 
@@ -663,4 +693,137 @@ Future<PopupMenuItem<String>> _forceAlwaysRelayMenuItem(String id) async {
         ],
       ),
       value: 'force-always-relay');
+}
+
+PopupMenuItem<String> _rdpMenuItem(String id) {
+  return PopupMenuItem<String>(
+      child: Row(
+        children: [
+          Text('RDP'),
+          SizedBox(width: 20),
+          IconButton(
+            icon: Icon(Icons.edit),
+            onPressed: () => _rdpDialog(id),
+          )
+        ],
+      ),
+      value: 'RDP');
+}
+
+void _rdpDialog(String id) async {
+  final portController = TextEditingController(
+      text: await bind.mainGetPeerOption(id: id, key: 'rdp_port'));
+  final userController = TextEditingController(
+      text: await bind.mainGetPeerOption(id: id, key: 'rdp_username'));
+  final passwordContorller = TextEditingController(
+      text: await bind.mainGetPeerOption(id: id, key: 'rdp_password'));
+  RxBool secure = true.obs;
+
+  gFFI.dialogManager.show((setState, close) {
+    return CustomAlertDialog(
+      title: Text('RDP ' + translate('Settings')),
+      content: ConstrainedBox(
+        constraints: BoxConstraints(minWidth: 500),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SizedBox(
+              height: 8.0,
+            ),
+            Row(
+              children: [
+                ConstrainedBox(
+                    constraints: BoxConstraints(minWidth: 100),
+                    child: Text(
+                      "${translate('Port')}:",
+                      textAlign: TextAlign.start,
+                    ).marginOnly(bottom: 16.0)),
+                SizedBox(
+                  width: 24.0,
+                ),
+                Expanded(
+                  child: TextField(
+                    inputFormatters: [
+                      FilteringTextInputFormatter.allow(RegExp(
+                          r'^([0-9]|[1-9]\d|[1-9]\d{2}|[1-9]\d{3}|[1-5]\d{4}|6[0-4]\d{3}|65[0-4]\d{2}|655[0-2]\d|6553[0-5])$'))
+                    ],
+                    decoration: InputDecoration(
+                        border: OutlineInputBorder(), hintText: '3389'),
+                    controller: portController,
+                  ),
+                ),
+              ],
+            ),
+            SizedBox(
+              height: 8.0,
+            ),
+            Row(
+              children: [
+                ConstrainedBox(
+                    constraints: BoxConstraints(minWidth: 100),
+                    child: Text(
+                      "${translate('Username')}:",
+                      textAlign: TextAlign.start,
+                    ).marginOnly(bottom: 16.0)),
+                SizedBox(
+                  width: 24.0,
+                ),
+                Expanded(
+                  child: TextField(
+                    decoration: InputDecoration(border: OutlineInputBorder()),
+                    controller: userController,
+                  ),
+                ),
+              ],
+            ),
+            SizedBox(
+              height: 8.0,
+            ),
+            Row(
+              children: [
+                ConstrainedBox(
+                    constraints: BoxConstraints(minWidth: 100),
+                    child: Text("${translate('Password')}:")
+                        .marginOnly(bottom: 16.0)),
+                SizedBox(
+                  width: 24.0,
+                ),
+                Expanded(
+                  child: Obx(() => TextField(
+                        obscureText: secure.value,
+                        decoration: InputDecoration(
+                            border: OutlineInputBorder(),
+                            suffixIcon: IconButton(
+                                onPressed: () => secure.value = !secure.value,
+                                icon: Icon(secure.value
+                                    ? Icons.visibility_off
+                                    : Icons.visibility))),
+                        controller: passwordContorller,
+                      )),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+            onPressed: () {
+              close();
+            },
+            child: Text(translate("Cancel"))),
+        TextButton(
+            onPressed: () async {
+              await bind.mainSetPeerOption(
+                  id: id, key: 'rdp_port', value: portController.text.trim());
+              await bind.mainSetPeerOption(
+                  id: id, key: 'rdp_username', value: userController.text);
+              await bind.mainSetPeerOption(
+                  id: id, key: 'rdp_password', value: passwordContorller.text);
+              close();
+            },
+            child: Text(translate("OK"))),
+      ],
+    );
+  });
 }

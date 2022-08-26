@@ -111,8 +111,9 @@ pub fn session_connect(
     events2ui: StreamSink<EventToUI>,
     id: String,
     is_file_transfer: bool,
+    is_port_forward: bool,
 ) -> ResultType<()> {
-    Session::start(&id, is_file_transfer, events2ui);
+    Session::start(&id, is_file_transfer, is_port_forward, events2ui);
     Ok(())
 }
 
@@ -592,10 +593,39 @@ pub fn main_load_lan_peers() {
     {
         let data = HashMap::from([
             ("name", "load_lan_peers".to_owned()),
-            ("peers", serde_json::to_string(&get_lan_peers()).unwrap_or_default()),
+            (
+                "peers",
+                serde_json::to_string(&get_lan_peers()).unwrap_or_default(),
+            ),
         ]);
         s.add(serde_json::ser::to_string(&data).unwrap_or("".to_owned()));
     };
+}
+
+pub fn main_add_port_forward(id: String, local_port: i32, remote_host: String, remote_port: i32) {
+    let mut config = get_peer(id.clone());
+    if config
+        .port_forwards
+        .iter()
+        .filter(|x| x.0 == local_port)
+        .next()
+        .is_some()
+    {
+        return;
+    }
+    let pf = (local_port, remote_host, remote_port);
+    config.port_forwards.push(pf);
+    config.store(&id);
+}
+
+pub fn main_remove_port_forward(id: String, local_port: i32) {
+    let mut config = get_peer(id.clone());
+    config.port_forwards = config
+        .port_forwards
+        .drain(..)
+        .filter(|x| x.0 != local_port)
+        .collect();
+    config.store(&id);
 }
 
 pub fn main_get_last_remote_id() -> String {

@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_hbb/desktop/pages/desktop_tab_page.dart';
 import 'package:flutter_hbb/desktop/pages/server_page.dart';
 import 'package:flutter_hbb/desktop/screen/desktop_file_transfer_screen.dart';
+import 'package:flutter_hbb/desktop/screen/desktop_port_forward_screen.dart';
 import 'package:flutter_hbb/desktop/screen/desktop_remote_screen.dart';
 import 'package:flutter_hbb/utils/multi_window_manager.dart';
 import 'package:get/get.dart';
@@ -46,6 +47,9 @@ Future<Null> main(List<String> args) async {
         break;
       case WindowType.FileTransfer:
         runFileTransferScreen(argument);
+        break;
+      case WindowType.PortForward:
+        runPortForwardScreen(argument);
         break;
       default:
         break;
@@ -125,6 +129,23 @@ void runFileTransferScreen(Map<String, dynamic> argument) async {
       title: 'RustDesk - File Transfer',
       theme: getCurrentTheme(),
       home: DesktopFileTransferScreen(params: argument),
+      navigatorObservers: [
+        // FirebaseAnalyticsObserver(analytics: analytics),
+      ],
+      builder: _keepScaleBuilder(),
+    ),
+  );
+}
+
+void runPortForwardScreen(Map<String, dynamic> argument) async {
+  await initEnv(kAppTypeDesktopPortForward);
+  runApp(
+    GetMaterialApp(
+      navigatorKey: globalKey,
+      debugShowCheckedModeBanner: false,
+      title: 'RustDesk - Port Forward',
+      theme: getCurrentTheme(),
+      home: DesktopPortForwardScreen(params: argument),
       navigatorObservers: [
         // FirebaseAnalyticsObserver(analytics: analytics),
       ],

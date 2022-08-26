@@ -1034,17 +1034,24 @@ class FFI {
     return [];
   }
 
-  /// Connect with the given [id]. Only transfer file if [isFileTransfer].
+  /// Connect with the given [id]. Only transfer file if [isFileTransfer], only port forward if [isPortForward].
   void connect(String id,
-      {bool isFileTransfer = false, double tabBarHeight = 0.0}) {
-    if (!isFileTransfer) {
+      {bool isFileTransfer = false,
+      bool isPortForward = false,
+      double tabBarHeight = 0.0}) {
+    assert(!(isFileTransfer && isPortForward), "more than one connect type");
+    if (isFileTransfer) {
+      id = 'ft_${id}';
+    } else if (isPortForward) {
+      id = 'pf_${id}';
+    } else {
       chatModel.resetClientMode();
       canvasModel.id = id;
       imageModel._id = id;
       cursorModel.id = id;
     }
-    id = isFileTransfer ? 'ft_${id}' : id;
-    final stream = bind.sessionConnect(id: id, isFileTransfer: isFileTransfer);
+    final stream = bind.sessionConnect(
+        id: id, isFileTransfer: isFileTransfer, isPortForward: isPortForward);
     final cb = ffiModel.startEventListener(id);
     () async {
       await for (final message in stream) {

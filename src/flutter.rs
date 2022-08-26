@@ -70,7 +70,13 @@ impl Session {
     ///
     /// * `id` - The identifier of the remote session with prefix. Regex: [\w]*[\_]*[\d]+
     /// * `is_file_transfer` - If the session is used for file transfer.
-    pub fn start(identifier: &str, is_file_transfer: bool, events2ui: StreamSink<EventToUI>) {
+    /// * `is_port_forward` - If the session is used for port forward.
+    pub fn start(
+        identifier: &str,
+        is_file_transfer: bool,
+        is_port_forward: bool,
+        events2ui: StreamSink<EventToUI>,
+    ) {
         // TODO check same id
         let session_id = get_session_id(identifier.to_owned());
         LocalConfig::set_remote_id(&session_id);
@@ -83,17 +89,17 @@ impl Session {
             lc: Default::default(),
             events2ui,
         };
-        session
-            .lc
-            .write()
-            .unwrap()
-            .initialize(session_id.clone(), is_file_transfer, false);
+        session.lc.write().unwrap().initialize(
+            session_id.clone(),
+            is_file_transfer,
+            is_port_forward,
+        );
         SESSIONS
             .write()
             .unwrap()
             .insert(identifier.to_owned(), session.clone());
         std::thread::spawn(move || {
-            Connection::start(session, is_file_transfer);
+            Connection::start(session, is_file_transfer, is_port_forward);
         });
     }
 
@@ -201,7 +207,7 @@ impl Session {
         self.send(Data::Close);
         let session = self.clone();
         std::thread::spawn(move || {
-            Connection::start(session, false);
+            Connection::start(session, false, false);
         });
     }
 
@@ -719,18 +725,21 @@ impl Connection {
     ///
     /// * `session` - The session to create a new connection for.
     /// * `is_file_transfer` - Whether the connection is for file transfer.
+    /// * `is_port_forward` - Whether the connection is for port forward.
     #[tokio::main(flavor = "current_thread")]
-    async fn start(session: Session, is_file_transfer: bool) {
+    async fn start(session: Session, is_file_transfer: bool, is_port_forward: bool) {
         let mut last_recv_time = Instant::now();
         let (sender, mut receiver) = mpsc::unbounded_channel::<Data>();
         let mut stop_clipboard = None;
-        if !is_file_transfer {
+        if !is_file_transfer && !is_port_forward {
             stop_clipboard = Self::start_clipboard(sender.clone(), session.lc.clone());
         }
         *session.sender.write().unwrap() = Some(sender);
         let conn_type = if is_file_transfer {
             session.lc.write().unwrap().is_file_transfer = true;
             ConnType::FILE_TRANSFER
+        } else if is_port_forward {
+            ConnType::PORT_FORWARD // TODO: RDP
         } else {
             ConnType::DEFAULT_CONN
         };
