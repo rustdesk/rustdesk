@@ -42,14 +42,6 @@ use hbb_common::{
     },
     Stream,
 };
-use hbb_common::{config::TransferSerde, fs::TransferJobMeta};
-use hbb_common::{
-    fs::{
-        can_enable_overwrite_detection, get_job, get_string, new_send_confirm, DigestCheckResult,
-        RemoveJobMeta,
-    },
-    get_version_number,
-};
 use rdev::{Event, EventType::*, Key as RdevKey, Keyboard as RdevKeyboard, KeyboardState};
 
 #[cfg(windows)]
