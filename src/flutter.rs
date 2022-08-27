@@ -37,6 +37,8 @@ use crate::common::{self, make_fd_to_json, CLIPBOARD_INTERVAL};
 use crate::common::{check_clipboard, update_clipboard, ClipboardContext};
 
 use crate::{client::*, flutter_ffi::EventToUI, make_fd_flutter};
+use enigo::{self, Enigo, KeyboardControllable};
+use rdev::{EventType::*, Key as RdevKey};
 
 pub(super) const APP_TYPE_MAIN: &str = "main";
 pub(super) const APP_TYPE_DESKTOP_REMOTE: &str = "remote";
@@ -46,6 +48,7 @@ lazy_static::lazy_static! {
     // static ref SESSION: Arc<RwLock<Option<Session>>> = Default::default();
     pub static ref SESSIONS: RwLock<HashMap<String,Session>> = Default::default();
     pub static ref GLOBAL_EVENT_STREAM: RwLock<HashMap<String, StreamSink<String>>> = Default::default(); // rust to dart event channel
+    pub static ref ENIGO: Arc<Mutex<Enigo>> = Arc::new(Mutex::new(Enigo::new()));
 }
 
 static SERVER_CLIPBOARD_ENABLED: AtomicBool = AtomicBool::new(true);
@@ -220,6 +223,15 @@ impl Session {
         self.send(Data::Message(msg));
     }
 
+    pub fn send_key_event(&self, mut evt: KeyEvent, keyboard_mode: KeyboardMode) {
+        // mode: legacy(0), map(1), translate(2), auto(3)
+        evt.mode = keyboard_mode.into();
+        dbg!(&evt);
+        let mut msg_out = Message::new();
+        msg_out.set_key_event(evt);
+        self.send(Data::Message(msg_out));
+    }
+
     /// Send chat message over the current session.
     ///
     /// # Arguments
@@ -373,14 +385,76 @@ impl Session {
         }
     }
 
+    #[allow(dead_code)]
+    pub fn convert_numpad_keys(&self, key: RdevKey) -> RdevKey {
+        if self.get_key_state(enigo::Key::NumLock) {
+            return key;
+        }
+        match key {
+            RdevKey::Kp0 => RdevKey::Insert,
+            RdevKey::KpDecimal => RdevKey::Delete,
+            RdevKey::Kp1 => RdevKey::End,
+            RdevKey::Kp2 => RdevKey::DownArrow,
+            RdevKey::Kp3 => RdevKey::PageDown,
+            RdevKey::Kp4 => RdevKey::LeftArrow,
+            RdevKey::Kp5 => RdevKey::Clear,
+            RdevKey::Kp6 => RdevKey::RightArrow,
+            RdevKey::Kp7 => RdevKey::Home,
+            RdevKey::Kp8 => RdevKey::UpArrow,
+            RdevKey::Kp9 => RdevKey::PageUp,
+            _ => key,
+        }
+    }
+
+    pub fn get_key_state(&self, key: enigo::Key) -> bool {
+        #[cfg(target_os = "macos")]
+        if key == enigo::Key::NumLock {
+            return true;
+        }
+        ENIGO.lock().unwrap().get_key_state(key)
+    }
+
+    /// Map keyboard mode
     pub fn input_raw_key(&self, keycode: i32, scancode: i32, down: bool){
-        use rdev::{EventType::*, Key as RdevKey, *};
         if scancode < 0 || keycode < 0{
             return;
         }
-        let key = rdev::key_from_scancode(scancode.try_into().unwrap()) as RdevKey;
-        
-        log::info!("{:?}", key);
+        let keycode: u32 = keycode as u32;
+        let scancode: u32 = scancode as u32;
+        let key = rdev::key_from_scancode(scancode) as RdevKey;
+        // Windows requires special handling
+        #[cfg(target_os = "windows")]
+        let key = if let Some(e) = _evt {
+            rdev::get_win_key(e.code.into(), e.scan_code)
+        } else {
+            key
+        };
+
+        let peer = self.peer_platform();
+
+        let mut key_event = KeyEvent::new();
+        // According to peer platform.
+        let keycode: u32 = if peer == "Linux" {
+            rdev::linux_keycode_from_key(key).unwrap_or_default().into()
+        } else if peer == "Windows" {
+            #[cfg(not(windows))]
+            let key = self.convert_numpad_keys(key);
+            rdev::win_keycode_from_key(key).unwrap_or_default().into()
+        } else {
+            rdev::macos_keycode_from_key(key).unwrap_or_default().into()
+        };
+
+        key_event.set_chr(keycode);
+        key_event.down = down;
+
+        if self.get_key_state(enigo::Key::CapsLock) {
+            key_event.modifiers.push(ControlKey::CapsLock.into());
+        }
+        if self.get_key_state(enigo::Key::NumLock) {
+            key_event.modifiers.push(ControlKey::NumLock.into());
+        }
+
+        self.send_key_event(key_event, KeyboardMode::Map);
     }
 
     /// Input a string of text.
