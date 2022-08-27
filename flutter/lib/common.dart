@@ -8,6 +8,7 @@ import 'package:desktop_multi_window/desktop_multi_window.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/desktop/widgets/tabbar_widget.dart';
+import 'package:flutter_hbb/models/peer_model.dart';
 import 'package:get/get.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:window_manager/window_manager.dart';
@@ -703,4 +704,39 @@ String bool2option(String option, bool b) {
     res = b ? 'Y' : 'N';
   }
   return res;
+}
+
+Future<bool> matchPeer(String searchText, Peer peer) async {
+  if (searchText.isEmpty) {
+    return true;
+  }
+  if (peer.id.toLowerCase().contains(searchText)) {
+    return true;
+  }
+  if (peer.hostname.toLowerCase().contains(searchText) ||
+      peer.username.toLowerCase().contains(searchText)) {
+    return true;
+  }
+  final alias = await bind.mainGetPeerOption(id: peer.id, key: 'alias');
+  if (alias.isEmpty) {
+    return false;
+  }
+  return alias.toLowerCase().contains(searchText);
+}
+
+Future<List<Peer>>? matchPeers(String searchText, List<Peer> peers) async {
+  searchText = searchText.trim();
+  if (searchText.isEmpty) {
+    return peers;
+  }
+  searchText = searchText.toLowerCase();
+  final matches =
+      await Future.wait(peers.map((peer) => matchPeer(searchText, peer)));
+  final filteredList = List<Peer>.empty(growable: true);
+  for (var i = 0; i < peers.length; i++) {
+    if (matches[i]) {
+      filteredList.add(peers[i]);
+    }
+  }
+  return filteredList;
 }
