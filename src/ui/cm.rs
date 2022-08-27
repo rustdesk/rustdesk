@@ -1,5 +1,5 @@
 use crate::ipc::{self, new_listener, Connection, Data};
-#[cfg(windows)]
+#[cfg(target_os = "linux")]
 use crate::ipc::{start_pa};
 #[cfg(windows)]
 use crate::ipc::start_clipboard_file;

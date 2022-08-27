@@ -1649,7 +1649,7 @@ pub enum Data {
 }
 
 /// Keycode for key events.
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum Key {
     ControlKey(ControlKey),
     Chr(u32),

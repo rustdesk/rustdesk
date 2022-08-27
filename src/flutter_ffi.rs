@@ -208,6 +208,12 @@ pub fn session_switch_display(id: String, value: i32) {
     }
 }
 
+pub fn session_input_raw_key(id: String, keycode: i32, scancode:i32, down: bool){
+    if let Some(session) = SESSIONS.read().unwrap().get(&id) {
+        session.input_raw_key(keycode, scancode, down);
+    }
+}
+
 pub fn session_input_key(
     id: String,
     name: String,
