@@ -3,7 +3,7 @@ description: Your Remote Desktop Software
 
 # The following line prevents the package from being accidentally published to
 # pub.dev using `pub publish`. This is preferred for private packages.
-publish_to: 'none' # Remove this line if you wish to publish to pub.dev
+publish_to: "none" # Remove this line if you wish to publish to pub.dev
 
 # The following defines the version and build number for your application.
 # A version number is three numbers separated by dots, like 1.2.43
@@ -19,93 +19,127 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 version: 1.1.10-1+28
 
 environment:
-  sdk: ">=2.16.1"
+    sdk: ">=2.16.1"
 
 dependencies:
-  flutter:
-    sdk: flutter
+    flutter:
+        sdk: flutter
 
-
-  # The following adds the Cupertino Icons font to your application.
-  # Use with the CupertinoIcons class for iOS style icons.
-  cupertino_icons: ^1.0.3
-  ffi: ^1.1.2
-  path_provider: ^2.0.2
-  external_path: ^1.0.1
-  provider: ^6.0.3
-  tuple: ^2.0.0
-  wakelock: ^0.5.2
-  device_info: ^2.0.2 
-  firebase_analytics: ^9.1.5
-  package_info: ^2.0.2
-  url_launcher: ^6.0.9
-  shared_preferences: ^2.0.6
-  toggle_switch: ^1.4.0
-  dash_chat_2: ^0.0.12
-  draggable_float_widget: ^0.0.2
-  settings_ui: ^2.0.2
-  flutter_breadcrumb: ^1.0.1
-  http: ^0.13.4
-  qr_code_scanner: ^1.0.0
-  zxing2: ^0.1.0
-  image_picker: ^0.8.5
-  image: ^3.1.3
-  flutter_smart_dialog: ^4.3.1
-  flutter_rust_bridge: ^1.30.0
+    # The following adds the Cupertino Icons font to your application.
+    # Use with the CupertinoIcons class for iOS style icons.
+    cupertino_icons: ^1.0.3
+    ffi: ^2.0.1
+    path_provider: ^2.0.2
+    external_path: ^1.0.1
+    provider: ^6.0.3
+    tuple: ^2.0.0
+    wakelock: ^0.5.2
+    device_info_plus: ^4.0.2
+    firebase_analytics: ^9.1.5
+    package_info_plus: ^1.4.2
+    url_launcher: ^6.0.9
+    shared_preferences: ^2.0.6
+    toggle_switch: ^1.4.0
+    dash_chat_2:
+        git:
+          url: https://github.com/fufesou/Dash-Chat-2
+          ref: feat_maxWidth
+    draggable_float_widget: ^0.0.2
+    settings_ui: ^2.0.2
+    flutter_breadcrumb: ^1.0.1
+    http: ^0.13.4
+    qr_code_scanner: ^1.0.0
+    zxing2: ^0.1.0
+    image_picker: ^0.8.5
+    image: ^3.1.3
+    back_button_interceptor: ^6.0.1
+    flutter_rust_bridge:
+        git:
+            url: https://github.com/SoLongAndThanksForAllThePizza/flutter_rust_bridge
+            ref: master
+            path: frb_dart
+    window_manager:
+        git:
+            url: https://github.com/Kingtous/rustdesk_window_manager
+            ref: 799ef079e87938c3f4340591b4330c2598f38bb9
+    desktop_multi_window:
+        git:
+            url: https://github.com/Kingtous/rustdesk_desktop_multi_window
+            ref: e013c81d75320bbf28adddeaadf462264ee6039d
+    freezed_annotation: ^2.0.3
+    tray_manager:
+        git:
+            url: https://github.com/Kingtous/rustdesk_tray_manager
+            ref: 3aa37c86e47ea748e7b5507cbe59f2c54ebdb23a
+    get: ^4.6.5
+    visibility_detector: ^0.3.3
+    contextmenu: ^3.0.0
+    desktop_drop: ^0.3.3
+    scroll_pos: ^0.3.0
 
 dev_dependencies:
-  flutter_launcher_icons: ^0.9.1
-  flutter_test:
-    sdk: flutter
+    flutter_launcher_icons: ^0.9.1
+    flutter_test:
+        sdk: flutter
+    build_runner: ^2.1.11
+    freezed: ^2.0.3
+    flutter_lints: ^2.0.0
 
 # rerun: flutter pub run flutter_launcher_icons:main
 flutter_icons:
-  android: "ic_launcher"
-  ios: true
-  image_path: "../1024-rec.png"
+    android: "ic_launcher"
+    ios: true
+    image_path: "../1024-rec.png"
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
 
 # The following section is specific to Flutter.
 flutter:
+    # The following line ensures that the Material Icons font is
+    # included with your application, so that you can use the icons in
+    # the material Icons class.
+    uses-material-design: true
 
-  # The following line ensures that the Material Icons font is
-  # included with your application, so that you can use the icons in
-  # the material Icons class.
-  uses-material-design: true
+    # To add assets to your application, add an assets section, like this:
+    assets:
+        - assets/
 
-  # To add assets to your application, add an assets section, like this:
-  assets:
-    - assets/
+    fonts:
+        - family: GestureIcons
+          fonts:
+              - asset: assets/gestures.ttf
+        - family: Tabbar
+          fonts:
+              - asset: assets/tabbar.ttf
+        - family: PeerSearchbar
+          fonts:
+              - asset: assets/peer_searchbar.ttf
 
-  fonts:
-    - family: GestureIcons
-      fonts:
-        - asset: assets/gestures.ttf
+              
 
-  # An image asset can refer to one or more resolution-specific "variants", see
-  # https://flutter.dev/assets-and-images/#resolution-aware.
+    # An image asset can refer to one or more resolution-specific "variants", see
+    # https://flutter.dev/assets-and-images/#resolution-aware.
 
-  # For details regarding adding assets from package dependencies, see
-  # https://flutter.dev/assets-and-images/#from-packages
+    # For details regarding adding assets from package dependencies, see
+    # https://flutter.dev/assets-and-images/#from-packages
 
-  # To add custom fonts to your application, add a fonts section here,
-  # in this "flutter" section. Each entry in this list should have a
-  # "family" key with the font family name, and a "fonts" key with a
-  # list giving the asset and other descriptors for the font. For
-  # example:
-  # fonts:
-  #   - family: Schyler
-  #     fonts:
-  #       - asset: fonts/Schyler-Regular.ttf
-  #       - asset: fonts/Schyler-Italic.ttf
-  #         style: italic
-  #   - family: Trajan Pro
-  #     fonts:
-  #       - asset: fonts/TrajanPro.ttf
-  #       - asset: fonts/TrajanPro_Bold.ttf
-  #         weight: 700
-  #
-  # For details regarding fonts from package dependencies,
-  # see https://flutter.dev/custom-fonts/#from-packages
+    # To add custom fonts to your application, add a fonts section here,
+    # in this "flutter" section. Each entry in this list should have a
+    # "family" key with the font family name, and a "fonts" key with a
+    # list giving the asset and other descriptors for the font. For
+    # example:
+    # fonts:
+    #   - family: Schyler
+    #     fonts:
+    #       - asset: fonts/Schyler-Regular.ttf
+    #       - asset: fonts/Schyler-Italic.ttf
+    #         style: italic
+    #   - family: Trajan Pro
+    #     fonts:
+    #       - asset: fonts/TrajanPro.ttf
+    #       - asset: fonts/TrajanPro_Bold.ttf
+    #         weight: 700
+    #
+    # For details regarding fonts from package dependencies,
+    # see https://flutter.dev/custom-fonts/#from-packages

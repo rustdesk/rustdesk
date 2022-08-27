@@ -1,25 +1,136 @@
+import 'dart:async';
+import 'dart:convert';
+import 'dart:io';
+import 'dart:typed_data';
+
+import 'package:back_button_interceptor/back_button_interceptor.dart';
+import 'package:desktop_multi_window/desktop_multi_window.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
-import 'dart:async';
-import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
+import 'package:flutter_hbb/desktop/widgets/tabbar_widget.dart';
+import 'package:flutter_hbb/models/peer_model.dart';
+import 'package:get/get.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:window_manager/window_manager.dart';
 
 import 'models/model.dart';
+import 'models/platform_model.dart';
 
 final globalKey = GlobalKey<NavigatorState>();
 final navigationBarKey = GlobalKey();
 
-var isAndroid = false;
-var isIOS = false;
+final isAndroid = Platform.isAndroid;
+final isIOS = Platform.isIOS;
+final isDesktop = Platform.isWindows || Platform.isMacOS || Platform.isLinux;
 var isWeb = false;
-var isDesktop = false;
+var isWebDesktop = false;
 var version = "";
 int androidVersion = 0;
 
 typedef F = String Function(String);
 typedef FMethod = String Function(String, dynamic);
 
-class Translator {
-  static late F call;
+late final iconKeyboard = MemoryImage(Uint8List.fromList(base64Decode(
+    "iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAMAAABEpIrGAAAAgVBMVEUAAAD///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////9d3yJTAAAAKnRSTlMA0Gd/0y8ILZgbJffDPUwV2nvzt+TMqZxyU7CMb1pYQyzsvKunkXE4AwJnNC24AAAA+0lEQVQ4y83O2U7DMBCF4ZMxk9rZk26kpQs7nPd/QJy4EiLbLf01N5Y/2YP/qxDFQvGB5NPC/ZpVnfJx4b5xyGfF95rkHvNCWH1u+N6J6T0sC7gqRy8uGPfBLEbozPXUjlkQKwGaFPNizwQbwkx0TDvhCii34ExZCSQVBdzIOEOyeclSHgBGXkpeygXSQgStACtWx4Z8rr8COHOvfEP/IbbsQAToFUAAV1M408IIjIGYAPoCSNRP7DQutfQTqxuAiH7UUg1FaJR2AGrrx52sK2ye28LZ0wBAEyR6y8X+NADhm1B4fgiiHXbRrTrxpwEY9RdM9wsepnvFHfUDwYEeiwAJr/gAAAAASUVORK5CYII=")));
+late final iconClipboard = MemoryImage(Uint8List.fromList(base64Decode(
+    'iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAMAAABEpIrGAAAAjVBMVEUAAAD///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////8DizOFAAAALnRSTlMAnIsyZy8YZF3NSAuabRL34cq6trCScyZ4qI9CQDwV+fPl2tnTwzkeB+m/pIFK/Xx0ewAAAQlJREFUOMudktduhDAQRWep69iY3tle0+7/f16Qg7MsJUQ5Dwh8jzRzhemJPIaf3GiW7eFQfOwDPp1ek/iMnKgBi5PrhJAhZAa1lCxE9pw5KWMswOMAQXuQOvqTB7tLFJ36wimKLrufZTzUaoRtdthqRA2vEwS+tR4qguiElRKk1YMrYfUQRkwLmwVBYDMvJKF8R0o3V2MOhNrfo+hXSYYjPn1L/S+n438t8gWh+q1F+cYFBMm1Jh8Ia7y2OWXQxMMRLqr2eTc1crSD84cWfEGwYM4LlaACEee2ZjsQXJxR3qmYb+GpC8ZfNM5oh3yxxbxgQE7lEkb3ZvvH1BiRHn1bu02ICcKGWr4AudUkyYxmvywAAAAASUVORK5CYII=')));
+late final iconAudio = MemoryImage(Uint8List.fromList(base64Decode(
+    'iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAMAAABEpIrGAAAAk1BMVEUAAAD////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////ROyVeAAAAMHRSTlMAgfz08DDqCAThvraZjEcoGA751JxzbGdfTRP25NrIpaGTcEM+HAvMuKinhXhWNx9Yzm/gAAABFUlEQVQ4y82S2XLCMAxFheMsQNghCQFalkL39vz/11V4GpNk0r629+Va1pmxPFfyh1ravOP2Y1ydJmBO0lYP3r+PyQ62s2Y7fgF6VRXOYdToT++ogIuoVhCUtX7YpwJG3F8f6V8rr3WABwwUahlEvr8y3IBniGKdKYBQ5OGQpukQakBpIVcfwptIhJcf8hWGakdndAAhBInIGHbdQGJg6jjbDUgEE5EpmB+AAM4uj6gb+AQT6wdhITLvAHJ4VCtgoAlG1tpNA0gWON/f4ioHdSADc1bfgt+PZFkDlD6ojWF+kVoaHlhvFjPHuVRrefohY1GdcFm1N8JvwEyrJ/X2Th2rIoVgIi3Fo6Xf0z5k8psKu5f/oi+nHjjI92o36AAAAABJRU5ErkJggg==')));
+late final iconFile = MemoryImage(Uint8List.fromList(base64Decode(
+    'iVBORw0KGgoAAAANSUhEUgAAAGAAAABgCAMAAADVRocKAAAAUVBMVEUAAAD///////////////////////////////////////////////////////////////////////////////////////////////////////8IN+deAAAAGnRSTlMAH+CAESEN8jyZkcIb5N/ONy3vmHhmiGjUm7UwS+YAAAHZSURBVGje7dnbboMwDIBhBwgQoFAO7Ta//4NOqCAXYZQstatq4r+r5ubrgQSpg8iyC4ZURa+PlIpQYGiwrzyeHtYZjAL8T05O4H8BbbKvFgRa4NoBU8pXeYEkDDgaaLQBcwJrmeErJQB/7wes3QBWGnCIX0+AQycL1PO6BMwPa0nA4ZxbgTvOjUYMGPHRnZkQAY4mxPZBjmy53E7ukSkFKYB/D4XsWZQx64sCeYebOogGsoOBYvv6/UCb8F0IOBZ0TlP6lEYdANY350AJqB9/qPVuOI5evw4A1hgLigAlepnyxW80bcCcwN++A2s82Vcu02ta+ceq9BoL5KGTTRwQPlpqA3gCnwWU2kCDgeWRQPj2jAPCDxgCMjhI6uZnToDpvd/BJeFrJQB/fsAa02gCt3mi1wNuy8GgBNDZlysBNNSrADVSjcJl6vCpUn6jOdx0kz0q6PMhQRa4465SFKhx35cgUCBTwj2/NHwZAb71qR8GEP2H1XcmAtBPTEO67GP6FUUAIKGABbDLQ0EArhN2sAIGesRO+iyy+RMAjckVTlMCKFVAbh/4Af9OPgG61SkDVco3BQGT3GXaDAnTIAcYZDuBTwGsAGDxuBFeAQqIqwoFMlAVLrHr/wId5MPt0nilGgAAAABJRU5ErkJggg==')));
+late final iconRestart = MemoryImage(Uint8List.fromList(base64Decode(
+    'iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAACXBIWXMAAB7BAAAewQHDaVRTAAAAGXRFWHRTb2Z0d2FyZQB3d3cuaW5rc2NhcGUub3Jnm+48GgAAAbhJREFUWIXVlrFqFGEUhb+7UYxaWCQKlrKKxaZSQVGDJih2tj6MD2DnMwiWvoAIRnENIpZiYxEro6IooiS7SPwsMgNLkk3mjmYmnmb45/73nMNwz/x/qH3gMu2gH6rAU+Blw+Lngau4jpmGxVF7qp1iPWjaQKnZ2WnXbuP/NqAeUPc3ZkA9XDwvqc+BVWCgPlJ7tRwUKThZce819b46VH+pfXVRXVO/q2cSul3VOgZUl0ejq86r39TXI8mqZKDuDEwCw3IREQvAbWAGmMsQZQ0sAl3gHPB1Q+0e8BuYzRDuy2yOiFVgaUxtRf0ETGc4syk4rc6PqU0Cx9j8Zf6dAeAK8Fi9sUXtFjABvEgxJlNwRP2svlNPjbw/q35U36oTFbnyMSwabxb/gB/qA3VBHagrauV7RW0DRfP1IvMlXqkXkhz1DYyQTKtHa/Z2VVMx3IiI+PI3/bCHjuOpFrSnAMpL6QfgTcMGesDx0kBr2BMzsNyi/vtQu8CJlgwsRbZDnWP90NkKaxHxJMOXMqAeAn5u0ydwMCKGY+qbkB3C2W3EKWoXk5zVoHbUZ+6Mh7tl4G4F8RJ3qvL+AfV3r5Vdpj70AAAAAElFTkSuQmCC')));
+
+class IconFont {
+  static const _family1 = 'Tabbar';
+  static const _family2 = 'PeerSearchbar';
+  IconFont._();
+
+  static const IconData max = IconData(0xe606, fontFamily: _family1);
+  static const IconData restore = IconData(0xe607, fontFamily: _family1);
+  static const IconData close = IconData(0xe668, fontFamily: _family1);
+  static const IconData min = IconData(0xe609, fontFamily: _family1);
+  static const IconData add = IconData(0xe664, fontFamily: _family1);
+  static const IconData menu = IconData(0xe628, fontFamily: _family1);
+  static const IconData search = IconData(0xe6a4, fontFamily: _family2);
+  static const IconData round_close = IconData(0xe6ed, fontFamily: _family2);
+}
+
+class ColorThemeExtension extends ThemeExtension<ColorThemeExtension> {
+  const ColorThemeExtension({
+    required this.bg,
+    required this.grayBg,
+    required this.text,
+    required this.lightText,
+    required this.lighterText,
+    required this.placeholder,
+    required this.border,
+  });
+
+  final Color? bg;
+  final Color? grayBg;
+  final Color? text;
+  final Color? lightText;
+  final Color? lighterText;
+  final Color? placeholder;
+  final Color? border;
+
+  static const light = ColorThemeExtension(
+    bg: Color(0xFFFFFFFF),
+    grayBg: Color(0xFFEEEEEE),
+    text: Color(0xFF222222),
+    lightText: Color(0xFF666666),
+    lighterText: Color(0xFF888888),
+    placeholder: Color(0xFFAAAAAA),
+    border: Color(0xFFCCCCCC),
+  );
+
+  static const dark = ColorThemeExtension(
+    bg: Color(0xFF252525),
+    grayBg: Color(0xFF141414),
+    text: Color(0xFFFFFFFF),
+    lightText: Color(0xFF999999),
+    lighterText: Color(0xFF777777),
+    placeholder: Color(0xFF555555),
+    border: Color(0xFF555555),
+  );
+
+  @override
+  ThemeExtension<ColorThemeExtension> copyWith(
+      {Color? bg,
+      Color? grayBg,
+      Color? text,
+      Color? lightText,
+      Color? lighterText,
+      Color? placeholder,
+      Color? border}) {
+    return ColorThemeExtension(
+      bg: bg ?? this.bg,
+      grayBg: grayBg ?? this.grayBg,
+      text: text ?? this.text,
+      lightText: lightText ?? this.lightText,
+      lighterText: lighterText ?? this.lighterText,
+      placeholder: placeholder ?? this.placeholder,
+      border: border ?? this.border,
+    );
+  }
+
+  @override
+  ThemeExtension<ColorThemeExtension> lerp(
+      ThemeExtension<ColorThemeExtension>? other, double t) {
+    if (other is! ColorThemeExtension) {
+      return this;
+    }
+    return ColorThemeExtension(
+      bg: Color.lerp(bg, other.bg, t),
+      grayBg: Color.lerp(grayBg, other.grayBg, t),
+      text: Color.lerp(text, other.text, t),
+      lightText: Color.lerp(lightText, other.lightText, t),
+      lighterText: Color.lerp(lighterText, other.lighterText, t),
+      placeholder: Color.lerp(placeholder, other.placeholder, t),
+      border: Color.lerp(border, other.border, t),
+    );
+  }
 }
 
 class MyTheme {
@@ -34,6 +145,48 @@ class MyTheme {
   static const Color border = Color(0xFFCCCCCC);
   static const Color idColor = Color(0xFF00B6F0);
   static const Color darkGray = Color(0xFFB9BABC);
+  static const Color cmIdColor = Color(0xFF21790B);
+  static const Color dark = Colors.black87;
+  static const Color button = Color(0xFF2C8CFF);
+  static const Color hoverBorder = Color(0xFF999999);
+
+  static ThemeData lightTheme = ThemeData(
+    brightness: Brightness.light,
+    primarySwatch: Colors.blue,
+    visualDensity: VisualDensity.adaptivePlatformDensity,
+    tabBarTheme: TabBarTheme(
+      labelColor: Colors.black87,
+    ),
+    splashColor: Colors.transparent,
+    highlightColor: Colors.transparent,
+  ).copyWith(
+    extensions: <ThemeExtension<dynamic>>[
+      ColorThemeExtension.light,
+    ],
+  );
+  static ThemeData darkTheme = ThemeData(
+    brightness: Brightness.dark,
+    primarySwatch: Colors.blue,
+    visualDensity: VisualDensity.adaptivePlatformDensity,
+    tabBarTheme: TabBarTheme(
+      labelColor: Colors.white70,
+    ),
+    splashColor: Colors.transparent,
+    highlightColor: Colors.transparent,
+  ).copyWith(
+    extensions: <ThemeExtension<dynamic>>[
+      ColorThemeExtension.dark,
+    ],
+  );
+
+  static ColorThemeExtension color(BuildContext context) {
+    return Theme.of(context).extension<ColorThemeExtension>()!;
+  }
+}
+
+bool isDarkTheme() {
+  final isDark = "Y" == Get.find<SharedPreferences>().getString("darkTheme");
+  return isDark;
 }
 
 final ButtonStyle flatButtonStyle = TextButton.styleFrom(
@@ -44,17 +197,151 @@ final ButtonStyle flatButtonStyle = TextButton.styleFrom(
   ),
 );
 
-void showToast(String text, {Duration? duration}) {
-  SmartDialog.showToast(text, displayTime: duration);
+String formatDurationToTime(Duration duration) {
+  var totalTime = duration.inSeconds;
+  final secs = totalTime % 60;
+  totalTime = (totalTime - secs) ~/ 60;
+  final mins = totalTime % 60;
+  totalTime = (totalTime - mins) ~/ 60;
+  return "${totalTime.toString().padLeft(2, "0")}:${mins.toString().padLeft(2, "0")}:${secs.toString().padLeft(2, "0")}";
 }
 
-void showLoading(String text, {bool clickMaskDismiss = false}) {
-  SmartDialog.dismiss();
-  SmartDialog.showLoading(
-      clickMaskDismiss: false,
-      builder: (context) {
-        return Container(
-            color: MyTheme.white,
+closeConnection({String? id}) {
+  if (isAndroid || isIOS) {
+    Navigator.popUntil(globalKey.currentContext!, ModalRoute.withName("/"));
+  } else {
+    final controller = Get.find<DesktopTabController>();
+    controller.closeBy(id);
+  }
+}
+
+void window_on_top(int? id) {
+  if (id == null) {
+    // main window
+    windowManager.restore();
+    windowManager.show();
+    windowManager.focus();
+  } else {
+    WindowController.fromWindowId(id)
+      ..focus()
+      ..show();
+  }
+}
+
+typedef DialogBuilder = CustomAlertDialog Function(
+    StateSetter setState, void Function([dynamic]) close);
+
+class Dialog<T> {
+  OverlayEntry? entry;
+  Completer<T?> completer = Completer<T?>();
+
+  Dialog();
+
+  void complete(T? res) {
+    try {
+      if (!completer.isCompleted) {
+        completer.complete(res);
+      }
+    } catch (e) {
+      debugPrint("Dialog complete catch error: $e");
+    } finally {
+      entry?.remove();
+    }
+  }
+}
+
+class OverlayDialogManager {
+  OverlayState? _overlayState;
+  Map<String, Dialog> _dialogs = Map();
+  int _tagCount = 0;
+
+  /// By default OverlayDialogManager use global overlay
+  OverlayDialogManager() {
+    _overlayState = globalKey.currentState?.overlay;
+  }
+
+  void setOverlayState(OverlayState? overlayState) {
+    _overlayState = overlayState;
+  }
+
+  void dismissAll() {
+    _dialogs.forEach((key, value) {
+      value.complete(null);
+      BackButtonInterceptor.removeByName(key);
+    });
+    _dialogs.clear();
+  }
+
+  void dismissByTag(String tag) {
+    _dialogs[tag]?.complete(null);
+    _dialogs.remove(tag);
+    BackButtonInterceptor.removeByName(tag);
+  }
+
+  Future<T?> show<T>(DialogBuilder builder,
+      {bool clickMaskDismiss = false,
+      bool backDismiss = false,
+      String? tag,
+      bool useAnimation = true,
+      bool forceGlobal = false}) {
+    final overlayState =
+        forceGlobal ? globalKey.currentState?.overlay : _overlayState;
+
+    if (overlayState == null) {
+      return Future.error(
+          "[OverlayDialogManager] Failed to show dialog, _overlayState is null, call [setOverlayState] first");
+    }
+
+    final _tag;
+    if (tag != null) {
+      _tag = tag;
+    } else {
+      _tag = _tagCount.toString();
+      _tagCount++;
+    }
+
+    final dialog = Dialog<T>();
+    _dialogs[_tag] = dialog;
+
+    final close = ([res]) {
+      _dialogs.remove(_tag);
+      dialog.complete(res);
+      BackButtonInterceptor.removeByName(_tag);
+    };
+    dialog.entry = OverlayEntry(builder: (_) {
+      bool innerClicked = false;
+      return Listener(
+          onPointerUp: (_) {
+            if (!innerClicked && clickMaskDismiss) {
+              close();
+            }
+            innerClicked = false;
+          },
+          child: Container(
+              color: Colors.black12,
+              child: StatefulBuilder(builder: (context, setState) {
+                return Listener(
+                  onPointerUp: (_) => innerClicked = true,
+                  child: builder(setState, close),
+                );
+              })));
+    });
+    overlayState.insert(dialog.entry!);
+    BackButtonInterceptor.add((stopDefaultButtonEvent, routeInfo) {
+      if (backDismiss) {
+        close();
+      }
+      return true;
+    }, name: _tag);
+    return dialog.completer.future;
+  }
+
+  void showLoading(String text,
+      {bool clickMaskDismiss = false,
+      bool showCancel = true,
+      VoidCallback? onCancel}) {
+    show((setState, close) => CustomAlertDialog(
+        content: Container(
             constraints: BoxConstraints(maxWidth: 240),
             child: Column(
                 mainAxisSize: MainAxisSize.min,
@@ -64,74 +351,64 @@ void showLoading(String text, {bool clickMaskDismiss = false}) {
                   Center(child: CircularProgressIndicator()),
                   SizedBox(height: 20),
                   Center(
-                      child: Text(Translator.call(text),
+                      child: Text(translate(text),
                           style: TextStyle(fontSize: 15))),
                   SizedBox(height: 20),
-                  Center(
-                      child: TextButton(
-                          style: flatButtonStyle,
-                          onPressed: () {
-                            SmartDialog.dismiss();
-                            backToHome();
-                          },
-                          child: Text(Translator.call('Cancel'),
-                              style: TextStyle(color: MyTheme.accent))))
-                ]));
-      });
+                  Offstage(
+                      offstage: !showCancel,
+                      child: Center(
+                          child: TextButton(
+                              style: flatButtonStyle,
+                              onPressed: () {
+                                dismissAll();
+                                if (onCancel != null) {
+                                  onCancel();
+                                }
+                              },
+                              child: Text(translate('Cancel'),
+                                  style: TextStyle(color: MyTheme.accent)))))
+                ]))));
+  }
 }
 
-backToHome() {
-  Navigator.popUntil(globalKey.currentContext!, ModalRoute.withName("/"));
-}
-
-typedef DialogBuilder = CustomAlertDialog Function(
-    StateSetter setState, void Function([dynamic]) close);
-
-class DialogManager {
-  static int _tag = 0;
-
-  static dismissByTag(String tag, [result]) {
-    SmartDialog.dismiss(tag: tag, result: result);
-  }
-
-  static Future<T?> show<T>(DialogBuilder builder,
-      {bool clickMaskDismiss = false,
-      bool backDismiss = false,
-      String? tag,
-      bool useAnimation = true}) async {
-    final t;
-    if (tag != null) {
-      t = tag;
-    } else {
-      _tag += 1;
-      t = _tag.toString();
-    }
-    SmartDialog.dismiss(status: SmartStatus.allToast);
-    SmartDialog.dismiss(status: SmartStatus.loading);
-    final close = ([res]) {
-      SmartDialog.dismiss(tag: t, result: res);
-    };
-    final res = await SmartDialog.show<T>(
-        tag: t,
-        clickMaskDismiss: clickMaskDismiss,
-        backDismiss: backDismiss,
-        useAnimation: useAnimation,
-        builder: (_) => StatefulBuilder(
-            builder: (_, setState) => builder(setState, close)));
-    return res;
-  }
+void showToast(String text, {Duration timeout = const Duration(seconds: 2)}) {
+  final overlayState = globalKey.currentState?.overlay;
+  if (overlayState == null) return;
+  final entry = OverlayEntry(builder: (_) {
+    return IgnorePointer(
+        child: Align(
+            alignment: Alignment(0.0, 0.8),
+            child: Container(
+              decoration: BoxDecoration(
+                color: Colors.black.withOpacity(0.6),
+                borderRadius: BorderRadius.all(
+                  Radius.circular(20),
+                ),
+              ),
+              padding: EdgeInsets.symmetric(horizontal: 20, vertical: 5),
+              child: Text(
+                text,
+                style: TextStyle(
+                    decoration: TextDecoration.none,
+                    fontWeight: FontWeight.w300,
+                    fontSize: 18,
+                    color: Colors.white),
+              ),
+            )));
+  });
+  overlayState.insert(entry);
+  Future.delayed(timeout, () {
+    entry.remove();
+  });
 }
 
 class CustomAlertDialog extends StatelessWidget {
   CustomAlertDialog(
-      {required this.title,
-      required this.content,
-      required this.actions,
-      this.contentPadding});
+      {this.title, required this.content, this.actions, this.contentPadding});
 
-  final Widget title;
+  final Widget? title;
   final Widget content;
-  final List<Widget> actions;
+  final List<Widget>? actions;
   final double? contentPadding;
 
   @override
@@ -147,7 +424,9 @@ class CustomAlertDialog extends StatelessWidget {
   }
 }
 
-void msgBox(String type, String title, String text, {bool? hasCancel}) {
+void msgBox(
+    String type, String title, String text, OverlayDialogManager dialogManager,
+    {bool? hasCancel}) {
   var wrap = (String text, void Function() onPressed) => ButtonTheme(
       padding: EdgeInsets.symmetric(horizontal: 20, vertical: 10),
       materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
@@ -158,29 +437,43 @@ void msgBox(String type, String title, String text, {bool? hasCancel}) {
       child: TextButton(
           style: flatButtonStyle,
           onPressed: onPressed,
-          child: Text(Translator.call(text),
-              style: TextStyle(color: MyTheme.accent))));
+          child:
+              Text(translate(text), style: TextStyle(color: MyTheme.accent))));
 
-  SmartDialog.dismiss();
-  final buttons = [
-    wrap(Translator.call('OK'), () {
-      SmartDialog.dismiss();
-      backToHome();
-    })
-  ];
+  dialogManager.dismissAll();
+  List<Widget> buttons = [];
+  if (type != "connecting" && type != "success" && type.indexOf("nook") < 0) {
+    buttons.insert(
+        0,
+        wrap(translate('OK'), () {
+          dialogManager.dismissAll();
+          closeConnection();
+        }));
+  }
   if (hasCancel == null) {
-    hasCancel = type != 'error';
+    // hasCancel = type != 'error';
+    hasCancel = type.indexOf("error") < 0 &&
+        type.indexOf("nocancel") < 0 &&
+        type != "restarting";
   }
   if (hasCancel) {
     buttons.insert(
         0,
-        wrap(Translator.call('Cancel'), () {
-          SmartDialog.dismiss();
+        wrap(translate('Cancel'), () {
+          dialogManager.dismissAll();
         }));
   }
-  DialogManager.show((setState, close) => CustomAlertDialog(
+  // TODO: test this button
+  if (type.indexOf("hasclose") >= 0) {
+    buttons.insert(
+        0,
+        wrap(translate('Close'), () {
+          dialogManager.dismissAll();
+        }));
+  }
+  dialogManager.show((setState, close) => CustomAlertDialog(
       title: Text(translate(title), style: TextStyle(fontSize: 21)),
-      content: Text(Translator.call(text), style: TextStyle(fontSize: 15)),
+      content: Text(translate(text), style: TextStyle(fontSize: 15)),
       actions: buttons));
 }
 
@@ -275,21 +568,28 @@ class PermissionManager {
   }
 
   static Future<bool> check(String type) {
+    if (isDesktop) {
+      return Future.value(true);
+    }
     if (!permissions.contains(type))
       return Future.error("Wrong permission!$type");
-    return FFI.invokeMethod("check_permission", type);
+    return gFFI.invokeMethod("check_permission", type);
   }
 
   static Future<bool> request(String type) {
+    if (isDesktop) {
+      return Future.value(true);
+    }
     if (!permissions.contains(type))
       return Future.error("Wrong permission!$type");
 
-    FFI.invokeMethod("request_permission", type);
+    gFFI.invokeMethod("request_permission", type);
     if (type == "ignore_battery_optimizations") {
       return Future.value(false);
     }
     _current = type;
     _completer = Completer<bool>();
+    gFFI.invokeMethod("request_permission", type);
 
     // timeout
     _timer?.cancel();
@@ -324,4 +624,119 @@ RadioListTile<T> getRadio<T>(
     onChanged: onChange,
     dense: true,
   );
+}
+
+CheckboxListTile getToggle(
+    String id, void Function(void Function()) setState, option, name,
+    {FFI? ffi}) {
+  final opt = bind.sessionGetToggleOptionSync(id: id, arg: option);
+  return CheckboxListTile(
+      value: opt,
+      onChanged: (v) {
+        setState(() {
+          bind.sessionToggleOption(id: id, value: option);
+        });
+        if (option == "show-quality-monitor") {
+          (ffi ?? gFFI).qualityMonitorModel.checkShowQualityMonitor(id);
+        }
+      },
+      dense: true,
+      title: Text(translate(name)));
+}
+
+/// find ffi, tag is Remote ID
+/// for session specific usage
+FFI ffi(String? tag) {
+  return Get.find<FFI>(tag: tag);
+}
+
+/// Global FFI object
+late FFI _globalFFI;
+
+FFI get gFFI => _globalFFI;
+
+Future<void> initGlobalFFI() async {
+  debugPrint("_globalFFI init");
+  _globalFFI = FFI();
+  debugPrint("_globalFFI init end");
+  // after `put`, can also be globally found by Get.find<FFI>();
+  Get.put(_globalFFI, permanent: true);
+  // trigger connection status updater
+  await bind.mainCheckConnectStatus();
+  // global shared preference
+  await Get.putAsync(() => SharedPreferences.getInstance());
+}
+
+String translate(String name) {
+  if (name.startsWith('Failed to') && name.contains(': ')) {
+    return name.split(': ').map((x) => translate(x)).join(': ');
+  }
+  return platformFFI.translate(name, localeName);
+}
+
+bool option2bool(String option, String value) {
+  bool res;
+  if (option.startsWith("enable-")) {
+    res = value != "N";
+  } else if (option.startsWith("allow-") ||
+      option == "stop-service" ||
+      option == "direct-server" ||
+      option == "stop-rendezvous-service") {
+    res = value == "Y";
+  } else {
+    assert(false);
+    res = value != "N";
+  }
+  return res;
+}
+
+String bool2option(String option, bool b) {
+  String res;
+  if (option.startsWith('enable-')) {
+    res = b ? '' : 'N';
+  } else if (option.startsWith('allow-') ||
+      option == "stop-service" ||
+      option == "direct-server" ||
+      option == "stop-rendezvous-service") {
+    res = b ? 'Y' : '';
+  } else {
+    assert(false);
+    res = b ? 'Y' : 'N';
+  }
+  return res;
+}
+
+Future<bool> matchPeer(String searchText, Peer peer) async {
+  if (searchText.isEmpty) {
+    return true;
+  }
+  if (peer.id.toLowerCase().contains(searchText)) {
+    return true;
+  }
+  if (peer.hostname.toLowerCase().contains(searchText) ||
+      peer.username.toLowerCase().contains(searchText)) {
+    return true;
+  }
+  final alias = await bind.mainGetPeerOption(id: peer.id, key: 'alias');
+  if (alias.isEmpty) {
+    return false;
+  }
+  return alias.toLowerCase().contains(searchText);
+}
+
+Future<List<Peer>>? matchPeers(String searchText, List<Peer> peers) async {
+  searchText = searchText.trim();
+  if (searchText.isEmpty) {
+    return peers;
+  }
+  searchText = searchText.toLowerCase();
+  final matches =
+      await Future.wait(peers.map((peer) => matchPeer(searchText, peer)));
+  final filteredList = List<Peer>.empty(growable: true);
+  for (var i = 0; i < peers.length; i++) {
+    if (matches[i]) {
+      filteredList.add(peers[i]);
+    }
+  }
+  return filteredList;
 }

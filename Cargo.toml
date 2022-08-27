@@ -24,8 +24,9 @@ appimage = []
 use_samplerate = ["samplerate"]
 use_rubato = ["rubato"]
 use_dasp = ["dasp"]
+flutter = ["flutter_rust_bridge"]
+default = ["use_dasp","flutter"]
 hwcodec = ["scrap/hwcodec"]
-default = ["use_dasp"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -44,7 +45,7 @@ libc = "0.2"
 parity-tokio-ipc = { git = "https://github.com/open-trade/parity-tokio-ipc" }
 flexi_logger = { version = "0.22", features = ["async", "use_chrono_for_offset"] }
 runas = "0.2"
-magnum-opus = { git = "https://github.com/open-trade/magnum-opus" }
+magnum-opus = { git = "https://github.com/SoLongAndThanksForAllThePizza/magnum-opus" }
 dasp = { version = "0.11", features = ["signal", "interpolate-linear", "interpolate"], optional = true }
 rubato = { version = "0.12", optional = true }
 samplerate = { version = "0.2", optional = true }
@@ -58,6 +59,8 @@ num_cpus = "1.13"
 bytes = { version = "1.2", features = ["serde"] }
 default-net = "0.11.0"
 wol-rs = "0.9.1"
+flutter_rust_bridge = { git = "https://github.com/SoLongAndThanksForAllThePizza/flutter_rust_bridge", optional = true }
+errno = "0.2.8"
 
 [target.'cfg(not(target_os = "linux"))'.dependencies]
 reqwest = { version = "0.11", features = ["json", "rustls-tls"], default-features=false }
@@ -113,7 +116,7 @@ android_logger = "0.11"
 jni = "0.19"
 
 [target.'cfg(any(target_os = "android", target_os = "ios"))'.dependencies]
-flutter_rust_bridge = "=1.30.0"
+flutter_rust_bridge = { git = "https://github.com/SoLongAndThanksForAllThePizza/flutter_rust_bridge" }
 
 [workspace]
 members = ["libs/scrap", "libs/hbb_common", "libs/enigo", "libs/clipboard", "libs/virtual_display", "libs/simple_rc"]
@@ -131,7 +134,7 @@ winapi = { version = "0.3", features = [ "winnt" ] }
 cc = "1.0"
 hbb_common = { path = "libs/hbb_common" }
 simple_rc = { path = "libs/simple_rc", optional = true }
-flutter_rust_bridge_codegen = "=1.30.0"
+flutter_rust_bridge_codegen = { git = "https://github.com/SoLongAndThanksForAllThePizza/flutter_rust_bridge" }
 
 [dev-dependencies]
 hound = "3.4"

@@ -11,8 +11,8 @@ use hbb_common::{
 const MAX_LATENCY: i64 = 500;
 const MIN_LATENCY: i64 = 100;
 
-// based on video frame time, fix audio latency relatively.
-// only works on audio, can't fix video latency.
+/// Latency controller for syncing audio with the video stream.
+/// Only sync the audio to video, not the other way around.
 #[derive(Debug)]
 pub struct LatencyController {
     last_video_remote_ts: i64, // generated on remote deivce
@@ -31,21 +31,23 @@ impl Default for LatencyController {
 }
 
 impl LatencyController {
+    /// Create a new latency controller.
     pub fn new() -> Arc<Mutex<LatencyController>> {
         Arc::new(Mutex::new(LatencyController::default()))
     }
 
-    // first, receive new video frame and update time
+    /// Update the latency controller with the latest video timestamp.
     pub fn update_video(&mut self, timestamp: i64) {
         self.last_video_remote_ts = timestamp;
         self.update_time = Instant::now();
     }
 
-    // second, compute audio latency
-    // set MAX and MIN, avoid fixing too frequently.
+    /// Check if the audio should be played based on the current latency.
     pub fn check_audio(&mut self, timestamp: i64) -> bool {
+        // Compute audio latency.
         let expected = self.update_time.elapsed().as_millis() as i64 + self.last_video_remote_ts;
         let latency = expected - timestamp;
+        // Set MAX and MIN, avoid fixing too frequently.
         if self.allow_audio {
             if latency.abs() > MAX_LATENCY {
                 log::debug!("LATENCY > {}ms cut off, latency:{}", MAX_LATENCY, latency);

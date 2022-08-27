@@ -78,10 +78,45 @@ jobs:
       shell: bash
       run: |
         case ${{ matrix.job.target }} in
-          x86_64-unknown-linux-gnu) sudo apt-get -y update ; sudo apt install -y g++ gcc git curl wget nasm yasm libgtk-3-dev clang libxcb-randr0-dev libxdo-dev libxfixes-dev libxcb-shape0-dev libxcb-xfixes0-dev libasound2-dev libpulse-dev cmake libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev ;;
+          x86_64-unknown-linux-gnu) sudo apt-get -y update ; sudo apt install -y g++ gcc git curl wget nasm yasm libgtk-3-dev clang libxcb-randr0-dev libxdo-dev libxfixes-dev libxcb-shape0-dev libxcb-xfixes0-dev libasound2-dev libpulse-dev cmake libclang-dev ninja-build libappindicator3-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev;;
           # arm-unknown-linux-*) sudo apt-get -y update ; sudo apt-get -y install gcc-arm-linux-gnueabihf ;;
           # aarch64-unknown-linux-gnu) sudo apt-get -y update ; sudo apt-get -y install gcc-aarch64-linux-gnu ;;
         esac
+    
+    - name: Install flutter
+      uses: subosito/flutter-action@v2
+      with:
+        channel: 'stable'
+
+    - name: Install Rust toolchain
+      uses: actions-rs/toolchain@v1
+      with:
+        toolchain: stable
+        target: ${{ matrix.job.target }}
+        override: true
+        profile: minimal # minimal component installation (ie, no documentation)
+
+    - name: Install flutter rust bridge deps
+      run: |
+        dart pub global activate ffigen --version 5.0.1
+        # flutter_rust_bridge
+        pushd /tmp && git clone https://github.com/SoLongAndThanksForAllThePizza/flutter_rust_bridge --depth=1 && popd
+        pushd /tmp/flutter_rust_bridge/frb_codegen && cargo install --path . && popd
+        pushd flutter && flutter pub get && popd
+        ~/.cargo/bin/flutter_rust_bridge_codegen --rust-input ./src/flutter_ffi.rs --dart-output ./flutter/lib/generated_bridge.dart
+
+    - name: Install corrosion
+      run: |
+        mkdir /tmp/corrosion
+        pushd /tmp/corrosion
+        git clone https://github.com/corrosion-rs/corrosion.git
+        # Optionally, specify -DCMAKE_INSTALL_PREFIX=<target-install-path>. You can install Corrosion anyway
+        cmake -Scorrosion -Bbuild -DCMAKE_BUILD_TYPE=Release
+        cmake --build build --config Release
+        # This next step may require sudo or admin privileges if you're installing to a system location,
+        # which is the default.
+        sudo cmake --install build --config Release
+        popd
 
     - name: Restore from cache and install vcpkg
       uses: lukka/run-vcpkg@v7
@@ -92,15 +127,7 @@ jobs:
     - name: Install vcpkg dependencies
       run: |
         $VCPKG_ROOT/vcpkg install libvpx libyuv opus
-      shell: bash        
-
-    - name: Install Rust toolchain
-      uses: actions-rs/toolchain@v1
-      with:
-        toolchain: stable
-        target: ${{ matrix.job.target }}
-        override: true
-        profile: minimal # minimal component installation (ie, no documentation)
+      shell: bash
 
     - name: Show version information (Rust, cargo, GCC)
       shell: bash
@@ -114,12 +141,19 @@ jobs:
 
     - uses: Swatinem/rust-cache@v1
   
-    - name: Build
-      uses: actions-rs/cargo@v1
-      with:
-        use-cross: ${{ matrix.job.use-cross }}
-        command: build
-        args: --locked --release --target=${{ matrix.job.target }}
+#    - name: Build
+#      uses: actions-rs/cargo@v1
+#      with:
+#        use-cross: ${{ matrix.job.use-cross }}
+#        command: build
+#        args: --locked --release --target=${{ matrix.job.target }} --features flutter -v
+
+    - name: Build Flutter
+      run: |
+        pushd flutter
+        flutter pub get
+        flutter build linux --release -v
+        popd
 
     # - name: Strip debug information from executable
     #   id: strip

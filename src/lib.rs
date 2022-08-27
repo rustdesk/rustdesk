@@ -23,13 +23,18 @@ pub mod ipc;
 pub mod ui;
 mod version;
 pub use version::*;
-#[cfg(any(target_os = "android", target_os = "ios"))]
+#[cfg(any(target_os = "android", target_os = "ios", feature = "flutter"))]
 mod bridge_generated;
-#[cfg(any(target_os = "android", target_os = "ios"))]
-pub mod mobile;
-#[cfg(any(target_os = "android", target_os = "ios"))]
-pub mod mobile_ffi;
+#[cfg(any(target_os = "android", target_os = "ios", feature = "flutter"))]
+pub mod flutter;
+#[cfg(any(target_os = "android", target_os = "ios", feature = "flutter"))]
+pub mod flutter_ffi;
 use common::*;
+#[cfg(all(
+    not(any(target_os = "android", target_os = "ios")),
+    feature = "flutter"
+))]
+pub mod core_main;
 #[cfg(feature = "cli")]
 pub mod cli;
 #[cfg(all(windows, feature = "hbbs"))]
@@ -41,6 +46,8 @@ mod license;
 mod port_forward;
 #[cfg(windows)]
 mod tray;
+
+mod ui_interface;
 
 #[cfg(windows)]
 pub mod clipboard_file;

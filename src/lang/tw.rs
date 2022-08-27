@@ -103,6 +103,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Original", "原始"),
         ("Shrink", "縮減"),
         ("Stretch", "延展"),
+        ("Scrollbar", "滾動條"),
+        ("ScrollAuto", "自動滾動"),
         ("Good image quality", "畫面品質良好"),
         ("Balanced", "平衡"),
         ("Optimize reaction time", "回應速度最佳化"),
@@ -302,5 +304,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Are you sure you want to restart", "确定要重启"),
         ("Restarting Remote Device", "正在重啓遠程設備"),
         ("remote_restarting_tip", "遠程設備正在重啓，請關閉當前提示框，並在一段時間後使用永久密碼重新連接"),
+        ("Copied", "已複製"),
     ].iter().cloned().collect();
 }

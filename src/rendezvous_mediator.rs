@@ -1,7 +1,21 @@
-use crate::server::{check_zombie, new as new_server, ServerPtr};
+use std::collections::HashMap;
+use std::{
+    net::SocketAddr,
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc, Mutex,
+    },
+    time::Instant,
+};
+
+use uuid::Uuid;
+
+use hbb_common::config::DiscoveryPeer;
+use hbb_common::tcp::FramedStream;
 use hbb_common::{
     allow_err,
     anyhow::bail,
+    config,
     config::{Config, REG_INTERVAL, RENDEZVOUS_PORT, RENDEZVOUS_TIMEOUT},
     futures::future::join_all,
     log,
@@ -15,15 +29,8 @@ use hbb_common::{
     udp::FramedSocket,
     AddrMangle, IntoTargetAddr, ResultType, TargetAddr,
 };
-use std::{
-    net::SocketAddr,
-    sync::{
-        atomic::{AtomicBool, Ordering},
-        Arc, Mutex,
-    },
-    time::Instant,
-};
-use uuid::Uuid;
+
+use crate::server::{check_zombie, new as new_server, ServerPtr};
 
 type Message = RendezvousMessage;
 
@@ -353,7 +360,14 @@ impl RendezvousMediator {
         {
             let uuid = Uuid::new_v4().to_string();
             return self
-                .create_relay(ph.socket_addr.into(), relay_server, uuid, server, true, true)
+                .create_relay(
+                    ph.socket_addr.into(),
+                    relay_server,
+                    uuid,
+                    server,
+                    true,
+                    true,
+                )
                 .await;
         }
         let peer_addr = AddrMangle::decode(&ph.socket_addr);
@@ -538,5 +552,190 @@ async fn direct_server(server: ServerPtr) {
         } else {
             sleep(1.).await;
         }
+    }
+}
+
+#[inline]
+pub fn get_broadcast_port() -> u16 {
+    (RENDEZVOUS_PORT + 3) as _
+}
+
+pub fn get_mac() -> String {
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    if let Ok(Some(mac)) = mac_address::get_mac_address() {
+        mac.to_string()
+    } else {
+        "".to_owned()
+    }
+    #[cfg(any(target_os = "android", target_os = "ios"))]
+    "".to_owned()
+}
+
+fn lan_discovery() -> ResultType<()> {
+    let addr = SocketAddr::from(([0, 0, 0, 0], get_broadcast_port()));
+    let socket = std::net::UdpSocket::bind(addr)?;
+    socket.set_read_timeout(Some(std::time::Duration::from_millis(1000)))?;
+    log::info!("lan discovery listener started");
+    loop {
+        let mut buf = [0; 2048];
+        if let Ok((len, addr)) = socket.recv_from(&mut buf) {
+            if let Ok(msg_in) = Message::parse_from_bytes(&buf[0..len]) {
+                match msg_in.union {
+                    Some(rendezvous_message::Union::PeerDiscovery(p)) => {
+                        if p.cmd == "ping" {
+                            let mut msg_out = Message::new();
+                            let peer = PeerDiscovery {
+                                cmd: "pong".to_owned(),
+                                mac: get_mac(),
+                                id: Config::get_id(),
+                                hostname: whoami::hostname(),
+                                username: crate::platform::get_active_username(),
+                                platform: whoami::platform().to_string(),
+                                ..Default::default()
+                            };
+                            msg_out.set_peer_discovery(peer);
+                            socket.send_to(&msg_out.write_to_bytes()?, addr).ok();
+                        }
+                    }
+                    _ => {}
+                }
+            }
+        }
+    }
+}
+
+#[tokio::main(flavor = "current_thread")]
+pub async fn query_online_states<F: FnOnce(Vec<String>, Vec<String>)>(ids: Vec<String>, f: F) {
+    let test = false;
+    if test {
+        sleep(1.5).await;
+        let mut onlines = ids;
+        let offlines = onlines.drain((onlines.len() / 2)..).collect();
+        f(onlines, offlines)
+    } else {
+        let query_begin = Instant::now();
+        let query_timeout = std::time::Duration::from_millis(3_000);
+        loop {
+            if SHOULD_EXIT.load(Ordering::SeqCst) {
+                break;
+            }
+            match query_online_states_(&ids, query_timeout).await {
+                Ok((onlines, offlines)) => {
+                    f(onlines, offlines);
+                    break;
+                }
+                Err(e) => {
+                    log::debug!("{}", &e);
+                }
+            }
+
+            if query_begin.elapsed() > query_timeout {
+                log::debug!("query onlines timeout {:?}", query_timeout);
+                break;
+            }
+
+            sleep(1.5).await;
+        }
+    }
+}
+
+async fn create_online_stream() -> ResultType<FramedStream> {
+    let (mut rendezvous_server, servers, contained) = crate::get_rendezvous_server(1_000).await;
+    let tmp: Vec<&str> = rendezvous_server.split(":").collect();
+    if tmp.len() != 2 {
+        bail!("Invalid server address: {}", rendezvous_server);
+    }
+    let port: u16 = tmp[1].parse()?;
+    if port == 0 {
+        bail!("Invalid server address: {}", rendezvous_server);
+    }
+    let online_server = format!("{}:{}", tmp[0], port - 1);
+    let server_addr = socket_client::get_target_addr(&online_server)?;
+    socket_client::connect_tcp(
+        server_addr,
+        Config::get_any_listen_addr(),
+        RENDEZVOUS_TIMEOUT,
+    )
+    .await
+}
+
+async fn query_online_states_(
+    ids: &Vec<String>,
+    timeout: std::time::Duration,
+) -> ResultType<(Vec<String>, Vec<String>)> {
+    let query_begin = Instant::now();
+
+    let mut msg_out = RendezvousMessage::new();
+    msg_out.set_online_request(OnlineRequest {
+        id: Config::get_id(),
+        peers: ids.clone(),
+        ..Default::default()
+    });
+
+    loop {
+        if SHOULD_EXIT.load(Ordering::SeqCst) {
+            // No need to care about onlines
+            return Ok((Vec::new(), Vec::new()));
+        }
+
+        let mut socket = create_online_stream().await?;
+        socket.send(&msg_out).await?;
+        match socket.next_timeout(RENDEZVOUS_TIMEOUT).await {
+            Some(Ok(bytes)) => {
+                if let Ok(msg_in) = RendezvousMessage::parse_from_bytes(&bytes) {
+                    match msg_in.union {
+                        Some(rendezvous_message::Union::OnlineResponse(online_response)) => {
+                            let states = online_response.states;
+                            let mut onlines = Vec::new();
+                            let mut offlines = Vec::new();
+                            for i in 0..ids.len() {
+                                // bytes index from left to right
+                                let bit_value = 0x01 << (7 - i % 8);
+                                if (states[i / 8] & bit_value) == bit_value {
+                                    onlines.push(ids[i].clone());
+                                } else {
+                                    offlines.push(ids[i].clone());
+                                }
+                            }
+                            return Ok((onlines, offlines));
+                        }
+                        _ => {
+                            // ignore
+                        }
+                    }
+                }
+            }
+            Some(Err(e)) => {
+                log::error!("Failed to receive {e}");
+            }
+            None => {
+                // TODO: Make sure socket closed?
+                bail!("Online stream receives None");
+            }
+        }
+
+        if query_begin.elapsed() > timeout {
+            bail!("Try query onlines timeout {:?}", &timeout);
+        }
+
+        sleep(300.0).await;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn test_query_onlines() {
+        super::query_online_states(
+            vec![
+                "152183996".to_owned(),
+                "165782066".to_owned(),
+                "155323351".to_owned(),
+                "460952777".to_owned(),
+            ],
+            |onlines: Vec<String>, offlines: Vec<String>| {
+                println!("onlines: {:?}, offlines: {:?}", &onlines, &offlines);
+            },
+        );
     }
 }

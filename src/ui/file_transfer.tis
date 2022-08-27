@@ -188,7 +188,8 @@ class JobTable: Reactor.Component {
         job.confirmed = true;
         return;
       }else if (job.type == "del-dir"){
-        handler.remove_dir_all(job.id, job.path, job.is_remote);
+        // TODO: include_hidden is always true
+        handler.remove_dir_all(job.id, job.path, job.is_remote, true);
         job.confirmed = true;
         return;
       }

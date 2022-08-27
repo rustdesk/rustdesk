@@ -1,13 +1,12 @@
-mod cm;
-#[cfg(feature = "inline")]
-mod inline;
-#[cfg(target_os = "macos")]
-mod macos;
-pub mod remote;
-#[cfg(target_os = "windows")]
-pub mod win_privacy;
-use crate::common::SOFTWARE_UPDATE_URL;
-use crate::ipc;
+use std::{
+    collections::HashMap,
+    iter::FromIterator,
+    process::Child,
+    sync::{Arc, Mutex},
+};
+
+use sciter::Value;
+
 use hbb_common::{
     allow_err,
     config::{self, Config, LocalConfig, PeerConfig, RENDEZVOUS_PORT, RENDEZVOUS_TIMEOUT},
@@ -19,13 +18,34 @@ use hbb_common::{
     tcp::FramedStream,
     tokio::{self, sync::mpsc, time},
 };
-use sciter::Value;
-use std::{
-    collections::HashMap,
-    iter::FromIterator,
-    process::Child,
-    sync::{Arc, Mutex},
+
+use crate::common::{get_app_name, SOFTWARE_UPDATE_URL};
+use crate::ipc;
+use crate::ui_interface::{
+    check_mouse_time, closing, create_shortcut, current_is_wayland, fix_login_wayland,
+    forget_password, get_api_server, get_async_job_status, get_connect_status, get_error, get_fav,
+    get_icon, get_lan_peers, get_langs, get_license, get_local_option, get_mouse_time,
+    get_new_version, get_option, get_options, get_peer, get_peer_option, get_recent_sessions,
+    get_remote_id, get_size, get_socks, get_software_ext, get_software_store_path,
+    get_software_update_url, get_uuid, get_version, goto_install, has_hwcodec,
+    has_rendezvous_service, install_me, install_path, is_can_screen_recording, is_installed,
+    is_installed_daemon, is_installed_lower_version, is_login_wayland, is_ok_change_id,
+    is_process_trusted, is_rdp_service_open, is_share_rdp, is_xfce, modify_default_login,
+    new_remote, open_url, peer_has_password, permanent_password, post_request,
+    recent_sessions_updated, remove_peer, run_without_install, set_local_option, set_option,
+    set_options, set_peer_option, set_permanent_password, set_remote_id, set_share_rdp, set_socks,
+    show_run_without_install, store_fav, t, temporary_password, test_if_valid_server, update_me,
+    update_temporary_password, using_public_server,
 };
+
+mod cm;
+#[cfg(feature = "inline")]
+mod inline;
+#[cfg(target_os = "macos")]
+mod macos;
+pub mod remote;
+#[cfg(target_os = "windows")]
+pub mod win_privacy;
 
 type Message = RendezvousMessage;
 
@@ -36,15 +56,6 @@ lazy_static::lazy_static! {
     // stupid workaround for https://sciter.com/forums/topic/crash-on-latest-tis-mac-sdk-sometimes/
     static ref STUPID_VALUES: Mutex<Vec<Arc<Vec<Value>>>> = Default::default();
 }
-
-struct UI(
-    Childs,
-    Arc<Mutex<Status>>,
-    Arc<Mutex<HashMap<String, String>>>,
-    Arc<Mutex<String>>,
-    mpsc::UnboundedSender<ipc::Data>,
-    Arc<Mutex<String>>,
-);
 
 struct UIHostHandler;
 
@@ -102,16 +113,14 @@ pub fn start(args: &mut [String]) {
         args[1] = id;
     }
     if args.is_empty() {
-        let childs: Childs = Default::default();
-        let cloned = childs.clone();
-        std::thread::spawn(move || check_zombie(cloned));
+        let child: Childs = Default::default();
+        std::thread::spawn(move || check_zombie(child));
         crate::common::check_software_update();
-        frame.event_handler(UI::new(childs));
+        frame.event_handler(UI {});
         frame.sciter_handler(UIHostHandler {});
         page = "index.html";
     } else if args[0] == "--install" {
-        let childs: Childs = Default::default();
-        frame.event_handler(UI::new(childs));
+        frame.event_handler(UI {});
         frame.sciter_handler(UIHostHandler {});
         page = "install.html";
     } else if args[0] == "--cm" {
@@ -173,20 +182,11 @@ pub fn start(args: &mut [String]) {
     frame.run_app();
 }
 
-impl UI {
-    fn new(childs: Childs) -> Self {
-        let res = check_connect_status(true);
-        Self(childs, res.0, res.1, Default::default(), res.2, res.3)
-    }
+struct UI {}
 
-    fn recent_sessions_updated(&mut self) -> bool {
-        let mut lock = self.0.lock().unwrap();
-        if lock.0 {
-            lock.0 = false;
-            true
-        } else {
-            false
-        }
+impl UI {
+    fn recent_sessions_updated(&self) -> bool {
+        recent_sessions_updated()
     }
 
     fn get_id(&self) -> String {
@@ -194,182 +194,104 @@ impl UI {
     }
 
     fn temporary_password(&mut self) -> String {
-        self.5.lock().unwrap().clone()
+        temporary_password()
     }
 
     fn update_temporary_password(&self) {
-        allow_err!(ipc::update_temporary_password());
+        update_temporary_password()
     }
 
     fn permanent_password(&self) -> String {
-        ipc::get_permanent_password()
+        permanent_password()
     }
 
     fn set_permanent_password(&self, password: String) {
-        allow_err!(ipc::set_permanent_password(password));
+        set_permanent_password(password);
     }
 
     fn get_remote_id(&mut self) -> String {
-        LocalConfig::get_remote_id()
+        get_remote_id()
     }
 
     fn set_remote_id(&mut self, id: String) {
-        LocalConfig::set_remote_id(&id);
+        set_remote_id(id);
     }
 
     fn goto_install(&mut self) {
-        allow_err!(crate::run_me(vec!["--install"]));
+        goto_install();
     }
 
     fn install_me(&mut self, _options: String, _path: String) {
-        #[cfg(windows)]
-        std::thread::spawn(move || {
-            allow_err!(crate::platform::windows::install_me(
-                &_options, _path, false, false
-            ));
-            std::process::exit(0);
-        });
+        install_me(_options, _path, false, false);
     }
 
     fn update_me(&self, _path: String) {
-        #[cfg(target_os = "linux")]
-        {
-            std::process::Command::new("pkexec")
-                .args(&["apt", "install", "-f", &_path])
-                .spawn()
-                .ok();
-            std::fs::remove_file(&_path).ok();
-            crate::run_me(Vec::<&str>::new()).ok();
-        }
-        #[cfg(windows)]
-        {
-            let mut path = _path;
-            if path.is_empty() {
-                if let Ok(tmp) = std::env::current_exe() {
-                    path = tmp.to_string_lossy().to_string();
-                }
-            }
-            std::process::Command::new(path)
-                .arg("--update")
-                .spawn()
-                .ok();
-            std::process::exit(0);
-        }
+        update_me(_path);
     }
 
     fn run_without_install(&self) {
-        crate::run_me(vec!["--noinstall"]).ok();
-        std::process::exit(0);
+        run_without_install();
     }
 
     fn show_run_without_install(&self) -> bool {
-        let mut it = std::env::args();
-        if let Some(tmp) = it.next() {
-            if crate::is_setup(&tmp) {
-                return it.next() == None;
-            }
-        }
-        false
+        show_run_without_install()
     }
 
     fn has_rendezvous_service(&self) -> bool {
-        #[cfg(all(windows, feature = "hbbs"))]
-        return crate::platform::is_win_server()
-            && crate::platform::windows::get_license().is_some();
-        return false;
+        has_rendezvous_service()
     }
 
     fn get_license(&self) -> String {
-        #[cfg(windows)]
-        if let Some(lic) = crate::platform::windows::get_license() {
-            return format!(
-                "<br /> Key: {} <br /> Host: {} Api: {}",
-                lic.key, lic.host, lic.api
-            );
-        }
-        Default::default()
+        get_license()
     }
 
     fn get_option(&self, key: String) -> String {
-        self.get_option_(&key)
-    }
-
-    fn get_option_(&self, key: &str) -> String {
-        if let Some(v) = self.2.lock().unwrap().get(key) {
-            v.to_owned()
-        } else {
-            "".to_owned()
-        }
+        get_option(key)
     }
 
     fn get_local_option(&self, key: String) -> String {
-        LocalConfig::get_option(&key)
+        get_local_option(key)
     }
 
     fn set_local_option(&self, key: String, value: String) {
-        LocalConfig::set_option(key, value);
+        set_local_option(key, value);
     }
 
     fn peer_has_password(&self, id: String) -> bool {
-        !PeerConfig::load(&id).password.is_empty()
+        peer_has_password(id)
     }
 
     fn forget_password(&self, id: String) {
-        let mut c = PeerConfig::load(&id);
-        c.password.clear();
-        c.store(&id);
+        forget_password(id)
     }
 
     fn get_peer_option(&self, id: String, name: String) -> String {
-        let c = PeerConfig::load(&id);
-        c.options.get(&name).unwrap_or(&"".to_owned()).to_owned()
+        get_peer_option(id, name)
     }
 
     fn set_peer_option(&self, id: String, name: String, value: String) {
-        let mut c = PeerConfig::load(&id);
-        if value.is_empty() {
-            c.options.remove(&name);
-        } else {
-            c.options.insert(name, value);
-        }
-        c.store(&id);
+        set_peer_option(id, name, value)
     }
 
     fn using_public_server(&self) -> bool {
-        crate::get_custom_rendezvous_server(self.get_option_("custom-rendezvous-server")).is_empty()
+        using_public_server()
     }
 
     fn get_options(&self) -> Value {
+        let hashmap: HashMap<String, String> = serde_json::from_str(&get_options()).unwrap();
         let mut m = Value::map();
-        for (k, v) in self.2.lock().unwrap().iter() {
+        for (k, v) in hashmap {
             m.set_item(k, v);
         }
         m
     }
 
     fn test_if_valid_server(&self, host: String) -> String {
-        hbb_common::socket_client::test_if_valid_server(&host)
+        test_if_valid_server(host)
     }
 
     fn get_sound_inputs(&self) -> Value {
-        let mut a = Value::array(0);
-        #[cfg(windows)]
-        {
-            let inputs = Arc::new(Mutex::new(Vec::new()));
-            let cloned = inputs.clone();
-            // can not call below in UI thread, because conflict with sciter sound com initialization
-            std::thread::spawn(move || *cloned.lock().unwrap() = get_sound_inputs())
-                .join()
-                .ok();
-            for name in inputs.lock().unwrap().drain(..) {
-                a.push(name);
-            }
-        }
-        #[cfg(not(windows))]
-        for name in get_sound_inputs() {
-            a.push(name);
-        }
-        a
+        Value::from_iter(get_sound_inputs())
     }
 
     fn set_options(&self, v: Value) {
@@ -383,119 +305,64 @@ impl UI {
                 }
             }
         }
-
-        *self.2.lock().unwrap() = m.clone();
-        ipc::set_options(m).ok();
+        set_options(m);
     }
 
     fn set_option(&self, key: String, value: String) {
-        #[cfg(target_os = "macos")]
-        if &key == "stop-service" {
-            let is_stop = value == "Y";
-            if is_stop && crate::platform::macos::uninstall() {
-                return;
-            }
-        }
-        let mut options = self.2.lock().unwrap();
-        if value.is_empty() {
-            options.remove(&key);
-        } else {
-            options.insert(key.clone(), value.clone());
-        }
-        ipc::set_options(options.clone()).ok();
+        set_option(key, value);
     }
 
     fn install_path(&mut self) -> String {
-        #[cfg(windows)]
-        return crate::platform::windows::get_install_info().1;
-        #[cfg(not(windows))]
-        return "".to_owned();
+        install_path()
     }
 
     fn get_socks(&self) -> Value {
-        let s = ipc::get_socks();
-        match s {
-            None => Value::null(),
-            Some(s) => {
-                let mut v = Value::array(0);
-                v.push(s.proxy);
-                v.push(s.username);
-                v.push(s.password);
-                v
-            }
-        }
+        Value::from_iter(get_socks())
     }
 
     fn set_socks(&self, proxy: String, username: String, password: String) {
-        ipc::set_socks(config::Socks5Server {
-            proxy,
-            username,
-            password,
-        })
-        .ok();
+        set_socks(proxy, username, password)
     }
 
     fn is_installed(&self) -> bool {
-        crate::platform::is_installed()
+        is_installed()
     }
 
     fn is_rdp_service_open(&self) -> bool {
-        #[cfg(windows)]
-        return self.is_installed() && crate::platform::windows::is_rdp_service_open();
-        #[cfg(not(windows))]
-        return false;
+        is_rdp_service_open()
     }
 
     fn is_share_rdp(&self) -> bool {
-        #[cfg(windows)]
-        return crate::platform::windows::is_share_rdp();
-        #[cfg(not(windows))]
-        return false;
+        is_share_rdp()
     }
 
     fn set_share_rdp(&self, _enable: bool) {
-        #[cfg(windows)]
-        crate::platform::windows::set_share_rdp(_enable);
+        set_share_rdp(_enable);
     }
 
     fn is_installed_lower_version(&self) -> bool {
-        #[cfg(not(windows))]
-        return false;
-        #[cfg(windows)]
-        {
-            let installed_version = crate::platform::windows::get_installed_version();
-            let a = hbb_common::get_version_number(crate::VERSION);
-            let b = hbb_common::get_version_number(&installed_version);
-            return a > b;
-        }
+        is_installed_lower_version()
     }
 
     fn closing(&mut self, x: i32, y: i32, w: i32, h: i32) {
-        crate::server::input_service::fix_key_down_timeout_at_exit();
-        LocalConfig::set_size(x, y, w, h);
+        closing(x, y, w, h)
     }
 
     fn get_size(&mut self) -> Value {
-        let s = LocalConfig::get_size();
-        let mut v = Value::array(0);
-        v.push(s.0);
-        v.push(s.1);
-        v.push(s.2);
-        v.push(s.3);
-        v
+        Value::from_iter(get_size())
     }
 
     fn get_mouse_time(&self) -> f64 {
-        self.1.lock().unwrap().2 as _
+        get_mouse_time()
     }
 
     fn check_mouse_time(&self) {
-        allow_err!(self.4.send(ipc::Data::MouseMoveTime(0)));
+        check_mouse_time()
     }
 
     fn get_connect_status(&mut self) -> Value {
         let mut v = Value::array(0);
-        let x = self.1.lock().unwrap().clone();
+        let x = get_connect_status();
         v.push(x.0);
         v.push(x.1);
         v.push(x.3);
@@ -515,12 +382,12 @@ impl UI {
     }
 
     fn get_peer(&self, id: String) -> Value {
-        let c = PeerConfig::load(&id);
+        let c = get_peer(id.clone());
         Self::get_peer_value(id, c)
     }
 
     fn get_fav(&self) -> Value {
-        Value::from_iter(LocalConfig::get_fav())
+        Value::from_iter(get_fav())
     }
 
     fn store_fav(&self, fav: Value) {
@@ -532,12 +399,12 @@ impl UI {
                 }
             }
         });
-        LocalConfig::set_fav(tmp);
+        store_fav(tmp);
     }
 
     fn get_recent_sessions(&mut self) -> Value {
         // to-do: limit number of recent sessions, and remove old peer file
-        let peers: Vec<Value> = PeerConfig::peers()
+        let peers: Vec<Value> = get_recent_sessions()
             .drain(..)
             .map(|p| Self::get_peer_value(p.0, p.2))
             .collect();
@@ -545,11 +412,11 @@ impl UI {
     }
 
     fn get_icon(&mut self) -> String {
-        crate::get_icon()
+        get_icon()
     }
 
     fn remove_peer(&mut self, id: String) {
-        PeerConfig::remove(&id);
+        remove_peer(id)
     }
 
     fn remove_discovered(&mut self, id: String) {
@@ -563,145 +430,67 @@ impl UI {
     }
 
     fn new_remote(&mut self, id: String, remote_type: String) {
-        let mut lock = self.0.lock().unwrap();
-        let args = vec![format!("--{}", remote_type), id.clone()];
-        let key = (id.clone(), remote_type.clone());
-        if let Some(c) = lock.1.get_mut(&key) {
-            if let Ok(Some(_)) = c.try_wait() {
-                lock.1.remove(&key);
-            } else {
-                if remote_type == "rdp" {
-                    allow_err!(c.kill());
-                    std::thread::sleep(std::time::Duration::from_millis(30));
-                    c.try_wait().ok();
-                    lock.1.remove(&key);
-                } else {
-                    return;
-                }
-            }
-        }
-        match crate::run_me(args) {
-            Ok(child) => {
-                lock.1.insert(key, child);
-            }
-            Err(err) => {
-                log::error!("Failed to spawn remote: {}", err);
-            }
-        }
+        new_remote(id, remote_type)
     }
 
     fn is_process_trusted(&mut self, _prompt: bool) -> bool {
-        #[cfg(target_os = "macos")]
-        return crate::platform::macos::is_process_trusted(_prompt);
-        #[cfg(not(target_os = "macos"))]
-        return true;
+        is_process_trusted(_prompt)
     }
 
     fn is_can_screen_recording(&mut self, _prompt: bool) -> bool {
-        #[cfg(target_os = "macos")]
-        return crate::platform::macos::is_can_screen_recording(_prompt);
-        #[cfg(not(target_os = "macos"))]
-        return true;
+        is_can_screen_recording(_prompt)
     }
 
     fn is_installed_daemon(&mut self, _prompt: bool) -> bool {
-        #[cfg(target_os = "macos")]
-        return crate::platform::macos::is_installed_daemon(_prompt);
-        #[cfg(not(target_os = "macos"))]
-        return true;
+        is_installed_daemon(_prompt)
     }
 
     fn get_error(&mut self) -> String {
-        #[cfg(target_os = "linux")]
-        {
-            let dtype = crate::platform::linux::get_display_server();
-            if "wayland" == dtype {
-                return "".to_owned();
-            }
-            if dtype != "x11" {
-                return format!(
-                    "{} {}, {}",
-                    self.t("Unsupported display server ".to_owned()),
-                    dtype,
-                    self.t("x11 expected".to_owned()),
-                );
-            }
-        }
-        return "".to_owned();
+        get_error()
     }
 
     fn is_login_wayland(&mut self) -> bool {
-        #[cfg(target_os = "linux")]
-        return crate::platform::linux::is_login_wayland();
-        #[cfg(not(target_os = "linux"))]
-        return false;
+        is_login_wayland()
     }
 
     fn fix_login_wayland(&mut self) {
-        /*
-        #[cfg(target_os = "linux")]
-        crate::platform::linux::fix_login_wayland();
-        */
+        fix_login_wayland()
     }
 
     fn current_is_wayland(&mut self) -> bool {
-        #[cfg(target_os = "linux")]
-        return crate::platform::linux::current_is_wayland();
-        #[cfg(not(target_os = "linux"))]
-        return false;
+        current_is_wayland()
     }
 
     fn modify_default_login(&mut self) -> String {
-        /*
-        #[cfg(target_os = "linux")]
-        return crate::platform::linux::modify_default_login();
-        #[cfg(not(target_os = "linux"))]
-        */
-        return "".to_owned();
+        modify_default_login()
     }
 
     fn get_software_update_url(&self) -> String {
-        SOFTWARE_UPDATE_URL.lock().unwrap().clone()
+        get_software_update_url()
     }
 
     fn get_new_version(&self) -> String {
-        hbb_common::get_version_from_url(&*SOFTWARE_UPDATE_URL.lock().unwrap())
+        get_new_version()
     }
 
     fn get_version(&self) -> String {
-        crate::VERSION.to_owned()
+        get_version()
     }
 
     fn get_app_name(&self) -> String {
-        crate::get_app_name()
+        get_app_name()
     }
 
     fn get_software_ext(&self) -> String {
-        #[cfg(windows)]
-        let p = "exe";
-        #[cfg(target_os = "macos")]
-        let p = "dmg";
-        #[cfg(target_os = "linux")]
-        let p = "deb";
-        p.to_owned()
+        get_software_ext()
     }
 
     fn get_software_store_path(&self) -> String {
-        let mut p = std::env::temp_dir();
-        let name = SOFTWARE_UPDATE_URL
-            .lock()
-            .unwrap()
-            .split("/")
-            .last()
-            .map(|x| x.to_owned())
-            .unwrap_or(crate::get_app_name());
-        p.push(name);
-        format!("{}.{}", p.to_string_lossy(), self.get_software_ext())
+        get_software_store_path()
     }
 
     fn create_shortcut(&self, _id: String) {
-        #[cfg(windows)]
-        crate::platform::windows::create_shortcut(&_id).ok();
+        create_shortcut(_id)
     }
 
     fn discover(&self) {
@@ -711,79 +500,56 @@ impl UI {
     }
 
     fn get_lan_peers(&self) -> String {
-        serde_json::to_string(&config::LanPeers::load().peers).unwrap_or_default()
+        let peers = get_lan_peers()
+            .into_iter()
+            .map(|(id, peer)| (id, peer.username, peer.hostname, peer.platform))
+            .collect::<Vec<(String, String, String, String)>>();
+        serde_json::to_string(&peers).unwrap_or_default()
     }
 
     fn get_uuid(&self) -> String {
-        base64::encode(hbb_common::get_uuid())
+        get_uuid()
     }
 
     fn open_url(&self, url: String) {
-        #[cfg(windows)]
-        let p = "explorer";
-        #[cfg(target_os = "macos")]
-        let p = "open";
-        #[cfg(target_os = "linux")]
-        let p = if std::path::Path::new("/usr/bin/firefox").exists() {
-            "firefox"
-        } else {
-            "xdg-open"
-        };
-        allow_err!(std::process::Command::new(p).arg(url).spawn());
+        open_url(url)
     }
 
     fn change_id(&self, id: String) {
-        let status = self.3.clone();
-        *status.lock().unwrap() = " ".to_owned();
         let old_id = self.get_id();
-        std::thread::spawn(move || {
-            *status.lock().unwrap() = change_id(id, old_id).to_owned();
-        });
+        change_id(id, old_id);
     }
 
     fn post_request(&self, url: String, body: String, header: String) {
-        let status = self.3.clone();
-        *status.lock().unwrap() = " ".to_owned();
-        std::thread::spawn(move || {
-            *status.lock().unwrap() = match crate::post_request_sync(url, body, &header) {
-                Err(err) => err.to_string(),
-                Ok(text) => text,
-            };
-        });
+        post_request(url, body, header)
     }
 
     fn is_ok_change_id(&self) -> bool {
-        machine_uid::get().is_ok()
+        is_ok_change_id()
     }
 
     fn get_async_job_status(&self) -> String {
-        self.3.clone().lock().unwrap().clone()
+        get_async_job_status()
     }
 
     fn t(&self, name: String) -> String {
-        crate::client::translate(name)
+        t(name)
     }
 
     fn is_xfce(&self) -> bool {
-        crate::platform::is_xfce()
+        is_xfce()
     }
 
     fn get_api_server(&self) -> String {
-        crate::get_api_server(
-            self.get_option_("api-server"),
-            self.get_option_("custom-rendezvous-server"),
-        )
+        get_api_server()
     }
 
     fn has_hwcodec(&self) -> bool {
-        #[cfg(not(feature = "hwcodec"))]
-        return false;
-        #[cfg(feature = "hwcodec")]
-        return true;
+        has_hwcodec()
     }
 
     fn get_langs(&self) -> String {
-        crate::lang::LANGS.to_string()
+        get_langs()
     }
 }
 

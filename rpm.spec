@@ -23,7 +23,7 @@ mkdir -p %{buildroot}/usr/share/rustdesk/files/
 install -m 755 $HBB/target/release/rustdesk %{buildroot}/usr/bin/rustdesk
 install $HBB/libsciter-gtk.so %{buildroot}/usr/lib/rustdesk/libsciter-gtk.so
 install $HBB/rustdesk.service %{buildroot}/usr/share/rustdesk/files/
-install $HBB/256-no-margin.png %{buildroot}/usr/share/rustdesk/files/rustdesk.png
+install $HBB/128x128@2x.png %{buildroot}/usr/share/rustdesk/files/rustdesk.png
 install $HBB/rustdesk.desktop %{buildroot}/usr/share/rustdesk/files/
 install $HBB/pynput_service.py %{buildroot}/usr/share/rustdesk/files/
 

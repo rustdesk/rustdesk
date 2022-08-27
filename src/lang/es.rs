@@ -103,6 +103,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Original", "Original"),
         ("Shrink", "Encogerse"),
         ("Stretch", "Estirar"),
+        ("Scrollbar", "Barra de desplazamiento"),
+        ("ScrollAuto", "Desplazamiento automático"),
         ("Good image quality", "Buena calidad de imagen"),
         ("Balanced", "Equilibrado"),
         ("Optimize reaction time", "Optimizar el tiempo de reacción"),
@@ -315,5 +317,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Are you sure you want to restart", "Esta Seguro que desea reiniciar?"),
         ("Restarting Remote Device", "Reiniciando dispositivo remoto"),
         ("remote_restarting_tip", "Dispositivo remoto reiniciando, favor de cerrar este mensaje y reconectarse con la contraseña permamente despues de un momento."),
+        ("Copied", ""),
     ].iter().cloned().collect();
 }

@@ -103,6 +103,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Original", ""),
         ("Shrink", ""),
         ("Stretch", ""),
+        ("Scrollbar", ""),
+        ("ScrollAuto", ""),
         ("Good image quality", ""),
         ("Balanced", ""),
         ("Optimize reaction time", ""),
@@ -302,5 +304,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Are you sure you want to restart", ""),
         ("Restarting Remote Device", ""),
         ("remote_restarting_tip", ""),
+        ("Copied", ""),
     ].iter().cloned().collect();
 }

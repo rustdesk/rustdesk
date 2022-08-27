@@ -1,12 +1,14 @@
 import 'dart:async';
 import 'dart:convert';
-import 'package:flutter_hbb/common.dart';
-import 'package:flutter_hbb/pages/file_manager_page.dart';
+
 import 'package:flutter/material.dart';
-import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
+import 'package:flutter_hbb/common.dart';
+import 'package:flutter_hbb/mobile/pages/file_manager_page.dart';
+import 'package:get/get.dart';
 import 'package:path/path.dart' as Path;
 
 import 'model.dart';
+import 'platform_model.dart';
 
 enum SortBy { Name, Type, Modified, Size }
 
@@ -21,6 +23,11 @@ class FileModel extends ChangeNotifier {
 
   var _jobProgress = JobProgress(); // from rust update
 
+  /// JobTable <jobId, JobProgress>
+  final _jobTable = List<JobProgress>.empty(growable: true).obs;
+
+  RxList<JobProgress> get jobTable => _jobTable;
+
   bool get isLocal => _isLocal;
 
   bool get selectMode => _selectMode;
@@ -33,6 +40,20 @@ class FileModel extends ChangeNotifier {
 
   SortBy get sortStyle => _sortStyle;
 
+  SortBy _localSortStyle = SortBy.Name;
+
+  bool _localSortAscending = true;
+
+  bool _remoteSortAscending = true;
+
+  SortBy _remoteSortStyle = SortBy.Name;
+
+  bool get localSortAscending => _localSortAscending;
+
+  SortBy getSortStyle(bool isLocal) {
+    return isLocal ? _localSortStyle : _remoteSortStyle;
+  }
+
   FileDirectory _currentLocalDir = FileDirectory();
 
   FileDirectory get currentLocalDir => _currentLocalDir;
@@ -43,7 +64,35 @@ class FileModel extends ChangeNotifier {
 
   FileDirectory get currentDir => _isLocal ? currentLocalDir : currentRemoteDir;
 
+  FileDirectory getCurrentDir(bool isLocal) {
+    return isLocal ? currentLocalDir : currentRemoteDir;
+  }
+
+  String getCurrentShortPath(bool isLocal) {
+    final currentDir = getCurrentDir(isLocal);
+    final currentHome = getCurrentHome(isLocal);
+    if (currentDir.path.startsWith(currentHome)) {
+      var path = currentDir.path.replaceFirst(currentHome, "");
+      if (path.length == 0) return "";
+      if (path[0] == "/" || path[0] == "\\") {
+        // remove more '/' or '\'
+        path = path.replaceFirst(path[0], "");
+      }
+      return path;
+    } else {
+      return currentDir.path.replaceFirst(currentHome, "");
+    }
+  }
+
   String get currentHome => _isLocal ? _localOption.home : _remoteOption.home;
+
+  String getCurrentHome(bool isLocal) {
+    return isLocal ? _localOption.home : _remoteOption.home;
+  }
+
+  int getJob(int id) {
+    return jobTable.indexWhere((element) => element.id == id);
+  }
 
   String get currentShortPath {
     if (currentDir.path.startsWith(currentHome)) {
@@ -59,15 +108,42 @@ class FileModel extends ChangeNotifier {
     }
   }
 
+  String shortPath(bool isLocal) {
+    final dir = isLocal ? currentLocalDir : currentRemoteDir;
+    if (dir.path.startsWith(currentHome)) {
+      var path = dir.path.replaceFirst(currentHome, "");
+      if (path.length == 0) return "";
+      if (path[0] == "/" || path[0] == "\\") {
+        // remove more '/' or '\'
+        path = path.replaceFirst(path[0], "");
+      }
+      return path;
+    } else {
+      return dir.path.replaceFirst(currentHome, "");
+    }
+  }
+
   bool get currentShowHidden =>
       _isLocal ? _localOption.showHidden : _remoteOption.showHidden;
+
+  bool getCurrentShowHidden(bool isLocal) {
+    return isLocal ? _localOption.showHidden : _remoteOption.showHidden;
+  }
 
   bool get currentIsWindows =>
       _isLocal ? _localOption.isWindows : _remoteOption.isWindows;
 
+  bool getCurrentIsWindows(bool isLocal) {
+    return isLocal ? _localOption.isWindows : _remoteOption.isWindows;
+  }
+
   final _fileFetcher = FileFetcher();
 
   final _jobResultListener = JobResultListener<Map<String, dynamic>>();
+
+  final WeakReference<FFI> parent;
+
+  FileModel(this.parent);
 
   toggleSelectMode() {
     if (jobState == JobState.inProgress) {
@@ -89,16 +165,29 @@ class FileModel extends ChangeNotifier {
     } else {
       _remoteOption.showHidden = showHidden ?? !_remoteOption.showHidden;
     }
-    refresh();
+    refresh(isLocal: local);
   }
 
   tryUpdateJobProgress(Map<String, dynamic> evt) {
     try {
       int id = int.parse(evt['id']);
-      _jobProgress.id = id;
-      _jobProgress.fileNum = int.parse(evt['file_num']);
-      _jobProgress.speed = double.parse(evt['speed']);
-      _jobProgress.finishedSize = int.parse(evt['finished_size']);
+      if (!isDesktop) {
+        _jobProgress.id = id;
+        _jobProgress.fileNum = int.parse(evt['file_num']);
+        _jobProgress.speed = double.parse(evt['speed']);
+        _jobProgress.finishedSize = int.parse(evt['finished_size']);
+      } else {
+        // Desktop uses jobTable
+        // id = index + 1
+        final jobIndex = getJob(id);
+        if (jobIndex >= 0 && _jobTable.length > jobIndex) {
+          final job = _jobTable[jobIndex];
+          job.fileNum = int.parse(evt['file_num']);
+          job.speed = double.parse(evt['speed']);
+          job.finishedSize = int.parse(evt['finished_size']);
+          debugPrint("update job ${id} with ${evt}");
+        }
+      }
       notifyListeners();
     } catch (e) {
       debugPrint("Failed to tryUpdateJobProgress,evt:${evt.toString()}");
@@ -106,63 +195,107 @@ class FileModel extends ChangeNotifier {
   }
 
   receiveFileDir(Map<String, dynamic> evt) {
-    if (_remoteOption.home.isEmpty && evt['is_local'] == "false") {
+    debugPrint("recv file dir:${evt}");
+    if (evt['is_local'] == "false") {
       // init remote home, the connection will automatic read remote home when established,
       try {
         final fd = FileDirectory.fromJson(jsonDecode(evt['value']));
         fd.format(_remoteOption.isWindows, sort: _sortStyle);
-        _remoteOption.home = fd.path;
-        debugPrint("init remote home:${fd.path}");
-        _currentRemoteDir = fd;
-        notifyListeners();
-        return;
+        if (fd.id > 0) {
+          final jobIndex = getJob(fd.id);
+          if (jobIndex != -1) {
+            final job = jobTable[jobIndex];
+            var totalSize = 0;
+            var fileCount = fd.entries.length;
+            fd.entries.forEach((element) {
+              totalSize += element.size;
+            });
+            job.totalSize = totalSize;
+            job.fileCount = fileCount;
+            debugPrint("update receive details:${fd.path}");
+          }
+        } else if (_remoteOption.home.isEmpty) {
+          _remoteOption.home = fd.path;
+          debugPrint("init remote home:${fd.path}");
+          _currentRemoteDir = fd;
+        }
       } finally {}
     }
     _fileFetcher.tryCompleteTask(evt['value'], evt['is_local']);
+    notifyListeners();
   }
 
-  jobDone(Map<String, dynamic> evt) {
+  jobDone(Map<String, dynamic> evt) async {
     if (_jobResultListener.isListening) {
       _jobResultListener.complete(evt);
       return;
     }
-    _selectMode = false;
-    _jobProgress.state = JobState.done;
-    refresh();
+    if (!isDesktop) {
+      _selectMode = false;
+      _jobProgress.state = JobState.done;
+    } else {
+      int id = int.parse(evt['id']);
+      final jobIndex = getJob(id);
+      if (jobIndex != -1) {
+        final job = jobTable[jobIndex];
+        job.finishedSize = job.totalSize;
+        job.state = JobState.done;
+        job.fileNum = int.parse(evt['file_num']);
+      }
+    }
+    await Future.wait([
+      refresh(isLocal: false),
+      refresh(isLocal: true),
+    ]);
   }
 
   jobError(Map<String, dynamic> evt) {
-    if (_jobResultListener.isListening) {
-      _jobResultListener.complete(evt);
-      return;
+    if (!isDesktop) {
+      if (_jobResultListener.isListening) {
+        _jobResultListener.complete(evt);
+        return;
+      }
+      _selectMode = false;
+      _jobProgress.clear();
+      _jobProgress.state = JobState.error;
+    } else {
+      int jobIndex = getJob(int.parse(evt['id']));
+      if (jobIndex != -1) {
+        final job = jobTable[jobIndex];
+        job.state = JobState.error;
+      }
     }
-
     debugPrint("jobError $evt");
-    _selectMode = false;
-    _jobProgress.clear();
-    _jobProgress.state = JobState.error;
     notifyListeners();
   }
 
   overrideFileConfirm(Map<String, dynamic> evt) async {
     final resp = await showFileConfirmDialog(
         translate("Overwrite"), "${evt['read_path']}", true);
+    final id = int.tryParse(evt['id']) ?? 0;
     if (false == resp) {
-      cancelJob(int.tryParse(evt['id']) ?? 0);
+      final jobIndex = getJob(id);
+      if (jobIndex != -1) {
+        cancelJob(id);
+        final job = jobTable[jobIndex];
+        job.state = JobState.done;
+      }
     } else {
-      var msg = Map()
-        ..['id'] = evt['id']
-        ..['file_num'] = evt['file_num']
-        ..['is_upload'] = evt['is_upload']
-        ..['remember'] = fileConfirmCheckboxRemember.toString();
+      var need_override = false;
       if (resp == null) {
         // skip
-        msg['need_override'] = 'false';
+        need_override = false;
       } else {
         // overwrite
-        msg['need_override'] = 'true';
+        need_override = true;
       }
-      FFI.setByName("set_confirm_override_file", jsonEncode(msg));
+      bind.sessionSetConfirmOverrideFile(
+          id: parent.target?.id ?? "",
+          actId: id,
+          fileNum: int.parse(evt['file_num']),
+          needOverride: need_override,
+          remember: fileConfirmCheckboxRemember,
+          isUpload: evt['is_upload'] == "true");
     }
   }
 
@@ -172,20 +305,24 @@ class FileModel extends ChangeNotifier {
   }
 
   onReady() async {
-    _localOption.home = FFI.getByName("get_home_dir");
-    _localOption.showHidden =
-        FFI.getByName("peer_option", "local_show_hidden").isNotEmpty;
+    _localOption.home = await bind.mainGetHomeDir();
+    _localOption.showHidden = (await bind.sessionGetPeerOption(
+            id: parent.target?.id ?? "", name: "local_show_hidden"))
+        .isNotEmpty;
 
-    _remoteOption.showHidden =
-        FFI.getByName("peer_option", "remote_show_hidden").isNotEmpty;
-    _remoteOption.isWindows = FFI.ffiModel.pi.platform == "Windows";
+    _remoteOption.showHidden = (await bind.sessionGetPeerOption(
+            id: parent.target?.id ?? "", name: "remote_show_hidden"))
+        .isNotEmpty;
+    _remoteOption.isWindows = parent.target?.ffiModel.pi.platform == "Windows";
 
-    debugPrint("remote platform: ${FFI.ffiModel.pi.platform}");
+    debugPrint("remote platform: ${parent.target?.ffiModel.pi.platform}");
 
     await Future.delayed(Duration(milliseconds: 100));
 
-    final local = FFI.getByName("peer_option", "local_dir");
-    final remote = FFI.getByName("peer_option", "remote_dir");
+    final local = (await bind.sessionGetPeerOption(
+        id: parent.target?.id ?? "", name: "local_dir"));
+    final remote = (await bind.sessionGetPeerOption(
+        id: parent.target?.id ?? "", name: "remote_dir"));
     openDirectory(local.isEmpty ? _localOption.home : local, isLocal: true);
     openDirectory(remote.isEmpty ? _remoteOption.home : remote, isLocal: false);
     await Future.delayed(Duration(seconds: 1));
@@ -195,38 +332,40 @@ class FileModel extends ChangeNotifier {
     if (_currentRemoteDir.path.isEmpty) {
       openDirectory(_remoteOption.home, isLocal: false);
     }
+    // load last transfer jobs
+    await bind.sessionLoadLastTransferJobs(id: '${parent.target?.id}');
   }
 
   onClose() {
-    SmartDialog.dismiss();
+    parent.target?.dialogManager.dismissAll();
     jobReset();
 
     // save config
-    Map<String, String> msg = Map();
+    Map<String, String> msgMap = Map();
 
-    msg["name"] = "local_dir";
-    msg["value"] = _currentLocalDir.path;
-    FFI.setByName('peer_option', jsonEncode(msg));
-
-    msg["name"] = "local_show_hidden";
-    msg["value"] = _localOption.showHidden ? "Y" : "";
-    FFI.setByName('peer_option', jsonEncode(msg));
-
-    msg["name"] = "remote_dir";
-    msg["value"] = _currentRemoteDir.path;
-    FFI.setByName('peer_option', jsonEncode(msg));
-
-    msg["name"] = "remote_show_hidden";
-    msg["value"] = _remoteOption.showHidden ? "Y" : "";
-    FFI.setByName('peer_option', jsonEncode(msg));
+    msgMap["local_dir"] = _currentLocalDir.path;
+    msgMap["local_show_hidden"] = _localOption.showHidden ? "Y" : "";
+    msgMap["remote_dir"] = _currentRemoteDir.path;
+    msgMap["remote_show_hidden"] = _remoteOption.showHidden ? "Y" : "";
+    final id = parent.target?.id ?? "";
+    for (final msg in msgMap.entries) {
+      bind.sessionPeerOption(id: id, name: msg.key, value: msg.value);
+    }
     _currentLocalDir.clear();
     _currentRemoteDir.clear();
     _localOption.clear();
     _remoteOption.clear();
   }
 
-  refresh() {
-    openDirectory(currentDir.path);
+  Future refresh({bool? isLocal}) async {
+    if (isDesktop) {
+      isLocal = isLocal ?? _isLocal;
+      await isLocal
+          ? openDirectory(currentLocalDir.path, isLocal: isLocal)
+          : openDirectory(currentRemoteDir.path, isLocal: isLocal);
+    } else {
+      await openDirectory(currentDir.path);
+    }
   }
 
   openDirectory(String path, {bool? isLocal}) async {
@@ -235,6 +374,15 @@ class FileModel extends ChangeNotifier {
         isLocal ? _localOption.showHidden : _remoteOption.showHidden;
     final isWindows =
         isLocal ? _localOption.isWindows : _remoteOption.isWindows;
+    // process /C:\ -> C:\ on Windows
+    if (isLocal
+        ? _localOption.isWindows
+        : _remoteOption.isWindows && path.length > 1 && path[0] == '/') {
+      path = path.substring(1);
+      if (path[path.length - 1] != '\\') {
+        path = path + "\\";
+      }
+    }
     try {
       final fd = await _fileFetcher.fetchDirectory(path, isLocal, showHidden);
       fd.format(isWindows, sort: _sortStyle);
@@ -245,48 +393,87 @@ class FileModel extends ChangeNotifier {
       }
       notifyListeners();
     } catch (e) {
-      debugPrint("Failed to openDirectory :$e");
+      debugPrint("Failed to openDirectory ${path} :$e");
     }
   }
 
-  goHome() {
-    openDirectory(currentHome);
+  goHome({bool? isLocal}) {
+    isLocal = isLocal ?? _isLocal;
+    openDirectory(getCurrentHome(isLocal), isLocal: isLocal);
   }
 
-  goToParentDirectory() {
-    final parent = PathUtil.dirname(currentDir.path, currentIsWindows);
-    openDirectory(parent);
-  }
-
-  sendFiles(SelectedItems items) {
-    if (items.isLocal == null) {
-      debugPrint("Failed to sendFiles ,wrong path state");
+  goToParentDirectory({bool? isLocal}) {
+    isLocal = isLocal ?? _isLocal;
+    final isWindows =
+        isLocal ? _localOption.isWindows : _remoteOption.isWindows;
+    final currDir = isLocal ? currentLocalDir : currentRemoteDir;
+    var parent = PathUtil.dirname(currDir.path, isWindows);
+    // specially for C:\, D:\, goto '/'
+    if (parent == currDir.path && isWindows) {
+      openDirectory('/', isLocal: isLocal);
       return;
     }
-    _jobProgress.state = JobState.inProgress;
-    final toPath =
-        items.isLocal! ? currentRemoteDir.path : currentLocalDir.path;
-    final isWindows =
-        items.isLocal! ? _localOption.isWindows : _remoteOption.isWindows;
-    final showHidden =
-        items.isLocal! ? _localOption.showHidden : _remoteOption.showHidden;
-    items.items.forEach((from) {
-      _jobId++;
-      final msg = {
-        "id": _jobId.toString(),
-        "path": from.path,
-        "to": PathUtil.join(toPath, from.name, isWindows),
-        "file_num": "0",
-        "show_hidden": showHidden.toString(),
-        "is_remote": (!(items.isLocal!)).toString()
-      };
-      FFI.setByName("send_files", jsonEncode(msg));
-    });
+    openDirectory(parent, isLocal: isLocal);
+  }
+
+  /// isRemote only for desktop now, [isRemote == true] means [remote -> local]
+  sendFiles(SelectedItems items, {bool isRemote = false}) {
+    if (isDesktop) {
+      // desktop sendFiles
+      final toPath = isRemote ? currentLocalDir.path : currentRemoteDir.path;
+      final isWindows =
+          isRemote ? _localOption.isWindows : _remoteOption.isWindows;
+      final showHidden =
+          isRemote ? _localOption.showHidden : _remoteOption.showHidden;
+      items.items.forEach((from) async {
+        final jobId = ++_jobId;
+        _jobTable.add(JobProgress()
+          ..jobName = from.path
+          ..totalSize = from.size
+          ..state = JobState.inProgress
+          ..id = jobId
+          ..isRemote = isRemote);
+        bind.sessionSendFiles(
+            id: '${parent.target?.id}',
+            actId: _jobId,
+            path: from.path,
+            to: PathUtil.join(toPath, from.name, isWindows),
+            fileNum: 0,
+            includeHidden: showHidden,
+            isRemote: isRemote);
+        print(
+            "path:${from.path}, toPath:${toPath}, to:${PathUtil.join(toPath, from.name, isWindows)}");
+      });
+    } else {
+      if (items.isLocal == null) {
+        debugPrint("Failed to sendFiles ,wrong path state");
+        return;
+      }
+      _jobProgress.state = JobState.inProgress;
+      final toPath =
+          items.isLocal! ? currentRemoteDir.path : currentLocalDir.path;
+      final isWindows =
+          items.isLocal! ? _localOption.isWindows : _remoteOption.isWindows;
+      final showHidden =
+          items.isLocal! ? _localOption.showHidden : _remoteOption.showHidden;
+      items.items.forEach((from) async {
+        _jobId++;
+        await bind.sessionSendFiles(
+            id: await bind.mainGetLastRemoteId(),
+            actId: _jobId,
+            path: from.path,
+            to: PathUtil.join(toPath, from.name, isWindows),
+            fileNum: 0,
+            includeHidden: showHidden,
+            isRemote: !(items.isLocal!));
+      });
+    }
   }
 
   bool removeCheckboxRemember = false;
 
-  removeAction(SelectedItems items) async {
+  removeAction(SelectedItems items, {bool? isLocal}) async {
+    isLocal = isLocal ?? _isLocal;
     removeCheckboxRemember = false;
     if (items.isLocal == null) {
       debugPrint("Failed to removeFile, wrong path state");
@@ -305,14 +492,14 @@ class FileModel extends ChangeNotifier {
         entries = [item];
       } else if (item.isDirectory) {
         title = translate("Not an empty directory");
-        showLoading(translate("Waiting"));
+        parent.target?.dialogManager.showLoading(translate("Waiting"));
         final fd = await _fileFetcher.fetchDirectoryRecursive(
             _jobId, item.path, items.isLocal!, true);
         if (fd.path.isEmpty) {
           fd.path = item.path;
         }
         fd.format(isWindows);
-        SmartDialog.dismiss();
+        parent.target?.dialogManager.dismissAll();
         if (fd.entries.isEmpty) {
           final confirm = await showRemoveDialog(
               translate(
@@ -360,16 +547,18 @@ class FileModel extends ChangeNotifier {
             }
             break;
           }
-        } catch (e) {}
+        } catch (e) {
+          print("remove error: ${e}");
+        }
       }
     });
     _selectMode = false;
-    refresh();
+    refresh(isLocal: isLocal);
   }
 
   Future<bool?> showRemoveDialog(
       String title, String content, bool showCheckbox) async {
-    return await DialogManager.show<bool>(
+    return await parent.target?.dialogManager.show<bool>(
         (setState, Function(bool v) close) => CustomAlertDialog(
                 title: Row(
                   children: [
@@ -420,7 +609,7 @@ class FileModel extends ChangeNotifier {
   Future<bool?> showFileConfirmDialog(
       String title, String content, bool showCheckbox) async {
     fileConfirmCheckboxRemember = false;
-    return await DialogManager.show<bool?>(
+    return await parent.target?.dialogManager.show<bool?>(
         (setState, Function(bool? v) close) => CustomAlertDialog(
                 title: Row(
                   children: [
@@ -473,43 +662,122 @@ class FileModel extends ChangeNotifier {
   }
 
   sendRemoveFile(String path, int fileNum, bool isLocal) {
-    final msg = {
-      "id": _jobId.toString(),
-      "path": path,
-      "file_num": fileNum.toString(),
-      "is_remote": (!(isLocal)).toString()
-    };
-    FFI.setByName("remove_file", jsonEncode(msg));
+    bind.sessionRemoveFile(
+        id: '${parent.target?.id}',
+        actId: _jobId,
+        path: path,
+        isRemote: !isLocal,
+        fileNum: fileNum);
   }
 
   sendRemoveEmptyDir(String path, int fileNum, bool isLocal) {
-    final msg = {
-      "id": _jobId.toString(),
-      "path": path,
-      "is_remote": (!isLocal).toString()
-    };
-    FFI.setByName("remove_all_empty_dirs", jsonEncode(msg));
+    bind.sessionRemoveAllEmptyDirs(
+        id: '${parent.target?.id}',
+        actId: _jobId,
+        path: path,
+        isRemote: !isLocal);
   }
 
-  createDir(String path) {
+  createDir(String path, {bool? isLocal}) async {
+    isLocal = isLocal ?? this.isLocal;
     _jobId++;
-    final msg = {
-      "id": _jobId.toString(),
-      "path": path,
-      "is_remote": (!isLocal).toString()
-    };
-    FFI.setByName("create_dir", jsonEncode(msg));
+    bind.sessionCreateDir(
+        id: '${parent.target?.id}',
+        actId: _jobId,
+        path: path,
+        isRemote: !isLocal);
   }
 
-  cancelJob(int id) {
-    FFI.setByName("cancel_job", id.toString());
+  cancelJob(int id) async {
+    bind.sessionCancelJob(id: '${parent.target?.id}', actId: id);
     jobReset();
   }
 
-  changeSortStyle(SortBy sort) {
+  changeSortStyle(SortBy sort, {bool? isLocal, bool ascending = true}) {
     _sortStyle = sort;
-    _currentLocalDir.changeSortStyle(sort);
-    _currentRemoteDir.changeSortStyle(sort);
+    if (isLocal == null) {
+      // compatible for mobile logic
+      _currentLocalDir.changeSortStyle(sort, ascending: ascending);
+      _currentRemoteDir.changeSortStyle(sort, ascending: ascending);
+      _localSortStyle = sort;
+      _localSortAscending = ascending;
+      _remoteSortStyle = sort;
+      _remoteSortAscending = ascending;
+    } else if (isLocal) {
+      _currentLocalDir.changeSortStyle(sort, ascending: ascending);
+      _localSortStyle = sort;
+      _localSortAscending = ascending;
+    } else {
+      _currentRemoteDir.changeSortStyle(sort, ascending: ascending);
+      _remoteSortStyle = sort;
+      _remoteSortAscending = ascending;
+    }
+    notifyListeners();
+  }
+
+  initFileFetcher() {
+    _fileFetcher.id = parent.target?.id;
+  }
+
+  void updateFolderFiles(Map<String, dynamic> evt) {
+    // ret: "{\"id\":1,\"num_entries\":12,\"total_size\":1264822.0}"
+    Map<String, dynamic> info = json.decode(evt['info']);
+    int id = info['id'];
+    int num_entries = info['num_entries'];
+    double total_size = info['total_size'];
+    final jobIndex = getJob(id);
+    if (jobIndex != -1) {
+      final job = jobTable[jobIndex];
+      job.fileCount = num_entries;
+      job.totalSize = total_size.toInt();
+    }
+    debugPrint("update folder files: ${info}");
+    notifyListeners();
+  }
+
+  bool get remoteSortAscending => _remoteSortAscending;
+
+  void loadLastJob(Map<String, dynamic> evt) {
+    debugPrint("load last job: ${evt}");
+    Map<String, dynamic> jobDetail = json.decode(evt['value']);
+    // int id = int.parse(jobDetail['id']);
+    String remote = jobDetail['remote'];
+    String to = jobDetail['to'];
+    bool showHidden = jobDetail['show_hidden'];
+    int fileNum = jobDetail['file_num'];
+    bool isRemote = jobDetail['is_remote'];
+    final currJobId = _jobId++;
+    var jobProgress = JobProgress()
+      ..jobName = isRemote ? remote : to
+      ..id = currJobId
+      ..isRemote = isRemote
+      ..fileNum = fileNum
+      ..remote = remote
+      ..to = to
+      ..showHidden = showHidden
+      ..state = JobState.paused;
+    jobTable.add(jobProgress);
+    bind.sessionAddJob(
+      id: '${parent.target?.id}',
+      isRemote: isRemote,
+      includeHidden: showHidden,
+      actId: currJobId,
+      path: isRemote ? remote : to,
+      to: isRemote ? to : remote,
+      fileNum: fileNum,
+    );
+  }
+
+  resumeJob(int jobId) {
+    final jobIndex = getJob(jobId);
+    if (jobIndex != -1) {
+      final job = jobTable[jobIndex];
+      bind.sessionResumeJob(
+          id: '${parent.target?.id}', actId: job.id, isRemote: job.isRemote);
+      job.state = JobState.inProgress;
+    } else {
+      debugPrint("jobId ${jobId} is not exists");
+    }
     notifyListeners();
   }
 }
@@ -558,6 +826,17 @@ class FileFetcher {
   // Map<String,Completer<FileDirectory>> localTasks = Map(); // now we only use read local dir sync
   Map<String, Completer<FileDirectory>> remoteTasks = Map();
   Map<int, Completer<FileDirectory>> readRecursiveTasks = Map();
+
+  String? _id;
+
+  String? get id => _id;
+
+  set id(String? id) {
+    _id = id;
+  }
+
+  // if id == null, means to fetch global FFI
+  FFI get _ffi => ffi(_id ?? "");
 
   Future<FileDirectory> registerReadTask(bool isLocal, String path) {
     // final jobs = isLocal?localJobs:remoteJobs; // maybe we will use read local dir async later
@@ -618,13 +897,14 @@ class FileFetcher {
   Future<FileDirectory> fetchDirectory(
       String path, bool isLocal, bool showHidden) async {
     try {
-      final msg = {"path": path, "show_hidden": showHidden.toString()};
       if (isLocal) {
-        final res = FFI.getByName("read_local_dir_sync", jsonEncode(msg));
+        final res = await bind.sessionReadLocalDirSync(
+            id: id ?? "", path: path, showHidden: showHidden);
         final fd = FileDirectory.fromJson(jsonDecode(res));
         return fd;
       } else {
-        FFI.setByName("read_remote_dir", jsonEncode(msg));
+        await bind.sessionReadRemoteDir(
+            id: id ?? "", path: path, includeHidden: showHidden);
         return registerReadTask(isLocal, path);
       }
     } catch (e) {
@@ -636,13 +916,12 @@ class FileFetcher {
       int id, String path, bool isLocal, bool showHidden) async {
     // TODO test Recursive is show hidden default?
     try {
-      final msg = {
-        "id": id.toString(),
-        "path": path,
-        "show_hidden": showHidden.toString(),
-        "is_remote": (!isLocal).toString()
-      };
-      FFI.setByName("read_dir_recursive", jsonEncode(msg));
+      await bind.sessionReadDirRecursive(
+          id: _ffi.id,
+          actId: id,
+          path: path,
+          isRemote: !isLocal,
+          showHidden: showHidden);
       return registerReadRecursiveTask(id);
     } catch (e) {
       return Future.error(e);
@@ -675,8 +954,8 @@ class FileDirectory {
     }
   }
 
-  changeSortStyle(SortBy sort) {
-    entries = _sortList(entries, sort);
+  changeSortStyle(SortBy sort, {bool ascending = true}) {
+    entries = _sortList(entries, sort, ascending);
   }
 
   clear() {
@@ -711,7 +990,24 @@ class Entry {
   }
 }
 
-enum JobState { none, inProgress, done, error }
+enum JobState { none, inProgress, done, error, paused }
+
+extension JobStateDisplay on JobState {
+  String display() {
+    switch (this) {
+      case JobState.none:
+        return translate("Waiting");
+      case JobState.inProgress:
+        return translate("Transfer File");
+      case JobState.done:
+        return translate("Finished");
+      case JobState.error:
+        return translate("Error");
+      default:
+        return "";
+    }
+  }
+}
 
 class JobProgress {
   JobState state = JobState.none;
@@ -719,6 +1015,13 @@ class JobProgress {
   var fileNum = 0;
   var speed = 0.0;
   var finishedSize = 0;
+  var totalSize = 0;
+  var fileCount = 0;
+  var isRemote = false;
+  var jobName = "";
+  var remote = "";
+  var to = "";
+  var showHidden = false;
 
   clear() {
     state = JobState.none;
@@ -726,6 +1029,10 @@ class JobProgress {
     fileNum = 0;
     speed = 0;
     finishedSize = 0;
+    jobName = "";
+    fileCount = 0;
+    remote = "";
+    to = "";
   }
 }
 
@@ -772,7 +1079,7 @@ class DirectoryOption {
 }
 
 // code from file_manager pkg after edit
-List<Entry> _sortList(List<Entry> list, SortBy sortType) {
+List<Entry> _sortList(List<Entry> list, SortBy sortType, bool ascending) {
   if (sortType == SortBy.Name) {
     // making list of only folders.
     final dirs = list.where((element) => element.isDirectory).toList();
@@ -785,7 +1092,9 @@ List<Entry> _sortList(List<Entry> list, SortBy sortType) {
     files.sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
 
     // first folders will go to list (if available) then files will go to list.
-    return [...dirs, ...files];
+    return ascending
+        ? [...dirs, ...files]
+        : [...dirs.reversed.toList(), ...files.reversed.toList()];
   } else if (sortType == SortBy.Modified) {
     // making the list of Path & DateTime
     List<_PathStat> _pathStat = [];
@@ -800,7 +1109,7 @@ List<Entry> _sortList(List<Entry> list, SortBy sortType) {
     list.sort((a, b) => _pathStat
         .indexWhere((element) => element.path == a.name)
         .compareTo(_pathStat.indexWhere((element) => element.path == b.name)));
-    return list;
+    return ascending ? list : list.reversed.toList();
   } else if (sortType == SortBy.Type) {
     // making list of only folders.
     final dirs = list.where((element) => element.isDirectory).toList();
@@ -817,7 +1126,9 @@ List<Entry> _sortList(List<Entry> list, SortBy sortType) {
         .split('.')
         .last
         .compareTo(b.name.toLowerCase().split('.').last));
-    return [...dirs, ...files];
+    return ascending
+        ? [...dirs, ...files]
+        : [...dirs.reversed.toList(), ...files.reversed.toList()];
   } else if (sortType == SortBy.Size) {
     // create list of path and size
     Map<String, int> _sizeMap = {};
@@ -842,7 +1153,9 @@ List<Entry> _sortList(List<Entry> list, SortBy sortType) {
         .indexWhere((element) => element.key == a.name)
         .compareTo(
             _sizeMapList.indexWhere((element) => element.key == b.name)));
-    return [...dirs, ...files];
+    return ascending
+        ? [...dirs, ...files]
+        : [...dirs.reversed.toList(), ...files.reversed.toList()];
   }
   return [];
 }

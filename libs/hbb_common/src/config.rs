@@ -1,15 +1,3 @@
-use crate::{
-    log,
-    password_security::{
-        decrypt_str_or_original, decrypt_vec_or_original, encrypt_str_or_original,
-        encrypt_vec_or_original,
-    },
-};
-use anyhow::Result;
-use directories_next::ProjectDirs;
-use rand::Rng;
-use serde_derive::{Deserialize, Serialize};
-use sodiumoxide::crypto::sign;
 use std::{
     collections::HashMap,
     fs,
@@ -19,8 +7,23 @@ use std::{
     time::SystemTime,
 };
 
+use anyhow::Result;
+use directories_next::ProjectDirs;
+use rand::Rng;
+use serde_derive::{Deserialize, Serialize};
+use sodiumoxide::crypto::sign;
+
+use crate::{
+    log,
+    password_security::{
+        decrypt_str_or_original, decrypt_vec_or_original, encrypt_str_or_original,
+        encrypt_vec_or_original,
+    },
+};
+
 pub const RENDEZVOUS_TIMEOUT: u64 = 12_000;
 pub const CONNECT_TIMEOUT: u64 = 18_000;
+pub const READ_TIMEOUT: u64 = 30_000;
 pub const REG_INTERVAL: i64 = 12_000;
 pub const COMPRESS_LEVEL: i32 = 3;
 const SERIAL: i32 = 3;
@@ -48,16 +51,10 @@ lazy_static::lazy_static! {
     pub static ref APP_NAME: Arc<RwLock<String>> = Arc::new(RwLock::new("RustDesk".to_owned()));
     static ref KEY_PAIR: Arc<Mutex<Option<(Vec<u8>, Vec<u8>)>>> = Default::default();
 }
-#[cfg(target_os = "android")]
-lazy_static::lazy_static! {
-    pub static ref APP_DIR: Arc<RwLock<String>> = Arc::new(RwLock::new("/data/user/0/com.carriez.flutter_hbb/app_flutter".to_owned()));
-}
-#[cfg(target_os = "ios")]
+
+// #[cfg(any(target_os = "android", target_os = "ios"))]
 lazy_static::lazy_static! {
     pub static ref APP_DIR: Arc<RwLock<String>> = Default::default();
-}
-#[cfg(any(target_os = "android", target_os = "ios"))]
-lazy_static::lazy_static! {
     pub static ref APP_HOME_DIR: Arc<RwLock<String>> = Default::default();
 }
 const CHARS: &'static [char] = &[

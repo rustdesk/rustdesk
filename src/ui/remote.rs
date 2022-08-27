@@ -25,8 +25,12 @@ use clipboard::{
 use enigo::{self, Enigo, KeyboardControllable};
 use hbb_common::{
     allow_err,
-    config::{Config, LocalConfig, PeerConfig},
-    fs, log,
+    config::{Config, LocalConfig, PeerConfig, TransferSerde},
+    fs::{
+        self, can_enable_overwrite_detection, get_job, get_string, new_send_confirm,
+        DigestCheckResult, RemoveJobMeta, TransferJobMeta,
+    },
+    get_version_number, log,
     message_proto::{permission_info::Permission, *},
     protobuf::Message as _,
     rendezvous_proto::ConnType,
@@ -54,6 +58,7 @@ use crate::{
     client::*,
     common::{self, check_clipboard, update_clipboard, ClipboardContext, CLIPBOARD_INTERVAL},
 };
+use errno;
 
 type Video = AssetPtr<video_destination>;
 
@@ -208,7 +213,7 @@ impl sciter::EventHandler for Handler {
         fn read_remote_dir(String, bool);
         fn send_chat(String);
         fn switch_display(i32);
-        fn remove_dir_all(i32, String, bool);
+        fn remove_dir_all(i32, String, bool, bool);
         fn confirm_delete_files(i32, i32);
         fn set_no_confirm(i32);
         fn cancel_job(i32);
@@ -1653,12 +1658,21 @@ impl Remote {
     async fn io_loop(&mut self, key: &str, token: &str) {
         let stop_clipboard = self.start_clipboard();
         let mut last_recv_time = Instant::now();
+        let mut received = false;
         let conn_type = if self.handler.is_file_transfer() {
             ConnType::FILE_TRANSFER
         } else {
             ConnType::default()
         };
-        match Client::start(&self.handler.id, key, token, conn_type).await {
+        match Client::start(
+            &self.handler.id,
+            key,
+            token,
+            conn_type,
+            self.handler.clone(),
+        )
+        .await
+        {
             Ok((mut peer, direct)) => {
                 SERVER_KEYBOARD_ENABLED.store(true, Ordering::SeqCst);
                 SERVER_CLIPBOARD_ENABLED.store(true, Ordering::SeqCst);
@@ -1681,11 +1695,13 @@ impl Remote {
                                 match res {
                                     Err(err) => {
                                         log::error!("Connection closed: {}", err);
+                                        self.handler.set_force_relay(direct, received);
                                         self.handler.msgbox("error", "Connection Error", &err.to_string());
                                         break;
                                     }
                                     Ok(ref bytes) => {
                                         last_recv_time = Instant::now();
+                                        received = true;
                                         self.data_count.fetch_add(bytes.len(), Ordering::Relaxed);
                                         if !self.handle_msg_from_peer(bytes, &mut peer).await {
                                             break
@@ -2093,7 +2109,7 @@ impl Remote {
                     }
                 }
             }
-            Data::RemoveDirAll((id, path, is_remote)) => {
+            Data::RemoveDirAll((id, path, is_remote, include_hidden)) => {
                 let sep = self.handler.get_path_sep(is_remote);
                 if is_remote {
                     let mut msg_out = Message::new();
@@ -2101,7 +2117,7 @@ impl Remote {
                     file_action.set_all_files(ReadAllFiles {
                         id,
                         path: path.clone(),
-                        include_hidden: true,
+                        include_hidden,
                         ..Default::default()
                     });
                     msg_out.set_file_action(file_action);
@@ -2109,7 +2125,7 @@ impl Remote {
                     self.remove_jobs
                         .insert(id, RemoveJob::new(Vec::new(), path, sep, is_remote));
                 } else {
-                    match fs::get_recursive_files(&path, true) {
+                    match fs::get_recursive_files(&path, include_hidden) {
                         Ok(entries) => {
                             let m = make_fd(id, &entries, true);
                             self.handler.call("updateFolderFiles", &make_args!(m));
@@ -2270,18 +2286,18 @@ impl Remote {
 
     async fn send_opts_after_login(&self, peer: &mut Stream) {
         if let Some(opts) = self
-        .handler
-        .lc
-        .read()
-        .unwrap()
-        .get_option_message_after_login()
-    {
-        let mut misc = Misc::new();
-        misc.set_option(opts);
-        let mut msg_out = Message::new();
-        msg_out.set_misc(misc);
-        allow_err!(peer.send(&msg_out).await);
-    }
+            .handler
+            .lc
+            .read()
+            .unwrap()
+            .get_option_message_after_login()
+        {
+            let mut misc = Misc::new();
+            misc.set_option(opts);
+            let mut msg_out = Message::new();
+            msg_out.set_misc(misc);
+            allow_err!(peer.send(&msg_out).await);
+        }
     }
 
     async fn handle_msg_from_peer(&mut self, data: &[u8], peer: &mut Stream) -> bool {
@@ -2891,6 +2907,24 @@ impl Interface for Handler {
             });
             handle_test_delay(t, peer).await;
         }
+    }
+
+    fn set_force_relay(&mut self, direct: bool, received: bool) {
+        let mut lc = self.lc.write().unwrap();
+        lc.force_relay = false;
+        if direct && !received {
+            let errno = errno::errno().0;
+            log::info!("errno is {}", errno);
+            // TODO: check mac and ios
+            if cfg!(windows) && errno == 10054 || !cfg!(windows) && errno == 104 {
+                lc.force_relay = true;
+                lc.set_option("force-always-relay".to_owned(), "Y".to_owned());
+            }
+        }
+    }
+
+    fn is_force_relay(&self) -> bool {
+        self.lc.read().unwrap().force_relay
     }
 }
 

@@ -1,5 +1,9 @@
+use std::sync::{Arc, Mutex};
+
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub use arboard::Clipboard as ClipboardContext;
+use serde_json::json;
+
 use hbb_common::{
     allow_err,
     anyhow::bail,
@@ -7,13 +11,13 @@ use hbb_common::{
     config::{self, Config, COMPRESS_LEVEL, RENDEZVOUS_TIMEOUT},
     get_version_number, log,
     message_proto::*,
-    protobuf::Message as _,
     protobuf::Enum,
+    protobuf::Message as _,
     rendezvous_proto::*,
     sleep, socket_client, tokio, ResultType,
 };
+// #[cfg(any(target_os = "android", target_os = "ios", feature = "cli"))]
 use hbb_common::{config::RENDEZVOUS_PORT, futures::future::join_all};
-use std::sync::{Arc, Mutex};
 
 pub const CLIPBOARD_NAME: &'static str = "clipboard";
 pub const CLIPBOARD_INTERVAL: u64 = 333;
@@ -23,10 +27,9 @@ lazy_static::lazy_static! {
     pub static ref SOFTWARE_UPDATE_URL: Arc<Mutex<String>> = Default::default();
 }
 
-#[cfg(any(target_os = "android", target_os = "ios"))]
 lazy_static::lazy_static! {
-    pub static ref MOBILE_INFO1: Arc<Mutex<String>> = Default::default();
-    pub static ref MOBILE_INFO2: Arc<Mutex<String>> = Default::default();
+    pub static ref DEVICE_ID: Arc<Mutex<String>> = Default::default();
+    pub static ref DEVICE_NAME: Arc<Mutex<String>> = Default::default();
 }
 
 #[inline]
@@ -48,7 +51,7 @@ pub fn create_clipboard_msg(content: String) -> Message {
     let mut msg = Message::new();
     msg.set_clipboard(Clipboard {
         compress,
-        content:content.into(),
+        content: content.into(),
         ..Default::default()
     });
     msg
@@ -98,6 +101,19 @@ pub fn update_clipboard(clipboard: Clipboard, old: Option<&Arc<Mutex<String>>>) 
                 log::error!("Failed to create clipboard context: {}", err);
             }
         }
+    }
+}
+
+pub async fn send_opts_after_login(
+    config: &crate::client::LoginConfigHandler,
+    peer: &mut hbb_common::tcp::FramedStream,
+) {
+    if let Some(opts) = config.get_option_message_after_login() {
+        let mut misc = Misc::new();
+        misc.set_option(opts);
+        let mut msg_out = Message::new();
+        msg_out.set_misc(misc);
+        allow_err!(peer.send(&msg_out).await);
     }
 }
 
@@ -367,6 +383,7 @@ pub async fn get_nat_type(ms_timeout: u64) -> i32 {
     crate::ipc::get_nat_type(ms_timeout).await
 }
 
+// #[cfg(any(target_os = "android", target_os = "ios", feature = "cli"))]
 #[tokio::main(flavor = "current_thread")]
 async fn test_rendezvous_server_() {
     let servers = Config::get_rendezvous_servers();
@@ -393,6 +410,7 @@ async fn test_rendezvous_server_() {
     join_all(futs).await;
 }
 
+// #[cfg(any(target_os = "android", target_os = "ios", feature = "cli"))]
 pub fn test_rendezvous_server() {
     std::thread::spawn(test_rendezvous_server_);
 }
@@ -436,7 +454,7 @@ pub fn username() -> String {
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     return whoami::username().trim_end_matches('\0').to_owned();
     #[cfg(any(target_os = "android", target_os = "ios"))]
-    return MOBILE_INFO2.lock().unwrap().clone();
+    return DEVICE_NAME.lock().unwrap().clone();
 }
 
 #[inline]
@@ -666,4 +684,31 @@ pub fn make_fd_to_json(fd: FileDirectory) -> String {
     }
     fd_json.insert("entries".into(), json!(entries));
     serde_json::to_string(&fd_json).unwrap_or("".into())
+}
+
+pub fn make_fd_flutter(id: i32, entries: &Vec<FileEntry>, only_count: bool) -> String {
+    let mut m = serde_json::Map::new();
+    m.insert("id".into(), json!(id));
+    let mut a = vec![];
+    let mut n: u64 = 0;
+    for entry in entries {
+        n += entry.size;
+        if only_count {
+            continue;
+        }
+        let mut e = serde_json::Map::new();
+        e.insert("name".into(), json!(entry.name.to_owned()));
+        let tmp = entry.entry_type.value();
+        e.insert("type".into(), json!(if tmp == 0 { 1 } else { tmp }));
+        e.insert("time".into(), json!(entry.modified_time as f64));
+        e.insert("size".into(), json!(entry.size as f64));
+        a.push(e);
+    }
+    if only_count {
+        m.insert("num_entries".into(), json!(entries.len() as i32));
+    } else {
+        m.insert("entries".into(), json!(a));
+    }
+    m.insert("total_size".into(), json!(n as f64));
+    serde_json::to_string(&m).unwrap_or("".into())
 }

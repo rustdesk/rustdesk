@@ -1,55 +1,211 @@
-import 'package:flutter/material.dart';
-import 'package:flutter_smart_dialog/flutter_smart_dialog.dart';
-import 'package:provider/provider.dart';
-import 'package:firebase_analytics/firebase_analytics.dart';
-import 'package:firebase_core/firebase_core.dart';
-import 'common.dart';
-import 'models/model.dart';
-import 'pages/home_page.dart';
-import 'pages/server_page.dart';
-import 'pages/settings_page.dart';
+import 'dart:convert';
 
-Future<Null> main() async {
+import 'package:desktop_multi_window/desktop_multi_window.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_hbb/desktop/pages/desktop_tab_page.dart';
+import 'package:flutter_hbb/desktop/pages/server_page.dart';
+import 'package:flutter_hbb/desktop/screen/desktop_file_transfer_screen.dart';
+import 'package:flutter_hbb/desktop/screen/desktop_remote_screen.dart';
+import 'package:flutter_hbb/utils/multi_window_manager.dart';
+import 'package:get/get.dart';
+import 'package:provider/provider.dart';
+import 'package:window_manager/window_manager.dart';
+
+// import 'package:window_manager/window_manager.dart';
+
+import 'common.dart';
+import 'consts.dart';
+import 'mobile/pages/home_page.dart';
+import 'mobile/pages/server_page.dart';
+import 'mobile/pages/settings_page.dart';
+import 'models/platform_model.dart';
+
+int? windowId;
+
+Future<Null> main(List<String> args) async {
   WidgetsFlutterBinding.ensureInitialized();
-  var a = FFI.ffiModel.init();
-  var b = Firebase.initializeApp();
-  await a;
-  await b;
+  print("launch args: $args");
+
+  if (!isDesktop) {
+    runMobileApp();
+    return;
+  }
+  // main window
+  if (args.isNotEmpty && args.first == 'multi_window') {
+    windowId = int.parse(args[1]);
+    WindowController.fromWindowId(windowId!).showTitleBar(false);
+    final argument = args[2].isEmpty
+        ? Map<String, dynamic>()
+        : jsonDecode(args[2]) as Map<String, dynamic>;
+    int type = argument['type'] ?? -1;
+    argument['windowId'] = windowId;
+    WindowType wType = type.windowType;
+    switch (wType) {
+      case WindowType.RemoteDesktop:
+        runRemoteScreen(argument);
+        break;
+      case WindowType.FileTransfer:
+        runFileTransferScreen(argument);
+        break;
+      default:
+        break;
+    }
+  } else if (args.isNotEmpty && args.first == '--cm') {
+    print("--cm started");
+    await windowManager.ensureInitialized();
+    runConnectionManagerScreen();
+  } else {
+    await windowManager.ensureInitialized();
+    windowManager.setPreventClose(true);
+    runMainApp(true);
+  }
+}
+
+ThemeData getCurrentTheme() {
+  return isDarkTheme() ? MyTheme.darkTheme : MyTheme.lightTheme;
+}
+
+Future<void> initEnv(String appType) async {
+  await platformFFI.init(appType);
+  // global FFI, use this **ONLY** for global configuration
+  // for convenience, use global FFI on mobile platform
+  // focus on multi-ffi on desktop first
+  await initGlobalFFI();
+  // await Firebase.initializeApp();
   refreshCurrentUser();
-  toAndroidChannelInit();
+}
+
+void runMainApp(bool startService) async {
+  WindowOptions windowOptions = getHiddenTitleBarWindowOptions(Size(1280, 720));
+  await Future.wait([
+    initEnv(kAppTypeMain),
+    windowManager.waitUntilReadyToShow(windowOptions, () async {
+      await windowManager.show();
+      await windowManager.focus();
+    })
+  ]);
+  if (startService) {
+    // await windowManager.ensureInitialized();
+    // disable tray
+    // initTray();
+    gFFI.serverModel.startService();
+  }
   runApp(App());
+}
+
+void runMobileApp() async {
+  await initEnv(kAppTypeMain);
+  if (isAndroid) androidChannelInit();
+  runApp(App());
+}
+
+void runRemoteScreen(Map<String, dynamic> argument) async {
+  await initEnv(kAppTypeDesktopRemote);
+  runApp(GetMaterialApp(
+    navigatorKey: globalKey,
+    debugShowCheckedModeBanner: false,
+    title: 'RustDesk - Remote Desktop',
+    theme: getCurrentTheme(),
+    home: DesktopRemoteScreen(
+      params: argument,
+    ),
+    navigatorObservers: [
+      // FirebaseAnalyticsObserver(analytics: analytics),
+    ],
+    builder: _keepScaleBuilder(),
+  ));
+}
+
+void runFileTransferScreen(Map<String, dynamic> argument) async {
+  await initEnv(kAppTypeDesktopFileTransfer);
+  runApp(
+    GetMaterialApp(
+      navigatorKey: globalKey,
+      debugShowCheckedModeBanner: false,
+      title: 'RustDesk - File Transfer',
+      theme: getCurrentTheme(),
+      home: DesktopFileTransferScreen(params: argument),
+      navigatorObservers: [
+        // FirebaseAnalyticsObserver(analytics: analytics),
+      ],
+      builder: _keepScaleBuilder(),
+    ),
+  );
+}
+
+void runConnectionManagerScreen() async {
+  // initialize window
+  WindowOptions windowOptions = getHiddenTitleBarWindowOptions(Size(300, 400));
+  await Future.wait([
+    initEnv(kAppTypeMain),
+    windowManager.waitUntilReadyToShow(windowOptions, () async {
+      await windowManager.setAlignment(Alignment.topRight);
+      await windowManager.show();
+      await windowManager.focus();
+    })
+  ]);
+  runApp(GetMaterialApp(
+      debugShowCheckedModeBanner: false,
+      theme: getCurrentTheme(),
+      home: DesktopServerPage(),
+      builder: _keepScaleBuilder()));
+}
+
+WindowOptions getHiddenTitleBarWindowOptions(Size size) {
+  return WindowOptions(
+    size: size,
+    center: true,
+    backgroundColor: Colors.transparent,
+    skipTaskbar: false,
+    titleBarStyle: TitleBarStyle.hidden,
+  );
 }
 
 class App extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
-    final analytics = FirebaseAnalytics.instance;
+    // final analytics = FirebaseAnalytics.instance;
     return MultiProvider(
       providers: [
-        ChangeNotifierProvider.value(value: FFI.ffiModel),
-        ChangeNotifierProvider.value(value: FFI.imageModel),
-        ChangeNotifierProvider.value(value: FFI.cursorModel),
-        ChangeNotifierProvider.value(value: FFI.canvasModel),
+        // global configuration
+        // use session related FFI when in remote control or file transfer page
+        ChangeNotifierProvider.value(value: gFFI.ffiModel),
+        ChangeNotifierProvider.value(value: gFFI.imageModel),
+        ChangeNotifierProvider.value(value: gFFI.cursorModel),
+        ChangeNotifierProvider.value(value: gFFI.canvasModel),
+        ChangeNotifierProvider.value(value: gFFI.abModel),
+        ChangeNotifierProvider.value(value: gFFI.userModel),
       ],
-      child: MaterialApp(
-          navigatorKey: globalKey,
-          debugShowCheckedModeBanner: false,
-          title: 'RustDesk',
-          theme: ThemeData(
-            primarySwatch: Colors.blue,
-            visualDensity: VisualDensity.adaptivePlatformDensity,
-          ),
-          home: !isAndroid ? WebHomePage() : HomePage(key: homeKey),
-          navigatorObservers: [
-            FirebaseAnalyticsObserver(analytics: analytics),
-            FlutterSmartDialog.observer
-          ],
-          builder: FlutterSmartDialog.init(
-              builder: isAndroid
-                  ? (_, child) => AccessibilityListener(
-                        child: child,
-                      )
-                  : null)),
+      child: GetMaterialApp(
+        navigatorKey: globalKey,
+        debugShowCheckedModeBanner: false,
+        title: 'RustDesk',
+        theme: getCurrentTheme(),
+        home: isDesktop
+            ? DesktopTabPage()
+            : !isAndroid
+                ? WebHomePage()
+                : HomePage(),
+        navigatorObservers: [
+          // FirebaseAnalyticsObserver(analytics: analytics),
+        ],
+        builder: isAndroid
+            ? (_, child) => AccessibilityListener(
+                  child: child,
+                )
+            : _keepScaleBuilder(),
+      ),
     );
   }
+}
+
+_keepScaleBuilder() {
+  return (BuildContext context, Widget? child) {
+    return MediaQuery(
+      data: MediaQuery.of(context).copyWith(
+        textScaleFactor: 1.0,
+      ),
+      child: child ?? Container(),
+    );
+  };
 }
