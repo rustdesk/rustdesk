@@ -980,6 +980,12 @@ class FFI {
         msg: json.encode(modify({'type': type, 'buttons': button.value})));
   }
 
+  // Raw Key 
+  void inputRawKey(int keyCode, int scanCode, bool down){
+      debugPrint(scanCode.toString());
+      bind.sessionInputRawKey(id: id, keycode: keyCode, scancode: scanCode, down: down);
+  }
+
   /// Send key stroke event.
   /// [down] indicates the key's state(down or up).
   /// [press] indicates a click event(down and up).

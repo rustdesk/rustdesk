@@ -373,6 +373,16 @@ impl Session {
         }
     }
 
+    pub fn input_raw_key(&self, keycode: i32, scancode: i32, down: bool){
+        use rdev::{EventType::*, Key as RdevKey, *};
+        if scancode < 0 || keycode < 0{
+            return;
+        }
+        let key = rdev::key_from_scancode(scancode.try_into().unwrap()) as RdevKey;
+        
+        log::info!("{:?}", key);
+    }
+
     /// Input a string of text.
     /// String is parsed into individual key presses.
     ///
@@ -471,7 +481,7 @@ impl Session {
         }
         let mut msg_out = Message::new();
         msg_out.set_key_event(key_event);
-        log::debug!("{:?}", msg_out);
+        // log::debug!("{:?}", msg_out);
         self.send_msg(msg_out);
     }
 
