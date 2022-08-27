@@ -4039,7 +4039,7 @@ class wire_StringList extends ffi.Struct {
 
 typedef uintptr_t = ffi.UnsignedLong;
 typedef DartPostCObjectFnType = ffi.Pointer<
-    ffi.NativeFunction<ffi.Bool Function(DartPort, ffi.Pointer<ffi.Void>)>>;
+    ffi.NativeFunction<ffi.Uint8 Function(DartPort, ffi.Pointer<ffi.Void>)>>;
 typedef DartPort = ffi.Int64;
 
 const int GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT = 2;
