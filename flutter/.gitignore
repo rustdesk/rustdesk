@@ -32,7 +32,6 @@
 /build/
 
 # Web related
-lib/generated_plugin_registrant.dart
 
 # Symbolication related
 app.*.symbols
@@ -44,8 +43,6 @@ jniLibs
 .vscode
 
 # flutter rust bridge
-lib/generated_bridge.dart
-lib/generated_bridge.freezed.dart
 
 # Flutter Generated Files
 **/flutter/GeneratedPluginRegistrant.swift
