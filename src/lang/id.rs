@@ -311,5 +311,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Ratio", "Perbandingan"),
         ("Image Quality", "Kualitas gambar"),
         ("Scroll Style", "Gaya Gulir"),
+        ("Show Menubar", "Tampilkan bilah menu"),
+        ("Hide Menubar", "sembunyikan bilah menu"),
     ].iter().cloned().collect();
 }

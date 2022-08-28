@@ -197,19 +197,19 @@ class _RemotePageState extends State<RemotePage>
     return Scaffold(
         backgroundColor: MyTheme.color(context).bg,
         // resizeToAvoidBottomInset: true,
-        floatingActionButton: _showBar
-            ? null
-            : FloatingActionButton(
-                mini: true,
-                child: Icon(Icons.expand_less),
-                backgroundColor: MyTheme.accent,
-                onPressed: () {
-                  setState(() {
-                    _showBar = !_showBar;
-                  });
-                }),
-        bottomNavigationBar:
-            _showBar && hasDisplays ? getBottomAppBar(ffiModel) : null,
+        // floatingActionButton: _showBar
+        //     ? null
+        //     : FloatingActionButton(
+        //         mini: true,
+        //         child: Icon(Icons.expand_less),
+        //         backgroundColor: MyTheme.accent,
+        //         onPressed: () {
+        //           setState(() {
+        //             _showBar = !_showBar;
+        //           });
+        //         }),
+        // bottomNavigationBar:
+        //     _showBar && hasDisplays ? getBottomAppBar(ffiModel) : null,
         body: Overlay(
           initialEntries: [
             OverlayEntry(builder: (context) {

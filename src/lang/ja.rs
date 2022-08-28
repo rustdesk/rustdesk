@@ -308,5 +308,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Ratio", "比率"),
         ("Image Quality", "画質"),
         ("Scroll Style", "スクロール スタイル"),
+        ("Show Menubar", "メニューバーを表示"),
+        ("Hide Menubar", "メニューバーを隠す"),
     ].iter().cloned().collect();
 }

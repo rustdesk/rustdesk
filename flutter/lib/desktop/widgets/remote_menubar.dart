@@ -10,7 +10,7 @@ import '../../mobile/widgets/overlay.dart';
 import '../../models/model.dart';
 import '../../models/platform_model.dart';
 import './popup_menu.dart';
-import './material_mod_popup_menu.dart' as modMenu;
+import './material_mod_popup_menu.dart' as mod_menu;
 
 class _MenubarTheme {
   static const Color commonColor = MyTheme.accent;
@@ -50,19 +50,22 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
   }
 
   Widget _buildShowHide(BuildContext context) {
-    return SizedBox(
-        width: 100,
-        height: 5,
-        child: TextButton(
-            onHover: (bool v) {
-              _hideColor.value = v ? Colors.white60 : Colors.white24;
-            },
-            onPressed: () {
-              _show.value = !_show.value;
-            },
-            child: Obx(() => Container(
-                  color: _hideColor.value,
-                ))));
+    return Obx(() => Tooltip(
+          message: translate(_show.value ? "Hide Menubar" : "Show Menubar"),
+          child: SizedBox(
+              width: 100,
+              height: 5,
+              child: TextButton(
+                  onHover: (bool v) {
+                    _hideColor.value = v ? Colors.white60 : Colors.white24;
+                  },
+                  onPressed: () {
+                    _show.value = !_show.value;
+                  },
+                  child: Obx(() => Container(
+                        color: _hideColor.value,
+                      )))),
+        ));
   }
 
   Widget _buildMenubar(BuildContext context) {
@@ -73,7 +76,7 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
         menubarItems.add(IconButton(
           tooltip: translate('Mobile Actions'),
           color: _MenubarTheme.commonColor,
-          icon: Icon(Icons.build),
+          icon: const Icon(Icons.build),
           onPressed: () {
             if (mobileActionsOverlayEntry == null) {
               showMobileActionsOverlay();
@@ -92,7 +95,7 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
     }
     menubarItems.add(_buildClose(context));
     return PopupMenuTheme(
-        data: PopupMenuThemeData(
+        data: const PopupMenuThemeData(
             textStyle: TextStyle(color: _MenubarTheme.commonColor)),
         child: Column(mainAxisSize: MainAxisSize.min, children: [
           Container(
@@ -112,11 +115,11 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
         setFullscreen(!isFullscreen);
       },
       icon: Obx(() => isFullscreen
-          ? Icon(
+          ? const Icon(
               Icons.fullscreen_exit,
               color: _MenubarTheme.commonColor,
             )
-          : Icon(
+          : const Icon(
               Icons.fullscreen,
               color: _MenubarTheme.commonColor,
             )),
@@ -130,7 +133,7 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
         widget.ffi.chatModel.changeCurrentID(ChatModel.clientModeID);
         widget.ffi.chatModel.toggleChatOverlay();
       },
-      icon: Icon(
+      icon: const Icon(
         Icons.message,
         color: _MenubarTheme.commonColor,
       ),
@@ -139,24 +142,25 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
 
   Widget _buildMonitor(BuildContext context) {
     final pi = widget.ffi.ffiModel.pi;
-    return modMenu.PopupMenuButton(
+    return mod_menu.PopupMenuButton(
       tooltip: translate('Select Monitor'),
       padding: EdgeInsets.zero,
-      position: modMenu.PopupMenuPosition.under,
+      position: mod_menu.PopupMenuPosition.under,
       icon: Stack(
         alignment: Alignment.center,
         children: [
-          Icon(
+          const Icon(
             Icons.personal_video,
             color: _MenubarTheme.commonColor,
           ),
           Padding(
-            padding: EdgeInsets.only(bottom: 3.9),
+            padding: const EdgeInsets.only(bottom: 3.9),
             child: Obx(() {
               RxInt display = CurrentDisplayState.find(widget.id);
               return Text(
                 "${display.value + 1}/${pi.displays.length}",
-                style: TextStyle(color: _MenubarTheme.commonColor, fontSize: 8),
+                style: const TextStyle(
+                    color: _MenubarTheme.commonColor, fontSize: 8),
               );
             }),
           )
@@ -164,14 +168,14 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
       ),
       itemBuilder: (BuildContext context) {
         final List<Widget> rowChildren = [];
-        final double selectorScale = 1.3;
+        const double selectorScale = 1.3;
         for (int i = 0; i < pi.displays.length; i++) {
           rowChildren.add(Transform.scale(
             scale: selectorScale,
             child: Stack(
               alignment: Alignment.center,
               children: [
-                Icon(
+                const Icon(
                   Icons.personal_video,
                   color: _MenubarTheme.commonColor,
                 ),
@@ -179,12 +183,13 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
                   child: Container(
                       alignment: AlignmentDirectional.center,
                       constraints:
-                          BoxConstraints(minHeight: _MenubarTheme.height),
+                          const BoxConstraints(minHeight: _MenubarTheme.height),
                       child: Padding(
-                        padding: EdgeInsets.only(bottom: 2.5),
+                        padding: const EdgeInsets.only(bottom: 2.5),
                         child: Text(
                           (i + 1).toString(),
-                          style: TextStyle(color: _MenubarTheme.commonColor),
+                          style:
+                              const TextStyle(color: _MenubarTheme.commonColor),
                         ),
                       )),
                   onPressed: () {
@@ -200,8 +205,8 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
             ),
           ));
         }
-        return <modMenu.PopupMenuEntry<String>>[
-          modMenu.PopupMenuItem<String>(
+        return <mod_menu.PopupMenuEntry<String>>[
+          mod_menu.PopupMenuItem<String>(
             height: _MenubarTheme.height,
             padding: EdgeInsets.zero,
             child: Row(
@@ -214,18 +219,18 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
   }
 
   Widget _buildControl(BuildContext context) {
-    return modMenu.PopupMenuButton(
+    return mod_menu.PopupMenuButton(
       padding: EdgeInsets.zero,
-      icon: Icon(
+      icon: const Icon(
         Icons.bolt,
         color: _MenubarTheme.commonColor,
       ),
       tooltip: translate('Control Actions'),
-      position: modMenu.PopupMenuPosition.under,
+      position: mod_menu.PopupMenuPosition.under,
       itemBuilder: (BuildContext context) => _getControlMenu()
           .map((entry) => entry.build(
               context,
-              MenuConfig(
+              const MenuConfig(
                 commonColor: _MenubarTheme.commonColor,
                 secondMenuHeight: _MenubarTheme.height,
               )))
@@ -234,19 +239,19 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
   }
 
   Widget _buildDisplay(BuildContext context) {
-    return modMenu.PopupMenuButton(
+    return mod_menu.PopupMenuButton(
       padding: EdgeInsets.zero,
-      icon: Icon(
+      icon: const Icon(
         Icons.tv,
         color: _MenubarTheme.commonColor,
       ),
       tooltip: translate('Display Settings'),
-      position: modMenu.PopupMenuPosition.under,
+      position: mod_menu.PopupMenuPosition.under,
       onSelected: (String item) {},
       itemBuilder: (BuildContext context) => _getDisplayMenu()
           .map((entry) => entry.build(
               context,
-              MenuConfig(
+              const MenuConfig(
                 commonColor: _MenubarTheme.commonColor,
                 secondMenuHeight: _MenubarTheme.height,
               )))
@@ -260,7 +265,7 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
       onPressed: () {
         clientClose(widget.ffi.dialogManager);
       },
-      icon: Icon(
+      icon: const Icon(
         Icons.close,
         color: _MenubarTheme.commonColor,
       ),
@@ -332,7 +337,7 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
       if (pi.platform == 'Linux' || pi.sasEnabled) {
         displayMenu.add(MenuEntryButton<String>(
           childBuilder: (TextStyle? style) => Text(
-            translate('Insert') + ' Ctrl + Alt + Del',
+            '${translate("Insert")} Ctrl + Alt + Del',
             style: style,
           ),
           proc: () {
@@ -357,8 +362,7 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
         displayMenu.add(MenuEntryButton<String>(
           childBuilder: (TextStyle? style) => Obx(() => Text(
                 translate(
-                    (BlockInputState.find(widget.id).value ? 'Unb' : 'B') +
-                        'lock user input'),
+                    '${BlockInputState.find(widget.id).value ? "Unb" : "B"}lock user input'),
                 style: style,
               )),
           proc: () {
@@ -366,7 +370,7 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
             RxBool blockInput = BlockInputState.find(widget.id);
             bind.sessionToggleOption(
                 id: widget.id,
-                value: (blockInput.value ? 'un' : '') + 'block-input');
+                value: '${blockInput.value ? "un" : ""}block-input');
             blockInput.value = !blockInput.value;
           },
         ));
@@ -447,7 +451,7 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
       MenuEntrySwitch<String>(
           text: translate('Show remote cursor'),
           getter: () async {
-            return await bind.sessionGetToggleOptionSync(
+            return bind.sessionGetToggleOptionSync(
                 id: widget.id, arg: 'show-remote-cursor');
           },
           setter: (bool v) async {
@@ -457,7 +461,7 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
       MenuEntrySwitch<String>(
           text: translate('Show quality monitor'),
           getter: () async {
-            return await bind.sessionGetToggleOptionSync(
+            return bind.sessionGetToggleOptionSync(
                 id: widget.id, arg: 'show-quality-monitor');
           },
           setter: (bool v) async {
