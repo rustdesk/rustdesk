@@ -462,6 +462,7 @@ class _PeerCardState extends State<_PeerCard>
   void _rename(String id) async {
     var isInProgress = false;
     var name = await bind.mainGetPeerOption(id: id, key: 'alias');
+    var controller = TextEditingController(text: name);
     if (widget.type == PeerType.ab) {
       final peer = gFFI.abModel.peers.firstWhere((p) => id == p['id']);
       if (peer == null) {
@@ -470,7 +471,6 @@ class _PeerCardState extends State<_PeerCard>
         name = peer['alias'] ?? "";
       }
     }
-    final k = GlobalKey<FormState>();
     gFFI.dialogManager.show((setState, close) {
       return CustomAlertDialog(
         title: Text(translate("Rename")),
@@ -480,22 +480,9 @@ class _PeerCardState extends State<_PeerCard>
             Container(
               padding: EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
               child: Form(
-                key: k,
                 child: TextFormField(
-                  controller: TextEditingController(text: name),
+                  controller: controller,
                   decoration: InputDecoration(border: OutlineInputBorder()),
-                  onChanged: (newStr) {
-                    name = newStr;
-                  },
-                  validator: (s) {
-                    if (s == null || s.isEmpty) {
-                      return translate("Empty");
-                    }
-                    return null;
-                  },
-                  onSaved: (s) {
-                    name = s ?? "unnamed";
-                  },
                 ),
               ),
             ),
@@ -513,22 +500,17 @@ class _PeerCardState extends State<_PeerCard>
                 setState(() {
                   isInProgress = true;
                 });
-                if (k.currentState != null) {
-                  if (k.currentState!.validate()) {
-                    k.currentState!.save();
-                    await bind.mainSetPeerOption(
-                        id: id, key: 'alias', value: name);
-                    if (widget.type == PeerType.ab) {
-                      gFFI.abModel.setPeerOption(id, 'alias', name);
-                      await gFFI.abModel.updateAb();
-                    } else {
-                      Future.delayed(Duration.zero, () {
-                        this.setState(() {});
-                      });
-                    }
-                    close();
-                  }
+                name = controller.text;
+                await bind.mainSetPeerOption(id: id, key: 'alias', value: name);
+                if (widget.type == PeerType.ab) {
+                  gFFI.abModel.setPeerOption(id, 'alias', name);
+                  await gFFI.abModel.updateAb();
+                } else {
+                  Future.delayed(Duration.zero, () {
+                    this.setState(() {});
+                  });
                 }
+                close();
                 setState(() {
                   isInProgress = false;
                 });

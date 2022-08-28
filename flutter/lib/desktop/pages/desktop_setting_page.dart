@@ -1025,7 +1025,6 @@ class _ComboBox extends StatelessWidget {
 
 void changeServer() async {
   Map<String, dynamic> oldOptions = jsonDecode(await bind.mainGetOptions());
-  print("${oldOptions}");
   String idServer = oldOptions['custom-rendezvous-server'] ?? "";
   var idServerMsg = "";
   String relayServer = oldOptions['relay-server'] ?? "";
@@ -1033,6 +1032,10 @@ void changeServer() async {
   String apiServer = oldOptions['api-server'] ?? "";
   var apiServerMsg = "";
   var key = oldOptions['key'] ?? "";
+  var idController = TextEditingController(text: idServer);
+  var relayController = TextEditingController(text: relayServer);
+  var apiController = TextEditingController(text: apiServer);
+  var keyController = TextEditingController(text: key);
 
   var isInProgress = false;
   gFFI.dialogManager.show((setState, close) {
@@ -1057,13 +1060,10 @@ void changeServer() async {
                 ),
                 Expanded(
                   child: TextField(
-                    onChanged: (s) {
-                      idServer = s;
-                    },
                     decoration: InputDecoration(
                         border: OutlineInputBorder(),
                         errorText: idServerMsg.isNotEmpty ? idServerMsg : null),
-                    controller: TextEditingController(text: idServer),
+                    controller: idController,
                   ),
                 ),
               ],
@@ -1082,14 +1082,11 @@ void changeServer() async {
                 ),
                 Expanded(
                   child: TextField(
-                    onChanged: (s) {
-                      relayServer = s;
-                    },
                     decoration: InputDecoration(
                         border: OutlineInputBorder(),
                         errorText:
                             relayServerMsg.isNotEmpty ? relayServerMsg : null),
-                    controller: TextEditingController(text: relayServer),
+                    controller: relayController,
                   ),
                 ),
               ],
@@ -1108,14 +1105,11 @@ void changeServer() async {
                 ),
                 Expanded(
                   child: TextField(
-                    onChanged: (s) {
-                      apiServer = s;
-                    },
                     decoration: InputDecoration(
                         border: OutlineInputBorder(),
                         errorText:
                             apiServerMsg.isNotEmpty ? apiServerMsg : null),
-                    controller: TextEditingController(text: apiServer),
+                    controller: apiController,
                   ),
                 ),
               ],
@@ -1134,13 +1128,10 @@ void changeServer() async {
                 ),
                 Expanded(
                   child: TextField(
-                    onChanged: (s) {
-                      key = s;
-                    },
                     decoration: InputDecoration(
                       border: OutlineInputBorder(),
                     ),
-                    controller: TextEditingController(text: key),
+                    controller: keyController,
                   ),
                 ),
               ],
@@ -1171,10 +1162,10 @@ void changeServer() async {
                   isInProgress = false;
                 });
               };
-              idServer = idServer.trim();
-              relayServer = relayServer.trim();
-              apiServer = apiServer.trim();
-              key = key.trim();
+              idServer = idController.text.trim();
+              relayServer = relayController.text.trim();
+              apiServer = apiController.text.trim().toLowerCase();
+              key = keyController.text.trim();
 
               if (idServer.isNotEmpty) {
                 idServerMsg = translate(
@@ -1230,6 +1221,7 @@ void changeWhiteList() async {
   Map<String, dynamic> oldOptions = jsonDecode(await bind.mainGetOptions());
   var newWhiteList = ((oldOptions['whitelist'] ?? "") as String).split(',');
   var newWhiteListField = newWhiteList.join('\n');
+  var controller = TextEditingController(text: newWhiteListField);
   var msg = "";
   var isInProgress = false;
   gFFI.dialogManager.show((setState, close) {
@@ -1246,15 +1238,12 @@ void changeWhiteList() async {
             children: [
               Expanded(
                 child: TextField(
-                  onChanged: (s) {
-                    newWhiteListField = s;
-                  },
                   maxLines: null,
                   decoration: InputDecoration(
                     border: OutlineInputBorder(),
                     errorText: msg.isEmpty ? null : translate(msg),
                   ),
-                  controller: TextEditingController(text: newWhiteListField),
+                  controller: controller,
                 ),
               ),
             ],
@@ -1277,7 +1266,7 @@ void changeWhiteList() async {
                 msg = "";
                 isInProgress = true;
               });
-              newWhiteListField = newWhiteListField.trim();
+              newWhiteListField = controller.text.trim();
               var newWhiteList = "";
               if (newWhiteListField.isEmpty) {
                 // pass
@@ -1319,6 +1308,9 @@ void changeSocks5Proxy() async {
     username = socks[1];
     password = socks[2];
   }
+  var proxyController = TextEditingController(text: proxy);
+  var userController = TextEditingController(text: username);
+  var pwdController = TextEditingController(text: password);
 
   var isInProgress = false;
   gFFI.dialogManager.show((setState, close) {
@@ -1343,13 +1335,10 @@ void changeSocks5Proxy() async {
                 ),
                 Expanded(
                   child: TextField(
-                    onChanged: (s) {
-                      proxy = s;
-                    },
                     decoration: InputDecoration(
                         border: OutlineInputBorder(),
                         errorText: proxyMsg.isNotEmpty ? proxyMsg : null),
-                    controller: TextEditingController(text: proxy),
+                    controller: proxyController,
                   ),
                 ),
               ],
@@ -1368,13 +1357,10 @@ void changeSocks5Proxy() async {
                 ),
                 Expanded(
                   child: TextField(
-                    onChanged: (s) {
-                      username = s;
-                    },
                     decoration: InputDecoration(
                       border: OutlineInputBorder(),
                     ),
-                    controller: TextEditingController(text: username),
+                    controller: userController,
                   ),
                 ),
               ],
@@ -1393,13 +1379,10 @@ void changeSocks5Proxy() async {
                 ),
                 Expanded(
                   child: TextField(
-                    onChanged: (s) {
-                      password = s;
-                    },
                     decoration: InputDecoration(
                       border: OutlineInputBorder(),
                     ),
-                    controller: TextEditingController(text: password),
+                    controller: pwdController,
                   ),
                 ),
               ],
@@ -1428,9 +1411,9 @@ void changeSocks5Proxy() async {
                   isInProgress = false;
                 });
               };
-              proxy = proxy.trim();
-              username = username.trim();
-              password = password.trim();
+              proxy = proxyController.text.trim();
+              username = userController.text.trim();
+              password = pwdController.text.trim();
 
               if (proxy.isNotEmpty) {
                 proxyMsg =
