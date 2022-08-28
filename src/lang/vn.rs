@@ -302,5 +302,16 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Restarting Remote Device", "Đang khởi động lại thiết bị từ xa"),
         ("remote_restarting_tip", "Thiết bị từ xa đang khởi động lại, hãy đóng cửa sổ tin nhắn này và kết nối lại với mật khẩu vĩnh viễn sau một khoảng thời gian"),
         ("Copied", ""),
+        ("Exit Fullscreen", "Thoát toàn màn hình"),
+        ("Fullscreen", "Toàn màn hình"),
+        ("Mobile Actions", "Hành động trên thiết bị di động"),
+        ("Select Monitor", "Chọn màn hình"),
+        ("Control Actions", "Kiểm soát hành động"),
+        ("Display Settings", "Thiết lập hiển thị"),
+        ("Ratio", "Tỉ lệ"),
+        ("Image Quality", "Chất lượng hình ảnh"),
+        ("Scroll Style", "Kiểu cuộn"),
+        ("Show Menubar", "Hiển thị thanh menu"),
+        ("Hide Menubar", "ẩn thanh menu"),
     ].iter().cloned().collect();
 }

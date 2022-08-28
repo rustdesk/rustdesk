@@ -9,9 +9,11 @@ import 'package:flutter_hbb/models/chat_model.dart';
 import 'package:get/get.dart';
 import 'package:provider/provider.dart';
 import 'package:wakelock/wakelock.dart';
+import 'package:tuple/tuple.dart';
 
 // import 'package:window_manager/window_manager.dart';
 
+import '../widgets/remote_menubar.dart';
 import '../../common.dart';
 import '../../mobile/widgets/dialog.dart';
 import '../../mobile/widgets/overlay.dart';
@@ -21,16 +23,14 @@ import '../../models/platform_model.dart';
 final initText = '\1' * 1024;
 
 class RemotePage extends StatefulWidget {
-  RemotePage(
-      {Key? key,
-      required this.id,
-      required this.tabBarHeight,
-      required this.fullscreenID})
-      : super(key: key);
+  RemotePage({
+    Key? key,
+    required this.id,
+    required this.tabBarHeight,
+  }) : super(key: key);
 
   final String id;
   final double tabBarHeight;
-  final Rx<String> fullscreenID;
 
   @override
   _RemotePageState createState() => _RemotePageState();
@@ -50,11 +50,15 @@ class _RemotePageState extends State<RemotePage>
 
   late FFI _ffi;
 
+  void _updateTabBarHeight() {
+    _ffi.canvasModel.tabBarHeight = widget.tabBarHeight;
+  }
+
   @override
   void initState() {
     super.initState();
     _ffi = FFI();
-    _ffi.canvasModel.tabBarHeight = super.widget.tabBarHeight;
+    _updateTabBarHeight();
     Get.put(_ffi, tag: widget.id);
     _ffi.connect(widget.id, tabBarHeight: super.widget.tabBarHeight);
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -70,6 +74,9 @@ class _RemotePageState extends State<RemotePage>
     _ffi.listenToMouse(true);
     _ffi.qualityMonitorModel.checkShowQualityMonitor(widget.id);
     // WindowManager.instance.addListener(this);
+    PrivacyModeState.init(widget.id);
+    BlockInputState.init(widget.id);
+    CurrentDisplayState.init(widget.id);
   }
 
   @override
@@ -90,6 +97,9 @@ class _RemotePageState extends State<RemotePage>
     // WindowManager.instance.removeListener(this);
     Get.delete<FFI>(tag: widget.id);
     super.dispose();
+    PrivacyModeState.delete(widget.id);
+    BlockInputState.delete(widget.id);
+    CurrentDisplayState.delete(widget.id);
   }
 
   void resetTool() {
@@ -187,19 +197,19 @@ class _RemotePageState extends State<RemotePage>
     return Scaffold(
         backgroundColor: MyTheme.color(context).bg,
         // resizeToAvoidBottomInset: true,
-        floatingActionButton: _showBar
-            ? null
-            : FloatingActionButton(
-                mini: true,
-                child: Icon(Icons.expand_less),
-                backgroundColor: MyTheme.accent,
-                onPressed: () {
-                  setState(() {
-                    _showBar = !_showBar;
-                  });
-                }),
-        bottomNavigationBar:
-            _showBar && hasDisplays ? getBottomAppBar(ffiModel) : null,
+        // floatingActionButton: _showBar
+        //     ? null
+        //     : FloatingActionButton(
+        //         mini: true,
+        //         child: Icon(Icons.expand_less),
+        //         backgroundColor: MyTheme.accent,
+        //         onPressed: () {
+        //           setState(() {
+        //             _showBar = !_showBar;
+        //           });
+        //         }),
+        // bottomNavigationBar:
+        //     _showBar && hasDisplays ? getBottomAppBar(ffiModel) : null,
         body: Overlay(
           initialEntries: [
             OverlayEntry(builder: (context) {
@@ -217,6 +227,7 @@ class _RemotePageState extends State<RemotePage>
   @override
   Widget build(BuildContext context) {
     super.build(context);
+    _updateTabBarHeight();
     return WillPopScope(
         onWillPop: () async {
           clientClose(_ffi.dialogManager);
@@ -289,6 +300,7 @@ class _RemotePageState extends State<RemotePage>
   }
 
   Widget? getBottomAppBar(FfiModel ffiModel) {
+    final RxBool fullscreen = Get.find(tag: 'fullscreen');
     return MouseRegion(
         cursor: SystemMouseCursors.basic,
         child: BottomAppBar(
@@ -323,15 +335,11 @@ class _RemotePageState extends State<RemotePage>
                           : <Widget>[
                               IconButton(
                                 color: Colors.white,
-                                icon: Icon(widget.fullscreenID.value.isEmpty
+                                icon: Icon(fullscreen.isTrue
                                     ? Icons.fullscreen
                                     : Icons.close_fullscreen),
                                 onPressed: () {
-                                  if (widget.fullscreenID.value.isEmpty) {
-                                    widget.fullscreenID.value = widget.id;
-                                  } else {
-                                    widget.fullscreenID.value = "";
-                                  }
+                                  fullscreen.value = !fullscreen.value;
                                 },
                               )
                             ]) +
@@ -404,7 +412,7 @@ class _RemotePageState extends State<RemotePage>
     }
     if (_isPhysicalMouse) {
       _ffi.handleMouse(getEvent(e, 'mousemove'),
-          tabBarHeight: super.widget.tabBarHeight);
+          tabBarHeight: widget.tabBarHeight);
     }
   }
 
@@ -418,7 +426,7 @@ class _RemotePageState extends State<RemotePage>
     }
     if (_isPhysicalMouse) {
       _ffi.handleMouse(getEvent(e, 'mousedown'),
-          tabBarHeight: super.widget.tabBarHeight);
+          tabBarHeight: widget.tabBarHeight);
     }
   }
 
@@ -426,7 +434,7 @@ class _RemotePageState extends State<RemotePage>
     if (e.kind != ui.PointerDeviceKind.mouse) return;
     if (_isPhysicalMouse) {
       _ffi.handleMouse(getEvent(e, 'mouseup'),
-          tabBarHeight: super.widget.tabBarHeight);
+          tabBarHeight: widget.tabBarHeight);
     }
   }
 
@@ -434,7 +442,7 @@ class _RemotePageState extends State<RemotePage>
     if (e.kind != ui.PointerDeviceKind.mouse) return;
     if (_isPhysicalMouse) {
       _ffi.handleMouse(getEvent(e, 'mousemove'),
-          tabBarHeight: super.widget.tabBarHeight);
+          tabBarHeight: widget.tabBarHeight);
     }
   }
 
@@ -500,6 +508,10 @@ class _RemotePageState extends State<RemotePage>
       ));
     }
     paints.add(QualityMonitor(_ffi.qualityMonitorModel));
+    paints.add(RemoteMenubar(
+      id: widget.id,
+      ffi: _ffi,
+    ));
     return Stack(
       children: paints,
     );

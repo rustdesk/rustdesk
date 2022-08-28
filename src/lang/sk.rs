@@ -302,5 +302,16 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Restarting Remote Device", ""),
         ("remote_restarting_tip", ""),
         ("Copied", ""),
+        ("Exit Fullscreen", "Ukončiť celú obrazovku"),
+        ("Fullscreen", "Celá obrazovka"),
+        ("Mobile Actions", "Mobilné akcie"),
+        ("Select Monitor", "Vyberte možnosť Monitor"),
+        ("Control Actions", "Kontrolné akcie"),
+        ("Display Settings", "Nastavenia displeja"),
+        ("Ratio", "Pomer"),
+        ("Image Quality", "Kvalita obrazu"),
+        ("Scroll Style", "Štýl posúvania"),
+        ("Show Menubar", "Zobraziť panel s ponukami"),
+        ("Hide Menubar", "skryť panel s ponukami"),
     ].iter().cloned().collect();
 }

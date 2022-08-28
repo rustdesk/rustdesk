@@ -172,9 +172,9 @@ class FfiModel with ChangeNotifier {
       } else if (name == 'update_quality_status') {
         parent.target?.qualityMonitorModel.updateQualityStatus(evt);
       } else if (name == 'update_block_input_state') {
-        updateBlockInputState(evt);
+        updateBlockInputState(evt, peerId);
       } else if (name == 'update_privacy_mode') {
-        updatePrivacyMode(evt);
+        updatePrivacyMode(evt, peerId);
       }
     };
   }
@@ -231,9 +231,9 @@ class FfiModel with ChangeNotifier {
       } else if (name == 'update_quality_status') {
         parent.target?.qualityMonitorModel.updateQualityStatus(evt);
       } else if (name == 'update_block_input_state') {
-        updateBlockInputState(evt);
+        updateBlockInputState(evt, peerId);
       } else if (name == 'update_privacy_mode') {
-        updatePrivacyMode(evt);
+        updatePrivacyMode(evt, peerId);
       }
     };
     platformFFI.setEventCallback(cb);
@@ -305,6 +305,12 @@ class FfiModel with ChangeNotifier {
     _pi.sasEnabled = evt['sas_enabled'] == "true";
     _pi.currentDisplay = int.parse(evt['current_display']);
 
+    try {
+      CurrentDisplayState.find(peerId).value = _pi.currentDisplay;
+    } catch (e) {
+      //
+    }
+
     if (isPeerAndroid) {
       _touchMode = true;
       if (parent.target?.ffiModel.permissions['keyboard'] != false) {
@@ -343,13 +349,24 @@ class FfiModel with ChangeNotifier {
     notifyListeners();
   }
 
-  updateBlockInputState(Map<String, dynamic> evt) {
+  updateBlockInputState(Map<String, dynamic> evt, String peerId) {
     _inputBlocked = evt['input_state'] == 'on';
     notifyListeners();
+    try {
+      BlockInputState.find(peerId).value = evt['input_state'] == 'on';
+    } catch (e) {
+      //
+    }
   }
 
-  updatePrivacyMode(Map<String, dynamic> evt) {
+  updatePrivacyMode(Map<String, dynamic> evt, String peerId) {
     notifyListeners();
+    try {
+      PrivacyModeState.find(peerId).value =
+          bind.sessionGetToggleOptionSync(id: peerId, arg: 'privacy-mode');
+    } catch (e) {
+      //
+    }
   }
 }
 

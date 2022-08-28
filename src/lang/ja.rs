@@ -299,5 +299,16 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Are you sure you want to restart", "本当に再起動しますか"),
         ("Restarting Remote Device", "リモート端末を再起動中"),
         ("remote_restarting_tip", "リモート端末は再起動中です。このメッセージボックスを閉じて、しばらくした後に固定のパスワードを使用して再接続してください。"),
+        ("Exit Fullscreen", "全画面表示を終了"),
+        ("Fullscreen", "全画面表示"),
+        ("Mobile Actions", "モバイル アクション"),
+        ("Select Monitor", "モニターを選択"),
+        ("Control Actions", "コントロール アクション"),
+        ("Display Settings", "ディスプレイの設定"),
+        ("Ratio", "比率"),
+        ("Image Quality", "画質"),
+        ("Scroll Style", "スクロール スタイル"),
+        ("Show Menubar", "メニューバーを表示"),
+        ("Hide Menubar", "メニューバーを隠す"),
     ].iter().cloned().collect();
 }

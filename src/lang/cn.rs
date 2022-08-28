@@ -302,5 +302,16 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Restarting Remote Device", "正在重启远程设备"),
         ("remote_restarting_tip", "远程设备正在重启, 请关闭当前提示框, 并在一段时间后使用永久密码重新连接"),
         ("Copied", "已复制"),
+        ("Exit Fullscreen", "退出全屏"),
+        ("Fullscreen", "全屏"),
+        ("Mobile Actions", "移动端操作"),
+        ("Select Monitor", "选择监视器"),
+        ("Control Actions", "控制操作"),
+        ("Display Settings", "显示设置"),
+        ("Ratio", "比例"),
+        ("Image Quality", "画质"),
+        ("Scroll Style", "滚屏方式"),
+        ("Show Menubar", "显示菜单栏"),
+        ("Hide Menubar", "隐藏菜单栏"),
     ].iter().cloned().collect();
 }

@@ -302,5 +302,16 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Restarting Remote Device", "Entferntes Gerät wird neu gestartet"),
         ("remote_restarting_tip", "Entferntes Gerät startet neu, bitte schließen Sie diese Meldung und verbinden Sie sich mit dem dauerhaften Passwort erneut."),
         ("Copied", ""),
+        ("Exit Fullscreen", "Vollbild beenden"),
+        ("Fullscreen", "Ganzer Bildschirm"),
+        ("Mobile Actions", "Mobile Aktionen"),
+        ("Select Monitor", "Wählen Sie Überwachen aus"),
+        ("Control Actions", "Kontrollaktionen"),
+        ("Display Settings", "Bildschirmeinstellungen"),
+        ("Ratio", "Verhältnis"),
+        ("Image Quality", "Bildqualität"),
+        ("Scroll Style", "Scroll-Stil"),
+        ("Show Menubar", "Menüleiste anzeigen"),
+        ("Hide Menubar", "Menüleiste ausblenden"),
     ].iter().cloned().collect();
 }

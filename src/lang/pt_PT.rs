@@ -299,5 +299,16 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Are you sure you want to restart", "Tem a certeza que pretende reiniciar"),
         ("Restarting Remote Device", "A reiniciar sistema remoto"),
         ("remote_restarting_tip", ""),
+        ("Exit Fullscreen", "Sair da tela cheia"),
+        ("Fullscreen", "Tela cheia"),
+        ("Mobile Actions", "Ações para celular"),
+        ("Select Monitor", "Selecionar monitor"),
+        ("Control Actions", "Ações de controle"),
+        ("Display Settings", "Configurações do visor"),
+        ("Ratio", "Razão"),
+        ("Image Quality", "Qualidade da imagem"),
+        ("Scroll Style", "Estilo de rolagem"),
+        ("Show Menubar", "Mostrar barra de menus"),
+        ("Hide Menubar", "ocultar barra de menu"),
     ].iter().cloned().collect();
 }
