@@ -211,8 +211,13 @@ class App extends StatelessWidget {
           // FirebaseAnalyticsObserver(analytics: analytics),
         ],
         builder: isAndroid
-            ? (_, child) => AccessibilityListener(
-                  child: child,
+            ? (context, child) => AccessibilityListener(
+                  child: MediaQuery(
+                    data: MediaQuery.of(context).copyWith(
+                      textScaleFactor: 1.0,
+                    ),
+                    child: child ?? Container(),
+                  ),
                 )
             : _keepScaleBuilder(),
       ),
