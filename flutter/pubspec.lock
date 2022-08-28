@@ -252,8 +252,8 @@ packages:
     dependency: "direct main"
     description:
       path: "."
-      ref: e013c81d75320bbf28adddeaadf462264ee6039d
-      resolved-ref: e013c81d75320bbf28adddeaadf462264ee6039d
+      ref: "14a001e83ab0e7c8cb119f7f65be4e3056a954fb"
+      resolved-ref: "14a001e83ab0e7c8cb119f7f65be4e3056a954fb"
       url: "https://github.com/Kingtous/rustdesk_desktop_multi_window"
     source: git
     version: "0.1.0"
@@ -1244,11 +1244,11 @@ packages:
     dependency: "direct main"
     description:
       path: "."
-      ref: "799ef079e87938c3f4340591b4330c2598f38bb9"
-      resolved-ref: "799ef079e87938c3f4340591b4330c2598f38bb9"
+      ref: "247818257b4b37f78bebea1719cee765282b3079"
+      resolved-ref: "247818257b4b37f78bebea1719cee765282b3079"
       url: "https://github.com/Kingtous/rustdesk_window_manager"
     source: git
-    version: "0.2.6"
+    version: "0.2.7"
   xdg_directories:
     dependency: transitive
     description:
