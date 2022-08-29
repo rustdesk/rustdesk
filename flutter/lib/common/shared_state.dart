@@ -45,12 +45,17 @@ class ConnectionType {
   Rx<String> get secure => _secure;
   Rx<String> get direct => _direct;
 
+  static String get strSecure => 'secure';
+  static String get strInsecure => 'insecure';
+  static String get strDirect => '';
+  static String get strIndirect => '_relay';
+
   void setSecure(bool v) {
-    _secure.value = v ? 'secure' : 'insecure';
+    _secure.value = v ? strSecure : strInsecure;
   }
 
   void setDirect(bool v) {
-    _direct.value = v ? '' : '_relay';
+    _direct.value = v ? strDirect : strIndirect;
   }
 
   bool isValid() {
@@ -63,11 +68,20 @@ class ConnectionTypeState {
   static String tag(String id) => 'connection_type_$id';
 
   static void init(String id) {
-    final ConnectionType collectionType = ConnectionType();
-    Get.put(collectionType, tag: tag(id));
+    final key = tag(id);
+    if (!Get.isRegistered(tag: key)) {
+      final ConnectionType collectionType = ConnectionType();
+      Get.put(collectionType, tag: key);
+    }
   }
 
-  static void delete(String id) => Get.delete(tag: tag(id));
+  static void delete(String id) {
+    final key = tag(id);
+    if (Get.isRegistered(tag: key)) {
+      Get.delete(tag: key);
+    }
+  }
+
   static ConnectionType find(String id) =>
       Get.find<ConnectionType>(tag: tag(id));
 }

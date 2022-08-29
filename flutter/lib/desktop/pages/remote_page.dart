@@ -58,14 +58,12 @@ class _RemotePageState extends State<RemotePage>
     PrivacyModeState.init(id);
     BlockInputState.init(id);
     CurrentDisplayState.init(id);
-    ConnectionTypeState.init(id);
   }
 
   void _removeStates(String id) {
     PrivacyModeState.delete(id);
     BlockInputState.delete(id);
     CurrentDisplayState.delete(id);
-    ConnectionTypeState.delete(id);
   }
 
   @override

@@ -313,5 +313,9 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Scroll Style", "Gaya Gulir"),
         ("Show Menubar", "Tampilkan bilah menu"),
         ("Hide Menubar", "sembunyikan bilah menu"),
+        ("Direct Connection", "Koneksi langsung"),
+        ("Relay Connection", "Koneksi Relay"),
+        ("Secure Connection", "Koneksi aman"),
+        ("Insecure Connection", "Koneksi Tidak Aman"),
     ].iter().cloned().collect();
 }

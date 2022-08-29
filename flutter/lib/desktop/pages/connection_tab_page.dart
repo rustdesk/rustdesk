@@ -28,15 +28,17 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
 
   _ConnectionTabPageState(Map<String, dynamic> params) {
     final RxBool fullscreen = Get.find(tag: 'fullscreen');
-    if (params['id'] != null) {
+    final peerId = params['id'];
+    if (peerId != null) {
+      ConnectionTypeState.init(peerId);
       tabController.add(TabInfo(
-          key: params['id'],
-          label: params['id'],
+          key: peerId,
+          label: peerId,
           selectedIcon: selectedIcon,
           unselectedIcon: unselectedIcon,
           page: Obx(() => RemotePage(
-                key: ValueKey(params['id']),
-                id: params['id'],
+                key: ValueKey(peerId),
+                id: peerId,
                 tabBarHeight:
                     fullscreen.isTrue ? 0 : kDesktopRemoteTabBarHeight,
               ))));
@@ -89,10 +91,10 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
             child: Scaffold(
                 backgroundColor: MyTheme.color(context).bg,
                 body: Obx(() => DesktopTab(
-                    controller: tabController,
-                    theme: theme,
-                    isMainWindow: false,
-                    showTabBar: fullscreen.isFalse,
+                      controller: tabController,
+                      theme: theme,
+                      isMainWindow: false,
+                      showTabBar: fullscreen.isFalse,
                       onClose: () {
                         tabController.clear();
                       },
@@ -104,36 +106,45 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
                             .setFullscreen(fullscreen.isTrue);
                         return pageView;
                       },
-                    tabBuilder: (key, icon, label, themeConf) {
-                      final connectionType = ConnectionTypeState.find(key);
-                      if (!connectionType.isValid()) {
-                        return Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            icon,
-                            label,
-                          ],
-                        );
-                      } else {
-                        final iconName =
-                            '${connectionType.secure.value}${connectionType.direct.value}';
-                        final connectionIcon = Image.asset(
-                          'assets/$iconName.png',
-                          width: themeConf.iconSize,
-                          height: themeConf.iconSize,
-                          color: theme.selectedtabIconColor,
-                        );
-                        //.paddingOnly(right: 5);
-                        return Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            icon,
-                            connectionIcon,
-                            label,
-                          ],
-                        );
-                      }
-                    }))),
+                      tabBuilder: (key, icon, label, themeConf) => Obx(() {
+                        final connectionType = ConnectionTypeState.find(key);
+                        if (!ConnectionTypeState.find(key).isValid()) {
+                          return Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              icon,
+                              label,
+                            ],
+                          );
+                        } else {
+                          final msgDirect = translate(
+                              connectionType.direct.value ==
+                                      ConnectionType.strDirect
+                                  ? 'Direct Connection'
+                                  : 'Relay Connection');
+                          final msgSecure = translate(
+                              connectionType.secure.value ==
+                                      ConnectionType.strSecure
+                                  ? 'Secure Connection'
+                                  : 'Insecure Connection');
+                          return Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              icon,
+                              Tooltip(
+                                message: '$msgDirect\n$msgSecure',
+                                child: Image.asset(
+                                  'assets/${connectionType.secure.value}${connectionType.direct.value}.png',
+                                  width: themeConf.iconSize,
+                                  height: themeConf.iconSize,
+                                ).paddingOnly(right: 5),
+                              ),
+                              label,
+                            ],
+                          );
+                        }
+                      }),
+                    ))),
           ),
         ));
   }
@@ -142,6 +153,7 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
     if (tabController.state.value.tabs.isEmpty) {
       WindowController.fromWindowId(windowId()).hide();
     }
+    ConnectionTypeState.delete(id);
   }
 
   int windowId() {

@@ -310,5 +310,9 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Scroll Style", "スクロール スタイル"),
         ("Show Menubar", "メニューバーを表示"),
         ("Hide Menubar", "メニューバーを隠す"),
+        ("Direct Connection", "直接接続"),
+        ("Relay Connection", "リレー接続"),
+        ("Secure Connection", "安全な接続"),
+        ("Insecure Connection", "安全でない接続"),
     ].iter().cloned().collect();
 }
