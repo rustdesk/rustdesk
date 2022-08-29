@@ -949,6 +949,7 @@ impl Connection {
                                 addr
                             ))
                             .await;
+                            return false;
                         }
                     }
                 }

@@ -26,7 +26,7 @@ class _PortForwardTabPageState extends State<PortForwardTabPage> {
 
   _PortForwardTabPageState(Map<String, dynamic> params) {
     tabController.add(TabInfo(
-        key: params['id'] + params['isRDP'].toString(),
+        key: params['id'],
         label: params['id'],
         selectedIcon: selectedIcon,
         unselectedIcon: unselectedIcon,
@@ -61,7 +61,7 @@ class _PortForwardTabPageState extends State<PortForwardTabPage> {
       } else if (call.method == "onDestroy") {
         tabController.state.value.tabs.forEach((tab) {
           print("executing onDestroy hook, closing ${tab.label}}");
-          final tag = tab.label;
+          final tag = 'pf_${tab.label}';
           ffi(tag).close().then((_) {
             Get.delete<FFI>(tag: tag);
           });

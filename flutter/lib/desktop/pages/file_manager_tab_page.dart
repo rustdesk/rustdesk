@@ -57,7 +57,7 @@ class _FileManagerTabPageState extends State<FileManagerTabPage> {
       } else if (call.method == "onDestroy") {
         tabController.state.value.tabs.forEach((tab) {
           print("executing onDestroy hook, closing ${tab.label}}");
-          final tag = tab.label;
+          final tag = 'ft_${tab.label}';
           ffi(tag).close().then((_) {
             Get.delete<FFI>(tag: tag);
           });

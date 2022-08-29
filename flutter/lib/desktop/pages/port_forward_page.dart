@@ -48,7 +48,7 @@ class _PortForwardPageState extends State<PortForwardPage>
   void initState() {
     super.initState();
     _ffi = FFI();
-    // _ffi.connect(widget.id, isPortForward: true);
+    _ffi.connect(widget.id, isPortForward: true);
     Get.put(_ffi, tag: 'pf_${widget.id}');
     if (!Platform.isLinux) {
       Wakelock.enable();
@@ -190,8 +190,8 @@ class _PortForwardPageState extends State<PortForwardPage>
                   remotePort != null &&
                   (remoteHostController.text.isEmpty ||
                       remoteHostController.text.trim().isNotEmpty)) {
-                await bind.mainAddPortForward(
-                    id: widget.id,
+                await bind.sessionAddPortForward(
+                    id: 'pf_${widget.id}',
                     localPort: localPort,
                     remoteHost: remoteHostController.text.trim().isEmpty
                         ? 'localhost'
@@ -261,8 +261,8 @@ class _PortForwardPageState extends State<PortForwardPage>
           child: IconButton(
             icon: const Icon(Icons.close),
             onPressed: () async {
-              await bind.mainRemovePortForward(
-                  id: widget.id, localPort: pf.localPort);
+              await bind.sessionRemovePortForward(
+                  id: 'pf_${widget.id}', localPort: pf.localPort);
               refreshTunnelConfig();
             },
           ),

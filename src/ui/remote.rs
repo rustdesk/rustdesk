@@ -1253,7 +1253,6 @@ async fn start_one_port_forward(
     key: &str,
     token: &str,
 ) {
-    handler.lc.write().unwrap().port_forward = (remote_host, remote_port);
     if let Err(err) = crate::port_forward::listen(
         handler.id.clone(),
         handler.password.clone(),
@@ -1262,6 +1261,9 @@ async fn start_one_port_forward(
         receiver,
         key,
         token,
+        handler.lc.clone(),
+        remote_host,
+        remote_port,
     )
     .await
     {
