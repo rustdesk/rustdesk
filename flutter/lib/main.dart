@@ -202,7 +202,7 @@ class App extends StatelessWidget {
         title: 'RustDesk',
         theme: getCurrentTheme(),
         home: isDesktop
-            ? DesktopTabPage()
+            ? const DesktopTabPage()
             : !isAndroid
                 ? WebHomePage()
                 : HomePage(),

@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:desktop_multi_window/desktop_multi_window.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/common.dart';
+import 'package:flutter_hbb/common/shared_state.dart';
 import 'package:flutter_hbb/consts.dart';
 import 'package:flutter_hbb/desktop/pages/remote_page.dart';
 import 'package:flutter_hbb/desktop/widgets/tabbar_widget.dart';
@@ -20,8 +21,8 @@ class ConnectionTabPage extends StatefulWidget {
 
 class _ConnectionTabPageState extends State<ConnectionTabPage> {
   final tabController = Get.put(DesktopTabController());
-  static final IconData selectedIcon = Icons.desktop_windows_sharp;
-  static final IconData unselectedIcon = Icons.desktop_windows_outlined;
+  static const IconData selectedIcon = Icons.desktop_windows_sharp;
+  static const IconData unselectedIcon = Icons.desktop_windows_outlined;
 
   var connectionMap = RxList<Widget>.empty(growable: true);
 
@@ -34,7 +35,7 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
           selectedIcon: selectedIcon,
           unselectedIcon: unselectedIcon,
           page: Obx(() => RemotePage(
-	        key: ValueKey(params['id']),
+                key: ValueKey(params['id']),
                 id: params['id'],
                 tabBarHeight:
                     fullscreen.isTrue ? 0 : kDesktopRemoteTabBarHeight,
@@ -88,10 +89,10 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
             child: Scaffold(
                 backgroundColor: MyTheme.color(context).bg,
                 body: Obx(() => DesktopTab(
-                      controller: tabController,
-                      theme: theme,
-                      isMainWindow: false,
-                      showTabBar: fullscreen.isFalse,
+                    controller: tabController,
+                    theme: theme,
+                    isMainWindow: false,
+                    showTabBar: fullscreen.isFalse,
                       onClose: () {
                         tabController.clear();
                       },
@@ -103,7 +104,36 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
                             .setFullscreen(fullscreen.isTrue);
                         return pageView;
                       },
-                    ))),
+                    tabBuilder: (key, icon, label, themeConf) {
+                      final connectionType = ConnectionTypeState.find(key);
+                      if (!connectionType.isValid()) {
+                        return Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            icon,
+                            label,
+                          ],
+                        );
+                      } else {
+                        final iconName =
+                            '${connectionType.secure.value}${connectionType.direct.value}';
+                        final connectionIcon = Image.asset(
+                          'assets/$iconName.png',
+                          width: themeConf.iconSize,
+                          height: themeConf.iconSize,
+                          color: theme.selectedtabIconColor,
+                        );
+                        //.paddingOnly(right: 5);
+                        return Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            icon,
+                            connectionIcon,
+                            label,
+                          ],
+                        );
+                      }
+                    }))),
           ),
         ));
   }

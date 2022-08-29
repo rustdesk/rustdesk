@@ -4,12 +4,10 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:tuple/tuple.dart';
 
-import './material_mod_popup_menu.dart' as modMenu;
-
-const kInvalidValueStr = "InvalidValueStr";
+import './material_mod_popup_menu.dart' as mod_menu;
 
 // https://stackoverflow.com/questions/68318314/flutter-popup-menu-inside-popup-menu
-class PopupMenuChildrenItem<T> extends modMenu.PopupMenuEntry<T> {
+class PopupMenuChildrenItem<T> extends mod_menu.PopupMenuEntry<T> {
   const PopupMenuChildrenItem({
     key,
     this.height = kMinInteractiveDimension,
@@ -17,19 +15,19 @@ class PopupMenuChildrenItem<T> extends modMenu.PopupMenuEntry<T> {
     this.enable = true,
     this.textStyle,
     this.onTap,
-    this.position = modMenu.PopupMenuPosition.overSide,
+    this.position = mod_menu.PopupMenuPosition.overSide,
     this.offset = Offset.zero,
     required this.itemBuilder,
     required this.child,
   }) : super(key: key);
 
-  final modMenu.PopupMenuPosition position;
+  final mod_menu.PopupMenuPosition position;
   final Offset offset;
   final TextStyle? textStyle;
   final EdgeInsets? padding;
   final bool enable;
   final void Function()? onTap;
-  final List<modMenu.PopupMenuEntry<T>> Function(BuildContext) itemBuilder;
+  final List<mod_menu.PopupMenuEntry<T>> Function(BuildContext) itemBuilder;
   final Widget child;
 
   @override
@@ -59,7 +57,7 @@ class MyPopupMenuItemState<T, W extends PopupMenuChildrenItem<T>>
         popupMenuTheme.textStyle ??
         theme.textTheme.subtitle1!;
 
-    return modMenu.PopupMenuButton<T>(
+    return mod_menu.PopupMenuButton<T>(
       enabled: widget.enable,
       position: widget.position,
       offset: widget.offset,
@@ -88,22 +86,26 @@ class MenuConfig {
   static const iconWidth = 12.0;
   static const iconHeight = 12.0;
 
-  final double secondMenuHeight;
+  final double height;
+  final double dividerHeight;
   final Color commonColor;
 
   const MenuConfig(
       {required this.commonColor,
-      this.secondMenuHeight = kMinInteractiveDimension});
+      this.height = kMinInteractiveDimension,
+      this.dividerHeight = 16.0});
 }
 
 abstract class MenuEntryBase<T> {
-  modMenu.PopupMenuEntry<T> build(BuildContext context, MenuConfig conf);
+  mod_menu.PopupMenuEntry<T> build(BuildContext context, MenuConfig conf);
 }
 
 class MenuEntryDivider<T> extends MenuEntryBase<T> {
   @override
-  modMenu.PopupMenuEntry<T> build(BuildContext context, MenuConfig conf) {
-    return const modMenu.PopupMenuDivider();
+  mod_menu.PopupMenuEntry<T> build(BuildContext context, MenuConfig conf) {
+    return mod_menu.PopupMenuDivider(
+      height: conf.dividerHeight,
+    );
   }
 }
 
@@ -138,14 +140,15 @@ class MenuEntrySubRadios<T> extends MenuEntryBase<T> {
     }
   }
 
-  modMenu.PopupMenuEntry<T> _buildSecondMenu(
+  mod_menu.PopupMenuEntry<T> _buildSecondMenu(
       BuildContext context, MenuConfig conf, Tuple2<String, String> opt) {
-    return modMenu.PopupMenuItem(
+    return mod_menu.PopupMenuItem(
       padding: EdgeInsets.zero,
+      height: conf.height,
       child: TextButton(
         child: Container(
           alignment: AlignmentDirectional.centerStart,
-          constraints: BoxConstraints(minHeight: conf.secondMenuHeight),
+          constraints: BoxConstraints(minHeight: conf.height),
           child: Row(
             children: [
               SizedBox(
@@ -156,7 +159,7 @@ class MenuEntrySubRadios<T> extends MenuEntryBase<T> {
                           Icons.check,
                           color: conf.commonColor,
                         )
-                      : SizedBox.shrink())),
+                      : const SizedBox.shrink())),
               const SizedBox(width: MenuConfig.midPadding),
               Text(
                 opt.item1,
@@ -178,10 +181,10 @@ class MenuEntrySubRadios<T> extends MenuEntryBase<T> {
   }
 
   @override
-  modMenu.PopupMenuEntry<T> build(BuildContext context, MenuConfig conf) {
+  mod_menu.PopupMenuEntry<T> build(BuildContext context, MenuConfig conf) {
     return PopupMenuChildrenItem(
-      height: conf.secondMenuHeight,
       padding: EdgeInsets.zero,
+      height: conf.height,
       itemBuilder: (BuildContext context) =>
           options.map((opt) => _buildSecondMenu(context, conf, opt)).toList(),
       child: Row(children: [
@@ -218,9 +221,10 @@ abstract class MenuEntrySwitchBase<T> extends MenuEntryBase<T> {
   Future<void> setOption(bool option);
 
   @override
-  modMenu.PopupMenuEntry<T> build(BuildContext context, MenuConfig conf) {
-    return modMenu.PopupMenuItem(
+  mod_menu.PopupMenuEntry<T> build(BuildContext context, MenuConfig conf) {
+    return mod_menu.PopupMenuItem(
       padding: EdgeInsets.zero,
+      height: conf.height,
       child: Obx(
         () => SwitchListTile(
           value: curOption.value,
@@ -229,7 +233,7 @@ abstract class MenuEntrySwitchBase<T> extends MenuEntryBase<T> {
           },
           title: Container(
               alignment: AlignmentDirectional.centerStart,
-              constraints: BoxConstraints(minHeight: conf.secondMenuHeight),
+              constraints: BoxConstraints(minHeight: conf.height),
               child: Text(
                 text,
                 style: const TextStyle(
@@ -242,7 +246,7 @@ abstract class MenuEntrySwitchBase<T> extends MenuEntryBase<T> {
             horizontal: VisualDensity.minimumDensity,
             vertical: VisualDensity.minimumDensity,
           ),
-          contentPadding: EdgeInsets.only(left: 8.0),
+          contentPadding: const EdgeInsets.only(left: 8.0),
         ),
       ),
     );
@@ -303,11 +307,11 @@ class MenuEntrySubMenu<T> extends MenuEntryBase<T> {
   });
 
   @override
-  modMenu.PopupMenuEntry<T> build(BuildContext context, MenuConfig conf) {
+  mod_menu.PopupMenuEntry<T> build(BuildContext context, MenuConfig conf) {
     return PopupMenuChildrenItem(
-      height: conf.secondMenuHeight,
+      height: conf.height,
       padding: EdgeInsets.zero,
-      position: modMenu.PopupMenuPosition.overSide,
+      position: mod_menu.PopupMenuPosition.overSide,
       itemBuilder: (BuildContext context) =>
           entries.map((entry) => entry.build(context, conf)).toList(),
       child: Row(children: [
@@ -342,13 +346,14 @@ class MenuEntryButton<T> extends MenuEntryBase<T> {
   });
 
   @override
-  modMenu.PopupMenuEntry<T> build(BuildContext context, MenuConfig conf) {
-    return modMenu.PopupMenuItem(
+  mod_menu.PopupMenuEntry<T> build(BuildContext context, MenuConfig conf) {
+    return mod_menu.PopupMenuItem(
       padding: EdgeInsets.zero,
+      height: conf.height,
       child: TextButton(
         child: Container(
             alignment: AlignmentDirectional.centerStart,
-            constraints: BoxConstraints(minHeight: conf.secondMenuHeight),
+            constraints: BoxConstraints(minHeight: conf.height),
             child: childBuilder(
               const TextStyle(
                   color: Colors.black,
@@ -360,16 +365,5 @@ class MenuEntryButton<T> extends MenuEntryBase<T> {
         },
       ),
     );
-  }
-}
-
-class CustomMenu<T> {
-  final List<MenuEntryBase<T>> entries;
-  final MenuConfig conf;
-
-  const CustomMenu({required this.entries, required this.conf});
-
-  List<modMenu.PopupMenuEntry<T>> build(BuildContext context) {
-    return entries.map((entry) => entry.build(context, conf)).toList();
   }
 }

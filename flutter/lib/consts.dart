@@ -10,3 +10,5 @@ const String kTabLabelSettingPage = "Settings";
 
 const int kDefaultDisplayWidth = 1280;
 const int kDefaultDisplayHeight = 720;
+
+const kInvalidValueStr = "InvalidValueStr";

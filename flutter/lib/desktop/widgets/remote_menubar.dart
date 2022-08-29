@@ -9,12 +9,15 @@ import '../../mobile/widgets/dialog.dart';
 import '../../mobile/widgets/overlay.dart';
 import '../../models/model.dart';
 import '../../models/platform_model.dart';
+import '../../common/shared_state.dart';
 import './popup_menu.dart';
 import './material_mod_popup_menu.dart' as mod_menu;
 
 class _MenubarTheme {
   static const Color commonColor = MyTheme.accent;
-  static const double height = kMinInteractiveDimension;
+  // kMinInteractiveDimension
+  static const double height = 24.0;
+  static const double dividerHeight = 12.0;
 }
 
 class RemoteMenubar extends StatefulWidget {
@@ -168,11 +171,9 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
       ),
       itemBuilder: (BuildContext context) {
         final List<Widget> rowChildren = [];
-        const double selectorScale = 1.3;
         for (int i = 0; i < pi.displays.length; i++) {
-          rowChildren.add(Transform.scale(
-            scale: selectorScale,
-            child: Stack(
+          rowChildren.add(
+            Stack(
               alignment: Alignment.center,
               children: [
                 const Icon(
@@ -203,7 +204,7 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
                 )
               ],
             ),
-          ));
+          );
         }
         return <mod_menu.PopupMenuEntry<String>>[
           mod_menu.PopupMenuItem<String>(
@@ -232,7 +233,8 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
               context,
               const MenuConfig(
                 commonColor: _MenubarTheme.commonColor,
-                secondMenuHeight: _MenubarTheme.height,
+                height: _MenubarTheme.height,
+                dividerHeight: _MenubarTheme.dividerHeight,
               )))
           .toList(),
     );
@@ -253,7 +255,8 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
               context,
               const MenuConfig(
                 commonColor: _MenubarTheme.commonColor,
-                secondMenuHeight: _MenubarTheme.height,
+                height: _MenubarTheme.height,
+                dividerHeight: _MenubarTheme.dividerHeight,
               )))
           .toList(),
     );

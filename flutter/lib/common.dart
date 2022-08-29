@@ -743,39 +743,3 @@ Future<List<Peer>>? matchPeers(String searchText, List<Peer> peers) async {
   }
   return filteredList;
 }
-
-class PrivacyModeState {
-  static String tag(String id) => 'privacy_mode_' + id;
-
-  static void init(String id) {
-    final RxBool state = false.obs;
-    Get.put(state, tag: tag(id));
-  }
-
-  static void delete(String id) => Get.delete(tag: tag(id));
-  static RxBool find(String id) => Get.find<RxBool>(tag: tag(id));
-}
-
-class BlockInputState {
-  static String tag(String id) => 'block_input_' + id;
-
-  static void init(String id) {
-    final RxBool state = false.obs;
-    Get.put(state, tag: tag(id));
-  }
-
-  static void delete(String id) => Get.delete(tag: tag(id));
-  static RxBool find(String id) => Get.find<RxBool>(tag: tag(id));
-}
-
-class CurrentDisplayState {
-  static String tag(String id) => 'current_display_' + id;
-
-  static void init(String id) {
-    final RxInt state = RxInt(0);
-    Get.put(state, tag: tag(id));
-  }
-
-  static void delete(String id) => Get.delete(tag: tag(id));
-  static RxInt find(String id) => Get.find<RxInt>(tag: tag(id));
-}
