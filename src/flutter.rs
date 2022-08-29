@@ -568,7 +568,6 @@ impl Session {
         self.send(Data::AddPortForward(pf));
     }
 
-
     fn on_error(&self, err: &str) {
         self.msgbox("error", "Error", err);
     }
@@ -885,7 +884,6 @@ impl Connection {
             frame_count: Arc::new(AtomicUsize::new(0)),
             video_format: CodecFormat::Unknown,
         };
-
 
         match Client::start(&session.id, &key, &token, conn_type, session.clone()).await {
             Ok((mut peer, direct)) => {
@@ -2414,7 +2412,6 @@ pub fn get_session_id(id: String) -> String {
     };
 }
 
-
 async fn start_one_port_forward(
     handler: Session,
     port: i32,
@@ -2424,7 +2421,6 @@ async fn start_one_port_forward(
     key: &str,
     token: &str,
 ) {
-    handler.lc.write().unwrap().port_forward = (remote_host, remote_port);
     if let Err(err) = crate::port_forward::listen(
         handler.id.clone(),
         String::new(), // TODO
@@ -2433,6 +2429,9 @@ async fn start_one_port_forward(
         receiver,
         key,
         token,
+        handler.lc.clone(),
+        remote_host,
+        remote_port,
     )
     .await
     {
