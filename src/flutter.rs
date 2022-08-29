@@ -539,6 +539,39 @@ impl Session {
             ],
         );
     }
+
+    pub fn remove_port_forward(&mut self, port: i32) {
+        let mut config = self.load_config();
+        config.port_forwards = config
+            .port_forwards
+            .drain(..)
+            .filter(|x| x.0 != port)
+            .collect();
+        self.save_config(&config);
+        self.send(Data::RemovePortForward(port));
+    }
+
+    pub fn add_port_forward(&mut self, port: i32, remote_host: String, remote_port: i32) {
+        let mut config = self.load_config();
+        if config
+            .port_forwards
+            .iter()
+            .filter(|x| x.0 == port)
+            .next()
+            .is_some()
+        {
+            return;
+        }
+        let pf = (port, remote_host, remote_port);
+        config.port_forwards.push(pf.clone());
+        self.save_config(&config);
+        self.send(Data::AddPortForward(pf));
+    }
+
+
+    fn on_error(&self, err: &str) {
+        self.msgbox("error", "Error", err);
+    }
 }
 
 impl FileManager for Session {}
@@ -734,7 +767,7 @@ impl Connection {
         if !is_file_transfer && !is_port_forward {
             stop_clipboard = Self::start_clipboard(sender.clone(), session.lc.clone());
         }
-        *session.sender.write().unwrap() = Some(sender);
+        *session.sender.write().unwrap() = Some(sender.clone());
         let conn_type = if is_file_transfer {
             session.lc.write().unwrap().is_file_transfer = true;
             ConnType::FILE_TRANSFER
@@ -743,6 +776,99 @@ impl Connection {
         } else {
             ConnType::DEFAULT_CONN
         };
+        let key = Config::get_option("key");
+        let token = Config::get_option("access_token");
+
+        // TODO rdp & cli args
+        let is_rdp = false;
+        let args: Vec<i32> = Vec::new();
+
+        if is_port_forward {
+            if is_rdp {
+                // let port = handler
+                //     .get_option("rdp_port".to_owned())
+                //     .parse::<i32>()
+                //     .unwrap_or(3389);
+                // std::env::set_var(
+                //     "rdp_username",
+                //     handler.get_option("rdp_username".to_owned()),
+                // );
+                // std::env::set_var(
+                //     "rdp_password",
+                //     handler.get_option("rdp_password".to_owned()),
+                // );
+                // log::info!("Remote rdp port: {}", port);
+                // start_one_port_forward(handler, 0, "".to_owned(), port, receiver, &key, &token).await;
+            } else if args.len() == 0 {
+                let pfs = session.lc.read().unwrap().port_forwards.clone();
+                let mut queues = HashMap::<i32, mpsc::UnboundedSender<Data>>::new();
+                for d in pfs {
+                    sender.send(Data::AddPortForward(d)).ok();
+                }
+                loop {
+                    match receiver.recv().await {
+                        Some(Data::AddPortForward((port, remote_host, remote_port))) => {
+                            if port <= 0 || remote_port <= 0 {
+                                continue;
+                            }
+                            let (sender, receiver) = mpsc::unbounded_channel::<Data>();
+                            queues.insert(port, sender);
+                            let handler = session.clone();
+                            let key = key.clone();
+                            let token = token.clone();
+                            tokio::spawn(async move {
+                                start_one_port_forward(
+                                    handler,
+                                    port,
+                                    remote_host,
+                                    remote_port,
+                                    receiver,
+                                    &key,
+                                    &token,
+                                )
+                                .await;
+                            });
+                        }
+                        Some(Data::RemovePortForward(port)) => {
+                            if let Some(s) = queues.remove(&port) {
+                                s.send(Data::Close).ok();
+                            }
+                        }
+                        Some(Data::Close) => {
+                            break;
+                        }
+                        Some(d) => {
+                            for (_, s) in queues.iter() {
+                                s.send(d.clone()).ok();
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+            } else {
+                // let port = handler.args[0].parse::<i32>().unwrap_or(0);
+                // if handler.args.len() != 3
+                //     || handler.args[2].parse::<i32>().unwrap_or(0) <= 0
+                //     || port <= 0
+                // {
+                //     handler.on_error("Invalid arguments, usage:<br><br> rustdesk --port-forward remote-id listen-port remote-host remote-port");
+                // }
+                // let remote_host = handler.args[1].clone();
+                // let remote_port = handler.args[2].parse::<i32>().unwrap_or(0);
+                // start_one_port_forward(
+                //     handler,
+                //     port,
+                //     remote_host,
+                //     remote_port,
+                //     receiver,
+                //     &key,
+                //     &token,
+                // )
+                // .await;
+            }
+            return;
+        }
+
         let latency_controller = LatencyController::new();
         let latency_controller_cl = latency_controller.clone();
 
@@ -759,8 +885,7 @@ impl Connection {
             frame_count: Arc::new(AtomicUsize::new(0)),
             video_format: CodecFormat::Unknown,
         };
-        let key = Config::get_option("key");
-        let token = Config::get_option("access_token");
+
 
         match Client::start(&session.id, &key, &token, conn_type, session.clone()).await {
             Ok((mut peer, direct)) => {
@@ -2287,4 +2412,31 @@ pub fn get_session_id(id: String) -> String {
     } else {
         id
     };
+}
+
+
+async fn start_one_port_forward(
+    handler: Session,
+    port: i32,
+    remote_host: String,
+    remote_port: i32,
+    receiver: mpsc::UnboundedReceiver<Data>,
+    key: &str,
+    token: &str,
+) {
+    handler.lc.write().unwrap().port_forward = (remote_host, remote_port);
+    if let Err(err) = crate::port_forward::listen(
+        handler.id.clone(),
+        String::new(), // TODO
+        port,
+        handler.clone(),
+        receiver,
+        key,
+        token,
+    )
+    .await
+    {
+        handler.on_error(&format!("Failed to listen on {}: {}", port, err));
+    }
+    log::info!("port forward (:{}) exit", port);
 }

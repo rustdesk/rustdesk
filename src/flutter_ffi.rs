@@ -602,30 +602,16 @@ pub fn main_load_lan_peers() {
     };
 }
 
-pub fn main_add_port_forward(id: String, local_port: i32, remote_host: String, remote_port: i32) {
-    let mut config = get_peer(id.clone());
-    if config
-        .port_forwards
-        .iter()
-        .filter(|x| x.0 == local_port)
-        .next()
-        .is_some()
-    {
-        return;
+pub fn session_add_port_forward(id: String, local_port: i32, remote_host: String, remote_port: i32) {
+    if let Some(session) = SESSIONS.write().unwrap().get_mut(&id) {
+        session.add_port_forward(local_port, remote_host, remote_port);
     }
-    let pf = (local_port, remote_host, remote_port);
-    config.port_forwards.push(pf);
-    config.store(&id);
 }
 
-pub fn main_remove_port_forward(id: String, local_port: i32) {
-    let mut config = get_peer(id.clone());
-    config.port_forwards = config
-        .port_forwards
-        .drain(..)
-        .filter(|x| x.0 != local_port)
-        .collect();
-    config.store(&id);
+pub fn session_remove_port_forward(id: String, local_port: i32) {
+    if let Some(session) = SESSIONS.write().unwrap().get_mut(&id) {
+        session.remove_port_forward(local_port);
+    }
 }
 
 pub fn main_get_last_remote_id() -> String {
