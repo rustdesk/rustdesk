@@ -421,14 +421,12 @@ impl Session {
         }
         let keycode: u32 = keycode as u32;
         let scancode: u32 = scancode as u32;
+        
+        #[cfg(not(target_os = "windows"))]
         let key = rdev::key_from_scancode(scancode) as RdevKey;
         // Windows requires special handling
         #[cfg(target_os = "windows")]
-        let key = if let Some(e) = _evt {
-            rdev::get_win_key(e.code.into(), e.scan_code)
-        } else {
-            key
-        };
+        let key = rdev::get_win_key(keycode, scancode);
 
         let peer = self.peer_platform();
 
