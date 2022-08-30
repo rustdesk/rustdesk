@@ -313,5 +313,9 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Scroll Style", "Görgetési stílus"),
         ("Show Menubar", "Menüsor megjelenítése"),
         ("Hide Menubar", "menüsor elrejtése"),
+        ("Direct Connection", "Közvetlen kapcsolat"),
+        ("Relay Connection", "Relé csatlakozás"),
+        ("Secure Connection", "Biztonságos kapcsolat"),
+        ("Insecure Connection", "Nem biztonságos kapcsolat"),
     ].iter().cloned().collect();
 }

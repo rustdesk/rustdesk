@@ -847,7 +847,7 @@ impl VideoHandler {
 pub struct LoginConfigHandler {
     id: String,
     pub is_file_transfer: bool,
-    is_port_forward: bool,
+    pub is_port_forward: bool,
     hash: Hash,
     password: Vec<u8>, // remember password for reconnect
     pub remember: bool,

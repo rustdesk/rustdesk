@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:desktop_multi_window/desktop_multi_window.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/common.dart';
+import 'package:flutter_hbb/common/shared_state.dart';
 import 'package:flutter_hbb/consts.dart';
 import 'package:flutter_hbb/desktop/pages/remote_page.dart';
 import 'package:flutter_hbb/desktop/widgets/tabbar_widget.dart';
@@ -20,22 +21,24 @@ class ConnectionTabPage extends StatefulWidget {
 
 class _ConnectionTabPageState extends State<ConnectionTabPage> {
   final tabController = Get.put(DesktopTabController());
-  static final IconData selectedIcon = Icons.desktop_windows_sharp;
-  static final IconData unselectedIcon = Icons.desktop_windows_outlined;
+  static const IconData selectedIcon = Icons.desktop_windows_sharp;
+  static const IconData unselectedIcon = Icons.desktop_windows_outlined;
 
   var connectionMap = RxList<Widget>.empty(growable: true);
 
   _ConnectionTabPageState(Map<String, dynamic> params) {
     final RxBool fullscreen = Get.find(tag: 'fullscreen');
-    if (params['id'] != null) {
+    final peerId = params['id'];
+    if (peerId != null) {
+      ConnectionTypeState.init(peerId);
       tabController.add(TabInfo(
-          key: params['id'],
-          label: params['id'],
+          key: peerId,
+          label: peerId,
           selectedIcon: selectedIcon,
           unselectedIcon: unselectedIcon,
           page: Obx(() => RemotePage(
-	        key: ValueKey(params['id']),
-                id: params['id'],
+                key: ValueKey(peerId),
+                id: peerId,
                 tabBarHeight:
                     fullscreen.isTrue ? 0 : kDesktopRemoteTabBarHeight,
               ))));
@@ -103,6 +106,44 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
                             .setFullscreen(fullscreen.isTrue);
                         return pageView;
                       },
+                      tabBuilder: (key, icon, label, themeConf) => Obx(() {
+                        final connectionType = ConnectionTypeState.find(key);
+                        if (!ConnectionTypeState.find(key).isValid()) {
+                          return Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              icon,
+                              label,
+                            ],
+                          );
+                        } else {
+                          final msgDirect = translate(
+                              connectionType.direct.value ==
+                                      ConnectionType.strDirect
+                                  ? 'Direct Connection'
+                                  : 'Relay Connection');
+                          final msgSecure = translate(
+                              connectionType.secure.value ==
+                                      ConnectionType.strSecure
+                                  ? 'Secure Connection'
+                                  : 'Insecure Connection');
+                          return Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              icon,
+                              Tooltip(
+                                message: '$msgDirect\n$msgSecure',
+                                child: Image.asset(
+                                  'assets/${connectionType.secure.value}${connectionType.direct.value}.png',
+                                  width: themeConf.iconSize,
+                                  height: themeConf.iconSize,
+                                ).paddingOnly(right: 5),
+                              ),
+                              label,
+                            ],
+                          );
+                        }
+                      }),
                     ))),
           ),
         ));
@@ -112,6 +153,7 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
     if (tabController.state.value.tabs.isEmpty) {
       WindowController.fromWindowId(windowId()).hide();
     }
+    ConnectionTypeState.delete(id);
   }
 
   int windowId() {

@@ -8,16 +8,13 @@ use std::{
 
 use flutter_rust_bridge::{StreamSink, ZeroCopyBuffer};
 
-use hbb_common::config::{PeerConfig, TransferSerde};
-use hbb_common::fs::get_job;
 use hbb_common::{
-    allow_err,
+    allow_err, bail,
     compress::decompress,
-    config::{Config, LocalConfig},
-    fs,
+    config::{Config, LocalConfig, PeerConfig, TransferSerde},
     fs::{
-        can_enable_overwrite_detection, get_string, new_send_confirm, transform_windows_path,
-        DigestCheckResult,
+        self, can_enable_overwrite_detection, get_job, get_string, new_send_confirm,
+        transform_windows_path, DigestCheckResult,
     },
     log,
     message_proto::*,
@@ -28,7 +25,7 @@ use hbb_common::{
         sync::mpsc,
         time::{self, Duration, Instant, Interval},
     },
-    Stream,
+    ResultType, Stream,
 };
 
 use crate::common::{self, make_fd_to_json, CLIPBOARD_INTERVAL};
@@ -60,7 +57,7 @@ pub struct Session {
     id: String,
     sender: Arc<RwLock<Option<mpsc::UnboundedSender<Data>>>>, // UI to rust
     lc: Arc<RwLock<LoginConfigHandler>>,
-    events2ui: Arc<RwLock<StreamSink<EventToUI>>>,
+    events2ui: Arc<RwLock<Option<StreamSink<EventToUI>>>>,
 }
 
 impl Session {
@@ -71,23 +68,17 @@ impl Session {
     /// * `id` - The identifier of the remote session with prefix. Regex: [\w]*[\_]*[\d]+
     /// * `is_file_transfer` - If the session is used for file transfer.
     /// * `is_port_forward` - If the session is used for port forward.
-    pub fn start(
-        identifier: &str,
-        is_file_transfer: bool,
-        is_port_forward: bool,
-        events2ui: StreamSink<EventToUI>,
-    ) {
+    pub fn add(id: &str, is_file_transfer: bool, is_port_forward: bool) -> ResultType<()> {
         // TODO check same id
-        let session_id = get_session_id(identifier.to_owned());
+        let session_id = get_session_id(id.to_owned());
         LocalConfig::set_remote_id(&session_id);
         // TODO close
         // Self::close();
-        let events2ui = Arc::new(RwLock::new(events2ui));
         let session = Session {
             id: session_id.clone(),
             sender: Default::default(),
             lc: Default::default(),
-            events2ui,
+            events2ui: Arc::new(RwLock::new(None)),
         };
         session.lc.write().unwrap().initialize(
             session_id.clone(),
@@ -97,10 +88,29 @@ impl Session {
         SESSIONS
             .write()
             .unwrap()
-            .insert(identifier.to_owned(), session.clone());
-        std::thread::spawn(move || {
-            Connection::start(session, is_file_transfer, is_port_forward);
-        });
+            .insert(id.to_owned(), session.clone());
+        Ok(())
+    }
+
+    /// Create a new remote session with the given id.
+    ///
+    /// # Arguments
+    ///
+    /// * `id` - The identifier of the remote session with prefix. Regex: [\w]*[\_]*[\d]+
+    /// * `events2ui` - The events channel to ui.
+    pub fn start(id: &str, events2ui: StreamSink<EventToUI>) -> ResultType<()> {
+        if let Some(session) = SESSIONS.write().unwrap().get_mut(id) {
+            *session.events2ui.write().unwrap() = Some(events2ui);
+            let session = session.clone();
+            std::thread::spawn(move || {
+                let is_file_transfer = session.lc.read().unwrap().is_file_transfer;
+                let is_port_forward = session.lc.read().unwrap().is_port_forward;
+                Connection::start(session, is_file_transfer, is_port_forward);
+            });
+            Ok(())
+        } else {
+            bail!("No session with peer id {}", id)
+        }
     }
 
     /// Get the current session instance.
@@ -305,7 +315,9 @@ impl Session {
         assert!(h.get("name").is_none());
         h.insert("name", name);
         let out = serde_json::ser::to_string(&h).unwrap_or("".to_owned());
-        self.events2ui.read().unwrap().add(EventToUI::Event(out));
+        if let Some(stream) = &*self.events2ui.read().unwrap() {
+            stream.add(EventToUI::Event(out));
+        }
     }
 
     /// Get platform of peer.
@@ -998,11 +1010,12 @@ impl Connection {
                         })
                     };
                     if let Ok(true) = self.video_handler.handle_frame(vf) {
-                        let stream = self.session.events2ui.read().unwrap();
-                        self.frame_count.fetch_add(1, Ordering::Relaxed);
-                        stream.add(EventToUI::Rgba(ZeroCopyBuffer(
-                            self.video_handler.rgb.clone(),
-                        )));
+                        if let Some(stream) = &*self.session.events2ui.read().unwrap() {
+                            self.frame_count.fetch_add(1, Ordering::Relaxed);
+                            stream.add(EventToUI::Rgba(ZeroCopyBuffer(
+                                self.video_handler.rgb.clone(),
+                            )));
+                        }
                     }
                 }
                 Some(message::Union::Hash(hash)) => {

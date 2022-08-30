@@ -5,11 +5,9 @@ import 'dart:ui' as ui;
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_hbb/models/chat_model.dart';
 import 'package:get/get.dart';
 import 'package:provider/provider.dart';
 import 'package:wakelock/wakelock.dart';
-import 'package:tuple/tuple.dart';
 
 // import 'package:window_manager/window_manager.dart';
 
@@ -19,6 +17,8 @@ import '../../mobile/widgets/dialog.dart';
 import '../../mobile/widgets/overlay.dart';
 import '../../models/model.dart';
 import '../../models/platform_model.dart';
+import '../../models/chat_model.dart';
+import '../../common/shared_state.dart';
 
 final initText = '\1' * 1024;
 
@@ -41,7 +41,7 @@ class _RemotePageState extends State<RemotePage>
   Timer? _timer;
   bool _showBar = !isWebDesktop;
   String _value = '';
-  var _cursorOverImage = false.obs;
+  final _cursorOverImage = false.obs;
 
   final FocusNode _mobileFocusNode = FocusNode();
   final FocusNode _physicalFocusNode = FocusNode();
@@ -52,6 +52,18 @@ class _RemotePageState extends State<RemotePage>
 
   void _updateTabBarHeight() {
     _ffi.canvasModel.tabBarHeight = widget.tabBarHeight;
+  }
+
+  void _initStates(String id) {
+    PrivacyModeState.init(id);
+    BlockInputState.init(id);
+    CurrentDisplayState.init(id);
+  }
+
+  void _removeStates(String id) {
+    PrivacyModeState.delete(id);
+    BlockInputState.delete(id);
+    CurrentDisplayState.delete(id);
   }
 
   @override
@@ -74,14 +86,12 @@ class _RemotePageState extends State<RemotePage>
     _ffi.listenToMouse(true);
     _ffi.qualityMonitorModel.checkShowQualityMonitor(widget.id);
     // WindowManager.instance.addListener(this);
-    PrivacyModeState.init(widget.id);
-    BlockInputState.init(widget.id);
-    CurrentDisplayState.init(widget.id);
+    _initStates(widget.id);
   }
 
   @override
   void dispose() {
-    print("REMOTE PAGE dispose ${widget.id}");
+    debugPrint("REMOTE PAGE dispose ${widget.id}");
     hideMobileActionsOverlay();
     _ffi.listenToMouse(false);
     _mobileFocusNode.dispose();
@@ -97,9 +107,7 @@ class _RemotePageState extends State<RemotePage>
     // WindowManager.instance.removeListener(this);
     Get.delete<FFI>(tag: widget.id);
     super.dispose();
-    PrivacyModeState.delete(widget.id);
-    BlockInputState.delete(widget.id);
-    CurrentDisplayState.delete(widget.id);
+    _removeStates(widget.id);
   }
 
   void resetTool() {

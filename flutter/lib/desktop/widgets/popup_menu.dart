@@ -4,12 +4,10 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:tuple/tuple.dart';
 
-import './material_mod_popup_menu.dart' as modMenu;
-
-const kInvalidValueStr = "InvalidValueStr";
+import './material_mod_popup_menu.dart' as mod_menu;
 
 // https://stackoverflow.com/questions/68318314/flutter-popup-menu-inside-popup-menu
-class PopupMenuChildrenItem<T> extends modMenu.PopupMenuEntry<T> {
+class PopupMenuChildrenItem<T> extends mod_menu.PopupMenuEntry<T> {
   const PopupMenuChildrenItem({
     key,
     this.height = kMinInteractiveDimension,
@@ -17,19 +15,19 @@ class PopupMenuChildrenItem<T> extends modMenu.PopupMenuEntry<T> {
     this.enable = true,
     this.textStyle,
     this.onTap,
-    this.position = modMenu.PopupMenuPosition.overSide,
+    this.position = mod_menu.PopupMenuPosition.overSide,
     this.offset = Offset.zero,
     required this.itemBuilder,
     required this.child,
   }) : super(key: key);
 
-  final modMenu.PopupMenuPosition position;
+  final mod_menu.PopupMenuPosition position;
   final Offset offset;
   final TextStyle? textStyle;
   final EdgeInsets? padding;
   final bool enable;
   final void Function()? onTap;
-  final List<modMenu.PopupMenuEntry<T>> Function(BuildContext) itemBuilder;
+  final List<mod_menu.PopupMenuEntry<T>> Function(BuildContext) itemBuilder;
   final Widget child;
 
   @override
@@ -59,7 +57,7 @@ class MyPopupMenuItemState<T, W extends PopupMenuChildrenItem<T>>
         popupMenuTheme.textStyle ??
         theme.textTheme.subtitle1!;
 
-    return modMenu.PopupMenuButton<T>(
+    return mod_menu.PopupMenuButton<T>(
       enabled: widget.enable,
       position: widget.position,
       offset: widget.offset,
@@ -88,28 +86,114 @@ class MenuConfig {
   static const iconWidth = 12.0;
   static const iconHeight = 12.0;
 
-  final double secondMenuHeight;
+  final double height;
+  final double dividerHeight;
   final Color commonColor;
 
   const MenuConfig(
       {required this.commonColor,
-      this.secondMenuHeight = kMinInteractiveDimension});
+      this.height = kMinInteractiveDimension,
+      this.dividerHeight = 16.0});
 }
 
 abstract class MenuEntryBase<T> {
-  modMenu.PopupMenuEntry<T> build(BuildContext context, MenuConfig conf);
+  List<mod_menu.PopupMenuEntry<T>> build(BuildContext context, MenuConfig conf);
 }
 
 class MenuEntryDivider<T> extends MenuEntryBase<T> {
   @override
-  modMenu.PopupMenuEntry<T> build(BuildContext context, MenuConfig conf) {
-    return const modMenu.PopupMenuDivider();
+  List<mod_menu.PopupMenuEntry<T>> build(
+      BuildContext context, MenuConfig conf) {
+    return [
+      mod_menu.PopupMenuDivider(
+        height: conf.dividerHeight,
+      )
+    ];
   }
 }
 
 typedef RadioOptionsGetter = List<Tuple2<String, String>> Function();
 typedef RadioCurOptionGetter = Future<String> Function();
 typedef RadioOptionSetter = Future<void> Function(String);
+
+class MenuEntryRadioUtils<T> {}
+
+class MenuEntryRadios<T> extends MenuEntryBase<T> {
+  final String text;
+  final RadioOptionsGetter optionsGetter;
+  final RadioCurOptionGetter curOptionGetter;
+  final RadioOptionSetter optionSetter;
+  final RxString _curOption = "".obs;
+
+  MenuEntryRadios(
+      {required this.text,
+      required this.optionsGetter,
+      required this.curOptionGetter,
+      required this.optionSetter}) {
+    () async {
+      _curOption.value = await curOptionGetter();
+    }();
+  }
+
+  List<Tuple2<String, String>> get options => optionsGetter();
+  RxString get curOption => _curOption;
+  setOption(String option) async {
+    await optionSetter(option);
+    final opt = await curOptionGetter();
+    if (_curOption.value != opt) {
+      _curOption.value = opt;
+    }
+  }
+
+  mod_menu.PopupMenuEntry<T> _buildMenuItem(
+      BuildContext context, MenuConfig conf, Tuple2<String, String> opt) {
+    return mod_menu.PopupMenuItem(
+      padding: EdgeInsets.zero,
+      height: conf.height,
+      child: TextButton(
+        child: Container(
+          alignment: AlignmentDirectional.centerStart,
+          constraints: BoxConstraints(minHeight: conf.height),
+          child: Row(
+            children: [
+              Text(
+                opt.item1,
+                style: const TextStyle(
+                    color: Colors.black,
+                    fontSize: MenuConfig.fontSize,
+                    fontWeight: FontWeight.normal),
+              ),
+              Expanded(
+                  child: Align(
+                alignment: Alignment.centerRight,
+                child: SizedBox(
+                    width: 20.0,
+                    height: 20.0,
+                    child: Obx(() => opt.item2 == curOption.value
+                        ? Icon(
+                            Icons.check,
+                            color: conf.commonColor,
+                          )
+                        : const SizedBox.shrink())),
+              )),
+            ],
+          ),
+        ),
+        onPressed: () {
+          if (opt.item2 != curOption.value) {
+            setOption(opt.item2);
+          }
+        },
+      ),
+    );
+  }
+
+  @override
+  List<mod_menu.PopupMenuEntry<T>> build(
+      BuildContext context, MenuConfig conf) {
+    return options.map((opt) => _buildMenuItem(context, conf, opt)).toList();
+  }
+}
 
 class MenuEntrySubRadios<T> extends MenuEntryBase<T> {
   final String text;
@@ -138,33 +222,37 @@ class MenuEntrySubRadios<T> extends MenuEntryBase<T> {
     }
   }
 
-  modMenu.PopupMenuEntry<T> _buildSecondMenu(
+  mod_menu.PopupMenuEntry<T> _buildSecondMenu(
       BuildContext context, MenuConfig conf, Tuple2<String, String> opt) {
-    return modMenu.PopupMenuItem(
+    return mod_menu.PopupMenuItem(
       padding: EdgeInsets.zero,
+      height: conf.height,
       child: TextButton(
         child: Container(
           alignment: AlignmentDirectional.centerStart,
-          constraints: BoxConstraints(minHeight: conf.secondMenuHeight),
+          constraints: BoxConstraints(minHeight: conf.height),
           child: Row(
             children: [
-              SizedBox(
-                  width: 20.0,
-                  height: 20.0,
-                  child: Obx(() => opt.item2 == curOption.value
-                      ? Icon(
-                          Icons.check,
-                          color: conf.commonColor,
-                        )
-                      : SizedBox.shrink())),
-              const SizedBox(width: MenuConfig.midPadding),
               Text(
                 opt.item1,
                 style: const TextStyle(
                     color: Colors.black,
                     fontSize: MenuConfig.fontSize,
                     fontWeight: FontWeight.normal),
-              )
+              ),
+              Expanded(
+                  child: Align(
+                alignment: Alignment.centerRight,
+                child: SizedBox(
+                    width: 20.0,
+                    height: 20.0,
+                    child: Obx(() => opt.item2 == curOption.value
+                        ? Icon(
+                            Icons.check,
+                            color: conf.commonColor,
+                          )
+                        : const SizedBox.shrink())),
+              )),
             ],
           ),
         ),
@@ -178,31 +266,34 @@ class MenuEntrySubRadios<T> extends MenuEntryBase<T> {
   }
 
   @override
-  modMenu.PopupMenuEntry<T> build(BuildContext context, MenuConfig conf) {
-    return PopupMenuChildrenItem(
-      height: conf.secondMenuHeight,
-      padding: EdgeInsets.zero,
-      itemBuilder: (BuildContext context) =>
-          options.map((opt) => _buildSecondMenu(context, conf, opt)).toList(),
-      child: Row(children: [
-        const SizedBox(width: MenuConfig.midPadding),
-        Text(
-          text,
-          style: const TextStyle(
-              color: Colors.black,
-              fontSize: MenuConfig.fontSize,
-              fontWeight: FontWeight.normal),
-        ),
-        Expanded(
-            child: Align(
-          alignment: Alignment.centerRight,
-          child: Icon(
-            Icons.keyboard_arrow_right,
-            color: conf.commonColor,
+  List<mod_menu.PopupMenuEntry<T>> build(
+      BuildContext context, MenuConfig conf) {
+    return [
+      PopupMenuChildrenItem(
+        padding: EdgeInsets.zero,
+        height: conf.height,
+        itemBuilder: (BuildContext context) =>
+            options.map((opt) => _buildSecondMenu(context, conf, opt)).toList(),
+        child: Row(children: [
+          const SizedBox(width: MenuConfig.midPadding),
+          Text(
+            text,
+            style: const TextStyle(
+                color: Colors.black,
+                fontSize: MenuConfig.fontSize,
+                fontWeight: FontWeight.normal),
           ),
-        ))
-      ]),
-    );
+          Expanded(
+              child: Align(
+            alignment: Alignment.centerRight,
+            child: Icon(
+              Icons.keyboard_arrow_right,
+              color: conf.commonColor,
+            ),
+          ))
+        ]),
+      )
+    ];
   }
 }
 
@@ -218,34 +309,38 @@ abstract class MenuEntrySwitchBase<T> extends MenuEntryBase<T> {
   Future<void> setOption(bool option);
 
   @override
-  modMenu.PopupMenuEntry<T> build(BuildContext context, MenuConfig conf) {
-    return modMenu.PopupMenuItem(
-      padding: EdgeInsets.zero,
-      child: Obx(
-        () => SwitchListTile(
-          value: curOption.value,
-          onChanged: (v) {
-            setOption(v);
-          },
-          title: Container(
-              alignment: AlignmentDirectional.centerStart,
-              constraints: BoxConstraints(minHeight: conf.secondMenuHeight),
-              child: Text(
-                text,
-                style: const TextStyle(
-                    color: Colors.black,
-                    fontSize: MenuConfig.fontSize,
-                    fontWeight: FontWeight.normal),
-              )),
-          dense: true,
-          visualDensity: const VisualDensity(
-            horizontal: VisualDensity.minimumDensity,
-            vertical: VisualDensity.minimumDensity,
+  List<mod_menu.PopupMenuEntry<T>> build(
+      BuildContext context, MenuConfig conf) {
+    return [
+      mod_menu.PopupMenuItem(
+        padding: EdgeInsets.zero,
+        height: conf.height,
+        child: Obx(
+          () => SwitchListTile(
+            value: curOption.value,
+            onChanged: (v) {
+              setOption(v);
+            },
+            title: Container(
+                alignment: AlignmentDirectional.centerStart,
+                constraints: BoxConstraints(minHeight: conf.height),
+                child: Text(
+                  text,
+                  style: const TextStyle(
+                      color: Colors.black,
+                      fontSize: MenuConfig.fontSize,
+                      fontWeight: FontWeight.normal),
+                )),
+            dense: true,
+            visualDensity: const VisualDensity(
+              horizontal: VisualDensity.minimumDensity,
+              vertical: VisualDensity.minimumDensity,
+            ),
+            contentPadding: const EdgeInsets.only(left: 8.0),
           ),
-          contentPadding: EdgeInsets.only(left: 8.0),
         ),
-      ),
-    );
+      )
+    ];
   }
 }
 
@@ -303,32 +398,37 @@ class MenuEntrySubMenu<T> extends MenuEntryBase<T> {
   });
 
   @override
-  modMenu.PopupMenuEntry<T> build(BuildContext context, MenuConfig conf) {
-    return PopupMenuChildrenItem(
-      height: conf.secondMenuHeight,
-      padding: EdgeInsets.zero,
-      position: modMenu.PopupMenuPosition.overSide,
-      itemBuilder: (BuildContext context) =>
-          entries.map((entry) => entry.build(context, conf)).toList(),
-      child: Row(children: [
-        const SizedBox(width: MenuConfig.midPadding),
-        Text(
-          text,
-          style: const TextStyle(
-              color: Colors.black,
-              fontSize: MenuConfig.fontSize,
-              fontWeight: FontWeight.normal),
-        ),
-        Expanded(
-            child: Align(
-          alignment: Alignment.centerRight,
-          child: Icon(
-            Icons.keyboard_arrow_right,
-            color: conf.commonColor,
+  List<mod_menu.PopupMenuEntry<T>> build(
+      BuildContext context, MenuConfig conf) {
+    return [
+      PopupMenuChildrenItem(
+        height: conf.height,
+        padding: EdgeInsets.zero,
+        position: mod_menu.PopupMenuPosition.overSide,
+        itemBuilder: (BuildContext context) => entries
+            .map((entry) => entry.build(context, conf))
+            .expand((i) => i)
+            .toList(),
+        child: Row(children: [
+          const SizedBox(width: MenuConfig.midPadding),
+          Text(
+            text,
+            style: const TextStyle(
+                color: Colors.black,
+                fontSize: MenuConfig.fontSize,
+                fontWeight: FontWeight.normal),
           ),
-        ))
-      ]),
-    );
+          Expanded(
+              child: Align(
+            alignment: Alignment.centerRight,
+            child: Icon(
+              Icons.keyboard_arrow_right,
+              color: conf.commonColor,
+            ),
+          ))
+        ]),
+      )
+    ];
   }
 }
 
@@ -342,34 +442,27 @@ class MenuEntryButton<T> extends MenuEntryBase<T> {
   });
 
   @override
-  modMenu.PopupMenuEntry<T> build(BuildContext context, MenuConfig conf) {
-    return modMenu.PopupMenuItem(
-      padding: EdgeInsets.zero,
-      child: TextButton(
-        child: Container(
-            alignment: AlignmentDirectional.centerStart,
-            constraints: BoxConstraints(minHeight: conf.secondMenuHeight),
-            child: childBuilder(
-              const TextStyle(
-                  color: Colors.black,
-                  fontSize: MenuConfig.fontSize,
-                  fontWeight: FontWeight.normal),
-            )),
-        onPressed: () {
-          proc();
-        },
-      ),
-    );
-  }
-}
-
-class CustomMenu<T> {
-  final List<MenuEntryBase<T>> entries;
-  final MenuConfig conf;
-
-  const CustomMenu({required this.entries, required this.conf});
-
-  List<modMenu.PopupMenuEntry<T>> build(BuildContext context) {
-    return entries.map((entry) => entry.build(context, conf)).toList();
+  List<mod_menu.PopupMenuEntry<T>> build(
+      BuildContext context, MenuConfig conf) {
+    return [
+      mod_menu.PopupMenuItem(
+        padding: EdgeInsets.zero,
+        height: conf.height,
+        child: TextButton(
+          child: Container(
+              alignment: AlignmentDirectional.centerStart,
+              constraints: BoxConstraints(minHeight: conf.height),
+              child: childBuilder(
+                const TextStyle(
+                    color: Colors.black,
+                    fontSize: MenuConfig.fontSize,
+                    fontWeight: FontWeight.normal),
+              )),
+          onPressed: () {
+            proc();
+          },
+        ),
+      )
+    ];
   }
 }

@@ -107,14 +107,18 @@ pub fn host_stop_system_key_propagate(stopped: bool) {
     crate::platform::windows::stop_system_key_propagate(stopped);
 }
 
-pub fn session_connect(
-    events2ui: StreamSink<EventToUI>,
-    id: String,
-    is_file_transfer: bool,
-    is_port_forward: bool,
-) -> ResultType<()> {
-    Session::start(&id, is_file_transfer, is_port_forward, events2ui);
-    Ok(())
+// FIXME: -> ResultType<()> cannot be parsed by frb_codegen
+// thread 'main' panicked at 'Failed to parse function output type `ResultType<()>`', $HOME\.cargo\git\checkouts\flutter_rust_bridge-ddba876d3ebb2a1e\e5adce5\frb_codegen\src\parser\mod.rs:151:25
+pub fn session_add_sync(id: String, is_file_transfer: bool, is_port_forward: bool) -> SyncReturn<String> {
+    if let Err(e) = Session::add(&id, is_file_transfer, is_port_forward) {
+        SyncReturn(format!("Failed to add session with id {}, {}", &id, e))
+    } else {
+        SyncReturn("".to_owned())
+    }
+}
+
+pub fn session_start(events2ui: StreamSink<EventToUI>, id: String) -> ResultType<()> {
+    Session::start(&id, events2ui)
 }
 
 pub fn session_get_remember(id: String) -> Option<bool> {
@@ -602,7 +606,12 @@ pub fn main_load_lan_peers() {
     };
 }
 
-pub fn session_add_port_forward(id: String, local_port: i32, remote_host: String, remote_port: i32) {
+pub fn session_add_port_forward(
+    id: String,
+    local_port: i32,
+    remote_host: String,
+    remote_port: i32,
+) {
     if let Some(session) = SESSIONS.write().unwrap().get_mut(&id) {
         session.add_port_forward(local_port, remote_host, remote_port);
     }

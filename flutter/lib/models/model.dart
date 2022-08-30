@@ -17,6 +17,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:tuple/tuple.dart';
 
 import '../common.dart';
+import '../common/shared_state.dart';
 import '../mobile/widgets/dialog.dart';
 import '../mobile/widgets/overlay.dart';
 import 'peer_model.dart';
@@ -96,25 +97,26 @@ class FfiModel with ChangeNotifier {
     clearPermissions();
   }
 
-  void setConnectionType(bool secure, bool direct) {
+  void setConnectionType(String peerId, bool secure, bool direct) {
     _secure = secure;
     _direct = direct;
+    try {
+      var connectionType = ConnectionTypeState.find(peerId);
+      connectionType.setSecure(secure);
+      connectionType.setDirect(direct);
+    } catch (e) {
+      //
+    }
   }
 
   Image? getConnectionImage() {
-    String? icon;
-    if (secure == true && direct == true) {
-      icon = 'secure';
-    } else if (secure == false && direct == true) {
-      icon = 'insecure';
-    } else if (secure == false && direct == false) {
-      icon = 'insecure_relay';
-    } else if (secure == true && direct == false) {
-      icon = 'secure_relay';
+    if (secure == null || direct == null) {
+      return null;
+    } else {
+      final icon =
+          '${secure == true ? "secure" : "insecure"}${direct == true ? "" : "_relay"}';
+      return Image.asset('assets/$icon.png', width: 48, height: 48);
     }
-    return icon == null
-        ? null
-        : Image.asset('assets/$icon.png', width: 48, height: 48);
   }
 
   void clearPermissions() {
@@ -130,7 +132,8 @@ class FfiModel with ChangeNotifier {
       } else if (name == 'peer_info') {
         handlePeerInfo(evt, peerId);
       } else if (name == 'connection_ready') {
-        setConnectionType(evt['secure'] == 'true', evt['direct'] == 'true');
+        setConnectionType(
+            peerId, evt['secure'] == 'true', evt['direct'] == 'true');
       } else if (name == 'switch_display') {
         handleSwitchDisplay(evt);
       } else if (name == 'cursor_data') {
@@ -189,7 +192,7 @@ class FfiModel with ChangeNotifier {
         handlePeerInfo(evt, peerId);
       } else if (name == 'connection_ready') {
         parent.target?.ffiModel.setConnectionType(
-            evt['secure'] == 'true', evt['direct'] == 'true');
+            peerId, evt['secure'] == 'true', evt['direct'] == 'true');
       } else if (name == 'switch_display') {
         handleSwitchDisplay(evt);
       } else if (name == 'cursor_data') {
@@ -1067,8 +1070,10 @@ class FFI {
       imageModel._id = id;
       cursorModel.id = id;
     }
-    final stream = bind.sessionConnect(
+    // ignore: unused_local_variable
+    final addRes = bind.sessionAddSync(
         id: id, isFileTransfer: isFileTransfer, isPortForward: isPortForward);
+    final stream = bind.sessionStart(id: id);
     final cb = ffiModel.startEventListener(id);
     () async {
       await for (final message in stream) {
