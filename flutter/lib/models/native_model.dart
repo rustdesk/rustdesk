@@ -117,7 +117,7 @@ class PlatformFFI {
           _homeDir = (await getDownloadsDirectory())?.path ?? "";
         }
       } catch (e) {
-        print(e);
+        print("initialize failed: $e");
       }
       String id = 'NA';
       String name = 'Flutter';
@@ -151,7 +151,7 @@ class PlatformFFI {
       await _ffiBind.mainSetHomeDir(home: _homeDir);
       await _ffiBind.mainInit(appDir: _dir);
     } catch (e) {
-      print(e);
+      print("initialize failed: $e");
     }
     version = await getVersion();
   }

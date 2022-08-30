@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'dart:math';
 
 import 'package:desktop_multi_window/desktop_multi_window.dart';
@@ -113,6 +114,11 @@ class DesktopTabController {
       remove(state.value.selected);
     }
   }
+
+  void clear() {
+    state.value.tabs.clear();
+    state.refresh();
+  }
 }
 
 class DesktopTab extends StatelessWidget {
@@ -127,11 +133,12 @@ class DesktopTab extends StatelessWidget {
   final bool showClose;
   final Widget Function(Widget pageView)? pageViewBuilder;
   final Widget? tail;
+  final VoidCallback? onClose;
 
   final DesktopTabController controller;
-  late final state = controller.state;
+  Rx<DesktopTabState> get state => controller.state;
 
-  DesktopTab(
+  const DesktopTab(
       {required this.controller,
       required this.isMainWindow,
       this.theme = const TarBarTheme.light(),
@@ -143,7 +150,8 @@ class DesktopTab extends StatelessWidget {
       this.showMaximize = true,
       this.showClose = true,
       this.pageViewBuilder,
-      this.tail});
+      this.tail,
+      this.onClose});
 
   @override
   Widget build(BuildContext context) {
@@ -185,6 +193,9 @@ class DesktopTab extends StatelessWidget {
         Expanded(
           child: Row(
             children: [
+              Offstage(
+                offstage: !Platform.isMacOS,
+                child: const SizedBox(width: 78,)),
               Row(children: [
                 Offstage(
                     offstage: !showLogo,
@@ -229,6 +240,7 @@ class DesktopTab extends StatelessWidget {
           showMinimize: showMinimize,
           showMaximize: showMaximize,
           showClose: showClose,
+          onClose: onClose,
         )
       ],
     );
@@ -242,6 +254,7 @@ class WindowActionPanel extends StatelessWidget {
   final bool showMinimize;
   final bool showMaximize;
   final bool showClose;
+  final VoidCallback? onClose;
 
   const WindowActionPanel(
       {Key? key,
@@ -249,7 +262,8 @@ class WindowActionPanel extends StatelessWidget {
       required this.theme,
       this.showMinimize = true,
       this.showMaximize = true,
-      this.showClose = true})
+      this.showClose = true,
+      this.onClose})
       : super(key: key);
 
   @override
@@ -324,8 +338,11 @@ class WindowActionPanel extends StatelessWidget {
                   windowManager.close();
                 } else {
                   // only hide for multi window, not close
-                  WindowController.fromWindowId(windowId!).hide();
+                  Future.delayed(Duration.zero, () {
+                    WindowController.fromWindowId(windowId!).hide();
+                  });
                 }
+                onClose?.call();
               },
               is_close: true,
             )),
@@ -337,13 +354,12 @@ class WindowActionPanel extends StatelessWidget {
 // ignore: must_be_immutable
 class _ListView extends StatelessWidget {
   final DesktopTabController controller;
-  late final Rx<DesktopTabState> state;
   final Function(String key)? onTabClose;
   final TarBarTheme theme;
+  Rx<DesktopTabState> get state => controller.state;
 
-  _ListView(
-      {required this.controller, required this.onTabClose, required this.theme})
-      : this.state = controller.state;
+  const _ListView(
+      {required this.controller, required this.onTabClose, required this.theme});
 
   @override
   Widget build(BuildContext context) {

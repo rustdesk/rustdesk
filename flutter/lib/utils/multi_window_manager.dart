@@ -163,7 +163,7 @@ class RustDeskMultiWindowManager {
           // no such window already
           return;
         }
-        await WindowController.fromWindowId(wId).hide();
+        await WindowController.fromWindowId(wId).close();
       } on Error {
         return;
       }
