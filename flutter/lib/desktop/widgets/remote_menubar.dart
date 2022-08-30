@@ -236,6 +236,7 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
                 height: _MenubarTheme.height,
                 dividerHeight: _MenubarTheme.dividerHeight,
               )))
+          .expand((i) => i)
           .toList(),
     );
   }
@@ -258,6 +259,7 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
                 height: _MenubarTheme.height,
                 dividerHeight: _MenubarTheme.dividerHeight,
               )))
+          .expand((i) => i)
           .toList(),
     );
   }
@@ -401,7 +403,7 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
 
   List<MenuEntryBase<String>> _getDisplayMenu() {
     final displayMenu = [
-      MenuEntrySubRadios<String>(
+      MenuEntryRadios<String>(
           text: translate('Ratio'),
           optionsGetter: () => [
                 Tuple2<String, String>(translate('Original'), 'original'),
@@ -418,7 +420,8 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
                 id: widget.id, name: "view-style", value: v);
             widget.ffi.canvasModel.updateViewStyle();
           }),
-      MenuEntrySubRadios<String>(
+      MenuEntryDivider<String>(),
+      MenuEntryRadios<String>(
           text: translate('Scroll Style'),
           optionsGetter: () => [
                 Tuple2<String, String>(translate('ScrollAuto'), 'scrollauto'),
@@ -434,7 +437,8 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
                 id: widget.id, name: "scroll-style", value: v);
             widget.ffi.canvasModel.updateScrollStyle();
           }),
-      MenuEntrySubRadios<String>(
+      MenuEntryDivider<String>(),
+      MenuEntryRadios<String>(
           text: translate('Image Quality'),
           optionsGetter: () => [
                 Tuple2<String, String>(translate('Good image quality'), 'best'),
@@ -451,6 +455,7 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
           optionSetter: (String v) async {
             await bind.sessionSetImageQuality(id: widget.id, value: v);
           }),
+      MenuEntryDivider<String>(),
       MenuEntrySwitch<String>(
           text: translate('Show remote cursor'),
           getter: () async {
