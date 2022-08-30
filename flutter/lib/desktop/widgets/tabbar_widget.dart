@@ -64,6 +64,7 @@ class DesktopTabController {
       state.update((val) {
         val!.tabs.add(tab);
       });
+      state.value.scrollController.itemCount = state.value.tabs.length;
       toIndex = state.value.tabs.length - 1;
       assert(toIndex >= 0);
     }
@@ -96,8 +97,16 @@ class DesktopTabController {
   void jumpTo(int index) {
     state.update((val) {
       val!.selected = index;
-      val.pageController.jumpToPage(index);
-      val.scrollController.scrollToItem(index, center: true, animate: true);
+      Future.delayed(Duration.zero, (() {
+        if (val.pageController.hasClients) {
+          val.pageController.jumpToPage(index);
+        }
+        if (val.scrollController.hasClients &&
+            val.scrollController.canScroll &&
+            val.scrollController.itemCount >= index) {
+          val.scrollController.scrollToItem(index, center: true, animate: true);
+        }
+      }));
     });
     onSelected?.call(index);
   }
