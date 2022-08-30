@@ -1061,6 +1061,10 @@ impl Handler {
             let key = self.convert_numpad_keys(key);
             rdev::win_keycode_from_key(key).unwrap_or_default().into()
         } else {
+            // Without Clear Key on Mac OS
+            if key == rdev::Key::Clear{
+                return;
+            }
             rdev::macos_keycode_from_key(key).unwrap_or_default().into()
         };
 
