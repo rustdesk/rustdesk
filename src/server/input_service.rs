@@ -655,12 +655,21 @@ fn sync_status(evt: &KeyEvent) -> (bool, bool) {
 fn map_keyboard_mode(evt: &KeyEvent) {
     // map mode(1): Send keycode according to the peer platform.
     let (click_capslock, click_numlock) = sync_status(evt);
+
+    #[cfg(not(target_os = "macos"))]
     if click_capslock {
         rdev_key_click(RdevKey::CapsLock);
     }
+    #[cfg(not(target_os = "macos"))]
     if click_numlock {
         rdev_key_click(RdevKey::NumLock);
     }
+    #[cfg(target_os = "macos")]
+    if evt.down && click_capslock {
+        rdev_key_down_or_up(RdevKey::CapsLock, evt.down);
+    }
+    log::info!("click capslog {:?} click_numlock {:?}", click_capslock, click_numlock);
+
     rdev_key_down_or_up(RdevKey::Unknown(evt.chr()), evt.down);
     return;
 }
