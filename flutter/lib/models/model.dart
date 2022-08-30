@@ -1110,7 +1110,7 @@ class FFI {
     ffiModel.clear();
     canvasModel.clear();
     resetModifiers();
-    print("model closed");
+    debugPrint("model $id closed");
   }
 
   /// Send **get** command to the Rust core based on [name] and [arg].

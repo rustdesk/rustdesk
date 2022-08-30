@@ -9,8 +9,6 @@ import 'package:flutter_hbb/desktop/widgets/tabbar_widget.dart';
 import 'package:flutter_hbb/utils/multi_window_manager.dart';
 import 'package:get/get.dart';
 
-import '../../models/model.dart';
-
 class ConnectionTabPage extends StatefulWidget {
   final Map<String, dynamic> params;
 
@@ -73,14 +71,7 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
                       fullscreen.isTrue ? 0 : kDesktopRemoteTabBarHeight,
                 ))));
       } else if (call.method == "onDestroy") {
-        tabController.state.value.tabs.forEach((tab) {
-          print("executing onDestroy hook, closing ${tab.label}}");
-          final tag = tab.label;
-          ffi(tag).close().then((_) {
-            Get.delete<FFI>(tag: tag);
-          });
-        });
-        Get.back();
+        tabController.state.value.tabs.clear();
       }
     });
   }
@@ -116,9 +107,8 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
   }
 
   void onRemoveId(String id) {
-    ffi(id).close();
-    if (tabController.state.value.tabs.length == 0) {
-      WindowController.fromWindowId(windowId()).close();
+    if (tabController.state.value.tabs.isEmpty) {
+      WindowController.fromWindowId(windowId()).hide();
     }
   }
 

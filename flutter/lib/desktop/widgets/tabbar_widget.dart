@@ -6,8 +6,8 @@ import 'package:flutter_hbb/common.dart';
 import 'package:flutter_hbb/consts.dart';
 import 'package:flutter_hbb/main.dart';
 import 'package:get/get.dart';
-import 'package:window_manager/window_manager.dart';
 import 'package:scroll_pos/scroll_pos.dart';
+import 'package:window_manager/window_manager.dart';
 
 import '../../utils/multi_window_manager.dart';
 
@@ -323,7 +323,8 @@ class WindowActionPanel extends StatelessWidget {
                 if (mainTab) {
                   windowManager.close();
                 } else {
-                  WindowController.fromWindowId(windowId!).close();
+                  // only hide for multi window, not close
+                  WindowController.fromWindowId(windowId!).hide();
                 }
               },
               is_close: true,
