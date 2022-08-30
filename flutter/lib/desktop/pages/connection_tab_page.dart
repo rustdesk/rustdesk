@@ -93,7 +93,7 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
                 body: Obx(() => DesktopTab(
                       controller: tabController,
                       theme: theme,
-                      isMainWindow: false,
+                      tabType: DesktopTabType.remoteScreen,
                       showTabBar: fullscreen.isFalse,
                       onClose: () {
                         tabController.clear();

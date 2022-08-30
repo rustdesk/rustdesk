@@ -22,12 +22,13 @@ use crate::ui_interface;
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use crate::ui_interface::{change_id, check_connect_status, is_ok_change_id};
 use crate::ui_interface::{
-    check_super_user_permission, discover, forget_password, get_api_server, get_app_name,
-    get_async_job_status, get_connect_status, get_fav, get_id, get_lan_peers, get_langs,
-    get_license, get_local_option, get_option, get_options, get_peer, get_peer_option, get_socks,
-    get_sound_inputs, get_uuid, get_version, has_hwcodec, has_rendezvous_service, post_request,
-    set_local_option, set_option, set_options, set_peer_option, set_permanent_password, set_socks,
-    store_fav, test_if_valid_server, update_temporary_password, using_public_server,
+    check_mouse_time, check_super_user_permission, discover, forget_password, get_api_server,
+    get_app_name, get_async_job_status, get_connect_status, get_fav, get_id, get_lan_peers,
+    get_langs, get_license, get_local_option, get_mouse_time, get_option, get_options, get_peer,
+    get_peer_option, get_socks, get_sound_inputs, get_uuid, get_version, has_hwcodec,
+    has_rendezvous_service, post_request, set_local_option, set_option, set_options,
+    set_peer_option, set_permanent_password, set_socks, store_fav, test_if_valid_server,
+    update_temporary_password, using_public_server,
 };
 
 fn initialize(app_dir: &str) {
@@ -472,7 +473,7 @@ pub fn main_get_connect_status() -> String {
 
 pub fn main_check_connect_status() {
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    check_connect_status(true);
+    check_mouse_time(); // avoid multi calls
 }
 
 pub fn main_is_using_public_server() -> bool {
@@ -762,6 +763,14 @@ pub fn main_set_permanent_password(password: String) {
 
 pub fn main_check_super_user_permission() -> bool {
     check_super_user_permission()
+}
+
+pub fn main_check_mouse_time() {
+    check_mouse_time();
+}
+
+pub fn main_get_mouse_time() -> f64 {
+    get_mouse_time()
 }
 
 pub fn cm_send_chat(conn_id: i32, msg: String) {

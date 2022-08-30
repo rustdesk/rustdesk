@@ -19,11 +19,13 @@ class PortForwardTabPage extends StatefulWidget {
 
 class _PortForwardTabPageState extends State<PortForwardTabPage> {
   final tabController = Get.put(DesktopTabController());
+  late final bool isRDP;
 
-  static final IconData selectedIcon = Icons.forward_sharp;
-  static final IconData unselectedIcon = Icons.forward_outlined;
+  static const IconData selectedIcon = Icons.forward_sharp;
+  static const IconData unselectedIcon = Icons.forward_outlined;
 
   _PortForwardTabPageState(Map<String, dynamic> params) {
+    isRDP = params['isRDP'];
     tabController.add(TabInfo(
         key: params['id'],
         label: params['id'],
@@ -32,7 +34,7 @@ class _PortForwardTabPageState extends State<PortForwardTabPage> {
         page: PortForwardPage(
           key: ValueKey(params['id']),
           id: params['id'],
-          isRDP: params['isRDP'],
+          isRDP: isRDP,
         )));
   }
 
@@ -76,7 +78,7 @@ class _PortForwardTabPageState extends State<PortForwardTabPage> {
             body: DesktopTab(
               controller: tabController,
               theme: theme,
-              isMainWindow: false,
+              tabType: isRDP ? DesktopTabType.rdp : DesktopTabType.portForward,
               onClose: () {
                 tabController.clear();
               },
