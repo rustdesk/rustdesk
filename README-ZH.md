@@ -20,9 +20,9 @@ Chat with us: [知乎](https://www.zhihu.com/people/rustdesk) | [Discord](https:
 
 [**可执行程序下载**](https://github.com/rustdesk/rustdesk/releases)
 
-## 免费公共服务器
+## 免费的公共服务器
 
-以下是您免费使用的服务器，它可能会随着时间的推移而变化。如果您不靠近其中之一，您的网络可能会很慢。
+以下是您可以使用的、免费的、会随时更新的公共服务器列表，在国内也许网速会很慢或者无法访问。
 
 - 首尔, AWS lightsail, 1 VCPU/0.5G RAM
 - 新加坡, Vultr, 1 VCPU/1G RAM
@@ -113,100 +113,102 @@ cargo run
 
 ### 把 Wayland 修改成 X11 (Xorg)
 
-RustDesk 暂时不支持 Wayland，不过正在积极开发中.
-请查看[this](https://docs.fedoraproject.org/en-US/quick-docs/configuring-xorg-as-default-gnome-session/)配置 X11.
+RustDesk 暂时不支持 Wayland，不过正在积极开发中。
+> [点我](https://docs.fedoraproject.org/en-US/quick-docs/configuring-xorg-as-default-gnome-session/)
+查看 如何将Xorg设置成默认的GNOME session
 
 ## 使用 Docker 编译
 
-首先克隆存储库并构建 docker 容器：
+### 构建Docker容器
 
 ```sh
-git clone https://github.com/rustdesk/rustdesk
-cd rustdesk
-docker build -t "rustdesk-builder" .
+git clone https://github.com/rustdesk/rustdesk # 克隆Github存储库
+cd rustdesk # 进入文件夹
+docker build -t "rustdesk-builder" . # 构建容器
 ```
+请注意：
+* 针对国内网络访问问题，可以做以下几点优化：  
+   1. Dockerfile 中修改系统的源到国内镜像
+      ```
+      在Dockerfile的RUN apt update之前插入两行：
+   
+      RUN sed -i "s/deb.debian.org/mirrors.163.com/g" /etc/apt/sources.list
+      RUN sed -i "s/security.debian.org/mirrors.163.com/g" /etc/apt/sources.list
+      ```
 
-针对国内网络访问问题，可以做以下几点优化：
+   2. 修改容器系统中的 cargo 源，在`RUN ./rustup.sh -y`后插入下面代码：
 
-1. Dockerfile 中修改系统的源到国内镜像
+      ```
+      RUN echo '[source.crates-io]' > ~/.cargo/config \
+       && echo 'registry = "https://github.com/rust-lang/crates.io-index"'  >> ~/.cargo/config \
+       && echo '# 替换成你偏好的镜像源'  >> ~/.cargo/config \
+       && echo "replace-with = 'sjtu'"  >> ~/.cargo/config \
+       && echo '# 上海交通大学'   >> ~/.cargo/config \
+       && echo '[source.sjtu]'   >> ~/.cargo/config \
+       && echo 'registry = "https://mirrors.sjtug.sjtu.edu.cn/git/crates.io-index"'  >> ~/.cargo/config \
+       && echo '' >> ~/.cargo/config
+      ```
 
-   ```
-   在Dockerfile的RUN apt update之前插入两行：
+   3. Dockerfile 中加入代理的 env
 
-   RUN sed -i "s/deb.debian.org/mirrors.163.com/g" /etc/apt/sources.list
-   RUN sed -i "s/security.debian.org/mirrors.163.com/g" /etc/apt/sources.list
-   ```
+      ```
+      在User root后插入两行
 
-2. 修改容器系统中的 cargo 源，在`RUN ./rustup.sh -y`后插入下面代码：
+      ENV http_proxy=http://host:port
+      ENV https_proxy=http://host:port
+      ```
 
-   ```
-   RUN echo '[source.crates-io]' > ~/.cargo/config \
-    && echo 'registry = "https://github.com/rust-lang/crates.io-index"'  >> ~/.cargo/config \
-    && echo '# 替换成你偏好的镜像源'  >> ~/.cargo/config \
-    && echo "replace-with = 'sjtu'"  >> ~/.cargo/config \
-    && echo '# 上海交通大学'   >> ~/.cargo/config \
-    && echo '[source.sjtu]'   >> ~/.cargo/config \
-    && echo 'registry = "https://mirrors.sjtug.sjtu.edu.cn/git/crates.io-index"'  >> ~/.cargo/config \
-    && echo '' >> ~/.cargo/config
-   ```
+   4. docker build 命令后面加上 proxy 参数
 
-3. Dockerfile 中加入代理的 env
+      ```
+      docker build -t "rustdesk-builder" . --build-arg http_proxy=http://host:port --build-arg https_proxy=http://host:port
+      ```
 
-   ```
-   在User root后插入两行
-
-   ENV http_proxy=http://host:port
-   ENV https_proxy=http://host:port
-   ```
-
-4. docker build 命令后面加上 proxy 参数
-
-   ```
-   docker build -t "rustdesk-builder" . --build-arg http_proxy=http://host:port --build-arg https_proxy=http://host:port
-   ```
-
-然后，每次需要构建应用程序时，运行以下命令：
+### 构建RustDesk程序
+容器构建完成后，运行下列指令以完成对RustDesk应用程序的构建：
 
 ```sh
 docker run --rm -it -v $PWD:/home/user/rustdesk -v rustdesk-git-cache:/home/user/.cargo/git -v rustdesk-registry-cache:/home/user/.cargo/registry -e PUID="$(id -u)" -e PGID="$(id -g)" rustdesk-builder
 ```
 
-运行若遇到无权限问题，出现以下提示：
+请注意:  
+* 因为需要缓存依赖项，首次构建一般很慢（国内网络会经常出现拉取失败，可以多试几次）。  
+* 如果您需要添加不同的构建参数，可以在指令末尾的`<OPTIONAL-ARGS>` 位置进行修改。例如构建一个"Release"版本，在指令后面加上` --release`即可。
+* 如果出现以下的提示，则是无权限问题，可以尝试把`-e PUID="$(id -u)" -e PGID="$(id -g)"`参数去掉。
+   ```
+   usermod: user user is currently used by process 1
+   groupmod: Permission denied.
+   groupmod: cannot lock /etc/group; try again later.
+   ```
+   > **原因：** 容器的entrypoint脚本会检测UID和GID，在度判和给定的环境变量的不一致时，会强行修改user的UID和GID并重新运行。但在重启后读不到环境中的UID和GID，然后再次进入判错重启环节
 
-```
-usermod: user user is currently used by process 1
-groupmod: Permission denied.
-groupmod: cannot lock /etc/group; try again later.
-```
 
-可以尝试把`-e PUID="$(id -u)" -e PGID="$(id -g)"`参数去掉。（出现这一问题的原因是容器中的 entrypoint 脚本中判定 uid 和 gid 与给定的环境变量不一致时会修改 user 的 uid 和 gid 重新运行，但是重新运行时取不到环境变量中的 uid 和 gid 了，会再次进入 uid 与 gid 与给定值不一致的逻辑分支）
+### 运行RustDesk程序
 
-请注意，第一次构建可能需要比较长的时间，因为需要缓存依赖项（国内网络经常出现拉取失败，可多尝试几次），后续构建会更快。此外，如果您需要为构建命令指定不同的参数，
-您可以在命令末尾的 `<OPTIONAL-ARGS>` 位置执行此操作。例如，如果你想构建一个优化的发布版本，你可以在命令后跟 `--release`。
-将在 target 下产生可执行程序，请通过以下方式运行调试版本：
-
+生成的可执行程序在target目录下，可直接通过指令运行调试(Debug)版本的RustDesk:
 ```sh
 target/debug/rustdesk
 ```
 
-或者运行发布版本:
+或者您想运行发行(Release)版本:
 
 ```sh
 target/release/rustdesk
 ```
 
-请确保您从 RustDesk 存储库的根目录运行这些命令，否则应用程序可能无法找到所需的资源。另请注意，此方法当前不支持其他`Cargo`子命令，
-例如 `install` 或 `run`，因为运行在容器里，而不是宿主机上。
+请注意：
+* 请保证您运行的目录是在RustDesk库的根目录内，否则软件会读不到文件。
+* `install`、`run`等Cargo的子指令在容器内不可用，宿主机才行。
 
 ## 文件结构
 
 - **[libs/hbb_common](https://github.com/rustdesk/rustdesk/tree/master/libs/hbb_common)**: 视频编解码, 配置, tcp/udp 封装, protobuf, 文件传输相关文件系统操作函数, 以及一些其他实用函数
-- **[libs/scrap](https://github.com/rustdesk/rustdesk/tree/master/libs/scrap)**: 截屏
+- **[libs/scrap](https://github.com/rustdesk/rustdesk/tree/master/libs/scrap)**: 屏幕截取
 - **[libs/enigo](https://github.com/rustdesk/rustdesk/tree/master/libs/enigo)**: 平台相关的鼠标键盘输入
 - **[src/ui](https://github.com/rustdesk/rustdesk/tree/master/src/ui)**: GUI
-- **[src/server](https://github.com/rustdesk/rustdesk/tree/master/src/server)**: 被控端服务，audio/clipboard/input/video 服务, 以及连接的实现
+- **[src/server](https://github.com/rustdesk/rustdesk/tree/master/src/server)**: 被控端服务音频、剪切板、输入、视频服务、网络连接的实现
 - **[src/client.rs](https://github.com/rustdesk/rustdesk/tree/master/src/client.rs)**: 控制端
-- **[src/rendezvous_mediator.rs](https://github.com/rustdesk/rustdesk/tree/master/src/rendezvous_mediator.rs)**: 与[rustdesk-server](https://github.com/rustdesk/rustdesk-server)保持 UDP 通讯, 等待远程连接（通过打洞直连或者中继）
+- **[src/rendezvous_mediator.rs](https://github.com/rustdesk/rustdesk/tree/master/src/rendezvous_mediator.rs)**: 与[rustdesk-server](https://github.com/rustdesk/rustdesk-server)保持UDP通讯, 等待远程连接（通过打洞直连或者中继）
 - **[src/platform](https://github.com/rustdesk/rustdesk/tree/master/src/platform)**: 平台服务相关代码
 - **[flutter](https://github.com/rustdesk/rustdesk/tree/master/flutter)**: 移动版本的Flutter代码 
 - **[flutter/web/js](https://github.com/rustdesk/rustdesk/tree/master/flutter/web/js)**: Flutter Web版本中的Javascript代码
