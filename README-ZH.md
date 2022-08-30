@@ -27,8 +27,8 @@ Chat with us: [知乎](https://www.zhihu.com/people/rustdesk) | [Discord](https:
 - 首尔, AWS lightsail, 1 VCPU/0.5G RAM
 - 新加坡, Vultr, 1 VCPU/1G RAM
 - 达拉斯, Vultr, 1 VCPU/1G RAM
-- Germany, Codext, 2 VCPU / 4GB RAM
-- Germany, Hetzner, 4 VCPU / 8GB RAM
+- 德国, Codext, 2 VCPU / 4GB RAM
+- 德国, Hetzner, 4 VCPU / 8GB RAM
 
 ## 依赖
 
