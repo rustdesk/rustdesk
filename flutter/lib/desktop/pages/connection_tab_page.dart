@@ -63,7 +63,6 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
             label: id,
             selectedIcon: selectedIcon,
             unselectedIcon: unselectedIcon,
-            closable: false,
             page: Obx(() => RemotePage(
                   key: ValueKey(id),
                   id: id,
@@ -71,7 +70,7 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
                       fullscreen.isTrue ? 0 : kDesktopRemoteTabBarHeight,
                 ))));
       } else if (call.method == "onDestroy") {
-        tabController.state.value.tabs.clear();
+        tabController.clear();
       }
     });
   }
@@ -93,6 +92,9 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
                       theme: theme,
                       isMainWindow: false,
                       showTabBar: fullscreen.isFalse,
+                      onClose: () {
+                        tabController.clear();
+                      },
                       tail: AddButton(
                         theme: theme,
                       ).paddingOnly(left: 10),

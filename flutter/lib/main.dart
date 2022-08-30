@@ -80,14 +80,7 @@ Future<void> initEnv(String appType) async {
 }
 
 void runMainApp(bool startService) async {
-  WindowOptions windowOptions = getHiddenTitleBarWindowOptions(Size(1280, 720));
-  await Future.wait([
-    initEnv(kAppTypeMain),
-    windowManager.waitUntilReadyToShow(windowOptions, () async {
-      await windowManager.show();
-      await windowManager.focus();
-    })
-  ]);
+  await initEnv(kAppTypeMain);
   if (startService) {
     // await windowManager.ensureInitialized();
     // disable tray
@@ -95,6 +88,12 @@ void runMainApp(bool startService) async {
     gFFI.serverModel.startService();
   }
   runApp(App());
+  // set window option
+  WindowOptions windowOptions = getHiddenTitleBarWindowOptions(const Size(1280, 720));
+  windowManager.waitUntilReadyToShow(windowOptions, () async {
+      await windowManager.show();
+      await windowManager.focus();
+  });
 }
 
 void runMobileApp() async {

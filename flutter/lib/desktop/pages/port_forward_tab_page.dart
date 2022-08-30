@@ -58,7 +58,7 @@ class _PortForwardTabPageState extends State<PortForwardTabPage> {
             unselectedIcon: unselectedIcon,
             page: PortForwardPage(id: id, isRDP: isRDP)));
       } else if (call.method == "onDestroy") {
-        tabController.state.value.tabs.clear();
+        tabController.clear();
       }
     });
   }
@@ -77,6 +77,9 @@ class _PortForwardTabPageState extends State<PortForwardTabPage> {
               controller: tabController,
               theme: theme,
               isMainWindow: false,
+              onClose: () {
+                tabController.clear();
+              },
               tail: AddButton(
                 theme: theme,
               ).paddingOnly(left: 10),

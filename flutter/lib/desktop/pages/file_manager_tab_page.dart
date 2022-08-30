@@ -19,12 +19,13 @@ class FileManagerTabPage extends StatefulWidget {
 }
 
 class _FileManagerTabPageState extends State<FileManagerTabPage> {
-  final tabController = Get.put(DesktopTabController());
+  DesktopTabController get tabController => Get.find<DesktopTabController>();
 
   static final IconData selectedIcon = Icons.file_copy_sharp;
   static final IconData unselectedIcon = Icons.file_copy_outlined;
 
   _FileManagerTabPageState(Map<String, dynamic> params) {
+    Get.put(DesktopTabController());
     tabController.add(TabInfo(
         key: params['id'],
         label: params['id'],
@@ -36,7 +37,7 @@ class _FileManagerTabPageState extends State<FileManagerTabPage> {
   @override
   void initState() {
     super.initState();
-
+    
     tabController.onRemove = (_, id) => onRemoveId(id);
 
     rustDeskWinManager.setMethodHandler((call, fromWindowId) async {
@@ -54,7 +55,7 @@ class _FileManagerTabPageState extends State<FileManagerTabPage> {
             unselectedIcon: unselectedIcon,
             page: FileManagerPage(key: ValueKey(id), id: id)));
       } else if (call.method == "onDestroy") {
-        tabController.state.value.tabs.clear();
+        tabController.clear();
       }
     });
   }
@@ -74,6 +75,9 @@ class _FileManagerTabPageState extends State<FileManagerTabPage> {
               controller: tabController,
               theme: theme,
               isMainWindow: false,
+              onClose: () {
+                 tabController.clear();
+              },
               tail: AddButton(
                 theme: theme,
               ).paddingOnly(left: 10),
