@@ -1070,8 +1070,10 @@ class FFI {
       imageModel._id = id;
       cursorModel.id = id;
     }
-    final stream = bind.sessionConnect(
+    // ignore: unused_local_variable
+    final addRes = bind.sessionAddSync(
         id: id, isFileTransfer: isFileTransfer, isPortForward: isPortForward);
+    final stream = bind.sessionStart(id: id);
     final cb = ffiModel.startEventListener(id);
     () async {
       await for (final message in stream) {
