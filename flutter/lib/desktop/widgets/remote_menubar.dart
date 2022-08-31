@@ -406,14 +406,13 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
       MenuEntryRadios<String>(
           text: translate('Ratio'),
           optionsGetter: () => [
-                Tuple2<String, String>(translate('Original'), 'original'),
-                Tuple2<String, String>(translate('Shrink'), 'shrink'),
-                Tuple2<String, String>(translate('Stretch'), 'stretch'),
+                Tuple2<String, String>(translate('Scale original'), 'original'),
+                Tuple2<String, String>(translate('Scale adaptive'), 'adaptive'),
               ],
           curOptionGetter: () async {
             return await bind.sessionGetOption(
                     id: widget.id, arg: 'view-style') ??
-                '';
+                'adaptive';
           },
           optionSetter: (String v) async {
             await bind.sessionPeerOption(

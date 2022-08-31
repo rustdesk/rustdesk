@@ -315,29 +315,31 @@ abstract class MenuEntrySwitchBase<T> extends MenuEntryBase<T> {
       mod_menu.PopupMenuItem(
         padding: EdgeInsets.zero,
         height: conf.height,
-        child: Obx(
-          () => SwitchListTile(
-            value: curOption.value,
-            onChanged: (v) {
-              setOption(v);
-            },
-            title: Container(
-                alignment: AlignmentDirectional.centerStart,
-                constraints: BoxConstraints(minHeight: conf.height),
-                child: Text(
+        child: TextButton(
+          child: Container(
+              alignment: AlignmentDirectional.centerStart,
+              height: conf.height,
+              child: Row(children: [
+                // const SizedBox(width: MenuConfig.midPadding),
+                Text(
                   text,
                   style: const TextStyle(
                       color: Colors.black,
                       fontSize: MenuConfig.fontSize,
                       fontWeight: FontWeight.normal),
-                )),
-            dense: true,
-            visualDensity: const VisualDensity(
-              horizontal: VisualDensity.minimumDensity,
-              vertical: VisualDensity.minimumDensity,
-            ),
-            contentPadding: const EdgeInsets.only(left: 8.0),
-          ),
+                ),
+                Expanded(
+                    child: Align(
+                  alignment: Alignment.centerRight,
+                  child: Obx(() => Switch(
+                        value: curOption.value,
+                        onChanged: (v) => setOption(v),
+                      )),
+                ))
+              ])),
+          onPressed: () {
+            setOption(!curOption.value);
+          },
         ),
       )
     ];

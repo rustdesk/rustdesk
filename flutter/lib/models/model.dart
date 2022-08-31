@@ -497,39 +497,11 @@ class CanvasModel with ChangeNotifier {
       return;
     }
 
-    final s1 = size.width / (parent.target?.ffiModel.display.width ?? 720);
-    final s2 = size.height / (parent.target?.ffiModel.display.height ?? 1280);
-
-    // Closure to perform shrink operation.
-    final shrinkOp = () {
-      final s = s1 < s2 ? s1 : s2;
-      if (s < 1) {
-        _scale = s;
-      }
-    };
-    // Closure to perform stretch operation.
-    final stretchOp = () {
-      final s = s1 < s2 ? s1 : s2;
-      if (s > 1) {
-        _scale = s;
-      }
-    };
-    // Closure to perform default operation(set the scale to 1.0).
-    final defaultOp = () {
-      _scale = 1.0;
-    };
-
-    // // On desktop, shrink is the default behavior.
-    // if (isDesktop) {
-    //   shrinkOp();
-    // } else {
-    defaultOp();
-    // }
-
-    if (style == 'shrink') {
-      shrinkOp();
-    } else if (style == 'stretch') {
-      stretchOp();
+    _scale = 1.0;
+    if (style == 'adaptive') {
+      final s1 = size.width / (parent.target?.ffiModel.display.width ?? 720);
+      final s2 = size.height / (parent.target?.ffiModel.display.height ?? 1280);
+      _scale = s1 < s2 ? s1 : s2;
     }
 
     _x = (size.width - getDisplayWidth() * _scale) / 2;
