@@ -11,6 +11,7 @@ use cpal::{
     traits::{DeviceTrait, HostTrait, StreamTrait},
     Device, Host, StreamConfig,
 };
+use enigo::{Enigo, KeyboardControllable};
 use magnum_opus::{Channels::*, Decoder as AudioDecoder};
 use sha2::{Digest, Sha256};
 use uuid::Uuid;
@@ -56,6 +57,18 @@ pub struct Client;
 #[cfg(not(any(target_os = "android", target_os = "linux")))]
 lazy_static::lazy_static! {
 static ref AUDIO_HOST: Host = cpal::default_host();
+}
+
+lazy_static::lazy_static! {
+    static ref ENIGO: Arc<Mutex<Enigo>> = Arc::new(Mutex::new(Enigo::new()));
+}
+
+pub fn get_key_state(key: enigo::Key) -> bool {
+    #[cfg(target_os = "macos")]
+    if key == enigo::Key::NumLock {
+        return true;
+    }
+    ENIGO.lock().unwrap().get_key_state(key)
 }
 
 cfg_if::cfg_if! {

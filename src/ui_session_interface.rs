@@ -1,7 +1,7 @@
 use crate::client::{
-    self, check_if_retry, handle_hash, handle_login_from_ui, handle_test_delay, input_os_password,
-    load_config, start_video_audio_threads, Client, CodecFormat, FileManager, LoginConfigHandler,
-    MediaData, MediaSender, QualityStatus, SEC30,
+    self, check_if_retry, get_key_state, handle_hash, handle_login_from_ui, handle_test_delay,
+    input_os_password, load_config, send_mouse, start_video_audio_threads, Client, CodecFormat,
+    FileManager, Key, LoginConfigHandler, MediaData, MediaSender, QualityStatus, KEY_MAP, SEC30,
 };
 use crate::common::{
     self, check_clipboard, update_clipboard, ClipboardContext, CLIPBOARD_INTERVAL,
@@ -9,6 +9,7 @@ use crate::common::{
 use crate::platform;
 use crate::{client::Data, client::Interface};
 use async_trait::async_trait;
+use enigo::{Enigo, KeyboardControllable};
 use hbb_common::config::{Config, LocalConfig, PeerConfig, TransferSerde};
 use hbb_common::fs::{
     can_enable_overwrite_detection, get_job, get_string, new_send_confirm, DigestCheckResult,
@@ -43,11 +44,11 @@ pub struct Session<T: InvokeUi> {
 
 impl<T: InvokeUi> Session<T> {
     pub fn get_view_style(&self) -> String {
-        return self.lc.read().unwrap().view_style.clone();
+        self.lc.read().unwrap().view_style.clone()
     }
 
     pub fn get_image_quality(&self) -> String {
-        return self.lc.read().unwrap().image_quality.clone();
+        self.lc.read().unwrap().image_quality.clone()
     }
 
     pub fn save_view_style(&mut self, value: String) {
@@ -65,8 +66,7 @@ impl<T: InvokeUi> Session<T> {
     }
 
     pub fn get_toggle_option(&self, name: String) -> bool {
-        let res = self.lc.read().unwrap().get_toggle_option(&name);
-        return res;
+        self.lc.read().unwrap().get_toggle_option(&name)
     }
 
     pub fn is_privacy_mode_supported(&self) -> bool {
@@ -196,12 +196,18 @@ impl<T: InvokeUi> Session<T> {
     }
 
     pub fn get_option(&self, k: String) -> String {
-        let res = self.lc.read().unwrap().get_option(&k);
-        return res;
+        if k.eq("remote_dir") {
+            return self.lc.read().unwrap().get_remote_dir();
+        }
+        self.lc.read().unwrap().get_option(&k)
     }
 
-    pub fn set_option(&self, k: String, v: String) {
-        self.lc.write().unwrap().set_option(k.clone(), v);
+    pub fn set_option(&self, k: String, mut v: String) {
+        let mut lc = self.lc.write().unwrap();
+        if k.eq("remote_dir") {
+            v = lc.get_all_remote_dir(v);
+        }
+        lc.set_option(k, v);
     }
 
     #[inline]
@@ -221,6 +227,72 @@ impl<T: InvokeUi> Session<T> {
     #[inline]
     pub fn peer_platform(&self) -> String {
         self.lc.read().unwrap().info.platform.clone()
+    }
+
+    pub fn ctrl_alt_del(&mut self) {
+        if self.peer_platform() == "Windows" {
+            let mut key_event = KeyEvent::new();
+            key_event.set_control_key(ControlKey::CtrlAltDel);
+            self.key_down_or_up(1, key_event, false, false, false, false);
+        } else {
+            let mut key_event = KeyEvent::new();
+            key_event.set_control_key(ControlKey::Delete);
+            self.key_down_or_up(3, key_event, true, true, false, false);
+        }
+    }
+
+    pub fn key_down_or_up(
+        &self,
+        down_or_up: i32,
+        evt: KeyEvent,
+        alt: bool,
+        ctrl: bool,
+        shift: bool,
+        command: bool,
+    ) {
+        let mut key_event = evt;
+
+        if alt
+            && !crate::is_control_key(&key_event, &ControlKey::Alt)
+            && !crate::is_control_key(&key_event, &ControlKey::RAlt)
+        {
+            key_event.modifiers.push(ControlKey::Alt.into());
+        }
+        if shift
+            && !crate::is_control_key(&key_event, &ControlKey::Shift)
+            && !crate::is_control_key(&key_event, &ControlKey::RShift)
+        {
+            key_event.modifiers.push(ControlKey::Shift.into());
+        }
+        if ctrl
+            && !crate::is_control_key(&key_event, &ControlKey::Control)
+            && !crate::is_control_key(&key_event, &ControlKey::RControl)
+        {
+            key_event.modifiers.push(ControlKey::Control.into());
+        }
+        if command
+            && !crate::is_control_key(&key_event, &ControlKey::Meta)
+            && !crate::is_control_key(&key_event, &ControlKey::RWin)
+        {
+            key_event.modifiers.push(ControlKey::Meta.into());
+        }
+        if get_key_state(enigo::Key::CapsLock) {
+            key_event.modifiers.push(ControlKey::CapsLock.into());
+        }
+        if self.peer_platform() != "Mac OS" {
+            if get_key_state(enigo::Key::NumLock) && common::valid_for_numlock(&key_event) {
+                key_event.modifiers.push(ControlKey::NumLock.into());
+            }
+        }
+        if down_or_up == 1 {
+            key_event.down = true;
+        } else if down_or_up == 3 {
+            key_event.press = true;
+        }
+        let mut msg_out = Message::new();
+        msg_out.set_key_event(key_event);
+        log::debug!("{:?}", msg_out);
+        self.send(Data::Message(msg_out));
     }
 
     pub fn get_platform(&self, is_remote: bool) -> String {
@@ -277,8 +349,122 @@ impl<T: InvokeUi> Session<T> {
         self.send(Data::Message(msg_out));
     }
 
+    pub fn lock_screen(&mut self) {
+        let mut key_event = KeyEvent::new();
+        key_event.set_control_key(ControlKey::LockScreen);
+        self.key_down_or_up(1, key_event, false, false, false, false);
+    }
+
+    // flutter only TODO new input
+    pub fn input_key(
+        &self,
+        name: &str,
+        down: bool,
+        press: bool,
+        alt: bool,
+        ctrl: bool,
+        shift: bool,
+        command: bool,
+    ) {
+        let chars: Vec<char> = name.chars().collect();
+        if chars.len() == 1 {
+            let key = Key::_Raw(chars[0] as _);
+            self._input_key(key, down, press, alt, ctrl, shift, command);
+        } else {
+            if let Some(key) = KEY_MAP.get(name) {
+                self._input_key(key.clone(), down, press, alt, ctrl, shift, command);
+            }
+        }
+    }
+
+    // flutter only TODO new input
+    pub fn input_string(&self, value: &str) {
+        let mut key_event = KeyEvent::new();
+        key_event.set_seq(value.to_owned());
+        let mut msg_out = Message::new();
+        msg_out.set_key_event(key_event);
+        self.send(Data::Message(msg_out));
+    }
+
+    // flutter only TODO new input
+    fn _input_key(
+        &self,
+        key: Key,
+        down: bool,
+        press: bool,
+        alt: bool,
+        ctrl: bool,
+        shift: bool,
+        command: bool,
+    ) {
+        let v = if press {
+            3
+        } else if down {
+            1
+        } else {
+            0
+        };
+        let mut key_event = KeyEvent::new();
+        match key {
+            Key::Chr(chr) => {
+                key_event.set_chr(chr);
+            }
+            Key::ControlKey(key) => {
+                key_event.set_control_key(key.clone());
+            }
+            Key::_Raw(raw) => {
+                if raw > 'z' as u32 || raw < 'a' as u32 {
+                    key_event.set_unicode(raw);
+                    // TODO
+                    // if down_or_up == 0 {
+                    //     // ignore up, avoiding trigger twice
+                    //     return;
+                    // }
+                    // down_or_up = 1; // if press, turn into down for avoiding trigger twice on server side
+                } else {
+                    // to make ctrl+c works on windows
+                    key_event.set_chr(raw);
+                }
+            }
+        }
+
+        self.key_down_or_up(v, key_event, alt, ctrl, shift, command);
+    }
+
+    pub fn send_mouse(
+        &mut self,
+        mask: i32,
+        x: i32,
+        y: i32,
+        alt: bool,
+        ctrl: bool,
+        shift: bool,
+        command: bool,
+    ) {
+        #[allow(unused_mut)]
+        let mut command = command;
+        #[cfg(windows)]
+        {
+            if !command && crate::platform::windows::get_win_key_state() {
+                command = true;
+            }
+        }
+
+        send_mouse(mask, x, y, alt, ctrl, shift, command, self);
+        // on macos, ctrl + left button down = right button down, up won't emit, so we need to
+        // emit up myself if peer is not macos
+        // to-do: how about ctrl + left from win to macos
+        if cfg!(target_os = "macos") {
+            let buttons = mask >> 3;
+            let evt_type = mask & 0x7;
+            if buttons == 1 && evt_type == 1 && ctrl && self.peer_platform() != "Mac OS" {
+                self.send_mouse((1 << 3 | 2) as _, x, y, alt, ctrl, shift, command);
+            }
+        }
+    }
+
     pub fn reconnect(&self) {
-        println!("reconnecting");
+        self.send(Data::Close);
         let cloned = self.clone();
         let mut lock = self.thread.lock().unwrap();
         lock.take().map(|t| t.join());
@@ -979,7 +1165,7 @@ impl<T: InvokeUi> Remote<T> {
         Some(tx)
     }
 
-    async fn load_last_jobs(&mut self) {
+    fn load_last_jobs(&mut self) {
         log::info!("start load last jobs");
         // self.handler.call("clearAllJobs", &make_args!());
         self.handler.clear_all_jobs();
@@ -993,17 +1179,6 @@ impl<T: InvokeUi> Remote<T> {
         for job_str in pc.transfer.read_jobs.iter() {
             let job: Result<TransferJobMeta, serde_json::Error> = serde_json::from_str(&job_str);
             if let Ok(job) = job {
-                // self.handler.call(
-                //     "addJob",
-                //     &make_args!(
-                //         cnt,
-                //         job.to.clone(),
-                //         job.remote.clone(),
-                //         job.file_num,
-                //         job.show_hidden,
-                //         false
-                //     ),
-                // );
                 self.handler.add_job(
                     cnt,
                     job.to.clone(),
@@ -1019,17 +1194,6 @@ impl<T: InvokeUi> Remote<T> {
         for job_str in pc.transfer.write_jobs.iter() {
             let job: Result<TransferJobMeta, serde_json::Error> = serde_json::from_str(&job_str);
             if let Ok(job) = job {
-                // self.handler.call(
-                //     "addJob",
-                //     &make_args!(
-                //         cnt,
-                //         job.remote.clone(),
-                //         job.to.clone(),
-                //         job.file_num,
-                //         job.show_hidden,
-                //         true
-                //     ),
-                // );
                 self.handler.add_job(
                     cnt,
                     job.remote.clone(),

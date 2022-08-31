@@ -55,16 +55,7 @@ use errno;
 type Video = AssetPtr<video_destination>;
 
 lazy_static::lazy_static! {
-    static ref ENIGO: Arc<Mutex<Enigo>> = Arc::new(Mutex::new(Enigo::new()));
     static ref VIDEO: Arc<Mutex<Option<Video>>> = Default::default();
-}
-
-fn get_key_state(key: enigo::Key) -> bool {
-    #[cfg(target_os = "macos")]
-    if key == enigo::Key::NumLock {
-        return true;
-    }
-    ENIGO.lock().unwrap().get_key_state(key)
 }
 
 static IS_IN: AtomicBool = AtomicBool::new(false);
@@ -1111,38 +1102,7 @@ impl SciterSession {
         IS_IN.store(false, Ordering::SeqCst);
     }
 
-    fn send_mouse(
-        &mut self,
-        mask: i32,
-        x: i32,
-        y: i32,
-        alt: bool,
-        ctrl: bool,
-        shift: bool,
-        command: bool,
-    ) {
-        #[allow(unused_mut)]
-        let mut command = command;
-        #[cfg(windows)]
-        {
-            if !command && crate::platform::windows::get_win_key_state() {
-                command = true;
-            }
-        }
-
-        send_mouse(mask, x, y, alt, ctrl, shift, command, &self.0);
-        // on macos, ctrl + left button down = right button down, up won't emit, so we need to
-        // emit up myself if peer is not macos
-        // to-do: how about ctrl + left from win to macos
-        if cfg!(target_os = "macos") {
-            let buttons = mask >> 3;
-            let evt_type = mask & 0x7;
-            if buttons == 1 && evt_type == 1 && ctrl && self.peer_platform() != "Mac OS" {
-                self.send_mouse((1 << 3 | 2) as _, x, y, alt, ctrl, shift, command);
-            }
-        }
-    }
-
+    // TODO
     fn set_cursor_data(&mut self, cd: CursorData) {
         let mut colors = hbb_common::compress::decompress(&cd.colors);
         if colors.iter().filter(|x| **x != 0).next().is_none() {
@@ -1285,24 +1245,6 @@ impl SciterSession {
         "".to_owned()
     }
 
-    fn ctrl_alt_del(&mut self) {
-        if self.peer_platform() == "Windows" {
-            let mut key_event = KeyEvent::new();
-            key_event.set_control_key(ControlKey::CtrlAltDel);
-            self.key_down_or_up(1, key_event, false, false, false, false);
-        } else {
-            let mut key_event = KeyEvent::new();
-            key_event.set_control_key(ControlKey::Delete);
-            self.key_down_or_up(3, key_event, true, true, false, false);
-        }
-    }
-
-    fn lock_screen(&mut self) {
-        let mut key_event = KeyEvent::new();
-        key_event.set_control_key(ControlKey::LockScreen);
-        self.key_down_or_up(1, key_event, false, false, false, false);
-    }
-
     fn transfer_file(&mut self) {
         let id = self.get_id();
         let args = vec!["--file-transfer", &id, &self.password];
@@ -1317,60 +1259,6 @@ impl SciterSession {
         if let Err(err) = crate::run_me(args) {
             log::error!("Failed to spawn IP tunneling: {}", err);
         }
-    }
-
-    fn key_down_or_up(
-        &mut self,
-        down_or_up: i32,
-        evt: KeyEvent,
-        alt: bool,
-        ctrl: bool,
-        shift: bool,
-        command: bool,
-    ) {
-        let mut key_event = evt;
-
-        if alt
-            && !crate::is_control_key(&key_event, &ControlKey::Alt)
-            && !crate::is_control_key(&key_event, &ControlKey::RAlt)
-        {
-            key_event.modifiers.push(ControlKey::Alt.into());
-        }
-        if shift
-            && !crate::is_control_key(&key_event, &ControlKey::Shift)
-            && !crate::is_control_key(&key_event, &ControlKey::RShift)
-        {
-            key_event.modifiers.push(ControlKey::Shift.into());
-        }
-        if ctrl
-            && !crate::is_control_key(&key_event, &ControlKey::Control)
-            && !crate::is_control_key(&key_event, &ControlKey::RControl)
-        {
-            key_event.modifiers.push(ControlKey::Control.into());
-        }
-        if command
-            && !crate::is_control_key(&key_event, &ControlKey::Meta)
-            && !crate::is_control_key(&key_event, &ControlKey::RWin)
-        {
-            key_event.modifiers.push(ControlKey::Meta.into());
-        }
-        if get_key_state(enigo::Key::CapsLock) {
-            key_event.modifiers.push(ControlKey::CapsLock.into());
-        }
-        if self.peer_platform() != "Mac OS" {
-            if get_key_state(enigo::Key::NumLock) && common::valid_for_numlock(&key_event) {
-                key_event.modifiers.push(ControlKey::NumLock.into());
-            }
-        }
-        if down_or_up == 1 {
-            key_event.down = true;
-        } else if down_or_up == 3 {
-            key_event.press = true;
-        }
-        let mut msg_out = Message::new();
-        msg_out.set_key_event(key_event);
-        log::debug!("{:?}", msg_out);
-        self.send(Data::Message(msg_out));
     }
 
     // #[inline]
