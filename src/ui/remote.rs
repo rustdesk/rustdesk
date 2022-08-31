@@ -1,6 +1,6 @@
 use std::{
     collections::HashMap,
-    ops::Deref,
+    ops::{Deref, DerefMut},
     sync::{
         atomic::{AtomicBool, AtomicUsize, Ordering},
         Arc, Mutex, RwLock,
@@ -48,6 +48,7 @@ use crate::clipboard_file::*;
 use crate::{
     client::*,
     common::{self, check_clipboard, update_clipboard, ClipboardContext, CLIPBOARD_INTERVAL},
+    ui_session_interface::{InvokeUi, Session},
 };
 use errno;
 
@@ -74,46 +75,200 @@ static SERVER_CLIPBOARD_ENABLED: AtomicBool = AtomicBool::new(true);
 #[cfg(windows)]
 static mut IS_ALT_GR: bool = false;
 
-#[derive(Default)]
-pub struct HandlerInner {
-    element: Option<Element>,
-    sender: Option<mpsc::UnboundedSender<Data>>,
-    thread: Option<std::thread::JoinHandle<()>>,
+/// SciterHandler
+/// * element
+/// * thread  TODO check if flutter need
+/// * close_state  for file path when close
+#[derive(Clone, Default)]
+pub struct SciterHandler {
+    element: Arc<Mutex<Option<Element>>>,
+    thread: Arc<Mutex<Option<std::thread::JoinHandle<()>>>>,
     close_state: HashMap<String, String>,
 }
 
-#[derive(Clone, Default)]
-pub struct Handler {
-    inner: Arc<RwLock<HandlerInner>>,
-    cmd: String,
-    id: String,
-    password: String,
-    args: Vec<String>,
-    lc: Arc<RwLock<LoginConfigHandler>>,
-}
+impl SciterHandler {
+    #[inline]
+    fn call(&self, func: &str, args: &[Value]) {
+        if let Some(ref e) = self.element.lock().unwrap().as_ref() {
+            allow_err!(e.call_method(func, args));
+        }
+    }
 
-impl Deref for Handler {
-    type Target = Arc<RwLock<HandlerInner>>;
-
-    fn deref(&self) -> &Self::Target {
-        &self.inner
+    #[inline]
+    fn call2(&self, func: &str, args: &[Value]) {
+        if let Some(ref e) = self.element.lock().unwrap().as_ref() {
+            allow_err!(e.call_method(func, &super::value_crash_workaround(args)[..]));
+        }
     }
 }
 
-impl FileManager for Handler {}
+impl InvokeUi for SciterHandler {
+    fn set_cursor_data(&self, cd: CursorData) {
+        let mut colors = hbb_common::compress::decompress(&cd.colors);
+        if colors.iter().filter(|x| **x != 0).next().is_none() {
+            log::info!("Fix transparent");
+            // somehow all 0 images shows black rect, here is a workaround
+            colors[3] = 1;
+        }
+        let mut png = Vec::new();
+        if let Ok(()) = repng::encode(&mut png, cd.width as _, cd.height as _, &colors) {
+            self.call(
+                "setCursorData",
+                &make_args!(
+                    cd.id.to_string(),
+                    cd.hotx,
+                    cd.hoty,
+                    cd.width,
+                    cd.height,
+                    &png[..]
+                ),
+            );
+        }
+    }
 
-impl sciter::EventHandler for Handler {
+    fn set_display(&self, x: i32, y: i32, w: i32, h: i32) {
+        self.call("setDisplay", &make_args!(x, y, w, h));
+    }
+
+    fn update_privacy_mode(&self) {
+        self.call("updatePrivacyMode", &[]);
+    }
+
+    fn set_permission(&self, name: &str, value: bool) {
+        self.call2("setPermission", &make_args!(name, value));
+    }
+
+    fn update_pi(&self, pi: PeerInfo) {}
+
+    fn close_success(&self) {
+        self.call2("closeSuccess", &make_args!());
+    }
+
+    fn update_quality_status(&self, status: QualityStatus) {
+        self.call2(
+            "updateQualityStatus",
+            &make_args!(
+                status.speed.map_or(Value::null(), |it| it.into()),
+                status.fps.map_or(Value::null(), |it| it.into()),
+                status.delay.map_or(Value::null(), |it| it.into()),
+                status.target_bitrate.map_or(Value::null(), |it| it.into()),
+                status
+                    .codec_format
+                    .map_or(Value::null(), |it| it.to_string().into())
+            ),
+        );
+    }
+
+    fn set_cursor_id(&self, id: String) {
+        self.call("setCursorId", &make_args!(id));
+    }
+
+    fn set_cursor_position(&self, cp: CursorPosition) {
+        self.call("setCursorPosition", &make_args!(cp.x, cp.y));
+    }
+
+    fn set_connection_type(&self, is_secured: bool, direct: bool) {
+        self.call("setConnectionType", &make_args!(is_secured, direct));
+    }
+
+    fn job_error(&self, id: i32, err: String, file_num: i32) {
+        todo!()
+    }
+
+    fn job_done(&self, id: i32, file_num: i32) {
+        todo!()
+    }
+
+    fn clear_all_jobs(&self) {
+        todo!()
+    }
+
+    fn add_job(
+        &self,
+        id: i32,
+        path: String,
+        to: String,
+        file_num: i32,
+        show_hidden: bool,
+        is_remote: bool,
+    ) {
+        todo!()
+    }
+
+    fn update_transfer_list(&self) {
+        todo!()
+    }
+
+    fn confirm_delete_files(&self, id: i32, i: i32, name: String) {
+        todo!()
+    }
+
+    fn override_file_confirm(&self, id: i32, file_num: i32, to: String, is_upload: bool) {
+        todo!()
+    }
+
+    fn job_progress(&self, id: i32, file_num: i32, speed: f64, finished_size: f64) {
+        todo!()
+    }
+
+    fn adapt_size(&self) {
+        self.call("adaptSize", &make_args!());
+    }
+}
+
+pub struct SciterSession(Session<SciterHandler>);
+
+impl Deref for SciterSession {
+    type Target = Session<SciterHandler>;
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl DerefMut for SciterSession {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
+
+// #[derive(Default)]
+// pub struct HandlerInner {
+//     element: Option<Element>,
+//     sender: Option<mpsc::UnboundedSender<Data>>,
+//     thread: Option<std::thread::JoinHandle<()>>,
+//     close_state: HashMap<String, String>,
+// }
+
+// #[derive(Clone, Default)]
+// pub struct Handler {
+//     inner: Arc<RwLock<HandlerInner>>,
+//     cmd: String,
+//     id: String,
+//     password: String,
+//     args: Vec<String>,
+//     lc: Arc<RwLock<LoginConfigHandler>>,
+// }
+
+// impl Deref for Handler {
+//     type Target = Arc<RwLock<HandlerInner>>;
+
+//     fn deref(&self) -> &Self::Target {
+//         &self.inner
+//     }
+// }
+
+impl sciter::EventHandler for SciterSession {
     fn get_subscription(&mut self) -> Option<EVENT_GROUPS> {
         Some(EVENT_GROUPS::HANDLE_BEHAVIOR_EVENT)
     }
 
     fn attached(&mut self, root: HELEMENT) {
-        self.write().unwrap().element = Some(Element::from(root));
+        *self.element.lock().unwrap() = Some(Element::from(root));
     }
 
     fn detached(&mut self, _root: HELEMENT) {
-        self.write().unwrap().element = None;
-        self.write().unwrap().sender.take().map(|sender| {
+        *self.element.lock().unwrap() = None;
+        self.sender.write().unwrap().take().map(|sender| {
             sender.send(Data::Close).ok();
         });
     }
@@ -239,38 +394,40 @@ impl sciter::EventHandler for Handler {
     }
 }
 
-impl Handler {
+impl SciterSession {
     pub fn new(cmd: String, id: String, password: String, args: Vec<String>) -> Self {
-        let me = Self {
+        let session: Session<SciterHandler> = Session {
             cmd,
             id: id.clone(),
             password: password.clone(),
             args,
             ..Default::default()
         };
-        me.lc
-            .write()
-            .unwrap()
-            .initialize(id, me.is_file_transfer(), me.is_port_forward());
-        me
-    }
-
-    fn update_quality_status(&self, status: QualityStatus) {
-        self.call2(
-            "updateQualityStatus",
-            &make_args!(
-                status.speed.map_or(Value::null(), |it| it.into()),
-                status.fps.map_or(Value::null(), |it| it.into()),
-                status.delay.map_or(Value::null(), |it| it.into()),
-                status.target_bitrate.map_or(Value::null(), |it| it.into()),
-                status
-                    .codec_format
-                    .map_or(Value::null(), |it| it.to_string().into())
-            ),
+        session.lc.write().unwrap().initialize(
+            id,
+            session.is_file_transfer(),
+            session.is_port_forward(),
         );
+
+        Self(session)
     }
 
-    fn start_keyboard_hook(&self) {
+    // fn update_quality_status(&self, status: QualityStatus) {
+    //     self.call2(
+    //         "updateQualityStatus",
+    //         &make_args!(
+    //             status.speed.map_or(Value::null(), |it| it.into()),
+    //             status.fps.map_or(Value::null(), |it| it.into()),
+    //             status.delay.map_or(Value::null(), |it| it.into()),
+    //             status.target_bitrate.map_or(Value::null(), |it| it.into()),
+    //             status
+    //                 .codec_format
+    //                 .map_or(Value::null(), |it| it.to_string().into())
+    //         ),
+    //     );
+    // }
+
+    fn start_keyboard_hook(&'static self) {
         if self.is_port_forward() || self.is_file_transfer() {
             return;
         }
@@ -278,7 +435,7 @@ impl Handler {
             return;
         }
         log::info!("keyboard hooked");
-        let mut me = self.clone();
+        let me = self.clone();
         let peer = self.peer_platform();
         let is_win = peer == "Windows";
         #[cfg(windows)]
@@ -364,7 +521,7 @@ impl Handler {
                     Key::UpArrow => Some(ControlKey::UpArrow),
                     Key::Delete => {
                         if is_win && ctrl && alt {
-                            me.ctrl_alt_del();
+                            // me.ctrl_alt_del(); // TODO
                             return;
                         }
                         Some(ControlKey::Delete)
@@ -485,7 +642,7 @@ impl Handler {
                     }
                     if chr != '\0' {
                         if chr == 'l' && is_win && command {
-                            me.lock_screen();
+                            // me.lock_screen(); // TODO
                             return;
                         }
                         key_event.set_chr(chr as _);
@@ -494,7 +651,7 @@ impl Handler {
                         return;
                     }
                 }
-                me.key_down_or_up(down, key_event, alt, ctrl, shift, command);
+                // me.key_down_or_up(down, key_event, alt, ctrl, shift, command); // TODO
             };
             if let Err(error) = rdev::listen(func) {
                 log::error!("rdev: {:?}", error);
@@ -518,19 +675,19 @@ impl Handler {
         v
     }
 
-    #[inline]
-    pub(super) fn save_config(&self, config: PeerConfig) {
-        self.lc.write().unwrap().save_config(config);
-    }
+    // #[inline]
+    // pub(super) fn save_config(&self, config: PeerConfig) {
+    //     self.lc.write().unwrap().save_config(config);
+    // }
 
     fn save_view_style(&mut self, value: String) {
         self.lc.write().unwrap().save_view_style(value);
     }
 
-    #[inline]
-    pub(super) fn load_config(&self) -> PeerConfig {
-        load_config(&self.id)
-    }
+    // #[inline]
+    // pub(super) fn load_config(&self) -> PeerConfig {
+    //     load_config(&self.id)
+    // }
 
     fn toggle_option(&mut self, name: String) {
         let msg = self.lc.write().unwrap().toggle_option(name.clone());
@@ -635,9 +792,9 @@ impl Handler {
         self.send(Data::Message(msg));
     }
 
-    pub fn is_restarting_remote_device(&self) -> bool {
-        self.lc.read().unwrap().restarting_remote_device
-    }
+    // pub fn is_restarting_remote_device(&self) -> bool {
+    //     self.lc.read().unwrap().restarting_remote_device
+    // }
 
     fn t(&self, name: String) -> String {
         crate::client::translate(name)
@@ -672,7 +829,7 @@ impl Handler {
         let size = (x, y, w, h);
         let mut config = self.load_config();
         if self.is_file_transfer() {
-            let close_state = self.read().unwrap().close_state.clone();
+            let close_state = self.close_state.clone();
             let mut has_change = false;
             for (k, mut v) in close_state {
                 if k == "remote_dir" {
@@ -785,20 +942,20 @@ impl Handler {
         pi
     }
 
-    fn get_option(&self, k: String) -> String {
-        self.lc.read().unwrap().get_option(&k)
-    }
+    // fn get_option(&self, k: String) -> String {
+    //     self.lc.read().unwrap().get_option(&k)
+    // }
 
-    fn set_option(&self, k: String, v: String) {
-        self.lc.write().unwrap().set_option(k, v);
-    }
+    // fn set_option(&self, k: String, v: String) {
+    //     self.lc.write().unwrap().set_option(k, v);
+    // }
 
     fn input_os_password(&mut self, pass: String, activate: bool) {
         input_os_password(pass, activate, self.clone());
     }
 
-    fn save_close_state(&self, k: String, v: String) {
-        self.write().unwrap().close_state.insert(k, v);
+    fn save_close_state(&mut self, k: String, v: String) {
+        self.close_state.insert(k, v);
     }
 
     fn get_chatbox(&mut self) -> String {
@@ -834,49 +991,49 @@ impl Handler {
         self.send(Data::Message(msg_out));
     }
 
-    fn is_file_transfer(&self) -> bool {
-        self.cmd == "--file-transfer"
-    }
+    // fn is_file_transfer(&self) -> bool {
+    //     self.cmd == "--file-transfer"
+    // }
 
-    fn is_port_forward(&self) -> bool {
-        self.cmd == "--port-forward" || self.is_rdp()
-    }
+    // fn is_port_forward(&self) -> bool {
+    //     self.cmd == "--port-forward" || self.is_rdp()
+    // }
 
-    fn is_rdp(&self) -> bool {
-        self.cmd == "--rdp"
-    }
+    // fn is_rdp(&self) -> bool {
+    //     self.cmd == "--rdp"
+    // }
 
     fn reconnect(&mut self) {
         println!("reconnecting");
         let cloned = self.clone();
-        let mut lock = self.write().unwrap();
-        lock.thread.take().map(|t| t.join());
-        lock.thread = Some(std::thread::spawn(move || {
+        let mut lock = self.thread.lock().unwrap();
+        lock.take().map(|t| t.join());
+        *lock = Some(std::thread::spawn(move || {
             io_loop(cloned);
         }));
     }
 
-    #[inline]
-    fn peer_platform(&self) -> String {
-        self.lc.read().unwrap().info.platform.clone()
-    }
+    // #[inline]
+    // fn peer_platform(&self) -> String {
+    //     self.lc.read().unwrap().info.platform.clone()
+    // }
 
-    fn get_platform(&mut self, is_remote: bool) -> String {
-        if is_remote {
-            self.peer_platform()
-        } else {
-            whoami::platform().to_string()
-        }
-    }
+    // fn get_platform(&mut self, is_remote: bool) -> String {
+    //     if is_remote {
+    //         self.peer_platform()
+    //     } else {
+    //         whoami::platform().to_string()
+    //     }
+    // }
 
-    fn get_path_sep(&mut self, is_remote: bool) -> &'static str {
-        let p = self.get_platform(is_remote);
-        if &p == "Windows" {
-            return "\\";
-        } else {
-            return "/";
-        }
-    }
+    // fn get_path_sep(&mut self, is_remote: bool) -> &'static str {
+    //     let p = self.get_platform(is_remote);
+    //     if &p == "Windows" {
+    //         return "\\";
+    //     } else {
+    //         return "/";
+    //     }
+    // }
 
     fn get_icon_path(&mut self, file_type: i32, ext: String) -> String {
         let mut path = Config::icon_path();
@@ -967,7 +1124,7 @@ impl Handler {
             }
         }
 
-        send_mouse(mask, x, y, alt, ctrl, shift, command, self);
+        send_mouse(mask, x, y, alt, ctrl, shift, command, &self.0);
         // on macos, ctrl + left button down = right button down, up won't emit, so we need to
         // emit up myself if peer is not macos
         // to-do: how about ctrl + left from win to macos
@@ -1210,42 +1367,26 @@ impl Handler {
         self.send(Data::Message(msg_out));
     }
 
-    #[inline]
-    fn set_cursor_id(&mut self, id: String) {
-        self.call("setCursorId", &make_args!(id));
-    }
+    // #[inline]
+    // fn set_cursor_id(&mut self, id: String) {
+    //     self.call("setCursorId", &make_args!(id));
+    // }
 
-    #[inline]
-    fn set_cursor_position(&mut self, cd: CursorPosition) {
-        self.call("setCursorPosition", &make_args!(cd.x, cd.y));
-    }
+    // #[inline]
+    // fn set_cursor_position(&mut self, cd: CursorPosition) {
+    //     self.call("setCursorPosition", &make_args!(cd.x, cd.y));
+    // }
 
-    #[inline]
-    fn call(&self, func: &str, args: &[Value]) {
-        let r = self.read().unwrap();
-        if let Some(ref e) = r.element {
-            allow_err!(e.call_method(func, args));
-        }
-    }
-
-    #[inline]
-    fn call2(&self, func: &str, args: &[Value]) {
-        let r = self.read().unwrap();
-        if let Some(ref e) = r.element {
-            allow_err!(e.call_method(func, &super::value_crash_workaround(args)[..]));
-        }
-    }
-
-    #[inline]
-    fn set_display(&self, x: i32, y: i32, w: i32, h: i32) {
-        self.call("setDisplay", &make_args!(x, y, w, h));
-    }
+    // #[inline]
+    // fn set_display(&self, x: i32, y: i32, w: i32, h: i32) {
+    //     self.call("setDisplay", &make_args!(x, y, w, h));
+    // }
 }
 
 const MILLI1: Duration = Duration::from_millis(1);
 
-async fn start_one_port_forward(
-    handler: Handler,
+async fn start_one_port_forward<T: InvokeUi>(
+    handler: Session<T>,
     port: i32,
     remote_host: String,
     remote_port: i32,
@@ -1273,9 +1414,9 @@ async fn start_one_port_forward(
 }
 
 #[tokio::main(flavor = "current_thread")]
-async fn io_loop(handler: Handler) {
+async fn io_loop<T: InvokeUi>(handler: Session<T>) {
     let (sender, mut receiver) = mpsc::unbounded_channel::<Data>();
-    handler.write().unwrap().sender = Some(sender.clone());
+    *handler.sender.write().unwrap() = Some(sender.clone());
     let mut options = crate::ipc::get_options_async().await;
     let mut key = options.remove("key").unwrap_or("".to_owned());
     let token = LocalConfig::get_option("access_token");
@@ -1431,8 +1572,8 @@ impl RemoveJob {
     }
 }
 
-struct Remote {
-    handler: Handler,
+struct Remote<T: InvokeUi> {
+    handler: Session<T>,
     video_sender: MediaSender,
     audio_sender: MediaSender,
     receiver: mpsc::UnboundedReceiver<Data>,
@@ -1451,7 +1592,7 @@ struct Remote {
     video_format: CodecFormat,
 }
 
-impl Remote {
+impl<T: InvokeUi> Remote<T> {
     async fn io_loop(&mut self, key: &str, token: &str) {
         let stop_clipboard = self.start_clipboard();
         let mut last_recv_time = Instant::now();
@@ -1474,8 +1615,9 @@ impl Remote {
                 SERVER_KEYBOARD_ENABLED.store(true, Ordering::SeqCst);
                 SERVER_CLIPBOARD_ENABLED.store(true, Ordering::SeqCst);
                 SERVER_FILE_TRANSFER_ENABLED.store(true, Ordering::SeqCst);
-                self.handler
-                    .call("setConnectionType", &make_args!(peer.is_secured(), direct));
+                // self.handler
+                //     .call("setConnectionType", &make_args!(peer.is_secured(), direct));
+                self.handler.set_connection_type(peer.is_secured(), direct);
 
                 // just build for now
                 #[cfg(not(windows))]
@@ -1597,10 +1739,12 @@ impl Remote {
             }
         }
         if let Some(err) = err {
-            self.handler
-                .call("jobError", &make_args!(id, err, file_num));
+            // self.handler
+            //     .call("jobError", &make_args!(id, err, file_num));
+            self.handler.job_error(id, err, file_num);
         } else {
-            self.handler.call("jobDone", &make_args!(id, file_num));
+            // self.handler.call("jobDone", &make_args!(id, file_num));
+            self.handler.job_done(id, file_num);
         }
     }
 
@@ -1645,7 +1789,8 @@ impl Remote {
 
     async fn load_last_jobs(&mut self) {
         log::info!("start load last jobs");
-        self.handler.call("clearAllJobs", &make_args!());
+        // self.handler.call("clearAllJobs", &make_args!());
+        self.handler.clear_all_jobs();
         let pc = self.handler.load_config();
         if pc.transfer.write_jobs.is_empty() && pc.transfer.read_jobs.is_empty() {
             // no last jobs
@@ -1656,16 +1801,24 @@ impl Remote {
         for job_str in pc.transfer.read_jobs.iter() {
             let job: Result<TransferJobMeta, serde_json::Error> = serde_json::from_str(&job_str);
             if let Ok(job) = job {
-                self.handler.call(
-                    "addJob",
-                    &make_args!(
-                        cnt,
-                        job.to.clone(),
-                        job.remote.clone(),
-                        job.file_num,
-                        job.show_hidden,
-                        false
-                    ),
+                // self.handler.call(
+                //     "addJob",
+                //     &make_args!(
+                //         cnt,
+                //         job.to.clone(),
+                //         job.remote.clone(),
+                //         job.file_num,
+                //         job.show_hidden,
+                //         false
+                //     ),
+                // );
+                self.handler.add_job(
+                    cnt,
+                    job.to.clone(),
+                    job.remote.clone(),
+                    job.file_num,
+                    job.show_hidden,
+                    false,
                 );
                 cnt += 1;
                 println!("restore read_job: {:?}", job);
@@ -1674,22 +1827,31 @@ impl Remote {
         for job_str in pc.transfer.write_jobs.iter() {
             let job: Result<TransferJobMeta, serde_json::Error> = serde_json::from_str(&job_str);
             if let Ok(job) = job {
-                self.handler.call(
-                    "addJob",
-                    &make_args!(
-                        cnt,
-                        job.remote.clone(),
-                        job.to.clone(),
-                        job.file_num,
-                        job.show_hidden,
-                        true
-                    ),
+                // self.handler.call(
+                //     "addJob",
+                //     &make_args!(
+                //         cnt,
+                //         job.remote.clone(),
+                //         job.to.clone(),
+                //         job.file_num,
+                //         job.show_hidden,
+                //         true
+                //     ),
+                // );
+                self.handler.add_job(
+                    cnt,
+                    job.remote.clone(),
+                    job.to.clone(),
+                    job.file_num,
+                    job.show_hidden,
+                    true,
                 );
                 cnt += 1;
                 println!("restore write_job: {:?}", job);
             }
         }
-        self.handler.call("updateTransferList", &make_args!());
+        // self.handler.call("updateTransferList", &make_args!());
+        self.handler.update_transfer_list();
     }
 
     async fn handle_msg_from_ui(&mut self, data: Data, peer: &mut Stream) -> bool {
@@ -1753,8 +1915,8 @@ impl Remote {
                                 to,
                                 job.files().len()
                             );
-                            let m = make_fd(job.id(), job.files(), true);
-                            self.handler.call("updateFolderFiles", &make_args!(m));
+                            // let m = make_fd(job.id(), job.files(), true);
+                            // self.handler.call("updateFolderFiles", &make_args!(m)); // TODO
                             #[cfg(not(windows))]
                             let files = job.files().clone();
                             #[cfg(windows)]
@@ -1813,8 +1975,8 @@ impl Remote {
                                 to,
                                 job.files().len()
                             );
-                            let m = make_fd(job.id(), job.files(), true);
-                            self.handler.call("updateFolderFiles", &make_args!(m));
+                            // let m = make_fd(job.id(), job.files(), true);
+                            // self.handler.call("updateFolderFiles", &make_args!(m));
                             job.is_last_job = true;
                             self.read_jobs.push(job);
                             self.timer = time::interval(MILLI1);
@@ -1860,10 +2022,11 @@ impl Remote {
                 if let Some(job) = self.remove_jobs.get_mut(&id) {
                     let i = file_num as usize;
                     if i < job.files.len() {
-                        self.handler.call(
-                            "confirmDeleteFiles",
-                            &make_args!(id, file_num, job.files[i].name.clone()),
-                        );
+                        // self.handler.call(
+                        //     "confirmDeleteFiles",
+                        //     &make_args!(id, file_num, job.files[i].name.clone()),
+                        // );
+                        self.handler.confirm_delete_files(id, file_num);
                     }
                 }
             }
@@ -1924,8 +2087,8 @@ impl Remote {
                 } else {
                     match fs::get_recursive_files(&path, include_hidden) {
                         Ok(entries) => {
-                            let m = make_fd(id, &entries, true);
-                            self.handler.call("updateFolderFiles", &make_args!(m));
+                            // let m = make_fd(id, &entries, true);
+                            // self.handler.call("updateFolderFiles", &make_args!(m));
                             self.remove_jobs
                                 .insert(id, RemoveJob::new(entries, path, sep, is_remote));
                         }
@@ -2018,7 +2181,7 @@ impl Remote {
         job: &fs::TransferJob,
         elapsed: i32,
         last_update_jobs_status: &mut (Instant, HashMap<i32, u64>),
-        handler: &mut Handler,
+        handler: &mut Session<T>,
     ) {
         if elapsed <= 0 {
             return;
@@ -2034,10 +2197,11 @@ impl Remote {
         last_update_jobs_status.1.insert(job.id(), transferred);
         let speed = (transferred - last_transferred) as f64 / (elapsed as f64 / 1000.);
         let file_num = job.file_num() - 1;
-        handler.call(
-            "jobProgress",
-            &make_args!(job.id(), file_num, speed, job.finished_size() as f64),
-        );
+        // handler.call(
+        //     "jobProgress",
+        //     &make_args!(job.id(), file_num, speed, job.finished_size() as f64),
+        // );
+        handler.job_progress(job.id(), file_num, speed, job.finished_size() as f64);
     }
 
     fn update_jobs_status(&mut self) {
@@ -2103,8 +2267,10 @@ impl Remote {
                 Some(message::Union::VideoFrame(vf)) => {
                     if !self.first_frame {
                         self.first_frame = true;
-                        self.handler.call2("closeSuccess", &make_args!());
-                        self.handler.call("adaptSize", &make_args!());
+                        // self.handler.call2("closeSuccess", &make_args!());
+                        self.handler.close_success();
+                        // self.handler.call("adaptSize", &make_args!());
+                        self.handler.adapt_size();
                         self.send_opts_after_login(peer).await;
                     }
                     let incomming_format = CodecFormat::from(&vf);
@@ -2192,11 +2358,11 @@ impl Remote {
                                     fs::transform_windows_path(&mut entries);
                                 }
                             }
-                            let mut m = make_fd(fd.id, &entries, fd.id > 0);
-                            if fd.id <= 0 {
-                                m.set_item("path", fd.path);
-                            }
-                            self.handler.call("updateFolderFiles", &make_args!(m));
+                            // let mut m = make_fd(fd.id, &entries, fd.id > 0);
+                            // if fd.id <= 0 {
+                            //     m.set_item("path", fd.path);
+                            // }
+                            // self.handler.call("updateFolderFiles", &make_args!(m));
                             if let Some(job) = fs::get_job(fd.id, &mut self.write_jobs) {
                                 log::info!("job set_files: {:?}", entries);
                                 job.set_files(entries);
@@ -2227,14 +2393,20 @@ impl Remote {
                                             let msg = new_send_confirm(req);
                                             allow_err!(peer.send(&msg).await);
                                         } else {
-                                            self.handler.call(
-                                                "overrideFileConfirm",
-                                                &make_args!(
-                                                    digest.id,
-                                                    digest.file_num,
-                                                    read_path,
-                                                    true
-                                                ),
+                                            // self.handler.call(
+                                            //     "overrideFileConfirm",
+                                            //     &make_args!(
+                                            //         digest.id,
+                                            //         digest.file_num,
+                                            //         read_path,
+                                            //         true
+                                            //     ),
+                                            // );
+                                            self.handler.override_file_confirm(
+                                                digest.id,
+                                                digest.file_num,
+                                                read_path,
+                                                true,
                                             );
                                         }
                                     }
@@ -2271,14 +2443,20 @@ impl Remote {
                                                         );
                                                         allow_err!(peer.send(&msg).await);
                                                     } else {
-                                                        self.handler.call(
-                                                            "overrideFileConfirm",
-                                                            &make_args!(
-                                                                digest.id,
-                                                                digest.file_num,
-                                                                write_path,
-                                                                false
-                                                            ),
+                                                        // self.handler.call(
+                                                        //     "overrideFileConfirm",
+                                                        //     &make_args!(
+                                                        //         digest.id,
+                                                        //         digest.file_num,
+                                                        //         write_path,
+                                                        //         false
+                                                        //     ),
+                                                        // );
+                                                        self.handler.override_file_confirm(
+                                                            digest.id,
+                                                            digest.file_num,
+                                                            write_path,
+                                                            false,
                                                         );
                                                     }
                                                 }
@@ -2333,24 +2511,27 @@ impl Remote {
                         self.audio_sender.send(MediaData::AudioFormat(f)).ok();
                     }
                     Some(misc::Union::ChatMessage(c)) => {
-                        self.handler.call("newMessage", &make_args!(c.text));
+                        // self.handler.call("newMessage", &make_args!(c.text)); // TODO
                     }
                     Some(misc::Union::PermissionInfo(p)) => {
                         log::info!("Change permission {:?} -> {}", p.permission, p.enabled);
                         match p.permission.enum_value_or_default() {
                             Permission::Keyboard => {
                                 SERVER_KEYBOARD_ENABLED.store(p.enabled, Ordering::SeqCst);
-                                self.handler
-                                    .call2("setPermission", &make_args!("keyboard", p.enabled));
+                                // self.handler
+                                //     .call2("setPermission", &make_args!("keyboard", p.enabled));
+                                self.handler.set_permission("keyboard", p.enabled);
                             }
                             Permission::Clipboard => {
                                 SERVER_CLIPBOARD_ENABLED.store(p.enabled, Ordering::SeqCst);
-                                self.handler
-                                    .call2("setPermission", &make_args!("clipboard", p.enabled));
+                                // self.handler
+                                //     .call2("setPermission", &make_args!("clipboard", p.enabled));
+                                self.handler.set_permission("clipboard", p.enabled);
                             }
                             Permission::Audio => {
-                                self.handler
-                                    .call2("setPermission", &make_args!("audio", p.enabled));
+                                // self.handler
+                                //     .call2("setPermission", &make_args!("audio", p.enabled));
+                                self.handler.set_permission("audio", p.enabled);
                             }
                             Permission::File => {
                                 SERVER_FILE_TRANSFER_ENABLED.store(p.enabled, Ordering::SeqCst);
@@ -2358,17 +2539,19 @@ impl Remote {
                                     return true;
                                 }
                                 self.check_clipboard_file_context();
-                                self.handler
-                                    .call2("setPermission", &make_args!("file", p.enabled));
+                                // self.handler
+                                //     .call2("setPermission", &make_args!("file", p.enabled));
+                                self.handler.set_permission("file", p.enabled);
                             }
                             Permission::Restart => {
-                                self.handler
-                                    .call2("setPermission", &make_args!("restart", p.enabled));
+                                // self.handler
+                                //     .call2("setPermission", &make_args!("restart", p.enabled));
+                                self.handler.set_permission("restart", p.enabled);
                             }
                         }
                     }
                     Some(misc::Union::SwitchDisplay(s)) => {
-                        self.handler.call("switchDisplay", &make_args!(s.display));
+                        // self.handler.call("switchDisplay", &make_args!(s.display)); // TODO
                         self.video_sender.send(MediaData::Reset).ok();
                         if s.width > 0 && s.height > 0 {
                             VIDEO.lock().unwrap().as_mut().map(|v| {
@@ -2441,7 +2624,7 @@ impl Remote {
 
     #[inline(always)]
     fn update_block_input_state(&mut self, on: bool) {
-        self.handler.call("updateBlockInputState", &make_args!(on));
+        // self.handler.call("updateBlockInputState", &make_args!(on)); // TODO
     }
 
     async fn handle_back_msg_block_input(&mut self, state: back_notification::BlockInputState) {
@@ -2471,7 +2654,8 @@ impl Remote {
         config.privacy_mode = on;
         self.handler.save_config(config);
 
-        self.handler.call("updatePrivacyMode", &[]);
+        // self.handler.call("updatePrivacyMode", &[]);
+        self.handler.update_privacy_mode();
     }
 
     async fn handle_back_msg_privacy_mode(
@@ -2593,143 +2777,137 @@ pub fn make_fd(id: i32, entries: &Vec<FileEntry>, only_count: bool) -> Value {
     m
 }
 
-#[async_trait]
-impl Interface for Handler {
-    fn send(&self, data: Data) {
-        if let Some(ref sender) = self.read().unwrap().sender {
-            sender.send(data).ok();
-        }
-    }
+// #[async_trait]
+// impl Interface for Handler {
+//     fn send(&self, data: Data) {
+//         if let Some(ref sender) = self.read().unwrap().sender {
+//             sender.send(data).ok();
+//         }
+//     }
 
-    fn msgbox(&self, msgtype: &str, title: &str, text: &str) {
-        let retry = check_if_retry(msgtype, title, text);
-        self.call2("msgbox_retry", &make_args!(msgtype, title, text, retry));
-    }
+//     fn msgbox(&self, msgtype: &str, title: &str, text: &str) {
+//         let retry = check_if_retry(msgtype, title, text);
+//         self.call2("msgbox_retry", &make_args!(msgtype, title, text, retry));
+//     }
 
-    fn handle_login_error(&mut self, err: &str) -> bool {
-        self.lc.write().unwrap().handle_login_error(err, self)
-    }
+//     fn handle_login_error(&mut self, err: &str) -> bool {
+//         self.lc.write().unwrap().handle_login_error(err, self)
+//     }
 
-    fn handle_peer_info(&mut self, pi: PeerInfo) {
-        let mut pi_sciter = Value::map();
-        let username = self.lc.read().unwrap().get_username(&pi);
-        pi_sciter.set_item("username", username.clone());
-        pi_sciter.set_item("hostname", pi.hostname.clone());
-        pi_sciter.set_item("platform", pi.platform.clone());
-        pi_sciter.set_item("sas_enabled", pi.sas_enabled);
-        if get_version_number(&pi.version) < get_version_number("1.1.10") {
-            self.call2("setPermission", &make_args!("restart", false));
-        }
-        if self.is_file_transfer() {
-            if pi.username.is_empty() {
-                self.on_error("No active console user logged on, please connect and logon first.");
-                return;
-            }
-        } else if !self.is_port_forward() {
-            if pi.displays.is_empty() {
-                self.lc.write().unwrap().handle_peer_info(username, pi);
-                self.call("updatePrivacyMode", &[]);
-                self.msgbox("error", "Remote Error", "No Display");
-                return;
-            }
-            let mut displays = Value::array(0);
-            for ref d in pi.displays.iter() {
-                let mut display = Value::map();
-                display.set_item("x", d.x);
-                display.set_item("y", d.y);
-                display.set_item("width", d.width);
-                display.set_item("height", d.height);
-                displays.push(display);
-            }
-            pi_sciter.set_item("displays", displays);
-            let mut current = pi.current_display as usize;
-            if current >= pi.displays.len() {
-                current = 0;
-            }
-            pi_sciter.set_item("current_display", current as i32);
-            let current = &pi.displays[current];
-            self.set_display(current.x, current.y, current.width, current.height);
-            // https://sciter.com/forums/topic/color_spaceiyuv-crash
-            // Nothing spectacular in decoder – done on CPU side.
-            // So if you can do BGRA translation on your side – the better.
-            // BGRA is used as internal image format so it will not require additional transformations.
-            VIDEO.lock().unwrap().as_mut().map(|v| {
-                let ok = v.start_streaming(
-                    (current.width as _, current.height as _),
-                    COLOR_SPACE::Rgb32,
-                    None,
-                );
-                log::info!("[video] initialized: {:?}", ok);
-            });
-            let p = self.lc.read().unwrap().should_auto_login();
-            if !p.is_empty() {
-                input_os_password(p, true, self.clone());
-            }
-        }
-        self.lc.write().unwrap().handle_peer_info(username, pi);
-        self.call("updatePrivacyMode", &[]);
-        self.call("updatePi", &make_args!(pi_sciter));
-        if self.is_file_transfer() {
-            self.call2("closeSuccess", &make_args!());
-        } else if !self.is_port_forward() {
-            self.msgbox("success", "Successful", "Connected, waiting for image...");
-        }
-        #[cfg(windows)]
-        {
-            let mut path = std::env::temp_dir();
-            path.push(&self.id);
-            let path = path.with_extension(crate::get_app_name().to_lowercase());
-            std::fs::File::create(&path).ok();
-            if let Some(path) = path.to_str() {
-                crate::platform::windows::add_recent_document(&path);
-            }
-        }
-        self.start_keyboard_hook();
-    }
+//     fn handle_peer_info(&mut self, pi: PeerInfo) {
+//         let mut pi_sciter = Value::map();
+//         let username = self.lc.read().unwrap().get_username(&pi);
+//         pi_sciter.set_item("username", username.clone());
+//         pi_sciter.set_item("hostname", pi.hostname.clone());
+//         pi_sciter.set_item("platform", pi.platform.clone());
+//         pi_sciter.set_item("sas_enabled", pi.sas_enabled);
+//         if get_version_number(&pi.version) < get_version_number("1.1.10") {
+//             self.call2("setPermission", &make_args!("restart", false));
+//         }
+//         if self.is_file_transfer() {
+//             if pi.username.is_empty() {
+//                 self.on_error("No active console user logged on, please connect and logon first.");
+//                 return;
+//             }
+//         } else if !self.is_port_forward() {
+//             if pi.displays.is_empty() {
+//                 self.lc.write().unwrap().handle_peer_info(username, pi);
+//                 self.call("updatePrivacyMode", &[]);
+//                 self.msgbox("error", "Remote Error", "No Display");
+//                 return;
+//             }
+//             let mut displays = Value::array(0);
+//             for ref d in pi.displays.iter() {
+//                 let mut display = Value::map();
+//                 display.set_item("x", d.x);
+//                 display.set_item("y", d.y);
+//                 display.set_item("width", d.width);
+//                 display.set_item("height", d.height);
+//                 displays.push(display);
+//             }
+//             pi_sciter.set_item("displays", displays);
+//             let mut current = pi.current_display as usize;
+//             if current >= pi.displays.len() {
+//                 current = 0;
+//             }
+//             pi_sciter.set_item("current_display", current as i32);
+//             let current = &pi.displays[current];
+//             self.set_display(current.x, current.y, current.width, current.height);
+//             // https://sciter.com/forums/topic/color_spaceiyuv-crash
+//             // Nothing spectacular in decoder – done on CPU side.
+//             // So if you can do BGRA translation on your side – the better.
+//             // BGRA is used as internal image format so it will not require additional transformations.
+//             VIDEO.lock().unwrap().as_mut().map(|v| {
+//                 let ok = v.start_streaming(
+//                     (current.width as _, current.height as _),
+//                     COLOR_SPACE::Rgb32,
+//                     None,
+//                 );
+//                 log::info!("[video] initialized: {:?}", ok);
+//             });
+//             let p = self.lc.read().unwrap().should_auto_login();
+//             if !p.is_empty() {
+//                 input_os_password(p, true, self.clone());
+//             }
+//         }
+//         self.lc.write().unwrap().handle_peer_info(username, pi);
+//         self.call("updatePrivacyMode", &[]);
+//         self.call("updatePi", &make_args!(pi_sciter));
+//         if self.is_file_transfer() {
+//             self.call2("closeSuccess", &make_args!());
+//         } else if !self.is_port_forward() {
+//             self.msgbox("success", "Successful", "Connected, waiting for image...");
+//         }
+//         #[cfg(windows)]
+//         {
+//             let mut path = std::env::temp_dir();
+//             path.push(&self.id);
+//             let path = path.with_extension(crate::get_app_name().to_lowercase());
+//             std::fs::File::create(&path).ok();
+//             if let Some(path) = path.to_str() {
+//                 crate::platform::windows::add_recent_document(&path);
+//             }
+//         }
+//         self.start_keyboard_hook();
+//     }
 
-    async fn handle_hash(&mut self, pass: &str, hash: Hash, peer: &mut Stream) {
-        handle_hash(self.lc.clone(), pass, hash, self, peer).await;
-    }
+//     async fn handle_hash(&mut self, pass: &str, hash: Hash, peer: &mut Stream) {
+//         handle_hash(self.lc.clone(), pass, hash, self, peer).await;
+//     }
 
-    async fn handle_login_from_ui(&mut self, password: String, remember: bool, peer: &mut Stream) {
-        handle_login_from_ui(self.lc.clone(), password, remember, peer).await;
-    }
+//     async fn handle_login_from_ui(&mut self, password: String, remember: bool, peer: &mut Stream) {
+//         handle_login_from_ui(self.lc.clone(), password, remember, peer).await;
+//     }
 
-    async fn handle_test_delay(&mut self, t: TestDelay, peer: &mut Stream) {
-        if !t.from_client {
-            self.update_quality_status(QualityStatus {
-                delay: Some(t.last_delay as _),
-                target_bitrate: Some(t.target_bitrate as _),
-                ..Default::default()
-            });
-            handle_test_delay(t, peer).await;
-        }
-    }
+//     async fn handle_test_delay(&mut self, t: TestDelay, peer: &mut Stream) {
+//         if !t.from_client {
+//             self.update_quality_status(QualityStatus {
+//                 delay: Some(t.last_delay as _),
+//                 target_bitrate: Some(t.target_bitrate as _),
+//                 ..Default::default()
+//             });
+//             handle_test_delay(t, peer).await;
+//         }
+//     }
 
-    fn set_force_relay(&mut self, direct: bool, received: bool) {
-        let mut lc = self.lc.write().unwrap();
-        lc.force_relay = false;
-        if direct && !received {
-            let errno = errno::errno().0;
-            log::info!("errno is {}", errno);
-            // TODO: check mac and ios
-            if cfg!(windows) && errno == 10054 || !cfg!(windows) && errno == 104 {
-                lc.force_relay = true;
-                lc.set_option("force-always-relay".to_owned(), "Y".to_owned());
-            }
-        }
-    }
+//     fn set_force_relay(&mut self, direct: bool, received: bool) {
+//         let mut lc = self.lc.write().unwrap();
+//         lc.force_relay = false;
+//         if direct && !received {
+//             let errno = errno::errno().0;
+//             log::info!("errno is {}", errno);
+//             // TODO: check mac and ios
+//             if cfg!(windows) && errno == 10054 || !cfg!(windows) && errno == 104 {
+//                 lc.force_relay = true;
+//                 lc.set_option("force-always-relay".to_owned(), "Y".to_owned());
+//             }
+//         }
+//     }
 
-    fn is_force_relay(&self) -> bool {
-        self.lc.read().unwrap().force_relay
-    }
-}
-
-impl Handler {
-    fn on_error(&self, err: &str) {
-        self.msgbox("error", "Error", err);
-    }
-}
+//     fn is_force_relay(&self) -> bool {
+//         self.lc.read().unwrap().force_relay
+//     }
+// }
 
 #[tokio::main(flavor = "current_thread")]
 async fn send_note(url: String, id: String, conn_id: i32, note: String) {

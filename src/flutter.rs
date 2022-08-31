@@ -39,8 +39,9 @@ pub(super) const APP_TYPE_MAIN: &str = "main";
 pub(super) const APP_TYPE_DESKTOP_REMOTE: &str = "remote";
 pub(super) const APP_TYPE_DESKTOP_FILE_TRANSFER: &str = "file transfer";
 
+const MILLI1: Duration = Duration::from_millis(1);
+
 lazy_static::lazy_static! {
-    // static ref SESSION: Arc<RwLock<Option<Session>>> = Default::default();
     pub static ref SESSIONS: RwLock<HashMap<String,Session>> = Default::default();
     pub static ref GLOBAL_EVENT_STREAM: RwLock<HashMap<String, StreamSink<String>>> = Default::default(); // rust to dart event channel
 }
@@ -48,9 +49,6 @@ lazy_static::lazy_static! {
 static SERVER_CLIPBOARD_ENABLED: AtomicBool = AtomicBool::new(true);
 static SERVER_KEYBOARD_ENABLED: AtomicBool = AtomicBool::new(true);
 
-// pub fn get_session<'a>(id: &str) -> Option<&'a Session> {
-//     SESSIONS.read().unwrap().get(id)
-// }
 
 #[derive(Clone)]
 pub struct Session {
@@ -113,10 +111,6 @@ impl Session {
         }
     }
 
-    /// Get the current session instance.
-    // pub fn get() -> Arc<RwLock<Option<Session>>> {
-    //     SESSION.clone()
-    // }
 
     /// Get the option of the current session.
     ///
@@ -251,57 +245,6 @@ impl Session {
         msg_out.set_misc(misc);
         self.send_msg(msg_out);
     }
-
-    // file trait
-    /// Send file over the current session.
-    // pub fn send_files(
-    //     id: i32,
-    //     path: String,
-    //     to: String,
-    //     file_num: i32,
-    //     include_hidden: bool,
-    //     is_remote: bool,
-    // ) {
-    //     if let Some(session) = SESSION.write().unwrap().as_mut() {
-    //         session.send_files(id, path, to, file_num, include_hidden, is_remote);
-    //     }
-    // }
-
-    // TODO into file trait
-    /// Confirm file override.
-    pub fn set_confirm_override_file(
-        &self,
-        id: i32,
-        file_num: i32,
-        need_override: bool,
-        remember: bool,
-        is_upload: bool,
-    ) {
-        log::info!(
-            "confirm file transfer, job: {}, need_override: {}",
-            id,
-            need_override
-        );
-        self.send(Data::SetConfirmOverrideFile((
-            id,
-            file_num,
-            need_override,
-            remember,
-            is_upload,
-        )));
-    }
-
-    /// Static method to send message over the current session.
-    ///
-    /// # Arguments
-    ///
-    /// * `msg` - The message to send.
-    // #[inline]
-    // pub fn send_msg_static(msg: Message) {
-    //     if let Some(session) = SESSION.read().unwrap().as_ref() {
-    //         session.send_msg(msg);
-    //     }
-    // }
 
     /// Push an event to the event queue.
     /// An event is stored as json in the event queue.
@@ -595,6 +538,18 @@ impl Interface for Session {
         }
     }
 
+    fn is_file_transfer(&self) -> bool {
+        todo!()
+    }
+
+    fn is_port_forward(&self) -> bool {
+        todo!()
+    }
+
+    fn is_rdp(&self) -> bool {
+        todo!()
+    }
+
     fn msgbox(&self, msgtype: &str, title: &str, text: &str) {
         let has_retry = if check_if_retry(msgtype, title, text) {
             "true"
@@ -706,7 +661,6 @@ impl Interface for Session {
     }
 }
 
-const MILLI1: Duration = Duration::from_millis(1);
 
 struct Connection {
     video_handler: VideoHandler,

@@ -146,7 +146,7 @@ pub fn start(args: &mut [String]) {
         let args: Vec<String> = iter.map(|x| x.clone()).collect();
         frame.set_title(&id);
         frame.register_behavior("native-remote", move || {
-            Box::new(remote::Handler::new(
+            Box::new(remote::SciterSession::new(
                 cmd.clone(),
                 id.clone(),
                 pass.clone(),

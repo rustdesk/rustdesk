@@ -1651,6 +1651,12 @@ pub trait Interface: Send + Clone + 'static + Sized {
     fn handle_login_error(&mut self, err: &str) -> bool;
     fn handle_peer_info(&mut self, pi: PeerInfo);
     fn set_force_relay(&mut self, direct: bool, received: bool);
+    fn is_file_transfer(&self) -> bool;
+    fn is_port_forward(&self) -> bool;
+    fn is_rdp(&self) -> bool;
+    fn on_error(&self, err: &str) {
+        self.msgbox("error", "Error", err);
+    }
     fn is_force_relay(&self) -> bool;
     async fn handle_hash(&mut self, pass: &str, hash: Hash, peer: &mut Stream);
     async fn handle_login_from_ui(&mut self, password: String, remember: bool, peer: &mut Stream);
