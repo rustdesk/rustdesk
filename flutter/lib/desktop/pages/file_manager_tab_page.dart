@@ -37,7 +37,7 @@ class _FileManagerTabPageState extends State<FileManagerTabPage> {
   @override
   void initState() {
     super.initState();
-    
+
     tabController.onRemove = (_, id) => onRemoveId(id);
 
     rustDeskWinManager.setMethodHandler((call, fromWindowId) async {
@@ -74,9 +74,9 @@ class _FileManagerTabPageState extends State<FileManagerTabPage> {
             body: DesktopTab(
               controller: tabController,
               theme: theme,
-              isMainWindow: false,
+              tabType: DesktopTabType.fileTransfer,
               onClose: () {
-                 tabController.clear();
+                tabController.clear();
               },
               tail: AddButton(
                 theme: theme,

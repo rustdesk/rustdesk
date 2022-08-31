@@ -664,8 +664,6 @@ Future<void> initGlobalFFI() async {
   debugPrint("_globalFFI init end");
   // after `put`, can also be globally found by Get.find<FFI>();
   Get.put(_globalFFI, permanent: true);
-  // trigger connection status updater
-  await bind.mainCheckConnectStatus();
   // global shared preference
   await Get.putAsync(() => SharedPreferences.getInstance());
 }

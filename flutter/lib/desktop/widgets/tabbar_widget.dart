@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:async';
 import 'dart:math';
 
 import 'package:desktop_multi_window/desktop_multi_window.dart';
@@ -6,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_hbb/common.dart';
 import 'package:flutter_hbb/consts.dart';
 import 'package:flutter_hbb/main.dart';
+import 'package:flutter_hbb/models/platform_model.dart';
 import 'package:get/get.dart';
 import 'package:scroll_pos/scroll_pos.dart';
 import 'package:window_manager/window_manager.dart';
@@ -32,6 +34,15 @@ class TabInfo {
       this.unselectedIcon,
       this.closable = true,
       required this.page});
+}
+
+enum DesktopTabType {
+  main,
+  cm,
+  remoteScreen,
+  fileTransfer,
+  portForward,
+  rdp,
 }
 
 class DesktopTabState {
@@ -64,6 +75,7 @@ class DesktopTabController {
       state.update((val) {
         val!.tabs.add(tab);
       });
+      state.value.scrollController.itemCount = state.value.tabs.length;
       toIndex = state.value.tabs.length - 1;
       assert(toIndex >= 0);
     }
@@ -96,8 +108,16 @@ class DesktopTabController {
   void jumpTo(int index) {
     state.update((val) {
       val!.selected = index;
-      val.pageController.jumpToPage(index);
-      val.scrollController.scrollToItem(index, center: true, animate: true);
+      Future.delayed(Duration.zero, (() {
+        if (val.pageController.hasClients) {
+          val.pageController.jumpToPage(index);
+        }
+        if (val.scrollController.hasClients &&
+            val.scrollController.canScroll &&
+            val.scrollController.itemCount >= index) {
+          val.scrollController.scrollToItem(index, center: true, animate: true);
+        }
+      }));
     });
     onSelected?.call(index);
   }
@@ -134,6 +154,7 @@ typedef LabelGetter = Rx<String> Function(String key);
 class DesktopTab extends StatelessWidget {
   final Function(String)? onTabClose;
   final TarBarTheme theme;
+  final DesktopTabType tabType;
   final bool isMainWindow;
   final bool showTabBar;
   final bool showLogo;
@@ -152,7 +173,7 @@ class DesktopTab extends StatelessWidget {
 
   const DesktopTab({
     required this.controller,
-    required this.isMainWindow,
+    required this.tabType,
     this.theme = const TarBarTheme.light(),
     this.onTabClose,
     this.showTabBar = true,
@@ -166,7 +187,8 @@ class DesktopTab extends StatelessWidget {
     this.onClose,
     this.tabBuilder,
     this.labelGetter,
-  });
+  }) : isMainWindow =
+            tabType == DesktopTabType.main || tabType == DesktopTabType.cm;
 
   @override
   Widget build(BuildContext context) {
@@ -195,11 +217,48 @@ class DesktopTab extends StatelessWidget {
     ]);
   }
 
+  Widget _buildBlock({required Widget child}) {
+    if (tabType != DesktopTabType.main) {
+      return child;
+    }
+    var block = false.obs;
+    return Obx(() => MouseRegion(
+          onEnter: (_) async {
+            if (!option2bool(
+                'allow-remote-config-modification',
+                await bind.mainGetOption(
+                    key: 'allow-remote-config-modification'))) {
+              var time0 = DateTime.now().millisecondsSinceEpoch;
+              await bind.mainCheckMouseTime();
+              Timer(const Duration(milliseconds: 120), () async {
+                var d = time0 - await bind.mainGetMouseTime();
+                if (d < 120) {
+                  block.value = true;
+                }
+              });
+            }
+          },
+          onExit: (_) => block.value = false,
+          child: Stack(
+            children: [
+              child,
+              Offstage(
+                  offstage: !block.value,
+                  child: Container(
+                    color: Colors.black.withOpacity(0.5),
+                  )),
+            ],
+          ),
+        ));
+  }
+
   Widget _buildPageView() {
-    return Obx(() => PageView(
-        controller: state.value.pageController,
-        children:
-            state.value.tabs.map((tab) => tab.page).toList(growable: false)));
+    return _buildBlock(
+        child: Obx(() => PageView(
+            controller: state.value.pageController,
+            children: state.value.tabs
+                .map((tab) => tab.page)
+                .toList(growable: false))));
   }
 
   Widget _buildBar() {

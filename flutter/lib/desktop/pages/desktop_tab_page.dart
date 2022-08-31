@@ -46,7 +46,7 @@ class _DesktopTabPageState extends State<DesktopTabPage> {
                 body: DesktopTab(
                   controller: tabController,
                   theme: dark ? TarBarTheme.dark() : TarBarTheme.light(),
-                  isMainWindow: true,
+                  tabType: DesktopTabType.main,
                   tail: ActionIcon(
                     message: 'Settings',
                     icon: IconFont.menu,

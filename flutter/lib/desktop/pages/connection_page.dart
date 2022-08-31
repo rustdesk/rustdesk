@@ -233,7 +233,6 @@ class _ConnectionPageState extends State<ConnectionPage> {
                         },
                         child: Container(
                           height: 24,
-                          width: 72,
                           alignment: Alignment.center,
                           decoration: BoxDecoration(
                             color: ftPressed.value
@@ -257,7 +256,7 @@ class _ConnectionPageState extends State<ConnectionPage> {
                                 color: ftPressed.value
                                     ? MyTheme.color(context).bg
                                     : MyTheme.color(context).text),
-                          ),
+                          ).marginSymmetric(horizontal: 12),
                         ),
                       )),
                   SizedBox(
@@ -272,7 +271,6 @@ class _ConnectionPageState extends State<ConnectionPage> {
                       onTap: onConnect,
                       child: Container(
                         height: 24,
-                        width: 65,
                         decoration: BoxDecoration(
                           color: connPressed.value
                               ? MyTheme.accent
@@ -289,12 +287,12 @@ class _ConnectionPageState extends State<ConnectionPage> {
                         child: Center(
                           child: Text(
                             translate(
-                              "Connection",
+                              "Connect",
                             ),
                             style: TextStyle(
                                 fontSize: 12, color: MyTheme.color(context).bg),
                           ),
-                        ),
+                        ).marginSymmetric(horizontal: 12),
                       ),
                     ),
                   ),

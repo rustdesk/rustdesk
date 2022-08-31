@@ -81,6 +81,8 @@ Future<void> initEnv(String appType) async {
 
 void runMainApp(bool startService) async {
   await initEnv(kAppTypeMain);
+  // trigger connection status updater
+  await bind.mainCheckConnectStatus();
   if (startService) {
     // await windowManager.ensureInitialized();
     // disable tray
@@ -89,10 +91,11 @@ void runMainApp(bool startService) async {
   }
   runApp(App());
   // set window option
-  WindowOptions windowOptions = getHiddenTitleBarWindowOptions(const Size(1280, 720));
+  WindowOptions windowOptions =
+      getHiddenTitleBarWindowOptions(const Size(1280, 720));
   windowManager.waitUntilReadyToShow(windowOptions, () async {
-      await windowManager.show();
-      await windowManager.focus();
+    await windowManager.show();
+    await windowManager.focus();
   });
 }
 

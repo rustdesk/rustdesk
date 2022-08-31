@@ -111,7 +111,7 @@ class ConnectionManagerState extends State<ConnectionManager> {
             showMaximize: false,
             showMinimize: false,
             controller: serverModel.tabController,
-            isMainWindow: true,
+            tabType: DesktopTabType.cm,
             pageViewBuilder: (pageView) => Row(children: [
                   Expanded(child: pageView),
                   Consumer<ChatModel>(
@@ -294,7 +294,8 @@ class _CmHeaderState extends State<_CmHeader>
         Offstage(
           offstage: client.isFileTransfer,
           child: IconButton(
-            onPressed: () => gFFI.chatModel.toggleCMChatPage(client.id),
+            onPressed: () => checkClickTime(
+                client.id, () => gFFI.chatModel.toggleCMChatPage(client.id)),
             icon: Icon(Icons.message_outlined),
           ),
         )
@@ -326,7 +327,8 @@ class _PrivilegeBoardState extends State<_PrivilegeBoard> {
             BoxDecoration(color: enabled ? MyTheme.accent80 : Colors.grey),
         padding: EdgeInsets.all(4.0),
         child: InkWell(
-          onTap: () => onTap?.call(!enabled),
+          onTap: () =>
+              checkClickTime(widget.client.id, () => onTap?.call(!enabled)),
           child: Image(
             image: icon,
             width: 50,
@@ -422,7 +424,8 @@ class _CmControlPanel extends StatelessWidget {
           decoration: BoxDecoration(
               color: Colors.redAccent, borderRadius: BorderRadius.circular(10)),
           child: InkWell(
-              onTap: () => handleDisconnect(context),
+              onTap: () =>
+                  checkClickTime(client.id, () => handleDisconnect(context)),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
@@ -447,7 +450,8 @@ class _CmControlPanel extends StatelessWidget {
           decoration: BoxDecoration(
               color: MyTheme.accent, borderRadius: BorderRadius.circular(10)),
           child: InkWell(
-              onTap: () => handleAccept(context),
+              onTap: () =>
+                  checkClickTime(client.id, () => handleAccept(context)),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
@@ -469,7 +473,8 @@ class _CmControlPanel extends StatelessWidget {
               borderRadius: BorderRadius.circular(10),
               border: Border.all(color: Colors.grey)),
           child: InkWell(
-              onTap: () => handleDisconnect(context),
+              onTap: () =>
+                  checkClickTime(client.id, () => handleDisconnect(context)),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
@@ -571,4 +576,13 @@ Widget clientInfo(Client client) {
           ],
         ),
       ]));
+}
+
+void checkClickTime(int id, Function() callback) async {
+  var clickCallbackTime = DateTime.now().millisecondsSinceEpoch;
+  await bind.cmCheckClickTime(connId: id);
+  Timer(const Duration(milliseconds: 120), () async {
+    var d = clickCallbackTime - await bind.cmGetClickTime();
+    if (d > 120) callback();
+  });
 }
