@@ -13,10 +13,10 @@ use hbb_common::{
 };
 use hbb_common::{password_security, ResultType};
 
-use crate::client::file_trait::FileManager;
+use crate::{client::file_trait::FileManager, flutter::{session_add, session_start_}};
 use crate::common::make_fd_to_json;
 use crate::flutter::connection_manager::{self, get_clients_length, get_clients_state};
-use crate::flutter::{self, Session, SESSIONS};
+use crate::flutter::{self, SESSIONS};
 use crate::start_server;
 use crate::ui_interface;
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
@@ -110,7 +110,7 @@ pub fn host_stop_system_key_propagate(stopped: bool) {
 // FIXME: -> ResultType<()> cannot be parsed by frb_codegen
 // thread 'main' panicked at 'Failed to parse function output type `ResultType<()>`', $HOME\.cargo\git\checkouts\flutter_rust_bridge-ddba876d3ebb2a1e\e5adce5\frb_codegen\src\parser\mod.rs:151:25
 pub fn session_add_sync(id: String, is_file_transfer: bool, is_port_forward: bool) -> SyncReturn<String> {
-    if let Err(e) = Session::add(&id, is_file_transfer, is_port_forward) {
+    if let Err(e) = session_add(&id, is_file_transfer, is_port_forward) {
         SyncReturn(format!("Failed to add session with id {}, {}", &id, e))
     } else {
         SyncReturn("".to_owned())
@@ -118,7 +118,7 @@ pub fn session_add_sync(id: String, is_file_transfer: bool, is_port_forward: boo
 }
 
 pub fn session_start(events2ui: StreamSink<EventToUI>, id: String) -> ResultType<()> {
-    Session::start(&id, events2ui)
+    session_start_(&id, events2ui)
 }
 
 pub fn session_get_remember(id: String) -> Option<bool> {
@@ -131,7 +131,7 @@ pub fn session_get_remember(id: String) -> Option<bool> {
 
 pub fn session_get_toggle_option(id: String, arg: String) -> Option<bool> {
     if let Some(session) = SESSIONS.read().unwrap().get(&id) {
-        Some(session.get_toggle_option(&arg))
+        Some(session.get_toggle_option(arg))
     } else {
         None
     }
@@ -152,7 +152,7 @@ pub fn session_get_image_quality(id: String) -> Option<String> {
 
 pub fn session_get_option(id: String, arg: String) -> Option<String> {
     if let Some(session) = SESSIONS.read().unwrap().get(&id) {
-        Some(session.get_option(&arg))
+        Some(session.get_option(arg))
     } else {
         None
     }
@@ -160,7 +160,7 @@ pub fn session_get_option(id: String, arg: String) -> Option<String> {
 
 pub fn session_login(id: String, password: String, remember: bool) {
     if let Some(session) = SESSIONS.read().unwrap().get(&id) {
-        session.login(&password, remember);
+        session.login(password, remember);
     }
 }
 
@@ -173,7 +173,7 @@ pub fn session_close(id: String) {
 
 pub fn session_refresh(id: String) {
     if let Some(session) = SESSIONS.read().unwrap().get(&id) {
-        session.refresh();
+        session.refresh_video();
     }
 }
 
@@ -184,26 +184,26 @@ pub fn session_reconnect(id: String) {
 }
 
 pub fn session_toggle_option(id: String, value: String) {
-    if let Some(session) = SESSIONS.read().unwrap().get(&id) {
-        session.toggle_option(&value);
+    if let Some(session) = SESSIONS.write().unwrap().get_mut(&id) {
+        session.toggle_option(value);
     }
 }
 
 pub fn session_set_image_quality(id: String, value: String) {
     if let Some(session) = SESSIONS.read().unwrap().get(&id) {
-        session.set_image_quality(&value);
+        // session.set_image_quality(value);
     }
 }
 
 pub fn session_lock_screen(id: String) {
     if let Some(session) = SESSIONS.read().unwrap().get(&id) {
-        session.lock_screen();
+        // session.lock_screen();
     }
 }
 
 pub fn session_ctrl_alt_del(id: String) {
     if let Some(session) = SESSIONS.read().unwrap().get(&id) {
-        session.ctrl_alt_del();
+        // session.ctrl_alt_del();
     }
 }
 
@@ -224,13 +224,13 @@ pub fn session_input_key(
     command: bool,
 ) {
     if let Some(session) = SESSIONS.read().unwrap().get(&id) {
-        session.input_key(&name, down, press, alt, ctrl, shift, command);
+        // session.input_key(&name, down, press, alt, ctrl, shift, command);
     }
 }
 
 pub fn session_input_string(id: String, value: String) {
     if let Some(session) = SESSIONS.read().unwrap().get(&id) {
-        session.input_string(&value);
+        // session.input_string(&value);
     }
 }
 
@@ -249,7 +249,7 @@ pub fn session_peer_option(id: String, name: String, value: String) {
 
 pub fn session_get_peer_option(id: String, name: String) -> String {
     if let Some(session) = SESSIONS.read().unwrap().get(&id) {
-        return session.get_option(&name);
+        return session.get_option(name);
     }
     "".to_string()
 }
@@ -348,7 +348,7 @@ pub fn session_get_platform(id: String, is_remote: bool) -> String {
 
 pub fn session_load_last_transfer_jobs(id: String) {
     if let Some(session) = SESSIONS.read().unwrap().get(&id) {
-        return session.load_last_jobs();
+        // return session.load_last_jobs();
     } else {
         // a tip for flutter dev
         eprintln!(
@@ -719,7 +719,7 @@ pub fn session_send_mouse(id: String, msg: String) {
             } << 3;
         }
         if let Some(session) = SESSIONS.read().unwrap().get(&id) {
-            session.send_mouse(mask, x, y, alt, ctrl, shift, command);
+            // session.send_mouse(mask, x, y, alt, ctrl, shift, command);
         }
     }
 }

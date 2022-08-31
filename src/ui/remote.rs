@@ -48,7 +48,7 @@ use crate::clipboard_file::*;
 use crate::{
     client::*,
     common::{self, check_clipboard, update_clipboard, ClipboardContext, CLIPBOARD_INTERVAL},
-    ui_session_interface::{InvokeUi, Session},
+    ui_session_interface::{io_loop, InvokeUi, Remote, Session, SERVER_KEYBOARD_ENABLED},
 };
 use errno;
 
@@ -69,9 +69,7 @@ fn get_key_state(key: enigo::Key) -> bool {
 
 static IS_IN: AtomicBool = AtomicBool::new(false);
 static KEYBOARD_HOOKED: AtomicBool = AtomicBool::new(false);
-static SERVER_KEYBOARD_ENABLED: AtomicBool = AtomicBool::new(true);
-static SERVER_FILE_TRANSFER_ENABLED: AtomicBool = AtomicBool::new(true);
-static SERVER_CLIPBOARD_ENABLED: AtomicBool = AtomicBool::new(true);
+
 #[cfg(windows)]
 static mut IS_ALT_GR: bool = false;
 
@@ -82,7 +80,6 @@ static mut IS_ALT_GR: bool = false;
 #[derive(Clone, Default)]
 pub struct SciterHandler {
     element: Arc<Mutex<Option<Element>>>,
-    thread: Arc<Mutex<Option<std::thread::JoinHandle<()>>>>,
     close_state: HashMap<String, String>,
 }
 
@@ -128,6 +125,11 @@ impl InvokeUi for SciterHandler {
 
     fn set_display(&self, x: i32, y: i32, w: i32, h: i32) {
         self.call("setDisplay", &make_args!(x, y, w, h));
+        VIDEO.lock().unwrap().as_mut().map(|v| {
+            v.stop_streaming().ok();
+            let ok = v.start_streaming((w, h), COLOR_SPACE::Rgb32, None);
+            log::info!("[video] reinitialized: {:?}", ok);
+        });
     }
 
     fn update_privacy_mode(&self) {
@@ -214,6 +216,32 @@ impl InvokeUi for SciterHandler {
     fn adapt_size(&self) {
         self.call("adaptSize", &make_args!());
     }
+
+    fn on_rgba(&self, data: &[u8]) {
+        VIDEO
+            .lock()
+            .unwrap()
+            .as_mut()
+            .map(|v| v.render_frame(data).ok());
+    }
+
+    fn set_peer_info(
+        &self,
+        username: &str,
+        hostname: &str,
+        platform: &str,
+        sas_enabled: bool,
+        displays: &Vec<HashMap<&str, i32>>,
+        version: &str,
+        current_display: usize,
+        is_file_transfer: bool,
+    ) {
+        todo!()
+    }
+
+    fn msgbox(&self, msgtype: &str, title: &str, text: &str, retry: bool) {
+        todo!()
+    }
 }
 
 pub struct SciterSession(Session<SciterHandler>);
@@ -230,32 +258,6 @@ impl DerefMut for SciterSession {
         &mut self.0
     }
 }
-
-// #[derive(Default)]
-// pub struct HandlerInner {
-//     element: Option<Element>,
-//     sender: Option<mpsc::UnboundedSender<Data>>,
-//     thread: Option<std::thread::JoinHandle<()>>,
-//     close_state: HashMap<String, String>,
-// }
-
-// #[derive(Clone, Default)]
-// pub struct Handler {
-//     inner: Arc<RwLock<HandlerInner>>,
-//     cmd: String,
-//     id: String,
-//     password: String,
-//     args: Vec<String>,
-//     lc: Arc<RwLock<LoginConfigHandler>>,
-// }
-
-// impl Deref for Handler {
-//     type Target = Arc<RwLock<HandlerInner>>;
-
-//     fn deref(&self) -> &Self::Target {
-//         &self.inner
-//     }
-// }
 
 impl sciter::EventHandler for SciterSession {
     fn get_subscription(&mut self) -> Option<EVENT_GROUPS> {
@@ -659,14 +661,15 @@ impl SciterSession {
         });
     }
 
-    fn get_view_style(&mut self) -> String {
-        return self.lc.read().unwrap().view_style.clone();
-    }
+    // fn get_view_style(&mut self) -> String {
+    //     return self.lc.read().unwrap().view_style.clone();
+    // }
 
-    fn get_image_quality(&mut self) -> String {
-        return self.lc.read().unwrap().image_quality.clone();
-    }
+    // fn get_image_quality(&mut self) -> String {
+    //     return self.lc.read().unwrap().image_quality.clone();
+    // }
 
+    // TODO
     fn get_custom_image_quality(&mut self) -> Value {
         let mut v = Value::array(0);
         for x in self.lc.read().unwrap().custom_image_quality.iter() {
@@ -680,82 +683,83 @@ impl SciterSession {
     //     self.lc.write().unwrap().save_config(config);
     // }
 
-    fn save_view_style(&mut self, value: String) {
-        self.lc.write().unwrap().save_view_style(value);
-    }
+    // fn save_view_style(&mut self, value: String) {
+    //     self.lc.write().unwrap().save_view_style(value);
+    // }
 
     // #[inline]
     // pub(super) fn load_config(&self) -> PeerConfig {
     //     load_config(&self.id)
     // }
 
-    fn toggle_option(&mut self, name: String) {
-        let msg = self.lc.write().unwrap().toggle_option(name.clone());
-        if name == "enable-file-transfer" {
-            self.send(Data::ToggleClipboardFile);
-        }
-        if let Some(msg) = msg {
-            self.send(Data::Message(msg));
-        }
-    }
+    // fn toggle_option(&mut self, name: String) {
+    //     let msg = self.lc.write().unwrap().toggle_option(name.clone());
+    //     if name == "enable-file-transfer" {
+    //         self.send(Data::ToggleClipboardFile);
+    //     }
+    //     if let Some(msg) = msg {
+    //         self.send(Data::Message(msg));
+    //     }
+    // }
 
-    fn get_toggle_option(&mut self, name: String) -> bool {
-        self.lc.read().unwrap().get_toggle_option(&name)
-    }
+    // fn get_toggle_option(&mut self, name: String) -> bool {
+    //     self.lc.read().unwrap().get_toggle_option(&name)
+    // }
 
-    fn is_privacy_mode_supported(&self) -> bool {
-        self.lc.read().unwrap().is_privacy_mode_supported()
-    }
+    // fn is_privacy_mode_supported(&self) -> bool {
+    //     self.lc.read().unwrap().is_privacy_mode_supported()
+    // }
 
-    fn refresh_video(&mut self) {
-        self.send(Data::Message(LoginConfigHandler::refresh()));
-    }
+    // fn refresh_video(&mut self) {
+    //     self.send(Data::Message(LoginConfigHandler::refresh()));
+    // }
 
-    fn save_custom_image_quality(&mut self, custom_image_quality: i32) {
-        let msg = self
-            .lc
-            .write()
-            .unwrap()
-            .save_custom_image_quality(custom_image_quality);
-        self.send(Data::Message(msg));
-    }
+    // fn save_custom_image_quality(&mut self, custom_image_quality: i32) {
+    //     let msg = self
+    //         .lc
+    //         .write()
+    //         .unwrap()
+    //         .save_custom_image_quality(custom_image_quality);
+    //     self.send(Data::Message(msg));
+    // }
 
-    fn save_image_quality(&mut self, value: String) {
-        let msg = self.lc.write().unwrap().save_image_quality(value);
-        if let Some(msg) = msg {
-            self.send(Data::Message(msg));
-        }
-    }
+    // fn save_image_quality(&mut self, value: String) {
+    //     let msg = self.lc.write().unwrap().save_image_quality(value);
+    //     if let Some(msg) = msg {
+    //         self.send(Data::Message(msg));
+    //     }
+    // }
 
-    fn get_remember(&mut self) -> bool {
-        self.lc.read().unwrap().remember
-    }
+    // fn get_remember(&mut self) -> bool {
+    //     self.lc.read().unwrap().remember
+    // }
 
-    fn set_write_override(
-        &mut self,
-        job_id: i32,
-        file_num: i32,
-        is_override: bool,
-        remember: bool,
-        is_upload: bool,
-    ) -> bool {
-        self.send(Data::SetConfirmOverrideFile((
-            job_id,
-            file_num,
-            is_override,
-            remember,
-            is_upload,
-        )));
-        true
-    }
+    // fn set_write_override(
+    //     &mut self,
+    //     job_id: i32,
+    //     file_num: i32,
+    //     is_override: bool,
+    //     remember: bool,
+    //     is_upload: bool,
+    // ) -> bool {
+    //     self.send(Data::SetConfirmOverrideFile((
+    //         job_id,
+    //         file_num,
+    //         is_override,
+    //         remember,
+    //         is_upload,
+    //     )));
+    //     true
+    // }
 
-    fn has_hwcodec(&self) -> bool {
-        #[cfg(not(feature = "hwcodec"))]
-        return false;
-        #[cfg(feature = "hwcodec")]
-        return true;
-    }
+    // fn has_hwcodec(&self) -> bool {
+    //     #[cfg(not(feature = "hwcodec"))]
+    //     return false;
+    //     #[cfg(feature = "hwcodec")]
+    //     return true;
+    // }
 
+    // TODO
     fn supported_hwcodec(&self) -> Value {
         #[cfg(feature = "hwcodec")]
         {
@@ -780,51 +784,52 @@ impl SciterSession {
         }
     }
 
-    fn change_prefer_codec(&self) {
-        let msg = self.lc.write().unwrap().change_prefer_codec();
-        self.send(Data::Message(msg));
-    }
+    // fn change_prefer_codec(&self) {
+    //     let msg = self.lc.write().unwrap().change_prefer_codec();
+    //     self.send(Data::Message(msg));
+    // }
 
-    fn restart_remote_device(&mut self) {
-        let mut lc = self.lc.write().unwrap();
-        lc.restarting_remote_device = true;
-        let msg = lc.restart_remote_device();
-        self.send(Data::Message(msg));
-    }
+    // fn restart_remote_device(&mut self) {
+    //     let mut lc = self.lc.write().unwrap();
+    //     lc.restarting_remote_device = true;
+    //     let msg = lc.restart_remote_device();
+    //     self.send(Data::Message(msg));
+    // }
 
     // pub fn is_restarting_remote_device(&self) -> bool {
     //     self.lc.read().unwrap().restarting_remote_device
     // }
 
-    fn t(&self, name: String) -> String {
-        crate::client::translate(name)
-    }
+    // fn t(&self, name: String) -> String {
+    //     crate::client::translate(name)
+    // }
 
-    fn get_audit_server(&self) -> String {
-        if self.lc.read().unwrap().conn_id <= 0
-            || LocalConfig::get_option("access_token").is_empty()
-        {
-            return "".to_owned();
-        }
-        crate::get_audit_server(
-            Config::get_option("api-server"),
-            Config::get_option("custom-rendezvous-server"),
-        )
-    }
+    // fn get_audit_server(&self) -> String {
+    //     if self.lc.read().unwrap().conn_id <= 0
+    //         || LocalConfig::get_option("access_token").is_empty()
+    //     {
+    //         return "".to_owned();
+    //     }
+    //     crate::get_audit_server(
+    //         Config::get_option("api-server"),
+    //         Config::get_option("custom-rendezvous-server"),
+    //     )
+    // }
 
-    fn send_note(&self, note: String) {
-        let url = self.get_audit_server();
-        let id = self.id.clone();
-        let conn_id = self.lc.read().unwrap().conn_id;
-        std::thread::spawn(move || {
-            send_note(url, id, conn_id, note);
-        });
-    }
+    // fn send_note(&self, note: String) {
+    //     let url = self.get_audit_server();
+    //     let id = self.id.clone();
+    //     let conn_id = self.lc.read().unwrap().conn_id;
+    //     std::thread::spawn(move || {
+    //         send_note(url, id, conn_id, note);
+    //     });
+    // }
 
-    fn is_xfce(&self) -> bool {
-        crate::platform::is_xfce()
-    }
+    // fn is_xfce(&self) -> bool {
+    //     crate::platform::is_xfce()
+    // }
 
+    // TODO
     fn save_size(&mut self, x: i32, y: i32, w: i32, h: i32) {
         let size = (x, y, w, h);
         let mut config = self.load_config();
@@ -885,33 +890,33 @@ impl SciterSession {
         v
     }
 
-    fn remove_port_forward(&mut self, port: i32) {
-        let mut config = self.load_config();
-        config.port_forwards = config
-            .port_forwards
-            .drain(..)
-            .filter(|x| x.0 != port)
-            .collect();
-        self.save_config(config);
-        self.send(Data::RemovePortForward(port));
-    }
+    // fn remove_port_forward(&mut self, port: i32) {
+    //     let mut config = self.load_config();
+    //     config.port_forwards = config
+    //         .port_forwards
+    //         .drain(..)
+    //         .filter(|x| x.0 != port)
+    //         .collect();
+    //     self.save_config(config);
+    //     self.send(Data::RemovePortForward(port));
+    // }
 
-    fn add_port_forward(&mut self, port: i32, remote_host: String, remote_port: i32) {
-        let mut config = self.load_config();
-        if config
-            .port_forwards
-            .iter()
-            .filter(|x| x.0 == port)
-            .next()
-            .is_some()
-        {
-            return;
-        }
-        let pf = (port, remote_host, remote_port);
-        config.port_forwards.push(pf.clone());
-        self.save_config(config);
-        self.send(Data::AddPortForward(pf));
-    }
+    // fn add_port_forward(&mut self, port: i32, remote_host: String, remote_port: i32) {
+    //     let mut config = self.load_config();
+    //     if config
+    //         .port_forwards
+    //         .iter()
+    //         .filter(|x| x.0 == port)
+    //         .next()
+    //         .is_some()
+    //     {
+    //         return;
+    //     }
+    //     let pf = (port, remote_host, remote_port);
+    //     config.port_forwards.push(pf.clone());
+    //     self.save_config(config);
+    //     self.send(Data::AddPortForward(pf));
+    // }
 
     fn get_size(&mut self) -> Value {
         let s = if self.is_file_transfer() {
@@ -929,9 +934,9 @@ impl SciterSession {
         v
     }
 
-    fn get_id(&mut self) -> String {
-        self.id.clone()
-    }
+    // fn get_id(&mut self) -> String {
+    //     self.id.clone()
+    // }
 
     fn get_default_pi(&mut self) -> Value {
         let mut pi = Value::map();
@@ -950,46 +955,47 @@ impl SciterSession {
     //     self.lc.write().unwrap().set_option(k, v);
     // }
 
-    fn input_os_password(&mut self, pass: String, activate: bool) {
-        input_os_password(pass, activate, self.clone());
-    }
+    // fn input_os_password(&mut self, pass: String, activate: bool) {
+    //     input_os_password(pass, activate, self.clone());
+    // }
 
+    // close_state sciter only
     fn save_close_state(&mut self, k: String, v: String) {
         self.close_state.insert(k, v);
     }
 
-    fn get_chatbox(&mut self) -> String {
-        #[cfg(feature = "inline")]
-        return super::inline::get_chatbox();
-        #[cfg(not(feature = "inline"))]
-        return "".to_owned();
-    }
+    // fn get_chatbox(&mut self) -> String {
+    //     #[cfg(feature = "inline")]
+    //     return super::inline::get_chatbox();
+    //     #[cfg(not(feature = "inline"))]
+    //     return "".to_owned();
+    // }
 
-    fn get_icon(&mut self) -> String {
-        crate::get_icon()
-    }
+    // fn get_icon(&mut self) -> String {
+    //     crate::get_icon()
+    // }
 
-    fn send_chat(&mut self, text: String) {
-        let mut misc = Misc::new();
-        misc.set_chat_message(ChatMessage {
-            text,
-            ..Default::default()
-        });
-        let mut msg_out = Message::new();
-        msg_out.set_misc(misc);
-        self.send(Data::Message(msg_out));
-    }
+    // fn send_chat(&mut self, text: String) {
+    //     let mut misc = Misc::new();
+    //     misc.set_chat_message(ChatMessage {
+    //         text,
+    //         ..Default::default()
+    //     });
+    //     let mut msg_out = Message::new();
+    //     msg_out.set_misc(misc);
+    //     self.send(Data::Message(msg_out));
+    // }
 
-    fn switch_display(&mut self, display: i32) {
-        let mut misc = Misc::new();
-        misc.set_switch_display(SwitchDisplay {
-            display,
-            ..Default::default()
-        });
-        let mut msg_out = Message::new();
-        msg_out.set_misc(misc);
-        self.send(Data::Message(msg_out));
-    }
+    // fn switch_display(&mut self, display: i32) {
+    //     let mut misc = Misc::new();
+    //     misc.set_switch_display(SwitchDisplay {
+    //         display,
+    //         ..Default::default()
+    //     });
+    //     let mut msg_out = Message::new();
+    //     msg_out.set_misc(misc);
+    //     self.send(Data::Message(msg_out));
+    // }
 
     // fn is_file_transfer(&self) -> bool {
     //     self.cmd == "--file-transfer"
@@ -1003,15 +1009,15 @@ impl SciterSession {
     //     self.cmd == "--rdp"
     // }
 
-    fn reconnect(&mut self) {
-        println!("reconnecting");
-        let cloned = self.clone();
-        let mut lock = self.thread.lock().unwrap();
-        lock.take().map(|t| t.join());
-        *lock = Some(std::thread::spawn(move || {
-            io_loop(cloned);
-        }));
-    }
+    // fn reconnect(&mut self) {
+    //     println!("reconnecting");
+    //     let cloned = self.clone();
+    //     let mut lock = self.thread.lock().unwrap();
+    //     lock.take().map(|t| t.join());
+    //     *lock = Some(std::thread::spawn(move || {
+    //         io_loop(cloned);
+    //     }));
+    // }
 
     // #[inline]
     // fn peer_platform(&self) -> String {
@@ -1035,63 +1041,63 @@ impl SciterSession {
     //     }
     // }
 
-    fn get_icon_path(&mut self, file_type: i32, ext: String) -> String {
-        let mut path = Config::icon_path();
-        if file_type == FileType::DirLink as i32 {
-            let new_path = path.join("dir_link");
-            if !std::fs::metadata(&new_path).is_ok() {
-                #[cfg(windows)]
-                allow_err!(std::os::windows::fs::symlink_file(&path, &new_path));
-                #[cfg(not(windows))]
-                allow_err!(std::os::unix::fs::symlink(&path, &new_path));
-            }
-            path = new_path;
-        } else if file_type == FileType::File as i32 {
-            if !ext.is_empty() {
-                path = path.join(format!("file.{}", ext));
-            } else {
-                path = path.join("file");
-            }
-            if !std::fs::metadata(&path).is_ok() {
-                allow_err!(std::fs::File::create(&path));
-            }
-        } else if file_type == FileType::FileLink as i32 {
-            let new_path = path.join("file_link");
-            if !std::fs::metadata(&new_path).is_ok() {
-                path = path.join("file");
-                if !std::fs::metadata(&path).is_ok() {
-                    allow_err!(std::fs::File::create(&path));
-                }
-                #[cfg(windows)]
-                allow_err!(std::os::windows::fs::symlink_file(&path, &new_path));
-                #[cfg(not(windows))]
-                allow_err!(std::os::unix::fs::symlink(&path, &new_path));
-            }
-            path = new_path;
-        } else if file_type == FileType::DirDrive as i32 {
-            if cfg!(windows) {
-                path = fs::get_path("C:");
-            } else if cfg!(target_os = "macos") {
-                if let Ok(entries) = fs::get_path("/Volumes/").read_dir() {
-                    for entry in entries {
-                        if let Ok(entry) = entry {
-                            path = entry.path();
-                            break;
-                        }
-                    }
-                }
-            }
-        }
-        fs::get_string(&path)
-    }
+    // fn get_icon_path(&mut self, file_type: i32, ext: String) -> String {
+    //     let mut path = Config::icon_path();
+    //     if file_type == FileType::DirLink as i32 {
+    //         let new_path = path.join("dir_link");
+    //         if !std::fs::metadata(&new_path).is_ok() {
+    //             #[cfg(windows)]
+    //             allow_err!(std::os::windows::fs::symlink_file(&path, &new_path));
+    //             #[cfg(not(windows))]
+    //             allow_err!(std::os::unix::fs::symlink(&path, &new_path));
+    //         }
+    //         path = new_path;
+    //     } else if file_type == FileType::File as i32 {
+    //         if !ext.is_empty() {
+    //             path = path.join(format!("file.{}", ext));
+    //         } else {
+    //             path = path.join("file");
+    //         }
+    //         if !std::fs::metadata(&path).is_ok() {
+    //             allow_err!(std::fs::File::create(&path));
+    //         }
+    //     } else if file_type == FileType::FileLink as i32 {
+    //         let new_path = path.join("file_link");
+    //         if !std::fs::metadata(&new_path).is_ok() {
+    //             path = path.join("file");
+    //             if !std::fs::metadata(&path).is_ok() {
+    //                 allow_err!(std::fs::File::create(&path));
+    //             }
+    //             #[cfg(windows)]
+    //             allow_err!(std::os::windows::fs::symlink_file(&path, &new_path));
+    //             #[cfg(not(windows))]
+    //             allow_err!(std::os::unix::fs::symlink(&path, &new_path));
+    //         }
+    //         path = new_path;
+    //     } else if file_type == FileType::DirDrive as i32 {
+    //         if cfg!(windows) {
+    //             path = fs::get_path("C:");
+    //         } else if cfg!(target_os = "macos") {
+    //             if let Ok(entries) = fs::get_path("/Volumes/").read_dir() {
+    //                 for entry in entries {
+    //                     if let Ok(entry) = entry {
+    //                         path = entry.path();
+    //                         break;
+    //                     }
+    //                 }
+    //             }
+    //         }
+    //     }
+    //     fs::get_string(&path)
+    // }
 
-    fn login(&mut self, password: String, remember: bool) {
-        self.send(Data::Login((password, remember)));
-    }
+    // fn login(&mut self, password: String, remember: bool) {
+    //     self.send(Data::Login((password, remember)));
+    // }
 
-    fn new_rdp(&mut self) {
-        self.send(Data::NewRDP);
-    }
+    // fn new_rdp(&mut self) {
+    //     self.send(Data::NewRDP);
+    // }
 
     fn enter(&mut self) {
         #[cfg(windows)]
@@ -1383,1373 +1389,6 @@ impl SciterSession {
     // }
 }
 
-const MILLI1: Duration = Duration::from_millis(1);
-
-async fn start_one_port_forward<T: InvokeUi>(
-    handler: Session<T>,
-    port: i32,
-    remote_host: String,
-    remote_port: i32,
-    receiver: mpsc::UnboundedReceiver<Data>,
-    key: &str,
-    token: &str,
-) {
-    if let Err(err) = crate::port_forward::listen(
-        handler.id.clone(),
-        handler.password.clone(),
-        port,
-        handler.clone(),
-        receiver,
-        key,
-        token,
-        handler.lc.clone(),
-        remote_host,
-        remote_port,
-    )
-    .await
-    {
-        handler.on_error(&format!("Failed to listen on {}: {}", port, err));
-    }
-    log::info!("port forward (:{}) exit", port);
-}
-
-#[tokio::main(flavor = "current_thread")]
-async fn io_loop<T: InvokeUi>(handler: Session<T>) {
-    let (sender, mut receiver) = mpsc::unbounded_channel::<Data>();
-    *handler.sender.write().unwrap() = Some(sender.clone());
-    let mut options = crate::ipc::get_options_async().await;
-    let mut key = options.remove("key").unwrap_or("".to_owned());
-    let token = LocalConfig::get_option("access_token");
-    if key.is_empty() {
-        key = crate::platform::get_license_key();
-    }
-    if handler.is_port_forward() {
-        if handler.is_rdp() {
-            let port = handler
-                .get_option("rdp_port".to_owned())
-                .parse::<i32>()
-                .unwrap_or(3389);
-            std::env::set_var(
-                "rdp_username",
-                handler.get_option("rdp_username".to_owned()),
-            );
-            std::env::set_var(
-                "rdp_password",
-                handler.get_option("rdp_password".to_owned()),
-            );
-            log::info!("Remote rdp port: {}", port);
-            start_one_port_forward(handler, 0, "".to_owned(), port, receiver, &key, &token).await;
-        } else if handler.args.len() == 0 {
-            let pfs = handler.lc.read().unwrap().port_forwards.clone();
-            let mut queues = HashMap::<i32, mpsc::UnboundedSender<Data>>::new();
-            for d in pfs {
-                sender.send(Data::AddPortForward(d)).ok();
-            }
-            loop {
-                match receiver.recv().await {
-                    Some(Data::AddPortForward((port, remote_host, remote_port))) => {
-                        if port <= 0 || remote_port <= 0 {
-                            continue;
-                        }
-                        let (sender, receiver) = mpsc::unbounded_channel::<Data>();
-                        queues.insert(port, sender);
-                        let handler = handler.clone();
-                        let key = key.clone();
-                        let token = token.clone();
-                        tokio::spawn(async move {
-                            start_one_port_forward(
-                                handler,
-                                port,
-                                remote_host,
-                                remote_port,
-                                receiver,
-                                &key,
-                                &token,
-                            )
-                            .await;
-                        });
-                    }
-                    Some(Data::RemovePortForward(port)) => {
-                        if let Some(s) = queues.remove(&port) {
-                            s.send(Data::Close).ok();
-                        }
-                    }
-                    Some(Data::Close) => {
-                        break;
-                    }
-                    Some(d) => {
-                        for (_, s) in queues.iter() {
-                            s.send(d.clone()).ok();
-                        }
-                    }
-                    _ => {}
-                }
-            }
-        } else {
-            let port = handler.args[0].parse::<i32>().unwrap_or(0);
-            if handler.args.len() != 3
-                || handler.args[2].parse::<i32>().unwrap_or(0) <= 0
-                || port <= 0
-            {
-                handler.on_error("Invalid arguments, usage:<br><br> rustdesk --port-forward remote-id listen-port remote-host remote-port");
-            }
-            let remote_host = handler.args[1].clone();
-            let remote_port = handler.args[2].parse::<i32>().unwrap_or(0);
-            start_one_port_forward(
-                handler,
-                port,
-                remote_host,
-                remote_port,
-                receiver,
-                &key,
-                &token,
-            )
-            .await;
-        }
-        return;
-    }
-    let frame_count = Arc::new(AtomicUsize::new(0));
-    let frame_count_cl = frame_count.clone();
-    let (video_sender, audio_sender) = start_video_audio_threads(move |data: &[u8]| {
-        frame_count_cl.fetch_add(1, Ordering::Relaxed);
-        VIDEO
-            .lock()
-            .unwrap()
-            .as_mut()
-            .map(|v| v.render_frame(data).ok());
-    });
-
-    let mut remote = Remote {
-        handler,
-        video_sender,
-        audio_sender,
-        receiver,
-        sender,
-        old_clipboard: Default::default(),
-        read_jobs: Vec::new(),
-        write_jobs: Vec::new(),
-        remove_jobs: Default::default(),
-        timer: time::interval(SEC30),
-        last_update_jobs_status: (Instant::now(), Default::default()),
-        first_frame: false,
-        #[cfg(windows)]
-        clipboard_file_context: None,
-        data_count: Arc::new(AtomicUsize::new(0)),
-        frame_count,
-        video_format: CodecFormat::Unknown,
-    };
-    remote.io_loop(&key, &token).await;
-    remote.sync_jobs_status_to_local().await;
-}
-
-struct RemoveJob {
-    files: Vec<FileEntry>,
-    path: String,
-    sep: &'static str,
-    is_remote: bool,
-    no_confirm: bool,
-    last_update_job_status: Instant,
-}
-
-impl RemoveJob {
-    fn new(files: Vec<FileEntry>, path: String, sep: &'static str, is_remote: bool) -> Self {
-        Self {
-            files,
-            path,
-            sep,
-            is_remote,
-            no_confirm: false,
-            last_update_job_status: Instant::now(),
-        }
-    }
-
-    pub fn _gen_meta(&self) -> RemoveJobMeta {
-        RemoveJobMeta {
-            path: self.path.clone(),
-            is_remote: self.is_remote,
-            no_confirm: self.no_confirm,
-        }
-    }
-}
-
-struct Remote<T: InvokeUi> {
-    handler: Session<T>,
-    video_sender: MediaSender,
-    audio_sender: MediaSender,
-    receiver: mpsc::UnboundedReceiver<Data>,
-    sender: mpsc::UnboundedSender<Data>,
-    old_clipboard: Arc<Mutex<String>>,
-    read_jobs: Vec<fs::TransferJob>,
-    write_jobs: Vec<fs::TransferJob>,
-    remove_jobs: HashMap<i32, RemoveJob>,
-    timer: Interval,
-    last_update_jobs_status: (Instant, HashMap<i32, u64>),
-    first_frame: bool,
-    #[cfg(windows)]
-    clipboard_file_context: Option<Box<CliprdrClientContext>>,
-    data_count: Arc<AtomicUsize>,
-    frame_count: Arc<AtomicUsize>,
-    video_format: CodecFormat,
-}
-
-impl<T: InvokeUi> Remote<T> {
-    async fn io_loop(&mut self, key: &str, token: &str) {
-        let stop_clipboard = self.start_clipboard();
-        let mut last_recv_time = Instant::now();
-        let mut received = false;
-        let conn_type = if self.handler.is_file_transfer() {
-            ConnType::FILE_TRANSFER
-        } else {
-            ConnType::default()
-        };
-        match Client::start(
-            &self.handler.id,
-            key,
-            token,
-            conn_type,
-            self.handler.clone(),
-        )
-        .await
-        {
-            Ok((mut peer, direct)) => {
-                SERVER_KEYBOARD_ENABLED.store(true, Ordering::SeqCst);
-                SERVER_CLIPBOARD_ENABLED.store(true, Ordering::SeqCst);
-                SERVER_FILE_TRANSFER_ENABLED.store(true, Ordering::SeqCst);
-                // self.handler
-                //     .call("setConnectionType", &make_args!(peer.is_secured(), direct));
-                self.handler.set_connection_type(peer.is_secured(), direct);
-
-                // just build for now
-                #[cfg(not(windows))]
-                let (_tx_holder, mut rx_clip_client) = mpsc::unbounded_channel::<i32>();
-                #[cfg(windows)]
-                let mut rx_clip_client = get_rx_clip_client().lock().await;
-
-                let mut status_timer = time::interval(Duration::new(1, 0));
-
-                loop {
-                    tokio::select! {
-                        res = peer.next() => {
-                            if let Some(res) = res {
-                                match res {
-                                    Err(err) => {
-                                        log::error!("Connection closed: {}", err);
-                                        self.handler.set_force_relay(direct, received);
-                                        self.handler.msgbox("error", "Connection Error", &err.to_string());
-                                        break;
-                                    }
-                                    Ok(ref bytes) => {
-                                        last_recv_time = Instant::now();
-                                        received = true;
-                                        self.data_count.fetch_add(bytes.len(), Ordering::Relaxed);
-                                        if !self.handle_msg_from_peer(bytes, &mut peer).await {
-                                            break
-                                        }
-                                    }
-                                }
-                            } else {
-                                if self.handler.is_restarting_remote_device() {
-                                    log::info!("Restart remote device");
-                                    self.handler.msgbox("restarting", "Restarting Remote Device", "remote_restarting_tip");
-                                } else {
-                                    log::info!("Reset by the peer");
-                                    self.handler.msgbox("error", "Connection Error", "Reset by the peer");
-                                }
-                                break;
-                            }
-                        }
-                        d = self.receiver.recv() => {
-                            if let Some(d) = d {
-                                if !self.handle_msg_from_ui(d, &mut peer).await {
-                                    break;
-                                }
-                            }
-                        }
-                        _msg = rx_clip_client.recv() => {
-                            #[cfg(windows)]
-                            match _msg {
-                                Some((_, clip)) => {
-                                    allow_err!(peer.send(&clip_2_msg(clip)).await);
-                                }
-                                None => {
-                                    // unreachable!()
-                                }
-                            }
-                        }
-                        _ = self.timer.tick() => {
-                            if last_recv_time.elapsed() >= SEC30 {
-                                self.handler.msgbox("error", "Connection Error", "Timeout");
-                                break;
-                            }
-                            if !self.read_jobs.is_empty() {
-                                if let Err(err) = fs::handle_read_jobs(&mut self.read_jobs, &mut peer).await {
-                                    self.handler.msgbox("error", "Connection Error", &err.to_string());
-                                    break;
-                                }
-                                self.update_jobs_status();
-                            } else {
-                                self.timer = time::interval_at(Instant::now() + SEC30, SEC30);
-                            }
-                        }
-                        _ = status_timer.tick() => {
-                            let speed = self.data_count.swap(0, Ordering::Relaxed);
-                            let speed = format!("{:.2}kB/s", speed as f32 / 1024 as f32);
-                            let fps = self.frame_count.swap(0, Ordering::Relaxed) as _;
-                            self.handler.update_quality_status(QualityStatus {
-                                speed:Some(speed),
-                                fps:Some(fps),
-                                ..Default::default()
-                            });
-                        }
-                    }
-                }
-                log::debug!("Exit io_loop of id={}", self.handler.id);
-            }
-            Err(err) => {
-                self.handler
-                    .msgbox("error", "Connection Error", &err.to_string());
-            }
-        }
-        if let Some(stop) = stop_clipboard {
-            stop.send(()).ok();
-        }
-        SERVER_KEYBOARD_ENABLED.store(false, Ordering::SeqCst);
-        SERVER_CLIPBOARD_ENABLED.store(false, Ordering::SeqCst);
-        SERVER_FILE_TRANSFER_ENABLED.store(false, Ordering::SeqCst);
-    }
-
-    fn handle_job_status(&mut self, id: i32, file_num: i32, err: Option<String>) {
-        if let Some(job) = self.remove_jobs.get_mut(&id) {
-            if job.no_confirm {
-                let file_num = (file_num + 1) as usize;
-                if file_num < job.files.len() {
-                    let path = format!("{}{}{}", job.path, job.sep, job.files[file_num].name);
-                    self.sender
-                        .send(Data::RemoveFile((id, path, file_num as i32, job.is_remote)))
-                        .ok();
-                    let elapsed = job.last_update_job_status.elapsed().as_millis() as i32;
-                    if elapsed >= 1000 {
-                        job.last_update_job_status = Instant::now();
-                    } else {
-                        return;
-                    }
-                } else {
-                    self.remove_jobs.remove(&id);
-                }
-            }
-        }
-        if let Some(err) = err {
-            // self.handler
-            //     .call("jobError", &make_args!(id, err, file_num));
-            self.handler.job_error(id, err, file_num);
-        } else {
-            // self.handler.call("jobDone", &make_args!(id, file_num));
-            self.handler.job_done(id, file_num);
-        }
-    }
-
-    fn start_clipboard(&mut self) -> Option<std::sync::mpsc::Sender<()>> {
-        if self.handler.is_file_transfer() || self.handler.is_port_forward() {
-            return None;
-        }
-        let (tx, rx) = std::sync::mpsc::channel();
-        let old_clipboard = self.old_clipboard.clone();
-        let tx_protobuf = self.sender.clone();
-        let lc = self.handler.lc.clone();
-        match ClipboardContext::new() {
-            Ok(mut ctx) => {
-                // ignore clipboard update before service start
-                check_clipboard(&mut ctx, Some(&old_clipboard));
-                std::thread::spawn(move || loop {
-                    std::thread::sleep(Duration::from_millis(CLIPBOARD_INTERVAL));
-                    match rx.try_recv() {
-                        Ok(_) | Err(std::sync::mpsc::TryRecvError::Disconnected) => {
-                            log::debug!("Exit clipboard service of client");
-                            break;
-                        }
-                        _ => {}
-                    }
-                    if !SERVER_CLIPBOARD_ENABLED.load(Ordering::SeqCst)
-                        || !SERVER_KEYBOARD_ENABLED.load(Ordering::SeqCst)
-                        || lc.read().unwrap().disable_clipboard
-                    {
-                        continue;
-                    }
-                    if let Some(msg) = check_clipboard(&mut ctx, Some(&old_clipboard)) {
-                        tx_protobuf.send(Data::Message(msg)).ok();
-                    }
-                });
-            }
-            Err(err) => {
-                log::error!("Failed to start clipboard service of client: {}", err);
-            }
-        }
-        Some(tx)
-    }
-
-    async fn load_last_jobs(&mut self) {
-        log::info!("start load last jobs");
-        // self.handler.call("clearAllJobs", &make_args!());
-        self.handler.clear_all_jobs();
-        let pc = self.handler.load_config();
-        if pc.transfer.write_jobs.is_empty() && pc.transfer.read_jobs.is_empty() {
-            // no last jobs
-            return;
-        }
-        // TODO: can add a confirm dialog
-        let mut cnt = 1;
-        for job_str in pc.transfer.read_jobs.iter() {
-            let job: Result<TransferJobMeta, serde_json::Error> = serde_json::from_str(&job_str);
-            if let Ok(job) = job {
-                // self.handler.call(
-                //     "addJob",
-                //     &make_args!(
-                //         cnt,
-                //         job.to.clone(),
-                //         job.remote.clone(),
-                //         job.file_num,
-                //         job.show_hidden,
-                //         false
-                //     ),
-                // );
-                self.handler.add_job(
-                    cnt,
-                    job.to.clone(),
-                    job.remote.clone(),
-                    job.file_num,
-                    job.show_hidden,
-                    false,
-                );
-                cnt += 1;
-                println!("restore read_job: {:?}", job);
-            }
-        }
-        for job_str in pc.transfer.write_jobs.iter() {
-            let job: Result<TransferJobMeta, serde_json::Error> = serde_json::from_str(&job_str);
-            if let Ok(job) = job {
-                // self.handler.call(
-                //     "addJob",
-                //     &make_args!(
-                //         cnt,
-                //         job.remote.clone(),
-                //         job.to.clone(),
-                //         job.file_num,
-                //         job.show_hidden,
-                //         true
-                //     ),
-                // );
-                self.handler.add_job(
-                    cnt,
-                    job.remote.clone(),
-                    job.to.clone(),
-                    job.file_num,
-                    job.show_hidden,
-                    true,
-                );
-                cnt += 1;
-                println!("restore write_job: {:?}", job);
-            }
-        }
-        // self.handler.call("updateTransferList", &make_args!());
-        self.handler.update_transfer_list();
-    }
-
-    async fn handle_msg_from_ui(&mut self, data: Data, peer: &mut Stream) -> bool {
-        match data {
-            Data::Close => {
-                let mut misc = Misc::new();
-                misc.set_close_reason("".to_owned());
-                let mut msg = Message::new();
-                msg.set_misc(misc);
-                allow_err!(peer.send(&msg).await);
-                return false;
-            }
-            Data::Login((password, remember)) => {
-                self.handler
-                    .handle_login_from_ui(password, remember, peer)
-                    .await;
-            }
-            Data::ToggleClipboardFile => {
-                self.check_clipboard_file_context();
-            }
-            Data::Message(msg) => {
-                allow_err!(peer.send(&msg).await);
-            }
-            Data::SendFiles((id, path, to, file_num, include_hidden, is_remote)) => {
-                log::info!("send files, is remote {}", is_remote);
-                let od = can_enable_overwrite_detection(self.handler.lc.read().unwrap().version);
-                if is_remote {
-                    log::debug!("New job {}, write to {} from remote {}", id, to, path);
-                    self.write_jobs.push(fs::TransferJob::new_write(
-                        id,
-                        path.clone(),
-                        to,
-                        file_num,
-                        include_hidden,
-                        is_remote,
-                        Vec::new(),
-                        od,
-                    ));
-                    allow_err!(
-                        peer.send(&fs::new_send(id, path, file_num, include_hidden))
-                            .await
-                    );
-                } else {
-                    match fs::TransferJob::new_read(
-                        id,
-                        to.clone(),
-                        path.clone(),
-                        file_num,
-                        include_hidden,
-                        is_remote,
-                        od,
-                    ) {
-                        Err(err) => {
-                            self.handle_job_status(id, -1, Some(err.to_string()));
-                        }
-                        Ok(job) => {
-                            log::debug!(
-                                "New job {}, read {} to remote {}, {} files",
-                                id,
-                                path,
-                                to,
-                                job.files().len()
-                            );
-                            // let m = make_fd(job.id(), job.files(), true);
-                            // self.handler.call("updateFolderFiles", &make_args!(m)); // TODO
-                            #[cfg(not(windows))]
-                            let files = job.files().clone();
-                            #[cfg(windows)]
-                            let mut files = job.files().clone();
-                            #[cfg(windows)]
-                            if self.handler.peer_platform() != "Windows" {
-                                // peer is not windows, need transform \ to /
-                                fs::transform_windows_path(&mut files);
-                            }
-                            self.read_jobs.push(job);
-                            self.timer = time::interval(MILLI1);
-                            allow_err!(peer.send(&fs::new_receive(id, to, file_num, files)).await);
-                        }
-                    }
-                }
-            }
-            Data::AddJob((id, path, to, file_num, include_hidden, is_remote)) => {
-                let od = can_enable_overwrite_detection(self.handler.lc.read().unwrap().version);
-                if is_remote {
-                    log::debug!(
-                        "new write waiting job {}, write to {} from remote {}",
-                        id,
-                        to,
-                        path
-                    );
-                    let mut job = fs::TransferJob::new_write(
-                        id,
-                        path.clone(),
-                        to,
-                        file_num,
-                        include_hidden,
-                        is_remote,
-                        Vec::new(),
-                        od,
-                    );
-                    job.is_last_job = true;
-                    self.write_jobs.push(job);
-                } else {
-                    match fs::TransferJob::new_read(
-                        id,
-                        to.clone(),
-                        path.clone(),
-                        file_num,
-                        include_hidden,
-                        is_remote,
-                        od,
-                    ) {
-                        Err(err) => {
-                            self.handle_job_status(id, -1, Some(err.to_string()));
-                        }
-                        Ok(mut job) => {
-                            log::debug!(
-                                "new read waiting job {}, read {} to remote {}, {} files",
-                                id,
-                                path,
-                                to,
-                                job.files().len()
-                            );
-                            // let m = make_fd(job.id(), job.files(), true);
-                            // self.handler.call("updateFolderFiles", &make_args!(m));
-                            job.is_last_job = true;
-                            self.read_jobs.push(job);
-                            self.timer = time::interval(MILLI1);
-                        }
-                    }
-                }
-            }
-            Data::ResumeJob((id, is_remote)) => {
-                if is_remote {
-                    if let Some(job) = get_job(id, &mut self.write_jobs) {
-                        job.is_last_job = false;
-                        allow_err!(
-                            peer.send(&fs::new_send(
-                                id,
-                                job.remote.clone(),
-                                job.file_num,
-                                job.show_hidden
-                            ))
-                            .await
-                        );
-                    }
-                } else {
-                    if let Some(job) = get_job(id, &mut self.read_jobs) {
-                        job.is_last_job = false;
-                        allow_err!(
-                            peer.send(&fs::new_receive(
-                                id,
-                                job.path.to_string_lossy().to_string(),
-                                job.file_num,
-                                job.files.clone()
-                            ))
-                            .await
-                        );
-                    }
-                }
-            }
-            Data::SetNoConfirm(id) => {
-                if let Some(job) = self.remove_jobs.get_mut(&id) {
-                    job.no_confirm = true;
-                }
-            }
-            Data::ConfirmDeleteFiles((id, file_num)) => {
-                if let Some(job) = self.remove_jobs.get_mut(&id) {
-                    let i = file_num as usize;
-                    if i < job.files.len() {
-                        // self.handler.call(
-                        //     "confirmDeleteFiles",
-                        //     &make_args!(id, file_num, job.files[i].name.clone()),
-                        // );
-                        self.handler.confirm_delete_files(id, file_num);
-                    }
-                }
-            }
-            Data::SetConfirmOverrideFile((id, file_num, need_override, remember, is_upload)) => {
-                if is_upload {
-                    if let Some(job) = fs::get_job(id, &mut self.read_jobs) {
-                        if remember {
-                            job.set_overwrite_strategy(Some(need_override));
-                        }
-                        job.confirm(&FileTransferSendConfirmRequest {
-                            id,
-                            file_num,
-                            union: if need_override {
-                                Some(file_transfer_send_confirm_request::Union::OffsetBlk(0))
-                            } else {
-                                Some(file_transfer_send_confirm_request::Union::Skip(true))
-                            },
-                            ..Default::default()
-                        });
-                    }
-                } else {
-                    if let Some(job) = fs::get_job(id, &mut self.write_jobs) {
-                        if remember {
-                            job.set_overwrite_strategy(Some(need_override));
-                        }
-                        let mut msg = Message::new();
-                        let mut file_action = FileAction::new();
-                        file_action.set_send_confirm(FileTransferSendConfirmRequest {
-                            id,
-                            file_num,
-                            union: if need_override {
-                                Some(file_transfer_send_confirm_request::Union::OffsetBlk(0))
-                            } else {
-                                Some(file_transfer_send_confirm_request::Union::Skip(true))
-                            },
-                            ..Default::default()
-                        });
-                        msg.set_file_action(file_action);
-                        allow_err!(peer.send(&msg).await);
-                    }
-                }
-            }
-            Data::RemoveDirAll((id, path, is_remote, include_hidden)) => {
-                let sep = self.handler.get_path_sep(is_remote);
-                if is_remote {
-                    let mut msg_out = Message::new();
-                    let mut file_action = FileAction::new();
-                    file_action.set_all_files(ReadAllFiles {
-                        id,
-                        path: path.clone(),
-                        include_hidden,
-                        ..Default::default()
-                    });
-                    msg_out.set_file_action(file_action);
-                    allow_err!(peer.send(&msg_out).await);
-                    self.remove_jobs
-                        .insert(id, RemoveJob::new(Vec::new(), path, sep, is_remote));
-                } else {
-                    match fs::get_recursive_files(&path, include_hidden) {
-                        Ok(entries) => {
-                            // let m = make_fd(id, &entries, true);
-                            // self.handler.call("updateFolderFiles", &make_args!(m));
-                            self.remove_jobs
-                                .insert(id, RemoveJob::new(entries, path, sep, is_remote));
-                        }
-                        Err(err) => {
-                            self.handle_job_status(id, -1, Some(err.to_string()));
-                        }
-                    }
-                }
-            }
-            Data::CancelJob(id) => {
-                let mut msg_out = Message::new();
-                let mut file_action = FileAction::new();
-                file_action.set_cancel(FileTransferCancel {
-                    id: id,
-                    ..Default::default()
-                });
-                msg_out.set_file_action(file_action);
-                allow_err!(peer.send(&msg_out).await);
-                if let Some(job) = fs::get_job(id, &mut self.write_jobs) {
-                    job.remove_download_file();
-                    fs::remove_job(id, &mut self.write_jobs);
-                }
-                fs::remove_job(id, &mut self.read_jobs);
-                self.remove_jobs.remove(&id);
-            }
-            Data::RemoveDir((id, path)) => {
-                let mut msg_out = Message::new();
-                let mut file_action = FileAction::new();
-                file_action.set_remove_dir(FileRemoveDir {
-                    id,
-                    path,
-                    recursive: true,
-                    ..Default::default()
-                });
-                msg_out.set_file_action(file_action);
-                allow_err!(peer.send(&msg_out).await);
-            }
-            Data::RemoveFile((id, path, file_num, is_remote)) => {
-                if is_remote {
-                    let mut msg_out = Message::new();
-                    let mut file_action = FileAction::new();
-                    file_action.set_remove_file(FileRemoveFile {
-                        id,
-                        path,
-                        file_num,
-                        ..Default::default()
-                    });
-                    msg_out.set_file_action(file_action);
-                    allow_err!(peer.send(&msg_out).await);
-                } else {
-                    match fs::remove_file(&path) {
-                        Err(err) => {
-                            self.handle_job_status(id, file_num, Some(err.to_string()));
-                        }
-                        Ok(()) => {
-                            self.handle_job_status(id, file_num, None);
-                        }
-                    }
-                }
-            }
-            Data::CreateDir((id, path, is_remote)) => {
-                if is_remote {
-                    let mut msg_out = Message::new();
-                    let mut file_action = FileAction::new();
-                    file_action.set_create(FileDirCreate {
-                        id,
-                        path,
-                        ..Default::default()
-                    });
-                    msg_out.set_file_action(file_action);
-                    allow_err!(peer.send(&msg_out).await);
-                } else {
-                    match fs::create_dir(&path) {
-                        Err(err) => {
-                            self.handle_job_status(id, -1, Some(err.to_string()));
-                        }
-                        Ok(()) => {
-                            self.handle_job_status(id, -1, None);
-                        }
-                    }
-                }
-            }
-            _ => {}
-        }
-        true
-    }
-
-    #[inline]
-    fn update_job_status(
-        job: &fs::TransferJob,
-        elapsed: i32,
-        last_update_jobs_status: &mut (Instant, HashMap<i32, u64>),
-        handler: &mut Session<T>,
-    ) {
-        if elapsed <= 0 {
-            return;
-        }
-        let transferred = job.transferred();
-        let last_transferred = {
-            if let Some(v) = last_update_jobs_status.1.get(&job.id()) {
-                v.to_owned()
-            } else {
-                0
-            }
-        };
-        last_update_jobs_status.1.insert(job.id(), transferred);
-        let speed = (transferred - last_transferred) as f64 / (elapsed as f64 / 1000.);
-        let file_num = job.file_num() - 1;
-        // handler.call(
-        //     "jobProgress",
-        //     &make_args!(job.id(), file_num, speed, job.finished_size() as f64),
-        // );
-        handler.job_progress(job.id(), file_num, speed, job.finished_size() as f64);
-    }
-
-    fn update_jobs_status(&mut self) {
-        let elapsed = self.last_update_jobs_status.0.elapsed().as_millis() as i32;
-        if elapsed >= 1000 {
-            for job in self.read_jobs.iter() {
-                Self::update_job_status(
-                    job,
-                    elapsed,
-                    &mut self.last_update_jobs_status,
-                    &mut self.handler,
-                );
-            }
-            for job in self.write_jobs.iter() {
-                Self::update_job_status(
-                    job,
-                    elapsed,
-                    &mut self.last_update_jobs_status,
-                    &mut self.handler,
-                );
-            }
-            self.last_update_jobs_status.0 = Instant::now();
-        }
-    }
-
-    async fn sync_jobs_status_to_local(&mut self) -> bool {
-        log::info!("sync transfer job status");
-        let mut config: PeerConfig = self.handler.load_config();
-        let mut transfer_metas = TransferSerde::default();
-        for job in self.read_jobs.iter() {
-            let json_str = serde_json::to_string(&job.gen_meta()).unwrap_or_default();
-            transfer_metas.read_jobs.push(json_str);
-        }
-        for job in self.write_jobs.iter() {
-            let json_str = serde_json::to_string(&job.gen_meta()).unwrap_or_default();
-            transfer_metas.write_jobs.push(json_str);
-        }
-        log::info!("meta: {:?}", transfer_metas);
-        config.transfer = transfer_metas;
-        self.handler.save_config(config);
-        true
-    }
-
-    async fn send_opts_after_login(&self, peer: &mut Stream) {
-        if let Some(opts) = self
-            .handler
-            .lc
-            .read()
-            .unwrap()
-            .get_option_message_after_login()
-        {
-            let mut misc = Misc::new();
-            misc.set_option(opts);
-            let mut msg_out = Message::new();
-            msg_out.set_misc(misc);
-            allow_err!(peer.send(&msg_out).await);
-        }
-    }
-
-    async fn handle_msg_from_peer(&mut self, data: &[u8], peer: &mut Stream) -> bool {
-        if let Ok(msg_in) = Message::parse_from_bytes(&data) {
-            match msg_in.union {
-                Some(message::Union::VideoFrame(vf)) => {
-                    if !self.first_frame {
-                        self.first_frame = true;
-                        // self.handler.call2("closeSuccess", &make_args!());
-                        self.handler.close_success();
-                        // self.handler.call("adaptSize", &make_args!());
-                        self.handler.adapt_size();
-                        self.send_opts_after_login(peer).await;
-                    }
-                    let incomming_format = CodecFormat::from(&vf);
-                    if self.video_format != incomming_format {
-                        self.video_format = incomming_format.clone();
-                        self.handler.update_quality_status(QualityStatus {
-                            codec_format: Some(incomming_format),
-                            ..Default::default()
-                        })
-                    };
-                    self.video_sender.send(MediaData::VideoFrame(vf)).ok();
-                }
-                Some(message::Union::Hash(hash)) => {
-                    self.handler
-                        .handle_hash(&self.handler.password.clone(), hash, peer)
-                        .await;
-                }
-                Some(message::Union::LoginResponse(lr)) => match lr.union {
-                    Some(login_response::Union::Error(err)) => {
-                        if !self.handler.handle_login_error(&err) {
-                            return false;
-                        }
-                    }
-                    Some(login_response::Union::PeerInfo(pi)) => {
-                        self.handler.handle_peer_info(pi);
-                        self.check_clipboard_file_context();
-                        if !(self.handler.is_file_transfer()
-                            || self.handler.is_port_forward()
-                            || !SERVER_CLIPBOARD_ENABLED.load(Ordering::SeqCst)
-                            || !SERVER_KEYBOARD_ENABLED.load(Ordering::SeqCst)
-                            || self.handler.lc.read().unwrap().disable_clipboard)
-                        {
-                            let txt = self.old_clipboard.lock().unwrap().clone();
-                            if !txt.is_empty() {
-                                let msg_out = crate::create_clipboard_msg(txt);
-                                let sender = self.sender.clone();
-                                tokio::spawn(async move {
-                                    // due to clipboard service interval time
-                                    sleep(common::CLIPBOARD_INTERVAL as f32 / 1_000.).await;
-                                    sender.send(Data::Message(msg_out)).ok();
-                                });
-                            }
-                        }
-
-                        if self.handler.is_file_transfer() {
-                            self.load_last_jobs().await;
-                        }
-                    }
-                    _ => {}
-                },
-                Some(message::Union::CursorData(cd)) => {
-                    self.handler.set_cursor_data(cd);
-                }
-                Some(message::Union::CursorId(id)) => {
-                    self.handler.set_cursor_id(id.to_string());
-                }
-                Some(message::Union::CursorPosition(cp)) => {
-                    self.handler.set_cursor_position(cp);
-                }
-                Some(message::Union::Clipboard(cb)) => {
-                    if !self.handler.lc.read().unwrap().disable_clipboard {
-                        update_clipboard(cb, Some(&self.old_clipboard));
-                    }
-                }
-                #[cfg(windows)]
-                Some(message::Union::Cliprdr(clip)) => {
-                    if !self.handler.lc.read().unwrap().disable_clipboard {
-                        if let Some(context) = &mut self.clipboard_file_context {
-                            if let Some(clip) = msg_2_clip(clip) {
-                                server_clip_file(context, 0, clip);
-                            }
-                        }
-                    }
-                }
-                Some(message::Union::FileResponse(fr)) => {
-                    match fr.union {
-                        Some(file_response::Union::Dir(fd)) => {
-                            #[cfg(windows)]
-                            let entries = fd.entries.to_vec();
-                            #[cfg(not(windows))]
-                            let mut entries = fd.entries.to_vec();
-                            #[cfg(not(windows))]
-                            {
-                                if self.handler.peer_platform() == "Windows" {
-                                    fs::transform_windows_path(&mut entries);
-                                }
-                            }
-                            // let mut m = make_fd(fd.id, &entries, fd.id > 0);
-                            // if fd.id <= 0 {
-                            //     m.set_item("path", fd.path);
-                            // }
-                            // self.handler.call("updateFolderFiles", &make_args!(m));
-                            if let Some(job) = fs::get_job(fd.id, &mut self.write_jobs) {
-                                log::info!("job set_files: {:?}", entries);
-                                job.set_files(entries);
-                            } else if let Some(job) = self.remove_jobs.get_mut(&fd.id) {
-                                job.files = entries;
-                            }
-                        }
-                        Some(file_response::Union::Digest(digest)) => {
-                            if digest.is_upload {
-                                if let Some(job) = fs::get_job(digest.id, &mut self.read_jobs) {
-                                    if let Some(file) = job.files().get(digest.file_num as usize) {
-                                        let read_path = get_string(&job.join(&file.name));
-                                        let overwrite_strategy = job.default_overwrite_strategy();
-                                        if let Some(overwrite) = overwrite_strategy {
-                                            let req = FileTransferSendConfirmRequest {
-                                                id: digest.id,
-                                                file_num: digest.file_num,
-                                                union: Some(if overwrite {
-                                                    file_transfer_send_confirm_request::Union::OffsetBlk(0)
-                                                } else {
-                                                    file_transfer_send_confirm_request::Union::Skip(
-                                                        true,
-                                                    )
-                                                }),
-                                                ..Default::default()
-                                            };
-                                            job.confirm(&req);
-                                            let msg = new_send_confirm(req);
-                                            allow_err!(peer.send(&msg).await);
-                                        } else {
-                                            // self.handler.call(
-                                            //     "overrideFileConfirm",
-                                            //     &make_args!(
-                                            //         digest.id,
-                                            //         digest.file_num,
-                                            //         read_path,
-                                            //         true
-                                            //     ),
-                                            // );
-                                            self.handler.override_file_confirm(
-                                                digest.id,
-                                                digest.file_num,
-                                                read_path,
-                                                true,
-                                            );
-                                        }
-                                    }
-                                }
-                            } else {
-                                if let Some(job) = fs::get_job(digest.id, &mut self.write_jobs) {
-                                    if let Some(file) = job.files().get(digest.file_num as usize) {
-                                        let write_path = get_string(&job.join(&file.name));
-                                        let overwrite_strategy = job.default_overwrite_strategy();
-                                        match fs::is_write_need_confirmation(&write_path, &digest) {
-                                            Ok(res) => match res {
-                                                DigestCheckResult::IsSame => {
-                                                    let msg= new_send_confirm(FileTransferSendConfirmRequest {
-                                                        id: digest.id,
-                                                        file_num: digest.file_num,
-                                                        union: Some(file_transfer_send_confirm_request::Union::Skip(true)),
-                                                        ..Default::default()
-                                                    });
-                                                    allow_err!(peer.send(&msg).await);
-                                                }
-                                                DigestCheckResult::NeedConfirm(digest) => {
-                                                    if let Some(overwrite) = overwrite_strategy {
-                                                        let msg = new_send_confirm(
-                                                            FileTransferSendConfirmRequest {
-                                                                id: digest.id,
-                                                                file_num: digest.file_num,
-                                                                union: Some(if overwrite {
-                                                                    file_transfer_send_confirm_request::Union::OffsetBlk(0)
-                                                                } else {
-                                                                    file_transfer_send_confirm_request::Union::Skip(true)
-                                                                }),
-                                                                ..Default::default()
-                                                            },
-                                                        );
-                                                        allow_err!(peer.send(&msg).await);
-                                                    } else {
-                                                        // self.handler.call(
-                                                        //     "overrideFileConfirm",
-                                                        //     &make_args!(
-                                                        //         digest.id,
-                                                        //         digest.file_num,
-                                                        //         write_path,
-                                                        //         false
-                                                        //     ),
-                                                        // );
-                                                        self.handler.override_file_confirm(
-                                                            digest.id,
-                                                            digest.file_num,
-                                                            write_path,
-                                                            false,
-                                                        );
-                                                    }
-                                                }
-                                                DigestCheckResult::NoSuchFile => {
-                                                    let msg = new_send_confirm(
-                                                    FileTransferSendConfirmRequest {
-                                                        id: digest.id,
-                                                        file_num: digest.file_num,
-                                                        union: Some(file_transfer_send_confirm_request::Union::OffsetBlk(0)),
-                                                        ..Default::default()
-                                                    },
-                                                );
-                                                    allow_err!(peer.send(&msg).await);
-                                                }
-                                            },
-                                            Err(err) => {
-                                                println!("error recving digest: {}", err);
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                        Some(file_response::Union::Block(block)) => {
-                            log::info!(
-                                "file response block, file id:{}, file num: {}",
-                                block.id,
-                                block.file_num
-                            );
-                            if let Some(job) = fs::get_job(block.id, &mut self.write_jobs) {
-                                if let Err(_err) = job.write(block, None).await {
-                                    // to-do: add "skip" for writing job
-                                }
-                                self.update_jobs_status();
-                            }
-                        }
-                        Some(file_response::Union::Done(d)) => {
-                            if let Some(job) = fs::get_job(d.id, &mut self.write_jobs) {
-                                job.modify_time();
-                                fs::remove_job(d.id, &mut self.write_jobs);
-                            }
-                            self.handle_job_status(d.id, d.file_num, None);
-                        }
-                        Some(file_response::Union::Error(e)) => {
-                            self.handle_job_status(e.id, e.file_num, Some(e.error));
-                        }
-                        _ => {}
-                    }
-                }
-                Some(message::Union::Misc(misc)) => match misc.union {
-                    Some(misc::Union::AudioFormat(f)) => {
-                        self.audio_sender.send(MediaData::AudioFormat(f)).ok();
-                    }
-                    Some(misc::Union::ChatMessage(c)) => {
-                        // self.handler.call("newMessage", &make_args!(c.text)); // TODO
-                    }
-                    Some(misc::Union::PermissionInfo(p)) => {
-                        log::info!("Change permission {:?} -> {}", p.permission, p.enabled);
-                        match p.permission.enum_value_or_default() {
-                            Permission::Keyboard => {
-                                SERVER_KEYBOARD_ENABLED.store(p.enabled, Ordering::SeqCst);
-                                // self.handler
-                                //     .call2("setPermission", &make_args!("keyboard", p.enabled));
-                                self.handler.set_permission("keyboard", p.enabled);
-                            }
-                            Permission::Clipboard => {
-                                SERVER_CLIPBOARD_ENABLED.store(p.enabled, Ordering::SeqCst);
-                                // self.handler
-                                //     .call2("setPermission", &make_args!("clipboard", p.enabled));
-                                self.handler.set_permission("clipboard", p.enabled);
-                            }
-                            Permission::Audio => {
-                                // self.handler
-                                //     .call2("setPermission", &make_args!("audio", p.enabled));
-                                self.handler.set_permission("audio", p.enabled);
-                            }
-                            Permission::File => {
-                                SERVER_FILE_TRANSFER_ENABLED.store(p.enabled, Ordering::SeqCst);
-                                if !p.enabled && self.handler.is_file_transfer() {
-                                    return true;
-                                }
-                                self.check_clipboard_file_context();
-                                // self.handler
-                                //     .call2("setPermission", &make_args!("file", p.enabled));
-                                self.handler.set_permission("file", p.enabled);
-                            }
-                            Permission::Restart => {
-                                // self.handler
-                                //     .call2("setPermission", &make_args!("restart", p.enabled));
-                                self.handler.set_permission("restart", p.enabled);
-                            }
-                        }
-                    }
-                    Some(misc::Union::SwitchDisplay(s)) => {
-                        // self.handler.call("switchDisplay", &make_args!(s.display)); // TODO
-                        self.video_sender.send(MediaData::Reset).ok();
-                        if s.width > 0 && s.height > 0 {
-                            VIDEO.lock().unwrap().as_mut().map(|v| {
-                                v.stop_streaming().ok();
-                                let ok = v.start_streaming(
-                                    (s.width, s.height),
-                                    COLOR_SPACE::Rgb32,
-                                    None,
-                                );
-                                log::info!("[video] reinitialized: {:?}", ok);
-                            });
-                            self.handler.set_display(s.x, s.y, s.width, s.height);
-                        }
-                    }
-                    Some(misc::Union::CloseReason(c)) => {
-                        self.handler.msgbox("error", "Connection Error", &c);
-                        return false;
-                    }
-                    Some(misc::Union::BackNotification(notification)) => {
-                        if !self.handle_back_notification(notification).await {
-                            return false;
-                        }
-                    }
-                    _ => {}
-                },
-                Some(message::Union::TestDelay(t)) => {
-                    self.handler.handle_test_delay(t, peer).await;
-                }
-                Some(message::Union::AudioFrame(frame)) => {
-                    if !self.handler.lc.read().unwrap().disable_audio {
-                        self.audio_sender.send(MediaData::AudioFrame(frame)).ok();
-                    }
-                }
-                Some(message::Union::FileAction(action)) => match action.union {
-                    Some(file_action::Union::SendConfirm(c)) => {
-                        if let Some(job) = fs::get_job(c.id, &mut self.read_jobs) {
-                            job.confirm(&c);
-                        }
-                    }
-                    _ => {}
-                },
-                _ => {}
-            }
-        }
-        true
-    }
-
-    async fn handle_back_notification(&mut self, notification: BackNotification) -> bool {
-        match notification.union {
-            Some(back_notification::Union::BlockInputState(state)) => {
-                self.handle_back_msg_block_input(
-                    state.enum_value_or(back_notification::BlockInputState::BlkStateUnknown),
-                )
-                .await;
-            }
-            Some(back_notification::Union::PrivacyModeState(state)) => {
-                if !self
-                    .handle_back_msg_privacy_mode(
-                        state.enum_value_or(back_notification::PrivacyModeState::PrvStateUnknown),
-                    )
-                    .await
-                {
-                    return false;
-                }
-            }
-            _ => {}
-        }
-        true
-    }
-
-    #[inline(always)]
-    fn update_block_input_state(&mut self, on: bool) {
-        // self.handler.call("updateBlockInputState", &make_args!(on)); // TODO
-    }
-
-    async fn handle_back_msg_block_input(&mut self, state: back_notification::BlockInputState) {
-        match state {
-            back_notification::BlockInputState::BlkOnSucceeded => {
-                self.update_block_input_state(true);
-            }
-            back_notification::BlockInputState::BlkOnFailed => {
-                self.handler
-                    .msgbox("custom-error", "Block user input", "Failed");
-                self.update_block_input_state(false);
-            }
-            back_notification::BlockInputState::BlkOffSucceeded => {
-                self.update_block_input_state(false);
-            }
-            back_notification::BlockInputState::BlkOffFailed => {
-                self.handler
-                    .msgbox("custom-error", "Unblock user input", "Failed");
-            }
-            _ => {}
-        }
-    }
-
-    #[inline(always)]
-    fn update_privacy_mode(&mut self, on: bool) {
-        let mut config = self.handler.load_config();
-        config.privacy_mode = on;
-        self.handler.save_config(config);
-
-        // self.handler.call("updatePrivacyMode", &[]);
-        self.handler.update_privacy_mode();
-    }
-
-    async fn handle_back_msg_privacy_mode(
-        &mut self,
-        state: back_notification::PrivacyModeState,
-    ) -> bool {
-        match state {
-            back_notification::PrivacyModeState::PrvOnByOther => {
-                self.handler.msgbox(
-                    "error",
-                    "Connecting...",
-                    "Someone turns on privacy mode, exit",
-                );
-                return false;
-            }
-            back_notification::PrivacyModeState::PrvNotSupported => {
-                self.handler
-                    .msgbox("custom-error", "Privacy mode", "Unsupported");
-                self.update_privacy_mode(false);
-            }
-            back_notification::PrivacyModeState::PrvOnSucceeded => {
-                self.handler
-                    .msgbox("custom-nocancel", "Privacy mode", "In privacy mode");
-                self.update_privacy_mode(true);
-            }
-            back_notification::PrivacyModeState::PrvOnFailedDenied => {
-                self.handler
-                    .msgbox("custom-error", "Privacy mode", "Peer denied");
-                self.update_privacy_mode(false);
-            }
-            back_notification::PrivacyModeState::PrvOnFailedPlugin => {
-                self.handler
-                    .msgbox("custom-error", "Privacy mode", "Please install plugins");
-                self.update_privacy_mode(false);
-            }
-            back_notification::PrivacyModeState::PrvOnFailed => {
-                self.handler
-                    .msgbox("custom-error", "Privacy mode", "Failed");
-                self.update_privacy_mode(false);
-            }
-            back_notification::PrivacyModeState::PrvOffSucceeded => {
-                self.handler
-                    .msgbox("custom-nocancel", "Privacy mode", "Out privacy mode");
-                self.update_privacy_mode(false);
-            }
-            back_notification::PrivacyModeState::PrvOffByPeer => {
-                self.handler
-                    .msgbox("custom-error", "Privacy mode", "Peer exit");
-                self.update_privacy_mode(false);
-            }
-            back_notification::PrivacyModeState::PrvOffFailed => {
-                self.handler
-                    .msgbox("custom-error", "Privacy mode", "Failed to turn off");
-            }
-            back_notification::PrivacyModeState::PrvOffUnknown => {
-                self.handler
-                    .msgbox("custom-error", "Privacy mode", "Turned off");
-                // log::error!("Privacy mode is turned off with unknown reason");
-                self.update_privacy_mode(false);
-            }
-            _ => {}
-        }
-        true
-    }
-
-    fn check_clipboard_file_context(&mut self) {
-        #[cfg(windows)]
-        {
-            let enabled = SERVER_FILE_TRANSFER_ENABLED.load(Ordering::SeqCst)
-                && self.handler.lc.read().unwrap().enable_file_transfer;
-            if enabled == self.clipboard_file_context.is_none() {
-                self.clipboard_file_context = if enabled {
-                    match create_clipboard_file_context(true, false) {
-                        Ok(context) => {
-                            log::info!("clipboard context for file transfer created.");
-                            Some(context)
-                        }
-                        Err(err) => {
-                            log::error!(
-                                "Create clipboard context for file transfer: {}",
-                                err.to_string()
-                            );
-                            None
-                        }
-                    }
-                } else {
-                    log::info!("clipboard context for file transfer destroyed.");
-                    None
-                };
-            }
-        }
-    }
-}
-
 pub fn make_fd(id: i32, entries: &Vec<FileEntry>, only_count: bool) -> Value {
     let mut m = Value::map();
     m.set_item("id", id);
@@ -2775,142 +1414,4 @@ pub fn make_fd(id: i32, entries: &Vec<FileEntry>, only_count: bool) -> Value {
     }
     m.set_item("total_size", n as f64);
     m
-}
-
-// #[async_trait]
-// impl Interface for Handler {
-//     fn send(&self, data: Data) {
-//         if let Some(ref sender) = self.read().unwrap().sender {
-//             sender.send(data).ok();
-//         }
-//     }
-
-//     fn msgbox(&self, msgtype: &str, title: &str, text: &str) {
-//         let retry = check_if_retry(msgtype, title, text);
-//         self.call2("msgbox_retry", &make_args!(msgtype, title, text, retry));
-//     }
-
-//     fn handle_login_error(&mut self, err: &str) -> bool {
-//         self.lc.write().unwrap().handle_login_error(err, self)
-//     }
-
-//     fn handle_peer_info(&mut self, pi: PeerInfo) {
-//         let mut pi_sciter = Value::map();
-//         let username = self.lc.read().unwrap().get_username(&pi);
-//         pi_sciter.set_item("username", username.clone());
-//         pi_sciter.set_item("hostname", pi.hostname.clone());
-//         pi_sciter.set_item("platform", pi.platform.clone());
-//         pi_sciter.set_item("sas_enabled", pi.sas_enabled);
-//         if get_version_number(&pi.version) < get_version_number("1.1.10") {
-//             self.call2("setPermission", &make_args!("restart", false));
-//         }
-//         if self.is_file_transfer() {
-//             if pi.username.is_empty() {
-//                 self.on_error("No active console user logged on, please connect and logon first.");
-//                 return;
-//             }
-//         } else if !self.is_port_forward() {
-//             if pi.displays.is_empty() {
-//                 self.lc.write().unwrap().handle_peer_info(username, pi);
-//                 self.call("updatePrivacyMode", &[]);
-//                 self.msgbox("error", "Remote Error", "No Display");
-//                 return;
-//             }
-//             let mut displays = Value::array(0);
-//             for ref d in pi.displays.iter() {
-//                 let mut display = Value::map();
-//                 display.set_item("x", d.x);
-//                 display.set_item("y", d.y);
-//                 display.set_item("width", d.width);
-//                 display.set_item("height", d.height);
-//                 displays.push(display);
-//             }
-//             pi_sciter.set_item("displays", displays);
-//             let mut current = pi.current_display as usize;
-//             if current >= pi.displays.len() {
-//                 current = 0;
-//             }
-//             pi_sciter.set_item("current_display", current as i32);
-//             let current = &pi.displays[current];
-//             self.set_display(current.x, current.y, current.width, current.height);
-//             // https://sciter.com/forums/topic/color_spaceiyuv-crash
-//             // Nothing spectacular in decoder – done on CPU side.
-//             // So if you can do BGRA translation on your side – the better.
-//             // BGRA is used as internal image format so it will not require additional transformations.
-//             VIDEO.lock().unwrap().as_mut().map(|v| {
-//                 let ok = v.start_streaming(
-//                     (current.width as _, current.height as _),
-//                     COLOR_SPACE::Rgb32,
-//                     None,
-//                 );
-//                 log::info!("[video] initialized: {:?}", ok);
-//             });
-//             let p = self.lc.read().unwrap().should_auto_login();
-//             if !p.is_empty() {
-//                 input_os_password(p, true, self.clone());
-//             }
-//         }
-//         self.lc.write().unwrap().handle_peer_info(username, pi);
-//         self.call("updatePrivacyMode", &[]);
-//         self.call("updatePi", &make_args!(pi_sciter));
-//         if self.is_file_transfer() {
-//             self.call2("closeSuccess", &make_args!());
-//         } else if !self.is_port_forward() {
-//             self.msgbox("success", "Successful", "Connected, waiting for image...");
-//         }
-//         #[cfg(windows)]
-//         {
-//             let mut path = std::env::temp_dir();
-//             path.push(&self.id);
-//             let path = path.with_extension(crate::get_app_name().to_lowercase());
-//             std::fs::File::create(&path).ok();
-//             if let Some(path) = path.to_str() {
-//                 crate::platform::windows::add_recent_document(&path);
-//             }
-//         }
-//         self.start_keyboard_hook();
-//     }
-
-//     async fn handle_hash(&mut self, pass: &str, hash: Hash, peer: &mut Stream) {
-//         handle_hash(self.lc.clone(), pass, hash, self, peer).await;
-//     }
-
-//     async fn handle_login_from_ui(&mut self, password: String, remember: bool, peer: &mut Stream) {
-//         handle_login_from_ui(self.lc.clone(), password, remember, peer).await;
-//     }
-
-//     async fn handle_test_delay(&mut self, t: TestDelay, peer: &mut Stream) {
-//         if !t.from_client {
-//             self.update_quality_status(QualityStatus {
-//                 delay: Some(t.last_delay as _),
-//                 target_bitrate: Some(t.target_bitrate as _),
-//                 ..Default::default()
-//             });
-//             handle_test_delay(t, peer).await;
-//         }
-//     }
-
-//     fn set_force_relay(&mut self, direct: bool, received: bool) {
-//         let mut lc = self.lc.write().unwrap();
-//         lc.force_relay = false;
-//         if direct && !received {
-//             let errno = errno::errno().0;
-//             log::info!("errno is {}", errno);
-//             // TODO: check mac and ios
-//             if cfg!(windows) && errno == 10054 || !cfg!(windows) && errno == 104 {
-//                 lc.force_relay = true;
-//                 lc.set_option("force-always-relay".to_owned(), "Y".to_owned());
-//             }
-//         }
-//     }
-
-//     fn is_force_relay(&self) -> bool {
-//         self.lc.read().unwrap().force_relay
-//     }
-// }
-
-#[tokio::main(flavor = "current_thread")]
-async fn send_note(url: String, id: String, conn_id: i32, note: String) {
-    let body = serde_json::json!({ "id": id, "Id": conn_id, "note": note });
-    allow_err!(crate::post_request(url, body.to_string(), "").await);
 }
