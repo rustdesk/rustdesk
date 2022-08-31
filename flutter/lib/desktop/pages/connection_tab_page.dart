@@ -61,6 +61,7 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
         final args = jsonDecode(call.arguments);
         final id = args['id'];
         window_on_top(windowId());
+        ConnectionTypeState.init(id);
         tabController.add(TabInfo(
             key: id,
             label: id,
@@ -108,7 +109,7 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
                       },
                       tabBuilder: (key, icon, label, themeConf) => Obx(() {
                         final connectionType = ConnectionTypeState.find(key);
-                        if (!ConnectionTypeState.find(key).isValid()) {
+                        if (!connectionType.isValid()) {
                           return Row(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [

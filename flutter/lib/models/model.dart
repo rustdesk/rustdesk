@@ -7,6 +7,7 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_hbb/consts.dart';
 import 'package:flutter_hbb/generated_bridge.dart';
 import 'package:flutter_hbb/models/ab_model.dart';
 import 'package:flutter_hbb/models/chat_model.dart';
@@ -499,8 +500,8 @@ class CanvasModel with ChangeNotifier {
 
     _scale = 1.0;
     if (style == 'adaptive') {
-      final s1 = size.width / (parent.target?.ffiModel.display.width ?? 720);
-      final s2 = size.height / (parent.target?.ffiModel.display.height ?? 1280);
+      final s1 = size.width / getDisplayWidth();
+      final s2 = size.height / getDisplayHeight();
       _scale = s1 < s2 ? s1 : s2;
     }
 
@@ -529,11 +530,17 @@ class CanvasModel with ChangeNotifier {
   }
 
   int getDisplayWidth() {
-    return parent.target?.ffiModel.display.width ?? 1080;
+    final defaultWidth = (isDesktop || isWebDesktop)
+        ? kDesktopDefaultDisplayWidth
+        : kMobileDefaultDisplayWidth;
+    return parent.target?.ffiModel.display.width ?? defaultWidth;
   }
 
   int getDisplayHeight() {
-    return parent.target?.ffiModel.display.height ?? 720;
+    final defaultHeight = (isDesktop || isWebDesktop)
+        ? kDesktopDefaultDisplayHeight
+        : kMobileDefaultDisplayHeight;
+    return parent.target?.ffiModel.display.height ?? defaultHeight;
   }
 
   Size get size {

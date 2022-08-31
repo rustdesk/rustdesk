@@ -143,14 +143,6 @@ pub fn session_get_toggle_option_sync(id: String, arg: String) -> SyncReturn<boo
     SyncReturn(res)
 }
 
-pub fn session_get_image_quality(id: String) -> Option<String> {
-    if let Some(session) = SESSIONS.read().unwrap().get(&id) {
-        Some(session.get_image_quality())
-    } else {
-        None
-    }
-}
-
 pub fn session_get_option(id: String, arg: String) -> Option<String> {
     if let Some(session) = SESSIONS.read().unwrap().get(&id) {
         Some(session.get_option(arg))
@@ -190,9 +182,31 @@ pub fn session_toggle_option(id: String, value: String) {
     }
 }
 
+pub fn session_get_image_quality(id: String) -> Option<String> {
+    if let Some(session) = SESSIONS.read().unwrap().get(&id) {
+        Some(session.get_image_quality())
+    } else {
+        None
+    }
+}
+
 pub fn session_set_image_quality(id: String, value: String) {
     if let Some(session) = SESSIONS.write().unwrap().get_mut(&id) {
         session.save_image_quality(value);
+    }
+}
+
+pub fn session_get_custom_image_quality(id: String) -> Option<Vec<i32>> {
+    if let Some(session) = SESSIONS.read().unwrap().get(&id) {
+        Some(session.get_custom_image_quality())
+    } else {
+        None
+    }
+}
+
+pub fn session_set_custom_image_quality(id: String, value: i32) {
+    if let Some(session) = SESSIONS.read().unwrap().get(&id) {
+        session.set_custom_image_quality(value);
     }
 }
 

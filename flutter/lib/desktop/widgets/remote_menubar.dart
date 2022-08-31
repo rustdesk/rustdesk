@@ -290,9 +290,9 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
           style: style,
         ),
         proc: () {
-          Navigator.pop(context);
           bind.sessionRefresh(id: widget.id);
         },
+        dismissOnClicked: true,
       ));
     }
     displayMenu.add(MenuEntryButton<String>(
@@ -301,9 +301,9 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
         style: style,
       ),
       proc: () {
-        Navigator.pop(context);
         showSetOSPassword(widget.id, false, widget.ffi.dialogManager);
       },
+      dismissOnClicked: true,
     ));
 
     if (!isWebDesktop) {
@@ -314,7 +314,6 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
             style: style,
           ),
           proc: () {
-            Navigator.pop(context);
             () async {
               ClipboardData? data =
                   await Clipboard.getData(Clipboard.kTextPlain);
@@ -323,6 +322,7 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
               }
             }();
           },
+          dismissOnClicked: true,
         ));
       }
 
@@ -332,9 +332,9 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
           style: style,
         ),
         proc: () {
-          Navigator.pop(context);
           widget.ffi.cursorModel.reset();
         },
+        dismissOnClicked: true,
       ));
     }
 
@@ -346,9 +346,9 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
             style: style,
           ),
           proc: () {
-            Navigator.pop(context);
             bind.sessionCtrlAltDel(id: widget.id);
           },
+          dismissOnClicked: true,
         ));
       }
 
@@ -358,9 +358,9 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
           style: style,
         ),
         proc: () {
-          Navigator.pop(context);
           bind.sessionLockScreen(id: widget.id);
         },
+        dismissOnClicked: true,
       ));
 
       if (pi.platform == 'Windows') {
@@ -371,13 +371,13 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
                 style: style,
               )),
           proc: () {
-            Navigator.pop(context);
             RxBool blockInput = BlockInputState.find(widget.id);
             bind.sessionToggleOption(
                 id: widget.id,
                 value: '${blockInput.value ? "un" : ""}block-input');
             blockInput.value = !blockInput.value;
           },
+          dismissOnClicked: true,
         ));
       }
     }
@@ -392,9 +392,9 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
           style: style,
         ),
         proc: () {
-          Navigator.pop(context);
           showRestartRemoteDevice(pi, widget.id, gFFI.dialogManager);
         },
+        dismissOnClicked: true,
       ));
     }
 
@@ -406,44 +406,54 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
       MenuEntryRadios<String>(
           text: translate('Ratio'),
           optionsGetter: () => [
-                Tuple2<String, String>(translate('Scale original'), 'original'),
-                Tuple2<String, String>(translate('Scale adaptive'), 'adaptive'),
+                MenuEntryRadioOption(
+                    text: translate('Scale original'), value: 'original'),
+                MenuEntryRadioOption(
+                    text: translate('Scale adaptive'), value: 'adaptive'),
               ],
           curOptionGetter: () async {
             return await bind.sessionGetOption(
                     id: widget.id, arg: 'view-style') ??
                 'adaptive';
           },
-          optionSetter: (String v) async {
+          optionSetter: (String oldValue, String newValue) async {
             await bind.sessionPeerOption(
-                id: widget.id, name: "view-style", value: v);
+                id: widget.id, name: "view-style", value: newValue);
             widget.ffi.canvasModel.updateViewStyle();
           }),
       MenuEntryDivider<String>(),
       MenuEntryRadios<String>(
           text: translate('Scroll Style'),
           optionsGetter: () => [
-                Tuple2<String, String>(translate('ScrollAuto'), 'scrollauto'),
-                Tuple2<String, String>(translate('Scrollbar'), 'scrollbar'),
+                MenuEntryRadioOption(
+                    text: translate('ScrollAuto'), value: 'scrollauto'),
+                MenuEntryRadioOption(
+                    text: translate('Scrollbar'), value: 'scrollbar'),
               ],
           curOptionGetter: () async {
             return await bind.sessionGetOption(
                     id: widget.id, arg: 'scroll-style') ??
                 '';
           },
-          optionSetter: (String v) async {
+          optionSetter: (String oldValue, String newValue) async {
             await bind.sessionPeerOption(
-                id: widget.id, name: "scroll-style", value: v);
+                id: widget.id, name: "scroll-style", value: newValue);
             widget.ffi.canvasModel.updateScrollStyle();
           }),
       MenuEntryDivider<String>(),
       MenuEntryRadios<String>(
           text: translate('Image Quality'),
           optionsGetter: () => [
-                Tuple2<String, String>(translate('Good image quality'), 'best'),
-                Tuple2<String, String>(translate('Balanced'), 'balanced'),
-                Tuple2<String, String>(
-                    translate('Optimize reaction time'), 'low'),
+                MenuEntryRadioOption(
+                    text: translate('Good image quality'), value: 'best'),
+                MenuEntryRadioOption(
+                    text: translate('Balanced'), value: 'balanced'),
+                MenuEntryRadioOption(
+                    text: translate('Optimize reaction time'), value: 'low'),
+                MenuEntryRadioOption(
+                    text: translate('Custom'),
+                    value: 'custom',
+                    dismissOnClicked: true),
               ],
           curOptionGetter: () async {
             String quality =
@@ -451,8 +461,43 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
             if (quality == '') quality = 'balanced';
             return quality;
           },
-          optionSetter: (String v) async {
-            await bind.sessionSetImageQuality(id: widget.id, value: v);
+          optionSetter: (String oldValue, String newValue) async {
+            if (oldValue != newValue) {
+              await bind.sessionSetImageQuality(id: widget.id, value: newValue);
+            }
+
+            if (newValue == 'custom') {
+              final btnCancel = getMsgBoxButton(translate('Cancel'), () {
+                widget.ffi.dialogManager.dismissAll();
+              });
+              final quality =
+                  await bind.sessionGetCustomImageQuality(id: widget.id);
+              final double initValue = quality != null && quality.isNotEmpty
+                  ? quality[0].toDouble()
+                  : 50.0;
+              // final slider = _ImageCustomQualitySlider(
+              //     id: widget.id, v: RxDouble(initValue));
+              final RxDouble sliderValue = RxDouble(initValue);
+              final slider = Obx(() => Slider(
+                    value: sliderValue.value,
+                    max: 100,
+                    label: sliderValue.value.round().toString(),
+                    onChanged: (double value) {
+                      () async {
+                        await bind.sessionSetCustomImageQuality(
+                            id: widget.id, value: value.toInt());
+                        final quality = await bind.sessionGetCustomImageQuality(
+                            id: widget.id);
+                        sliderValue.value =
+                            quality != null && quality.isNotEmpty
+                                ? quality[0].toDouble()
+                                : 50.0;
+                      }();
+                    },
+                  ));
+              msgBoxCommon(widget.ffi.dialogManager, 'Custom Image Quality',
+                  slider, [btnCancel]);
+            }
           }),
       MenuEntryDivider<String>(),
       MenuEntrySwitch<String>(

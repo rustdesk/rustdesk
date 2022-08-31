@@ -689,11 +689,11 @@ class ImagePaint extends StatelessWidget {
           width: c.getDisplayWidth() * s,
           height: c.getDisplayHeight() * s,
           child: CustomPaint(
-            painter: new ImagePainter(image: m.image, x: 0, y: 0, scale: s),
+            painter: ImagePainter(image: m.image, x: 0, y: 0, scale: s),
           ));
       return Center(
           child: NotificationListener<ScrollNotification>(
-        onNotification: (_notification) {
+        onNotification: (notification) {
           final percentX = _horizontal.position.extentBefore /
               (_horizontal.position.extentBefore +
                   _horizontal.position.extentInside +
@@ -716,8 +716,8 @@ class ImagePaint extends StatelessWidget {
           width: c.size.width,
           height: c.size.height,
           child: CustomPaint(
-            painter: new ImagePainter(
-                image: m.image, x: c.x / s, y: c.y / s, scale: s),
+            painter:
+                ImagePainter(image: m.image, x: c.x / s, y: c.y / s, scale: s),
           ));
       return _buildListener(imageWidget);
     }
@@ -771,7 +771,7 @@ class CursorPaint extends StatelessWidget {
     // final adjust = m.adjustForKeyboard();
     var s = c.scale;
     return CustomPaint(
-      painter: new ImagePainter(
+      painter: ImagePainter(
           image: m.image,
           x: m.x * s - m.hotx + c.x,
           y: m.y * s - m.hoty + c.y,
@@ -796,15 +796,16 @@ class ImagePainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     if (image == null) return;
+    if (x.isNaN || y.isNaN) return;
     canvas.scale(scale, scale);
     // https://github.com/flutter/flutter/issues/76187#issuecomment-784628161
     // https://api.flutter-io.cn/flutter/dart-ui/FilterQuality.html
-    var paint = new Paint();
+    var paint = Paint();
     paint.filterQuality = FilterQuality.medium;
     if (scale > 10.00000) {
       paint.filterQuality = FilterQuality.high;
     }
-    canvas.drawImage(image!, new Offset(x, y), paint);
+    canvas.drawImage(image!, Offset(x, y), paint);
   }
 
   @override

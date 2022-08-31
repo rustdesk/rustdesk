@@ -97,6 +97,9 @@ class MenuConfig {
 }
 
 abstract class MenuEntryBase<T> {
+  bool dismissOnClicked;
+
+  MenuEntryBase({this.dismissOnClicked = false});
   List<mod_menu.PopupMenuEntry<T>> build(BuildContext context, MenuConfig conf);
 }
 
@@ -112,9 +115,19 @@ class MenuEntryDivider<T> extends MenuEntryBase<T> {
   }
 }
 
-typedef RadioOptionsGetter = List<Tuple2<String, String>> Function();
+class MenuEntryRadioOption {
+  String text;
+  String value;
+  bool dismissOnClicked;
+
+  MenuEntryRadioOption(
+      {required this.text, required this.value, this.dismissOnClicked = false});
+}
+
+typedef RadioOptionsGetter = List<MenuEntryRadioOption> Function();
 typedef RadioCurOptionGetter = Future<String> Function();
-typedef RadioOptionSetter = Future<void> Function(String);
+typedef RadioOptionSetter = Future<void> Function(
+    String oldValue, String newValue);
 
 class MenuEntryRadioUtils<T> {}
 
@@ -129,24 +142,28 @@ class MenuEntryRadios<T> extends MenuEntryBase<T> {
       {required this.text,
       required this.optionsGetter,
       required this.curOptionGetter,
-      required this.optionSetter}) {
+      required this.optionSetter,
+      dismissOnClicked = false})
+      : super(dismissOnClicked: dismissOnClicked) {
     () async {
       _curOption.value = await curOptionGetter();
     }();
   }
 
-  List<Tuple2<String, String>> get options => optionsGetter();
+  List<MenuEntryRadioOption> get options => optionsGetter();
   RxString get curOption => _curOption;
   setOption(String option) async {
-    await optionSetter(option);
-    final opt = await curOptionGetter();
-    if (_curOption.value != opt) {
-      _curOption.value = opt;
+    await optionSetter(_curOption.value, option);
+    if (_curOption.value != option) {
+      final opt = await curOptionGetter();
+      if (_curOption.value != opt) {
+        _curOption.value = opt;
+      }
     }
   }
 
   mod_menu.PopupMenuEntry<T> _buildMenuItem(
-      BuildContext context, MenuConfig conf, Tuple2<String, String> opt) {
+      BuildContext context, MenuConfig conf, MenuEntryRadioOption opt) {
     return mod_menu.PopupMenuItem(
       padding: EdgeInsets.zero,
       height: conf.height,
@@ -157,7 +174,7 @@ class MenuEntryRadios<T> extends MenuEntryBase<T> {
           child: Row(
             children: [
               Text(
-                opt.item1,
+                opt.text,
                 style: const TextStyle(
                     color: Colors.black,
                     fontSize: MenuConfig.fontSize,
@@ -169,7 +186,7 @@ class MenuEntryRadios<T> extends MenuEntryBase<T> {
                 child: SizedBox(
                     width: 20.0,
                     height: 20.0,
-                    child: Obx(() => opt.item2 == curOption.value
+                    child: Obx(() => opt.value == curOption.value
                         ? Icon(
                             Icons.check,
                             color: conf.commonColor,
@@ -180,9 +197,10 @@ class MenuEntryRadios<T> extends MenuEntryBase<T> {
           ),
         ),
         onPressed: () {
-          if (opt.item2 != curOption.value) {
-            setOption(opt.item2);
+          if (opt.dismissOnClicked && Navigator.canPop(context)) {
+            Navigator.pop(context);
           }
+          setOption(opt.value);
         },
       ),
     );
@@ -206,24 +224,28 @@ class MenuEntrySubRadios<T> extends MenuEntryBase<T> {
       {required this.text,
       required this.optionsGetter,
       required this.curOptionGetter,
-      required this.optionSetter}) {
+      required this.optionSetter,
+      dismissOnClicked = false})
+      : super(dismissOnClicked: dismissOnClicked) {
     () async {
       _curOption.value = await curOptionGetter();
     }();
   }
 
-  List<Tuple2<String, String>> get options => optionsGetter();
+  List<MenuEntryRadioOption> get options => optionsGetter();
   RxString get curOption => _curOption;
   setOption(String option) async {
-    await optionSetter(option);
-    final opt = await curOptionGetter();
-    if (_curOption.value != opt) {
-      _curOption.value = opt;
+    await optionSetter(_curOption.value, option);
+    if (_curOption.value != option) {
+      final opt = await curOptionGetter();
+      if (_curOption.value != opt) {
+        _curOption.value = opt;
+      }
     }
   }
 
   mod_menu.PopupMenuEntry<T> _buildSecondMenu(
-      BuildContext context, MenuConfig conf, Tuple2<String, String> opt) {
+      BuildContext context, MenuConfig conf, MenuEntryRadioOption opt) {
     return mod_menu.PopupMenuItem(
       padding: EdgeInsets.zero,
       height: conf.height,
@@ -234,7 +256,7 @@ class MenuEntrySubRadios<T> extends MenuEntryBase<T> {
           child: Row(
             children: [
               Text(
-                opt.item1,
+                opt.text,
                 style: const TextStyle(
                     color: Colors.black,
                     fontSize: MenuConfig.fontSize,
@@ -246,7 +268,7 @@ class MenuEntrySubRadios<T> extends MenuEntryBase<T> {
                 child: SizedBox(
                     width: 20.0,
                     height: 20.0,
-                    child: Obx(() => opt.item2 == curOption.value
+                    child: Obx(() => opt.value == curOption.value
                         ? Icon(
                             Icons.check,
                             color: conf.commonColor,
@@ -257,9 +279,10 @@ class MenuEntrySubRadios<T> extends MenuEntryBase<T> {
           ),
         ),
         onPressed: () {
-          if (opt.item2 != curOption.value) {
-            setOption(opt.item2);
+          if (opt.dismissOnClicked && Navigator.canPop(context)) {
+            Navigator.pop(context);
           }
+          setOption(opt.value);
         },
       ),
     );
@@ -303,7 +326,8 @@ typedef SwitchSetter = Future<void> Function(bool);
 abstract class MenuEntrySwitchBase<T> extends MenuEntryBase<T> {
   final String text;
 
-  MenuEntrySwitchBase({required this.text});
+  MenuEntrySwitchBase({required this.text, required dismissOnClicked})
+      : super(dismissOnClicked: dismissOnClicked);
 
   RxBool get curOption;
   Future<void> setOption(bool option);
@@ -333,11 +357,20 @@ abstract class MenuEntrySwitchBase<T> extends MenuEntryBase<T> {
                   alignment: Alignment.centerRight,
                   child: Obx(() => Switch(
                         value: curOption.value,
-                        onChanged: (v) => setOption(v),
+                        onChanged: (v) {
+                          if (super.dismissOnClicked &&
+                              Navigator.canPop(context)) {
+                            Navigator.pop(context);
+                          }
+                          setOption(v);
+                        },
                       )),
                 ))
               ])),
           onPressed: () {
+            if (super.dismissOnClicked && Navigator.canPop(context)) {
+              Navigator.pop(context);
+            }
             setOption(!curOption.value);
           },
         ),
@@ -352,8 +385,11 @@ class MenuEntrySwitch<T> extends MenuEntrySwitchBase<T> {
   final RxBool _curOption = false.obs;
 
   MenuEntrySwitch(
-      {required String text, required this.getter, required this.setter})
-      : super(text: text) {
+      {required String text,
+      required this.getter,
+      required this.setter,
+      dismissOnClicked = false})
+      : super(text: text, dismissOnClicked: dismissOnClicked) {
     () async {
       _curOption.value = await getter();
     }();
@@ -379,8 +415,11 @@ class MenuEntrySwitch2<T> extends MenuEntrySwitchBase<T> {
   final SwitchSetter setter;
 
   MenuEntrySwitch2(
-      {required String text, required this.getter, required this.setter})
-      : super(text: text);
+      {required String text,
+      required this.getter,
+      required this.setter,
+      dismissOnClicked = false})
+      : super(text: text, dismissOnClicked: dismissOnClicked);
 
   @override
   RxBool get curOption => getter();
@@ -394,10 +433,7 @@ class MenuEntrySubMenu<T> extends MenuEntryBase<T> {
   final String text;
   final List<MenuEntryBase<T>> entries;
 
-  MenuEntrySubMenu({
-    required this.text,
-    required this.entries,
-  });
+  MenuEntrySubMenu({required this.text, required this.entries});
 
   @override
   List<mod_menu.PopupMenuEntry<T>> build(
@@ -438,10 +474,11 @@ class MenuEntryButton<T> extends MenuEntryBase<T> {
   final Widget Function(TextStyle? style) childBuilder;
   Function() proc;
 
-  MenuEntryButton({
-    required this.childBuilder,
-    required this.proc,
-  });
+  MenuEntryButton(
+      {required this.childBuilder,
+      required this.proc,
+      dismissOnClicked = false})
+      : super(dismissOnClicked: dismissOnClicked);
 
   @override
   List<mod_menu.PopupMenuEntry<T>> build(
@@ -461,6 +498,9 @@ class MenuEntryButton<T> extends MenuEntryBase<T> {
                     fontWeight: FontWeight.normal),
               )),
           onPressed: () {
+            if (super.dismissOnClicked && Navigator.canPop(context)) {
+              Navigator.pop(context);
+            }
             proc();
           },
         ),
