@@ -484,7 +484,7 @@ class _ListView extends StatelessWidget {
   }
 }
 
-class _Tab extends StatelessWidget {
+class _Tab extends StatefulWidget {
   late final int index;
   late final Rx<String> label;
   late final IconData? selectedIcon;
@@ -493,7 +493,6 @@ class _Tab extends StatelessWidget {
   late final int selected;
   late final Function() onClose;
   late final Function() onSelected;
-  final RxBool _hover = false.obs;
   late final TarBarTheme theme;
   final Widget Function(Widget icon, Widget label, TabThemeConf themeConf)?
       tabBuilder;
@@ -512,31 +511,39 @@ class _Tab extends StatelessWidget {
       required this.theme})
       : super(key: key);
 
+  @override
+  State<_Tab> createState() => _TabState();
+}
+
+class _TabState extends State<_Tab> with RestorationMixin {
+  final RestorableBool restoreHover = RestorableBool(false);
+
   Widget _buildTabContent() {
-    bool showIcon = selectedIcon != null && unselectedIcon != null;
-    bool isSelected = index == selected;
+    bool showIcon =
+        widget.selectedIcon != null && widget.unselectedIcon != null;
+    bool isSelected = widget.index == widget.selected;
 
     final icon = Offstage(
         offstage: !showIcon,
         child: Icon(
-          isSelected ? selectedIcon : unselectedIcon,
+          isSelected ? widget.selectedIcon : widget.unselectedIcon,
           size: _kIconSize,
           color: isSelected
-              ? theme.selectedtabIconColor
-              : theme.unSelectedtabIconColor,
+              ? widget.theme.selectedtabIconColor
+              : widget.theme.unSelectedtabIconColor,
         ).paddingOnly(right: 5));
     final labelWidget = Obx(() {
       return Text(
-        translate(label.value),
+        translate(widget.label.value),
         textAlign: TextAlign.center,
         style: TextStyle(
             color: isSelected
-                ? theme.selectedTextColor
-                : theme.unSelectedTextColor),
+                ? widget.theme.selectedTextColor
+                : widget.theme.unSelectedTextColor),
       );
     });
 
-    if (tabBuilder == null) {
+    if (widget.tabBuilder == null) {
       return Row(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
@@ -545,37 +552,38 @@ class _Tab extends StatelessWidget {
         ],
       );
     } else {
-      return tabBuilder!(
-          icon, labelWidget, TabThemeConf(iconSize: _kIconSize, theme: theme));
+      return widget.tabBuilder!(icon, labelWidget,
+          TabThemeConf(iconSize: _kIconSize, theme: widget.theme));
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    bool showIcon = selectedIcon != null && unselectedIcon != null;
-    bool isSelected = index == selected;
-    bool showDivider = index != selected - 1 && index != selected;
+    bool isSelected = widget.index == widget.selected;
+    bool showDivider =
+        widget.index != widget.selected - 1 && widget.index != widget.selected;
+    RxBool hover = restoreHover.value.obs;
     return Ink(
       child: InkWell(
-        onHover: (hover) => _hover.value = hover,
-        onTap: () => onSelected(),
+        onHover: (value) {
+          hover.value = value;
+          restoreHover.value = value;
+        },
+        onTap: () => widget.onSelected(),
         child: Row(
           children: [
-            Container(
+            SizedBox(
                 height: _kTabBarHeight,
                 child: Row(
                     crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
                       _buildTabContent(),
-                      Offstage(
-                        offstage: !closable,
-                        child: Obx((() => _CloseButton(
-                              visiable: _hover.value,
-                              tabSelected: isSelected,
-                              onClose: () => onClose(),
-                              theme: theme,
-                            ))),
-                      )
+                      Obx((() => _CloseButton(
+                            visiable: hover.value && widget.closable,
+                            tabSelected: isSelected,
+                            onClose: () => widget.onClose(),
+                            theme: widget.theme,
+                          )))
                     ])).paddingSymmetric(horizontal: 10),
             Offstage(
               offstage: !showDivider,
@@ -583,7 +591,7 @@ class _Tab extends StatelessWidget {
                 width: 1,
                 indent: _kDividerIndent,
                 endIndent: _kDividerIndent,
-                color: theme.dividerColor,
+                color: widget.theme.dividerColor,
                 thickness: 1,
               ),
             )
@@ -591,6 +599,14 @@ class _Tab extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  @override
+  String? get restorationId => "_Tab${widget.label.value}";
+
+  @override
+  void restoreState(RestorationBucket? oldBucket, bool initialRestore) {
+    registerForRestoration(restoreHover, 'restoreHover');
   }
 }
 
@@ -615,7 +631,7 @@ class _CloseButton extends StatelessWidget {
         child: Offstage(
           offstage: !visiable,
           child: InkWell(
-            customBorder: RoundedRectangleBorder(),
+            customBorder: const RoundedRectangleBorder(),
             onTap: () => onClose(),
             child: Icon(
               Icons.close,
