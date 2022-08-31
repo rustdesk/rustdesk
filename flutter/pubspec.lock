@@ -1244,8 +1244,8 @@ packages:
     dependency: "direct main"
     description:
       path: "."
-      ref: "799ef079e87938c3f4340591b4330c2598f38bb9"
-      resolved-ref: "799ef079e87938c3f4340591b4330c2598f38bb9"
+      ref: a25f1776ccc1119cbb2a8541174293aa36d532ed
+      resolved-ref: a25f1776ccc1119cbb2a8541174293aa36d532ed
       url: "https://github.com/Kingtous/rustdesk_window_manager"
     source: git
     version: "0.2.6"
