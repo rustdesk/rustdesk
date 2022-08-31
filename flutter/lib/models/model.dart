@@ -556,9 +556,19 @@ class CanvasModel with ChangeNotifier {
     var dxOffset = 0;
     var dyOffset = 0;
     if (dw > size.width) {
+      final xxxx = x - dw * (x / size.width) - _x;
+      if (xxxx.isInfinite || xxxx.isNaN) {
+        debugPrint(
+            'REMOVE ME ============================ xxxx $x,$dw,$_scale,${size.width},$_x');
+      }
       dxOffset = (x - dw * (x / size.width) - _x).toInt();
     }
     if (dh > size.height) {
+      final yyyy = y - dh * (y / size.height) - _y;
+      if (yyyy.isInfinite || yyyy.isNaN) {
+        debugPrint(
+            'REMOVE ME ============================ xxxx $y,$dh,$_scale,${size.height},$_y');
+      }
       dyOffset = (y - dh * (y / size.height) - _y).toInt();
     }
     _x += dxOffset;
@@ -926,16 +936,16 @@ class FFI {
   late final QualityMonitorModel qualityMonitorModel; // session
 
   FFI() {
-    this.imageModel = ImageModel(WeakReference(this));
-    this.ffiModel = FfiModel(WeakReference(this));
-    this.cursorModel = CursorModel(WeakReference(this));
-    this.canvasModel = CanvasModel(WeakReference(this));
-    this.serverModel = ServerModel(WeakReference(this)); // use global FFI
-    this.chatModel = ChatModel(WeakReference(this));
-    this.fileModel = FileModel(WeakReference(this));
-    this.abModel = AbModel(WeakReference(this));
-    this.userModel = UserModel(WeakReference(this));
-    this.qualityMonitorModel = QualityMonitorModel(WeakReference(this));
+    imageModel = ImageModel(WeakReference(this));
+    ffiModel = FfiModel(WeakReference(this));
+    cursorModel = CursorModel(WeakReference(this));
+    canvasModel = CanvasModel(WeakReference(this));
+    serverModel = ServerModel(WeakReference(this)); // use global FFI
+    chatModel = ChatModel(WeakReference(this));
+    fileModel = FileModel(WeakReference(this));
+    abModel = AbModel(WeakReference(this));
+    userModel = UserModel(WeakReference(this));
+    qualityMonitorModel = QualityMonitorModel(WeakReference(this));
   }
 
   /// Send a mouse tap event(down and up).
