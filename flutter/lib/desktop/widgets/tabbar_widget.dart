@@ -314,6 +314,8 @@ class DesktopTab extends StatelessWidget {
         Offstage(offstage: tail == null, child: tail),
         WindowActionPanel(
           mainTab: isMainWindow,
+          tabType: tabType,
+          state: state,
           theme: theme,
           showMinimize: showMinimize,
           showMaximize: showMaximize,
@@ -327,6 +329,8 @@ class DesktopTab extends StatelessWidget {
 
 class WindowActionPanel extends StatelessWidget {
   final bool mainTab;
+  final DesktopTabType tabType;
+  final Rx<DesktopTabState> state;
   final TarBarTheme theme;
 
   final bool showMinimize;
@@ -337,6 +341,8 @@ class WindowActionPanel extends StatelessWidget {
   const WindowActionPanel(
       {Key? key,
       required this.mainTab,
+      required this.tabType,
+      required this.state,
       required this.theme,
       this.showMinimize = true,
       this.showMaximize = true,
@@ -411,21 +417,52 @@ class WindowActionPanel extends StatelessWidget {
               message: 'Close',
               icon: IconFont.close,
               theme: theme,
-              onTap: () {
-                if (mainTab) {
-                  windowManager.close();
-                } else {
-                  // only hide for multi window, not close
-                  Future.delayed(Duration.zero, () {
-                    WindowController.fromWindowId(windowId!).hide();
-                  });
+              onTap: () async {
+                action() {
+                  if (mainTab) {
+                    windowManager.close();
+                  } else {
+                    // only hide for multi window, not close
+                    Future.delayed(Duration.zero, () {
+                      WindowController.fromWindowId(windowId!).hide();
+                    });
+                  }
+                  onClose?.call();
                 }
-                onClose?.call();
+
+                if (tabType != DesktopTabType.main &&
+                    state.value.tabs.length > 1) {
+                  closeConfirmDialog(action);
+                } else {
+                  action();
+                }
               },
               is_close: true,
             )),
       ],
     );
+  }
+
+  closeConfirmDialog(Function() callback) async {
+    final res = await gFFI.dialogManager
+        .show<bool>((setState, close) => CustomAlertDialog(
+              title: Row(children: [
+                Icon(Icons.warning_amber_sharp,
+                    color: Colors.redAccent, size: 28),
+                SizedBox(width: 10),
+                Text(translate("Warning")),
+              ]),
+              content: Text(translate("Disconnect all devices?")),
+              actions: [
+                TextButton(
+                    onPressed: () => close(), child: Text(translate("Cancel"))),
+                ElevatedButton(
+                    onPressed: () => close(true), child: Text(translate("OK"))),
+              ],
+            ));
+    if (res == true) {
+      callback();
+    }
   }
 }
 

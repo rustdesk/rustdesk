@@ -48,22 +48,25 @@ class _DesktopServerPageState extends State<DesktopServerPage>
         ],
         child: Consumer<ServerModel>(
             builder: (context, serverModel, child) => Container(
-                  decoration: BoxDecoration(
-                      border:
-                          Border.all(color: MyTheme.color(context).border!)),
-                  child: Scaffold(
-                    backgroundColor: MyTheme.color(context).bg,
-                    body: Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.start,
-                        children: [
-                          Expanded(child: ConnectionManager()),
-                          SizedBox.fromSize(size: Size(0, 15.0)),
-                        ],
-                      ),
-                    ),
-                  ),
-                )));
+                decoration: BoxDecoration(
+                    border: Border.all(color: MyTheme.color(context).border!)),
+                child: Scaffold(
+                  backgroundColor: MyTheme.color(context).bg,
+                  body: Overlay(initialEntries: [
+                    OverlayEntry(builder: (context) {
+                      gFFI.dialogManager.setOverlayState(Overlay.of(context));
+                      return Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.start,
+                          children: [
+                            Expanded(child: ConnectionManager()),
+                            SizedBox.fromSize(size: Size(0, 15.0)),
+                          ],
+                        ),
+                      );
+                    })
+                  ]),
+                ))));
   }
 
   @override
@@ -109,7 +112,8 @@ class ConnectionManagerState extends State<ConnectionManager> {
             theme: isDarkTheme() ? TarBarTheme.dark() : TarBarTheme.light(),
             showTitle: false,
             showMaximize: false,
-            showMinimize: false,
+            showMinimize: true,
+            showClose: true,
             controller: serverModel.tabController,
             tabType: DesktopTabType.cm,
             pageViewBuilder: (pageView) => Row(children: [
