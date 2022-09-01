@@ -12,9 +12,6 @@ if [ "$1" = configure ]; then
 		fi
 		version=$(python3 -V 2>&1 | grep -Po '(?<=Python )(.+)')
 		parsedVersion=$(echo "${version//./}")
-		if [[ "$parsedVersion" -gt "360" ]]; then
-			sudo -H pip3 install pynput
-		fi
 		cp /usr/share/rustdesk/files/systemd/rustdesk.service /usr/lib/systemd/system/rustdesk.service
 		systemctl daemon-reload
 		systemctl enable rustdesk

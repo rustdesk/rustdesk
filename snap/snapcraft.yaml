@@ -108,13 +108,7 @@ parts:
     plugin: nil
     override-pull: |
       mkdir -p ${SNAPCRAFT_PART_INSTALL}/usr/share/rustdesk/files/systemd/
-      cp ${SNAPCRAFT_PART_SRC}/../../rustdesk/src/pynput_service.py ${SNAPCRAFT_PART_INSTALL}/usr/share/rustdesk/files/
       cp ${SNAPCRAFT_PART_SRC}/../../rustdesk/src/rustdesk.service ${SNAPCRAFT_PART_INSTALL}/usr/share/rustdesk/files/systemd/
-
-  python3-deps:
-    plugin: python
-    python-packages:
-      - pynput == 1.7.6
       
 layout:
   /usr/share/rustdesk:

@@ -1106,8 +1106,6 @@ impl Handler {
 
         if let Some(chars) = chars {
             for chr in chars {
-                dbg!(chr);
-
                 let mut key_event = KeyEvent::new();
                 key_event.set_chr(chr as _);
                 key_event.down = true;

@@ -82,12 +82,6 @@ sudo yum -y install gcc-c++ git curl wget nasm yasm gcc gtk3-devel clang libxcb-
 sudo pacman -Syu --needed unzip git cmake gcc curl wget yasm nasm zip make pkg-config clang gtk3 xdotool libxcb libxfixes alsa-lib pulseaudio
 ```
 
-### Cách tải về gói hàng pynput
-
-```sh
-pip3 install pynput
-```
-
 ### Cách cài vcpkg
 
 ```sh

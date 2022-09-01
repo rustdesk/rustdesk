@@ -169,13 +169,6 @@ fn run_cursor(sp: MouseCursorService, state: &mut StateCursor) -> ResultType<()>
 
 lazy_static::lazy_static! {
     static ref ENIGO: Arc<Mutex<Enigo>> = {
-        #[cfg(target_os = "linux")]
-        {
-            if crate::platform::is_root() {
-                std::env::set_var("PYNPUT_USERNAME", crate::platform::linux::get_active_username());
-                std::env::set_var("PYNPUT_USERID", crate::platform::linux::get_active_userid());
-            }
-        }
         Arc::new(Mutex::new(Enigo::new()))
     };
     static ref KEYS_DOWN: Arc<Mutex<HashMap<u64, Instant>>> = Default::default();
@@ -680,7 +673,6 @@ fn map_keyboard_mode(evt: &KeyEvent) {
 
 fn tfc_key_down_or_up(key: Key, down: bool, up: bool) {
     if let Key::Layout(chr) = key {
-        log::info!("tfc_key_down_or_up: {:?}", chr);
         if down {
             TFC_CONTEXT.lock().unwrap().unicode_char_down(chr);
         }
@@ -766,7 +758,6 @@ fn tfc_key_down_or_up(key: Key, down: bool, up: bool) {
         }
     };
 
-    log::info!("tfc_key_down_or_up: {:?}", key);
     if down {
         TFC_CONTEXT.lock().unwrap().key_down(key);
     }

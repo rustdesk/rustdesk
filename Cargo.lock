@@ -3985,7 +3985,7 @@ dependencies = [
  "libc",
  "widestring 1.0.2",
  "winapi 0.3.9",
- "x11",
+ "x11 2.20.0",
 ]
 
 [[package]]
@@ -4993,11 +4993,12 @@ checksum = "b1141d4d61095b28419e22cb0bbf02755f5e54e0526f97f1e3d1d160e60885fb"
 [[package]]
 name = "tfc"
 version = "0.6.1"
-source = "git+https://github.com/asur4s/The-Fat-Controller#25bfa7ef1cb0bd0b522cc4155dea6b99673bcfd4"
+source = "git+https://github.com/asur4s/The-Fat-Controller#8ef82be83d8d941f08bdb84e77bea52290f92050"
 dependencies = [
  "core-graphics 0.22.3",
  "unicode-segmentation",
  "winapi 0.3.9",
+ "x11 2.19.0",
 ]
 
 [[package]]
@@ -5929,6 +5930,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "30b31594f29d27036c383b53b59ed3476874d518f0efb151b27a4c275141390e"
 dependencies = [
  "tap",
+]
+
+[[package]]
+name = "x11"
+version = "2.19.0"
+source = "git+https://github.com/bjornsnoen/x11-rs#c2e9bfaa7b196938f8700245564d8ac5d447786a"
+dependencies = [
+ "libc",
+ "pkg-config",
 ]
 
 [[package]]

@@ -1,11 +1,10 @@
-use super::{pynput::EnigoPynput, xdo::EnigoXdo};
+use super::{xdo::EnigoXdo};
 use crate::{Key, KeyboardControllable, MouseButton, MouseControllable};
 
 /// The main struct for handling the event emitting
 // #[derive(Default)]
 pub struct Enigo {
     xdo: EnigoXdo,
-    pynput: EnigoPynput,
     is_x11: bool,
     uinput_keyboard: Option<Box<dyn KeyboardControllable + Send>>,
     uinput_mouse: Option<Box<dyn MouseControllable + Send>>,
@@ -20,9 +19,9 @@ impl Enigo {
     pub fn set_delay(&mut self, delay: u64) {
         self.xdo.set_delay(delay)
     }
-    /// Reset pynput.
+    /// Reset pynput?.
     pub fn reset(&mut self) {
-        self.pynput.reset();
+        todo!()
     }
     /// Set uinput keyboard.
     pub fn set_uinput_keyboard(
@@ -44,7 +43,6 @@ impl Default for Enigo {
             uinput_keyboard: None,
             uinput_mouse: None,
             xdo: EnigoXdo::default(),
-            pynput: EnigoPynput::default(),
         }
     }
 }
@@ -142,9 +140,6 @@ impl KeyboardControllable for Enigo {
 
     fn key_down(&mut self, key: Key) -> crate::ResultType {
         if self.is_x11 {
-            if self.pynput.send_pynput(&key, true) {
-                return Ok(());
-            }
             self.xdo.key_down(key)
         } else {
             if let Some(keyboard) = &mut self.uinput_keyboard {
@@ -156,9 +151,6 @@ impl KeyboardControllable for Enigo {
     }
     fn key_up(&mut self, key: Key) {
         if self.is_x11 {
-            if self.pynput.send_pynput(&key, false) {
-                return;
-            }
             self.xdo.key_up(key)
         } else {
             if let Some(keyboard) = &mut self.uinput_keyboard {

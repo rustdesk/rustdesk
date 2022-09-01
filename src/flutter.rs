@@ -226,7 +226,6 @@ impl Session {
     pub fn send_key_event(&self, mut evt: KeyEvent, keyboard_mode: KeyboardMode) {
         // mode: legacy(0), map(1), translate(2), auto(3)
         evt.mode = keyboard_mode.into();
-        dbg!(&evt);
         let mut msg_out = Message::new();
         msg_out.set_key_event(evt);
         self.send(Data::Message(msg_out));

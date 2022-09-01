@@ -9,8 +9,6 @@ script:
   # Download sciter.so
   - mkdir -p AppDir/usr/lib/rustdesk/
   - pushd AppDir/usr/lib/rustdesk && wget https://github.com/c-smile/sciter-sdk/raw/29a598b6d20220b93848b5e8abab704619296857/bin.lnx/x64/libsciter-gtk.so && popd
-  # pynput_service.py
-  - cp ../pynput_service.py ./AppDir/usr/lib/rustdesk
   # Build rustdesk
   - pushd .. && python3 inline-sciter.py && cargo build --features inline,appimage --release && popd
   - mkdir -p AppDir/usr/bin
