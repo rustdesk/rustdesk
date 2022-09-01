@@ -532,20 +532,9 @@ pub trait InvokeUi: Send + Sync + Clone + 'static + Sized + Default {
     fn set_cursor_position(&self, cp: CursorPosition);
     fn set_display(&self, x: i32, y: i32, w: i32, h: i32);
     fn switch_display(&self, display: &SwitchDisplay);
-    fn set_peer_info(
-        &self,
-        username: &str,
-        hostname: &str,
-        platform: &str,
-        sas_enabled: bool,
-        displays: &Vec<HashMap<&str, i32>>,
-        version: &str,
-        current_display: usize,
-        is_file_transfer: bool,
-    ); // flutter
+    fn set_peer_info(&self, peer_info: &PeerInfo); // flutter
     fn update_privacy_mode(&self);
     fn set_permission(&self, name: &str, value: bool);
-    fn update_pi(&self, pi: PeerInfo);
     fn close_success(&self);
     fn update_quality_status(&self, qs: QualityStatus);
     fn set_connection_type(&self, is_secured: bool, direct: bool);
@@ -623,20 +612,11 @@ impl<T: InvokeUi> Interface for Session<T> {
         self.lc.write().unwrap().handle_login_error(err, self)
     }
 
-    fn handle_peer_info(&mut self, pi: PeerInfo) {
-        let mut lc = self.lc.write().unwrap();
-
-        // let mut pi_sciter = Value::map();
-        let username = lc.get_username(&pi);
-
-        // flutter
-        let mut displays = Vec::new();
-        let mut current_index = pi.current_display as usize;
-
-        // pi_sciter.set_item("username", username.clone());
-        // pi_sciter.set_item("hostname", pi.hostname.clone());
-        // pi_sciter.set_item("platform", pi.platform.clone());
-        // pi_sciter.set_item("sas_enabled", pi.sas_enabled);
+    fn handle_peer_info(&mut self, mut pi: PeerInfo) {
+        pi.username = self.lc.read().unwrap().get_username(&pi);
+        if pi.current_display as usize >= pi.displays.len() {
+            pi.current_display = 0;
+        }
         if get_version_number(&pi.version) < get_version_number("1.1.10") {
             self.set_permission("restart", false);
         }
@@ -647,73 +627,22 @@ impl<T: InvokeUi> Interface for Session<T> {
             }
         } else if !self.is_port_forward() {
             if pi.displays.is_empty() {
-                lc.handle_peer_info(username, pi);
+                self.lc.write().unwrap().handle_peer_info(pi);
                 self.update_privacy_mode();
                 self.msgbox("error", "Remote Error", "No Display");
                 return;
             }
-            // let mut displays = Value::array(0);
-            // for ref d in pi.displays.iter() {
-            //     let mut display = Value::map();
-            //     display.set_item("x", d.x);
-            //     display.set_item("y", d.y);
-            //     display.set_item("width", d.width);
-            //     display.set_item("height", d.height);
-            //     displays.push(display);
-            // }
-            // pi_sciter.set_item("displays", displays);
-
-            // flutter
-            for ref d in pi.displays.iter() {
-                let mut h: HashMap<&str, i32> = Default::default();
-                h.insert("x", d.x);
-                h.insert("y", d.y);
-                h.insert("width", d.width);
-                h.insert("height", d.height);
-                displays.push(h);
-            }
-            if current_index >= pi.displays.len() {
-                current_index = 0;
-            }
-
-            if current_index >= pi.displays.len() {
-                current_index = 0;
-            }
-            // pi_sciter.set_item("current_display", current as i32);
-            let current = &pi.displays[current_index];
-            self.set_display(current.x, current.y, current.width, current.height);
-
-            self.set_peer_info(
-                &username,
-                &pi.hostname,
-                &pi.platform,
-                pi.sas_enabled,
-                &displays,
-                &pi.version,
-                current_index,
-                lc.is_file_transfer,
-            );
-
-            // https://sciter.com/forums/topic/color_spaceiyuv-crash
-            // Nothing spectacular in decoder – done on CPU side.
-            // So if you can do BGRA translation on your side – the better.
-            // BGRA is used as internal image format so it will not require additional transformations.
-            // VIDEO.lock().unwrap().as_mut().map(|v| {
-            //     let ok = v.start_streaming(
-            //         (current.width as _, current.height as _),
-            //         COLOR_SPACE::Rgb32,
-            //         None,
-            //     );
-            //     log::info!("[video] initialized: {:?}", ok);
-            // });
-            let p = lc.should_auto_login();
+            let p = self.lc.read().unwrap().should_auto_login();
             if !p.is_empty() {
                 input_os_password(p, true, self.clone());
             }
+            let current = &pi.displays[pi.current_display as usize];
+            self.set_display(current.x, current.y, current.width, current.height);
         }
-        lc.handle_peer_info(username, pi);
         self.update_privacy_mode();
-        // self.update_pi(pi);
+        self.set_peer_info(&pi);
+        self.lc.write().unwrap().handle_peer_info(pi);
+
         if self.is_file_transfer() {
             self.close_success();
         } else if !self.is_port_forward() {

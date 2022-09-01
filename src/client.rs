@@ -1278,13 +1278,13 @@ impl LoginConfigHandler {
     ///
     /// * `username` - The name of the peer.
     /// * `pi` - The peer info.
-    pub fn handle_peer_info(&mut self, username: String, pi: PeerInfo) {
+    pub fn handle_peer_info(&mut self, pi: PeerInfo) {
         if !pi.version.is_empty() {
             self.version = hbb_common::get_version_number(&pi.version);
         }
         self.features = pi.features.into_option();
         let serde = PeerInfoSerde {
-            username,
+            username: pi.username.clone(),
             hostname: pi.hostname.clone(),
             platform: pi.platform.clone(),
         };

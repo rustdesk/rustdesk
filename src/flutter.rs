@@ -1,24 +1,13 @@
 use std::{
     collections::HashMap,
-    sync::{
-        Arc, RwLock,
-    },
+    sync::{Arc, RwLock},
 };
 
 use flutter_rust_bridge::{StreamSink, ZeroCopyBuffer};
 
-use hbb_common::{
-    bail,
-    config::{LocalConfig},
-    message_proto::*,
-    ResultType,
-};
+use hbb_common::{bail, config::LocalConfig, message_proto::*, ResultType};
 
-use crate::{
-    ui_session_interface::{io_loop, InvokeUi, Session},
-};
-
-
+use crate::ui_session_interface::{io_loop, InvokeUi, Session};
 
 use crate::{client::*, flutter_ffi::EventToUI};
 
@@ -95,10 +84,6 @@ impl InvokeUi for FlutterHandler {
 
     fn set_permission(&self, name: &str, value: bool) {
         self.push_event("permission", vec![(name, &value.to_string())]);
-    }
-
-    fn update_pi(&self, pi: PeerInfo) {
-        // todo!()
     }
 
     fn close_success(&self) {
@@ -204,29 +189,27 @@ impl InvokeUi for FlutterHandler {
         }
     }
 
-    fn set_peer_info(
-        &self,
-        username: &str,
-        hostname: &str,
-        platform: &str,
-        sas_enabled: bool,
-        displays: &Vec<HashMap<&str, i32>>,
-        version: &str,
-        current_display: usize,
-        is_file_transfer: bool,
-    ) {
-        let displays = serde_json::ser::to_string(displays).unwrap_or("".to_owned());
+    fn set_peer_info(&self, pi: &PeerInfo) {
+        let mut displays = Vec::new();
+        for ref d in pi.displays.iter() {
+            let mut h: HashMap<&str, i32> = Default::default();
+            h.insert("x", d.x);
+            h.insert("y", d.y);
+            h.insert("width", d.width);
+            h.insert("height", d.height);
+            displays.push(h);
+        }
+        let displays = serde_json::ser::to_string(&displays).unwrap_or("".to_owned());
         self.push_event(
             "peer_info",
             vec![
-                ("username", username),
-                ("hostname", hostname),
-                ("platform", platform),
-                ("sas_enabled", &sas_enabled.to_string()),
+                ("username", &pi.username),
+                ("hostname", &pi.hostname),
+                ("platform", &pi.platform),
+                ("sas_enabled", &pi.sas_enabled.to_string()),
                 ("displays", &displays),
-                ("version", &version),
-                ("current_display", &current_display.to_string()),
-                ("is_file_transfer", &is_file_transfer.to_string()),
+                ("version", &pi.version),
+                ("current_display", &pi.current_display.to_string()),
             ],
         );
     }

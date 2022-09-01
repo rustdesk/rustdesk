@@ -96,6 +96,10 @@ impl InvokeUi for SciterHandler {
 
     fn set_display(&self, x: i32, y: i32, w: i32, h: i32) {
         self.call("setDisplay", &make_args!(x, y, w, h));
+        // https://sciter.com/forums/topic/color_spaceiyuv-crash
+        // Nothing spectacular in decoder – done on CPU side.
+        // So if you can do BGRA translation on your side – the better.
+        // BGRA is used as internal image format so it will not require additional transformations.
         VIDEO.lock().unwrap().as_mut().map(|v| {
             v.stop_streaming().ok();
             let ok = v.start_streaming((w, h), COLOR_SPACE::Rgb32, None);
@@ -110,8 +114,6 @@ impl InvokeUi for SciterHandler {
     fn set_permission(&self, name: &str, value: bool) {
         self.call2("setPermission", &make_args!(name, value));
     }
-
-    fn update_pi(&self, pi: PeerInfo) {} // TODO dup flutter
 
     fn close_success(&self) {
         self.call2("closeSuccess", &make_args!());
@@ -202,17 +204,25 @@ impl InvokeUi for SciterHandler {
             .map(|v| v.render_frame(data).ok());
     }
 
-    fn set_peer_info(
-        &self,
-        username: &str,
-        hostname: &str,
-        platform: &str,
-        sas_enabled: bool,
-        displays: &Vec<HashMap<&str, i32>>,
-        version: &str,
-        current_display: usize,
-        is_file_transfer: bool,
-    ) {
+    fn set_peer_info(&self, pi: &PeerInfo) {
+        let mut pi_sciter = Value::map();
+        pi_sciter.set_item("username", pi.username.clone());
+        pi_sciter.set_item("hostname", pi.hostname.clone());
+        pi_sciter.set_item("platform", pi.platform.clone());
+        pi_sciter.set_item("sas_enabled", pi.sas_enabled);
+
+        let mut displays = Value::array(0);
+        for ref d in pi.displays.iter() {
+            let mut display = Value::map();
+            display.set_item("x", d.x);
+            display.set_item("y", d.y);
+            display.set_item("width", d.width);
+            display.set_item("height", d.height);
+            displays.push(display);
+        }
+        pi_sciter.set_item("displays", displays);
+        pi_sciter.set_item("current_display", pi.current_display);
+        self.call("updatePi", &make_args!(pi_sciter));
     }
 
     fn msgbox(&self, msgtype: &str, title: &str, text: &str, retry: bool) {
