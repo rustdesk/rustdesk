@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_hbb/models/chat_model.dart';
 import 'package:get/get.dart';
-import 'package:tuple/tuple.dart';
+import 'package:rxdart/rxdart.dart' as rxdart;
 
 import '../../common.dart';
 import '../../mobile/widgets/dialog.dart';
@@ -467,7 +467,7 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
             }
 
             if (newValue == 'custom') {
-              final btnCancel = getMsgBoxButton(translate('Cancel'), () {
+              final btnCancel = msgBoxButton(translate('Close'), () {
                 widget.ffi.dialogManager.dismissAll();
               });
               final quality =
@@ -475,26 +475,29 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
               final double initValue = quality != null && quality.isNotEmpty
                   ? quality[0].toDouble()
                   : 50.0;
-              // final slider = _ImageCustomQualitySlider(
-              //     id: widget.id, v: RxDouble(initValue));
               final RxDouble sliderValue = RxDouble(initValue);
-              final slider = Obx(() => Slider(
-                    value: sliderValue.value,
-                    max: 100,
-                    label: sliderValue.value.round().toString(),
-                    onChanged: (double value) {
-                      () async {
-                        await bind.sessionSetCustomImageQuality(
-                            id: widget.id, value: value.toInt());
-                        final quality = await bind.sessionGetCustomImageQuality(
-                            id: widget.id);
-                        sliderValue.value =
-                            quality != null && quality.isNotEmpty
-                                ? quality[0].toDouble()
-                                : 50.0;
-                      }();
-                    },
-                  ));
+              final rxReplay = rxdart.ReplaySubject<double>();
+              rxReplay
+                  .throttleTime(const Duration(milliseconds: 1000),
+                      trailing: true, leading: false)
+                  .listen((double v) {
+                () async {
+                  await bind.sessionSetCustomImageQuality(
+                      id: widget.id, value: v.toInt());
+                }();
+              });
+              final slider = Obx(() {
+                return Slider(
+                  value: sliderValue.value,
+                  max: 100,
+                  divisions: 100,
+                  label: sliderValue.value.round().toString(),
+                  onChanged: (double value) {
+                    sliderValue.value = value;
+                    rxReplay.add(value);
+                  },
+                );
+              });
               msgBoxCommon(widget.ffi.dialogManager, 'Custom Image Quality',
                   slider, [btnCancel]);
             }

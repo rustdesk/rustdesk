@@ -432,7 +432,7 @@ void msgBox(
   if (type != "connecting" && type != "success" && !type.contains("nook")) {
     buttons.insert(
         0,
-        getMsgBoxButton(translate('OK'), () {
+        msgBoxButton(translate('OK'), () {
           dialogManager.dismissAll();
           // https://github.com/fufesou/rustdesk/blob/5e9a31340b899822090a3731769ae79c6bf5f3e5/src/ui/common.tis#L263
           if (!type.contains("custom")) {
@@ -446,7 +446,7 @@ void msgBox(
   if (hasCancel) {
     buttons.insert(
         0,
-        getMsgBoxButton(translate('Cancel'), () {
+        msgBoxButton(translate('Cancel'), () {
           dialogManager.dismissAll();
         }));
   }
@@ -454,17 +454,17 @@ void msgBox(
   if (type.contains("hasclose")) {
     buttons.insert(
         0,
-        getMsgBoxButton(translate('Close'), () {
+        msgBoxButton(translate('Close'), () {
           dialogManager.dismissAll();
         }));
   }
   dialogManager.show((setState, close) => CustomAlertDialog(
-      title: Text(translate(title), style: TextStyle(fontSize: 21)),
+      title: _msgBoxTitle(title),
       content: Text(translate(text), style: TextStyle(fontSize: 15)),
       actions: buttons));
 }
 
-Widget getMsgBoxButton(String text, void Function() onPressed) {
+Widget msgBoxButton(String text, void Function() onPressed) {
   return ButtonTheme(
       padding: EdgeInsets.symmetric(horizontal: 20, vertical: 10),
       materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
@@ -479,11 +479,13 @@ Widget getMsgBoxButton(String text, void Function() onPressed) {
               Text(translate(text), style: TextStyle(color: MyTheme.accent))));
 }
 
+Widget _msgBoxTitle(String title) => Text(translate(title), style: TextStyle(fontSize: 21));
+
 void msgBoxCommon(OverlayDialogManager dialogManager, String title,
     Widget content, List<Widget> buttons) {
   dialogManager.dismissAll();
   dialogManager.show((setState, close) => CustomAlertDialog(
-      title: Text(translate(title), style: TextStyle(fontSize: 21)),
+      title: _msgBoxTitle(title),
       content: content,
       actions: buttons));
 }
