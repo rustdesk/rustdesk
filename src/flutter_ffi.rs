@@ -190,20 +190,20 @@ pub fn session_toggle_option(id: String, value: String) {
 }
 
 pub fn session_set_image_quality(id: String, value: String) {
-    if let Some(session) = SESSIONS.read().unwrap().get(&id) {
-        // session.set_image_quality(value);
+    if let Some(session) = SESSIONS.write().unwrap().get_mut(&id) {
+        session.save_image_quality(value);
     }
 }
 
 pub fn session_lock_screen(id: String) {
     if let Some(session) = SESSIONS.read().unwrap().get(&id) {
-        // session.lock_screen();
+        session.lock_screen();
     }
 }
 
 pub fn session_ctrl_alt_del(id: String) {
     if let Some(session) = SESSIONS.read().unwrap().get(&id) {
-        // session.ctrl_alt_del();
+        session.ctrl_alt_del();
     }
 }
 
@@ -224,13 +224,13 @@ pub fn session_input_key(
     command: bool,
 ) {
     if let Some(session) = SESSIONS.read().unwrap().get(&id) {
-        // session.input_key(&name, down, press, alt, ctrl, shift, command);
+        session.input_key(&name, down, press, alt, ctrl, shift, command);
     }
 }
 
 pub fn session_input_string(id: String, value: String) {
     if let Some(session) = SESSIONS.read().unwrap().get(&id) {
-        // session.input_string(&value);
+        session.input_string(&value);
     }
 }
 
@@ -686,7 +686,6 @@ pub fn main_has_hwcodec() -> bool {
     has_hwcodec()
 }
 
-// TODO
 pub fn session_send_mouse(id: String, msg: String) {
     if let Ok(m) = serde_json::from_str::<HashMap<String, String>>(&msg) {
         let alt = m.get("alt").is_some();
@@ -719,7 +718,7 @@ pub fn session_send_mouse(id: String, msg: String) {
             } << 3;
         }
         if let Some(session) = SESSIONS.read().unwrap().get(&id) {
-            // session.send_mouse(mask, x, y, alt, ctrl, shift, command);
+            session.send_mouse(mask, x, y, alt, ctrl, shift, command);
         }
     }
 }

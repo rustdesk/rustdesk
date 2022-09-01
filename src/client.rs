@@ -2,7 +2,7 @@ use std::{
     collections::HashMap,
     net::SocketAddr,
     ops::{Deref, Not},
-    sync::{mpsc, Arc, Mutex, RwLock, atomic::AtomicBool},
+    sync::{atomic::AtomicBool, mpsc, Arc, Mutex, RwLock},
 };
 
 pub use async_trait::async_trait;
@@ -864,8 +864,7 @@ impl VideoHandler {
 #[derive(Default)]
 pub struct LoginConfigHandler {
     id: String,
-    pub is_file_transfer: bool,
-    pub is_port_forward: bool,
+    pub conn_type: ConnType,
     hash: Hash,
     password: Vec<u8>, // remember password for reconnect
     pub remember: bool,
@@ -904,12 +903,10 @@ impl LoginConfigHandler {
     /// # Arguments
     ///
     /// * `id` - id of peer
-    /// * `is_file_transfer` - Whether the connection is file transfer.
-    /// * `is_port_forward` - Whether the connection is port forward.
-    pub fn initialize(&mut self, id: String, is_file_transfer: bool, is_port_forward: bool) {
+    /// * `conn_type` - Connection type enum.
+    pub fn initialize(&mut self, id: String, conn_type: ConnType) {
         self.id = id;
-        self.is_file_transfer = is_file_transfer;
-        self.is_port_forward = is_port_forward;
+        self.conn_type = conn_type;
         let config = self.load_config();
         self.remember = !config.password.is_empty();
         self.config = config;
@@ -1066,7 +1063,8 @@ impl LoginConfigHandler {
     ///
     /// * `ignore_default` - If `true`, ignore the default value of the option.
     fn get_option_message(&self, ignore_default: bool) -> Option<OptionMessage> {
-        if self.is_port_forward || self.is_file_transfer {
+        if self.conn_type.eq(&ConnType::FILE_TRANSFER) || self.conn_type.eq(&ConnType::PORT_FORWARD)
+        {
             return None;
         }
         let mut n = 0;
@@ -1112,7 +1110,8 @@ impl LoginConfigHandler {
     }
 
     pub fn get_option_message_after_login(&self) -> Option<OptionMessage> {
-        if self.is_port_forward || self.is_file_transfer {
+        if self.conn_type.eq(&ConnType::FILE_TRANSFER) || self.conn_type.eq(&ConnType::PORT_FORWARD)
+        {
             return None;
         }
         let mut n = 0;
@@ -1348,19 +1347,20 @@ impl LoginConfigHandler {
             version: crate::VERSION.to_string(),
             ..Default::default()
         };
-        if self.is_file_transfer {
-            lr.set_file_transfer(FileTransfer {
+        match self.conn_type {
+            ConnType::FILE_TRANSFER => lr.set_file_transfer(FileTransfer {
                 dir: self.get_remote_dir(),
                 show_hidden: !self.get_option("remote_show_hidden").is_empty(),
                 ..Default::default()
-            });
-        } else if self.is_port_forward {
-            lr.set_port_forward(PortForward {
+            }),
+            ConnType::PORT_FORWARD => lr.set_port_forward(PortForward {
                 host: self.port_forward.0.clone(),
                 port: self.port_forward.1,
                 ..Default::default()
-            });
+            }),
+            _ => {}
         }
+
         let mut msg_out = Message::new();
         msg_out.set_login_request(lr);
         msg_out

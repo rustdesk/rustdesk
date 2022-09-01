@@ -5,7 +5,7 @@ use std::{
 
 use flutter_rust_bridge::{StreamSink, ZeroCopyBuffer};
 
-use hbb_common::{bail, config::LocalConfig, message_proto::*, ResultType};
+use hbb_common::{bail, config::LocalConfig, message_proto::*, ResultType, rendezvous_proto::ConnType};
 
 use crate::ui_session_interface::{io_loop, InvokeUi, Session};
 
@@ -74,9 +74,8 @@ impl InvokeUi for FlutterHandler {
         );
     }
 
-    fn set_display(&self, x: i32, y: i32, w: i32, h: i32) {
-        // todo!()
-    }
+    /// unused in flutter, use switch_display or set_peer_info
+    fn set_display(&self, _x: i32, _y: i32, _w: i32, _h: i32) {}
 
     fn update_privacy_mode(&self) {
         self.push_event("update_privacy_mode", [].into());
@@ -86,9 +85,7 @@ impl InvokeUi for FlutterHandler {
         self.push_event("permission", vec![(name, &value.to_string())]);
     }
 
-    fn close_success(&self) {
-        // todo!()
-    }
+    fn close_success(&self) {}
 
     fn update_quality_status(&self, status: QualityStatus) {
         const NULL: String = String::new();
@@ -179,9 +176,7 @@ impl InvokeUi for FlutterHandler {
         );
     }
 
-    fn adapt_size(&self) {
-        // todo!()
-    }
+    fn adapt_size(&self) {}
 
     fn on_rgba(&self, data: &[u8]) {
         if let Some(stream) = &*self.event_stream.read().unwrap() {
@@ -265,27 +260,37 @@ impl InvokeUi for FlutterHandler {
 /// * `is_file_transfer` - If the session is used for file transfer.
 /// * `is_port_forward` - If the session is used for port forward.
 pub fn session_add(id: &str, is_file_transfer: bool, is_port_forward: bool) -> ResultType<()> {
-    // TODO check same id
     let session_id = get_session_id(id.to_owned());
     LocalConfig::set_remote_id(&session_id);
-    // TODO close
-    // Self::close();
 
-    // TODO cmd passwd args
     let session: Session<FlutterHandler> = Session {
         id: session_id.clone(),
         ..Default::default()
+    };
+
+    // TODO rdp
+    let conn_type = if is_file_transfer {
+        ConnType::FILE_TRANSFER
+    } else if is_port_forward {
+        ConnType::PORT_FORWARD
+    } else {
+        ConnType::DEFAULT_CONN
     };
 
     session
         .lc
         .write()
         .unwrap()
-        .initialize(session_id.clone(), is_file_transfer, is_port_forward);
-    SESSIONS
+        .initialize(session_id, conn_type);
+
+    if let Some(same_id_session) = SESSIONS
         .write()
         .unwrap()
-        .insert(id.to_owned(), session.clone());
+        .insert(id.to_owned(), session)
+    {
+        same_id_session.close();
+    }
+
     Ok(())
 }
 
@@ -300,10 +305,6 @@ pub fn session_start_(id: &str, event_stream: StreamSink<EventToUI>) -> ResultTy
         *session.event_stream.write().unwrap() = Some(event_stream);
         let session = session.clone();
         std::thread::spawn(move || {
-            // TODO is_file_transfer is_port_forward
-            // let is_file_transfer = session.lc.read().unwrap().is_file_transfer;
-            // let is_port_forward = session.lc.read().unwrap().is_port_forward;
-            // Connection::start(session, is_file_transfer, is_port_forward);
             io_loop(session);
         });
         Ok(())
