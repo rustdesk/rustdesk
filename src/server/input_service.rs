@@ -673,6 +673,7 @@ fn map_keyboard_mode(evt: &KeyEvent) {
 
 fn tfc_key_down_or_up(key: Key, down: bool, up: bool) {
     if let Key::Layout(chr) = key {
+        log::info!("tfc_key_down_or_up :{:?}", chr);
         if down {
             TFC_CONTEXT.lock().unwrap().unicode_char_down(chr);
         }
@@ -705,7 +706,6 @@ fn tfc_key_down_or_up(key: Key, down: bool, up: bool) {
         Key::F9 => TFC_Key::F9,
         Key::Home => TFC_Key::Home,
         Key::LeftArrow => TFC_Key::LeftArrow,
-        Key::Option => TFC_Key::Alt,
         Key::PageDown => TFC_Key::PageDown,
         Key::PageUp => TFC_Key::PageUp,
         Key::Return => TFC_Key::ReturnOrEnter,
@@ -725,24 +725,15 @@ fn tfc_key_down_or_up(key: Key, down: bool, up: bool) {
         Key::Numpad8 => TFC_Key::N8,
         Key::Numpad9 => TFC_Key::N9,
         Key::Decimal => TFC_Key::NumpadDecimal,
-        // Key::Cancel => TFC_Key::Cancel,
         Key::Clear => TFC_Key::NumpadClear,
         Key::Pause => TFC_Key::PlayPause,
-        // Key::Kana => TFC_Key::,
-        // Key::Hangul => "Hangul",
-        // Key::Hanja => "Hanja",
-        // Key::Kanji => "Kanji",
-        // Key::Select => TFC_Key::Sel,
-        // Key::Print => TFC_Key::P,
-        // Key::Execute => "Execute",
-        // Key::Snapshot => "3270_PrintScreen",
-        // Key::Insert => TFC_Key:,
-        // Key::Help => "Help",
-        // Key::Separator => "KP_Separator",
-        // Key::Scroll => "Scroll_Lock",
-        // Key::NumLock => "Num_Lock",
+        Key::Print => TFC_Key::Print,
+        Key::Snapshot => TFC_Key::PrintScreen,
+        Key::Insert => TFC_Key::Insert,
+        Key::Scroll => TFC_Key::ScrollLock,
+        Key::NumLock => TFC_Key::NumLock,
         Key::RWin => TFC_Key::Meta,
-        // Key::Apps => "Menu",
+        Key::Apps => TFC_Key::Apps,
         Key::Multiply => TFC_Key::NumpadMultiply,
         Key::Add => TFC_Key::NumpadPlus,
         Key::Subtract => TFC_Key::NumpadMinus,
@@ -758,6 +749,7 @@ fn tfc_key_down_or_up(key: Key, down: bool, up: bool) {
         }
     };
 
+    log::info!("tfc_key_down_or_up: {:?}", key);
     if down {
         TFC_CONTEXT.lock().unwrap().key_down(key);
     }
