@@ -1,4 +1,4 @@
-use hbb_common::{fs, message_proto::*};
+use hbb_common::{fs, message_proto::*, log};
 
 use super::{Data, Interface};
 
@@ -113,5 +113,27 @@ pub trait FileManager: Interface {
 
     fn resume_job(&self, id: i32, is_remote: bool) {
         self.send(Data::ResumeJob((id, is_remote)));
+    }
+
+    fn set_confirm_override_file(
+        &self,
+        id: i32,
+        file_num: i32,
+        need_override: bool,
+        remember: bool,
+        is_upload: bool,
+    ) {
+        log::info!(
+            "confirm file transfer, job: {}, need_override: {}",
+            id,
+            need_override
+        );
+        self.send(Data::SetConfirmOverrideFile((
+            id,
+            file_num,
+            need_override,
+            remember,
+            is_upload,
+        )));
     }
 }

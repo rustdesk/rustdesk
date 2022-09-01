@@ -325,6 +325,7 @@ class FfiModel with ChangeNotifier {
     }
 
     if (evt['is_file_transfer'] == "true") {
+      // TODO is file transfer
       parent.target?.fileModel.onReady();
     } else {
       _pi.displays = [];
