@@ -10,9 +10,8 @@ class Peer {
   final List<dynamic> tags;
   bool online = false;
 
-  Peer.fromJson(String id, Map<String, dynamic> json)
-      : id = id,
-        username = json['username'] ?? '',
+  Peer.fromJson(this.id, Map<String, dynamic> json)
+      : username = json['username'] ?? '',
         hostname = json['hostname'] ?? '',
         platform = json['platform'] ?? '',
         tags = json['tags'] ?? [];
@@ -35,57 +34,52 @@ class Peer {
 }
 
 class Peers extends ChangeNotifier {
-  late String _name;
-  late List<Peer> _peers;
-  late final _loadEvent;
+  final String name;
+  final String loadEvent;
+  List<Peer> peers;
   static const _cbQueryOnlines = 'callback_query_onlines';
 
-  Peers(String name, String loadEvent, List<Peer> _initPeers) {
-    _name = name;
-    _loadEvent = loadEvent;
-    _peers = _initPeers;
-    platformFFI.registerEventHandler(_cbQueryOnlines, _name, (evt) {
+  Peers({required this.name, required this.peers, required this.loadEvent}) {
+    platformFFI.registerEventHandler(_cbQueryOnlines, name, (evt) {
       _updateOnlineState(evt);
     });
-    platformFFI.registerEventHandler(_loadEvent, _name, (evt) {
+    platformFFI.registerEventHandler(loadEvent, name, (evt) {
       _updatePeers(evt);
     });
   }
 
-  List<Peer> get peers => _peers;
-
   @override
   void dispose() {
-    platformFFI.unregisterEventHandler(_cbQueryOnlines, _name);
-    platformFFI.unregisterEventHandler(_loadEvent, _name);
+    platformFFI.unregisterEventHandler(_cbQueryOnlines, name);
+    platformFFI.unregisterEventHandler(loadEvent, name);
     super.dispose();
   }
 
   Peer getByIndex(int index) {
-    if (index < _peers.length) {
-      return _peers[index];
+    if (index < peers.length) {
+      return peers[index];
     } else {
       return Peer.loading();
     }
   }
 
   int getPeersCount() {
-    return _peers.length;
+    return peers.length;
   }
 
   void _updateOnlineState(Map<String, dynamic> evt) {
     evt['onlines'].split(',').forEach((online) {
-      for (var i = 0; i < _peers.length; i++) {
-        if (_peers[i].id == online) {
-          _peers[i].online = true;
+      for (var i = 0; i < peers.length; i++) {
+        if (peers[i].id == online) {
+          peers[i].online = true;
         }
       }
     });
 
     evt['offlines'].split(',').forEach((offline) {
-      for (var i = 0; i < _peers.length; i++) {
-        if (_peers[i].id == offline) {
-          _peers[i].online = false;
+      for (var i = 0; i < peers.length; i++) {
+        if (peers[i].id == offline) {
+          peers[i].online = false;
         }
       }
     });
@@ -95,19 +89,19 @@ class Peers extends ChangeNotifier {
 
   void _updatePeers(Map<String, dynamic> evt) {
     final onlineStates = _getOnlineStates();
-    _peers = _decodePeers(evt['peers']);
-    _peers.forEach((peer) {
+    peers = _decodePeers(evt['peers']);
+    for (var peer in peers) {
       final state = onlineStates[peer.id];
       peer.online = state != null && state != false;
-    });
+    }
     notifyListeners();
   }
 
   Map<String, bool> _getOnlineStates() {
-    var onlineStates = new Map<String, bool>();
-    _peers.forEach((peer) {
+    var onlineStates = <String, bool>{};
+    for (var peer in peers) {
       onlineStates[peer.id] = peer.online;
-    });
+    }
     return onlineStates;
   }
 
@@ -121,7 +115,7 @@ class Peers extends ChangeNotifier {
               Peer.fromJson(s[0] as String, s[1] as Map<String, dynamic>))
           .toList();
     } catch (e) {
-      print('peers(): $e');
+      debugPrint('peers(): $e');
     }
     return [];
   }

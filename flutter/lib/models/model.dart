@@ -301,6 +301,9 @@ class FfiModel with ChangeNotifier {
 
   /// Handle the peer info event based on [evt].
   void handlePeerInfo(Map<String, dynamic> evt, String peerId) async {
+    // recent peer updated by handle_peer_info(ui_session_interface.rs) --> handle_peer_info(client.rs) --> save_config(client.rs)
+    bind.mainLoadRecentPeers();
+
     parent.target?.dialogManager.dismissAll();
     _pi.version = evt['version'];
     _pi.username = evt['username'];
@@ -556,18 +559,18 @@ class CanvasModel with ChangeNotifier {
     var dxOffset = 0;
     var dyOffset = 0;
     if (dw > size.width) {
-      final xxxx = x - dw * (x / size.width) - _x;
-      if (xxxx.isInfinite || xxxx.isNaN) {
+      final X_debugNanOrInfinite = x - dw * (x / size.width) - _x;
+      if (X_debugNanOrInfinite.isInfinite || X_debugNanOrInfinite.isNaN) {
         debugPrint(
-            'REMOVE ME ============================ xxxx $x,$dw,$_scale,${size.width},$_x');
+            'REMOVE ME ============================ X_debugNanOrInfinite $x,$dw,$_scale,${size.width},$_x');
       }
       dxOffset = (x - dw * (x / size.width) - _x).toInt();
     }
     if (dh > size.height) {
-      final yyyy = y - dh * (y / size.height) - _y;
-      if (yyyy.isInfinite || yyyy.isNaN) {
+      final Y_debugNanOrInfinite = y - dh * (y / size.height) - _y;
+      if (Y_debugNanOrInfinite.isInfinite || Y_debugNanOrInfinite.isNaN) {
         debugPrint(
-            'REMOVE ME ============================ xxxx $y,$dh,$_scale,${size.height},$_y');
+            'REMOVE ME ============================ Y_debugNanOrInfinite $y,$dh,$_scale,${size.height},$_y');
       }
       dyOffset = (y - dh * (y / size.height) - _y).toInt();
     }
@@ -1249,20 +1252,20 @@ class PeerInfo {
 Future<void> savePreference(String id, double xCursor, double yCursor,
     double xCanvas, double yCanvas, double scale, int currentDisplay) async {
   SharedPreferences prefs = await SharedPreferences.getInstance();
-  final p = Map<String, dynamic>();
+  final p = <String, dynamic>{};
   p['xCursor'] = xCursor;
   p['yCursor'] = yCursor;
   p['xCanvas'] = xCanvas;
   p['yCanvas'] = yCanvas;
   p['scale'] = scale;
   p['currentDisplay'] = currentDisplay;
-  prefs.setString('peer' + id, json.encode(p));
+  prefs.setString('peer$id', json.encode(p));
 }
 
 Future<Map<String, dynamic>?> getPreference(String id) async {
   if (!isWebDesktop) return null;
   SharedPreferences prefs = await SharedPreferences.getInstance();
-  var p = prefs.getString('peer' + id);
+  var p = prefs.getString('peer$id');
   if (p == null) return null;
   Map<String, dynamic> m = json.decode(p);
   return m;
@@ -1270,7 +1273,7 @@ Future<Map<String, dynamic>?> getPreference(String id) async {
 
 void removePreference(String id) async {
   SharedPreferences prefs = await SharedPreferences.getInstance();
-  prefs.remove('peer' + id);
+  prefs.remove('peer$id');
 }
 
 void initializeCursorAndCanvas(FFI ffi) async {

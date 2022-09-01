@@ -348,11 +348,11 @@ abstract class BasePeerCard extends StatelessWidget {
     assert(!(isFileTransfer && isTcpTunneling && isRDP),
         "more than one connect type");
     if (isFileTransfer) {
-      await rustDeskWinManager.new_file_transfer(id);
+      await rustDeskWinManager.newFileTransfer(id);
     } else if (isTcpTunneling || isRDP) {
-      await rustDeskWinManager.new_port_forward(id, isRDP);
+      await rustDeskWinManager.newPortForward(id, isRDP);
     } else {
-      await rustDeskWinManager.new_remote_desktop(id);
+      await rustDeskWinManager.newRemoteDesktop(id);
     }
     FocusScopeNode currentFocus = FocusScope.of(context);
     if (!currentFocus.hasPrimaryFocus) {
@@ -468,7 +468,8 @@ abstract class BasePeerCard extends StatelessWidget {
   }
 
   @protected
-  MenuEntryBase<String> _removeAction(String id) {
+  MenuEntryBase<String> _removeAction(
+      String id, Future<void> Function() reloadFunc) {
     return MenuEntryButton<String>(
       childBuilder: (TextStyle? style) => Text(
         translate('Remove'),
@@ -478,7 +479,8 @@ abstract class BasePeerCard extends StatelessWidget {
         () async {
           await bind.mainRemovePeer(id: id);
           removePreference(id);
-          Get.forceAppUpdate(); // TODO use inner model / state
+          await reloadFunc();
+          // Get.forceAppUpdate(); // TODO use inner model / state
         }();
       },
       dismissOnClicked: true,
@@ -614,7 +616,9 @@ class RecentPeerCard extends BasePeerCard {
     }
     menuItems.add(await _forceAlwaysRelayAction(peer.id));
     menuItems.add(_renameAction(peer.id, false));
-    menuItems.add(_removeAction(peer.id));
+    menuItems.add(_removeAction(peer.id, () async {
+      await bind.mainLoadRecentPeers();
+    }));
     menuItems.add(_unrememberPasswordAction(peer.id));
     menuItems.add(_addFavAction(peer.id));
     return menuItems;
@@ -638,7 +642,9 @@ class FavoritePeerCard extends BasePeerCard {
     }
     menuItems.add(await _forceAlwaysRelayAction(peer.id));
     menuItems.add(_renameAction(peer.id, false));
-    menuItems.add(_removeAction(peer.id));
+    menuItems.add(_removeAction(peer.id, () async {
+      await bind.mainLoadFavPeers();
+    }));
     menuItems.add(_unrememberPasswordAction(peer.id));
     menuItems.add(_rmFavAction(peer.id));
     return menuItems;
@@ -662,9 +668,10 @@ class DiscoveredPeerCard extends BasePeerCard {
     }
     menuItems.add(await _forceAlwaysRelayAction(peer.id));
     menuItems.add(_renameAction(peer.id, false));
-    menuItems.add(_removeAction(peer.id));
+    menuItems.add(_removeAction(peer.id, () async {
+      await bind.mainLoadLanPeers();
+    }));
     menuItems.add(_unrememberPasswordAction(peer.id));
-    menuItems.add(_addFavAction(peer.id));
     return menuItems;
   }
 }
@@ -686,7 +693,7 @@ class AddressBookPeerCard extends BasePeerCard {
     }
     menuItems.add(await _forceAlwaysRelayAction(peer.id));
     menuItems.add(_renameAction(peer.id, false));
-    menuItems.add(_removeAction(peer.id));
+    menuItems.add(_removeAction(peer.id, () async {}));
     menuItems.add(_unrememberPasswordAction(peer.id));
     menuItems.add(_addFavAction(peer.id));
     menuItems.add(_editTagAction(peer.id));
@@ -695,7 +702,8 @@ class AddressBookPeerCard extends BasePeerCard {
 
   @protected
   @override
-  MenuEntryBase<String> _removeAction(String id) {
+  MenuEntryBase<String> _removeAction(
+      String id, Future<void> Function() reloadFunc) {
     return MenuEntryButton<String>(
       childBuilder: (TextStyle? style) => Text(
         translate('Remove'),

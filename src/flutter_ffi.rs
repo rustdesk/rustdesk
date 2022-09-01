@@ -205,8 +205,8 @@ pub fn session_get_custom_image_quality(id: String) -> Option<Vec<i32>> {
 }
 
 pub fn session_set_custom_image_quality(id: String, value: i32) {
-    if let Some(session) = SESSIONS.read().unwrap().get(&id) {
-        session.set_custom_image_quality(value);
+    if let Some(session) = SESSIONS.write().unwrap().get_mut(&id) {
+        session.save_custom_image_quality(value);
     }
 }
 

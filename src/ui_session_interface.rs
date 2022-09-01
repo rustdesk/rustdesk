@@ -47,6 +47,11 @@ impl<T: InvokeUi> Session<T> {
         self.lc.read().unwrap().image_quality.clone()
     }
 
+    /// Get custom image quality.
+    pub fn get_custom_image_quality(&self) -> Vec<i32> {
+        self.lc.read().unwrap().custom_image_quality.clone()
+    }
+
     pub fn save_view_style(&mut self, value: String) {
         self.lc.write().unwrap().save_view_style(value);
     }
@@ -634,7 +639,7 @@ impl<T: InvokeUi> Interface for Session<T> {
             }
         } else if !self.is_port_forward() {
             if pi.displays.is_empty() {
-                self.lc.write().unwrap().handle_peer_info(pi);
+                self.lc.write().unwrap().handle_peer_info(&pi);
                 self.update_privacy_mode();
                 self.msgbox("error", "Remote Error", "No Display");
                 return;
@@ -647,9 +652,9 @@ impl<T: InvokeUi> Interface for Session<T> {
             self.set_display(current.x, current.y, current.width, current.height);
         }
         self.update_privacy_mode();
+        // Save recent peers, then push event to flutter. So flutter can refresh peer page.
+        self.lc.write().unwrap().handle_peer_info(&pi);
         self.set_peer_info(&pi);
-        self.lc.write().unwrap().handle_peer_info(pi);
-
         if self.is_file_transfer() {
             self.close_success();
         } else if !self.is_port_forward() {
