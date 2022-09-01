@@ -2,7 +2,7 @@ use std::{
     collections::HashMap,
     net::SocketAddr,
     ops::{Deref, Not},
-    sync::{mpsc, Arc, Mutex, RwLock},
+    sync::{mpsc, Arc, Mutex, RwLock, atomic::AtomicBool},
 };
 
 pub use async_trait::async_trait;
@@ -48,7 +48,12 @@ pub use super::lang::*;
 
 pub mod file_trait;
 pub mod helper;
+pub mod io_loop;
 
+pub static SERVER_KEYBOARD_ENABLED: AtomicBool = AtomicBool::new(true);
+pub static SERVER_FILE_TRANSFER_ENABLED: AtomicBool = AtomicBool::new(true);
+pub static SERVER_CLIPBOARD_ENABLED: AtomicBool = AtomicBool::new(true);
+pub const MILLI1: Duration = Duration::from_millis(1);
 pub const SEC30: Duration = Duration::from_secs(30);
 
 /// Client of the remote desktop.

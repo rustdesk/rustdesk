@@ -2,8 +2,8 @@ use std::{
     collections::HashMap,
     ops::{Deref, DerefMut},
     sync::{
-        atomic::{AtomicBool, AtomicUsize, Ordering},
-        Arc, Mutex, RwLock,
+        atomic::{AtomicBool, Ordering},
+        Arc, Mutex,
     },
 };
 
@@ -22,35 +22,15 @@ use clipboard::{
     cliprdr::CliprdrClientContext, create_cliprdr_context as create_clipboard_file_context,
     get_rx_clip_client, server_clip_file,
 };
-use enigo::{self, Enigo, KeyboardControllable};
-use hbb_common::{
-    allow_err,
-    config::{Config, LocalConfig, PeerConfig, TransferSerde},
-    fs::{
-        self, can_enable_overwrite_detection, get_job, get_string, new_send_confirm,
-        DigestCheckResult, RemoveJobMeta, TransferJobMeta,
-    },
-    get_version_number, log,
-    message_proto::{permission_info::Permission, *},
-    protobuf::Message as _,
-    rendezvous_proto::ConnType,
-    sleep,
-    tokio::{
-        self,
-        sync::mpsc,
-        time::{self, Duration, Instant, Interval},
-    },
-    Stream,
-};
+use enigo::{self};
+use hbb_common::{allow_err, log, message_proto::*};
 
 #[cfg(windows)]
 use crate::clipboard_file::*;
 use crate::{
     client::*,
-    common::{self, check_clipboard, update_clipboard, ClipboardContext, CLIPBOARD_INTERVAL},
-    ui_session_interface::{io_loop, InvokeUi, Remote, Session, SERVER_KEYBOARD_ENABLED},
+    ui_session_interface::{InvokeUi, Session},
 };
-use errno;
 
 type Video = AssetPtr<video_destination>;
 
@@ -131,7 +111,7 @@ impl InvokeUi for SciterHandler {
         self.call2("setPermission", &make_args!(name, value));
     }
 
-    fn update_pi(&self, pi: PeerInfo) {}
+    fn update_pi(&self, pi: PeerInfo) {} // TODO dup flutter
 
     fn close_success(&self) {
         self.call2("closeSuccess", &make_args!());
@@ -165,15 +145,15 @@ impl InvokeUi for SciterHandler {
     }
 
     fn job_error(&self, id: i32, err: String, file_num: i32) {
-        todo!()
+        self.call("jobError", &make_args!(id, err, file_num));
     }
 
     fn job_done(&self, id: i32, file_num: i32) {
-        todo!()
+        self.call("jobDone", &make_args!(id, file_num));
     }
 
     fn clear_all_jobs(&self) {
-        todo!()
+        self.call("clearAllJobs", &make_args!());
     }
 
     fn add_job(
@@ -189,19 +169,25 @@ impl InvokeUi for SciterHandler {
     }
 
     fn update_transfer_list(&self) {
-        todo!()
+        self.call("updateTransferList", &make_args!());
     }
 
     fn confirm_delete_files(&self, id: i32, i: i32, name: String) {
-        todo!()
+        self.call("confirmDeleteFiles", &make_args!(id, i, name));
     }
 
     fn override_file_confirm(&self, id: i32, file_num: i32, to: String, is_upload: bool) {
-        todo!()
+        self.call(
+            "overrideFileConfirm",
+            &make_args!(id, file_num, to, is_upload),
+        );
     }
 
     fn job_progress(&self, id: i32, file_num: i32, speed: f64, finished_size: f64) {
-        todo!()
+        self.call(
+            "jobProgress",
+            &make_args!(id, file_num, speed, finished_size),
+        );
     }
 
     fn adapt_size(&self) {
@@ -227,11 +213,22 @@ impl InvokeUi for SciterHandler {
         current_display: usize,
         is_file_transfer: bool,
     ) {
-        todo!()
     }
 
     fn msgbox(&self, msgtype: &str, title: &str, text: &str, retry: bool) {
-        todo!()
+        self.call2("msgbox_retry", &make_args!(msgtype, title, text, retry));
+    }
+
+    fn new_message(&self, msg: String) {
+        self.call("newMessage", &make_args!(msg));
+    }
+
+    fn switch_display(&self, display: &SwitchDisplay) {
+        self.call("switchDisplay", &make_args!(display.display));
+    }
+
+    fn update_block_input_state(&self, on: bool) {
+        self.call("updateBlockInputState", &make_args!(on));
     }
 }
 
@@ -405,21 +402,7 @@ impl SciterSession {
         Self(session)
     }
 
-    // fn update_quality_status(&self, status: QualityStatus) {
-    //     self.call2(
-    //         "updateQualityStatus",
-    //         &make_args!(
-    //             status.speed.map_or(Value::null(), |it| it.into()),
-    //             status.fps.map_or(Value::null(), |it| it.into()),
-    //             status.delay.map_or(Value::null(), |it| it.into()),
-    //             status.target_bitrate.map_or(Value::null(), |it| it.into()),
-    //             status
-    //                 .codec_format
-    //                 .map_or(Value::null(), |it| it.to_string().into())
-    //         ),
-    //     );
-    // }
-
+    // TODO
     fn start_keyboard_hook(&'static self) {
         if self.is_port_forward() || self.is_file_transfer() {
             return;
@@ -652,14 +635,6 @@ impl SciterSession {
         });
     }
 
-    // fn get_view_style(&mut self) -> String {
-    //     return self.lc.read().unwrap().view_style.clone();
-    // }
-
-    // fn get_image_quality(&mut self) -> String {
-    //     return self.lc.read().unwrap().image_quality.clone();
-    // }
-
     // TODO
     fn get_custom_image_quality(&mut self) -> Value {
         let mut v = Value::array(0);
@@ -668,87 +643,6 @@ impl SciterSession {
         }
         v
     }
-
-    // #[inline]
-    // pub(super) fn save_config(&self, config: PeerConfig) {
-    //     self.lc.write().unwrap().save_config(config);
-    // }
-
-    // fn save_view_style(&mut self, value: String) {
-    //     self.lc.write().unwrap().save_view_style(value);
-    // }
-
-    // #[inline]
-    // pub(super) fn load_config(&self) -> PeerConfig {
-    //     load_config(&self.id)
-    // }
-
-    // fn toggle_option(&mut self, name: String) {
-    //     let msg = self.lc.write().unwrap().toggle_option(name.clone());
-    //     if name == "enable-file-transfer" {
-    //         self.send(Data::ToggleClipboardFile);
-    //     }
-    //     if let Some(msg) = msg {
-    //         self.send(Data::Message(msg));
-    //     }
-    // }
-
-    // fn get_toggle_option(&mut self, name: String) -> bool {
-    //     self.lc.read().unwrap().get_toggle_option(&name)
-    // }
-
-    // fn is_privacy_mode_supported(&self) -> bool {
-    //     self.lc.read().unwrap().is_privacy_mode_supported()
-    // }
-
-    // fn refresh_video(&mut self) {
-    //     self.send(Data::Message(LoginConfigHandler::refresh()));
-    // }
-
-    // fn save_custom_image_quality(&mut self, custom_image_quality: i32) {
-    //     let msg = self
-    //         .lc
-    //         .write()
-    //         .unwrap()
-    //         .save_custom_image_quality(custom_image_quality);
-    //     self.send(Data::Message(msg));
-    // }
-
-    // fn save_image_quality(&mut self, value: String) {
-    //     let msg = self.lc.write().unwrap().save_image_quality(value);
-    //     if let Some(msg) = msg {
-    //         self.send(Data::Message(msg));
-    //     }
-    // }
-
-    // fn get_remember(&mut self) -> bool {
-    //     self.lc.read().unwrap().remember
-    // }
-
-    // fn set_write_override(
-    //     &mut self,
-    //     job_id: i32,
-    //     file_num: i32,
-    //     is_override: bool,
-    //     remember: bool,
-    //     is_upload: bool,
-    // ) -> bool {
-    //     self.send(Data::SetConfirmOverrideFile((
-    //         job_id,
-    //         file_num,
-    //         is_override,
-    //         remember,
-    //         is_upload,
-    //     )));
-    //     true
-    // }
-
-    // fn has_hwcodec(&self) -> bool {
-    //     #[cfg(not(feature = "hwcodec"))]
-    //     return false;
-    //     #[cfg(feature = "hwcodec")]
-    //     return true;
-    // }
 
     // TODO
     fn supported_hwcodec(&self) -> Value {
@@ -774,51 +668,6 @@ impl SciterSession {
             v
         }
     }
-
-    // fn change_prefer_codec(&self) {
-    //     let msg = self.lc.write().unwrap().change_prefer_codec();
-    //     self.send(Data::Message(msg));
-    // }
-
-    // fn restart_remote_device(&mut self) {
-    //     let mut lc = self.lc.write().unwrap();
-    //     lc.restarting_remote_device = true;
-    //     let msg = lc.restart_remote_device();
-    //     self.send(Data::Message(msg));
-    // }
-
-    // pub fn is_restarting_remote_device(&self) -> bool {
-    //     self.lc.read().unwrap().restarting_remote_device
-    // }
-
-    // fn t(&self, name: String) -> String {
-    //     crate::client::translate(name)
-    // }
-
-    // fn get_audit_server(&self) -> String {
-    //     if self.lc.read().unwrap().conn_id <= 0
-    //         || LocalConfig::get_option("access_token").is_empty()
-    //     {
-    //         return "".to_owned();
-    //     }
-    //     crate::get_audit_server(
-    //         Config::get_option("api-server"),
-    //         Config::get_option("custom-rendezvous-server"),
-    //     )
-    // }
-
-    // fn send_note(&self, note: String) {
-    //     let url = self.get_audit_server();
-    //     let id = self.id.clone();
-    //     let conn_id = self.lc.read().unwrap().conn_id;
-    //     std::thread::spawn(move || {
-    //         send_note(url, id, conn_id, note);
-    //     });
-    // }
-
-    // fn is_xfce(&self) -> bool {
-    //     crate::platform::is_xfce()
-    // }
 
     // TODO
     fn save_size(&mut self, x: i32, y: i32, w: i32, h: i32) {
@@ -881,34 +730,6 @@ impl SciterSession {
         v
     }
 
-    // fn remove_port_forward(&mut self, port: i32) {
-    //     let mut config = self.load_config();
-    //     config.port_forwards = config
-    //         .port_forwards
-    //         .drain(..)
-    //         .filter(|x| x.0 != port)
-    //         .collect();
-    //     self.save_config(config);
-    //     self.send(Data::RemovePortForward(port));
-    // }
-
-    // fn add_port_forward(&mut self, port: i32, remote_host: String, remote_port: i32) {
-    //     let mut config = self.load_config();
-    //     if config
-    //         .port_forwards
-    //         .iter()
-    //         .filter(|x| x.0 == port)
-    //         .next()
-    //         .is_some()
-    //     {
-    //         return;
-    //     }
-    //     let pf = (port, remote_host, remote_port);
-    //     config.port_forwards.push(pf.clone());
-    //     self.save_config(config);
-    //     self.send(Data::AddPortForward(pf));
-    // }
-
     fn get_size(&mut self) -> Value {
         let s = if self.is_file_transfer() {
             self.lc.read().unwrap().size_ft
@@ -925,10 +746,6 @@ impl SciterSession {
         v
     }
 
-    // fn get_id(&mut self) -> String {
-    //     self.id.clone()
-    // }
-
     fn get_default_pi(&mut self) -> Value {
         let mut pi = Value::map();
         let info = self.lc.read().unwrap().info.clone();
@@ -938,157 +755,10 @@ impl SciterSession {
         pi
     }
 
-    // fn get_option(&self, k: String) -> String {
-    //     self.lc.read().unwrap().get_option(&k)
-    // }
-
-    // fn set_option(&self, k: String, v: String) {
-    //     self.lc.write().unwrap().set_option(k, v);
-    // }
-
-    // fn input_os_password(&mut self, pass: String, activate: bool) {
-    //     input_os_password(pass, activate, self.clone());
-    // }
-
     // close_state sciter only
     fn save_close_state(&mut self, k: String, v: String) {
         self.close_state.insert(k, v);
     }
-
-    // fn get_chatbox(&mut self) -> String {
-    //     #[cfg(feature = "inline")]
-    //     return super::inline::get_chatbox();
-    //     #[cfg(not(feature = "inline"))]
-    //     return "".to_owned();
-    // }
-
-    // fn get_icon(&mut self) -> String {
-    //     crate::get_icon()
-    // }
-
-    // fn send_chat(&mut self, text: String) {
-    //     let mut misc = Misc::new();
-    //     misc.set_chat_message(ChatMessage {
-    //         text,
-    //         ..Default::default()
-    //     });
-    //     let mut msg_out = Message::new();
-    //     msg_out.set_misc(misc);
-    //     self.send(Data::Message(msg_out));
-    // }
-
-    // fn switch_display(&mut self, display: i32) {
-    //     let mut misc = Misc::new();
-    //     misc.set_switch_display(SwitchDisplay {
-    //         display,
-    //         ..Default::default()
-    //     });
-    //     let mut msg_out = Message::new();
-    //     msg_out.set_misc(misc);
-    //     self.send(Data::Message(msg_out));
-    // }
-
-    // fn is_file_transfer(&self) -> bool {
-    //     self.cmd == "--file-transfer"
-    // }
-
-    // fn is_port_forward(&self) -> bool {
-    //     self.cmd == "--port-forward" || self.is_rdp()
-    // }
-
-    // fn is_rdp(&self) -> bool {
-    //     self.cmd == "--rdp"
-    // }
-
-    // fn reconnect(&mut self) {
-    //     println!("reconnecting");
-    //     let cloned = self.clone();
-    //     let mut lock = self.thread.lock().unwrap();
-    //     lock.take().map(|t| t.join());
-    //     *lock = Some(std::thread::spawn(move || {
-    //         io_loop(cloned);
-    //     }));
-    // }
-
-    // #[inline]
-    // fn peer_platform(&self) -> String {
-    //     self.lc.read().unwrap().info.platform.clone()
-    // }
-
-    // fn get_platform(&mut self, is_remote: bool) -> String {
-    //     if is_remote {
-    //         self.peer_platform()
-    //     } else {
-    //         whoami::platform().to_string()
-    //     }
-    // }
-
-    // fn get_path_sep(&mut self, is_remote: bool) -> &'static str {
-    //     let p = self.get_platform(is_remote);
-    //     if &p == "Windows" {
-    //         return "\\";
-    //     } else {
-    //         return "/";
-    //     }
-    // }
-
-    // fn get_icon_path(&mut self, file_type: i32, ext: String) -> String {
-    //     let mut path = Config::icon_path();
-    //     if file_type == FileType::DirLink as i32 {
-    //         let new_path = path.join("dir_link");
-    //         if !std::fs::metadata(&new_path).is_ok() {
-    //             #[cfg(windows)]
-    //             allow_err!(std::os::windows::fs::symlink_file(&path, &new_path));
-    //             #[cfg(not(windows))]
-    //             allow_err!(std::os::unix::fs::symlink(&path, &new_path));
-    //         }
-    //         path = new_path;
-    //     } else if file_type == FileType::File as i32 {
-    //         if !ext.is_empty() {
-    //             path = path.join(format!("file.{}", ext));
-    //         } else {
-    //             path = path.join("file");
-    //         }
-    //         if !std::fs::metadata(&path).is_ok() {
-    //             allow_err!(std::fs::File::create(&path));
-    //         }
-    //     } else if file_type == FileType::FileLink as i32 {
-    //         let new_path = path.join("file_link");
-    //         if !std::fs::metadata(&new_path).is_ok() {
-    //             path = path.join("file");
-    //             if !std::fs::metadata(&path).is_ok() {
-    //                 allow_err!(std::fs::File::create(&path));
-    //             }
-    //             #[cfg(windows)]
-    //             allow_err!(std::os::windows::fs::symlink_file(&path, &new_path));
-    //             #[cfg(not(windows))]
-    //             allow_err!(std::os::unix::fs::symlink(&path, &new_path));
-    //         }
-    //         path = new_path;
-    //     } else if file_type == FileType::DirDrive as i32 {
-    //         if cfg!(windows) {
-    //             path = fs::get_path("C:");
-    //         } else if cfg!(target_os = "macos") {
-    //             if let Ok(entries) = fs::get_path("/Volumes/").read_dir() {
-    //                 for entry in entries {
-    //                     if let Ok(entry) = entry {
-    //                         path = entry.path();
-    //                         break;
-    //                     }
-    //                 }
-    //             }
-    //         }
-    //     }
-    //     fs::get_string(&path)
-    // }
-
-    // fn login(&mut self, password: String, remember: bool) {
-    //     self.send(Data::Login((password, remember)));
-    // }
-
-    // fn new_rdp(&mut self) {
-    //     self.send(Data::NewRDP);
-    // }
 
     fn enter(&mut self) {
         #[cfg(windows)]
@@ -1100,30 +770,6 @@ impl SciterSession {
         #[cfg(windows)]
         crate::platform::windows::stop_system_key_propagate(false);
         IS_IN.store(false, Ordering::SeqCst);
-    }
-
-    // TODO
-    fn set_cursor_data(&mut self, cd: CursorData) {
-        let mut colors = hbb_common::compress::decompress(&cd.colors);
-        if colors.iter().filter(|x| **x != 0).next().is_none() {
-            log::info!("Fix transparent");
-            // somehow all 0 images shows black rect, here is a workaround
-            colors[3] = 1;
-        }
-        let mut png = Vec::new();
-        if let Ok(()) = repng::encode(&mut png, cd.width as _, cd.height as _, &colors) {
-            self.call(
-                "setCursorData",
-                &make_args!(
-                    cd.id.to_string(),
-                    cd.hotx,
-                    cd.hoty,
-                    cd.width,
-                    cd.height,
-                    &png[..]
-                ),
-            );
-        }
     }
 
     fn get_key_event(&self, down_or_up: i32, name: &str, code: i32) -> Option<KeyEvent> {
@@ -1260,21 +906,6 @@ impl SciterSession {
             log::error!("Failed to spawn IP tunneling: {}", err);
         }
     }
-
-    // #[inline]
-    // fn set_cursor_id(&mut self, id: String) {
-    //     self.call("setCursorId", &make_args!(id));
-    // }
-
-    // #[inline]
-    // fn set_cursor_position(&mut self, cd: CursorPosition) {
-    //     self.call("setCursorPosition", &make_args!(cd.x, cd.y));
-    // }
-
-    // #[inline]
-    // fn set_display(&self, x: i32, y: i32, w: i32, h: i32) {
-    //     self.call("setDisplay", &make_args!(x, y, w, h));
-    // }
 }
 
 pub fn make_fd(id: i32, entries: &Vec<FileEntry>, only_count: bool) -> Value {
