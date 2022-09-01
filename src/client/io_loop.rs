@@ -2,6 +2,7 @@ use crate::client::{
     Client, CodecFormat, FileManager, MediaData, MediaSender, QualityStatus, MILLI1, SEC30,
     SERVER_CLIPBOARD_ENABLED, SERVER_FILE_TRANSFER_ENABLED, SERVER_KEYBOARD_ENABLED,
 };
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 use crate::common::{check_clipboard, update_clipboard, ClipboardContext, CLIPBOARD_INTERVAL};
 
 use crate::ui_session_interface::{InvokeUi, Session};
@@ -235,6 +236,7 @@ impl<T: InvokeUi> Remote<T> {
         let old_clipboard = self.old_clipboard.clone();
         let tx_protobuf = self.sender.clone();
         let lc = self.handler.lc.clone();
+        #[cfg(not(any(target_os = "android", target_os = "ios")))]
         match ClipboardContext::new() {
             Ok(mut ctx) => {
                 // ignore clipboard update before service start
@@ -266,6 +268,7 @@ impl<T: InvokeUi> Remote<T> {
         Some(tx)
     }
 
+    // TODO
     fn load_last_jobs(&mut self) {
         log::info!("start load last jobs");
         self.handler.clear_all_jobs();

@@ -1,11 +1,12 @@
 use crate::client::io_loop::Remote;
 use crate::client::{
-    check_if_retry, get_key_state, handle_hash, handle_login_from_ui, handle_test_delay,
+    check_if_retry, handle_hash, handle_login_from_ui, handle_test_delay,
     input_os_password, load_config, send_mouse, start_video_audio_threads, FileManager, Key,
     LoginConfigHandler, QualityStatus, KEY_MAP, SERVER_KEYBOARD_ENABLED,
 };
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+use crate::client::get_key_state;
 use crate::common;
-
 use crate::{client::Data, client::Interface};
 use async_trait::async_trait;
 
@@ -129,6 +130,7 @@ impl<T: InvokeUi> Session<T> {
         self.send(Data::Message(msg));
     }
 
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
     pub fn t(&self, name: String) -> String {
         crate::client::translate(name)
     }
@@ -271,9 +273,11 @@ impl<T: InvokeUi> Session<T> {
         {
             key_event.modifiers.push(ControlKey::Meta.into());
         }
+        #[cfg(not(any(target_os = "android", target_os = "ios")))]
         if get_key_state(enigo::Key::CapsLock) {
             key_event.modifiers.push(ControlKey::CapsLock.into());
         }
+        #[cfg(not(any(target_os = "android", target_os = "ios")))]
         if self.peer_platform() != "Mac OS" {
             if get_key_state(enigo::Key::NumLock) && common::valid_for_numlock(&key_event) {
                 key_event.modifiers.push(ControlKey::NumLock.into());
@@ -318,6 +322,7 @@ impl<T: InvokeUi> Session<T> {
         return "".to_owned();
     }
 
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
     pub fn get_icon(&self) -> String {
         crate::get_icon()
     }
@@ -661,6 +666,7 @@ impl<T: InvokeUi> Interface for Session<T> {
             }
         }
         // TODO use event callbcak
+        #[cfg(not(any(target_os = "android", target_os = "ios")))]
         self.start_keyboard_hook();
     }
 
@@ -704,6 +710,7 @@ impl<T: InvokeUi> Interface for Session<T> {
 
 // TODO use event callbcak
 // sciter only
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 impl<T: InvokeUi> Session<T> {
     fn start_keyboard_hook(&self) {
         if self.is_port_forward() || self.is_file_transfer() {
@@ -948,6 +955,7 @@ pub async fn io_loop<T: InvokeUi>(handler: Session<T>) {
     if key.is_empty() {
         key = crate::platform::get_license_key();
     }
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
     if handler.is_port_forward() {
         if handler.is_rdp() {
             let port = handler
@@ -1053,6 +1061,7 @@ pub async fn io_loop<T: InvokeUi>(handler: Session<T>) {
     remote.sync_jobs_status_to_local().await;
 }
 
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 async fn start_one_port_forward<T: InvokeUi>(
     handler: Session<T>,
     port: i32,

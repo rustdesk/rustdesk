@@ -11,7 +11,6 @@ use cpal::{
     traits::{DeviceTrait, HostTrait, StreamTrait},
     Device, Host, StreamConfig,
 };
-use enigo::{Enigo, KeyboardControllable};
 use magnum_opus::{Channels::*, Decoder as AudioDecoder};
 use sha2::{Digest, Sha256};
 use uuid::Uuid;
@@ -38,7 +37,6 @@ use hbb_common::{
 };
 pub use helper::LatencyController;
 pub use helper::*;
-use scrap::Image;
 use scrap::{
     codec::{Decoder, DecoderCfg},
     VpxDecoderConfig, VpxVideoCodecId,
@@ -61,14 +59,17 @@ pub struct Client;
 
 #[cfg(not(any(target_os = "android", target_os = "linux")))]
 lazy_static::lazy_static! {
-static ref AUDIO_HOST: Host = cpal::default_host();
+    static ref AUDIO_HOST: Host = cpal::default_host();
 }
 
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 lazy_static::lazy_static! {
-    static ref ENIGO: Arc<Mutex<Enigo>> = Arc::new(Mutex::new(Enigo::new()));
+    static ref ENIGO: Arc<Mutex<enigo::Enigo>> = Arc::new(Mutex::new(enigo::Enigo::new()));
 }
 
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub fn get_key_state(key: enigo::Key) -> bool {
+    use enigo::KeyboardControllable;
     #[cfg(target_os = "macos")]
     if key == enigo::Key::NumLock {
         return true;
