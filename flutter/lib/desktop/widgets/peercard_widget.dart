@@ -8,10 +8,18 @@ import '../../common.dart';
 import '../../models/model.dart';
 import '../../models/peer_model.dart';
 import '../../models/platform_model.dart';
+import './material_mod_popup_menu.dart' as mod_menu;
+import './popup_menu.dart';
 
-typedef PopupMenuItemsFunc = Future<List<PopupMenuItem<String>>> Function();
+class _PopupMenuTheme {
+  static const Color commonColor = MyTheme.accent;
+  // kMinInteractiveDimension
+  static const double height = 25.0;
+  static const double dividerHeight = 12.0;
+}
 
-enum PeerType { recent, fav, discovered, ab }
+typedef PopupMenuEntryBuilder = Future<List<mod_menu.PopupMenuEntry<String>>>
+    Function(BuildContext);
 
 enum PeerUiType { grid, list }
 
@@ -19,14 +27,16 @@ final peerCardUiType = PeerUiType.grid.obs;
 
 class _PeerCard extends StatefulWidget {
   final Peer peer;
-  final PopupMenuItemsFunc popupMenuItemsFunc;
-  final PeerType type;
+  final RxString alias;
+  final Function(BuildContext, String) connect;
+  final PopupMenuEntryBuilder popupMenuEntryBuilder;
 
   _PeerCard(
       {required this.peer,
-      required this.popupMenuItemsFunc,
-      Key? key,
-      required this.type})
+      required this.alias,
+      required this.connect,
+      required this.popupMenuEntryBuilder,
+      Key? key})
       : super(key: key);
 
   @override
@@ -36,7 +46,6 @@ class _PeerCard extends StatefulWidget {
 /// State for the connection page.
 class _PeerCardState extends State<_PeerCard>
     with AutomaticKeepAliveClientMixin {
-  var _menuPos = RelativeRect.fill;
   final double _cardRadis = 20;
   final double _borderWidth = 2;
   final RxBool _iconMoreHover = false.obs;
@@ -66,7 +75,7 @@ class _PeerCardState extends State<_PeerCard>
                 : null);
       },
       child: GestureDetector(
-          onDoubleTap: () => _connect(peer.id),
+          onDoubleTap: () => widget.connect(context, peer.id),
           child: Obx(() => peerCardUiType.value == PeerUiType.grid
               ? _buildPeerCard(context, peer, deco)
               : _buildPeerTile(context, peer, deco))),
@@ -185,46 +194,28 @@ class _PeerCardState extends State<_PeerCard>
                             children: [
                               Container(
                                 padding: const EdgeInsets.all(6),
-                                child:
-                                    _getPlatformImage('${peer.platform}', 60),
+                                child: _getPlatformImage(peer.platform, 60),
                               ),
                               Row(
                                 children: [
                                   Expanded(
-                                    child: FutureBuilder<String>(
-                                      future: bind.mainGetPeerOption(
-                                          id: peer.id, key: 'alias'),
-                                      builder: (_, snapshot) {
-                                        if (snapshot.hasData) {
-                                          final name = snapshot.data!.isEmpty
-                                              ? '${peer.username}@${peer.hostname}'
-                                              : snapshot.data!;
-                                          return Tooltip(
-                                            message: name,
-                                            waitDuration: Duration(seconds: 1),
-                                            child: Text(
-                                              name,
-                                              style: TextStyle(
-                                                  color: Colors.white70,
-                                                  fontSize: 12),
-                                              textAlign: TextAlign.center,
-                                              overflow: TextOverflow.ellipsis,
-                                            ),
-                                          );
-                                        } else {
-                                          // alias has not arrived
-                                          return Center(
-                                              child: Text(
-                                            '${peer.username}@${peer.hostname}',
-                                            style: TextStyle(
-                                                color: Colors.white70,
-                                                fontSize: 12),
-                                            textAlign: TextAlign.center,
-                                            overflow: TextOverflow.ellipsis,
-                                          ));
-                                        }
-                                      },
-                                    ),
+                                    child: Obx(() {
+                                      final name = widget.alias.value.isEmpty
+                                          ? '${peer.username}@${peer.hostname}'
+                                          : widget.alias.value;
+                                      return Tooltip(
+                                        message: name,
+                                        waitDuration: Duration(seconds: 1),
+                                        child: Text(
+                                          name,
+                                          style: TextStyle(
+                                              color: Colors.white70,
+                                              fontSize: 12),
+                                          textAlign: TextAlign.center,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      );
+                                    }),
                                   ),
                                 ],
                               ),
@@ -248,7 +239,7 @@ class _PeerCardState extends State<_PeerCard>
                                 backgroundColor: peer.online
                                     ? Colors.green
                                     : Colors.yellow)),
-                        Text('${peer.id}')
+                        Text(peer.id)
                       ]).paddingSymmetric(vertical: 8),
                       _actionMore(peer),
                     ],
@@ -262,32 +253,93 @@ class _PeerCardState extends State<_PeerCard>
     );
   }
 
-  Widget _actionMore(Peer peer) => Listener(
-      onPointerDown: (e) {
-        final x = e.position.dx;
-        final y = e.position.dy;
-        _menuPos = RelativeRect.fromLTRB(x, y, x, y);
-      },
-      onPointerUp: (_) => _showPeerMenu(context, peer.id),
-      child: MouseRegion(
-          onEnter: (_) => _iconMoreHover.value = true,
-          onExit: (_) => _iconMoreHover.value = false,
-          child: CircleAvatar(
-              radius: 14,
-              backgroundColor: _iconMoreHover.value
-                  ? MyTheme.color(context).grayBg!
-                  : MyTheme.color(context).bg!,
-              child: Icon(Icons.more_vert,
-                  size: 18,
-                  color: _iconMoreHover.value
-                      ? MyTheme.color(context).text
-                      : MyTheme.color(context).lightText))));
+  Widget _actionMore(Peer peer) {
+    return FutureBuilder(
+        future: widget.popupMenuEntryBuilder(context),
+        initialData: const <mod_menu.PopupMenuEntry<String>>[],
+        builder: (BuildContext context,
+            AsyncSnapshot<List<mod_menu.PopupMenuEntry<String>>> snapshot) {
+          if (snapshot.hasData) {
+            return Listener(
+                child: MouseRegion(
+                    onEnter: (_) => _iconMoreHover.value = true,
+                    onExit: (_) => _iconMoreHover.value = false,
+                    child: CircleAvatar(
+                        radius: 14,
+                        backgroundColor: _iconMoreHover.value
+                            ? MyTheme.color(context).grayBg!
+                            : MyTheme.color(context).bg!,
+                        child: mod_menu.PopupMenuButton(
+                          padding: EdgeInsets.zero,
+                          icon: Icon(Icons.more_vert,
+                              size: 18,
+                              color: _iconMoreHover.value
+                                  ? MyTheme.color(context).text
+                                  : MyTheme.color(context).lightText),
+                          position: mod_menu.PopupMenuPosition.under,
+                          itemBuilder: (BuildContext context) => snapshot.data!,
+                        ))));
+          } else {
+            return Container();
+          }
+        });
+  }
+
+  /// Get the image for the current [platform].
+  Widget _getPlatformImage(String platform, double size) {
+    platform = platform.toLowerCase();
+    if (platform == 'mac os') {
+      platform = 'mac';
+    } else if (platform != 'linux' && platform != 'android') {
+      platform = 'win';
+    }
+    return Image.asset('assets/$platform.png', height: size, width: size);
+  }
+
+  @override
+  bool get wantKeepAlive => true;
+}
+
+abstract class BasePeerCard extends StatelessWidget {
+  final RxString alias = ''.obs;
+  final Peer peer;
+
+  BasePeerCard({required this.peer, Key? key}) : super(key: key) {
+    bind
+        .mainGetPeerOption(id: peer.id, key: 'alias')
+        .then((value) => alias.value = value);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return _PeerCard(
+      peer: peer,
+      alias: alias,
+      connect: (BuildContext context, String id) => _connect(context, id),
+      popupMenuEntryBuilder: _buildPopupMenuEntry,
+    );
+  }
+
+  Future<List<mod_menu.PopupMenuEntry<String>>> _buildPopupMenuEntry(
+          BuildContext context) async =>
+      (await _buildMenuItems(context))
+          .map((e) => e.build(
+              context,
+              const MenuConfig(
+                  commonColor: _PopupMenuTheme.commonColor,
+                  height: _PopupMenuTheme.height,
+                  dividerHeight: _PopupMenuTheme.dividerHeight)))
+          .expand((i) => i)
+          .toList();
+
+  @protected
+  Future<List<MenuEntryBase<String>>> _buildMenuItems(BuildContext context);
 
   /// Connect to a peer with [id].
   /// If [isFileTransfer], starts a session only for file transfer.
   /// If [isTcpTunneling], starts a session only for tcp tunneling.
   /// If [isRDP], starts a session only for rdp.
-  void _connect(String id,
+  void _connect(BuildContext context, String id,
       {bool isFileTransfer = false,
       bool isTcpTunneling = false,
       bool isRDP = false}) async {
@@ -308,105 +360,369 @@ class _PeerCardState extends State<_PeerCard>
     }
   }
 
-  /// Show the peer menu and handle user's choice.
-  /// User might remove the peer or send a file to the peer.
-  void _showPeerMenu(BuildContext context, String id) async {
-    var value = await showMenu(
-      context: context,
-      position: _menuPos,
-      items: await super.widget.popupMenuItemsFunc(),
-      elevation: 8,
-    );
-    if (value == 'connect') {
-      _connect(id);
-    } else if (value == 'file') {
-      _connect(id, isFileTransfer: true);
-    } else if (value == 'tcp-tunnel') {
-      _connect(id, isTcpTunneling: true);
-    } else if (value == 'RDP') {
-      _connect(id, isRDP: true);
-    } else if (value == 'remove') {
-      await bind.mainRemovePeer(id: id);
-      removePreference(id);
-      Get.forceAppUpdate(); // TODO use inner model / state
-    } else if (value == 'add-fav') {
-      final favs = (await bind.mainGetFav()).toList();
-      if (favs.indexOf(id) < 0) {
-        favs.add(id);
-        bind.mainStoreFav(favs: favs);
-      }
-    } else if (value == 'remove-fav') {
-      final favs = (await bind.mainGetFav()).toList();
-      if (favs.remove(id)) {
-        bind.mainStoreFav(favs: favs);
-        Get.forceAppUpdate(); // TODO use inner model / state
-      }
-    } else if (value == 'ab-delete') {
-      gFFI.abModel.deletePeer(id);
-      await gFFI.abModel.updateAb();
-      setState(() {});
-    } else if (value == 'ab-edit-tag') {
-      _abEditTag(id);
-    } else if (value == 'rename') {
-      _rename(id);
-    } else if (value == 'unremember-password') {
-      await bind.mainForgetPassword(id: id);
-    } else if (value == 'force-always-relay') {
-      String value;
-      String oldValue =
-          await bind.mainGetPeerOption(id: id, key: 'force-always-relay');
-      if (oldValue.isEmpty) {
-        value = 'Y';
-      } else {
-        value = '';
-      }
-      await bind.mainSetPeerOption(
-          id: id, key: 'force-always-relay', value: value);
-    }
-  }
-
-  Widget _buildTag(String tagName, RxList<dynamic> rxTags,
-      {Function()? onTap}) {
-    return ContextMenuArea(
-      width: 100,
-      builder: (context) => [
-        ListTile(
-          title: Text(translate("Delete")),
-          onTap: () {
-            gFFI.abModel.deleteTag(tagName);
-            gFFI.abModel.updateAb();
-            Future.delayed(Duration.zero, () => Get.back());
-          },
-        )
-      ],
-      child: GestureDetector(
-        onTap: onTap,
-        child: Obx(
-          () => Container(
-            decoration: BoxDecoration(
-                color: rxTags.contains(tagName) ? Colors.blue : null,
-                border: Border.all(color: MyTheme.darkGray),
-                borderRadius: BorderRadius.circular(10)),
-            margin: EdgeInsets.symmetric(horizontal: 4.0, vertical: 8.0),
-            padding: EdgeInsets.symmetric(vertical: 2.0, horizontal: 8.0),
-            child: Text(
-              tagName,
-              style: TextStyle(
-                  color: rxTags.contains(tagName) ? MyTheme.white : null),
-            ),
-          ),
-        ),
+  MenuEntryBase<String> _connectCommonAction(
+      BuildContext context, String id, String title,
+      {bool isFileTransfer = false,
+      bool isTcpTunneling = false,
+      bool isRDP = false}) {
+    return MenuEntryButton<String>(
+      childBuilder: (TextStyle? style) => Text(
+        translate(title),
+        style: style,
       ),
+      proc: () {
+        _connect(
+          context,
+          peer.id,
+          isFileTransfer: isFileTransfer,
+          isTcpTunneling: isTcpTunneling,
+          isRDP: isRDP,
+        );
+      },
+      dismissOnClicked: true,
     );
   }
 
-  /// Get the image for the current [platform].
-  Widget _getPlatformImage(String platform, double size) {
-    platform = platform.toLowerCase();
-    if (platform == 'mac os')
-      platform = 'mac';
-    else if (platform != 'linux' && platform != 'android') platform = 'win';
-    return Image.asset('assets/$platform.png', height: size, width: size);
+  @protected
+  MenuEntryBase<String> _connectAction(BuildContext context, String id) {
+    return _connectCommonAction(context, id, 'Connect');
+  }
+
+  @protected
+  MenuEntryBase<String> _transferFileAction(BuildContext context, String id) {
+    return _connectCommonAction(
+      context,
+      id,
+      'Transfer File',
+      isFileTransfer: true,
+    );
+  }
+
+  @protected
+  MenuEntryBase<String> _tcpTunnelingAction(BuildContext context, String id) {
+    return _connectCommonAction(
+      context,
+      id,
+      'TCP Tunneling',
+      isTcpTunneling: true,
+    );
+  }
+
+  @protected
+  MenuEntryBase<String> _rdpAction(BuildContext context, String id) {
+    return MenuEntryButton<String>(
+      childBuilder: (TextStyle? style) => Row(
+        children: [
+          Text(
+            translate('RDP'),
+            style: style,
+          ),
+          SizedBox(width: 20),
+          IconButton(
+            icon: Icon(Icons.edit),
+            onPressed: () => _rdpDialog(id),
+          )
+        ],
+      ),
+      proc: () {
+        _connect(context, id, isRDP: true);
+      },
+      dismissOnClicked: true,
+    );
+  }
+
+  @protected
+  Future<MenuEntryBase<String>> _forceAlwaysRelayAction(String id) async {
+    const option = 'force-always-relay';
+    return MenuEntrySwitch<String>(
+      text: translate('Always connect via relay'),
+      getter: () async {
+        return (await bind.mainGetPeerOption(id: id, key: option)).isNotEmpty;
+      },
+      setter: (bool v) async {
+        String value;
+        String oldValue = await bind.mainGetPeerOption(id: id, key: option);
+        if (oldValue.isEmpty) {
+          value = 'Y';
+        } else {
+          value = '';
+        }
+        await bind.mainSetPeerOption(id: id, key: option, value: value);
+      },
+      dismissOnClicked: true,
+    );
+  }
+
+  @protected
+  MenuEntryBase<String> _renameAction(String id, bool isAddressBook) {
+    return MenuEntryButton<String>(
+      childBuilder: (TextStyle? style) => Text(
+        translate('Rename'),
+        style: style,
+      ),
+      proc: () {
+        _rename(id, isAddressBook);
+      },
+      dismissOnClicked: true,
+    );
+  }
+
+  @protected
+  MenuEntryBase<String> _removeAction(String id) {
+    return MenuEntryButton<String>(
+      childBuilder: (TextStyle? style) => Text(
+        translate('Remove'),
+        style: style,
+      ),
+      proc: () {
+        () async {
+          await bind.mainRemovePeer(id: id);
+          removePreference(id);
+          Get.forceAppUpdate(); // TODO use inner model / state
+        }();
+      },
+      dismissOnClicked: true,
+    );
+  }
+
+  @protected
+  MenuEntryBase<String> _unrememberPasswordAction(String id) {
+    return MenuEntryButton<String>(
+      childBuilder: (TextStyle? style) => Text(
+        translate('Unremember Password'),
+        style: style,
+      ),
+      proc: () {
+        bind.mainForgetPassword(id: id);
+      },
+      dismissOnClicked: true,
+    );
+  }
+
+  @protected
+  MenuEntryBase<String> _addFavAction(String id) {
+    return MenuEntryButton<String>(
+      childBuilder: (TextStyle? style) => Text(
+        translate('Add to Favorites'),
+        style: style,
+      ),
+      proc: () {
+        () async {
+          final favs = (await bind.mainGetFav()).toList();
+          if (!favs.contains(id)) {
+            favs.add(id);
+            bind.mainStoreFav(favs: favs);
+          }
+        }();
+      },
+      dismissOnClicked: true,
+    );
+  }
+
+  @protected
+  MenuEntryBase<String> _rmFavAction(String id) {
+    return MenuEntryButton<String>(
+      childBuilder: (TextStyle? style) => Text(
+        translate('Remove from Favorites'),
+        style: style,
+      ),
+      proc: () {
+        () async {
+          final favs = (await bind.mainGetFav()).toList();
+          if (favs.remove(id)) {
+            bind.mainStoreFav(favs: favs);
+            Get.forceAppUpdate(); // TODO use inner model / state
+          }
+        }();
+      },
+      dismissOnClicked: true,
+    );
+  }
+
+  void _rename(String id, bool isAddressBook) async {
+    RxBool isInProgress = false.obs;
+    var name = await bind.mainGetPeerOption(id: id, key: 'alias');
+    var controller = TextEditingController(text: name);
+    if (isAddressBook) {
+      final peer = gFFI.abModel.peers.firstWhere((p) => id == p['id']);
+      if (peer == null) {
+        // this should not happen
+      } else {
+        name = peer['alias'] ?? '';
+      }
+    }
+    gFFI.dialogManager.show((setState, close) {
+      return CustomAlertDialog(
+        title: Text(translate('Rename')),
+        content: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              padding: EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+              child: Form(
+                child: TextFormField(
+                  controller: controller,
+                  decoration: InputDecoration(border: OutlineInputBorder()),
+                ),
+              ),
+            ),
+            Obx(() => Offstage(
+                offstage: isInProgress.isFalse,
+                child: LinearProgressIndicator())),
+          ],
+        ),
+        actions: [
+          TextButton(
+              onPressed: () {
+                close();
+              },
+              child: Text(translate("Cancel"))),
+          TextButton(
+              onPressed: () async {
+                isInProgress.value = true;
+                name = controller.text;
+                await bind.mainSetPeerOption(id: id, key: 'alias', value: name);
+                if (isAddressBook) {
+                  gFFI.abModel.setPeerOption(id, 'alias', name);
+                  await gFFI.abModel.updateAb();
+                }
+                alias.value =
+                    await bind.mainGetPeerOption(id: peer.id, key: 'alias');
+                close();
+                isInProgress.value = false;
+              },
+              child: Text(translate("OK"))),
+        ],
+      );
+    });
+  }
+}
+
+class RecentPeerCard extends BasePeerCard {
+  RecentPeerCard({required Peer peer, Key? key}) : super(peer: peer, key: key);
+
+  @override
+  Future<List<MenuEntryBase<String>>> _buildMenuItems(
+      BuildContext context) async {
+    final List<MenuEntryBase<String>> menuItems = [
+      _connectAction(context, peer.id),
+      _transferFileAction(context, peer.id),
+      _tcpTunnelingAction(context, peer.id),
+    ];
+    if (peer.platform == 'Windows') {
+      menuItems.add(_rdpAction(context, peer.id));
+    }
+    menuItems.add(await _forceAlwaysRelayAction(peer.id));
+    menuItems.add(_renameAction(peer.id, false));
+    menuItems.add(_removeAction(peer.id));
+    menuItems.add(_unrememberPasswordAction(peer.id));
+    menuItems.add(_addFavAction(peer.id));
+    return menuItems;
+  }
+}
+
+class FavoritePeerCard extends BasePeerCard {
+  FavoritePeerCard({required Peer peer, Key? key})
+      : super(peer: peer, key: key);
+
+  @override
+  Future<List<MenuEntryBase<String>>> _buildMenuItems(
+      BuildContext context) async {
+    final List<MenuEntryBase<String>> menuItems = [
+      _connectAction(context, peer.id),
+      _transferFileAction(context, peer.id),
+      _tcpTunnelingAction(context, peer.id),
+    ];
+    if (peer.platform == 'Windows') {
+      menuItems.add(_rdpAction(context, peer.id));
+    }
+    menuItems.add(await _forceAlwaysRelayAction(peer.id));
+    menuItems.add(_renameAction(peer.id, false));
+    menuItems.add(_removeAction(peer.id));
+    menuItems.add(_unrememberPasswordAction(peer.id));
+    menuItems.add(_rmFavAction(peer.id));
+    return menuItems;
+  }
+}
+
+class DiscoveredPeerCard extends BasePeerCard {
+  DiscoveredPeerCard({required Peer peer, Key? key})
+      : super(peer: peer, key: key);
+
+  @override
+  Future<List<MenuEntryBase<String>>> _buildMenuItems(
+      BuildContext context) async {
+    final List<MenuEntryBase<String>> menuItems = [
+      _connectAction(context, peer.id),
+      _transferFileAction(context, peer.id),
+      _tcpTunnelingAction(context, peer.id),
+    ];
+    if (peer.platform == 'Windows') {
+      menuItems.add(_rdpAction(context, peer.id));
+    }
+    menuItems.add(await _forceAlwaysRelayAction(peer.id));
+    menuItems.add(_renameAction(peer.id, false));
+    menuItems.add(_removeAction(peer.id));
+    menuItems.add(_unrememberPasswordAction(peer.id));
+    menuItems.add(_addFavAction(peer.id));
+    return menuItems;
+  }
+}
+
+class AddressBookPeerCard extends BasePeerCard {
+  AddressBookPeerCard({required Peer peer, Key? key})
+      : super(peer: peer, key: key);
+
+  @override
+  Future<List<MenuEntryBase<String>>> _buildMenuItems(
+      BuildContext context) async {
+    final List<MenuEntryBase<String>> menuItems = [
+      _connectAction(context, peer.id),
+      _transferFileAction(context, peer.id),
+      _tcpTunnelingAction(context, peer.id),
+    ];
+    if (peer.platform == 'Windows') {
+      menuItems.add(_rdpAction(context, peer.id));
+    }
+    menuItems.add(await _forceAlwaysRelayAction(peer.id));
+    menuItems.add(_renameAction(peer.id, false));
+    menuItems.add(_removeAction(peer.id));
+    menuItems.add(_unrememberPasswordAction(peer.id));
+    menuItems.add(_addFavAction(peer.id));
+    menuItems.add(_editTagAction(peer.id));
+    return menuItems;
+  }
+
+  @protected
+  @override
+  MenuEntryBase<String> _removeAction(String id) {
+    return MenuEntryButton<String>(
+      childBuilder: (TextStyle? style) => Text(
+        translate('Remove'),
+        style: style,
+      ),
+      proc: () {
+        () async {
+          gFFI.abModel.deletePeer(id);
+          await gFFI.abModel.updateAb();
+        }();
+      },
+      dismissOnClicked: true,
+    );
+  }
+
+  @protected
+  MenuEntryBase<String> _editTagAction(String id) {
+    return MenuEntryButton<String>(
+      childBuilder: (TextStyle? style) => Text(
+        translate('Edit Tag'),
+        style: style,
+      ),
+      proc: () {
+        _abEditTag(id);
+      },
+      dismissOnClicked: true,
+    );
   }
 
   void _abEditTag(String id) {
@@ -459,204 +775,39 @@ class _PeerCardState extends State<_PeerCard>
     });
   }
 
-  void _rename(String id) async {
-    var isInProgress = false;
-    var name = await bind.mainGetPeerOption(id: id, key: 'alias');
-    var controller = TextEditingController(text: name);
-    if (widget.type == PeerType.ab) {
-      final peer = gFFI.abModel.peers.firstWhere((p) => id == p['id']);
-      if (peer == null) {
-        // this should not happen
-      } else {
-        name = peer['alias'] ?? "";
-      }
-    }
-    gFFI.dialogManager.show((setState, close) {
-      return CustomAlertDialog(
-        title: Text(translate("Rename")),
-        content: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Container(
-              padding: EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-              child: Form(
-                child: TextFormField(
-                  controller: controller,
-                  decoration: InputDecoration(border: OutlineInputBorder()),
-                ),
-              ),
+  Widget _buildTag(String tagName, RxList<dynamic> rxTags,
+      {Function()? onTap}) {
+    return ContextMenuArea(
+      width: 100,
+      builder: (context) => [
+        ListTile(
+          title: Text(translate("Delete")),
+          onTap: () {
+            gFFI.abModel.deleteTag(tagName);
+            gFFI.abModel.updateAb();
+            Future.delayed(Duration.zero, () => Get.back());
+          },
+        )
+      ],
+      child: GestureDetector(
+        onTap: onTap,
+        child: Obx(
+          () => Container(
+            decoration: BoxDecoration(
+                color: rxTags.contains(tagName) ? Colors.blue : null,
+                border: Border.all(color: MyTheme.darkGray),
+                borderRadius: BorderRadius.circular(10)),
+            margin: EdgeInsets.symmetric(horizontal: 4.0, vertical: 8.0),
+            padding: EdgeInsets.symmetric(vertical: 2.0, horizontal: 8.0),
+            child: Text(
+              tagName,
+              style: TextStyle(
+                  color: rxTags.contains(tagName) ? MyTheme.white : null),
             ),
-            Offstage(offstage: !isInProgress, child: LinearProgressIndicator())
-          ],
+          ),
         ),
-        actions: [
-          TextButton(
-              onPressed: () {
-                close();
-              },
-              child: Text(translate("Cancel"))),
-          TextButton(
-              onPressed: () async {
-                setState(() {
-                  isInProgress = true;
-                });
-                name = controller.text;
-                await bind.mainSetPeerOption(id: id, key: 'alias', value: name);
-                if (widget.type == PeerType.ab) {
-                  gFFI.abModel.setPeerOption(id, 'alias', name);
-                  await gFFI.abModel.updateAb();
-                } else {
-                  Future.delayed(Duration.zero, () {
-                    this.setState(() {});
-                  });
-                }
-                close();
-                setState(() {
-                  isInProgress = false;
-                });
-              },
-              child: Text(translate("OK"))),
-        ],
-      );
-    });
-  }
-
-  @override
-  bool get wantKeepAlive => true;
-}
-
-abstract class BasePeerCard extends StatelessWidget {
-  final Peer peer;
-  final PeerType type;
-
-  BasePeerCard({required this.peer, required this.type, Key? key})
-      : super(key: key);
-
-  @override
-  Widget build(BuildContext context) {
-    return _PeerCard(
-      peer: peer,
-      popupMenuItemsFunc: _getPopupMenuItems,
-      type: type,
+      ),
     );
-  }
-
-  @protected
-  Future<List<PopupMenuItem<String>>> _getPopupMenuItems();
-}
-
-class RecentPeerCard extends BasePeerCard {
-  RecentPeerCard({required Peer peer, Key? key})
-      : super(peer: peer, key: key, type: PeerType.recent);
-
-  Future<List<PopupMenuItem<String>>> _getPopupMenuItems() async {
-    var items = [
-      PopupMenuItem<String>(
-          child: Text(translate('Connect')), value: 'connect'),
-      PopupMenuItem<String>(
-          child: Text(translate('Transfer File')), value: 'file'),
-      PopupMenuItem<String>(
-          child: Text(translate('TCP Tunneling')), value: 'tcp-tunnel'),
-      await _forceAlwaysRelayMenuItem(peer.id),
-      PopupMenuItem<String>(child: Text(translate('Rename')), value: 'rename'),
-      PopupMenuItem<String>(child: Text(translate('Remove')), value: 'remove'),
-      PopupMenuItem<String>(
-          child: Text(translate('Unremember Password')),
-          value: 'unremember-password'),
-      PopupMenuItem<String>(
-          child: Text(translate('Add to Favorites')), value: 'add-fav'),
-    ];
-    if (peer.platform == 'Windows') {
-      items.insert(3, _rdpMenuItem(peer.id));
-    }
-    return items;
-  }
-}
-
-class FavoritePeerCard extends BasePeerCard {
-  FavoritePeerCard({required Peer peer, Key? key})
-      : super(peer: peer, key: key, type: PeerType.fav);
-
-  Future<List<PopupMenuItem<String>>> _getPopupMenuItems() async {
-    var items = [
-      PopupMenuItem<String>(
-          child: Text(translate('Connect')), value: 'connect'),
-      PopupMenuItem<String>(
-          child: Text(translate('Transfer File')), value: 'file'),
-      PopupMenuItem<String>(
-          child: Text(translate('TCP Tunneling')), value: 'tcp-tunnel'),
-      await _forceAlwaysRelayMenuItem(peer.id),
-      PopupMenuItem<String>(child: Text(translate('Rename')), value: 'rename'),
-      PopupMenuItem<String>(child: Text(translate('Remove')), value: 'remove'),
-      PopupMenuItem<String>(
-          child: Text(translate('Unremember Password')),
-          value: 'unremember-password'),
-      PopupMenuItem<String>(
-          child: Text(translate('Remove from Favorites')), value: 'remove-fav'),
-    ];
-    if (peer.platform == 'Windows') {
-      items.insert(3, _rdpMenuItem(peer.id));
-    }
-    return items;
-  }
-}
-
-class DiscoveredPeerCard extends BasePeerCard {
-  DiscoveredPeerCard({required Peer peer, Key? key})
-      : super(peer: peer, key: key, type: PeerType.discovered);
-
-  Future<List<PopupMenuItem<String>>> _getPopupMenuItems() async {
-    var items = [
-      PopupMenuItem<String>(
-          child: Text(translate('Connect')), value: 'connect'),
-      PopupMenuItem<String>(
-          child: Text(translate('Transfer File')), value: 'file'),
-      PopupMenuItem<String>(
-          child: Text(translate('TCP Tunneling')), value: 'tcp-tunnel'),
-      await _forceAlwaysRelayMenuItem(peer.id),
-      PopupMenuItem<String>(child: Text(translate('Rename')), value: 'rename'),
-      PopupMenuItem<String>(child: Text(translate('Remove')), value: 'remove'),
-      PopupMenuItem<String>(
-          child: Text(translate('Unremember Password')),
-          value: 'unremember-password'),
-      PopupMenuItem<String>(
-          child: Text(translate('Add to Favorites')), value: 'add-fav'),
-    ];
-    if (peer.platform == 'Windows') {
-      items.insert(3, _rdpMenuItem(peer.id));
-    }
-    return items;
-  }
-}
-
-class AddressBookPeerCard extends BasePeerCard {
-  AddressBookPeerCard({required Peer peer, Key? key})
-      : super(peer: peer, key: key, type: PeerType.ab);
-
-  Future<List<PopupMenuItem<String>>> _getPopupMenuItems() async {
-    var items = [
-      PopupMenuItem<String>(
-          child: Text(translate('Connect')), value: 'connect'),
-      PopupMenuItem<String>(
-          child: Text(translate('Transfer File')), value: 'file'),
-      PopupMenuItem<String>(
-          child: Text(translate('TCP Tunneling')), value: 'tcp-tunnel'),
-      await _forceAlwaysRelayMenuItem(peer.id),
-      PopupMenuItem<String>(child: Text(translate('Rename')), value: 'rename'),
-      PopupMenuItem<String>(
-          child: Text(translate('Remove')), value: 'ab-delete'),
-      PopupMenuItem<String>(
-          child: Text(translate('Unremember Password')),
-          value: 'unremember-password'),
-      PopupMenuItem<String>(
-          child: Text(translate('Add to Favorites')), value: 'add-fav'),
-      PopupMenuItem<String>(
-          child: Text(translate('Edit Tag')), value: 'ab-edit-tag'),
-    ];
-    if (peer.platform == 'Windows') {
-      items.insert(3, _rdpMenuItem(peer.id));
-    }
-    return items;
   }
 }
 

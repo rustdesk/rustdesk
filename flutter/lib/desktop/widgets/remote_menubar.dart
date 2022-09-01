@@ -16,7 +16,7 @@ import './material_mod_popup_menu.dart' as mod_menu;
 class _MenubarTheme {
   static const Color commonColor = MyTheme.accent;
   // kMinInteractiveDimension
-  static const double height = 24.0;
+  static const double height = 25.0;
   static const double dividerHeight = 12.0;
 }
 
