@@ -209,9 +209,18 @@ class ChatModel with ChangeNotifier {
         id: await bind.mainGetLastRemoteId(),
       );
     } else {
-      final client = _ffi.target?.serverModel.clients[id];
+      final client = _ffi.target?.serverModel.clients
+          .firstWhere((client) => client.id == id);
       if (client == null) {
         return debugPrint("Failed to receive msg,user doesn't exist");
+      }
+      if (isDesktop) {
+        window_on_top(null);
+        var index = _ffi.target?.serverModel.clients
+            .indexWhere((client) => client.id == id);
+        if (index != null && index >= 0) {
+          gFFI.serverModel.tabController.jumpTo(index);
+        }
       }
       chatUser = ChatUser(id: client.peerId, firstName: client.name);
     }

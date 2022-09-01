@@ -15,7 +15,7 @@ class DesktopTabPage extends StatefulWidget {
 }
 
 class _DesktopTabPageState extends State<DesktopTabPage> {
-  final tabController = DesktopTabController();
+  final tabController = DesktopTabController(tabType: DesktopTabType.main);
 
   @override
   void initState() {
@@ -46,7 +46,6 @@ class _DesktopTabPageState extends State<DesktopTabPage> {
                 body: DesktopTab(
                   controller: tabController,
                   theme: dark ? TarBarTheme.dark() : TarBarTheme.light(),
-                  tabType: DesktopTabType.main,
                   tail: ActionIcon(
                     message: 'Settings',
                     icon: IconFont.menu,

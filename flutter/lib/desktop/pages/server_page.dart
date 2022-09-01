@@ -19,10 +19,12 @@ class DesktopServerPage extends StatefulWidget {
 
 class _DesktopServerPageState extends State<DesktopServerPage>
     with WindowListener, AutomaticKeepAliveClientMixin {
+  final tabController = gFFI.serverModel.tabController;
   @override
   void initState() {
     gFFI.ffiModel.updateEventListener("");
     windowManager.addListener(this);
+    tabController.onRemove = (_, id) => onRemoveId(id);
     super.initState();
   }
 
@@ -39,6 +41,13 @@ class _DesktopServerPageState extends State<DesktopServerPage>
     super.onWindowClose();
   }
 
+  void onRemoveId(String id) {
+    if (tabController.state.value.tabs.isEmpty) {
+      windowManager.close();
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     super.build(context);
     return MultiProvider(
@@ -115,7 +124,6 @@ class ConnectionManagerState extends State<ConnectionManager> {
             showMinimize: true,
             showClose: true,
             controller: serverModel.tabController,
-            tabType: DesktopTabType.cm,
             pageViewBuilder: (pageView) => Row(children: [
                   Expanded(child: pageView),
                   Consumer<ChatModel>(
@@ -454,8 +462,10 @@ class _CmControlPanel extends StatelessWidget {
           decoration: BoxDecoration(
               color: MyTheme.accent, borderRadius: BorderRadius.circular(10)),
           child: InkWell(
-              onTap: () =>
-                  checkClickTime(client.id, () => handleAccept(context)),
+              onTap: () => checkClickTime(client.id, () {
+                    handleAccept(context);
+                    windowManager.minimize();
+                  }),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [

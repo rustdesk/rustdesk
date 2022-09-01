@@ -165,6 +165,7 @@ void runConnectionManagerScreen() async {
       await windowManager.setAlignment(Alignment.topRight);
       await windowManager.show();
       await windowManager.focus();
+      await windowManager.setAlignment(Alignment.topRight); // ensure
     })
   ]);
   runApp(GetMaterialApp(

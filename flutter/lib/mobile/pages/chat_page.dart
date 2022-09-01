@@ -59,6 +59,7 @@ class ChatPage extends StatelessWidget implements PageShape {
                       messages: chatModel
                               .messages[chatModel.currentID]?.chatMessages ??
                           [],
+                      inputOptions: const InputOptions(sendOnEnter: true),
                       messageOptions: MessageOptions(
                           showOtherUsersAvatar: false,
                           showTime: true,
