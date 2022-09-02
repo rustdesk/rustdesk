@@ -41,6 +41,16 @@ fn build_rc_source() {
     .unwrap();
 }
 
+fn check_environment() {
+    // Check env variable
+    let env_list = vec!["LLVM_HOME", "VCPKG_ROOT"];
+    for env in env_list.iter() {
+        if std::env::var(env).is_err() {
+            panic!("Missing environment variable: {:?}", env);
+        };
+    }
+}
+
 fn install_oboe() {
     let target_os = std::env::var("CARGO_CFG_TARGET_OS").unwrap();
     if target_os != "android" {
@@ -83,16 +93,10 @@ fn gen_flutter_rust_bridge() {
             .args(["pub", "get"])
             .current_dir("./flutter")
             .output()
-            .expect("failed to execute flutter pub get");
+            .expect("Failed to execute flutter pub get");
     };
     let llvm_path = match std::env::var("LLVM_HOME") {
-        Ok(path) => {
-            if !path.is_empty() {
-                Some(vec![path])
-            } else {
-                panic!("Missing LLVM_HOME environment variable");
-            }
-        }
+        Ok(path) => Some(vec![path]),
         Err(_) => panic!("Failure to get environments"),
     };
 
@@ -115,6 +119,8 @@ fn gen_flutter_rust_bridge() {
 }
 
 fn main() {
+    check_environment();
+
     hbb_common::gen_version();
     install_oboe();
     // there is problem with cfg(target_os) in build.rs, so use our workaround
