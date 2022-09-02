@@ -49,7 +49,7 @@ packages:
       name: async
       url: "https://pub.flutter-io.cn"
     source: hosted
-    version: "2.8.2"
+    version: "2.9.0"
   back_button_interceptor:
     dependency: "direct main"
     description:
@@ -147,7 +147,7 @@ packages:
       name: characters
       url: "https://pub.flutter-io.cn"
     source: hosted
-    version: "1.2.0"
+    version: "1.2.1"
   charcode:
     dependency: transitive
     description:
@@ -168,7 +168,7 @@ packages:
       name: clock
       url: "https://pub.flutter-io.cn"
     source: hosted
-    version: "1.1.0"
+    version: "1.1.1"
   code_builder:
     dependency: transitive
     description:
@@ -324,7 +324,7 @@ packages:
       name: fake_async
       url: "https://pub.flutter-io.cn"
     source: hosted
-    version: "1.3.0"
+    version: "1.3.1"
   ffi:
     dependency: "direct main"
     description:
@@ -621,14 +621,14 @@ packages:
       name: matcher
       url: "https://pub.flutter-io.cn"
     source: hosted
-    version: "0.12.11"
+    version: "0.12.12"
   material_color_utilities:
     dependency: transitive
     description:
       name: material_color_utilities
       url: "https://pub.flutter-io.cn"
     source: hosted
-    version: "0.1.4"
+    version: "0.1.5"
   menu_base:
     dependency: transitive
     description:
@@ -642,7 +642,7 @@ packages:
       name: meta
       url: "https://pub.flutter-io.cn"
     source: hosted
-    version: "1.7.0"
+    version: "1.8.0"
   mime:
     dependency: transitive
     description:
@@ -719,7 +719,7 @@ packages:
       name: path
       url: "https://pub.flutter-io.cn"
     source: hosted
-    version: "1.8.1"
+    version: "1.8.2"
   path_provider:
     dependency: "direct main"
     description:
@@ -856,9 +856,11 @@ packages:
   screen_retriever:
     dependency: transitive
     description:
-      name: screen_retriever
-      url: "https://pub.flutter-io.cn"
-    source: hosted
+      path: "."
+      ref: "406b9b0"
+      resolved-ref: "406b9b038b2c1d779f1e7bf609c8c248be247372"
+      url: "https://github.com/Kingtous/rustdesk_screen_retriever.git"
+    source: git
     version: "0.1.2"
   scroll_pos:
     dependency: "direct main"
@@ -969,7 +971,7 @@ packages:
       name: source_span
       url: "https://pub.flutter-io.cn"
     source: hosted
-    version: "1.8.2"
+    version: "1.9.0"
   sqflite:
     dependency: transitive
     description:
@@ -1011,7 +1013,7 @@ packages:
       name: string_scanner
       url: "https://pub.flutter-io.cn"
     source: hosted
-    version: "1.1.0"
+    version: "1.1.1"
   synchronized:
     dependency: transitive
     description:
@@ -1025,14 +1027,14 @@ packages:
       name: term_glyph
       url: "https://pub.flutter-io.cn"
     source: hosted
-    version: "1.2.0"
+    version: "1.2.1"
   test_api:
     dependency: transitive
     description:
       name: test_api
       url: "https://pub.flutter-io.cn"
     source: hosted
-    version: "0.4.9"
+    version: "0.4.12"
   timing:
     dependency: transitive
     description:
@@ -1242,11 +1244,11 @@ packages:
     dependency: "direct main"
     description:
       path: "."
-      ref: "799ef079e87938c3f4340591b4330c2598f38bb9"
-      resolved-ref: "799ef079e87938c3f4340591b4330c2598f38bb9"
+      ref: "4627ba808ed08ff0c08706b01a7f9cc8b747accd"
+      resolved-ref: "4627ba808ed08ff0c08706b01a7f9cc8b747accd"
       url: "https://github.com/Kingtous/rustdesk_window_manager"
     source: git
-    version: "0.2.6"
+    version: "0.2.7"
   xdg_directories:
     dependency: transitive
     description:

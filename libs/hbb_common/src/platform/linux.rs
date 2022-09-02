@@ -1,4 +1,9 @@
 use crate::ResultType;
+use std::sync::Mutex;
+
+lazy_static::lazy_static! {
+    pub static ref IS_X11: Mutex<bool> = Mutex::new("x11" == get_display_server());
+}
 
 pub fn get_display_server() -> String {
     let session = get_value_of_seat0(0);

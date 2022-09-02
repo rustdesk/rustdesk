@@ -2,6 +2,7 @@ use super::*;
 #[cfg(target_os = "macos")]
 use dispatch::Queue;
 use enigo::{Enigo, Key, KeyboardControllable, MouseButton, MouseControllable};
+use hbb_common::platform::linux::IS_X11;
 use hbb_common::{config::COMPRESS_LEVEL, protobuf::EnumOrUnknown};
 use rdev::{simulate, EventType, Key as RdevKey};
 use std::{
@@ -673,13 +674,13 @@ fn tfc_key_down_or_up(key: Key, down: bool, up: bool) {
     if let Key::Layout(chr) = key {
         log::info!("tfc_key_down_or_up :{:?}", chr);
         if down {
-            if let Err(_) = TFC_CONTEXT.lock().unwrap().unicode_char_down(chr){
+            if let Err(_) = TFC_CONTEXT.lock().unwrap().unicode_char_down(chr) {
                 log::error!("Failed to press char {:?}", chr);
             };
         }
         if up {
-            if let Err(_) = TFC_CONTEXT.lock().unwrap().unicode_char_down(chr){
-                log::error!("Failed to press char {:?}",chr);
+            if let Err(_) = TFC_CONTEXT.lock().unwrap().unicode_char_down(chr) {
+                log::error!("Failed to press char {:?}", chr);
             };
         }
         return;
@@ -753,12 +754,12 @@ fn tfc_key_down_or_up(key: Key, down: bool, up: bool) {
 
     log::info!("tfc_key_down_or_up: {:?}", key);
     if down {
-        if let Err(_) = TFC_CONTEXT.lock().unwrap().key_down(key){
+        if let Err(_) = TFC_CONTEXT.lock().unwrap().key_down(key) {
             log::error!("Failed to press char {:?}", key);
         };
     }
     if up {
-        if let Err(_) = TFC_CONTEXT.lock().unwrap().key_up(key){
+        if let Err(_) = TFC_CONTEXT.lock().unwrap().key_up(key) {
             log::error!("Failed to press char {:?}", key);
         };
     }
@@ -771,16 +772,18 @@ fn legacy_keyboard_mode(evt: &KeyEvent) {
     crate::platform::windows::try_change_desktop();
     let mut en = ENIGO.lock().unwrap();
     if click_capslock {
-        #[cfg(target_os = "linux")]
-        tfc_key_down_or_up(Key::CapsLock, true, true);
-        #[cfg(not(target_os = "linux"))]
-        en.key_click(Key::CapsLock);
+        if *IS_X11.lock().unwrap() {
+            tfc_key_down_or_up(Key::CapsLock, true, true);
+        } else {
+            en.key_click(Key::CapsLock);
+        }
     }
     if click_numlock {
-        #[cfg(target_os = "linux")]
-        tfc_key_down_or_up(Key::NumLock, true, true);
-        #[cfg(not(target_os = "linux"))]
-        en.key_click(Key::NumLock);
+        if *IS_X11.lock().unwrap() {
+            tfc_key_down_or_up(Key::NumLock, true, true);
+        } else {
+            en.key_click(Key::NumLock);
+        }
     }
     // disable numlock if press home etc when numlock is on,
     // because we will get numpad value (7,8,9 etc) if not
@@ -834,10 +837,11 @@ fn legacy_keyboard_mode(evt: &KeyEvent) {
                         }
                     } else {
                         if !get_modifier_state(key.clone(), &mut en) {
-                            #[cfg(target_os = "linux")]
-                            tfc_key_down_or_up(key.clone(), true, false);
-                            #[cfg(not(target_os = "linux"))]
-                            en.key_down(key.clone()).ok();
+                            if *IS_X11.lock().unwrap() {
+                                tfc_key_down_or_up(key.clone(), true, false);
+                            } else {
+                                en.key_down(key.clone()).ok();
+                            }
                             modifier_sleep();
                             to_release.push(key);
                         }
@@ -848,12 +852,12 @@ fn legacy_keyboard_mode(evt: &KeyEvent) {
     }
     #[cfg(not(target_os = "macos"))]
     if has_cap != en.get_key_state(Key::CapsLock) {
-        #[cfg(target_os = "linux")]
-        tfc_key_down_or_up(Key::CapsLock, true, true);
-        #[cfg(not(target_os = "linux"))]
-        en.key_down(Key::CapsLock).ok();
-        #[cfg(not(target_os = "linux"))]
-        en.key_up(Key::CapsLock);
+        if *IS_X11.lock().unwrap() {
+            tfc_key_down_or_up(Key::CapsLock, true, true);
+        } else {
+            en.key_down(Key::CapsLock).ok();
+            en.key_up(Key::CapsLock);
+        }
     }
     #[cfg(windows)]
     if crate::common::valid_for_numlock(evt) {
@@ -874,19 +878,21 @@ fn legacy_keyboard_mode(evt: &KeyEvent) {
                     }
                 }
                 if evt.down {
-                    #[cfg(target_os = "linux")]
-                    tfc_key_down_or_up(key.clone(), true, false);
-                    #[cfg(not(target_os = "linux"))]
-                    allow_err!(en.key_down(key.clone()));
+                    if *IS_X11.lock().unwrap() {
+                        tfc_key_down_or_up(key.clone(), true, false);
+                    } else {
+                        allow_err!(en.key_down(key.clone()));
+                    }
                     KEYS_DOWN
                         .lock()
                         .unwrap()
                         .insert(ck.value() as _, Instant::now());
                 } else {
-                    #[cfg(target_os = "linux")]
-                    tfc_key_down_or_up(key.clone(), false, true);
-                    #[cfg(not(target_os = "linux"))]
-                    en.key_up(key.clone());
+                    if *IS_X11.lock().unwrap() {
+                        tfc_key_down_or_up(key.clone(), false, true);
+                    } else {
+                        en.key_up(key.clone());
+                    }
                     KEYS_DOWN.lock().unwrap().remove(&(ck.value() as _));
                 }
             } else if ck.value() == ControlKey::CtrlAltDel.value() {
@@ -900,35 +906,36 @@ fn legacy_keyboard_mode(evt: &KeyEvent) {
         }
         Some(key_event::Union::Chr(chr)) => {
             if evt.down {
-                #[cfg(target_os = "linux")]
-                tfc_key_down_or_up(get_layout(chr), true, false);
-                #[cfg(target_os = "linux")]
+                if *IS_X11.lock().unwrap() {
+                    tfc_key_down_or_up(get_layout(chr), true, false);
+                } else {
+                    if en.key_down(get_layout(chr)).is_ok() {
+                        KEYS_DOWN
+                            .lock()
+                            .unwrap()
+                            .insert(chr as u64 + KEY_CHAR_START, Instant::now());
+                    } else {
+                        if let Ok(chr) = char::try_from(chr) {
+                            let mut x = chr.to_string();
+                            if get_modifier_state(Key::Shift, &mut en)
+                                || get_modifier_state(Key::CapsLock, &mut en)
+                            {
+                                x = x.to_uppercase();
+                            }
+                            en.key_sequence(&x);
+                        }
+                    }
+                }
                 KEYS_DOWN
                     .lock()
                     .unwrap()
                     .insert(chr as u64 + KEY_CHAR_START, Instant::now());
-                #[cfg(not(target_os = "linux"))]
-                if en.key_down(get_layout(chr)).is_ok() {
-                    KEYS_DOWN
-                        .lock()
-                        .unwrap()
-                        .insert(chr as u64 + KEY_CHAR_START, Instant::now());
-                } else {
-                    if let Ok(chr) = char::try_from(chr) {
-                        let mut x = chr.to_string();
-                        if get_modifier_state(Key::Shift, &mut en)
-                            || get_modifier_state(Key::CapsLock, &mut en)
-                        {
-                            x = x.to_uppercase();
-                        }
-                        en.key_sequence(&x);
-                    }
-                }
             } else {
-                #[cfg(target_os = "linux")]
-                tfc_key_down_or_up(get_layout(chr), false, true);
-                #[cfg(not(target_os = "linux"))]
-                en.key_up(get_layout(chr));
+                if *IS_X11.lock().unwrap() {
+                    tfc_key_down_or_up(get_layout(chr), false, true);
+                } else {
+                    en.key_up(get_layout(chr));
+                }
                 KEYS_DOWN
                     .lock()
                     .unwrap()
@@ -947,10 +954,11 @@ fn legacy_keyboard_mode(evt: &KeyEvent) {
     }
     #[cfg(not(target_os = "macos"))]
     for key in to_release {
-        #[cfg(target_os = "linux")]
-        tfc_key_down_or_up(key.clone(), false, true);
-        #[cfg(not(target_os = "linux"))]
-        en.key_up(key.clone());
+        if *IS_X11.lock().unwrap() {
+            tfc_key_down_or_up(key.clone(), false, true);
+        } else {
+            en.key_up(key.clone());
+        }
     }
     #[cfg(windows)]
     if disable_numlock {
