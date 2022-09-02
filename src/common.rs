@@ -668,7 +668,6 @@ pub fn make_privacy_mode_msg(state: back_notification::PrivacyModeState) -> Mess
 }
 
 pub fn make_fd_to_json(fd: FileDirectory) -> String {
-    use serde_json::json;
     let mut fd_json = serde_json::Map::new();
     fd_json.insert("id".into(), json!(fd.id));
     fd_json.insert("path".into(), json!(fd.path));

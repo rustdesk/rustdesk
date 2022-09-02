@@ -2,7 +2,7 @@ use std::{
     collections::HashMap,
     ops::{Deref, DerefMut},
     sync::{
-        atomic::{AtomicBool, Ordering},
+        atomic::{Ordering},
         Arc, Mutex,
     },
 };

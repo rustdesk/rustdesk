@@ -61,7 +61,6 @@ pub struct Client;
 lazy_static::lazy_static! {
     static ref AUDIO_HOST: Host = cpal::default_host();
 }
-use rdev::{Event, EventType::*, Key as RdevKey, Keyboard as RdevKeyboard, KeyboardState};
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 lazy_static::lazy_static! {

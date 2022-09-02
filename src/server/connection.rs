@@ -633,7 +633,7 @@ impl Connection {
         let mut pi = PeerInfo {
             username: username.clone(),
             conn_id: self.inner.id,
-            version: crate::VERSION.to_owned(),
+            version: VERSION.to_owned(),
             ..Default::default()
         };
 

@@ -9,7 +9,7 @@ use sciter::Value;
 
 use hbb_common::{
     allow_err,
-    config::{self, Config, LocalConfig, PeerConfig, RENDEZVOUS_PORT, RENDEZVOUS_TIMEOUT},
+    config::{self, Config, PeerConfig, RENDEZVOUS_PORT, RENDEZVOUS_TIMEOUT},
     futures::future::join_all,
     log,
     protobuf::Message as _,
@@ -19,7 +19,7 @@ use hbb_common::{
     tokio::{self, sync::mpsc, time},
 };
 
-use crate::common::{get_app_name, SOFTWARE_UPDATE_URL};
+use crate::common::{get_app_name};
 use crate::ipc;
 use crate::ui_interface::{
     check_mouse_time, closing, create_shortcut, current_is_wayland, fix_login_wayland,

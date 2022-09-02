@@ -6,7 +6,6 @@ use crate::client::{
     load_config, send_mouse, start_video_audio_threads, FileManager, Key, LoginConfigHandler,
     QualityStatus, KEY_MAP, SERVER_KEYBOARD_ENABLED,
 };
-use crate::common;
 use crate::{client::Data, client::Interface};
 use async_trait::async_trait;
 

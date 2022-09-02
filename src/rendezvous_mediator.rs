@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 use std::{
     net::SocketAddr,
     sync::{
@@ -10,12 +9,10 @@ use std::{
 
 use uuid::Uuid;
 
-use hbb_common::config::DiscoveryPeer;
 use hbb_common::tcp::FramedStream;
 use hbb_common::{
     allow_err,
     anyhow::bail,
-    config,
     config::{Config, REG_INTERVAL, RENDEZVOUS_PORT, RENDEZVOUS_TIMEOUT},
     futures::future::join_all,
     log,
@@ -640,7 +637,7 @@ pub async fn query_online_states<F: FnOnce(Vec<String>, Vec<String>)>(ids: Vec<S
 }
 
 async fn create_online_stream() -> ResultType<FramedStream> {
-    let (mut rendezvous_server, servers, contained) = crate::get_rendezvous_server(1_000).await;
+    let (mut rendezvous_server, _servers, _contained) = crate::get_rendezvous_server(1_000).await;
     let tmp: Vec<&str> = rendezvous_server.split(":").collect();
     if tmp.len() != 2 {
         bail!("Invalid server address: {}", rendezvous_server);

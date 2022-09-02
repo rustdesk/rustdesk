@@ -78,8 +78,6 @@ fn install_oboe() {
 
 fn gen_flutter_rust_bridge() {
     // Get dependent of flutter
-    println!("cargo:rerun-if-changed=flutter/pubspec.lock");
-    println!("cargo:rerun-if-changed=flutter/pubspec.yaml");
     if !std::path::Path::new("./flutter/.packages").exists(){
         std::process::Command::new("flutter")
         .args(["pub", "get"])

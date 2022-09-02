@@ -5,13 +5,13 @@ use std::{
 };
 
 use flutter_rust_bridge::{StreamSink, SyncReturn, ZeroCopyBuffer};
-use serde_json::{json, Number, Value};
+use serde_json::json;
 
 use hbb_common::{
-    config::{self, Config, LocalConfig, PeerConfig, ONLINE},
+    config::{self, LocalConfig, PeerConfig, ONLINE},
     fs, log,
 };
-use hbb_common::{password_security, ResultType};
+use hbb_common::{ResultType};
 
 use crate::{client::file_trait::FileManager, flutter::{session_add, session_start_}};
 use crate::common::make_fd_to_json;
@@ -20,7 +20,7 @@ use crate::flutter::{self, SESSIONS};
 use crate::start_server;
 use crate::ui_interface;
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
-use crate::ui_interface::{change_id, check_connect_status, is_ok_change_id};
+use crate::ui_interface::{change_id};
 use crate::ui_interface::{
     check_mouse_time, check_super_user_permission, discover, forget_password, get_api_server,
     get_app_name, get_async_job_status, get_connect_status, get_fav, get_id, get_lan_peers,

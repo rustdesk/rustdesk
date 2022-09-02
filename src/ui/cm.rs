@@ -6,13 +6,13 @@ use clipboard::{
     create_cliprdr_context, empty_clipboard, get_rx_clip_client, server_clip_file, set_conn_enabled,
 };
 use hbb_common::fs::{
-    can_enable_overwrite_detection, get_string, is_write_need_confirmation, new_send_confirm,
+    get_string, is_write_need_confirmation, new_send_confirm,
     DigestCheckResult,
 };
 use hbb_common::{
     allow_err,
     config::Config,
-    fs, get_version_number, log,
+    fs, log,
     message_proto::*,
     protobuf::Message as _,
     tokio::{self, sync::mpsc, task::spawn_blocking},
