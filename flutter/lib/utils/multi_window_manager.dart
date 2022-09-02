@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'dart:ui';
 
 import 'package:desktop_multi_window/desktop_multi_window.dart';
 import 'package:flutter/material.dart';
@@ -35,10 +34,11 @@ class RustDeskMultiWindowManager {
 
   int? _remoteDesktopWindowId;
   int? _fileTransferWindowId;
+  int? _portForwardWindowId;
 
-  Future<dynamic> new_remote_desktop(String remote_id) async {
+  Future<dynamic> newRemoteDesktop(String remoteId) async {
     final msg =
-        jsonEncode({"type": WindowType.RemoteDesktop.index, "id": remote_id});
+        jsonEncode({"type": WindowType.RemoteDesktop.index, "id": remoteId});
 
     try {
       final ids = await DesktopMultiWindow.getAllSubWindowIds();
@@ -62,9 +62,9 @@ class RustDeskMultiWindowManager {
     }
   }
 
-  Future<dynamic> new_file_transfer(String remote_id) async {
+  Future<dynamic> newFileTransfer(String remoteId) async {
     final msg =
-        jsonEncode({"type": WindowType.FileTransfer.index, "id": remote_id});
+        jsonEncode({"type": WindowType.FileTransfer.index, "id": remoteId});
 
     try {
       final ids = await DesktopMultiWindow.getAllSubWindowIds();
@@ -87,6 +87,31 @@ class RustDeskMultiWindowManager {
     }
   }
 
+  Future<dynamic> newPortForward(String remoteId, bool isRDP) async {
+    final msg = jsonEncode(
+        {"type": WindowType.PortForward.index, "id": remoteId, "isRDP": isRDP});
+
+    try {
+      final ids = await DesktopMultiWindow.getAllSubWindowIds();
+      if (!ids.contains(_portForwardWindowId)) {
+        _portForwardWindowId = null;
+      }
+    } on Error {
+      _portForwardWindowId = null;
+    }
+    if (_portForwardWindowId == null) {
+      final portForwardController = await DesktopMultiWindow.createWindow(msg);
+      portForwardController
+        ..setFrame(const Offset(0, 0) & const Size(1280, 720))
+        ..center()
+        ..setTitle("rustdesk - port forward")
+        ..show();
+      _portForwardWindowId = portForwardController.windowId;
+    } else {
+      return call(WindowType.PortForward, "new_port_forward", msg);
+    }
+  }
+
   Future<dynamic> call(WindowType type, String methodName, dynamic args) async {
     int? windowId = findWindowByType(type);
     if (windowId == null) {
@@ -104,7 +129,7 @@ class RustDeskMultiWindowManager {
       case WindowType.FileTransfer:
         return _fileTransferWindowId;
       case WindowType.PortForward:
-        break;
+        return _portForwardWindowId;
       case WindowType.Unknown:
         break;
     }
@@ -120,7 +145,7 @@ class RustDeskMultiWindowManager {
     await Future.wait(WindowType.values.map((e) => closeWindows(e)));
   }
 
-  Future<void> closeWindows(WindowType type) async  {
+  Future<void> closeWindows(WindowType type) async {
     if (type == WindowType.Main) {
       // skip main window, use window manager instead
       return;

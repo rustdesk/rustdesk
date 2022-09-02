@@ -7,6 +7,7 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_hbb/consts.dart';
 import 'package:flutter_hbb/generated_bridge.dart';
 import 'package:flutter_hbb/models/ab_model.dart';
 import 'package:flutter_hbb/models/chat_model.dart';
@@ -17,6 +18,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:tuple/tuple.dart';
 
 import '../common.dart';
+import '../common/shared_state.dart';
 import '../mobile/widgets/dialog.dart';
 import '../mobile/widgets/overlay.dart';
 import 'peer_model.dart';
@@ -96,25 +98,26 @@ class FfiModel with ChangeNotifier {
     clearPermissions();
   }
 
-  void setConnectionType(bool secure, bool direct) {
+  void setConnectionType(String peerId, bool secure, bool direct) {
     _secure = secure;
     _direct = direct;
+    try {
+      var connectionType = ConnectionTypeState.find(peerId);
+      connectionType.setSecure(secure);
+      connectionType.setDirect(direct);
+    } catch (e) {
+      //
+    }
   }
 
   Image? getConnectionImage() {
-    String? icon;
-    if (secure == true && direct == true) {
-      icon = 'secure';
-    } else if (secure == false && direct == true) {
-      icon = 'insecure';
-    } else if (secure == false && direct == false) {
-      icon = 'insecure_relay';
-    } else if (secure == true && direct == false) {
-      icon = 'secure_relay';
+    if (secure == null || direct == null) {
+      return null;
+    } else {
+      final icon =
+          '${secure == true ? "secure" : "insecure"}${direct == true ? "" : "_relay"}';
+      return Image.asset('assets/$icon.png', width: 48, height: 48);
     }
-    return icon == null
-        ? null
-        : Image.asset('assets/$icon.png', width: 48, height: 48);
   }
 
   void clearPermissions() {
@@ -130,7 +133,8 @@ class FfiModel with ChangeNotifier {
       } else if (name == 'peer_info') {
         handlePeerInfo(evt, peerId);
       } else if (name == 'connection_ready') {
-        setConnectionType(evt['secure'] == 'true', evt['direct'] == 'true');
+        setConnectionType(
+            peerId, evt['secure'] == 'true', evt['direct'] == 'true');
       } else if (name == 'switch_display') {
         handleSwitchDisplay(evt);
       } else if (name == 'cursor_data') {
@@ -172,9 +176,9 @@ class FfiModel with ChangeNotifier {
       } else if (name == 'update_quality_status') {
         parent.target?.qualityMonitorModel.updateQualityStatus(evt);
       } else if (name == 'update_block_input_state') {
-        updateBlockInputState(evt);
+        updateBlockInputState(evt, peerId);
       } else if (name == 'update_privacy_mode') {
-        updatePrivacyMode(evt);
+        updatePrivacyMode(evt, peerId);
       }
     };
   }
@@ -189,7 +193,7 @@ class FfiModel with ChangeNotifier {
         handlePeerInfo(evt, peerId);
       } else if (name == 'connection_ready') {
         parent.target?.ffiModel.setConnectionType(
-            evt['secure'] == 'true', evt['direct'] == 'true');
+            peerId, evt['secure'] == 'true', evt['direct'] == 'true');
       } else if (name == 'switch_display') {
         handleSwitchDisplay(evt);
       } else if (name == 'cursor_data') {
@@ -231,9 +235,9 @@ class FfiModel with ChangeNotifier {
       } else if (name == 'update_quality_status') {
         parent.target?.qualityMonitorModel.updateQualityStatus(evt);
       } else if (name == 'update_block_input_state') {
-        updateBlockInputState(evt);
+        updateBlockInputState(evt, peerId);
       } else if (name == 'update_privacy_mode') {
-        updatePrivacyMode(evt);
+        updatePrivacyMode(evt, peerId);
       }
     };
     platformFFI.setEventCallback(cb);
@@ -297,6 +301,9 @@ class FfiModel with ChangeNotifier {
 
   /// Handle the peer info event based on [evt].
   void handlePeerInfo(Map<String, dynamic> evt, String peerId) async {
+    // recent peer updated by handle_peer_info(ui_session_interface.rs) --> handle_peer_info(client.rs) --> save_config(client.rs)
+    bind.mainLoadRecentPeers();
+
     parent.target?.dialogManager.dismissAll();
     _pi.version = evt['version'];
     _pi.username = evt['username'];
@@ -304,6 +311,12 @@ class FfiModel with ChangeNotifier {
     _pi.platform = evt['platform'];
     _pi.sasEnabled = evt['sas_enabled'] == "true";
     _pi.currentDisplay = int.parse(evt['current_display']);
+
+    try {
+      CurrentDisplayState.find(peerId).value = _pi.currentDisplay;
+    } catch (e) {
+      //
+    }
 
     if (isPeerAndroid) {
       _touchMode = true;
@@ -316,6 +329,7 @@ class FfiModel with ChangeNotifier {
     }
 
     if (evt['is_file_transfer'] == "true") {
+      // TODO is file transfer
       parent.target?.fileModel.onReady();
     } else {
       _pi.displays = [];
@@ -343,13 +357,24 @@ class FfiModel with ChangeNotifier {
     notifyListeners();
   }
 
-  updateBlockInputState(Map<String, dynamic> evt) {
+  updateBlockInputState(Map<String, dynamic> evt, String peerId) {
     _inputBlocked = evt['input_state'] == 'on';
     notifyListeners();
+    try {
+      BlockInputState.find(peerId).value = evt['input_state'] == 'on';
+    } catch (e) {
+      //
+    }
   }
 
-  updatePrivacyMode(Map<String, dynamic> evt) {
+  updatePrivacyMode(Map<String, dynamic> evt, String peerId) {
     notifyListeners();
+    try {
+      PrivacyModeState.find(peerId).value =
+          bind.sessionGetToggleOptionSync(id: peerId, arg: 'privacy-mode');
+    } catch (e) {
+      //
+    }
   }
 }
 
@@ -476,39 +501,11 @@ class CanvasModel with ChangeNotifier {
       return;
     }
 
-    final s1 = size.width / (parent.target?.ffiModel.display.width ?? 720);
-    final s2 = size.height / (parent.target?.ffiModel.display.height ?? 1280);
-
-    // Closure to perform shrink operation.
-    final shrinkOp = () {
-      final s = s1 < s2 ? s1 : s2;
-      if (s < 1) {
-        _scale = s;
-      }
-    };
-    // Closure to perform stretch operation.
-    final stretchOp = () {
-      final s = s1 < s2 ? s1 : s2;
-      if (s > 1) {
-        _scale = s;
-      }
-    };
-    // Closure to perform default operation(set the scale to 1.0).
-    final defaultOp = () {
-      _scale = 1.0;
-    };
-
-    // // On desktop, shrink is the default behavior.
-    // if (isDesktop) {
-    //   shrinkOp();
-    // } else {
-    defaultOp();
-    // }
-
-    if (style == 'shrink') {
-      shrinkOp();
-    } else if (style == 'stretch') {
-      stretchOp();
+    _scale = 1.0;
+    if (style == 'adaptive') {
+      final s1 = size.width / getDisplayWidth();
+      final s2 = size.height / getDisplayHeight();
+      _scale = s1 < s2 ? s1 : s2;
     }
 
     _x = (size.width - getDisplayWidth() * _scale) / 2;
@@ -536,11 +533,17 @@ class CanvasModel with ChangeNotifier {
   }
 
   int getDisplayWidth() {
-    return parent.target?.ffiModel.display.width ?? 1080;
+    final defaultWidth = (isDesktop || isWebDesktop)
+        ? kDesktopDefaultDisplayWidth
+        : kMobileDefaultDisplayWidth;
+    return parent.target?.ffiModel.display.width ?? defaultWidth;
   }
 
   int getDisplayHeight() {
-    return parent.target?.ffiModel.display.height ?? 720;
+    final defaultHeight = (isDesktop || isWebDesktop)
+        ? kDesktopDefaultDisplayHeight
+        : kMobileDefaultDisplayHeight;
+    return parent.target?.ffiModel.display.height ?? defaultHeight;
   }
 
   Size get size {
@@ -556,9 +559,19 @@ class CanvasModel with ChangeNotifier {
     var dxOffset = 0;
     var dyOffset = 0;
     if (dw > size.width) {
+      final X_debugNanOrInfinite = x - dw * (x / size.width) - _x;
+      if (X_debugNanOrInfinite.isInfinite || X_debugNanOrInfinite.isNaN) {
+        debugPrint(
+            'REMOVE ME ============================ X_debugNanOrInfinite $x,$dw,$_scale,${size.width},$_x');
+      }
       dxOffset = (x - dw * (x / size.width) - _x).toInt();
     }
     if (dh > size.height) {
+      final Y_debugNanOrInfinite = y - dh * (y / size.height) - _y;
+      if (Y_debugNanOrInfinite.isInfinite || Y_debugNanOrInfinite.isNaN) {
+        debugPrint(
+            'REMOVE ME ============================ Y_debugNanOrInfinite $y,$dh,$_scale,${size.height},$_y');
+      }
       dyOffset = (y - dh * (y / size.height) - _y).toInt();
     }
     _x += dxOffset;
@@ -926,16 +939,16 @@ class FFI {
   late final QualityMonitorModel qualityMonitorModel; // session
 
   FFI() {
-    this.imageModel = ImageModel(WeakReference(this));
-    this.ffiModel = FfiModel(WeakReference(this));
-    this.cursorModel = CursorModel(WeakReference(this));
-    this.canvasModel = CanvasModel(WeakReference(this));
-    this.serverModel = ServerModel(WeakReference(this)); // use global FFI
-    this.chatModel = ChatModel(WeakReference(this));
-    this.fileModel = FileModel(WeakReference(this));
-    this.abModel = AbModel(WeakReference(this));
-    this.userModel = UserModel(WeakReference(this));
-    this.qualityMonitorModel = QualityMonitorModel(WeakReference(this));
+    imageModel = ImageModel(WeakReference(this));
+    ffiModel = FfiModel(WeakReference(this));
+    cursorModel = CursorModel(WeakReference(this));
+    canvasModel = CanvasModel(WeakReference(this));
+    serverModel = ServerModel(WeakReference(this)); // use global FFI
+    chatModel = ChatModel(WeakReference(this));
+    fileModel = FileModel(WeakReference(this));
+    abModel = AbModel(WeakReference(this));
+    userModel = UserModel(WeakReference(this));
+    qualityMonitorModel = QualityMonitorModel(WeakReference(this));
   }
 
   /// Send a mouse tap event(down and up).
@@ -983,7 +996,7 @@ class FFI {
   // Raw Key 
   void inputRawKey(int keyCode, int scanCode, bool down){
       debugPrint(scanCode.toString());
-      bind.sessionInputRawKey(id: id, keycode: keyCode, scancode: scanCode, down: down);
+      // bind.sessionInputRawKey(id: id, keycode: keyCode, scancode: scanCode, down: down);
   }
 
   /// Send key stroke event.
@@ -1040,17 +1053,26 @@ class FFI {
     return [];
   }
 
-  /// Connect with the given [id]. Only transfer file if [isFileTransfer].
+  /// Connect with the given [id]. Only transfer file if [isFileTransfer], only port forward if [isPortForward].
   void connect(String id,
-      {bool isFileTransfer = false, double tabBarHeight = 0.0}) {
-    if (!isFileTransfer) {
+      {bool isFileTransfer = false,
+      bool isPortForward = false,
+      double tabBarHeight = 0.0}) {
+    assert(!(isFileTransfer && isPortForward), "more than one connect type");
+    if (isFileTransfer) {
+      id = 'ft_${id}';
+    } else if (isPortForward) {
+      id = 'pf_${id}';
+    } else {
       chatModel.resetClientMode();
       canvasModel.id = id;
       imageModel._id = id;
       cursorModel.id = id;
     }
-    id = isFileTransfer ? 'ft_${id}' : id;
-    final stream = bind.sessionConnect(id: id, isFileTransfer: isFileTransfer);
+    // ignore: unused_local_variable
+    final addRes = bind.sessionAddSync(
+        id: id, isFileTransfer: isFileTransfer, isPortForward: isPortForward);
+    final stream = bind.sessionStart(id: id);
     final cb = ffiModel.startEventListener(id);
     () async {
       await for (final message in stream) {
@@ -1092,7 +1114,7 @@ class FFI {
     ffiModel.clear();
     canvasModel.clear();
     resetModifiers();
-    print("model closed");
+    debugPrint("model $id closed");
   }
 
   /// Send **get** command to the Rust core based on [name] and [arg].
@@ -1236,20 +1258,20 @@ class PeerInfo {
 Future<void> savePreference(String id, double xCursor, double yCursor,
     double xCanvas, double yCanvas, double scale, int currentDisplay) async {
   SharedPreferences prefs = await SharedPreferences.getInstance();
-  final p = Map<String, dynamic>();
+  final p = <String, dynamic>{};
   p['xCursor'] = xCursor;
   p['yCursor'] = yCursor;
   p['xCanvas'] = xCanvas;
   p['yCanvas'] = yCanvas;
   p['scale'] = scale;
   p['currentDisplay'] = currentDisplay;
-  prefs.setString('peer' + id, json.encode(p));
+  prefs.setString('peer$id', json.encode(p));
 }
 
 Future<Map<String, dynamic>?> getPreference(String id) async {
   if (!isWebDesktop) return null;
   SharedPreferences prefs = await SharedPreferences.getInstance();
-  var p = prefs.getString('peer' + id);
+  var p = prefs.getString('peer$id');
   if (p == null) return null;
   Map<String, dynamic> m = json.decode(p);
   return m;
@@ -1257,7 +1279,7 @@ Future<Map<String, dynamic>?> getPreference(String id) async {
 
 void removePreference(String id) async {
   SharedPreferences prefs = await SharedPreferences.getInstance();
-  prefs.remove('peer' + id);
+  prefs.remove('peer$id');
 }
 
 void initializeCursorAndCanvas(FFI ffi) async {

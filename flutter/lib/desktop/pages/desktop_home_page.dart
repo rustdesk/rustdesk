@@ -806,6 +806,8 @@ Future<bool> loginDialog() async {
   var userNameMsg = "";
   String pass = "";
   var passMsg = "";
+  var userContontroller = TextEditingController(text: userName);
+  var pwdController = TextEditingController(text: pass);
 
   var isInProgress = false;
   var completer = Completer<bool>();
@@ -833,13 +835,10 @@ Future<bool> loginDialog() async {
                 ),
                 Expanded(
                   child: TextField(
-                    onChanged: (s) {
-                      userName = s;
-                    },
                     decoration: InputDecoration(
                         border: OutlineInputBorder(),
                         errorText: userNameMsg.isNotEmpty ? userNameMsg : null),
-                    controller: TextEditingController(text: userName),
+                    controller: userContontroller,
                   ),
                 ),
               ],
@@ -859,13 +858,10 @@ Future<bool> loginDialog() async {
                 Expanded(
                   child: TextField(
                     obscureText: true,
-                    onChanged: (s) {
-                      pass = s;
-                    },
                     decoration: InputDecoration(
                         border: OutlineInputBorder(),
                         errorText: passMsg.isNotEmpty ? passMsg : null),
-                    controller: TextEditingController(text: pass),
+                    controller: pwdController,
                   ),
                 ),
               ],
@@ -896,8 +892,8 @@ Future<bool> loginDialog() async {
                   isInProgress = false;
                 });
               };
-              userName = userName;
-              pass = pass;
+              userName = userContontroller.text;
+              pass = pwdController.text;
               if (userName.isEmpty) {
                 userNameMsg = translate("Username missed");
                 cancel();

@@ -235,12 +235,10 @@ packages:
   dash_chat_2:
     dependency: "direct main"
     description:
-      path: "."
-      ref: feat_maxWidth
-      resolved-ref: "3946ecf86d3600b54632fd80d0eb0ef0e74f2d6a"
-      url: "https://github.com/fufesou/Dash-Chat-2"
-    source: git
-    version: "0.0.12"
+      name: dash_chat_2
+      url: "https://pub.flutter-io.cn"
+    source: hosted
+    version: "0.0.14"
   desktop_drop:
     dependency: "direct main"
     description:
@@ -252,8 +250,8 @@ packages:
     dependency: "direct main"
     description:
       path: "."
-      ref: e013c81d75320bbf28adddeaadf462264ee6039d
-      resolved-ref: e013c81d75320bbf28adddeaadf462264ee6039d
+      ref: e0368a023ba195462acc00d33ab361b499f0e413
+      resolved-ref: e0368a023ba195462acc00d33ab361b499f0e413
       url: "https://github.com/Kingtous/rustdesk_desktop_multi_window"
     source: git
     version: "0.1.0"
@@ -849,7 +847,7 @@ packages:
     source: hosted
     version: "3.1.0"
   rxdart:
-    dependency: transitive
+    dependency: "direct main"
     description:
       name: rxdart
       url: "https://pub.flutter-io.cn"
@@ -1244,8 +1242,8 @@ packages:
     dependency: "direct main"
     description:
       path: "."
-      ref: a25f1776ccc1119cbb2a8541174293aa36d532ed
-      resolved-ref: a25f1776ccc1119cbb2a8541174293aa36d532ed
+      ref: "799ef079e87938c3f4340591b4330c2598f38bb9"
+      resolved-ref: "799ef079e87938c3f4340591b4330c2598f38bb9"
       url: "https://github.com/Kingtous/rustdesk_window_manager"
     source: git
     version: "0.2.6"

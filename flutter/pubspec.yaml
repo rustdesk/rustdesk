@@ -34,16 +34,13 @@ dependencies:
     provider: ^6.0.3
     tuple: ^2.0.0
     wakelock: ^0.5.2
-    device_info_plus: ^4.0.2
+    device_info_plus: ^4.1.2
     firebase_analytics: ^9.1.5
     package_info_plus: ^1.4.2
     url_launcher: ^6.0.9
     shared_preferences: ^2.0.6
     toggle_switch: ^1.4.0
-    dash_chat_2:
-        git:
-          url: https://github.com/fufesou/Dash-Chat-2
-          ref: feat_maxWidth
+    dash_chat_2: ^0.0.14
     draggable_float_widget: ^0.0.2
     settings_ui: ^2.0.2
     flutter_breadcrumb: ^1.0.1
@@ -61,11 +58,11 @@ dependencies:
     window_manager:
         git:
             url: https://github.com/Kingtous/rustdesk_window_manager
-            ref: a25f1776ccc1119cbb2a8541174293aa36d532ed
+            ref: 799ef079e87938c3f4340591b4330c2598f38bb9
     desktop_multi_window:
         git:
             url: https://github.com/Kingtous/rustdesk_desktop_multi_window
-            ref: e013c81d75320bbf28adddeaadf462264ee6039d
+            ref: e0368a023ba195462acc00d33ab361b499f0e413
     freezed_annotation: ^2.0.3
     tray_manager:
         git:
@@ -76,6 +73,7 @@ dependencies:
     contextmenu: ^3.0.0
     desktop_drop: ^0.3.3
     scroll_pos: ^0.3.0
+    rxdart: ^0.27.5
 
 dev_dependencies:
     flutter_launcher_icons: ^0.9.1

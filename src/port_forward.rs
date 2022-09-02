@@ -1,3 +1,5 @@
+use std::sync::{Arc, RwLock};
+
 use crate::client::*;
 use hbb_common::{
     allow_err, bail,
@@ -48,6 +50,9 @@ pub async fn listen(
     ui_receiver: mpsc::UnboundedReceiver<Data>,
     key: &str,
     token: &str,
+    lc: Arc<RwLock<LoginConfigHandler>>,
+    remote_host: String,
+    remote_port: i32,
 ) -> ResultType<()> {
     let listener = tcp::new_listener(format!("0.0.0.0:{}", port), true).await?;
     let addr = listener.local_addr()?;
@@ -61,6 +66,7 @@ pub async fn listen(
         tokio::select! {
             Ok((forward, addr)) = listener.accept() => {
                 log::info!("new connection from {:?}", addr);
+                lc.write().unwrap().port_forward = (remote_host.clone(), remote_port);
                 let id = id.clone();
                 let password = password.clone();
                 let mut forward = Framed::new(forward, BytesCodec::new());

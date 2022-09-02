@@ -4,6 +4,7 @@ import 'package:flutter_hbb/consts.dart';
 import 'package:flutter_hbb/desktop/pages/desktop_home_page.dart';
 import 'package:flutter_hbb/desktop/pages/desktop_setting_page.dart';
 import 'package:flutter_hbb/desktop/widgets/tabbar_widget.dart';
+import 'package:get/get.dart';
 import 'package:window_manager/window_manager.dart';
 
 class DesktopTabPage extends StatefulWidget {
@@ -33,26 +34,29 @@ class _DesktopTabPageState extends State<DesktopTabPage> {
   @override
   Widget build(BuildContext context) {
     final dark = isDarkTheme();
-    return DragToResizeArea(
-      child: Container(
-        decoration: BoxDecoration(
-            border: Border.all(color: MyTheme.color(context).border!)),
-        child: Scaffold(
-            backgroundColor: MyTheme.color(context).bg,
-            body: DesktopTab(
-              controller: tabController,
-              theme: dark ? TarBarTheme.dark() : TarBarTheme.light(),
-              isMainWindow: true,
-              tail: ActionIcon(
-                message: 'Settings',
-                icon: IconFont.menu,
-                theme: dark ? TarBarTheme.dark() : TarBarTheme.light(),
-                onTap: onAddSetting,
-                is_close: false,
-              ),
-            )),
-      ),
-    );
+    RxBool fullscreen = false.obs;
+    Get.put(fullscreen, tag: 'fullscreen');
+    return Obx(() => DragToResizeArea(
+          resizeEdgeSize: fullscreen.value ? 1.0 : 8.0,
+          child: Container(
+            decoration: BoxDecoration(
+                border: Border.all(color: MyTheme.color(context).border!)),
+            child: Scaffold(
+                backgroundColor: MyTheme.color(context).bg,
+                body: DesktopTab(
+                  controller: tabController,
+                  theme: dark ? TarBarTheme.dark() : TarBarTheme.light(),
+                  tabType: DesktopTabType.main,
+                  tail: ActionIcon(
+                    message: 'Settings',
+                    icon: IconFont.menu,
+                    theme: dark ? TarBarTheme.dark() : TarBarTheme.light(),
+                    onTap: onAddSetting,
+                    is_close: false,
+                  ),
+                )),
+          ),
+        ));
   }
 
   void onAddSetting() {

@@ -21,18 +21,16 @@ final peerSearchTextController =
     TextEditingController(text: peerSearchText.value);
 
 class _PeerWidget extends StatefulWidget {
-  late final _peers;
-  late final OffstageFunc _offstageFunc;
-  late final PeerCardWidgetFunc _peerCardWidgetFunc;
+  final Peers peers;
+  final OffstageFunc offstageFunc;
+  final PeerCardWidgetFunc peerCardWidgetFunc;
 
-  _PeerWidget(Peers peers, OffstageFunc offstageFunc,
-      PeerCardWidgetFunc peerCardWidgetFunc,
-      {Key? key})
-      : super(key: key) {
-    _peers = peers;
-    _offstageFunc = offstageFunc;
-    _peerCardWidgetFunc = peerCardWidgetFunc;
-  }
+  const _PeerWidget(
+      {required this.peers,
+      required this.offstageFunc,
+      required this.peerCardWidgetFunc,
+      Key? key})
+      : super(key: key);
 
   @override
   _PeerWidgetState createState() => _PeerWidgetState();
@@ -42,9 +40,9 @@ class _PeerWidget extends StatefulWidget {
 class _PeerWidgetState extends State<_PeerWidget> with WindowListener {
   static const int _maxQueryCount = 3;
 
-  var _curPeers = Set<String>();
+  final _curPeers = <String>{};
   var _lastChangeTime = DateTime.now();
-  var _lastQueryPeers = Set<String>();
+  var _lastQueryPeers = <String>{};
   var _lastQueryTime = DateTime.now().subtract(Duration(hours: 1));
   var _queryCoun = 0;
   var _exit = false;
@@ -78,65 +76,62 @@ class _PeerWidgetState extends State<_PeerWidget> with WindowListener {
 
   @override
   Widget build(BuildContext context) {
-    final space = 12.0;
+    const space = 12.0;
     return ChangeNotifierProvider<Peers>(
-      create: (context) => super.widget._peers,
+      create: (context) => widget.peers,
       child: Consumer<Peers>(
-          builder: (context, peers, child) => peers.peers.isEmpty
-              ? Center(
-                  child: Text(translate("Empty")),
-                )
-              : SingleChildScrollView(
-                  child: ObxValue<RxString>((searchText) {
-                    return FutureBuilder<List<Peer>>(
-                      builder: (context, snapshot) {
-                        if (snapshot.hasData) {
-                          final peers = snapshot.data!;
-                          final cards = <Widget>[];
-                          for (final peer in peers) {
-                            cards.add(Offstage(
-                                key: ValueKey("off${peer.id}"),
-                                offstage: super.widget._offstageFunc(peer),
-                                child: Obx(
-                                  () => SizedBox(
-                                    width: 220,
-                                    height:
-                                        peerCardUiType.value == PeerUiType.grid
-                                            ? 140
-                                            : 42,
-                                    child: VisibilityDetector(
-                                      key: ValueKey(peer.id),
-                                      onVisibilityChanged: (info) {
-                                        final peerId =
-                                            (info.key as ValueKey).value;
-                                        if (info.visibleFraction > 0.00001) {
-                                          _curPeers.add(peerId);
-                                        } else {
-                                          _curPeers.remove(peerId);
-                                        }
-                                        _lastChangeTime = DateTime.now();
-                                      },
-                                      child: super
-                                          .widget
-                                          ._peerCardWidgetFunc(peer),
-                                    ),
+        builder: (context, peers, child) => peers.peers.isEmpty
+            ? Center(
+                child: Text(translate("Empty")),
+              )
+            : SingleChildScrollView(
+                child: ObxValue<RxString>((searchText) {
+                  return FutureBuilder<List<Peer>>(
+                    builder: (context, snapshot) {
+                      if (snapshot.hasData) {
+                        final peers = snapshot.data!;
+                        final cards = <Widget>[];
+                        for (final peer in peers) {
+                          cards.add(Offstage(
+                              key: ValueKey("off${peer.id}"),
+                              offstage: widget.offstageFunc(peer),
+                              child: Obx(
+                                () => SizedBox(
+                                  width: 220,
+                                  height:
+                                      peerCardUiType.value == PeerUiType.grid
+                                          ? 140
+                                          : 42,
+                                  child: VisibilityDetector(
+                                    key: ValueKey(peer.id),
+                                    onVisibilityChanged: (info) {
+                                      final peerId =
+                                          (info.key as ValueKey).value;
+                                      if (info.visibleFraction > 0.00001) {
+                                        _curPeers.add(peerId);
+                                      } else {
+                                        _curPeers.remove(peerId);
+                                      }
+                                      _lastChangeTime = DateTime.now();
+                                    },
+                                    child: widget.peerCardWidgetFunc(peer),
                                   ),
-                                )));
-                          }
-                          return Wrap(
-                              spacing: space,
-                              runSpacing: space,
-                              children: cards);
-                        } else {
-                          return const Center(
-                            child: CircularProgressIndicator(),
-                          );
+                                ),
+                              )));
                         }
-                      },
-                      future: matchPeers(searchText.value, peers.peers),
-                    );
-                  }, peerSearchText),
-                )),
+                        return Wrap(
+                            spacing: space, runSpacing: space, children: cards);
+                      } else {
+                        return const Center(
+                          child: CircularProgressIndicator(),
+                        );
+                      }
+                    },
+                    future: matchPeers(searchText.value, peers.peers),
+                  );
+                }, peerSearchText),
+              ),
+      ),
     );
   }
 
@@ -175,31 +170,42 @@ class _PeerWidgetState extends State<_PeerWidget> with WindowListener {
 }
 
 abstract class BasePeerWidget extends StatelessWidget {
-  late final _name;
-  late final _loadEvent;
-  late final OffstageFunc _offstageFunc;
-  late final PeerCardWidgetFunc _peerCardWidgetFunc;
-  late final List<Peer> _initPeers;
+  final String name;
+  final String loadEvent;
+  final OffstageFunc offstageFunc;
+  final PeerCardWidgetFunc peerCardWidgetFunc;
+  final List<Peer> initPeers;
 
-  BasePeerWidget({Key? key}) : super(key: key) {}
+  const BasePeerWidget({
+    Key? key,
+    required this.name,
+    required this.loadEvent,
+    required this.offstageFunc,
+    required this.peerCardWidgetFunc,
+    required this.initPeers,
+  }) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
-    return _PeerWidget(Peers(_name, _loadEvent, _initPeers), _offstageFunc,
-        _peerCardWidgetFunc);
+    return _PeerWidget(
+        peers: Peers(name: name, loadEvent: loadEvent, peers: initPeers),
+        offstageFunc: offstageFunc,
+        peerCardWidgetFunc: peerCardWidgetFunc);
   }
 }
 
 class RecentPeerWidget extends BasePeerWidget {
-  RecentPeerWidget({Key? key}) : super(key: key) {
-    super._name = "recent peer";
-    super._loadEvent = "load_recent_peers";
-    super._offstageFunc = (Peer _peer) => false;
-    super._peerCardWidgetFunc = (Peer peer) => RecentPeerCard(
-          peer: peer,
+  RecentPeerWidget({Key? key})
+      : super(
+          key: key,
+          name: 'recent peer',
+          loadEvent: 'load_recent_peers',
+          offstageFunc: (Peer peer) => false,
+          peerCardWidgetFunc: (Peer peer) => RecentPeerCard(
+            peer: peer,
+          ),
+          initPeers: [],
         );
-    super._initPeers = [];
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -210,13 +216,17 @@ class RecentPeerWidget extends BasePeerWidget {
 }
 
 class FavoritePeerWidget extends BasePeerWidget {
-  FavoritePeerWidget({Key? key}) : super(key: key) {
-    super._name = "favorite peer";
-    super._loadEvent = "load_fav_peers";
-    super._offstageFunc = (Peer _peer) => false;
-    super._peerCardWidgetFunc = (Peer peer) => FavoritePeerCard(peer: peer);
-    super._initPeers = [];
-  }
+  FavoritePeerWidget({Key? key})
+      : super(
+          key: key,
+          name: 'favorite peer',
+          loadEvent: 'load_fav_peers',
+          offstageFunc: (Peer peer) => false,
+          peerCardWidgetFunc: (Peer peer) => FavoritePeerCard(
+            peer: peer,
+          ),
+          initPeers: [],
+        );
 
   @override
   Widget build(BuildContext context) {
@@ -227,13 +237,17 @@ class FavoritePeerWidget extends BasePeerWidget {
 }
 
 class DiscoveredPeerWidget extends BasePeerWidget {
-  DiscoveredPeerWidget({Key? key}) : super(key: key) {
-    super._name = "discovered peer";
-    super._loadEvent = "load_lan_peers";
-    super._offstageFunc = (Peer _peer) => false;
-    super._peerCardWidgetFunc = (Peer peer) => DiscoveredPeerCard(peer: peer);
-    super._initPeers = [];
-  }
+  DiscoveredPeerWidget({Key? key})
+      : super(
+          key: key,
+          name: 'discovered peer',
+          loadEvent: 'load_lan_peers',
+          offstageFunc: (Peer peer) => false,
+          peerCardWidgetFunc: (Peer peer) => DiscoveredPeerCard(
+            peer: peer,
+          ),
+          initPeers: [],
+        );
 
   @override
   Widget build(BuildContext context) {
@@ -244,21 +258,26 @@ class DiscoveredPeerWidget extends BasePeerWidget {
 }
 
 class AddressBookPeerWidget extends BasePeerWidget {
-  AddressBookPeerWidget({Key? key}) : super(key: key) {
-    super._name = "address book peer";
-    super._offstageFunc =
-        (Peer peer) => !_hitTag(gFFI.abModel.selectedTags, peer.tags);
-    super._peerCardWidgetFunc = (Peer peer) => AddressBookPeerCard(peer: peer);
-    super._initPeers = _loadPeers();
-  }
+  AddressBookPeerWidget({Key? key})
+      : super(
+          key: key,
+          name: 'address book peer',
+          loadEvent: 'load_address_book_peers',
+          offstageFunc: (Peer peer) =>
+              !_hitTag(gFFI.abModel.selectedTags, peer.tags),
+          peerCardWidgetFunc: (Peer peer) => DiscoveredPeerCard(
+            peer: peer,
+          ),
+          initPeers: _loadPeers(),
+        );
 
-  List<Peer> _loadPeers() {
+  static List<Peer> _loadPeers() {
     return gFFI.abModel.peers.map((e) {
       return Peer.fromJson(e['id'], e);
     }).toList();
   }
 
-  bool _hitTag(List<dynamic> selectedTags, List<dynamic> idents) {
+  static bool _hitTag(List<dynamic> selectedTags, List<dynamic> idents) {
     if (selectedTags.isEmpty) {
       return true;
     }

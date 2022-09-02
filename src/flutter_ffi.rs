@@ -13,21 +13,22 @@ use hbb_common::{
 };
 use hbb_common::{password_security, ResultType};
 
-use crate::client::file_trait::FileManager;
+use crate::{client::file_trait::FileManager, flutter::{session_add, session_start_}};
 use crate::common::make_fd_to_json;
 use crate::flutter::connection_manager::{self, get_clients_length, get_clients_state};
-use crate::flutter::{self, Session, SESSIONS};
+use crate::flutter::{self, SESSIONS};
 use crate::start_server;
 use crate::ui_interface;
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use crate::ui_interface::{change_id, check_connect_status, is_ok_change_id};
 use crate::ui_interface::{
-    check_super_user_permission, discover, forget_password, get_api_server, get_app_name,
-    get_async_job_status, get_connect_status, get_fav, get_id, get_lan_peers, get_langs,
-    get_license, get_local_option, get_option, get_options, get_peer, get_peer_option, get_socks,
-    get_sound_inputs, get_uuid, get_version, has_hwcodec, has_rendezvous_service, post_request,
-    set_local_option, set_option, set_options, set_peer_option, set_permanent_password, set_socks,
-    store_fav, test_if_valid_server, update_temporary_password, using_public_server,
+    check_mouse_time, check_super_user_permission, discover, forget_password, get_api_server,
+    get_app_name, get_async_job_status, get_connect_status, get_fav, get_id, get_lan_peers,
+    get_langs, get_license, get_local_option, get_mouse_time, get_option, get_options, get_peer,
+    get_peer_option, get_socks, get_sound_inputs, get_uuid, get_version, has_hwcodec,
+    has_rendezvous_service, post_request, set_local_option, set_option, set_options,
+    set_peer_option, set_permanent_password, set_socks, store_fav, test_if_valid_server,
+    update_temporary_password, using_public_server,
 };
 
 fn initialize(app_dir: &str) {
@@ -107,13 +108,18 @@ pub fn host_stop_system_key_propagate(stopped: bool) {
     crate::platform::windows::stop_system_key_propagate(stopped);
 }
 
-pub fn session_connect(
-    events2ui: StreamSink<EventToUI>,
-    id: String,
-    is_file_transfer: bool,
-) -> ResultType<()> {
-    Session::start(&id, is_file_transfer, events2ui);
-    Ok(())
+// FIXME: -> ResultType<()> cannot be parsed by frb_codegen
+// thread 'main' panicked at 'Failed to parse function output type `ResultType<()>`', $HOME\.cargo\git\checkouts\flutter_rust_bridge-ddba876d3ebb2a1e\e5adce5\frb_codegen\src\parser\mod.rs:151:25
+pub fn session_add_sync(id: String, is_file_transfer: bool, is_port_forward: bool) -> SyncReturn<String> {
+    if let Err(e) = session_add(&id, is_file_transfer, is_port_forward) {
+        SyncReturn(format!("Failed to add session with id {}, {}", &id, e))
+    } else {
+        SyncReturn("".to_owned())
+    }
+}
+
+pub fn session_start(events2ui: StreamSink<EventToUI>, id: String) -> ResultType<()> {
+    session_start_(&id, events2ui)
 }
 
 pub fn session_get_remember(id: String) -> Option<bool> {
@@ -126,7 +132,7 @@ pub fn session_get_remember(id: String) -> Option<bool> {
 
 pub fn session_get_toggle_option(id: String, arg: String) -> Option<bool> {
     if let Some(session) = SESSIONS.read().unwrap().get(&id) {
-        Some(session.get_toggle_option(&arg))
+        Some(session.get_toggle_option(arg))
     } else {
         None
     }
@@ -137,17 +143,9 @@ pub fn session_get_toggle_option_sync(id: String, arg: String) -> SyncReturn<boo
     SyncReturn(res)
 }
 
-pub fn session_get_image_quality(id: String) -> Option<String> {
-    if let Some(session) = SESSIONS.read().unwrap().get(&id) {
-        Some(session.get_image_quality())
-    } else {
-        None
-    }
-}
-
 pub fn session_get_option(id: String, arg: String) -> Option<String> {
     if let Some(session) = SESSIONS.read().unwrap().get(&id) {
-        Some(session.get_option(&arg))
+        Some(session.get_option(arg))
     } else {
         None
     }
@@ -155,7 +153,7 @@ pub fn session_get_option(id: String, arg: String) -> Option<String> {
 
 pub fn session_login(id: String, password: String, remember: bool) {
     if let Some(session) = SESSIONS.read().unwrap().get(&id) {
-        session.login(&password, remember);
+        session.login(password, remember);
     }
 }
 
@@ -168,7 +166,7 @@ pub fn session_close(id: String) {
 
 pub fn session_refresh(id: String) {
     if let Some(session) = SESSIONS.read().unwrap().get(&id) {
-        session.refresh();
+        session.refresh_video();
     }
 }
 
@@ -179,14 +177,36 @@ pub fn session_reconnect(id: String) {
 }
 
 pub fn session_toggle_option(id: String, value: String) {
+    if let Some(session) = SESSIONS.write().unwrap().get_mut(&id) {
+        session.toggle_option(value);
+    }
+}
+
+pub fn session_get_image_quality(id: String) -> Option<String> {
     if let Some(session) = SESSIONS.read().unwrap().get(&id) {
-        session.toggle_option(&value);
+        Some(session.get_image_quality())
+    } else {
+        None
     }
 }
 
 pub fn session_set_image_quality(id: String, value: String) {
+    if let Some(session) = SESSIONS.write().unwrap().get_mut(&id) {
+        session.save_image_quality(value);
+    }
+}
+
+pub fn session_get_custom_image_quality(id: String) -> Option<Vec<i32>> {
     if let Some(session) = SESSIONS.read().unwrap().get(&id) {
-        session.set_image_quality(&value);
+        Some(session.get_custom_image_quality())
+    } else {
+        None
+    }
+}
+
+pub fn session_set_custom_image_quality(id: String, value: i32) {
+    if let Some(session) = SESSIONS.write().unwrap().get_mut(&id) {
+        session.save_custom_image_quality(value);
     }
 }
 
@@ -208,11 +228,11 @@ pub fn session_switch_display(id: String, value: i32) {
     }
 }
 
-pub fn session_input_raw_key(id: String, keycode: i32, scancode:i32, down: bool){
-    if let Some(session) = SESSIONS.read().unwrap().get(&id) {
-        session.input_raw_key(keycode, scancode, down);
-    }
-}
+// pub fn session_input_raw_key(id: String, keycode: i32, scancode:i32, down: bool){
+//     if let Some(session) = SESSIONS.read().unwrap().get(&id) {
+//         session.input_raw_key(keycode, scancode, down);
+//     }
+// }
 
 pub fn session_input_key(
     id: String,
@@ -250,7 +270,7 @@ pub fn session_peer_option(id: String, name: String, value: String) {
 
 pub fn session_get_peer_option(id: String, name: String) -> String {
     if let Some(session) = SESSIONS.read().unwrap().get(&id) {
-        return session.get_option(&name);
+        return session.get_option(name);
     }
     "".to_string()
 }
@@ -349,7 +369,7 @@ pub fn session_get_platform(id: String, is_remote: bool) -> String {
 
 pub fn session_load_last_transfer_jobs(id: String) {
     if let Some(session) = SESSIONS.read().unwrap().get(&id) {
-        return session.load_last_jobs();
+        // return session.load_last_jobs();
     } else {
         // a tip for flutter dev
         eprintln!(
@@ -473,7 +493,7 @@ pub fn main_get_connect_status() -> String {
 
 pub fn main_check_connect_status() {
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    check_connect_status(true);
+    check_mouse_time(); // avoid multi calls
 }
 
 pub fn main_is_using_public_server() -> bool {
@@ -598,10 +618,30 @@ pub fn main_load_lan_peers() {
     {
         let data = HashMap::from([
             ("name", "load_lan_peers".to_owned()),
-            ("peers", serde_json::to_string(&get_lan_peers()).unwrap_or_default()),
+            (
+                "peers",
+                serde_json::to_string(&get_lan_peers()).unwrap_or_default(),
+            ),
         ]);
         s.add(serde_json::ser::to_string(&data).unwrap_or("".to_owned()));
     };
+}
+
+pub fn session_add_port_forward(
+    id: String,
+    local_port: i32,
+    remote_host: String,
+    remote_port: i32,
+) {
+    if let Some(session) = SESSIONS.write().unwrap().get_mut(&id) {
+        session.add_port_forward(local_port, remote_host, remote_port);
+    }
+}
+
+pub fn session_remove_port_forward(id: String, local_port: i32) {
+    if let Some(session) = SESSIONS.write().unwrap().get_mut(&id) {
+        session.remove_port_forward(local_port);
+    }
 }
 
 pub fn main_get_last_remote_id() -> String {
@@ -667,7 +707,6 @@ pub fn main_has_hwcodec() -> bool {
     has_hwcodec()
 }
 
-// TODO
 pub fn session_send_mouse(id: String, msg: String) {
     if let Ok(m) = serde_json::from_str::<HashMap<String, String>>(&msg) {
         let alt = m.get("alt").is_some();
@@ -743,6 +782,14 @@ pub fn main_set_permanent_password(password: String) {
 
 pub fn main_check_super_user_permission() -> bool {
     check_super_user_permission()
+}
+
+pub fn main_check_mouse_time() {
+    check_mouse_time();
+}
+
+pub fn main_get_mouse_time() -> f64 {
+    get_mouse_time()
 }
 
 pub fn cm_send_chat(conn_id: i32, msg: String) {

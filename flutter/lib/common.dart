@@ -427,7 +427,45 @@ class CustomAlertDialog extends StatelessWidget {
 void msgBox(
     String type, String title, String text, OverlayDialogManager dialogManager,
     {bool? hasCancel}) {
-  var wrap = (String text, void Function() onPressed) => ButtonTheme(
+  dialogManager.dismissAll();
+  List<Widget> buttons = [];
+  if (type != "connecting" && type != "success" && !type.contains("nook")) {
+    buttons.insert(
+        0,
+        msgBoxButton(translate('OK'), () {
+          dialogManager.dismissAll();
+          // https://github.com/fufesou/rustdesk/blob/5e9a31340b899822090a3731769ae79c6bf5f3e5/src/ui/common.tis#L263
+          if (!type.contains("custom")) {
+            closeConnection();
+          }
+        }));
+  }
+  hasCancel ??= !type.contains("error") &&
+      !type.contains("nocancel") &&
+      type != "restarting";
+  if (hasCancel) {
+    buttons.insert(
+        0,
+        msgBoxButton(translate('Cancel'), () {
+          dialogManager.dismissAll();
+        }));
+  }
+  // TODO: test this button
+  if (type.contains("hasclose")) {
+    buttons.insert(
+        0,
+        msgBoxButton(translate('Close'), () {
+          dialogManager.dismissAll();
+        }));
+  }
+  dialogManager.show((setState, close) => CustomAlertDialog(
+      title: _msgBoxTitle(title),
+      content: Text(translate(text), style: TextStyle(fontSize: 15)),
+      actions: buttons));
+}
+
+Widget msgBoxButton(String text, void Function() onPressed) {
+  return ButtonTheme(
       padding: EdgeInsets.symmetric(horizontal: 20, vertical: 10),
       materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
       //limits the touch area to the button area
@@ -439,41 +477,16 @@ void msgBox(
           onPressed: onPressed,
           child:
               Text(translate(text), style: TextStyle(color: MyTheme.accent))));
+}
 
+Widget _msgBoxTitle(String title) => Text(translate(title), style: TextStyle(fontSize: 21));
+
+void msgBoxCommon(OverlayDialogManager dialogManager, String title,
+    Widget content, List<Widget> buttons) {
   dialogManager.dismissAll();
-  List<Widget> buttons = [];
-  if (type != "connecting" && type != "success" && type.indexOf("nook") < 0) {
-    buttons.insert(
-        0,
-        wrap(translate('OK'), () {
-          dialogManager.dismissAll();
-          closeConnection();
-        }));
-  }
-  if (hasCancel == null) {
-    // hasCancel = type != 'error';
-    hasCancel = type.indexOf("error") < 0 &&
-        type.indexOf("nocancel") < 0 &&
-        type != "restarting";
-  }
-  if (hasCancel) {
-    buttons.insert(
-        0,
-        wrap(translate('Cancel'), () {
-          dialogManager.dismissAll();
-        }));
-  }
-  // TODO: test this button
-  if (type.indexOf("hasclose") >= 0) {
-    buttons.insert(
-        0,
-        wrap(translate('Close'), () {
-          dialogManager.dismissAll();
-        }));
-  }
   dialogManager.show((setState, close) => CustomAlertDialog(
-      title: Text(translate(title), style: TextStyle(fontSize: 21)),
-      content: Text(translate(text), style: TextStyle(fontSize: 15)),
+      title: _msgBoxTitle(title),
+      content: content,
       actions: buttons));
 }
 
@@ -492,13 +505,13 @@ const G = M * K;
 
 String readableFileSize(double size) {
   if (size < K) {
-    return size.toStringAsFixed(2) + " B";
+    return "${size.toStringAsFixed(2)} B";
   } else if (size < M) {
-    return (size / K).toStringAsFixed(2) + " KB";
+    return "${(size / K).toStringAsFixed(2)} KB";
   } else if (size < G) {
-    return (size / M).toStringAsFixed(2) + " MB";
+    return "${(size / M).toStringAsFixed(2)} MB";
   } else {
-    return (size / G).toStringAsFixed(2) + " GB";
+    return "${(size / G).toStringAsFixed(2)} GB";
   }
 }
 
@@ -661,8 +674,6 @@ Future<void> initGlobalFFI() async {
   debugPrint("_globalFFI init end");
   // after `put`, can also be globally found by Get.find<FFI>();
   Get.put(_globalFFI, permanent: true);
-  // trigger connection status updater
-  await bind.mainCheckConnectStatus();
   // global shared preference
   await Get.putAsync(() => SharedPreferences.getInstance());
 }

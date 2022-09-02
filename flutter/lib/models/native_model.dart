@@ -30,7 +30,7 @@ class PlatformFFI {
   String _dir = '';
   String _homeDir = '';
   F2? _translate;
-  var _eventHandlers = Map<String, Map<String, HandleEvent>>();
+  final _eventHandlers = Map<String, Map<String, HandleEvent>>();
   late RustdeskImpl _ffiBind;
   late String _appType;
   void Function(Map<String, dynamic>)? _eventCallback;
@@ -50,27 +50,27 @@ class PlatformFFI {
   }
 
   bool registerEventHandler(
-      String event_name, String handler_name, HandleEvent handler) {
-    debugPrint('registerEventHandler $event_name $handler_name');
-    var handlers = _eventHandlers[event_name];
+      String eventName, String handlerName, HandleEvent handler) {
+    debugPrint('registerEventHandler $eventName $handlerName');
+    var handlers = _eventHandlers[eventName];
     if (handlers == null) {
-      _eventHandlers[event_name] = {handler_name: handler};
+      _eventHandlers[eventName] = {handlerName: handler};
       return true;
     } else {
-      if (handlers.containsKey(handler_name)) {
+      if (handlers.containsKey(handlerName)) {
         return false;
       } else {
-        handlers[handler_name] = handler;
+        handlers[handlerName] = handler;
         return true;
       }
     }
   }
 
-  void unregisterEventHandler(String event_name, String handler_name) {
-    debugPrint('unregisterEventHandler $event_name $handler_name');
-    var handlers = _eventHandlers[event_name];
+  void unregisterEventHandler(String eventName, String handlerName) {
+    debugPrint('unregisterEventHandler $eventName $handlerName');
+    var handlers = _eventHandlers[eventName];
     if (handlers != null) {
-      handlers.remove(handler_name);
+      handlers.remove(handlerName);
     }
   }
 
@@ -117,7 +117,7 @@ class PlatformFFI {
           _homeDir = (await getDownloadsDirectory())?.path ?? "";
         }
       } catch (e) {
-        print(e);
+        print("initialize failed: $e");
       }
       String id = 'NA';
       String name = 'Flutter';
@@ -151,7 +151,7 @@ class PlatformFFI {
       await _ffiBind.mainSetHomeDir(home: _homeDir);
       await _ffiBind.mainInit(appDir: _dir);
     } catch (e) {
-      print(e);
+      print("initialize failed: $e");
     }
     version = await getVersion();
   }

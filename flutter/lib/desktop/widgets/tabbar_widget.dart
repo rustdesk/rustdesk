@@ -1,3 +1,5 @@
+import 'dart:io';
+import 'dart:async';
 import 'dart:math';
 
 import 'package:desktop_multi_window/desktop_multi_window.dart';
@@ -5,9 +7,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_hbb/common.dart';
 import 'package:flutter_hbb/consts.dart';
 import 'package:flutter_hbb/main.dart';
+import 'package:flutter_hbb/models/platform_model.dart';
 import 'package:get/get.dart';
-import 'package:window_manager/window_manager.dart';
 import 'package:scroll_pos/scroll_pos.dart';
+import 'package:window_manager/window_manager.dart';
 
 import '../../utils/multi_window_manager.dart';
 
@@ -31,6 +34,15 @@ class TabInfo {
       this.unselectedIcon,
       this.closable = true,
       required this.page});
+}
+
+enum DesktopTabType {
+  main,
+  cm,
+  remoteScreen,
+  fileTransfer,
+  portForward,
+  rdp,
 }
 
 class DesktopTabState {
@@ -63,6 +75,7 @@ class DesktopTabController {
       state.update((val) {
         val!.tabs.add(tab);
       });
+      state.value.scrollController.itemCount = state.value.tabs.length;
       toIndex = state.value.tabs.length - 1;
       assert(toIndex >= 0);
     }
@@ -95,8 +108,16 @@ class DesktopTabController {
   void jumpTo(int index) {
     state.update((val) {
       val!.selected = index;
-      val.pageController.jumpToPage(index);
-      val.scrollController.scrollToItem(index, center: true, animate: true);
+      Future.delayed(Duration.zero, (() {
+        if (val.pageController.hasClients) {
+          val.pageController.jumpToPage(index);
+        }
+        if (val.scrollController.hasClients &&
+            val.scrollController.canScroll &&
+            val.scrollController.itemCount >= index) {
+          val.scrollController.scrollToItem(index, center: true, animate: true);
+        }
+      }));
     });
     onSelected?.call(index);
   }
@@ -113,11 +134,27 @@ class DesktopTabController {
       remove(state.value.selected);
     }
   }
+
+  void clear() {
+    state.value.tabs.clear();
+    state.refresh();
+  }
 }
+
+class TabThemeConf {
+  double iconSize;
+  TarBarTheme theme;
+  TabThemeConf({required this.iconSize, required this.theme});
+}
+
+typedef TabBuilder = Widget Function(
+    String key, Widget icon, Widget label, TabThemeConf themeConf);
+typedef LabelGetter = Rx<String> Function(String key);
 
 class DesktopTab extends StatelessWidget {
   final Function(String)? onTabClose;
   final TarBarTheme theme;
+  final DesktopTabType tabType;
   final bool isMainWindow;
   final bool showTabBar;
   final bool showLogo;
@@ -127,23 +164,31 @@ class DesktopTab extends StatelessWidget {
   final bool showClose;
   final Widget Function(Widget pageView)? pageViewBuilder;
   final Widget? tail;
+  final VoidCallback? onClose;
+  final TabBuilder? tabBuilder;
+  final LabelGetter? labelGetter;
 
   final DesktopTabController controller;
-  late final state = controller.state;
+  Rx<DesktopTabState> get state => controller.state;
 
-  DesktopTab(
-      {required this.controller,
-      required this.isMainWindow,
-      this.theme = const TarBarTheme.light(),
-      this.onTabClose,
-      this.showTabBar = true,
-      this.showLogo = true,
-      this.showTitle = true,
-      this.showMinimize = true,
-      this.showMaximize = true,
-      this.showClose = true,
-      this.pageViewBuilder,
-      this.tail});
+  const DesktopTab({
+    required this.controller,
+    required this.tabType,
+    this.theme = const TarBarTheme.light(),
+    this.onTabClose,
+    this.showTabBar = true,
+    this.showLogo = true,
+    this.showTitle = true,
+    this.showMinimize = true,
+    this.showMaximize = true,
+    this.showClose = true,
+    this.pageViewBuilder,
+    this.tail,
+    this.onClose,
+    this.tabBuilder,
+    this.labelGetter,
+  }) : isMainWindow =
+            tabType == DesktopTabType.main || tabType == DesktopTabType.cm;
 
   @override
   Widget build(BuildContext context) {
@@ -172,11 +217,48 @@ class DesktopTab extends StatelessWidget {
     ]);
   }
 
+  Widget _buildBlock({required Widget child}) {
+    if (tabType != DesktopTabType.main) {
+      return child;
+    }
+    var block = false.obs;
+    return Obx(() => MouseRegion(
+          onEnter: (_) async {
+            if (!option2bool(
+                'allow-remote-config-modification',
+                await bind.mainGetOption(
+                    key: 'allow-remote-config-modification'))) {
+              var time0 = DateTime.now().millisecondsSinceEpoch;
+              await bind.mainCheckMouseTime();
+              Timer(const Duration(milliseconds: 120), () async {
+                var d = time0 - await bind.mainGetMouseTime();
+                if (d < 120) {
+                  block.value = true;
+                }
+              });
+            }
+          },
+          onExit: (_) => block.value = false,
+          child: Stack(
+            children: [
+              child,
+              Offstage(
+                  offstage: !block.value,
+                  child: Container(
+                    color: Colors.black.withOpacity(0.5),
+                  )),
+            ],
+          ),
+        ));
+  }
+
   Widget _buildPageView() {
-    return Obx(() => PageView(
-        controller: state.value.pageController,
-        children:
-            state.value.tabs.map((tab) => tab.page).toList(growable: false)));
+    return _buildBlock(
+        child: Obx(() => PageView(
+            controller: state.value.pageController,
+            children: state.value.tabs
+                .map((tab) => tab.page)
+                .toList(growable: false))));
   }
 
   Widget _buildBar() {
@@ -185,6 +267,11 @@ class DesktopTab extends StatelessWidget {
         Expanded(
           child: Row(
             children: [
+              Offstage(
+                  offstage: !Platform.isMacOS,
+                  child: const SizedBox(
+                    width: 78,
+                  )),
               Row(children: [
                 Offstage(
                     offstage: !showLogo,
@@ -217,6 +304,8 @@ class DesktopTab extends StatelessWidget {
                       controller: controller,
                       onTabClose: onTabClose,
                       theme: theme,
+                      tabBuilder: tabBuilder,
+                      labelGetter: labelGetter,
                     )),
               ),
             ],
@@ -229,6 +318,7 @@ class DesktopTab extends StatelessWidget {
           showMinimize: showMinimize,
           showMaximize: showMaximize,
           showClose: showClose,
+          onClose: onClose,
         )
       ],
     );
@@ -242,6 +332,7 @@ class WindowActionPanel extends StatelessWidget {
   final bool showMinimize;
   final bool showMaximize;
   final bool showClose;
+  final VoidCallback? onClose;
 
   const WindowActionPanel(
       {Key? key,
@@ -249,7 +340,8 @@ class WindowActionPanel extends StatelessWidget {
       required this.theme,
       this.showMinimize = true,
       this.showMaximize = true,
-      this.showClose = true})
+      this.showClose = true,
+      this.onClose})
       : super(key: key);
 
   @override
@@ -323,8 +415,12 @@ class WindowActionPanel extends StatelessWidget {
                 if (mainTab) {
                   windowManager.close();
                 } else {
-                  WindowController.fromWindowId(windowId!).close();
+                  // only hide for multi window, not close
+                  Future.delayed(Duration.zero, () {
+                    WindowController.fromWindowId(windowId!).hide();
+                  });
                 }
+                onClose?.call();
               },
               is_close: true,
             )),
@@ -336,13 +432,20 @@ class WindowActionPanel extends StatelessWidget {
 // ignore: must_be_immutable
 class _ListView extends StatelessWidget {
   final DesktopTabController controller;
-  late final Rx<DesktopTabState> state;
   final Function(String key)? onTabClose;
   final TarBarTheme theme;
 
+  final TabBuilder? tabBuilder;
+  final LabelGetter? labelGetter;
+
+  Rx<DesktopTabState> get state => controller.state;
+
   _ListView(
-      {required this.controller, required this.onTabClose, required this.theme})
-      : this.state = controller.state;
+      {required this.controller,
+      required this.onTabClose,
+      required this.theme,
+      this.tabBuilder,
+      this.labelGetter});
 
   @override
   Widget build(BuildContext context) {
@@ -356,7 +459,9 @@ class _ListView extends StatelessWidget {
           final tab = e.value;
           return _Tab(
             index: index,
-            label: tab.label,
+            label: labelGetter == null
+                ? Rx<String>(tab.label)
+                : labelGetter!(tab.label),
             selectedIcon: tab.selectedIcon,
             unselectedIcon: tab.unselectedIcon,
             closable: tab.closable,
@@ -364,22 +469,33 @@ class _ListView extends StatelessWidget {
             onClose: () => controller.remove(index),
             onSelected: () => controller.jumpTo(index),
             theme: theme,
+            tabBuilder: tabBuilder == null
+                ? null
+                : (Widget icon, Widget labelWidget, TabThemeConf themeConf) {
+                    return tabBuilder!(
+                      tab.label,
+                      icon,
+                      labelWidget,
+                      themeConf,
+                    );
+                  },
           );
         }).toList()));
   }
 }
 
-class _Tab extends StatelessWidget {
+class _Tab extends StatefulWidget {
   late final int index;
-  late final String label;
+  late final Rx<String> label;
   late final IconData? selectedIcon;
   late final IconData? unselectedIcon;
   late final bool closable;
   late final int selected;
   late final Function() onClose;
   late final Function() onSelected;
-  final RxBool _hover = false.obs;
   late final TarBarTheme theme;
+  final Widget Function(Widget icon, Widget label, TabThemeConf themeConf)?
+      tabBuilder;
 
   _Tab(
       {Key? key,
@@ -387,6 +503,7 @@ class _Tab extends StatelessWidget {
       required this.label,
       this.selectedIcon,
       this.unselectedIcon,
+      this.tabBuilder,
       required this.closable,
       required this.selected,
       required this.onClose,
@@ -395,60 +512,86 @@ class _Tab extends StatelessWidget {
       : super(key: key);
 
   @override
+  State<_Tab> createState() => _TabState();
+}
+
+class _TabState extends State<_Tab> with RestorationMixin {
+  final RestorableBool restoreHover = RestorableBool(false);
+
+  Widget _buildTabContent() {
+    bool showIcon =
+        widget.selectedIcon != null && widget.unselectedIcon != null;
+    bool isSelected = widget.index == widget.selected;
+
+    final icon = Offstage(
+        offstage: !showIcon,
+        child: Icon(
+          isSelected ? widget.selectedIcon : widget.unselectedIcon,
+          size: _kIconSize,
+          color: isSelected
+              ? widget.theme.selectedtabIconColor
+              : widget.theme.unSelectedtabIconColor,
+        ).paddingOnly(right: 5));
+    final labelWidget = Obx(() {
+      return Text(
+        translate(widget.label.value),
+        textAlign: TextAlign.center,
+        style: TextStyle(
+            color: isSelected
+                ? widget.theme.selectedTextColor
+                : widget.theme.unSelectedTextColor),
+      );
+    });
+
+    if (widget.tabBuilder == null) {
+      return Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          icon,
+          labelWidget,
+        ],
+      );
+    } else {
+      return widget.tabBuilder!(icon, labelWidget,
+          TabThemeConf(iconSize: _kIconSize, theme: widget.theme));
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
-    bool show_icon = selectedIcon != null && unselectedIcon != null;
-    bool is_selected = index == selected;
-    bool show_divider = index != selected - 1 && index != selected;
+    bool isSelected = widget.index == widget.selected;
+    bool showDivider =
+        widget.index != widget.selected - 1 && widget.index != widget.selected;
+    RxBool hover = restoreHover.value.obs;
     return Ink(
       child: InkWell(
-        onHover: (hover) => _hover.value = hover,
-        onTap: () => onSelected(),
+        onHover: (value) {
+          hover.value = value;
+          restoreHover.value = value;
+        },
+        onTap: () => widget.onSelected(),
         child: Row(
           children: [
-            Container(
+            SizedBox(
                 height: _kTabBarHeight,
                 child: Row(
                     crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Offstage(
-                              offstage: !show_icon,
-                              child: Icon(
-                                is_selected ? selectedIcon : unselectedIcon,
-                                size: _kIconSize,
-                                color: is_selected
-                                    ? theme.selectedtabIconColor
-                                    : theme.unSelectedtabIconColor,
-                              ).paddingOnly(right: 5)),
-                          Text(
-                            translate(label),
-                            textAlign: TextAlign.center,
-                            style: TextStyle(
-                                color: is_selected
-                                    ? theme.selectedTextColor
-                                    : theme.unSelectedTextColor),
-                          ),
-                        ],
-                      ),
-                      Offstage(
-                        offstage: !closable,
-                        child: Obx((() => _CloseButton(
-                              visiable: _hover.value,
-                              tabSelected: is_selected,
-                              onClose: () => onClose(),
-                              theme: theme,
-                            ))),
-                      )
+                      _buildTabContent(),
+                      Obx((() => _CloseButton(
+                            visiable: hover.value && widget.closable,
+                            tabSelected: isSelected,
+                            onClose: () => widget.onClose(),
+                            theme: widget.theme,
+                          )))
                     ])).paddingSymmetric(horizontal: 10),
             Offstage(
-              offstage: !show_divider,
+              offstage: !showDivider,
               child: VerticalDivider(
                 width: 1,
                 indent: _kDividerIndent,
                 endIndent: _kDividerIndent,
-                color: theme.dividerColor,
+                color: widget.theme.dividerColor,
                 thickness: 1,
               ),
             )
@@ -456,6 +599,14 @@ class _Tab extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  @override
+  String? get restorationId => "_Tab${widget.label.value}";
+
+  @override
+  void restoreState(RestorationBucket? oldBucket, bool initialRestore) {
+    registerForRestoration(restoreHover, 'restoreHover');
   }
 }
 
@@ -480,7 +631,7 @@ class _CloseButton extends StatelessWidget {
         child: Offstage(
           offstage: !visiable,
           child: InkWell(
-            customBorder: RoundedRectangleBorder(),
+            customBorder: const RoundedRectangleBorder(),
             onTap: () => onClose(),
             child: Icon(
               Icons.close,

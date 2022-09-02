@@ -3,35 +3,39 @@ import 'dart:convert';
 import 'package:desktop_multi_window/desktop_multi_window.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/common.dart';
-import 'package:flutter_hbb/desktop/pages/file_manager_page.dart';
+import 'package:flutter_hbb/desktop/pages/port_forward_page.dart';
 import 'package:flutter_hbb/desktop/widgets/tabbar_widget.dart';
 import 'package:flutter_hbb/utils/multi_window_manager.dart';
 import 'package:get/get.dart';
 
-/// File Transfer for multi tabs
-class FileManagerTabPage extends StatefulWidget {
+class PortForwardTabPage extends StatefulWidget {
   final Map<String, dynamic> params;
 
-  const FileManagerTabPage({Key? key, required this.params}) : super(key: key);
+  const PortForwardTabPage({Key? key, required this.params}) : super(key: key);
 
   @override
-  State<FileManagerTabPage> createState() => _FileManagerTabPageState(params);
+  State<PortForwardTabPage> createState() => _PortForwardTabPageState(params);
 }
 
-class _FileManagerTabPageState extends State<FileManagerTabPage> {
-  DesktopTabController get tabController => Get.find<DesktopTabController>();
+class _PortForwardTabPageState extends State<PortForwardTabPage> {
+  final tabController = Get.put(DesktopTabController());
+  late final bool isRDP;
 
-  static final IconData selectedIcon = Icons.file_copy_sharp;
-  static final IconData unselectedIcon = Icons.file_copy_outlined;
+  static const IconData selectedIcon = Icons.forward_sharp;
+  static const IconData unselectedIcon = Icons.forward_outlined;
 
-  _FileManagerTabPageState(Map<String, dynamic> params) {
-    Get.put(DesktopTabController());
+  _PortForwardTabPageState(Map<String, dynamic> params) {
+    isRDP = params['isRDP'];
     tabController.add(TabInfo(
         key: params['id'],
         label: params['id'],
         selectedIcon: selectedIcon,
         unselectedIcon: unselectedIcon,
-        page: FileManagerPage(key: ValueKey(params['id']), id: params['id'])));
+        page: PortForwardPage(
+          key: ValueKey(params['id']),
+          id: params['id'],
+          isRDP: isRDP,
+        )));
   }
 
   @override
@@ -41,19 +45,20 @@ class _FileManagerTabPageState extends State<FileManagerTabPage> {
     tabController.onRemove = (_, id) => onRemoveId(id);
 
     rustDeskWinManager.setMethodHandler((call, fromWindowId) async {
-      print(
-          "call ${call.method} with args ${call.arguments} from window ${fromWindowId} to ${windowId()}");
+      debugPrint(
+          "call ${call.method} with args ${call.arguments} from window ${fromWindowId}");
       // for simplify, just replace connectionId
-      if (call.method == "new_file_transfer") {
+      if (call.method == "new_port_forward") {
         final args = jsonDecode(call.arguments);
         final id = args['id'];
+        final isRDP = args['isRDP'];
         window_on_top(windowId());
         tabController.add(TabInfo(
             key: id,
             label: id,
             selectedIcon: selectedIcon,
             unselectedIcon: unselectedIcon,
-            page: FileManagerPage(key: ValueKey(id), id: id)));
+            page: PortForwardPage(id: id, isRDP: isRDP)));
       } else if (call.method == "onDestroy") {
         tabController.clear();
       }
@@ -62,8 +67,7 @@ class _FileManagerTabPageState extends State<FileManagerTabPage> {
 
   @override
   Widget build(BuildContext context) {
-    final theme =
-        isDarkTheme() ? const TarBarTheme.dark() : const TarBarTheme.light();
+    final theme = isDarkTheme() ? TarBarTheme.dark() : TarBarTheme.light();
     return SubWindowDragToResizeArea(
       windowId: windowId(),
       child: Container(
@@ -74,7 +78,7 @@ class _FileManagerTabPageState extends State<FileManagerTabPage> {
             body: DesktopTab(
               controller: tabController,
               theme: theme,
-              tabType: DesktopTabType.fileTransfer,
+              tabType: isRDP ? DesktopTabType.rdp : DesktopTabType.portForward,
               onClose: () {
                 tabController.clear();
               },
@@ -87,6 +91,7 @@ class _FileManagerTabPageState extends State<FileManagerTabPage> {
   }
 
   void onRemoveId(String id) {
+    ffi("pf_$id").close();
     if (tabController.state.value.tabs.isEmpty) {
       WindowController.fromWindowId(windowId()).hide();
     }

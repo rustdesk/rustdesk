@@ -27,8 +27,13 @@ abstract class Rustdesk {
   Future<void> hostStopSystemKeyPropagate(
       {required bool stopped, dynamic hint});
 
-  Stream<EventToUI> sessionConnect(
-      {required String id, required bool isFileTransfer, dynamic hint});
+  String sessionAddSync(
+      {required String id,
+      required bool isFileTransfer,
+      required bool isPortForward,
+      dynamic hint});
+
+  Stream<EventToUI> sessionStart({required String id, dynamic hint});
 
   Future<bool?> sessionGetRemember({required String id, dynamic hint});
 
@@ -37,8 +42,6 @@ abstract class Rustdesk {
 
   bool sessionGetToggleOptionSync(
       {required String id, required String arg, dynamic hint});
-
-  Future<String?> sessionGetImageQuality({required String id, dynamic hint});
 
   Future<String?> sessionGetOption(
       {required String id, required String arg, dynamic hint});
@@ -58,8 +61,16 @@ abstract class Rustdesk {
   Future<void> sessionToggleOption(
       {required String id, required String value, dynamic hint});
 
+  Future<String?> sessionGetImageQuality({required String id, dynamic hint});
+
   Future<void> sessionSetImageQuality(
       {required String id, required String value, dynamic hint});
+
+  Future<Int32List?> sessionGetCustomImageQuality(
+      {required String id, dynamic hint});
+
+  Future<void> sessionSetCustomImageQuality(
+      {required String id, required int value, dynamic hint});
 
   Future<void> sessionLockScreen({required String id, dynamic hint});
 
@@ -67,13 +78,6 @@ abstract class Rustdesk {
 
   Future<void> sessionSwitchDisplay(
       {required String id, required int value, dynamic hint});
-
-  Future<void> sessionInputRawKey(
-      {required String id,
-      required int keycode,
-      required int scancode,
-      required bool down,
-      dynamic hint});
 
   Future<void> sessionInputKey(
       {required String id,
@@ -274,6 +278,16 @@ abstract class Rustdesk {
 
   Future<void> mainLoadLanPeers({dynamic hint});
 
+  Future<void> sessionAddPortForward(
+      {required String id,
+      required int localPort,
+      required String remoteHost,
+      required int remotePort,
+      dynamic hint});
+
+  Future<void> sessionRemovePortForward(
+      {required String id, required int localPort, dynamic hint});
+
   Future<String> mainGetLastRemoteId({dynamic hint});
 
   Future<String> mainGetSoftwareUpdateUrl({dynamic hint});
@@ -319,6 +333,10 @@ abstract class Rustdesk {
       {required String password, dynamic hint});
 
   Future<bool> mainCheckSuperUserPermission({dynamic hint});
+
+  Future<void> mainCheckMouseTime({dynamic hint});
+
+  Future<double> mainGetMouseTime({dynamic hint});
 
   Future<void> cmSendChat(
       {required int connId, required String msg, dynamic hint});
@@ -413,17 +431,32 @@ class RustdeskImpl extends FlutterRustBridgeBase<RustdeskWire>
         hint: hint,
       ));
 
-  Stream<EventToUI> sessionConnect(
-          {required String id, required bool isFileTransfer, dynamic hint}) =>
+  String sessionAddSync(
+          {required String id,
+          required bool isFileTransfer,
+          required bool isPortForward,
+          dynamic hint}) =>
+      executeSync(FlutterRustBridgeSyncTask(
+        callFfi: () => inner.wire_session_add_sync(
+            _api2wire_String(id), isFileTransfer, isPortForward),
+        constMeta: const FlutterRustBridgeTaskConstMeta(
+          debugName: "session_add_sync",
+          argNames: ["id", "isFileTransfer", "isPortForward"],
+        ),
+        argValues: [id, isFileTransfer, isPortForward],
+        hint: hint,
+      ));
+
+  Stream<EventToUI> sessionStart({required String id, dynamic hint}) =>
       executeStream(FlutterRustBridgeTask(
-        callFfi: (port_) => inner.wire_session_connect(
-            port_, _api2wire_String(id), isFileTransfer),
+        callFfi: (port_) =>
+            inner.wire_session_start(port_, _api2wire_String(id)),
         parseSuccessData: _wire2api_event_to_ui,
         constMeta: const FlutterRustBridgeTaskConstMeta(
-          debugName: "session_connect",
-          argNames: ["id", "isFileTransfer"],
+          debugName: "session_start",
+          argNames: ["id"],
         ),
-        argValues: [id, isFileTransfer],
+        argValues: [id],
         hint: hint,
       ));
 
@@ -464,19 +497,6 @@ class RustdeskImpl extends FlutterRustBridgeBase<RustdeskWire>
           argNames: ["id", "arg"],
         ),
         argValues: [id, arg],
-        hint: hint,
-      ));
-
-  Future<String?> sessionGetImageQuality({required String id, dynamic hint}) =>
-      executeNormal(FlutterRustBridgeTask(
-        callFfi: (port_) =>
-            inner.wire_session_get_image_quality(port_, _api2wire_String(id)),
-        parseSuccessData: _wire2api_opt_String,
-        constMeta: const FlutterRustBridgeTaskConstMeta(
-          debugName: "session_get_image_quality",
-          argNames: ["id"],
-        ),
-        argValues: [id],
         hint: hint,
       ));
 
@@ -564,6 +584,19 @@ class RustdeskImpl extends FlutterRustBridgeBase<RustdeskWire>
         hint: hint,
       ));
 
+  Future<String?> sessionGetImageQuality({required String id, dynamic hint}) =>
+      executeNormal(FlutterRustBridgeTask(
+        callFfi: (port_) =>
+            inner.wire_session_get_image_quality(port_, _api2wire_String(id)),
+        parseSuccessData: _wire2api_opt_String,
+        constMeta: const FlutterRustBridgeTaskConstMeta(
+          debugName: "session_get_image_quality",
+          argNames: ["id"],
+        ),
+        argValues: [id],
+        hint: hint,
+      ));
+
   Future<void> sessionSetImageQuality(
           {required String id, required String value, dynamic hint}) =>
       executeNormal(FlutterRustBridgeTask(
@@ -572,6 +605,34 @@ class RustdeskImpl extends FlutterRustBridgeBase<RustdeskWire>
         parseSuccessData: _wire2api_unit,
         constMeta: const FlutterRustBridgeTaskConstMeta(
           debugName: "session_set_image_quality",
+          argNames: ["id", "value"],
+        ),
+        argValues: [id, value],
+        hint: hint,
+      ));
+
+  Future<Int32List?> sessionGetCustomImageQuality(
+          {required String id, dynamic hint}) =>
+      executeNormal(FlutterRustBridgeTask(
+        callFfi: (port_) => inner.wire_session_get_custom_image_quality(
+            port_, _api2wire_String(id)),
+        parseSuccessData: _wire2api_opt_int_32_list,
+        constMeta: const FlutterRustBridgeTaskConstMeta(
+          debugName: "session_get_custom_image_quality",
+          argNames: ["id"],
+        ),
+        argValues: [id],
+        hint: hint,
+      ));
+
+  Future<void> sessionSetCustomImageQuality(
+          {required String id, required int value, dynamic hint}) =>
+      executeNormal(FlutterRustBridgeTask(
+        callFfi: (port_) => inner.wire_session_set_custom_image_quality(
+            port_, _api2wire_String(id), _api2wire_i32(value)),
+        parseSuccessData: _wire2api_unit,
+        constMeta: const FlutterRustBridgeTaskConstMeta(
+          debugName: "session_set_custom_image_quality",
           argNames: ["id", "value"],
         ),
         argValues: [id, value],
@@ -615,28 +676,6 @@ class RustdeskImpl extends FlutterRustBridgeBase<RustdeskWire>
           argNames: ["id", "value"],
         ),
         argValues: [id, value],
-        hint: hint,
-      ));
-
-  Future<void> sessionInputRawKey(
-          {required String id,
-          required int keycode,
-          required int scancode,
-          required bool down,
-          dynamic hint}) =>
-      executeNormal(FlutterRustBridgeTask(
-        callFfi: (port_) => inner.wire_session_input_raw_key(
-            port_,
-            _api2wire_String(id),
-            _api2wire_i32(keycode),
-            _api2wire_i32(scancode),
-            down),
-        parseSuccessData: _wire2api_unit,
-        constMeta: const FlutterRustBridgeTaskConstMeta(
-          debugName: "session_input_raw_key",
-          argNames: ["id", "keycode", "scancode", "down"],
-        ),
-        argValues: [id, keycode, scancode, down],
         hint: hint,
       ));
 
@@ -1504,6 +1543,42 @@ class RustdeskImpl extends FlutterRustBridgeBase<RustdeskWire>
         hint: hint,
       ));
 
+  Future<void> sessionAddPortForward(
+          {required String id,
+          required int localPort,
+          required String remoteHost,
+          required int remotePort,
+          dynamic hint}) =>
+      executeNormal(FlutterRustBridgeTask(
+        callFfi: (port_) => inner.wire_session_add_port_forward(
+            port_,
+            _api2wire_String(id),
+            _api2wire_i32(localPort),
+            _api2wire_String(remoteHost),
+            _api2wire_i32(remotePort)),
+        parseSuccessData: _wire2api_unit,
+        constMeta: const FlutterRustBridgeTaskConstMeta(
+          debugName: "session_add_port_forward",
+          argNames: ["id", "localPort", "remoteHost", "remotePort"],
+        ),
+        argValues: [id, localPort, remoteHost, remotePort],
+        hint: hint,
+      ));
+
+  Future<void> sessionRemovePortForward(
+          {required String id, required int localPort, dynamic hint}) =>
+      executeNormal(FlutterRustBridgeTask(
+        callFfi: (port_) => inner.wire_session_remove_port_forward(
+            port_, _api2wire_String(id), _api2wire_i32(localPort)),
+        parseSuccessData: _wire2api_unit,
+        constMeta: const FlutterRustBridgeTaskConstMeta(
+          debugName: "session_remove_port_forward",
+          argNames: ["id", "localPort"],
+        ),
+        argValues: [id, localPort],
+        hint: hint,
+      ));
+
   Future<String> mainGetLastRemoteId({dynamic hint}) =>
       executeNormal(FlutterRustBridgeTask(
         callFfi: (port_) => inner.wire_main_get_last_remote_id(port_),
@@ -1779,6 +1854,30 @@ class RustdeskImpl extends FlutterRustBridgeBase<RustdeskWire>
         hint: hint,
       ));
 
+  Future<void> mainCheckMouseTime({dynamic hint}) =>
+      executeNormal(FlutterRustBridgeTask(
+        callFfi: (port_) => inner.wire_main_check_mouse_time(port_),
+        parseSuccessData: _wire2api_unit,
+        constMeta: const FlutterRustBridgeTaskConstMeta(
+          debugName: "main_check_mouse_time",
+          argNames: [],
+        ),
+        argValues: [],
+        hint: hint,
+      ));
+
+  Future<double> mainGetMouseTime({dynamic hint}) =>
+      executeNormal(FlutterRustBridgeTask(
+        callFfi: (port_) => inner.wire_main_get_mouse_time(port_),
+        parseSuccessData: _wire2api_f64,
+        constMeta: const FlutterRustBridgeTaskConstMeta(
+          debugName: "main_get_mouse_time",
+          argNames: [],
+        ),
+        argValues: [],
+        hint: hint,
+      ));
+
   Future<void> cmSendChat(
           {required int connId, required String msg, dynamic hint}) =>
       executeNormal(FlutterRustBridgeTask(
@@ -1935,6 +2034,10 @@ List<String> _wire2api_StringList(dynamic raw) {
   return (raw as List<dynamic>).cast<String>();
 }
 
+String _wire2api_SyncReturnString(dynamic raw) {
+  return raw as String;
+}
+
 Uint8List _wire2api_ZeroCopyBuffer_Uint8List(dynamic raw) {
   return raw as Uint8List;
 }
@@ -1966,8 +2069,16 @@ double _wire2api_f64(dynamic raw) {
   return raw as double;
 }
 
+int _wire2api_i32(dynamic raw) {
+  return raw as int;
+}
+
 int _wire2api_i64(dynamic raw) {
   return raw as int;
+}
+
+Int32List _wire2api_int_32_list(dynamic raw) {
+  return raw as Int32List;
 }
 
 String? _wire2api_opt_String(dynamic raw) {
@@ -1976,6 +2087,10 @@ String? _wire2api_opt_String(dynamic raw) {
 
 bool? _wire2api_opt_box_autoadd_bool(dynamic raw) {
   return raw == null ? null : _wire2api_box_autoadd_bool(raw);
+}
+
+Int32List? _wire2api_opt_int_32_list(dynamic raw) {
+  return raw == null ? null : _wire2api_int_32_list(raw);
 }
 
 int _wire2api_u8(dynamic raw) {
@@ -2063,7 +2178,7 @@ class RustdeskWire implements FlutterRustBridgeWireBase {
 
   void wire_host_stop_system_key_propagate(
     int port_,
-    bool stopped,
+    ffi.Pointer<bool> stopped,
   ) {
     return _wire_host_stop_system_key_propagate(
       port_,
@@ -2071,31 +2186,49 @@ class RustdeskWire implements FlutterRustBridgeWireBase {
     );
   }
 
-  late final _wire_host_stop_system_key_propagatePtr =
-      _lookup<ffi.NativeFunction<ffi.Void Function(ffi.Int64, ffi.Bool)>>(
-          'wire_host_stop_system_key_propagate');
+  late final _wire_host_stop_system_key_propagatePtr = _lookup<
+          ffi.NativeFunction<ffi.Void Function(ffi.Int64, ffi.Pointer<bool>)>>(
+      'wire_host_stop_system_key_propagate');
   late final _wire_host_stop_system_key_propagate =
       _wire_host_stop_system_key_propagatePtr
-          .asFunction<void Function(int, bool)>();
+          .asFunction<void Function(int, ffi.Pointer<bool>)>();
 
-  void wire_session_connect(
-    int port_,
+  WireSyncReturnStruct wire_session_add_sync(
     ffi.Pointer<wire_uint_8_list> id,
-    bool is_file_transfer,
+    ffi.Pointer<bool> is_file_transfer,
+    ffi.Pointer<bool> is_port_forward,
   ) {
-    return _wire_session_connect(
-      port_,
+    return _wire_session_add_sync(
       id,
       is_file_transfer,
+      is_port_forward,
     );
   }
 
-  late final _wire_session_connectPtr = _lookup<
+  late final _wire_session_add_syncPtr = _lookup<
       ffi.NativeFunction<
-          ffi.Void Function(ffi.Int64, ffi.Pointer<wire_uint_8_list>,
-              ffi.Bool)>>('wire_session_connect');
-  late final _wire_session_connect = _wire_session_connectPtr
-      .asFunction<void Function(int, ffi.Pointer<wire_uint_8_list>, bool)>();
+          WireSyncReturnStruct Function(ffi.Pointer<wire_uint_8_list>,
+              ffi.Pointer<bool>, ffi.Pointer<bool>)>>('wire_session_add_sync');
+  late final _wire_session_add_sync = _wire_session_add_syncPtr.asFunction<
+      WireSyncReturnStruct Function(ffi.Pointer<wire_uint_8_list>,
+          ffi.Pointer<bool>, ffi.Pointer<bool>)>();
+
+  void wire_session_start(
+    int port_,
+    ffi.Pointer<wire_uint_8_list> id,
+  ) {
+    return _wire_session_start(
+      port_,
+      id,
+    );
+  }
+
+  late final _wire_session_startPtr = _lookup<
+      ffi.NativeFunction<
+          ffi.Void Function(
+              ffi.Int64, ffi.Pointer<wire_uint_8_list>)>>('wire_session_start');
+  late final _wire_session_start = _wire_session_startPtr
+      .asFunction<void Function(int, ffi.Pointer<wire_uint_8_list>)>();
 
   void wire_session_get_remember(
     int port_,
@@ -2156,24 +2289,6 @@ class RustdeskWire implements FlutterRustBridgeWireBase {
           WireSyncReturnStruct Function(
               ffi.Pointer<wire_uint_8_list>, ffi.Pointer<wire_uint_8_list>)>();
 
-  void wire_session_get_image_quality(
-    int port_,
-    ffi.Pointer<wire_uint_8_list> id,
-  ) {
-    return _wire_session_get_image_quality(
-      port_,
-      id,
-    );
-  }
-
-  late final _wire_session_get_image_qualityPtr = _lookup<
-          ffi.NativeFunction<
-              ffi.Void Function(ffi.Int64, ffi.Pointer<wire_uint_8_list>)>>(
-      'wire_session_get_image_quality');
-  late final _wire_session_get_image_quality =
-      _wire_session_get_image_qualityPtr
-          .asFunction<void Function(int, ffi.Pointer<wire_uint_8_list>)>();
-
   void wire_session_get_option(
     int port_,
     ffi.Pointer<wire_uint_8_list> id,
@@ -2198,7 +2313,7 @@ class RustdeskWire implements FlutterRustBridgeWireBase {
     int port_,
     ffi.Pointer<wire_uint_8_list> id,
     ffi.Pointer<wire_uint_8_list> password,
-    bool remember,
+    ffi.Pointer<bool> remember,
   ) {
     return _wire_session_login(
       port_,
@@ -2210,11 +2325,14 @@ class RustdeskWire implements FlutterRustBridgeWireBase {
 
   late final _wire_session_loginPtr = _lookup<
       ffi.NativeFunction<
-          ffi.Void Function(ffi.Int64, ffi.Pointer<wire_uint_8_list>,
-              ffi.Pointer<wire_uint_8_list>, ffi.Bool)>>('wire_session_login');
+          ffi.Void Function(
+              ffi.Int64,
+              ffi.Pointer<wire_uint_8_list>,
+              ffi.Pointer<wire_uint_8_list>,
+              ffi.Pointer<bool>)>>('wire_session_login');
   late final _wire_session_login = _wire_session_loginPtr.asFunction<
       void Function(int, ffi.Pointer<wire_uint_8_list>,
-          ffi.Pointer<wire_uint_8_list>, bool)>();
+          ffi.Pointer<wire_uint_8_list>, ffi.Pointer<bool>)>();
 
   void wire_session_close(
     int port_,
@@ -2288,6 +2406,24 @@ class RustdeskWire implements FlutterRustBridgeWireBase {
           void Function(int, ffi.Pointer<wire_uint_8_list>,
               ffi.Pointer<wire_uint_8_list>)>();
 
+  void wire_session_get_image_quality(
+    int port_,
+    ffi.Pointer<wire_uint_8_list> id,
+  ) {
+    return _wire_session_get_image_quality(
+      port_,
+      id,
+    );
+  }
+
+  late final _wire_session_get_image_qualityPtr = _lookup<
+          ffi.NativeFunction<
+              ffi.Void Function(ffi.Int64, ffi.Pointer<wire_uint_8_list>)>>(
+      'wire_session_get_image_quality');
+  late final _wire_session_get_image_quality =
+      _wire_session_get_image_qualityPtr
+          .asFunction<void Function(int, ffi.Pointer<wire_uint_8_list>)>();
+
   void wire_session_set_image_quality(
     int port_,
     ffi.Pointer<wire_uint_8_list> id,
@@ -2309,6 +2445,44 @@ class RustdeskWire implements FlutterRustBridgeWireBase {
       _wire_session_set_image_qualityPtr.asFunction<
           void Function(int, ffi.Pointer<wire_uint_8_list>,
               ffi.Pointer<wire_uint_8_list>)>();
+
+  void wire_session_get_custom_image_quality(
+    int port_,
+    ffi.Pointer<wire_uint_8_list> id,
+  ) {
+    return _wire_session_get_custom_image_quality(
+      port_,
+      id,
+    );
+  }
+
+  late final _wire_session_get_custom_image_qualityPtr = _lookup<
+          ffi.NativeFunction<
+              ffi.Void Function(ffi.Int64, ffi.Pointer<wire_uint_8_list>)>>(
+      'wire_session_get_custom_image_quality');
+  late final _wire_session_get_custom_image_quality =
+      _wire_session_get_custom_image_qualityPtr
+          .asFunction<void Function(int, ffi.Pointer<wire_uint_8_list>)>();
+
+  void wire_session_set_custom_image_quality(
+    int port_,
+    ffi.Pointer<wire_uint_8_list> id,
+    int value,
+  ) {
+    return _wire_session_set_custom_image_quality(
+      port_,
+      id,
+      value,
+    );
+  }
+
+  late final _wire_session_set_custom_image_qualityPtr = _lookup<
+      ffi.NativeFunction<
+          ffi.Void Function(ffi.Int64, ffi.Pointer<wire_uint_8_list>,
+              ffi.Int32)>>('wire_session_set_custom_image_quality');
+  late final _wire_session_set_custom_image_quality =
+      _wire_session_set_custom_image_qualityPtr
+          .asFunction<void Function(int, ffi.Pointer<wire_uint_8_list>, int)>();
 
   void wire_session_lock_screen(
     int port_,
@@ -2363,40 +2537,16 @@ class RustdeskWire implements FlutterRustBridgeWireBase {
   late final _wire_session_switch_display = _wire_session_switch_displayPtr
       .asFunction<void Function(int, ffi.Pointer<wire_uint_8_list>, int)>();
 
-  void wire_session_input_raw_key(
-    int port_,
-    ffi.Pointer<wire_uint_8_list> id,
-    int keycode,
-    int scancode,
-    bool down,
-  ) {
-    return _wire_session_input_raw_key(
-      port_,
-      id,
-      keycode,
-      scancode,
-      down,
-    );
-  }
-
-  late final _wire_session_input_raw_keyPtr = _lookup<
-      ffi.NativeFunction<
-          ffi.Void Function(ffi.Int64, ffi.Pointer<wire_uint_8_list>, ffi.Int32,
-              ffi.Int32, ffi.Bool)>>('wire_session_input_raw_key');
-  late final _wire_session_input_raw_key =
-      _wire_session_input_raw_keyPtr.asFunction<
-          void Function(int, ffi.Pointer<wire_uint_8_list>, int, int, bool)>();
-
   void wire_session_input_key(
     int port_,
     ffi.Pointer<wire_uint_8_list> id,
     ffi.Pointer<wire_uint_8_list> name,
-    bool down,
-    bool press,
-    bool alt,
-    bool ctrl,
-    bool shift,
-    bool command,
+    ffi.Pointer<bool> down,
+    ffi.Pointer<bool> press,
+    ffi.Pointer<bool> alt,
+    ffi.Pointer<bool> ctrl,
+    ffi.Pointer<bool> shift,
+    ffi.Pointer<bool> command,
   ) {
     return _wire_session_input_key(
       port_,
@@ -2417,15 +2567,23 @@ class RustdeskWire implements FlutterRustBridgeWireBase {
               ffi.Int64,
               ffi.Pointer<wire_uint_8_list>,
               ffi.Pointer<wire_uint_8_list>,
-              ffi.Bool,
-              ffi.Bool,
-              ffi.Bool,
-              ffi.Bool,
-              ffi.Bool,
-              ffi.Bool)>>('wire_session_input_key');
+              ffi.Pointer<bool>,
+              ffi.Pointer<bool>,
+              ffi.Pointer<bool>,
+              ffi.Pointer<bool>,
+              ffi.Pointer<bool>,
+              ffi.Pointer<bool>)>>('wire_session_input_key');
   late final _wire_session_input_key = _wire_session_input_keyPtr.asFunction<
-      void Function(int, ffi.Pointer<wire_uint_8_list>,
-          ffi.Pointer<wire_uint_8_list>, bool, bool, bool, bool, bool, bool)>();
+      void Function(
+          int,
+          ffi.Pointer<wire_uint_8_list>,
+          ffi.Pointer<wire_uint_8_list>,
+          ffi.Pointer<bool>,
+          ffi.Pointer<bool>,
+          ffi.Pointer<bool>,
+          ffi.Pointer<bool>,
+          ffi.Pointer<bool>,
+          ffi.Pointer<bool>)>();
 
   void wire_session_input_string(
     int port_,
@@ -2541,7 +2699,7 @@ class RustdeskWire implements FlutterRustBridgeWireBase {
     int port_,
     ffi.Pointer<wire_uint_8_list> id,
     ffi.Pointer<wire_uint_8_list> path,
-    bool include_hidden,
+    ffi.Pointer<bool> include_hidden,
   ) {
     return _wire_session_read_remote_dir(
       port_,
@@ -2557,11 +2715,11 @@ class RustdeskWire implements FlutterRustBridgeWireBase {
               ffi.Int64,
               ffi.Pointer<wire_uint_8_list>,
               ffi.Pointer<wire_uint_8_list>,
-              ffi.Bool)>>('wire_session_read_remote_dir');
+              ffi.Pointer<bool>)>>('wire_session_read_remote_dir');
   late final _wire_session_read_remote_dir =
       _wire_session_read_remote_dirPtr.asFunction<
           void Function(int, ffi.Pointer<wire_uint_8_list>,
-              ffi.Pointer<wire_uint_8_list>, bool)>();
+              ffi.Pointer<wire_uint_8_list>, ffi.Pointer<bool>)>();
 
   void wire_session_send_files(
     int port_,
@@ -2570,8 +2728,8 @@ class RustdeskWire implements FlutterRustBridgeWireBase {
     ffi.Pointer<wire_uint_8_list> path,
     ffi.Pointer<wire_uint_8_list> to,
     int file_num,
-    bool include_hidden,
-    bool is_remote,
+    ffi.Pointer<bool> include_hidden,
+    ffi.Pointer<bool> is_remote,
   ) {
     return _wire_session_send_files(
       port_,
@@ -2594,8 +2752,8 @@ class RustdeskWire implements FlutterRustBridgeWireBase {
               ffi.Pointer<wire_uint_8_list>,
               ffi.Pointer<wire_uint_8_list>,
               ffi.Int32,
-              ffi.Bool,
-              ffi.Bool)>>('wire_session_send_files');
+              ffi.Pointer<bool>,
+              ffi.Pointer<bool>)>>('wire_session_send_files');
   late final _wire_session_send_files = _wire_session_send_filesPtr.asFunction<
       void Function(
           int,
@@ -2604,17 +2762,17 @@ class RustdeskWire implements FlutterRustBridgeWireBase {
           ffi.Pointer<wire_uint_8_list>,
           ffi.Pointer<wire_uint_8_list>,
           int,
-          bool,
-          bool)>();
+          ffi.Pointer<bool>,
+          ffi.Pointer<bool>)>();
 
   void wire_session_set_confirm_override_file(
     int port_,
     ffi.Pointer<wire_uint_8_list> id,
     int act_id,
     int file_num,
-    bool need_override,
-    bool remember,
-    bool is_upload,
+    ffi.Pointer<bool> need_override,
+    ffi.Pointer<bool> remember,
+    ffi.Pointer<bool> is_upload,
   ) {
     return _wire_session_set_confirm_override_file(
       port_,
@@ -2634,13 +2792,13 @@ class RustdeskWire implements FlutterRustBridgeWireBase {
               ffi.Pointer<wire_uint_8_list>,
               ffi.Int32,
               ffi.Int32,
-              ffi.Bool,
-              ffi.Bool,
-              ffi.Bool)>>('wire_session_set_confirm_override_file');
+              ffi.Pointer<bool>,
+              ffi.Pointer<bool>,
+              ffi.Pointer<bool>)>>('wire_session_set_confirm_override_file');
   late final _wire_session_set_confirm_override_file =
       _wire_session_set_confirm_override_filePtr.asFunction<
-          void Function(int, ffi.Pointer<wire_uint_8_list>, int, int, bool,
-              bool, bool)>();
+          void Function(int, ffi.Pointer<wire_uint_8_list>, int, int,
+              ffi.Pointer<bool>, ffi.Pointer<bool>, ffi.Pointer<bool>)>();
 
   void wire_session_remove_file(
     int port_,
@@ -2648,7 +2806,7 @@ class RustdeskWire implements FlutterRustBridgeWireBase {
     int act_id,
     ffi.Pointer<wire_uint_8_list> path,
     int file_num,
-    bool is_remote,
+    ffi.Pointer<bool> is_remote,
   ) {
     return _wire_session_remove_file(
       port_,
@@ -2668,19 +2826,19 @@ class RustdeskWire implements FlutterRustBridgeWireBase {
               ffi.Int32,
               ffi.Pointer<wire_uint_8_list>,
               ffi.Int32,
-              ffi.Bool)>>('wire_session_remove_file');
+              ffi.Pointer<bool>)>>('wire_session_remove_file');
   late final _wire_session_remove_file =
       _wire_session_remove_filePtr.asFunction<
           void Function(int, ffi.Pointer<wire_uint_8_list>, int,
-              ffi.Pointer<wire_uint_8_list>, int, bool)>();
+              ffi.Pointer<wire_uint_8_list>, int, ffi.Pointer<bool>)>();
 
   void wire_session_read_dir_recursive(
     int port_,
     ffi.Pointer<wire_uint_8_list> id,
     int act_id,
     ffi.Pointer<wire_uint_8_list> path,
-    bool is_remote,
-    bool show_hidden,
+    ffi.Pointer<bool> is_remote,
+    ffi.Pointer<bool> show_hidden,
   ) {
     return _wire_session_read_dir_recursive(
       port_,
@@ -2699,19 +2857,24 @@ class RustdeskWire implements FlutterRustBridgeWireBase {
               ffi.Pointer<wire_uint_8_list>,
               ffi.Int32,
               ffi.Pointer<wire_uint_8_list>,
-              ffi.Bool,
-              ffi.Bool)>>('wire_session_read_dir_recursive');
+              ffi.Pointer<bool>,
+              ffi.Pointer<bool>)>>('wire_session_read_dir_recursive');
   late final _wire_session_read_dir_recursive =
       _wire_session_read_dir_recursivePtr.asFunction<
-          void Function(int, ffi.Pointer<wire_uint_8_list>, int,
-              ffi.Pointer<wire_uint_8_list>, bool, bool)>();
+          void Function(
+              int,
+              ffi.Pointer<wire_uint_8_list>,
+              int,
+              ffi.Pointer<wire_uint_8_list>,
+              ffi.Pointer<bool>,
+              ffi.Pointer<bool>)>();
 
   void wire_session_remove_all_empty_dirs(
     int port_,
     ffi.Pointer<wire_uint_8_list> id,
     int act_id,
     ffi.Pointer<wire_uint_8_list> path,
-    bool is_remote,
+    ffi.Pointer<bool> is_remote,
   ) {
     return _wire_session_remove_all_empty_dirs(
       port_,
@@ -2729,11 +2892,11 @@ class RustdeskWire implements FlutterRustBridgeWireBase {
               ffi.Pointer<wire_uint_8_list>,
               ffi.Int32,
               ffi.Pointer<wire_uint_8_list>,
-              ffi.Bool)>>('wire_session_remove_all_empty_dirs');
+              ffi.Pointer<bool>)>>('wire_session_remove_all_empty_dirs');
   late final _wire_session_remove_all_empty_dirs =
       _wire_session_remove_all_empty_dirsPtr.asFunction<
           void Function(int, ffi.Pointer<wire_uint_8_list>, int,
-              ffi.Pointer<wire_uint_8_list>, bool)>();
+              ffi.Pointer<wire_uint_8_list>, ffi.Pointer<bool>)>();
 
   void wire_session_cancel_job(
     int port_,
@@ -2759,7 +2922,7 @@ class RustdeskWire implements FlutterRustBridgeWireBase {
     ffi.Pointer<wire_uint_8_list> id,
     int act_id,
     ffi.Pointer<wire_uint_8_list> path,
-    bool is_remote,
+    ffi.Pointer<bool> is_remote,
   ) {
     return _wire_session_create_dir(
       port_,
@@ -2777,16 +2940,16 @@ class RustdeskWire implements FlutterRustBridgeWireBase {
               ffi.Pointer<wire_uint_8_list>,
               ffi.Int32,
               ffi.Pointer<wire_uint_8_list>,
-              ffi.Bool)>>('wire_session_create_dir');
+              ffi.Pointer<bool>)>>('wire_session_create_dir');
   late final _wire_session_create_dir = _wire_session_create_dirPtr.asFunction<
       void Function(int, ffi.Pointer<wire_uint_8_list>, int,
-          ffi.Pointer<wire_uint_8_list>, bool)>();
+          ffi.Pointer<wire_uint_8_list>, ffi.Pointer<bool>)>();
 
   void wire_session_read_local_dir_sync(
     int port_,
     ffi.Pointer<wire_uint_8_list> id,
     ffi.Pointer<wire_uint_8_list> path,
-    bool show_hidden,
+    ffi.Pointer<bool> show_hidden,
   ) {
     return _wire_session_read_local_dir_sync(
       port_,
@@ -2802,16 +2965,16 @@ class RustdeskWire implements FlutterRustBridgeWireBase {
               ffi.Int64,
               ffi.Pointer<wire_uint_8_list>,
               ffi.Pointer<wire_uint_8_list>,
-              ffi.Bool)>>('wire_session_read_local_dir_sync');
+              ffi.Pointer<bool>)>>('wire_session_read_local_dir_sync');
   late final _wire_session_read_local_dir_sync =
       _wire_session_read_local_dir_syncPtr.asFunction<
           void Function(int, ffi.Pointer<wire_uint_8_list>,
-              ffi.Pointer<wire_uint_8_list>, bool)>();
+              ffi.Pointer<wire_uint_8_list>, ffi.Pointer<bool>)>();
 
   void wire_session_get_platform(
     int port_,
     ffi.Pointer<wire_uint_8_list> id,
-    bool is_remote,
+    ffi.Pointer<bool> is_remote,
   ) {
     return _wire_session_get_platform(
       port_,
@@ -2823,9 +2986,11 @@ class RustdeskWire implements FlutterRustBridgeWireBase {
   late final _wire_session_get_platformPtr = _lookup<
       ffi.NativeFunction<
           ffi.Void Function(ffi.Int64, ffi.Pointer<wire_uint_8_list>,
-              ffi.Bool)>>('wire_session_get_platform');
-  late final _wire_session_get_platform = _wire_session_get_platformPtr
-      .asFunction<void Function(int, ffi.Pointer<wire_uint_8_list>, bool)>();
+              ffi.Pointer<bool>)>>('wire_session_get_platform');
+  late final _wire_session_get_platform =
+      _wire_session_get_platformPtr.asFunction<
+          void Function(
+              int, ffi.Pointer<wire_uint_8_list>, ffi.Pointer<bool>)>();
 
   void wire_session_load_last_transfer_jobs(
     int port_,
@@ -2852,8 +3017,8 @@ class RustdeskWire implements FlutterRustBridgeWireBase {
     ffi.Pointer<wire_uint_8_list> path,
     ffi.Pointer<wire_uint_8_list> to,
     int file_num,
-    bool include_hidden,
-    bool is_remote,
+    ffi.Pointer<bool> include_hidden,
+    ffi.Pointer<bool> is_remote,
   ) {
     return _wire_session_add_job(
       port_,
@@ -2876,8 +3041,8 @@ class RustdeskWire implements FlutterRustBridgeWireBase {
               ffi.Pointer<wire_uint_8_list>,
               ffi.Pointer<wire_uint_8_list>,
               ffi.Int32,
-              ffi.Bool,
-              ffi.Bool)>>('wire_session_add_job');
+              ffi.Pointer<bool>,
+              ffi.Pointer<bool>)>>('wire_session_add_job');
   late final _wire_session_add_job = _wire_session_add_jobPtr.asFunction<
       void Function(
           int,
@@ -2886,14 +3051,14 @@ class RustdeskWire implements FlutterRustBridgeWireBase {
           ffi.Pointer<wire_uint_8_list>,
           ffi.Pointer<wire_uint_8_list>,
           int,
-          bool,
-          bool)>();
+          ffi.Pointer<bool>,
+          ffi.Pointer<bool>)>();
 
   void wire_session_resume_job(
     int port_,
     ffi.Pointer<wire_uint_8_list> id,
     int act_id,
-    bool is_remote,
+    ffi.Pointer<bool> is_remote,
   ) {
     return _wire_session_resume_job(
       port_,
@@ -2906,9 +3071,10 @@ class RustdeskWire implements FlutterRustBridgeWireBase {
   late final _wire_session_resume_jobPtr = _lookup<
       ffi.NativeFunction<
           ffi.Void Function(ffi.Int64, ffi.Pointer<wire_uint_8_list>, ffi.Int32,
-              ffi.Bool)>>('wire_session_resume_job');
+              ffi.Pointer<bool>)>>('wire_session_resume_job');
   late final _wire_session_resume_job = _wire_session_resume_jobPtr.asFunction<
-      void Function(int, ffi.Pointer<wire_uint_8_list>, int, bool)>();
+      void Function(
+          int, ffi.Pointer<wire_uint_8_list>, int, ffi.Pointer<bool>)>();
 
   void wire_main_get_sound_inputs(
     int port_,
@@ -3479,6 +3645,55 @@ class RustdeskWire implements FlutterRustBridgeWireBase {
   late final _wire_main_load_lan_peers =
       _wire_main_load_lan_peersPtr.asFunction<void Function(int)>();
 
+  void wire_session_add_port_forward(
+    int port_,
+    ffi.Pointer<wire_uint_8_list> id,
+    int local_port,
+    ffi.Pointer<wire_uint_8_list> remote_host,
+    int remote_port,
+  ) {
+    return _wire_session_add_port_forward(
+      port_,
+      id,
+      local_port,
+      remote_host,
+      remote_port,
+    );
+  }
+
+  late final _wire_session_add_port_forwardPtr = _lookup<
+      ffi.NativeFunction<
+          ffi.Void Function(
+              ffi.Int64,
+              ffi.Pointer<wire_uint_8_list>,
+              ffi.Int32,
+              ffi.Pointer<wire_uint_8_list>,
+              ffi.Int32)>>('wire_session_add_port_forward');
+  late final _wire_session_add_port_forward =
+      _wire_session_add_port_forwardPtr.asFunction<
+          void Function(int, ffi.Pointer<wire_uint_8_list>, int,
+              ffi.Pointer<wire_uint_8_list>, int)>();
+
+  void wire_session_remove_port_forward(
+    int port_,
+    ffi.Pointer<wire_uint_8_list> id,
+    int local_port,
+  ) {
+    return _wire_session_remove_port_forward(
+      port_,
+      id,
+      local_port,
+    );
+  }
+
+  late final _wire_session_remove_port_forwardPtr = _lookup<
+      ffi.NativeFunction<
+          ffi.Void Function(ffi.Int64, ffi.Pointer<wire_uint_8_list>,
+              ffi.Int32)>>('wire_session_remove_port_forward');
+  late final _wire_session_remove_port_forward =
+      _wire_session_remove_port_forwardPtr
+          .asFunction<void Function(int, ffi.Pointer<wire_uint_8_list>, int)>();
+
   void wire_main_get_last_remote_id(
     int port_,
   ) {
@@ -3819,6 +4034,34 @@ class RustdeskWire implements FlutterRustBridgeWireBase {
       _wire_main_check_super_user_permissionPtr
           .asFunction<void Function(int)>();
 
+  void wire_main_check_mouse_time(
+    int port_,
+  ) {
+    return _wire_main_check_mouse_time(
+      port_,
+    );
+  }
+
+  late final _wire_main_check_mouse_timePtr =
+      _lookup<ffi.NativeFunction<ffi.Void Function(ffi.Int64)>>(
+          'wire_main_check_mouse_time');
+  late final _wire_main_check_mouse_time =
+      _wire_main_check_mouse_timePtr.asFunction<void Function(int)>();
+
+  void wire_main_get_mouse_time(
+    int port_,
+  ) {
+    return _wire_main_get_mouse_time(
+      port_,
+    );
+  }
+
+  late final _wire_main_get_mouse_timePtr =
+      _lookup<ffi.NativeFunction<ffi.Void Function(ffi.Int64)>>(
+          'wire_main_get_mouse_time');
+  late final _wire_main_get_mouse_time =
+      _wire_main_get_mouse_timePtr.asFunction<void Function(int)>();
+
   void wire_cm_send_chat(
     int port_,
     int conn_id,
@@ -3841,7 +4084,7 @@ class RustdeskWire implements FlutterRustBridgeWireBase {
   void wire_cm_login_res(
     int port_,
     int conn_id,
-    bool res,
+    ffi.Pointer<bool> res,
   ) {
     return _wire_cm_login_res(
       port_,
@@ -3853,9 +4096,9 @@ class RustdeskWire implements FlutterRustBridgeWireBase {
   late final _wire_cm_login_resPtr = _lookup<
       ffi.NativeFunction<
           ffi.Void Function(
-              ffi.Int64, ffi.Int32, ffi.Bool)>>('wire_cm_login_res');
-  late final _wire_cm_login_res =
-      _wire_cm_login_resPtr.asFunction<void Function(int, int, bool)>();
+              ffi.Int64, ffi.Int32, ffi.Pointer<bool>)>>('wire_cm_login_res');
+  late final _wire_cm_login_res = _wire_cm_login_resPtr
+      .asFunction<void Function(int, int, ffi.Pointer<bool>)>();
 
   void wire_cm_close_connection(
     int port_,
@@ -3907,7 +4150,7 @@ class RustdeskWire implements FlutterRustBridgeWireBase {
     int port_,
     int conn_id,
     ffi.Pointer<wire_uint_8_list> name,
-    bool enabled,
+    ffi.Pointer<bool> enabled,
   ) {
     return _wire_cm_switch_permission(
       port_,
@@ -3920,10 +4163,11 @@ class RustdeskWire implements FlutterRustBridgeWireBase {
   late final _wire_cm_switch_permissionPtr = _lookup<
       ffi.NativeFunction<
           ffi.Void Function(ffi.Int64, ffi.Int32, ffi.Pointer<wire_uint_8_list>,
-              ffi.Bool)>>('wire_cm_switch_permission');
+              ffi.Pointer<bool>)>>('wire_cm_switch_permission');
   late final _wire_cm_switch_permission =
       _wire_cm_switch_permissionPtr.asFunction<
-          void Function(int, int, ffi.Pointer<wire_uint_8_list>, bool)>();
+          void Function(
+              int, int, ffi.Pointer<wire_uint_8_list>, ffi.Pointer<bool>)>();
 
   void wire_main_get_icon(
     int port_,
@@ -4000,7 +4244,7 @@ class RustdeskWire implements FlutterRustBridgeWireBase {
       .asFunction<void Function(WireSyncReturnStruct)>();
 
   void store_dart_post_cobject(
-    DartPostCObjectFnType ptr,
+    int ptr,
   ) {
     return _store_dart_post_cobject(
       ptr,
@@ -4008,19 +4252,19 @@ class RustdeskWire implements FlutterRustBridgeWireBase {
   }
 
   late final _store_dart_post_cobjectPtr =
-      _lookup<ffi.NativeFunction<ffi.Void Function(DartPostCObjectFnType)>>(
+      _lookup<ffi.NativeFunction<ffi.Void Function(ffi.Int)>>(
           'store_dart_post_cobject');
-  late final _store_dart_post_cobject = _store_dart_post_cobjectPtr
-      .asFunction<void Function(DartPostCObjectFnType)>();
+  late final _store_dart_post_cobject =
+      _store_dart_post_cobjectPtr.asFunction<void Function(int)>();
 
-  bool rustdesk_core_main() {
+  int rustdesk_core_main() {
     return _rustdesk_core_main();
   }
 
   late final _rustdesk_core_mainPtr =
-      _lookup<ffi.NativeFunction<ffi.Bool Function()>>('rustdesk_core_main');
+      _lookup<ffi.NativeFunction<ffi.Int Function()>>('rustdesk_core_main');
   late final _rustdesk_core_main =
-      _rustdesk_core_mainPtr.asFunction<bool Function()>();
+      _rustdesk_core_mainPtr.asFunction<int Function()>();
 }
 
 class wire_uint_8_list extends ffi.Struct {
@@ -4037,10 +4281,8 @@ class wire_StringList extends ffi.Struct {
   external int len;
 }
 
+typedef bool = ffi.NativeFunction<ffi.Int Function(ffi.Pointer<ffi.Int>)>;
 typedef uintptr_t = ffi.UnsignedLong;
-typedef DartPostCObjectFnType = ffi.Pointer<
-    ffi.NativeFunction<ffi.Uint8 Function(DartPort, ffi.Pointer<ffi.Void>)>>;
-typedef DartPort = ffi.Int64;
 
 const int GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT = 2;
 

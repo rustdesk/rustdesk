@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_hbb/desktop/pages/desktop_tab_page.dart';
 import 'package:flutter_hbb/desktop/pages/server_page.dart';
 import 'package:flutter_hbb/desktop/screen/desktop_file_transfer_screen.dart';
+import 'package:flutter_hbb/desktop/screen/desktop_port_forward_screen.dart';
 import 'package:flutter_hbb/desktop/screen/desktop_remote_screen.dart';
 import 'package:flutter_hbb/utils/multi_window_manager.dart';
 import 'package:get/get.dart';
@@ -47,6 +48,9 @@ Future<Null> main(List<String> args) async {
       case WindowType.FileTransfer:
         runFileTransferScreen(argument);
         break;
+      case WindowType.PortForward:
+        runPortForwardScreen(argument);
+        break;
       default:
         break;
     }
@@ -76,14 +80,9 @@ Future<void> initEnv(String appType) async {
 }
 
 void runMainApp(bool startService) async {
-  WindowOptions windowOptions = getHiddenTitleBarWindowOptions(Size(1280, 720));
-  await Future.wait([
-    initEnv(kAppTypeMain),
-    windowManager.waitUntilReadyToShow(windowOptions, () async {
-      await windowManager.show();
-      await windowManager.focus();
-    })
-  ]);
+  await initEnv(kAppTypeMain);
+  // trigger connection status updater
+  await bind.mainCheckConnectStatus();
   if (startService) {
     // await windowManager.ensureInitialized();
     // disable tray
@@ -91,6 +90,13 @@ void runMainApp(bool startService) async {
     gFFI.serverModel.startService();
   }
   runApp(App());
+  // set window option
+  WindowOptions windowOptions =
+      getHiddenTitleBarWindowOptions(const Size(1280, 720));
+  windowManager.waitUntilReadyToShow(windowOptions, () async {
+    await windowManager.show();
+    await windowManager.focus();
+  });
 }
 
 void runMobileApp() async {
@@ -125,6 +131,23 @@ void runFileTransferScreen(Map<String, dynamic> argument) async {
       title: 'RustDesk - File Transfer',
       theme: getCurrentTheme(),
       home: DesktopFileTransferScreen(params: argument),
+      navigatorObservers: [
+        // FirebaseAnalyticsObserver(analytics: analytics),
+      ],
+      builder: _keepScaleBuilder(),
+    ),
+  );
+}
+
+void runPortForwardScreen(Map<String, dynamic> argument) async {
+  await initEnv(kAppTypeDesktopPortForward);
+  runApp(
+    GetMaterialApp(
+      navigatorKey: globalKey,
+      debugShowCheckedModeBanner: false,
+      title: 'RustDesk - Port Forward',
+      theme: getCurrentTheme(),
+      home: DesktopPortForwardScreen(params: argument),
       navigatorObservers: [
         // FirebaseAnalyticsObserver(analytics: analytics),
       ],
@@ -182,7 +205,7 @@ class App extends StatelessWidget {
         title: 'RustDesk',
         theme: getCurrentTheme(),
         home: isDesktop
-            ? DesktopTabPage()
+            ? const DesktopTabPage()
             : !isAndroid
                 ? WebHomePage()
                 : HomePage(),
@@ -190,8 +213,13 @@ class App extends StatelessWidget {
           // FirebaseAnalyticsObserver(analytics: analytics),
         ],
         builder: isAndroid
-            ? (_, child) => AccessibilityListener(
-                  child: child,
+            ? (context, child) => AccessibilityListener(
+                  child: MediaQuery(
+                    data: MediaQuery.of(context).copyWith(
+                      textScaleFactor: 1.0,
+                    ),
+                    child: child ?? Container(),
+                  ),
                 )
             : _keepScaleBuilder(),
       ),

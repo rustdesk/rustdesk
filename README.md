@@ -32,10 +32,10 @@ RustDesk welcomes contribution from everyone. See [`CONTRIBUTING.md`](CONTRIBUTI
 Below are the servers you are using for free, it may change along the time. If you are not close to one of these, your network may be slow.
 | Location | Vendor | Specification |
 | --------- | ------------- | ------------------ |
-| Seoul | AWS lightsail | 1 VCPU / 0.5GB RAM |
-| Singapore | Vultr | 1 VCPU / 1GB RAM |
-| Germany | Hetzner | 2 VCPU / 4GB RAM |
-| Germany | Codext | 4 VCPU / 8GB RAM |
+| Seoul | AWS lightsail | 1 vCPU / 0.5GB RAM |
+| Singapore | Vultr | 1 vCPU / 1GB RAM |
+| Germany | Hetzner | 2 vCPU / 4GB RAM |
+| Germany | Codext | 4 vCPU / 8GB RAM |
 
 ## Dependencies
 

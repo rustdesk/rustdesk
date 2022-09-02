@@ -1,0 +1,1305 @@
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+use crate::client::get_key_state;
+use crate::client::io_loop::Remote;
+use crate::client::{
+    check_if_retry, handle_hash, handle_login_from_ui, handle_test_delay, input_os_password,
+    load_config, send_mouse, start_video_audio_threads, FileManager, Key, LoginConfigHandler,
+    QualityStatus, KEY_MAP, SERVER_KEYBOARD_ENABLED,
+};
+use crate::common;
+use crate::{client::Data, client::Interface};
+use async_trait::async_trait;
+
+use hbb_common::config::{Config, LocalConfig, PeerConfig};
+use hbb_common::rendezvous_proto::ConnType;
+use hbb_common::tokio::{self, sync::mpsc};
+use rdev::{Event, EventType::*, Key as RdevKey, Keyboard as RdevKeyboard, KeyboardState};
+
+use hbb_common::{allow_err, message_proto::*};
+use hbb_common::{fs, get_version_number, log, Stream};
+use std::collections::{HashMap, HashSet};
+use std::ops::{Deref, DerefMut};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::sync::{Arc, Mutex, RwLock};
+
+/// IS_IN KEYBOARD_HOOKED sciter only
+pub static IS_IN: AtomicBool = AtomicBool::new(false);
+static KEYBOARD_HOOKED: AtomicBool = AtomicBool::new(false);
+
+
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+lazy_static::lazy_static! {
+    static ref TO_RELEASE: Arc<Mutex<HashSet<RdevKey>>> = Arc::new(Mutex::new(HashSet::<RdevKey>::new()));
+    static ref KEYBOARD: Arc<Mutex<RdevKeyboard>> = Arc::new(Mutex::new(RdevKeyboard::new().unwrap()));
+}
+
+#[derive(Clone, Default)]
+pub struct Session<T: InvokeUi> {
+    pub cmd: String,
+    pub id: String,
+    pub password: String,
+    pub args: Vec<String>,
+    pub lc: Arc<RwLock<LoginConfigHandler>>,
+    pub sender: Arc<RwLock<Option<mpsc::UnboundedSender<Data>>>>,
+    pub thread: Arc<Mutex<Option<std::thread::JoinHandle<()>>>>,
+    pub ui_handler: T,
+}
+
+impl<T: InvokeUi> Session<T> {
+    pub fn get_view_style(&self) -> String {
+        self.lc.read().unwrap().view_style.clone()
+    }
+
+    pub fn get_image_quality(&self) -> String {
+        self.lc.read().unwrap().image_quality.clone()
+    }
+    /// Get custom image quality.
+    pub fn get_custom_image_quality(&self) -> Vec<i32> {
+        self.lc.read().unwrap().custom_image_quality.clone()
+    }
+
+    pub fn get_keyboard_mode(&mut self) -> String {
+        return std::env::var("KEYBOARD_MODE")
+            .unwrap_or(String::from("legacy"))
+            .to_lowercase();
+    }
+
+    pub fn save_keyboard_mode(&mut self, value: String) {
+        std::env::set_var("KEYBOARD_MODE", value);
+    }
+
+    pub fn save_view_style(&mut self, value: String) {
+        self.lc.write().unwrap().save_view_style(value);
+    }
+
+    pub fn toggle_option(&mut self, name: String) {
+        let msg = self.lc.write().unwrap().toggle_option(name.clone());
+        if name == "enable-file-transfer" {
+            self.send(Data::ToggleClipboardFile);
+        }
+        if let Some(msg) = msg {
+            self.send(Data::Message(msg));
+        }
+    }
+
+    pub fn get_toggle_option(&self, name: String) -> bool {
+        self.lc.read().unwrap().get_toggle_option(&name)
+    }
+
+    pub fn is_privacy_mode_supported(&self) -> bool {
+        self.lc.read().unwrap().is_privacy_mode_supported()
+    }
+
+    pub fn refresh_video(&self) {
+        self.send(Data::Message(LoginConfigHandler::refresh()));
+    }
+
+    pub fn save_custom_image_quality(&mut self, custom_image_quality: i32) {
+        let msg = self
+            .lc
+            .write()
+            .unwrap()
+            .save_custom_image_quality(custom_image_quality);
+        self.send(Data::Message(msg));
+    }
+
+    pub fn save_image_quality(&mut self, value: String) {
+        let msg = self.lc.write().unwrap().save_image_quality(value);
+        if let Some(msg) = msg {
+            self.send(Data::Message(msg));
+        }
+    }
+
+    pub fn get_remember(&self) -> bool {
+        self.lc.read().unwrap().remember
+    }
+
+    pub fn set_write_override(
+        &mut self,
+        job_id: i32,
+        file_num: i32,
+        is_override: bool,
+        remember: bool,
+        is_upload: bool,
+    ) -> bool {
+        self.send(Data::SetConfirmOverrideFile((
+            job_id,
+            file_num,
+            is_override,
+            remember,
+            is_upload,
+        )));
+        true
+    }
+
+    pub fn has_hwcodec(&self) -> bool {
+        #[cfg(not(feature = "hwcodec"))]
+        return false;
+        #[cfg(feature = "hwcodec")]
+        return true;
+    }
+
+    pub fn change_prefer_codec(&self) {
+        let msg = self.lc.write().unwrap().change_prefer_codec();
+        self.send(Data::Message(msg));
+    }
+
+    pub fn restart_remote_device(&self) {
+        let mut lc = self.lc.write().unwrap();
+        lc.restarting_remote_device = true;
+        let msg = lc.restart_remote_device();
+        self.send(Data::Message(msg));
+    }
+
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    pub fn t(&self, name: String) -> String {
+        crate::client::translate(name)
+    }
+
+    pub fn get_audit_server(&self) -> String {
+        if self.lc.read().unwrap().conn_id <= 0
+            || LocalConfig::get_option("access_token").is_empty()
+        {
+            return "".to_owned();
+        }
+        crate::get_audit_server(
+            Config::get_option("api-server"),
+            Config::get_option("custom-rendezvous-server"),
+        )
+    }
+
+    pub fn send_note(&self, note: String) {
+        let url = self.get_audit_server();
+        let id = self.id.clone();
+        let conn_id = self.lc.read().unwrap().conn_id;
+        std::thread::spawn(move || {
+            send_note(url, id, conn_id, note);
+        });
+    }
+
+    pub fn is_xfce(&self) -> bool {
+        crate::platform::is_xfce()
+    }
+
+    pub fn remove_port_forward(&self, port: i32) {
+        let mut config = self.load_config();
+        config.port_forwards = config
+            .port_forwards
+            .drain(..)
+            .filter(|x| x.0 != port)
+            .collect();
+        self.save_config(config);
+        self.send(Data::RemovePortForward(port));
+    }
+
+    pub fn add_port_forward(&mut self, port: i32, remote_host: String, remote_port: i32) {
+        let mut config = self.load_config();
+        if config
+            .port_forwards
+            .iter()
+            .filter(|x| x.0 == port)
+            .next()
+            .is_some()
+        {
+            return;
+        }
+        let pf = (port, remote_host, remote_port);
+        config.port_forwards.push(pf.clone());
+        self.save_config(config);
+        self.send(Data::AddPortForward(pf));
+    }
+
+    pub fn get_id(&self) -> String {
+        self.id.clone()
+    }
+
+    pub fn get_option(&self, k: String) -> String {
+        if k.eq("remote_dir") {
+            return self.lc.read().unwrap().get_remote_dir();
+        }
+        self.lc.read().unwrap().get_option(&k)
+    }
+
+    pub fn set_option(&self, k: String, mut v: String) {
+        let mut lc = self.lc.write().unwrap();
+        if k.eq("remote_dir") {
+            v = lc.get_all_remote_dir(v);
+        }
+        lc.set_option(k, v);
+    }
+
+    #[inline]
+    pub fn load_config(&self) -> PeerConfig {
+        load_config(&self.id)
+    }
+
+    #[inline]
+    pub(super) fn save_config(&self, config: PeerConfig) {
+        self.lc.write().unwrap().save_config(config);
+    }
+
+    pub fn is_restarting_remote_device(&self) -> bool {
+        self.lc.read().unwrap().restarting_remote_device
+    }
+
+    #[inline]
+    pub fn peer_platform(&self) -> String {
+        self.lc.read().unwrap().info.platform.clone()
+    }
+
+    pub fn ctrl_alt_del(&self) {
+        if self.peer_platform() == "Windows" {
+            let mut key_event = KeyEvent::new();
+            key_event.set_control_key(ControlKey::CtrlAltDel);
+            // todo
+            key_event.down = true;
+            self.send_key_event(key_event, KeyboardMode::Legacy);
+        } else {
+            let mut key_event = KeyEvent::new();
+            key_event.set_control_key(ControlKey::Delete);
+            self.legacy_modifiers(&mut key_event, true, true, false, false);
+            // todo
+            key_event.press = true;
+            self.send_key_event(key_event, KeyboardMode::Legacy);
+        }
+    }
+
+    fn send_key_event(&self, mut evt: KeyEvent, keyboard_mode: KeyboardMode) {
+        // mode: legacy(0), map(1), translate(2), auto(3)
+        evt.mode = keyboard_mode.into();
+        let mut msg_out = Message::new();
+        msg_out.set_key_event(evt);
+        self.send(Data::Message(msg_out));
+    }
+
+    #[allow(dead_code)]
+    fn convert_numpad_keys(&mut self, key: RdevKey) -> RdevKey {
+        if get_key_state(enigo::Key::NumLock) {
+            return key;
+        }
+        match key {
+            RdevKey::Kp0 => RdevKey::Insert,
+            RdevKey::KpDecimal => RdevKey::Delete,
+            RdevKey::Kp1 => RdevKey::End,
+            RdevKey::Kp2 => RdevKey::DownArrow,
+            RdevKey::Kp3 => RdevKey::PageDown,
+            RdevKey::Kp4 => RdevKey::LeftArrow,
+            RdevKey::Kp5 => RdevKey::Clear,
+            RdevKey::Kp6 => RdevKey::RightArrow,
+            RdevKey::Kp7 => RdevKey::Home,
+            RdevKey::Kp8 => RdevKey::UpArrow,
+            RdevKey::Kp9 => RdevKey::PageUp,
+            _ => key,
+        }
+    }
+
+    fn map_keyboard_mode(&mut self, down_or_up: bool, key: RdevKey, _evt: Option<Event>) {
+        // map mode(1): Send keycode according to the peer platform.
+        #[cfg(target_os = "windows")]
+        let key = if let Some(e) = _evt {
+            rdev::get_win_key(e.code.into(), e.scan_code)
+        } else {
+            key
+        };
+
+        let peer = self.peer_platform();
+
+        let mut key_event = KeyEvent::new();
+        // According to peer platform.
+        let keycode: u32 = if peer == "Linux" {
+            rdev::linux_keycode_from_key(key).unwrap_or_default().into()
+        } else if peer == "Windows" {
+            #[cfg(not(windows))]
+            let key = self.convert_numpad_keys(key);
+            rdev::win_keycode_from_key(key).unwrap_or_default().into()
+        } else {
+            // Without Clear Key on Mac OS
+            if key == rdev::Key::Clear {
+                return;
+            }
+            rdev::macos_keycode_from_key(key).unwrap_or_default().into()
+        };
+
+        key_event.set_chr(keycode);
+        key_event.down = down_or_up;
+
+        if get_key_state(enigo::Key::CapsLock) {
+            key_event.modifiers.push(ControlKey::CapsLock.into());
+        }
+        if get_key_state(enigo::Key::NumLock) {
+            key_event.modifiers.push(ControlKey::NumLock.into());
+        }
+
+        self.send_key_event(key_event, KeyboardMode::Map);
+    }
+
+    fn translate_keyboard_mode(&mut self, down_or_up: bool, key: RdevKey, evt: Event) {
+        // translate mode(2): locally generated characters are send to the peer.
+
+        // get char
+        let string = match KEYBOARD.lock() {
+            Ok(mut keyboard) => {
+                let string = keyboard.add(&evt.event_type).unwrap_or_default();
+                if keyboard.is_dead() && string == "" && down_or_up == true {
+                    return;
+                }
+                string
+            }
+            Err(_) => "".to_owned(),
+        };
+
+        // maybe two string
+        let chars = if string == "" {
+            None
+        } else {
+            let chars: Vec<char> = string.chars().collect();
+            Some(chars)
+        };
+
+        if let Some(chars) = chars {
+            for chr in chars {
+                let mut key_event = KeyEvent::new();
+                key_event.set_chr(chr as _);
+                key_event.down = true;
+                key_event.press = false;
+
+                self.send_key_event(key_event, KeyboardMode::Translate);
+            }
+        } else {
+            let success = if down_or_up == true {
+                TO_RELEASE.lock().unwrap().insert(key)
+            } else {
+                TO_RELEASE.lock().unwrap().remove(&key)
+            };
+
+            // AltGr && LeftControl(SpecialKey) without action
+            if key == RdevKey::AltGr || evt.scan_code == 541 {
+                return;
+            }
+            if success {
+                self.map_keyboard_mode(down_or_up, key, None);
+            }
+        }
+    }
+
+    fn legacy_modifiers(
+        &self,
+        key_event: &mut KeyEvent,
+        alt: bool,
+        ctrl: bool,
+        shift: bool,
+        command: bool,
+    ) {
+        if alt
+            && !crate::is_control_key(&key_event, &ControlKey::Alt)
+            && !crate::is_control_key(&key_event, &ControlKey::RAlt)
+        {
+            key_event.modifiers.push(ControlKey::Alt.into());
+        }
+        if shift
+            && !crate::is_control_key(&key_event, &ControlKey::Shift)
+            && !crate::is_control_key(&key_event, &ControlKey::RShift)
+        {
+            key_event.modifiers.push(ControlKey::Shift.into());
+        }
+        if ctrl
+            && !crate::is_control_key(&key_event, &ControlKey::Control)
+            && !crate::is_control_key(&key_event, &ControlKey::RControl)
+        {
+            key_event.modifiers.push(ControlKey::Control.into());
+        }
+        if command
+            && !crate::is_control_key(&key_event, &ControlKey::Meta)
+            && !crate::is_control_key(&key_event, &ControlKey::RWin)
+        {
+            key_event.modifiers.push(ControlKey::Meta.into());
+        }
+        if get_key_state(enigo::Key::CapsLock) {
+            key_event.modifiers.push(ControlKey::CapsLock.into());
+        }
+        if self.peer_platform() != "Mac OS" {
+            if get_key_state(enigo::Key::NumLock) {
+                key_event.modifiers.push(ControlKey::NumLock.into());
+            }
+        }
+    }
+
+    fn legacy_keyboard_mode(&mut self, down_or_up: bool, key: RdevKey, evt: Event) {
+        // legacy mode(0): Generate characters locally, look for keycode on other side.
+        let peer = self.peer_platform();
+        let is_win = peer == "Windows";
+
+        let alt = get_key_state(enigo::Key::Alt);
+        #[cfg(windows)]
+        let ctrl = {
+            let mut tmp =
+                get_key_state(enigo::Key::Control) || get_key_state(enigo::Key::RightControl);
+            unsafe {
+                if IS_ALT_GR {
+                    if alt || key == RdevKey::AltGr {
+                        if tmp {
+                            tmp = false;
+                        }
+                    } else {
+                        IS_ALT_GR = false;
+                    }
+                }
+            }
+            tmp
+        };
+        #[cfg(not(windows))]
+        let ctrl = get_key_state(enigo::Key::Control) || get_key_state(enigo::Key::RightControl);
+        let shift = get_key_state(enigo::Key::Shift) || get_key_state(enigo::Key::RightShift);
+        #[cfg(windows)]
+        let command = crate::platform::windows::get_win_key_state();
+        #[cfg(not(windows))]
+        let command = get_key_state(enigo::Key::Meta);
+        let control_key = match key {
+            RdevKey::Alt => Some(ControlKey::Alt),
+            RdevKey::AltGr => Some(ControlKey::RAlt),
+            RdevKey::Backspace => Some(ControlKey::Backspace),
+            RdevKey::ControlLeft => {
+                // when pressing AltGr, an extra VK_LCONTROL with a special
+                // scancode with bit 9 set is sent, let's ignore this.
+                #[cfg(windows)]
+                if evt.scan_code & 0x200 != 0 {
+                    unsafe {
+                        IS_ALT_GR = true;
+                    }
+                    return;
+                }
+                Some(ControlKey::Control)
+            }
+            RdevKey::ControlRight => Some(ControlKey::RControl),
+            RdevKey::DownArrow => Some(ControlKey::DownArrow),
+            RdevKey::Escape => Some(ControlKey::Escape),
+            RdevKey::F1 => Some(ControlKey::F1),
+            RdevKey::F10 => Some(ControlKey::F10),
+            RdevKey::F11 => Some(ControlKey::F11),
+            RdevKey::F12 => Some(ControlKey::F12),
+            RdevKey::F2 => Some(ControlKey::F2),
+            RdevKey::F3 => Some(ControlKey::F3),
+            RdevKey::F4 => Some(ControlKey::F4),
+            RdevKey::F5 => Some(ControlKey::F5),
+            RdevKey::F6 => Some(ControlKey::F6),
+            RdevKey::F7 => Some(ControlKey::F7),
+            RdevKey::F8 => Some(ControlKey::F8),
+            RdevKey::F9 => Some(ControlKey::F9),
+            RdevKey::LeftArrow => Some(ControlKey::LeftArrow),
+            RdevKey::MetaLeft => Some(ControlKey::Meta),
+            RdevKey::MetaRight => Some(ControlKey::RWin),
+            RdevKey::Return => Some(ControlKey::Return),
+            RdevKey::RightArrow => Some(ControlKey::RightArrow),
+            RdevKey::ShiftLeft => Some(ControlKey::Shift),
+            RdevKey::ShiftRight => Some(ControlKey::RShift),
+            RdevKey::Space => Some(ControlKey::Space),
+            RdevKey::Tab => Some(ControlKey::Tab),
+            RdevKey::UpArrow => Some(ControlKey::UpArrow),
+            RdevKey::Delete => {
+                if is_win && ctrl && alt {
+                    self.ctrl_alt_del();
+                    return;
+                }
+                Some(ControlKey::Delete)
+            }
+            RdevKey::Apps => Some(ControlKey::Apps),
+            RdevKey::Cancel => Some(ControlKey::Cancel),
+            RdevKey::Clear => Some(ControlKey::Clear),
+            RdevKey::Kana => Some(ControlKey::Kana),
+            RdevKey::Hangul => Some(ControlKey::Hangul),
+            RdevKey::Junja => Some(ControlKey::Junja),
+            RdevKey::Final => Some(ControlKey::Final),
+            RdevKey::Hanja => Some(ControlKey::Hanja),
+            RdevKey::Hanji => Some(ControlKey::Hanja),
+            RdevKey::Convert => Some(ControlKey::Convert),
+            RdevKey::Print => Some(ControlKey::Print),
+            RdevKey::Select => Some(ControlKey::Select),
+            RdevKey::Execute => Some(ControlKey::Execute),
+            RdevKey::PrintScreen => Some(ControlKey::Snapshot),
+            RdevKey::Help => Some(ControlKey::Help),
+            RdevKey::Sleep => Some(ControlKey::Sleep),
+            RdevKey::Separator => Some(ControlKey::Separator),
+            RdevKey::KpReturn => Some(ControlKey::NumpadEnter),
+            RdevKey::Kp0 => Some(ControlKey::Numpad0),
+            RdevKey::Kp1 => Some(ControlKey::Numpad1),
+            RdevKey::Kp2 => Some(ControlKey::Numpad2),
+            RdevKey::Kp3 => Some(ControlKey::Numpad3),
+            RdevKey::Kp4 => Some(ControlKey::Numpad4),
+            RdevKey::Kp5 => Some(ControlKey::Numpad5),
+            RdevKey::Kp6 => Some(ControlKey::Numpad6),
+            RdevKey::Kp7 => Some(ControlKey::Numpad7),
+            RdevKey::Kp8 => Some(ControlKey::Numpad8),
+            RdevKey::Kp9 => Some(ControlKey::Numpad9),
+            RdevKey::KpDivide => Some(ControlKey::Divide),
+            RdevKey::KpMultiply => Some(ControlKey::Multiply),
+            RdevKey::KpDecimal => Some(ControlKey::Decimal),
+            RdevKey::KpMinus => Some(ControlKey::Subtract),
+            RdevKey::KpPlus => Some(ControlKey::Add),
+            RdevKey::CapsLock | RdevKey::NumLock | RdevKey::ScrollLock => {
+                return;
+            }
+            RdevKey::Home => Some(ControlKey::Home),
+            RdevKey::End => Some(ControlKey::End),
+            RdevKey::Insert => Some(ControlKey::Insert),
+            RdevKey::PageUp => Some(ControlKey::PageUp),
+            RdevKey::PageDown => Some(ControlKey::PageDown),
+            RdevKey::Pause => Some(ControlKey::Pause),
+            _ => None,
+        };
+        let mut key_event = KeyEvent::new();
+        if let Some(k) = control_key {
+            key_event.set_control_key(k);
+        } else {
+            let mut chr = match evt.name {
+                Some(ref s) => {
+                    if s.len() <= 2 {
+                        // exclude chinese characters
+                        s.chars().next().unwrap_or('\0')
+                    } else {
+                        '\0'
+                    }
+                }
+                _ => '\0',
+            };
+            if chr == '·' {
+                // special for Chinese
+                chr = '`';
+            }
+            if chr == '\0' {
+                chr = match key {
+                    RdevKey::Num1 => '1',
+                    RdevKey::Num2 => '2',
+                    RdevKey::Num3 => '3',
+                    RdevKey::Num4 => '4',
+                    RdevKey::Num5 => '5',
+                    RdevKey::Num6 => '6',
+                    RdevKey::Num7 => '7',
+                    RdevKey::Num8 => '8',
+                    RdevKey::Num9 => '9',
+                    RdevKey::Num0 => '0',
+                    RdevKey::KeyA => 'a',
+                    RdevKey::KeyB => 'b',
+                    RdevKey::KeyC => 'c',
+                    RdevKey::KeyD => 'd',
+                    RdevKey::KeyE => 'e',
+                    RdevKey::KeyF => 'f',
+                    RdevKey::KeyG => 'g',
+                    RdevKey::KeyH => 'h',
+                    RdevKey::KeyI => 'i',
+                    RdevKey::KeyJ => 'j',
+                    RdevKey::KeyK => 'k',
+                    RdevKey::KeyL => 'l',
+                    RdevKey::KeyM => 'm',
+                    RdevKey::KeyN => 'n',
+                    RdevKey::KeyO => 'o',
+                    RdevKey::KeyP => 'p',
+                    RdevKey::KeyQ => 'q',
+                    RdevKey::KeyR => 'r',
+                    RdevKey::KeyS => 's',
+                    RdevKey::KeyT => 't',
+                    RdevKey::KeyU => 'u',
+                    RdevKey::KeyV => 'v',
+                    RdevKey::KeyW => 'w',
+                    RdevKey::KeyX => 'x',
+                    RdevKey::KeyY => 'y',
+                    RdevKey::KeyZ => 'z',
+                    RdevKey::Comma => ',',
+                    RdevKey::Dot => '.',
+                    RdevKey::SemiColon => ';',
+                    RdevKey::Quote => '\'',
+                    RdevKey::LeftBracket => '[',
+                    RdevKey::RightBracket => ']',
+                    RdevKey::BackSlash => '\\',
+                    RdevKey::Minus => '-',
+                    RdevKey::Equal => '=',
+                    RdevKey::BackQuote => '`',
+                    _ => '\0',
+                }
+            }
+            if chr != '\0' {
+                if chr == 'l' && is_win && command {
+                    self.lock_screen();
+                    return;
+                }
+                key_event.set_chr(chr as _);
+            } else {
+                log::error!("Unknown key {:?}", evt);
+                return;
+            }
+        }
+
+        self.legacy_modifiers(&mut key_event, alt, ctrl, shift, command);
+
+        if down_or_up == true {
+            key_event.down = true;
+        }
+        self.send_key_event(key_event, KeyboardMode::Legacy)
+    }
+
+    fn key_down_or_up(&mut self, down_or_up: bool, key: RdevKey, evt: Event) {
+        // Call different functions according to keyboard mode.
+        let mode = match self.get_keyboard_mode().as_str() {
+            "map" => KeyboardMode::Map,
+            "legacy" => KeyboardMode::Legacy,
+            "translate" => KeyboardMode::Translate,
+            _ => KeyboardMode::Legacy,
+        };
+
+        match mode {
+            KeyboardMode::Map => {
+                if down_or_up == true {
+                    TO_RELEASE.lock().unwrap().insert(key);
+                } else {
+                    TO_RELEASE.lock().unwrap().remove(&key);
+                }
+                self.map_keyboard_mode(down_or_up, key, Some(evt));
+            }
+            KeyboardMode::Legacy => self.legacy_keyboard_mode(down_or_up, key, evt),
+            KeyboardMode::Translate => {
+                self.translate_keyboard_mode(down_or_up, key, evt);
+            }
+            _ => self.legacy_keyboard_mode(down_or_up, key, evt),
+        }
+    }
+
+    pub fn get_platform(&self, is_remote: bool) -> String {
+        if is_remote {
+            self.peer_platform()
+        } else {
+            whoami::platform().to_string()
+        }
+    }
+
+    pub fn get_path_sep(&self, is_remote: bool) -> &'static str {
+        let p = self.get_platform(is_remote);
+        if &p == "Windows" {
+            return "\\";
+        } else {
+            return "/";
+        }
+    }
+
+    pub fn input_os_password(&self, pass: String, activate: bool) {
+        input_os_password(pass, activate, self.clone());
+    }
+
+    pub fn get_chatbox(&self) -> String {
+        #[cfg(feature = "inline")]
+        return super::inline::get_chatbox();
+        #[cfg(not(feature = "inline"))]
+        return "".to_owned();
+    }
+
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    pub fn get_icon(&self) -> String {
+        crate::get_icon()
+    }
+
+    pub fn send_chat(&self, text: String) {
+        let mut misc = Misc::new();
+        misc.set_chat_message(ChatMessage {
+            text,
+            ..Default::default()
+        });
+        let mut msg_out = Message::new();
+        msg_out.set_misc(misc);
+        self.send(Data::Message(msg_out));
+    }
+
+    pub fn switch_display(&self, display: i32) {
+        let mut misc = Misc::new();
+        misc.set_switch_display(SwitchDisplay {
+            display,
+            ..Default::default()
+        });
+        let mut msg_out = Message::new();
+        msg_out.set_misc(misc);
+        self.send(Data::Message(msg_out));
+    }
+
+    pub fn lock_screen(&self) {
+        let mut key_event = KeyEvent::new();
+        key_event.set_control_key(ControlKey::LockScreen);
+        // todo
+        key_event.down = true;
+        self.send_key_event(key_event, KeyboardMode::Legacy);
+    }
+
+    // flutter only TODO new input
+    pub fn input_key(
+        &self,
+        name: &str,
+        down: bool,
+        press: bool,
+        alt: bool,
+        ctrl: bool,
+        shift: bool,
+        command: bool,
+    ) {
+        let chars: Vec<char> = name.chars().collect();
+        if chars.len() == 1 {
+            let key = Key::_Raw(chars[0] as _);
+            self._input_key(key, down, press, alt, ctrl, shift, command);
+        } else {
+            if let Some(key) = KEY_MAP.get(name) {
+                self._input_key(key.clone(), down, press, alt, ctrl, shift, command);
+            }
+        }
+    }
+
+    // flutter only TODO new input
+    pub fn input_string(&self, value: &str) {
+        let mut key_event = KeyEvent::new();
+        key_event.set_seq(value.to_owned());
+        let mut msg_out = Message::new();
+        msg_out.set_key_event(key_event);
+        self.send(Data::Message(msg_out));
+    }
+
+    // flutter only TODO new input
+    fn _input_key(
+        &self,
+        key: Key,
+        down: bool,
+        press: bool,
+        alt: bool,
+        ctrl: bool,
+        shift: bool,
+        command: bool,
+    ) {
+        let v = if press {
+            3
+        } else if down {
+            1
+        } else {
+            0
+        };
+        let mut key_event = KeyEvent::new();
+        match key {
+            Key::Chr(chr) => {
+                key_event.set_chr(chr);
+            }
+            Key::ControlKey(key) => {
+                key_event.set_control_key(key.clone());
+            }
+            Key::_Raw(raw) => {
+                if raw > 'z' as u32 || raw < 'a' as u32 {
+                    key_event.set_unicode(raw);
+                    // TODO
+                    // if down_or_up == 0 {
+                    //     // ignore up, avoiding trigger twice
+                    //     return;
+                    // }
+                    // down_or_up = 1; // if press, turn into down for avoiding trigger twice on server side
+                } else {
+                    // to make ctrl+c works on windows
+                    key_event.set_chr(raw);
+                }
+            }
+        }
+        // asur4s-todo
+        // self.key_down_or_up(v, key_event, alt, ctrl, shift, command);
+    }
+
+    pub fn send_mouse(
+        &self,
+        mask: i32,
+        x: i32,
+        y: i32,
+        alt: bool,
+        ctrl: bool,
+        shift: bool,
+        command: bool,
+    ) {
+        #[allow(unused_mut)]
+        let mut command = command;
+        #[cfg(windows)]
+        {
+            if !command && crate::platform::windows::get_win_key_state() {
+                command = true;
+            }
+        }
+
+        send_mouse(mask, x, y, alt, ctrl, shift, command, self);
+        // on macos, ctrl + left button down = right button down, up won't emit, so we need to
+        // emit up myself if peer is not macos
+        // to-do: how about ctrl + left from win to macos
+        if cfg!(target_os = "macos") {
+            let buttons = mask >> 3;
+            let evt_type = mask & 0x7;
+            if buttons == 1 && evt_type == 1 && ctrl && self.peer_platform() != "Mac OS" {
+                self.send_mouse((1 << 3 | 2) as _, x, y, alt, ctrl, shift, command);
+            }
+        }
+    }
+
+    pub fn reconnect(&self) {
+        self.send(Data::Close);
+        let cloned = self.clone();
+        let mut lock = self.thread.lock().unwrap();
+        lock.take().map(|t| t.join());
+        *lock = Some(std::thread::spawn(move || {
+            io_loop(cloned);
+        }));
+    }
+
+    pub fn get_icon_path(&self, file_type: i32, ext: String) -> String {
+        let mut path = Config::icon_path();
+        if file_type == FileType::DirLink as i32 {
+            let new_path = path.join("dir_link");
+            if !std::fs::metadata(&new_path).is_ok() {
+                #[cfg(windows)]
+                allow_err!(std::os::windows::fs::symlink_file(&path, &new_path));
+                #[cfg(not(windows))]
+                allow_err!(std::os::unix::fs::symlink(&path, &new_path));
+            }
+            path = new_path;
+        } else if file_type == FileType::File as i32 {
+            if !ext.is_empty() {
+                path = path.join(format!("file.{}", ext));
+            } else {
+                path = path.join("file");
+            }
+            if !std::fs::metadata(&path).is_ok() {
+                allow_err!(std::fs::File::create(&path));
+            }
+        } else if file_type == FileType::FileLink as i32 {
+            let new_path = path.join("file_link");
+            if !std::fs::metadata(&new_path).is_ok() {
+                path = path.join("file");
+                if !std::fs::metadata(&path).is_ok() {
+                    allow_err!(std::fs::File::create(&path));
+                }
+                #[cfg(windows)]
+                allow_err!(std::os::windows::fs::symlink_file(&path, &new_path));
+                #[cfg(not(windows))]
+                allow_err!(std::os::unix::fs::symlink(&path, &new_path));
+            }
+            path = new_path;
+        } else if file_type == FileType::DirDrive as i32 {
+            if cfg!(windows) {
+                path = fs::get_path("C:");
+            } else if cfg!(target_os = "macos") {
+                if let Ok(entries) = fs::get_path("/Volumes/").read_dir() {
+                    for entry in entries {
+                        if let Ok(entry) = entry {
+                            path = entry.path();
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+        fs::get_string(&path)
+    }
+
+    pub fn login(&self, password: String, remember: bool) {
+        self.send(Data::Login((password, remember)));
+    }
+
+    pub fn new_rdp(&self) {
+        self.send(Data::NewRDP);
+    }
+
+    pub fn close(&self) {
+        self.send(Data::Close);
+    }
+}
+
+pub trait InvokeUi: Send + Sync + Clone + 'static + Sized + Default {
+    fn set_cursor_data(&self, cd: CursorData);
+    fn set_cursor_id(&self, id: String);
+    fn set_cursor_position(&self, cp: CursorPosition);
+    fn set_display(&self, x: i32, y: i32, w: i32, h: i32);
+    fn switch_display(&self, display: &SwitchDisplay);
+    fn set_peer_info(&self, peer_info: &PeerInfo); // flutter
+    fn update_privacy_mode(&self);
+    fn set_permission(&self, name: &str, value: bool);
+    fn close_success(&self);
+    fn update_quality_status(&self, qs: QualityStatus);
+    fn set_connection_type(&self, is_secured: bool, direct: bool);
+    fn job_error(&self, id: i32, err: String, file_num: i32);
+    fn job_done(&self, id: i32, file_num: i32);
+    fn clear_all_jobs(&self);
+    fn add_job(
+        &self,
+        id: i32,
+        path: String,
+        to: String,
+        file_num: i32,
+        show_hidden: bool,
+        is_remote: bool,
+    );
+    fn new_message(&self, msg: String);
+    fn update_transfer_list(&self);
+    // fn update_folder_files(&self); // TODO flutter with file_dir and update_folder_files
+    fn confirm_delete_files(&self, id: i32, i: i32, name: String);
+    fn override_file_confirm(&self, id: i32, file_num: i32, to: String, is_upload: bool);
+    fn update_block_input_state(&self, on: bool);
+    fn job_progress(&self, id: i32, file_num: i32, speed: f64, finished_size: f64);
+    fn adapt_size(&self);
+    fn on_rgba(&self, data: &[u8]);
+    fn msgbox(&self, msgtype: &str, title: &str, text: &str, retry: bool);
+    #[cfg(any(target_os = "android", target_os = "ios"))]
+    fn clipboard(&self, content: String);
+}
+
+impl<T: InvokeUi> Deref for Session<T> {
+    type Target = T;
+
+    fn deref(&self) -> &Self::Target {
+        &self.ui_handler
+    }
+}
+
+impl<T: InvokeUi> DerefMut for Session<T> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.ui_handler
+    }
+}
+
+impl<T: InvokeUi> FileManager for Session<T> {}
+
+#[async_trait]
+impl<T: InvokeUi> Interface for Session<T> {
+    fn send(&self, data: Data) {
+        if let Some(sender) = self.sender.read().unwrap().as_ref() {
+            sender.send(data).ok();
+        }
+    }
+
+    fn is_file_transfer(&self) -> bool {
+        self.lc
+            .read()
+            .unwrap()
+            .conn_type
+            .eq(&ConnType::FILE_TRANSFER)
+    }
+
+    fn is_port_forward(&self) -> bool {
+        self.lc
+            .read()
+            .unwrap()
+            .conn_type
+            .eq(&ConnType::PORT_FORWARD)
+    }
+
+    fn is_rdp(&self) -> bool {
+        self.lc.read().unwrap().conn_type.eq(&ConnType::RDP)
+    }
+
+    fn msgbox(&self, msgtype: &str, title: &str, text: &str) {
+        let retry = check_if_retry(msgtype, title, text);
+        self.ui_handler.msgbox(msgtype, title, text, retry);
+    }
+
+    fn handle_login_error(&mut self, err: &str) -> bool {
+        self.lc.write().unwrap().handle_login_error(err, self)
+    }
+
+    fn handle_peer_info(&mut self, mut pi: PeerInfo) {
+        pi.username = self.lc.read().unwrap().get_username(&pi);
+        if pi.current_display as usize >= pi.displays.len() {
+            pi.current_display = 0;
+        }
+        if get_version_number(&pi.version) < get_version_number("1.1.10") {
+            self.set_permission("restart", false);
+        }
+        if self.is_file_transfer() {
+            if pi.username.is_empty() {
+                self.on_error("No active console user logged on, please connect and logon first.");
+                return;
+            }
+        } else if !self.is_port_forward() {
+            if pi.displays.is_empty() {
+                self.lc.write().unwrap().handle_peer_info(&pi);
+                self.update_privacy_mode();
+                self.msgbox("error", "Remote Error", "No Display");
+                return;
+            }
+            let p = self.lc.read().unwrap().should_auto_login();
+            if !p.is_empty() {
+                input_os_password(p, true, self.clone());
+            }
+            let current = &pi.displays[pi.current_display as usize];
+            self.set_display(current.x, current.y, current.width, current.height);
+        }
+        self.update_privacy_mode();
+        // Save recent peers, then push event to flutter. So flutter can refresh peer page.
+        self.lc.write().unwrap().handle_peer_info(&pi);
+        self.set_peer_info(&pi);
+        if self.is_file_transfer() {
+            self.close_success();
+        } else if !self.is_port_forward() {
+            self.msgbox("success", "Successful", "Connected, waiting for image...");
+        }
+        #[cfg(windows)]
+        {
+            let mut path = std::env::temp_dir();
+            path.push(&self.id);
+            let path = path.with_extension(crate::get_app_name().to_lowercase());
+            std::fs::File::create(&path).ok();
+            if let Some(path) = path.to_str() {
+                crate::platform::windows::add_recent_document(&path);
+            }
+        }
+        // TODO use event callbcak
+        #[cfg(not(any(target_os = "android", target_os = "ios")))]
+        self.start_keyboard_hook();
+    }
+
+    async fn handle_hash(&mut self, pass: &str, hash: Hash, peer: &mut Stream) {
+        handle_hash(self.lc.clone(), pass, hash, self, peer).await;
+    }
+
+    async fn handle_login_from_ui(&mut self, password: String, remember: bool, peer: &mut Stream) {
+        handle_login_from_ui(self.lc.clone(), password, remember, peer).await;
+    }
+
+    async fn handle_test_delay(&mut self, t: TestDelay, peer: &mut Stream) {
+        if !t.from_client {
+            self.update_quality_status(QualityStatus {
+                delay: Some(t.last_delay as _),
+                target_bitrate: Some(t.target_bitrate as _),
+                ..Default::default()
+            });
+            handle_test_delay(t, peer).await;
+        }
+    }
+
+    fn set_force_relay(&mut self, direct: bool, received: bool) {
+        let mut lc = self.lc.write().unwrap();
+        lc.force_relay = false;
+        if direct && !received {
+            let errno = errno::errno().0;
+            log::info!("errno is {}", errno);
+            // TODO: check mac and ios
+            if cfg!(windows) && errno == 10054 || !cfg!(windows) && errno == 104 {
+                lc.force_relay = true;
+                lc.set_option("force-always-relay".to_owned(), "Y".to_owned());
+            }
+        }
+    }
+
+    fn is_force_relay(&self) -> bool {
+        self.lc.read().unwrap().force_relay
+    }
+}
+
+// TODO use event callbcak
+// sciter only
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+impl<T: InvokeUi> Session<T> {
+    fn start_keyboard_hook(&self) {
+        if self.is_port_forward() || self.is_file_transfer() {
+            return;
+        }
+        if KEYBOARD_HOOKED.swap(true, Ordering::SeqCst) {
+            return;
+        }
+        log::info!("keyboard hooked");
+        let mut me = self.clone();
+        #[cfg(windows)]
+        crate::platform::windows::enable_lowlevel_keyboard(std::ptr::null_mut() as _);
+        std::thread::spawn(move || {
+            // This will block.
+            std::env::set_var("KEYBOARD_ONLY", "y");
+            lazy_static::lazy_static! {
+                static ref MUTEX_SPECIAL_KEYS: Mutex<HashMap<RdevKey, bool>> = {
+                    let mut m = HashMap::new();
+                    m.insert(RdevKey::ShiftLeft, false);
+                    m.insert(RdevKey::ShiftRight, false);
+                    m.insert(RdevKey::ControlLeft, false);
+                    m.insert(RdevKey::ControlRight, false);
+                    m.insert(RdevKey::Alt, false);
+                    m.insert(RdevKey::AltGr, false);
+                    m.insert(RdevKey::MetaLeft, false);
+                    m.insert(RdevKey::MetaRight, false);
+                    Mutex::new(m)
+                };
+            }
+
+            let func = move |evt: Event| {
+                if !IS_IN.load(Ordering::SeqCst) || !SERVER_KEYBOARD_ENABLED.load(Ordering::SeqCst)
+                {
+                    return;
+                }
+                let (_key, down) = match evt.event_type {
+                    KeyPress(k) => {
+                        // keyboard long press
+                        if MUTEX_SPECIAL_KEYS.lock().unwrap().contains_key(&k) {
+                            if *MUTEX_SPECIAL_KEYS.lock().unwrap().get(&k).unwrap() {
+                                return;
+                            }
+                            MUTEX_SPECIAL_KEYS.lock().unwrap().insert(k, true);
+                        }
+                        (k, true)
+                    }
+                    KeyRelease(k) => {
+                        // keyboard long press
+                        if MUTEX_SPECIAL_KEYS.lock().unwrap().contains_key(&k) {
+                            MUTEX_SPECIAL_KEYS.lock().unwrap().insert(k, false);
+                        }
+                        (k, false)
+                    }
+                    _ => return,
+                };
+                me.key_down_or_up(down, _key, evt);
+            };
+            if let Err(error) = rdev::listen(func) {
+                log::error!("rdev: {:?}", error);
+            }
+        });
+    }
+}
+
+#[tokio::main(flavor = "current_thread")]
+pub async fn io_loop<T: InvokeUi>(handler: Session<T>) {
+    let (sender, mut receiver) = mpsc::unbounded_channel::<Data>();
+    *handler.sender.write().unwrap() = Some(sender.clone());
+    let mut options = crate::ipc::get_options_async().await;
+    let mut key = options.remove("key").unwrap_or("".to_owned());
+    let token = LocalConfig::get_option("access_token");
+    if key.is_empty() {
+        key = crate::platform::get_license_key();
+    }
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    if handler.is_port_forward() {
+        if handler.is_rdp() {
+            let port = handler
+                .get_option("rdp_port".to_owned())
+                .parse::<i32>()
+                .unwrap_or(3389);
+            std::env::set_var(
+                "rdp_username",
+                handler.get_option("rdp_username".to_owned()),
+            );
+            std::env::set_var(
+                "rdp_password",
+                handler.get_option("rdp_password".to_owned()),
+            );
+            log::info!("Remote rdp port: {}", port);
+            start_one_port_forward(handler, 0, "".to_owned(), port, receiver, &key, &token).await;
+        } else if handler.args.len() == 0 {
+            let pfs = handler.lc.read().unwrap().port_forwards.clone();
+            let mut queues = HashMap::<i32, mpsc::UnboundedSender<Data>>::new();
+            for d in pfs {
+                sender.send(Data::AddPortForward(d)).ok();
+            }
+            loop {
+                match receiver.recv().await {
+                    Some(Data::AddPortForward((port, remote_host, remote_port))) => {
+                        if port <= 0 || remote_port <= 0 {
+                            continue;
+                        }
+                        let (sender, receiver) = mpsc::unbounded_channel::<Data>();
+                        queues.insert(port, sender);
+                        let handler = handler.clone();
+                        let key = key.clone();
+                        let token = token.clone();
+                        tokio::spawn(async move {
+                            start_one_port_forward(
+                                handler,
+                                port,
+                                remote_host,
+                                remote_port,
+                                receiver,
+                                &key,
+                                &token,
+                            )
+                            .await;
+                        });
+                    }
+                    Some(Data::RemovePortForward(port)) => {
+                        if let Some(s) = queues.remove(&port) {
+                            s.send(Data::Close).ok();
+                        }
+                    }
+                    Some(Data::Close) => {
+                        break;
+                    }
+                    Some(d) => {
+                        for (_, s) in queues.iter() {
+                            s.send(d.clone()).ok();
+                        }
+                    }
+                    _ => {}
+                }
+            }
+        } else {
+            let port = handler.args[0].parse::<i32>().unwrap_or(0);
+            if handler.args.len() != 3
+                || handler.args[2].parse::<i32>().unwrap_or(0) <= 0
+                || port <= 0
+            {
+                handler.on_error("Invalid arguments, usage:<br><br> rustdesk --port-forward remote-id listen-port remote-host remote-port");
+            }
+            let remote_host = handler.args[1].clone();
+            let remote_port = handler.args[2].parse::<i32>().unwrap_or(0);
+            start_one_port_forward(
+                handler,
+                port,
+                remote_host,
+                remote_port,
+                receiver,
+                &key,
+                &token,
+            )
+            .await;
+        }
+        return;
+    }
+    let frame_count = Arc::new(AtomicUsize::new(0));
+    let frame_count_cl = frame_count.clone();
+    let ui_handler = handler.ui_handler.clone();
+    let (video_sender, audio_sender) = start_video_audio_threads(move |data: &[u8]| {
+        frame_count_cl.fetch_add(1, Ordering::Relaxed);
+        ui_handler.on_rgba(data);
+    });
+
+    let mut remote = Remote::new(
+        handler,
+        video_sender,
+        audio_sender,
+        receiver,
+        sender,
+        frame_count,
+    );
+    remote.io_loop(&key, &token).await;
+    remote.sync_jobs_status_to_local().await;
+}
+
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+async fn start_one_port_forward<T: InvokeUi>(
+    handler: Session<T>,
+    port: i32,
+    remote_host: String,
+    remote_port: i32,
+    receiver: mpsc::UnboundedReceiver<Data>,
+    key: &str,
+    token: &str,
+) {
+    if let Err(err) = crate::port_forward::listen(
+        handler.id.clone(),
+        handler.password.clone(),
+        port,
+        handler.clone(),
+        receiver,
+        key,
+        token,
+        handler.lc.clone(),
+        remote_host,
+        remote_port,
+    )
+    .await
+    {
+        handler.on_error(&format!("Failed to listen on {}: {}", port, err));
+    }
+    log::info!("port forward (:{}) exit", port);
+}
+
+#[tokio::main(flavor = "current_thread")]
+async fn send_note(url: String, id: String, conn_id: i32, note: String) {
+    let body = serde_json::json!({ "id": id, "Id": conn_id, "note": note });
+    allow_err!(crate::post_request(url, body.to_string(), "").await);
+}
