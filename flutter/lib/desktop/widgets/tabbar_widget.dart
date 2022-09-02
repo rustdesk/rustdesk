@@ -59,13 +59,15 @@ class DesktopTabState {
 
 class DesktopTabController {
   final state = DesktopTabState().obs;
+  final DesktopTabType tabType;
 
   /// index, key
   Function(int, String)? onRemove;
-
   Function(int)? onSelected;
 
-  void add(TabInfo tab) {
+  DesktopTabController({required this.tabType});
+
+  void add(TabInfo tab, {bool authorized = false}) {
     if (!isDesktop) return;
     final index = state.value.tabs.indexWhere((e) => e.key == tab.key);
     int toIndex;
@@ -78,6 +80,16 @@ class DesktopTabController {
       state.value.scrollController.itemCount = state.value.tabs.length;
       toIndex = state.value.tabs.length - 1;
       assert(toIndex >= 0);
+    }
+    if (tabType == DesktopTabType.cm) {
+      Future.delayed(Duration.zero, () async {
+        window_on_top(null);
+      });
+      if (authorized) {
+        Future.delayed(const Duration(seconds: 3), () {
+          windowManager.minimize();
+        });
+      }
     }
     try {
       jumpTo(toIndex);
@@ -106,6 +118,7 @@ class DesktopTabController {
   }
 
   void jumpTo(int index) {
+    if (!isDesktop || index < 0) return;
     state.update((val) {
       val!.selected = index;
       Future.delayed(Duration.zero, (() {
@@ -114,12 +127,14 @@ class DesktopTabController {
         }
         if (val.scrollController.hasClients &&
             val.scrollController.canScroll &&
-            val.scrollController.itemCount >= index) {
+            val.scrollController.itemCount > index) {
           val.scrollController.scrollToItem(index, center: true, animate: true);
         }
       }));
     });
-    onSelected?.call(index);
+    if (state.value.tabs.length > index) {
+      onSelected?.call(index);
+    }
   }
 
   void closeBy(String? key) {
@@ -154,8 +169,6 @@ typedef LabelGetter = Rx<String> Function(String key);
 class DesktopTab extends StatelessWidget {
   final Function(String)? onTabClose;
   final TarBarTheme theme;
-  final DesktopTabType tabType;
-  final bool isMainWindow;
   final bool showTabBar;
   final bool showLogo;
   final bool showTitle;
@@ -170,10 +183,12 @@ class DesktopTab extends StatelessWidget {
 
   final DesktopTabController controller;
   Rx<DesktopTabState> get state => controller.state;
+  late final DesktopTabType tabType;
+  late final bool isMainWindow;
 
-  const DesktopTab({
+  DesktopTab({
+    Key? key,
     required this.controller,
-    required this.tabType,
     this.theme = const TarBarTheme.light(),
     this.onTabClose,
     this.showTabBar = true,
@@ -187,8 +202,11 @@ class DesktopTab extends StatelessWidget {
     this.onClose,
     this.tabBuilder,
     this.labelGetter,
-  }) : isMainWindow =
-            tabType == DesktopTabType.main || tabType == DesktopTabType.cm;
+  }) : super(key: key) {
+    tabType = controller.tabType;
+    isMainWindow =
+        tabType == DesktopTabType.main || tabType == DesktopTabType.cm;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -314,6 +332,8 @@ class DesktopTab extends StatelessWidget {
         Offstage(offstage: tail == null, child: tail),
         WindowActionPanel(
           mainTab: isMainWindow,
+          tabType: tabType,
+          state: state,
           theme: theme,
           showMinimize: showMinimize,
           showMaximize: showMaximize,
@@ -327,6 +347,8 @@ class DesktopTab extends StatelessWidget {
 
 class WindowActionPanel extends StatelessWidget {
   final bool mainTab;
+  final DesktopTabType tabType;
+  final Rx<DesktopTabState> state;
   final TarBarTheme theme;
 
   final bool showMinimize;
@@ -337,6 +359,8 @@ class WindowActionPanel extends StatelessWidget {
   const WindowActionPanel(
       {Key? key,
       required this.mainTab,
+      required this.tabType,
+      required this.state,
       required this.theme,
       this.showMinimize = true,
       this.showMaximize = true,
@@ -411,21 +435,52 @@ class WindowActionPanel extends StatelessWidget {
               message: 'Close',
               icon: IconFont.close,
               theme: theme,
-              onTap: () {
-                if (mainTab) {
-                  windowManager.close();
-                } else {
-                  // only hide for multi window, not close
-                  Future.delayed(Duration.zero, () {
-                    WindowController.fromWindowId(windowId!).hide();
-                  });
+              onTap: () async {
+                action() {
+                  if (mainTab) {
+                    windowManager.close();
+                  } else {
+                    // only hide for multi window, not close
+                    Future.delayed(Duration.zero, () {
+                      WindowController.fromWindowId(windowId!).hide();
+                    });
+                  }
+                  onClose?.call();
                 }
-                onClose?.call();
+
+                if (tabType != DesktopTabType.main &&
+                    state.value.tabs.length > 1) {
+                  closeConfirmDialog(action);
+                } else {
+                  action();
+                }
               },
               is_close: true,
             )),
       ],
     );
+  }
+
+  closeConfirmDialog(Function() callback) async {
+    final res = await gFFI.dialogManager
+        .show<bool>((setState, close) => CustomAlertDialog(
+              title: Row(children: [
+                Icon(Icons.warning_amber_sharp,
+                    color: Colors.redAccent, size: 28),
+                SizedBox(width: 10),
+                Text(translate("Warning")),
+              ]),
+              content: Text(translate("Disconnect all devices?")),
+              actions: [
+                TextButton(
+                    onPressed: () => close(), child: Text(translate("Cancel"))),
+                ElevatedButton(
+                    onPressed: () => close(true), child: Text(translate("OK"))),
+              ],
+            ));
+    if (res == true) {
+      callback();
+    }
   }
 }
 

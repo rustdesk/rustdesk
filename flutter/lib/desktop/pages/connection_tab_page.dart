@@ -20,7 +20,8 @@ class ConnectionTabPage extends StatefulWidget {
 }
 
 class _ConnectionTabPageState extends State<ConnectionTabPage> {
-  final tabController = Get.put(DesktopTabController());
+  final tabController =
+      Get.put(DesktopTabController(tabType: DesktopTabType.remoteScreen));
   static const IconData selectedIcon = Icons.desktop_windows_sharp;
   static const IconData unselectedIcon = Icons.desktop_windows_outlined;
 
@@ -60,6 +61,7 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
       if (call.method == "new_remote_desktop") {
         final args = jsonDecode(call.arguments);
         final id = args['id'];
+        ConnectionTypeState.init(id);
         window_on_top(windowId());
         ConnectionTypeState.init(id);
         tabController.add(TabInfo(
@@ -94,7 +96,6 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
                 body: Obx(() => DesktopTab(
                       controller: tabController,
                       theme: theme,
-                      tabType: DesktopTabType.remoteScreen,
                       showTabBar: fullscreen.isFalse,
                       onClose: () {
                         tabController.clear();

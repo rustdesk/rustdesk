@@ -32,7 +32,7 @@ class ServerModel with ChangeNotifier {
   late final TextEditingController _serverId;
   final _serverPasswd = TextEditingController(text: "");
 
-  final tabController = DesktopTabController();
+  final tabController = DesktopTabController(tabType: DesktopTabType.cm);
 
   List<Client> _clients = [];
 
@@ -347,20 +347,18 @@ class ServerModel with ChangeNotifier {
     var res = await bind.mainGetClientsState();
     try {
       final List clientsJson = jsonDecode(res);
-      if (isDesktop && clientsJson.isEmpty && _clients.isNotEmpty) {
-        // exit cm when >1 peers to no peers
-        exit(0);
-      }
       _clients.clear();
       tabController.state.value.tabs.clear();
       for (var clientJson in clientsJson) {
         final client = Client.fromJson(clientJson);
         _clients.add(client);
-        tabController.add(TabInfo(
-            key: client.id.toString(),
-            label: client.name,
-            closable: false,
-            page: Desktop.buildConnectionCard(client)));
+        tabController.add(
+            TabInfo(
+                key: client.id.toString(),
+                label: client.name,
+                closable: false,
+                page: Desktop.buildConnectionCard(client)),
+            authorized: client.authorized);
       }
       notifyListeners();
     } catch (e) {
@@ -471,14 +469,18 @@ class ServerModel with ChangeNotifier {
       } else {
         _clients[index].authorized = true;
       }
-      tabController.add(TabInfo(
-          key: client.id.toString(),
-          label: client.name,
-          closable: false,
-          page: Desktop.buildConnectionCard(client)));
+      tabController.add(
+          TabInfo(
+              key: client.id.toString(),
+              label: client.name,
+              closable: false,
+              page: Desktop.buildConnectionCard(client)),
+          authorized: true);
       scrollToBottom();
       notifyListeners();
-    } catch (e) {}
+    } catch (e) {
+      debugPrint("onClientAuthorized:$e");
+    }
   }
 
   void onClientRemove(Map<String, dynamic> evt) {
@@ -486,8 +488,10 @@ class ServerModel with ChangeNotifier {
       final id = int.parse(evt['id'] as String);
       if (_clients.any((c) => c.id == id)) {
         final index = _clients.indexWhere((client) => client.id == id);
-        _clients.removeAt(index);
-        tabController.remove(index);
+        if (index >= 0) {
+          _clients.removeAt(index);
+          tabController.remove(index);
+        }
         parent.target?.dialogManager.dismissByTag(getLoginDialogTag(id));
         parent.target?.invokeMethod("cancel_notification", id);
       }

@@ -25,7 +25,7 @@ class _FileManagerTabPageState extends State<FileManagerTabPage> {
   static final IconData unselectedIcon = Icons.file_copy_outlined;
 
   _FileManagerTabPageState(Map<String, dynamic> params) {
-    Get.put(DesktopTabController());
+    Get.put(DesktopTabController(tabType: DesktopTabType.fileTransfer));
     tabController.add(TabInfo(
         key: params['id'],
         label: params['id'],
@@ -74,7 +74,6 @@ class _FileManagerTabPageState extends State<FileManagerTabPage> {
             body: DesktopTab(
               controller: tabController,
               theme: theme,
-              tabType: DesktopTabType.fileTransfer,
               onClose: () {
                 tabController.clear();
               },
