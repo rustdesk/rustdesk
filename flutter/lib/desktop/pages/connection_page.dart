@@ -12,6 +12,7 @@ import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher_string.dart';
 
 import '../../common.dart';
+import '../../common/formatter/id_formatter.dart';
 import '../../mobile/pages/scan_page.dart';
 import '../../mobile/pages/settings_page.dart';
 import '../../models/model.dart';
@@ -30,7 +31,7 @@ class ConnectionPage extends StatefulWidget {
 /// State for the connection page.
 class _ConnectionPageState extends State<ConnectionPage> {
   /// Controller for the id input bar.
-  final _idController = TextEditingController();
+  final _idController = IDTextEditingController();
 
   /// Update url. If it's not null, means an update is available.
   final _updateUrl = '';
@@ -43,9 +44,9 @@ class _ConnectionPageState extends State<ConnectionPage> {
     if (_idController.text.isEmpty) {
       () async {
         final lastRemoteId = await bind.mainGetLastRemoteId();
-        if (lastRemoteId != _idController.text) {
+        if (lastRemoteId != _idController.id) {
           setState(() {
-            _idController.text = lastRemoteId;
+            _idController.id = lastRemoteId;
           });
         }
       }();
@@ -110,7 +111,7 @@ class _ConnectionPageState extends State<ConnectionPage> {
   /// Callback for the connect button.
   /// Connects to the selected peer.
   void onConnect({bool isFileTransfer = false}) {
-    final id = _idController.text.trim();
+    final id = _idController.id;
     connect(id, isFileTransfer: isFileTransfer);
   }
 
@@ -185,35 +186,41 @@ class _ConnectionPageState extends State<ConnectionPage> {
             Row(
               children: [
                 Expanded(
-                  child: TextField(
-                    autocorrect: false,
-                    enableSuggestions: false,
-                    keyboardType: TextInputType.visiblePassword,
-                    style: TextStyle(
-                      fontFamily: 'WorkSans',
-                      fontSize: 22,
-                      height: 1,
-                    ),
-                    decoration: InputDecoration(
-                        hintText: translate('Enter Remote ID'),
-                        hintStyle: TextStyle(
-                            color: MyTheme.color(context).placeholder),
-                        border: OutlineInputBorder(
+                  child: Obx(
+                    () => TextField(
+                      autocorrect: false,
+                      enableSuggestions: false,
+                      keyboardType: TextInputType.visiblePassword,
+                      focusNode: focusNode,
+                      style: TextStyle(
+                        fontFamily: 'WorkSans',
+                        fontSize: 22,
+                        height: 1,
+                      ),
+                      decoration: InputDecoration(
+                          hintText: inputFocused.value
+                              ? null
+                              : translate('Enter Remote ID'),
+                          hintStyle: TextStyle(
+                              color: MyTheme.color(context).placeholder),
+                          border: OutlineInputBorder(
+                              borderRadius: BorderRadius.zero,
+                              borderSide: BorderSide(
+                                  color: MyTheme.color(context).placeholder!)),
+                          focusedBorder: OutlineInputBorder(
                             borderRadius: BorderRadius.zero,
-                            borderSide: BorderSide(
-                                color: MyTheme.color(context).placeholder!)),
-                        focusedBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.zero,
-                          borderSide:
-                              BorderSide(color: MyTheme.button, width: 3),
-                        ),
-                        isDense: true,
-                        contentPadding:
-                            EdgeInsets.symmetric(horizontal: 10, vertical: 12)),
-                    controller: _idController,
-                    onSubmitted: (s) {
-                      onConnect();
-                    },
+                            borderSide:
+                                BorderSide(color: MyTheme.button, width: 3),
+                          ),
+                          isDense: true,
+                          contentPadding: EdgeInsets.symmetric(
+                              horizontal: 10, vertical: 12)),
+                      controller: _idController,
+                      inputFormatters: [IDTextInputFormatter()],
+                      onSubmitted: (s) {
+                        onConnect();
+                      },
+                    ),
                   ),
                 ),
               ],

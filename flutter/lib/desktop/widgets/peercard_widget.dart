@@ -5,6 +5,7 @@ import 'package:flutter_hbb/utils/multi_window_manager.dart';
 import 'package:get/get.dart';
 
 import '../../common.dart';
+import '../../common/formatter/id_formatter.dart';
 import '../../models/model.dart';
 import '../../models/peer_model.dart';
 import '../../models/platform_model.dart';
@@ -119,7 +120,7 @@ class _PeerCardState extends State<_PeerCard>
                                         ? Colors.green
                                         : Colors.yellow)),
                             Text(
-                              '${peer.id}',
+                              formatID('${peer.id}'),
                               style: TextStyle(fontWeight: FontWeight.w400),
                             ),
                           ]),
@@ -240,7 +241,7 @@ class _PeerCardState extends State<_PeerCard>
                                 backgroundColor: peer.online
                                     ? Colors.green
                                     : Colors.yellow)),
-                        Text(peer.id)
+                        Text(formatID(peer.id))
                       ]).paddingSymmetric(vertical: 8),
                       _actionMore(peer),
                     ],

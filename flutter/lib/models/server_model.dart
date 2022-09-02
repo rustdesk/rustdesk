@@ -7,6 +7,7 @@ import 'package:flutter_hbb/models/platform_model.dart';
 import 'package:wakelock/wakelock.dart';
 
 import '../common.dart';
+import '../common/formatter/id_formatter.dart';
 import '../desktop/pages/server_page.dart' as Desktop;
 import '../desktop/widgets/tabbar_widget.dart';
 import '../mobile/pages/server_page.dart';
@@ -29,7 +30,7 @@ class ServerModel with ChangeNotifier {
   String _temporaryPasswordLength = "";
 
   late String _emptyIdShow;
-  late final TextEditingController _serverId;
+  late final IDTextEditingController _serverId;
   final _serverPasswd = TextEditingController(text: "");
 
   final tabController = DesktopTabController(tabType: DesktopTabType.cm);
@@ -88,7 +89,7 @@ class ServerModel with ChangeNotifier {
 
   ServerModel(this.parent) {
     _emptyIdShow = translate("Generating ...");
-    _serverId = TextEditingController(text: this._emptyIdShow);
+    _serverId = IDTextEditingController(text: _emptyIdShow);
 
     Timer.periodic(Duration(seconds: 1), (timer) async {
       var status = await bind.mainGetOnlineStatue();
@@ -300,7 +301,7 @@ class ServerModel with ChangeNotifier {
   }
 
   _fetchID() async {
-    final old = _serverId.text;
+    final old = _serverId.id;
     var count = 0;
     const maxCount = 10;
     while (count < maxCount) {
@@ -309,12 +310,12 @@ class ServerModel with ChangeNotifier {
       if (id.isEmpty) {
         continue;
       } else {
-        _serverId.text = id;
+        _serverId.id = id;
       }
 
-      debugPrint("fetch id again at $count:id:${_serverId.text}");
+      debugPrint("fetch id again at $count:id:${_serverId.id}");
       count++;
-      if (_serverId.text != old) {
+      if (_serverId.id != old) {
         break;
       }
     }
