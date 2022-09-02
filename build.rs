@@ -41,16 +41,6 @@ fn build_rc_source() {
     .unwrap();
 }
 
-fn check_environment() {
-    // Check env variable
-    let env_list = vec!["LLVM_HOME", "VCPKG_ROOT"];
-    for env in env_list.iter() {
-        if std::env::var(env).is_err() {
-            panic!("Missing environment variable: {:?}", env);
-        };
-    }
-}
-
 fn install_oboe() {
     let target_os = std::env::var("CARGO_CFG_TARGET_OS").unwrap();
     if target_os != "android" {
@@ -87,19 +77,10 @@ fn install_oboe() {
 }
 
 fn gen_flutter_rust_bridge() {
-    // Get dependent of flutter
-    if !std::path::Path::new("./flutter/.packages").exists() {
-        std::process::Command::new("flutter")
-            .args(["pub", "get"])
-            .current_dir("./flutter")
-            .output()
-            .expect("Failed to execute flutter pub get");
-    };
     let llvm_path = match std::env::var("LLVM_HOME") {
         Ok(path) => Some(vec![path]),
-        Err(_) => panic!("Failure to get environments"),
+        Err(_) => None,
     };
-
     // Tell Cargo that if the given file changes, to rerun this build script.
     println!("cargo:rerun-if-changed=src/flutter_ffi.rs");
     // settings for fbr_codegen
@@ -119,8 +100,6 @@ fn gen_flutter_rust_bridge() {
 }
 
 fn main() {
-    check_environment();
-
     hbb_common::gen_version();
     install_oboe();
     // there is problem with cfg(target_os) in build.rs, so use our workaround
