@@ -90,7 +90,7 @@ fn gen_flutter_rust_bridge() {
             if !path.is_empty() {
                 Some(vec![path])
             } else {
-                panic!("Missing LVM_HOME environment variable");
+                panic!("Missing LLVM_HOME environment variable");
             }
         }
         Err(_) => panic!("Failure to get environments"),
