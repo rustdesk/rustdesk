@@ -7,20 +7,19 @@ use std::{
 use flutter_rust_bridge::{StreamSink, SyncReturn, ZeroCopyBuffer};
 use serde_json::json;
 
+use hbb_common::ResultType;
 use hbb_common::{
     config::{self, LocalConfig, PeerConfig, ONLINE},
     fs, log,
 };
-use hbb_common::{ResultType};
 
-use crate::{client::file_trait::FileManager, flutter::{session_add, session_start_}};
 use crate::common::make_fd_to_json;
 use crate::flutter::connection_manager::{self, get_clients_length, get_clients_state};
 use crate::flutter::{self, SESSIONS};
 use crate::start_server;
 use crate::ui_interface;
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
-use crate::ui_interface::{change_id};
+use crate::ui_interface::change_id;
 use crate::ui_interface::{
     check_mouse_time, check_super_user_permission, discover, forget_password, get_api_server,
     get_app_name, get_async_job_status, get_connect_status, get_fav, get_id, get_lan_peers,
@@ -29,6 +28,10 @@ use crate::ui_interface::{
     has_rendezvous_service, post_request, set_local_option, set_option, set_options,
     set_peer_option, set_permanent_password, set_socks, store_fav, test_if_valid_server,
     update_temporary_password, using_public_server,
+};
+use crate::{
+    client::file_trait::FileManager,
+    flutter::{session_add, session_start_},
 };
 
 fn initialize(app_dir: &str) {
@@ -110,7 +113,11 @@ pub fn host_stop_system_key_propagate(stopped: bool) {
 
 // FIXME: -> ResultType<()> cannot be parsed by frb_codegen
 // thread 'main' panicked at 'Failed to parse function output type `ResultType<()>`', $HOME\.cargo\git\checkouts\flutter_rust_bridge-ddba876d3ebb2a1e\e5adce5\frb_codegen\src\parser\mod.rs:151:25
-pub fn session_add_sync(id: String, is_file_transfer: bool, is_port_forward: bool) -> SyncReturn<String> {
+pub fn session_add_sync(
+    id: String,
+    is_file_transfer: bool,
+    is_port_forward: bool,
+) -> SyncReturn<String> {
     if let Err(e) = session_add(&id, is_file_transfer, is_port_forward) {
         SyncReturn(format!("Failed to add session with id {}, {}", &id, e))
     } else {
@@ -228,11 +235,17 @@ pub fn session_switch_display(id: String, value: i32) {
     }
 }
 
-// pub fn session_input_raw_key(id: String, keycode: i32, scancode:i32, down: bool){
-//     if let Some(session) = SESSIONS.read().unwrap().get(&id) {
-//         session.input_raw_key(keycode, scancode, down);
-//     }
-// }
+pub fn session_handle_flutter_key_event(
+    id: String,
+    name: String,
+    keycode: i32,
+    scancode: i32,
+    down_or_up: bool,
+) {
+    if let Some(session) = SESSIONS.read().unwrap().get(&id) {
+        session.handle_flutter_key_event(&name, keycode, scancode, down_or_up);
+    }
+}
 
 pub fn session_input_key(
     id: String,

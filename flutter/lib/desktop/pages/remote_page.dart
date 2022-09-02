@@ -291,13 +291,13 @@ class _RemotePageState extends State<RemotePage>
       keyCode = -1;
     }
 
-    if (e is RawKeyDownEvent){
+    if (e is RawKeyDownEvent) {
       down = true;
-    }else{
+    } else {
       down = false;
     }
-    
-    _ffi.inputRawKey(keyCode, scanCode, down);
+
+    _ffi.inputRawKey(e.character ?? "", keyCode, scanCode, down);
   }
 
   void legacyKeyboardMode(RawKeyEvent e) {

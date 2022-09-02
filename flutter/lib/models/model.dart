@@ -993,10 +993,14 @@ class FFI {
         msg: json.encode(modify({'type': type, 'buttons': button.value})));
   }
 
-  // Raw Key 
-  void inputRawKey(int keyCode, int scanCode, bool down){
-      debugPrint(scanCode.toString());
-      // bind.sessionInputRawKey(id: id, keycode: keyCode, scancode: scanCode, down: down);
+  // Raw Key
+  void inputRawKey(String name, int keyCode, int scanCode, bool down) {
+    bind.sessionHandleFlutterKeyEvent(
+        id: id,
+        name: name,
+        keycode: keyCode,
+        scancode: scanCode,
+        downOrUp: down);
   }
 
   /// Send key stroke event.

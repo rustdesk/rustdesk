@@ -57,13 +57,13 @@ impl<T: InvokeUi> Session<T> {
         self.lc.read().unwrap().custom_image_quality.clone()
     }
 
-    pub fn get_keyboard_mode(&mut self) -> String {
+    pub fn get_keyboard_mode(&self) -> String {
         return std::env::var("KEYBOARD_MODE")
             .unwrap_or(String::from("legacy"))
             .to_lowercase();
     }
 
-    pub fn save_keyboard_mode(&mut self, value: String) {
+    pub fn save_keyboard_mode(&self, value: String) {
         std::env::set_var("KEYBOARD_MODE", value);
     }
 
@@ -272,7 +272,7 @@ impl<T: InvokeUi> Session<T> {
     }
 
     #[allow(dead_code)]
-    fn convert_numpad_keys(&mut self, key: RdevKey) -> RdevKey {
+    fn convert_numpad_keys(&self, key: RdevKey) -> RdevKey {
         if get_key_state(enigo::Key::NumLock) {
             return key;
         }
@@ -292,7 +292,7 @@ impl<T: InvokeUi> Session<T> {
         }
     }
 
-    fn map_keyboard_mode(&mut self, down_or_up: bool, key: RdevKey, _evt: Option<Event>) {
+    fn map_keyboard_mode(&self, down_or_up: bool, key: RdevKey, _evt: Option<Event>) {
         // map mode(1): Send keycode according to the peer platform.
         #[cfg(target_os = "windows")]
         let key = if let Some(e) = _evt {
@@ -328,11 +328,12 @@ impl<T: InvokeUi> Session<T> {
         if get_key_state(enigo::Key::NumLock) {
             key_event.modifiers.push(ControlKey::NumLock.into());
         }
+        log::info!("{:?}", get_key_state(enigo::Key::NumLock));
 
         self.send_key_event(key_event, KeyboardMode::Map);
     }
 
-    fn translate_keyboard_mode(&mut self, down_or_up: bool, key: RdevKey, evt: Event) {
+    fn translate_keyboard_mode(&self, down_or_up: bool, key: RdevKey, evt: Event) {
         // translate mode(2): locally generated characters are send to the peer.
 
         // get char
@@ -423,7 +424,7 @@ impl<T: InvokeUi> Session<T> {
         }
     }
 
-    fn legacy_keyboard_mode(&mut self, down_or_up: bool, key: RdevKey, evt: Event) {
+    fn legacy_keyboard_mode(&self, down_or_up: bool, key: RdevKey, evt: Event) {
         // legacy mode(0): Generate characters locally, look for keycode on other side.
         let peer = self.peer_platform();
         let is_win = peer == "Windows";
@@ -635,7 +636,7 @@ impl<T: InvokeUi> Session<T> {
         self.send_key_event(key_event, KeyboardMode::Legacy)
     }
 
-    fn key_down_or_up(&mut self, down_or_up: bool, key: RdevKey, evt: Event) {
+    fn key_down_or_up(&self, down_or_up: bool, key: RdevKey, evt: Event) {
         // Call different functions according to keyboard mode.
         let mode = match self.get_keyboard_mode().as_str() {
             "map" => KeyboardMode::Map,
@@ -724,6 +725,35 @@ impl<T: InvokeUi> Session<T> {
         self.send_key_event(key_event, KeyboardMode::Legacy);
     }
 
+    pub fn handle_flutter_key_event(&self, name: &str, keycode: i32, scancode:i32, down_or_up: bool){
+        if scancode < 0 || keycode < 0{
+            return;
+        }
+        let keycode: u32 = keycode as u32;
+        let scancode: u32 = scancode as u32;
+
+        #[cfg(not(target_os = "windows"))]
+        let key = rdev::key_from_scancode(scancode) as RdevKey;
+        // Windows requires special handling
+        #[cfg(target_os = "windows")]
+        let key = rdev::get_win_key(keycode, scancode);
+
+        let event_type = if down_or_up{
+            KeyPress(key)
+        }else{
+            KeyRelease(key)
+        };
+        let evt = Event{
+            time: std::time::SystemTime::now(),
+            name: Option::Some(name.to_owned()),
+            code: keycode as _,
+            scan_code: scancode as _,
+            event_type: event_type,
+        };
+
+        self.key_down_or_up(down_or_up, key, evt)
+    }
+
     // flutter only TODO new input
     pub fn input_key(
         &self,
@@ -796,8 +826,10 @@ impl<T: InvokeUi> Session<T> {
                 }
             }
         }
-        // asur4s-todo
-        // self.key_down_or_up(v, key_event, alt, ctrl, shift, command);
+        
+        self.legacy_modifiers(&mut key_event, true, true, false, false);
+        key_event.press = down;
+        self.send_key_event(key_event, KeyboardMode::Legacy);
     }
 
     pub fn send_mouse(
