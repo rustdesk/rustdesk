@@ -472,9 +472,17 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
               });
               final quality =
                   await bind.sessionGetCustomImageQuality(id: widget.id);
-              final double initValue = quality != null && quality.isNotEmpty
+              double initValue = quality != null && quality.isNotEmpty
                   ? quality[0].toDouble()
                   : 50.0;
+              const minValue = 10.0;
+              const maxValue = 100.0;
+              if (initValue < minValue) {
+                initValue = minValue;
+              }
+              if (initValue > maxValue) {
+                initValue = maxValue;
+              }
               final RxDouble sliderValue = RxDouble(initValue);
               final rxReplay = rxdart.ReplaySubject<double>();
               rxReplay
@@ -489,17 +497,28 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
               final slider = Obx(() {
                 return Slider(
                   value: sliderValue.value,
-                  max: 100,
-                  divisions: 100,
-                  label: sliderValue.value.round().toString(),
+                  min: minValue,
+                  max: maxValue,
+                  divisions: 90,
                   onChanged: (double value) {
                     sliderValue.value = value;
                     rxReplay.add(value);
                   },
                 );
               });
+              final content = Row(
+                children: [
+                  slider,
+                  SizedBox(
+                      width: 90,
+                      child: Obx(() => Text(
+                            '${sliderValue.value.round()}% Bitrate',
+                            style: const TextStyle(fontSize: 15),
+                          )))
+                ],
+              );
               msgBoxCommon(widget.ffi.dialogManager, 'Custom Image Quality',
-                  slider, [btnCancel]);
+                  content, [btnCancel]);
             }
           }),
       MenuEntryDivider<String>(),

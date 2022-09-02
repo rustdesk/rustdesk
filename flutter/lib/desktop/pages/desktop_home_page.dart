@@ -6,6 +6,9 @@ import 'package:flutter/services.dart';
 import 'package:flutter_hbb/common.dart';
 import 'package:flutter_hbb/desktop/pages/connection_page.dart';
 import 'package:flutter_hbb/desktop/pages/desktop_setting_page.dart';
+import 'package:flutter_hbb/desktop/widgets/popup_menu.dart';
+import 'package:flutter_hbb/desktop/widgets/material_mod_popup_menu.dart'
+    as mod_menu;
 import 'package:flutter_hbb/models/platform_model.dart';
 import 'package:flutter_hbb/models/server_model.dart';
 import 'package:flutter_hbb/utils/multi_window_manager.dart';
