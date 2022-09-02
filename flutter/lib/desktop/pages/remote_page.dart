@@ -17,7 +17,6 @@ import '../../mobile/widgets/dialog.dart';
 import '../../mobile/widgets/overlay.dart';
 import '../../models/model.dart';
 import '../../models/platform_model.dart';
-import '../../models/chat_model.dart';
 import '../../common/shared_state.dart';
 
 final initText = '\1' * 1024;
@@ -39,7 +38,6 @@ class RemotePage extends StatefulWidget {
 class _RemotePageState extends State<RemotePage>
     with AutomaticKeepAliveClientMixin {
   Timer? _timer;
-  bool _showBar = !isWebDesktop;
   String _value = '';
   final _cursorOverImage = false.obs;
 
@@ -131,7 +129,7 @@ class _RemotePageState extends State<RemotePage>
           common < oldValue.length &&
               common < newValue.length &&
               newValue[common] == oldValue[common];
-          ++common);
+          ++common) {}
       for (i = 0; i < oldValue.length - common; ++i) {
         _ffi.inputKey('VK_BACK');
       }
@@ -145,8 +143,8 @@ class _RemotePageState extends State<RemotePage>
       }
       return;
     }
-    if (oldValue.length > 0 &&
-        newValue.length > 0 &&
+    if (oldValue.isNotEmpty &&
+        newValue.isNotEmpty &&
         oldValue[0] == '\1' &&
         newValue[0] != '\1') {
       // clipboard
@@ -155,7 +153,7 @@ class _RemotePageState extends State<RemotePage>
     if (newValue.length == oldValue.length) {
       // ?
     } else if (newValue.length < oldValue.length) {
-      final char = 'VK_BACK';
+      const char = 'VK_BACK';
       _ffi.inputKey(char);
     } else {
       final content = newValue.substring(oldValue.length);
@@ -200,24 +198,9 @@ class _RemotePageState extends State<RemotePage>
   }
 
   Widget buildBody(BuildContext context, FfiModel ffiModel) {
-    final hasDisplays = ffiModel.pi.displays.length > 0;
     final keyboard = ffiModel.permissions['keyboard'] != false;
     return Scaffold(
         backgroundColor: MyTheme.color(context).bg,
-        // resizeToAvoidBottomInset: true,
-        // floatingActionButton: _showBar
-        //     ? null
-        //     : FloatingActionButton(
-        //         mini: true,
-        //         child: Icon(Icons.expand_less),
-        //         backgroundColor: MyTheme.accent,
-        //         onPressed: () {
-        //           setState(() {
-        //             _showBar = !_showBar;
-        //           });
-        //         }),
-        // bottomNavigationBar:
-        //     _showBar && hasDisplays ? getBottomAppBar(ffiModel) : null,
         body: Overlay(
           initialEntries: [
             OverlayEntry(builder: (context) {
@@ -249,7 +232,7 @@ class _RemotePageState extends State<RemotePage>
               ChangeNotifierProvider.value(value: _ffi.canvasModel),
             ],
             child: Consumer<FfiModel>(
-                builder: (context, ffiModel, _child) =>
+                builder: (context, ffiModel, child) =>
                     buildBody(context, ffiModel))));
   }
 
@@ -305,100 +288,6 @@ class _RemotePageState extends State<RemotePage>
                       return KeyEventResult.handled;
                     },
                     child: child))));
-  }
-
-  Widget? getBottomAppBar(FfiModel ffiModel) {
-    final RxBool fullscreen = Get.find(tag: 'fullscreen');
-    return MouseRegion(
-        cursor: SystemMouseCursors.basic,
-        child: BottomAppBar(
-          elevation: 10,
-          color: MyTheme.accent,
-          child: Row(
-            mainAxisSize: MainAxisSize.max,
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: <Widget>[
-              Row(
-                  children: <Widget>[
-                        IconButton(
-                          color: Colors.white,
-                          icon: Icon(Icons.clear),
-                          onPressed: () {
-                            clientClose(_ffi.dialogManager);
-                          },
-                        )
-                      ] +
-                      <Widget>[
-                        IconButton(
-                          color: Colors.white,
-                          icon: Icon(Icons.tv),
-                          onPressed: () {
-                            _ffi.dialogManager.dismissAll();
-                            showOptions(widget.id);
-                          },
-                        )
-                      ] +
-                      (isWebDesktop
-                          ? []
-                          : <Widget>[
-                              IconButton(
-                                color: Colors.white,
-                                icon: Icon(fullscreen.isTrue
-                                    ? Icons.fullscreen
-                                    : Icons.close_fullscreen),
-                                onPressed: () {
-                                  fullscreen.value = !fullscreen.value;
-                                },
-                              )
-                            ]) +
-                      (isWebDesktop
-                          ? []
-                          : _ffi.ffiModel.isPeerAndroid
-                              ? [
-                                  IconButton(
-                                    color: Colors.white,
-                                    icon: Icon(Icons.build),
-                                    onPressed: () {
-                                      if (mobileActionsOverlayEntry == null) {
-                                        showMobileActionsOverlay();
-                                      } else {
-                                        hideMobileActionsOverlay();
-                                      }
-                                    },
-                                  )
-                                ]
-                              : []) +
-                      (isWeb
-                          ? []
-                          : <Widget>[
-                              IconButton(
-                                color: Colors.white,
-                                icon: Icon(Icons.message),
-                                onPressed: () {
-                                  _ffi.chatModel
-                                      .changeCurrentID(ChatModel.clientModeID);
-                                  _ffi.chatModel.toggleChatOverlay();
-                                },
-                              )
-                            ]) +
-                      [
-                        IconButton(
-                          color: Colors.white,
-                          icon: Icon(Icons.more_vert),
-                          onPressed: () {
-                            showActions(widget.id, ffiModel);
-                          },
-                        ),
-                      ]),
-              IconButton(
-                  color: Colors.white,
-                  icon: Icon(Icons.expand_more),
-                  onPressed: () {
-                    setState(() => _showBar = !_showBar);
-                  }),
-            ],
-          ),
-        ));
   }
 
   /// touchMode only:
@@ -458,12 +347,16 @@ class _RemotePageState extends State<RemotePage>
     if (e is PointerScrollEvent) {
       var dx = e.scrollDelta.dx.toInt();
       var dy = e.scrollDelta.dy.toInt();
-      if (dx > 0)
+      if (dx > 0) {
         dx = -1;
-      else if (dx < 0) dx = 1;
-      if (dy > 0)
+      } else if (dx < 0) {
+        dx = 1;
+      }
+      if (dy > 0) {
         dy = -1;
-      else if (dy < 0) dy = 1;
+      } else if (dy < 0) {
+        dy = 1;
+      }
       bind.sessionSendMouse(
           id: widget.id, msg: '{"type": "wheel", "x": "$dx", "y": "$dy"}');
     }
@@ -546,106 +439,6 @@ class _RemotePageState extends State<RemotePage>
     return out;
   }
 
-  void showActions(String id, FfiModel ffiModel) async {
-    final size = MediaQuery.of(context).size;
-    final x = 120.0;
-    final y = size.height - super.widget.tabBarHeight;
-    final more = <PopupMenuItem<String>>[];
-    final pi = _ffi.ffiModel.pi;
-    final perms = _ffi.ffiModel.permissions;
-    if (pi.version.isNotEmpty) {
-      more.add(PopupMenuItem<String>(
-          child: Text(translate('Refresh')), value: 'refresh'));
-    }
-    more.add(PopupMenuItem<String>(
-        child: Row(
-            children: ([
-          Text(translate('OS Password')),
-          TextButton(
-            style: flatButtonStyle,
-            onPressed: () {
-              showSetOSPassword(widget.id, false, _ffi.dialogManager);
-            },
-            child: Icon(Icons.edit, color: MyTheme.accent),
-          )
-        ])),
-        value: 'enter_os_password'));
-    if (!isWebDesktop) {
-      if (perms['keyboard'] != false && perms['clipboard'] != false) {
-        more.add(PopupMenuItem<String>(
-            child: Text(translate('Paste')), value: 'paste'));
-      }
-      more.add(PopupMenuItem<String>(
-          child: Text(translate('Reset canvas')), value: 'reset_canvas'));
-    }
-    if (perms['keyboard'] != false) {
-      if (pi.platform == 'Linux' || pi.sasEnabled) {
-        more.add(PopupMenuItem<String>(
-            child: Text(translate('Insert') + ' Ctrl + Alt + Del'),
-            value: 'cad'));
-      }
-      more.add(PopupMenuItem<String>(
-          child: Text(translate('Insert Lock')), value: 'lock'));
-      if (pi.platform == 'Windows' &&
-          await bind.sessionGetToggleOption(id: id, arg: 'privacy-mode') !=
-              true) {
-        more.add(PopupMenuItem<String>(
-            child: Text(translate(
-                (ffiModel.inputBlocked ? 'Unb' : 'B') + 'lock user input')),
-            value: 'block-input'));
-      }
-    }
-    if (gFFI.ffiModel.permissions["restart"] != false &&
-        (pi.platform == "Linux" ||
-            pi.platform == "Windows" ||
-            pi.platform == "Mac OS")) {
-      more.add(PopupMenuItem<String>(
-          child: Text(translate('Restart Remote Device')), value: 'restart'));
-    }
-    () async {
-      var value = await showMenu(
-        context: context,
-        position: RelativeRect.fromLTRB(x, y, x, y),
-        items: more,
-        elevation: 8,
-      );
-      if (value == 'cad') {
-        bind.sessionCtrlAltDel(id: widget.id);
-      } else if (value == 'lock') {
-        bind.sessionLockScreen(id: widget.id);
-      } else if (value == 'block-input') {
-        bind.sessionToggleOption(
-            id: widget.id,
-            value: (_ffi.ffiModel.inputBlocked ? 'un' : '') + 'block-input');
-        _ffi.ffiModel.inputBlocked = !_ffi.ffiModel.inputBlocked;
-      } else if (value == 'refresh') {
-        bind.sessionRefresh(id: widget.id);
-      } else if (value == 'paste') {
-        () async {
-          ClipboardData? data = await Clipboard.getData(Clipboard.kTextPlain);
-          if (data != null && data.text != null) {
-            bind.sessionInputString(id: widget.id, value: data.text ?? "");
-          }
-        }();
-      } else if (value == 'enter_os_password') {
-        // FIXME:
-        // TODO icon diff
-        // null means no session of id
-        // empty string means no password
-        var password = await bind.sessionGetOption(id: id, arg: "os-password");
-        if (password != null) {
-          bind.sessionInputOsPassword(id: widget.id, value: password);
-        } else {
-          showSetOSPassword(widget.id, true, _ffi.dialogManager);
-        }
-      } else if (value == 'reset_canvas') {
-        _ffi.cursorModel.reset();
-      } else if (value == 'restart') {
-        showRestartRemoteDevice(pi, widget.id, gFFI.dialogManager);
-      }
-    }();
-  }
-
   @override
   void onWindowEvent(String eventName) {
     print("window event: $eventName");
@@ -676,7 +469,7 @@ class ImagePaint extends StatelessWidget {
       {Key? key,
       required this.id,
       required this.cursorOverImage,
-      this.listenerBuilder = null})
+      this.listenerBuilder})
       : super(key: key);
 
   @override
@@ -855,177 +648,7 @@ class QualityMonitor extends StatelessWidget {
                         ],
                       ),
                     )
-                  : SizedBox.shrink())));
-}
-
-void showOptions(String id) async {
-  final _ffi = ffi(id);
-  String quality = await bind.sessionGetImageQuality(id: id) ?? 'balanced';
-  if (quality == '') quality = 'balanced';
-  String viewStyle =
-      await bind.sessionGetOption(id: id, arg: 'view-style') ?? '';
-  String scrollStyle =
-      await bind.sessionGetOption(id: id, arg: 'scroll-style') ?? '';
-  var displays = <Widget>[];
-  final pi = _ffi.ffiModel.pi;
-  final image = _ffi.ffiModel.getConnectionImage();
-  if (image != null)
-    displays.add(Padding(padding: const EdgeInsets.only(top: 8), child: image));
-  if (pi.displays.length > 1) {
-    final cur = pi.currentDisplay;
-    final children = <Widget>[];
-    for (var i = 0; i < pi.displays.length; ++i)
-      children.add(InkWell(
-          onTap: () {
-            if (i == cur) return;
-            bind.sessionSwitchDisplay(id: id, value: i);
-            _ffi.dialogManager.dismissAll();
-          },
-          child: Ink(
-              width: 40,
-              height: 40,
-              decoration: BoxDecoration(
-                  border: Border.all(color: Colors.black87),
-                  color: i == cur ? Colors.black87 : Colors.white),
-              child: Center(
-                  child: Text((i + 1).toString(),
-                      style: TextStyle(
-                          color: i == cur ? Colors.white : Colors.black87))))));
-    displays.add(Padding(
-        padding: const EdgeInsets.only(top: 8),
-        child: Wrap(
-          alignment: WrapAlignment.center,
-          spacing: 8,
-          children: children,
-        )));
-  }
-  if (displays.isNotEmpty) {
-    displays.add(Divider(color: MyTheme.border));
-  }
-  final perms = _ffi.ffiModel.permissions;
-
-  _ffi.dialogManager.show((setState, close) {
-    final more = <Widget>[];
-    if (perms['audio'] != false) {
-      more.add(getToggle(id, setState, 'disable-audio', 'Mute'));
-    }
-    if (perms['keyboard'] != false) {
-      if (perms['clipboard'] != false)
-        more.add(
-            getToggle(id, setState, 'disable-clipboard', 'Disable clipboard'));
-      more.add(getToggle(
-          id, setState, 'lock-after-session-end', 'Lock after session end'));
-      if (pi.platform == 'Windows') {
-        more.add(Consumer<FfiModel>(
-            builder: (_context, _ffiModel, _child) => () {
-                  return getToggle(
-                      id, setState, 'privacy-mode', 'Privacy mode');
-                }()));
-      }
-    }
-    var setQuality = (String? value) {
-      if (value == null) return;
-      setState(() {
-        quality = value;
-        bind.sessionSetImageQuality(id: id, value: value);
-      });
-    };
-    var setViewStyle = (String? value) {
-      if (value == null) return;
-      setState(() {
-        viewStyle = value;
-        bind.sessionPeerOption(id: id, name: "view-style", value: value);
-        _ffi.canvasModel.updateViewStyle();
-      });
-    };
-    var setScrollStyle = (String? value) {
-      if (value == null) return;
-      setState(() {
-        scrollStyle = value;
-        bind.sessionPeerOption(id: id, name: "scroll-style", value: value);
-        _ffi.canvasModel.updateScrollStyle();
-      });
-    };
-    return CustomAlertDialog(
-      title: SizedBox.shrink(),
-      content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: displays +
-              <Widget>[
-                getRadio('Original', 'original', viewStyle, setViewStyle),
-                getRadio('Shrink', 'shrink', viewStyle, setViewStyle),
-                getRadio('Stretch', 'stretch', viewStyle, setViewStyle),
-                Divider(color: MyTheme.border),
-                getRadio(
-                    'ScrollAuto', 'scrollauto', scrollStyle, setScrollStyle),
-                getRadio('Scrollbar', 'scrollbar', scrollStyle, setScrollStyle),
-                Divider(color: MyTheme.border),
-                getRadio('Good image quality', 'best', quality, setQuality),
-                getRadio('Balanced', 'balanced', quality, setQuality),
-                getRadio('Optimize reaction time', 'low', quality, setQuality),
-                Divider(color: MyTheme.border),
-                getToggle(
-                    id, setState, 'show-remote-cursor', 'Show remote cursor'),
-                getToggle(id, setState, 'show-quality-monitor',
-                    'Show quality monitor',
-                    ffi: _ffi),
-              ] +
-              more),
-      actions: [],
-      contentPadding: 0,
-    );
-  }, clickMaskDismiss: true, backDismiss: true);
-}
-
-void showSetOSPassword(
-    String id, bool login, OverlayDialogManager dialogManager) async {
-  final controller = TextEditingController();
-  var password = await bind.sessionGetOption(id: id, arg: "os-password") ?? "";
-  var autoLogin = await bind.sessionGetOption(id: id, arg: "auto-login") != "";
-  controller.text = password;
-  dialogManager.show((setState, close) {
-    return CustomAlertDialog(
-        title: Text(translate('OS Password')),
-        content: Column(mainAxisSize: MainAxisSize.min, children: [
-          PasswordWidget(controller: controller),
-          CheckboxListTile(
-            contentPadding: const EdgeInsets.all(0),
-            dense: true,
-            controlAffinity: ListTileControlAffinity.leading,
-            title: Text(
-              translate('Auto Login'),
-            ),
-            value: autoLogin,
-            onChanged: (v) {
-              if (v == null) return;
-              setState(() => autoLogin = v);
-            },
-          ),
-        ]),
-        actions: [
-          TextButton(
-            style: flatButtonStyle,
-            onPressed: () {
-              close();
-            },
-            child: Text(translate('Cancel')),
-          ),
-          TextButton(
-            style: flatButtonStyle,
-            onPressed: () {
-              var text = controller.text.trim();
-              bind.sessionPeerOption(id: id, name: "os-password", value: text);
-              bind.sessionPeerOption(
-                  id: id, name: "auto-login", value: autoLogin ? 'Y' : '');
-              if (text != "" && login) {
-                bind.sessionInputOsPassword(id: id, value: text);
-              }
-              close();
-            },
-            child: Text(translate('OK')),
-          ),
-        ]);
-  });
+                  : const SizedBox.shrink())));
 }
 
 void sendPrompt(String id, bool isMac, String key) {

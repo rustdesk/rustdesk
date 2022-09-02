@@ -15,7 +15,7 @@ class _PopupMenuTheme {
   static const Color commonColor = MyTheme.accent;
   // kMinInteractiveDimension
   static const double height = 25.0;
-  static const double dividerHeight = 12.0;
+  static const double dividerHeight = 3.0;
 }
 
 typedef PopupMenuEntryBuilder = Future<List<mod_menu.PopupMenuEntry<String>>>
@@ -46,6 +46,7 @@ class _PeerCard extends StatefulWidget {
 /// State for the connection page.
 class _PeerCardState extends State<_PeerCard>
     with AutomaticKeepAliveClientMixin {
+  var _menuPos = RelativeRect.fill;
   final double _cardRadis = 20;
   final double _borderWidth = 2;
   final RxBool _iconMoreHover = false.obs;
@@ -253,36 +254,36 @@ class _PeerCardState extends State<_PeerCard>
     );
   }
 
-  Widget _actionMore(Peer peer) {
-    return FutureBuilder(
-        future: widget.popupMenuEntryBuilder(context),
-        initialData: const <mod_menu.PopupMenuEntry<String>>[],
-        builder: (BuildContext context,
-            AsyncSnapshot<List<mod_menu.PopupMenuEntry<String>>> snapshot) {
-          if (snapshot.hasData) {
-            return Listener(
-                child: MouseRegion(
-                    onEnter: (_) => _iconMoreHover.value = true,
-                    onExit: (_) => _iconMoreHover.value = false,
-                    child: CircleAvatar(
-                        radius: 14,
-                        backgroundColor: _iconMoreHover.value
-                            ? MyTheme.color(context).grayBg!
-                            : MyTheme.color(context).bg!,
-                        child: mod_menu.PopupMenuButton(
-                          padding: EdgeInsets.zero,
-                          icon: Icon(Icons.more_vert,
-                              size: 18,
-                              color: _iconMoreHover.value
-                                  ? MyTheme.color(context).text
-                                  : MyTheme.color(context).lightText),
-                          position: mod_menu.PopupMenuPosition.over,
-                          itemBuilder: (BuildContext context) => snapshot.data!,
-                        ))));
-          } else {
-            return Container();
-          }
-        });
+  Widget _actionMore(Peer peer) => Listener(
+      onPointerDown: (e) {
+        final x = e.position.dx;
+        final y = e.position.dy;
+        _menuPos = RelativeRect.fromLTRB(x, y, x, y);
+      },
+      onPointerUp: (_) => _showPeerMenu(context, peer.id),
+      child: MouseRegion(
+          onEnter: (_) => _iconMoreHover.value = true,
+          onExit: (_) => _iconMoreHover.value = false,
+          child: CircleAvatar(
+              radius: 14,
+              backgroundColor: _iconMoreHover.value
+                  ? MyTheme.color(context).grayBg!
+                  : MyTheme.color(context).bg!,
+              child: Icon(Icons.more_vert,
+                  size: 18,
+                  color: _iconMoreHover.value
+                      ? MyTheme.color(context).text
+                      : MyTheme.color(context).lightText))));
+
+  /// Show the peer menu and handle user's choice.
+  /// User might remove the peer or send a file to the peer.
+  void _showPeerMenu(BuildContext context, String id) async {
+    await mod_menu.showMenu(
+      context: context,
+      position: _menuPos,
+      items: await super.widget.popupMenuEntryBuilder(context),
+      elevation: 8,
+    );
   }
 
   /// Get the image for the current [platform].
@@ -411,19 +412,26 @@ abstract class BasePeerCard extends StatelessWidget {
   @protected
   MenuEntryBase<String> _rdpAction(BuildContext context, String id) {
     return MenuEntryButton<String>(
-      childBuilder: (TextStyle? style) => Row(
-        children: [
-          Text(
-            translate('RDP'),
-            style: style,
-          ),
-          SizedBox(width: 20),
-          IconButton(
-            icon: Icon(Icons.edit),
-            onPressed: () => _rdpDialog(id),
-          )
-        ],
-      ),
+      childBuilder: (TextStyle? style) => Container(
+          alignment: AlignmentDirectional.center,
+          height: _PopupMenuTheme.height,
+          child: Row(
+            children: [
+              Text(
+                translate('RDP'),
+                style: style,
+              ),
+              Expanded(
+                  child: Align(
+                alignment: Alignment.centerRight,
+                child: IconButton(
+                  padding: EdgeInsets.zero,
+                  icon: Icon(Icons.edit),
+                  onPressed: () => _rdpDialog(id),
+                ),
+              ))
+            ],
+          )),
       proc: () {
         _connect(context, id, isRDP: true);
       },
@@ -614,6 +622,7 @@ class RecentPeerCard extends BasePeerCard {
     if (peer.platform == 'Windows') {
       menuItems.add(_rdpAction(context, peer.id));
     }
+    menuItems.add(MenuEntryDivider());
     menuItems.add(await _forceAlwaysRelayAction(peer.id));
     menuItems.add(_renameAction(peer.id, false));
     menuItems.add(_removeAction(peer.id, () async {
