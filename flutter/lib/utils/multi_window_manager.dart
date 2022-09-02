@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'dart:ui';
 
 import 'package:desktop_multi_window/desktop_multi_window.dart';
 import 'package:flutter/material.dart';
@@ -37,9 +36,9 @@ class RustDeskMultiWindowManager {
   int? _fileTransferWindowId;
   int? _portForwardWindowId;
 
-  Future<dynamic> new_remote_desktop(String remote_id) async {
+  Future<dynamic> newRemoteDesktop(String remoteId) async {
     final msg =
-        jsonEncode({"type": WindowType.RemoteDesktop.index, "id": remote_id});
+        jsonEncode({"type": WindowType.RemoteDesktop.index, "id": remoteId});
 
     try {
       final ids = await DesktopMultiWindow.getAllSubWindowIds();
@@ -63,9 +62,9 @@ class RustDeskMultiWindowManager {
     }
   }
 
-  Future<dynamic> new_file_transfer(String remote_id) async {
+  Future<dynamic> newFileTransfer(String remoteId) async {
     final msg =
-        jsonEncode({"type": WindowType.FileTransfer.index, "id": remote_id});
+        jsonEncode({"type": WindowType.FileTransfer.index, "id": remoteId});
 
     try {
       final ids = await DesktopMultiWindow.getAllSubWindowIds();
@@ -88,12 +87,9 @@ class RustDeskMultiWindowManager {
     }
   }
 
-  Future<dynamic> new_port_forward(String remote_id, bool isRDP) async {
-    final msg = jsonEncode({
-      "type": WindowType.PortForward.index,
-      "id": remote_id,
-      "isRDP": isRDP
-    });
+  Future<dynamic> newPortForward(String remoteId, bool isRDP) async {
+    final msg = jsonEncode(
+        {"type": WindowType.PortForward.index, "id": remoteId, "isRDP": isRDP});
 
     try {
       final ids = await DesktopMultiWindow.getAllSubWindowIds();

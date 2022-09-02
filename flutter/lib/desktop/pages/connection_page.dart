@@ -33,7 +33,7 @@ class _ConnectionPageState extends State<ConnectionPage> {
   final _idController = TextEditingController();
 
   /// Update url. If it's not null, means an update is available.
-  var _updateUrl = '';
+  final _updateUrl = '';
 
   Timer? _updateTimer;
 
@@ -92,7 +92,7 @@ class _ConnectionPageState extends State<ConnectionPage> {
                             if (snapshot.hasData) {
                               return snapshot.data!;
                             } else {
-                              return Offstage();
+                              return const Offstage();
                             }
                           }),
                     ],
@@ -110,7 +110,7 @@ class _ConnectionPageState extends State<ConnectionPage> {
   /// Callback for the connect button.
   /// Connects to the selected peer.
   void onConnect({bool isFileTransfer = false}) {
-    var id = _idController.text.trim();
+    final id = _idController.text.trim();
     connect(id, isFileTransfer: isFileTransfer);
   }
 
@@ -120,9 +120,9 @@ class _ConnectionPageState extends State<ConnectionPage> {
     if (id == '') return;
     id = id.replaceAll(' ', '');
     if (isFileTransfer) {
-      await rustDeskWinManager.new_file_transfer(id);
+      await rustDeskWinManager.newFileTransfer(id);
     } else {
-      await rustDeskWinManager.new_remote_desktop(id);
+      await rustDeskWinManager.newRemoteDesktop(id);
     }
     FocusScopeNode currentFocus = FocusScope.of(context);
     if (!currentFocus.hasPrimaryFocus) {

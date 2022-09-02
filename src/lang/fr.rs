@@ -317,5 +317,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Relay Connection", "Connexion relais"),
         ("Secure Connection", "Connexion sécurisée"),
         ("Insecure Connection", "Connexion non sécurisée"),
+        ("Scale original", "Échelle d'origine"),
+        ("Scale adaptive", "Échelle adaptative"),
     ].iter().cloned().collect();
 }

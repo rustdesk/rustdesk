@@ -317,5 +317,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Relay Connection", "Relé csatlakozás"),
         ("Secure Connection", "Biztonságos kapcsolat"),
         ("Insecure Connection", "Nem biztonságos kapcsolat"),
+        ("Scale original", "Eredeti méretarány"),
+        ("Scale adaptive", "Skála adaptív"),
     ].iter().cloned().collect();
 }

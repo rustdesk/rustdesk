@@ -48,7 +48,7 @@ lib/generated_bridge.dart
 lib/generated_bridge.freezed.dart
 
 # Flutter Generated Files
-**/flutter/GeneratedPluginRegistrant.swift
+**/GeneratedPluginRegistrant.swift
 **/flutter/generated_plugin_registrant.cc
 **/flutter/generated_plugin_registrant.h
 **/flutter/generated_plugins.cmake
