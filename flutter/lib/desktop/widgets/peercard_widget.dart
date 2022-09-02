@@ -276,7 +276,7 @@ class _PeerCardState extends State<_PeerCard>
                               color: _iconMoreHover.value
                                   ? MyTheme.color(context).text
                                   : MyTheme.color(context).lightText),
-                          position: mod_menu.PopupMenuPosition.under,
+                          position: mod_menu.PopupMenuPosition.over,
                           itemBuilder: (BuildContext context) => snapshot.data!,
                         ))));
           } else {

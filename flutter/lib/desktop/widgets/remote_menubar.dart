@@ -489,17 +489,24 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
               final slider = Obx(() {
                 return Slider(
                   value: sliderValue.value,
-                  max: 100,
-                  divisions: 100,
-                  label: sliderValue.value.round().toString(),
+                  min: 10.0,
+                  max: 100.0,
+                  divisions: 90,
+                  // label: sliderValue.value.round().toString(),
                   onChanged: (double value) {
                     sliderValue.value = value;
                     rxReplay.add(value);
                   },
                 );
               });
+              final content = Row(
+                children: [
+                  slider,
+                  Obx(() => Text('${sliderValue.value.round()}% Bitrate'))
+                ],
+              );
               msgBoxCommon(widget.ffi.dialogManager, 'Custom Image Quality',
-                  slider, [btnCancel]);
+                  content, [btnCancel]);
             }
           }),
       MenuEntryDivider<String>(),
