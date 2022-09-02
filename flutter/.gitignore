@@ -32,17 +32,18 @@
 /build/
 
 # Web related
+lib/generated_plugin_registrant.dart
 
 # Symbolication related
 app.*.symbols
-
 # Obfuscation related
 app.*.map.json
 jniLibs
-
 .vscode
 
 # flutter rust bridge
+lib/generated_bridge.dart
+lib/generated_bridge.freezed.dart
 
 # Flutter Generated Files
 **/GeneratedPluginRegistrant.swift
