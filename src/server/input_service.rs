@@ -7,7 +7,7 @@ use rdev::{simulate, EventType, Key as RdevKey};
 use std::{
     convert::TryFrom,
     sync::atomic::{AtomicBool, Ordering},
-    time::Instant,
+    time::Instant
 };
 use tfc::{traits::*, Context as TFC_Context, Key as TFC_Key};
 
@@ -673,10 +673,14 @@ fn tfc_key_down_or_up(key: Key, down: bool, up: bool) {
     if let Key::Layout(chr) = key {
         log::info!("tfc_key_down_or_up :{:?}", chr);
         if down {
-            TFC_CONTEXT.lock().unwrap().unicode_char_down(chr);
+            if let Err(e) = TFC_CONTEXT.lock().unwrap().unicode_char_down(chr){
+                log::error!("Failed to press char {:?}", chr);
+            };
         }
         if up {
-            TFC_CONTEXT.lock().unwrap().unicode_char_up(chr);
+            if let Err(e) = TFC_CONTEXT.lock().unwrap().unicode_char_down(chr){
+                log::error!("Failed to press char {:?}",chr);
+            };
         }
         return;
     }
@@ -749,10 +753,14 @@ fn tfc_key_down_or_up(key: Key, down: bool, up: bool) {
 
     log::info!("tfc_key_down_or_up: {:?}", key);
     if down {
-        TFC_CONTEXT.lock().unwrap().key_down(key);
+        if let Err(e) = TFC_CONTEXT.lock().unwrap().key_down(key){
+            log::error!("Failed to press char {:?}", key);
+        };
     }
     if up {
-        TFC_CONTEXT.lock().unwrap().key_up(key);
+        if let Err(e) = TFC_CONTEXT.lock().unwrap().key_up(key){
+            log::error!("Failed to press char {:?}", key);
+        };
     }
 }
 
