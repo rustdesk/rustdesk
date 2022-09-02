@@ -19,10 +19,6 @@ impl Enigo {
     pub fn set_delay(&mut self, delay: u64) {
         self.xdo.set_delay(delay)
     }
-    /// Reset pynput?.
-    pub fn reset(&mut self) {
-        todo!()
-    }
     /// Set uinput keyboard.
     pub fn set_uinput_keyboard(
         &mut self,

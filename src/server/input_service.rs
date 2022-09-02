@@ -23,8 +23,6 @@ impl super::service::Reset for StateCursor {
         *self = Default::default();
         crate::platform::reset_input_cache();
         fix_key_down_timeout(true);
-        #[cfg(target_os = "linux")]
-        ENIGO.lock().unwrap().reset();
     }
 }
 
