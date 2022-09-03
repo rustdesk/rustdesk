@@ -1,16 +1,26 @@
 import 'package:get/get.dart';
 
 import '../consts.dart';
+import '../models/platform_model.dart';
 
 class PrivacyModeState {
   static String tag(String id) => 'privacy_mode_$id';
 
   static void init(String id) {
-    final RxBool state = false.obs;
-    Get.put(state, tag: tag(id));
+    final key = tag(id);
+    if (!Get.isRegistered(tag: key)) {
+      final RxBool state = false.obs;
+      Get.put(state, tag: key);
+    }
   }
 
-  static void delete(String id) => Get.delete(tag: tag(id));
+  static void delete(String id) {
+    final key = tag(id);
+    if (Get.isRegistered(tag: key)) {
+      Get.delete(tag: key);
+    }
+  }
+
   static RxBool find(String id) => Get.find<RxBool>(tag: tag(id));
 }
 
@@ -18,11 +28,20 @@ class BlockInputState {
   static String tag(String id) => 'block_input_$id';
 
   static void init(String id) {
-    final RxBool state = false.obs;
-    Get.put(state, tag: tag(id));
+    final key = tag(id);
+    if (!Get.isRegistered(tag: key)) {
+      final RxBool state = false.obs;
+      Get.put(state, tag: key);
+    }
   }
 
-  static void delete(String id) => Get.delete(tag: tag(id));
+  static void delete(String id) {
+    final key = tag(id);
+    if (Get.isRegistered(tag: key)) {
+      Get.delete(tag: key);
+    }
+  }
+
   static RxBool find(String id) => Get.find<RxBool>(tag: tag(id));
 }
 
@@ -30,11 +49,20 @@ class CurrentDisplayState {
   static String tag(String id) => 'current_display_$id';
 
   static void init(String id) {
-    final RxInt state = RxInt(0);
-    Get.put(state, tag: tag(id));
+    final key = tag(id);
+    if (!Get.isRegistered(tag: key)) {
+      final RxInt state = RxInt(0);
+      Get.put(state, tag: key);
+    }
   }
 
-  static void delete(String id) => Get.delete(tag: tag(id));
+  static void delete(String id) {
+    final key = tag(id);
+    if (Get.isRegistered(tag: key)) {
+      Get.delete(tag: key);
+    }
+  }
+
   static RxInt find(String id) => Get.find<RxInt>(tag: tag(id));
 }
 
@@ -84,4 +112,47 @@ class ConnectionTypeState {
 
   static ConnectionType find(String id) =>
       Get.find<ConnectionType>(tag: tag(id));
+}
+
+class ShowRemoteCursorState {
+  static String tag(String id) => 'show_remote_cursor_$id';
+
+  static void init(String id) {
+    final key = tag(id);
+    if (!Get.isRegistered(tag: key)) {
+      final RxBool state = false.obs;
+      Get.put(state, tag: key);
+    }
+  }
+
+  static void delete(String id) {
+    final key = tag(id);
+    if (Get.isRegistered(tag: key)) {
+      Get.delete(tag: key);
+    }
+  }
+
+  static RxBool find(String id) => Get.find<RxBool>(tag: tag(id));
+}
+
+class KeyboardEnabledState {
+  static String tag(String id) => 'keyboard_enabled_$id';
+
+  static void init(String id) {
+    final key = tag(id);
+    if (!Get.isRegistered(tag: key)) {
+      // Server side, default true
+      final RxBool state = true.obs;
+      Get.put(state, tag: key);
+    }
+  }
+
+  static void delete(String id) {
+    final key = tag(id);
+    if (Get.isRegistered(tag: key)) {
+      Get.delete(tag: key);
+    }
+  }
+
+  static RxBool find(String id) => Get.find<RxBool>(tag: tag(id));
 }
