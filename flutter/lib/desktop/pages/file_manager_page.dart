@@ -642,47 +642,51 @@ class _FileManagerPageState extends State<FileManagerPage>
                   IconButton(
                       onPressed: () {
                         final name = TextEditingController();
-                        _ffi.dialogManager
-                            .show((setState, close) => CustomAlertDialog(
-                                    title: Text(translate("Create Folder")),
-                                    content: Column(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        TextFormField(
-                                          decoration: InputDecoration(
-                                            labelText: translate(
-                                                "Please enter the folder name"),
-                                          ),
-                                          controller: name,
-                                        ),
-                                      ],
-                                    ),
-                                    actions: [
-                                      TextButton(
-                                          style: flatButtonStyle,
-                                          onPressed: () => close(false),
-                                          child: Text(translate("Cancel"))),
-                                      ElevatedButton(
-                                          style: flatButtonStyle,
-                                          onPressed: () {
-                                            if (name.value.text.isNotEmpty) {
-                                              model.createDir(
-                                                  PathUtil.join(
-                                                      model
-                                                          .getCurrentDir(
-                                                              isLocal)
-                                                          .path,
-                                                      name.value.text,
-                                                      model.getCurrentIsWindows(
-                                                          isLocal)),
-                                                  isLocal: isLocal);
-                                              close();
-                                            }
-                                          },
-                                          child: Text(translate("OK")))
-                                    ]));
+                        _ffi.dialogManager.show((setState, close) {
+                          submit() {
+                            if (name.value.text.isNotEmpty) {
+                              model.createDir(
+                                  PathUtil.join(
+                                      model.getCurrentDir(isLocal).path,
+                                      name.value.text,
+                                      model.getCurrentIsWindows(isLocal)),
+                                  isLocal: isLocal);
+                              close();
+                            }
+                          }
+
+                          cancel() => close(false);
+                          return CustomAlertDialog(
+                            title: Text(translate("Create Folder")),
+                            content: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                TextFormField(
+                                  decoration: InputDecoration(
+                                    labelText: translate(
+                                        "Please enter the folder name"),
+                                  ),
+                                  controller: name,
+                                  focusNode: FocusNode()..requestFocus(),
+                                ),
+                              ],
+                            ),
+                            actions: [
+                              TextButton(
+                                  style: flatButtonStyle,
+                                  onPressed: cancel,
+                                  child: Text(translate("Cancel"))),
+                              ElevatedButton(
+                                  style: flatButtonStyle,
+                                  onPressed: submit,
+                                  child: Text(translate("OK")))
+                            ],
+                            onSubmit: submit,
+                            onCancel: cancel,
+                          );
+                        });
                       },
-                      icon: Icon(Icons.create_new_folder_outlined)),
+                      icon: const Icon(Icons.create_new_folder_outlined)),
                   IconButton(
                       onPressed: () async {
                         final items = isLocal

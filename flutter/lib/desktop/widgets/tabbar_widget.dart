@@ -462,22 +462,24 @@ class WindowActionPanel extends StatelessWidget {
   }
 
   closeConfirmDialog(Function() callback) async {
-    final res = await gFFI.dialogManager
-        .show<bool>((setState, close) => CustomAlertDialog(
-              title: Row(children: [
-                Icon(Icons.warning_amber_sharp,
-                    color: Colors.redAccent, size: 28),
-                SizedBox(width: 10),
-                Text(translate("Warning")),
-              ]),
-              content: Text(translate("Disconnect all devices?")),
-              actions: [
-                TextButton(
-                    onPressed: () => close(), child: Text(translate("Cancel"))),
-                ElevatedButton(
-                    onPressed: () => close(true), child: Text(translate("OK"))),
-              ],
-            ));
+    final res = await gFFI.dialogManager.show<bool>((setState, close) {
+      submit() => close(true);
+      return CustomAlertDialog(
+        title: Row(children: [
+          const Icon(Icons.warning_amber_sharp,
+              color: Colors.redAccent, size: 28),
+          const SizedBox(width: 10),
+          Text(translate("Warning")),
+        ]),
+        content: Text(translate("Disconnect all devices?")),
+        actions: [
+          TextButton(onPressed: close, child: Text(translate("Cancel"))),
+          ElevatedButton(onPressed: submit, child: Text(translate("OK"))),
+        ],
+        onSubmit: submit,
+        onCancel: close,
+      );
+    });
     if (res == true) {
       callback();
     }

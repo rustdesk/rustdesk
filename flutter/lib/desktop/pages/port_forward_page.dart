@@ -70,38 +70,45 @@ class _PortForwardPageState extends State<PortForwardPage>
   @override
   Widget build(BuildContext context) {
     super.build(context);
-    return Scaffold(
-      backgroundColor: MyTheme.color(context).grayBg,
-      body: FutureBuilder(future: () async {
-        if (!isRdp) {
-          refreshTunnelConfig();
-        }
-      }(), builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.done) {
-          return Container(
-            decoration: BoxDecoration(
-                border: Border.all(
-                    width: 20, color: MyTheme.color(context).grayBg!)),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                buildPrompt(context),
-                Flexible(
-                  child: Container(
-                    decoration: BoxDecoration(
-                        color: MyTheme.color(context).bg,
-                        border: Border.all(width: 1, color: MyTheme.border)),
-                    child:
-                        widget.isRDP ? buildRdp(context) : buildTunnel(context),
-                  ),
+    return Overlay(initialEntries: [
+      OverlayEntry(builder: (context) {
+        _ffi.dialogManager.setOverlayState(Overlay.of(context));
+        return Scaffold(
+          backgroundColor: MyTheme.color(context).grayBg,
+          body: FutureBuilder(future: () async {
+            if (!isRdp) {
+              refreshTunnelConfig();
+            }
+          }(), builder: (context, snapshot) {
+            if (snapshot.connectionState == ConnectionState.done) {
+              return Container(
+                decoration: BoxDecoration(
+                    border: Border.all(
+                        width: 20, color: MyTheme.color(context).grayBg!)),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    buildPrompt(context),
+                    Flexible(
+                      child: Container(
+                        decoration: BoxDecoration(
+                            color: MyTheme.color(context).bg,
+                            border:
+                                Border.all(width: 1, color: MyTheme.border)),
+                        child: widget.isRDP
+                            ? buildRdp(context)
+                            : buildTunnel(context),
+                      ),
+                    ),
+                  ],
                 ),
-              ],
-            ),
-          );
-        }
-        return const Offstage();
-      }),
-    );
+              );
+            }
+            return const Offstage();
+          }),
+        );
+      })
+    ]);
   }
 
   buildPrompt(BuildContext context) {

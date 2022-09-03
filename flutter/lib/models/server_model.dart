@@ -209,46 +209,48 @@ class ServerModel with ChangeNotifier {
   /// Toggle the screen sharing service.
   toggleService() async {
     if (_isStart) {
-      final res = await parent.target?.dialogManager
-          .show<bool>((setState, close) => CustomAlertDialog(
-                title: Row(children: [
-                  Icon(Icons.warning_amber_sharp,
-                      color: Colors.redAccent, size: 28),
-                  SizedBox(width: 10),
-                  Text(translate("Warning")),
-                ]),
-                content: Text(translate("android_stop_service_tip")),
-                actions: [
-                  TextButton(
-                      onPressed: () => close(),
-                      child: Text(translate("Cancel"))),
-                  ElevatedButton(
-                      onPressed: () => close(true),
-                      child: Text(translate("OK"))),
-                ],
-              ));
+      final res =
+          await parent.target?.dialogManager.show<bool>((setState, close) {
+        submit() => close(true);
+        return CustomAlertDialog(
+          title: Row(children: [
+            const Icon(Icons.warning_amber_sharp,
+                color: Colors.redAccent, size: 28),
+            const SizedBox(width: 10),
+            Text(translate("Warning")),
+          ]),
+          content: Text(translate("android_stop_service_tip")),
+          actions: [
+            TextButton(onPressed: close, child: Text(translate("Cancel"))),
+            ElevatedButton(onPressed: submit, child: Text(translate("OK"))),
+          ],
+          onSubmit: submit,
+          onCancel: close,
+        );
+      });
       if (res == true) {
         stopService();
       }
     } else {
-      final res = await parent.target?.dialogManager
-          .show<bool>((setState, close) => CustomAlertDialog(
-                title: Row(children: [
-                  Icon(Icons.warning_amber_sharp,
-                      color: Colors.redAccent, size: 28),
-                  SizedBox(width: 10),
-                  Text(translate("Warning")),
-                ]),
-                content: Text(translate("android_service_will_start_tip")),
-                actions: [
-                  TextButton(
-                      onPressed: () => close(),
-                      child: Text(translate("Cancel"))),
-                  ElevatedButton(
-                      onPressed: () => close(true),
-                      child: Text(translate("OK"))),
-                ],
-              ));
+      final res =
+          await parent.target?.dialogManager.show<bool>((setState, close) {
+        submit() => close(true);
+        return CustomAlertDialog(
+          title: Row(children: [
+            const Icon(Icons.warning_amber_sharp,
+                color: Colors.redAccent, size: 28),
+            const SizedBox(width: 10),
+            Text(translate("Warning")),
+          ]),
+          content: Text(translate("android_service_will_start_tip")),
+          actions: [
+            TextButton(onPressed: close, child: Text(translate("Cancel"))),
+            ElevatedButton(onPressed: submit, child: Text(translate("OK"))),
+          ],
+          onSubmit: submit,
+          onCancel: close,
+        );
+      });
       if (res == true) {
         startService();
       }
@@ -388,49 +390,49 @@ class ServerModel with ChangeNotifier {
   }
 
   void showLoginDialog(Client client) {
-    parent.target?.dialogManager.show(
-        (setState, close) => CustomAlertDialog(
-              title: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(translate(client.isFileTransfer
-                        ? "File Connection"
-                        : "Screen Connection")),
-                    IconButton(
-                        onPressed: () {
-                          close();
-                        },
-                        icon: Icon(Icons.close))
-                  ]),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                mainAxisAlignment: MainAxisAlignment.center,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(translate("Do you accept?")),
-                  clientInfo(client),
-                  Text(
-                    translate("android_new_connection_tip"),
-                    style: TextStyle(color: Colors.black54),
-                  ),
-                ],
-              ),
-              actions: [
-                TextButton(
-                    child: Text(translate("Dismiss")),
-                    onPressed: () {
-                      sendLoginResponse(client, false);
-                      close();
-                    }),
-                ElevatedButton(
-                    child: Text(translate("Accept")),
-                    onPressed: () {
-                      sendLoginResponse(client, true);
-                      close();
-                    }),
-              ],
+    parent.target?.dialogManager.show((setState, close) {
+      cancel() {
+        sendLoginResponse(client, false);
+        close();
+      }
+
+      submit() {
+        sendLoginResponse(client, true);
+        close();
+      }
+
+      return CustomAlertDialog(
+        title:
+            Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+          Text(translate(
+              client.isFileTransfer ? "File Connection" : "Screen Connection")),
+          IconButton(
+              onPressed: () {
+                close();
+              },
+              icon: const Icon(Icons.close))
+        ]),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          mainAxisAlignment: MainAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(translate("Do you accept?")),
+            clientInfo(client),
+            Text(
+              translate("android_new_connection_tip"),
+              style: const TextStyle(color: Colors.black54),
             ),
-        tag: getLoginDialogTag(client.id));
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: cancel, child: Text(translate("Dismiss"))),
+          ElevatedButton(onPressed: submit, child: Text(translate("Accept"))),
+        ],
+        onSubmit: submit,
+        onCancel: cancel,
+      );
+    }, tag: getLoginDialogTag(client.id));
   }
 
   scrollToBottom() {
@@ -563,24 +565,29 @@ String getLoginDialogTag(int id) {
 }
 
 showInputWarnAlert(FFI ffi) {
-  ffi.dialogManager.show((setState, close) => CustomAlertDialog(
-        title: Text(translate("How to get Android input permission?")),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(translate("android_input_permission_tip1")),
-            SizedBox(height: 10),
-            Text(translate("android_input_permission_tip2")),
-          ],
-        ),
-        actions: [
-          TextButton(child: Text(translate("Cancel")), onPressed: close),
-          ElevatedButton(
-              child: Text(translate("Open System Setting")),
-              onPressed: () {
-                ffi.serverModel.initInput();
-                close();
-              }),
+  ffi.dialogManager.show((setState, close) {
+    submit() {
+      ffi.serverModel.initInput();
+      close();
+    }
+
+    return CustomAlertDialog(
+      title: Text(translate("How to get Android input permission?")),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(translate("android_input_permission_tip1")),
+          const SizedBox(height: 10),
+          Text(translate("android_input_permission_tip2")),
         ],
-      ));
+      ),
+      actions: [
+        TextButton(onPressed: close, child: Text(translate("Cancel"))),
+        ElevatedButton(
+            onPressed: submit, child: Text(translate("Open System Setting"))),
+      ],
+      onSubmit: submit,
+      onCancel: close,
+    );
+  });
 }

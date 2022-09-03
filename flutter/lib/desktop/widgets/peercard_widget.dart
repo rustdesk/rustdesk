@@ -563,47 +563,47 @@ abstract class BasePeerCard extends StatelessWidget {
       }
     }
     gFFI.dialogManager.show((setState, close) {
+      submit() async {
+        isInProgress.value = true;
+        name = controller.text;
+        await bind.mainSetPeerOption(id: id, key: 'alias', value: name);
+        if (isAddressBook) {
+          gFFI.abModel.setPeerOption(id, 'alias', name);
+          await gFFI.abModel.updateAb();
+        }
+        alias.value = await bind.mainGetPeerOption(id: peer.id, key: 'alias');
+        close();
+        isInProgress.value = false;
+      }
+
       return CustomAlertDialog(
         title: Text(translate('Rename')),
         content: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Container(
-              padding: EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
               child: Form(
                 child: TextFormField(
                   controller: controller,
-                  decoration: InputDecoration(border: OutlineInputBorder()),
+                  focusNode: FocusNode()..requestFocus(),
+                  decoration:
+                      const InputDecoration(border: OutlineInputBorder()),
                 ),
               ),
             ),
             Obx(() => Offstage(
                 offstage: isInProgress.isFalse,
-                child: LinearProgressIndicator())),
+                child: const LinearProgressIndicator())),
           ],
         ),
         actions: [
-          TextButton(
-              onPressed: () {
-                close();
-              },
-              child: Text(translate("Cancel"))),
-          TextButton(
-              onPressed: () async {
-                isInProgress.value = true;
-                name = controller.text;
-                await bind.mainSetPeerOption(id: id, key: 'alias', value: name);
-                if (isAddressBook) {
-                  gFFI.abModel.setPeerOption(id, 'alias', name);
-                  await gFFI.abModel.updateAb();
-                }
-                alias.value =
-                    await bind.mainGetPeerOption(id: peer.id, key: 'alias');
-                close();
-                isInProgress.value = false;
-              },
-              child: Text(translate("OK"))),
+          TextButton(onPressed: close, child: Text(translate("Cancel"))),
+          TextButton(onPressed: submit, child: Text(translate("OK"))),
         ],
+        onSubmit: submit,
+        onCancel: close,
       );
     });
   }
@@ -750,13 +750,23 @@ class AddressBookPeerCard extends BasePeerCard {
     var selectedTag = gFFI.abModel.getPeerTags(id).obs;
 
     gFFI.dialogManager.show((setState, close) {
+      submit() async {
+        setState(() {
+          isInProgress = true;
+        });
+        gFFI.abModel.changeTagForPeer(id, selectedTag);
+        await gFFI.abModel.updateAb();
+        close();
+      }
+
       return CustomAlertDialog(
         title: Text(translate("Edit Tag")),
         content: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Container(
-              padding: EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
               child: Wrap(
                 children: tags
                     .map((e) => _buildTag(e, selectedTag, onTap: () {
@@ -769,26 +779,16 @@ class AddressBookPeerCard extends BasePeerCard {
                     .toList(growable: false),
               ),
             ),
-            Offstage(offstage: !isInProgress, child: LinearProgressIndicator())
+            Offstage(
+                offstage: !isInProgress, child: const LinearProgressIndicator())
           ],
         ),
         actions: [
-          TextButton(
-              onPressed: () {
-                close();
-              },
-              child: Text(translate("Cancel"))),
-          TextButton(
-              onPressed: () async {
-                setState(() {
-                  isInProgress = true;
-                });
-                gFFI.abModel.changeTagForPeer(id, selectedTag);
-                await gFFI.abModel.updateAb();
-                close();
-              },
-              child: Text(translate("OK"))),
+          TextButton(onPressed: close, child: Text(translate("Cancel"))),
+          TextButton(onPressed: submit, child: Text(translate("OK"))),
         ],
+        onSubmit: submit,
+        onCancel: close,
       );
     });
   }
@@ -871,25 +871,35 @@ void _rdpDialog(String id) async {
   RxBool secure = true.obs;
 
   gFFI.dialogManager.show((setState, close) {
+    submit() async {
+      await bind.mainSetPeerOption(
+          id: id, key: 'rdp_port', value: portController.text.trim());
+      await bind.mainSetPeerOption(
+          id: id, key: 'rdp_username', value: userController.text);
+      await bind.mainSetPeerOption(
+          id: id, key: 'rdp_password', value: passwordContorller.text);
+      close();
+    }
+
     return CustomAlertDialog(
-      title: Text('RDP ' + translate('Settings')),
+      title: Text('RDP ${translate('Settings')}'),
       content: ConstrainedBox(
-        constraints: BoxConstraints(minWidth: 500),
+        constraints: const BoxConstraints(minWidth: 500),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            SizedBox(
+            const SizedBox(
               height: 8.0,
             ),
             Row(
               children: [
                 ConstrainedBox(
-                    constraints: BoxConstraints(minWidth: 100),
+                    constraints: const BoxConstraints(minWidth: 100),
                     child: Text(
                       "${translate('Port')}:",
                       textAlign: TextAlign.start,
                     ).marginOnly(bottom: 16.0)),
-                SizedBox(
+                const SizedBox(
                   width: 24.0,
                 ),
                 Expanded(
@@ -898,52 +908,54 @@ void _rdpDialog(String id) async {
                       FilteringTextInputFormatter.allow(RegExp(
                           r'^([0-9]|[1-9]\d|[1-9]\d{2}|[1-9]\d{3}|[1-5]\d{4}|6[0-4]\d{3}|65[0-4]\d{2}|655[0-2]\d|6553[0-5])$'))
                     ],
-                    decoration: InputDecoration(
+                    decoration: const InputDecoration(
                         border: OutlineInputBorder(), hintText: '3389'),
                     controller: portController,
+                    focusNode: FocusNode()..requestFocus(),
                   ),
                 ),
               ],
             ),
-            SizedBox(
+            const SizedBox(
               height: 8.0,
             ),
             Row(
               children: [
                 ConstrainedBox(
-                    constraints: BoxConstraints(minWidth: 100),
+                    constraints: const BoxConstraints(minWidth: 100),
                     child: Text(
                       "${translate('Username')}:",
                       textAlign: TextAlign.start,
                     ).marginOnly(bottom: 16.0)),
-                SizedBox(
+                const SizedBox(
                   width: 24.0,
                 ),
                 Expanded(
                   child: TextField(
-                    decoration: InputDecoration(border: OutlineInputBorder()),
+                    decoration:
+                        const InputDecoration(border: OutlineInputBorder()),
                     controller: userController,
                   ),
                 ),
               ],
             ),
-            SizedBox(
+            const SizedBox(
               height: 8.0,
             ),
             Row(
               children: [
                 ConstrainedBox(
-                    constraints: BoxConstraints(minWidth: 100),
+                    constraints: const BoxConstraints(minWidth: 100),
                     child: Text("${translate('Password')}:")
                         .marginOnly(bottom: 16.0)),
-                SizedBox(
+                const SizedBox(
                   width: 24.0,
                 ),
                 Expanded(
                   child: Obx(() => TextField(
                         obscureText: secure.value,
                         decoration: InputDecoration(
-                            border: OutlineInputBorder(),
+                            border: const OutlineInputBorder(),
                             suffixIcon: IconButton(
                                 onPressed: () => secure.value = !secure.value,
                                 icon: Icon(secure.value
@@ -958,23 +970,11 @@ void _rdpDialog(String id) async {
         ),
       ),
       actions: [
-        TextButton(
-            onPressed: () {
-              close();
-            },
-            child: Text(translate("Cancel"))),
-        TextButton(
-            onPressed: () async {
-              await bind.mainSetPeerOption(
-                  id: id, key: 'rdp_port', value: portController.text.trim());
-              await bind.mainSetPeerOption(
-                  id: id, key: 'rdp_username', value: userController.text);
-              await bind.mainSetPeerOption(
-                  id: id, key: 'rdp_password', value: passwordContorller.text);
-              close();
-            },
-            child: Text(translate("OK"))),
+        TextButton(onPressed: close, child: Text(translate("Cancel"))),
+        TextButton(onPressed: submit, child: Text(translate("OK"))),
       ],
+      onSubmit: submit,
+      onCancel: close,
     );
   });
 }
