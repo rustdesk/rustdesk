@@ -827,8 +827,13 @@ impl<T: InvokeUi> Session<T> {
             }
         }
         
-        self.legacy_modifiers(&mut key_event, true, true, false, false);
-        key_event.press = down;
+        self.legacy_modifiers(&mut key_event, alt, ctrl, shift, command);
+        if v == 1 {
+            key_event.down = true;
+        } else if v == 3 {
+            key_event.press = true;
+        }
+
         self.send_key_event(key_event, KeyboardMode::Legacy);
     }
 
