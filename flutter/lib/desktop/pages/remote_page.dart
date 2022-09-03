@@ -40,6 +40,8 @@ class _RemotePageState extends State<RemotePage>
   Timer? _timer;
   String _value = '';
   final _cursorOverImage = false.obs;
+  late RxBool _showRemoteCursor;
+  late RxBool _keyboardEnabled;
 
   final FocusNode _mobileFocusNode = FocusNode();
   final FocusNode _physicalFocusNode = FocusNode();
@@ -56,17 +58,24 @@ class _RemotePageState extends State<RemotePage>
     PrivacyModeState.init(id);
     BlockInputState.init(id);
     CurrentDisplayState.init(id);
+    KeyboardEnabledState.init(id);
+    ShowRemoteCursorState.init(id);
+    _showRemoteCursor = ShowRemoteCursorState.find(id);
+    _keyboardEnabled = KeyboardEnabledState.find(id);
   }
 
   void _removeStates(String id) {
     PrivacyModeState.delete(id);
     BlockInputState.delete(id);
     CurrentDisplayState.delete(id);
+    ShowRemoteCursorState.delete(id);
+    KeyboardEnabledState.delete(id);
   }
 
   @override
   void initState() {
     super.initState();
+    _initStates(widget.id);
     _ffi = FFI();
     _updateTabBarHeight();
     Get.put(_ffi, tag: widget.id);
@@ -84,7 +93,8 @@ class _RemotePageState extends State<RemotePage>
     _ffi.listenToMouse(true);
     _ffi.qualityMonitorModel.checkShowQualityMonitor(widget.id);
     // WindowManager.instance.addListener(this);
-    _initStates(widget.id);
+    _showRemoteCursor.value = bind.sessionGetToggleOptionSync(
+        id: widget.id, arg: 'show-remote-cursor');
   }
 
   @override
@@ -197,8 +207,7 @@ class _RemotePageState extends State<RemotePage>
     _ffi.inputKey(label, down: down, press: press ?? false);
   }
 
-  Widget buildBody(BuildContext context, FfiModel ffiModel) {
-    final keyboard = ffiModel.permissions['keyboard'] != false;
+  Widget buildBody(BuildContext context) {
     return Scaffold(
         backgroundColor: MyTheme.color(context).bg,
         body: Overlay(
@@ -208,8 +217,7 @@ class _RemotePageState extends State<RemotePage>
               _ffi.dialogManager.setOverlayState(Overlay.of(context));
               return Container(
                   color: Colors.black,
-                  child: getRawPointerAndKeyBody(
-                      getBodyForDesktop(context, keyboard)));
+                  child: getRawPointerAndKeyBody(getBodyForDesktop(context)));
             })
           ],
         ));
@@ -224,70 +232,61 @@ class _RemotePageState extends State<RemotePage>
           clientClose(_ffi.dialogManager);
           return false;
         },
-        child: MultiProvider(
-            providers: [
-              ChangeNotifierProvider.value(value: _ffi.ffiModel),
-              ChangeNotifierProvider.value(value: _ffi.imageModel),
-              ChangeNotifierProvider.value(value: _ffi.cursorModel),
-              ChangeNotifierProvider.value(value: _ffi.canvasModel),
-            ],
-            child: Consumer<FfiModel>(
-                builder: (context, ffiModel, child) =>
-                    buildBody(context, ffiModel))));
+        child: MultiProvider(providers: [
+          ChangeNotifierProvider.value(value: _ffi.ffiModel),
+          ChangeNotifierProvider.value(value: _ffi.imageModel),
+          ChangeNotifierProvider.value(value: _ffi.cursorModel),
+          ChangeNotifierProvider.value(value: _ffi.canvasModel),
+        ], child: buildBody(context)));
   }
 
   Widget getRawPointerAndKeyBody(Widget child) {
-    return Consumer<FfiModel>(
-        builder: (context, FfiModel, _child) => MouseRegion(
-            cursor: FfiModel.permissions['keyboard'] != false
-                ? SystemMouseCursors.none
-                : MouseCursor.defer,
-            child: FocusScope(
-                autofocus: true,
-                child: Focus(
-                    autofocus: true,
-                    canRequestFocus: true,
-                    focusNode: _physicalFocusNode,
-                    onFocusChange: (bool v) {
-                      _imageFocused = v;
-                    },
-                    onKey: (data, e) {
-                      final key = e.logicalKey;
-                      if (e is RawKeyDownEvent) {
-                        if (e.repeat) {
-                          sendRawKey(e, press: true);
-                        } else {
-                          if (e.isAltPressed && !_ffi.alt) {
-                            _ffi.alt = true;
-                          } else if (e.isControlPressed && !_ffi.ctrl) {
-                            _ffi.ctrl = true;
-                          } else if (e.isShiftPressed && !_ffi.shift) {
-                            _ffi.shift = true;
-                          } else if (e.isMetaPressed && !_ffi.command) {
-                            _ffi.command = true;
-                          }
-                          sendRawKey(e, down: true);
-                        }
-                      }
-                      if (e is RawKeyUpEvent) {
-                        if (key == LogicalKeyboardKey.altLeft ||
-                            key == LogicalKeyboardKey.altRight) {
-                          _ffi.alt = false;
-                        } else if (key == LogicalKeyboardKey.controlLeft ||
-                            key == LogicalKeyboardKey.controlRight) {
-                          _ffi.ctrl = false;
-                        } else if (key == LogicalKeyboardKey.shiftRight ||
-                            key == LogicalKeyboardKey.shiftLeft) {
-                          _ffi.shift = false;
-                        } else if (key == LogicalKeyboardKey.metaLeft ||
-                            key == LogicalKeyboardKey.metaRight) {
-                          _ffi.command = false;
-                        }
-                        sendRawKey(e);
-                      }
-                      return KeyEventResult.handled;
-                    },
-                    child: child))));
+    return FocusScope(
+        autofocus: true,
+        child: Focus(
+            autofocus: true,
+            canRequestFocus: true,
+            focusNode: _physicalFocusNode,
+            onFocusChange: (bool v) {
+              _imageFocused = v;
+            },
+            onKey: (data, e) {
+              final key = e.logicalKey;
+              if (e is RawKeyDownEvent) {
+                if (e.repeat) {
+                  sendRawKey(e, press: true);
+                } else {
+                  if (e.isAltPressed && !_ffi.alt) {
+                    _ffi.alt = true;
+                  } else if (e.isControlPressed && !_ffi.ctrl) {
+                    _ffi.ctrl = true;
+                  } else if (e.isShiftPressed && !_ffi.shift) {
+                    _ffi.shift = true;
+                  } else if (e.isMetaPressed && !_ffi.command) {
+                    _ffi.command = true;
+                  }
+                  sendRawKey(e, down: true);
+                }
+              }
+              if (e is RawKeyUpEvent) {
+                if (key == LogicalKeyboardKey.altLeft ||
+                    key == LogicalKeyboardKey.altRight) {
+                  _ffi.alt = false;
+                } else if (key == LogicalKeyboardKey.controlLeft ||
+                    key == LogicalKeyboardKey.controlRight) {
+                  _ffi.ctrl = false;
+                } else if (key == LogicalKeyboardKey.shiftRight ||
+                    key == LogicalKeyboardKey.shiftLeft) {
+                  _ffi.shift = false;
+                } else if (key == LogicalKeyboardKey.metaLeft ||
+                    key == LogicalKeyboardKey.metaRight) {
+                  _ffi.command = false;
+                }
+                sendRawKey(e);
+              }
+              return KeyEventResult.handled;
+            },
+            child: child));
   }
 
   /// touchMode only:
@@ -382,32 +381,30 @@ class _RemotePageState extends State<RemotePage>
             child: child));
   }
 
-  Widget getBodyForDesktop(BuildContext context, bool keyboard) {
+  Widget getBodyForDesktop(BuildContext context) {
     var paints = <Widget>[
       MouseRegion(onEnter: (evt) {
         bind.hostStopSystemKeyPropagate(stopped: false);
       }, onExit: (evt) {
         bind.hostStopSystemKeyPropagate(stopped: true);
-      }, child: Container(
-        child: LayoutBuilder(builder: (context, constraints) {
-          Future.delayed(Duration.zero, () {
-            Provider.of<CanvasModel>(context, listen: false).updateViewStyle();
-          });
-          return ImagePaint(
-            id: widget.id,
-            cursorOverImage: _cursorOverImage,
-            listenerBuilder: _buildImageListener,
-          );
-        }),
-      ))
+      }, child: LayoutBuilder(builder: (context, constraints) {
+        Future.delayed(Duration.zero, () {
+          Provider.of<CanvasModel>(context, listen: false).updateViewStyle();
+        });
+        return ImagePaint(
+          id: widget.id,
+          cursorOverImage: _cursorOverImage,
+          keyboardEnabled: _keyboardEnabled,
+          listenerBuilder: _buildImageListener,
+        );
+      }))
     ];
-    final cursor = bind.sessionGetToggleOptionSync(
-        id: widget.id, arg: 'show-remote-cursor');
-    if (keyboard || cursor) {
-      paints.add(CursorPaint(
-        id: widget.id,
-      ));
-    }
+
+    paints.add(Obx(() => Visibility(
+        visible: _keyboardEnabled.isTrue || _showRemoteCursor.isTrue,
+        child: CursorPaint(
+          id: widget.id,
+        ))));
     paints.add(QualityMonitor(_ffi.qualityMonitorModel));
     paints.add(RemoteMenubar(
       id: widget.id,
@@ -447,7 +444,7 @@ class _RemotePageState extends State<RemotePage>
         _ffi.canvasModel.updateViewStyle();
         break;
       case 'maximize':
-        Future.delayed(Duration(milliseconds: 100), () {
+        Future.delayed(const Duration(milliseconds: 100), () {
           _ffi.canvasModel.updateViewStyle();
         });
         break;
@@ -461,6 +458,7 @@ class _RemotePageState extends State<RemotePage>
 class ImagePaint extends StatelessWidget {
   final String id;
   final Rx<bool> cursorOverImage;
+  final Rx<bool> keyboardEnabled;
   final Widget Function(Widget)? listenerBuilder;
   final ScrollController _horizontal = ScrollController();
   final ScrollController _vertical = ScrollController();
@@ -469,6 +467,7 @@ class ImagePaint extends StatelessWidget {
       {Key? key,
       required this.id,
       required this.cursorOverImage,
+      required this.keyboardEnabled,
       this.listenerBuilder})
       : super(key: key);
 
@@ -485,25 +484,26 @@ class ImagePaint extends StatelessWidget {
             painter: ImagePainter(image: m.image, x: 0, y: 0, scale: s),
           ));
       return Center(
-          child: NotificationListener<ScrollNotification>(
-        onNotification: (notification) {
-          final percentX = _horizontal.position.extentBefore /
-              (_horizontal.position.extentBefore +
-                  _horizontal.position.extentInside +
-                  _horizontal.position.extentAfter);
-          final percentY = _vertical.position.extentBefore /
-              (_vertical.position.extentBefore +
-                  _vertical.position.extentInside +
-                  _vertical.position.extentAfter);
-          c.setScrollPercent(percentX, percentY);
-          return false;
-        },
-        child: Obx(() => MouseRegion(
-            cursor: cursorOverImage.value
-                ? SystemMouseCursors.none
-                : SystemMouseCursors.basic,
-            child: _buildCrossScrollbar(_buildListener(imageWidget)))),
-      ));
+        child: NotificationListener<ScrollNotification>(
+          onNotification: (notification) {
+            final percentX = _horizontal.position.extentBefore /
+                (_horizontal.position.extentBefore +
+                    _horizontal.position.extentInside +
+                    _horizontal.position.extentAfter);
+            final percentY = _vertical.position.extentBefore /
+                (_vertical.position.extentBefore +
+                    _vertical.position.extentInside +
+                    _vertical.position.extentAfter);
+            c.setScrollPercent(percentX, percentY);
+            return false;
+          },
+          child: Obx(() => MouseRegion(
+              cursor: (keyboardEnabled.isTrue && cursorOverImage.isTrue)
+                  ? SystemMouseCursors.none
+                  : MouseCursor.defer,
+              child: _buildCrossScrollbar(_buildListener(imageWidget)))),
+        ),
+      );
     } else {
       final imageWidget = SizedBox(
           width: c.size.width,
@@ -562,13 +562,12 @@ class CursorPaint extends StatelessWidget {
     final m = Provider.of<CursorModel>(context);
     final c = Provider.of<CanvasModel>(context);
     // final adjust = m.adjustForKeyboard();
-    var s = c.scale;
     return CustomPaint(
       painter: ImagePainter(
           image: m.image,
-          x: m.x * s - m.hotx + c.x,
-          y: m.y * s - m.hoty + c.y,
-          scale: 1),
+          x: m.x - m.hotx + c.x / c.scale,
+          y: m.y - m.hoty + c.y / c.scale,
+          scale: c.scale),
     );
   }
 }
@@ -620,30 +619,30 @@ class QualityMonitor extends StatelessWidget {
               right: 10,
               child: qualityMonitorModel.show
                   ? Container(
-                      padding: EdgeInsets.all(8),
+                      padding: const EdgeInsets.all(8),
                       color: MyTheme.canvasColor.withAlpha(120),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
                             "Speed: ${qualityMonitorModel.data.speed ?? ''}",
-                            style: TextStyle(color: MyTheme.grayBg),
+                            style: const TextStyle(color: MyTheme.grayBg),
                           ),
                           Text(
                             "FPS: ${qualityMonitorModel.data.fps ?? ''}",
-                            style: TextStyle(color: MyTheme.grayBg),
+                            style: const TextStyle(color: MyTheme.grayBg),
                           ),
                           Text(
                             "Delay: ${qualityMonitorModel.data.delay ?? ''} ms",
-                            style: TextStyle(color: MyTheme.grayBg),
+                            style: const TextStyle(color: MyTheme.grayBg),
                           ),
                           Text(
                             "Target Bitrate: ${qualityMonitorModel.data.targetBitrate ?? ''}kb",
-                            style: TextStyle(color: MyTheme.grayBg),
+                            style: const TextStyle(color: MyTheme.grayBg),
                           ),
                           Text(
                             "Codec: ${qualityMonitorModel.data.codecFormat ?? ''}",
-                            style: TextStyle(color: MyTheme.grayBg),
+                            style: const TextStyle(color: MyTheme.grayBg),
                           ),
                         ],
                       ),

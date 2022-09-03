@@ -522,16 +522,19 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
             }
           }),
       MenuEntryDivider<String>(),
-      MenuEntrySwitch<String>(
-          text: translate('Show remote cursor'),
-          getter: () async {
-            return bind.sessionGetToggleOptionSync(
-                id: widget.id, arg: 'show-remote-cursor');
-          },
-          setter: (bool v) async {
-            await bind.sessionToggleOption(
-                id: widget.id, value: 'show-remote-cursor');
-          }),
+      () {
+        final state = ShowRemoteCursorState.find(widget.id);
+        return MenuEntrySwitch2<String>(
+            text: translate('Show remote cursor'),
+            getter: () {
+              return state;
+            },
+            setter: (bool v) async {
+              state.value = v;
+              await bind.sessionToggleOption(
+                  id: widget.id, value: 'show-remote-cursor');
+            });
+      }(),
       MenuEntrySwitch<String>(
           text: translate('Show quality monitor'),
           getter: () async {
@@ -560,12 +563,12 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
           'Lock after session end', 'lock-after-session-end'));
       if (pi.platform == 'Windows') {
         displayMenu.add(MenuEntrySwitch2<String>(
+            dismissOnClicked: true,
             text: translate('Privacy mode'),
             getter: () {
               return PrivacyModeState.find(widget.id);
             },
             setter: (bool v) async {
-              Navigator.pop(context);
               await bind.sessionToggleOption(
                   id: widget.id, value: 'privacy-mode');
             }));
