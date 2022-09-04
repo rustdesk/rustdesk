@@ -820,10 +820,7 @@ fn legacy_keyboard_mode(evt: &KeyEvent) {
     }
     #[cfg(not(target_os = "macos"))]
     let mut to_release = Vec::new();
-    #[cfg(not(target_os = "macos"))]
-    let mut has_cap = false;
-    #[cfg(windows)]
-    let mut has_numlock = false;
+    
     if evt.down {
         let ck = if let Some(key_event::Union::ControlKey(ck)) = evt.union {
             ck.value()
@@ -846,45 +843,19 @@ fn legacy_keyboard_mode(evt: &KeyEvent) {
                     }
                 }
                 #[cfg(not(target_os = "macos"))]
-                {
-                    if key == &Key::CapsLock {
-                        has_cap = true;
-                    } else if key == &Key::NumLock {
-                        #[cfg(windows)]
-                        {
-                            has_numlock = true;
-                        }
+                if !get_modifier_state(key.clone(), &mut en) {
+                    if *IS_X11.lock().unwrap() {
+                        tfc_key_down_or_up(key.clone(), true, false);
                     } else {
-                        if !get_modifier_state(key.clone(), &mut en) {
-                            if *IS_X11.lock().unwrap() {
-                                tfc_key_down_or_up(key.clone(), true, false);
-                            } else {
-                                en.key_down(key.clone()).ok();
-                            }
-                            modifier_sleep();
-                            to_release.push(key);
-                        }
+                        en.key_down(key.clone()).ok();
                     }
+                    modifier_sleep();
+                    to_release.push(key);
                 }
             }
         }
     }
-    #[cfg(not(target_os = "macos"))]
-    if has_cap != en.get_key_state(Key::CapsLock) {
-        if *IS_X11.lock().unwrap() {
-            tfc_key_down_or_up(Key::CapsLock, true, true);
-        } else {
-            en.key_down(Key::CapsLock).ok();
-            en.key_up(Key::CapsLock);
-        }
-    }
-    #[cfg(windows)]
-    if crate::common::valid_for_numlock(evt) {
-        if has_numlock != en.get_key_state(Key::NumLock) {
-            en.key_down(Key::NumLock).ok();
-            en.key_up(Key::NumLock);
-        }
-    }
+
     match evt.union {
         Some(key_event::Union::ControlKey(ck)) => {
             if let Some(key) = KEY_MAP.get(&ck.value()) {
@@ -978,11 +949,6 @@ fn legacy_keyboard_mode(evt: &KeyEvent) {
         } else {
             en.key_up(key.clone());
         }
-    }
-    #[cfg(windows)]
-    if disable_numlock {
-        en.key_down(Key::NumLock).ok();
-        en.key_up(Key::NumLock);
     }
 }
 

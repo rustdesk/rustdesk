@@ -314,7 +314,7 @@ pub mod service {
 
     fn map_key(key: &enigo::Key) -> ResultType<evdev::Key> {
         if let Some(k) = KEY_MAP.get(&key) {
-            log::info!("mapkey {:?}, get {:?}", &key, &k);
+            log::trace!("mapkey {:?}, get {:?}", &key, &k);
             return Ok(k.clone());
         } else {
             match key {
@@ -351,12 +351,10 @@ pub mod service {
                 // ignore
             }
             DataKeyboard::KeyDown(enigo::Key::Raw(code)) => {
-                log::info!("keycode {:?}", *code - 8);
                 let down_event = InputEvent::new(EventType::KEY, *code - 8, 1);
                 allow_err!(keyboard.emit(&[down_event]));
             }
             DataKeyboard::KeyUp(enigo::Key::Raw(code)) => {
-                log::info!("keycode {:?}", *code - 8);
                 let down_event = InputEvent::new(EventType::KEY, *code - 8, 0);
                 allow_err!(keyboard.emit(&[down_event]));
             }
@@ -388,6 +386,14 @@ pub mod service {
                             false
                         }
                     }
+                } else if enigo::Key::NumLock == *key {
+                    match keyboard.get_led_state() {
+                        Ok(leds) => leds.contains(evdev::LedType::LED_NUML),
+                        Err(_e) => {
+                            // log::debug!("Failed to get led state {}", &_e);
+                            false
+                        }
+                    }
                 } else {
                     match keyboard.get_key_state() {
                         Ok(keys) => match key {
@@ -403,7 +409,6 @@ pub mod service {
                                 keys.contains(evdev::Key::KEY_LEFTALT)
                                     || keys.contains(evdev::Key::KEY_RIGHTALT)
                             }
-                            enigo::Key::NumLock => keys.contains(evdev::Key::KEY_NUMLOCK),
                             enigo::Key::Meta => {
                                 keys.contains(evdev::Key::KEY_LEFTMETA)
                                     || keys.contains(evdev::Key::KEY_RIGHTMETA)
