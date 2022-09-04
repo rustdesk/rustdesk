@@ -8,7 +8,7 @@ use rdev::{simulate, EventType, Key as RdevKey};
 use std::{
     convert::TryFrom,
     sync::atomic::{AtomicBool, Ordering},
-    time::Instant
+    time::Instant,
 };
 use tfc::{traits::*, Context as TFC_Context, Key as TFC_Key};
 
@@ -648,6 +648,30 @@ fn map_keyboard_mode(evt: &KeyEvent) {
     // map mode(1): Send keycode according to the peer platform.
     let (click_capslock, click_numlock) = sync_status(evt);
 
+    // Wayland
+    if !*IS_X11.lock().unwrap() {
+        let mut en = ENIGO.lock().unwrap();
+        let code = evt.chr() as u16;
+
+        #[cfg(not(target_os = "macos"))]
+        if click_capslock {
+            en.key_click(enigo::Key::CapsLock);
+        }
+        #[cfg(not(target_os = "macos"))]
+        if click_numlock {
+            en.key_click(enigo::Key::NumLock);
+        }
+        #[cfg(target_os = "macos")]
+        en.key_down(enigo::Key::CapsLock);
+
+        if evt.down {
+            en.key_down(enigo::Key::Raw(code));
+        } else {
+            en.key_up(enigo::Key::Raw(code));
+        }
+        return;
+    }
+
     #[cfg(not(target_os = "macos"))]
     if click_capslock {
         rdev_key_click(RdevKey::CapsLock);
@@ -660,11 +684,6 @@ fn map_keyboard_mode(evt: &KeyEvent) {
     if evt.down && click_capslock {
         rdev_key_down_or_up(RdevKey::CapsLock, evt.down);
     }
-    log::info!(
-        "click capslog {:?} click_numlock {:?}",
-        click_capslock,
-        click_numlock
-    );
 
     rdev_key_down_or_up(RdevKey::Unknown(evt.chr()), evt.down);
     return;

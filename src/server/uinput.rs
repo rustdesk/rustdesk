@@ -314,7 +314,7 @@ pub mod service {
 
     fn map_key(key: &enigo::Key) -> ResultType<evdev::Key> {
         if let Some(k) = KEY_MAP.get(&key) {
-            log::trace!("mapkey {:?}, get {:?}", &key, &k);
+            log::info!("mapkey {:?}, get {:?}", &key, &k);
             return Ok(k.clone());
         } else {
             match key {
@@ -349,6 +349,16 @@ pub mod service {
         match data {
             DataKeyboard::Sequence(_seq) => {
                 // ignore
+            }
+            DataKeyboard::KeyDown(enigo::Key::Raw(code)) => {
+                log::info!("keycode {:?}", *code - 8);
+                let down_event = InputEvent::new(EventType::KEY, *code - 8, 1);
+                allow_err!(keyboard.emit(&[down_event]));
+            }
+            DataKeyboard::KeyUp(enigo::Key::Raw(code)) => {
+                log::info!("keycode {:?}", *code - 8);
+                let down_event = InputEvent::new(EventType::KEY, *code - 8, 0);
+                allow_err!(keyboard.emit(&[down_event]));
             }
             DataKeyboard::KeyDown(key) => {
                 if let Ok(k) = map_key(key) {
