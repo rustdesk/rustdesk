@@ -4993,7 +4993,7 @@ checksum = "b1141d4d61095b28419e22cb0bbf02755f5e54e0526f97f1e3d1d160e60885fb"
 [[package]]
 name = "tfc"
 version = "0.6.1"
-source = "git+https://github.com/asur4s/The-Fat-Controller#a091f887edc2440b17d86c9ba580f2f35ce0cfcc"
+source = "git+https://github.com/asur4s/The-Fat-Controller#48303c5dacded6ea1873bc5d69bdde3175cf336a"
 dependencies = [
  "core-graphics 0.22.3",
  "unicode-segmentation",

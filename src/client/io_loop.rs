@@ -5,6 +5,13 @@ use crate::client::{
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use crate::common::{check_clipboard, update_clipboard, ClipboardContext, CLIPBOARD_INTERVAL};
 
+#[cfg(windows)]
+use clipboard::{
+    cliprdr::CliprdrClientContext, create_cliprdr_context as create_clipboard_file_context,
+    get_rx_clip_client, server_clip_file,
+};
+#[cfg(windows)]
+use crate::clipboard_file::*;
 use crate::ui_session_interface::{InvokeUi, Session};
 use crate::{client::Data, client::Interface};
 

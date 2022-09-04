@@ -26,6 +26,8 @@ use std::sync::{Arc, Mutex, RwLock};
 pub static IS_IN: AtomicBool = AtomicBool::new(false);
 static KEYBOARD_HOOKED: AtomicBool = AtomicBool::new(false);
 
+#[cfg(windows)]
+static mut IS_ALT_GR: bool = false;
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 lazy_static::lazy_static! {
