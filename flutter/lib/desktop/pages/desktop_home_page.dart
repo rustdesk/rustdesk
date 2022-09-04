@@ -93,8 +93,8 @@ class _DesktopHomePageState extends State<DesktopHomePage>
   buildIDBoard(BuildContext context) {
     final model = gFFI.serverModel;
     return Container(
-      margin: const EdgeInsets.only(left: 20, right: 16),
-      height: 52,
+      margin: const EdgeInsets.only(left: 20, right: 11),
+      height: 57,
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.baseline,
         textBaseline: TextBaseline.alphabetic,
@@ -102,10 +102,10 @@ class _DesktopHomePageState extends State<DesktopHomePage>
           Container(
             width: 2,
             decoration: const BoxDecoration(color: MyTheme.accent),
-          ),
+          ).marginOnly(top: 5),
           Expanded(
             child: Padding(
-              padding: const EdgeInsets.only(left: 8.0),
+              padding: const EdgeInsets.only(left: 7),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -120,7 +120,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
                           style: TextStyle(
                               fontSize: 14,
                               color: MyTheme.color(context).lightText),
-                        ),
+                        ).marginOnly(top: 5),
                         buildPopupMenu(context)
                       ],
                     ),
@@ -137,7 +137,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
                         readOnly: true,
                         decoration: const InputDecoration(
                           border: InputBorder.none,
-                          contentPadding: EdgeInsets.only(bottom: 18),
+                          contentPadding: EdgeInsets.only(bottom: 20),
                         ),
                         style: const TextStyle(
                           fontSize: 22,
@@ -244,7 +244,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
       },
       child: Obx(
         () => CircleAvatar(
-          radius: 12,
+          radius: 15,
           backgroundColor: hover.value
               ? MyTheme.color(context).grayBg!
               : MyTheme.color(context).bg!,
@@ -277,7 +277,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
           ),
           Expanded(
             child: Padding(
-              padding: const EdgeInsets.only(left: 8.0),
+              padding: const EdgeInsets.only(left: 7),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -303,7 +303,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
                             readOnly: true,
                             decoration: InputDecoration(
                               border: InputBorder.none,
-                              contentPadding: EdgeInsets.only(bottom: 8),
+                              contentPadding: EdgeInsets.only(bottom: 2),
                             ),
                             style: TextStyle(fontSize: 15),
                           ),
@@ -317,7 +317,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
                                 ? MyTheme.color(context).text
                                 : Color(0xFFDDDDDD),
                             size: 22,
-                          ).marginOnly(right: 10, bottom: 8),
+                          ).marginOnly(right: 8, bottom: 2),
                         ),
                         onTap: () => bind.mainUpdateTemporaryPassword(),
                         onHover: (value) => refreshHover.value = value,
@@ -425,13 +425,13 @@ class _DesktopHomePageState extends State<DesktopHomePage>
                 color: editHover.value
                     ? MyTheme.color(context).text
                     : Color(0xFFDDDDDD))
-            .marginOnly(bottom: 8)));
+            .marginOnly(bottom: 2)));
   }
 
   buildTip(BuildContext context) {
     return Padding(
       padding:
-          const EdgeInsets.only(left: 20.0, right: 16, top: 16.0, bottom: 14),
+          const EdgeInsets.only(left: 20.0, right: 16, top: 16.0, bottom: 5),
       child: Column(
         mainAxisAlignment: MainAxisAlignment.start,
         crossAxisAlignment: CrossAxisAlignment.start,

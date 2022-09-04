@@ -48,7 +48,7 @@ class _PeerCard extends StatefulWidget {
 class _PeerCardState extends State<_PeerCard>
     with AutomaticKeepAliveClientMixin {
   var _menuPos = RelativeRect.fill;
-  final double _cardRadis = 20;
+  final double _cardRadis = 16;
   final double _borderWidth = 2;
   final RxBool _iconMoreHover = false.obs;
 

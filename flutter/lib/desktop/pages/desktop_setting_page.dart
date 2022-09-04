@@ -49,7 +49,7 @@ class _DesktopSettingPageState extends State<DesktopSettingPage>
         'Display', Icons.desktop_windows_outlined, Icons.desktop_windows_sharp),
     _TabInfo('Audio', Icons.volume_up_outlined, Icons.volume_up_sharp),
     _TabInfo('Connection', Icons.link_outlined, Icons.link_sharp),
-    _TabInfo('About RustDesk', Icons.info_outline, Icons.info_sharp)
+    _TabInfo('About', Icons.info_outline, Icons.info_sharp)
   ];
 
   late PageController controller;
@@ -714,7 +714,7 @@ class _AboutState extends State<_About> {
             ],
           ).marginOnly(left: _kContentHMargin)
         ]),
-      ]).marginOnly(left: _kCardLeftMargin);
+      ]);
     });
   }
 }
