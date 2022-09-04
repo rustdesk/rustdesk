@@ -722,3 +722,12 @@ pub fn get_keyboard_mode() -> String {
 pub fn save_keyboard_mode(value: String) {
     std::env::set_var("KEYBOARD_MODE", value);
 }
+
+lazy_static::lazy_static! {
+    pub static ref IS_X11: Mutex<bool> = {
+        #[cfg(not(target_os = "linux"))]
+        Mutex::new("x11" == hbb_common::platform::linux::get_display_server())
+        #[cfg(not(target_os = "linux"))]
+        false
+    };
+}

@@ -156,7 +156,7 @@ impl Client {
             }
             Ok(x) => {
                 #[cfg(target_os = "linux")]
-                if !*IS_X11.lock().unwrap() {
+                if !*crate::common::IS_X11.lock().unwrap() {
                     let keyboard = super::uinput::client::UInputKeyboard::new().await?;
                     log::info!("UInput keyboard created");
                     let mouse = super::uinput::client::UInputMouse::new().await?;

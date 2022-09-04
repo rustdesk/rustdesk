@@ -2,7 +2,7 @@ use super::*;
 #[cfg(target_os = "macos")]
 use dispatch::Queue;
 use enigo::{Enigo, Key, KeyboardControllable, MouseButton, MouseControllable};
-use hbb_common::platform::linux::IS_X11;
+use crate::common::IS_X11;
 use hbb_common::{config::COMPRESS_LEVEL, protobuf::EnumOrUnknown};
 use rdev::{simulate, EventType, Key as RdevKey};
 use std::{
