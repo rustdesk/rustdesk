@@ -711,3 +711,14 @@ pub fn make_fd_flutter(id: i32, entries: &Vec<FileEntry>, only_count: bool) -> S
     m.insert("total_size".into(), json!(n as f64));
     serde_json::to_string(&m).unwrap_or("".into())
 }
+
+
+pub fn get_keyboard_mode() -> String {
+    return std::env::var("KEYBOARD_MODE")
+        .unwrap_or(String::from("legacy"))
+        .to_lowercase();
+}
+
+pub fn save_keyboard_mode(value: String) {
+    std::env::set_var("KEYBOARD_MODE", value);
+}

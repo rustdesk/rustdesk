@@ -1,3 +1,4 @@
+use crate::common::{get_keyboard_mode, save_keyboard_mode};
 use std::{
     collections::HashMap,
     ops::{Deref, DerefMut},

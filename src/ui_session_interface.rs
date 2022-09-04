@@ -7,6 +7,7 @@ use crate::client::{
     QualityStatus, KEY_MAP, SERVER_KEYBOARD_ENABLED,
 };
 use crate::{client::Data, client::Interface};
+use crate::common::{get_keyboard_mode, save_keyboard_mode};
 use async_trait::async_trait;
 
 use hbb_common::config::{Config, LocalConfig, PeerConfig};
@@ -58,13 +59,11 @@ impl<T: InvokeUi> Session<T> {
     }
 
     pub fn get_keyboard_mode(&self) -> String {
-        return std::env::var("KEYBOARD_MODE")
-            .unwrap_or(String::from("legacy"))
-            .to_lowercase();
+        return get_keyboard_mode();
     }
 
     pub fn save_keyboard_mode(&self, value: String) {
-        std::env::set_var("KEYBOARD_MODE", value);
+        save_keyboard_mode(value);
     }
 
     pub fn save_view_style(&mut self, value: String) {
