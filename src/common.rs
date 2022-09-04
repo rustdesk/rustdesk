@@ -725,9 +725,9 @@ pub fn save_keyboard_mode(value: String) {
 
 lazy_static::lazy_static! {
     pub static ref IS_X11: Mutex<bool> = {
+        #[cfg(target_os = "linux")]
+        Mutex::new("x11" == hbb_common::platform::linux::get_display_server());
         #[cfg(not(target_os = "linux"))]
-        Mutex::new("x11" == hbb_common::platform::linux::get_display_server())
-        #[cfg(not(target_os = "linux"))]
-        false
+        Mutex::new(false)
     };
 }
