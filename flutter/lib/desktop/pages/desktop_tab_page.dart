@@ -48,17 +48,11 @@ class _DesktopTabPageState extends State<DesktopTabPage> {
                   backgroundColor: MyTheme.color(context).bg,
                   body: DesktopTab(
                     controller: tabController,
-                    theme: dark
-                        ? const TarBarTheme.dark()
-                        : const TarBarTheme.light(),
                     tail: ActionIcon(
                       message: 'Settings',
                       icon: IconFont.menu,
-                      theme: dark
-                          ? const TarBarTheme.dark()
-                          : const TarBarTheme.light(),
                       onTap: onAddSetting,
-                      is_close: false,
+                      isClose: false,
                     ),
                   ));
             })

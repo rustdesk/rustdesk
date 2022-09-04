@@ -83,7 +83,6 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = isDarkTheme() ? TarBarTheme.dark() : TarBarTheme.light();
     final RxBool fullscreen = Get.find(tag: 'fullscreen');
     return Obx(() => SubWindowDragToResizeArea(
           resizeEdgeSize: fullscreen.value ? 1.0 : 8.0,
@@ -95,14 +94,11 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
                 backgroundColor: MyTheme.color(context).bg,
                 body: Obx(() => DesktopTab(
                       controller: tabController,
-                      theme: theme,
                       showTabBar: fullscreen.isFalse,
                       onClose: () {
                         tabController.clear();
                       },
-                      tail: AddButton(
-                        theme: theme,
-                      ).paddingOnly(left: 10),
+                      tail: AddButton().paddingOnly(left: 10),
                       pageViewBuilder: (pageView) {
                         WindowController.fromWindowId(windowId())
                             .setFullscreen(fullscreen.isTrue);

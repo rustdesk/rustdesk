@@ -118,7 +118,6 @@ class ConnectionManagerState extends State<ConnectionManager> {
             ],
           )
         : DesktopTab(
-            theme: isDarkTheme() ? TarBarTheme.dark() : TarBarTheme.light(),
             showTitle: false,
             showMaximize: false,
             showMinimize: true,

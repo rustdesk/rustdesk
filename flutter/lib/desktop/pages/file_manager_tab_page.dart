@@ -62,8 +62,6 @@ class _FileManagerTabPageState extends State<FileManagerTabPage> {
 
   @override
   Widget build(BuildContext context) {
-    final theme =
-        isDarkTheme() ? const TarBarTheme.dark() : const TarBarTheme.light();
     return SubWindowDragToResizeArea(
       windowId: windowId(),
       child: Container(
@@ -73,13 +71,10 @@ class _FileManagerTabPageState extends State<FileManagerTabPage> {
             backgroundColor: MyTheme.color(context).bg,
             body: DesktopTab(
               controller: tabController,
-              theme: theme,
               onClose: () {
                 tabController.clear();
               },
-              tail: AddButton(
-                theme: theme,
-              ).paddingOnly(left: 10),
+              tail: AddButton().paddingOnly(left: 10),
             )),
       ),
     );

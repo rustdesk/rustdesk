@@ -155,7 +155,7 @@ class MyTheme {
     brightness: Brightness.light,
     primarySwatch: Colors.blue,
     visualDensity: VisualDensity.adaptivePlatformDensity,
-    tabBarTheme: TabBarTheme(
+    tabBarTheme: const TabBarTheme(
       labelColor: Colors.black87,
     ),
     splashColor: Colors.transparent,
@@ -163,13 +163,14 @@ class MyTheme {
   ).copyWith(
     extensions: <ThemeExtension<dynamic>>[
       ColorThemeExtension.light,
+      TabbarTheme.light,
     ],
   );
   static ThemeData darkTheme = ThemeData(
     brightness: Brightness.dark,
     primarySwatch: Colors.blue,
     visualDensity: VisualDensity.adaptivePlatformDensity,
-    tabBarTheme: TabBarTheme(
+    tabBarTheme: const TabBarTheme(
       labelColor: Colors.white70,
     ),
     splashColor: Colors.transparent,
@@ -177,11 +178,16 @@ class MyTheme {
   ).copyWith(
     extensions: <ThemeExtension<dynamic>>[
       ColorThemeExtension.dark,
+      TabbarTheme.dark,
     ],
   );
 
   static ColorThemeExtension color(BuildContext context) {
     return Theme.of(context).extension<ColorThemeExtension>()!;
+  }
+
+  static TabbarTheme tabbar(BuildContext context) {
+    return Theme.of(context).extension<TabbarTheme>()!;
   }
 }
 
