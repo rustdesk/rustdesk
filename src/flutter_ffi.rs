@@ -754,7 +754,7 @@ pub fn main_set_home_dir(home: String) {
 pub fn main_stop_service() {
     #[cfg(target_os = "android")]
     {
-        Config::set_option("stop-service".into(), "Y".into());
+        config::Config::set_option("stop-service".into(), "Y".into());
         crate::rendezvous_mediator::RendezvousMediator::restart();
     }
 }
@@ -762,7 +762,7 @@ pub fn main_stop_service() {
 pub fn main_start_service() {
     #[cfg(target_os = "android")]
     {
-        Config::set_option("stop-service".into(), "".into());
+        config::Config::set_option("stop-service".into(), "".into());
         crate::rendezvous_mediator::RendezvousMediator::restart();
     }
     #[cfg(not(target_os = "android"))]

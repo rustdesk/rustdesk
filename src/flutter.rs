@@ -340,6 +340,7 @@ pub fn session_start_(id: &str, event_stream: StreamSink<EventToUI>) -> ResultTy
 pub mod connection_manager {
     use std::collections::HashMap;
 
+    use hbb_common::log;
     #[cfg(any(target_os = "android"))]
     use scrap::android::call_main_service_set_by_name;
 
@@ -410,9 +411,18 @@ pub mod connection_manager {
     }
 
     #[cfg(target_os = "android")]
-    pub fn start_channel(rx: UnboundedReceiver<Data>, tx: UnboundedSender<Data>) {
+    use hbb_common::tokio::sync::mpsc::{UnboundedReceiver,UnboundedSender};
+
+    #[cfg(target_os = "android")]
+    pub fn start_channel(
+        rx: UnboundedReceiver<crate::ipc::Data>,
+        tx: UnboundedSender<crate::ipc::Data>,
+    ) {
         use crate::ui_cm_interface::start_listen;
-        std::thread::spawn(move || start_listen(rx, tx));
+        let cm = crate::ui_cm_interface::ConnectionManager {
+            ui_handler: FlutterHandler {},
+        };
+        std::thread::spawn(move || start_listen(cm, rx, tx));
     }
 }
 

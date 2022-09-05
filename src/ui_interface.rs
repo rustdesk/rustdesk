@@ -372,10 +372,11 @@ pub fn get_mouse_time() -> f64 {
     return res;
 }
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub fn check_mouse_time() {
-    let sender = SENDER.lock().unwrap();
-    allow_err!(sender.send(ipc::Data::MouseMoveTime(0)));
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]{
+        let sender = SENDER.lock().unwrap();
+        allow_err!(sender.send(ipc::Data::MouseMoveTime(0)));
+    }
 }
 
 pub fn get_connect_status() -> Status {

@@ -114,13 +114,17 @@ impl<T: InvokeUiCM> ConnectionManager<T> {
         CLIENTS.write().unwrap().remove(&id);
 
         #[cfg(any(target_os = "android"))]
-        if clients
+        if CLIENTS
+            .read()
+            .unwrap()
             .iter()
             .filter(|(_k, v)| !v.is_file_transfer)
             .next()
             .is_none()
         {
-            if let Err(e) = call_main_service_set_by_name("stop_capture", None, None) {
+            if let Err(e) =
+                scrap::android::call_main_service_set_by_name("stop_capture", None, None)
+            {
                 log::debug!("stop_capture err:{}", e);
             }
         }
@@ -312,7 +316,7 @@ pub async fn start_ipc<T: InvokeUiCM>(cm: ConnectionManager<T>) {
 
 #[cfg(target_os = "android")]
 #[tokio::main(flavor = "current_thread")]
-pub async fn start_listen(mut rx: UnboundedReceiver<Data>, tx: UnboundedSender<Data>) {
+pub async fn start_listen<T: InvokeUiCM>(cm: ConnectionManager<T>, mut rx: mpsc::UnboundedReceiver<Data>, tx: mpsc::UnboundedSender<Data>) {
     let mut current_id = 0;
     let mut write_jobs: Vec<fs::TransferJob> = Vec::new();
     loop {
@@ -332,7 +336,7 @@ pub async fn start_listen(mut rx: UnboundedReceiver<Data>, tx: UnboundedSender<D
                 ..
             }) => {
                 current_id = id;
-                on_login(
+                cm.add_connection(
                     id,
                     is_file_transfer,
                     port_forward,
@@ -348,7 +352,7 @@ pub async fn start_listen(mut rx: UnboundedReceiver<Data>, tx: UnboundedSender<D
                 );
             }
             Some(Data::ChatMessage { text }) => {
-                cm.new_message(conn_id, text);
+                cm.new_message(current_id, text);
             }
             Some(Data::FS(fs)) => {
                 handle_fs(fs, &mut write_jobs, &tx).await;
@@ -362,7 +366,7 @@ pub async fn start_listen(mut rx: UnboundedReceiver<Data>, tx: UnboundedSender<D
             _ => {}
         }
     }
-    remove_connection(current_id);
+    cm.remove_connection(current_id);
 }
 
 async fn handle_fs(fs: ipc::FS, write_jobs: &mut Vec<fs::TransferJob>, tx: &UnboundedSender<Data>) {
