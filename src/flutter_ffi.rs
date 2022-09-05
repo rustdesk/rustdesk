@@ -247,6 +247,16 @@ pub fn session_handle_flutter_key_event(
     }
 }
 
+pub fn session_enter_or_leave(id: String, enter: bool) {
+    if let Some(session) = SESSIONS.read().unwrap().get(&id) {
+        if enter {
+            session.enter();
+        } else {
+            session.leave();
+        }
+    }
+}
+
 pub fn session_input_key(
     id: String,
     name: String,

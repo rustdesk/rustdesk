@@ -1003,6 +1003,10 @@ class FFI {
         downOrUp: down);
   }
 
+  void enterOrLeave(bool enter) {
+    bind.sessionEnterOrLeave(id: id, enter: enter);
+  }
+
   /// Send key stroke event.
   /// [down] indicates the key's state(down or up).
   /// [press] indicates a click event(down and up).

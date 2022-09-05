@@ -517,6 +517,19 @@ class _RemotePageState extends State<RemotePage>
     }
   }
 
+  void enterView(PointerEnterEvent evt) {
+    if (!_imageFocused) {
+      _physicalFocusNode.requestFocus();
+    }
+    _cursorOverImage.value = true;
+    _ffi.enterOrLeave(true);
+  }
+
+  void leaveView(PointerExitEvent evt) {
+    _cursorOverImage.value = false;
+    _ffi.enterOrLeave(false);
+  }
+
   Widget _buildImageListener(Widget child) {
     return Listener(
         onPointerHover: _onPointHoverImage,
@@ -525,15 +538,8 @@ class _RemotePageState extends State<RemotePage>
         onPointerMove: _onPointMoveImage,
         onPointerSignal: _onPointerSignalImage,
         child: MouseRegion(
-            onEnter: (evt) {
-              if (!_imageFocused) {
-                _physicalFocusNode.requestFocus();
-              }
-              _cursorOverImage.value = true;
-            },
-            onExit: (evt) {
-              _cursorOverImage.value = false;
-            },
+            onEnter: enterView,
+            onExit: leaveView,
             child: child));
   }
 
