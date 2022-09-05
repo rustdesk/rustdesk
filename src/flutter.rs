@@ -5,7 +5,10 @@ use std::{
 
 use flutter_rust_bridge::{StreamSink, ZeroCopyBuffer};
 
-use hbb_common::{bail, config::LocalConfig, message_proto::*, ResultType, rendezvous_proto::ConnType};
+use hbb_common::{
+    bail, config::LocalConfig, message_proto::*, rendezvous_proto::ConnType, ResultType,
+};
+use serde_json::json;
 
 use crate::ui_session_interface::{io_loop, InvokeUi, Session};
 
@@ -85,6 +88,7 @@ impl InvokeUi for FlutterHandler {
         self.push_event("permission", vec![(name, &value.to_string())]);
     }
 
+    // unused in flutter
     fn close_success(&self) {}
 
     fn update_quality_status(&self, status: QualityStatus) {
@@ -118,7 +122,14 @@ impl InvokeUi for FlutterHandler {
     }
 
     fn job_error(&self, id: i32, err: String, file_num: i32) {
-        self.push_event("job_error", vec![("id", &id.to_string()), ("err", &err)]);
+        self.push_event(
+            "job_error",
+            vec![
+                ("id", &id.to_string()),
+                ("err", &err),
+                ("file_num", &file_num.to_string()),
+            ],
+        );
     }
 
     fn job_done(&self, id: i32, file_num: i32) {
@@ -128,29 +139,43 @@ impl InvokeUi for FlutterHandler {
         );
     }
 
-    fn clear_all_jobs(&self) {
-        // todo!()
+    // unused in flutter
+    fn clear_all_jobs(&self) {}
+
+    fn load_last_job(&self, _cnt: i32, job_json: &str) {
+        self.push_event("load_last_job", vec![("value", job_json)]);
     }
 
-    fn add_job(
+    fn update_folder_files(
         &self,
         id: i32,
+        entries: &Vec<FileEntry>,
         path: String,
-        to: String,
-        file_num: i32,
-        show_hidden: bool,
-        is_remote: bool,
+        is_local: bool,
+        only_count: bool,
     ) {
-        // todo!()
+        // TODO opt
+        if only_count {
+            self.push_event(
+                "update_folder_files",
+                vec![("info", &make_fd_flutter(id, entries, only_count))],
+            );
+        } else {
+            self.push_event(
+                "file_dir",
+                vec![
+                    ("value", &make_fd_to_json(id, path, entries)),
+                    ("is_local", "false"),
+                ],
+            );
+        }
     }
 
-    fn update_transfer_list(&self) {
-        // todo!()
-    }
+    // unused in flutter
+    fn update_transfer_list(&self) {}
 
-    fn confirm_delete_files(&self, id: i32, i: i32, name: String) {
-        // todo!()
-    }
+    // unused in flutter // TEST flutter
+    fn confirm_delete_files(&self, _id: i32, _i: i32, _name: String) {}
 
     fn override_file_confirm(&self, id: i32, file_num: i32, to: String, is_upload: bool) {
         self.push_event(
@@ -176,6 +201,7 @@ impl InvokeUi for FlutterHandler {
         );
     }
 
+    // unused in flutter
     fn adapt_size(&self) {}
 
     fn on_rgba(&self, data: &[u8]) {
@@ -283,11 +309,7 @@ pub fn session_add(id: &str, is_file_transfer: bool, is_port_forward: bool) -> R
         .unwrap()
         .initialize(session_id, conn_type);
 
-    if let Some(same_id_session) = SESSIONS
-        .write()
-        .unwrap()
-        .insert(id.to_owned(), session)
-    {
+    if let Some(same_id_session) = SESSIONS.write().unwrap().insert(id.to_owned(), session) {
         same_id_session.close();
     }
 
@@ -946,30 +968,47 @@ pub fn get_session_id(id: String) -> String {
     };
 }
 
-// async fn start_one_port_forward(
-//     handler: Session,
-//     port: i32,
-//     remote_host: String,
-//     remote_port: i32,
-//     receiver: mpsc::UnboundedReceiver<Data>,
-//     key: &str,
-//     token: &str,
-// ) {
-//     if let Err(err) = crate::port_forward::listen(
-//         handler.id.clone(),
-//         String::new(), // TODO
-//         port,
-//         handler.clone(),
-//         receiver,
-//         key,
-//         token,
-//         handler.lc.clone(),
-//         remote_host,
-//         remote_port,
-//     )
-//     .await
-//     {
-//         handler.on_error(&format!("Failed to listen on {}: {}", port, err));
-//     }
-//     log::info!("port forward (:{}) exit", port);
-// }
+pub fn make_fd_to_json(id: i32, path: String, entries: &Vec<FileEntry>) -> String {
+    let mut fd_json = serde_json::Map::new();
+    fd_json.insert("id".into(), json!(id));
+    fd_json.insert("path".into(), json!(path));
+
+    let mut entries_out = vec![];
+    for entry in entries {
+        let mut entry_map = serde_json::Map::new();
+        entry_map.insert("entry_type".into(), json!(entry.entry_type.value()));
+        entry_map.insert("name".into(), json!(entry.name));
+        entry_map.insert("size".into(), json!(entry.size));
+        entry_map.insert("modified_time".into(), json!(entry.modified_time));
+        entries_out.push(entry_map);
+    }
+    fd_json.insert("entries".into(), json!(entries_out));
+    serde_json::to_string(&fd_json).unwrap_or("".into())
+}
+
+pub fn make_fd_flutter(id: i32, entries: &Vec<FileEntry>, only_count: bool) -> String {
+    let mut m = serde_json::Map::new();
+    m.insert("id".into(), json!(id));
+    let mut a = vec![];
+    let mut n: u64 = 0;
+    for entry in entries {
+        n += entry.size;
+        if only_count {
+            continue;
+        }
+        let mut e = serde_json::Map::new();
+        e.insert("name".into(), json!(entry.name.to_owned()));
+        let tmp = entry.entry_type.value();
+        e.insert("type".into(), json!(if tmp == 0 { 1 } else { tmp }));
+        e.insert("time".into(), json!(entry.modified_time as f64));
+        e.insert("size".into(), json!(entry.size as f64));
+        a.push(e);
+    }
+    if only_count {
+        m.insert("num_entries".into(), json!(entries.len() as i32));
+    } else {
+        m.insert("entries".into(), json!(a));
+    }
+    m.insert("total_size".into(), json!(n as f64));
+    serde_json::to_string(&m).unwrap_or("".into())
+}

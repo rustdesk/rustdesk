@@ -1,11 +1,11 @@
-use crate::client::io_loop::Remote;
-use crate::client::{
-    check_if_retry, handle_hash, handle_login_from_ui, handle_test_delay,
-    input_os_password, load_config, send_mouse, start_video_audio_threads, FileManager, Key,
-    LoginConfigHandler, QualityStatus, KEY_MAP, SERVER_KEYBOARD_ENABLED,
-};
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use crate::client::get_key_state;
+use crate::client::io_loop::Remote;
+use crate::client::{
+    check_if_retry, handle_hash, handle_login_from_ui, handle_test_delay, input_os_password,
+    load_config, send_mouse, start_video_audio_threads, FileManager, Key, LoginConfigHandler,
+    QualityStatus, KEY_MAP, SERVER_KEYBOARD_ENABLED,
+};
 use crate::common;
 use crate::{client::Data, client::Interface};
 use async_trait::async_trait;
@@ -19,7 +19,7 @@ use hbb_common::{allow_err, message_proto::*};
 use hbb_common::{fs, get_version_number, log, Stream};
 use std::collections::HashMap;
 use std::ops::{Deref, DerefMut};
-use std::sync::atomic::{AtomicUsize, Ordering, AtomicBool};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, RwLock};
 
 /// IS_IN KEYBOARD_HOOKED sciter only
@@ -556,18 +556,17 @@ pub trait InvokeUi: Send + Sync + Clone + 'static + Sized + Default {
     fn job_error(&self, id: i32, err: String, file_num: i32);
     fn job_done(&self, id: i32, file_num: i32);
     fn clear_all_jobs(&self);
-    fn add_job(
-        &self,
-        id: i32,
-        path: String,
-        to: String,
-        file_num: i32,
-        show_hidden: bool,
-        is_remote: bool,
-    );
     fn new_message(&self, msg: String);
     fn update_transfer_list(&self);
-    // fn update_folder_files(&self); // TODO flutter with file_dir and update_folder_files
+    fn load_last_job(&self, cnt: i32, job_json: &str);
+    fn update_folder_files(
+        &self,
+        id: i32,
+        entries: &Vec<FileEntry>,
+        path: String,
+        is_local: bool,
+        only_count: bool,
+    );
     fn confirm_delete_files(&self, id: i32, i: i32, name: String);
     fn override_file_confirm(&self, id: i32, file_num: i32, to: String, is_upload: bool);
     fn update_block_input_state(&self, on: bool);
@@ -604,11 +603,19 @@ impl<T: InvokeUi> Interface for Session<T> {
     }
 
     fn is_file_transfer(&self) -> bool {
-        self.lc.read().unwrap().conn_type.eq(&ConnType::FILE_TRANSFER)
+        self.lc
+            .read()
+            .unwrap()
+            .conn_type
+            .eq(&ConnType::FILE_TRANSFER)
     }
 
     fn is_port_forward(&self) -> bool {
-        self.lc.read().unwrap().conn_type.eq(&ConnType::PORT_FORWARD)
+        self.lc
+            .read()
+            .unwrap()
+            .conn_type
+            .eq(&ConnType::PORT_FORWARD)
     }
 
     fn is_rdp(&self) -> bool {

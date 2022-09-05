@@ -5,16 +5,14 @@ use std::{
 };
 
 use flutter_rust_bridge::{StreamSink, SyncReturn, ZeroCopyBuffer};
-use serde_json::{json, Number, Value};
+use serde_json::json;
 
+use hbb_common::ResultType;
 use hbb_common::{
-    config::{self, Config, LocalConfig, PeerConfig, ONLINE},
+    config::{self, LocalConfig, PeerConfig, ONLINE},
     fs, log,
 };
-use hbb_common::{password_security, ResultType};
 
-use crate::{client::file_trait::FileManager, flutter::{session_add, session_start_}};
-use crate::common::make_fd_to_json;
 use crate::flutter::connection_manager::{self, get_clients_length, get_clients_state};
 use crate::flutter::{self, SESSIONS};
 use crate::start_server;
@@ -29,6 +27,10 @@ use crate::ui_interface::{
     has_rendezvous_service, post_request, set_local_option, set_option, set_options,
     set_peer_option, set_permanent_password, set_socks, store_fav, test_if_valid_server,
     update_temporary_password, using_public_server,
+};
+use crate::{
+    client::file_trait::FileManager,
+    flutter::{make_fd_to_json, session_add, session_start_},
 };
 
 fn initialize(app_dir: &str) {
@@ -110,7 +112,11 @@ pub fn host_stop_system_key_propagate(stopped: bool) {
 
 // FIXME: -> ResultType<()> cannot be parsed by frb_codegen
 // thread 'main' panicked at 'Failed to parse function output type `ResultType<()>`', $HOME\.cargo\git\checkouts\flutter_rust_bridge-ddba876d3ebb2a1e\e5adce5\frb_codegen\src\parser\mod.rs:151:25
-pub fn session_add_sync(id: String, is_file_transfer: bool, is_port_forward: bool) -> SyncReturn<String> {
+pub fn session_add_sync(
+    id: String,
+    is_file_transfer: bool,
+    is_port_forward: bool,
+) -> SyncReturn<String> {
     if let Err(e) = session_add(&id, is_file_transfer, is_port_forward) {
         SyncReturn(format!("Failed to add session with id {}, {}", &id, e))
     } else {
@@ -346,10 +352,8 @@ pub fn session_create_dir(id: String, act_id: i32, path: String, is_remote: bool
 }
 
 pub fn session_read_local_dir_sync(id: String, path: String, show_hidden: bool) -> String {
-    if let Some(session) = SESSIONS.read().unwrap().get(&id) {
-        if let Ok(fd) = fs::read_dir(&fs::get_path(&path), show_hidden) {
-            return make_fd_to_json(fd);
-        }
+    if let Ok(fd) = fs::read_dir(&fs::get_path(&path), show_hidden) {
+        return make_fd_to_json(fd.id, path, &fd.entries);
     }
     "".to_string()
 }
