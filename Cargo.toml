@@ -76,8 +76,6 @@ sys-locale = "0.2"
 enigo = { path = "libs/enigo", features = [ "with_serde" ] }
 clipboard = { path = "libs/clipboard" }
 rdev = { git = "https://github.com/asur4s/rdev" }
-tfc = { git = "https://github.com/asur4s/The-Fat-Controller" }
-once_cell = "1.13.0"
 ctrlc = "3.2"
 arboard = "2.0"
 #minreq = { version = "2.4", features = ["punycode", "https-native"] }

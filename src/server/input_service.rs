@@ -1,8 +1,8 @@
 use super::*;
+use crate::common::IS_X11;
 #[cfg(target_os = "macos")]
 use dispatch::Queue;
 use enigo::{Enigo, Key, KeyboardControllable, MouseButton, MouseControllable};
-use crate::common::IS_X11;
 use hbb_common::{config::COMPRESS_LEVEL, protobuf::EnumOrUnknown};
 use rdev::{simulate, EventType, Key as RdevKey};
 use std::{
@@ -10,7 +10,6 @@ use std::{
     sync::atomic::{AtomicBool, Ordering},
     time::Instant,
 };
-use tfc::{traits::*, Context as TFC_Context, Key as TFC_Key};
 
 #[derive(Default)]
 struct StateCursor {
@@ -172,7 +171,6 @@ lazy_static::lazy_static! {
     };
     static ref KEYS_DOWN: Arc<Mutex<HashMap<u64, Instant>>> = Default::default();
     static ref LATEST_INPUT: Arc<Mutex<Input>> = Default::default();
-    static ref TFC_CONTEXT: Mutex<TFC_Context> = Mutex::new(TFC_Context::new().expect("kbd context error"));
 }
 static EXITING: AtomicBool = AtomicBool::new(false);
 
@@ -689,101 +687,6 @@ fn map_keyboard_mode(evt: &KeyEvent) {
     return;
 }
 
-fn tfc_key_down_or_up(key: Key, down: bool, up: bool) {
-    if let Key::Layout(chr) = key {
-        log::info!("tfc_key_down_or_up :{:?}", chr);
-        if down {
-            if let Err(_) = TFC_CONTEXT.lock().unwrap().unicode_char_down(chr) {
-                log::error!("Failed to press char {:?}", chr);
-            };
-        }
-        if up {
-            if let Err(_) = TFC_CONTEXT.lock().unwrap().unicode_char_down(chr) {
-                log::error!("Failed to press char {:?}", chr);
-            };
-        }
-        return;
-    }
-
-    let key = match key {
-        Key::Alt => TFC_Key::Alt,
-        Key::Backspace => TFC_Key::DeleteOrBackspace,
-        Key::CapsLock => TFC_Key::CapsLock,
-        Key::Control => TFC_Key::Control,
-        Key::Delete => TFC_Key::ForwardDelete,
-        Key::DownArrow => TFC_Key::DownArrow,
-        Key::End => TFC_Key::End,
-        Key::Escape => TFC_Key::Escape,
-        Key::F1 => TFC_Key::F1,
-        Key::F10 => TFC_Key::F10,
-        Key::F11 => TFC_Key::F11,
-        Key::F12 => TFC_Key::F12,
-        Key::F2 => TFC_Key::F2,
-        Key::F3 => TFC_Key::F3,
-        Key::F4 => TFC_Key::F4,
-        Key::F5 => TFC_Key::F5,
-        Key::F6 => TFC_Key::F6,
-        Key::F7 => TFC_Key::F7,
-        Key::F8 => TFC_Key::F8,
-        Key::F9 => TFC_Key::F9,
-        Key::Home => TFC_Key::Home,
-        Key::LeftArrow => TFC_Key::LeftArrow,
-        Key::PageDown => TFC_Key::PageDown,
-        Key::PageUp => TFC_Key::PageUp,
-        Key::Return => TFC_Key::ReturnOrEnter,
-        Key::RightArrow => TFC_Key::RightArrow,
-        Key::Shift => TFC_Key::Shift,
-        Key::Space => TFC_Key::Space,
-        Key::Tab => TFC_Key::Tab,
-        Key::UpArrow => TFC_Key::UpArrow,
-        Key::Numpad0 => TFC_Key::N0,
-        Key::Numpad1 => TFC_Key::N1,
-        Key::Numpad2 => TFC_Key::N2,
-        Key::Numpad3 => TFC_Key::N3,
-        Key::Numpad4 => TFC_Key::N4,
-        Key::Numpad5 => TFC_Key::N5,
-        Key::Numpad6 => TFC_Key::N6,
-        Key::Numpad7 => TFC_Key::N7,
-        Key::Numpad8 => TFC_Key::N8,
-        Key::Numpad9 => TFC_Key::N9,
-        Key::Decimal => TFC_Key::NumpadDecimal,
-        Key::Clear => TFC_Key::NumpadClear,
-        Key::Pause => TFC_Key::PlayPause,
-        Key::Print => TFC_Key::Print,
-        Key::Snapshot => TFC_Key::PrintScreen,
-        Key::Insert => TFC_Key::Insert,
-        Key::Scroll => TFC_Key::ScrollLock,
-        Key::NumLock => TFC_Key::NumLock,
-        Key::RWin => TFC_Key::Meta,
-        Key::Apps => TFC_Key::Apps,
-        Key::Multiply => TFC_Key::NumpadMultiply,
-        Key::Add => TFC_Key::NumpadPlus,
-        Key::Subtract => TFC_Key::NumpadMinus,
-        Key::Divide => TFC_Key::NumpadDivide,
-        Key::Equals => TFC_Key::NumpadEquals,
-        Key::NumpadEnter => TFC_Key::NumpadEnter,
-        Key::RightShift => TFC_Key::RightShift,
-        Key::RightControl => TFC_Key::RightControl,
-        Key::RightAlt => TFC_Key::RightAlt,
-        Key::Command | Key::Super | Key::Windows | Key::Meta => TFC_Key::Meta,
-        _ => {
-            return;
-        }
-    };
-
-    log::info!("tfc_key_down_or_up: {:?}", key);
-    if down {
-        if let Err(_) = TFC_CONTEXT.lock().unwrap().key_down(key) {
-            log::error!("Failed to press char {:?}", key);
-        };
-    }
-    if up {
-        if let Err(_) = TFC_CONTEXT.lock().unwrap().key_up(key) {
-            log::error!("Failed to press char {:?}", key);
-        };
-    }
-}
-
 fn legacy_keyboard_mode(evt: &KeyEvent) {
     let (click_capslock, click_numlock) = sync_status(evt);
 
@@ -791,18 +694,10 @@ fn legacy_keyboard_mode(evt: &KeyEvent) {
     crate::platform::windows::try_change_desktop();
     let mut en = ENIGO.lock().unwrap();
     if click_capslock {
-        if *IS_X11.lock().unwrap() {
-            tfc_key_down_or_up(Key::CapsLock, true, true);
-        } else {
-            en.key_click(Key::CapsLock);
-        }
+        en.key_click(Key::CapsLock);
     }
     if click_numlock {
-        if *IS_X11.lock().unwrap() {
-            tfc_key_down_or_up(Key::NumLock, true, true);
-        } else {
-            en.key_click(Key::NumLock);
-        }
+        en.key_click(Key::NumLock);
     }
     // disable numlock if press home etc when numlock is on,
     // because we will get numpad value (7,8,9 etc) if not
@@ -820,7 +715,7 @@ fn legacy_keyboard_mode(evt: &KeyEvent) {
     }
     #[cfg(not(target_os = "macos"))]
     let mut to_release = Vec::new();
-    
+
     if evt.down {
         let ck = if let Some(key_event::Union::ControlKey(ck)) = evt.union {
             ck.value()
@@ -844,11 +739,7 @@ fn legacy_keyboard_mode(evt: &KeyEvent) {
                 }
                 #[cfg(not(target_os = "macos"))]
                 if !get_modifier_state(key.clone(), &mut en) {
-                    if *IS_X11.lock().unwrap() {
-                        tfc_key_down_or_up(key.clone(), true, false);
-                    } else {
-                        en.key_down(key.clone()).ok();
-                    }
+                    en.key_down(key.clone()).ok();
                     modifier_sleep();
                     to_release.push(key);
                 }
@@ -868,21 +759,13 @@ fn legacy_keyboard_mode(evt: &KeyEvent) {
                     }
                 }
                 if evt.down {
-                    if *IS_X11.lock().unwrap() {
-                        tfc_key_down_or_up(key.clone(), true, false);
-                    } else {
-                        en.key_down(key.clone()).ok();
-                    }
+                    en.key_down(key.clone()).ok();
                     KEYS_DOWN
                         .lock()
                         .unwrap()
                         .insert(ck.value() as _, Instant::now());
                 } else {
-                    if *IS_X11.lock().unwrap() {
-                        tfc_key_down_or_up(key.clone(), false, true);
-                    } else {
-                        en.key_up(key.clone());
-                    }
+                    en.key_up(key.clone());
                     KEYS_DOWN.lock().unwrap().remove(&(ck.value() as _));
                 }
             } else if ck.value() == ControlKey::CtrlAltDel.value() {
@@ -896,24 +779,20 @@ fn legacy_keyboard_mode(evt: &KeyEvent) {
         }
         Some(key_event::Union::Chr(chr)) => {
             if evt.down {
-                if *IS_X11.lock().unwrap() {
-                    tfc_key_down_or_up(get_layout(chr), true, false);
+                if en.key_down(get_layout(chr)).is_ok() {
+                    KEYS_DOWN
+                        .lock()
+                        .unwrap()
+                        .insert(chr as u64 + KEY_CHAR_START, Instant::now());
                 } else {
-                    if en.key_down(get_layout(chr)).is_ok() {
-                        KEYS_DOWN
-                            .lock()
-                            .unwrap()
-                            .insert(chr as u64 + KEY_CHAR_START, Instant::now());
-                    } else {
-                        if let Ok(chr) = char::try_from(chr) {
-                            let mut x = chr.to_string();
-                            if get_modifier_state(Key::Shift, &mut en)
-                                || get_modifier_state(Key::CapsLock, &mut en)
-                            {
-                                x = x.to_uppercase();
-                            }
-                            en.key_sequence(&x);
+                    if let Ok(chr) = char::try_from(chr) {
+                        let mut x = chr.to_string();
+                        if get_modifier_state(Key::Shift, &mut en)
+                            || get_modifier_state(Key::CapsLock, &mut en)
+                        {
+                            x = x.to_uppercase();
                         }
+                        en.key_sequence(&x);
                     }
                 }
                 KEYS_DOWN
@@ -921,11 +800,7 @@ fn legacy_keyboard_mode(evt: &KeyEvent) {
                     .unwrap()
                     .insert(chr as u64 + KEY_CHAR_START, Instant::now());
             } else {
-                if *IS_X11.lock().unwrap() {
-                    tfc_key_down_or_up(get_layout(chr), false, true);
-                } else {
-                    en.key_up(get_layout(chr));
-                }
+                en.key_up(get_layout(chr));
                 KEYS_DOWN
                     .lock()
                     .unwrap()
@@ -944,23 +819,7 @@ fn legacy_keyboard_mode(evt: &KeyEvent) {
     }
     #[cfg(not(target_os = "macos"))]
     for key in to_release {
-        if *IS_X11.lock().unwrap() {
-            tfc_key_down_or_up(key.clone(), false, true);
-        } else {
-            en.key_up(key.clone());
-        }
-    }
-}
-
-fn translate_keyboard_mode(evt: &KeyEvent) {
-    let chr = char::from_u32(evt.chr()).unwrap_or_default();
-    // down(true)->press && press(false)-> release
-    if evt.down && !evt.press {
-        TFC_CONTEXT
-            .lock()
-            .unwrap()
-            .unicode_char(chr)
-            .expect("unicode_char_down error");
+        en.key_up(key.clone());
     }
 }
 
@@ -977,7 +836,7 @@ fn handle_key_(evt: &KeyEvent) {
             map_keyboard_mode(evt);
         }
         KeyboardMode::Translate => {
-            translate_keyboard_mode(evt);
+            legacy_keyboard_mode(evt);
         }
         _ => {
             legacy_keyboard_mode(evt);

@@ -1381,6 +1381,7 @@ dependencies = [
  "rdev",
  "serde 1.0.144",
  "serde_derive",
+ "tfc",
  "unicode-segmentation",
  "winapi 0.3.9",
 ]
@@ -4241,7 +4242,6 @@ dependencies = [
  "mouce",
  "num_cpus",
  "objc",
- "once_cell",
  "parity-tokio-ipc",
  "rdev",
  "repng",
@@ -4261,7 +4261,6 @@ dependencies = [
  "sys-locale",
  "sysinfo",
  "system_shutdown",
- "tfc",
  "tray-item",
  "trayicon",
  "uuid",
