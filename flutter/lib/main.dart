@@ -43,12 +43,16 @@ Future<Null> main(List<String> args) async {
     WindowType wType = type.windowType;
     switch (wType) {
       case WindowType.RemoteDesktop:
+        desktopType = DesktopType.remote;
         runRemoteScreen(argument);
         break;
       case WindowType.FileTransfer:
+        desktopType = DesktopType.fileTransfer;
         runFileTransferScreen(argument);
         break;
       case WindowType.PortForward:
+        desktopType =
+            argument['isRDP'] ? DesktopType.rdp : DesktopType.portForward;
         runPortForwardScreen(argument);
         break;
       default:
@@ -56,9 +60,11 @@ Future<Null> main(List<String> args) async {
     }
   } else if (args.isNotEmpty && args.first == '--cm') {
     print("--cm started");
+    desktopType = DesktopType.cm;
     await windowManager.ensureInitialized();
     runConnectionManagerScreen();
   } else {
+    desktopType = DesktopType.main;
     await windowManager.ensureInitialized();
     windowManager.setPreventClose(true);
     runMainApp(true);
