@@ -6,7 +6,7 @@ use crate::common;
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use crate::common::{check_clipboard, update_clipboard, ClipboardContext, CLIPBOARD_INTERVAL};
 
-use crate::ui_session_interface::{InvokeUi, Session};
+use crate::ui_session_interface::{InvokeUiSession, Session};
 use crate::{client::Data, client::Interface};
 
 use hbb_common::config::{PeerConfig, TransferSerde};
@@ -29,7 +29,7 @@ use std::collections::HashMap;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 
-pub struct Remote<T: InvokeUi> {
+pub struct Remote<T: InvokeUiSession> {
     handler: Session<T>,
     video_sender: MediaSender,
     audio_sender: MediaSender,
@@ -49,7 +49,7 @@ pub struct Remote<T: InvokeUi> {
     video_format: CodecFormat,
 }
 
-impl<T: InvokeUi> Remote<T> {
+impl<T: InvokeUiSession> Remote<T> {
     pub fn new(
         handler: Session<T>,
         video_sender: MediaSender,

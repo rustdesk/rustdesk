@@ -2,7 +2,7 @@ use std::{
     collections::HashMap,
     ops::{Deref, DerefMut},
     sync::{
-        atomic::{AtomicBool, Ordering},
+        atomic::Ordering,
         Arc, Mutex,
     },
 };
@@ -31,7 +31,7 @@ use hbb_common::{
 use crate::clipboard_file::*;
 use crate::{
     client::*,
-    ui_session_interface::{InvokeUi, Session, IS_IN},
+    ui_session_interface::{InvokeUiSession, Session, IS_IN},
 };
 
 type Video = AssetPtr<video_destination>;
@@ -68,7 +68,7 @@ impl SciterHandler {
     }
 }
 
-impl InvokeUi for SciterHandler {
+impl InvokeUiSession for SciterHandler {
     fn set_cursor_data(&self, cd: CursorData) {
         let mut colors = hbb_common::compress::decompress(&cd.colors);
         if colors.iter().filter(|x| **x != 0).next().is_none() {
@@ -443,6 +443,14 @@ impl SciterSession {
             v.push(x);
         }
         v
+    }
+
+    pub fn t(&self, name: String) -> String {
+        crate::client::translate(name)
+    }
+
+    pub fn get_icon(&self) -> String {
+        crate::get_icon()
     }
 
     fn supported_hwcodec(&self) -> Value {

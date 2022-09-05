@@ -27,7 +27,7 @@ pub static IS_IN: AtomicBool = AtomicBool::new(false);
 static KEYBOARD_HOOKED: AtomicBool = AtomicBool::new(false);
 
 #[derive(Clone, Default)]
-pub struct Session<T: InvokeUi> {
+pub struct Session<T: InvokeUiSession> {
     pub cmd: String,
     pub id: String,
     pub password: String,
@@ -38,7 +38,7 @@ pub struct Session<T: InvokeUi> {
     pub ui_handler: T,
 }
 
-impl<T: InvokeUi> Session<T> {
+impl<T: InvokeUiSession> Session<T> {
     pub fn get_view_style(&self) -> String {
         self.lc.read().unwrap().view_style.clone()
     }
@@ -133,11 +133,6 @@ impl<T: InvokeUi> Session<T> {
         lc.restarting_remote_device = true;
         let msg = lc.restart_remote_device();
         self.send(Data::Message(msg));
-    }
-
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    pub fn t(&self, name: String) -> String {
-        crate::client::translate(name)
     }
 
     pub fn get_audit_server(&self) -> String {
@@ -325,11 +320,6 @@ impl<T: InvokeUi> Session<T> {
         return super::inline::get_chatbox();
         #[cfg(not(feature = "inline"))]
         return "".to_owned();
-    }
-
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    pub fn get_icon(&self) -> String {
-        crate::get_icon()
     }
 
     pub fn send_chat(&self, text: String) {
@@ -541,7 +531,7 @@ impl<T: InvokeUi> Session<T> {
     }
 }
 
-pub trait InvokeUi: Send + Sync + Clone + 'static + Sized + Default {
+pub trait InvokeUiSession: Send + Sync + Clone + 'static + Sized + Default {
     fn set_cursor_data(&self, cd: CursorData);
     fn set_cursor_id(&self, id: String);
     fn set_cursor_position(&self, cp: CursorPosition);
@@ -578,7 +568,7 @@ pub trait InvokeUi: Send + Sync + Clone + 'static + Sized + Default {
     fn clipboard(&self, content: String);
 }
 
-impl<T: InvokeUi> Deref for Session<T> {
+impl<T: InvokeUiSession> Deref for Session<T> {
     type Target = T;
 
     fn deref(&self) -> &Self::Target {
@@ -586,16 +576,16 @@ impl<T: InvokeUi> Deref for Session<T> {
     }
 }
 
-impl<T: InvokeUi> DerefMut for Session<T> {
+impl<T: InvokeUiSession> DerefMut for Session<T> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.ui_handler
     }
 }
 
-impl<T: InvokeUi> FileManager for Session<T> {}
+impl<T: InvokeUiSession> FileManager for Session<T> {}
 
 #[async_trait]
-impl<T: InvokeUi> Interface for Session<T> {
+impl<T: InvokeUiSession> Interface for Session<T> {
     fn send(&self, data: Data) {
         if let Some(sender) = self.sender.read().unwrap().as_ref() {
             sender.send(data).ok();
@@ -723,7 +713,7 @@ impl<T: InvokeUi> Interface for Session<T> {
 // TODO use event callbcak
 // sciter only
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
-impl<T: InvokeUi> Session<T> {
+impl<T: InvokeUiSession> Session<T> {
     fn start_keyboard_hook(&self) {
         if self.is_port_forward() || self.is_file_transfer() {
             return;
@@ -958,7 +948,7 @@ impl<T: InvokeUi> Session<T> {
 }
 
 #[tokio::main(flavor = "current_thread")]
-pub async fn io_loop<T: InvokeUi>(handler: Session<T>) {
+pub async fn io_loop<T: InvokeUiSession>(handler: Session<T>) {
     let (sender, mut receiver) = mpsc::unbounded_channel::<Data>();
     *handler.sender.write().unwrap() = Some(sender.clone());
     let mut options = crate::ipc::get_options_async().await;
@@ -1074,7 +1064,7 @@ pub async fn io_loop<T: InvokeUi>(handler: Session<T>) {
 }
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
-async fn start_one_port_forward<T: InvokeUi>(
+async fn start_one_port_forward<T: InvokeUiSession>(
     handler: Session<T>,
     port: i32,
     remote_host: String,
