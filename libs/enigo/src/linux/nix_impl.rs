@@ -1,5 +1,6 @@
 use super::{xdo::EnigoXdo};
 use crate::{Key, KeyboardControllable, MouseButton, MouseControllable};
+use std::io::Read;
 
 /// The main struct for handling the event emitting
 // #[derive(Default)]
@@ -111,6 +112,30 @@ impl MouseControllable for Enigo {
     }
 }
 
+fn get_led_state(key: Key) -> bool{
+    let led_file = match key{
+        Key::CapsLock => {
+            "/sys/class/leds/input1::capslock/brightness"
+        }
+        Key::NumLock => {
+            "/sys/class/leds/input1::numlock/brightness"
+        }
+        _ => {
+            return false;
+        }
+    };
+
+    let status = if let Ok(mut file) = std::fs::File::open(&led_file) {
+        let mut content = String::new();
+        file.read_to_string(&mut content).ok();
+        let status = content.trim_end().to_string().parse::<i32>().unwrap_or(0);
+        status
+    }else{
+        0
+    };
+    status == 1
+}
+
 impl KeyboardControllable for Enigo {
     fn get_key_state(&mut self, key: Key) -> bool {
         if self.is_x11 {
@@ -119,7 +144,7 @@ impl KeyboardControllable for Enigo {
             if let Some(keyboard) = &mut self.uinput_keyboard {
                 keyboard.get_key_state(key)
             } else {
-                false
+                get_led_state(key)
             }
         }
     }
