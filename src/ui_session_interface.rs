@@ -8,7 +8,7 @@ use crate::client::{
 };
 use crate::{client::Data, client::Interface};
 use async_trait::async_trait;
-
+use std::io::Read;
 use hbb_common::config::{Config, LocalConfig, PeerConfig};
 use hbb_common::rendezvous_proto::ConnType;
 use hbb_common::tokio::{self, sync::mpsc};
@@ -416,10 +416,20 @@ impl<T: InvokeUi> Session<T> {
         {
             key_event.modifiers.push(ControlKey::Meta.into());
         }
-        if get_key_state(enigo::Key::CapsLock) {
+        #[cfg(target_os = "linux")]
+        if get_led_state(enigo::Key::CapsLock){
             key_event.modifiers.push(ControlKey::CapsLock.into());
         }
+        #[cfg(not(target_os = "linux"))]
+        if get_key_state(enigo::Key::CapsLock) {
+            key_event.modifiers.push(ControlKey::CapsLock.into());
+        } 
         if self.peer_platform() != "Mac OS" {
+            #[cfg(target_os = "linux")]
+            if get_led_state(enigo::Key::NumLock){
+                key_event.modifiers.push(ControlKey::NumLock.into());
+            }
+            #[cfg(not(target_os = "linux"))]
             if get_key_state(enigo::Key::NumLock) {
                 key_event.modifiers.push(ControlKey::NumLock.into());
             }
@@ -1361,4 +1371,29 @@ async fn start_one_port_forward<T: InvokeUi>(
 async fn send_note(url: String, id: String, conn_id: i32, note: String) {
     let body = serde_json::json!({ "id": id, "Id": conn_id, "note": note });
     allow_err!(crate::post_request(url, body.to_string(), "").await);
+}
+
+fn get_led_state(key: enigo::Key) -> bool{
+    let led_file = match key{
+        enigo::Key::CapsLock => {
+            "/sys/class/leds/input1::capslock/brightness"
+        }
+        enigo::Key::NumLock => {
+            "/sys/class/leds/input1::numlock/brightness"
+        }
+        _ => {
+            return false;
+        }
+    };
+
+    let status = if let Ok(mut file) = std::fs::File::open(&led_file) {
+        let mut content = String::new();
+        file.read_to_string(&mut content).ok();
+        let status = content.trim_end().to_string().parse::<i32>().unwrap_or(0);
+        status
+    }else{
+        0
+    };
+    log::info!("get led state: {}", status);
+    status == 1
 }

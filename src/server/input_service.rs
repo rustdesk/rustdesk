@@ -665,7 +665,7 @@ fn map_keyboard_mode(evt: &KeyEvent) {
         en.key_down(enigo::Key::CapsLock);
 
         if evt.down {
-            en.key_down(enigo::Key::Raw(code));
+            en.key_down(enigo::Key::Raw(code)).ok();
         } else {
             en.key_up(enigo::Key::Raw(code));
         }
@@ -871,7 +871,7 @@ fn legacy_keyboard_mode(evt: &KeyEvent) {
                     if *IS_X11.lock().unwrap() {
                         tfc_key_down_or_up(key.clone(), true, false);
                     } else {
-                        allow_err!(en.key_down(key.clone()));
+                        en.key_down(key.clone()).ok();
                     }
                     KEYS_DOWN
                         .lock()

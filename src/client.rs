@@ -155,18 +155,6 @@ impl Client {
                 }
             }
             Ok(x) => {
-                #[cfg(target_os = "linux")]
-                if !*crate::common::IS_X11.lock().unwrap() {
-                    let keyboard = super::uinput::client::UInputKeyboard::new().await?;
-                    log::info!("UInput keyboard created");
-                    let mouse = super::uinput::client::UInputMouse::new().await?;
-                    log::info!("UInput mouse created");
-                
-                    let mut en = ENIGO.lock().unwrap();
-                    en.set_uinput_keyboard(Some(Box::new(keyboard)));
-                    en.set_uinput_mouse(Some(Box::new(mouse)));
-                }
-
                 Ok(x)},
         }
     }
