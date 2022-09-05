@@ -5,17 +5,14 @@ use std::{
 };
 
 use flutter_rust_bridge::{StreamSink, SyncReturn, ZeroCopyBuffer};
-use serde_json::{json, Number, Value};
+use serde_json::json;
 
+use hbb_common::ResultType;
 use hbb_common::{
-    config::{self, Config, LocalConfig, PeerConfig, ONLINE},
+    config::{self, LocalConfig, PeerConfig, ONLINE},
     fs, log,
 };
-use hbb_common::{password_security, ResultType};
 
-use crate::{client::file_trait::FileManager, flutter::{session_add, session_start_}};
-use crate::common::make_fd_to_json;
-use crate::flutter::connection_manager::{self, get_clients_length, get_clients_state};
 use crate::flutter::{self, SESSIONS};
 use crate::start_server;
 use crate::ui_interface;
@@ -29,6 +26,10 @@ use crate::ui_interface::{
     has_rendezvous_service, post_request, set_local_option, set_option, set_options,
     set_peer_option, set_permanent_password, set_socks, store_fav, test_if_valid_server,
     update_temporary_password, using_public_server,
+};
+use crate::{
+    client::file_trait::FileManager,
+    flutter::{make_fd_to_json, session_add, session_start_},
 };
 
 fn initialize(app_dir: &str) {
@@ -110,7 +111,11 @@ pub fn host_stop_system_key_propagate(stopped: bool) {
 
 // FIXME: -> ResultType<()> cannot be parsed by frb_codegen
 // thread 'main' panicked at 'Failed to parse function output type `ResultType<()>`', $HOME\.cargo\git\checkouts\flutter_rust_bridge-ddba876d3ebb2a1e\e5adce5\frb_codegen\src\parser\mod.rs:151:25
-pub fn session_add_sync(id: String, is_file_transfer: bool, is_port_forward: bool) -> SyncReturn<String> {
+pub fn session_add_sync(
+    id: String,
+    is_file_transfer: bool,
+    is_port_forward: bool,
+) -> SyncReturn<String> {
     if let Err(e) = session_add(&id, is_file_transfer, is_port_forward) {
         SyncReturn(format!("Failed to add session with id {}, {}", &id, e))
     } else {
@@ -346,10 +351,8 @@ pub fn session_create_dir(id: String, act_id: i32, path: String, is_remote: bool
 }
 
 pub fn session_read_local_dir_sync(id: String, path: String, show_hidden: bool) -> String {
-    if let Some(session) = SESSIONS.read().unwrap().get(&id) {
-        if let Ok(fd) = fs::read_dir(&fs::get_path(&path), show_hidden) {
-            return make_fd_to_json(fd);
-        }
+    if let Ok(fd) = fs::read_dir(&fs::get_path(&path), show_hidden) {
+        return make_fd_to_json(fd.id, path, &fd.entries);
     }
     "".to_string()
 }
@@ -669,13 +672,13 @@ pub fn main_get_online_statue() -> i64 {
     ONLINE.lock().unwrap().values().max().unwrap_or(&0).clone()
 }
 
-pub fn main_get_clients_state() -> String {
-    get_clients_state()
+pub fn cm_get_clients_state() -> String {
+    crate::ui_cm_interface::get_clients_state()
 }
 
-pub fn main_check_clients_length(length: usize) -> Option<String> {
-    if length != get_clients_length() {
-        Some(get_clients_state())
+pub fn cm_check_clients_length(length: usize) -> Option<String> {
+    if length != crate::ui_cm_interface::get_clients_length() {
+        Some(crate::ui_cm_interface::get_clients_state())
     } else {
         None
     }
@@ -751,7 +754,7 @@ pub fn main_set_home_dir(home: String) {
 pub fn main_stop_service() {
     #[cfg(target_os = "android")]
     {
-        Config::set_option("stop-service".into(), "Y".into());
+        config::Config::set_option("stop-service".into(), "Y".into());
         crate::rendezvous_mediator::RendezvousMediator::restart();
     }
 }
@@ -759,7 +762,7 @@ pub fn main_stop_service() {
 pub fn main_start_service() {
     #[cfg(target_os = "android")]
     {
-        Config::set_option("stop-service".into(), "".into());
+        config::Config::set_option("stop-service".into(), "".into());
         crate::rendezvous_mediator::RendezvousMediator::restart();
     }
     #[cfg(not(target_os = "android"))]
@@ -787,27 +790,31 @@ pub fn main_get_mouse_time() -> f64 {
 }
 
 pub fn cm_send_chat(conn_id: i32, msg: String) {
-    connection_manager::send_chat(conn_id, msg);
+    crate::ui_cm_interface::send_chat(conn_id, msg);
 }
 
 pub fn cm_login_res(conn_id: i32, res: bool) {
-    connection_manager::on_login_res(conn_id, res);
+    if res {
+        crate::ui_cm_interface::authorize(conn_id);
+    } else {
+        crate::ui_cm_interface::close(conn_id);
+    }
 }
 
 pub fn cm_close_connection(conn_id: i32) {
-    connection_manager::close_conn(conn_id);
+    crate::ui_cm_interface::close(conn_id);
 }
 
 pub fn cm_check_click_time(conn_id: i32) {
-    connection_manager::check_click_time(conn_id)
+    crate::ui_cm_interface::check_click_time(conn_id)
 }
 
 pub fn cm_get_click_time() -> f64 {
-    connection_manager::get_click_time() as _
+    crate::ui_cm_interface::get_click_time() as _
 }
 
 pub fn cm_switch_permission(conn_id: i32, name: String, enabled: bool) {
-    connection_manager::switch_permission(conn_id, name, enabled)
+    crate::ui_cm_interface::switch_permission(conn_id, name, enabled)
 }
 
 pub fn main_get_icon() -> String {

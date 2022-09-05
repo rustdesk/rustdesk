@@ -100,7 +100,7 @@ class ServerModel with ChangeNotifier {
         _connectStatus = status;
         notifyListeners();
       }
-      final res = await bind.mainCheckClientsLength(length: _clients.length);
+      final res = await bind.cmCheckClientsLength(length: _clients.length);
       if (res != null) {
         debugPrint("clients not match!");
         updateClientState(res);
@@ -347,7 +347,7 @@ class ServerModel with ChangeNotifier {
 
   // force
   updateClientState([String? json]) async {
-    var res = await bind.mainGetClientsState();
+    var res = await bind.cmGetClientsState();
     try {
       final List clientsJson = jsonDecode(res);
       _clients.clear();
@@ -369,21 +369,40 @@ class ServerModel with ChangeNotifier {
     }
   }
 
-  void loginRequest(Map<String, dynamic> evt) {
+  void addConnection(Map<String, dynamic> evt) {
     try {
       final client = Client.fromJson(jsonDecode(evt["client"]));
-      if (_clients.any((c) => c.id == client.id)) {
-        return;
+      if (client.authorized) {
+        parent.target?.dialogManager.dismissByTag(getLoginDialogTag(client.id));
+        final index = _clients.indexWhere((c) => c.id == client.id);
+        if (index < 0) {
+          _clients.add(client);
+        } else {
+          _clients[index].authorized = true;
+        }
+        tabController.add(
+            TabInfo(
+                key: client.id.toString(),
+                label: client.name,
+                closable: false,
+                page: Desktop.buildConnectionCard(client)),
+            authorized: true);
+        scrollToBottom();
+        notifyListeners();
+      } else {
+        if (_clients.any((c) => c.id == client.id)) {
+          return;
+        }
+        _clients.add(client);
+        tabController.add(TabInfo(
+            key: client.id.toString(),
+            label: client.name,
+            closable: false,
+            page: Desktop.buildConnectionCard(client)));
+        scrollToBottom();
+        notifyListeners();
+        if (isAndroid) showLoginDialog(client);
       }
-      _clients.add(client);
-      tabController.add(TabInfo(
-          key: client.id.toString(),
-          label: client.name,
-          closable: false,
-          page: Desktop.buildConnectionCard(client)));
-      scrollToBottom();
-      notifyListeners();
-      if (isAndroid) showLoginDialog(client);
     } catch (e) {
       debugPrint("Failed to call loginRequest,error:$e");
     }

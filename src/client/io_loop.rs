@@ -2,10 +2,11 @@ use crate::client::{
     Client, CodecFormat, FileManager, MediaData, MediaSender, QualityStatus, MILLI1, SEC30,
     SERVER_CLIPBOARD_ENABLED, SERVER_FILE_TRANSFER_ENABLED, SERVER_KEYBOARD_ENABLED,
 };
+use crate::common;
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use crate::common::{check_clipboard, update_clipboard, ClipboardContext, CLIPBOARD_INTERVAL};
 
-use crate::ui_session_interface::{InvokeUi, Session};
+use crate::ui_session_interface::{InvokeUiSession, Session};
 use crate::{client::Data, client::Interface};
 
 use hbb_common::config::{PeerConfig, TransferSerde};
@@ -21,14 +22,14 @@ use hbb_common::tokio::{
     sync::mpsc,
     time::{self, Duration, Instant, Interval},
 };
-use hbb_common::{allow_err, message_proto::*};
+use hbb_common::{allow_err, message_proto::*, sleep};
 use hbb_common::{fs, log, Stream};
 use std::collections::HashMap;
 
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 
-pub struct Remote<T: InvokeUi> {
+pub struct Remote<T: InvokeUiSession> {
     handler: Session<T>,
     video_sender: MediaSender,
     audio_sender: MediaSender,
@@ -42,13 +43,13 @@ pub struct Remote<T: InvokeUi> {
     last_update_jobs_status: (Instant, HashMap<i32, u64>),
     first_frame: bool,
     #[cfg(windows)]
-    clipboard_file_context: Option<Box<CliprdrClientContext>>,
+    clipboard_file_context: Option<Box<clipboard::cliprdr::CliprdrClientContext>>,
     data_count: Arc<AtomicUsize>,
     frame_count: Arc<AtomicUsize>,
     video_format: CodecFormat,
 }
 
-impl<T: InvokeUi> Remote<T> {
+impl<T: InvokeUiSession> Remote<T> {
     pub fn new(
         handler: Session<T>,
         video_sender: MediaSender,
@@ -106,7 +107,7 @@ impl<T: InvokeUi> Remote<T> {
                 #[cfg(not(windows))]
                 let (_tx_holder, mut rx_clip_client) = mpsc::unbounded_channel::<i32>();
                 #[cfg(windows)]
-                let mut rx_clip_client = get_rx_clip_client().lock().await;
+                let mut rx_clip_client = clipboard::get_rx_clip_client().lock().await;
 
                 let mut status_timer = time::interval(Duration::new(1, 0));
 
@@ -152,7 +153,7 @@ impl<T: InvokeUi> Remote<T> {
                             #[cfg(windows)]
                             match _msg {
                                 Some((_, clip)) => {
-                                    allow_err!(peer.send(&clip_2_msg(clip)).await);
+                                    allow_err!(peer.send(&crate::clipboard_file::clip_2_msg(clip)).await);
                                 }
                                 None => {
                                     // unreachable!()
@@ -270,7 +271,6 @@ impl<T: InvokeUi> Remote<T> {
 
     // TODO
     fn load_last_jobs(&mut self) {
-        log::info!("start load last jobs");
         self.handler.clear_all_jobs();
         let pc = self.handler.load_config();
         if pc.transfer.write_jobs.is_empty() && pc.transfer.read_jobs.is_empty() {
@@ -280,33 +280,17 @@ impl<T: InvokeUi> Remote<T> {
         // TODO: can add a confirm dialog
         let mut cnt = 1;
         for job_str in pc.transfer.read_jobs.iter() {
-            let job: Result<TransferJobMeta, serde_json::Error> = serde_json::from_str(&job_str);
-            if let Ok(job) = job {
-                self.handler.add_job(
-                    cnt,
-                    job.to.clone(),
-                    job.remote.clone(),
-                    job.file_num,
-                    job.show_hidden,
-                    false,
-                );
+            if !job_str.is_empty() {
+                self.handler.load_last_job(cnt, job_str);
                 cnt += 1;
-                println!("restore read_job: {:?}", job);
+                log::info!("restore read_job: {:?}", job_str);
             }
         }
         for job_str in pc.transfer.write_jobs.iter() {
-            let job: Result<TransferJobMeta, serde_json::Error> = serde_json::from_str(&job_str);
-            if let Ok(job) = job {
-                self.handler.add_job(
-                    cnt,
-                    job.remote.clone(),
-                    job.to.clone(),
-                    job.file_num,
-                    job.show_hidden,
-                    true,
-                );
+            if !job_str.is_empty() {
+                self.handler.load_last_job(cnt, job_str);
                 cnt += 1;
-                println!("restore write_job: {:?}", job);
+                log::info!("restore write_job: {:?}", job_str);
             }
         }
         self.handler.update_transfer_list();
@@ -373,8 +357,13 @@ impl<T: InvokeUi> Remote<T> {
                                 to,
                                 job.files().len()
                             );
-                            // let m = make_fd(job.id(), job.files(), true);
-                            // self.handler.call("updateFolderFiles", &make_args!(m)); // TODO
+                            self.handler.update_folder_files(
+                                job.id(),
+                                job.files(),
+                                path,
+                                !is_remote,
+                                true,
+                            );
                             #[cfg(not(windows))]
                             let files = job.files().clone();
                             #[cfg(windows)]
@@ -433,8 +422,13 @@ impl<T: InvokeUi> Remote<T> {
                                 to,
                                 job.files().len()
                             );
-                            // let m = make_fd(job.id(), job.files(), true);
-                            // self.handler.call("updateFolderFiles", &make_args!(m));
+                            self.handler.update_folder_files(
+                                job.id(),
+                                job.files(),
+                                path,
+                                !is_remote,
+                                true,
+                            );
                             job.is_last_job = true;
                             self.read_jobs.push(job);
                             self.timer = time::interval(MILLI1);
@@ -546,8 +540,13 @@ impl<T: InvokeUi> Remote<T> {
                 } else {
                     match fs::get_recursive_files(&path, include_hidden) {
                         Ok(entries) => {
-                            // let m = make_fd(id, &entries, true);
-                            // self.handler.call("updateFolderFiles", &make_args!(m));
+                            self.handler.update_folder_files(
+                                id,
+                                &entries,
+                                path.clone(),
+                                !is_remote,
+                                false,
+                            );
                             self.remove_jobs
                                 .insert(id, RemoveJob::new(entries, path, sep, is_remote));
                         }
@@ -749,28 +748,28 @@ impl<T: InvokeUi> Remote<T> {
                     }
                     Some(login_response::Union::PeerInfo(pi)) => {
                         self.handler.handle_peer_info(pi);
-                        // self.check_clipboard_file_context();
-                        // if !(self.handler.is_file_transfer()
-                        //     || self.handler.is_port_forward()
-                        //     || !SERVER_CLIPBOARD_ENABLED.load(Ordering::SeqCst)
-                        //     || !SERVER_KEYBOARD_ENABLED.load(Ordering::SeqCst)
-                        //     || self.handler.lc.read().unwrap().disable_clipboard)
-                        // {
-                        //     let txt = self.old_clipboard.lock().unwrap().clone();
-                        //     if !txt.is_empty() {
-                        //         let msg_out = crate::create_clipboard_msg(txt);
-                        //         let sender = self.sender.clone();
-                        //         tokio::spawn(async move {
-                        //             // due to clipboard service interval time
-                        //             sleep(common::CLIPBOARD_INTERVAL as f32 / 1_000.).await;
-                        //             sender.send(Data::Message(msg_out)).ok();
-                        //         });
-                        //     }
-                        // }
+                        self.check_clipboard_file_context();
+                        if !(self.handler.is_file_transfer()
+                            || self.handler.is_port_forward()
+                            || !SERVER_CLIPBOARD_ENABLED.load(Ordering::SeqCst)
+                            || !SERVER_KEYBOARD_ENABLED.load(Ordering::SeqCst)
+                            || self.handler.lc.read().unwrap().disable_clipboard)
+                        {
+                            let txt = self.old_clipboard.lock().unwrap().clone();
+                            if !txt.is_empty() {
+                                let msg_out = crate::create_clipboard_msg(txt);
+                                let sender = self.sender.clone();
+                                tokio::spawn(async move {
+                                    // due to clipboard service interval time
+                                    sleep(common::CLIPBOARD_INTERVAL as f32 / 1_000.).await;
+                                    sender.send(Data::Message(msg_out)).ok();
+                                });
+                            }
+                        }
 
-                        // if self.handler.is_file_transfer() {
-                        //     self.load_last_jobs().await;
-                        // }
+                        if self.handler.is_file_transfer() {
+                            self.load_last_jobs();
+                        }
                     }
                     _ => {}
                 },
@@ -804,8 +803,8 @@ impl<T: InvokeUi> Remote<T> {
                 Some(message::Union::Cliprdr(clip)) => {
                     if !self.handler.lc.read().unwrap().disable_clipboard {
                         if let Some(context) = &mut self.clipboard_file_context {
-                            if let Some(clip) = msg_2_clip(clip) {
-                                server_clip_file(context, 0, clip);
+                            if let Some(clip) = crate::clipboard_file::msg_2_clip(clip) {
+                                clipboard::server_clip_file(context, 0, clip);
                             }
                         }
                     }
@@ -823,11 +822,13 @@ impl<T: InvokeUi> Remote<T> {
                                     fs::transform_windows_path(&mut entries);
                                 }
                             }
-                            // let mut m = make_fd(fd.id, &entries, fd.id > 0);
-                            // if fd.id <= 0 {
-                            //     m.set_item("path", fd.path);
-                            // }
-                            // self.handler.call("updateFolderFiles", &make_args!(m));
+                            self.handler.update_folder_files(
+                                fd.id,
+                                &entries,
+                                fd.path,
+                                false,
+                                fd.id > 0,
+                            );
                             if let Some(job) = fs::get_job(fd.id, &mut self.write_jobs) {
                                 log::info!("job set_files: {:?}", entries);
                                 job.set_files(entries);
@@ -1155,7 +1156,7 @@ impl<T: InvokeUi> Remote<T> {
                 && self.handler.lc.read().unwrap().enable_file_transfer;
             if enabled == self.clipboard_file_context.is_none() {
                 self.clipboard_file_context = if enabled {
-                    match create_clipboard_file_context(true, false) {
+                    match clipboard::create_cliprdr_context(true, false) {
                         Ok(context) => {
                             log::info!("clipboard context for file transfer created.");
                             Some(context)

@@ -49,6 +49,7 @@ mod tray;
 
 mod ui_interface;
 mod ui_session_interface;
+mod ui_cm_interface;
 
 #[cfg(windows)]
 pub mod clipboard_file;

@@ -1,10 +1,7 @@
 use std::{
     collections::HashMap,
     ops::{Deref, DerefMut},
-    sync::{
-        atomic::{AtomicBool, Ordering},
-        Arc, Mutex,
-    },
+    sync::{atomic::Ordering, Arc, Mutex},
 };
 
 use sciter::{
@@ -23,13 +20,15 @@ use clipboard::{
     get_rx_clip_client, server_clip_file,
 };
 
-use hbb_common::{allow_err, log, message_proto::*, rendezvous_proto::ConnType};
+use hbb_common::{
+    allow_err, fs::TransferJobMeta, log, message_proto::*, rendezvous_proto::ConnType,
+};
 
 #[cfg(windows)]
 use crate::clipboard_file::*;
 use crate::{
     client::*,
-    ui_session_interface::{InvokeUi, Session, IS_IN},
+    ui_session_interface::{InvokeUiSession, Session, IS_IN},
 };
 
 type Video = AssetPtr<video_destination>;
@@ -38,12 +37,8 @@ lazy_static::lazy_static! {
     static ref VIDEO: Arc<Mutex<Option<Video>>> = Default::default();
 }
 
-#[cfg(windows)]
-static mut IS_ALT_GR: bool = false;
-
 /// SciterHandler
 /// * element
-/// * thread  TODO check if flutter need
 /// * close_state  for file path when close
 #[derive(Clone, Default)]
 pub struct SciterHandler {
@@ -67,7 +62,7 @@ impl SciterHandler {
     }
 }
 
-impl InvokeUi for SciterHandler {
+impl InvokeUiSession for SciterHandler {
     fn set_cursor_data(&self, cd: CursorData) {
         let mut colors = hbb_common::compress::decompress(&cd.colors);
         if colors.iter().filter(|x| **x != 0).next().is_none() {
@@ -155,16 +150,36 @@ impl InvokeUi for SciterHandler {
         self.call("clearAllJobs", &make_args!());
     }
 
-    fn add_job(
+    fn load_last_job(&self, cnt: i32, job_json: &str) {
+        let job: Result<TransferJobMeta, serde_json::Error> = serde_json::from_str(job_json);
+        if let Ok(job) = job {
+            let path;
+            let to;
+            if job.is_remote {
+                path = job.remote.clone();
+                to = job.to.clone();
+            } else {
+                path = job.to.clone();
+                to = job.remote.clone();
+            }
+            self.call(
+                "addJob",
+                &make_args!(cnt, path, to, job.file_num, job.show_hidden, job.is_remote),
+            );
+        }
+    }
+
+    fn update_folder_files(
         &self,
         id: i32,
+        entries: &Vec<FileEntry>,
         path: String,
-        to: String,
-        file_num: i32,
-        show_hidden: bool,
-        is_remote: bool,
+        _is_local: bool,
+        only_count: bool,
     ) {
-        todo!()
+        let mut m = make_fd(id, entries, only_count);
+        m.set_item("path", path);
+        self.call("updateFolderFiles", &make_args!(m));
     }
 
     fn update_transfer_list(&self) {
@@ -422,6 +437,14 @@ impl SciterSession {
             v.push(x);
         }
         v
+    }
+
+    pub fn t(&self, name: String) -> String {
+        crate::client::translate(name)
+    }
+
+    pub fn get_icon(&self) -> String {
+        crate::get_icon()
     }
 
     fn supported_hwcodec(&self) -> Value {
@@ -686,15 +709,18 @@ impl SciterSession {
 }
 
 pub fn make_fd(id: i32, entries: &Vec<FileEntry>, only_count: bool) -> Value {
+    log::debug!("make_fd");
     let mut m = Value::map();
     m.set_item("id", id);
     let mut a = Value::array(0);
     let mut n: u64 = 0;
     for entry in entries {
+        log::debug!("for");
         n += entry.size;
         if only_count {
             continue;
         }
+        log::debug!("for1");
         let mut e = Value::map();
         e.set_item("name", entry.name.to_owned());
         let tmp = entry.entry_type.value();
@@ -703,11 +729,11 @@ pub fn make_fd(id: i32, entries: &Vec<FileEntry>, only_count: bool) -> Value {
         e.set_item("size", entry.size as f64);
         a.push(e);
     }
-    if only_count {
-        m.set_item("num_entries", entries.len() as i32);
-    } else {
+    if !only_count {
         m.set_item("entries", a);
     }
+    m.set_item("num_entries", entries.len() as i32);
     m.set_item("total_size", n as f64);
+    log::debug!("make_fd end");
     m
 }

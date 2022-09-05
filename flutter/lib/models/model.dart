@@ -168,10 +168,8 @@ class FfiModel with ChangeNotifier {
         parent.target?.fileModel.loadLastJob(evt);
       } else if (name == 'update_folder_files') {
         parent.target?.fileModel.updateFolderFiles(evt);
-      } else if (name == 'try_start_without_auth') {
-        parent.target?.serverModel.loginRequest(evt);
-      } else if (name == 'on_client_authorized') {
-        parent.target?.serverModel.onClientAuthorized(evt);
+      } else if (name == 'add_connection') {
+        parent.target?.serverModel.addConnection(evt);
       } else if (name == 'on_client_remove') {
         parent.target?.serverModel.onClientRemove(evt);
       } else if (name == 'update_quality_status') {
@@ -227,10 +225,8 @@ class FfiModel with ChangeNotifier {
         parent.target?.fileModel.loadLastJob(evt);
       } else if (name == 'update_folder_files') {
         parent.target?.fileModel.updateFolderFiles(evt);
-      } else if (name == 'try_start_without_auth') {
-        parent.target?.serverModel.loginRequest(evt);
-      } else if (name == 'on_client_authorized') {
-        parent.target?.serverModel.onClientAuthorized(evt);
+      } else if (name == 'add_connection') {
+        parent.target?.serverModel.addConnection(evt);
       } else if (name == 'on_client_remove') {
         parent.target?.serverModel.onClientRemove(evt);
       } else if (name == 'update_quality_status') {
