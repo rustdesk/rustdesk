@@ -37,25 +37,27 @@ class _DesktopTabPageState extends State<DesktopTabPage> {
     RxBool fullscreen = false.obs;
     Get.put(fullscreen, tag: 'fullscreen');
     return Obx(() => DragToResizeArea(
-          resizeEdgeSize: fullscreen.value ? 1.0 : 8.0,
-          child: Container(
-            decoration: BoxDecoration(
-                border: Border.all(color: MyTheme.color(context).border!)),
-            child: Scaffold(
-                backgroundColor: MyTheme.color(context).bg,
-                body: DesktopTab(
-                  controller: tabController,
-                  theme: dark ? TarBarTheme.dark() : TarBarTheme.light(),
-                  tail: ActionIcon(
-                    message: 'Settings',
-                    icon: IconFont.menu,
-                    theme: dark ? TarBarTheme.dark() : TarBarTheme.light(),
-                    onTap: onAddSetting,
-                    is_close: false,
-                  ),
-                )),
-          ),
-        ));
+        resizeEdgeSize: fullscreen.value ? 1.0 : 8.0,
+        child: Container(
+          decoration: BoxDecoration(
+              border: Border.all(color: MyTheme.color(context).border!)),
+          child: Overlay(initialEntries: [
+            OverlayEntry(builder: (context) {
+              gFFI.dialogManager.setOverlayState(Overlay.of(context));
+              return Scaffold(
+                  backgroundColor: MyTheme.color(context).bg,
+                  body: DesktopTab(
+                    controller: tabController,
+                    tail: ActionIcon(
+                      message: 'Settings',
+                      icon: IconFont.menu,
+                      onTap: onAddSetting,
+                      isClose: false,
+                    ),
+                  ));
+            })
+          ]),
+        )));
   }
 
   void onAddSetting() {

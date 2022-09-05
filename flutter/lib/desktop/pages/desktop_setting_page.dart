@@ -49,7 +49,7 @@ class _DesktopSettingPageState extends State<DesktopSettingPage>
         'Display', Icons.desktop_windows_outlined, Icons.desktop_windows_sharp),
     _TabInfo('Audio', Icons.volume_up_outlined, Icons.volume_up_sharp),
     _TabInfo('Connection', Icons.link_outlined, Icons.link_sharp),
-    _TabInfo('About RustDesk', Icons.info_outline, Icons.info_sharp)
+    _TabInfo('About', Icons.info_outline, Icons.info_sharp)
   ];
 
   late PageController controller;
@@ -714,7 +714,7 @@ class _AboutState extends State<_About> {
             ],
           ).marginOnly(left: _kContentHMargin)
         ]),
-      ]).marginOnly(left: _kCardLeftMargin);
+      ]);
     });
   }
 }
@@ -1038,52 +1038,117 @@ void changeServer() async {
   var keyController = TextEditingController(text: key);
 
   var isInProgress = false;
+
   gFFI.dialogManager.show((setState, close) {
+    submit() async {
+      setState(() {
+        [idServerMsg, relayServerMsg, apiServerMsg].forEach((element) {
+          element = "";
+        });
+        isInProgress = true;
+      });
+      cancel() {
+        setState(() {
+          isInProgress = false;
+        });
+      }
+
+      idServer = idController.text.trim();
+      relayServer = relayController.text.trim();
+      apiServer = apiController.text.trim().toLowerCase();
+      key = keyController.text.trim();
+
+      if (idServer.isNotEmpty) {
+        idServerMsg =
+            translate(await bind.mainTestIfValidServer(server: idServer));
+        if (idServerMsg.isEmpty) {
+          oldOptions['custom-rendezvous-server'] = idServer;
+        } else {
+          cancel();
+          return;
+        }
+      } else {
+        oldOptions['custom-rendezvous-server'] = "";
+      }
+
+      if (relayServer.isNotEmpty) {
+        relayServerMsg =
+            translate(await bind.mainTestIfValidServer(server: relayServer));
+        if (relayServerMsg.isEmpty) {
+          oldOptions['relay-server'] = relayServer;
+        } else {
+          cancel();
+          return;
+        }
+      } else {
+        oldOptions['relay-server'] = "";
+      }
+
+      if (apiServer.isNotEmpty) {
+        if (apiServer.startsWith('http://') ||
+            apiServer.startsWith("https://")) {
+          oldOptions['api-server'] = apiServer;
+          return;
+        } else {
+          apiServerMsg = translate("invalid_http");
+          cancel();
+          return;
+        }
+      } else {
+        oldOptions['api-server'] = "";
+      }
+      // ok
+      oldOptions['key'] = key;
+      await bind.mainSetOptions(json: jsonEncode(oldOptions));
+      close();
+    }
+
     return CustomAlertDialog(
       title: Text(translate("ID/Relay Server")),
       content: ConstrainedBox(
-        constraints: BoxConstraints(minWidth: 500),
+        constraints: const BoxConstraints(minWidth: 500),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            SizedBox(
+            const SizedBox(
               height: 8.0,
             ),
             Row(
               children: [
                 ConstrainedBox(
-                    constraints: BoxConstraints(minWidth: 100),
+                    constraints: const BoxConstraints(minWidth: 100),
                     child: Text("${translate('ID Server')}:")
                         .marginOnly(bottom: 16.0)),
-                SizedBox(
+                const SizedBox(
                   width: 24.0,
                 ),
                 Expanded(
                   child: TextField(
                     decoration: InputDecoration(
-                        border: OutlineInputBorder(),
+                        border: const OutlineInputBorder(),
                         errorText: idServerMsg.isNotEmpty ? idServerMsg : null),
                     controller: idController,
+                    focusNode: FocusNode()..requestFocus(),
                   ),
                 ),
               ],
             ),
-            SizedBox(
+            const SizedBox(
               height: 8.0,
             ),
             Row(
               children: [
                 ConstrainedBox(
-                    constraints: BoxConstraints(minWidth: 100),
+                    constraints: const BoxConstraints(minWidth: 100),
                     child: Text("${translate('Relay Server')}:")
                         .marginOnly(bottom: 16.0)),
-                SizedBox(
+                const SizedBox(
                   width: 24.0,
                 ),
                 Expanded(
                   child: TextField(
                     decoration: InputDecoration(
-                        border: OutlineInputBorder(),
+                        border: const OutlineInputBorder(),
                         errorText:
                             relayServerMsg.isNotEmpty ? relayServerMsg : null),
                     controller: relayController,
@@ -1091,22 +1156,22 @@ void changeServer() async {
                 ),
               ],
             ),
-            SizedBox(
+            const SizedBox(
               height: 8.0,
             ),
             Row(
               children: [
                 ConstrainedBox(
-                    constraints: BoxConstraints(minWidth: 100),
+                    constraints: const BoxConstraints(minWidth: 100),
                     child: Text("${translate('API Server')}:")
                         .marginOnly(bottom: 16.0)),
-                SizedBox(
+                const SizedBox(
                   width: 24.0,
                 ),
                 Expanded(
                   child: TextField(
                     decoration: InputDecoration(
-                        border: OutlineInputBorder(),
+                        border: const OutlineInputBorder(),
                         errorText:
                             apiServerMsg.isNotEmpty ? apiServerMsg : null),
                     controller: apiController,
@@ -1114,21 +1179,21 @@ void changeServer() async {
                 ),
               ],
             ),
-            SizedBox(
+            const SizedBox(
               height: 8.0,
             ),
             Row(
               children: [
                 ConstrainedBox(
-                    constraints: BoxConstraints(minWidth: 100),
+                    constraints: const BoxConstraints(minWidth: 100),
                     child:
                         Text("${translate('Key')}:").marginOnly(bottom: 16.0)),
-                SizedBox(
+                const SizedBox(
                   width: 24.0,
                 ),
                 Expanded(
                   child: TextField(
-                    decoration: InputDecoration(
+                    decoration: const InputDecoration(
                       border: OutlineInputBorder(),
                     ),
                     controller: keyController,
@@ -1136,83 +1201,20 @@ void changeServer() async {
                 ),
               ],
             ),
-            SizedBox(
+            const SizedBox(
               height: 4.0,
             ),
-            Offstage(offstage: !isInProgress, child: LinearProgressIndicator())
+            Offstage(
+                offstage: !isInProgress, child: const LinearProgressIndicator())
           ],
         ),
       ),
       actions: [
-        TextButton(
-            onPressed: () {
-              close();
-            },
-            child: Text(translate("Cancel"))),
-        TextButton(
-            onPressed: () async {
-              setState(() {
-                [idServerMsg, relayServerMsg, apiServerMsg].forEach((element) {
-                  element = "";
-                });
-                isInProgress = true;
-              });
-              final cancel = () {
-                setState(() {
-                  isInProgress = false;
-                });
-              };
-              idServer = idController.text.trim();
-              relayServer = relayController.text.trim();
-              apiServer = apiController.text.trim().toLowerCase();
-              key = keyController.text.trim();
-
-              if (idServer.isNotEmpty) {
-                idServerMsg = translate(
-                    await bind.mainTestIfValidServer(server: idServer));
-                if (idServerMsg.isEmpty) {
-                  oldOptions['custom-rendezvous-server'] = idServer;
-                } else {
-                  cancel();
-                  return;
-                }
-              } else {
-                oldOptions['custom-rendezvous-server'] = "";
-              }
-
-              if (relayServer.isNotEmpty) {
-                relayServerMsg = translate(
-                    await bind.mainTestIfValidServer(server: relayServer));
-                if (relayServerMsg.isEmpty) {
-                  oldOptions['relay-server'] = relayServer;
-                } else {
-                  cancel();
-                  return;
-                }
-              } else {
-                oldOptions['relay-server'] = "";
-              }
-
-              if (apiServer.isNotEmpty) {
-                if (apiServer.startsWith('http://') ||
-                    apiServer.startsWith("https://")) {
-                  oldOptions['api-server'] = apiServer;
-                  return;
-                } else {
-                  apiServerMsg = translate("invalid_http");
-                  cancel();
-                  return;
-                }
-              } else {
-                oldOptions['api-server'] = "";
-              }
-              // ok
-              oldOptions['key'] = key;
-              await bind.mainSetOptions(json: jsonEncode(oldOptions));
-              close();
-            },
-            child: Text(translate("OK"))),
+        TextButton(onPressed: close, child: Text(translate("Cancel"))),
+        TextButton(onPressed: submit, child: Text(translate("OK"))),
       ],
+      onSubmit: submit,
+      onCancel: close,
     );
   });
 }
@@ -1231,27 +1233,28 @@ void changeWhiteList() async {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(translate("whitelist_sep")),
-          SizedBox(
+          const SizedBox(
             height: 8.0,
           ),
           Row(
             children: [
               Expanded(
                 child: TextField(
-                  maxLines: null,
-                  decoration: InputDecoration(
-                    border: OutlineInputBorder(),
-                    errorText: msg.isEmpty ? null : translate(msg),
-                  ),
-                  controller: controller,
-                ),
+                    maxLines: null,
+                    decoration: InputDecoration(
+                      border: const OutlineInputBorder(),
+                      errorText: msg.isEmpty ? null : translate(msg),
+                    ),
+                    controller: controller,
+                    focusNode: FocusNode()..requestFocus()),
               ),
             ],
           ),
-          SizedBox(
+          const SizedBox(
             height: 4.0,
           ),
-          Offstage(offstage: !isInProgress, child: LinearProgressIndicator())
+          Offstage(
+              offstage: !isInProgress, child: const LinearProgressIndicator())
         ],
       ),
       actions: [
@@ -1277,7 +1280,7 @@ void changeWhiteList() async {
                 final ipMatch = RegExp(r"^\d+\.\d+\.\d+\.\d+$");
                 for (final ip in ips) {
                   if (!ipMatch.hasMatch(ip)) {
-                    msg = translate("Invalid IP") + " $ip";
+                    msg = "${translate("Invalid IP")} $ip";
                     setState(() {
                       isInProgress = false;
                     });
@@ -1292,6 +1295,7 @@ void changeWhiteList() async {
             },
             child: Text(translate("OK"))),
       ],
+      onCancel: close,
     );
   });
 }
@@ -1314,50 +1318,80 @@ void changeSocks5Proxy() async {
 
   var isInProgress = false;
   gFFI.dialogManager.show((setState, close) {
+    submit() async {
+      setState(() {
+        proxyMsg = "";
+        isInProgress = true;
+      });
+      cancel() {
+        setState(() {
+          isInProgress = false;
+        });
+      }
+
+      proxy = proxyController.text.trim();
+      username = userController.text.trim();
+      password = pwdController.text.trim();
+
+      if (proxy.isNotEmpty) {
+        proxyMsg = translate(await bind.mainTestIfValidServer(server: proxy));
+        if (proxyMsg.isEmpty) {
+          // ignore
+        } else {
+          cancel();
+          return;
+        }
+      }
+      await bind.mainSetSocks(
+          proxy: proxy, username: username, password: password);
+      close();
+    }
+
     return CustomAlertDialog(
       title: Text(translate("Socks5 Proxy")),
       content: ConstrainedBox(
-        constraints: BoxConstraints(minWidth: 500),
+        constraints: const BoxConstraints(minWidth: 500),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            SizedBox(
+            const SizedBox(
               height: 8.0,
             ),
             Row(
               children: [
                 ConstrainedBox(
-                    constraints: BoxConstraints(minWidth: 100),
+                    constraints: const BoxConstraints(minWidth: 100),
                     child: Text("${translate('Hostname')}:")
                         .marginOnly(bottom: 16.0)),
-                SizedBox(
+                const SizedBox(
                   width: 24.0,
                 ),
                 Expanded(
                   child: TextField(
                     decoration: InputDecoration(
-                        border: OutlineInputBorder(),
+                        border: const OutlineInputBorder(),
                         errorText: proxyMsg.isNotEmpty ? proxyMsg : null),
                     controller: proxyController,
+                    focusNode: FocusNode()..requestFocus(),
                   ),
                 ),
               ],
             ),
-            SizedBox(
+            const SizedBox(
               height: 8.0,
             ),
             Row(
               children: [
                 ConstrainedBox(
-                    constraints: BoxConstraints(minWidth: 100),
+                    constraints: const BoxConstraints(minWidth: 100),
                     child: Text("${translate('Username')}:")
                         .marginOnly(bottom: 16.0)),
-                SizedBox(
+                const SizedBox(
                   width: 24.0,
                 ),
                 Expanded(
                   child: TextField(
-                    decoration: InputDecoration(
+                    decoration: const InputDecoration(
                       border: OutlineInputBorder(),
                     ),
                     controller: userController,
@@ -1365,21 +1399,21 @@ void changeSocks5Proxy() async {
                 ),
               ],
             ),
-            SizedBox(
+            const SizedBox(
               height: 8.0,
             ),
             Row(
               children: [
                 ConstrainedBox(
-                    constraints: BoxConstraints(minWidth: 100),
+                    constraints: const BoxConstraints(minWidth: 100),
                     child: Text("${translate('Password')}:")
                         .marginOnly(bottom: 16.0)),
-                SizedBox(
+                const SizedBox(
                   width: 24.0,
                 ),
                 Expanded(
                   child: TextField(
-                    decoration: InputDecoration(
+                    decoration: const InputDecoration(
                       border: OutlineInputBorder(),
                     ),
                     controller: pwdController,
@@ -1387,50 +1421,20 @@ void changeSocks5Proxy() async {
                 ),
               ],
             ),
-            SizedBox(
+            const SizedBox(
               height: 8.0,
             ),
-            Offstage(offstage: !isInProgress, child: LinearProgressIndicator())
+            Offstage(
+                offstage: !isInProgress, child: const LinearProgressIndicator())
           ],
         ),
       ),
       actions: [
-        TextButton(
-            onPressed: () {
-              close();
-            },
-            child: Text(translate("Cancel"))),
-        TextButton(
-            onPressed: () async {
-              setState(() {
-                proxyMsg = "";
-                isInProgress = true;
-              });
-              final cancel = () {
-                setState(() {
-                  isInProgress = false;
-                });
-              };
-              proxy = proxyController.text.trim();
-              username = userController.text.trim();
-              password = pwdController.text.trim();
-
-              if (proxy.isNotEmpty) {
-                proxyMsg =
-                    translate(await bind.mainTestIfValidServer(server: proxy));
-                if (proxyMsg.isEmpty) {
-                  // ignore
-                } else {
-                  cancel();
-                  return;
-                }
-              }
-              await bind.mainSetSocks(
-                  proxy: proxy, username: username, password: password);
-              close();
-            },
-            child: Text(translate("OK"))),
+        TextButton(onPressed: close, child: Text(translate("Cancel"))),
+        TextButton(onPressed: submit, child: Text(translate("OK"))),
       ],
+      onSubmit: submit,
+      onCancel: close,
     );
   });
 }

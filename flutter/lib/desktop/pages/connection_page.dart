@@ -12,6 +12,7 @@ import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher_string.dart';
 
 import '../../common.dart';
+import '../../common/formatter/id_formatter.dart';
 import '../../mobile/pages/scan_page.dart';
 import '../../mobile/pages/settings_page.dart';
 import '../../models/model.dart';
@@ -30,7 +31,7 @@ class ConnectionPage extends StatefulWidget {
 /// State for the connection page.
 class _ConnectionPageState extends State<ConnectionPage> {
   /// Controller for the id input bar.
-  final _idController = TextEditingController();
+  final _idController = IDTextEditingController();
 
   /// Update url. If it's not null, means an update is available.
   final _updateUrl = '';
@@ -43,9 +44,9 @@ class _ConnectionPageState extends State<ConnectionPage> {
     if (_idController.text.isEmpty) {
       () async {
         final lastRemoteId = await bind.mainGetLastRemoteId();
-        if (lastRemoteId != _idController.text) {
+        if (lastRemoteId != _idController.id) {
           setState(() {
-            _idController.text = lastRemoteId;
+            _idController.id = lastRemoteId;
           });
         }
       }();
@@ -110,7 +111,7 @@ class _ConnectionPageState extends State<ConnectionPage> {
   /// Callback for the connect button.
   /// Connects to the selected peer.
   void onConnect({bool isFileTransfer = false}) {
-    final id = _idController.text.trim();
+    final id = _idController.id;
     connect(id, isFileTransfer: isFileTransfer);
   }
 
@@ -166,7 +167,7 @@ class _ConnectionPageState extends State<ConnectionPage> {
     });
     var w = Container(
       width: 320 + 20 * 2,
-      padding: EdgeInsets.fromLTRB(20, 24, 20, 22),
+      padding: const EdgeInsets.fromLTRB(20, 24, 20, 22),
       decoration: BoxDecoration(
         color: MyTheme.color(context).bg,
         borderRadius: const BorderRadius.all(Radius.circular(13)),
@@ -178,42 +179,54 @@ class _ConnectionPageState extends State<ConnectionPage> {
               children: [
                 Text(
                   translate('Control Remote Desktop'),
-                  style: TextStyle(fontSize: 19, height: 1),
+                  style: const TextStyle(fontSize: 19, height: 1),
                 ),
               ],
             ).marginOnly(bottom: 15),
             Row(
               children: [
                 Expanded(
-                  child: TextField(
-                    autocorrect: false,
-                    enableSuggestions: false,
-                    keyboardType: TextInputType.visiblePassword,
-                    style: TextStyle(
-                      fontFamily: 'WorkSans',
-                      fontSize: 22,
-                      height: 1,
-                    ),
-                    decoration: InputDecoration(
-                        hintText: translate('Enter Remote ID'),
-                        hintStyle: TextStyle(
-                            color: MyTheme.color(context).placeholder),
-                        border: OutlineInputBorder(
+                  child: Obx(
+                    () => TextField(
+                      autocorrect: false,
+                      enableSuggestions: false,
+                      keyboardType: TextInputType.visiblePassword,
+                      focusNode: focusNode,
+                      style: const TextStyle(
+                        fontFamily: 'WorkSans',
+                        fontSize: 22,
+                        height: 1,
+                      ),
+                      maxLines: 1,
+                      cursorColor: MyTheme.color(context).text!,
+                      decoration: InputDecoration(
+                          hintText: inputFocused.value
+                              ? null
+                              : translate('Enter Remote ID'),
+                          hintStyle: TextStyle(
+                              color: MyTheme.color(context).placeholder),
+                          border: OutlineInputBorder(
+                              borderRadius: BorderRadius.zero,
+                              borderSide: BorderSide(
+                                  color: MyTheme.color(context).border!)),
+                          enabledBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.zero,
+                              borderSide: BorderSide(
+                                  color: MyTheme.color(context).border!)),
+                          focusedBorder: const OutlineInputBorder(
                             borderRadius: BorderRadius.zero,
-                            borderSide: BorderSide(
-                                color: MyTheme.color(context).placeholder!)),
-                        focusedBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.zero,
-                          borderSide:
-                              BorderSide(color: MyTheme.button, width: 3),
-                        ),
-                        isDense: true,
-                        contentPadding:
-                            EdgeInsets.symmetric(horizontal: 10, vertical: 12)),
-                    controller: _idController,
-                    onSubmitted: (s) {
-                      onConnect();
-                    },
+                            borderSide:
+                                BorderSide(color: MyTheme.button, width: 3),
+                          ),
+                          isDense: true,
+                          contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 10, vertical: 12)),
+                      controller: _idController,
+                      inputFormatters: [IDTextInputFormatter()],
+                      onSubmitted: (s) {
+                        onConnect();
+                      },
+                    ),
                   ),
                 ),
               ],
@@ -259,7 +272,7 @@ class _ConnectionPageState extends State<ConnectionPage> {
                           ).marginSymmetric(horizontal: 12),
                         ),
                       )),
-                  SizedBox(
+                  const SizedBox(
                     width: 17,
                   ),
                   Obx(
@@ -304,7 +317,8 @@ class _ConnectionPageState extends State<ConnectionPage> {
       ),
     );
     return Center(
-        child: Container(constraints: BoxConstraints(maxWidth: 600), child: w));
+        child: Container(
+            constraints: const BoxConstraints(maxWidth: 600), child: w));
   }
 
   @override
@@ -654,71 +668,69 @@ class _ConnectionPageState extends State<ConnectionPage> {
     var field = "";
     var msg = "";
     var isInProgress = false;
+    TextEditingController controller = TextEditingController(text: field);
+
     gFFI.dialogManager.show((setState, close) {
+      submit() async {
+        setState(() {
+          msg = "";
+          isInProgress = true;
+        });
+        field = controller.text.trim();
+        if (field.isEmpty) {
+          // pass
+        } else {
+          final ids = field.trim().split(RegExp(r"[\s,;\n]+"));
+          field = ids.join(',');
+          for (final newId in ids) {
+            if (gFFI.abModel.idContainBy(newId)) {
+              continue;
+            }
+            gFFI.abModel.addId(newId);
+          }
+          await gFFI.abModel.updateAb();
+          this.setState(() {});
+          // final currentPeers
+        }
+        close();
+      }
+
       return CustomAlertDialog(
         title: Text(translate("Add ID")),
         content: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(translate("whitelist_sep")),
-            SizedBox(
+            const SizedBox(
               height: 8.0,
             ),
             Row(
               children: [
                 Expanded(
                   child: TextField(
-                    onChanged: (s) {
-                      field = s;
-                    },
-                    maxLines: null,
-                    decoration: InputDecoration(
-                      border: OutlineInputBorder(),
-                      errorText: msg.isEmpty ? null : translate(msg),
-                    ),
-                    controller: TextEditingController(text: field),
-                  ),
+                      maxLines: null,
+                      decoration: InputDecoration(
+                        border: const OutlineInputBorder(),
+                        errorText: msg.isEmpty ? null : translate(msg),
+                      ),
+                      controller: controller,
+                      focusNode: FocusNode()..requestFocus()),
                 ),
               ],
             ),
-            SizedBox(
+            const SizedBox(
               height: 4.0,
             ),
-            Offstage(offstage: !isInProgress, child: LinearProgressIndicator())
+            Offstage(
+                offstage: !isInProgress, child: const LinearProgressIndicator())
           ],
         ),
         actions: [
-          TextButton(
-              onPressed: () {
-                close();
-              },
-              child: Text(translate("Cancel"))),
-          TextButton(
-              onPressed: () async {
-                setState(() {
-                  msg = "";
-                  isInProgress = true;
-                });
-                field = field.trim();
-                if (field.isEmpty) {
-                  // pass
-                } else {
-                  final ids = field.trim().split(RegExp(r"[\s,;\n]+"));
-                  field = ids.join(',');
-                  for (final newId in ids) {
-                    if (gFFI.abModel.idContainBy(newId)) {
-                      continue;
-                    }
-                    gFFI.abModel.addId(newId);
-                  }
-                  await gFFI.abModel.updateAb();
-                  this.setState(() {});
-                  // final currentPeers
-                }
-                close();
-              },
-              child: Text(translate("OK"))),
+          TextButton(onPressed: close, child: Text(translate("Cancel"))),
+          TextButton(onPressed: submit, child: Text(translate("OK"))),
         ],
+        onSubmit: submit,
+        onCancel: close,
       );
     });
   }
@@ -727,67 +739,65 @@ class _ConnectionPageState extends State<ConnectionPage> {
     var field = "";
     var msg = "";
     var isInProgress = false;
+    TextEditingController controller = TextEditingController(text: field);
     gFFI.dialogManager.show((setState, close) {
+      submit() async {
+        setState(() {
+          msg = "";
+          isInProgress = true;
+        });
+        field = controller.text.trim();
+        if (field.isEmpty) {
+          // pass
+        } else {
+          final tags = field.trim().split(RegExp(r"[\s,;\n]+"));
+          field = tags.join(',');
+          for (final tag in tags) {
+            gFFI.abModel.addTag(tag);
+          }
+          await gFFI.abModel.updateAb();
+          // final currentPeers
+        }
+        close();
+      }
+
       return CustomAlertDialog(
         title: Text(translate("Add Tag")),
         content: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(translate("whitelist_sep")),
-            SizedBox(
+            const SizedBox(
               height: 8.0,
             ),
             Row(
               children: [
                 Expanded(
                   child: TextField(
-                    onChanged: (s) {
-                      field = s;
-                    },
                     maxLines: null,
                     decoration: InputDecoration(
-                      border: OutlineInputBorder(),
+                      border: const OutlineInputBorder(),
                       errorText: msg.isEmpty ? null : translate(msg),
                     ),
-                    controller: TextEditingController(text: field),
+                    controller: controller,
+                    focusNode: FocusNode()..requestFocus(),
                   ),
                 ),
               ],
             ),
-            SizedBox(
+            const SizedBox(
               height: 4.0,
             ),
-            Offstage(offstage: !isInProgress, child: LinearProgressIndicator())
+            Offstage(
+                offstage: !isInProgress, child: const LinearProgressIndicator())
           ],
         ),
         actions: [
-          TextButton(
-              onPressed: () {
-                close();
-              },
-              child: Text(translate("Cancel"))),
-          TextButton(
-              onPressed: () async {
-                setState(() {
-                  msg = "";
-                  isInProgress = true;
-                });
-                field = field.trim();
-                if (field.isEmpty) {
-                  // pass
-                } else {
-                  final tags = field.trim().split(RegExp(r"[\s,;\n]+"));
-                  field = tags.join(',');
-                  for (final tag in tags) {
-                    gFFI.abModel.addTag(tag);
-                  }
-                  await gFFI.abModel.updateAb();
-                  // final currentPeers
-                }
-                close();
-              },
-              child: Text(translate("OK"))),
+          TextButton(onPressed: close, child: Text(translate("Cancel"))),
+          TextButton(onPressed: submit, child: Text(translate("OK"))),
         ],
+        onSubmit: submit,
+        onCancel: close,
       );
     });
   }
@@ -799,13 +809,23 @@ class _ConnectionPageState extends State<ConnectionPage> {
     var selectedTag = gFFI.abModel.getPeerTags(id).obs;
 
     gFFI.dialogManager.show((setState, close) {
+      submit() async {
+        setState(() {
+          isInProgress = true;
+        });
+        gFFI.abModel.changeTagForPeer(id, selectedTag);
+        await gFFI.abModel.updateAb();
+        close();
+      }
+
       return CustomAlertDialog(
         title: Text(translate("Edit Tag")),
         content: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Container(
-              padding: EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
               child: Wrap(
                 children: tags
                     .map((e) => buildTag(e, selectedTag, onTap: () {
@@ -818,26 +838,16 @@ class _ConnectionPageState extends State<ConnectionPage> {
                     .toList(growable: false),
               ),
             ),
-            Offstage(offstage: !isInProgress, child: LinearProgressIndicator())
+            Offstage(
+                offstage: !isInProgress, child: const LinearProgressIndicator())
           ],
         ),
         actions: [
-          TextButton(
-              onPressed: () {
-                close();
-              },
-              child: Text(translate("Cancel"))),
-          TextButton(
-              onPressed: () async {
-                setState(() {
-                  isInProgress = true;
-                });
-                gFFI.abModel.changeTagForPeer(id, selectedTag);
-                await gFFI.abModel.updateAb();
-                close();
-              },
-              child: Text(translate("OK"))),
+          TextButton(onPressed: close, child: Text(translate("Cancel"))),
+          TextButton(onPressed: submit, child: Text(translate("OK"))),
         ],
+        onSubmit: submit,
+        onCancel: close,
       );
     });
   }

@@ -69,7 +69,6 @@ class _PortForwardTabPageState extends State<PortForwardTabPage> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = isDarkTheme() ? TarBarTheme.dark() : TarBarTheme.light();
     return SubWindowDragToResizeArea(
       windowId: windowId(),
       child: Container(
@@ -79,13 +78,10 @@ class _PortForwardTabPageState extends State<PortForwardTabPage> {
             backgroundColor: MyTheme.color(context).bg,
             body: DesktopTab(
               controller: tabController,
-              theme: theme,
               onClose: () {
                 tabController.clear();
               },
-              tail: AddButton(
-                theme: theme,
-              ).paddingOnly(left: 10),
+              tail: AddButton().paddingOnly(left: 10),
             )),
       ),
     );

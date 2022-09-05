@@ -596,46 +596,49 @@ void showSetOSPassword(
   var autoLogin = await bind.sessionGetOption(id: id, arg: "auto-login") != "";
   controller.text = password;
   dialogManager.show((setState, close) {
+    submit() {
+      var text = controller.text.trim();
+      bind.sessionPeerOption(id: id, name: "os-password", value: text);
+      bind.sessionPeerOption(
+          id: id, name: "auto-login", value: autoLogin ? 'Y' : '');
+      if (text != "" && login) {
+        bind.sessionInputOsPassword(id: id, value: text);
+      }
+      close();
+    }
+
     return CustomAlertDialog(
-        title: Text(translate('OS Password')),
-        content: Column(mainAxisSize: MainAxisSize.min, children: [
-          PasswordWidget(controller: controller),
-          CheckboxListTile(
-            contentPadding: const EdgeInsets.all(0),
-            dense: true,
-            controlAffinity: ListTileControlAffinity.leading,
-            title: Text(
-              translate('Auto Login'),
-            ),
-            value: autoLogin,
-            onChanged: (v) {
-              if (v == null) return;
-              setState(() => autoLogin = v);
-            },
+      title: Text(translate('OS Password')),
+      content: Column(mainAxisSize: MainAxisSize.min, children: [
+        PasswordWidget(controller: controller),
+        CheckboxListTile(
+          contentPadding: const EdgeInsets.all(0),
+          dense: true,
+          controlAffinity: ListTileControlAffinity.leading,
+          title: Text(
+            translate('Auto Login'),
           ),
-        ]),
-        actions: [
-          TextButton(
-            style: flatButtonStyle,
-            onPressed: () {
-              close();
-            },
-            child: Text(translate('Cancel')),
-          ),
-          TextButton(
-            style: flatButtonStyle,
-            onPressed: () {
-              var text = controller.text.trim();
-              bind.sessionPeerOption(id: id, name: "os-password", value: text);
-              bind.sessionPeerOption(
-                  id: id, name: "auto-login", value: autoLogin ? 'Y' : '');
-              if (text != "" && login) {
-                bind.sessionInputOsPassword(id: id, value: text);
-              }
-              close();
-            },
-            child: Text(translate('OK')),
-          ),
-        ]);
+          value: autoLogin,
+          onChanged: (v) {
+            if (v == null) return;
+            setState(() => autoLogin = v);
+          },
+        ),
+      ]),
+      actions: [
+        TextButton(
+          style: flatButtonStyle,
+          onPressed: close,
+          child: Text(translate('Cancel')),
+        ),
+        TextButton(
+          style: flatButtonStyle,
+          onPressed: submit,
+          child: Text(translate('OK')),
+        ),
+      ],
+      onSubmit: submit,
+      onCancel: close,
+    );
   });
 }

@@ -55,7 +55,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
     return Row(
       children: [
         buildServerInfo(context),
-        VerticalDivider(
+        const VerticalDivider(
           width: 1,
           thickness: 1,
         ),
@@ -93,23 +93,23 @@ class _DesktopHomePageState extends State<DesktopHomePage>
   buildIDBoard(BuildContext context) {
     final model = gFFI.serverModel;
     return Container(
-      margin: EdgeInsets.only(left: 20, right: 16),
-      height: 52,
+      margin: const EdgeInsets.only(left: 20, right: 11),
+      height: 57,
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.baseline,
         textBaseline: TextBaseline.alphabetic,
         children: [
           Container(
             width: 2,
-            decoration: BoxDecoration(color: MyTheme.accent),
-          ),
+            decoration: const BoxDecoration(color: MyTheme.accent),
+          ).marginOnly(top: 5),
           Expanded(
             child: Padding(
-              padding: const EdgeInsets.only(left: 8.0),
+              padding: const EdgeInsets.only(left: 7),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Container(
+                  SizedBox(
                     height: 25,
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -120,7 +120,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
                           style: TextStyle(
                               fontSize: 14,
                               color: MyTheme.color(context).lightText),
-                        ),
+                        ).marginOnly(top: 5),
                         buildPopupMenu(context)
                       ],
                     ),
@@ -135,11 +135,11 @@ class _DesktopHomePageState extends State<DesktopHomePage>
                       child: TextFormField(
                         controller: model.serverId,
                         readOnly: true,
-                        decoration: InputDecoration(
+                        decoration: const InputDecoration(
                           border: InputBorder.none,
-                          contentPadding: EdgeInsets.only(bottom: 18),
+                          contentPadding: EdgeInsets.only(bottom: 20),
                         ),
-                        style: TextStyle(
+                        style: const TextStyle(
                           fontSize: 22,
                         ),
                       ),
@@ -244,7 +244,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
       },
       child: Obx(
         () => CircleAvatar(
-          radius: 12,
+          radius: 15,
           backgroundColor: hover.value
               ? MyTheme.color(context).grayBg!
               : MyTheme.color(context).bg!,
@@ -277,7 +277,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
           ),
           Expanded(
             child: Padding(
-              padding: const EdgeInsets.only(left: 8.0),
+              padding: const EdgeInsets.only(left: 7),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -303,7 +303,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
                             readOnly: true,
                             decoration: InputDecoration(
                               border: InputBorder.none,
-                              contentPadding: EdgeInsets.only(bottom: 8),
+                              contentPadding: EdgeInsets.only(bottom: 2),
                             ),
                             style: TextStyle(fontSize: 15),
                           ),
@@ -317,7 +317,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
                                 ? MyTheme.color(context).text
                                 : Color(0xFFDDDDDD),
                             size: 22,
-                          ).marginOnly(right: 10, bottom: 8),
+                          ).marginOnly(right: 8, bottom: 2),
                         ),
                         onTap: () => bind.mainUpdateTemporaryPassword(),
                         onHover: (value) => refreshHover.value = value,
@@ -425,13 +425,13 @@ class _DesktopHomePageState extends State<DesktopHomePage>
                 color: editHover.value
                     ? MyTheme.color(context).text
                     : Color(0xFFDDDDDD))
-            .marginOnly(bottom: 8)));
+            .marginOnly(bottom: 2)));
   }
 
   buildTip(BuildContext context) {
     return Padding(
       padding:
-          const EdgeInsets.only(left: 20.0, right: 16, top: 16.0, bottom: 14),
+          const EdgeInsets.only(left: 20.0, right: 16, top: 16.0, bottom: 5),
       child: Column(
         mainAxisAlignment: MainAxisAlignment.start,
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -642,76 +642,76 @@ class _DesktopHomePageState extends State<DesktopHomePage>
     var newId = "";
     var msg = "";
     var isInProgress = false;
+    TextEditingController controller = TextEditingController();
     gFFI.dialogManager.show((setState, close) {
+      submit() async {
+        newId = controller.text.trim();
+        setState(() {
+          msg = "";
+          isInProgress = true;
+          bind.mainChangeId(newId: newId);
+        });
+
+        var status = await bind.mainGetAsyncStatus();
+        while (status == " ") {
+          await Future.delayed(const Duration(milliseconds: 100));
+          status = await bind.mainGetAsyncStatus();
+        }
+        if (status.isEmpty) {
+          // ok
+          close();
+          return;
+        }
+        setState(() {
+          isInProgress = false;
+          msg = translate(status);
+        });
+      }
+
       return CustomAlertDialog(
         title: Text(translate("Change ID")),
         content: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(translate("id_change_tip")),
-            SizedBox(
+            const SizedBox(
               height: 8.0,
             ),
             Row(
               children: [
-                Text("ID:").marginOnly(bottom: 16.0),
-                SizedBox(
+                const Text("ID:").marginOnly(bottom: 16.0),
+                const SizedBox(
                   width: 24.0,
                 ),
                 Expanded(
                   child: TextField(
-                    onChanged: (s) {
-                      newId = s;
-                    },
                     decoration: InputDecoration(
-                        border: OutlineInputBorder(),
+                        border: const OutlineInputBorder(),
                         errorText: msg.isEmpty ? null : translate(msg)),
                     inputFormatters: [
                       LengthLimitingTextInputFormatter(16),
                       // FilteringTextInputFormatter(RegExp(r"[a-zA-z][a-zA-z0-9\_]*"), allow: true)
                     ],
                     maxLength: 16,
+                    controller: controller,
+                    focusNode: FocusNode()..requestFocus(),
                   ),
                 ),
               ],
             ),
-            SizedBox(
+            const SizedBox(
               height: 4.0,
             ),
-            Offstage(offstage: !isInProgress, child: LinearProgressIndicator())
+            Offstage(
+                offstage: !isInProgress, child: const LinearProgressIndicator())
           ],
         ),
         actions: [
-          TextButton(
-              onPressed: () {
-                close();
-              },
-              child: Text(translate("Cancel"))),
-          TextButton(
-              onPressed: () async {
-                setState(() {
-                  msg = "";
-                  isInProgress = true;
-                  bind.mainChangeId(newId: newId);
-                });
-
-                var status = await bind.mainGetAsyncStatus();
-                while (status == " ") {
-                  await Future.delayed(Duration(milliseconds: 100));
-                  status = await bind.mainGetAsyncStatus();
-                }
-                if (status.isEmpty) {
-                  // ok
-                  close();
-                  return;
-                }
-                setState(() {
-                  isInProgress = false;
-                  msg = translate(status);
-                });
-              },
-              child: Text(translate("OK"))),
+          TextButton(onPressed: close, child: Text(translate("Cancel"))),
+          TextButton(onPressed: submit, child: Text(translate("OK"))),
         ],
+        onSubmit: submit,
+        onCancel: close,
       );
     });
   }
@@ -720,16 +720,16 @@ class _DesktopHomePageState extends State<DesktopHomePage>
     final appName = await bind.mainGetAppName();
     final license = await bind.mainGetLicense();
     final version = await bind.mainGetVersion();
-    final linkStyle = TextStyle(decoration: TextDecoration.underline);
+    const linkStyle = TextStyle(decoration: TextDecoration.underline);
     gFFI.dialogManager.show((setState, close) {
       return CustomAlertDialog(
         title: Text("About $appName"),
         content: ConstrainedBox(
-          constraints: BoxConstraints(minWidth: 500),
+          constraints: const BoxConstraints(minWidth: 500),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              SizedBox(
+              const SizedBox(
                 height: 8.0,
               ),
               Text("Version: $version").marginSymmetric(vertical: 4.0),
@@ -737,7 +737,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
                   onTap: () {
                     launchUrlString("https://rustdesk.com/privacy");
                   },
-                  child: Text(
+                  child: const Text(
                     "Privacy Statement",
                     style: linkStyle,
                   ).marginSymmetric(vertical: 4.0)),
@@ -745,13 +745,14 @@ class _DesktopHomePageState extends State<DesktopHomePage>
                   onTap: () {
                     launchUrlString("https://rustdesk.com");
                   },
-                  child: Text(
+                  child: const Text(
                     "Website",
                     style: linkStyle,
                   ).marginSymmetric(vertical: 4.0)),
               Container(
-                decoration: BoxDecoration(color: Color(0xFF2c8cff)),
-                padding: EdgeInsets.symmetric(vertical: 24, horizontal: 8),
+                decoration: const BoxDecoration(color: Color(0xFF2c8cff)),
+                padding:
+                    const EdgeInsets.symmetric(vertical: 24, horizontal: 8),
                 child: Row(
                   children: [
                     Expanded(
@@ -760,9 +761,9 @@ class _DesktopHomePageState extends State<DesktopHomePage>
                         children: [
                           Text(
                             "Copyright &copy; 2022 Purslane Ltd.\n$license",
-                            style: TextStyle(color: Colors.white),
+                            style: const TextStyle(color: Colors.white),
                           ),
-                          Text(
+                          const Text(
                             "Made with heart in this chaotic world!",
                             style: TextStyle(
                                 fontWeight: FontWeight.w800,
@@ -778,12 +779,10 @@ class _DesktopHomePageState extends State<DesktopHomePage>
           ),
         ),
         actions: [
-          TextButton(
-              onPressed: () async {
-                close();
-              },
-              child: Text(translate("OK"))),
+          TextButton(onPressed: close, child: Text(translate("OK"))),
         ],
+        onSubmit: close,
+        onCancel: close,
       );
     });
   }
@@ -815,118 +814,124 @@ Future<bool> loginDialog() async {
   var isInProgress = false;
   var completer = Completer<bool>();
   gFFI.dialogManager.show((setState, close) {
+    submit() async {
+      setState(() {
+        userNameMsg = "";
+        passMsg = "";
+        isInProgress = true;
+      });
+      cancel() {
+        setState(() {
+          isInProgress = false;
+        });
+      }
+
+      userName = userContontroller.text;
+      pass = pwdController.text;
+      if (userName.isEmpty) {
+        userNameMsg = translate("Username missed");
+        cancel();
+        return;
+      }
+      if (pass.isEmpty) {
+        passMsg = translate("Password missed");
+        cancel();
+        return;
+      }
+      try {
+        final resp = await gFFI.userModel.login(userName, pass);
+        if (resp.containsKey('error')) {
+          passMsg = resp['error'];
+          cancel();
+          return;
+        }
+        // {access_token: eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJndWlkIjoiMDFkZjQ2ZjgtZjg3OS00MDE0LTk5Y2QtMGMwYzM2MmViZGJlIiwiZXhwIjoxNjYxNDg2NzYwfQ.GZpe1oI8TfM5yTYNrpcwbI599P4Z_-b2GmnwNl2Lr-w,
+        // token_type: Bearer, user: {id: , name: admin, email: null, note: null, status: null, grp: null, is_admin: true}}
+        debugPrint("$resp");
+        completer.complete(true);
+      } catch (err) {
+        // ignore: avoid_print
+        print(err.toString());
+        cancel();
+        return;
+      }
+      close();
+    }
+
+    cancel() {
+      completer.complete(false);
+      close();
+    }
+
     return CustomAlertDialog(
       title: Text(translate("Login")),
       content: ConstrainedBox(
-        constraints: BoxConstraints(minWidth: 500),
+        constraints: const BoxConstraints(minWidth: 500),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            SizedBox(
+            const SizedBox(
               height: 8.0,
             ),
             Row(
               children: [
                 ConstrainedBox(
-                    constraints: BoxConstraints(minWidth: 100),
+                    constraints: const BoxConstraints(minWidth: 100),
                     child: Text(
                       "${translate('Username')}:",
                       textAlign: TextAlign.start,
                     ).marginOnly(bottom: 16.0)),
-                SizedBox(
+                const SizedBox(
                   width: 24.0,
                 ),
                 Expanded(
                   child: TextField(
                     decoration: InputDecoration(
-                        border: OutlineInputBorder(),
+                        border: const OutlineInputBorder(),
                         errorText: userNameMsg.isNotEmpty ? userNameMsg : null),
                     controller: userContontroller,
+                    focusNode: FocusNode()..requestFocus(),
                   ),
                 ),
               ],
             ),
-            SizedBox(
+            const SizedBox(
               height: 8.0,
             ),
             Row(
               children: [
                 ConstrainedBox(
-                    constraints: BoxConstraints(minWidth: 100),
+                    constraints: const BoxConstraints(minWidth: 100),
                     child: Text("${translate('Password')}:")
                         .marginOnly(bottom: 16.0)),
-                SizedBox(
+                const SizedBox(
                   width: 24.0,
                 ),
                 Expanded(
                   child: TextField(
                     obscureText: true,
                     decoration: InputDecoration(
-                        border: OutlineInputBorder(),
+                        border: const OutlineInputBorder(),
                         errorText: passMsg.isNotEmpty ? passMsg : null),
                     controller: pwdController,
                   ),
                 ),
               ],
             ),
-            SizedBox(
+            const SizedBox(
               height: 4.0,
             ),
-            Offstage(offstage: !isInProgress, child: LinearProgressIndicator())
+            Offstage(
+                offstage: !isInProgress, child: const LinearProgressIndicator())
           ],
         ),
       ),
       actions: [
-        TextButton(
-            onPressed: () {
-              completer.complete(false);
-              close();
-            },
-            child: Text(translate("Cancel"))),
-        TextButton(
-            onPressed: () async {
-              setState(() {
-                userNameMsg = "";
-                passMsg = "";
-                isInProgress = true;
-              });
-              final cancel = () {
-                setState(() {
-                  isInProgress = false;
-                });
-              };
-              userName = userContontroller.text;
-              pass = pwdController.text;
-              if (userName.isEmpty) {
-                userNameMsg = translate("Username missed");
-                cancel();
-                return;
-              }
-              if (pass.isEmpty) {
-                passMsg = translate("Password missed");
-                cancel();
-                return;
-              }
-              try {
-                final resp = await gFFI.userModel.login(userName, pass);
-                if (resp.containsKey('error')) {
-                  passMsg = resp['error'];
-                  cancel();
-                  return;
-                }
-                // {access_token: eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJndWlkIjoiMDFkZjQ2ZjgtZjg3OS00MDE0LTk5Y2QtMGMwYzM2MmViZGJlIiwiZXhwIjoxNjYxNDg2NzYwfQ.GZpe1oI8TfM5yTYNrpcwbI599P4Z_-b2GmnwNl2Lr-w,
-                // token_type: Bearer, user: {id: , name: admin, email: null, note: null, status: null, grp: null, is_admin: true}}
-                debugPrint("$resp");
-                completer.complete(true);
-              } catch (err) {
-                print(err.toString());
-                cancel();
-                return;
-              }
-              close();
-            },
-            child: Text(translate("OK"))),
+        TextButton(onPressed: cancel, child: Text(translate("Cancel"))),
+        TextButton(onPressed: submit, child: Text(translate("OK"))),
       ],
+      onSubmit: submit,
+      onCancel: cancel,
     );
   });
   return completer.future;
@@ -940,55 +945,78 @@ void setPasswordDialog() async {
   var errMsg1 = "";
 
   gFFI.dialogManager.show((setState, close) {
+    submit() {
+      setState(() {
+        errMsg0 = "";
+        errMsg1 = "";
+      });
+      final pass = p0.text.trim();
+      if (pass.length < 6) {
+        setState(() {
+          errMsg0 = translate("Too short, at least 6 characters.");
+        });
+        return;
+      }
+      if (p1.text.trim() != pass) {
+        setState(() {
+          errMsg1 = translate("The confirmation is not identical.");
+        });
+        return;
+      }
+      bind.mainSetPermanentPassword(password: pass);
+      close();
+    }
+
     return CustomAlertDialog(
       title: Text(translate("Set Password")),
       content: ConstrainedBox(
-        constraints: BoxConstraints(minWidth: 500),
+        constraints: const BoxConstraints(minWidth: 500),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            SizedBox(
+            const SizedBox(
               height: 8.0,
             ),
             Row(
               children: [
                 ConstrainedBox(
-                    constraints: BoxConstraints(minWidth: 100),
+                    constraints: const BoxConstraints(minWidth: 100),
                     child: Text(
                       "${translate('Password')}:",
                       textAlign: TextAlign.start,
                     ).marginOnly(bottom: 16.0)),
-                SizedBox(
+                const SizedBox(
                   width: 24.0,
                 ),
                 Expanded(
                   child: TextField(
                     obscureText: true,
                     decoration: InputDecoration(
-                        border: OutlineInputBorder(),
+                        border: const OutlineInputBorder(),
                         errorText: errMsg0.isNotEmpty ? errMsg0 : null),
                     controller: p0,
+                    focusNode: FocusNode()..requestFocus(),
                   ),
                 ),
               ],
             ),
-            SizedBox(
+            const SizedBox(
               height: 8.0,
             ),
             Row(
               children: [
                 ConstrainedBox(
-                    constraints: BoxConstraints(minWidth: 100),
+                    constraints: const BoxConstraints(minWidth: 100),
                     child: Text("${translate('Confirmation')}:")
                         .marginOnly(bottom: 16.0)),
-                SizedBox(
+                const SizedBox(
                   width: 24.0,
                 ),
                 Expanded(
                   child: TextField(
                     obscureText: true,
                     decoration: InputDecoration(
-                        border: OutlineInputBorder(),
+                        border: const OutlineInputBorder(),
                         errorText: errMsg1.isNotEmpty ? errMsg1 : null),
                     controller: p1,
                   ),
@@ -999,35 +1027,11 @@ void setPasswordDialog() async {
         ),
       ),
       actions: [
-        TextButton(
-            onPressed: () {
-              close();
-            },
-            child: Text(translate("Cancel"))),
-        TextButton(
-            onPressed: () {
-              setState(() {
-                errMsg0 = "";
-                errMsg1 = "";
-              });
-              final pass = p0.text.trim();
-              if (pass.length < 6) {
-                setState(() {
-                  errMsg0 = translate("Too short, at least 6 characters.");
-                });
-                return;
-              }
-              if (p1.text.trim() != pass) {
-                setState(() {
-                  errMsg1 = translate("The confirmation is not identical.");
-                });
-                return;
-              }
-              bind.mainSetPermanentPassword(password: pass);
-              close();
-            },
-            child: Text(translate("OK"))),
+        TextButton(onPressed: close, child: Text(translate("Cancel"))),
+        TextButton(onPressed: submit, child: Text(translate("OK"))),
       ],
+      onSubmit: submit,
+      onCancel: close,
     );
   });
 }

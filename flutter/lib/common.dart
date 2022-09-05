@@ -7,6 +7,7 @@ import 'package:back_button_interceptor/back_button_interceptor.dart';
 import 'package:desktop_multi_window/desktop_multi_window.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_hbb/desktop/widgets/tabbar_widget.dart';
 import 'package:flutter_hbb/models/peer_model.dart';
 import 'package:get/get.dart';
@@ -154,7 +155,7 @@ class MyTheme {
     brightness: Brightness.light,
     primarySwatch: Colors.blue,
     visualDensity: VisualDensity.adaptivePlatformDensity,
-    tabBarTheme: TabBarTheme(
+    tabBarTheme: const TabBarTheme(
       labelColor: Colors.black87,
     ),
     splashColor: Colors.transparent,
@@ -162,13 +163,14 @@ class MyTheme {
   ).copyWith(
     extensions: <ThemeExtension<dynamic>>[
       ColorThemeExtension.light,
+      TabbarTheme.light,
     ],
   );
   static ThemeData darkTheme = ThemeData(
     brightness: Brightness.dark,
     primarySwatch: Colors.blue,
     visualDensity: VisualDensity.adaptivePlatformDensity,
-    tabBarTheme: TabBarTheme(
+    tabBarTheme: const TabBarTheme(
       labelColor: Colors.white70,
     ),
     splashColor: Colors.transparent,
@@ -176,11 +178,16 @@ class MyTheme {
   ).copyWith(
     extensions: <ThemeExtension<dynamic>>[
       ColorThemeExtension.dark,
+      TabbarTheme.dark,
     ],
   );
 
   static ColorThemeExtension color(BuildContext context) {
     return Theme.of(context).extension<ColorThemeExtension>()!;
+  }
+
+  static TabbarTheme tabbar(BuildContext context) {
+    return Theme.of(context).extension<TabbarTheme>()!;
   }
 }
 
@@ -340,34 +347,41 @@ class OverlayDialogManager {
       {bool clickMaskDismiss = false,
       bool showCancel = true,
       VoidCallback? onCancel}) {
-    show((setState, close) => CustomAlertDialog(
+    show((setState, close) {
+      cancel() {
+        dismissAll();
+        if (onCancel != null) {
+          onCancel();
+        }
+      }
+
+      return CustomAlertDialog(
         content: Container(
-            constraints: BoxConstraints(maxWidth: 240),
+            constraints: const BoxConstraints(maxWidth: 240),
             child: Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  SizedBox(height: 30),
-                  Center(child: CircularProgressIndicator()),
-                  SizedBox(height: 20),
+                  const SizedBox(height: 30),
+                  const Center(child: CircularProgressIndicator()),
+                  const SizedBox(height: 20),
                   Center(
                       child: Text(translate(text),
-                          style: TextStyle(fontSize: 15))),
-                  SizedBox(height: 20),
+                          style: const TextStyle(fontSize: 15))),
+                  const SizedBox(height: 20),
                   Offstage(
                       offstage: !showCancel,
                       child: Center(
                           child: TextButton(
                               style: flatButtonStyle,
-                              onPressed: () {
-                                dismissAll();
-                                if (onCancel != null) {
-                                  onCancel();
-                                }
-                              },
+                              onPressed: cancel,
                               child: Text(translate('Cancel'),
-                                  style: TextStyle(color: MyTheme.accent)))))
-                ]))));
+                                  style:
+                                      const TextStyle(color: MyTheme.accent)))))
+                ])),
+        onCancel: showCancel ? cancel : null,
+      );
+    });
   }
 }
 
@@ -377,18 +391,18 @@ void showToast(String text, {Duration timeout = const Duration(seconds: 2)}) {
   final entry = OverlayEntry(builder: (_) {
     return IgnorePointer(
         child: Align(
-            alignment: Alignment(0.0, 0.8),
+            alignment: const Alignment(0.0, 0.8),
             child: Container(
               decoration: BoxDecoration(
                 color: Colors.black.withOpacity(0.6),
-                borderRadius: BorderRadius.all(
+                borderRadius: const BorderRadius.all(
                   Radius.circular(20),
                 ),
               ),
-              padding: EdgeInsets.symmetric(horizontal: 20, vertical: 5),
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 5),
               child: Text(
                 text,
-                style: TextStyle(
+                style: const TextStyle(
                     decoration: TextDecoration.none,
                     fontWeight: FontWeight.w300,
                     fontSize: 18,
@@ -403,23 +417,54 @@ void showToast(String text, {Duration timeout = const Duration(seconds: 2)}) {
 }
 
 class CustomAlertDialog extends StatelessWidget {
-  CustomAlertDialog(
-      {this.title, required this.content, this.actions, this.contentPadding});
+  const CustomAlertDialog(
+      {Key? key,
+      this.title,
+      required this.content,
+      this.actions,
+      this.contentPadding,
+      this.onSubmit,
+      this.onCancel})
+      : super(key: key);
 
   final Widget? title;
   final Widget content;
   final List<Widget>? actions;
   final double? contentPadding;
+  final Function()? onSubmit;
+  final Function()? onCancel;
 
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
-      scrollable: true,
-      title: title,
-      contentPadding:
-          EdgeInsets.symmetric(horizontal: contentPadding ?? 25, vertical: 10),
-      content: content,
-      actions: actions,
+    FocusNode focusNode = FocusNode();
+    // request focus if there is no focused FocusNode in the dialog
+    Future.delayed(Duration.zero, () {
+      if (!focusNode.hasFocus) focusNode.requestFocus();
+    });
+    return Focus(
+      focusNode: focusNode,
+      autofocus: true,
+      onKey: (node, key) {
+        if (key.logicalKey == LogicalKeyboardKey.escape) {
+          if (key is RawKeyDownEvent) {
+            onCancel?.call();
+          }
+          return KeyEventResult.handled; // avoid TextField exception on escape
+        } else if (onSubmit != null &&
+            key.logicalKey == LogicalKeyboardKey.enter) {
+          if (key is RawKeyDownEvent) onSubmit?.call();
+          return KeyEventResult.handled;
+        }
+        return KeyEventResult.ignored;
+      },
+      child: AlertDialog(
+        scrollable: true,
+        title: title,
+        contentPadding: EdgeInsets.symmetric(
+            horizontal: contentPadding ?? 25, vertical: 10),
+        content: content,
+        actions: actions,
+      ),
     );
   }
 }
@@ -429,26 +474,28 @@ void msgBox(
     {bool? hasCancel}) {
   dialogManager.dismissAll();
   List<Widget> buttons = [];
+  bool hasOk = false;
+  submit() {
+    dialogManager.dismissAll();
+    // https://github.com/fufesou/rustdesk/blob/5e9a31340b899822090a3731769ae79c6bf5f3e5/src/ui/common.tis#L263
+    if (!type.contains("custom")) {
+      closeConnection();
+    }
+  }
+
+  cancel() {
+    dialogManager.dismissAll();
+  }
+
   if (type != "connecting" && type != "success" && !type.contains("nook")) {
-    buttons.insert(
-        0,
-        msgBoxButton(translate('OK'), () {
-          dialogManager.dismissAll();
-          // https://github.com/fufesou/rustdesk/blob/5e9a31340b899822090a3731769ae79c6bf5f3e5/src/ui/common.tis#L263
-          if (!type.contains("custom")) {
-            closeConnection();
-          }
-        }));
+    hasOk = true;
+    buttons.insert(0, msgBoxButton(translate('OK'), submit));
   }
   hasCancel ??= !type.contains("error") &&
       !type.contains("nocancel") &&
       type != "restarting";
   if (hasCancel) {
-    buttons.insert(
-        0,
-        msgBoxButton(translate('Cancel'), () {
-          dialogManager.dismissAll();
-        }));
+    buttons.insert(0, msgBoxButton(translate('Cancel'), cancel));
   }
   // TODO: test this button
   if (type.contains("hasclose")) {
@@ -459,9 +506,12 @@ void msgBox(
         }));
   }
   dialogManager.show((setState, close) => CustomAlertDialog(
-      title: _msgBoxTitle(title),
-      content: Text(translate(text), style: TextStyle(fontSize: 15)),
-      actions: buttons));
+        title: _msgBoxTitle(title),
+        content: Text(translate(text), style: const TextStyle(fontSize: 15)),
+        actions: buttons,
+        onSubmit: hasOk ? submit : null,
+        onCancel: hasCancel == true ? cancel : null,
+      ));
 }
 
 Widget msgBoxButton(String text, void Function() onPressed) {
@@ -479,15 +529,19 @@ Widget msgBoxButton(String text, void Function() onPressed) {
               Text(translate(text), style: TextStyle(color: MyTheme.accent))));
 }
 
-Widget _msgBoxTitle(String title) => Text(translate(title), style: TextStyle(fontSize: 21));
+Widget _msgBoxTitle(String title) =>
+    Text(translate(title), style: TextStyle(fontSize: 21));
 
 void msgBoxCommon(OverlayDialogManager dialogManager, String title,
-    Widget content, List<Widget> buttons) {
+    Widget content, List<Widget> buttons,
+    {bool hasCancel = true}) {
   dialogManager.dismissAll();
   dialogManager.show((setState, close) => CustomAlertDialog(
-      title: _msgBoxTitle(title),
-      content: content,
-      actions: buttons));
+        title: _msgBoxTitle(title),
+        content: content,
+        actions: buttons,
+        onCancel: hasCancel ? close : null,
+      ));
 }
 
 Color str2color(String str, [alpha = 0xFF]) {
