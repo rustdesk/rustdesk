@@ -1,4 +1,3 @@
-use crate::common::{get_keyboard_mode, save_keyboard_mode};
 use std::{
     collections::HashMap,
     ops::{Deref, DerefMut},
@@ -538,18 +537,6 @@ impl SciterSession {
 
     fn save_close_state(&mut self, k: String, v: String) {
         self.close_state.insert(k, v);
-    }
-
-    fn enter(&mut self) {
-        #[cfg(windows)]
-        crate::platform::windows::stop_system_key_propagate(true);
-        IS_IN.store(true, Ordering::SeqCst);
-    }
-
-    fn leave(&mut self) {
-        #[cfg(windows)]
-        crate::platform::windows::stop_system_key_propagate(false);
-        IS_IN.store(false, Ordering::SeqCst);
     }
 
     fn get_key_event(&self, down_or_up: i32, name: &str, code: i32) -> Option<KeyEvent> {

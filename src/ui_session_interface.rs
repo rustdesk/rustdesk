@@ -7,7 +7,6 @@ use crate::client::{
     QualityStatus, KEY_MAP, SERVER_KEYBOARD_ENABLED,
 };
 use crate::{client::Data, client::Interface};
-use crate::common::{get_keyboard_mode, save_keyboard_mode};
 use async_trait::async_trait;
 
 use hbb_common::config::{Config, LocalConfig, PeerConfig};
@@ -61,11 +60,13 @@ impl<T: InvokeUi> Session<T> {
     }
 
     pub fn get_keyboard_mode(&self) -> String {
-        return get_keyboard_mode();
+        return std::env::var("KEYBOARD_MODE")
+        .unwrap_or(String::from("legacy"))
+        .to_lowercase();
     }
 
     pub fn save_keyboard_mode(&self, value: String) {
-        save_keyboard_mode(value);
+        std::env::set_var("KEYBOARD_MODE", value);
     }
 
     pub fn save_view_style(&mut self, value: String) {
@@ -726,8 +727,29 @@ impl<T: InvokeUi> Session<T> {
         self.send_key_event(key_event, KeyboardMode::Legacy);
     }
 
-    pub fn handle_flutter_key_event(&self, name: &str, keycode: i32, scancode:i32, down_or_up: bool){
-        if scancode < 0 || keycode < 0{
+    pub fn enter(&self) {
+        #[cfg(windows)]
+        crate::platform::windows::stop_system_key_propagate(true);
+        IS_IN.store(true, Ordering::SeqCst);
+    }
+
+    pub fn leave(&self) {
+        for key in TO_RELEASE.lock().unwrap().iter() {
+            self.map_keyboard_mode(false, *key, None)
+        }
+        #[cfg(windows)]
+        crate::platform::windows::stop_system_key_propagate(false);
+        IS_IN.store(false, Ordering::SeqCst);
+    }
+
+    pub fn handle_flutter_key_event(
+        &self,
+        name: &str,
+        keycode: i32,
+        scancode: i32,
+        down_or_up: bool,
+    ) {
+        if scancode < 0 || keycode < 0 {
             return;
         }
         let keycode: u32 = keycode as u32;
@@ -739,12 +761,12 @@ impl<T: InvokeUi> Session<T> {
         #[cfg(target_os = "windows")]
         let key = rdev::get_win_key(keycode, scancode);
 
-        let event_type = if down_or_up{
+        let event_type = if down_or_up {
             KeyPress(key)
-        }else{
+        } else {
             KeyRelease(key)
         };
-        let evt = Event{
+        let evt = Event {
             time: std::time::SystemTime::now(),
             name: Option::Some(name.to_owned()),
             code: keycode as _,
@@ -827,7 +849,7 @@ impl<T: InvokeUi> Session<T> {
                 }
             }
         }
-        
+
         self.legacy_modifiers(&mut key_event, alt, ctrl, shift, command);
         if v == 1 {
             key_event.down = true;
