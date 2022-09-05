@@ -268,19 +268,18 @@ pub async fn start_ipc<T: InvokeUiCM>(cm: ConnectionManager<T>) {
                                                     Data::FS(fs) => {
                                                         handle_fs(fs, &mut write_jobs, &tx).await;
                                                     }
-                                                    // TODO ClipbaordFile
-                                                    // #[cfg(windows)]
-                                                    // Data::ClipbaordFile(_clip) => {
-                                                    //     tx_file
-                                                    //         .send(ClipboardFileData::Clip((id, _clip)))
-                                                    //         .ok();
-                                                    // }
-                                                    // #[cfg(windows)]
-                                                    // Data::ClipboardFileEnabled(enabled) => {
-                                                    //     tx_file
-                                                    //         .send(ClipboardFileData::Enable((id, enabled)))
-                                                    //         .ok();
-                                                    // }
+                                                    #[cfg(windows)]
+                                                    Data::ClipbaordFile(_clip) => {
+                                                        tx_file
+                                                            .send(ClipboardFileData::Clip((conn_id, _clip)))
+                                                            .ok();
+                                                    }
+                                                    #[cfg(windows)]
+                                                    Data::ClipboardFileEnabled(enabled) => {
+                                                        tx_file
+                                                            .send(ClipboardFileData::Enable((conn_id, enabled)))
+                                                            .ok();
+                                                    }
                                                     _ => {
 
                                                     }
@@ -316,7 +315,11 @@ pub async fn start_ipc<T: InvokeUiCM>(cm: ConnectionManager<T>) {
 
 #[cfg(target_os = "android")]
 #[tokio::main(flavor = "current_thread")]
-pub async fn start_listen<T: InvokeUiCM>(cm: ConnectionManager<T>, mut rx: mpsc::UnboundedReceiver<Data>, tx: mpsc::UnboundedSender<Data>) {
+pub async fn start_listen<T: InvokeUiCM>(
+    cm: ConnectionManager<T>,
+    mut rx: mpsc::UnboundedReceiver<Data>,
+    tx: mpsc::UnboundedSender<Data>,
+) {
     let mut current_id = 0;
     let mut write_jobs: Vec<fs::TransferJob> = Vec::new();
     loop {
@@ -596,19 +599,18 @@ fn send_raw(msg: Message, tx: &UnboundedSender<Data>) {
 
 #[cfg(windows)]
 #[tokio::main(flavor = "current_thread")]
-pub async fn start_clipboard_file(
-    cm: ConnectionManager,
+pub async fn start_clipboard_file<T: InvokeUiCM>(
+    cm: ConnectionManager<T>,
     mut rx: mpsc::UnboundedReceiver<ClipboardFileData>,
 ) {
     let mut cliprdr_context = None;
-    let mut rx_clip_client = get_rx_clip_client().lock().await;
+    let mut rx_clip_client = clipboard::get_rx_clip_client().lock().await;
 
     loop {
         tokio::select! {
             clip_file = rx_clip_client.recv() => match clip_file {
                 Some((conn_id, clip)) => {
                     cmd_inner_send(
-                        &cm,
                         conn_id,
                         Data::ClipbaordFile(clip)
                     );
@@ -620,12 +622,12 @@ pub async fn start_clipboard_file(
             server_msg = rx.recv() => match server_msg {
                 Some(ClipboardFileData::Clip((conn_id, clip))) => {
                     if let Some(ctx) = cliprdr_context.as_mut() {
-                        server_clip_file(ctx, conn_id, clip);
+                        clipboard::server_clip_file(ctx, conn_id, clip);
                     }
                 }
                 Some(ClipboardFileData::Enable((id, enabled))) => {
                     if enabled && cliprdr_context.is_none() {
-                        cliprdr_context = Some(match create_cliprdr_context(true, false) {
+                        cliprdr_context = Some(match clipboard::create_cliprdr_context(true, false) {
                             Ok(context) => {
                                 log::info!("clipboard context for file transfer created.");
                                 context
@@ -639,10 +641,10 @@ pub async fn start_clipboard_file(
                             }
                         });
                     }
-                    set_conn_enabled(id, enabled);
+                    clipboard::set_conn_enabled(id, enabled);
                     if !enabled {
                         if let Some(ctx) = cliprdr_context.as_mut() {
-                            empty_clipboard(ctx, id);
+                            clipboard::empty_clipboard(ctx, id);
                         }
                     }
                 }
@@ -655,15 +657,15 @@ pub async fn start_clipboard_file(
 }
 
 #[cfg(windows)]
-fn cmd_inner_send(cm: &ConnectionManager, id: i32, data: Data) {
-    let lock = cm.read().unwrap();
+fn cmd_inner_send(id: i32, data: Data) {
+    let lock = CLIENTS.read().unwrap();
     if id != 0 {
-        if let Some(s) = lock.senders.get(&id) {
-            allow_err!(s.send(data));
+        if let Some(s) = lock.get(&id) {
+            allow_err!(s.tx.send(data));
         }
     } else {
-        for s in lock.senders.values() {
-            allow_err!(s.send(data.clone()));
+        for s in lock.values() {
+            allow_err!(s.tx.send(data.clone()));
         }
     }
 }

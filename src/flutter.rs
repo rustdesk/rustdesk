@@ -396,13 +396,10 @@ pub mod connection_manager {
 
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     pub fn start_listen_ipc_thread() {
-        use crate::{
-            ipc::start_pa,
-            ui_cm_interface::{start_ipc, ConnectionManager},
-        };
+        use crate::ui_cm_interface::{start_ipc, ConnectionManager};
 
         #[cfg(target_os = "linux")]
-        std::thread::spawn(start_pa);
+        std::thread::spawn(crate::ipc::start_pa);
 
         let cm = ConnectionManager {
             ui_handler: FlutterHandler {},
@@ -411,7 +408,7 @@ pub mod connection_manager {
     }
 
     #[cfg(target_os = "android")]
-    use hbb_common::tokio::sync::mpsc::{UnboundedReceiver,UnboundedSender};
+    use hbb_common::tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 
     #[cfg(target_os = "android")]
     pub fn start_channel(

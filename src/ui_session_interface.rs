@@ -26,6 +26,9 @@ use std::sync::{Arc, Mutex, RwLock};
 pub static IS_IN: AtomicBool = AtomicBool::new(false);
 static KEYBOARD_HOOKED: AtomicBool = AtomicBool::new(false);
 
+#[cfg(windows)]
+static mut IS_ALT_GR: bool = false;
+
 #[derive(Clone, Default)]
 pub struct Session<T: InvokeUiSession> {
     pub cmd: String,

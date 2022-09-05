@@ -1,10 +1,7 @@
 use std::{
     collections::HashMap,
     ops::{Deref, DerefMut},
-    sync::{
-        atomic::Ordering,
-        Arc, Mutex,
-    },
+    sync::{atomic::Ordering, Arc, Mutex},
 };
 
 use sciter::{
@@ -39,9 +36,6 @@ type Video = AssetPtr<video_destination>;
 lazy_static::lazy_static! {
     static ref VIDEO: Arc<Mutex<Option<Video>>> = Default::default();
 }
-
-#[cfg(windows)]
-static mut IS_ALT_GR: bool = false;
 
 /// SciterHandler
 /// * element
