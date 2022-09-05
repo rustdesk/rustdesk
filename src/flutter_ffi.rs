@@ -298,6 +298,19 @@ pub fn session_get_peer_option(id: String, name: String) -> String {
     "".to_string()
 }
 
+pub fn session_get_keyboard_name(id: String) -> String {
+    if let Some(session) = SESSIONS.read().unwrap().get(&id) {
+        return session.get_keyboard_mode();
+    }
+    "legacy".to_string()
+}
+
+pub fn session_set_keyboard_mode(id: String, keyboard_mode: String) {
+    if let Some(session) = SESSIONS.read().unwrap().get(&id) {
+        session.save_keyboard_mode(keyboard_mode);
+    }
+}
+
 pub fn session_input_os_password(id: String, value: String) {
     if let Some(session) = SESSIONS.read().unwrap().get(&id) {
         session.input_os_password(value, true);

@@ -41,6 +41,7 @@ class _RemotePageState extends State<RemotePage>
   Timer? _timer;
   bool _showBar = !isWebDesktop;
   String _value = '';
+  String keyboardMode = "legacy";
   final _cursorOverImage = false.obs;
 
   final FocusNode _mobileFocusNode = FocusNode();
@@ -254,8 +255,11 @@ class _RemotePageState extends State<RemotePage>
   }
 
   KeyEventResult handleRawKeyEvent(FocusNode data, RawKeyEvent e) {
-    String? keyboardMode = Platform.environment['KEYBOARD_MODE'];
-    keyboardMode ??= 'legacy';
+    bind.sessionGetKeyboardName(id: widget.id).then((result) {
+      setState(() {
+        keyboardMode = result.toString();
+      });
+    });
 
     if (keyboardMode == 'map') {
       mapKeyboardMode(e);
@@ -285,7 +289,6 @@ class _RemotePageState extends State<RemotePage>
       RawKeyEventDataLinux newData = e.data as RawKeyEventDataLinux;
       scanCode = newData.scanCode;
       keyCode = newData.keyCode;
-      debugPrint(newData.unicodeScalarValues.toString());
     } else {
       scanCode = -1;
       keyCode = -1;
@@ -537,10 +540,8 @@ class _RemotePageState extends State<RemotePage>
         onPointerUp: _onPointUpImage,
         onPointerMove: _onPointMoveImage,
         onPointerSignal: _onPointerSignalImage,
-        child: MouseRegion(
-            onEnter: enterView,
-            onExit: leaveView,
-            child: child));
+        child:
+            MouseRegion(onEnter: enterView, onExit: leaveView, child: child));
   }
 
   Widget getBodyForDesktop(BuildContext context, bool keyboard) {

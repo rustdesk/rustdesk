@@ -1003,6 +1003,10 @@ class FFI {
         downOrUp: down);
   }
 
+  Future<String> getKeyboardMode(){
+    return bind.sessionGetKeyboardName(id: id);
+  }
+
   void enterOrLeave(bool enter) {
     bind.sessionEnterOrLeave(id: id, enter: enter);
   }

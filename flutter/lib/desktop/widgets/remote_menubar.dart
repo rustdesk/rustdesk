@@ -93,6 +93,7 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
     menubarItems.add(_buildMonitor(context));
     menubarItems.add(_buildControl(context));
     menubarItems.add(_buildDisplay(context));
+    menubarItems.add(_buildKeyboard(context));
     if (!isWeb) {
       menubarItems.add(_buildChat(context));
     }
@@ -252,6 +253,29 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
       position: mod_menu.PopupMenuPosition.under,
       onSelected: (String item) {},
       itemBuilder: (BuildContext context) => _getDisplayMenu()
+          .map((entry) => entry.build(
+              context,
+              const MenuConfig(
+                commonColor: _MenubarTheme.commonColor,
+                height: _MenubarTheme.height,
+                dividerHeight: _MenubarTheme.dividerHeight,
+              )))
+          .expand((i) => i)
+          .toList(),
+    );
+  }
+
+  Widget _buildKeyboard(BuildContext context) {
+    return mod_menu.PopupMenuButton(
+      padding: EdgeInsets.zero,
+      icon: const Icon(
+        Icons.keyboard,
+        color: _MenubarTheme.commonColor,
+      ),
+      tooltip: translate('Keyboard Settings'),
+      position: mod_menu.PopupMenuPosition.under,
+      onSelected: (String item) {},
+      itemBuilder: (BuildContext context) => _getKeyboardMenu()
           .map((entry) => entry.build(
               context,
               const MenuConfig(
@@ -553,6 +577,28 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
       }
     }
     return displayMenu;
+  }
+
+  List<MenuEntryBase<String>> _getKeyboardMenu() {
+    final keyboardMenu = [
+      MenuEntryRadios<String>(
+          text: translate('Ratio'),
+          optionsGetter: () => [
+                MenuEntryRadioOption(
+                    text: translate('Legacy mode'), value: 'legacy'),
+                MenuEntryRadioOption(text: translate('Map mode'), value: 'map'),
+              ],
+          curOptionGetter: () async {
+            return await bind.sessionGetKeyboardName(id: widget.id) ?? 'legacy';
+          },
+          optionSetter: (String oldValue, String newValue) async {
+            await bind.sessionSetKeyboardMode(
+                id: widget.id, keyboardMode: newValue);
+            widget.ffi.canvasModel.updateViewStyle();
+          })
+    ];
+
+    return keyboardMenu;
   }
 
   MenuEntrySwitch<String> _createSwitchMenuEntry(String text, String option) {
