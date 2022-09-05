@@ -106,9 +106,9 @@ pub fn stop_global_event_stream(app_type: String) {
         .remove(&app_type);
 }
 
-pub fn host_stop_system_key_propagate(stopped: bool) {
+pub fn host_stop_system_key_propagate(_stopped: bool) {
     #[cfg(windows)]
-    crate::platform::windows::stop_system_key_propagate(stopped);
+    crate::platform::windows::stop_system_key_propagate(_stopped);
 }
 
 // FIXME: -> ResultType<()> cannot be parsed by frb_codegen
@@ -388,7 +388,7 @@ pub fn session_create_dir(id: String, act_id: i32, path: String, is_remote: bool
 }
 
 pub fn session_read_local_dir_sync(id: String, path: String, show_hidden: bool) -> String {
-    if let Some(session) = SESSIONS.read().unwrap().get(&id) {
+    if let Some(_) = SESSIONS.read().unwrap().get(&id) {
         if let Ok(fd) = fs::read_dir(&fs::get_path(&path), show_hidden) {
             return make_fd_to_json(fd);
         }
@@ -404,7 +404,7 @@ pub fn session_get_platform(id: String, is_remote: bool) -> String {
 }
 
 pub fn session_load_last_transfer_jobs(id: String) {
-    if let Some(session) = SESSIONS.read().unwrap().get(&id) {
+    if let Some(_) = SESSIONS.read().unwrap().get(&id) {
         // return session.load_last_jobs();
     } else {
         // a tip for flutter dev

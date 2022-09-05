@@ -1,5 +1,4 @@
 use crate::ResultType;
-use std::sync::Mutex;
 
 pub fn get_display_server() -> String {
     let session = get_value_of_seat0(0);

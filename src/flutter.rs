@@ -12,7 +12,9 @@ use crate::ui_session_interface::{io_loop, InvokeUi, Session};
 use crate::{client::*, flutter_ffi::EventToUI};
 
 pub(super) const APP_TYPE_MAIN: &str = "main";
+#[allow(dead_code)]
 pub(super) const APP_TYPE_DESKTOP_REMOTE: &str = "remote";
+#[allow(dead_code)]
 pub(super) const APP_TYPE_DESKTOP_FILE_TRANSFER: &str = "file transfer";
 
 lazy_static::lazy_static! {
@@ -117,7 +119,7 @@ impl InvokeUi for FlutterHandler {
         );
     }
 
-    fn job_error(&self, id: i32, err: String, file_num: i32) {
+    fn job_error(&self, id: i32, err: String, _file_num: i32) {
         self.push_event("job_error", vec![("id", &id.to_string()), ("err", &err)]);
     }
 
@@ -132,6 +134,7 @@ impl InvokeUi for FlutterHandler {
         // todo!()
     }
 
+    #[allow(unused_variables)]
     fn add_job(
         &self,
         id: i32,
@@ -148,6 +151,7 @@ impl InvokeUi for FlutterHandler {
         // todo!()
     }
 
+    #[allow(unused_variables)]
     fn confirm_delete_files(&self, id: i32, i: i32, name: String) {
         // todo!()
     }
@@ -337,7 +341,7 @@ pub mod connection_manager {
         protobuf::Message as _,
         tokio::{
             self,
-            sync::mpsc::{self, UnboundedReceiver, UnboundedSender},
+            sync::mpsc::{self, UnboundedSender},
             task::spawn_blocking,
         },
     };
@@ -432,7 +436,7 @@ pub mod connection_manager {
                                                 }
                                                 Ok(Some(data)) => {
                                                     match data {
-                                                        Data::Login{id, is_file_transfer, port_forward, peer_id, name, authorized, keyboard, clipboard, audio, file, file_transfer_enabled, restart} => {
+                                                        Data::Login{id, is_file_transfer, port_forward, peer_id, name, authorized, keyboard, clipboard, audio, file, file_transfer_enabled: _file_transfer_enabled, restart} => {
                                                             log::debug!("conn_id: {}", id);
                                                             conn_id = id;
                                                             // tx_file.send(ClipboardFileData::Enable((id, file_transfer_enabled))).ok();

@@ -276,6 +276,7 @@ impl<T: InvokeUi> Remote<T> {
     }
 
     // TODO
+    #[allow(dead_code)]
     fn load_last_jobs(&mut self) {
         log::info!("start load last jobs");
         self.handler.clear_all_jobs();

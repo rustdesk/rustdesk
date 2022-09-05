@@ -8,7 +8,6 @@ use crate::client::{
 };
 use crate::{client::Data, client::Interface};
 use async_trait::async_trait;
-use std::io::Read;
 use hbb_common::config::{Config, LocalConfig, PeerConfig};
 use hbb_common::rendezvous_proto::ConnType;
 use hbb_common::tokio::{self, sync::mpsc};
@@ -1157,7 +1156,7 @@ impl<T: InvokeUi> Session<T> {
             return;
         }
         log::info!("keyboard hooked");
-        let mut me = self.clone();
+        let me = self.clone();
         #[cfg(windows)]
         crate::platform::windows::enable_lowlevel_keyboard(std::ptr::null_mut() as _);
         std::thread::spawn(move || {

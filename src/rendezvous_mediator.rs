@@ -568,6 +568,7 @@ pub fn get_mac() -> String {
     "".to_owned()
 }
 
+#[allow(dead_code)]
 fn lan_discovery() -> ResultType<()> {
     let addr = SocketAddr::from(([0, 0, 0, 0], get_broadcast_port()));
     let socket = std::net::UdpSocket::bind(addr)?;
@@ -637,7 +638,7 @@ pub async fn query_online_states<F: FnOnce(Vec<String>, Vec<String>)>(ids: Vec<S
 }
 
 async fn create_online_stream() -> ResultType<FramedStream> {
-    let (mut rendezvous_server, _servers, _contained) = crate::get_rendezvous_server(1_000).await;
+    let (rendezvous_server, _servers, _contained) = crate::get_rendezvous_server(1_000).await;
     let tmp: Vec<&str> = rendezvous_server.split(":").collect();
     if tmp.len() != 2 {
         bail!("Invalid server address: {}", rendezvous_server);

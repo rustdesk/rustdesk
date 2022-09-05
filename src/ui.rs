@@ -763,6 +763,7 @@ fn get_sound_inputs() -> Vec<String> {
         .collect()
 }
 
+#[allow(dead_code)]
 fn check_connect_status(
     reconnect: bool,
 ) -> (

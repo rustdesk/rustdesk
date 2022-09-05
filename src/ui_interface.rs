@@ -69,7 +69,7 @@ pub fn goto_install() {
     allow_err!(crate::run_me(vec!["--install"]));
 }
 
-pub fn install_me(_options: String, _path: String, silent: bool, debug: bool) {
+pub fn install_me(_options: String, _path: String, _silent: bool, _debug: bool) {
     #[cfg(windows)]
     std::thread::spawn(move || {
         allow_err!(crate::platform::windows::install_me(
@@ -682,6 +682,7 @@ pub fn check_super_user_permission() -> bool {
     true
 }
 
+#[allow(dead_code)]
 pub fn check_zombie(childs: Childs) {
     let mut deads = Vec::new();
     loop {

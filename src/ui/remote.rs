@@ -2,7 +2,6 @@ use std::{
     collections::HashMap,
     ops::{Deref, DerefMut},
     sync::{
-        atomic::{Ordering},
         Arc, Mutex,
     },
 };
@@ -29,7 +28,7 @@ use hbb_common::{allow_err, log, message_proto::*, rendezvous_proto::ConnType};
 use crate::clipboard_file::*;
 use crate::{
     client::*,
-    ui_session_interface::{InvokeUi, Session, IS_IN},
+    ui_session_interface::{InvokeUi, Session},
 };
 
 type Video = AssetPtr<video_destination>;
@@ -155,6 +154,7 @@ impl InvokeUi for SciterHandler {
         self.call("clearAllJobs", &make_args!());
     }
 
+    #[allow(unused_variables)]
     fn add_job(
         &self,
         id: i32,
