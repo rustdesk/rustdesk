@@ -452,7 +452,6 @@ impl<T: InvokeUiSession> Remote<T> {
                             file_num,
                             job.files[i].name.clone(),
                         );
-                        self.handler.confirm_delete_files(id, file_num);
                     }
                 }
             }
