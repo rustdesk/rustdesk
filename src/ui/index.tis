@@ -1055,6 +1055,7 @@ function showSettings() {
 }
 
 function checkConnectStatus() {
+    handler.check_mouse_time(); // trigger connection status updater
     self.timer(1s, function() {
         var tmp = !!handler.get_option("stop-service");
         if (tmp != service_stopped) {
