@@ -269,33 +269,6 @@ impl<T: InvokeUiSession> Remote<T> {
         Some(tx)
     }
 
-    // TODO
-    fn load_last_jobs(&mut self) {
-        self.handler.clear_all_jobs();
-        let pc = self.handler.load_config();
-        if pc.transfer.write_jobs.is_empty() && pc.transfer.read_jobs.is_empty() {
-            // no last jobs
-            return;
-        }
-        // TODO: can add a confirm dialog
-        let mut cnt = 1;
-        for job_str in pc.transfer.read_jobs.iter() {
-            if !job_str.is_empty() {
-                self.handler.load_last_job(cnt, job_str);
-                cnt += 1;
-                log::info!("restore read_job: {:?}", job_str);
-            }
-        }
-        for job_str in pc.transfer.write_jobs.iter() {
-            if !job_str.is_empty() {
-                self.handler.load_last_job(cnt, job_str);
-                cnt += 1;
-                log::info!("restore write_job: {:?}", job_str);
-            }
-        }
-        self.handler.update_transfer_list();
-    }
-
     async fn handle_msg_from_ui(&mut self, data: Data, peer: &mut Stream) -> bool {
         match data {
             Data::Close => {
@@ -768,7 +741,7 @@ impl<T: InvokeUiSession> Remote<T> {
                         }
 
                         if self.handler.is_file_transfer() {
-                            self.load_last_jobs();
+                            self.handler.load_last_jobs();
                         }
                     }
                     _ => {}
@@ -827,7 +800,7 @@ impl<T: InvokeUiSession> Remote<T> {
                                 &entries,
                                 fd.path,
                                 false,
-                                fd.id > 0,
+                                false,
                             );
                             if let Some(job) = fs::get_job(fd.id, &mut self.write_jobs) {
                                 log::info!("job set_files: {:?}", entries);

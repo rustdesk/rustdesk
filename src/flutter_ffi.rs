@@ -366,7 +366,7 @@ pub fn session_get_platform(id: String, is_remote: bool) -> String {
 
 pub fn session_load_last_transfer_jobs(id: String) {
     if let Some(session) = SESSIONS.read().unwrap().get(&id) {
-        // return session.load_last_jobs();
+        return session.load_last_jobs();
     } else {
         // a tip for flutter dev
         eprintln!(

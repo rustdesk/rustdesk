@@ -532,6 +532,32 @@ impl<T: InvokeUiSession> Session<T> {
     pub fn close(&self) {
         self.send(Data::Close);
     }
+
+    pub fn load_last_jobs(&self) {
+        self.clear_all_jobs();
+        let pc = self.load_config();
+        if pc.transfer.write_jobs.is_empty() && pc.transfer.read_jobs.is_empty() {
+            // no last jobs
+            return;
+        }
+        // TODO: can add a confirm dialog
+        let mut cnt = 1;
+        for job_str in pc.transfer.read_jobs.iter() {
+            if !job_str.is_empty() {
+                self.load_last_job(cnt, job_str);
+                cnt += 1;
+                log::info!("restore read_job: {:?}", job_str);
+            }
+        }
+        for job_str in pc.transfer.write_jobs.iter() {
+            if !job_str.is_empty() {
+                self.load_last_job(cnt, job_str);
+                cnt += 1;
+                log::info!("restore write_job: {:?}", job_str);
+            }
+        }
+        self.update_transfer_list();
+    }
 }
 
 pub trait InvokeUiSession: Send + Sync + Clone + 'static + Sized + Default {
