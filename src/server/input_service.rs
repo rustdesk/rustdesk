@@ -595,6 +595,7 @@ pub fn handle_key(evt: &KeyEvent) {
         QUEUE.exec_async(move || handle_key_(&evt));
         return;
     }
+    log::info!("{:?}", evt);
     handle_key_(evt);
 }
 
@@ -647,6 +648,7 @@ fn map_keyboard_mode(evt: &KeyEvent) {
     let (click_capslock, click_numlock) = sync_status(evt);
 
     // Wayland
+    #[cfg(target_os = "linux")]
     if !*IS_X11.lock().unwrap() {
         let mut en = ENIGO.lock().unwrap();
         let code = evt.chr() as u16;
