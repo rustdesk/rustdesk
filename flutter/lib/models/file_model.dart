@@ -360,9 +360,9 @@ class FileModel extends ChangeNotifier {
   Future refresh({bool? isLocal}) async {
     if (isDesktop) {
       isLocal = isLocal ?? _isLocal;
-      await isLocal
-          ? openDirectory(currentLocalDir.path, isLocal: isLocal)
-          : openDirectory(currentRemoteDir.path, isLocal: isLocal);
+      isLocal
+          ? await openDirectory(currentLocalDir.path, isLocal: isLocal)
+          : await openDirectory(currentRemoteDir.path, isLocal: isLocal);
     } else {
       await openDirectory(currentDir.path);
     }
@@ -393,7 +393,7 @@ class FileModel extends ChangeNotifier {
       }
       notifyListeners();
     } catch (e) {
-      debugPrint("Failed to openDirectory ${path} :$e");
+      debugPrint("Failed to openDirectory $path: $e");
     }
   }
 

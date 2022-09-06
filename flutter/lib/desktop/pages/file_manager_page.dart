@@ -59,8 +59,11 @@ class _FileManagerPageState extends State<FileManagerPage>
     super.initState();
     _ffi = FFI();
     _ffi.connect(widget.id, isFileTransfer: true);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _ffi.dialogManager
+          .showLoading(translate('Connecting...'), onCancel: closeConnection);
+    });
     Get.put(_ffi, tag: 'ft_${widget.id}');
-    // _ffi.ffiModel.updateEventListener(widget.id);
     if (!Platform.isLinux) {
       Wakelock.enable();
     }
@@ -117,7 +120,8 @@ class _FileManagerPageState extends State<FileManagerPage>
 
   Widget menu({bool isLocal = false}) {
     return PopupMenuButton<String>(
-        icon: Icon(Icons.more_vert),
+        icon: const Icon(Icons.more_vert),
+        splashRadius: 20,
         itemBuilder: (context) {
           return [
             PopupMenuItem(
@@ -413,6 +417,7 @@ class _FileManagerPageState extends State<FileManagerPage>
   /// watch transfer status
   Widget statusList() {
     return PreferredSize(
+        preferredSize: const Size(200, double.infinity),
         child: Container(
           margin: const EdgeInsets.only(top: 16.0, bottom: 16.0, right: 16.0),
           padding: const EdgeInsets.all(8.0),
@@ -429,8 +434,8 @@ class _FileManagerPageState extends State<FileManagerPage>
                       children: [
                         Transform.rotate(
                             angle: item.isRemote ? pi : 0,
-                            child: Icon(Icons.send)),
-                        SizedBox(
+                            child: const Icon(Icons.send)),
+                        const SizedBox(
                           width: 16.0,
                         ),
                         Expanded(
@@ -441,7 +446,7 @@ class _FileManagerPageState extends State<FileManagerPage>
                               Tooltip(
                                   message: item.jobName,
                                   child: Text(
-                                    '${item.jobName}',
+                                    item.jobName,
                                     maxLines: 1,
                                     overflow: TextOverflow.ellipsis,
                                   )),
@@ -455,7 +460,7 @@ class _FileManagerPageState extends State<FileManagerPage>
                                       offstage:
                                           item.state != JobState.inProgress,
                                       child: Text(
-                                          '${readableFileSize(item.speed) + "/s"} ')),
+                                          '${"${readableFileSize(item.speed)}/s"} ')),
                                   Offstage(
                                     offstage: item.totalSize <= 0,
                                     child: Text(
@@ -475,10 +480,12 @@ class _FileManagerPageState extends State<FileManagerPage>
                                   onPressed: () {
                                     model.resumeJob(item.id);
                                   },
-                                  icon: Icon(Icons.restart_alt_rounded)),
+                                  splashRadius: 20,
+                                  icon: const Icon(Icons.restart_alt_rounded)),
                             ),
                             IconButton(
-                              icon: Icon(Icons.delete),
+                              icon: const Icon(Icons.delete),
+                              splashRadius: 20,
                               onPressed: () {
                                 model.jobTable.removeAt(index);
                                 model.cancelJob(item.id);
@@ -500,8 +507,7 @@ class _FileManagerPageState extends State<FileManagerPage>
               itemCount: model.jobTable.length,
             ),
           ),
-        ),
-        preferredSize: Size(200, double.infinity));
+        ));
   }
 
   goBack({bool? isLocal}) {
@@ -551,12 +557,15 @@ class _FileManagerPageState extends State<FileManagerPage>
             Row(
               children: [
                 IconButton(
-                    onPressed: () {
-                      model.goHome(isLocal: isLocal);
-                    },
-                    icon: Icon(Icons.home_outlined)),
+                  onPressed: () {
+                    model.goHome(isLocal: isLocal);
+                  },
+                  icon: const Icon(Icons.home_outlined),
+                  splashRadius: 20,
+                ),
                 IconButton(
-                  icon: Icon(Icons.arrow_upward),
+                  icon: const Icon(Icons.arrow_upward),
+                  splashRadius: 20,
                   onPressed: () {
                     goBack(isLocal: isLocal);
                   },
@@ -622,13 +631,15 @@ class _FileManagerPageState extends State<FileManagerPage>
                       ),
                     ))
               ],
-              child: Icon(Icons.search),
+              splashRadius: 20,
+              child: const Icon(Icons.search),
             ),
             IconButton(
                 onPressed: () {
                   model.refresh(isLocal: isLocal);
                 },
-                icon: Icon(Icons.refresh)),
+                splashRadius: 20,
+                icon: const Icon(Icons.refresh)),
           ],
         ),
         Row(
@@ -686,6 +697,7 @@ class _FileManagerPageState extends State<FileManagerPage>
                           );
                         });
                       },
+                      splashRadius: 20,
                       icon: const Icon(Icons.create_new_folder_outlined)),
                   IconButton(
                       onPressed: () async {
@@ -695,7 +707,8 @@ class _FileManagerPageState extends State<FileManagerPage>
                         await (model.removeAction(items, isLocal: isLocal));
                         items.clear();
                       },
-                      icon: Icon(Icons.delete_forever_outlined)),
+                      splashRadius: 20,
+                      icon: const Icon(Icons.delete_forever_outlined)),
                 ],
               ),
             ),
@@ -707,7 +720,7 @@ class _FileManagerPageState extends State<FileManagerPage>
                 },
                 icon: Transform.rotate(
                   angle: isLocal ? 0 : pi,
-                  child: Icon(
+                  child: const Icon(
                     Icons.send,
                   ),
                 ),

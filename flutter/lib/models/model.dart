@@ -326,8 +326,8 @@ class FfiModel with ChangeNotifier {
           await bind.sessionGetOption(id: peerId, arg: "touch-mode") != '';
     }
 
-    if (evt['is_file_transfer'] == "true") {
-      // TODO is file transfer
+    if (parent.target != null &&
+        parent.target!.connType == ConnType.fileTransfer) {
       parent.target?.fileModel.onReady();
     } else {
       _pi.displays = [];
@@ -916,6 +916,8 @@ extension ToString on MouseButtons {
   }
 }
 
+enum ConnType { defaultConn, fileTransfer, portForward, rdp }
+
 /// FFI class for communicating with the Rust core.
 class FFI {
   var id = "";
@@ -924,6 +926,7 @@ class FFI {
   var alt = false;
   var command = false;
   var version = "";
+  var connType = ConnType.defaultConn;
 
   /// dialogManager use late to ensure init after main page binding [globalKey]
   late final dialogManager = OverlayDialogManager();
@@ -1055,9 +1058,11 @@ class FFI {
       double tabBarHeight = 0.0}) {
     assert(!(isFileTransfer && isPortForward), "more than one connect type");
     if (isFileTransfer) {
-      id = 'ft_${id}';
+      connType = ConnType.fileTransfer;
+      id = 'ft_$id';
     } else if (isPortForward) {
-      id = 'pf_${id}';
+      connType = ConnType.portForward;
+      id = 'pf_$id';
     } else {
       chatModel.resetClientMode();
       canvasModel.id = id;
@@ -1086,7 +1091,7 @@ class FFI {
     // every instance will bind a stream
     this.id = id;
     if (isFileTransfer) {
-      this.fileModel.initFileFetcher();
+      fileModel.initFileFetcher();
     }
   }
 

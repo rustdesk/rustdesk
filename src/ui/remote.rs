@@ -709,18 +709,15 @@ impl SciterSession {
 }
 
 pub fn make_fd(id: i32, entries: &Vec<FileEntry>, only_count: bool) -> Value {
-    log::debug!("make_fd");
     let mut m = Value::map();
     m.set_item("id", id);
     let mut a = Value::array(0);
     let mut n: u64 = 0;
     for entry in entries {
-        log::debug!("for");
         n += entry.size;
         if only_count {
             continue;
         }
-        log::debug!("for1");
         let mut e = Value::map();
         e.set_item("name", entry.name.to_owned());
         let tmp = entry.entry_type.value();
@@ -734,6 +731,5 @@ pub fn make_fd(id: i32, entries: &Vec<FileEntry>, only_count: bool) -> Value {
     }
     m.set_item("num_entries", entries.len() as i32);
     m.set_item("total_size", n as f64);
-    log::debug!("make_fd end");
     m
 }
