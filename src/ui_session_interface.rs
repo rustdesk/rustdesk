@@ -60,8 +60,8 @@ impl<T: InvokeUi> Session<T> {
 
     pub fn get_keyboard_mode(&self) -> String {
         return std::env::var("KEYBOARD_MODE")
-        .unwrap_or(String::from("legacy"))
-        .to_lowercase();
+            .unwrap_or(String::from("legacy"))
+            .to_lowercase();
     }
 
     pub fn save_keyboard_mode(&self, value: String) {
@@ -301,16 +301,15 @@ impl<T: InvokeUi> Session<T> {
         } else {
             key
         };
+        #[cfg(not(windows))]
+        let key = self.convert_numpad_keys(key);
 
         let peer = self.peer_platform();
-
         let mut key_event = KeyEvent::new();
         // According to peer platform.
         let keycode: u32 = if peer == "Linux" {
             rdev::linux_keycode_from_key(key).unwrap_or_default().into()
         } else if peer == "Windows" {
-            #[cfg(not(windows))]
-            let key = self.convert_numpad_keys(key);
             rdev::win_keycode_from_key(key).unwrap_or_default().into()
         } else {
             // Without Clear Key on Mac OS
@@ -417,7 +416,7 @@ impl<T: InvokeUi> Session<T> {
 
         if get_key_state(enigo::Key::CapsLock) {
             key_event.modifiers.push(ControlKey::CapsLock.into());
-        } 
+        }
         if self.peer_platform() != "Mac OS" {
             if get_key_state(enigo::Key::NumLock) {
                 key_event.modifiers.push(ControlKey::NumLock.into());
