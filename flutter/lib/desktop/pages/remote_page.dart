@@ -332,7 +332,7 @@ class _RemotePageState extends State<RemotePage>
           key == LogicalKeyboardKey.shiftLeft) {
         _ffi.shift = false;
       } else if (key == LogicalKeyboardKey.metaLeft ||
-          key == LogicalKeyboardKey.metaRight) {
+          key == LogicalKeyboardKey.metaRight || key == LogicalKeyboardKey.superKey) {
         _ffi.command = false;
       }
       sendRawKey(e);
