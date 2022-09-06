@@ -427,7 +427,7 @@ abstract class BasePeerCard extends StatelessWidget {
                 alignment: Alignment.centerRight,
                 child: IconButton(
                   padding: EdgeInsets.zero,
-                  icon: Icon(Icons.edit),
+                  icon: const Icon(Icons.edit),
                   onPressed: () => _rdpDialog(id),
                 ),
               ))
@@ -435,6 +435,20 @@ abstract class BasePeerCard extends StatelessWidget {
           )),
       proc: () {
         _connect(context, id, isRDP: true);
+      },
+      dismissOnClicked: true,
+    );
+  }
+
+  @protected
+  MenuEntryBase<String> _wolAction(String id) {
+    return MenuEntryButton<String>(
+      childBuilder: (TextStyle? style) => Text(
+        translate('WOL'),
+        style: style,
+      ),
+      proc: () {
+        bind.mainWol(id: id);
       },
       dismissOnClicked: true,
     );
@@ -620,11 +634,16 @@ class RecentPeerCard extends BasePeerCard {
       _transferFileAction(context, peer.id),
       _tcpTunnelingAction(context, peer.id),
     ];
+    MenuEntryBase<String>? rdpAction;
     if (peer.platform == 'Windows') {
-      menuItems.add(_rdpAction(context, peer.id));
+      rdpAction = _rdpAction(context, peer.id);
     }
-    menuItems.add(MenuEntryDivider());
     menuItems.add(await _forceAlwaysRelayAction(peer.id));
+    if (rdpAction != null) {
+      menuItems.add(rdpAction);
+    }
+    menuItems.add(_wolAction(peer.id));
+    menuItems.add(MenuEntryDivider());
     menuItems.add(_renameAction(peer.id, false));
     menuItems.add(_removeAction(peer.id, () async {
       await bind.mainLoadRecentPeers();
@@ -647,10 +666,16 @@ class FavoritePeerCard extends BasePeerCard {
       _transferFileAction(context, peer.id),
       _tcpTunnelingAction(context, peer.id),
     ];
+    MenuEntryBase<String>? rdpAction;
     if (peer.platform == 'Windows') {
-      menuItems.add(_rdpAction(context, peer.id));
+      rdpAction = _rdpAction(context, peer.id);
     }
     menuItems.add(await _forceAlwaysRelayAction(peer.id));
+    if (rdpAction != null) {
+      menuItems.add(rdpAction);
+    }
+    menuItems.add(_wolAction(peer.id));
+    menuItems.add(MenuEntryDivider());
     menuItems.add(_renameAction(peer.id, false));
     menuItems.add(_removeAction(peer.id, () async {
       await bind.mainLoadFavPeers();
@@ -673,10 +698,16 @@ class DiscoveredPeerCard extends BasePeerCard {
       _transferFileAction(context, peer.id),
       _tcpTunnelingAction(context, peer.id),
     ];
+    MenuEntryBase<String>? rdpAction;
     if (peer.platform == 'Windows') {
-      menuItems.add(_rdpAction(context, peer.id));
+      rdpAction = _rdpAction(context, peer.id);
     }
     menuItems.add(await _forceAlwaysRelayAction(peer.id));
+    if (rdpAction != null) {
+      menuItems.add(rdpAction);
+    }
+    menuItems.add(_wolAction(peer.id));
+    menuItems.add(MenuEntryDivider());
     menuItems.add(_renameAction(peer.id, false));
     menuItems.add(_removeAction(peer.id, () async {
       await bind.mainLoadLanPeers();
@@ -698,10 +729,16 @@ class AddressBookPeerCard extends BasePeerCard {
       _transferFileAction(context, peer.id),
       _tcpTunnelingAction(context, peer.id),
     ];
+    MenuEntryBase<String>? rdpAction;
     if (peer.platform == 'Windows') {
-      menuItems.add(_rdpAction(context, peer.id));
+      rdpAction = _rdpAction(context, peer.id);
     }
     menuItems.add(await _forceAlwaysRelayAction(peer.id));
+    if (rdpAction != null) {
+      menuItems.add(rdpAction);
+    }
+    menuItems.add(_wolAction(peer.id));
+    menuItems.add(MenuEntryDivider());
     menuItems.add(_renameAction(peer.id, false));
     menuItems.add(_removeAction(peer.id, () async {}));
     menuItems.add(_unrememberPasswordAction(peer.id));

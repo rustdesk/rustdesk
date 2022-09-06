@@ -19,8 +19,15 @@ import 'package:tray_manager/tray_manager.dart';
 import 'package:url_launcher/url_launcher_string.dart';
 import 'package:window_manager/window_manager.dart';
 
+class _PopupMenuTheme {
+  static const Color commonColor = MyTheme.accent;
+  // kMinInteractiveDimension
+  static const double height = 25.0;
+  static const double dividerHeight = 3.0;
+}
+
 class DesktopHomePage extends StatefulWidget {
-  DesktopHomePage({Key? key}) : super(key: key);
+  const DesktopHomePage({Key? key}) : super(key: key);
 
   @override
   State<StatefulWidget> createState() => _DesktopHomePageState();
@@ -86,7 +93,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
   buildServerBoard(BuildContext context) {
     return Container(
       color: MyTheme.color(context).grayBg,
-      child: ConnectionPage(),
+      child: const ConnectionPage(),
     );
   }
 
@@ -154,8 +161,190 @@ class _DesktopHomePageState extends State<DesktopHomePage>
     );
   }
 
+  // Future<MenuEntryBase<String>> _genSwitchEntry(
+  //     String label, String key) async {
+
+  //   final v = await bind.mainGetOption(key: key);
+  //   bool enable;
+  //   if (key == "stop-service") {
+  //     enable = v != "Y";
+  //   } else if (key.startsWith("allow-")) {
+  //     enable = v == "Y";
+  //   } else {
+  //     enable = v != "N";
+  //   }
+
+  //   return PopupMenuItem(
+  //     child: Row(
+  //       children: [
+  //         Icon(Icons.check,
+  //             color: enable ? null : MyTheme.accent.withAlpha(00)),
+  //         Text(
+  //           label,
+  //           style: genTextStyle(enable),
+  //         ),
+  //       ],
+  //     ),
+  //     value: key,
+  //   );
+  // }
+
+  _popupMenu(BuildContext context, RelativeRect position) async {
+    TextStyle styleEnabled = const TextStyle(
+        color: Colors.black,
+        fontSize: MenuConfig.fontSize,
+        fontWeight: FontWeight.normal);
+    TextStyle styleDisabled = const TextStyle(
+        color: Colors.redAccent,
+        fontSize: MenuConfig.fontSize,
+        fontWeight: FontWeight.normal,
+        decoration: TextDecoration.lineThrough);
+
+    enabledEntry(String label, String key) {
+      Rx<TextStyle> textStyle = styleEnabled.obs;
+      return MenuEntrySwitch<String>(
+        text: translate(label),
+        textStyle: textStyle,
+        getter: () async {
+          final opt = await bind.mainGetOption(key: key);
+          bool enabled;
+          if (key == 'stop-service') {
+            enabled = opt != 'Y';
+          } else if (key.startsWith("allow-")) {
+            enabled = opt == 'Y';
+          } else {
+            enabled = opt != 'N';
+          }
+          textStyle.value = enabled ? styleEnabled : styleDisabled;
+          return enabled;
+        },
+        setter: (bool v) async {
+          String opt;
+          if (key == 'stop-service') {
+            opt = v ? 'Y' : '';
+          } else if (key.startsWith("allow-")) {
+            opt = v ? 'Y' : '';
+          } else {
+            opt = v ? '' : 'N';
+          }
+          await bind.mainSetOption(key: key, value: opt);
+          if (key == 'allow-darktheme') {
+            changeTheme(opt);
+          }
+        },
+        dismissOnClicked: false,
+      );
+    }
+
+    final userName = await gFFI.userModel.getUserName();
+    final enabledInput = await bind.mainGetOption(key: 'enable-audio');
+    final defaultInput = await gFFI.getDefaultAudioInput();
+
+    final List<MenuEntryBase<String>> menu = <MenuEntryBase<String>>[
+      enabledEntry('Enable Keyboard/Mouse', 'enable-keyboard'),
+      enabledEntry('Enable Clipboard', 'enable-clipboard'),
+      enabledEntry('Enable File Transfer', 'enable-file-transfer'),
+      enabledEntry('Enable TCP Tunneling', 'enable-tunnel'),
+      // TODO: audio sub menu?
+      // genAudioInputPopupMenuItem(enabledInput != "N", defaultInput),
+      MenuEntryDivider(),
+      MenuEntryButton(
+        childBuilder: (TextStyle? style) => Text(
+          translate('ID/Relay Server'),
+          style: style,
+        ),
+        proc: () {
+          changeServer();
+        },
+        dismissOnClicked: true,
+      ),
+      MenuEntryButton(
+        childBuilder: (TextStyle? style) => Text(
+          translate('IP Whitelisting'),
+          style: style,
+        ),
+        proc: () {
+          changeWhiteList();
+        },
+        dismissOnClicked: true,
+      ),
+      MenuEntryButton(
+        childBuilder: (TextStyle? style) => Text(
+          translate('Socks5 Proxy'),
+          style: style,
+        ),
+        proc: () {
+          changeSocks5Proxy();
+        },
+        dismissOnClicked: true,
+      ),
+      MenuEntryDivider(),
+      enabledEntry('Enable Service', 'stop-service'),
+      enabledEntry('Always connected via relay', 'allow-always-relay'),
+      // FIXME: is this option correct?
+      enabledEntry('Start ID/relay service', 'stop-rendezvous-service'),
+      MenuEntryDivider(),
+      userName.isEmpty
+          ? MenuEntryButton(
+              childBuilder: (TextStyle? style) => Text(
+                translate('Login'),
+                style: style,
+              ),
+              proc: () {
+                login();
+              },
+              dismissOnClicked: true,
+            )
+          : MenuEntryButton(
+              childBuilder: (TextStyle? style) => Text(
+                translate('Logout'),
+                style: style,
+              ),
+              proc: () {
+                logOut();
+              },
+              dismissOnClicked: true,
+            ),
+      MenuEntryButton(
+        childBuilder: (TextStyle? style) => Text(
+          translate('Change ID'),
+          style: style,
+        ),
+        proc: () {
+          changeId();
+        },
+        dismissOnClicked: true,
+      ),
+      MenuEntryDivider(),
+      enabledEntry('Dark Theme', 'allow-darktheme'),
+      MenuEntryButton(
+        childBuilder: (TextStyle? style) => Text(
+          translate('About'),
+          style: style,
+        ),
+        proc: () {
+          about();
+        },
+        dismissOnClicked: true,
+      ),
+    ];
+
+    await mod_menu.showMenu(
+        context: context,
+        position: position,
+        items: menu
+            .map((e) => e.build(
+                context,
+                const MenuConfig(
+                    commonColor: _PopupMenuTheme.commonColor,
+                    height: _PopupMenuTheme.height,
+                    dividerHeight: _PopupMenuTheme.dividerHeight)))
+            .expand((i) => i)
+            .toList());
+  }
+
   Widget buildPopupMenu(BuildContext context) {
-    var position;
+    RelativeRect position = const RelativeRect.fromLTRB(0.0, 0.0, 0.0, 0.0);
     RxBool hover = false.obs;
     return InkWell(
       onTapDown: (detail) {
@@ -164,83 +353,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
         position = RelativeRect.fromLTRB(x, y, x, y);
       },
       onTap: () async {
-        final userName = await gFFI.userModel.getUserName();
-        final enabledInput = await bind.mainGetOption(key: 'enable-audio');
-        final defaultInput = await gFFI.getDefaultAudioInput();
-        var menu = <PopupMenuEntry>[
-          await genEnablePopupMenuItem(
-            translate("Enable Keyboard/Mouse"),
-            'enable-keyboard',
-          ),
-          await genEnablePopupMenuItem(
-            translate("Enable Clipboard"),
-            'enable-clipboard',
-          ),
-          await genEnablePopupMenuItem(
-            translate("Enable File Transfer"),
-            'enable-file-transfer',
-          ),
-          await genEnablePopupMenuItem(
-            translate("Enable TCP Tunneling"),
-            'enable-tunnel',
-          ),
-          genAudioInputPopupMenuItem(enabledInput != "N", defaultInput),
-          PopupMenuDivider(),
-          PopupMenuItem(
-            child: Text(translate("ID/Relay Server")),
-            value: 'custom-server',
-          ),
-          PopupMenuItem(
-            child: Text(translate("IP Whitelisting")),
-            value: 'whitelist',
-          ),
-          PopupMenuItem(
-            child: Text(translate("Socks5 Proxy")),
-            value: 'socks5-proxy',
-          ),
-          PopupMenuDivider(),
-          await genEnablePopupMenuItem(
-            translate("Enable Service"),
-            'stop-service',
-          ),
-          // TODO: direct server
-          await genEnablePopupMenuItem(
-            translate("Always connected via relay"),
-            'allow-always-relay',
-          ),
-          await genEnablePopupMenuItem(
-            translate("Start ID/relay service"),
-            'stop-rendezvous-service',
-          ),
-          PopupMenuDivider(),
-          userName.isEmpty
-              ? PopupMenuItem(
-                  child: Text(translate("Login")),
-                  value: 'login',
-                )
-              : PopupMenuItem(
-                  child: Text("${translate("Logout")} $userName"),
-                  value: 'logout',
-                ),
-          PopupMenuItem(
-            child: Text(translate("Change ID")),
-            value: 'change-id',
-          ),
-          PopupMenuDivider(),
-          await genEnablePopupMenuItem(
-            translate("Dark Theme"),
-            'allow-darktheme',
-          ),
-          PopupMenuItem(
-            child: Text(translate("About")),
-            value: 'about',
-          ),
-        ];
-        final v =
-            await showMenu(context: context, position: position, items: menu);
-        if (v != null) {
-          onSelectMenu(v);
-        }
+        await _popupMenu(context, position);
       },
       child: Obx(
         () => CircleAvatar(

@@ -325,8 +325,10 @@ typedef SwitchSetter = Future<void> Function(bool);
 
 abstract class MenuEntrySwitchBase<T> extends MenuEntryBase<T> {
   final String text;
+  final Rx<TextStyle>? textStyle;
 
-  MenuEntrySwitchBase({required this.text, required dismissOnClicked})
+  MenuEntrySwitchBase(
+      {required this.text, required dismissOnClicked, this.textStyle})
       : super(dismissOnClicked: dismissOnClicked);
 
   RxBool get curOption;
@@ -344,14 +346,23 @@ abstract class MenuEntrySwitchBase<T> extends MenuEntryBase<T> {
               alignment: AlignmentDirectional.centerStart,
               height: conf.height,
               child: Row(children: [
-                // const SizedBox(width: MenuConfig.midPadding),
-                Text(
-                  text,
-                  style: TextStyle(
-                      color: MyTheme.color(context).text,
-                      fontSize: MenuConfig.fontSize,
-                      fontWeight: FontWeight.normal),
-                ),
+                () {
+                  if (textStyle != null) {
+                    final style = textStyle!;
+                    return Obx(() => Text(
+                          text,
+                          style: style.value,
+                        ));
+                  } else {
+                    return Text(
+                      text,
+                      style: const TextStyle(
+                          color: Colors.black,
+                          fontSize: MenuConfig.fontSize,
+                          fontWeight: FontWeight.normal),
+                    );
+                  }
+                }(),
                 Expanded(
                     child: Align(
                   alignment: Alignment.centerRight,
@@ -388,8 +399,12 @@ class MenuEntrySwitch<T> extends MenuEntrySwitchBase<T> {
       {required String text,
       required this.getter,
       required this.setter,
+      Rx<TextStyle>? textStyle,
       dismissOnClicked = false})
-      : super(text: text, dismissOnClicked: dismissOnClicked) {
+      : super(
+            text: text,
+            textStyle: textStyle,
+            dismissOnClicked: dismissOnClicked) {
     () async {
       _curOption.value = await getter();
     }();
@@ -418,8 +433,12 @@ class MenuEntrySwitch2<T> extends MenuEntrySwitchBase<T> {
       {required String text,
       required this.getter,
       required this.setter,
+      Rx<TextStyle>? textStyle,
       dismissOnClicked = false})
-      : super(text: text, dismissOnClicked: dismissOnClicked);
+      : super(
+            text: text,
+            textStyle: textStyle,
+            dismissOnClicked: dismissOnClicked);
 
   @override
   RxBool get curOption => getter();

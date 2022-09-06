@@ -17,7 +17,7 @@ import '../../models/platform_model.dart';
 enum LocationStatus { bread, textField }
 
 class FileManagerPage extends StatefulWidget {
-  FileManagerPage({Key? key, required this.id}) : super(key: key);
+  const FileManagerPage({Key? key, required this.id}) : super(key: key);
   final String id;
 
   @override

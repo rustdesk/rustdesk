@@ -789,6 +789,10 @@ pub fn main_get_mouse_time() -> f64 {
     get_mouse_time()
 }
 
+pub fn main_wol(id: String) {
+    crate::lan::send_wol(id)
+}
+
 pub fn cm_send_chat(conn_id: i32, msg: String) {
     crate::ui_cm_interface::send_chat(conn_id, msg);
 }

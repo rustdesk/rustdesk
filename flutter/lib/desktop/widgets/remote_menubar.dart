@@ -75,20 +75,20 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
     final List<Widget> menubarItems = [];
     if (!isWebDesktop) {
       menubarItems.add(_buildFullscreen(context));
-      if (widget.ffi.ffiModel.isPeerAndroid) {
-        menubarItems.add(IconButton(
-          tooltip: translate('Mobile Actions'),
-          color: _MenubarTheme.commonColor,
-          icon: const Icon(Icons.build),
-          onPressed: () {
-            if (mobileActionsOverlayEntry == null) {
-              showMobileActionsOverlay();
-            } else {
-              hideMobileActionsOverlay();
-            }
-          },
-        ));
-      }
+      //if (widget.ffi.ffiModel.isPeerAndroid) {
+      menubarItems.add(IconButton(
+        tooltip: translate('Mobile Actions'),
+        color: _MenubarTheme.commonColor,
+        icon: const Icon(Icons.build),
+        onPressed: () {
+          if (mobileActionsOverlayEntry == null) {
+            showMobileActionsOverlay();
+          } else {
+            hideMobileActionsOverlay();
+          }
+        },
+      ));
+      //}
     }
     menubarItems.add(_buildMonitor(context));
     menubarItems.add(_buildControl(context));

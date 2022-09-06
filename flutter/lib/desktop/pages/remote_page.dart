@@ -8,6 +8,7 @@ import 'package:flutter/services.dart';
 import 'package:get/get.dart';
 import 'package:provider/provider.dart';
 import 'package:wakelock/wakelock.dart';
+import 'package:flutter_custom_cursor/flutter_custom_cursor.dart';
 
 // import 'package:window_manager/window_manager.dart';
 
@@ -22,7 +23,7 @@ import '../../common/shared_state.dart';
 final initText = '\1' * 1024;
 
 class RemotePage extends StatefulWidget {
-  RemotePage({
+  const RemotePage({
     Key? key,
     required this.id,
     required this.tabBarHeight,
@@ -32,7 +33,7 @@ class RemotePage extends StatefulWidget {
   final double tabBarHeight;
 
   @override
-  _RemotePageState createState() => _RemotePageState();
+  State<RemotePage> createState() => _RemotePageState();
 }
 
 class _RemotePageState extends State<RemotePage>
@@ -483,6 +484,8 @@ class ImagePaint extends StatelessWidget {
           child: CustomPaint(
             painter: ImagePainter(image: m.image, x: 0, y: 0, scale: s),
           ));
+
+      Rx<Offset> pos = Rx<Offset>(Offset(0.0, 0.0));
       return Center(
         child: NotificationListener<ScrollNotification>(
           onNotification: (notification) {
@@ -498,9 +501,15 @@ class ImagePaint extends StatelessWidget {
             return false;
           },
           child: Obx(() => MouseRegion(
-              cursor: (keyboardEnabled.isTrue && cursorOverImage.isTrue)
-                  ? SystemMouseCursors.none
-                  : MouseCursor.defer,
+              // cursor: (keyboardEnabled.isTrue && cursorOverImage.isTrue)
+              //     ? SystemMouseCursors.none
+              //     : MouseCursor.defer,
+              /// cursor: MouseCursor.defer,
+              cursor: FlutterCustomCursor(
+                  path: "assets/pencil.png", x: 1.0, y: 8.0),
+              onHover: (evt) {
+                pos.value = evt.position;
+              },
               child: _buildCrossScrollbar(_buildListener(imageWidget)))),
         ),
       );

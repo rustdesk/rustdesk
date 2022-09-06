@@ -13,8 +13,10 @@ import '../../models/platform_model.dart';
 import '../../models/server_model.dart';
 
 class DesktopServerPage extends StatefulWidget {
+  const DesktopServerPage({Key? key}) : super(key: key);
+
   @override
-  State<StatefulWidget> createState() => _DesktopServerPageState();
+  State<DesktopServerPage> createState() => _DesktopServerPageState();
 }
 
 class _DesktopServerPageState extends State<DesktopServerPage>
