@@ -1010,10 +1010,7 @@ class FFI {
   void enterOrLeave(bool enter) {
     // Fix status
     if (!enter) {
-      alt = false;
-      shift = false;
-      ctrl = false;
-      command = false;
+      resetModifiers();
     }
     bind.sessionEnterOrLeave(id: id, enter: enter);
   }
