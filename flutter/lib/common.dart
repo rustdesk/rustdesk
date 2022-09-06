@@ -192,12 +192,42 @@ class MyTheme {
     ],
   );
 
+  static changeTo(bool dark) {
+    Get.find<SharedPreferences>().setString("darkTheme", dark ? "Y" : "");
+    Get.changeTheme(dark ? MyTheme.darkTheme : MyTheme.lightTheme);
+    Get.forceAppUpdate();
+  }
+
+  static bool _themeInitialed = false;
+
+  static ThemeData initialTheme({bool mainPage = false}) {
+    bool dark;
+    // Brightnesss is always light on windows, Flutter 3.0.5
+    if (_themeInitialed || !mainPage || Platform.isWindows) {
+      dark = isDarkTheme();
+    } else {
+      dark = WidgetsBinding.instance.platformDispatcher.platformBrightness ==
+          Brightness.dark;
+      Get.find<SharedPreferences>().setString("darkTheme", dark ? "Y" : "");
+    }
+    _themeInitialed = true;
+    return dark ? MyTheme.darkTheme : MyTheme.lightTheme;
+  }
+
   static ColorThemeExtension color(BuildContext context) {
     return Theme.of(context).extension<ColorThemeExtension>()!;
   }
 
   static TabbarTheme tabbar(BuildContext context) {
     return Theme.of(context).extension<TabbarTheme>()!;
+  }
+}
+
+class ThemeModeNotifier {
+  final ValueNotifier<Brightness> brightness;
+  ThemeModeNotifier(this.brightness);
+  changeThemeBrightness({required Brightness brightness}) {
+    this.brightness.value = brightness;
   }
 }
 

@@ -71,10 +71,6 @@ Future<Null> main(List<String> args) async {
   }
 }
 
-ThemeData getCurrentTheme() {
-  return isDarkTheme() ? MyTheme.darkTheme : MyTheme.lightTheme;
-}
-
 Future<void> initEnv(String appType) async {
   await platformFFI.init(appType);
   // global FFI, use this **ONLY** for global configuration
@@ -117,7 +113,7 @@ void runRemoteScreen(Map<String, dynamic> argument) async {
     navigatorKey: globalKey,
     debugShowCheckedModeBanner: false,
     title: 'RustDesk - Remote Desktop',
-    theme: getCurrentTheme(),
+    theme: MyTheme.initialTheme(),
     home: DesktopRemoteScreen(
       params: argument,
     ),
@@ -135,7 +131,7 @@ void runFileTransferScreen(Map<String, dynamic> argument) async {
       navigatorKey: globalKey,
       debugShowCheckedModeBanner: false,
       title: 'RustDesk - File Transfer',
-      theme: getCurrentTheme(),
+      theme: MyTheme.initialTheme(),
       home: DesktopFileTransferScreen(params: argument),
       navigatorObservers: [
         // FirebaseAnalyticsObserver(analytics: analytics),
@@ -152,7 +148,7 @@ void runPortForwardScreen(Map<String, dynamic> argument) async {
       navigatorKey: globalKey,
       debugShowCheckedModeBanner: false,
       title: 'RustDesk - Port Forward',
-      theme: getCurrentTheme(),
+      theme: MyTheme.initialTheme(),
       home: DesktopPortForwardScreen(params: argument),
       navigatorObservers: [
         // FirebaseAnalyticsObserver(analytics: analytics),
@@ -176,7 +172,7 @@ void runConnectionManagerScreen() async {
   ]);
   runApp(GetMaterialApp(
       debugShowCheckedModeBanner: false,
-      theme: getCurrentTheme(),
+      theme: MyTheme.initialTheme(),
       home: DesktopServerPage(),
       builder: _keepScaleBuilder()));
 }
@@ -191,7 +187,26 @@ WindowOptions getHiddenTitleBarWindowOptions(Size size) {
   );
 }
 
-class App extends StatelessWidget {
+class App extends StatefulWidget {
+  @override
+  State<App> createState() => _AppState();
+}
+
+class _AppState extends State<App> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.window.onPlatformBrightnessChanged = () {
+      WidgetsBinding.instance.handlePlatformBrightnessChanged();
+      var system =
+          WidgetsBinding.instance.platformDispatcher.platformBrightness;
+      var current = isDarkTheme() ? Brightness.dark : Brightness.light;
+      if (current != system) {
+        MyTheme.changeTo(system == Brightness.dark);
+      }
+    };
+  }
+
   @override
   Widget build(BuildContext context) {
     // final analytics = FirebaseAnalytics.instance;
@@ -210,7 +225,7 @@ class App extends StatelessWidget {
         navigatorKey: globalKey,
         debugShowCheckedModeBanner: false,
         title: 'RustDesk',
-        theme: getCurrentTheme(),
+        theme: MyTheme.initialTheme(mainPage: true),
         home: isDesktop
             ? const DesktopTabPage()
             : !isAndroid

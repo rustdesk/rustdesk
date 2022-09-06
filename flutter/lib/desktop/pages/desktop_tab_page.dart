@@ -33,7 +33,6 @@ class _DesktopTabPageState extends State<DesktopTabPage> {
 
   @override
   Widget build(BuildContext context) {
-    final dark = isDarkTheme();
     RxBool fullscreen = false.obs;
     Get.put(fullscreen, tag: 'fullscreen');
     return Obx(() => DragToResizeArea(

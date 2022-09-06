@@ -25,6 +25,6 @@ void main(List<String> args) async {
       .add(Client(3, false, false, "UserD", "441123123", true, false, false));
   runApp(GetMaterialApp(
       debugShowCheckedModeBanner: false,
-      theme: getCurrentTheme(),
+      theme: MyTheme.initialTheme(),
       home: DesktopServerPage()));
 }
