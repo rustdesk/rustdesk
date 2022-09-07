@@ -568,13 +568,16 @@ class ImagePaint extends StatelessWidget {
               cursor: (cursorOverImage.isTrue && keyboardEnabled.isTrue)
                   ? (remoteCursorMoved.isTrue
                       ? SystemMouseCursors.none
-                      : (cursor.pngData != null
+                      : (cursor.cacheLinux != null
                           ? FlutterCustomMemoryImageCursor(
-                              pixbuf: cursor.pngData!,
-                              hotx: cursor.hotx,
-                              hoty: cursor.hoty,
-                              imageWidth: (cursor.image!.width * s).toInt(),
-                              imageHeight: (cursor.image!.height * s).toInt(),
+                              pixbuf: cursor.cacheLinux!.data,
+                              key: cursor.cacheLinux!.key,
+                              hotx: cursor.cacheLinux!.hotx,
+                              hoty: cursor.cacheLinux!.hoty,
+                              imageWidth:
+                                  (cursor.cacheLinux!.width * s).toInt(),
+                              imageHeight:
+                                  (cursor.cacheLinux!.height * s).toInt(),
                             )
                           : MouseCursor.defer))
                   : MouseCursor.defer,
