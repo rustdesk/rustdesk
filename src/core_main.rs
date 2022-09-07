@@ -1,6 +1,6 @@
 use hbb_common::log;
 
-use crate::{start_os_service, flutter::connection_manager};
+use crate::{start_os_service, flutter::connection_manager, start_server};
 
 /// Main entry of the RustDesk Core.
 /// Return true if the app should continue running with UI(possibly Flutter), false if the app should exit.
@@ -20,7 +20,15 @@ pub fn core_main() -> bool {
             return false;
         }
         if args[1] == "--server" {
-            // TODO: server
+            log::info!("start --server");
+            #[cfg(not(target_os = "macos"))]
+            {
+                start_server(true);
+            }
+            #[cfg(target_os = "macos")]
+            {
+                std::thread::spawn(move || start_server(true));
+            }
             return false;
         }
     }

@@ -525,20 +525,27 @@ pub fn is_root() -> bool {
     crate::username() == "root"
 }
 
+fn is_opensuse() -> bool {
+    if let Ok(res) = run_cmds("cat /etc/os-release | grep opensuse".to_owned()) {
+        if !res.is_empty() {
+            return true;
+        }
+    }
+    false
+}
+
 pub fn run_as_user(arg: &str) -> ResultType<Option<std::process::Child>> {
     let uid = get_active_userid();
     let cmd = std::env::current_exe()?;
+    let xdg = &format!("XDG_RUNTIME_DIR=/run/user/{}", uid) as &str;
+    let username = &get_active_username();
+    let mut args = vec![xdg, "-u", username, cmd.to_str().unwrap_or(""), arg];
     // -E required for opensuse
-    let task = std::process::Command::new("sudo")
-        .args(vec![
-            "-E",
-            &format!("XDG_RUNTIME_DIR=/run/user/{}", uid) as &str,
-            "-u",
-            &get_active_username(),
-            cmd.to_str().unwrap_or(""),
-            arg,
-        ])
-        .spawn()?;
+    if is_opensuse() {
+        args.insert(0, "-E");
+    }
+
+    let task = std::process::Command::new("sudo").args(args).spawn()?;
     Ok(Some(task))
 }
 
