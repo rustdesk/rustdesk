@@ -17,7 +17,7 @@ use crate::flutter::{self, SESSIONS};
 use crate::start_server;
 use crate::ui_interface;
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
-use crate::ui_interface::{change_id, check_connect_status, is_ok_change_id};
+use crate::ui_interface::change_id;
 use crate::ui_interface::{
     check_mouse_time, check_super_user_permission, discover, forget_password, get_api_server,
     get_app_name, get_async_job_status, get_connect_status, get_fav, get_id, get_lan_peers,
@@ -104,9 +104,9 @@ pub fn stop_global_event_stream(app_type: String) {
         .remove(&app_type);
 }
 
-pub fn host_stop_system_key_propagate(stopped: bool) {
+pub fn host_stop_system_key_propagate(_stopped: bool) {
     #[cfg(windows)]
-    crate::platform::windows::stop_system_key_propagate(stopped);
+    crate::platform::windows::stop_system_key_propagate(_stopped);
 }
 
 // FIXME: -> ResultType<()> cannot be parsed by frb_codegen
@@ -233,6 +233,28 @@ pub fn session_switch_display(id: String, value: i32) {
     }
 }
 
+pub fn session_handle_flutter_key_event(
+    id: String,
+    name: String,
+    keycode: i32,
+    scancode: i32,
+    down_or_up: bool,
+) {
+    if let Some(session) = SESSIONS.read().unwrap().get(&id) {
+        session.handle_flutter_key_event(&name, keycode, scancode, down_or_up);
+    }
+}
+
+pub fn session_enter_or_leave(id: String, enter: bool) {
+    if let Some(session) = SESSIONS.read().unwrap().get(&id) {
+        if enter {
+            session.enter();
+        } else {
+            session.leave();
+        }
+    }
+}
+
 pub fn session_input_key(
     id: String,
     name: String,
@@ -272,6 +294,19 @@ pub fn session_get_peer_option(id: String, name: String) -> String {
         return session.get_option(name);
     }
     "".to_string()
+}
+
+pub fn session_get_keyboard_name(id: String) -> String {
+    if let Some(session) = SESSIONS.read().unwrap().get(&id) {
+        return session.get_keyboard_mode();
+    }
+    "legacy".to_string()
+}
+
+pub fn session_set_keyboard_mode(id: String, keyboard_mode: String) {
+    if let Some(session) = SESSIONS.read().unwrap().get(&id) {
+        session.save_keyboard_mode(keyboard_mode);
+    }
 }
 
 pub fn session_input_os_password(id: String, value: String) {

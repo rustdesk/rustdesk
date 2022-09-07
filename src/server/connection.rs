@@ -448,11 +448,12 @@ impl Connection {
                         handle_mouse(&msg, id);
                     }
                     MessageInput::Key((mut msg, press)) => {
-                        if press {
+                        // todo: press and down have similar meanings.
+                        if press && msg.mode.unwrap() == KeyboardMode::Legacy {
                             msg.down = true;
                         }
                         handle_key(&msg);
-                        if press {
+                        if press && msg.mode.unwrap() == KeyboardMode::Legacy {
                             msg.down = false;
                             handle_key(&msg);
                         }
@@ -632,7 +633,7 @@ impl Connection {
         let mut pi = PeerInfo {
             username: username.clone(),
             conn_id: self.inner.id,
-            version: crate::VERSION.to_owned(),
+            version: VERSION.to_owned(),
             ..Default::default()
         };
 

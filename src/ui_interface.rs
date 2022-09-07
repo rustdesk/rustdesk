@@ -683,6 +683,7 @@ pub fn check_super_user_permission() -> bool {
     true
 }
 
+#[allow(dead_code)]
 pub fn check_zombie(childs: Childs) {
     let mut deads = Vec::new();
     loop {
@@ -714,7 +715,7 @@ pub(crate) fn check_connect_status(reconnect: bool) -> mpsc::UnboundedSender<ipc
 // notice: avoiding create ipc connecton repeatly,
 // because windows named pipe has serious memory leak issue.
 #[tokio::main(flavor = "current_thread")]
-async fn check_connect_status_(reconnect: bool, rx: mpsc::UnboundedReceiver<ipc::Data>) {
+pub(crate) async fn check_connect_status_(reconnect: bool, rx: mpsc::UnboundedReceiver<ipc::Data>) {
     let mut key_confirmed = false;
     let mut rx = rx;
     let mut mouse_time = 0;

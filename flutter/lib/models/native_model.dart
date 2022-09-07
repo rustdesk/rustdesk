@@ -97,7 +97,7 @@ class PlatformFFI {
     final dylib = Platform.isAndroid
         ? DynamicLibrary.open('librustdesk.so')
         : Platform.isLinux
-            ? DynamicLibrary.open("/usr/lib/rustdesk/librustdesk.so")
+            ? DynamicLibrary.open("librustdesk.so")
             : Platform.isWindows
                 ? DynamicLibrary.open("librustdesk.dll")
                 : Platform.isMacOS

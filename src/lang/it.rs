@@ -318,5 +318,8 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Insecure Connection", "Connessione insicura"),
         ("Scale original", "Scala originale"),
         ("Scale adaptive", "Scala adattiva"),
+        ("Legacy mode", ""),
+        ("Map mode", ""),
+        ("Translate mode", ""),
     ].iter().cloned().collect();
 }

@@ -1,7 +1,7 @@
 use std::{
     collections::HashMap,
     ops::{Deref, DerefMut},
-    sync::{atomic::Ordering, Arc, Mutex},
+    sync::{Arc, Mutex},
 };
 
 use sciter::{
@@ -28,7 +28,7 @@ use hbb_common::{
 use crate::clipboard_file::*;
 use crate::{
     client::*,
-    ui_session_interface::{InvokeUiSession, Session, IS_IN},
+    ui_session_interface::{InvokeUiSession, Session},
 };
 
 type Video = AssetPtr<video_destination>;
@@ -399,6 +399,8 @@ impl sciter::EventHandler for SciterSession {
         fn get_remember();
         fn peer_platform();
         fn set_write_override(i32, i32, bool, bool, bool);
+        fn get_keyboard_mode();
+        fn save_keyboard_mode(String);
         fn has_hwcodec();
         fn supported_hwcodec();
         fn change_prefer_codec();
@@ -558,18 +560,6 @@ impl SciterSession {
 
     fn save_close_state(&mut self, k: String, v: String) {
         self.close_state.insert(k, v);
-    }
-
-    fn enter(&mut self) {
-        #[cfg(windows)]
-        crate::platform::windows::stop_system_key_propagate(true);
-        IS_IN.store(true, Ordering::SeqCst);
-    }
-
-    fn leave(&mut self) {
-        #[cfg(windows)]
-        crate::platform::windows::stop_system_key_propagate(false);
-        IS_IN.store(false, Ordering::SeqCst);
     }
 
     fn get_key_event(&self, down_or_up: i32, name: &str, code: i32) -> Option<KeyEvent> {

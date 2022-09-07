@@ -26,6 +26,5 @@ package() {
 	install -Dm 644 ${HBB}/libsciter-gtk.so -t "${pkgdir}/usr/lib/rustdesk"
   install -Dm 644 $HBB/rustdesk.service -t "${pkgdir}/usr/share/rustdesk/files"
   install -Dm 644 $HBB/rustdesk.desktop -t "${pkgdir}/usr/share/rustdesk/files"
-  install -Dm 644 $HBB/pynput_service.py -t "${pkgdir}/usr/share/rustdesk/files"
   install -Dm 644 $HBB/128x128@2x.png "${pkgdir}/usr/share/rustdesk/files/rustdesk.png"
 }

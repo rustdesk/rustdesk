@@ -28,7 +28,7 @@ packages:
       name: animations
       url: "https://pub.flutter-io.cn"
     source: hosted
-    version: "2.0.3"
+    version: "2.0.4"
   archive:
     dependency: transitive
     description:
@@ -235,12 +235,10 @@ packages:
   dash_chat_2:
     dependency: "direct main"
     description:
-      path: "."
-      ref: feat_maxWidth
-      resolved-ref: "3946ecf86d3600b54632fd80d0eb0ef0e74f2d6a"
-      url: "https://github.com/fufesou/Dash-Chat-2"
-    source: git
-    version: "0.0.12"
+      name: dash_chat_2
+      url: "https://pub.flutter-io.cn"
+    source: hosted
+    version: "0.0.14"
   desktop_drop:
     dependency: "direct main"
     description:
@@ -347,42 +345,42 @@ packages:
       name: firebase_analytics
       url: "https://pub.flutter-io.cn"
     source: hosted
-    version: "9.3.2"
+    version: "9.3.3"
   firebase_analytics_platform_interface:
     dependency: transitive
     description:
       name: firebase_analytics_platform_interface
       url: "https://pub.flutter-io.cn"
     source: hosted
-    version: "3.3.2"
+    version: "3.3.3"
   firebase_analytics_web:
     dependency: transitive
     description:
       name: firebase_analytics_web
       url: "https://pub.flutter-io.cn"
     source: hosted
-    version: "0.4.2+2"
+    version: "0.4.2+3"
   firebase_core:
     dependency: transitive
     description:
       name: firebase_core
       url: "https://pub.flutter-io.cn"
     source: hosted
-    version: "1.21.0"
+    version: "1.21.1"
   firebase_core_platform_interface:
     dependency: transitive
     description:
       name: firebase_core_platform_interface
       url: "https://pub.flutter-io.cn"
     source: hosted
-    version: "4.5.0"
+    version: "4.5.1"
   firebase_core_web:
     dependency: transitive
     description:
       name: firebase_core_web
       url: "https://pub.flutter-io.cn"
     source: hosted
-    version: "1.7.1"
+    version: "1.7.2"
   fixnum:
     dependency: transitive
     description:
@@ -735,7 +733,7 @@ packages:
       name: path_provider_android
       url: "https://pub.flutter-io.cn"
     source: hosted
-    version: "2.0.19"
+    version: "2.0.20"
   path_provider_ios:
     dependency: transitive
     description:
@@ -849,7 +847,7 @@ packages:
     source: hosted
     version: "3.1.0"
   rxdart:
-    dependency: transitive
+    dependency: "direct main"
     description:
       name: rxdart
       url: "https://pub.flutter-io.cn"
@@ -1257,7 +1255,7 @@ packages:
       name: xdg_directories
       url: "https://pub.flutter-io.cn"
     source: hosted
-    version: "0.2.0+1"
+    version: "0.2.0+2"
   xml:
     dependency: transitive
     description:

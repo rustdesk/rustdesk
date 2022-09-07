@@ -1,78 +1,84 @@
 PODS:
-  - bitsdojo_window_macos (0.0.1):
+  - desktop_drop (0.0.1):
     - FlutterMacOS
   - desktop_multi_window (0.0.1):
     - FlutterMacOS
   - device_info_plus_macos (0.0.1):
     - FlutterMacOS
-  - Firebase/Analytics (8.15.0):
+  - Firebase/Analytics (9.4.0):
     - Firebase/Core
-  - Firebase/Core (8.15.0):
+  - Firebase/Core (9.4.0):
     - Firebase/CoreOnly
-    - FirebaseAnalytics (~> 8.15.0)
-  - Firebase/CoreOnly (8.15.0):
-    - FirebaseCore (= 8.15.0)
-  - firebase_analytics (9.1.9):
-    - Firebase/Analytics (= 8.15.0)
+    - FirebaseAnalytics (~> 9.4.0)
+  - Firebase/CoreOnly (9.4.0):
+    - FirebaseCore (= 9.4.0)
+  - firebase_analytics (9.3.3):
+    - Firebase/Analytics (= 9.4.0)
     - firebase_core
     - FlutterMacOS
-  - firebase_core (1.17.1):
-    - Firebase/CoreOnly (~> 8.15.0)
+  - firebase_core (1.21.1):
+    - Firebase/CoreOnly (~> 9.4.0)
     - FlutterMacOS
-  - FirebaseAnalytics (8.15.0):
-    - FirebaseAnalytics/AdIdSupport (= 8.15.0)
-    - FirebaseCore (~> 8.0)
-    - FirebaseInstallations (~> 8.0)
+  - FirebaseAnalytics (9.4.0):
+    - FirebaseAnalytics/AdIdSupport (= 9.4.0)
+    - FirebaseCore (~> 9.0)
+    - FirebaseInstallations (~> 9.0)
     - GoogleUtilities/AppDelegateSwizzler (~> 7.7)
     - GoogleUtilities/MethodSwizzler (~> 7.7)
     - GoogleUtilities/Network (~> 7.7)
     - "GoogleUtilities/NSData+zlib (~> 7.7)"
-    - nanopb (~> 2.30908.0)
-  - FirebaseAnalytics/AdIdSupport (8.15.0):
-    - FirebaseCore (~> 8.0)
-    - FirebaseInstallations (~> 8.0)
-    - GoogleAppMeasurement (= 8.15.0)
+    - nanopb (< 2.30910.0, >= 2.30908.0)
+  - FirebaseAnalytics/AdIdSupport (9.4.0):
+    - FirebaseCore (~> 9.0)
+    - FirebaseInstallations (~> 9.0)
+    - GoogleAppMeasurement (= 9.4.0)
     - GoogleUtilities/AppDelegateSwizzler (~> 7.7)
     - GoogleUtilities/MethodSwizzler (~> 7.7)
     - GoogleUtilities/Network (~> 7.7)
     - "GoogleUtilities/NSData+zlib (~> 7.7)"
-    - nanopb (~> 2.30908.0)
-  - FirebaseCore (8.15.0):
-    - FirebaseCoreDiagnostics (~> 8.0)
+    - nanopb (< 2.30910.0, >= 2.30908.0)
+  - FirebaseCore (9.4.0):
+    - FirebaseCoreDiagnostics (~> 9.0)
+    - FirebaseCoreInternal (~> 9.0)
     - GoogleUtilities/Environment (~> 7.7)
     - GoogleUtilities/Logger (~> 7.7)
-  - FirebaseCoreDiagnostics (8.15.0):
-    - GoogleDataTransport (~> 9.1)
+  - FirebaseCoreDiagnostics (9.5.0):
+    - GoogleDataTransport (< 10.0.0, >= 9.1.4)
     - GoogleUtilities/Environment (~> 7.7)
     - GoogleUtilities/Logger (~> 7.7)
-    - nanopb (~> 2.30908.0)
-  - FirebaseInstallations (8.15.0):
-    - FirebaseCore (~> 8.0)
+    - nanopb (< 2.30910.0, >= 2.30908.0)
+  - FirebaseCoreInternal (9.5.0):
+    - "GoogleUtilities/NSData+zlib (~> 7.7)"
+  - FirebaseInstallations (9.5.0):
+    - FirebaseCore (~> 9.0)
     - GoogleUtilities/Environment (~> 7.7)
     - GoogleUtilities/UserDefaults (~> 7.7)
-    - PromisesObjC (< 3.0, >= 1.2)
+    - PromisesObjC (~> 2.1)
   - FlutterMacOS (1.0.0)
-  - GoogleAppMeasurement (8.15.0):
-    - GoogleAppMeasurement/AdIdSupport (= 8.15.0)
+  - FMDB (2.7.5):
+    - FMDB/standard (= 2.7.5)
+  - FMDB/standard (2.7.5)
+  - GoogleAppMeasurement (9.4.0):
+    - GoogleAppMeasurement/AdIdSupport (= 9.4.0)
     - GoogleUtilities/AppDelegateSwizzler (~> 7.7)
     - GoogleUtilities/MethodSwizzler (~> 7.7)
     - GoogleUtilities/Network (~> 7.7)
     - "GoogleUtilities/NSData+zlib (~> 7.7)"
-    - nanopb (~> 2.30908.0)
-  - GoogleAppMeasurement/AdIdSupport (8.15.0):
-    - GoogleAppMeasurement/WithoutAdIdSupport (= 8.15.0)
+    - nanopb (< 2.30910.0, >= 2.30908.0)
+  - GoogleAppMeasurement/AdIdSupport (9.4.0):
+    - GoogleAppMeasurement/WithoutAdIdSupport (= 9.4.0)
     - GoogleUtilities/AppDelegateSwizzler (~> 7.7)
     - GoogleUtilities/MethodSwizzler (~> 7.7)
     - GoogleUtilities/Network (~> 7.7)
     - "GoogleUtilities/NSData+zlib (~> 7.7)"
-    - nanopb (~> 2.30908.0)
-  - GoogleAppMeasurement/WithoutAdIdSupport (8.15.0):
+    - nanopb (< 2.30910.0, >= 2.30908.0)
+  - GoogleAppMeasurement/WithoutAdIdSupport (9.4.0):
     - GoogleUtilities/AppDelegateSwizzler (~> 7.7)
     - GoogleUtilities/MethodSwizzler (~> 7.7)
     - GoogleUtilities/Network (~> 7.7)
     - "GoogleUtilities/NSData+zlib (~> 7.7)"
-    - nanopb (~> 2.30908.0)
-  - GoogleDataTransport (9.1.4):
+    - nanopb (< 2.30910.0, >= 2.30908.0)
+  - GoogleDataTransport (9.2.0):
     - GoogleUtilities/Environment (~> 7.7)
     - nanopb (< 2.30910.0, >= 2.30908.0)
     - PromisesObjC (< 3.0, >= 1.2)
@@ -95,17 +101,24 @@ PODS:
     - GoogleUtilities/Logger
   - GoogleUtilities/UserDefaults (7.7.0):
     - GoogleUtilities/Logger
-  - nanopb (2.30908.0):
-    - nanopb/decode (= 2.30908.0)
-    - nanopb/encode (= 2.30908.0)
-  - nanopb/decode (2.30908.0)
-  - nanopb/encode (2.30908.0)
+  - nanopb (2.30909.0):
+    - nanopb/decode (= 2.30909.0)
+    - nanopb/encode (= 2.30909.0)
+  - nanopb/decode (2.30909.0)
+  - nanopb/encode (2.30909.0)
   - package_info_plus_macos (0.0.1):
     - FlutterMacOS
   - path_provider_macos (0.0.1):
     - FlutterMacOS
-  - PromisesObjC (2.1.0)
+  - PromisesObjC (2.1.1)
+  - screen_retriever (0.0.1):
+    - FlutterMacOS
   - shared_preferences_macos (0.0.1):
+    - FlutterMacOS
+  - sqflite (0.0.2):
+    - FlutterMacOS
+    - FMDB (>= 2.7.5)
+  - tray_manager (0.0.1):
     - FlutterMacOS
   - url_launcher_macos (0.0.1):
     - FlutterMacOS
@@ -115,7 +128,7 @@ PODS:
     - FlutterMacOS
 
 DEPENDENCIES:
-  - bitsdojo_window_macos (from `Flutter/ephemeral/.symlinks/plugins/bitsdojo_window_macos/macos`)
+  - desktop_drop (from `Flutter/ephemeral/.symlinks/plugins/desktop_drop/macos`)
   - desktop_multi_window (from `Flutter/ephemeral/.symlinks/plugins/desktop_multi_window/macos`)
   - device_info_plus_macos (from `Flutter/ephemeral/.symlinks/plugins/device_info_plus_macos/macos`)
   - firebase_analytics (from `Flutter/ephemeral/.symlinks/plugins/firebase_analytics/macos`)
@@ -123,7 +136,10 @@ DEPENDENCIES:
   - FlutterMacOS (from `Flutter/ephemeral`)
   - package_info_plus_macos (from `Flutter/ephemeral/.symlinks/plugins/package_info_plus_macos/macos`)
   - path_provider_macos (from `Flutter/ephemeral/.symlinks/plugins/path_provider_macos/macos`)
+  - screen_retriever (from `Flutter/ephemeral/.symlinks/plugins/screen_retriever/macos`)
   - shared_preferences_macos (from `Flutter/ephemeral/.symlinks/plugins/shared_preferences_macos/macos`)
+  - sqflite (from `Flutter/ephemeral/.symlinks/plugins/sqflite/macos`)
+  - tray_manager (from `Flutter/ephemeral/.symlinks/plugins/tray_manager/macos`)
   - url_launcher_macos (from `Flutter/ephemeral/.symlinks/plugins/url_launcher_macos/macos`)
   - wakelock_macos (from `Flutter/ephemeral/.symlinks/plugins/wakelock_macos/macos`)
   - window_manager (from `Flutter/ephemeral/.symlinks/plugins/window_manager/macos`)
@@ -134,7 +150,9 @@ SPEC REPOS:
     - FirebaseAnalytics
     - FirebaseCore
     - FirebaseCoreDiagnostics
+    - FirebaseCoreInternal
     - FirebaseInstallations
+    - FMDB
     - GoogleAppMeasurement
     - GoogleDataTransport
     - GoogleUtilities
@@ -142,8 +160,8 @@ SPEC REPOS:
     - PromisesObjC
 
 EXTERNAL SOURCES:
-  bitsdojo_window_macos:
-    :path: Flutter/ephemeral/.symlinks/plugins/bitsdojo_window_macos/macos
+  desktop_drop:
+    :path: Flutter/ephemeral/.symlinks/plugins/desktop_drop/macos
   desktop_multi_window:
     :path: Flutter/ephemeral/.symlinks/plugins/desktop_multi_window/macos
   device_info_plus_macos:
@@ -158,8 +176,14 @@ EXTERNAL SOURCES:
     :path: Flutter/ephemeral/.symlinks/plugins/package_info_plus_macos/macos
   path_provider_macos:
     :path: Flutter/ephemeral/.symlinks/plugins/path_provider_macos/macos
+  screen_retriever:
+    :path: Flutter/ephemeral/.symlinks/plugins/screen_retriever/macos
   shared_preferences_macos:
     :path: Flutter/ephemeral/.symlinks/plugins/shared_preferences_macos/macos
+  sqflite:
+    :path: Flutter/ephemeral/.symlinks/plugins/sqflite/macos
+  tray_manager:
+    :path: Flutter/ephemeral/.symlinks/plugins/tray_manager/macos
   url_launcher_macos:
     :path: Flutter/ephemeral/.symlinks/plugins/url_launcher_macos/macos
   wakelock_macos:
@@ -168,25 +192,30 @@ EXTERNAL SOURCES:
     :path: Flutter/ephemeral/.symlinks/plugins/window_manager/macos
 
 SPEC CHECKSUMS:
-  bitsdojo_window_macos: 44e3b8fe3dd463820e0321f6256c5b1c16bb6a00
+  desktop_drop: 69eeff437544aa619c8db7f4481b3a65f7696898
   desktop_multi_window: 566489c048b501134f9d7fb6a2354c60a9126486
   device_info_plus_macos: 1ad388a1ef433505c4038e7dd9605aadd1e2e9c7
-  Firebase: 5f8193dff4b5b7c5d5ef72ae54bb76c08e2b841d
-  firebase_analytics: d448483150504ed84f25c5437a34af2591a7929e
-  firebase_core: 7b87364e2d1eae70018a60698e89e7d6f5320bad
-  FirebaseAnalytics: 7761cbadb00a717d8d0939363eb46041526474fa
-  FirebaseCore: 5743c5785c074a794d35f2fff7ecc254a91e08b1
-  FirebaseCoreDiagnostics: 92e07a649aeb66352b319d43bdd2ee3942af84cb
-  FirebaseInstallations: 40bd9054049b2eae9a2c38ef1c3dd213df3605cd
+  Firebase: 7703fc4022824b6d6db1bf7bea58d13b8e17ec46
+  firebase_analytics: 57144bae6cd39d3be367a8767a1b8857a037cee5
+  firebase_core: 822a1076483bf9764284322c9310daa98e1e6817
+  FirebaseAnalytics: a1a24e72b7ba7f47045a4633f1abb545c07bd29c
+  FirebaseCore: 9a2b10270a854731c4d4d8a97d0aa8380ec3458d
+  FirebaseCoreDiagnostics: 17cbf4e72b1dbd64bfdc33d4b1f07bce4f16f1d8
+  FirebaseCoreInternal: 50a8e39cae8abf72d5145d07ea34c3244f70862b
+  FirebaseInstallations: 41f811b530c41dd90973d0174381cdb3fcb5e839
   FlutterMacOS: 57701585bf7de1b3fc2bb61f6378d73bbdea8424
-  GoogleAppMeasurement: 4c19f031220c72464d460c9daa1fb5d1acce958e
-  GoogleDataTransport: 5fffe35792f8b96ec8d6775f5eccd83c998d5a3b
+  FMDB: 2ce00b547f966261cd18927a3ddb07cb6f3db82a
+  GoogleAppMeasurement: 5d69e04287fc2c10cc43724bfa4bf31fc12c3dff
+  GoogleDataTransport: 1c8145da7117bd68bbbed00cf304edb6a24de00f
   GoogleUtilities: e0913149f6b0625b553d70dae12b49fc62914fd1
-  nanopb: a0ba3315591a9ae0a16a309ee504766e90db0c96
+  nanopb: b552cce312b6c8484180ef47159bc0f65a1f0431
   package_info_plus_macos: f010621b07802a241d96d01876d6705f15e77c1c
   path_provider_macos: 3c0c3b4b0d4a76d2bf989a913c2de869c5641a19
-  PromisesObjC: 99b6f43f9e1044bd87a95a60beff28c2c44ddb72
+  PromisesObjC: ab77feca74fa2823e7af4249b8326368e61014cb
+  screen_retriever: 59634572a57080243dd1bf715e55b6c54f241a38
   shared_preferences_macos: a64dc611287ed6cbe28fd1297898db1336975727
+  sqflite: a5789cceda41d54d23f31d6de539d65bb14100ea
+  tray_manager: 9064e219c56d75c476e46b9a21182087930baf90
   url_launcher_macos: 597e05b8e514239626bcf4a850fcf9ef5c856ec3
   wakelock_macos: bc3f2a9bd8d2e6c89fee1e1822e7ddac3bd004a9
   window_manager: 3a1844359a6295ab1e47659b1a777e36773cd6e8

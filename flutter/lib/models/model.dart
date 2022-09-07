@@ -972,6 +972,28 @@ class FFI {
         msg: json.encode(modify({'type': type, 'buttons': button.value})));
   }
 
+  // Raw Key
+  void inputRawKey(String name, int keyCode, int scanCode, bool down) {
+    bind.sessionHandleFlutterKeyEvent(
+        id: id,
+        name: name,
+        keycode: keyCode,
+        scancode: scanCode,
+        downOrUp: down);
+  }
+
+  Future<String> getKeyboardMode() {
+    return bind.sessionGetKeyboardName(id: id);
+  }
+
+  void enterOrLeave(bool enter) {
+    // Fix status
+    if (!enter) {
+      resetModifiers();
+    }
+    bind.sessionEnterOrLeave(id: id, enter: enter);
+  }
+
   /// Send key stroke event.
   /// [down] indicates the key's state(down or up).
   /// [press] indicates a click event(down and up).

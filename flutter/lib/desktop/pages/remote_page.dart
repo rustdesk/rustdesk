@@ -41,6 +41,7 @@ class _RemotePageState extends State<RemotePage>
     with AutomaticKeepAliveClientMixin {
   Timer? _timer;
   String _value = '';
+  String keyboardMode = "legacy";
   final _cursorOverImage = false.obs;
   late RxBool _showRemoteCursor;
   late RxBool _remoteCursorMoved;
@@ -246,6 +247,92 @@ class _RemotePageState extends State<RemotePage>
         ], child: buildBody(context)));
   }
 
+  KeyEventResult handleRawKeyEvent(FocusNode data, RawKeyEvent e) {
+    bind.sessionGetKeyboardName(id: widget.id).then((result) {
+      setState(() {
+        keyboardMode = result.toString();
+      });
+    });
+
+    if (keyboardMode == 'map') {
+      mapKeyboardMode(e);
+    } else if (keyboardMode == 'translate') {
+      legacyKeyboardMode(e);
+    } else {
+      legacyKeyboardMode(e);
+    }
+
+    return KeyEventResult.handled;
+  }
+
+  void mapKeyboardMode(RawKeyEvent e) {
+    int scanCode;
+    int keyCode;
+    bool down;
+
+    if (e.data is RawKeyEventDataMacOs) {
+      RawKeyEventDataMacOs newData = e.data as RawKeyEventDataMacOs;
+      scanCode = newData.keyCode;
+      keyCode = newData.keyCode;
+    } else if (e.data is RawKeyEventDataWindows) {
+      RawKeyEventDataWindows newData = e.data as RawKeyEventDataWindows;
+      scanCode = newData.scanCode;
+      keyCode = newData.keyCode;
+    } else if (e.data is RawKeyEventDataLinux) {
+      RawKeyEventDataLinux newData = e.data as RawKeyEventDataLinux;
+      scanCode = newData.scanCode;
+      keyCode = newData.keyCode;
+    } else {
+      scanCode = -1;
+      keyCode = -1;
+    }
+
+    if (e is RawKeyDownEvent) {
+      down = true;
+    } else {
+      down = false;
+    }
+
+    _ffi.inputRawKey(e.character ?? "", keyCode, scanCode, down);
+  }
+
+  void legacyKeyboardMode(RawKeyEvent e) {
+    final key = e.logicalKey;
+    if (e is RawKeyDownEvent) {
+      if (e.repeat) {
+        sendRawKey(e, press: true);
+      } else {
+        if (e.isAltPressed && !_ffi.alt) {
+          _ffi.alt = true;
+        } else if (e.isControlPressed && !_ffi.ctrl) {
+          _ffi.ctrl = true;
+        } else if (e.isShiftPressed && !_ffi.shift) {
+          _ffi.shift = true;
+        } else if (e.isMetaPressed && !_ffi.command) {
+          _ffi.command = true;
+        }
+        sendRawKey(e, down: true);
+      }
+    }
+    if (e is RawKeyUpEvent) {
+      if (key == LogicalKeyboardKey.altLeft ||
+          key == LogicalKeyboardKey.altRight) {
+        _ffi.alt = false;
+      } else if (key == LogicalKeyboardKey.controlLeft ||
+          key == LogicalKeyboardKey.controlRight) {
+        _ffi.ctrl = false;
+      } else if (key == LogicalKeyboardKey.shiftRight ||
+          key == LogicalKeyboardKey.shiftLeft) {
+        _ffi.shift = false;
+      } else if (key == LogicalKeyboardKey.metaLeft ||
+          key == LogicalKeyboardKey.metaRight ||
+          key == LogicalKeyboardKey.superKey) {
+        _ffi.command = false;
+      }
+      sendRawKey(e);
+    }
+  }
+
   Widget getRawPointerAndKeyBody(Widget child) {
     return FocusScope(
         autofocus: true,
@@ -256,42 +343,7 @@ class _RemotePageState extends State<RemotePage>
             onFocusChange: (bool v) {
               _imageFocused = v;
             },
-            onKey: (data, e) {
-              final key = e.logicalKey;
-              if (e is RawKeyDownEvent) {
-                if (e.repeat) {
-                  sendRawKey(e, press: true);
-                } else {
-                  if (e.isAltPressed && !_ffi.alt) {
-                    _ffi.alt = true;
-                  } else if (e.isControlPressed && !_ffi.ctrl) {
-                    _ffi.ctrl = true;
-                  } else if (e.isShiftPressed && !_ffi.shift) {
-                    _ffi.shift = true;
-                  } else if (e.isMetaPressed && !_ffi.command) {
-                    _ffi.command = true;
-                  }
-                  sendRawKey(e, down: true);
-                }
-              }
-              if (e is RawKeyUpEvent) {
-                if (key == LogicalKeyboardKey.altLeft ||
-                    key == LogicalKeyboardKey.altRight) {
-                  _ffi.alt = false;
-                } else if (key == LogicalKeyboardKey.controlLeft ||
-                    key == LogicalKeyboardKey.controlRight) {
-                  _ffi.ctrl = false;
-                } else if (key == LogicalKeyboardKey.shiftRight ||
-                    key == LogicalKeyboardKey.shiftLeft) {
-                  _ffi.shift = false;
-                } else if (key == LogicalKeyboardKey.metaLeft ||
-                    key == LogicalKeyboardKey.metaRight) {
-                  _ffi.command = false;
-                }
-                sendRawKey(e);
-              }
-              return KeyEventResult.handled;
-            },
+            onKey: handleRawKeyEvent,
             child: child));
   }
 
@@ -304,7 +356,6 @@ class _RemotePageState extends State<RemotePage>
   /// mouseMode only:
   ///   DoubleFiner -> right click
   ///   HoldDrag -> left drag
-
   void _onPointHoverImage(PointerHoverEvent e) {
     if (e.kind != ui.PointerDeviceKind.mouse) return;
     if (!_isPhysicalMouse) {
@@ -367,6 +418,19 @@ class _RemotePageState extends State<RemotePage>
     }
   }
 
+  void enterView(PointerEnterEvent evt) {
+    if (!_imageFocused) {
+      _physicalFocusNode.requestFocus();
+    }
+    _cursorOverImage.value = true;
+    _ffi.enterOrLeave(true);
+  }
+
+  void leaveView(PointerExitEvent evt) {
+    _cursorOverImage.value = false;
+    _ffi.enterOrLeave(false);
+  }
+
   Widget _buildImageListener(Widget child) {
     return Listener(
         onPointerHover: _onPointHoverImage,
@@ -374,17 +438,8 @@ class _RemotePageState extends State<RemotePage>
         onPointerUp: _onPointUpImage,
         onPointerMove: _onPointMoveImage,
         onPointerSignal: _onPointerSignalImage,
-        child: MouseRegion(
-            onEnter: (evt) {
-              if (!_imageFocused) {
-                _physicalFocusNode.requestFocus();
-              }
-              _cursorOverImage.value = true;
-            },
-            onExit: (evt) {
-              _cursorOverImage.value = false;
-            },
-            child: child));
+        child:
+            MouseRegion(onEnter: enterView, onExit: leaveView, child: child));
   }
 
   Widget getBodyForDesktop(BuildContext context) {

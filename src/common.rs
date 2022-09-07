@@ -666,3 +666,14 @@ pub fn make_privacy_mode_msg(state: back_notification::PrivacyModeState) -> Mess
     msg_out.set_misc(misc);
     msg_out
 }
+
+#[cfg(not(target_os = "linux"))]
+lazy_static::lazy_static! {
+    pub static ref IS_X11: Mutex<bool> = Mutex::new(false);
+
+}
+
+#[cfg(target_os = "linux")]
+lazy_static::lazy_static! {
+    pub static ref IS_X11: Mutex<bool> = Mutex::new("x11" == hbb_common::platform::linux::get_display_server());
+}

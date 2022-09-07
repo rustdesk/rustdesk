@@ -25,7 +25,6 @@ install $HBB/libsciter-gtk.so %{buildroot}/usr/lib/rustdesk/libsciter-gtk.so
 install $HBB/rustdesk.service %{buildroot}/usr/share/rustdesk/files/
 install $HBB/128x128@2x.png %{buildroot}/usr/share/rustdesk/files/rustdesk.png
 install $HBB/rustdesk.desktop %{buildroot}/usr/share/rustdesk/files/
-install $HBB/pynput_service.py %{buildroot}/usr/share/rustdesk/files/
 
 %files
 /usr/bin/rustdesk
@@ -33,7 +32,6 @@ install $HBB/pynput_service.py %{buildroot}/usr/share/rustdesk/files/
 /usr/share/rustdesk/files/rustdesk.service
 /usr/share/rustdesk/files/rustdesk.png
 /usr/share/rustdesk/files/rustdesk.desktop
-/usr/share/rustdesk/files/pynput_service.py
 
 %changelog
 # let's skip this for now
@@ -54,7 +52,6 @@ esac
 %post
 cp /usr/share/rustdesk/files/rustdesk.service /etc/systemd/system/rustdesk.service
 cp /usr/share/rustdesk/files/rustdesk.desktop /usr/share/applications/
-sudo -H pip3 install pynput
 systemctl daemon-reload
 systemctl enable rustdesk
 systemctl start rustdesk
