@@ -69,7 +69,7 @@ pub fn goto_install() {
     allow_err!(crate::run_me(vec!["--install"]));
 }
 
-pub fn install_me(_options: String, _path: String, _silent: bool, _debug: bool) {
+pub fn install_me(_options: String, _path: String, silent: bool, debug: bool) {
     #[cfg(windows)]
     std::thread::spawn(move || {
         allow_err!(crate::platform::windows::install_me(
@@ -715,7 +715,7 @@ pub(crate) fn check_connect_status(reconnect: bool) -> mpsc::UnboundedSender<ipc
 // notice: avoiding create ipc connecton repeatly,
 // because windows named pipe has serious memory leak issue.
 #[tokio::main(flavor = "current_thread")]
-async fn check_connect_status_(reconnect: bool, rx: mpsc::UnboundedReceiver<ipc::Data>) {
+pub(crate) async fn check_connect_status_(reconnect: bool, rx: mpsc::UnboundedReceiver<ipc::Data>) {
     let mut key_confirmed = false;
     let mut rx = rx;
     let mut mouse_time = 0;

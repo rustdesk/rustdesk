@@ -58,6 +58,27 @@ lazy_static::lazy_static! {
 
 struct UIHostHandler;
 
+fn check_connect_status(
+    reconnect: bool,
+) -> (
+    Arc<Mutex<Status>>,
+    Arc<Mutex<HashMap<String, String>>>,
+    mpsc::UnboundedSender<ipc::Data>,
+    Arc<Mutex<String>>,
+) {
+    let status = Arc::new(Mutex::new((0, false, 0, "".to_owned())));
+    let options = Arc::new(Mutex::new(Config::get_options()));
+    let cloned = status.clone();
+    let cloned_options = options.clone();
+    let (tx, rx) = mpsc::unbounded_channel::<ipc::Data>();
+    let password = Arc::new(Mutex::new(String::default()));
+    let cloned_password = password.clone();
+    std::thread::spawn(move || {
+        crate::ui_interface::check_connect_status_(reconnect, rx)
+    });
+    (status, options, tx, password)
+}
+
 pub fn start(args: &mut [String]) {
     #[cfg(target_os = "macos")]
     if args.len() == 1 && args[0] == "--server" {
@@ -86,7 +107,7 @@ pub fn start(args: &mut [String]) {
     }
     #[cfg(windows)]
     if args.len() > 0 && args[0] == "--tray" {
-        let options = crate::ui_interface::check_connect_status(false).1;
+        let options = check_connect_status(false).1;
         crate::tray::start_tray(options);
         return;
     }
