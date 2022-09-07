@@ -150,6 +150,13 @@ fn main() {
                 import_config(&filepath);
             }
             return;
+        } else if args[0] == "--id" {
+            if args.len() == 2 {
+                ipc::set_id(args[1].to_owned()).unwrap();
+            } else if args.len() == 1 {
+                println!("{}", ipc::get_id());
+            }
+            return;
         } else if args[0] == "--password" {
             if args.len() == 2 {
                 ipc::set_permanent_password(args[1].to_owned()).unwrap();
