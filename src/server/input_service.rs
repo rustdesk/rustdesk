@@ -595,7 +595,6 @@ pub fn handle_key(evt: &KeyEvent) {
         QUEUE.exec_async(move || handle_key_(&evt));
         return;
     }
-    log::info!("{:?}", evt);
     handle_key_(evt);
 }
 
