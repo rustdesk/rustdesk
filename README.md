@@ -65,7 +65,9 @@ Please download sciter dynamic library yourself.
 ### Ubuntu 18 (Debian 10)
 
 ```sh
-sudo apt install -y g++ gcc git curl wget nasm yasm libgtk-3-dev clang libxcb-randr0-dev libxdo-dev libxfixes-dev libxcb-shape0-dev libxcb-xfixes0-dev libasound2-dev libpulse-dev cmake
+sudo apt install -y g++ gcc git curl wget nasm yasm libgtk-3-dev clang libxcb-randr0-dev libxdo-dev \
+        libxfixes-dev libxcb-shape0-dev libxcb-xfixes0-dev libasound2-dev libpulse-dev cmake \
+        libclang-dev ninja-build libayatana-appindicator3-1 libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev libayatana-appindicator3-dev
 ```
 
 ### Fedora 28 (CentOS 8)
@@ -121,6 +123,30 @@ VCPKG_ROOT=$HOME/vcpkg cargo run
 ### Change Wayland to X11 (Xorg)
 
 RustDesk does not support Wayland. Check [this](https://docs.fedoraproject.org/en-US/quick-docs/configuring-xorg-as-default-gnome-session/) to configuring Xorg as the default GNOME session.
+
+## Wayland support
+
+Wayland does not seem to provide any API for sending keypresses to other windows. Therefore, the rustdesk uses an API from a lower level, namely the `/dev/uinput` device (Linux kernel level).
+
+When wayland is the controlled side, you have to start in the following way:
+```bash
+# Start uinput service
+$ sudo rustdesk --service
+$ rustdesk
+```
+**Notice**: Wayland screen recording uses different interfaces, currently currently only supports org.freedesktop.portal.ScreenCast. 
+```bash
+$ dbus-send --session --print-reply       \
+  --dest=org.freedesktop.portal.Desktop \
+  /org/freedesktop/portal/desktop       \
+  org.freedesktop.DBus.Properties.Get   \
+  string:org.freedesktop.portal.ScreenCast string:version
+# Not support
+Error org.freedesktop.DBus.Error.InvalidArgs: No such interface “org.freedesktop.portal.ScreenCast”
+# Support
+method return time=1662544486.931020 sender=:1.54 -> destination=:1.139 serial=257 reply_serial=2
+   variant       uint32 4
+```
 
 ## How to build with Docker
 
