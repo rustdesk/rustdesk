@@ -32,7 +32,7 @@ class FfiModel with ChangeNotifier {
   Display _display = Display();
 
   var _inputBlocked = false;
-  final _permissions = Map<String, bool>();
+  final _permissions = <String, bool>{};
   bool? _secure;
   bool? _direct;
   bool _touchMode = false;
@@ -71,12 +71,13 @@ class FfiModel with ChangeNotifier {
     }
   }
 
-  void updatePermission(Map<String, dynamic> evt) {
+  void updatePermission(Map<String, dynamic> evt, String id) {
     evt.forEach((k, v) {
       if (k == 'name' || k.isEmpty) return;
       _permissions[k] = v == 'true';
     });
-    print('$_permissions');
+    KeyboardEnabledState.find(id).value = _permissions['keyboard'] != false;
+    debugPrint('$_permissions');
     notifyListeners();
   }
 
@@ -146,7 +147,7 @@ class FfiModel with ChangeNotifier {
       } else if (name == 'clipboard') {
         Clipboard.setData(ClipboardData(text: evt['content']));
       } else if (name == 'permission') {
-        parent.target?.ffiModel.updatePermission(evt);
+        parent.target?.ffiModel.updatePermission(evt, peerId);
       } else if (name == 'chat_client_mode') {
         parent.target?.chatModel
             .receive(ChatModel.clientModeID, evt['text'] ?? "");
@@ -167,10 +168,8 @@ class FfiModel with ChangeNotifier {
         parent.target?.fileModel.loadLastJob(evt);
       } else if (name == 'update_folder_files') {
         parent.target?.fileModel.updateFolderFiles(evt);
-      } else if (name == 'try_start_without_auth') {
-        parent.target?.serverModel.loginRequest(evt);
-      } else if (name == 'on_client_authorized') {
-        parent.target?.serverModel.onClientAuthorized(evt);
+      } else if (name == 'add_connection') {
+        parent.target?.serverModel.addConnection(evt);
       } else if (name == 'on_client_remove') {
         parent.target?.serverModel.onClientRemove(evt);
       } else if (name == 'update_quality_status') {
@@ -185,7 +184,7 @@ class FfiModel with ChangeNotifier {
 
   /// Bind the event listener to receive events from the Rust core.
   void updateEventListener(String peerId) {
-    final void Function(Map<String, dynamic>) cb = (evt) {
+    cb(evt) {
       var name = evt['name'];
       if (name == 'msgbox') {
         handleMsgBox(evt, peerId);
@@ -205,7 +204,7 @@ class FfiModel with ChangeNotifier {
       } else if (name == 'clipboard') {
         Clipboard.setData(ClipboardData(text: evt['content']));
       } else if (name == 'permission') {
-        parent.target?.ffiModel.updatePermission(evt);
+        parent.target?.ffiModel.updatePermission(evt, peerId);
       } else if (name == 'chat_client_mode') {
         parent.target?.chatModel
             .receive(ChatModel.clientModeID, evt['text'] ?? "");
@@ -226,10 +225,8 @@ class FfiModel with ChangeNotifier {
         parent.target?.fileModel.loadLastJob(evt);
       } else if (name == 'update_folder_files') {
         parent.target?.fileModel.updateFolderFiles(evt);
-      } else if (name == 'try_start_without_auth') {
-        parent.target?.serverModel.loginRequest(evt);
-      } else if (name == 'on_client_authorized') {
-        parent.target?.serverModel.onClientAuthorized(evt);
+      } else if (name == 'add_connection') {
+        parent.target?.serverModel.addConnection(evt);
       } else if (name == 'on_client_remove') {
         parent.target?.serverModel.onClientRemove(evt);
       } else if (name == 'update_quality_status') {
@@ -239,7 +236,8 @@ class FfiModel with ChangeNotifier {
       } else if (name == 'update_privacy_mode') {
         updatePrivacyMode(evt, peerId);
       }
-    };
+    }
+
     platformFFI.setEventCallback(cb);
   }
 
@@ -321,15 +319,15 @@ class FfiModel with ChangeNotifier {
     if (isPeerAndroid) {
       _touchMode = true;
       if (parent.target?.ffiModel.permissions['keyboard'] != false) {
-        Timer(Duration(milliseconds: 100), showMobileActionsOverlay);
+        Timer(const Duration(milliseconds: 100), showMobileActionsOverlay);
       }
     } else {
       _touchMode =
           await bind.sessionGetOption(id: peerId, arg: "touch-mode") != '';
     }
 
-    if (evt['is_file_transfer'] == "true") {
-      // TODO is file transfer
+    if (parent.target != null &&
+        parent.target!.connType == ConnType.fileTransfer) {
       parent.target?.fileModel.onReady();
     } else {
       _pi.displays = [];
@@ -464,15 +462,20 @@ enum ScrollStyle {
 }
 
 class CanvasModel with ChangeNotifier {
+  // image offset of canvas
+  double _x = 0;
+  // image offset of canvas
+  double _y = 0;
+  // image scale
+  double _scale = 1.0;
+  // the tabbar over the image
+  double tabBarHeight = 0.0;
+  // TODO multi canvas model
+  String id = "";
   // scroll offset x percent
   double _scrollX = 0.0;
   // scroll offset y percent
   double _scrollY = 0.0;
-  double _x = 0;
-  double _y = 0;
-  double _scale = 1.0;
-  double _tabBarHeight = 0.0;
-  String id = ""; // TODO multi canvas model
   ScrollStyle _scrollStyle = ScrollStyle.scrollauto;
 
   WeakReference<FFI> parent;
@@ -491,9 +494,6 @@ class CanvasModel with ChangeNotifier {
 
   double get scrollX => _scrollX;
   double get scrollY => _scrollY;
-
-  set tabBarHeight(double h) => _tabBarHeight = h;
-  double get tabBarHeight => _tabBarHeight;
 
   void updateViewStyle() async {
     final style = await bind.sessionGetOption(id: id, arg: 'view-style');
@@ -548,12 +548,11 @@ class CanvasModel with ChangeNotifier {
 
   Size get size {
     final size = MediaQueryData.fromWindow(ui.window).size;
-    return Size(size.width, size.height - _tabBarHeight);
+    return Size(size.width, size.height - tabBarHeight);
   }
 
   void moveDesktopMouse(double x, double y) {
     // On mobile platforms, move the canvas with the cursor.
-    //if (!isDesktop) {
     final dw = getDisplayWidth() * _scale;
     final dh = getDisplayHeight() * _scale;
     var dxOffset = 0;
@@ -579,8 +578,13 @@ class CanvasModel with ChangeNotifier {
     if (dxOffset != 0 || dyOffset != 0) {
       notifyListeners();
     }
-    //}
-    parent.target?.cursorModel.moveLocal(x, y);
+
+    // If keyboard is not permitted, do not move cursor when mouse is moving.
+    if (parent.target != null) {
+      if (parent.target!.ffiModel.keyboard()) {
+        parent.target!.cursorModel.moveLocal(x, y);
+      }
+    }
   }
 
   set scale(v) {
@@ -597,11 +601,8 @@ class CanvasModel with ChangeNotifier {
     if (isWebDesktop) {
       updateViewStyle();
     } else {
-      final size = MediaQueryData.fromWindow(ui.window).size;
-      final canvasWidth = size.width;
-      final canvasHeight = size.height - _tabBarHeight;
-      _x = (canvasWidth - getDisplayWidth() * _scale) / 2;
-      _y = (canvasHeight - getDisplayHeight() * _scale) / 2;
+      _x = (size.width - getDisplayWidth() * _scale) / 2;
+      _y = (size.height - getDisplayHeight() * _scale) / 2;
     }
     notifyListeners();
   }
@@ -613,7 +614,7 @@ class CanvasModel with ChangeNotifier {
 
   void updateScale(double v) {
     if (parent.target?.imageModel.image == null) return;
-    final offset = parent.target?.cursorModel.offset ?? Offset(0, 0);
+    final offset = parent.target?.cursorModel.offset ?? const Offset(0, 0);
     var r = parent.target?.cursorModel.getVisibleRect() ?? Rect.zero;
     final px0 = (offset.dx - r.left) * _scale;
     final py0 = (offset.dy - r.top) * _scale;
@@ -640,7 +641,7 @@ class CanvasModel with ChangeNotifier {
 
 class CursorModel with ChangeNotifier {
   ui.Image? _image;
-  final _images = Map<int, Tuple3<ui.Image, double, double>>();
+  final _images = <int, Tuple3<ui.Image, double, double>>{};
   double _x = -10000;
   double _y = -10000;
   double _hotx = 0;
@@ -807,7 +808,7 @@ class CursorModel with ChangeNotifier {
         // my throw exception, because the listener maybe already dispose
         notifyListeners();
       } catch (e) {
-        print('notify cursor: $e');
+        debugPrint('notify cursor: $e');
       }
     });
   }
@@ -915,6 +916,8 @@ extension ToString on MouseButtons {
   }
 }
 
+enum ConnType { defaultConn, fileTransfer, portForward, rdp }
+
 /// FFI class for communicating with the Rust core.
 class FFI {
   var id = "";
@@ -923,6 +926,7 @@ class FFI {
   var alt = false;
   var command = false;
   var version = "";
+  var connType = ConnType.defaultConn;
 
   /// dialogManager use late to ensure init after main page binding [globalKey]
   late final dialogManager = OverlayDialogManager();
@@ -1076,9 +1080,11 @@ class FFI {
       double tabBarHeight = 0.0}) {
     assert(!(isFileTransfer && isPortForward), "more than one connect type");
     if (isFileTransfer) {
-      id = 'ft_${id}';
+      connType = ConnType.fileTransfer;
+      id = 'ft_$id';
     } else if (isPortForward) {
-      id = 'pf_${id}';
+      connType = ConnType.portForward;
+      id = 'pf_$id';
     } else {
       chatModel.resetClientMode();
       canvasModel.id = id;
@@ -1107,7 +1113,7 @@ class FFI {
     // every instance will bind a stream
     this.id = id;
     if (isFileTransfer) {
-      this.fileModel.initFileFetcher();
+      fileModel.initFileFetcher();
     }
   }
 

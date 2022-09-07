@@ -7,6 +7,7 @@ import 'package:flutter_hbb/models/platform_model.dart';
 import 'package:wakelock/wakelock.dart';
 
 import '../common.dart';
+import '../common/formatter/id_formatter.dart';
 import '../desktop/pages/server_page.dart' as Desktop;
 import '../desktop/widgets/tabbar_widget.dart';
 import '../mobile/pages/server_page.dart';
@@ -29,10 +30,10 @@ class ServerModel with ChangeNotifier {
   String _temporaryPasswordLength = "";
 
   late String _emptyIdShow;
-  late final TextEditingController _serverId;
+  late final IDTextEditingController _serverId;
   final _serverPasswd = TextEditingController(text: "");
 
-  final tabController = DesktopTabController();
+  final tabController = DesktopTabController(tabType: DesktopTabType.cm);
 
   List<Client> _clients = [];
 
@@ -88,7 +89,7 @@ class ServerModel with ChangeNotifier {
 
   ServerModel(this.parent) {
     _emptyIdShow = translate("Generating ...");
-    _serverId = TextEditingController(text: this._emptyIdShow);
+    _serverId = IDTextEditingController(text: _emptyIdShow);
 
     Timer.periodic(Duration(seconds: 1), (timer) async {
       var status = await bind.mainGetOnlineStatue();
@@ -99,7 +100,7 @@ class ServerModel with ChangeNotifier {
         _connectStatus = status;
         notifyListeners();
       }
-      final res = await bind.mainCheckClientsLength(length: _clients.length);
+      final res = await bind.cmCheckClientsLength(length: _clients.length);
       if (res != null) {
         debugPrint("clients not match!");
         updateClientState(res);
@@ -208,46 +209,48 @@ class ServerModel with ChangeNotifier {
   /// Toggle the screen sharing service.
   toggleService() async {
     if (_isStart) {
-      final res = await parent.target?.dialogManager
-          .show<bool>((setState, close) => CustomAlertDialog(
-                title: Row(children: [
-                  Icon(Icons.warning_amber_sharp,
-                      color: Colors.redAccent, size: 28),
-                  SizedBox(width: 10),
-                  Text(translate("Warning")),
-                ]),
-                content: Text(translate("android_stop_service_tip")),
-                actions: [
-                  TextButton(
-                      onPressed: () => close(),
-                      child: Text(translate("Cancel"))),
-                  ElevatedButton(
-                      onPressed: () => close(true),
-                      child: Text(translate("OK"))),
-                ],
-              ));
+      final res =
+          await parent.target?.dialogManager.show<bool>((setState, close) {
+        submit() => close(true);
+        return CustomAlertDialog(
+          title: Row(children: [
+            const Icon(Icons.warning_amber_sharp,
+                color: Colors.redAccent, size: 28),
+            const SizedBox(width: 10),
+            Text(translate("Warning")),
+          ]),
+          content: Text(translate("android_stop_service_tip")),
+          actions: [
+            TextButton(onPressed: close, child: Text(translate("Cancel"))),
+            ElevatedButton(onPressed: submit, child: Text(translate("OK"))),
+          ],
+          onSubmit: submit,
+          onCancel: close,
+        );
+      });
       if (res == true) {
         stopService();
       }
     } else {
-      final res = await parent.target?.dialogManager
-          .show<bool>((setState, close) => CustomAlertDialog(
-                title: Row(children: [
-                  Icon(Icons.warning_amber_sharp,
-                      color: Colors.redAccent, size: 28),
-                  SizedBox(width: 10),
-                  Text(translate("Warning")),
-                ]),
-                content: Text(translate("android_service_will_start_tip")),
-                actions: [
-                  TextButton(
-                      onPressed: () => close(),
-                      child: Text(translate("Cancel"))),
-                  ElevatedButton(
-                      onPressed: () => close(true),
-                      child: Text(translate("OK"))),
-                ],
-              ));
+      final res =
+          await parent.target?.dialogManager.show<bool>((setState, close) {
+        submit() => close(true);
+        return CustomAlertDialog(
+          title: Row(children: [
+            const Icon(Icons.warning_amber_sharp,
+                color: Colors.redAccent, size: 28),
+            const SizedBox(width: 10),
+            Text(translate("Warning")),
+          ]),
+          content: Text(translate("android_service_will_start_tip")),
+          actions: [
+            TextButton(onPressed: close, child: Text(translate("Cancel"))),
+            ElevatedButton(onPressed: submit, child: Text(translate("OK"))),
+          ],
+          onSubmit: submit,
+          onCancel: close,
+        );
+      });
       if (res == true) {
         startService();
       }
@@ -300,7 +303,7 @@ class ServerModel with ChangeNotifier {
   }
 
   _fetchID() async {
-    final old = _serverId.text;
+    final old = _serverId.id;
     var count = 0;
     const maxCount = 10;
     while (count < maxCount) {
@@ -309,12 +312,12 @@ class ServerModel with ChangeNotifier {
       if (id.isEmpty) {
         continue;
       } else {
-        _serverId.text = id;
+        _serverId.id = id;
       }
 
-      debugPrint("fetch id again at $count:id:${_serverId.text}");
+      debugPrint("fetch id again at $count:id:${_serverId.id}");
       count++;
-      if (_serverId.text != old) {
+      if (_serverId.id != old) {
         break;
       }
     }
@@ -344,23 +347,21 @@ class ServerModel with ChangeNotifier {
 
   // force
   updateClientState([String? json]) async {
-    var res = await bind.mainGetClientsState();
+    var res = await bind.cmGetClientsState();
     try {
       final List clientsJson = jsonDecode(res);
-      if (isDesktop && clientsJson.isEmpty && _clients.isNotEmpty) {
-        // exit cm when >1 peers to no peers
-        exit(0);
-      }
       _clients.clear();
       tabController.state.value.tabs.clear();
       for (var clientJson in clientsJson) {
         final client = Client.fromJson(clientJson);
         _clients.add(client);
-        tabController.add(TabInfo(
-            key: client.id.toString(),
-            label: client.name,
-            closable: false,
-            page: Desktop.buildConnectionCard(client)));
+        tabController.add(
+            TabInfo(
+                key: client.id.toString(),
+                label: client.name,
+                closable: false,
+                page: Desktop.buildConnectionCard(client)),
+            authorized: client.authorized);
       }
       notifyListeners();
     } catch (e) {
@@ -368,70 +369,89 @@ class ServerModel with ChangeNotifier {
     }
   }
 
-  void loginRequest(Map<String, dynamic> evt) {
+  void addConnection(Map<String, dynamic> evt) {
     try {
       final client = Client.fromJson(jsonDecode(evt["client"]));
-      if (_clients.any((c) => c.id == client.id)) {
-        return;
+      if (client.authorized) {
+        parent.target?.dialogManager.dismissByTag(getLoginDialogTag(client.id));
+        final index = _clients.indexWhere((c) => c.id == client.id);
+        if (index < 0) {
+          _clients.add(client);
+        } else {
+          _clients[index].authorized = true;
+        }
+        tabController.add(
+            TabInfo(
+                key: client.id.toString(),
+                label: client.name,
+                closable: false,
+                page: Desktop.buildConnectionCard(client)),
+            authorized: true);
+        scrollToBottom();
+        notifyListeners();
+      } else {
+        if (_clients.any((c) => c.id == client.id)) {
+          return;
+        }
+        _clients.add(client);
+        tabController.add(TabInfo(
+            key: client.id.toString(),
+            label: client.name,
+            closable: false,
+            page: Desktop.buildConnectionCard(client)));
+        scrollToBottom();
+        notifyListeners();
+        if (isAndroid) showLoginDialog(client);
       }
-      _clients.add(client);
-      tabController.add(TabInfo(
-          key: client.id.toString(),
-          label: client.name,
-          closable: false,
-          page: Desktop.buildConnectionCard(client)));
-      scrollToBottom();
-      notifyListeners();
-      if (isAndroid) showLoginDialog(client);
     } catch (e) {
       debugPrint("Failed to call loginRequest,error:$e");
     }
   }
 
   void showLoginDialog(Client client) {
-    parent.target?.dialogManager.show(
-        (setState, close) => CustomAlertDialog(
-              title: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(translate(client.isFileTransfer
-                        ? "File Connection"
-                        : "Screen Connection")),
-                    IconButton(
-                        onPressed: () {
-                          close();
-                        },
-                        icon: Icon(Icons.close))
-                  ]),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                mainAxisAlignment: MainAxisAlignment.center,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(translate("Do you accept?")),
-                  clientInfo(client),
-                  Text(
-                    translate("android_new_connection_tip"),
-                    style: TextStyle(color: Colors.black54),
-                  ),
-                ],
-              ),
-              actions: [
-                TextButton(
-                    child: Text(translate("Dismiss")),
-                    onPressed: () {
-                      sendLoginResponse(client, false);
-                      close();
-                    }),
-                ElevatedButton(
-                    child: Text(translate("Accept")),
-                    onPressed: () {
-                      sendLoginResponse(client, true);
-                      close();
-                    }),
-              ],
+    parent.target?.dialogManager.show((setState, close) {
+      cancel() {
+        sendLoginResponse(client, false);
+        close();
+      }
+
+      submit() {
+        sendLoginResponse(client, true);
+        close();
+      }
+
+      return CustomAlertDialog(
+        title:
+            Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+          Text(translate(
+              client.isFileTransfer ? "File Connection" : "Screen Connection")),
+          IconButton(
+              onPressed: () {
+                close();
+              },
+              icon: const Icon(Icons.close))
+        ]),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          mainAxisAlignment: MainAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(translate("Do you accept?")),
+            clientInfo(client),
+            Text(
+              translate("android_new_connection_tip"),
+              style: const TextStyle(color: Colors.black54),
             ),
-        tag: getLoginDialogTag(client.id));
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: cancel, child: Text(translate("Dismiss"))),
+          ElevatedButton(onPressed: submit, child: Text(translate("Accept"))),
+        ],
+        onSubmit: submit,
+        onCancel: cancel,
+      );
+    }, tag: getLoginDialogTag(client.id));
   }
 
   scrollToBottom() {
@@ -471,14 +491,18 @@ class ServerModel with ChangeNotifier {
       } else {
         _clients[index].authorized = true;
       }
-      tabController.add(TabInfo(
-          key: client.id.toString(),
-          label: client.name,
-          closable: false,
-          page: Desktop.buildConnectionCard(client)));
+      tabController.add(
+          TabInfo(
+              key: client.id.toString(),
+              label: client.name,
+              closable: false,
+              page: Desktop.buildConnectionCard(client)),
+          authorized: true);
       scrollToBottom();
       notifyListeners();
-    } catch (e) {}
+    } catch (e) {
+      debugPrint("onClientAuthorized:$e");
+    }
   }
 
   void onClientRemove(Map<String, dynamic> evt) {
@@ -486,8 +510,10 @@ class ServerModel with ChangeNotifier {
       final id = int.parse(evt['id'] as String);
       if (_clients.any((c) => c.id == id)) {
         final index = _clients.indexWhere((client) => client.id == id);
-        _clients.removeAt(index);
-        tabController.remove(index);
+        if (index >= 0) {
+          _clients.removeAt(index);
+          tabController.remove(index);
+        }
         parent.target?.dialogManager.dismissByTag(getLoginDialogTag(id));
         parent.target?.invokeMethod("cancel_notification", id);
       }
@@ -558,24 +584,29 @@ String getLoginDialogTag(int id) {
 }
 
 showInputWarnAlert(FFI ffi) {
-  ffi.dialogManager.show((setState, close) => CustomAlertDialog(
-        title: Text(translate("How to get Android input permission?")),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(translate("android_input_permission_tip1")),
-            SizedBox(height: 10),
-            Text(translate("android_input_permission_tip2")),
-          ],
-        ),
-        actions: [
-          TextButton(child: Text(translate("Cancel")), onPressed: close),
-          ElevatedButton(
-              child: Text(translate("Open System Setting")),
-              onPressed: () {
-                ffi.serverModel.initInput();
-                close();
-              }),
+  ffi.dialogManager.show((setState, close) {
+    submit() {
+      ffi.serverModel.initInput();
+      close();
+    }
+
+    return CustomAlertDialog(
+      title: Text(translate("How to get Android input permission?")),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(translate("android_input_permission_tip1")),
+          const SizedBox(height: 10),
+          Text(translate("android_input_permission_tip2")),
         ],
-      ));
+      ),
+      actions: [
+        TextButton(onPressed: close, child: Text(translate("Cancel"))),
+        ElevatedButton(
+            onPressed: submit, child: Text(translate("Open System Setting"))),
+      ],
+      onSubmit: submit,
+      onCancel: close,
+    );
+  });
 }

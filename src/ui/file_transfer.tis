@@ -695,7 +695,7 @@ handler.clearAllJobs = function() {
   file_transfer.job_table.clearAllJobs();
 }
 
-handler.addJob = function (id, path, to, file_num, show_hidden, is_remote) {
+handler.addJob = function (id, path, to, file_num, show_hidden, is_remote) { // load last job
   // stdout.println("restore job: " + is_remote);
   file_transfer.job_table.addJob(id,path,to,file_num,show_hidden,is_remote);
 }

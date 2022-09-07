@@ -1,0 +1,671 @@
+use std::ops::{Deref, DerefMut};
+use std::{
+    collections::HashMap,
+    iter::FromIterator,
+    sync::{
+        atomic::{AtomicI64, Ordering},
+        RwLock,
+    },
+};
+
+use serde_derive::Serialize;
+
+use crate::ipc::Data;
+use crate::ipc::{self, new_listener, Connection};
+use hbb_common::{
+    allow_err,
+    config::Config,
+    fs::is_write_need_confirmation,
+    fs::{self, get_string, new_send_confirm, DigestCheckResult},
+    log,
+    message_proto::*,
+    protobuf::Message as _,
+    tokio::{
+        self,
+        sync::mpsc::{self, UnboundedSender},
+        task::spawn_blocking,
+    },
+};
+
+#[derive(Serialize, Clone)]
+pub struct Client {
+    pub id: i32,
+    pub authorized: bool,
+    pub is_file_transfer: bool,
+    pub port_forward: String,
+    pub name: String,
+    pub peer_id: String,
+    pub keyboard: bool,
+    pub clipboard: bool,
+    pub audio: bool,
+    pub file: bool,
+    pub restart: bool,
+    #[serde(skip)]
+    tx: UnboundedSender<Data>,
+}
+
+lazy_static::lazy_static! {
+    static ref CLIENTS: RwLock<HashMap<i32,Client>> = Default::default();
+    static ref CLICK_TIME: AtomicI64 = AtomicI64::new(0);
+}
+
+#[derive(Clone)]
+pub struct ConnectionManager<T: InvokeUiCM> {
+    pub ui_handler: T,
+}
+
+pub trait InvokeUiCM: Send + Clone + 'static + Sized {
+    fn add_connection(&self, client: &Client);
+
+    fn remove_connection(&self, id: i32);
+
+    fn new_message(&self, id: i32, text: String);
+}
+
+impl<T: InvokeUiCM> Deref for ConnectionManager<T> {
+    type Target = T;
+
+    fn deref(&self) -> &Self::Target {
+        &self.ui_handler
+    }
+}
+
+impl<T: InvokeUiCM> DerefMut for ConnectionManager<T> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.ui_handler
+    }
+}
+
+impl<T: InvokeUiCM> ConnectionManager<T> {
+    fn add_connection(
+        &self,
+        id: i32,
+        is_file_transfer: bool,
+        port_forward: String,
+        peer_id: String,
+        name: String,
+        authorized: bool,
+        keyboard: bool,
+        clipboard: bool,
+        audio: bool,
+        file: bool,
+        restart: bool,
+        tx: mpsc::UnboundedSender<Data>,
+    ) {
+        let client = Client {
+            id,
+            authorized,
+            is_file_transfer,
+            port_forward,
+            name: name.clone(),
+            peer_id: peer_id.clone(),
+            keyboard,
+            clipboard,
+            audio,
+            file,
+            restart,
+            tx,
+        };
+        self.ui_handler.add_connection(&client);
+        CLIENTS.write().unwrap().insert(id, client);
+    }
+
+    fn remove_connection(&self, id: i32) {
+        CLIENTS.write().unwrap().remove(&id);
+
+        #[cfg(any(target_os = "android"))]
+        if CLIENTS
+            .read()
+            .unwrap()
+            .iter()
+            .filter(|(_k, v)| !v.is_file_transfer)
+            .next()
+            .is_none()
+        {
+            if let Err(e) =
+                scrap::android::call_main_service_set_by_name("stop_capture", None, None)
+            {
+                log::debug!("stop_capture err:{}", e);
+            }
+        }
+
+        self.ui_handler.remove_connection(id);
+    }
+}
+
+#[inline]
+pub fn check_click_time(id: i32) {
+    if let Some(client) = CLIENTS.read().unwrap().get(&id) {
+        allow_err!(client.tx.send(Data::ClickTime(0)));
+    };
+}
+
+#[inline]
+pub fn get_click_time() -> i64 {
+    CLICK_TIME.load(Ordering::SeqCst)
+}
+
+#[inline]
+pub fn authorize(id: i32) {
+    if let Some(client) = CLIENTS.write().unwrap().get_mut(&id) {
+        client.authorized = true;
+        allow_err!(client.tx.send(Data::Authorize));
+    };
+}
+
+#[inline]
+pub fn close(id: i32) {
+    if let Some(client) = CLIENTS.read().unwrap().get(&id) {
+        allow_err!(client.tx.send(Data::Close));
+    };
+}
+
+// server mode send chat to peer
+#[inline]
+pub fn send_chat(id: i32, text: String) {
+    let clients = CLIENTS.read().unwrap();
+    if let Some(client) = clients.get(&id) {
+        allow_err!(client.tx.send(Data::ChatMessage { text }));
+    }
+}
+
+#[inline]
+pub fn switch_permission(id: i32, name: String, enabled: bool) {
+    if let Some(client) = CLIENTS.read().unwrap().get(&id) {
+        allow_err!(client.tx.send(Data::SwitchPermission { name, enabled }));
+    };
+}
+
+#[inline]
+pub fn get_clients_state() -> String {
+    let clients = CLIENTS.read().unwrap();
+    let res = Vec::from_iter(clients.values().cloned());
+    serde_json::to_string(&res).unwrap_or("".into())
+}
+
+#[inline]
+pub fn get_clients_length() -> usize {
+    let clients = CLIENTS.read().unwrap();
+    clients.len()
+}
+
+pub enum ClipboardFileData {
+    #[cfg(windows)]
+    Clip((i32, ipc::ClipbaordFile)),
+    Enable((i32, bool)),
+}
+
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[tokio::main(flavor = "current_thread")]
+pub async fn start_ipc<T: InvokeUiCM>(cm: ConnectionManager<T>) {
+    let (tx_file, _rx_file) = mpsc::unbounded_channel::<ClipboardFileData>();
+    #[cfg(windows)]
+    let cm_clip = cm.clone();
+    #[cfg(windows)]
+    std::thread::spawn(move || start_clipboard_file(cm_clip, _rx_file));
+
+    #[cfg(windows)]
+    std::thread::spawn(move || {
+        log::info!("try create privacy mode window");
+        #[cfg(windows)]
+        {
+            if let Err(e) = crate::platform::windows::check_update_broker_process() {
+                log::warn!(
+                    "Failed to check update broker process. Privacy mode may not work properly. {}",
+                    e
+                );
+            }
+        }
+        allow_err!(crate::ui::win_privacy::start());
+    });
+
+    match new_listener("_cm").await {
+        Ok(mut incoming) => {
+            while let Some(result) = incoming.next().await {
+                match result {
+                    Ok(stream) => {
+                        log::debug!("Got new connection");
+                        let mut stream = Connection::new(stream);
+                        let cm = cm.clone();
+                        let tx_file = tx_file.clone();
+                        tokio::spawn(async move {
+                            // for tmp use, without real conn id
+                            let conn_id_tmp = -1;
+                            let mut conn_id: i32 = 0;
+                            let (tx, mut rx) = mpsc::unbounded_channel::<Data>();
+                            let mut write_jobs: Vec<fs::TransferJob> = Vec::new();
+                            loop {
+                                tokio::select! {
+                                    res = stream.next() => {
+                                        match res {
+                                            Err(err) => {
+                                                log::info!("cm ipc connection closed: {}", err);
+                                                break;
+                                            }
+                                            Ok(Some(data)) => {
+                                                match data {
+                                                    Data::Login{id, is_file_transfer, port_forward, peer_id, name, authorized, keyboard, clipboard, audio, file, file_transfer_enabled, restart} => {
+                                                        log::debug!("conn_id: {}", id);
+                                                        conn_id = id;
+                                                        tx_file.send(ClipboardFileData::Enable((id, file_transfer_enabled))).ok();
+                                                        cm.add_connection(id, is_file_transfer, port_forward, peer_id, name, authorized, keyboard, clipboard, audio, file, restart, tx.clone());
+                                                    }
+                                                    Data::Close => {
+                                                        tx_file.send(ClipboardFileData::Enable((conn_id, false))).ok();
+                                                        log::info!("cm ipc connection closed from connection request");
+                                                        break;
+                                                    }
+                                                    Data::PrivacyModeState((id, _)) => {
+                                                        conn_id = conn_id_tmp;
+                                                        allow_err!(tx.send(data));
+                                                    }
+                                                    Data::ClickTime(ms) => {
+                                                        CLICK_TIME.store(ms, Ordering::SeqCst);
+                                                    }
+                                                    Data::ChatMessage { text } => {
+                                                        cm.new_message(conn_id, text);
+                                                    }
+                                                    Data::FS(fs) => {
+                                                        handle_fs(fs, &mut write_jobs, &tx).await;
+                                                    }
+                                                    #[cfg(windows)]
+                                                    Data::ClipbaordFile(_clip) => {
+                                                        tx_file
+                                                            .send(ClipboardFileData::Clip((conn_id, _clip)))
+                                                            .ok();
+                                                    }
+                                                    #[cfg(windows)]
+                                                    Data::ClipboardFileEnabled(enabled) => {
+                                                        tx_file
+                                                            .send(ClipboardFileData::Enable((conn_id, enabled)))
+                                                            .ok();
+                                                    }
+                                                    _ => {
+
+                                                    }
+                                                }
+                                            }
+                                            _ => {}
+                                        }
+                                    }
+                                    Some(data) = rx.recv() => {
+                                        if stream.send(&data).await.is_err() {
+                                            break;
+                                        }
+                                    }
+                                }
+                            }
+                            if conn_id != conn_id_tmp {
+                                cm.remove_connection(conn_id);
+                            }
+                        });
+                    }
+                    Err(err) => {
+                        log::error!("Couldn't get cm client: {:?}", err);
+                    }
+                }
+            }
+        }
+        Err(err) => {
+            log::error!("Failed to start cm ipc server: {}", err);
+        }
+    }
+    crate::platform::quit_gui();
+}
+
+#[cfg(target_os = "android")]
+#[tokio::main(flavor = "current_thread")]
+pub async fn start_listen<T: InvokeUiCM>(
+    cm: ConnectionManager<T>,
+    mut rx: mpsc::UnboundedReceiver<Data>,
+    tx: mpsc::UnboundedSender<Data>,
+) {
+    let mut current_id = 0;
+    let mut write_jobs: Vec<fs::TransferJob> = Vec::new();
+    loop {
+        match rx.recv().await {
+            Some(Data::Login {
+                id,
+                is_file_transfer,
+                port_forward,
+                peer_id,
+                name,
+                authorized,
+                keyboard,
+                clipboard,
+                audio,
+                file,
+                restart,
+                ..
+            }) => {
+                current_id = id;
+                cm.add_connection(
+                    id,
+                    is_file_transfer,
+                    port_forward,
+                    peer_id,
+                    name,
+                    authorized,
+                    keyboard,
+                    clipboard,
+                    audio,
+                    file,
+                    restart,
+                    tx.clone(),
+                );
+            }
+            Some(Data::ChatMessage { text }) => {
+                cm.new_message(current_id, text);
+            }
+            Some(Data::FS(fs)) => {
+                handle_fs(fs, &mut write_jobs, &tx).await;
+            }
+            Some(Data::Close) => {
+                break;
+            }
+            None => {
+                break;
+            }
+            _ => {}
+        }
+    }
+    cm.remove_connection(current_id);
+}
+
+async fn handle_fs(fs: ipc::FS, write_jobs: &mut Vec<fs::TransferJob>, tx: &UnboundedSender<Data>) {
+    match fs {
+        ipc::FS::ReadDir {
+            dir,
+            include_hidden,
+        } => {
+            read_dir(&dir, include_hidden, tx).await;
+        }
+        ipc::FS::RemoveDir {
+            path,
+            id,
+            recursive,
+        } => {
+            remove_dir(path, id, recursive, tx).await;
+        }
+        ipc::FS::RemoveFile { path, id, file_num } => {
+            remove_file(path, id, file_num, tx).await;
+        }
+        ipc::FS::CreateDir { path, id } => {
+            create_dir(path, id, tx).await;
+        }
+        ipc::FS::NewWrite {
+            path,
+            id,
+            file_num,
+            mut files,
+            overwrite_detection,
+        } => {
+            // cm has no show_hidden context
+            // dummy remote, show_hidden, is_remote
+            write_jobs.push(fs::TransferJob::new_write(
+                id,
+                "".to_string(),
+                path,
+                file_num,
+                false,
+                false,
+                files
+                    .drain(..)
+                    .map(|f| FileEntry {
+                        name: f.0,
+                        modified_time: f.1,
+                        ..Default::default()
+                    })
+                    .collect(),
+                overwrite_detection,
+            ));
+        }
+        ipc::FS::CancelWrite { id } => {
+            if let Some(job) = fs::get_job(id, write_jobs) {
+                job.remove_download_file();
+                fs::remove_job(id, write_jobs);
+            }
+        }
+        ipc::FS::WriteDone { id, file_num } => {
+            if let Some(job) = fs::get_job(id, write_jobs) {
+                job.modify_time();
+                send_raw(fs::new_done(id, file_num), tx);
+                fs::remove_job(id, write_jobs);
+            }
+        }
+        ipc::FS::WriteBlock {
+            id,
+            file_num,
+            data,
+            compressed,
+        } => {
+            if let Some(job) = fs::get_job(id, write_jobs) {
+                if let Err(err) = job
+                    .write(
+                        FileTransferBlock {
+                            id,
+                            file_num,
+                            data,
+                            compressed,
+                            ..Default::default()
+                        },
+                        None,
+                    )
+                    .await
+                {
+                    send_raw(fs::new_error(id, err, file_num), &tx);
+                }
+            }
+        }
+        ipc::FS::CheckDigest {
+            id,
+            file_num,
+            file_size,
+            last_modified,
+            is_upload,
+        } => {
+            if let Some(job) = fs::get_job(id, write_jobs) {
+                let mut req = FileTransferSendConfirmRequest {
+                    id,
+                    file_num,
+                    union: Some(file_transfer_send_confirm_request::Union::OffsetBlk(0)),
+                    ..Default::default()
+                };
+                let digest = FileTransferDigest {
+                    id,
+                    file_num,
+                    last_modified,
+                    file_size,
+                    ..Default::default()
+                };
+                if let Some(file) = job.files().get(file_num as usize) {
+                    let path = get_string(&job.join(&file.name));
+                    match is_write_need_confirmation(&path, &digest) {
+                        Ok(digest_result) => {
+                            match digest_result {
+                                DigestCheckResult::IsSame => {
+                                    req.set_skip(true);
+                                    let msg_out = new_send_confirm(req);
+                                    send_raw(msg_out, &tx);
+                                }
+                                DigestCheckResult::NeedConfirm(mut digest) => {
+                                    // upload to server, but server has the same file, request
+                                    digest.is_upload = is_upload;
+                                    let mut msg_out = Message::new();
+                                    let mut fr = FileResponse::new();
+                                    fr.set_digest(digest);
+                                    msg_out.set_file_response(fr);
+                                    send_raw(msg_out, &tx);
+                                }
+                                DigestCheckResult::NoSuchFile => {
+                                    let msg_out = new_send_confirm(req);
+                                    send_raw(msg_out, &tx);
+                                }
+                            }
+                        }
+                        Err(err) => {
+                            send_raw(fs::new_error(id, err, file_num), &tx);
+                        }
+                    }
+                }
+            }
+        }
+        _ => {}
+    }
+}
+
+async fn read_dir(dir: &str, include_hidden: bool, tx: &UnboundedSender<Data>) {
+    let path = {
+        if dir.is_empty() {
+            Config::get_home()
+        } else {
+            fs::get_path(dir)
+        }
+    };
+    if let Ok(Ok(fd)) = spawn_blocking(move || fs::read_dir(&path, include_hidden)).await {
+        let mut msg_out = Message::new();
+        let mut file_response = FileResponse::new();
+        file_response.set_dir(fd);
+        msg_out.set_file_response(file_response);
+        send_raw(msg_out, tx);
+    }
+}
+
+async fn handle_result<F: std::fmt::Display, S: std::fmt::Display>(
+    res: std::result::Result<std::result::Result<(), F>, S>,
+    id: i32,
+    file_num: i32,
+    tx: &UnboundedSender<Data>,
+) {
+    match res {
+        Err(err) => {
+            send_raw(fs::new_error(id, err, file_num), tx);
+        }
+        Ok(Err(err)) => {
+            send_raw(fs::new_error(id, err, file_num), tx);
+        }
+        Ok(Ok(())) => {
+            send_raw(fs::new_done(id, file_num), tx);
+        }
+    }
+}
+
+async fn remove_file(path: String, id: i32, file_num: i32, tx: &UnboundedSender<Data>) {
+    handle_result(
+        spawn_blocking(move || fs::remove_file(&path)).await,
+        id,
+        file_num,
+        tx,
+    )
+    .await;
+}
+
+async fn create_dir(path: String, id: i32, tx: &UnboundedSender<Data>) {
+    handle_result(
+        spawn_blocking(move || fs::create_dir(&path)).await,
+        id,
+        0,
+        tx,
+    )
+    .await;
+}
+
+async fn remove_dir(path: String, id: i32, recursive: bool, tx: &UnboundedSender<Data>) {
+    let path = fs::get_path(&path);
+    handle_result(
+        spawn_blocking(move || {
+            if recursive {
+                fs::remove_all_empty_dir(&path)
+            } else {
+                std::fs::remove_dir(&path).map_err(|err| err.into())
+            }
+        })
+        .await,
+        id,
+        0,
+        tx,
+    )
+    .await;
+}
+
+fn send_raw(msg: Message, tx: &UnboundedSender<Data>) {
+    match msg.write_to_bytes() {
+        Ok(bytes) => {
+            allow_err!(tx.send(Data::RawMessage(bytes)));
+        }
+        err => allow_err!(err),
+    }
+}
+
+#[cfg(windows)]
+#[tokio::main(flavor = "current_thread")]
+pub async fn start_clipboard_file<T: InvokeUiCM>(
+    cm: ConnectionManager<T>,
+    mut rx: mpsc::UnboundedReceiver<ClipboardFileData>,
+) {
+    let mut cliprdr_context = None;
+    let mut rx_clip_client = clipboard::get_rx_clip_client().lock().await;
+
+    loop {
+        tokio::select! {
+            clip_file = rx_clip_client.recv() => match clip_file {
+                Some((conn_id, clip)) => {
+                    cmd_inner_send(
+                        conn_id,
+                        Data::ClipbaordFile(clip)
+                    );
+                }
+                None => {
+                    //
+                }
+            },
+            server_msg = rx.recv() => match server_msg {
+                Some(ClipboardFileData::Clip((conn_id, clip))) => {
+                    if let Some(ctx) = cliprdr_context.as_mut() {
+                        clipboard::server_clip_file(ctx, conn_id, clip);
+                    }
+                }
+                Some(ClipboardFileData::Enable((id, enabled))) => {
+                    if enabled && cliprdr_context.is_none() {
+                        cliprdr_context = Some(match clipboard::create_cliprdr_context(true, false) {
+                            Ok(context) => {
+                                log::info!("clipboard context for file transfer created.");
+                                context
+                            }
+                            Err(err) => {
+                                log::error!(
+                                    "Create clipboard context for file transfer: {}",
+                                    err.to_string()
+                                );
+                                return;
+                            }
+                        });
+                    }
+                    clipboard::set_conn_enabled(id, enabled);
+                    if !enabled {
+                        if let Some(ctx) = cliprdr_context.as_mut() {
+                            clipboard::empty_clipboard(ctx, id);
+                        }
+                    }
+                }
+                None => {
+                    break
+                }
+            }
+        }
+    }
+}
+
+#[cfg(windows)]
+fn cmd_inner_send(id: i32, data: Data) {
+    let lock = CLIENTS.read().unwrap();
+    if id != 0 {
+        if let Some(s) = lock.get(&id) {
+            allow_err!(s.tx.send(data));
+        }
+    } else {
+        for s in lock.values() {
+            allow_err!(s.tx.send(data.clone()));
+        }
+    }
+}

@@ -14,7 +14,6 @@ use hbb_common::{
     log,
     protobuf::Message as _,
     rendezvous_proto::*,
-    sleep,
     tcp::FramedStream,
     tokio::{self, sync::mpsc, time},
 };
@@ -87,7 +86,7 @@ pub fn start(args: &mut [String]) {
     }
     #[cfg(windows)]
     if args.len() > 0 && args[0] == "--tray" {
-        let options = check_connect_status(false).1;
+        let options = crate::ui_interface::check_connect_status(false).1;
         crate::tray::start_tray(options);
         return;
     }
@@ -125,7 +124,7 @@ pub fn start(args: &mut [String]) {
         page = "install.html";
     } else if args[0] == "--cm" {
         frame.register_behavior("connection-manager", move || {
-            Box::new(cm::ConnectionManager::new())
+            Box::new(cm::SciterConnectionManager::new())
         });
         page = "cm.html";
     } else if (args[0] == "--connect"
@@ -664,79 +663,6 @@ pub fn check_zombie(childs: Childs) {
     }
 }
 
-// notice: avoiding create ipc connecton repeatly,
-// because windows named pipe has serious memory leak issue.
-#[tokio::main(flavor = "current_thread")]
-async fn check_connect_status_(
-    reconnect: bool,
-    status: Arc<Mutex<Status>>,
-    options: Arc<Mutex<HashMap<String, String>>>,
-    rx: mpsc::UnboundedReceiver<ipc::Data>,
-    password: Arc<Mutex<String>>,
-) {
-    let mut key_confirmed = false;
-    let mut rx = rx;
-    let mut mouse_time = 0;
-    let mut id = "".to_owned();
-    loop {
-        if let Ok(mut c) = ipc::connect(1000, "").await {
-            let mut timer = time::interval(time::Duration::from_secs(1));
-            loop {
-                tokio::select! {
-                    res = c.next() => {
-                        match res {
-                            Err(err) => {
-                                log::error!("ipc connection closed: {}", err);
-                                break;
-                            }
-                            Ok(Some(ipc::Data::MouseMoveTime(v))) => {
-                                mouse_time = v;
-                                status.lock().unwrap().2 = v;
-                            }
-                            Ok(Some(ipc::Data::Options(Some(v)))) => {
-                                *options.lock().unwrap() = v
-                            }
-                            Ok(Some(ipc::Data::Config((name, Some(value))))) => {
-                                if name == "id" {
-                                    id = value;
-                                } else if name == "temporary-password" {
-                                    *password.lock().unwrap() = value;
-                                }
-                            }
-                            Ok(Some(ipc::Data::OnlineStatus(Some((mut x, c))))) => {
-                                if x > 0 {
-                                    x = 1
-                                }
-                                key_confirmed = c;
-                                *status.lock().unwrap() = (x as _, key_confirmed, mouse_time, id.clone());
-                            }
-                            _ => {}
-                        }
-                    }
-                    Some(data) = rx.recv() => {
-                        allow_err!(c.send(&data).await);
-                    }
-                    _ = timer.tick() => {
-                        c.send(&ipc::Data::OnlineStatus(None)).await.ok();
-                        c.send(&ipc::Data::Options(None)).await.ok();
-                        c.send(&ipc::Data::Config(("id".to_owned(), None))).await.ok();
-                        c.send(&ipc::Data::Config(("temporary-password".to_owned(), None))).await.ok();
-                    }
-                }
-            }
-        }
-        if !reconnect {
-            options
-                .lock()
-                .unwrap()
-                .insert("ipc-closed".to_owned(), "Y".to_owned());
-            break;
-        }
-        *status.lock().unwrap() = (-1, key_confirmed, mouse_time, id.clone());
-        sleep(1.).await;
-    }
-}
-
 #[cfg(not(target_os = "linux"))]
 fn get_sound_inputs() -> Vec<String> {
     let mut out = Vec::new();
@@ -761,28 +687,6 @@ fn get_sound_inputs() -> Vec<String> {
         .drain(..)
         .map(|x| x.1)
         .collect()
-}
-
-#[allow(dead_code)]
-fn check_connect_status(
-    reconnect: bool,
-) -> (
-    Arc<Mutex<Status>>,
-    Arc<Mutex<HashMap<String, String>>>,
-    mpsc::UnboundedSender<ipc::Data>,
-    Arc<Mutex<String>>,
-) {
-    let status = Arc::new(Mutex::new((0, false, 0, "".to_owned())));
-    let options = Arc::new(Mutex::new(Config::get_options()));
-    let cloned = status.clone();
-    let cloned_options = options.clone();
-    let (tx, rx) = mpsc::unbounded_channel::<ipc::Data>();
-    let password = Arc::new(Mutex::new(String::default()));
-    let cloned_password = password.clone();
-    std::thread::spawn(move || {
-        check_connect_status_(reconnect, cloned, cloned_options, rx, cloned_password)
-    });
-    (status, options, tx, password)
 }
 
 const INVALID_FORMAT: &'static str = "Invalid format";

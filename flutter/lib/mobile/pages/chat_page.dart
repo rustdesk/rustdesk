@@ -45,7 +45,7 @@ class ChatPage extends StatelessWidget implements PageShape {
     return ChangeNotifierProvider.value(
         value: chatModel,
         child: Container(
-            color: MyTheme.grayBg,
+            color: MyTheme.color(context).grayBg,
             child: Consumer<ChatModel>(builder: (context, chatModel, child) {
               final currentUser = chatModel.currentUser;
               return Stack(
@@ -59,6 +59,14 @@ class ChatPage extends StatelessWidget implements PageShape {
                       messages: chatModel
                               .messages[chatModel.currentID]?.chatMessages ??
                           [],
+                      inputOptions: InputOptions(
+                          sendOnEnter: true,
+                          inputDecoration: defaultInputDecoration(
+                              fillColor: MyTheme.color(context).bg),
+                          sendButtonBuilder: defaultSendButton(
+                              color: MyTheme.color(context).text!),
+                          inputTextStyle:
+                              TextStyle(color: MyTheme.color(context).text)),
                       messageOptions: MessageOptions(
                           showOtherUsersAvatar: false,
                           showTime: true,

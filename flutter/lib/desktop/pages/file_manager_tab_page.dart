@@ -25,7 +25,7 @@ class _FileManagerTabPageState extends State<FileManagerTabPage> {
   static final IconData unselectedIcon = Icons.file_copy_outlined;
 
   _FileManagerTabPageState(Map<String, dynamic> params) {
-    Get.put(DesktopTabController());
+    Get.put(DesktopTabController(tabType: DesktopTabType.fileTransfer));
     tabController.add(TabInfo(
         key: params['id'],
         label: params['id'],
@@ -62,8 +62,6 @@ class _FileManagerTabPageState extends State<FileManagerTabPage> {
 
   @override
   Widget build(BuildContext context) {
-    final theme =
-        isDarkTheme() ? const TarBarTheme.dark() : const TarBarTheme.light();
     return SubWindowDragToResizeArea(
       windowId: windowId(),
       child: Container(
@@ -73,14 +71,10 @@ class _FileManagerTabPageState extends State<FileManagerTabPage> {
             backgroundColor: MyTheme.color(context).bg,
             body: DesktopTab(
               controller: tabController,
-              theme: theme,
-              tabType: DesktopTabType.fileTransfer,
               onClose: () {
                 tabController.clear();
               },
-              tail: AddButton(
-                theme: theme,
-              ).paddingOnly(left: 10),
+              tail: AddButton().paddingOnly(left: 10),
             )),
       ),
     );

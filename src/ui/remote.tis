@@ -67,6 +67,7 @@ function adaptDisplay() {
             }
         }
     }
+    refreshCursor();
     handler.style.set {
         width: w / scaleFactor + "px",
         height: h / scaleFactor + "px",
@@ -98,6 +99,7 @@ var acc_wheel_delta_y0 = 0;
 var total_wheel_time = 0;
 var wheeling = false;
 var dragging = false;
+var is_mouse_event_triggered = false;
 
 // https://stackoverflow.com/questions/5833399/calculating-scroll-inertia-momentum
 function resetWheel() {
@@ -139,6 +141,7 @@ function accWheel(v, is_x) {
 
 function handler.onMouse(evt)
 {
+    is_mouse_event_triggered = true;
     if (is_file_transfer || is_port_forward) return false;
     if (view.windowState == View.WINDOW_FULL_SCREEN && !dragging) {
         var dy = evt.y - scroll_body.scroll(#top);
@@ -317,6 +320,7 @@ function handler.onMouse(evt)
     return true;
 };
 
+var cur_id = -1;
 var cur_hotx = 0;
 var cur_hoty = 0;
 var cur_img = null;
@@ -345,11 +349,17 @@ function scaleCursorImage(img) {
 var useSystemCursor = true;
 function updateCursor(system=false) {
     stdout.println("Update cursor, system: " + system);
-    useSystemCursor= system;
+    useSystemCursor = system;
     if (system) {
         handler.style#cursor = undefined;
     } else if (cur_img) {
         handler.style.cursor(cur_img, (cur_hotx * display_scale).toInteger(), (cur_hoty * display_scale).toInteger());
+    }
+}
+
+function refreshCursor() {
+    if (cur_id != -1) {
+        handler.setCursorId(cur_id);
     }
 }
 
@@ -360,8 +370,9 @@ handler.setCursorData = function(id, hotx, hoty, width, height, colors) {
     if (img) {
         image_binded = true;
         cursors[id] = [img, hotx, hoty, width, height];
+        cur_id = id;
         img = scaleCursorImage(img);
-        if (cursor_img.style#display == 'none') {
+        if (!first_mouse_event_triggered || cursor_img.style#display == 'none') {
             self.timer(1ms, updateCursor);
         }
         cur_img = img;
@@ -371,11 +382,12 @@ handler.setCursorData = function(id, hotx, hoty, width, height, colors) {
 handler.setCursorId = function(id) {
     var img = cursors[id];
     if (img) {
+        cur_id = id;
         image_binded = true;
         cur_hotx = img[1];
         cur_hoty = img[2];
         img = scaleCursorImage(img[0]);
-        if (cursor_img.style#display == 'none') {
+        if (!first_mouse_event_triggered || cursor_img.style#display == 'none') {
             self.timer(1ms, updateCursor);
         }
         cur_img = img;

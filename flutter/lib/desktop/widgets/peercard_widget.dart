@@ -5,6 +5,7 @@ import 'package:flutter_hbb/utils/multi_window_manager.dart';
 import 'package:get/get.dart';
 
 import '../../common.dart';
+import '../../common/formatter/id_formatter.dart';
 import '../../models/model.dart';
 import '../../models/peer_model.dart';
 import '../../models/platform_model.dart';
@@ -15,7 +16,7 @@ class _PopupMenuTheme {
   static const Color commonColor = MyTheme.accent;
   // kMinInteractiveDimension
   static const double height = 25.0;
-  static const double dividerHeight = 12.0;
+  static const double dividerHeight = 3.0;
 }
 
 typedef PopupMenuEntryBuilder = Future<List<mod_menu.PopupMenuEntry<String>>>
@@ -46,7 +47,8 @@ class _PeerCard extends StatefulWidget {
 /// State for the connection page.
 class _PeerCardState extends State<_PeerCard>
     with AutomaticKeepAliveClientMixin {
-  final double _cardRadis = 20;
+  var _menuPos = RelativeRect.fill;
+  final double _cardRadis = 16;
   final double _borderWidth = 2;
   final RxBool _iconMoreHover = false.obs;
 
@@ -118,7 +120,7 @@ class _PeerCardState extends State<_PeerCard>
                                         ? Colors.green
                                         : Colors.yellow)),
                             Text(
-                              '${peer.id}',
+                              formatID('${peer.id}'),
                               style: TextStyle(fontWeight: FontWeight.w400),
                             ),
                           ]),
@@ -239,7 +241,7 @@ class _PeerCardState extends State<_PeerCard>
                                 backgroundColor: peer.online
                                     ? Colors.green
                                     : Colors.yellow)),
-                        Text(peer.id)
+                        Text(formatID(peer.id))
                       ]).paddingSymmetric(vertical: 8),
                       _actionMore(peer),
                     ],
@@ -253,36 +255,36 @@ class _PeerCardState extends State<_PeerCard>
     );
   }
 
-  Widget _actionMore(Peer peer) {
-    return FutureBuilder(
-        future: widget.popupMenuEntryBuilder(context),
-        initialData: const <mod_menu.PopupMenuEntry<String>>[],
-        builder: (BuildContext context,
-            AsyncSnapshot<List<mod_menu.PopupMenuEntry<String>>> snapshot) {
-          if (snapshot.hasData) {
-            return Listener(
-                child: MouseRegion(
-                    onEnter: (_) => _iconMoreHover.value = true,
-                    onExit: (_) => _iconMoreHover.value = false,
-                    child: CircleAvatar(
-                        radius: 14,
-                        backgroundColor: _iconMoreHover.value
-                            ? MyTheme.color(context).grayBg!
-                            : MyTheme.color(context).bg!,
-                        child: mod_menu.PopupMenuButton(
-                          padding: EdgeInsets.zero,
-                          icon: Icon(Icons.more_vert,
-                              size: 18,
-                              color: _iconMoreHover.value
-                                  ? MyTheme.color(context).text
-                                  : MyTheme.color(context).lightText),
-                          position: mod_menu.PopupMenuPosition.under,
-                          itemBuilder: (BuildContext context) => snapshot.data!,
-                        ))));
-          } else {
-            return Container();
-          }
-        });
+  Widget _actionMore(Peer peer) => Listener(
+      onPointerDown: (e) {
+        final x = e.position.dx;
+        final y = e.position.dy;
+        _menuPos = RelativeRect.fromLTRB(x, y, x, y);
+      },
+      onPointerUp: (_) => _showPeerMenu(context, peer.id),
+      child: MouseRegion(
+          onEnter: (_) => _iconMoreHover.value = true,
+          onExit: (_) => _iconMoreHover.value = false,
+          child: CircleAvatar(
+              radius: 14,
+              backgroundColor: _iconMoreHover.value
+                  ? MyTheme.color(context).grayBg!
+                  : MyTheme.color(context).bg!,
+              child: Icon(Icons.more_vert,
+                  size: 18,
+                  color: _iconMoreHover.value
+                      ? MyTheme.color(context).text
+                      : MyTheme.color(context).lightText))));
+
+  /// Show the peer menu and handle user's choice.
+  /// User might remove the peer or send a file to the peer.
+  void _showPeerMenu(BuildContext context, String id) async {
+    await mod_menu.showMenu(
+      context: context,
+      position: _menuPos,
+      items: await super.widget.popupMenuEntryBuilder(context),
+      elevation: 8,
+    );
   }
 
   /// Get the image for the current [platform].
@@ -411,19 +413,26 @@ abstract class BasePeerCard extends StatelessWidget {
   @protected
   MenuEntryBase<String> _rdpAction(BuildContext context, String id) {
     return MenuEntryButton<String>(
-      childBuilder: (TextStyle? style) => Row(
-        children: [
-          Text(
-            translate('RDP'),
-            style: style,
-          ),
-          SizedBox(width: 20),
-          IconButton(
-            icon: Icon(Icons.edit),
-            onPressed: () => _rdpDialog(id),
-          )
-        ],
-      ),
+      childBuilder: (TextStyle? style) => Container(
+          alignment: AlignmentDirectional.center,
+          height: _PopupMenuTheme.height,
+          child: Row(
+            children: [
+              Text(
+                translate('RDP'),
+                style: style,
+              ),
+              Expanded(
+                  child: Align(
+                alignment: Alignment.centerRight,
+                child: IconButton(
+                  padding: EdgeInsets.zero,
+                  icon: Icon(Icons.edit),
+                  onPressed: () => _rdpDialog(id),
+                ),
+              ))
+            ],
+          )),
       proc: () {
         _connect(context, id, isRDP: true);
       },
@@ -554,47 +563,47 @@ abstract class BasePeerCard extends StatelessWidget {
       }
     }
     gFFI.dialogManager.show((setState, close) {
+      submit() async {
+        isInProgress.value = true;
+        name = controller.text;
+        await bind.mainSetPeerOption(id: id, key: 'alias', value: name);
+        if (isAddressBook) {
+          gFFI.abModel.setPeerOption(id, 'alias', name);
+          await gFFI.abModel.updateAb();
+        }
+        alias.value = await bind.mainGetPeerOption(id: peer.id, key: 'alias');
+        close();
+        isInProgress.value = false;
+      }
+
       return CustomAlertDialog(
         title: Text(translate('Rename')),
         content: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Container(
-              padding: EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
               child: Form(
                 child: TextFormField(
                   controller: controller,
-                  decoration: InputDecoration(border: OutlineInputBorder()),
+                  focusNode: FocusNode()..requestFocus(),
+                  decoration:
+                      const InputDecoration(border: OutlineInputBorder()),
                 ),
               ),
             ),
             Obx(() => Offstage(
                 offstage: isInProgress.isFalse,
-                child: LinearProgressIndicator())),
+                child: const LinearProgressIndicator())),
           ],
         ),
         actions: [
-          TextButton(
-              onPressed: () {
-                close();
-              },
-              child: Text(translate("Cancel"))),
-          TextButton(
-              onPressed: () async {
-                isInProgress.value = true;
-                name = controller.text;
-                await bind.mainSetPeerOption(id: id, key: 'alias', value: name);
-                if (isAddressBook) {
-                  gFFI.abModel.setPeerOption(id, 'alias', name);
-                  await gFFI.abModel.updateAb();
-                }
-                alias.value =
-                    await bind.mainGetPeerOption(id: peer.id, key: 'alias');
-                close();
-                isInProgress.value = false;
-              },
-              child: Text(translate("OK"))),
+          TextButton(onPressed: close, child: Text(translate("Cancel"))),
+          TextButton(onPressed: submit, child: Text(translate("OK"))),
         ],
+        onSubmit: submit,
+        onCancel: close,
       );
     });
   }
@@ -614,6 +623,7 @@ class RecentPeerCard extends BasePeerCard {
     if (peer.platform == 'Windows') {
       menuItems.add(_rdpAction(context, peer.id));
     }
+    menuItems.add(MenuEntryDivider());
     menuItems.add(await _forceAlwaysRelayAction(peer.id));
     menuItems.add(_renameAction(peer.id, false));
     menuItems.add(_removeAction(peer.id, () async {
@@ -740,13 +750,23 @@ class AddressBookPeerCard extends BasePeerCard {
     var selectedTag = gFFI.abModel.getPeerTags(id).obs;
 
     gFFI.dialogManager.show((setState, close) {
+      submit() async {
+        setState(() {
+          isInProgress = true;
+        });
+        gFFI.abModel.changeTagForPeer(id, selectedTag);
+        await gFFI.abModel.updateAb();
+        close();
+      }
+
       return CustomAlertDialog(
         title: Text(translate("Edit Tag")),
         content: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Container(
-              padding: EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
               child: Wrap(
                 children: tags
                     .map((e) => _buildTag(e, selectedTag, onTap: () {
@@ -759,26 +779,16 @@ class AddressBookPeerCard extends BasePeerCard {
                     .toList(growable: false),
               ),
             ),
-            Offstage(offstage: !isInProgress, child: LinearProgressIndicator())
+            Offstage(
+                offstage: !isInProgress, child: const LinearProgressIndicator())
           ],
         ),
         actions: [
-          TextButton(
-              onPressed: () {
-                close();
-              },
-              child: Text(translate("Cancel"))),
-          TextButton(
-              onPressed: () async {
-                setState(() {
-                  isInProgress = true;
-                });
-                gFFI.abModel.changeTagForPeer(id, selectedTag);
-                await gFFI.abModel.updateAb();
-                close();
-              },
-              child: Text(translate("OK"))),
+          TextButton(onPressed: close, child: Text(translate("Cancel"))),
+          TextButton(onPressed: submit, child: Text(translate("OK"))),
         ],
+        onSubmit: submit,
+        onCancel: close,
       );
     });
   }
@@ -861,25 +871,35 @@ void _rdpDialog(String id) async {
   RxBool secure = true.obs;
 
   gFFI.dialogManager.show((setState, close) {
+    submit() async {
+      await bind.mainSetPeerOption(
+          id: id, key: 'rdp_port', value: portController.text.trim());
+      await bind.mainSetPeerOption(
+          id: id, key: 'rdp_username', value: userController.text);
+      await bind.mainSetPeerOption(
+          id: id, key: 'rdp_password', value: passwordContorller.text);
+      close();
+    }
+
     return CustomAlertDialog(
-      title: Text('RDP ' + translate('Settings')),
+      title: Text('RDP ${translate('Settings')}'),
       content: ConstrainedBox(
-        constraints: BoxConstraints(minWidth: 500),
+        constraints: const BoxConstraints(minWidth: 500),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            SizedBox(
+            const SizedBox(
               height: 8.0,
             ),
             Row(
               children: [
                 ConstrainedBox(
-                    constraints: BoxConstraints(minWidth: 100),
+                    constraints: const BoxConstraints(minWidth: 100),
                     child: Text(
                       "${translate('Port')}:",
                       textAlign: TextAlign.start,
                     ).marginOnly(bottom: 16.0)),
-                SizedBox(
+                const SizedBox(
                   width: 24.0,
                 ),
                 Expanded(
@@ -888,52 +908,54 @@ void _rdpDialog(String id) async {
                       FilteringTextInputFormatter.allow(RegExp(
                           r'^([0-9]|[1-9]\d|[1-9]\d{2}|[1-9]\d{3}|[1-5]\d{4}|6[0-4]\d{3}|65[0-4]\d{2}|655[0-2]\d|6553[0-5])$'))
                     ],
-                    decoration: InputDecoration(
+                    decoration: const InputDecoration(
                         border: OutlineInputBorder(), hintText: '3389'),
                     controller: portController,
+                    focusNode: FocusNode()..requestFocus(),
                   ),
                 ),
               ],
             ),
-            SizedBox(
+            const SizedBox(
               height: 8.0,
             ),
             Row(
               children: [
                 ConstrainedBox(
-                    constraints: BoxConstraints(minWidth: 100),
+                    constraints: const BoxConstraints(minWidth: 100),
                     child: Text(
                       "${translate('Username')}:",
                       textAlign: TextAlign.start,
                     ).marginOnly(bottom: 16.0)),
-                SizedBox(
+                const SizedBox(
                   width: 24.0,
                 ),
                 Expanded(
                   child: TextField(
-                    decoration: InputDecoration(border: OutlineInputBorder()),
+                    decoration:
+                        const InputDecoration(border: OutlineInputBorder()),
                     controller: userController,
                   ),
                 ),
               ],
             ),
-            SizedBox(
+            const SizedBox(
               height: 8.0,
             ),
             Row(
               children: [
                 ConstrainedBox(
-                    constraints: BoxConstraints(minWidth: 100),
+                    constraints: const BoxConstraints(minWidth: 100),
                     child: Text("${translate('Password')}:")
                         .marginOnly(bottom: 16.0)),
-                SizedBox(
+                const SizedBox(
                   width: 24.0,
                 ),
                 Expanded(
                   child: Obx(() => TextField(
                         obscureText: secure.value,
                         decoration: InputDecoration(
-                            border: OutlineInputBorder(),
+                            border: const OutlineInputBorder(),
                             suffixIcon: IconButton(
                                 onPressed: () => secure.value = !secure.value,
                                 icon: Icon(secure.value
@@ -948,23 +970,11 @@ void _rdpDialog(String id) async {
         ),
       ),
       actions: [
-        TextButton(
-            onPressed: () {
-              close();
-            },
-            child: Text(translate("Cancel"))),
-        TextButton(
-            onPressed: () async {
-              await bind.mainSetPeerOption(
-                  id: id, key: 'rdp_port', value: portController.text.trim());
-              await bind.mainSetPeerOption(
-                  id: id, key: 'rdp_username', value: userController.text);
-              await bind.mainSetPeerOption(
-                  id: id, key: 'rdp_password', value: passwordContorller.text);
-              close();
-            },
-            child: Text(translate("OK"))),
+        TextButton(onPressed: close, child: Text(translate("Cancel"))),
+        TextButton(onPressed: submit, child: Text(translate("OK"))),
       ],
+      onSubmit: submit,
+      onCancel: close,
     );
   });
 }

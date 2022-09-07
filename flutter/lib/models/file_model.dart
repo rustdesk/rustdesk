@@ -360,9 +360,9 @@ class FileModel extends ChangeNotifier {
   Future refresh({bool? isLocal}) async {
     if (isDesktop) {
       isLocal = isLocal ?? _isLocal;
-      await isLocal
-          ? openDirectory(currentLocalDir.path, isLocal: isLocal)
-          : openDirectory(currentRemoteDir.path, isLocal: isLocal);
+      isLocal
+          ? await openDirectory(currentLocalDir.path, isLocal: isLocal)
+          : await openDirectory(currentRemoteDir.path, isLocal: isLocal);
     } else {
       await openDirectory(currentDir.path);
     }
@@ -393,7 +393,7 @@ class FileModel extends ChangeNotifier {
       }
       notifyListeners();
     } catch (e) {
-      debugPrint("Failed to openDirectory ${path} :$e");
+      debugPrint("Failed to openDirectory $path: $e");
     }
   }
 
@@ -559,49 +559,55 @@ class FileModel extends ChangeNotifier {
   Future<bool?> showRemoveDialog(
       String title, String content, bool showCheckbox) async {
     return await parent.target?.dialogManager.show<bool>(
-        (setState, Function(bool v) close) => CustomAlertDialog(
-                title: Row(
-                  children: [
-                    Icon(Icons.warning, color: Colors.red),
-                    SizedBox(width: 20),
-                    Text(title)
-                  ],
-                ),
-                content: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(content),
-                      SizedBox(height: 5),
-                      Text(translate("This is irreversible!"),
-                          style: TextStyle(fontWeight: FontWeight.bold)),
-                      showCheckbox
-                          ? CheckboxListTile(
-                              contentPadding: const EdgeInsets.all(0),
-                              dense: true,
-                              controlAffinity: ListTileControlAffinity.leading,
-                              title: Text(
-                                translate("Do this for all conflicts"),
-                              ),
-                              value: removeCheckboxRemember,
-                              onChanged: (v) {
-                                if (v == null) return;
-                                setState(() => removeCheckboxRemember = v);
-                              },
-                            )
-                          : SizedBox.shrink()
-                    ]),
-                actions: [
-                  TextButton(
-                      style: flatButtonStyle,
-                      onPressed: () => close(false),
-                      child: Text(translate("Cancel"))),
-                  TextButton(
-                      style: flatButtonStyle,
-                      onPressed: () => close(true),
-                      child: Text(translate("OK"))),
-                ]),
-        useAnimation: false);
+        (setState, Function(bool v) close) {
+      cancel() => close(false);
+      submit() => close(true);
+      return CustomAlertDialog(
+        title: Row(
+          children: [
+            const Icon(Icons.warning, color: Colors.red),
+            const SizedBox(width: 20),
+            Text(title)
+          ],
+        ),
+        content: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(content),
+              const SizedBox(height: 5),
+              Text(translate("This is irreversible!"),
+                  style: const TextStyle(fontWeight: FontWeight.bold)),
+              showCheckbox
+                  ? CheckboxListTile(
+                      contentPadding: const EdgeInsets.all(0),
+                      dense: true,
+                      controlAffinity: ListTileControlAffinity.leading,
+                      title: Text(
+                        translate("Do this for all conflicts"),
+                      ),
+                      value: removeCheckboxRemember,
+                      onChanged: (v) {
+                        if (v == null) return;
+                        setState(() => removeCheckboxRemember = v);
+                      },
+                    )
+                  : const SizedBox.shrink()
+            ]),
+        actions: [
+          TextButton(
+              style: flatButtonStyle,
+              onPressed: cancel,
+              child: Text(translate("Cancel"))),
+          TextButton(
+              style: flatButtonStyle,
+              onPressed: submit,
+              child: Text(translate("OK"))),
+        ],
+        onSubmit: submit,
+        onCancel: cancel,
+      );
+    }, useAnimation: false);
   }
 
   bool fileConfirmCheckboxRemember = false;
@@ -610,55 +616,59 @@ class FileModel extends ChangeNotifier {
       String title, String content, bool showCheckbox) async {
     fileConfirmCheckboxRemember = false;
     return await parent.target?.dialogManager.show<bool?>(
-        (setState, Function(bool? v) close) => CustomAlertDialog(
-                title: Row(
-                  children: [
-                    Icon(Icons.warning, color: Colors.red),
-                    SizedBox(width: 20),
-                    Text(title)
-                  ],
-                ),
-                content: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                          translate(
-                              "This file exists, skip or overwrite this file?"),
-                          style: TextStyle(fontWeight: FontWeight.bold)),
-                      SizedBox(height: 5),
-                      Text(content),
-                      showCheckbox
-                          ? CheckboxListTile(
-                              contentPadding: const EdgeInsets.all(0),
-                              dense: true,
-                              controlAffinity: ListTileControlAffinity.leading,
-                              title: Text(
-                                translate("Do this for all conflicts"),
-                              ),
-                              value: fileConfirmCheckboxRemember,
-                              onChanged: (v) {
-                                if (v == null) return;
-                                setState(() => fileConfirmCheckboxRemember = v);
-                              },
-                            )
-                          : SizedBox.shrink()
-                    ]),
-                actions: [
-                  TextButton(
-                      style: flatButtonStyle,
-                      onPressed: () => close(false),
-                      child: Text(translate("Cancel"))),
-                  TextButton(
-                      style: flatButtonStyle,
-                      onPressed: () => close(null),
-                      child: Text(translate("Skip"))),
-                  TextButton(
-                      style: flatButtonStyle,
-                      onPressed: () => close(true),
-                      child: Text(translate("OK"))),
-                ]),
-        useAnimation: false);
+        (setState, Function(bool? v) close) {
+      cancel() => close(false);
+      submit() => close(true);
+      return CustomAlertDialog(
+        title: Row(
+          children: [
+            const Icon(Icons.warning, color: Colors.red),
+            const SizedBox(width: 20),
+            Text(title)
+          ],
+        ),
+        content: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(translate("This file exists, skip or overwrite this file?"),
+                  style: const TextStyle(fontWeight: FontWeight.bold)),
+              const SizedBox(height: 5),
+              Text(content),
+              showCheckbox
+                  ? CheckboxListTile(
+                      contentPadding: const EdgeInsets.all(0),
+                      dense: true,
+                      controlAffinity: ListTileControlAffinity.leading,
+                      title: Text(
+                        translate("Do this for all conflicts"),
+                      ),
+                      value: fileConfirmCheckboxRemember,
+                      onChanged: (v) {
+                        if (v == null) return;
+                        setState(() => fileConfirmCheckboxRemember = v);
+                      },
+                    )
+                  : const SizedBox.shrink()
+            ]),
+        actions: [
+          TextButton(
+              style: flatButtonStyle,
+              onPressed: cancel,
+              child: Text(translate("Cancel"))),
+          TextButton(
+              style: flatButtonStyle,
+              onPressed: () => close(null),
+              child: Text(translate("Skip"))),
+          TextButton(
+              style: flatButtonStyle,
+              onPressed: submit,
+              child: Text(translate("OK"))),
+        ],
+        onSubmit: submit,
+        onCancel: cancel,
+      );
+    }, useAnimation: false);
   }
 
   sendRemoveFile(String path, int fileNum, bool isLocal) {

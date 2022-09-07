@@ -13,8 +13,6 @@ use hbb_common::{
     fs, log,
 };
 
-use crate::common::make_fd_to_json;
-use crate::flutter::connection_manager::{self, get_clients_length, get_clients_state};
 use crate::flutter::{self, SESSIONS};
 use crate::start_server;
 use crate::ui_interface;
@@ -31,7 +29,7 @@ use crate::ui_interface::{
 };
 use crate::{
     client::file_trait::FileManager,
-    flutter::{session_add, session_start_},
+    flutter::{make_fd_to_json, session_add, session_start_},
 };
 
 fn initialize(app_dir: &str) {
@@ -388,10 +386,8 @@ pub fn session_create_dir(id: String, act_id: i32, path: String, is_remote: bool
 }
 
 pub fn session_read_local_dir_sync(id: String, path: String, show_hidden: bool) -> String {
-    if let Some(_) = SESSIONS.read().unwrap().get(&id) {
-        if let Ok(fd) = fs::read_dir(&fs::get_path(&path), show_hidden) {
-            return make_fd_to_json(fd);
-        }
+    if let Ok(fd) = fs::read_dir(&fs::get_path(&path), show_hidden) {
+        return make_fd_to_json(fd.id, path, &fd.entries);
     }
     "".to_string()
 }
@@ -404,8 +400,8 @@ pub fn session_get_platform(id: String, is_remote: bool) -> String {
 }
 
 pub fn session_load_last_transfer_jobs(id: String) {
-    if let Some(_) = SESSIONS.read().unwrap().get(&id) {
-        // return session.load_last_jobs();
+    if let Some(session) = SESSIONS.read().unwrap().get(&id) {
+        return session.load_last_jobs();
     } else {
         // a tip for flutter dev
         eprintln!(
@@ -711,13 +707,13 @@ pub fn main_get_online_statue() -> i64 {
     ONLINE.lock().unwrap().values().max().unwrap_or(&0).clone()
 }
 
-pub fn main_get_clients_state() -> String {
-    get_clients_state()
+pub fn cm_get_clients_state() -> String {
+    crate::ui_cm_interface::get_clients_state()
 }
 
-pub fn main_check_clients_length(length: usize) -> Option<String> {
-    if length != get_clients_length() {
-        Some(get_clients_state())
+pub fn cm_check_clients_length(length: usize) -> Option<String> {
+    if length != crate::ui_cm_interface::get_clients_length() {
+        Some(crate::ui_cm_interface::get_clients_state())
     } else {
         None
     }
@@ -793,7 +789,7 @@ pub fn main_set_home_dir(home: String) {
 pub fn main_stop_service() {
     #[cfg(target_os = "android")]
     {
-        Config::set_option("stop-service".into(), "Y".into());
+        config::Config::set_option("stop-service".into(), "Y".into());
         crate::rendezvous_mediator::RendezvousMediator::restart();
     }
 }
@@ -801,7 +797,7 @@ pub fn main_stop_service() {
 pub fn main_start_service() {
     #[cfg(target_os = "android")]
     {
-        Config::set_option("stop-service".into(), "".into());
+        config::Config::set_option("stop-service".into(), "".into());
         crate::rendezvous_mediator::RendezvousMediator::restart();
     }
     #[cfg(not(target_os = "android"))]
@@ -829,27 +825,31 @@ pub fn main_get_mouse_time() -> f64 {
 }
 
 pub fn cm_send_chat(conn_id: i32, msg: String) {
-    connection_manager::send_chat(conn_id, msg);
+    crate::ui_cm_interface::send_chat(conn_id, msg);
 }
 
 pub fn cm_login_res(conn_id: i32, res: bool) {
-    connection_manager::on_login_res(conn_id, res);
+    if res {
+        crate::ui_cm_interface::authorize(conn_id);
+    } else {
+        crate::ui_cm_interface::close(conn_id);
+    }
 }
 
 pub fn cm_close_connection(conn_id: i32) {
-    connection_manager::close_conn(conn_id);
+    crate::ui_cm_interface::close(conn_id);
 }
 
 pub fn cm_check_click_time(conn_id: i32) {
-    connection_manager::check_click_time(conn_id)
+    crate::ui_cm_interface::check_click_time(conn_id)
 }
 
 pub fn cm_get_click_time() -> f64 {
-    connection_manager::get_click_time() as _
+    crate::ui_cm_interface::get_click_time() as _
 }
 
 pub fn cm_switch_permission(conn_id: i32, name: String, enabled: bool) {
-    connection_manager::switch_permission(conn_id, name, enabled)
+    crate::ui_cm_interface::switch_permission(conn_id, name, enabled)
 }
 
 pub fn main_get_icon() -> String {

@@ -496,9 +496,17 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
               });
               final quality =
                   await bind.sessionGetCustomImageQuality(id: widget.id);
-              final double initValue = quality != null && quality.isNotEmpty
+              double initValue = quality != null && quality.isNotEmpty
                   ? quality[0].toDouble()
                   : 50.0;
+              const minValue = 10.0;
+              const maxValue = 100.0;
+              if (initValue < minValue) {
+                initValue = minValue;
+              }
+              if (initValue > maxValue) {
+                initValue = maxValue;
+              }
               final RxDouble sliderValue = RxDouble(initValue);
               final rxReplay = rxdart.ReplaySubject<double>();
               rxReplay
@@ -513,30 +521,44 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
               final slider = Obx(() {
                 return Slider(
                   value: sliderValue.value,
-                  max: 100,
-                  divisions: 100,
-                  label: sliderValue.value.round().toString(),
+                  min: minValue,
+                  max: maxValue,
+                  divisions: 90,
                   onChanged: (double value) {
                     sliderValue.value = value;
                     rxReplay.add(value);
                   },
                 );
               });
+              final content = Row(
+                children: [
+                  slider,
+                  SizedBox(
+                      width: 90,
+                      child: Obx(() => Text(
+                            '${sliderValue.value.round()}% Bitrate',
+                            style: const TextStyle(fontSize: 15),
+                          )))
+                ],
+              );
               msgBoxCommon(widget.ffi.dialogManager, 'Custom Image Quality',
-                  slider, [btnCancel]);
+                  content, [btnCancel]);
             }
           }),
       MenuEntryDivider<String>(),
-      MenuEntrySwitch<String>(
-          text: translate('Show remote cursor'),
-          getter: () async {
-            return bind.sessionGetToggleOptionSync(
-                id: widget.id, arg: 'show-remote-cursor');
-          },
-          setter: (bool v) async {
-            await bind.sessionToggleOption(
-                id: widget.id, value: 'show-remote-cursor');
-          }),
+      () {
+        final state = ShowRemoteCursorState.find(widget.id);
+        return MenuEntrySwitch2<String>(
+            text: translate('Show remote cursor'),
+            getter: () {
+              return state;
+            },
+            setter: (bool v) async {
+              state.value = v;
+              await bind.sessionToggleOption(
+                  id: widget.id, value: 'show-remote-cursor');
+            });
+      }(),
       MenuEntrySwitch<String>(
           text: translate('Show quality monitor'),
           getter: () async {
@@ -565,12 +587,12 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
           'Lock after session end', 'lock-after-session-end'));
       if (pi.platform == 'Windows') {
         displayMenu.add(MenuEntrySwitch2<String>(
+            dismissOnClicked: true,
             text: translate('Privacy mode'),
             getter: () {
               return PrivacyModeState.find(widget.id);
             },
             setter: (bool v) async {
-              Navigator.pop(context);
               await bind.sessionToggleOption(
                   id: widget.id, value: 'privacy-mode');
             }));
@@ -620,46 +642,49 @@ void showSetOSPassword(
   var autoLogin = await bind.sessionGetOption(id: id, arg: "auto-login") != "";
   controller.text = password;
   dialogManager.show((setState, close) {
+    submit() {
+      var text = controller.text.trim();
+      bind.sessionPeerOption(id: id, name: "os-password", value: text);
+      bind.sessionPeerOption(
+          id: id, name: "auto-login", value: autoLogin ? 'Y' : '');
+      if (text != "" && login) {
+        bind.sessionInputOsPassword(id: id, value: text);
+      }
+      close();
+    }
+
     return CustomAlertDialog(
-        title: Text(translate('OS Password')),
-        content: Column(mainAxisSize: MainAxisSize.min, children: [
-          PasswordWidget(controller: controller),
-          CheckboxListTile(
-            contentPadding: const EdgeInsets.all(0),
-            dense: true,
-            controlAffinity: ListTileControlAffinity.leading,
-            title: Text(
-              translate('Auto Login'),
-            ),
-            value: autoLogin,
-            onChanged: (v) {
-              if (v == null) return;
-              setState(() => autoLogin = v);
-            },
+      title: Text(translate('OS Password')),
+      content: Column(mainAxisSize: MainAxisSize.min, children: [
+        PasswordWidget(controller: controller),
+        CheckboxListTile(
+          contentPadding: const EdgeInsets.all(0),
+          dense: true,
+          controlAffinity: ListTileControlAffinity.leading,
+          title: Text(
+            translate('Auto Login'),
           ),
-        ]),
-        actions: [
-          TextButton(
-            style: flatButtonStyle,
-            onPressed: () {
-              close();
-            },
-            child: Text(translate('Cancel')),
-          ),
-          TextButton(
-            style: flatButtonStyle,
-            onPressed: () {
-              var text = controller.text.trim();
-              bind.sessionPeerOption(id: id, name: "os-password", value: text);
-              bind.sessionPeerOption(
-                  id: id, name: "auto-login", value: autoLogin ? 'Y' : '');
-              if (text != "" && login) {
-                bind.sessionInputOsPassword(id: id, value: text);
-              }
-              close();
-            },
-            child: Text(translate('OK')),
-          ),
-        ]);
+          value: autoLogin,
+          onChanged: (v) {
+            if (v == null) return;
+            setState(() => autoLogin = v);
+          },
+        ),
+      ]),
+      actions: [
+        TextButton(
+          style: flatButtonStyle,
+          onPressed: close,
+          child: Text(translate('Cancel')),
+        ),
+        TextButton(
+          style: flatButtonStyle,
+          onPressed: submit,
+          child: Text(translate('OK')),
+        ),
+      ],
+      onSubmit: submit,
+      onCancel: close,
+    );
   });
 }

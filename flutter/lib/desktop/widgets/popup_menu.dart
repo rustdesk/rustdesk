@@ -1,6 +1,7 @@
 import 'dart:core';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_hbb/common.dart';
 import 'package:get/get.dart';
 
 import './material_mod_popup_menu.dart' as mod_menu;
@@ -174,8 +175,8 @@ class MenuEntryRadios<T> extends MenuEntryBase<T> {
             children: [
               Text(
                 opt.text,
-                style: const TextStyle(
-                    color: Colors.black,
+                style: TextStyle(
+                    color: MyTheme.color(context).text,
                     fontSize: MenuConfig.fontSize,
                     fontWeight: FontWeight.normal),
               ),
@@ -256,8 +257,8 @@ class MenuEntrySubRadios<T> extends MenuEntryBase<T> {
             children: [
               Text(
                 opt.text,
-                style: const TextStyle(
-                    color: Colors.black,
+                style: TextStyle(
+                    color: MyTheme.color(context).text,
                     fontSize: MenuConfig.fontSize,
                     fontWeight: FontWeight.normal),
               ),
@@ -300,8 +301,8 @@ class MenuEntrySubRadios<T> extends MenuEntryBase<T> {
           const SizedBox(width: MenuConfig.midPadding),
           Text(
             text,
-            style: const TextStyle(
-                color: Colors.black,
+            style: TextStyle(
+                color: MyTheme.color(context).text,
                 fontSize: MenuConfig.fontSize,
                 fontWeight: FontWeight.normal),
           ),
@@ -346,8 +347,8 @@ abstract class MenuEntrySwitchBase<T> extends MenuEntryBase<T> {
                 // const SizedBox(width: MenuConfig.midPadding),
                 Text(
                   text,
-                  style: const TextStyle(
-                      color: Colors.black,
+                  style: TextStyle(
+                      color: MyTheme.color(context).text,
                       fontSize: MenuConfig.fontSize,
                       fontWeight: FontWeight.normal),
                 ),
@@ -450,8 +451,8 @@ class MenuEntrySubMenu<T> extends MenuEntryBase<T> {
           const SizedBox(width: MenuConfig.midPadding),
           Text(
             text,
-            style: const TextStyle(
-                color: Colors.black,
+            style: TextStyle(
+                color: MyTheme.color(context).text,
                 fontSize: MenuConfig.fontSize,
                 fontWeight: FontWeight.normal),
           ),
@@ -491,8 +492,8 @@ class MenuEntryButton<T> extends MenuEntryBase<T> {
               alignment: AlignmentDirectional.centerStart,
               constraints: BoxConstraints(minHeight: conf.height),
               child: childBuilder(
-                const TextStyle(
-                    color: Colors.black,
+                TextStyle(
+                    color: MyTheme.color(context).text,
                     fontSize: MenuConfig.fontSize,
                     fontWeight: FontWeight.normal),
               )),

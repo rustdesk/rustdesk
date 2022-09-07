@@ -34,7 +34,7 @@ lazy_static::lazy_static! {
 }
 
 #[derive(Clone, Default)]
-pub struct Session<T: InvokeUi> {
+pub struct Session<T: InvokeUiSession> {
     pub cmd: String,
     pub id: String,
     pub password: String,
@@ -45,7 +45,7 @@ pub struct Session<T: InvokeUi> {
     pub ui_handler: T,
 }
 
-impl<T: InvokeUi> Session<T> {
+impl<T: InvokeUiSession> Session<T> {
     pub fn get_view_style(&self) -> String {
         self.lc.read().unwrap().view_style.clone()
     }
@@ -149,11 +149,6 @@ impl<T: InvokeUi> Session<T> {
         lc.restarting_remote_device = true;
         let msg = lc.restart_remote_device();
         self.send(Data::Message(msg));
-    }
-
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    pub fn t(&self, name: String) -> String {
-        crate::client::translate(name)
     }
 
     pub fn get_audit_server(&self) -> String {
@@ -690,11 +685,6 @@ impl<T: InvokeUi> Session<T> {
         return "".to_owned();
     }
 
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    pub fn get_icon(&self) -> String {
-        crate::get_icon()
-    }
-
     pub fn send_chat(&self, text: String) {
         let mut misc = Misc::new();
         misc.set_chat_message(ChatMessage {
@@ -961,9 +951,35 @@ impl<T: InvokeUi> Session<T> {
     pub fn close(&self) {
         self.send(Data::Close);
     }
+
+    pub fn load_last_jobs(&self) {
+        self.clear_all_jobs();
+        let pc = self.load_config();
+        if pc.transfer.write_jobs.is_empty() && pc.transfer.read_jobs.is_empty() {
+            // no last jobs
+            return;
+        }
+        // TODO: can add a confirm dialog
+        let mut cnt = 1;
+        for job_str in pc.transfer.read_jobs.iter() {
+            if !job_str.is_empty() {
+                self.load_last_job(cnt, job_str);
+                cnt += 1;
+                log::info!("restore read_job: {:?}", job_str);
+            }
+        }
+        for job_str in pc.transfer.write_jobs.iter() {
+            if !job_str.is_empty() {
+                self.load_last_job(cnt, job_str);
+                cnt += 1;
+                log::info!("restore write_job: {:?}", job_str);
+            }
+        }
+        self.update_transfer_list();
+    }
 }
 
-pub trait InvokeUi: Send + Sync + Clone + 'static + Sized + Default {
+pub trait InvokeUiSession: Send + Sync + Clone + 'static + Sized + Default {
     fn set_cursor_data(&self, cd: CursorData);
     fn set_cursor_id(&self, id: String);
     fn set_cursor_position(&self, cp: CursorPosition);
@@ -978,18 +994,17 @@ pub trait InvokeUi: Send + Sync + Clone + 'static + Sized + Default {
     fn job_error(&self, id: i32, err: String, file_num: i32);
     fn job_done(&self, id: i32, file_num: i32);
     fn clear_all_jobs(&self);
-    fn add_job(
-        &self,
-        id: i32,
-        path: String,
-        to: String,
-        file_num: i32,
-        show_hidden: bool,
-        is_remote: bool,
-    );
     fn new_message(&self, msg: String);
     fn update_transfer_list(&self);
-    // fn update_folder_files(&self); // TODO flutter with file_dir and update_folder_files
+    fn load_last_job(&self, cnt: i32, job_json: &str);
+    fn update_folder_files(
+        &self,
+        id: i32,
+        entries: &Vec<FileEntry>,
+        path: String,
+        is_local: bool,
+        only_count: bool,
+    );
     fn confirm_delete_files(&self, id: i32, i: i32, name: String);
     fn override_file_confirm(&self, id: i32, file_num: i32, to: String, is_upload: bool);
     fn update_block_input_state(&self, on: bool);
@@ -1001,7 +1016,7 @@ pub trait InvokeUi: Send + Sync + Clone + 'static + Sized + Default {
     fn clipboard(&self, content: String);
 }
 
-impl<T: InvokeUi> Deref for Session<T> {
+impl<T: InvokeUiSession> Deref for Session<T> {
     type Target = T;
 
     fn deref(&self) -> &Self::Target {
@@ -1009,16 +1024,16 @@ impl<T: InvokeUi> Deref for Session<T> {
     }
 }
 
-impl<T: InvokeUi> DerefMut for Session<T> {
+impl<T: InvokeUiSession> DerefMut for Session<T> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.ui_handler
     }
 }
 
-impl<T: InvokeUi> FileManager for Session<T> {}
+impl<T: InvokeUiSession> FileManager for Session<T> {}
 
 #[async_trait]
-impl<T: InvokeUi> Interface for Session<T> {
+impl<T: InvokeUiSession> Interface for Session<T> {
     fn send(&self, data: Data) {
         if let Some(sender) = self.sender.read().unwrap().as_ref() {
             sender.send(data).ok();
@@ -1146,7 +1161,7 @@ impl<T: InvokeUi> Interface for Session<T> {
 // TODO use event callbcak
 // sciter only
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
-impl<T: InvokeUi> Session<T> {
+impl<T: InvokeUiSession> Session<T> {
     fn start_keyboard_hook(&self) {
         if self.is_port_forward() || self.is_file_transfer() {
             return;
@@ -1211,7 +1226,7 @@ impl<T: InvokeUi> Session<T> {
 }
 
 #[tokio::main(flavor = "current_thread")]
-pub async fn io_loop<T: InvokeUi>(handler: Session<T>) {
+pub async fn io_loop<T: InvokeUiSession>(handler: Session<T>) {
     let (sender, mut receiver) = mpsc::unbounded_channel::<Data>();
     *handler.sender.write().unwrap() = Some(sender.clone());
     let mut options = crate::ipc::get_options_async().await;
@@ -1327,7 +1342,7 @@ pub async fn io_loop<T: InvokeUi>(handler: Session<T>) {
 }
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
-async fn start_one_port_forward<T: InvokeUi>(
+async fn start_one_port_forward<T: InvokeUiSession>(
     handler: Session<T>,
     port: i32,
     remote_host: String,

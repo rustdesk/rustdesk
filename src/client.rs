@@ -1666,6 +1666,7 @@ pub async fn handle_login_from_ui(
 /// Interface for client to send data and commands.
 #[async_trait]
 pub trait Interface: Send + Clone + 'static + Sized {
+    /// Send message data to remote peer.
     fn send(&self, data: Data);
     fn msgbox(&self, msgtype: &str, title: &str, text: &str);
     fn handle_login_error(&mut self, err: &str) -> bool;

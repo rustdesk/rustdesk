@@ -18,7 +18,7 @@ class PortForwardTabPage extends StatefulWidget {
 }
 
 class _PortForwardTabPageState extends State<PortForwardTabPage> {
-  final tabController = Get.put(DesktopTabController());
+  late final DesktopTabController tabController;
   late final bool isRDP;
 
   static const IconData selectedIcon = Icons.forward_sharp;
@@ -26,6 +26,8 @@ class _PortForwardTabPageState extends State<PortForwardTabPage> {
 
   _PortForwardTabPageState(Map<String, dynamic> params) {
     isRDP = params['isRDP'];
+    tabController = Get.put(DesktopTabController(
+        tabType: isRDP ? DesktopTabType.rdp : DesktopTabType.portForward));
     tabController.add(TabInfo(
         key: params['id'],
         label: params['id'],
@@ -67,7 +69,6 @@ class _PortForwardTabPageState extends State<PortForwardTabPage> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = isDarkTheme() ? TarBarTheme.dark() : TarBarTheme.light();
     return SubWindowDragToResizeArea(
       windowId: windowId(),
       child: Container(
@@ -77,14 +78,10 @@ class _PortForwardTabPageState extends State<PortForwardTabPage> {
             backgroundColor: MyTheme.color(context).bg,
             body: DesktopTab(
               controller: tabController,
-              theme: theme,
-              tabType: isRDP ? DesktopTabType.rdp : DesktopTabType.portForward,
               onClose: () {
                 tabController.clear();
               },
-              tail: AddButton(
-                theme: theme,
-              ).paddingOnly(left: 10),
+              tail: AddButton().paddingOnly(left: 10),
             )),
       ),
     );
