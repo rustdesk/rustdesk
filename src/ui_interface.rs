@@ -373,7 +373,8 @@ pub fn get_mouse_time() -> f64 {
 }
 
 pub fn check_mouse_time() {
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]{
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    {
         let sender = SENDER.lock().unwrap();
         allow_err!(sender.send(ipc::Data::MouseMoveTime(0)));
     }
@@ -776,6 +777,13 @@ pub(crate) async fn check_connect_status_(reconnect: bool, rx: mpsc::UnboundedRe
         }
         *UI_STATUS.lock().unwrap() = (-1, key_confirmed, mouse_time, id.clone());
         sleep(1.).await;
+    }
+}
+
+#[tokio::main(flavor = "current_thread")]
+pub(crate) async fn send_to_cm(data: &ipc::Data) {
+    if let Ok(mut c) = ipc::connect(1000, "_cm").await {
+        c.send(data).await.ok();
     }
 }
 

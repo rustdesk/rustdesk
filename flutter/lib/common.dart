@@ -193,25 +193,40 @@ class MyTheme {
   );
 
   static changeTo(bool dark) {
-    Get.find<SharedPreferences>().setString("darkTheme", dark ? "Y" : "");
-    Get.changeTheme(dark ? MyTheme.darkTheme : MyTheme.lightTheme);
-    Get.forceAppUpdate();
+    if (Get.isDarkMode != dark) {
+      Get.find<SharedPreferences>().setString("darkTheme", dark ? "Y" : "");
+      Get.changeThemeMode(dark ? ThemeMode.dark : ThemeMode.light);
+      if (desktopType == DesktopType.main) {
+        bind.mainChangeTheme(dark: dark);
+      }
+    }
   }
 
   static bool _themeInitialed = false;
 
-  static ThemeData initialTheme({bool mainPage = false}) {
+  static ThemeMode initialThemeMode({bool mainPage = false}) {
     bool dark;
     // Brightnesss is always light on windows, Flutter 3.0.5
     if (_themeInitialed || !mainPage || Platform.isWindows) {
-      dark = isDarkTheme();
+      dark = "Y" == Get.find<SharedPreferences>().getString("darkTheme");
     } else {
       dark = WidgetsBinding.instance.platformDispatcher.platformBrightness ==
           Brightness.dark;
       Get.find<SharedPreferences>().setString("darkTheme", dark ? "Y" : "");
     }
     _themeInitialed = true;
-    return dark ? MyTheme.darkTheme : MyTheme.lightTheme;
+    return dark ? ThemeMode.dark : ThemeMode.light;
+  }
+
+  static registerEventHandler() {
+    if (desktopType != DesktopType.main) {
+      platformFFI.registerEventHandler('theme', 'theme-$desktopType', (evt) {
+        String? dark = evt['dark'];
+        if (dark != null) {
+          changeTo(dark == 'true');
+        }
+      });
+    }
   }
 
   static ColorThemeExtension color(BuildContext context) {
@@ -232,8 +247,7 @@ class ThemeModeNotifier {
 }
 
 bool isDarkTheme() {
-  final isDark = "Y" == Get.find<SharedPreferences>().getString("darkTheme");
-  return isDark;
+  return Get.isDarkMode;
 }
 
 final ButtonStyle flatButtonStyle = TextButton.styleFrom(

@@ -24,7 +24,5 @@ void main(List<String> args) async {
   gFFI.serverModel.clients
       .add(Client(3, false, false, "UserD", "441123123", true, false, false));
   runApp(GetMaterialApp(
-      debugShowCheckedModeBanner: false,
-      theme: MyTheme.initialTheme(),
-      home: DesktopServerPage()));
+      debugShowCheckedModeBanner: false, home: DesktopServerPage()));
 }

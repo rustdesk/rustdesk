@@ -23,7 +23,7 @@ use crate::ui_interface::{
     get_app_name, get_async_job_status, get_connect_status, get_fav, get_id, get_lan_peers,
     get_langs, get_license, get_local_option, get_mouse_time, get_option, get_options, get_peer,
     get_peer_option, get_socks, get_sound_inputs, get_uuid, get_version, has_hwcodec,
-    has_rendezvous_service, post_request, set_local_option, set_option, set_options,
+    has_rendezvous_service, post_request, send_to_cm, set_local_option, set_option, set_options,
     set_peer_option, set_permanent_password, set_socks, store_fav, test_if_valid_server,
     update_temporary_password, using_public_server,
 };
@@ -657,6 +657,23 @@ pub fn main_load_lan_peers() {
         ]);
         s.add(serde_json::ser::to_string(&data).unwrap_or("".to_owned()));
     };
+}
+
+pub fn main_change_theme(dark: bool) {
+    let apps = vec![
+        flutter::APP_TYPE_DESKTOP_REMOTE,
+        flutter::APP_TYPE_DESKTOP_FILE_TRANSFER,
+        flutter::APP_TYPE_DESKTOP_PORT_FORWARD,
+        flutter::APP_TYPE_DESKTOP_RDP,
+    ];
+
+    for app in apps {
+        if let Some(s) = flutter::GLOBAL_EVENT_STREAM.read().unwrap().get(app) {
+            let data = HashMap::from([("name", "theme".to_owned()), ("dark", dark.to_string())]);
+            s.add(serde_json::ser::to_string(&data).unwrap_or("".to_owned()));
+        };
+    }
+    send_to_cm(&crate::ipc::Data::Theme(dark));
 }
 
 pub fn session_add_port_forward(

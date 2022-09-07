@@ -60,6 +60,8 @@ pub trait InvokeUiCM: Send + Clone + 'static + Sized {
     fn remove_connection(&self, id: i32);
 
     fn new_message(&self, id: i32, text: String);
+
+    fn change_theme(&self, dark: bool);
 }
 
 impl<T: InvokeUiCM> Deref for ConnectionManager<T> {
@@ -279,6 +281,9 @@ pub async fn start_ipc<T: InvokeUiCM>(cm: ConnectionManager<T>) {
                                                         tx_file
                                                             .send(ClipboardFileData::Enable((conn_id, enabled)))
                                                             .ok();
+                                                    }
+                                                    Data::Theme(dark) => {
+                                                        cm.change_theme(dark);
                                                     }
                                                     _ => {
 

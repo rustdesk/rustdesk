@@ -79,6 +79,7 @@ Future<void> initEnv(String appType) async {
   await initGlobalFFI();
   // await Firebase.initializeApp();
   refreshCurrentUser();
+  MyTheme.registerEventHandler();
 }
 
 void runMainApp(bool startService) async {
@@ -113,7 +114,9 @@ void runRemoteScreen(Map<String, dynamic> argument) async {
     navigatorKey: globalKey,
     debugShowCheckedModeBanner: false,
     title: 'RustDesk - Remote Desktop',
-    theme: MyTheme.initialTheme(),
+    theme: MyTheme.lightTheme,
+    darkTheme: MyTheme.darkTheme,
+    themeMode: MyTheme.initialThemeMode(),
     home: DesktopRemoteScreen(
       params: argument,
     ),
@@ -131,7 +134,9 @@ void runFileTransferScreen(Map<String, dynamic> argument) async {
       navigatorKey: globalKey,
       debugShowCheckedModeBanner: false,
       title: 'RustDesk - File Transfer',
-      theme: MyTheme.initialTheme(),
+      theme: MyTheme.lightTheme,
+      darkTheme: MyTheme.darkTheme,
+      themeMode: MyTheme.initialThemeMode(),
       home: DesktopFileTransferScreen(params: argument),
       navigatorObservers: [
         // FirebaseAnalyticsObserver(analytics: analytics),
@@ -148,7 +153,9 @@ void runPortForwardScreen(Map<String, dynamic> argument) async {
       navigatorKey: globalKey,
       debugShowCheckedModeBanner: false,
       title: 'RustDesk - Port Forward',
-      theme: MyTheme.initialTheme(),
+      theme: MyTheme.lightTheme,
+      darkTheme: MyTheme.darkTheme,
+      themeMode: MyTheme.initialThemeMode(),
       home: DesktopPortForwardScreen(params: argument),
       navigatorObservers: [
         // FirebaseAnalyticsObserver(analytics: analytics),
@@ -172,7 +179,9 @@ void runConnectionManagerScreen() async {
   ]);
   runApp(GetMaterialApp(
       debugShowCheckedModeBanner: false,
-      theme: MyTheme.initialTheme(),
+      theme: MyTheme.lightTheme,
+      darkTheme: MyTheme.darkTheme,
+      themeMode: MyTheme.initialThemeMode(),
       home: DesktopServerPage(),
       builder: _keepScaleBuilder()));
 }
@@ -225,7 +234,9 @@ class _AppState extends State<App> {
         navigatorKey: globalKey,
         debugShowCheckedModeBanner: false,
         title: 'RustDesk',
-        theme: MyTheme.initialTheme(mainPage: true),
+        theme: MyTheme.lightTheme,
+        darkTheme: MyTheme.darkTheme,
+        themeMode: MyTheme.initialThemeMode(mainPage: true),
         home: isDesktop
             ? const DesktopTabPage()
             : !isAndroid
