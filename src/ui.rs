@@ -107,8 +107,7 @@ pub fn start(args: &mut [String]) {
     }
     #[cfg(windows)]
     if args.len() > 0 && args[0] == "--tray" {
-        let options = check_connect_status(false).1;
-        crate::tray::start_tray(options);
+        crate::tray::start_tray(crate::ui_interface::OPTIONS.clone());
         return;
     }
     use sciter::SCRIPT_RUNTIME_FEATURES::*;
