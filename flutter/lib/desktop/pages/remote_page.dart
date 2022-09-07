@@ -42,6 +42,7 @@ class _RemotePageState extends State<RemotePage>
   String _value = '';
   final _cursorOverImage = false.obs;
   late RxBool _showRemoteCursor;
+  late RxBool _remoteCursorMoved;
   late RxBool _keyboardEnabled;
 
   final FocusNode _mobileFocusNode = FocusNode();
@@ -61,8 +62,10 @@ class _RemotePageState extends State<RemotePage>
     CurrentDisplayState.init(id);
     KeyboardEnabledState.init(id);
     ShowRemoteCursorState.init(id);
+    RemoteCursorMovedState.init(id);
     _showRemoteCursor = ShowRemoteCursorState.find(id);
     _keyboardEnabled = KeyboardEnabledState.find(id);
+    _remoteCursorMoved = RemoteCursorMovedState.find(id);
   }
 
   void _removeStates(String id) {
@@ -71,6 +74,7 @@ class _RemotePageState extends State<RemotePage>
     CurrentDisplayState.delete(id);
     ShowRemoteCursorState.delete(id);
     KeyboardEnabledState.delete(id);
+    RemoteCursorMovedState.delete(id);
   }
 
   @override
@@ -396,6 +400,7 @@ class _RemotePageState extends State<RemotePage>
           id: widget.id,
           cursorOverImage: _cursorOverImage,
           keyboardEnabled: _keyboardEnabled,
+          remoteCursorMoved: _remoteCursorMoved,
           listenerBuilder: _buildImageListener,
         );
       }))
@@ -460,6 +465,7 @@ class ImagePaint extends StatelessWidget {
   final String id;
   final Rx<bool> cursorOverImage;
   final Rx<bool> keyboardEnabled;
+  final Rx<bool> remoteCursorMoved;
   final Widget Function(Widget)? listenerBuilder;
   final ScrollController _horizontal = ScrollController();
   final ScrollController _vertical = ScrollController();
@@ -469,6 +475,7 @@ class ImagePaint extends StatelessWidget {
       required this.id,
       required this.cursorOverImage,
       required this.keyboardEnabled,
+      required this.remoteCursorMoved,
       this.listenerBuilder})
       : super(key: key);
 
@@ -476,6 +483,7 @@ class ImagePaint extends StatelessWidget {
   Widget build(BuildContext context) {
     final m = Provider.of<ImageModel>(context);
     var c = Provider.of<CanvasModel>(context);
+    final cursor = Provider.of<CursorModel>(context);
     final s = c.scale;
     if (c.scrollStyle == ScrollStyle.scrollbar) {
       final imageWidget = SizedBox(
@@ -501,12 +509,16 @@ class ImagePaint extends StatelessWidget {
             return false;
           },
           child: Obx(() => MouseRegion(
-              // cursor: (keyboardEnabled.isTrue && cursorOverImage.isTrue)
-              //     ? SystemMouseCursors.none
-              //     : MouseCursor.defer,
-              /// cursor: MouseCursor.defer,
-              cursor: FlutterCustomCursor(
-                  path: "assets/pencil.png", x: 1.0, y: 8.0),
+              cursor: (cursorOverImage.isTrue && keyboardEnabled.isTrue)
+                  ? (remoteCursorMoved.isTrue
+                      ? SystemMouseCursors.none
+                      : FlutterCustomMemoryImageCursor(
+                          pixbuf: cursor.rgba!,
+                          hotx: cursor.hotx,
+                          hoty: cursor.hoty,
+                          imageWidth: (cursor.image!.width * s).toInt(),
+                          imageHeight: (cursor.image!.height * s).toInt()))
+                  : MouseCursor.defer,
               onHover: (evt) {
                 pos.value = evt.position;
               },

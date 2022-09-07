@@ -54,7 +54,7 @@ class FfiModel with ChangeNotifier {
 
   bool get touchMode => _touchMode;
 
-  bool get isPeerAndroid => _pi.platform == "Android";
+  bool get isPeerAndroid => _pi.platform == 'Android';
 
   set inputBlocked(v) {
     _inputBlocked = v;
@@ -116,7 +116,7 @@ class FfiModel with ChangeNotifier {
       return null;
     } else {
       final icon =
-          '${secure == true ? "secure" : "insecure"}${direct == true ? "" : "_relay"}';
+          '${secure == true ? 'secure' : 'insecure'}${direct == true ? '' : '_relay'}';
       return Image.asset('assets/$icon.png', width: 48, height: 48);
     }
   }
@@ -143,17 +143,17 @@ class FfiModel with ChangeNotifier {
       } else if (name == 'cursor_id') {
         parent.target?.cursorModel.updateCursorId(evt);
       } else if (name == 'cursor_position') {
-        parent.target?.cursorModel.updateCursorPosition(evt);
+        parent.target?.cursorModel.updateCursorPosition(evt, peerId);
       } else if (name == 'clipboard') {
         Clipboard.setData(ClipboardData(text: evt['content']));
       } else if (name == 'permission') {
         parent.target?.ffiModel.updatePermission(evt, peerId);
       } else if (name == 'chat_client_mode') {
         parent.target?.chatModel
-            .receive(ChatModel.clientModeID, evt['text'] ?? "");
+            .receive(ChatModel.clientModeID, evt['text'] ?? '');
       } else if (name == 'chat_server_mode') {
         parent.target?.chatModel
-            .receive(int.parse(evt['id'] as String), evt['text'] ?? "");
+            .receive(int.parse(evt['id'] as String), evt['text'] ?? '');
       } else if (name == 'file_dir') {
         parent.target?.fileModel.receiveFileDir(evt);
       } else if (name == 'job_progress') {
@@ -184,61 +184,7 @@ class FfiModel with ChangeNotifier {
 
   /// Bind the event listener to receive events from the Rust core.
   void updateEventListener(String peerId) {
-    cb(evt) {
-      var name = evt['name'];
-      if (name == 'msgbox') {
-        handleMsgBox(evt, peerId);
-      } else if (name == 'peer_info') {
-        handlePeerInfo(evt, peerId);
-      } else if (name == 'connection_ready') {
-        parent.target?.ffiModel.setConnectionType(
-            peerId, evt['secure'] == 'true', evt['direct'] == 'true');
-      } else if (name == 'switch_display') {
-        handleSwitchDisplay(evt);
-      } else if (name == 'cursor_data') {
-        parent.target?.cursorModel.updateCursorData(evt);
-      } else if (name == 'cursor_id') {
-        parent.target?.cursorModel.updateCursorId(evt);
-      } else if (name == 'cursor_position') {
-        parent.target?.cursorModel.updateCursorPosition(evt);
-      } else if (name == 'clipboard') {
-        Clipboard.setData(ClipboardData(text: evt['content']));
-      } else if (name == 'permission') {
-        parent.target?.ffiModel.updatePermission(evt, peerId);
-      } else if (name == 'chat_client_mode') {
-        parent.target?.chatModel
-            .receive(ChatModel.clientModeID, evt['text'] ?? "");
-      } else if (name == 'chat_server_mode') {
-        parent.target?.chatModel
-            .receive(int.parse(evt['id'] as String), evt['text'] ?? "");
-      } else if (name == 'file_dir') {
-        parent.target?.fileModel.receiveFileDir(evt);
-      } else if (name == 'job_progress') {
-        parent.target?.fileModel.tryUpdateJobProgress(evt);
-      } else if (name == 'job_done') {
-        parent.target?.fileModel.jobDone(evt);
-      } else if (name == 'job_error') {
-        parent.target?.fileModel.jobError(evt);
-      } else if (name == 'override_file_confirm') {
-        parent.target?.fileModel.overrideFileConfirm(evt);
-      } else if (name == 'load_last_job') {
-        parent.target?.fileModel.loadLastJob(evt);
-      } else if (name == 'update_folder_files') {
-        parent.target?.fileModel.updateFolderFiles(evt);
-      } else if (name == 'add_connection') {
-        parent.target?.serverModel.addConnection(evt);
-      } else if (name == 'on_client_remove') {
-        parent.target?.serverModel.onClientRemove(evt);
-      } else if (name == 'update_quality_status') {
-        parent.target?.qualityMonitorModel.updateQualityStatus(evt);
-      } else if (name == 'update_block_input_state') {
-        updateBlockInputState(evt, peerId);
-      } else if (name == 'update_privacy_mode') {
-        updatePrivacyMode(evt, peerId);
-      }
-    }
-
-    platformFFI.setEventCallback(cb);
+    platformFFI.setEventCallback(startEventListener(peerId));
   }
 
   void handleSwitchDisplay(Map<String, dynamic> evt) {
@@ -249,8 +195,9 @@ class FfiModel with ChangeNotifier {
     _display.y = double.parse(evt['y']);
     _display.width = int.parse(evt['width']);
     _display.height = int.parse(evt['height']);
-    if (old != _pi.currentDisplay)
+    if (old != _pi.currentDisplay) {
       parent.target?.cursorModel.updateDisplayOrigin(_display.x, _display.y);
+    }
 
     // remote is mobile, and orientation changed
     if ((_display.width > _display.height) != oldOrientation) {
@@ -307,7 +254,7 @@ class FfiModel with ChangeNotifier {
     _pi.username = evt['username'];
     _pi.hostname = evt['hostname'];
     _pi.platform = evt['platform'];
-    _pi.sasEnabled = evt['sas_enabled'] == "true";
+    _pi.sasEnabled = evt['sas_enabled'] == 'true';
     _pi.currentDisplay = int.parse(evt['current_display']);
 
     try {
@@ -323,7 +270,7 @@ class FfiModel with ChangeNotifier {
       }
     } else {
       _touchMode =
-          await bind.sessionGetOption(id: peerId, arg: "touch-mode") != '';
+          await bind.sessionGetOption(id: peerId, arg: 'touch-mode') != '';
     }
 
     if (parent.target != null &&
@@ -381,7 +328,7 @@ class ImageModel with ChangeNotifier {
 
   ui.Image? get image => _image;
 
-  String _id = "";
+  String _id = '';
 
   WeakReference<FFI> parent;
 
@@ -426,7 +373,7 @@ class ImageModel with ChangeNotifier {
       }
       Future.delayed(Duration(milliseconds: 1), () {
         if (parent.target?.ffiModel.isPeerAndroid ?? false) {
-          bind.sessionPeerOption(id: _id, name: "view-style", value: "shrink");
+          bind.sessionPeerOption(id: _id, name: 'view-style', value: 'shrink');
           parent.target?.canvasModel.updateViewStyle();
         }
       });
@@ -471,7 +418,7 @@ class CanvasModel with ChangeNotifier {
   // the tabbar over the image
   double tabBarHeight = 0.0;
   // TODO multi canvas model
-  String id = "";
+  String id = '';
   // scroll offset x percent
   double _scrollX = 0.0;
   // scroll offset y percent
@@ -580,9 +527,16 @@ class CanvasModel with ChangeNotifier {
     }
 
     // If keyboard is not permitted, do not move cursor when mouse is moving.
-    if (parent.target != null) {
-      if (parent.target!.ffiModel.keyboard()) {
+    if (parent.target != null && parent.target!.ffiModel.keyboard()) {
+      // Draw cursor if is not desktop.
+      if (!isDesktop) {
         parent.target!.cursorModel.moveLocal(x, y);
+      } else {
+        try {
+          RemoteCursorMovedState.find(id).value = false;
+        } catch (e) {
+          //
+        }
       }
     }
   }
@@ -641,17 +595,19 @@ class CanvasModel with ChangeNotifier {
 
 class CursorModel with ChangeNotifier {
   ui.Image? _image;
-  final _images = <int, Tuple3<ui.Image, double, double>>{};
+  Uint8List? _rgba;
+  final _images = <int, Tuple4<Uint8List, ui.Image, double, double>>{};
   double _x = -10000;
   double _y = -10000;
   double _hotx = 0;
   double _hoty = 0;
   double _displayOriginX = 0;
   double _displayOriginY = 0;
-  String id = ""; // TODO multi cursor model
+  String id = ''; // TODO multi cursor model
   WeakReference<FFI> parent;
 
   ui.Image? get image => _image;
+  Uint8List? get rgba => _rgba;
 
   double get x => _x - _displayOriginX;
 
@@ -803,7 +759,8 @@ class CursorModel with ChangeNotifier {
         (image) {
       if (parent.target?.id != pid) return;
       _image = image;
-      _images[id] = Tuple3(image, _hotx, _hoty);
+      _rgba = rgba;
+      _images[id] = Tuple4(rgba, image, _hotx, _hoty);
       try {
         // my throw exception, because the listener maybe already dispose
         notifyListeners();
@@ -816,17 +773,23 @@ class CursorModel with ChangeNotifier {
   void updateCursorId(Map<String, dynamic> evt) {
     final tmp = _images[int.parse(evt['id'])];
     if (tmp != null) {
-      _image = tmp.item1;
-      _hotx = tmp.item2;
-      _hoty = tmp.item3;
+      _rgba = tmp.item1;
+      _image = tmp.item2;
+      _hotx = tmp.item3;
+      _hoty = tmp.item4;
       notifyListeners();
     }
   }
 
   /// Update the cursor position.
-  void updateCursorPosition(Map<String, dynamic> evt) {
+  void updateCursorPosition(Map<String, dynamic> evt, String id) {
     _x = double.parse(evt['x']);
     _y = double.parse(evt['y']);
+    try {
+      RemoteCursorMovedState.find(id).value = false;
+    } catch (e) {
+      //
+    }
     notifyListeners();
   }
 
@@ -888,13 +851,15 @@ class QualityMonitorModel with ChangeNotifier {
 
   updateQualityStatus(Map<String, dynamic> evt) {
     try {
-      if ((evt["speed"] as String).isNotEmpty) _data.speed = evt["speed"];
-      if ((evt["fps"] as String).isNotEmpty) _data.fps = evt["fps"];
-      if ((evt["delay"] as String).isNotEmpty) _data.delay = evt["delay"];
-      if ((evt["target_bitrate"] as String).isNotEmpty)
-        _data.targetBitrate = evt["target_bitrate"];
-      if ((evt["codec_format"] as String).isNotEmpty)
-        _data.codecFormat = evt["codec_format"];
+      if ((evt['speed'] as String).isNotEmpty) _data.speed = evt['speed'];
+      if ((evt['fps'] as String).isNotEmpty) _data.fps = evt['fps'];
+      if ((evt['delay'] as String).isNotEmpty) _data.delay = evt['delay'];
+      if ((evt['target_bitrate'] as String).isNotEmpty) {
+        _data.targetBitrate = evt['target_bitrate'];
+      }
+      if ((evt['codec_format'] as String).isNotEmpty) {
+        _data.codecFormat = evt['codec_format'];
+      }
       notifyListeners();
     } catch (e) {}
   }
@@ -907,11 +872,11 @@ extension ToString on MouseButtons {
   String get value {
     switch (this) {
       case MouseButtons.left:
-        return "left";
+        return 'left';
       case MouseButtons.right:
-        return "right";
+        return 'right';
       case MouseButtons.wheel:
-        return "wheel";
+        return 'wheel';
     }
   }
 }
@@ -920,12 +885,12 @@ enum ConnType { defaultConn, fileTransfer, portForward, rdp }
 
 /// FFI class for communicating with the Rust core.
 class FFI {
-  var id = "";
+  var id = '';
   var shift = false;
   var ctrl = false;
   var alt = false;
   var command = false;
-  var version = "";
+  var version = '';
   var connType = ConnType.defaultConn;
 
   /// dialogManager use late to ensure init after main page binding [globalKey]
@@ -1006,11 +971,11 @@ class FFI {
     // out['name'] = name;
     // // default: down = false
     // if (down == true) {
-    //   out['down'] = "true";
+    //   out['down'] = 'true';
     // }
     // // default: press = true
     // if (press != false) {
-    //   out['press'] = "true";
+    //   out['press'] = 'true';
     // }
     // setByName('input_key', json.encode(modify(out)));
     // TODO id
@@ -1038,7 +1003,7 @@ class FFI {
   Future<List<Peer>> peers() async {
     try {
       var str = await bind.mainGetRecentPeers();
-      if (str == "") return [];
+      if (str == '') return [];
       List<dynamic> peers = json.decode(str);
       return peers
           .map((s) => s as List<dynamic>)
@@ -1056,7 +1021,7 @@ class FFI {
       {bool isFileTransfer = false,
       bool isPortForward = false,
       double tabBarHeight = 0.0}) {
-    assert(!(isFileTransfer && isPortForward), "more than one connect type");
+    assert(!(isFileTransfer && isPortForward), 'more than one connect type');
     if (isFileTransfer) {
       connType = ConnType.fileTransfer;
       id = 'ft_$id';
@@ -1108,13 +1073,13 @@ class FFI {
           canvasModel.y, canvasModel.scale, ffiModel.pi.currentDisplay);
     }
     bind.sessionClose(id: id);
-    id = "";
+    id = '';
     imageModel.update(null, 0.0);
     cursorModel.clear();
     ffiModel.clear();
     canvasModel.clear();
     resetModifiers();
-    debugPrint("model $id closed");
+    debugPrint('model $id closed');
   }
 
   /// Send **get** command to the Rust core based on [name] and [arg].
@@ -1221,7 +1186,7 @@ class FFI {
   Future<String> getDefaultAudioInput() async {
     final input = await bind.mainGetOption(key: 'audio-input');
     if (input.isEmpty && Platform.isWindows) {
-      return "System Sound";
+      return 'System Sound';
     }
     return input;
   }
@@ -1232,8 +1197,8 @@ class FFI {
 
   Future<Map<String, String>> getHttpHeaders() async {
     return {
-      "Authorization":
-          "Bearer " + await bind.mainGetLocalOption(key: "access_token")
+      'Authorization':
+          'Bearer ' + await bind.mainGetLocalOption(key: 'access_token')
     };
   }
 }
@@ -1246,10 +1211,10 @@ class Display {
 }
 
 class PeerInfo {
-  String version = "";
-  String username = "";
-  String hostname = "";
-  String platform = "";
+  String version = '';
+  String username = '';
+  String hostname = '';
+  String platform = '';
   bool sasEnabled = false;
   int currentDisplay = 0;
   List<Display> displays = [];

@@ -35,7 +35,7 @@ class ServerModel with ChangeNotifier {
 
   final tabController = DesktopTabController(tabType: DesktopTabType.cm);
 
-  List<Client> _clients = [];
+  final List<Client> _clients = [];
 
   bool get isStart => _isStart;
 
@@ -61,8 +61,8 @@ class ServerModel with ChangeNotifier {
     return _verificationMethod;
   }
 
-  set verificationMethod(String method) {
-    bind.mainSetOption(key: "verification-method", value: method);
+  setVerificationMethod(String method) async {
+    await bind.mainSetOption(key: "verification-method", value: method);
   }
 
   String get temporaryPasswordLength {
@@ -73,8 +73,8 @@ class ServerModel with ChangeNotifier {
     return _temporaryPasswordLength;
   }
 
-  set temporaryPasswordLength(String length) {
-    bind.mainSetOption(key: "temporary-password-length", value: length);
+  setTemporaryPasswordLength(String length) async {
+    await bind.mainSetOption(key: "temporary-password-length", value: length);
   }
 
   TextEditingController get serverId => _serverId;

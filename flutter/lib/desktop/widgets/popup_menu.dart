@@ -12,7 +12,7 @@ class PopupMenuChildrenItem<T> extends mod_menu.PopupMenuEntry<T> {
     key,
     this.height = kMinInteractiveDimension,
     this.padding,
-    this.enable = true,
+    this.enabled,
     this.textStyle,
     this.onTap,
     this.position = mod_menu.PopupMenuPosition.overSide,
@@ -25,7 +25,7 @@ class PopupMenuChildrenItem<T> extends mod_menu.PopupMenuEntry<T> {
   final Offset offset;
   final TextStyle? textStyle;
   final EdgeInsets? padding;
-  final bool enable;
+  final RxBool? enabled;
   final void Function()? onTap;
   final List<mod_menu.PopupMenuEntry<T>> Function(BuildContext) itemBuilder;
   final Widget child;
@@ -56,25 +56,27 @@ class MyPopupMenuItemState<T, W extends PopupMenuChildrenItem<T>>
     TextStyle style = widget.textStyle ??
         popupMenuTheme.textStyle ??
         theme.textTheme.subtitle1!;
-
-    return mod_menu.PopupMenuButton<T>(
-      enabled: widget.enable,
-      position: widget.position,
-      offset: widget.offset,
-      onSelected: handleTap,
-      itemBuilder: widget.itemBuilder,
-      padding: EdgeInsets.zero,
-      child: AnimatedDefaultTextStyle(
-        style: style,
-        duration: kThemeChangeDuration,
-        child: Container(
-          alignment: AlignmentDirectional.centerStart,
-          constraints: BoxConstraints(minHeight: widget.height),
-          padding: widget.padding ?? const EdgeInsets.symmetric(horizontal: 16),
-          child: widget.child,
+    return Obx(() {
+      return mod_menu.PopupMenuButton<T>(
+        enabled: widget.enabled != null ? widget.enabled!.value : true,
+        position: widget.position,
+        offset: widget.offset,
+        onSelected: handleTap,
+        itemBuilder: widget.itemBuilder,
+        padding: EdgeInsets.zero,
+        child: AnimatedDefaultTextStyle(
+          style: style,
+          duration: kThemeChangeDuration,
+          child: Container(
+            alignment: AlignmentDirectional.centerStart,
+            constraints: BoxConstraints(minHeight: widget.height),
+            padding:
+                widget.padding ?? const EdgeInsets.symmetric(horizontal: 16),
+            child: widget.child,
+          ),
         ),
-      ),
-    );
+      );
+    });
   }
 }
 
@@ -98,8 +100,12 @@ class MenuConfig {
 
 abstract class MenuEntryBase<T> {
   bool dismissOnClicked;
+  RxBool? enabled;
 
-  MenuEntryBase({this.dismissOnClicked = false});
+  MenuEntryBase({
+    this.dismissOnClicked = false,
+    this.enabled,
+  });
   List<mod_menu.PopupMenuEntry<T>> build(BuildContext context, MenuConfig conf);
 }
 
@@ -119,9 +125,14 @@ class MenuEntryRadioOption {
   String text;
   String value;
   bool dismissOnClicked;
+  RxBool? enabled;
 
-  MenuEntryRadioOption(
-      {required this.text, required this.value, this.dismissOnClicked = false});
+  MenuEntryRadioOption({
+    required this.text,
+    required this.value,
+    this.dismissOnClicked = false,
+    this.enabled,
+  });
 }
 
 typedef RadioOptionsGetter = List<MenuEntryRadioOption> Function();
@@ -138,13 +149,14 @@ class MenuEntryRadios<T> extends MenuEntryBase<T> {
   final RadioOptionSetter optionSetter;
   final RxString _curOption = "".obs;
 
-  MenuEntryRadios(
-      {required this.text,
-      required this.optionsGetter,
-      required this.curOptionGetter,
-      required this.optionSetter,
-      dismissOnClicked = false})
-      : super(dismissOnClicked: dismissOnClicked) {
+  MenuEntryRadios({
+    required this.text,
+    required this.optionsGetter,
+    required this.curOptionGetter,
+    required this.optionSetter,
+    dismissOnClicked = false,
+    RxBool? enabled,
+  }) : super(dismissOnClicked: dismissOnClicked, enabled: enabled) {
     () async {
       _curOption.value = await curOptionGetter();
     }();
@@ -220,13 +232,17 @@ class MenuEntrySubRadios<T> extends MenuEntryBase<T> {
   final RadioOptionSetter optionSetter;
   final RxString _curOption = "".obs;
 
-  MenuEntrySubRadios(
-      {required this.text,
-      required this.optionsGetter,
-      required this.curOptionGetter,
-      required this.optionSetter,
-      dismissOnClicked = false})
-      : super(dismissOnClicked: dismissOnClicked) {
+  MenuEntrySubRadios({
+    required this.text,
+    required this.optionsGetter,
+    required this.curOptionGetter,
+    required this.optionSetter,
+    dismissOnClicked = false,
+    RxBool? enabled,
+  }) : super(
+          dismissOnClicked: dismissOnClicked,
+          enabled: enabled,
+        ) {
     () async {
       _curOption.value = await curOptionGetter();
     }();
@@ -293,6 +309,7 @@ class MenuEntrySubRadios<T> extends MenuEntryBase<T> {
       BuildContext context, MenuConfig conf) {
     return [
       PopupMenuChildrenItem(
+        enabled: super.enabled,
         padding: EdgeInsets.zero,
         height: conf.height,
         itemBuilder: (BuildContext context) =>
@@ -327,9 +344,12 @@ abstract class MenuEntrySwitchBase<T> extends MenuEntryBase<T> {
   final String text;
   final Rx<TextStyle>? textStyle;
 
-  MenuEntrySwitchBase(
-      {required this.text, required dismissOnClicked, this.textStyle})
-      : super(dismissOnClicked: dismissOnClicked);
+  MenuEntrySwitchBase({
+    required this.text,
+    required dismissOnClicked,
+    this.textStyle,
+    RxBool? enabled,
+  }) : super(dismissOnClicked: dismissOnClicked, enabled: enabled);
 
   RxBool get curOption;
   Future<void> setOption(bool option);
@@ -395,16 +415,19 @@ class MenuEntrySwitch<T> extends MenuEntrySwitchBase<T> {
   final SwitchSetter setter;
   final RxBool _curOption = false.obs;
 
-  MenuEntrySwitch(
-      {required String text,
-      required this.getter,
-      required this.setter,
-      Rx<TextStyle>? textStyle,
-      dismissOnClicked = false})
-      : super(
-            text: text,
-            textStyle: textStyle,
-            dismissOnClicked: dismissOnClicked) {
+  MenuEntrySwitch({
+    required String text,
+    required this.getter,
+    required this.setter,
+    Rx<TextStyle>? textStyle,
+    dismissOnClicked = false,
+    RxBool? enabled,
+  }) : super(
+          text: text,
+          textStyle: textStyle,
+          dismissOnClicked: dismissOnClicked,
+          enabled: enabled,
+        ) {
     () async {
       _curOption.value = await getter();
     }();
@@ -429,13 +452,14 @@ class MenuEntrySwitch2<T> extends MenuEntrySwitchBase<T> {
   final Switch2Getter getter;
   final SwitchSetter setter;
 
-  MenuEntrySwitch2(
-      {required String text,
-      required this.getter,
-      required this.setter,
-      Rx<TextStyle>? textStyle,
-      dismissOnClicked = false})
-      : super(
+  MenuEntrySwitch2({
+    required String text,
+    required this.getter,
+    required this.setter,
+    Rx<TextStyle>? textStyle,
+    dismissOnClicked = false,
+    RxBool? enabled,
+  }) : super(
             text: text,
             textStyle: textStyle,
             dismissOnClicked: dismissOnClicked);
@@ -452,13 +476,18 @@ class MenuEntrySubMenu<T> extends MenuEntryBase<T> {
   final String text;
   final List<MenuEntryBase<T>> entries;
 
-  MenuEntrySubMenu({required this.text, required this.entries});
+  MenuEntrySubMenu({
+    required this.text,
+    required this.entries,
+    RxBool? enabled,
+  }) : super(enabled: enabled);
 
   @override
   List<mod_menu.PopupMenuEntry<T>> build(
       BuildContext context, MenuConfig conf) {
     return [
       PopupMenuChildrenItem(
+        enabled: super.enabled,
         height: conf.height,
         padding: EdgeInsets.zero,
         position: mod_menu.PopupMenuPosition.overSide,
@@ -468,20 +497,24 @@ class MenuEntrySubMenu<T> extends MenuEntryBase<T> {
             .toList(),
         child: Row(children: [
           const SizedBox(width: MenuConfig.midPadding),
-          Text(
-            text,
-            style: TextStyle(
-                color: MyTheme.color(context).text,
-                fontSize: MenuConfig.fontSize,
-                fontWeight: FontWeight.normal),
-          ),
+          Obx(() => Text(
+                text,
+                style: TextStyle(
+                    color: (super.enabled != null ? super.enabled!.value : true)
+                        ? Colors.black
+                        : Colors.grey,
+                    fontSize: MenuConfig.fontSize,
+                    fontWeight: FontWeight.normal),
+              )),
           Expanded(
               child: Align(
             alignment: Alignment.centerRight,
-            child: Icon(
-              Icons.keyboard_arrow_right,
-              color: conf.commonColor,
-            ),
+            child: Obx(() => Icon(
+                  Icons.keyboard_arrow_right,
+                  color: (super.enabled != null ? super.enabled!.value : true)
+                      ? conf.commonColor
+                      : Colors.grey,
+                )),
           ))
         ]),
       )
@@ -493,36 +526,57 @@ class MenuEntryButton<T> extends MenuEntryBase<T> {
   final Widget Function(TextStyle? style) childBuilder;
   Function() proc;
 
-  MenuEntryButton(
-      {required this.childBuilder,
-      required this.proc,
-      dismissOnClicked = false})
-      : super(dismissOnClicked: dismissOnClicked);
+  MenuEntryButton({
+    required this.childBuilder,
+    required this.proc,
+    dismissOnClicked = false,
+    RxBool? enabled,
+  }) : super(
+          dismissOnClicked: dismissOnClicked,
+          enabled: enabled,
+        );
+
+  Widget _buildChild(BuildContext context, MenuConfig conf) {
+    return Obx(() {
+      bool enabled = true;
+      if (super.enabled != null) {
+        enabled = super.enabled!.value;
+      }
+      const enabledStyle = TextStyle(
+          color: Colors.black,
+          fontSize: MenuConfig.fontSize,
+          fontWeight: FontWeight.normal);
+      const disabledStyle = TextStyle(
+          color: Colors.grey,
+          fontSize: MenuConfig.fontSize,
+          fontWeight: FontWeight.normal);
+      return TextButton(
+        onPressed: enabled
+            ? () {
+                if (super.dismissOnClicked && Navigator.canPop(context)) {
+                  Navigator.pop(context);
+                }
+                proc();
+              }
+            : null,
+        child: Container(
+          alignment: AlignmentDirectional.centerStart,
+          constraints: BoxConstraints(minHeight: conf.height),
+          child: childBuilder(enabled ? enabledStyle : disabledStyle),
+        ),
+      );
+    });
+  }
 
   @override
   List<mod_menu.PopupMenuEntry<T>> build(
       BuildContext context, MenuConfig conf) {
     return [
       mod_menu.PopupMenuItem(
+        enabled: super.enabled != null ? super.enabled!.value : true,
         padding: EdgeInsets.zero,
         height: conf.height,
-        child: TextButton(
-          child: Container(
-              alignment: AlignmentDirectional.centerStart,
-              constraints: BoxConstraints(minHeight: conf.height),
-              child: childBuilder(
-                TextStyle(
-                    color: MyTheme.color(context).text,
-                    fontSize: MenuConfig.fontSize,
-                    fontWeight: FontWeight.normal),
-              )),
-          onPressed: () {
-            if (super.dismissOnClicked && Navigator.canPop(context)) {
-              Navigator.pop(context);
-            }
-            proc();
-          },
-        ),
+        child: _buildChild(context, conf),
       )
     ];
   }

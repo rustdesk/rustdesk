@@ -313,8 +313,8 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
             translate("Use permanent password"),
             translate("Use both passwords"),
           ];
-          bool tmp_enabled = model.verificationMethod != kUsePermanentPassword;
-          bool perm_enabled = model.verificationMethod != kUseTemporaryPassword;
+          bool tmpEnabled = model.verificationMethod != kUsePermanentPassword;
+          bool permEnabled = model.verificationMethod != kUseTemporaryPassword;
           String currentValue = values[keys.indexOf(model.verificationMethod)];
           List<Widget> radios = values
               .map((value) => _Radio<String>(
@@ -323,16 +323,24 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
                     groupValue: currentValue,
                     label: value,
                     onChanged: ((value) {
-                      model.verificationMethod = keys[values.indexOf(value)];
+                      () async {
+                        await model
+                            .setVerificationMethod(keys[values.indexOf(value)]);
+                        await model.updatePasswordModel();
+                      }();
                     }),
                     enabled: !locked,
                   ))
               .toList();
 
-          var onChanged = tmp_enabled && !locked
+          var onChanged = tmpEnabled && !locked
               ? (value) {
-                  if (value != null)
-                    model.temporaryPasswordLength = value.toString();
+                  if (value != null) {
+                    () async {
+                      await model.setTemporaryPasswordLength(value.toString());
+                      await model.updatePasswordModel();
+                    }();
+                  }
                 }
               : null;
           List<Widget> lengthRadios = ['6', '8', '10']
@@ -364,10 +372,10 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
                     ...lengthRadios,
                   ],
                 ),
-                enabled: tmp_enabled && !locked),
+                enabled: tmpEnabled && !locked),
             radios[1],
             _SubButton('Set permanent password', setPasswordDialog,
-                perm_enabled && !locked),
+                permEnabled && !locked),
             radios[2],
           ]);
         })));
