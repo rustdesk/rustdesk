@@ -22,10 +22,10 @@ import '../../models/platform_model.dart';
 
 /// Connection page for connecting to a remote peer.
 class ConnectionPage extends StatefulWidget {
-  ConnectionPage({Key? key}) : super(key: key);
+  const ConnectionPage({Key? key}) : super(key: key);
 
   @override
-  _ConnectionPageState createState() => _ConnectionPageState();
+  State<ConnectionPage> createState() => _ConnectionPageState();
 }
 
 /// State for the connection page.
@@ -101,7 +101,7 @@ class _ConnectionPageState extends State<ConnectionPage> {
                 ],
               ).marginSymmetric(horizontal: 22),
             ),
-            Divider(),
+            const Divider(),
             SizedBox(height: 50, child: Obx(() => buildStatus()))
                 .paddingSymmetric(horizontal: 12.0)
           ]),

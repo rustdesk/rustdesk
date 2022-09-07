@@ -19,11 +19,18 @@ import 'package:tray_manager/tray_manager.dart';
 import 'package:url_launcher/url_launcher_string.dart';
 import 'package:window_manager/window_manager.dart';
 
+class _MenubarTheme {
+  static const Color commonColor = MyTheme.accent;
+  // kMinInteractiveDimension
+  static const double height = 25.0;
+  static const double dividerHeight = 12.0;
+}
+
 class DesktopHomePage extends StatefulWidget {
-  DesktopHomePage({Key? key}) : super(key: key);
+  const DesktopHomePage({Key? key}) : super(key: key);
 
   @override
-  State<StatefulWidget> createState() => _DesktopHomePageState();
+  State<DesktopHomePage> createState() => _DesktopHomePageState();
 }
 
 const borderColor = Color(0xFF2F65BA);
@@ -109,7 +116,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  SizedBox(
+                  Container(
                     height: 25,
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -135,11 +142,11 @@ class _DesktopHomePageState extends State<DesktopHomePage>
                       child: TextFormField(
                         controller: model.serverId,
                         readOnly: true,
-                        decoration: const InputDecoration(
+                        decoration: InputDecoration(
                           border: InputBorder.none,
                           contentPadding: EdgeInsets.only(bottom: 20),
                         ),
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 22,
                         ),
                       ),
@@ -322,18 +329,19 @@ class _DesktopHomePageState extends State<DesktopHomePage>
                         onTap: () => bind.mainUpdateTemporaryPassword(),
                         onHover: (value) => refreshHover.value = value,
                       ),
-                      FutureBuilder<Widget>(
-                          future: buildPasswordPopupMenu(context),
-                          builder: (context, snapshot) {
-                            if (snapshot.hasError) {
-                              print("${snapshot.error}");
-                            }
-                            if (snapshot.hasData) {
-                              return snapshot.data!;
-                            } else {
-                              return Offstage();
-                            }
-                          })
+                      const _PasswordPopupMenu(),
+                      // FutureBuilder<Widget>(
+                      //     future: buildPasswordPopupMenu(context),
+                      //     builder: (context, snapshot) {
+                      //       if (snapshot.hasError) {
+                      //         print("${snapshot.error}");
+                      //       }
+                      //       if (snapshot.hasData) {
+                      //         return snapshot.data!;
+                      //       } else {
+                      //         return Offstage();
+                      //       }
+                      //     })
                     ],
                   ),
                 ],
@@ -366,7 +374,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
                     ),
                   ],
                 ),
-                onTap: () => gFFI.serverModel.verificationMethod = value,
+                onTap: () => gFFI.serverModel.setVerificationMethod(value),
               );
           final temporary_enabled =
               gFFI.serverModel.verificationMethod != kUsePermanentPassword;
@@ -403,8 +411,11 @@ class _DesktopHomePageState extends State<DesktopHomePage>
                             onTap: () {
                               if (gFFI.serverModel.temporaryPasswordLength !=
                                   e) {
-                                gFFI.serverModel.temporaryPasswordLength = e;
-                                bind.mainUpdateTemporaryPassword();
+                                () async {
+                                  await gFFI.serverModel
+                                      .setTemporaryPasswordLength(e);
+                                  await bind.mainUpdateTemporaryPassword();
+                                }();
                               }
                             },
                           ))
@@ -1034,4 +1045,121 @@ void setPasswordDialog() async {
       onCancel: close,
     );
   });
+}
+
+class _PasswordPopupMenu extends StatefulWidget {
+  const _PasswordPopupMenu({Key? key}) : super(key: key);
+
+  @override
+  State<_PasswordPopupMenu> createState() => _PasswordPopupMenuState();
+}
+
+class _PasswordPopupMenuState extends State<_PasswordPopupMenu> {
+  final RxBool _tempEnabled = true.obs;
+  final RxBool _permEnabled = true.obs;
+
+  List<MenuEntryBase<String>> _buildMenus() {
+    return <MenuEntryBase<String>>[
+      MenuEntryRadios<String>(
+          text: translate('Password type'),
+          optionsGetter: () => [
+                MenuEntryRadioOption(
+                    text: translate('Use temporary password'),
+                    value: kUseTemporaryPassword),
+                MenuEntryRadioOption(
+                    text: translate('Use permanent password'),
+                    value: kUsePermanentPassword),
+                MenuEntryRadioOption(
+                    text: translate('Use both passwords'),
+                    value: kUseBothPasswords),
+              ],
+          curOptionGetter: () async {
+            return gFFI.serverModel.verificationMethod;
+          },
+          optionSetter: (String oldValue, String newValue) async {
+            await bind.mainSetOption(
+                key: "verification-method", value: newValue);
+            await gFFI.serverModel.updatePasswordModel();
+            setState(() {
+              _tempEnabled.value =
+                  gFFI.serverModel.verificationMethod != kUsePermanentPassword;
+              _permEnabled.value =
+                  gFFI.serverModel.verificationMethod != kUseTemporaryPassword;
+            });
+          }),
+      MenuEntryDivider(),
+      MenuEntryButton<String>(
+        enabled: _permEnabled,
+        childBuilder: (TextStyle? style) => Text(
+          translate('Set permanent password'),
+          style: style,
+        ),
+        proc: () {
+          setPasswordDialog();
+        },
+        dismissOnClicked: true,
+      ),
+      MenuEntrySubMenu(
+          enabled: _tempEnabled,
+          text: translate('Set temporary password length'),
+          entries: [
+            MenuEntryRadios<String>(
+                enabled: _tempEnabled,
+                text: translate(''),
+                optionsGetter: () => [
+                      MenuEntryRadioOption(
+                        text: translate('6'),
+                        value: '6',
+                        enabled: _tempEnabled,
+                      ),
+                      MenuEntryRadioOption(
+                        text: translate('8'),
+                        value: '8',
+                        enabled: _tempEnabled,
+                      ),
+                      MenuEntryRadioOption(
+                        text: translate('10'),
+                        value: '10',
+                        enabled: _tempEnabled,
+                      ),
+                    ],
+                curOptionGetter: () async {
+                  return gFFI.serverModel.temporaryPasswordLength;
+                },
+                optionSetter: (String oldValue, String newValue) async {
+                  if (oldValue != newValue) {
+                    await gFFI.serverModel.setTemporaryPasswordLength(newValue);
+                    await gFFI.serverModel.updatePasswordModel();
+                  }
+                }),
+          ])
+    ];
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final editHover = false.obs;
+    return mod_menu.PopupMenuButton(
+      padding: EdgeInsets.zero,
+      onHover: (v) => editHover.value = v,
+      tooltip: translate(''),
+      position: mod_menu.PopupMenuPosition.overSide,
+      itemBuilder: (BuildContext context) => _buildMenus()
+          .map((entry) => entry.build(
+              context,
+              const MenuConfig(
+                commonColor: _MenubarTheme.commonColor,
+                height: _MenubarTheme.height,
+                dividerHeight: _MenubarTheme.dividerHeight,
+              )))
+          .expand((i) => i)
+          .toList(),
+      child: Obx(() => Icon(Icons.edit,
+              size: 22,
+              color: editHover.value
+                  ? MyTheme.color(context).text
+                  : const Color(0xFFDDDDDD))
+          .marginOnly(bottom: 2)),
+    );
+  }
 }

@@ -68,6 +68,10 @@ dependencies:
         git:
             url: https://github.com/Kingtous/rustdesk_tray_manager
             ref: 3aa37c86e47ea748e7b5507cbe59f2c54ebdb23a
+    flutter_custom_cursor:
+        git:
+            url: https://github.com/Kingtous/rustdesk_flutter_custom_cursor
+            ref: 7fe78c139c711bafbae52d924e9caf18bd193e28
     get: ^4.6.5
     visibility_detector: ^0.3.3
     contextmenu: ^3.0.0

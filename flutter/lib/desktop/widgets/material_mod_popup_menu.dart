@@ -1031,6 +1031,7 @@ class PopupMenuButton<T> extends StatefulWidget {
     Key? key,
     required this.itemBuilder,
     this.initialValue,
+    this.onHover,
     this.onSelected,
     this.onCanceled,
     this.tooltip,
@@ -1060,6 +1061,9 @@ class PopupMenuButton<T> extends StatefulWidget {
 
   /// The value of the menu item, if any, that should be highlighted when the menu opens.
   final T? initialValue;
+
+  /// Called when the user hovers this button.
+  final ValueChanged<bool>? onHover;
 
   /// Called when the user selects a value from the popup menu created by this button.
   ///
@@ -1273,18 +1277,20 @@ class PopupMenuButtonState<T> extends State<PopupMenuButton<T>> {
 
     assert(debugCheckHasMaterialLocalizations(context));
 
-    if (widget.child != null)
+    if (widget.child != null) {
       return Tooltip(
         message:
             widget.tooltip ?? MaterialLocalizations.of(context).showMenuTooltip,
         child: InkWell(
           onTap: widget.enabled ? showButtonMenu : null,
+          onHover: widget.onHover,
           canRequestFocus: _canRequestFocus,
           radius: widget.splashRadius,
           enableFeedback: enableFeedback,
           child: widget.child,
         ),
       );
+    }
 
     return IconButton(
       icon: widget.icon ?? Icon(Icons.adaptive.more),

@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:flutter/gestures.dart';
@@ -8,6 +9,7 @@ import 'package:flutter/services.dart';
 import 'package:get/get.dart';
 import 'package:provider/provider.dart';
 import 'package:wakelock/wakelock.dart';
+import 'package:flutter_custom_cursor/flutter_custom_cursor.dart';
 
 // import 'package:window_manager/window_manager.dart';
 
@@ -22,7 +24,7 @@ import '../../common/shared_state.dart';
 final initText = '\1' * 1024;
 
 class RemotePage extends StatefulWidget {
-  RemotePage({
+  const RemotePage({
     Key? key,
     required this.id,
     required this.tabBarHeight,
@@ -32,7 +34,7 @@ class RemotePage extends StatefulWidget {
   final double tabBarHeight;
 
   @override
-  _RemotePageState createState() => _RemotePageState();
+  State<RemotePage> createState() => _RemotePageState();
 }
 
 class _RemotePageState extends State<RemotePage>
@@ -41,6 +43,7 @@ class _RemotePageState extends State<RemotePage>
   String _value = '';
   final _cursorOverImage = false.obs;
   late RxBool _showRemoteCursor;
+  late RxBool _remoteCursorMoved;
   late RxBool _keyboardEnabled;
 
   final FocusNode _mobileFocusNode = FocusNode();
@@ -60,8 +63,10 @@ class _RemotePageState extends State<RemotePage>
     CurrentDisplayState.init(id);
     KeyboardEnabledState.init(id);
     ShowRemoteCursorState.init(id);
+    RemoteCursorMovedState.init(id);
     _showRemoteCursor = ShowRemoteCursorState.find(id);
     _keyboardEnabled = KeyboardEnabledState.find(id);
+    _remoteCursorMoved = RemoteCursorMovedState.find(id);
   }
 
   void _removeStates(String id) {
@@ -70,6 +75,7 @@ class _RemotePageState extends State<RemotePage>
     CurrentDisplayState.delete(id);
     ShowRemoteCursorState.delete(id);
     KeyboardEnabledState.delete(id);
+    RemoteCursorMovedState.delete(id);
   }
 
   @override
@@ -395,13 +401,14 @@ class _RemotePageState extends State<RemotePage>
           id: widget.id,
           cursorOverImage: _cursorOverImage,
           keyboardEnabled: _keyboardEnabled,
+          remoteCursorMoved: _remoteCursorMoved,
           listenerBuilder: _buildImageListener,
         );
       }))
     ];
 
     paints.add(Obx(() => Visibility(
-        visible: _keyboardEnabled.isTrue || _showRemoteCursor.isTrue,
+        visible: _showRemoteCursor.isTrue && _remoteCursorMoved.isTrue,
         child: CursorPaint(
           id: widget.id,
         ))));
@@ -459,6 +466,7 @@ class ImagePaint extends StatelessWidget {
   final String id;
   final Rx<bool> cursorOverImage;
   final Rx<bool> keyboardEnabled;
+  final Rx<bool> remoteCursorMoved;
   final Widget Function(Widget)? listenerBuilder;
   final ScrollController _horizontal = ScrollController();
   final ScrollController _vertical = ScrollController();
@@ -468,6 +476,7 @@ class ImagePaint extends StatelessWidget {
       required this.id,
       required this.cursorOverImage,
       required this.keyboardEnabled,
+      required this.remoteCursorMoved,
       this.listenerBuilder})
       : super(key: key);
 
@@ -475,6 +484,7 @@ class ImagePaint extends StatelessWidget {
   Widget build(BuildContext context) {
     final m = Provider.of<ImageModel>(context);
     var c = Provider.of<CanvasModel>(context);
+    final cursor = Provider.of<CursorModel>(context);
     final s = c.scale;
     if (c.scrollStyle == ScrollStyle.scrollbar) {
       final imageWidget = SizedBox(
@@ -483,6 +493,8 @@ class ImagePaint extends StatelessWidget {
           child: CustomPaint(
             painter: ImagePainter(image: m.image, x: 0, y: 0, scale: s),
           ));
+
+      Rx<Offset> pos = Rx<Offset>(const Offset(0.0, 0.0));
       return Center(
         child: NotificationListener<ScrollNotification>(
           onNotification: (notification) {
@@ -498,9 +510,22 @@ class ImagePaint extends StatelessWidget {
             return false;
           },
           child: Obx(() => MouseRegion(
-              cursor: (keyboardEnabled.isTrue && cursorOverImage.isTrue)
-                  ? SystemMouseCursors.none
+              cursor: (cursorOverImage.isTrue && keyboardEnabled.isTrue)
+                  ? (remoteCursorMoved.isTrue
+                      ? SystemMouseCursors.none
+                      : (cursor.pngData != null
+                          ? FlutterCustomMemoryImageCursor(
+                              pixbuf: cursor.pngData!,
+                              hotx: cursor.hotx,
+                              hoty: cursor.hoty,
+                              imageWidth: (cursor.image!.width * s).toInt(),
+                              imageHeight: (cursor.image!.height * s).toInt(),
+                            )
+                          : MouseCursor.defer))
                   : MouseCursor.defer,
+              onHover: (evt) {
+                pos.value = evt.position;
+              },
               child: _buildCrossScrollbar(_buildListener(imageWidget)))),
         ),
       );

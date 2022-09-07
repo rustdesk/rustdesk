@@ -1,7 +1,8 @@
 import 'package:get/get.dart';
 
 import '../consts.dart';
-import '../models/platform_model.dart';
+
+// TODO: A lot of dup code.
 
 class PrivacyModeState {
   static String tag(String id) => 'privacy_mode_$id';
@@ -143,6 +144,28 @@ class KeyboardEnabledState {
     if (!Get.isRegistered(tag: key)) {
       // Server side, default true
       final RxBool state = true.obs;
+      Get.put(state, tag: key);
+    }
+  }
+
+  static void delete(String id) {
+    final key = tag(id);
+    if (Get.isRegistered(tag: key)) {
+      Get.delete(tag: key);
+    }
+  }
+
+  static RxBool find(String id) => Get.find<RxBool>(tag: tag(id));
+}
+
+class RemoteCursorMovedState {
+  static String tag(String id) => 'remote_cursor_moved_$id';
+
+  static void init(String id) {
+    final key = tag(id);
+    if (!Get.isRegistered(tag: key)) {
+      // Server side, default true
+      final RxBool state = false.obs;
       Get.put(state, tag: key);
     }
   }
