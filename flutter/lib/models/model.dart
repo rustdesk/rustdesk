@@ -4,6 +4,7 @@ import 'dart:io';
 import 'dart:math';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
+import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -595,8 +596,9 @@ class CanvasModel with ChangeNotifier {
 
 class CursorModel with ChangeNotifier {
   ui.Image? _image;
-  Uint8List? _rgba;
-  final _images = <int, Tuple4<Uint8List, ui.Image, double, double>>{};
+  final _images = <int, Tuple3<ui.Image, double, double>>{};
+  Uint8List? _pngData;
+  final _pngs = <int, Uint8List?>{};
   double _x = -10000;
   double _y = -10000;
   double _hotx = 0;
@@ -607,7 +609,7 @@ class CursorModel with ChangeNotifier {
   WeakReference<FFI> parent;
 
   ui.Image? get image => _image;
-  Uint8List? get rgba => _rgba;
+  Uint8List? get pngData => _pngData;
 
   double get x => _x - _displayOriginX;
 
@@ -757,26 +759,34 @@ class CursorModel with ChangeNotifier {
     var pid = parent.target?.id;
     ui.decodeImageFromPixels(rgba, width, height, ui.PixelFormat.rgba8888,
         (image) {
-      if (parent.target?.id != pid) return;
-      _image = image;
-      _rgba = rgba;
-      _images[id] = Tuple4(rgba, image, _hotx, _hoty);
-      try {
-        // my throw exception, because the listener maybe already dispose
-        notifyListeners();
-      } catch (e) {
-        debugPrint('notify cursor: $e');
-      }
+      () async {
+        if (parent.target?.id != pid) return;
+        _image = image;
+        _images[id] = Tuple3(image, _hotx, _hoty);
+        final data = await image.toByteData(format: ImageByteFormat.png);
+        if (data != null) {
+          _pngData = data.buffer.asUint8List();
+        } else {
+          _pngData = null;
+        }
+        _pngs[id] = _pngData;
+        try {
+          // my throw exception, because the listener maybe already dispose
+          notifyListeners();
+        } catch (e) {
+          debugPrint('notify cursor: $e');
+        }
+      }();
     });
   }
 
   void updateCursorId(Map<String, dynamic> evt) {
+    _pngData = _pngs[int.parse(evt['id'])];
     final tmp = _images[int.parse(evt['id'])];
     if (tmp != null) {
-      _rgba = tmp.item1;
-      _image = tmp.item2;
-      _hotx = tmp.item3;
-      _hoty = tmp.item4;
+      _image = tmp.item1;
+      _hotx = tmp.item2;
+      _hoty = tmp.item3;
       notifyListeners();
     }
   }
@@ -786,7 +796,7 @@ class CursorModel with ChangeNotifier {
     _x = double.parse(evt['x']);
     _y = double.parse(evt['y']);
     try {
-      RemoteCursorMovedState.find(id).value = false;
+      RemoteCursorMovedState.find(id).value = true;
     } catch (e) {
       //
     }
@@ -1011,7 +1021,7 @@ class FFI {
               Peer.fromJson(s[0] as String, s[1] as Map<String, dynamic>))
           .toList();
     } catch (e) {
-      print('peers(): $e');
+      debugPrint('peers(): $e');
     }
     return [];
   }

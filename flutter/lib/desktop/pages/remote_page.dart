@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:flutter/gestures.dart';
@@ -407,7 +408,7 @@ class _RemotePageState extends State<RemotePage>
     ];
 
     paints.add(Obx(() => Visibility(
-        visible: _keyboardEnabled.isTrue || _showRemoteCursor.isTrue,
+        visible: _showRemoteCursor.isTrue && _remoteCursorMoved.isTrue,
         child: CursorPaint(
           id: widget.id,
         ))));
@@ -493,7 +494,7 @@ class ImagePaint extends StatelessWidget {
             painter: ImagePainter(image: m.image, x: 0, y: 0, scale: s),
           ));
 
-      Rx<Offset> pos = Rx<Offset>(Offset(0.0, 0.0));
+      Rx<Offset> pos = Rx<Offset>(const Offset(0.0, 0.0));
       return Center(
         child: NotificationListener<ScrollNotification>(
           onNotification: (notification) {
@@ -512,12 +513,15 @@ class ImagePaint extends StatelessWidget {
               cursor: (cursorOverImage.isTrue && keyboardEnabled.isTrue)
                   ? (remoteCursorMoved.isTrue
                       ? SystemMouseCursors.none
-                      : FlutterCustomMemoryImageCursor(
-                          pixbuf: cursor.rgba!,
-                          hotx: cursor.hotx,
-                          hoty: cursor.hoty,
-                          imageWidth: (cursor.image!.width * s).toInt(),
-                          imageHeight: (cursor.image!.height * s).toInt()))
+                      : (cursor.pngData != null
+                          ? FlutterCustomMemoryImageCursor(
+                              pixbuf: cursor.pngData!,
+                              hotx: cursor.hotx,
+                              hoty: cursor.hoty,
+                              imageWidth: (cursor.image!.width * s).toInt(),
+                              imageHeight: (cursor.image!.height * s).toInt(),
+                            )
+                          : MouseCursor.defer))
                   : MouseCursor.defer,
               onHover: (evt) {
                 pos.value = evt.position;
