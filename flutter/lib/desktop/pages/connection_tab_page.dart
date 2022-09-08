@@ -39,11 +39,7 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
           label: peerId,
           selectedIcon: selectedIcon,
           unselectedIcon: unselectedIcon,
-          onTabCloseButton: () {
-            debugPrint("onTabCloseButton");
-            tabController.jumpBy(peerId);
-            clientClose(ffi(peerId).dialogManager);
-          },
+          onTabCloseButton: () => handleTabCloseButton(peerId),
           page: RemotePage(
             key: ValueKey(peerId),
             id: peerId,
@@ -75,11 +71,7 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
             label: id,
             selectedIcon: selectedIcon,
             unselectedIcon: unselectedIcon,
-            onTabCloseButton: () {
-              debugPrint("onTabCloseButton");
-              tabController.jumpBy(id);
-              clientClose(ffi(id).dialogManager);
-            },
+            onTabCloseButton: () => handleTabCloseButton(id),
             page: RemotePage(
               key: ValueKey(id),
               id: id,
@@ -164,5 +156,15 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
 
   int windowId() {
     return widget.params["windowId"];
+  }
+
+  void handleTabCloseButton(String peerId) {
+    final session = ffi(peerId);
+    if (session.ffiModel.pi.hostname.isNotEmpty) {
+      tabController.jumpBy(peerId);
+      clientClose(session.dialogManager);
+    } else {
+      tabController.closeBy(peerId);
+    }
   }
 }

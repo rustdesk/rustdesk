@@ -24,7 +24,7 @@ class TabInfo {
   final String label;
   final IconData? selectedIcon;
   final IconData? unselectedIcon;
-  final bool closable; //
+  final bool closable;
   final VoidCallback? onTabCloseButton;
   final Widget page;
 
@@ -147,7 +147,6 @@ class DesktopTabController {
 
   void closeBy(String? key) {
     if (!isDesktop) return;
-    debugPrint("closeBy: $key");
     assert(onRemove != null);
     if (key == null) {
       if (state.value.selected < state.value.tabs.length) {
