@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_hbb/consts.dart';
 import 'package:flutter_hbb/desktop/widgets/tabbar_widget.dart';
 import 'package:flutter_hbb/mobile/pages/chat_page.dart';
 import 'package:flutter_hbb/models/chat_model.dart';
@@ -63,20 +64,15 @@ class _DesktopServerPageState extends State<DesktopServerPage>
                     border: Border.all(color: MyTheme.color(context).border!)),
                 child: Scaffold(
                   backgroundColor: MyTheme.color(context).bg,
-                  body: Overlay(initialEntries: [
-                    OverlayEntry(builder: (context) {
-                      gFFI.dialogManager.setOverlayState(Overlay.of(context));
-                      return Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.start,
-                          children: [
-                            Expanded(child: ConnectionManager()),
-                            SizedBox.fromSize(size: Size(0, 15.0)),
-                          ],
-                        ),
-                      );
-                    })
-                  ]),
+                  body: Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.start,
+                      children: [
+                        Expanded(child: ConnectionManager()),
+                        SizedBox.fromSize(size: Size(0, 15.0)),
+                      ],
+                    ),
+                  ),
                 ))));
   }
 
@@ -111,7 +107,7 @@ class ConnectionManagerState extends State<ConnectionManager> {
     return serverModel.clients.isEmpty
         ? Column(
             children: [
-              buildTitleBar(Offstage()),
+              buildTitleBar(),
               Expanded(
                 child: Center(
                   child: Text(translate("Waiting")),
@@ -134,20 +130,27 @@ class ConnectionManagerState extends State<ConnectionManager> {
                 ]));
   }
 
-  Widget buildTitleBar(Widget middle) {
-    return GestureDetector(
-      onPanDown: (d) {
-        windowManager.startDragging();
-      },
+  Widget buildTitleBar() {
+    return SizedBox(
+      height: kDesktopRemoteTabBarHeight,
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          _AppIcon(),
-          Expanded(child: middle),
+          const _AppIcon(),
+          Expanded(
+            child: GestureDetector(
+              onPanStart: (d) {
+                windowManager.startDragging();
+              },
+              child: Container(
+                color: MyTheme.color(context).bg,
+              ),
+            ),
+          ),
           const SizedBox(
             width: 4.0,
           ),
-          _CloseButton()
+          const _CloseButton()
         ],
       ),
     );
@@ -209,15 +212,16 @@ class _CloseButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Ink(
-      child: InkWell(
-          onTap: () {
-            windowManager.close();
-          },
-          child: Icon(
-            Icons.close,
-            size: 30,
-          )),
+    return IconButton(
+      onPressed: () {
+        windowManager.close();
+      },
+      icon: const Icon(
+        IconFont.close,
+        size: 18,
+      ),
+      splashColor: Colors.transparent,
+      hoverColor: Colors.transparent,
     );
   }
 }

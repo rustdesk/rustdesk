@@ -182,6 +182,8 @@ pub enum Data {
     #[cfg(not(any(target_os = "android", target_os = "ios", feature = "cli")))]
     Mouse(DataMouse),
     Control(DataControl),
+    Theme(bool),
+    Language(String),
     Empty,
 }
 

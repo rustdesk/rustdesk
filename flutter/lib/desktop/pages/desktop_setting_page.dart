@@ -218,27 +218,25 @@ class _UserInterfaceState extends State<_UserInterface>
         onChanged: (key) async {
           await bind.mainSetLocalOption(key: "lang", value: key);
           Get.forceAppUpdate();
+          bind.mainChangeLanguage(lang: key);
         },
       ).marginOnly(left: _kContentHMargin);
     });
   }
 
   Widget theme() {
-    var change = () {
-      bool dark = !isDarkTheme();
-      Get.changeTheme(dark ? MyTheme.darkTheme : MyTheme.lightTheme);
-      Get.find<SharedPreferences>().setString("darkTheme", dark ? "Y" : "");
-      Get.forceAppUpdate();
-    };
+    change() {
+      MyTheme.changeTo(!isDarkTheme());
+    }
 
     return GestureDetector(
+      onTap: change,
       child: Row(
         children: [
           Checkbox(value: isDarkTheme(), onChanged: (_) => change()),
           Expanded(child: Text(translate('Dark Theme'))),
         ],
       ).marginOnly(left: _kCheckBoxLeftMargin),
-      onTap: change,
     );
   }
 }

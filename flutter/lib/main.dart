@@ -43,12 +43,16 @@ Future<Null> main(List<String> args) async {
     WindowType wType = type.windowType;
     switch (wType) {
       case WindowType.RemoteDesktop:
+        desktopType = DesktopType.remote;
         runRemoteScreen(argument);
         break;
       case WindowType.FileTransfer:
+        desktopType = DesktopType.fileTransfer;
         runFileTransferScreen(argument);
         break;
       case WindowType.PortForward:
+        desktopType =
+            argument['isRDP'] ? DesktopType.rdp : DesktopType.portForward;
         runPortForwardScreen(argument);
         break;
       default:
@@ -56,17 +60,15 @@ Future<Null> main(List<String> args) async {
     }
   } else if (args.isNotEmpty && args.first == '--cm') {
     print("--cm started");
+    desktopType = DesktopType.cm;
     await windowManager.ensureInitialized();
     runConnectionManagerScreen();
   } else {
+    desktopType = DesktopType.main;
     await windowManager.ensureInitialized();
     windowManager.setPreventClose(true);
     runMainApp(true);
   }
-}
-
-ThemeData getCurrentTheme() {
-  return isDarkTheme() ? MyTheme.darkTheme : MyTheme.lightTheme;
 }
 
 Future<void> initEnv(String appType) async {
@@ -77,6 +79,7 @@ Future<void> initEnv(String appType) async {
   await initGlobalFFI();
   // await Firebase.initializeApp();
   refreshCurrentUser();
+  _registerEventHandler();
 }
 
 void runMainApp(bool startService) async {
@@ -111,7 +114,9 @@ void runRemoteScreen(Map<String, dynamic> argument) async {
     navigatorKey: globalKey,
     debugShowCheckedModeBanner: false,
     title: 'RustDesk - Remote Desktop',
-    theme: getCurrentTheme(),
+    theme: MyTheme.lightTheme,
+    darkTheme: MyTheme.darkTheme,
+    themeMode: MyTheme.initialThemeMode(),
     home: DesktopRemoteScreen(
       params: argument,
     ),
@@ -129,7 +134,9 @@ void runFileTransferScreen(Map<String, dynamic> argument) async {
       navigatorKey: globalKey,
       debugShowCheckedModeBanner: false,
       title: 'RustDesk - File Transfer',
-      theme: getCurrentTheme(),
+      theme: MyTheme.lightTheme,
+      darkTheme: MyTheme.darkTheme,
+      themeMode: MyTheme.initialThemeMode(),
       home: DesktopFileTransferScreen(params: argument),
       navigatorObservers: [
         // FirebaseAnalyticsObserver(analytics: analytics),
@@ -146,7 +153,9 @@ void runPortForwardScreen(Map<String, dynamic> argument) async {
       navigatorKey: globalKey,
       debugShowCheckedModeBanner: false,
       title: 'RustDesk - Port Forward',
-      theme: getCurrentTheme(),
+      theme: MyTheme.lightTheme,
+      darkTheme: MyTheme.darkTheme,
+      themeMode: MyTheme.initialThemeMode(),
       home: DesktopPortForwardScreen(params: argument),
       navigatorObservers: [
         // FirebaseAnalyticsObserver(analytics: analytics),
@@ -170,7 +179,9 @@ void runConnectionManagerScreen() async {
   ]);
   runApp(GetMaterialApp(
       debugShowCheckedModeBanner: false,
-      theme: getCurrentTheme(),
+      theme: MyTheme.lightTheme,
+      darkTheme: MyTheme.darkTheme,
+      themeMode: MyTheme.initialThemeMode(),
       home: DesktopServerPage(),
       builder: _keepScaleBuilder()));
 }
@@ -185,7 +196,26 @@ WindowOptions getHiddenTitleBarWindowOptions(Size size) {
   );
 }
 
-class App extends StatelessWidget {
+class App extends StatefulWidget {
+  @override
+  State<App> createState() => _AppState();
+}
+
+class _AppState extends State<App> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.window.onPlatformBrightnessChanged = () {
+      WidgetsBinding.instance.handlePlatformBrightnessChanged();
+      var system =
+          WidgetsBinding.instance.platformDispatcher.platformBrightness;
+      var current = isDarkTheme() ? Brightness.dark : Brightness.light;
+      if (current != system) {
+        MyTheme.changeTo(system == Brightness.dark);
+      }
+    };
+  }
+
   @override
   Widget build(BuildContext context) {
     // final analytics = FirebaseAnalytics.instance;
@@ -204,7 +234,9 @@ class App extends StatelessWidget {
         navigatorKey: globalKey,
         debugShowCheckedModeBanner: false,
         title: 'RustDesk',
-        theme: getCurrentTheme(),
+        theme: MyTheme.lightTheme,
+        darkTheme: MyTheme.darkTheme,
+        themeMode: MyTheme.initialThemeMode(mainPage: true),
         home: isDesktop
             ? const DesktopTabPage()
             : !isAndroid
@@ -237,4 +269,18 @@ _keepScaleBuilder() {
       child: child ?? Container(),
     );
   };
+}
+
+_registerEventHandler() {
+  if (desktopType != DesktopType.main) {
+    platformFFI.registerEventHandler('theme', 'theme', (evt) {
+      String? dark = evt['dark'];
+      if (dark != null) {
+        MyTheme.changeTo(dark == 'true');
+      }
+    });
+    platformFFI.registerEventHandler('language', 'language', (_) {
+      Get.forceAppUpdate();
+    });
+  }
 }

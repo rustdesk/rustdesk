@@ -27,6 +27,7 @@ var isWeb = false;
 var isWebDesktop = false;
 var version = "";
 int androidVersion = 0;
+late final DesktopType? desktopType;
 
 typedef F = String Function(String);
 typedef FMethod = String Function(String, dynamic);
@@ -41,6 +42,15 @@ late final iconFile = MemoryImage(Uint8List.fromList(base64Decode(
     'iVBORw0KGgoAAAANSUhEUgAAAGAAAABgCAMAAADVRocKAAAAUVBMVEUAAAD///////////////////////////////////////////////////////////////////////////////////////////////////////8IN+deAAAAGnRSTlMAH+CAESEN8jyZkcIb5N/ONy3vmHhmiGjUm7UwS+YAAAHZSURBVGje7dnbboMwDIBhBwgQoFAO7Ta//4NOqCAXYZQstatq4r+r5ubrgQSpg8iyC4ZURa+PlIpQYGiwrzyeHtYZjAL8T05O4H8BbbKvFgRa4NoBU8pXeYEkDDgaaLQBcwJrmeErJQB/7wes3QBWGnCIX0+AQycL1PO6BMwPa0nA4ZxbgTvOjUYMGPHRnZkQAY4mxPZBjmy53E7ukSkFKYB/D4XsWZQx64sCeYebOogGsoOBYvv6/UCb8F0IOBZ0TlP6lEYdANY350AJqB9/qPVuOI5evw4A1hgLigAlepnyxW80bcCcwN++A2s82Vcu02ta+ceq9BoL5KGTTRwQPlpqA3gCnwWU2kCDgeWRQPj2jAPCDxgCMjhI6uZnToDpvd/BJeFrJQB/fsAa02gCt3mi1wNuy8GgBNDZlysBNNSrADVSjcJl6vCpUn6jOdx0kz0q6PMhQRa4465SFKhx35cgUCBTwj2/NHwZAb71qR8GEP2H1XcmAtBPTEO67GP6FUUAIKGABbDLQ0EArhN2sAIGesRO+iyy+RMAjckVTlMCKFVAbh/4Af9OPgG61SkDVco3BQGT3GXaDAnTIAcYZDuBTwGsAGDxuBFeAQqIqwoFMlAVLrHr/wId5MPt0nilGgAAAABJRU5ErkJggg==')));
 late final iconRestart = MemoryImage(Uint8List.fromList(base64Decode(
     'iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAACXBIWXMAAB7BAAAewQHDaVRTAAAAGXRFWHRTb2Z0d2FyZQB3d3cuaW5rc2NhcGUub3Jnm+48GgAAAbhJREFUWIXVlrFqFGEUhb+7UYxaWCQKlrKKxaZSQVGDJih2tj6MD2DnMwiWvoAIRnENIpZiYxEro6IooiS7SPwsMgNLkk3mjmYmnmb45/73nMNwz/x/qH3gMu2gH6rAU+Blw+Lngau4jpmGxVF7qp1iPWjaQKnZ2WnXbuP/NqAeUPc3ZkA9XDwvqc+BVWCgPlJ7tRwUKThZce819b46VH+pfXVRXVO/q2cSul3VOgZUl0ejq86r39TXI8mqZKDuDEwCw3IREQvAbWAGmMsQZQ0sAl3gHPB1Q+0e8BuYzRDuy2yOiFVgaUxtRf0ETGc4syk4rc6PqU0Cx9j8Zf6dAeAK8Fi9sUXtFjABvEgxJlNwRP2svlNPjbw/q35U36oTFbnyMSwabxb/gB/qA3VBHagrauV7RW0DRfP1IvMlXqkXkhz1DYyQTKtHa/Z2VVMx3IiI+PI3/bCHjuOpFrSnAMpL6QfgTcMGesDx0kBr2BMzsNyi/vtQu8CJlgwsRbZDnWP90NkKaxHxJMOXMqAeAn5u0ydwMCKGY+qbkB3C2W3EKWoXk5zVoHbUZ+6Mh7tl4G4F8RJ3qvL+AfV3r5Vdpj70AAAAAElFTkSuQmCC')));
+
+enum DesktopType {
+  main,
+  remote,
+  fileTransfer,
+  cm,
+  portForward,
+  rdp,
+}
 
 class IconFont {
   static const _family1 = 'Tabbar';
@@ -182,6 +192,32 @@ class MyTheme {
     ],
   );
 
+  static changeTo(bool dark) {
+    if (Get.isDarkMode != dark) {
+      Get.find<SharedPreferences>().setString("darkTheme", dark ? "Y" : "");
+      Get.changeThemeMode(dark ? ThemeMode.dark : ThemeMode.light);
+      if (desktopType == DesktopType.main) {
+        bind.mainChangeTheme(dark: dark);
+      }
+    }
+  }
+
+  static bool _themeInitialed = false;
+
+  static ThemeMode initialThemeMode({bool mainPage = false}) {
+    bool dark;
+    // Brightnesss is always light on windows, Flutter 3.0.5
+    if (_themeInitialed || !mainPage || Platform.isWindows) {
+      dark = "Y" == Get.find<SharedPreferences>().getString("darkTheme");
+    } else {
+      dark = WidgetsBinding.instance.platformDispatcher.platformBrightness ==
+          Brightness.dark;
+      Get.find<SharedPreferences>().setString("darkTheme", dark ? "Y" : "");
+    }
+    _themeInitialed = true;
+    return dark ? ThemeMode.dark : ThemeMode.light;
+  }
+
   static ColorThemeExtension color(BuildContext context) {
     return Theme.of(context).extension<ColorThemeExtension>()!;
   }
@@ -192,8 +228,7 @@ class MyTheme {
 }
 
 bool isDarkTheme() {
-  final isDark = "Y" == Get.find<SharedPreferences>().getString("darkTheme");
-  return isDark;
+  return Get.isDarkMode;
 }
 
 final ButtonStyle flatButtonStyle = TextButton.styleFrom(
@@ -478,7 +513,9 @@ void msgBox(
   submit() {
     dialogManager.dismissAll();
     // https://github.com/fufesou/rustdesk/blob/5e9a31340b899822090a3731769ae79c6bf5f3e5/src/ui/common.tis#L263
-    if (!type.contains("custom")) {
+    if (!type.contains("custom") &&
+        !(desktopType == DesktopType.portForward ||
+            desktopType == DesktopType.rdp)) {
       closeConnection();
     }
   }

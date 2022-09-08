@@ -63,7 +63,7 @@ class MsgboxComponent: Reactor.Component {
             var ts = this.auto_login ? { checked: true } : {};
             return <div .form>
               <PasswordComponent value={this.content} />
-              <div><button|checkbox(auto_login) {ts}>{translate('Auto Login')}</button></div>
+              <div><button|checkbox(auto_login) {ts} style="width: *; word-wrap: break-word; overflow-wrap: break-word; white-space: normal; height: auto; overflow: hidden;">{translate('Auto Login')}</button></div>
               </div>;
         }
         return this.content;
