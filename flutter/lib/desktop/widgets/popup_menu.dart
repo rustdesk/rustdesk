@@ -8,7 +8,7 @@ import './material_mod_popup_menu.dart' as mod_menu;
 
 // https://stackoverflow.com/questions/68318314/flutter-popup-menu-inside-popup-menu
 class PopupMenuChildrenItem<T> extends mod_menu.PopupMenuEntry<T> {
-  const PopupMenuChildrenItem({
+  PopupMenuChildrenItem({
     key,
     this.height = kMinInteractiveDimension,
     this.padding,
@@ -43,6 +43,16 @@ class PopupMenuChildrenItem<T> extends mod_menu.PopupMenuEntry<T> {
 
 class MyPopupMenuItemState<T, W extends PopupMenuChildrenItem<T>>
     extends State<W> {
+  RxBool enabled = true.obs;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.enabled != null) {
+      enabled.value = widget.enabled!.value;
+    }
+  }
+
   @protected
   void handleTap(T value) {
     widget.onTap?.call();
@@ -56,27 +66,25 @@ class MyPopupMenuItemState<T, W extends PopupMenuChildrenItem<T>>
     TextStyle style = widget.textStyle ??
         popupMenuTheme.textStyle ??
         theme.textTheme.subtitle1!;
-    return Obx(() {
-      return mod_menu.PopupMenuButton<T>(
-        enabled: widget.enabled != null ? widget.enabled!.value : true,
-        position: widget.position,
-        offset: widget.offset,
-        onSelected: handleTap,
-        itemBuilder: widget.itemBuilder,
-        padding: EdgeInsets.zero,
-        child: AnimatedDefaultTextStyle(
-          style: style,
-          duration: kThemeChangeDuration,
-          child: Container(
-            alignment: AlignmentDirectional.centerStart,
-            constraints: BoxConstraints(minHeight: widget.height),
-            padding:
-                widget.padding ?? const EdgeInsets.symmetric(horizontal: 16),
-            child: widget.child,
+    return Obx(() => mod_menu.PopupMenuButton<T>(
+          enabled: enabled.value,
+          position: widget.position,
+          offset: widget.offset,
+          onSelected: handleTap,
+          itemBuilder: widget.itemBuilder,
+          padding: EdgeInsets.zero,
+          child: AnimatedDefaultTextStyle(
+            style: style,
+            duration: kThemeChangeDuration,
+            child: Container(
+              alignment: AlignmentDirectional.centerStart,
+              constraints: BoxConstraints(minHeight: widget.height),
+              padding:
+                  widget.padding ?? const EdgeInsets.symmetric(horizontal: 16),
+              child: widget.child,
+            ),
           ),
-        ),
-      );
-    });
+        ));
   }
 }
 
@@ -342,7 +350,7 @@ typedef SwitchSetter = Future<void> Function(bool);
 
 abstract class MenuEntrySwitchBase<T> extends MenuEntryBase<T> {
   final String text;
-  final Rx<TextStyle>? textStyle;
+  Rx<TextStyle>? textStyle;
 
   MenuEntrySwitchBase({
     required this.text,
@@ -357,6 +365,11 @@ abstract class MenuEntrySwitchBase<T> extends MenuEntryBase<T> {
   @override
   List<mod_menu.PopupMenuEntry<T>> build(
       BuildContext context, MenuConfig conf) {
+    textStyle ??= const TextStyle(
+            color: Colors.black,
+            fontSize: MenuConfig.fontSize,
+            fontWeight: FontWeight.normal)
+        .obs;
     return [
       mod_menu.PopupMenuItem(
         padding: EdgeInsets.zero,
@@ -366,23 +379,10 @@ abstract class MenuEntrySwitchBase<T> extends MenuEntryBase<T> {
               alignment: AlignmentDirectional.centerStart,
               height: conf.height,
               child: Row(children: [
-                () {
-                  if (textStyle != null) {
-                    final style = textStyle!;
-                    return Obx(() => Text(
-                          text,
-                          style: style.value,
-                        ));
-                  } else {
-                    return Text(
+                Obx(() => Text(
                       text,
-                      style: const TextStyle(
-                          color: Colors.black,
-                          fontSize: MenuConfig.fontSize,
-                          fontWeight: FontWeight.normal),
-                    );
-                  }
-                }(),
+                      style: textStyle!.value,
+                    )),
                 Expanded(
                     child: Align(
                   alignment: Alignment.centerRight,
@@ -485,6 +485,7 @@ class MenuEntrySubMenu<T> extends MenuEntryBase<T> {
   @override
   List<mod_menu.PopupMenuEntry<T>> build(
       BuildContext context, MenuConfig conf) {
+    super.enabled ??= true.obs;
     return [
       PopupMenuChildrenItem(
         enabled: super.enabled,
@@ -500,9 +501,7 @@ class MenuEntrySubMenu<T> extends MenuEntryBase<T> {
           Obx(() => Text(
                 text,
                 style: TextStyle(
-                    color: (super.enabled != null ? super.enabled!.value : true)
-                        ? Colors.black
-                        : Colors.grey,
+                    color: super.enabled!.value ? Colors.black : Colors.grey,
                     fontSize: MenuConfig.fontSize,
                     fontWeight: FontWeight.normal),
               )),
@@ -511,9 +510,7 @@ class MenuEntrySubMenu<T> extends MenuEntryBase<T> {
             alignment: Alignment.centerRight,
             child: Obx(() => Icon(
                   Icons.keyboard_arrow_right,
-                  color: (super.enabled != null ? super.enabled!.value : true)
-                      ? conf.commonColor
-                      : Colors.grey,
+                  color: super.enabled!.value ? conf.commonColor : Colors.grey,
                 )),
           ))
         ]),
@@ -537,35 +534,31 @@ class MenuEntryButton<T> extends MenuEntryBase<T> {
         );
 
   Widget _buildChild(BuildContext context, MenuConfig conf) {
-    return Obx(() {
-      bool enabled = true;
-      if (super.enabled != null) {
-        enabled = super.enabled!.value;
-      }
-      const enabledStyle = TextStyle(
-          color: Colors.black,
-          fontSize: MenuConfig.fontSize,
-          fontWeight: FontWeight.normal);
-      const disabledStyle = TextStyle(
-          color: Colors.grey,
-          fontSize: MenuConfig.fontSize,
-          fontWeight: FontWeight.normal);
-      return TextButton(
-        onPressed: enabled
-            ? () {
-                if (super.dismissOnClicked && Navigator.canPop(context)) {
-                  Navigator.pop(context);
+    const enabledStyle = TextStyle(
+        color: Colors.black,
+        fontSize: MenuConfig.fontSize,
+        fontWeight: FontWeight.normal);
+    const disabledStyle = TextStyle(
+        color: Colors.grey,
+        fontSize: MenuConfig.fontSize,
+        fontWeight: FontWeight.normal);
+    super.enabled ??= true.obs;
+    return Obx(() => TextButton(
+          onPressed: super.enabled!.value
+              ? () {
+                  if (super.dismissOnClicked && Navigator.canPop(context)) {
+                    Navigator.pop(context);
+                  }
+                  proc();
                 }
-                proc();
-              }
-            : null,
-        child: Container(
-          alignment: AlignmentDirectional.centerStart,
-          constraints: BoxConstraints(minHeight: conf.height),
-          child: childBuilder(enabled ? enabledStyle : disabledStyle),
-        ),
-      );
-    });
+              : null,
+          child: Container(
+            alignment: AlignmentDirectional.centerStart,
+            constraints: BoxConstraints(minHeight: conf.height),
+            child: childBuilder(
+                super.enabled!.value ? enabledStyle : disabledStyle),
+          ),
+        ));
   }
 
   @override
@@ -573,7 +566,6 @@ class MenuEntryButton<T> extends MenuEntryBase<T> {
       BuildContext context, MenuConfig conf) {
     return [
       mod_menu.PopupMenuItem(
-        enabled: super.enabled != null ? super.enabled!.value : true,
         padding: EdgeInsets.zero,
         height: conf.height,
         child: _buildChild(context, conf),
