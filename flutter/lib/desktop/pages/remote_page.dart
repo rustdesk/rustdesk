@@ -539,7 +539,7 @@ class ImagePaint extends StatelessWidget {
   Widget build(BuildContext context) {
     final m = Provider.of<ImageModel>(context);
     var c = Provider.of<CanvasModel>(context);
-    final cursor = Provider.of<CursorModel>(context);
+
     final s = c.scale;
     if (c.scrollStyle == ScrollStyle.scrollbar) {
       final imageWidget = SizedBox(
@@ -568,18 +568,7 @@ class ImagePaint extends StatelessWidget {
               cursor: (cursorOverImage.isTrue && keyboardEnabled.isTrue)
                   ? (remoteCursorMoved.isTrue
                       ? SystemMouseCursors.none
-                      : (cursor.cacheLinux != null
-                          ? FlutterCustomMemoryImageCursor(
-                              pixbuf: cursor.cacheLinux!.data,
-                              key: cursor.cacheLinux!.key,
-                              hotx: cursor.cacheLinux!.hotx,
-                              hoty: cursor.cacheLinux!.hoty,
-                              imageWidth:
-                                  (cursor.cacheLinux!.width * s).toInt(),
-                              imageHeight:
-                                  (cursor.cacheLinux!.height * s).toInt(),
-                            )
-                          : MouseCursor.defer))
+                      : _buildCustomCursorLinux(context, s))
                   : MouseCursor.defer,
               onHover: (evt) {
                 pos.value = evt.position;
@@ -596,6 +585,25 @@ class ImagePaint extends StatelessWidget {
                 ImagePainter(image: m.image, x: c.x / s, y: c.y / s, scale: s),
           ));
       return _buildListener(imageWidget);
+    }
+  }
+
+  MouseCursor _buildCustomCursorLinux(BuildContext context, double scale) {
+    final cursor = Provider.of<CursorModel>(context);
+    final cacheLinux = cursor.cacheLinux;
+    if (cacheLinux == null) {
+      return MouseCursor.defer;
+    } else {
+      final key = cacheLinux.key(scale);
+      cursor.addKeyLinux(key);
+      return FlutterCustomMemoryImageCursor(
+        pixbuf: cacheLinux.data,
+        key: key,
+        hotx: cacheLinux.hotx,
+        hoty: cacheLinux.hoty,
+        imageWidth: (cacheLinux.width * scale).toInt(),
+        imageHeight: (cacheLinux.height * scale).toInt(),
+      );
     }
   }
 

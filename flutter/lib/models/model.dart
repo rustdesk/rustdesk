@@ -604,7 +604,6 @@ class CursorData {
   final double hoty;
   final int width;
   final int height;
-  late String key;
 
   CursorData({
     required this.peerId,
@@ -614,10 +613,12 @@ class CursorData {
     required this.hoty,
     required this.width,
     required this.height,
-  }) {
-    key =
-        '${peerId}_${id}_${(hotx * 10e6).round().toInt()}_${(hoty * 10e6).round().toInt()}_${width}_$height';
-  }
+  });
+
+  int _doubleToInt(double v) => (v * 10e6).round().toInt();
+
+  String key(double scale) =>
+      '${peerId}_${id}_${_doubleToInt(hotx)}_${_doubleToInt(hoty)}_${_doubleToInt(width * scale)}_${_doubleToInt(height * scale)}';
 }
 
 class CursorModel with ChangeNotifier {
@@ -625,6 +626,7 @@ class CursorModel with ChangeNotifier {
   final _images = <int, Tuple3<ui.Image, double, double>>{};
   CursorData? _cacheLinux;
   final _cacheMapLinux = <int, CursorData>{};
+  final _cacheKeysLinux = <String>{};
   double _x = -10000;
   double _y = -10000;
   double _hotx = 0;
@@ -649,8 +651,8 @@ class CursorModel with ChangeNotifier {
 
   CursorModel(this.parent);
 
-  List<String> get cachedKeysLinux =>
-      _cacheMapLinux.values.map((v) => v.key).toList();
+  Set<String> get cachedKeysLinux => _cacheKeysLinux;
+  addKeyLinux(String key) => _cacheKeysLinux.add(key);
 
   // remote physical display coordinate
   Rect getVisibleRect() {
@@ -878,7 +880,7 @@ class CursorModel with ChangeNotifier {
   }
 
   void _clearCacheLinux() {
-    final cachedKeys = [...cachedKeysLinux];
+    final cachedKeys = {...cachedKeysLinux};
     for (var key in cachedKeys) {
       customCursorController.freeCache(key);
     }
