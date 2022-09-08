@@ -218,31 +218,12 @@ class MyTheme {
     return dark ? ThemeMode.dark : ThemeMode.light;
   }
 
-  static registerEventHandler() {
-    if (desktopType != DesktopType.main) {
-      platformFFI.registerEventHandler('theme', 'theme-$desktopType', (evt) {
-        String? dark = evt['dark'];
-        if (dark != null) {
-          changeTo(dark == 'true');
-        }
-      });
-    }
-  }
-
   static ColorThemeExtension color(BuildContext context) {
     return Theme.of(context).extension<ColorThemeExtension>()!;
   }
 
   static TabbarTheme tabbar(BuildContext context) {
     return Theme.of(context).extension<TabbarTheme>()!;
-  }
-}
-
-class ThemeModeNotifier {
-  final ValueNotifier<Brightness> brightness;
-  ThemeModeNotifier(this.brightness);
-  changeThemeBrightness({required Brightness brightness}) {
-    this.brightness.value = brightness;
   }
 }
 

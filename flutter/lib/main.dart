@@ -79,7 +79,7 @@ Future<void> initEnv(String appType) async {
   await initGlobalFFI();
   // await Firebase.initializeApp();
   refreshCurrentUser();
-  MyTheme.registerEventHandler();
+  _registerEventHandler();
 }
 
 void runMainApp(bool startService) async {
@@ -269,4 +269,18 @@ _keepScaleBuilder() {
       child: child ?? Container(),
     );
   };
+}
+
+_registerEventHandler() {
+  if (desktopType != DesktopType.main) {
+    platformFFI.registerEventHandler('theme', 'theme', (evt) {
+      String? dark = evt['dark'];
+      if (dark != null) {
+        MyTheme.changeTo(dark == 'true');
+      }
+    });
+    platformFFI.registerEventHandler('language', 'language', (_) {
+      Get.forceAppUpdate();
+    });
+  }
 }

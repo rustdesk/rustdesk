@@ -62,6 +62,8 @@ pub trait InvokeUiCM: Send + Clone + 'static + Sized {
     fn new_message(&self, id: i32, text: String);
 
     fn change_theme(&self, dark: bool);
+
+    fn change_language(&self);
 }
 
 impl<T: InvokeUiCM> Deref for ConnectionManager<T> {
@@ -200,6 +202,8 @@ pub enum ClipboardFileData {
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 #[tokio::main(flavor = "current_thread")]
 pub async fn start_ipc<T: InvokeUiCM>(cm: ConnectionManager<T>) {
+    use hbb_common::config::LocalConfig;
+
     let (tx_file, _rx_file) = mpsc::unbounded_channel::<ClipboardFileData>();
     #[cfg(windows)]
     let cm_clip = cm.clone();
@@ -284,6 +288,10 @@ pub async fn start_ipc<T: InvokeUiCM>(cm: ConnectionManager<T>) {
                                                     }
                                                     Data::Theme(dark) => {
                                                         cm.change_theme(dark);
+                                                    }
+                                                    Data::Language(lang) => {
+                                                        LocalConfig::set_option("lang".to_owned(), lang);
+                                                        cm.change_language();
                                                     }
                                                     _ => {
 

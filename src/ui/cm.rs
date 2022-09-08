@@ -51,6 +51,10 @@ impl InvokeUiCM for SciterHandler {
     fn change_theme(&self, _dark: bool) {
         // TODO
     }
+
+    fn change_language(&self) {
+        // TODO
+    }
 }
 
 impl SciterHandler {

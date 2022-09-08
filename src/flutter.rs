@@ -382,6 +382,10 @@ pub mod connection_manager {
         fn change_theme(&self, dark: bool) {
             self.push_event("theme", vec![("dark", &dark.to_string())]);
         }
+
+        fn change_language(&self) {
+            self.push_event("language", vec![]);
+        }
     }
 
     impl FlutterHandler {

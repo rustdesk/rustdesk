@@ -659,7 +659,7 @@ pub fn main_load_lan_peers() {
     };
 }
 
-pub fn main_change_theme(dark: bool) {
+fn main_broadcast_message(data: &HashMap<&str, &str>) {
     let apps = vec![
         flutter::APP_TYPE_DESKTOP_REMOTE,
         flutter::APP_TYPE_DESKTOP_FILE_TRANSFER,
@@ -669,11 +669,22 @@ pub fn main_change_theme(dark: bool) {
 
     for app in apps {
         if let Some(s) = flutter::GLOBAL_EVENT_STREAM.read().unwrap().get(app) {
-            let data = HashMap::from([("name", "theme".to_owned()), ("dark", dark.to_string())]);
-            s.add(serde_json::ser::to_string(&data).unwrap_or("".to_owned()));
+            s.add(serde_json::ser::to_string(data).unwrap_or("".to_owned()));
         };
     }
+}
+
+pub fn main_change_theme(dark: bool) {
+    main_broadcast_message(&HashMap::from([
+        ("name", "theme"),
+        ("dark", &dark.to_string()),
+    ]));
     send_to_cm(&crate::ipc::Data::Theme(dark));
+}
+
+pub fn main_change_language(lang: String) {
+    main_broadcast_message(&HashMap::from([("name", "language"), ("lang", &lang)]));
+    send_to_cm(&crate::ipc::Data::Language(lang));
 }
 
 pub fn session_add_port_forward(

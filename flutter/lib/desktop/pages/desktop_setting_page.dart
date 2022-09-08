@@ -218,6 +218,7 @@ class _UserInterfaceState extends State<_UserInterface>
         onChanged: (key) async {
           await bind.mainSetLocalOption(key: "lang", value: key);
           Get.forceAppUpdate();
+          bind.mainChangeLanguage(lang: key);
         },
       ).marginOnly(left: _kContentHMargin);
     });

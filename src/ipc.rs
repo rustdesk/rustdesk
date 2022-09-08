@@ -183,6 +183,7 @@ pub enum Data {
     Mouse(DataMouse),
     Control(DataControl),
     Theme(bool),
+    Language(String),
     Empty,
 }
 
