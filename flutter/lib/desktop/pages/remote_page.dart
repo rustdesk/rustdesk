@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:io';
-import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:flutter/gestures.dart';
@@ -16,7 +15,6 @@ import 'package:flutter_custom_cursor/flutter_custom_cursor.dart';
 import '../widgets/remote_menubar.dart';
 import '../../common.dart';
 import '../../mobile/widgets/dialog.dart';
-import '../../mobile/widgets/overlay.dart';
 import '../../models/model.dart';
 import '../../models/platform_model.dart';
 import '../../common/shared_state.dart';
@@ -107,7 +105,7 @@ class _RemotePageState extends State<RemotePage>
   @override
   void dispose() {
     debugPrint("REMOTE PAGE dispose ${widget.id}");
-    hideMobileActionsOverlay();
+    _ffi.dialogManager.hideMobileActionsOverlay();
     _ffi.listenToMouse(false);
     _mobileFocusNode.dispose();
     _physicalFocusNode.dispose();

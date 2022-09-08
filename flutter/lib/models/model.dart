@@ -22,7 +22,6 @@ import 'package:flutter_custom_cursor/flutter_custom_cursor.dart';
 import '../common.dart';
 import '../common/shared_state.dart';
 import '../mobile/widgets/dialog.dart';
-import '../mobile/widgets/overlay.dart';
 import 'peer_model.dart';
 import 'platform_model.dart';
 
@@ -267,8 +266,10 @@ class FfiModel with ChangeNotifier {
 
     if (isPeerAndroid) {
       _touchMode = true;
-      if (parent.target?.ffiModel.permissions['keyboard'] != false) {
-        Timer(const Duration(milliseconds: 100), showMobileActionsOverlay);
+      if (parent.target != null &&
+          parent.target!.ffiModel.permissions['keyboard'] != false) {
+        Timer(const Duration(milliseconds: 100),
+            parent.target!.dialogManager.showMobileActionsOverlay);
       }
     } else {
       _touchMode =

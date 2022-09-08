@@ -14,7 +14,6 @@ import '../../models/model.dart';
 import '../../models/platform_model.dart';
 import '../widgets/dialog.dart';
 import '../widgets/gestures.dart';
-import '../widgets/overlay.dart';
 
 final initText = '\1' * 1024;
 
@@ -64,7 +63,7 @@ class _RemotePageState extends State<RemotePage> {
 
   @override
   void dispose() {
-    hideMobileActionsOverlay();
+    gFFI.dialogManager.hideMobileActionsOverlay();
     gFFI.listenToMouse(false);
     gFFI.invokeMethod("enable_soft_keyboard", true);
     _mobileFocusNode.dispose();
@@ -266,8 +265,9 @@ class _RemotePageState extends State<RemotePage> {
                             : SafeArea(child:
                                 OrientationBuilder(builder: (ctx, orientation) {
                                 if (_currentOrientation != orientation) {
-                                  Timer(Duration(milliseconds: 200), () {
-                                    resetMobileActionsOverlay();
+                                  Timer(const Duration(milliseconds: 200), () {
+                                    gFFI.dialogManager
+                                        .resetMobileActionsOverlay(ffi: gFFI);
                                     _currentOrientation = orientation;
                                     gFFI.canvasModel.updateViewStyle();
                                   });
@@ -422,14 +422,9 @@ class _RemotePageState extends State<RemotePage> {
                           ? [
                               IconButton(
                                 color: Colors.white,
-                                icon: Icon(Icons.build),
-                                onPressed: () {
-                                  if (mobileActionsOverlayEntry == null) {
-                                    showMobileActionsOverlay();
-                                  } else {
-                                    hideMobileActionsOverlay();
-                                  }
-                                },
+                                icon: const Icon(Icons.build),
+                                onPressed: () => gFFI.dialogManager
+                                    .toggleMobileActionsOverlay(ffi: gFFI),
                               )
                             ]
                           : [

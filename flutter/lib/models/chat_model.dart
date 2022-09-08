@@ -143,9 +143,12 @@ class ChatModel with ChangeNotifier {
   }
 
   toggleChatOverlay() {
-    if (chatIconOverlayEntry == null || chatWindowOverlayEntry == null) {
+    if ((!isDesktop && chatIconOverlayEntry == null) ||
+        chatWindowOverlayEntry == null) {
       gFFI.invokeMethod("enable_soft_keyboard", true);
-      showChatIconOverlay();
+      if (!isDesktop) {
+        showChatIconOverlay();
+      }
       showChatWindowOverlay();
     } else {
       hideChatIconOverlay();

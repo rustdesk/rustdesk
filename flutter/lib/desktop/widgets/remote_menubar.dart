@@ -6,7 +6,6 @@ import 'package:rxdart/rxdart.dart' as rxdart;
 
 import '../../common.dart';
 import '../../mobile/widgets/dialog.dart';
-import '../../mobile/widgets/overlay.dart';
 import '../../models/model.dart';
 import '../../models/platform_model.dart';
 import '../../common/shared_state.dart';
@@ -75,20 +74,17 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
     final List<Widget> menubarItems = [];
     if (!isWebDesktop) {
       menubarItems.add(_buildFullscreen(context));
-      //if (widget.ffi.ffiModel.isPeerAndroid) {
-      menubarItems.add(IconButton(
-        tooltip: translate('Mobile Actions'),
-        color: _MenubarTheme.commonColor,
-        icon: const Icon(Icons.build),
-        onPressed: () {
-          if (mobileActionsOverlayEntry == null) {
-            showMobileActionsOverlay();
-          } else {
-            hideMobileActionsOverlay();
-          }
-        },
-      ));
-      //}
+      if (widget.ffi.ffiModel.isPeerAndroid) {
+        menubarItems.add(IconButton(
+          tooltip: translate('Mobile Actions'),
+          color: _MenubarTheme.commonColor,
+          icon: const Icon(Icons.build),
+          onPressed: () {
+            widget.ffi.dialogManager
+                .toggleMobileActionsOverlay(ffi: widget.ffi);
+          },
+        ));
+      }
     }
     menubarItems.add(_buildMonitor(context));
     menubarItems.add(_buildControl(context));
