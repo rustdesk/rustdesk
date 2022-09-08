@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_hbb/models/chat_model.dart';
@@ -349,24 +351,22 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
         dismissOnClicked: true,
       ),
     ]);
-
     // {handler.get_audit_server() && <li #note>{translate('Note')}</li>}
     final auditServer = bind.sessionGetAuditServerSync(id: widget.id);
-    //if (auditServer.isNotEmpty) {
-    displayMenu.add(
-      MenuEntryButton<String>(
-        childBuilder: (TextStyle? style) => Text(
-          translate('Note'),
-          style: style,
+    if (auditServer.isNotEmpty) {
+      displayMenu.add(
+        MenuEntryButton<String>(
+          childBuilder: (TextStyle? style) => Text(
+            translate('Note'),
+            style: style,
+          ),
+          proc: () {
+            showAuditDialog(widget.id, widget.ffi.dialogManager);
+          },
+          dismissOnClicked: true,
         ),
-        proc: () {
-          showAuditDialog(widget.id, widget.ffi.dialogManager);
-        },
-        dismissOnClicked: true,
-      ),
-    );
-    //}
-
+      );
+    }
     displayMenu.add(MenuEntryDivider());
 
     if (perms['keyboard'] != false) {
@@ -599,6 +599,8 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
             }
           }),
       MenuEntryDivider<String>(),
+      // {show_codec ? <div>
+      // MenuEntryDivider<String>(),
       () {
         final state = ShowRemoteCursorState.find(widget.id);
         return MenuEntrySwitch2<String>(
@@ -631,6 +633,14 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
     if (perms['audio'] != false) {
       displayMenu.add(_createSwitchMenuEntry('Mute', 'disable-audio'));
     }
+
+    if (Platform.isWindows &&
+        pi.platform == 'Windows' &&
+        perms['file'] != false) {
+      displayMenu.add(_createSwitchMenuEntry(
+          'Allow file copy and paste', 'enable-file-transfer'));
+    }
+
     if (perms['keyboard'] != false) {
       if (perms['clipboard'] != false) {
         displayMenu.add(
