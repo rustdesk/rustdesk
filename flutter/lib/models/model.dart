@@ -17,6 +17,7 @@ import 'package:flutter_hbb/models/server_model.dart';
 import 'package:flutter_hbb/models/user_model.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:tuple/tuple.dart';
+import 'package:flutter_custom_cursor/flutter_custom_cursor.dart';
 
 import '../common.dart';
 import '../common/shared_state.dart';
@@ -351,7 +352,7 @@ class ImageModel with ChangeNotifier {
         // my throw exception, because the listener maybe already dispose
         update(image, tabBarHeight);
       } catch (e) {
-        print('update image: $e');
+        debugPrint('update image: $e');
       }
     });
   }
@@ -594,11 +595,36 @@ class CanvasModel with ChangeNotifier {
   }
 }
 
+// data for cursor
+class CursorData {
+  final String peerId;
+  final int id;
+  final Uint8List? data;
+  final double hotx;
+  final double hoty;
+  final int width;
+  final int height;
+  late String key;
+
+  CursorData({
+    required this.peerId,
+    required this.id,
+    required this.data,
+    required this.hotx,
+    required this.hoty,
+    required this.width,
+    required this.height,
+  }) {
+    key =
+        '${peerId}_${id}_${(hotx * 10e6).round().toInt()}_${(hoty * 10e6).round().toInt()}_${width}_$height';
+  }
+}
+
 class CursorModel with ChangeNotifier {
   ui.Image? _image;
   final _images = <int, Tuple3<ui.Image, double, double>>{};
-  Uint8List? _pngData;
-  final _pngs = <int, Uint8List?>{};
+  CursorData? _cacheLinux;
+  final _cacheMapLinux = <int, CursorData>{};
   double _x = -10000;
   double _y = -10000;
   double _hotx = 0;
@@ -609,7 +635,7 @@ class CursorModel with ChangeNotifier {
   WeakReference<FFI> parent;
 
   ui.Image? get image => _image;
-  Uint8List? get pngData => _pngData;
+  CursorData? get cacheLinux => _cacheLinux;
 
   double get x => _x - _displayOriginX;
 
@@ -622,6 +648,9 @@ class CursorModel with ChangeNotifier {
   double get hoty => _hoty;
 
   CursorModel(this.parent);
+
+  List<String> get cachedKeysLinux =>
+      _cacheMapLinux.values.map((v) => v.key).toList();
 
   // remote physical display coordinate
   Rect getVisibleRect() {
@@ -763,13 +792,7 @@ class CursorModel with ChangeNotifier {
         if (parent.target?.id != pid) return;
         _image = image;
         _images[id] = Tuple3(image, _hotx, _hoty);
-        final data = await image.toByteData(format: ImageByteFormat.png);
-        if (data != null) {
-          _pngData = data.buffer.asUint8List();
-        } else {
-          _pngData = null;
-        }
-        _pngs[id] = _pngData;
+        _updateCacheLinux(image, id, width, height);
         try {
           // my throw exception, because the listener maybe already dispose
           notifyListeners();
@@ -780,8 +803,28 @@ class CursorModel with ChangeNotifier {
     });
   }
 
+  void _updateCacheLinux(ui.Image image, int id, int w, int h) async {
+    final data = await image.toByteData(format: ImageByteFormat.png);
+    late Uint8List? dataLinux;
+    if (data != null) {
+      dataLinux = data.buffer.asUint8List();
+    } else {
+      dataLinux = null;
+    }
+    _cacheLinux = CursorData(
+      peerId: this.id,
+      data: dataLinux,
+      id: id,
+      hotx: _hotx,
+      hoty: _hoty,
+      width: w,
+      height: h,
+    );
+    _cacheMapLinux[id] = _cacheLinux!;
+  }
+
   void updateCursorId(Map<String, dynamic> evt) {
-    _pngData = _pngs[int.parse(evt['id'])];
+    _cacheLinux = _cacheMapLinux[int.parse(evt['id'])];
     final tmp = _images[int.parse(evt['id'])];
     if (tmp != null) {
       _image = tmp.item1;
@@ -828,6 +871,17 @@ class CursorModel with ChangeNotifier {
     _x = -10000;
     _image = null;
     _images.clear();
+
+    _clearCacheLinux();
+    _cacheLinux = null;
+    _cacheMapLinux.clear();
+  }
+
+  void _clearCacheLinux() {
+    final cachedKeys = [...cachedKeysLinux];
+    for (var key in cachedKeys) {
+      customCursorController.freeCache(key);
+    }
   }
 }
 
@@ -871,7 +925,9 @@ class QualityMonitorModel with ChangeNotifier {
         _data.codecFormat = evt['codec_format'];
       }
       notifyListeners();
-    } catch (e) {}
+    } catch (e) {
+      //
+    }
   }
 }
 
@@ -1230,7 +1286,7 @@ class FFI {
   Future<Map<String, String>> getHttpHeaders() async {
     return {
       'Authorization':
-          'Bearer ' + await bind.mainGetLocalOption(key: 'access_token')
+          'Bearer ${await bind.mainGetLocalOption(key: 'access_token')}'
     };
   }
 }

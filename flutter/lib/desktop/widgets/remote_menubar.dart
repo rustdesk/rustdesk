@@ -611,7 +611,7 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
                 MenuEntryRadioOption(text: translate('Map mode'), value: 'map'),
               ],
           curOptionGetter: () async {
-            return await bind.sessionGetKeyboardName(id: widget.id) ?? 'legacy';
+            return await bind.sessionGetKeyboardName(id: widget.id);
           },
           optionSetter: (String oldValue, String newValue) async {
             await bind.sessionSetKeyboardMode(
