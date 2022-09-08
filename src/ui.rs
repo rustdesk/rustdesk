@@ -39,7 +39,7 @@ use crate::ui_interface::{
 
 mod cm;
 #[cfg(feature = "inline")]
-mod inline;
+pub mod inline;
 #[cfg(target_os = "macos")]
 mod macos;
 pub mod remote;
