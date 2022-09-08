@@ -282,8 +282,8 @@ class _PortForwardPageState extends State<PortForwardPage>
   }
 
   buildRdp(BuildContext context) {
-    text1(String lable) =>
-        Expanded(child: Text(lable).marginOnly(left: _kTextLeftMargin));
+    text1(String lable) => Expanded(
+        child: Text(translate(lable)).marginOnly(left: _kTextLeftMargin));
     text2(String lable) => Expanded(
             child: Text(
           lable,

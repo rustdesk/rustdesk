@@ -195,7 +195,7 @@ class MyTheme {
   );
 
   static changeTo(bool dark) {
-    if (Get.isDarkMode != dark) {
+    if (isDarkTheme() != dark) {
       Get.find<SharedPreferences>().setString("darkTheme", dark ? "Y" : "");
       Get.changeThemeMode(dark ? ThemeMode.dark : ThemeMode.light);
       if (desktopType == DesktopType.main) {
@@ -210,7 +210,7 @@ class MyTheme {
     bool dark;
     // Brightnesss is always light on windows, Flutter 3.0.5
     if (_themeInitialed || !mainPage || Platform.isWindows) {
-      dark = "Y" == Get.find<SharedPreferences>().getString("darkTheme");
+      dark = isDarkTheme();
     } else {
       dark = WidgetsBinding.instance.platformDispatcher.platformBrightness ==
           Brightness.dark;
@@ -230,7 +230,7 @@ class MyTheme {
 }
 
 bool isDarkTheme() {
-  return Get.isDarkMode;
+  return "Y" == Get.find<SharedPreferences>().getString("darkTheme");
 }
 
 final ButtonStyle flatButtonStyle = TextButton.styleFrom(

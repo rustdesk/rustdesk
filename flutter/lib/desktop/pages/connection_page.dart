@@ -428,8 +428,12 @@ class _ConnectionPageState extends State<ConnectionPage> {
           light,
           Text(translate("Service is not running")),
           TextButton(
-              onPressed: () =>
-                  bind.mainSetOption(key: "stop-service", value: ""),
+              onPressed: () async {
+                bool checked = await bind.mainCheckSuperUserPermission();
+                if (checked) {
+                  bind.mainSetOption(key: "stop-service", value: "");
+                }
+              },
               child: Text(translate("Start Service")))
         ],
       );
