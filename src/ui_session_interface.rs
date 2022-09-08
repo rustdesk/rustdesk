@@ -680,7 +680,7 @@ impl<T: InvokeUiSession> Session<T> {
 
     pub fn get_chatbox(&self) -> String {
         #[cfg(feature = "inline")]
-        return super::inline::get_chatbox();
+        return crate::ui::inline::get_chatbox();
         #[cfg(not(feature = "inline"))]
         return "".to_owned();
     }
