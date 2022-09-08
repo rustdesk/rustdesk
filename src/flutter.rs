@@ -18,7 +18,6 @@ pub(super) const APP_TYPE_MAIN: &str = "main";
 pub(super) const APP_TYPE_DESKTOP_REMOTE: &str = "remote";
 pub(super) const APP_TYPE_DESKTOP_FILE_TRANSFER: &str = "file transfer";
 pub(super) const APP_TYPE_DESKTOP_PORT_FORWARD: &str = "port forward";
-pub(super) const APP_TYPE_DESKTOP_RDP: &str = "rdp";
 
 lazy_static::lazy_static! {
     pub static ref SESSIONS: RwLock<HashMap<String,Session<FlutterHandler>>> = Default::default();

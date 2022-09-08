@@ -52,7 +52,6 @@ enum DesktopType {
   fileTransfer,
   cm,
   portForward,
-  rdp,
 }
 
 class IconFont {
@@ -572,9 +571,7 @@ void msgBox(
   submit() {
     dialogManager.dismissAll();
     // https://github.com/fufesou/rustdesk/blob/5e9a31340b899822090a3731769ae79c6bf5f3e5/src/ui/common.tis#L263
-    if (!type.contains("custom") &&
-        !(desktopType == DesktopType.portForward ||
-            desktopType == DesktopType.rdp)) {
+    if (!type.contains("custom") && desktopType != DesktopType.portForward) {
       closeConnection();
     }
   }

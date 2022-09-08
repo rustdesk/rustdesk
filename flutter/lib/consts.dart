@@ -5,7 +5,6 @@ const String kAppTypeMain = "main";
 const String kAppTypeDesktopRemote = "remote";
 const String kAppTypeDesktopFileTransfer = "file transfer";
 const String kAppTypeDesktopPortForward = "port forward";
-const String kAppTypeDesktopRDP = "rdp";
 
 const String kTabLabelHomePage = "Home";
 const String kTabLabelSettingPage = "Settings";

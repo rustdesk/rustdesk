@@ -51,8 +51,7 @@ Future<Null> main(List<String> args) async {
         runFileTransferScreen(argument);
         break;
       case WindowType.PortForward:
-        desktopType =
-            argument['isRDP'] ? DesktopType.rdp : DesktopType.portForward;
+        desktopType = DesktopType.portForward;
         runPortForwardScreen(argument);
         break;
       default:

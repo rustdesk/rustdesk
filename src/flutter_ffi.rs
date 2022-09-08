@@ -663,7 +663,6 @@ fn main_broadcast_message(data: &HashMap<&str, &str>) {
         flutter::APP_TYPE_DESKTOP_REMOTE,
         flutter::APP_TYPE_DESKTOP_FILE_TRANSFER,
         flutter::APP_TYPE_DESKTOP_PORT_FORWARD,
-        flutter::APP_TYPE_DESKTOP_RDP,
     ];
 
     for app in apps {
@@ -700,6 +699,12 @@ pub fn session_add_port_forward(
 pub fn session_remove_port_forward(id: String, local_port: i32) {
     if let Some(session) = SESSIONS.write().unwrap().get_mut(&id) {
         session.remove_port_forward(local_port);
+    }
+}
+
+pub fn session_new_rdp(id: String) {
+    if let Some(session) = SESSIONS.write().unwrap().get_mut(&id) {
+        session.new_rdp();
     }
 }
 

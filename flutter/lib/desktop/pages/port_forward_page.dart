@@ -37,7 +37,6 @@ class PortForwardPage extends StatefulWidget {
 
 class _PortForwardPageState extends State<PortForwardPage>
     with AutomaticKeepAliveClientMixin {
-  final bool isRdp = false;
   final TextEditingController localPortController = TextEditingController();
   final TextEditingController remoteHostController = TextEditingController();
   final TextEditingController remotePortController = TextEditingController();
@@ -53,7 +52,7 @@ class _PortForwardPageState extends State<PortForwardPage>
     if (!Platform.isLinux) {
       Wakelock.enable();
     }
-    print("init success with id ${widget.id}");
+    debugPrint("init success with id ${widget.id}");
   }
 
   @override
@@ -73,7 +72,7 @@ class _PortForwardPageState extends State<PortForwardPage>
     return Scaffold(
       backgroundColor: MyTheme.color(context).grayBg,
       body: FutureBuilder(future: () async {
-        if (!isRdp) {
+        if (!widget.isRDP) {
           refreshTunnelConfig();
         }
       }(), builder: (context, snapshot) {
@@ -288,7 +287,7 @@ class _PortForwardPageState extends State<PortForwardPage>
     text2(String lable) => Expanded(
             child: Text(
           lable,
-          style: TextStyle(fontSize: 20),
+          style: const TextStyle(fontSize: 20),
         ).marginOnly(left: _kTextLeftMargin));
     return Theme(
       data: Theme.of(context)
@@ -321,10 +320,10 @@ class _PortForwardPageState extends State<PortForwardPage>
                           style: ElevatedButton.styleFrom(
                               elevation: 0,
                               side: const BorderSide(color: MyTheme.border)),
-                          onPressed: () {},
+                          onPressed: () => bind.sessionNewRdp(id: widget.id),
                           child: Text(
                             translate('New RDP'),
-                            style: TextStyle(
+                            style: const TextStyle(
                                 fontWeight: FontWeight.w300, fontSize: 14),
                           ),
                         ).marginSymmetric(vertical: 10),

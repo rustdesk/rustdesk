@@ -44,7 +44,6 @@ enum DesktopTabType {
   remoteScreen,
   fileTransfer,
   portForward,
-  rdp,
 }
 
 class DesktopTabState {
