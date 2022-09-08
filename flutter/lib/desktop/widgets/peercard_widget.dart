@@ -1,7 +1,6 @@
 import 'package:contextmenu/contextmenu.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_hbb/utils/multi_window_manager.dart';
 import 'package:get/get.dart';
 
 import '../../common.dart';
@@ -11,6 +10,7 @@ import '../../models/peer_model.dart';
 import '../../models/platform_model.dart';
 import './material_mod_popup_menu.dart' as mod_menu;
 import './popup_menu.dart';
+import './utils.dart';
 
 class _PopupMenuTheme {
   static const Color commonColor = MyTheme.accent;
@@ -32,7 +32,7 @@ class _PeerCard extends StatefulWidget {
   final Function(BuildContext, String) connect;
   final PopupMenuEntryBuilder popupMenuEntryBuilder;
 
-  _PeerCard(
+  const _PeerCard(
       {required this.peer,
       required this.alias,
       required this.connect,
@@ -317,7 +317,7 @@ abstract class BasePeerCard extends StatelessWidget {
     return _PeerCard(
       peer: peer,
       alias: alias,
-      connect: (BuildContext context, String id) => _connect(context, id),
+      connect: (BuildContext context, String id) => connect(context, id),
       popupMenuEntryBuilder: _buildPopupMenuEntry,
     );
   }
@@ -337,31 +337,6 @@ abstract class BasePeerCard extends StatelessWidget {
   @protected
   Future<List<MenuEntryBase<String>>> _buildMenuItems(BuildContext context);
 
-  /// Connect to a peer with [id].
-  /// If [isFileTransfer], starts a session only for file transfer.
-  /// If [isTcpTunneling], starts a session only for tcp tunneling.
-  /// If [isRDP], starts a session only for rdp.
-  void _connect(BuildContext context, String id,
-      {bool isFileTransfer = false,
-      bool isTcpTunneling = false,
-      bool isRDP = false}) async {
-    if (id == '') return;
-    id = id.replaceAll(' ', '');
-    assert(!(isFileTransfer && isTcpTunneling && isRDP),
-        "more than one connect type");
-    if (isFileTransfer) {
-      await rustDeskWinManager.newFileTransfer(id);
-    } else if (isTcpTunneling || isRDP) {
-      await rustDeskWinManager.newPortForward(id, isRDP);
-    } else {
-      await rustDeskWinManager.newRemoteDesktop(id);
-    }
-    FocusScopeNode currentFocus = FocusScope.of(context);
-    if (!currentFocus.hasPrimaryFocus) {
-      currentFocus.unfocus();
-    }
-  }
-
   MenuEntryBase<String> _connectCommonAction(
       BuildContext context, String id, String title,
       {bool isFileTransfer = false,
@@ -373,7 +348,7 @@ abstract class BasePeerCard extends StatelessWidget {
         style: style,
       ),
       proc: () {
-        _connect(
+        connect(
           context,
           peer.id,
           isFileTransfer: isFileTransfer,
@@ -434,7 +409,7 @@ abstract class BasePeerCard extends StatelessWidget {
             ],
           )),
       proc: () {
-        _connect(context, id, isRDP: true);
+        connect(context, id, isRDP: true);
       },
       dismissOnClicked: true,
     );

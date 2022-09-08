@@ -17,15 +17,14 @@ use crate::flutter::{self, SESSIONS};
 use crate::start_server;
 use crate::ui_interface;
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
-use crate::ui_interface::change_id;
 use crate::ui_interface::{
-    check_mouse_time, check_super_user_permission, discover, forget_password, get_api_server,
-    get_app_name, get_async_job_status, get_connect_status, get_fav, get_id, get_lan_peers,
-    get_langs, get_license, get_local_option, get_mouse_time, get_option, get_options, get_peer,
-    get_peer_option, get_socks, get_sound_inputs, get_uuid, get_version, has_hwcodec,
-    has_rendezvous_service, post_request, send_to_cm, set_local_option, set_option, set_options,
-    set_peer_option, set_permanent_password, set_socks, store_fav, test_if_valid_server,
-    update_temporary_password, using_public_server,
+    change_id, check_mouse_time, check_super_user_permission, discover, forget_password,
+    get_api_server, get_app_name, get_async_job_status, get_connect_status, get_fav, get_id,
+    get_lan_peers, get_langs, get_license, get_local_option, get_mouse_time, get_option,
+    get_options, get_peer, get_peer_option, get_socks, get_sound_inputs, get_uuid, get_version,
+    has_hwcodec, has_rendezvous_service, post_request, send_to_cm, set_local_option, set_option,
+    set_options, set_peer_option, set_permanent_password, set_socks, store_fav,
+    test_if_valid_server, update_temporary_password, using_public_server,
 };
 use crate::{
     client::file_trait::FileManager,
@@ -807,6 +806,21 @@ pub fn session_send_mouse(id: String, msg: String) {
 pub fn session_restart_remote_device(id: String) {
     if let Some(session) = SESSIONS.read().unwrap().get(&id) {
         session.restart_remote_device();
+    }
+}
+
+pub fn session_get_audit_server_sync(id: String) -> SyncReturn<String> {
+    let res = if let Some(session) = SESSIONS.read().unwrap().get(&id) {
+        session.get_audit_server()
+    } else {
+        "".to_owned()
+    };
+    SyncReturn(res)
+}
+
+pub fn session_send_note(id: String, note: String) {
+    if let Some(session) = SESSIONS.read().unwrap().get(&id) {
+        session.send_note(note)
     }
 }
 

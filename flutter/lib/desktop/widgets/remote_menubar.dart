@@ -11,6 +11,7 @@ import '../../models/platform_model.dart';
 import '../../common/shared_state.dart';
 import './popup_menu.dart';
 import './material_mod_popup_menu.dart' as mod_menu;
+import './utils.dart';
 
 class _MenubarTheme {
   static const Color commonColor = MyTheme.accent;
@@ -225,7 +226,7 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
       ),
       tooltip: translate('Control Actions'),
       position: mod_menu.PopupMenuPosition.under,
-      itemBuilder: (BuildContext context) => _getControlMenu()
+      itemBuilder: (BuildContext context) => _getControlMenu(context)
           .map((entry) => entry.build(
               context,
               const MenuConfig(
@@ -297,66 +298,76 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
     );
   }
 
-  List<MenuEntryBase<String>> _getControlMenu() {
+  List<MenuEntryBase<String>> _getControlMenu(BuildContext context) {
     final pi = widget.ffi.ffiModel.pi;
     final perms = widget.ffi.ffiModel.permissions;
 
     final List<MenuEntryBase<String>> displayMenu = [];
-
-    if (pi.version.isNotEmpty) {
-      displayMenu.add(MenuEntryButton<String>(
-        childBuilder: (TextStyle? style) => Text(
-          translate('Refresh'),
-          style: style,
+    displayMenu.addAll([
+      MenuEntryButton<String>(
+        childBuilder: (TextStyle? style) => Row(
+          children: [
+            Text(
+              translate('OS Password'),
+              style: style,
+            ),
+            Expanded(
+                child: Align(
+              alignment: Alignment.centerRight,
+              child: IconButton(
+                padding: EdgeInsets.zero,
+                icon: const Icon(Icons.edit),
+                onPressed: () => showSetOSPassword(
+                    widget.id, false, widget.ffi.dialogManager),
+              ),
+            ))
+          ],
         ),
         proc: () {
-          bind.sessionRefresh(id: widget.id);
+          showSetOSPassword(widget.id, false, widget.ffi.dialogManager);
         },
         dismissOnClicked: true,
-      ));
-    }
-    displayMenu.add(MenuEntryButton<String>(
-      childBuilder: (TextStyle? style) => Text(
-        translate('OS Password'),
-        style: style,
       ),
-      proc: () {
-        showSetOSPassword(widget.id, false, widget.ffi.dialogManager);
-      },
-      dismissOnClicked: true,
-    ));
-
-    if (!isWebDesktop) {
-      if (perms['keyboard'] != false && perms['clipboard'] != false) {
-        displayMenu.add(MenuEntryButton<String>(
-          childBuilder: (TextStyle? style) => Text(
-            translate('Paste'),
-            style: style,
-          ),
-          proc: () {
-            () async {
-              ClipboardData? data =
-                  await Clipboard.getData(Clipboard.kTextPlain);
-              if (data != null && data.text != null) {
-                bind.sessionInputString(id: widget.id, value: data.text ?? "");
-              }
-            }();
-          },
-          dismissOnClicked: true,
-        ));
-      }
-
-      displayMenu.add(MenuEntryButton<String>(
+      MenuEntryButton<String>(
         childBuilder: (TextStyle? style) => Text(
-          translate('Reset canvas'),
+          translate('Transfer File'),
           style: style,
         ),
         proc: () {
-          widget.ffi.cursorModel.reset();
+          connect(context, widget.id, isFileTransfer: true);
         },
         dismissOnClicked: true,
-      ));
-    }
+      ),
+      MenuEntryButton<String>(
+        childBuilder: (TextStyle? style) => Text(
+          translate('TCP Tunneling'),
+          style: style,
+        ),
+        proc: () {
+          connect(context, widget.id, isTcpTunneling: true);
+        },
+        dismissOnClicked: true,
+      ),
+    ]);
+
+    // {handler.get_audit_server() && <li #note>{translate('Note')}</li>}
+    final auditServer = bind.sessionGetAuditServerSync(id: widget.id);
+    //if (auditServer.isNotEmpty) {
+    displayMenu.add(
+      MenuEntryButton<String>(
+        childBuilder: (TextStyle? style) => Text(
+          translate('Note'),
+          style: style,
+        ),
+        proc: () {
+          showAuditDialog(widget.id, widget.ffi.dialogManager);
+        },
+        dismissOnClicked: true,
+      ),
+    );
+    //}
+
+    displayMenu.add(MenuEntryDivider());
 
     if (perms['keyboard'] != false) {
       if (pi.platform == 'Linux' || pi.sasEnabled) {
@@ -371,7 +382,24 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
           dismissOnClicked: true,
         ));
       }
+    }
+    if (gFFI.ffiModel.permissions["restart"] != false &&
+        (pi.platform == "Linux" ||
+            pi.platform == "Windows" ||
+            pi.platform == "Mac OS")) {
+      displayMenu.add(MenuEntryButton<String>(
+        childBuilder: (TextStyle? style) => Text(
+          translate('Restart Remote Device'),
+          style: style,
+        ),
+        proc: () {
+          showRestartRemoteDevice(pi, widget.id, gFFI.dialogManager);
+        },
+        dismissOnClicked: true,
+      ));
+    }
 
+    if (perms['keyboard'] != false) {
       displayMenu.add(MenuEntryButton<String>(
         childBuilder: (TextStyle? style) => Text(
           translate('Insert Lock'),
@@ -402,17 +430,46 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
       }
     }
 
-    if (gFFI.ffiModel.permissions["restart"] != false &&
-        (pi.platform == "Linux" ||
-            pi.platform == "Windows" ||
-            pi.platform == "Mac OS")) {
+    if (pi.version.isNotEmpty) {
       displayMenu.add(MenuEntryButton<String>(
         childBuilder: (TextStyle? style) => Text(
-          translate('Restart Remote Device'),
+          translate('Refresh'),
           style: style,
         ),
         proc: () {
-          showRestartRemoteDevice(pi, widget.id, gFFI.dialogManager);
+          bind.sessionRefresh(id: widget.id);
+        },
+        dismissOnClicked: true,
+      ));
+    }
+
+    if (!isWebDesktop) {
+      //   if (perms['keyboard'] != false && perms['clipboard'] != false) {
+      //     displayMenu.add(MenuEntryButton<String>(
+      //       childBuilder: (TextStyle? style) => Text(
+      //         translate('Paste'),
+      //         style: style,
+      //       ),
+      //       proc: () {
+      //         () async {
+      //           ClipboardData? data =
+      //               await Clipboard.getData(Clipboard.kTextPlain);
+      //           if (data != null && data.text != null) {
+      //             bind.sessionInputString(id: widget.id, value: data.text ?? "");
+      //           }
+      //         }();
+      //       },
+      //       dismissOnClicked: true,
+      //     ));
+      //   }
+
+      displayMenu.add(MenuEntryButton<String>(
+        childBuilder: (TextStyle? style) => Text(
+          translate('Reset canvas'),
+          style: style,
+        ),
+        proc: () {
+          widget.ffi.cursorModel.reset();
         },
         dismissOnClicked: true,
       ));
@@ -667,6 +724,79 @@ void showSetOSPassword(
           },
         ),
       ]),
+      actions: [
+        TextButton(
+          style: flatButtonStyle,
+          onPressed: close,
+          child: Text(translate('Cancel')),
+        ),
+        TextButton(
+          style: flatButtonStyle,
+          onPressed: submit,
+          child: Text(translate('OK')),
+        ),
+      ],
+      onSubmit: submit,
+      onCancel: close,
+    );
+  });
+}
+
+void showAuditDialog(String id, dialogManager) async {
+  final controller = TextEditingController();
+  dialogManager.show((setState, close) {
+    submit() {
+      var text = controller.text.trim();
+      if (text != "") {
+        bind.sessionSendNote(id: id, note: text);
+      }
+      close();
+    }
+
+    late final focusNode = FocusNode(
+      onKey: (FocusNode node, RawKeyEvent evt) {
+        if (evt.logicalKey.keyLabel == 'Enter') {
+          if (evt is RawKeyDownEvent) {
+            int pos = controller.selection.base.offset;
+            controller.text =
+                '${controller.text.substring(0, pos)}\n${controller.text.substring(pos)}';
+            controller.selection =
+                TextSelection.fromPosition(TextPosition(offset: pos + 1));
+          }
+          return KeyEventResult.handled;
+        }
+        if (evt.logicalKey.keyLabel == 'Esc') {
+          if (evt is RawKeyDownEvent) {
+            close();
+          }
+          return KeyEventResult.handled;
+        } else {
+          return KeyEventResult.ignored;
+        }
+      },
+    );
+
+    return CustomAlertDialog(
+      title: Text(translate('Note')),
+      content: SizedBox(
+          width: 250,
+          height: 120,
+          child: TextField(
+            autofocus: true,
+            keyboardType: TextInputType.multiline,
+            textInputAction: TextInputAction.newline,
+            decoration: const InputDecoration.collapsed(
+              hintText: "input note here",
+            ),
+            // inputFormatters: [
+            //   LengthLimitingTextInputFormatter(16),
+            //   // FilteringTextInputFormatter(RegExp(r"[a-zA-z][a-zA-z0-9\_]*"), allow: true)
+            // ],
+            maxLines: null,
+            maxLength: 256,
+            controller: controller,
+            focusNode: focusNode,
+          )),
       actions: [
         TextButton(
           style: flatButtonStyle,
