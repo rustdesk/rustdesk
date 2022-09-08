@@ -24,7 +24,8 @@ class TabInfo {
   final String label;
   final IconData? selectedIcon;
   final IconData? unselectedIcon;
-  final bool closable;
+  final bool closable; //
+  final VoidCallback? onTabCloseButton;
   final Widget page;
 
   TabInfo(
@@ -33,6 +34,7 @@ class TabInfo {
       this.selectedIcon,
       this.unselectedIcon,
       this.closable = true,
+      this.onTabCloseButton,
       required this.page});
 }
 
@@ -137,16 +139,23 @@ class DesktopTabController {
     }
   }
 
+  void jumpBy(String key) {
+    if (!isDesktop) return;
+    final index = state.value.tabs.indexWhere((tab) => tab.key == key);
+    jumpTo(index);
+  }
+
   void closeBy(String? key) {
     if (!isDesktop) return;
+    debugPrint("closeBy: $key");
     assert(onRemove != null);
     if (key == null) {
       if (state.value.selected < state.value.tabs.length) {
         remove(state.value.selected);
       }
     } else {
-      state.value.tabs.indexWhere((tab) => tab.key == key);
-      remove(state.value.selected);
+      final index = state.value.tabs.indexWhere((tab) => tab.key == key);
+      remove(index);
     }
   }
 
@@ -175,7 +184,7 @@ class DesktopTab extends StatelessWidget {
   final bool showClose;
   final Widget Function(Widget pageView)? pageViewBuilder;
   final Widget? tail;
-  final VoidCallback? onClose;
+  final VoidCallback? onWindowCloseButton;
   final TabBuilder? tabBuilder;
   final LabelGetter? labelGetter;
 
@@ -196,7 +205,7 @@ class DesktopTab extends StatelessWidget {
     this.showClose = true,
     this.pageViewBuilder,
     this.tail,
-    this.onClose,
+    this.onWindowCloseButton,
     this.tabBuilder,
     this.labelGetter,
   }) : super(key: key) {
@@ -333,7 +342,7 @@ class DesktopTab extends StatelessWidget {
           showMinimize: showMinimize,
           showMaximize: showMaximize,
           showClose: showClose,
-          onClose: onClose,
+          onClose: onWindowCloseButton,
         )
       ],
     );
@@ -511,7 +520,13 @@ class _ListView extends StatelessWidget {
             unselectedIcon: tab.unselectedIcon,
             closable: tab.closable,
             selected: state.value.selected,
-            onClose: () => controller.remove(index),
+            onClose: () {
+              if (tab.onTabCloseButton != null) {
+                tab.onTabCloseButton!();
+              } else {
+                controller.remove(index);
+              }
+            },
             onSelected: () => controller.jumpTo(index),
             tabBuilder: tabBuilder == null
                 ? null

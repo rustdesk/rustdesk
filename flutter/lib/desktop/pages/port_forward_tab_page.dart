@@ -78,7 +78,7 @@ class _PortForwardTabPageState extends State<PortForwardTabPage> {
             backgroundColor: MyTheme.color(context).bg,
             body: DesktopTab(
               controller: tabController,
-              onClose: () {
+              onWindowCloseButton: () {
                 tabController.clear();
               },
               tail: AddButton().paddingOnly(left: 10),
@@ -88,7 +88,6 @@ class _PortForwardTabPageState extends State<PortForwardTabPage> {
   }
 
   void onRemoveId(String id) {
-    ffi("pf_$id").close();
     if (tabController.state.value.tabs.isEmpty) {
       WindowController.fromWindowId(windowId()).hide();
     }

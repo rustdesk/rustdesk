@@ -71,10 +71,10 @@ class _FileManagerTabPageState extends State<FileManagerTabPage> {
             backgroundColor: MyTheme.color(context).bg,
             body: DesktopTab(
               controller: tabController,
-              onClose: () {
+              onWindowCloseButton: () {
                 tabController.clear();
               },
-              tail: AddButton().paddingOnly(left: 10),
+              tail: const AddButton().paddingOnly(left: 10),
             )),
       ),
     );

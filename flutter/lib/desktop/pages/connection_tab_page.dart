@@ -10,6 +10,8 @@ import 'package:flutter_hbb/desktop/widgets/tabbar_widget.dart';
 import 'package:flutter_hbb/utils/multi_window_manager.dart';
 import 'package:get/get.dart';
 
+import '../../mobile/widgets/dialog.dart';
+
 class ConnectionTabPage extends StatefulWidget {
   final Map<String, dynamic> params;
 
@@ -37,6 +39,11 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
           label: peerId,
           selectedIcon: selectedIcon,
           unselectedIcon: unselectedIcon,
+          onTabCloseButton: () {
+            debugPrint("onTabCloseButton");
+            tabController.jumpBy(peerId);
+            clientClose(ffi(peerId).dialogManager);
+          },
           page: Obx(() => RemotePage(
                 key: ValueKey(peerId),
                 id: peerId,
@@ -69,6 +76,11 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
             label: id,
             selectedIcon: selectedIcon,
             unselectedIcon: unselectedIcon,
+            onTabCloseButton: () {
+              debugPrint("onTabCloseButton");
+              tabController.jumpBy(id);
+              clientClose(ffi(id).dialogManager);
+            },
             page: Obx(() => RemotePage(
                   key: ValueKey(id),
                   id: id,
@@ -95,7 +107,7 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
                 body: Obx(() => DesktopTab(
                       controller: tabController,
                       showTabBar: fullscreen.isFalse,
-                      onClose: () {
+                      onWindowCloseButton: () {
                         tabController.clear();
                       },
                       tail: AddButton().paddingOnly(left: 10),
