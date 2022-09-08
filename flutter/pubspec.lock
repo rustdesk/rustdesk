@@ -414,6 +414,15 @@ packages:
       url: "https://pub.flutter-io.cn"
     source: hosted
     version: "3.3.0"
+  flutter_custom_cursor:
+    dependency: "direct main"
+    description:
+      path: "."
+      ref: "9021e21de36c84edf01d5034f38eda580463163b"
+      resolved-ref: "9021e21de36c84edf01d5034f38eda580463163b"
+      url: "https://github.com/Kingtous/rustdesk_flutter_custom_cursor"
+    source: git
+    version: "0.0.1"
   flutter_launcher_icons:
     dependency: "direct dev"
     description:

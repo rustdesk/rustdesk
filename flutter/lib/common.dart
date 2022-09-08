@@ -14,6 +14,7 @@ import 'package:get/get.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:window_manager/window_manager.dart';
 
+import 'mobile/widgets/overlay.dart';
 import 'models/model.dart';
 import 'models/platform_model.dart';
 
@@ -294,8 +295,10 @@ class Dialog<T> {
 
 class OverlayDialogManager {
   OverlayState? _overlayState;
-  Map<String, Dialog> _dialogs = Map();
+  final Map<String, Dialog> _dialogs = {};
   int _tagCount = 0;
+
+  OverlayEntry? _mobileActionsOverlayEntry;
 
   /// By default OverlayDialogManager use global overlay
   OverlayDialogManager() {
@@ -417,6 +420,60 @@ class OverlayDialogManager {
         onCancel: showCancel ? cancel : null,
       );
     });
+  }
+
+  void resetMobileActionsOverlay({FFI? ffi}) {
+    if (_mobileActionsOverlayEntry == null) return;
+    hideMobileActionsOverlay();
+    showMobileActionsOverlay(ffi: ffi);
+  }
+
+  void showMobileActionsOverlay({FFI? ffi}) {
+    if (_mobileActionsOverlayEntry != null) return;
+    if (_overlayState == null) return;
+
+    // compute overlay position
+    final screenW = MediaQuery.of(globalKey.currentContext!).size.width;
+    final screenH = MediaQuery.of(globalKey.currentContext!).size.height;
+    const double overlayW = 200;
+    const double overlayH = 45;
+    final left = (screenW - overlayW) / 2;
+    final top = screenH - overlayH - 80;
+
+    final overlay = OverlayEntry(builder: (context) {
+      final session = ffi ?? gFFI;
+      return DraggableMobileActions(
+        position: Offset(left, top),
+        width: overlayW,
+        height: overlayH,
+        onBackPressed: () => session.tap(MouseButtons.right),
+        onHomePressed: () => session.tap(MouseButtons.wheel),
+        onRecentPressed: () async {
+          session.sendMouse('down', MouseButtons.wheel);
+          await Future.delayed(const Duration(milliseconds: 500));
+          session.sendMouse('up', MouseButtons.wheel);
+        },
+        onHidePressed: () => hideMobileActionsOverlay(),
+      );
+    });
+    _overlayState!.insert(overlay);
+    _mobileActionsOverlayEntry = overlay;
+  }
+
+  void hideMobileActionsOverlay() {
+    if (_mobileActionsOverlayEntry != null) {
+      _mobileActionsOverlayEntry!.remove();
+      _mobileActionsOverlayEntry = null;
+      return;
+    }
+  }
+
+  void toggleMobileActionsOverlay({FFI? ffi}) {
+    if (_mobileActionsOverlayEntry == null) {
+      showMobileActionsOverlay(ffi: ffi);
+    } else {
+      hideMobileActionsOverlay();
+    }
   }
 }
 

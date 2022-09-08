@@ -10,6 +10,8 @@ import 'package:flutter_hbb/desktop/widgets/tabbar_widget.dart';
 import 'package:flutter_hbb/utils/multi_window_manager.dart';
 import 'package:get/get.dart';
 
+import '../../mobile/widgets/dialog.dart';
+
 class ConnectionTabPage extends StatefulWidget {
   final Map<String, dynamic> params;
 
@@ -37,12 +39,12 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
           label: peerId,
           selectedIcon: selectedIcon,
           unselectedIcon: unselectedIcon,
-          page: Obx(() => RemotePage(
-                key: ValueKey(peerId),
-                id: peerId,
-                tabBarHeight:
-                    fullscreen.isTrue ? 0 : kDesktopRemoteTabBarHeight,
-              ))));
+          onTabCloseButton: () => handleTabCloseButton(peerId),
+          page: RemotePage(
+            key: ValueKey(peerId),
+            id: peerId,
+            tabBarHeight: fullscreen.isTrue ? 0 : kDesktopRemoteTabBarHeight,
+          )));
     }
   }
 
@@ -69,12 +71,12 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
             label: id,
             selectedIcon: selectedIcon,
             unselectedIcon: unselectedIcon,
-            page: Obx(() => RemotePage(
-                  key: ValueKey(id),
-                  id: id,
-                  tabBarHeight:
-                      fullscreen.isTrue ? 0 : kDesktopRemoteTabBarHeight,
-                ))));
+            onTabCloseButton: () => handleTabCloseButton(id),
+            page: RemotePage(
+              key: ValueKey(id),
+              id: id,
+              tabBarHeight: fullscreen.isTrue ? 0 : kDesktopRemoteTabBarHeight,
+            )));
       } else if (call.method == "onDestroy") {
         tabController.clear();
       }
@@ -92,57 +94,55 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
                 border: Border.all(color: MyTheme.color(context).border!)),
             child: Scaffold(
                 backgroundColor: MyTheme.color(context).bg,
-                body: Obx(() => DesktopTab(
-                      controller: tabController,
-                      showTabBar: fullscreen.isFalse,
-                      onClose: () {
-                        tabController.clear();
-                      },
-                      tail: AddButton().paddingOnly(left: 10),
-                      pageViewBuilder: (pageView) {
-                        WindowController.fromWindowId(windowId())
-                            .setFullscreen(fullscreen.isTrue);
-                        return pageView;
-                      },
-                      tabBuilder: (key, icon, label, themeConf) => Obx(() {
-                        final connectionType = ConnectionTypeState.find(key);
-                        if (!connectionType.isValid()) {
-                          return Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              icon,
-                              label,
-                            ],
-                          );
-                        } else {
-                          final msgDirect = translate(
-                              connectionType.direct.value ==
-                                      ConnectionType.strDirect
-                                  ? 'Direct Connection'
-                                  : 'Relay Connection');
-                          final msgSecure = translate(
-                              connectionType.secure.value ==
-                                      ConnectionType.strSecure
-                                  ? 'Secure Connection'
-                                  : 'Insecure Connection');
-                          return Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              icon,
-                              Tooltip(
-                                message: '$msgDirect\n$msgSecure',
-                                child: Image.asset(
-                                  'assets/${connectionType.secure.value}${connectionType.direct.value}.png',
-                                  width: themeConf.iconSize,
-                                  height: themeConf.iconSize,
-                                ).paddingOnly(right: 5),
-                              ),
-                              label,
-                            ],
-                          );
-                        }
-                      }),
-                    ))),
+                body: DesktopTab(
+                  controller: tabController,
+                  showTabBar: fullscreen.isFalse,
+                  onWindowCloseButton: () {
+                    tabController.clear();
+                  },
+                  tail: AddButton().paddingOnly(left: 10),
+                  pageViewBuilder: (pageView) {
+                    WindowController.fromWindowId(windowId())
+                        .setFullscreen(fullscreen.isTrue);
+                    return pageView;
+                  },
+                  tabBuilder: (key, icon, label, themeConf) => Obx(() {
+                    final connectionType = ConnectionTypeState.find(key);
+                    if (!connectionType.isValid()) {
+                      return Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          icon,
+                          label,
+                        ],
+                      );
+                    } else {
+                      final msgDirect = translate(connectionType.direct.value ==
+                              ConnectionType.strDirect
+                          ? 'Direct Connection'
+                          : 'Relay Connection');
+                      final msgSecure = translate(connectionType.secure.value ==
+                              ConnectionType.strSecure
+                          ? 'Secure Connection'
+                          : 'Insecure Connection');
+                      return Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          icon,
+                          Tooltip(
+                            message: '$msgDirect\n$msgSecure',
+                            child: Image.asset(
+                              'assets/${connectionType.secure.value}${connectionType.direct.value}.png',
+                              width: themeConf.iconSize,
+                              height: themeConf.iconSize,
+                            ).paddingOnly(right: 5),
+                          ),
+                          label,
+                        ],
+                      );
+                    }
+                  }),
+                )),
           ),
         ));
   }
@@ -156,5 +156,15 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
 
   int windowId() {
     return widget.params["windowId"];
+  }
+
+  void handleTabCloseButton(String peerId) {
+    final session = ffi(peerId);
+    if (session.ffiModel.pi.hostname.isNotEmpty) {
+      tabController.jumpBy(peerId);
+      clientClose(session.dialogManager);
+    } else {
+      tabController.closeBy(peerId);
+    }
   }
 }

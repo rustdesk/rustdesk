@@ -2,10 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_hbb/common.dart';
 
 import '../../models/chat_model.dart';
-import '../../models/model.dart';
 import '../pages/chat_page.dart';
-
-OverlayEntry? mobileActionsOverlayEntry;
 
 class DraggableChatWindow extends StatelessWidget {
   DraggableChatWindow(
@@ -99,6 +96,7 @@ class DraggableMobileActions extends StatelessWidget {
       this.onBackPressed,
       this.onRecentPressed,
       this.onHomePressed,
+      this.onHidePressed,
       required this.width,
       required this.height});
 
@@ -108,6 +106,7 @@ class DraggableMobileActions extends StatelessWidget {
   final VoidCallback? onBackPressed;
   final VoidCallback? onHomePressed;
   final VoidCallback? onRecentPressed;
+  final VoidCallback? onHidePressed;
 
   @override
   Widget build(BuildContext context) {
@@ -118,86 +117,46 @@ class DraggableMobileActions extends StatelessWidget {
         builder: (_, onPanUpdate) {
           return GestureDetector(
               onPanUpdate: onPanUpdate,
-              child: Container(
-                decoration: BoxDecoration(
-                    color: MyTheme.accent.withOpacity(0.4),
-                    borderRadius: BorderRadius.all(Radius.circular(15))),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceAround,
-                  children: [
-                    IconButton(
-                        color: MyTheme.white,
-                        onPressed: onBackPressed,
-                        icon: Icon(Icons.arrow_back)),
-                    IconButton(
-                        color: MyTheme.white,
-                        onPressed: onHomePressed,
-                        icon: Icon(Icons.home)),
-                    IconButton(
-                        color: MyTheme.white,
-                        onPressed: onRecentPressed,
-                        icon: Icon(Icons.more_horiz)),
-                    VerticalDivider(
-                      width: 0,
-                      thickness: 2,
-                      indent: 10,
-                      endIndent: 10,
+              child: Card(
+                  color: Colors.transparent,
+                  shadowColor: Colors.transparent,
+                  child: Container(
+                    decoration: BoxDecoration(
+                        color: MyTheme.accent.withOpacity(0.4),
+                        borderRadius: BorderRadius.all(Radius.circular(15))),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceAround,
+                      children: [
+                        IconButton(
+                            color: MyTheme.white,
+                            onPressed: onBackPressed,
+                            splashRadius: 20,
+                            icon: const Icon(Icons.arrow_back)),
+                        IconButton(
+                            color: MyTheme.white,
+                            onPressed: onHomePressed,
+                            splashRadius: 20,
+                            icon: const Icon(Icons.home)),
+                        IconButton(
+                            color: MyTheme.white,
+                            onPressed: onRecentPressed,
+                            splashRadius: 20,
+                            icon: const Icon(Icons.more_horiz)),
+                        const VerticalDivider(
+                          width: 0,
+                          thickness: 2,
+                          indent: 10,
+                          endIndent: 10,
+                        ),
+                        IconButton(
+                            color: MyTheme.white,
+                            onPressed: onHidePressed,
+                            splashRadius: 20,
+                            icon: const Icon(Icons.keyboard_arrow_down)),
+                      ],
                     ),
-                    IconButton(
-                        color: MyTheme.white,
-                        onPressed: hideMobileActionsOverlay,
-                        icon: Icon(Icons.keyboard_arrow_down)),
-                  ],
-                ),
-              ));
+                  )));
         });
-  }
-}
-
-resetMobileActionsOverlay() {
-  if (mobileActionsOverlayEntry == null) return;
-  hideMobileActionsOverlay();
-  showMobileActionsOverlay();
-}
-
-showMobileActionsOverlay() {
-  if (mobileActionsOverlayEntry != null) return;
-  if (globalKey.currentContext == null ||
-      globalKey.currentState == null ||
-      globalKey.currentState!.overlay == null) return;
-  final globalOverlayState = globalKey.currentState!.overlay!;
-
-  // compute overlay position
-  final screenW = MediaQuery.of(globalKey.currentContext!).size.width;
-  final screenH = MediaQuery.of(globalKey.currentContext!).size.height;
-  final double overlayW = 200;
-  final double overlayH = 45;
-  final left = (screenW - overlayW) / 2;
-  final top = screenH - overlayH - 80;
-
-  final overlay = OverlayEntry(builder: (context) {
-    return DraggableMobileActions(
-      position: Offset(left, top),
-      width: overlayW,
-      height: overlayH,
-      onBackPressed: () => gFFI.tap(MouseButtons.right),
-      onHomePressed: () => gFFI.tap(MouseButtons.wheel),
-      onRecentPressed: () async {
-        gFFI.sendMouse('down', MouseButtons.wheel);
-        await Future.delayed(Duration(milliseconds: 500));
-        gFFI.sendMouse('up', MouseButtons.wheel);
-      },
-    );
-  });
-  globalOverlayState.insert(overlay);
-  mobileActionsOverlayEntry = overlay;
-}
-
-hideMobileActionsOverlay() {
-  if (mobileActionsOverlayEntry != null) {
-    mobileActionsOverlayEntry!.remove();
-    mobileActionsOverlayEntry = null;
-    return;
   }
 }
 

@@ -8,6 +8,8 @@ import 'package:flutter_hbb/desktop/widgets/tabbar_widget.dart';
 import 'package:flutter_hbb/utils/multi_window_manager.dart';
 import 'package:get/get.dart';
 
+import '../../mobile/widgets/dialog.dart';
+
 /// File Transfer for multi tabs
 class FileManagerTabPage extends StatefulWidget {
   final Map<String, dynamic> params;
@@ -31,6 +33,7 @@ class _FileManagerTabPageState extends State<FileManagerTabPage> {
         label: params['id'],
         selectedIcon: selectedIcon,
         unselectedIcon: unselectedIcon,
+        onTabCloseButton: () => handleTabCloseButton(params['id']),
         page: FileManagerPage(key: ValueKey(params['id']), id: params['id'])));
   }
 
@@ -53,6 +56,7 @@ class _FileManagerTabPageState extends State<FileManagerTabPage> {
             label: id,
             selectedIcon: selectedIcon,
             unselectedIcon: unselectedIcon,
+            onTabCloseButton: () => handleTabCloseButton(id),
             page: FileManagerPage(key: ValueKey(id), id: id)));
       } else if (call.method == "onDestroy") {
         tabController.clear();
@@ -71,10 +75,10 @@ class _FileManagerTabPageState extends State<FileManagerTabPage> {
             backgroundColor: MyTheme.color(context).bg,
             body: DesktopTab(
               controller: tabController,
-              onClose: () {
+              onWindowCloseButton: () {
                 tabController.clear();
               },
-              tail: AddButton().paddingOnly(left: 10),
+              tail: const AddButton().paddingOnly(left: 10),
             )),
       ),
     );
@@ -88,5 +92,15 @@ class _FileManagerTabPageState extends State<FileManagerTabPage> {
 
   int windowId() {
     return widget.params["windowId"];
+  }
+
+  void handleTabCloseButton(String peerId) {
+    final session = ffi('ft_$peerId');
+    if (session.ffiModel.pi.hostname.isNotEmpty) {
+      tabController.jumpBy(peerId);
+      clientClose(session.dialogManager);
+    } else {
+      tabController.closeBy(peerId);
+    }
   }
 }
