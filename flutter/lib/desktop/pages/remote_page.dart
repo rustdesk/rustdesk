@@ -599,8 +599,8 @@ class ImagePaint extends StatelessWidget {
       return FlutterCustomMemoryImageCursor(
         pixbuf: cacheLinux.data,
         key: key,
-        hotx: cacheLinux.hotx,
-        hoty: cacheLinux.hoty,
+        hotx: 0.0,
+        hoty: 0.0,
         imageWidth: (cacheLinux.width * scale).toInt(),
         imageHeight: (cacheLinux.height * scale).toInt(),
       );

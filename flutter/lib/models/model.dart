@@ -619,7 +619,7 @@ class CursorData {
   int _doubleToInt(double v) => (v * 10e6).round().toInt();
 
   String key(double scale) =>
-      '${peerId}_${id}_${_doubleToInt(hotx)}_${_doubleToInt(hoty)}_${_doubleToInt(width * scale)}_${_doubleToInt(height * scale)}';
+      '${peerId}_${id}_${_doubleToInt(width * scale)}_${_doubleToInt(height * scale)}';
 }
 
 class CursorModel with ChangeNotifier {
