@@ -8,7 +8,7 @@ import './material_mod_popup_menu.dart' as mod_menu;
 
 // https://stackoverflow.com/questions/68318314/flutter-popup-menu-inside-popup-menu
 class PopupMenuChildrenItem<T> extends mod_menu.PopupMenuEntry<T> {
-  PopupMenuChildrenItem({
+  const PopupMenuChildrenItem({
     key,
     this.height = kMinInteractiveDimension,
     this.padding,
