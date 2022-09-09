@@ -75,9 +75,7 @@ class _FileManagerTabPageState extends State<FileManagerTabPage> {
             backgroundColor: MyTheme.color(context).bg,
             body: DesktopTab(
               controller: tabController,
-              onWindowCloseButton: () {
-                tabController.clear();
-              },
+              onWindowCloseButton: handleWindowCloseButton,
               tail: const AddButton().paddingOnly(left: 10),
             )),
       ),
@@ -101,6 +99,23 @@ class _FileManagerTabPageState extends State<FileManagerTabPage> {
       clientClose(session.dialogManager);
     } else {
       tabController.closeBy(peerId);
+    }
+  }
+
+  Future<bool> handleWindowCloseButton() async {
+    final connLength = tabController.state.value.tabs.length;
+    if (connLength < 1) {
+      return true;
+    } else if (connLength == 1) {
+      final currentConn = tabController.state.value.tabs[0];
+      handleTabCloseButton(currentConn.key);
+      return false;
+    } else {
+      final res = await closeConfirmDialog();
+      if (res) {
+        tabController.clear();
+      }
+      return res;
     }
   }
 }

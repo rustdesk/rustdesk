@@ -97,9 +97,7 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
                 body: DesktopTab(
                   controller: tabController,
                   showTabBar: fullscreen.isFalse,
-                  onWindowCloseButton: () {
-                    tabController.clear();
-                  },
+                  onWindowCloseButton: handleWindowCloseButton,
                   tail: AddButton().paddingOnly(left: 10),
                   pageViewBuilder: (pageView) {
                     WindowController.fromWindowId(windowId())
@@ -165,6 +163,23 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
       clientClose(session.dialogManager);
     } else {
       tabController.closeBy(peerId);
+    }
+  }
+
+  Future<bool> handleWindowCloseButton() async {
+    final connLength = tabController.state.value.tabs.length;
+    if (connLength < 1) {
+      return true;
+    } else if (connLength == 1) {
+      final currentConn = tabController.state.value.tabs[0];
+      handleTabCloseButton(currentConn.key);
+      return false;
+    } else {
+      final res = await closeConfirmDialog();
+      if (res) {
+        tabController.clear();
+      }
+      return res;
     }
   }
 }

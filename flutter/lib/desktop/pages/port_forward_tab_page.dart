@@ -78,8 +78,9 @@ class _PortForwardTabPageState extends State<PortForwardTabPage> {
             backgroundColor: MyTheme.color(context).bg,
             body: DesktopTab(
               controller: tabController,
-              onWindowCloseButton: () {
+              onWindowCloseButton: () async {
                 tabController.clear();
+                return true;
               },
               tail: AddButton().paddingOnly(left: 10),
             )),

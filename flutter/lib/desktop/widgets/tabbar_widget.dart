@@ -183,7 +183,7 @@ class DesktopTab extends StatelessWidget {
   final bool showClose;
   final Widget Function(Widget pageView)? pageViewBuilder;
   final Widget? tail;
-  final VoidCallback? onWindowCloseButton;
+  final Future<bool> Function()? onWindowCloseButton;
   final TabBuilder? tabBuilder;
   final LabelGetter? labelGetter;
 
@@ -356,7 +356,7 @@ class WindowActionPanel extends StatelessWidget {
   final bool showMinimize;
   final bool showMaximize;
   final bool showClose;
-  final VoidCallback? onClose;
+  final Future<bool> Function()? onClose;
 
   const WindowActionPanel(
       {Key? key,
@@ -434,7 +434,8 @@ class WindowActionPanel extends StatelessWidget {
               message: 'Close',
               icon: IconFont.close,
               onTap: () async {
-                action() {
+                final res = await onClose?.call() ?? true;
+                if (res) {
                   if (mainTab) {
                     windowManager.close();
                   } else {
@@ -443,14 +444,6 @@ class WindowActionPanel extends StatelessWidget {
                       WindowController.fromWindowId(windowId!).hide();
                     });
                   }
-                  onClose?.call();
-                }
-
-                if (tabType != DesktopTabType.main &&
-                    state.value.tabs.length > 1) {
-                  closeConfirmDialog(action);
-                } else {
-                  action();
                 }
               },
               isClose: true,
@@ -458,30 +451,28 @@ class WindowActionPanel extends StatelessWidget {
       ],
     );
   }
+}
 
-  closeConfirmDialog(Function() callback) async {
-    final res = await gFFI.dialogManager.show<bool>((setState, close) {
-      submit() => close(true);
-      return CustomAlertDialog(
-        title: Row(children: [
-          const Icon(Icons.warning_amber_sharp,
-              color: Colors.redAccent, size: 28),
-          const SizedBox(width: 10),
-          Text(translate("Warning")),
-        ]),
-        content: Text(translate("Disconnect all devices?")),
-        actions: [
-          TextButton(onPressed: close, child: Text(translate("Cancel"))),
-          ElevatedButton(onPressed: submit, child: Text(translate("OK"))),
-        ],
-        onSubmit: submit,
-        onCancel: close,
-      );
-    });
-    if (res == true) {
-      callback();
-    }
-  }
+Future<bool> closeConfirmDialog() async {
+  final res = await gFFI.dialogManager.show<bool>((setState, close) {
+    submit() => close(true);
+    return CustomAlertDialog(
+      title: Row(children: [
+        const Icon(Icons.warning_amber_sharp,
+            color: Colors.redAccent, size: 28),
+        const SizedBox(width: 10),
+        Text(translate("Warning")),
+      ]),
+      content: Text(translate("Disconnect all devices?")),
+      actions: [
+        TextButton(onPressed: close, child: Text(translate("Cancel"))),
+        ElevatedButton(onPressed: submit, child: Text(translate("OK"))),
+      ],
+      onSubmit: submit,
+      onCancel: close,
+    );
+  });
+  return res == true;
 }
 
 // ignore: must_be_immutable
