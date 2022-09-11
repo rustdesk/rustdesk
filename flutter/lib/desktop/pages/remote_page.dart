@@ -594,8 +594,8 @@ class ImagePaint extends StatelessWidget {
     } else {
       final key = cacheLinux.key(scale);
       cursor.addKeyLinux(key);
-      // debugPrint(
-      //     'REMOVE ME ================================= linux curor key: $key');
+      debugPrint(
+          'REMOVE ME ================================= linux curor key: $key');
       return FlutterCustomMemoryImageCursor(
         pixbuf: cacheLinux.data,
         key: key,

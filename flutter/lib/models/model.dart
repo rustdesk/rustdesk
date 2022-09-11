@@ -4,7 +4,6 @@ import 'dart:io';
 import 'dart:math';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
-import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -21,6 +20,7 @@ import 'package:flutter_custom_cursor/flutter_custom_cursor.dart';
 
 import '../common.dart';
 import '../common/shared_state.dart';
+import '../utils/image.dart' as img;
 import '../mobile/widgets/dialog.dart';
 import 'peer_model.dart';
 import 'platform_model.dart';
@@ -127,8 +127,8 @@ class FfiModel with ChangeNotifier {
     _permissions.clear();
   }
 
-  void Function(Map<String, dynamic>) startEventListener(String peerId) {
-    return (evt) {
+  StreamEventHandler startEventListener(String peerId) {
+    return (evt) async {
       var name = evt['name'];
       if (name == 'msgbox') {
         handleMsgBox(evt, peerId);
@@ -140,11 +140,11 @@ class FfiModel with ChangeNotifier {
       } else if (name == 'switch_display') {
         handleSwitchDisplay(evt);
       } else if (name == 'cursor_data') {
-        parent.target?.cursorModel.updateCursorData(evt);
+        await parent.target?.cursorModel.updateCursorData(evt);
       } else if (name == 'cursor_id') {
-        parent.target?.cursorModel.updateCursorId(evt);
+        await parent.target?.cursorModel.updateCursorId(evt);
       } else if (name == 'cursor_position') {
-        parent.target?.cursorModel.updateCursorPosition(evt, peerId);
+        await parent.target?.cursorModel.updateCursorPosition(evt, peerId);
       } else if (name == 'clipboard') {
         Clipboard.setData(ClipboardData(text: evt['content']));
       } else if (name == 'permission') {
@@ -780,7 +780,7 @@ class CursorModel with ChangeNotifier {
     notifyListeners();
   }
 
-  void updateCursorData(Map<String, dynamic> evt) {
+  updateCursorData(Map<String, dynamic> evt) async {
     var id = int.parse(evt['id']);
     _hotx = double.parse(evt['hotx']);
     _hoty = double.parse(evt['hoty']);
@@ -789,34 +789,26 @@ class CursorModel with ChangeNotifier {
     List<dynamic> colors = json.decode(evt['colors']);
     final rgba = Uint8List.fromList(colors.map((s) => s as int).toList());
     var pid = parent.target?.id;
-    ui.decodeImageFromPixels(rgba, width, height, ui.PixelFormat.rgba8888,
-        (image) {
-      () async {
-        if (parent.target?.id != pid) return;
-        _image = image;
-        _images[id] = Tuple3(image, _hotx, _hoty);
-        _updateCacheLinux(image, id, width, height);
-        try {
-          // my throw exception, because the listener maybe already dispose
-          notifyListeners();
-        } catch (e) {
-          debugPrint('notify cursor: $e');
-        }
-      }();
-    });
+
+    final image = await img.decodeImageFromPixels(
+        rgba, width, height, ui.PixelFormat.rgba8888);
+    if (parent.target?.id != pid) return;
+    _image = image;
+    _images[id] = Tuple3(image, _hotx, _hoty);
+    await _updateCacheLinux(image, id, width, height);
+    try {
+      // my throw exception, because the listener maybe already dispose
+      notifyListeners();
+    } catch (e) {
+      debugPrint('notify cursor: $e');
+    }
   }
 
-  void _updateCacheLinux(ui.Image image, int id, int w, int h) async {
-    final data = await image.toByteData(format: ImageByteFormat.png);
-    late Uint8List? dataLinux;
-    if (data != null) {
-      dataLinux = data.buffer.asUint8List();
-    } else {
-      dataLinux = null;
-    }
+  _updateCacheLinux(ui.Image image, int id, int w, int h) async {
+    final data = await image.toByteData(format: ui.ImageByteFormat.png);
     _cacheLinux = CursorData(
       peerId: this.id,
-      data: dataLinux,
+      data: data?.buffer.asUint8List(),
       id: id,
       hotx: _hotx,
       hoty: _hoty,
@@ -826,9 +818,10 @@ class CursorModel with ChangeNotifier {
     _cacheMapLinux[id] = _cacheLinux!;
   }
 
-  void updateCursorId(Map<String, dynamic> evt) {
-    _cacheLinux = _cacheMapLinux[int.parse(evt['id'])];
-    final tmp = _images[int.parse(evt['id'])];
+  updateCursorId(Map<String, dynamic> evt) async {
+    final id = int.parse(evt['id']);
+    _cacheLinux = _cacheMapLinux[id];
+    final tmp = _images[id];
     if (tmp != null) {
       _image = tmp.item1;
       _hotx = tmp.item2;
@@ -838,7 +831,7 @@ class CursorModel with ChangeNotifier {
   }
 
   /// Update the cursor position.
-  void updateCursorPosition(Map<String, dynamic> evt, String id) {
+  updateCursorPosition(Map<String, dynamic> evt, String id) async {
     _x = double.parse(evt['x']);
     _y = double.parse(evt['y']);
     try {

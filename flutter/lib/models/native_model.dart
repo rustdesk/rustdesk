@@ -30,15 +30,15 @@ class PlatformFFI {
   String _dir = '';
   String _homeDir = '';
   F2? _translate;
-  final _eventHandlers = Map<String, Map<String, HandleEvent>>();
+  final _eventHandlers = <String, Map<String, HandleEvent>>{};
   late RustdeskImpl _ffiBind;
   late String _appType;
-  void Function(Map<String, dynamic>)? _eventCallback;
+  StreamEventHandler? _eventCallback;
 
   PlatformFFI._();
 
   static final PlatformFFI instance = PlatformFFI._();
-  final _toAndroidChannel = MethodChannel("mChannel");
+  final _toAndroidChannel = const MethodChannel("mChannel");
 
   RustdeskImpl get ffiBind => _ffiBind;
 
@@ -88,7 +88,7 @@ class PlatformFFI {
   }
 
   /// Init the FFI class, loads the native Rust core library.
-  Future<Null> init(String appType) async {
+  Future<void> init(String appType) async {
     _appType = appType;
     // if (isDesktop) {
     //   // TODO
@@ -117,7 +117,7 @@ class PlatformFFI {
           _homeDir = (await getDownloadsDirectory())?.path ?? "";
         }
       } catch (e) {
-        print("initialize failed: $e");
+        debugPrint('initialize failed: $e');
       }
       String id = 'NA';
       String name = 'Flutter';
@@ -144,14 +144,14 @@ class PlatformFFI {
         name = macOsInfo.computerName;
         id = macOsInfo.systemGUID ?? "";
       }
-      print(
-          "_appType:$_appType,info1-id:$id,info2-name:$name,dir:$_dir,homeDir:$_homeDir");
+      debugPrint(
+          '_appType:$_appType,info1-id:$id,info2-name:$name,dir:$_dir,homeDir:$_homeDir');
       await _ffiBind.mainDeviceId(id: id);
       await _ffiBind.mainDeviceName(name: name);
       await _ffiBind.mainSetHomeDir(home: _homeDir);
       await _ffiBind.mainInit(appDir: _dir);
     } catch (e) {
-      print("initialize failed: $e");
+      debugPrint('initialize failed: $e');
     }
     version = await getVersion();
   }
@@ -162,9 +162,9 @@ class PlatformFFI {
       final handlers = _eventHandlers[name];
       if (handlers != null) {
         if (handlers.isNotEmpty) {
-          handlers.values.forEach((handler) {
+          for (var handler in handlers.values) {
             handler(evt);
-          });
+          }
           return true;
         }
       }
@@ -182,17 +182,17 @@ class PlatformFFI {
           // _tryHandle here may be more flexible than _eventCallback
           if (!_tryHandle(event)) {
             if (_eventCallback != null) {
-              _eventCallback!(event);
+              await _eventCallback!(event);
             }
           }
         } catch (e) {
-          print('json.decode fail(): $e');
+          debugPrint('json.decode fail(): $e');
         }
       }
     }();
   }
 
-  void setEventCallback(void Function(Map<String, dynamic>) fun) async {
+  void setEventCallback(StreamEventHandler fun) async {
     _eventCallback = fun;
   }
 
