@@ -12,7 +12,7 @@ use hbb_common::{
     fs,
     fs::can_enable_overwrite_detection,
     futures::{SinkExt, StreamExt},
-    get_version_number,
+    get_time, get_version_number,
     message_proto::{option_message::BoolOption, permission_info::Permission},
     password_security as password, sleep, timeout,
     tokio::{
@@ -397,7 +397,7 @@ impl Connection {
                         conn.on_close("Timeout", true).await;
                         break;
                     }
-                    let time = crate::get_time();
+                    let time = get_time();
                     if time > 0 && conn.last_test_delay == 0 {
                         conn.last_test_delay = time;
                         let mut msg_out = Message::new();
@@ -983,7 +983,7 @@ impl Connection {
                     .get(&self.ip)
                     .map(|x| x.clone())
                     .unwrap_or((0, 0, 0));
-                let time = (crate::get_time() / 60_000) as i32;
+                let time = (get_time() / 60_000) as i32;
                 if failure.2 > 30 {
                     self.send_login_error("Too many wrong password attempts")
                         .await;
@@ -1022,7 +1022,7 @@ impl Connection {
                 self.inner.send(msg_out.into());
             } else {
                 self.last_test_delay = 0;
-                let new_delay = (crate::get_time() - t.time) as u32;
+                let new_delay = (get_time() - t.time) as u32;
                 video_service::VIDEO_QOS
                     .lock()
                     .unwrap()
@@ -1038,9 +1038,9 @@ impl Connection {
                     #[cfg(not(any(target_os = "android", target_os = "ios")))]
                     if self.keyboard {
                         if is_left_up(&me) {
-                            CLICK_TIME.store(crate::get_time(), Ordering::SeqCst);
+                            CLICK_TIME.store(get_time(), Ordering::SeqCst);
                         } else {
-                            MOUSE_MOVE_TIME.store(crate::get_time(), Ordering::SeqCst);
+                            MOUSE_MOVE_TIME.store(get_time(), Ordering::SeqCst);
                         }
                         self.input_mouse(me, self.inner.id());
                     }
@@ -1049,7 +1049,7 @@ impl Connection {
                     #[cfg(not(any(target_os = "android", target_os = "ios")))]
                     if self.keyboard {
                         if is_enter(&me) {
-                            CLICK_TIME.store(crate::get_time(), Ordering::SeqCst);
+                            CLICK_TIME.store(get_time(), Ordering::SeqCst);
                         }
                         // handle all down as press
                         // fix unexpected repeating key on remote linux, seems also fix abnormal alt/shift, which

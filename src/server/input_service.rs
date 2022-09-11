@@ -3,7 +3,7 @@ use crate::common::IS_X11;
 #[cfg(target_os = "macos")]
 use dispatch::Queue;
 use enigo::{Enigo, Key, KeyboardControllable, MouseButton, MouseControllable};
-use hbb_common::{config::COMPRESS_LEVEL, protobuf::EnumOrUnknown};
+use hbb_common::{config::COMPRESS_LEVEL, get_time, protobuf::EnumOrUnknown};
 use rdev::{simulate, EventType, Key as RdevKey};
 use std::{
     convert::TryFrom,
@@ -111,7 +111,7 @@ fn run_pos(sp: GenericService, state: &mut StatePos) -> ResultType<()> {
                 ..Default::default()
             });
             let exclude = {
-                let now = crate::get_time();
+                let now = get_time();
                 let lock = LATEST_INPUT.lock().unwrap();
                 if now - lock.time < 300 {
                     lock.conn
@@ -365,7 +365,7 @@ fn handle_mouse_(evt: &MouseEvent, conn: i32) {
     let buttons = evt.mask >> 3;
     let evt_type = evt.mask & 0x7;
     if evt_type == 0 {
-        let time = crate::get_time();
+        let time = get_time();
         *LATEST_INPUT.lock().unwrap() = Input { time, conn };
     }
     let mut en = ENIGO.lock().unwrap();

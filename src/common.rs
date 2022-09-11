@@ -426,14 +426,6 @@ pub fn refresh_rendezvous_server() {
     });
 }
 
-#[inline]
-pub fn get_time() -> i64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_millis())
-        .unwrap_or(0) as _
-}
-
 pub fn run_me<T: AsRef<std::ffi::OsStr>>(args: Vec<T>) -> std::io::Result<std::process::Child> {
     #[cfg(not(feature = "appimage"))]
     {
