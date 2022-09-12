@@ -153,16 +153,12 @@ def build_flutter_deb(version):
     os.chdir("..")
 
 
-def build_flutter_arch_manjaro(version):
+def build_flutter_arch_manjaro():
     os.chdir('flutter')
     os.system('flutter build linux --release')
     os.system('strip build/linux/x64/release/liblibrustdesk.so')
-    os.system("sed -i 's/pkgver=.*/pkgver=%s/g' PKGBUILD" % version)
-    # pacman -S -needed base-devel
-    os.system('HBB=`pwd` makepkg -f')
-    os.system(
-        'mv rustdesk-%s-0-x86_64.pkg.tar.zst ../rustdesk-%s-manjaro-arch.pkg.tar.zst' % (version, version))
     os.chdir('..')
+    os.system('HBB=`pwd` FLUTTER=1 makepkg -f')
 
 
 def main():
@@ -196,18 +192,17 @@ def main():
             print('Not signed')
         os.system(f'cp -rf target/release/RustDesk.exe rustdesk-{version}-setdown.exe')
     elif os.path.isfile('/usr/bin/pacman1'):
+        # pacman -S -needed base-devel
+        os.system("sed -i 's/pkgver=.*/pkgver=%s/g' PKGBUILD" % version)
         if flutter:
-            build_flutter_arch_manjaro(version)
+            build_flutter_arch_manjaro()
         else:
-            # os.system('cargo build --release --features ' + features)
+            os.system('cargo build --release --features ' + features)
             os.system('git checkout src/ui/common.tis')
             os.system('strip target/release/rustdesk')
-            os.system("sed -i 's/pkgver=.*/pkgver=%s/g' PKGBUILD" % version)
-            # pacman -S -needed base-devel
             os.system('HBB=`pwd` makepkg -f')
-            os.system(
-                'mv rustdesk-%s-0-x86_64.pkg.tar.zst rustdesk-%s-manjaro-arch.pkg.tar.zst' % (version, version))
-            # pacman -U ./rustdesk.pkg.tar.zst
+        os.system('mv rustdesk-%s-0-x86_64.pkg.tar.zst rustdesk-%s-manjaro-arch.pkg.tar.zst' % (version, version))
+        # pacman -U ./rustdesk.pkg.tar.zst
     elif os.path.isfile('/usr/bin/yum'):
         os.system('cargo build --release --features ' + features)
         os.system('strip target/release/rustdesk')
