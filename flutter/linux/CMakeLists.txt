@@ -125,7 +125,7 @@ foreach(bundled_library ${PLUGIN_BUNDLED_LIBRARIES})
 endforeach(bundled_library)
 
 # flutter_rust_bridge
-set(RUSTDESK_LIB_BUILD_TYPE debug)
+set(RUSTDESK_LIB_BUILD_TYPE $<IF:$<CONFIG:Debug>,debug,release>)
 string(TOLOWER ${CMAKE_BUILD_TYPE} ${RUSTDESK_LIB_BUILD_TYPE})
 message(STATUS "rustdesk lib build type: ${RUSTDESK_LIB_BUILD_TYPE}")
 
