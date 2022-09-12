@@ -25,7 +25,7 @@ use_samplerate = ["samplerate"]
 use_rubato = ["rubato"]
 use_dasp = ["dasp"]
 flutter = ["flutter_rust_bridge"]
-default = ["use_dasp","flutter"]
+default = ["use_dasp"]
 hwcodec = ["scrap/hwcodec"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
