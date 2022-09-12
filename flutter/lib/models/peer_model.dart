@@ -40,10 +40,10 @@ class Peers extends ChangeNotifier {
   static const _cbQueryOnlines = 'callback_query_onlines';
 
   Peers({required this.name, required this.peers, required this.loadEvent}) {
-    platformFFI.registerEventHandler(_cbQueryOnlines, name, (evt) {
+    platformFFI.registerEventHandler(_cbQueryOnlines, name, (evt) async {
       _updateOnlineState(evt);
     });
-    platformFFI.registerEventHandler(loadEvent, name, (evt) {
+    platformFFI.registerEventHandler(loadEvent, name, (evt) async {
       _updatePeers(evt);
     });
   }

@@ -273,13 +273,13 @@ _keepScaleBuilder() {
 
 _registerEventHandler() {
   if (desktopType != DesktopType.main) {
-    platformFFI.registerEventHandler('theme', 'theme', (evt) {
+    platformFFI.registerEventHandler('theme', 'theme', (evt) async {
       String? dark = evt['dark'];
       if (dark != null) {
         MyTheme.changeTo(dark == 'true');
       }
     });
-    platformFFI.registerEventHandler('language', 'language', (_) {
+    platformFFI.registerEventHandler('language', 'language', (_) async {
       Get.forceAppUpdate();
     });
   }

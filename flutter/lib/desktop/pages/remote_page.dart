@@ -537,8 +537,17 @@ class ImagePaint extends StatelessWidget {
   Widget build(BuildContext context) {
     final m = Provider.of<ImageModel>(context);
     var c = Provider.of<CanvasModel>(context);
-
     final s = c.scale;
+
+    mouseRegion({child}) => Obx(() => MouseRegion(
+        cursor: (cursorOverImage.isTrue && keyboardEnabled.isTrue)
+            ? (remoteCursorMoved.isTrue
+                ? SystemMouseCursors.none
+                : _buildCustomCursorLinux(context, s))
+            : MouseCursor.defer,
+        onHover: (evt) {},
+        child: child));
+
     if (c.scrollStyle == ScrollStyle.scrollbar) {
       final imageWidget = SizedBox(
           width: c.getDisplayWidth() * s,
@@ -547,7 +556,6 @@ class ImagePaint extends StatelessWidget {
             painter: ImagePainter(image: m.image, x: 0, y: 0, scale: s),
           ));
 
-      Rx<Offset> pos = Rx<Offset>(const Offset(0.0, 0.0));
       return Center(
         child: NotificationListener<ScrollNotification>(
           onNotification: (notification) {
@@ -562,16 +570,8 @@ class ImagePaint extends StatelessWidget {
             c.setScrollPercent(percentX, percentY);
             return false;
           },
-          child: Obx(() => MouseRegion(
-              cursor: (cursorOverImage.isTrue && keyboardEnabled.isTrue)
-                  ? (remoteCursorMoved.isTrue
-                      ? SystemMouseCursors.none
-                      : _buildCustomCursorLinux(context, s))
-                  : MouseCursor.defer,
-              onHover: (evt) {
-                pos.value = evt.position;
-              },
-              child: _buildCrossScrollbar(_buildListener(imageWidget)))),
+          child: mouseRegion(
+              child: _buildCrossScrollbar(_buildListener(imageWidget))),
         ),
       );
     } else {
@@ -582,7 +582,7 @@ class ImagePaint extends StatelessWidget {
             painter:
                 ImagePainter(image: m.image, x: c.x / s, y: c.y / s, scale: s),
           ));
-      return _buildListener(imageWidget);
+      return mouseRegion(child: _buildListener(imageWidget));
     }
   }
 
@@ -597,8 +597,8 @@ class ImagePaint extends StatelessWidget {
       return FlutterCustomMemoryImageCursor(
         pixbuf: cacheLinux.data,
         key: key,
-        hotx: cacheLinux.hotx,
-        hoty: cacheLinux.hoty,
+        hotx: 0.0,
+        hoty: 0.0,
         imageWidth: (cacheLinux.width * scale).toInt(),
         imageHeight: (cacheLinux.height * scale).toInt(),
       );
