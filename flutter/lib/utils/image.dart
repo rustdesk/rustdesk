@@ -28,10 +28,10 @@ Future<ui.Image> decodeImageFromPixels(
     pixelFormat: format,
   );
   if (!allowUpscaling) {
-    if (targetWidth != null && targetWidth! > descriptor.width) {
+    if (targetWidth != null && targetWidth > descriptor.width) {
       targetWidth = descriptor.width;
     }
-    if (targetHeight != null && targetHeight! > descriptor.height) {
+    if (targetHeight != null && targetHeight > descriptor.height) {
       targetHeight = descriptor.height;
     }
   }

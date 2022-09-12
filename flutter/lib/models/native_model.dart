@@ -22,7 +22,7 @@ class RgbaFrame extends Struct {
 
 typedef F2 = Pointer<Utf8> Function(Pointer<Utf8>, Pointer<Utf8>);
 typedef F3 = void Function(Pointer<Utf8>, Pointer<Utf8>);
-typedef HandleEvent = void Function(Map<String, dynamic> evt);
+typedef HandleEvent = Future<void> Function(Map<String, dynamic> evt);
 
 /// FFI wrapper around the native Rust core.
 /// Hides the platform differences.
@@ -156,14 +156,14 @@ class PlatformFFI {
     version = await getVersion();
   }
 
-  bool _tryHandle(Map<String, dynamic> evt) {
+  Future<bool> _tryHandle(Map<String, dynamic> evt) async {
     final name = evt['name'];
     if (name != null) {
       final handlers = _eventHandlers[name];
       if (handlers != null) {
         if (handlers.isNotEmpty) {
           for (var handler in handlers.values) {
-            handler(evt);
+            await handler(evt);
           }
           return true;
         }
@@ -180,7 +180,7 @@ class PlatformFFI {
         try {
           Map<String, dynamic> event = json.decode(message);
           // _tryHandle here may be more flexible than _eventCallback
-          if (!_tryHandle(event)) {
+          if (!await _tryHandle(event)) {
             if (_eventCallback != null) {
               await _eventCallback!(event);
             }

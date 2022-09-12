@@ -1085,9 +1085,8 @@ void showOptions(String id, OverlayDialogManager dialogManager) async {
           mainAxisSize: MainAxisSize.min,
           children: displays +
               <Widget>[
-                getRadio('Original', 'original', viewStyle, setViewStyle),
-                getRadio('Shrink', 'shrink', viewStyle, setViewStyle),
-                getRadio('Stretch', 'stretch', viewStyle, setViewStyle),
+                getRadio('Scale Original', 'original', viewStyle, setViewStyle),
+                getRadio('Scale adaptive', 'adaptive', viewStyle, setViewStyle),
                 Divider(color: MyTheme.border),
                 getRadio('Good image quality', 'best', quality, setQuality),
                 getRadio('Balanced', 'balanced', quality, setQuality),
