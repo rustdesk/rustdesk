@@ -16,25 +16,6 @@ add_executable(${BINARY_NAME} WIN32
   "runner.exe.manifest"
 )
 
-# flutter_rust_bridge with Corrosion
-find_package(Corrosion REQUIRED)
-
-corrosion_import_crate(MANIFEST_PATH ../../../Cargo.toml
-        # Equivalent to --all-features passed to cargo build
-#        [ALL_FEATURES]
-        # Equivalent to --no-default-features passed to cargo build
-#        [NO_DEFAULT_FEATURES]
-        # Disable linking of standard libraries (required for no_std crates).
-#        [NO_STD]
-        # Specify  cargo build profile (e.g. release or a custom profile)
-#        [PROFILE <cargo-profile>]
-        # Only import the specified crates from a workspace
-#        [CRATES <crate1> ... <crateN>]
-        # Enable the specified features
-#        [FEATURES <feature1> ... <featureN>]
-)
-target_link_libraries(${BINARY_NAME} PRIVATE librustdesk)
-
 # Apply the standard set of build settings. This can be removed for applications
 # that need different build settings.
 apply_standard_settings(${BINARY_NAME})

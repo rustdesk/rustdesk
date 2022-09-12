@@ -56,26 +56,6 @@ pkg_check_modules(GTK REQUIRED IMPORTED_TARGET gtk+-3.0)
 
 add_definitions(-DAPPLICATION_ID="${APPLICATION_ID}")
 
-# flutter_rust_bridge
-find_package(Corrosion REQUIRED)
-
-corrosion_import_crate(MANIFEST_PATH ../../Cargo.toml
-        # Equivalent to --all-features passed to cargo build
-#        [ALL_FEATURES]
-        # Equivalent to --no-default-features passed to cargo build
-#        [NO_DEFAULT_FEATURES]
-        # Disable linking of standard libraries (required for no_std crates).
-#        [NO_STD]
-        # Specify  cargo build profile (e.g. release or a custom profile)
-#        [PROFILE <cargo-profile>]
-        # Only import the specified crates from a workspace
-#        [CRATES <crate1> ... <crateN>]
-        # Enable the specified features
-#        [FEATURES <feature1> ... <featureN>]
-)
-
-set(BASE_RUSTDESK "librustdesk")
-
 # Define the application target. To change its name, change BINARY_NAME above,
 # not the value here, or `flutter run` will no longer work.
 #
@@ -93,7 +73,7 @@ apply_standard_settings(${BINARY_NAME})
 # Add dependency libraries. Add any application-specific dependencies here.
 target_link_libraries(${BINARY_NAME} PRIVATE flutter)
 target_link_libraries(${BINARY_NAME} PRIVATE PkgConfig::GTK)
-target_link_libraries(${BINARY_NAME} PRIVATE ${BASE_RUSTDESK})
+target_link_libraries(${BINARY_NAME} PRIVATE ${CMAKE_DL_LIBS})
 # target_link_libraries(${BINARY_NAME} PRIVATE librustdesk)
 
 # Run the Flutter tool portions of the build. This must not be removed.
@@ -144,7 +124,14 @@ foreach(bundled_library ${PLUGIN_BUNDLED_LIBRARIES})
     COMPONENT Runtime)
 endforeach(bundled_library)
 
-install(FILES $<TARGET_FILE:${BASE_RUSTDESK}-shared> DESTINATION "${INSTALL_BUNDLE_LIB_DIR}" COMPONENT Runtime RENAME librustdesk.so)
+# flutter_rust_bridge
+set(RUSTDESK_LIB_BUILD_TYPE $<IF:$<CONFIG:Debug>,debug,release>)
+string(TOLOWER ${CMAKE_BUILD_TYPE} ${RUSTDESK_LIB_BUILD_TYPE})
+message(STATUS "rustdesk lib build type: ${RUSTDESK_LIB_BUILD_TYPE}")
+
+set(RUSTDESK_LIB "../../target/${RUSTDESK_LIB_BUILD_TYPE}/liblibrustdesk.so")
+install(FILES "${RUSTDESK_LIB}" DESTINATION "${INSTALL_BUNDLE_LIB_DIR}"
+COMPONENT Runtime RENAME librustdesk.so)
 
 # Fully re-copy the assets directory on each build to avoid having stale files
 # from a previous install.
