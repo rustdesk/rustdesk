@@ -614,6 +614,7 @@ class _PopupMenu<T> extends StatelessWidget {
             padding: const EdgeInsets.symmetric(
               vertical: _kMenuVerticalPadding,
             ),
+            controller: ScrollController(),
             child: ListBody(children: children),
           ),
         ),

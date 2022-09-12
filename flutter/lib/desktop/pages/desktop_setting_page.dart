@@ -122,6 +122,7 @@ class _DesktopSettingPageState extends State<DesktopSettingPage>
 
   Widget _listView({required List<_TabInfo> tabs}) {
     return ListView(
+      controller: ScrollController(),
       children: tabs
           .asMap()
           .entries
@@ -181,6 +182,7 @@ class _GeneralState extends State<_General> {
   @override
   Widget build(BuildContext context) {
     return ListView(
+      controller: ScrollController(),
       children: [
         theme(),
         abr(),
@@ -300,6 +302,7 @@ class _LanguageState extends State<_Language>
   Widget build(BuildContext context) {
     super.build(context);
     return ListView(
+      controller: ScrollController(),
       children: [
         _Card(title: 'Language', children: [language()]),
       ],
@@ -353,6 +356,7 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
   Widget build(BuildContext context) {
     super.build(context);
     return ListView(
+      controller: ScrollController(),
       children: [
         Column(
           children: [
@@ -622,7 +626,7 @@ class _NetworkState extends State<_Network> with AutomaticKeepAliveClientMixin {
   Widget build(BuildContext context) {
     super.build(context);
     bool enabled = !locked;
-    return ListView(children: [
+    return ListView(controller: ScrollController(), children: [
       Column(
         children: [
           _lock(locked, 'Unlock Network Settings', () {
@@ -657,6 +661,7 @@ class _AcountState extends State<_Acount> {
   @override
   Widget build(BuildContext context) {
     return ListView(
+      controller: ScrollController(),
       children: [
         _Card(title: 'Acount', children: [login()]),
         _Card(title: 'ID', children: [changeId()]),
@@ -705,7 +710,7 @@ class _AboutState extends State<_About> {
       final license = data['license'].toString();
       final version = data['version'].toString();
       const linkStyle = TextStyle(decoration: TextDecoration.underline);
-      return ListView(children: [
+      return ListView(controller: ScrollController(), children: [
         _Card(title: "About RustDesk", children: [
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,

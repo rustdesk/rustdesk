@@ -66,6 +66,7 @@ class _ConnectionPageState extends State<ConnectionPage> {
   Widget build(BuildContext context) {
     Provider.of<FfiModel>(context);
     return SingleChildScrollView(
+      controller: ScrollController(),
       child: Column(
           mainAxisAlignment: MainAxisAlignment.start,
           mainAxisSize: MainAxisSize.max,

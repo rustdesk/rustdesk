@@ -1023,6 +1023,7 @@ class _PeerTabbedPageState extends State<_PeerTabbedPage>
     return ListView(
         scrollDirection: Axis.horizontal,
         shrinkWrap: true,
+        controller: ScrollController(),
         children: super.widget.tabs.asMap().entries.map((t) {
           return Obx(() => GestureDetector(
                 child: Container(

@@ -133,6 +133,7 @@ class _PortForwardPageState extends State<PortForwardPage>
       data: Theme.of(context)
           .copyWith(backgroundColor: MyTheme.color(context).bg),
       child: Obx(() => ListView.builder(
+          controller: ScrollController(),
           itemCount: pfs.length + 2,
           itemBuilder: ((context, index) {
             if (index == 0) {
@@ -293,6 +294,7 @@ class _PortForwardPageState extends State<PortForwardPage>
       data: Theme.of(context)
           .copyWith(backgroundColor: MyTheme.color(context).bg),
       child: ListView.builder(
+          controller: ScrollController(),
           itemCount: 2,
           itemBuilder: ((context, index) {
             if (index == 0) {
