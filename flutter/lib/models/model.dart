@@ -25,7 +25,7 @@ import '../mobile/widgets/dialog.dart';
 import 'peer_model.dart';
 import 'platform_model.dart';
 
-typedef HandleMsgBox = void Function(Map<String, dynamic> evt, String id);
+typedef HandleMsgBox = Function(Map<String, dynamic> evt, String id);
 bool _waitForImage = false;
 
 class FfiModel with ChangeNotifier {
@@ -65,14 +65,14 @@ class FfiModel with ChangeNotifier {
     clear();
   }
 
-  void toggleTouchMode() {
+  toggleTouchMode() {
     if (!isPeerAndroid) {
       _touchMode = !_touchMode;
       notifyListeners();
     }
   }
 
-  void updatePermission(Map<String, dynamic> evt, String id) {
+  updatePermission(Map<String, dynamic> evt, String id) {
     evt.forEach((k, v) {
       if (k == 'name' || k.isEmpty) return;
       _permissions[k] = v == 'true';
@@ -82,13 +82,13 @@ class FfiModel with ChangeNotifier {
     notifyListeners();
   }
 
-  void updateUser() {
+  updateUser() {
     notifyListeners();
   }
 
   bool keyboard() => _permissions['keyboard'] != false;
 
-  void clear() {
+  clear() {
     _pi = PeerInfo();
     _display = Display();
     _waitForImage = false;
@@ -100,7 +100,7 @@ class FfiModel with ChangeNotifier {
     clearPermissions();
   }
 
-  void setConnectionType(String peerId, bool secure, bool direct) {
+  setConnectionType(String peerId, bool secure, bool direct) {
     _secure = secure;
     _direct = direct;
     try {
@@ -122,7 +122,7 @@ class FfiModel with ChangeNotifier {
     }
   }
 
-  void clearPermissions() {
+  clearPermissions() {
     _inputBlocked = false;
     _permissions.clear();
   }
@@ -184,11 +184,11 @@ class FfiModel with ChangeNotifier {
   }
 
   /// Bind the event listener to receive events from the Rust core.
-  void updateEventListener(String peerId) {
+  updateEventListener(String peerId) {
     platformFFI.setEventCallback(startEventListener(peerId));
   }
 
-  void handleSwitchDisplay(Map<String, dynamic> evt) {
+  handleSwitchDisplay(Map<String, dynamic> evt) {
     final oldOrientation = _display.width > _display.height;
     var old = _pi.currentDisplay;
     _pi.currentDisplay = int.parse(evt['display']);
@@ -208,7 +208,7 @@ class FfiModel with ChangeNotifier {
   }
 
   /// Handle the message box event based on [evt] and [id].
-  void handleMsgBox(Map<String, dynamic> evt, String id) {
+  handleMsgBox(Map<String, dynamic> evt, String id) {
     if (parent.target == null) return;
     final dialogManager = parent.target!.dialogManager;
     var type = evt['type'];
@@ -227,8 +227,8 @@ class FfiModel with ChangeNotifier {
   }
 
   /// Show a message box with [type], [title] and [text].
-  void showMsgBox(String id, String type, String title, String text,
-      bool hasRetry, OverlayDialogManager dialogManager,
+  showMsgBox(String id, String type, String title, String text, bool hasRetry,
+      OverlayDialogManager dialogManager,
       {bool? hasCancel}) {
     msgBox(type, title, text, dialogManager, hasCancel: hasCancel);
     _timer?.cancel();
@@ -246,7 +246,7 @@ class FfiModel with ChangeNotifier {
   }
 
   /// Handle the peer info event based on [evt].
-  void handlePeerInfo(Map<String, dynamic> evt, String peerId) async {
+  handlePeerInfo(Map<String, dynamic> evt, String peerId) async {
     // recent peer updated by handle_peer_info(ui_session_interface.rs) --> handle_peer_info(client.rs) --> save_config(client.rs)
     bind.mainLoadRecentPeers();
 
@@ -337,7 +337,7 @@ class ImageModel with ChangeNotifier {
 
   ImageModel(this.parent);
 
-  void onRgba(Uint8List rgba, double tabBarHeight) {
+  onRgba(Uint8List rgba, double tabBarHeight) {
     if (_waitForImage) {
       _waitForImage = false;
       parent.target?.dialogManager.dismissAll();
@@ -358,7 +358,7 @@ class ImageModel with ChangeNotifier {
     });
   }
 
-  void update(ui.Image? image, double tabBarHeight) async {
+  update(ui.Image? image, double tabBarHeight) async {
     if (_image == null && image != null) {
       if (isWebDesktop || isDesktop) {
         await parent.target?.canvasModel.updateViewStyle();
@@ -425,6 +425,7 @@ class CanvasModel with ChangeNotifier {
   // scroll offset y percent
   double _scrollY = 0.0;
   ScrollStyle _scrollStyle = ScrollStyle.scrollauto;
+  String? _viewStyle;
 
   WeakReference<FFI> parent;
 
@@ -445,7 +446,7 @@ class CanvasModel with ChangeNotifier {
 
   updateViewStyle() async {
     final style = await bind.sessionGetOption(id: id, arg: 'view-style');
-    if (style == null) {
+    if (style == null || _viewStyle == style) {
       return;
     }
 
@@ -455,6 +456,7 @@ class CanvasModel with ChangeNotifier {
       final s2 = size.height / getDisplayHeight();
       _scale = s1 < s2 ? s1 : s2;
     }
+    _viewStyle = style;
     _x = (size.width - getDisplayWidth() * _scale) / 2;
     _y = (size.height - getDisplayHeight() * _scale) / 2;
     notifyListeners();
@@ -498,7 +500,7 @@ class CanvasModel with ChangeNotifier {
     return Size(size.width, size.height - tabBarHeight);
   }
 
-  void moveDesktopMouse(double x, double y) {
+  moveDesktopMouse(double x, double y) {
     // On mobile platforms, move the canvas with the cursor.
     final dw = getDisplayWidth() * _scale;
     final dh = getDisplayHeight() * _scale;
@@ -536,12 +538,12 @@ class CanvasModel with ChangeNotifier {
     notifyListeners();
   }
 
-  void panX(double dx) {
+  panX(double dx) {
     _x += dx;
     notifyListeners();
   }
 
-  void resetOffset() {
+  resetOffset() {
     if (isWebDesktop) {
       updateViewStyle();
     } else {
@@ -551,12 +553,12 @@ class CanvasModel with ChangeNotifier {
     notifyListeners();
   }
 
-  void panY(double dy) {
+  panY(double dy) {
     _y += dy;
     notifyListeners();
   }
 
-  void updateScale(double v) {
+  updateScale(double v) {
     if (parent.target?.imageModel.image == null) return;
     final offset = parent.target?.cursorModel.offset ?? const Offset(0, 0);
     var r = parent.target?.cursorModel.getVisibleRect() ?? Rect.zero;
@@ -575,7 +577,7 @@ class CanvasModel with ChangeNotifier {
     notifyListeners();
   }
 
-  void clear([bool notify = false]) {
+  clear([bool notify = false]) {
     _x = 0;
     _y = 0;
     _scale = 1.0;
@@ -664,18 +666,18 @@ class CursorModel with ChangeNotifier {
     return h - thresh;
   }
 
-  void touch(double x, double y, MouseButtons button) {
+  touch(double x, double y, MouseButtons button) {
     moveLocal(x, y);
     parent.target?.moveMouse(_x, _y);
     parent.target?.tap(button);
   }
 
-  void move(double x, double y) {
+  move(double x, double y) {
     moveLocal(x, y);
     parent.target?.moveMouse(_x, _y);
   }
 
-  void moveLocal(double x, double y) {
+  moveLocal(double x, double y) {
     final scale = parent.target?.canvasModel.scale ?? 1.0;
     final xoffset = parent.target?.canvasModel.x ?? 0;
     final yoffset = parent.target?.canvasModel.y ?? 0;
@@ -684,7 +686,7 @@ class CursorModel with ChangeNotifier {
     notifyListeners();
   }
 
-  void reset() {
+  reset() {
     _x = _displayOriginX;
     _y = _displayOriginY;
     parent.target?.moveMouse(_x, _y);
@@ -692,7 +694,7 @@ class CursorModel with ChangeNotifier {
     notifyListeners();
   }
 
-  void updatePan(double dx, double dy, bool touchMode) {
+  updatePan(double dx, double dy, bool touchMode) {
     if (parent.target?.imageModel.image == null) return;
     if (touchMode) {
       final scale = parent.target?.canvasModel.scale ?? 1.0;
@@ -828,7 +830,7 @@ class CursorModel with ChangeNotifier {
     notifyListeners();
   }
 
-  void updateDisplayOrigin(double x, double y) {
+  updateDisplayOrigin(double x, double y) {
     _displayOriginX = x;
     _displayOriginY = y;
     _x = x + 1;
@@ -838,7 +840,7 @@ class CursorModel with ChangeNotifier {
     notifyListeners();
   }
 
-  void updateDisplayOriginWithCursor(
+  updateDisplayOriginWithCursor(
       double x, double y, double xCursor, double yCursor) {
     _displayOriginX = x;
     _displayOriginY = y;
@@ -848,7 +850,7 @@ class CursorModel with ChangeNotifier {
     notifyListeners();
   }
 
-  void clear() {
+  clear() {
     _x = -10000;
     _x = -10000;
     _image = null;
@@ -859,7 +861,7 @@ class CursorModel with ChangeNotifier {
     _cacheMapLinux.clear();
   }
 
-  void _clearCacheLinux() {
+  _clearCacheLinux() {
     final cachedKeys = {...cachedKeysLinux};
     for (var key in cachedKeys) {
       customCursorController.freeCache(key);
@@ -969,13 +971,13 @@ class FFI {
   }
 
   /// Send a mouse tap event(down and up).
-  void tap(MouseButtons button) {
+  tap(MouseButtons button) {
     sendMouse('down', button);
     sendMouse('up', button);
   }
 
   /// Send scroll event with scroll distance [y].
-  void scroll(int y) {
+  scroll(int y) {
     bind.sessionSendMouse(
         id: id,
         msg: json
@@ -983,13 +985,13 @@ class FFI {
   }
 
   /// Reconnect to the remote peer.
-  // static void reconnect() {
+  // static reconnect() {
   //   setByName('reconnect');
   //   parent.target?.ffiModel.clearPermissions();
   // }
 
   /// Reset key modifiers to false, including [shift], [ctrl], [alt] and [command].
-  void resetModifiers() {
+  resetModifiers() {
     shift = ctrl = alt = command = false;
   }
 
@@ -1003,7 +1005,7 @@ class FFI {
   }
 
   /// Send mouse press event.
-  void sendMouse(String type, MouseButtons button) {
+  sendMouse(String type, MouseButtons button) {
     if (!ffiModel.keyboard()) return;
     bind.sessionSendMouse(
         id: id,
@@ -1011,7 +1013,7 @@ class FFI {
   }
 
   // Raw Key
-  void inputRawKey(String name, int keyCode, int scanCode, bool down) {
+  inputRawKey(String name, int keyCode, int scanCode, bool down) {
     bind.sessionHandleFlutterKeyEvent(
         id: id,
         name: name,
@@ -1024,7 +1026,7 @@ class FFI {
     return bind.sessionGetKeyboardName(id: id);
   }
 
-  void enterOrLeave(bool enter) {
+  enterOrLeave(bool enter) {
     // Fix status
     if (!enter) {
       resetModifiers();
@@ -1035,7 +1037,7 @@ class FFI {
   /// Send key stroke event.
   /// [down] indicates the key's state(down or up).
   /// [press] indicates a click event(down and up).
-  void inputKey(String name, {bool? down, bool? press}) {
+  inputKey(String name, {bool? down, bool? press}) {
     if (!ffiModel.keyboard()) return;
     // final Map<String, String> out = Map();
     // out['name'] = name;
@@ -1061,7 +1063,7 @@ class FFI {
   }
 
   /// Send mouse movement event with distance in [x] and [y].
-  void moveMouse(double x, double y) {
+  moveMouse(double x, double y) {
     if (!ffiModel.keyboard()) return;
     var x2 = x.toInt();
     var y2 = y.toInt();
@@ -1087,7 +1089,7 @@ class FFI {
   }
 
   /// Connect with the given [id]. Only transfer file if [isFileTransfer], only port forward if [isPortForward].
-  void connect(String id,
+  connect(String id,
       {bool isFileTransfer = false,
       bool isPortForward = false,
       double tabBarHeight = 0.0}) {
@@ -1131,7 +1133,7 @@ class FFI {
   }
 
   /// Login with [password], choose if the client should [remember] it.
-  void login(String id, String password, bool remember) {
+  login(String id, String password, bool remember) {
     bind.sessionLogin(id: id, password: password, remember: remember);
   }
 
@@ -1159,7 +1161,7 @@ class FFI {
   // }
 
   /// Send **set** command to the Rust core based on [name] and [value].
-  // void setByName(String name, [String value = '']) {
+  // setByName(String name, [String value = '']) {
   //   platformFFI.setByName(name, value);
   // }
 
@@ -1241,7 +1243,7 @@ class FFI {
     }
   }
 
-  void setMethodCallHandler(FMethod callback) {
+  setMethodCallHandler(FMethod callback) {
     platformFFI.setMethodCallHandler(callback);
   }
 
@@ -1261,7 +1263,7 @@ class FFI {
     return input;
   }
 
-  void setDefaultAudioInput(String input) {
+  setDefaultAudioInput(String input) {
     bind.mainSetOption(key: 'audio-input', value: input);
   }
 

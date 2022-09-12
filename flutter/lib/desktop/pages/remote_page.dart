@@ -612,12 +612,12 @@ class ImagePaint extends StatelessWidget {
         cursorOverImage.value ? const NeverScrollableScrollPhysics() : null;
     return Scrollbar(
         controller: _vertical,
-        thumbVisibility: true,
-        trackVisibility: true,
+        thumbVisibility: false,
+        trackVisibility: false,
         child: Scrollbar(
           controller: _horizontal,
-          thumbVisibility: true,
-          trackVisibility: true,
+          thumbVisibility: false,
+          trackVisibility: false,
           notificationPredicate: (notif) => notif.depth == 1,
           child: SingleChildScrollView(
             controller: _vertical,

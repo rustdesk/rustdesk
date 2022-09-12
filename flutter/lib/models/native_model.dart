@@ -38,7 +38,7 @@ class PlatformFFI {
   PlatformFFI._();
 
   static final PlatformFFI instance = PlatformFFI._();
-  final _toAndroidChannel = const MethodChannel("mChannel");
+  final _toAndroidChannel = const MethodChannel('mChannel');
 
   RustdeskImpl get ffiBind => _ffiBind;
 
@@ -97,13 +97,13 @@ class PlatformFFI {
     final dylib = Platform.isAndroid
         ? DynamicLibrary.open('librustdesk.so')
         : Platform.isLinux
-            ? DynamicLibrary.open("librustdesk.so")
+            ? DynamicLibrary.open('librustdesk.so')
             : Platform.isWindows
-                ? DynamicLibrary.open("librustdesk.dll")
+                ? DynamicLibrary.open('librustdesk.dll')
                 : Platform.isMacOS
-                    ? DynamicLibrary.open("librustdesk.dylib")
+                    ? DynamicLibrary.open('librustdesk.dylib')
                     : DynamicLibrary.process();
-    debugPrint('initializing FFI ${_appType}');
+    debugPrint('initializing FFI $_appType');
     try {
       _translate = dylib.lookupFunction<F2, F2>('translate');
       _dir = (await getApplicationDocumentsDirectory()).path;
@@ -114,7 +114,7 @@ class PlatformFFI {
           // only support for android
           _homeDir = (await ExternalPath.getExternalStorageDirectories())[0];
         } else {
-          _homeDir = (await getDownloadsDirectory())?.path ?? "";
+          _homeDir = (await getDownloadsDirectory())?.path ?? '';
         }
       } catch (e) {
         debugPrint('initialize failed: $e');
@@ -129,7 +129,7 @@ class PlatformFFI {
         androidVersion = androidInfo.version.sdkInt ?? 0;
       } else if (Platform.isIOS) {
         IosDeviceInfo iosInfo = await deviceInfo.iosInfo;
-        name = iosInfo.utsname.machine ?? "";
+        name = iosInfo.utsname.machine ?? '';
         id = iosInfo.identifierForVendor.hashCode.toString();
       } else if (Platform.isLinux) {
         LinuxDeviceInfo linuxInfo = await deviceInfo.linuxInfo;
@@ -142,7 +142,7 @@ class PlatformFFI {
       } else if (Platform.isMacOS) {
         MacOsDeviceInfo macOsInfo = await deviceInfo.macOsInfo;
         name = macOsInfo.computerName;
-        id = macOsInfo.systemGUID ?? "";
+        id = macOsInfo.systemGUID ?? '';
       }
       debugPrint(
           '_appType:$_appType,info1-id:$id,info2-name:$name,dir:$_dir,homeDir:$_homeDir');
