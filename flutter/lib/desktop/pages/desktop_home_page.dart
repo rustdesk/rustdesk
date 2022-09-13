@@ -330,18 +330,6 @@ class _DesktopHomePageState extends State<DesktopHomePage>
                         onHover: (value) => refreshHover.value = value,
                       ),
                       const _PasswordPopupMenu(),
-                      // FutureBuilder<Widget>(
-                      //     future: buildPasswordPopupMenu(context),
-                      //     builder: (context, snapshot) {
-                      //       if (snapshot.hasError) {
-                      //         print("${snapshot.error}");
-                      //       }
-                      //       if (snapshot.hasData) {
-                      //         return snapshot.data!;
-                      //       } else {
-                      //         return Offstage();
-                      //       }
-                      //     })
                     ],
                   ),
                 ],
@@ -351,92 +339,6 @@ class _DesktopHomePageState extends State<DesktopHomePage>
         ],
       ),
     );
-  }
-
-  Future<Widget> buildPasswordPopupMenu(BuildContext context) async {
-    var position;
-    RxBool editHover = false.obs;
-    return InkWell(
-        onTapDown: (detail) {
-          final x = detail.globalPosition.dx;
-          final y = detail.globalPosition.dy;
-          position = RelativeRect.fromLTRB(x, y, x, y);
-        },
-        onTap: () async {
-          var method = (String text, String value) => PopupMenuItem(
-                child: Row(
-                  children: [
-                    Offstage(
-                        offstage: gFFI.serverModel.verificationMethod != value,
-                        child: Icon(Icons.check)),
-                    Text(
-                      text,
-                    ),
-                  ],
-                ),
-                onTap: () => gFFI.serverModel.setVerificationMethod(value),
-              );
-          final temporary_enabled =
-              gFFI.serverModel.verificationMethod != kUsePermanentPassword;
-          var menu = <PopupMenuEntry>[
-            method(translate("Use temporary password"), kUseTemporaryPassword),
-            method(translate("Use permanent password"), kUsePermanentPassword),
-            method(translate("Use both passwords"), kUseBothPasswords),
-            PopupMenuDivider(),
-            PopupMenuItem(
-                child: Text(translate("Set permanent password")),
-                value: 'set-permanent-password',
-                enabled: gFFI.serverModel.verificationMethod !=
-                    kUseTemporaryPassword),
-            PopupMenuItem(
-                child: PopupMenuButton(
-                  padding: EdgeInsets.zero,
-                  child: Text(
-                    translate("Set temporary password length"),
-                  ),
-                  itemBuilder: (context) => ["6", "8", "10"]
-                      .map((e) => PopupMenuItem(
-                            child: Row(
-                              children: [
-                                Offstage(
-                                    offstage: gFFI.serverModel
-                                            .temporaryPasswordLength !=
-                                        e,
-                                    child: Icon(Icons.check)),
-                                Text(
-                                  e,
-                                ),
-                              ],
-                            ),
-                            onTap: () {
-                              if (gFFI.serverModel.temporaryPasswordLength !=
-                                  e) {
-                                () async {
-                                  await gFFI.serverModel
-                                      .setTemporaryPasswordLength(e);
-                                  await bind.mainUpdateTemporaryPassword();
-                                }();
-                              }
-                            },
-                          ))
-                      .toList(),
-                  enabled: temporary_enabled,
-                ),
-                enabled: temporary_enabled),
-          ];
-          final v =
-              await showMenu(context: context, position: position, items: menu);
-          if (v == "set-permanent-password") {
-            setPasswordDialog();
-          }
-        },
-        onHover: (value) => editHover.value = value,
-        child: Obx(() => Icon(Icons.edit,
-                size: 22,
-                color: editHover.value
-                    ? MyTheme.color(context).text
-                    : Color(0xFFDDDDDD))
-            .marginOnly(bottom: 2)));
   }
 
   buildTip(BuildContext context) {
@@ -469,7 +371,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
 
   @override
   void onTrayMenuItemClick(MenuItem menuItem) {
-    print("click ${menuItem.key}");
+    print('click ${menuItem.key}');
     switch (menuItem.key) {
       case "quit":
         exit(0);

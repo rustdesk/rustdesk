@@ -409,6 +409,56 @@ enum ScrollStyle {
   scrollauto,
 }
 
+class ViewStyle {
+  final String style;
+  final double width;
+  final double height;
+  final int displayWidth;
+  final int displayHeight;
+  ViewStyle({
+    this.style = '',
+    this.width = 0.0,
+    this.height = 0.0,
+    this.displayWidth = 0,
+    this.displayHeight = 0,
+  });
+
+  static int _double2Int(double v) => (v * 100).round().toInt();
+
+  @override
+  bool operator ==(Object other) =>
+      other is ViewStyle &&
+      other.runtimeType == runtimeType &&
+      _innerEqual(other);
+
+  bool _innerEqual(ViewStyle other) {
+    return style == other.style &&
+        ViewStyle._double2Int(other.width) == ViewStyle._double2Int(width) &&
+        ViewStyle._double2Int(other.height) == ViewStyle._double2Int(height) &&
+        other.displayWidth == displayWidth &&
+        other.displayHeight == displayHeight;
+  }
+
+  @override
+  int get hashCode => Object.hash(
+        style,
+        ViewStyle._double2Int(width),
+        ViewStyle._double2Int(height),
+        displayWidth,
+        displayHeight,
+      ).hashCode;
+
+  double get scale {
+    double s = 1.0;
+    if (style == 'adaptive') {
+      final s1 = width / displayWidth;
+      final s2 = height / displayHeight;
+      s = s1 < s2 ? s1 : s2;
+    }
+    return s;
+  }
+}
+
 class CanvasModel with ChangeNotifier {
   // image offset of canvas
   double _x = 0;
@@ -425,7 +475,7 @@ class CanvasModel with ChangeNotifier {
   // scroll offset y percent
   double _scrollY = 0.0;
   ScrollStyle _scrollStyle = ScrollStyle.scrollauto;
-  String? _viewStyle;
+  ViewStyle _lastViewStyle = ViewStyle();
 
   WeakReference<FFI> parent;
 
@@ -446,19 +496,27 @@ class CanvasModel with ChangeNotifier {
 
   updateViewStyle() async {
     final style = await bind.sessionGetOption(id: id, arg: 'view-style');
-    if (style == null || _viewStyle == style) {
+    if (style == null) {
       return;
     }
-
-    _scale = 1.0;
-    if (style == 'adaptive') {
-      final s1 = size.width / getDisplayWidth();
-      final s2 = size.height / getDisplayHeight();
-      _scale = s1 < s2 ? s1 : s2;
+    final sizeWidth = size.width;
+    final sizeHeight = size.height;
+    final displayWidth = getDisplayWidth();
+    final displayHeight = getDisplayHeight();
+    final viewStyle = ViewStyle(
+      style: style,
+      width: sizeWidth,
+      height: sizeHeight,
+      displayWidth: displayWidth,
+      displayHeight: displayHeight,
+    );
+    if (_lastViewStyle == viewStyle) {
+      return;
     }
-    _viewStyle = style;
-    _x = (size.width - getDisplayWidth() * _scale) / 2;
-    _y = (size.height - getDisplayHeight() * _scale) / 2;
+    _lastViewStyle = viewStyle;
+    _scale = viewStyle.scale;
+    _x = (sizeWidth - displayWidth * _scale) / 2;
+    _y = (sizeHeight - displayHeight * _scale) / 2;
     notifyListeners();
   }
 

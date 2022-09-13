@@ -338,5 +338,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Use IP Whitelisting", ""),
         ("Network", ""),
         ("Enable RDP", ""),
+        ("Pin menubar", "핀 메뉴 바"),
     ].iter().cloned().collect();
 }
