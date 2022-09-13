@@ -638,7 +638,13 @@ pub fn quit_gui() {
 }
 
 pub fn check_super_user_permission() -> ResultType<bool> {
-    // TODO: replace echo with a rustdesk's program, which is location-fixed and non-gui.
-    let status = std::process::Command::new("pkexec").arg("echo").status()?;
+    let file = "/usr/share/rustdesk/files/polkit";
+    let arg;
+    if std::path::Path::new(file).is_file() {
+        arg = file;
+    } else {
+        arg = "echo";
+    }
+    let status = std::process::Command::new("pkexec").arg(arg).status()?;
     Ok(status.success() && status.code() == Some(0))
 }
