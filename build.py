@@ -71,7 +71,7 @@ def make_parser():
     parser.add_argument(
         '--hwcodec',
         action='store_true',
-        help='Enable feature hwcodec, windows only.'
+        help='Enable feature hwcodec'
     )
     return parser
 

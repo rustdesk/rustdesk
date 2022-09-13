@@ -265,22 +265,14 @@ class _GeneralState extends State<_General> {
       if (devices.isEmpty) {
         return const Offstage();
       }
-      List<String> keys = devices.toList();
-      List<String> values = devices.toList();
-      // TODO
-      if (!devices.contains(currentDevice)) {
-        currentDevice = "";
-        keys.insert(0, currentDevice);
-        values.insert(0, 'default');
-      }
       return _Card(title: 'Audio Input Device', children: [
-        _ComboBox(
-            keys: keys,
-            values: values,
-            initialKey: currentDevice,
-            onChanged: (key) {
-              setDevice(key);
-            }).marginOnly(left: _kContentHMargin),
+        ...devices.map((device) => _Radio<String>(context,
+                value: device,
+                groupValue: currentDevice,
+                label: device, onChanged: (value) {
+              setDevice(value);
+              setState(() {});
+            }))
       ]);
     });
   }
@@ -876,6 +868,8 @@ Widget _Radio<T>(BuildContext context,
         Radio<T>(value: value, groupValue: groupValue, onChanged: onChange),
         Expanded(
           child: Text(translate(label),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                   style: TextStyle(
                       fontSize: _kContentFontSize,
                       color: _disabledTextColor(context, enabled)))
