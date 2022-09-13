@@ -4,8 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_hbb/models/platform_model.dart';
 import 'package:window_manager/window_manager.dart';
 
-import '../../mobile/widgets/overlay.dart';
 import '../common.dart';
+import '../common/widgets/overlay.dart';
 import 'model.dart';
 
 class MessageBody {

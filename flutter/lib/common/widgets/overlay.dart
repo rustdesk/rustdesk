@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/common.dart';
 
+import '../../mobile/pages/chat_page.dart';
 import '../../models/chat_model.dart';
-import '../pages/chat_page.dart';
 
 class DraggableChatWindow extends StatelessWidget {
   DraggableChatWindow(
