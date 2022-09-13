@@ -4,7 +4,7 @@ use std::{
     ops::{Deref, Not},
     sync::{atomic::AtomicBool, mpsc, Arc, Mutex, RwLock},
 };
-
+use std::sync::atomic::Ordering;
 pub use async_trait::async_trait;
 #[cfg(not(any(target_os = "android", target_os = "linux")))]
 use cpal::{
@@ -1890,4 +1890,8 @@ fn decode_id_pk(signed: &[u8], key: &sign::PublicKey) -> ResultType<(String, [u8
     } else {
         bail!("Wrong public length");
     }
+}
+
+pub fn disable_keyboard_listening() {
+    crate::ui_session_interface::KEYBOARD_HOOKED.store(false, Ordering::SeqCst);
 }
