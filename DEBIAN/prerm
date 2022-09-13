@@ -5,12 +5,17 @@ set -e
 case $1 in
     remove|upgrade)
 		INITSYS=$(ls -al /proc/1/exe | awk -F' ' '{print $NF}' | awk -F'/' '{print $NF}')
+		
 		if [ "systemd" == "${INITSYS}" ]; then
+			rm /usr/bin/rustdesk
+
 			systemctl stop rustdesk || true
 			systemctl disable rustdesk || true
 			
 			serverUser=$(ps -ef | grep -E 'rustdesk +--server' | awk '{print $1}' | head -1)
-			if [ "$serverUser" != "" ] && [ "$serverUser" != "root" ]
+			ubuntuVersion=$(grep -oP 'VERSION_ID="\K[\d]+' /etc/os-release | bc -l)
+			waylandSupportVersion=21
+			if [ "$serverUser" != "" ] && [ "$serverUser" != "root" ] && [ "$ubuntuVersion" -ge "$waylandSupportVersion" ]
 			then
 				systemctl --machine=${serverUser}@.host --user stop rustdesk || true
 			fi	

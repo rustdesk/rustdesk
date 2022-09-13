@@ -5,8 +5,10 @@ set -e
 if [ "$1" = configure ]; then
 
 	INITSYS=$(ls -al /proc/1/exe | awk -F' ' '{print $NF}' | awk -F'/' '{print $NF}')
-
+	
 	if [ "systemd" == "$INITSYS" ]; then
+		ln -s /usr/lib/rustdesk/flutter_hbb /usr/bin/rustdesk
+
 		if [ -e /etc/systemd/system/rustdesk.service ]; then
 			rm /etc/systemd/system/rustdesk.service /usr/lib/systemd/system/rustdesk.service /usr/lib/systemd/user/rustdesk.service >/dev/null  2>&1
 		fi
@@ -18,7 +20,12 @@ if [ "$1" = configure ]; then
 		systemctl start rustdesk
 
 		cp /usr/share/rustdesk/files/systemd/rustdesk.service.user /usr/lib/systemd/user/rustdesk.service
-		curUser=$(who | awk '{print $1}' | head -1)
-		systemctl --machine=${curUser}@.host --user daemon-reload
+		ubuntuVersion=$(grep -oP 'VERSION_ID="\K[\d]+' /etc/os-release | bc -l)
+		waylandSupportVersion=21
+		if [ "$ubuntuVersion" -ge "$waylandSupportVersion" ]
+		then
+			curUser=$(who | awk '{print $1}' | head -1)
+			systemctl --machine=${curUser}@.host --user daemon-reload
+		fi
 	fi
 fi
