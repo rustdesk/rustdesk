@@ -358,5 +358,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Network", ""),
         ("Enable RDP", ""),
         ("Pin menubar", "Menü çubuğunu sabitle"),
+        ("Unpin menubar", "Menü çubuğunun sabitlemesini kaldır"),
     ].iter().cloned().collect();
 }

@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -141,16 +142,21 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
   }
 
   Widget _buildPinMenubar(BuildContext context) {
-    return IconButton(
-      tooltip: translate('Pin menubar'),
-      onPressed: () {
-        _pinMenubar.value = !_pinMenubar.value;
-      },
-      icon: Obx(() => Icon(
-            Icons.push_pin,
-            color: _pinMenubar.isTrue ? _MenubarTheme.commonColor : Colors.grey,
-          )),
-    );
+    return Obx(() => IconButton(
+          tooltip:
+              translate(_pinMenubar.isTrue ? 'Unpin menubar' : 'Pin menubar'),
+          onPressed: () {
+            _pinMenubar.value = !_pinMenubar.value;
+          },
+          icon: Obx(() => Transform.rotate(
+              angle: _pinMenubar.isTrue ? math.pi / 4 : 0,
+              child: Icon(
+                Icons.push_pin,
+                color: _pinMenubar.isTrue
+                    ? _MenubarTheme.commonColor
+                    : Colors.grey,
+              ))),
+        ));
   }
 
   Widget _buildFullscreen(BuildContext context) {

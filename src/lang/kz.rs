@@ -319,5 +319,7 @@ lazy_static::lazy_static! {
             ("Insecure Connection", "Қатерлі Қосылым"),
             ("Scale original", "Scale original"),
             ("Scale adaptive", "Scale adaptive"),
+            ("Pin menubar", "Мәзір жолағын бекіту"),
+            ("Unpin menubar", "Мәзір жолағын босату"),
         ].iter().cloned().collect();
     }
