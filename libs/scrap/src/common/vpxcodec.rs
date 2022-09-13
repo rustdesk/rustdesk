@@ -4,15 +4,15 @@
 
 use hbb_common::anyhow::{anyhow, Context};
 use hbb_common::message_proto::{EncodedVideoFrame, EncodedVideoFrames, Message, VideoFrame};
-use hbb_common::ResultType;
+use hbb_common::{ResultType, get_time};
 
 use crate::codec::EncoderApi;
 use crate::STRIDE_ALIGN;
 
 use super::vpx::{vp8e_enc_control_id::*, vpx_codec_err_t::*, *};
+use hbb_common::bytes::Bytes;
 use std::os::raw::{c_int, c_uint};
 use std::{ptr, slice};
-use hbb_common::bytes::Bytes;
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 pub enum VpxVideoCodecId {
@@ -285,6 +285,7 @@ impl VpxEncoder {
             frames: vp9s.into(),
             ..Default::default()
         });
+        vf.timestamp = get_time();
         msg_out.set_video_frame(vf);
         msg_out
     }

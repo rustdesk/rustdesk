@@ -428,8 +428,12 @@ class _ConnectionPageState extends State<ConnectionPage> {
           light,
           Text(translate("Service is not running")),
           TextButton(
-              onPressed: () =>
-                  bind.mainSetOption(key: "stop-service", value: ""),
+              onPressed: () async {
+                bool checked = await bind.mainCheckSuperUserPermission();
+                if (checked) {
+                  bind.mainSetOption(key: "stop-service", value: "");
+                }
+              },
               child: Text(translate("Start Service")))
         ],
       );
@@ -1019,6 +1023,7 @@ class _PeerTabbedPageState extends State<_PeerTabbedPage>
     return ListView(
         scrollDirection: Axis.horizontal,
         shrinkWrap: true,
+        controller: ScrollController(),
         children: super.widget.tabs.asMap().entries.map((t) {
           return Obx(() => GestureDetector(
                 child: Container(

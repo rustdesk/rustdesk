@@ -184,6 +184,7 @@ class _FileManagerPageState extends State<FileManagerPage>
             children: [
               Expanded(
                 child: SingleChildScrollView(
+                  controller: ScrollController(),
                   child: ObxValue<RxString>(
                     (searchText) {
                       final filteredEntries = searchText.isEmpty
@@ -309,6 +310,7 @@ class _FileManagerPageState extends State<FileManagerPage>
           // Center(child: listTail(isLocal: isLocal)),
           // Expanded(
           //     child: ListView.builder(
+          //   controller: ScrollController(),
           //   itemCount: entries.length + 1,
           //   itemBuilder: (context, index) {
           //     if (index >= entries.length) {
@@ -424,6 +426,7 @@ class _FileManagerPageState extends State<FileManagerPage>
           decoration: BoxDecoration(border: Border.all(color: Colors.grey)),
           child: Obx(
             () => ListView.builder(
+              controller: ScrollController(),
               itemBuilder: (BuildContext context, int index) {
                 final item = model.jobTable[index];
                 return Column(

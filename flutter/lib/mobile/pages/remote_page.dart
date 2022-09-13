@@ -759,6 +759,7 @@ class _RemotePageState extends State<RemotePage> {
             expand: false,
             builder: (context, scrollController) {
               return SingleChildScrollView(
+                  controller: ScrollController(),
                   padding: EdgeInsets.symmetric(vertical: 10),
                   child: GestureHelp(
                       touchMode: gFFI.ffiModel.touchMode,

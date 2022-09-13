@@ -206,7 +206,7 @@ pub fn test_if_valid_server(host: String) -> String {
 
 pub fn get_sound_inputs() -> Vec<String> {
     let mut a = Vec::new();
-    #[cfg(windows)]
+    #[cfg(not(target_os = "linux"))]
     {
         // TODO TEST
         fn get_sound_inputs_() -> Vec<String> {

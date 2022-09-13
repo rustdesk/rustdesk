@@ -203,6 +203,7 @@ class _FileManagerPageState extends State<FileManagerPage> {
       headTools(),
       Expanded(
           child: ListView.builder(
+        controller: ScrollController(),
         itemCount: entries.length + 1,
         itemBuilder: (context, index) {
           if (index >= entries.length) {

@@ -228,6 +228,14 @@ pub fn get_uuid() -> Vec<u8> {
     Config::get_key_pair().1
 }
 
+#[inline]
+pub fn get_time() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis())
+        .unwrap_or(0) as _
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

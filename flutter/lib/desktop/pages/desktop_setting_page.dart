@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -8,7 +9,6 @@ import 'package:flutter_hbb/models/platform_model.dart';
 import 'package:flutter_hbb/models/server_model.dart';
 import 'package:get/get.dart';
 import 'package:provider/provider.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher_string.dart';
 
 const double _kTabWidth = 235;
@@ -32,7 +32,7 @@ class _TabInfo {
 }
 
 class DesktopSettingPage extends StatefulWidget {
-  DesktopSettingPage({Key? key}) : super(key: key);
+  const DesktopSettingPage({Key? key}) : super(key: key);
 
   @override
   State<DesktopSettingPage> createState() => _DesktopSettingPageState();
@@ -40,19 +40,18 @@ class DesktopSettingPage extends StatefulWidget {
 
 class _DesktopSettingPageState extends State<DesktopSettingPage>
     with TickerProviderStateMixin, AutomaticKeepAliveClientMixin {
-  final List<_TabInfo> _setting_tabs = <_TabInfo>[
-    _TabInfo('User Interface', Icons.language_outlined, Icons.language_sharp),
+  final List<_TabInfo> settingTabs = <_TabInfo>[
+    _TabInfo('General', Icons.settings_outlined, Icons.settings),
+    _TabInfo('Language', Icons.language_outlined, Icons.language),
     _TabInfo('Security', Icons.enhanced_encryption_outlined,
-        Icons.enhanced_encryption_sharp),
-    _TabInfo(
-        'Display', Icons.desktop_windows_outlined, Icons.desktop_windows_sharp),
-    _TabInfo('Audio', Icons.volume_up_outlined, Icons.volume_up_sharp),
-    _TabInfo('Connection', Icons.link_outlined, Icons.link_sharp),
-    _TabInfo('About', Icons.info_outline, Icons.info_sharp)
+        Icons.enhanced_encryption),
+    _TabInfo('Network', Icons.link_outlined, Icons.link),
+    _TabInfo('Acount', Icons.person_outline, Icons.person),
+    _TabInfo('About', Icons.info_outline, Icons.info)
   ];
 
   late PageController controller;
-  RxInt _selectedIndex = 0.obs;
+  RxInt selectedIndex = 0.obs;
 
   @override
   bool get wantKeepAlive => true;
@@ -70,12 +69,12 @@ class _DesktopSettingPageState extends State<DesktopSettingPage>
       backgroundColor: MyTheme.color(context).bg,
       body: Row(
         children: <Widget>[
-          Container(
+          SizedBox(
             width: _kTabWidth,
             child: Column(
               children: [
                 _header(),
-                Flexible(child: _listView(tabs: _setting_tabs)),
+                Flexible(child: _listView(tabs: settingTabs)),
               ],
             ),
           ),
@@ -85,12 +84,12 @@ class _DesktopSettingPageState extends State<DesktopSettingPage>
               color: MyTheme.color(context).grayBg,
               child: PageView(
                 controller: controller,
-                children: [
-                  _UserInterface(),
+                children: const [
+                  _General(),
+                  _Language(),
                   _Safety(),
-                  _Display(),
-                  _Audio(),
-                  _Connection(),
+                  _Network(),
+                  _Acount(),
                   _About(),
                 ],
               ),
@@ -109,20 +108,21 @@ class _DesktopSettingPageState extends State<DesktopSettingPage>
           child: Text(
             translate('Settings'),
             textAlign: TextAlign.left,
-            style: TextStyle(
+            style: const TextStyle(
               color: _accentColor,
               fontSize: _kTitleFontSize,
               fontWeight: FontWeight.w400,
             ),
           ),
         ).marginOnly(left: 20, top: 10),
-        Spacer(),
+        const Spacer(),
       ],
     );
   }
 
   Widget _listView({required List<_TabInfo> tabs}) {
     return ListView(
+      controller: ScrollController(),
       children: tabs
           .asMap()
           .entries
@@ -133,16 +133,16 @@ class _DesktopSettingPageState extends State<DesktopSettingPage>
 
   Widget _listItem({required _TabInfo tab, required int index}) {
     return Obx(() {
-      bool selected = index == _selectedIndex.value;
-      return Container(
+      bool selected = index == selectedIndex.value;
+      return SizedBox(
         width: _kTabWidth,
         height: _kTabHeight,
         child: InkWell(
           onTap: () {
-            if (_selectedIndex.value != index) {
+            if (selectedIndex.value != index) {
               controller.jumpToPage(index);
             }
-            _selectedIndex.value = index;
+            selectedIndex.value = index;
           },
           child: Row(children: [
             Container(
@@ -171,14 +171,129 @@ class _DesktopSettingPageState extends State<DesktopSettingPage>
 
 //#region pages
 
-class _UserInterface extends StatefulWidget {
-  _UserInterface({Key? key}) : super(key: key);
+class _General extends StatefulWidget {
+  const _General({Key? key}) : super(key: key);
 
   @override
-  State<_UserInterface> createState() => _UserInterfaceState();
+  State<_General> createState() => _GeneralState();
 }
 
-class _UserInterfaceState extends State<_UserInterface>
+class _GeneralState extends State<_General> {
+  @override
+  Widget build(BuildContext context) {
+    return ListView(
+      controller: ScrollController(),
+      children: [
+        theme(),
+        abr(),
+        hwcodec(),
+        audio(context),
+      ],
+    ).marginOnly(bottom: _kListViewBottomMargin);
+  }
+
+  Widget theme() {
+    change() {
+      MyTheme.changeTo(!isDarkTheme());
+      setState(() {});
+    }
+
+    return _Card(title: 'Theme', children: [
+      GestureDetector(
+        onTap: change,
+        child: Row(
+          children: [
+            Checkbox(value: isDarkTheme(), onChanged: (_) => change())
+                .marginOnly(right: 5),
+            Expanded(child: Text(translate('Dark Theme'))),
+          ],
+        ).marginOnly(left: _kCheckBoxLeftMargin),
+      )
+    ]);
+  }
+
+  Widget abr() {
+    return _Card(title: 'Adaptive Bitrate', children: [
+      _OptionCheckBox(context, 'Adaptive Bitrate', 'enable-abr'),
+    ]);
+  }
+
+  Widget hwcodec() {
+    return _futureBuilder(
+        future: bind.mainHasHwcodec(),
+        hasData: (data) {
+          return Offstage(
+            offstage: !(data as bool),
+            child: _Card(title: 'Hardware Codec', children: [
+              _OptionCheckBox(
+                  context, 'Enable hardware codec', 'enable-hwcodec'),
+            ]),
+          );
+        });
+  }
+
+  Widget audio(BuildContext context) {
+    String getDefault() {
+      if (Platform.isWindows) return "System Sound";
+      return "";
+    }
+
+    Future<String> getValue() async {
+      String device = await bind.mainGetOption(key: 'audio-input');
+      if (device.isNotEmpty) {
+        return device;
+      } else {
+        return getDefault();
+      }
+    }
+
+    setDevice(String device) {
+      if (device == getDefault()) device = "";
+      bind.mainSetOption(key: 'audio-input', value: device);
+    }
+
+    return _futureBuilder(future: () async {
+      List<String> devices = (await bind.mainGetSoundInputs()).toList();
+      if (Platform.isWindows) {
+        devices.insert(0, 'System Sound');
+      }
+      String current = await getValue();
+      return {'devices': devices, 'current': current};
+    }(), hasData: (data) {
+      String currentDevice = data['current'];
+      List<String> devices = data['devices'] as List<String>;
+      if (devices.isEmpty) {
+        return const Offstage();
+      }
+      List<String> keys = devices.toList();
+      List<String> values = devices.toList();
+      // TODO
+      if (!devices.contains(currentDevice)) {
+        currentDevice = "";
+        keys.insert(0, currentDevice);
+        values.insert(0, 'default');
+      }
+      return _Card(title: 'Audio Input Device', children: [
+        _ComboBox(
+            keys: keys,
+            values: values,
+            initialKey: currentDevice,
+            onChanged: (key) {
+              setDevice(key);
+            }).marginOnly(left: _kContentHMargin),
+      ]);
+    });
+  }
+}
+
+class _Language extends StatefulWidget {
+  const _Language({Key? key}) : super(key: key);
+
+  @override
+  State<_Language> createState() => _LanguageState();
+}
+
+class _LanguageState extends State<_Language>
     with AutomaticKeepAliveClientMixin {
   @override
   bool get wantKeepAlive => true;
@@ -187,9 +302,9 @@ class _UserInterfaceState extends State<_UserInterface>
   Widget build(BuildContext context) {
     super.build(context);
     return ListView(
+      controller: ScrollController(),
       children: [
         _Card(title: 'Language', children: [language()]),
-        _Card(title: 'Theme', children: [theme()]),
       ],
     ).marginOnly(bottom: _kListViewBottomMargin);
   }
@@ -223,22 +338,6 @@ class _UserInterfaceState extends State<_UserInterface>
       ).marginOnly(left: _kContentHMargin);
     });
   }
-
-  Widget theme() {
-    change() {
-      MyTheme.changeTo(!isDarkTheme());
-    }
-
-    return GestureDetector(
-      onTap: change,
-      child: Row(
-        children: [
-          Checkbox(value: isDarkTheme(), onChanged: (_) => change()),
-          Expanded(child: Text(translate('Dark Theme'))),
-        ],
-      ).marginOnly(left: _kCheckBoxLeftMargin),
-    );
-  }
 }
 
 class _Safety extends StatefulWidget {
@@ -257,6 +356,7 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
   Widget build(BuildContext context) {
     super.build(context);
     return ListView(
+      controller: ScrollController(),
       children: [
         Column(
           children: [
@@ -269,7 +369,7 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
               child: Column(children: [
                 permissions(context),
                 password(context),
-                whitelist(),
+                connection(context),
               ]),
             ),
           ],
@@ -379,73 +479,32 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
         })));
   }
 
-  Widget whitelist() {
-    return _Card(title: 'IP Whitelisting', children: [
-      _Button('IP Whitelisting', changeWhiteList,
-          tip: 'whitelist_tip', enabled: !locked)
+  Widget connection(BuildContext context) {
+    bool enabled = !locked;
+    return _Card(title: 'Connection', children: [
+      _OptionCheckBox(context, 'Deny remote access', 'stop-service',
+          checkedIcon: const Icon(
+            Icons.warning,
+            color: Colors.yellowAccent,
+          ),
+          enabled: enabled),
+      _OptionCheckBox(context, 'Enable TCP Tunneling', 'enable-tunnel',
+          enabled: enabled),
+      Offstage(
+        offstage: !Platform.isWindows,
+        child: _OptionCheckBox(context, 'Enable RDP', 'enable-rdp',
+            enabled: enabled),
+      ),
+      ...directIp(context),
+      whitelist(),
     ]);
   }
-}
 
-class _Connection extends StatefulWidget {
-  const _Connection({Key? key}) : super(key: key);
-
-  @override
-  State<_Connection> createState() => _ConnectionState();
-}
-
-class _ConnectionState extends State<_Connection>
-    with AutomaticKeepAliveClientMixin {
-  @override
-  bool get wantKeepAlive => true;
-  bool locked = true;
-
-  @override
-  Widget build(BuildContext context) {
-    super.build(context);
-    bool enabled = !locked;
-    return ListView(children: [
-      Column(
-        children: [
-          _lock(locked, 'Unlock Connection Settings', () {
-            locked = false;
-            setState(() => {});
-          }),
-          AbsorbPointer(
-            absorbing: locked,
-            child: Column(children: [
-              _Card(title: 'Server', children: [
-                _Button('ID/Relay Server', changeServer, enabled: enabled),
-              ]),
-              _Card(title: 'Service', children: [
-                _OptionCheckBox(context, 'Enable Service', 'stop-service',
-                    reverse: true, enabled: enabled),
-                // TODO: Not implemented
-                // _option_check('Always connected via relay', 'allow-always-relay', enabled: enabled),
-                // _option_check('Start ID/relay service', 'stop-rendezvous-service',
-                //     reverse: true, enabled: enabled),
-              ]),
-              _Card(title: 'TCP Tunneling', children: [
-                _OptionCheckBox(
-                    context, 'Enable TCP Tunneling', 'enable-tunnel',
-                    enabled: enabled),
-              ]),
-              direct_ip(context),
-              _Card(title: 'Proxy', children: [
-                _Button('Socks5 Proxy', changeSocks5Proxy, enabled: enabled),
-              ]),
-            ]),
-          ),
-        ],
-      )
-    ]).marginOnly(bottom: _kListViewBottomMargin);
-  }
-
-  Widget direct_ip(BuildContext context) {
+  List<Widget> directIp(BuildContext context) {
     TextEditingController controller = TextEditingController();
-    var update = () => setState(() {});
-    RxBool apply_enabled = false.obs;
-    return _Card(title: 'Direct IP Access', children: [
+    update() => setState(() {});
+    RxBool applyEnabled = false.obs;
+    return [
       _OptionCheckBox(context, 'Enable Direct IP Access', 'direct-server',
           update: update, enabled: !locked),
       _futureBuilder(
@@ -457,194 +516,179 @@ class _ConnectionState extends State<_Connection>
         hasData: (data) {
           bool enabled =
               option2bool('direct-server', data['enabled'].toString());
-          if (!enabled) apply_enabled.value = false;
+          if (!enabled) applyEnabled.value = false;
           controller.text = data['port'].toString();
-          return Row(children: [
-            _SubLabeledWidget(
-              'Port',
-              Container(
-                width: 80,
-                child: TextField(
-                  controller: controller,
-                  enabled: enabled && !locked,
-                  onChanged: (_) => apply_enabled.value = true,
-                  inputFormatters: [
-                    FilteringTextInputFormatter.allow(RegExp(
-                        '\^([0-9]|[1-9]\\d|[1-9]\\d{2}|[1-9]\\d{3}|[1-5]\\d{4}|6[0-4]\\d{3}|65[0-4]\\d{2}|655[0-2]\\d|6553[0-5])\$')),
-                  ],
-                  textAlign: TextAlign.end,
-                  decoration: InputDecoration(
-                    hintText: '21118',
-                    border: InputBorder.none,
-                    contentPadding: EdgeInsets.only(right: 5),
-                    isCollapsed: true,
+          return Offstage(
+            offstage: !enabled,
+            child: Row(children: [
+              _SubLabeledWidget(
+                'Port',
+                SizedBox(
+                  width: 80,
+                  child: TextField(
+                    controller: controller,
+                    enabled: enabled && !locked,
+                    onChanged: (_) => applyEnabled.value = true,
+                    inputFormatters: [
+                      FilteringTextInputFormatter.allow(RegExp(
+                          r'^([0-9]|[1-9]\d|[1-9]\d{2}|[1-9]\d{3}|[1-5]\d{4}|6[0-4]\d{3}|65[0-4]\d{2}|655[0-2]\d|6553[0-5])$')),
+                    ],
+                    textAlign: TextAlign.end,
+                    decoration: const InputDecoration(
+                      hintText: '21118',
+                      border: InputBorder.none,
+                      contentPadding: EdgeInsets.only(right: 5),
+                      isCollapsed: true,
+                    ),
                   ),
                 ),
-              ),
-              enabled: enabled && !locked,
-            ).marginOnly(left: 5),
-            Obx(() => ElevatedButton(
-                  onPressed: apply_enabled.value && enabled && !locked
-                      ? () async {
-                          apply_enabled.value = false;
-                          await bind.mainSetOption(
-                              key: 'direct-access-port',
-                              value: controller.text);
-                        }
-                      : null,
-                  child: Text(
-                    translate('Apply'),
-                  ),
-                ).marginOnly(left: 20))
-          ]);
+                enabled: enabled && !locked,
+              ).marginOnly(left: 5),
+              Obx(() => ElevatedButton(
+                    onPressed: applyEnabled.value && enabled && !locked
+                        ? () async {
+                            applyEnabled.value = false;
+                            await bind.mainSetOption(
+                                key: 'direct-access-port',
+                                value: controller.text);
+                          }
+                        : null,
+                    child: Text(
+                      translate('Apply'),
+                    ),
+                  ).marginOnly(left: 20))
+            ]),
+          );
         },
       ),
-    ]);
+    ];
+  }
+
+  Widget whitelist() {
+    bool enabled = !locked;
+    return _futureBuilder(future: () async {
+      return await bind.mainGetOption(key: 'whitelist');
+    }(), hasData: (data) {
+      RxBool hasWhitelist = (data as String).isNotEmpty.obs;
+      update() async {
+        hasWhitelist.value =
+            (await bind.mainGetOption(key: 'whitelist')).isNotEmpty;
+      }
+
+      onChanged(bool? checked) async {
+        changeWhiteList(callback: update);
+      }
+
+      return GestureDetector(
+        child: Tooltip(
+          message: translate('whitelist_tip'),
+          child: Obx(() => Row(
+                children: [
+                  Checkbox(
+                          value: hasWhitelist.value,
+                          onChanged: enabled ? onChanged : null)
+                      .marginOnly(right: 5),
+                  Offstage(
+                    offstage: !hasWhitelist.value,
+                    child: const Icon(Icons.warning, color: Colors.yellowAccent)
+                        .marginOnly(right: 5),
+                  ),
+                  Expanded(
+                      child: Text(
+                    translate('Use IP Whitelisting'),
+                    style:
+                        TextStyle(color: _disabledTextColor(context, enabled)),
+                  ))
+                ],
+              )),
+        ),
+        onTap: () {
+          onChanged(!hasWhitelist.value);
+        },
+      ).marginOnly(left: _kCheckBoxLeftMargin);
+    });
   }
 }
 
-class _Display extends StatefulWidget {
-  const _Display({Key? key}) : super(key: key);
+class _Network extends StatefulWidget {
+  const _Network({Key? key}) : super(key: key);
 
   @override
-  State<_Display> createState() => _DisplayState();
+  State<_Network> createState() => _NetworkState();
 }
 
-class _DisplayState extends State<_Display> with AutomaticKeepAliveClientMixin {
+class _NetworkState extends State<_Network> with AutomaticKeepAliveClientMixin {
   @override
   bool get wantKeepAlive => true;
+  bool locked = true;
 
   @override
   Widget build(BuildContext context) {
     super.build(context);
+    bool enabled = !locked;
+    return ListView(controller: ScrollController(), children: [
+      Column(
+        children: [
+          _lock(locked, 'Unlock Network Settings', () {
+            locked = false;
+            setState(() => {});
+          }),
+          AbsorbPointer(
+            absorbing: locked,
+            child: Column(children: [
+              _Card(title: 'Server', children: [
+                _Button('ID/Relay Server', changeServer, enabled: enabled),
+              ]),
+              _Card(title: 'Proxy', children: [
+                _Button('Socks5 Proxy', changeSocks5Proxy, enabled: enabled),
+              ]),
+            ]),
+          ),
+        ],
+      )
+    ]).marginOnly(bottom: _kListViewBottomMargin);
+  }
+}
+
+class _Acount extends StatefulWidget {
+  const _Acount({Key? key}) : super(key: key);
+
+  @override
+  State<_Acount> createState() => _AcountState();
+}
+
+class _AcountState extends State<_Acount> {
+  @override
+  Widget build(BuildContext context) {
     return ListView(
+      controller: ScrollController(),
       children: [
-        _Card(title: 'Adaptive Bitrate', children: [
-          _OptionCheckBox(context, 'Adaptive Bitrate', 'enable-abr'),
-        ]),
-        hwcodec(),
+        _Card(title: 'Acount', children: [login()]),
+        _Card(title: 'ID', children: [changeId()]),
       ],
     ).marginOnly(bottom: _kListViewBottomMargin);
   }
 
-  Widget hwcodec() {
-    return _futureBuilder(
-        future: bind.mainHasHwcodec(),
-        hasData: (data) {
-          return Offstage(
-            offstage: !(data as bool),
-            child: _Card(title: 'Hardware Codec', children: [
-              _OptionCheckBox(
-                  context, 'Enable hardware codec', 'enable-hwcodec'),
-            ]),
-          );
-        });
+  Widget login() {
+    return _futureBuilder(future: () async {
+      return await gFFI.userModel.getUserName();
+    }(), hasData: (data) {
+      String username = data as String;
+      return _Button(
+          username.isEmpty ? 'Login' : 'Logout',
+          () => {
+                loginDialog().then((success) {
+                  if (success) {
+                    // refresh frame
+                    setState(() {});
+                  }
+                })
+              });
+    });
   }
-}
 
-class _Audio extends StatefulWidget {
-  const _Audio({Key? key}) : super(key: key);
-
-  @override
-  State<_Audio> createState() => _AudioState();
-}
-
-enum _AudioInputType {
-  Mute,
-  Standard,
-  Specify,
-}
-
-class _AudioState extends State<_Audio> with AutomaticKeepAliveClientMixin {
-  @override
-  bool get wantKeepAlive => true;
-
-  @override
-  Widget build(BuildContext context) {
-    super.build(context);
-    var update = () => setState(() {});
-    var set_enabled = (bool enabled) => bind.mainSetOption(
-        key: 'enable-audio', value: bool2option('enable-audio', enabled));
-    var set_device = (String device) =>
-        bind.mainSetOption(key: 'audio-input', value: device);
-    return ListView(children: [
-      _Card(
-        title: 'Audio Input',
-        children: [
-          _futureBuilder(future: () async {
-            List<String> devices = await bind.mainGetSoundInputs();
-            String current = await bind.mainGetOption(key: 'audio-input');
-            String enabled = await bind.mainGetOption(key: 'enable-audio');
-            return {'devices': devices, 'current': current, 'enabled': enabled};
-          }(), hasData: (data) {
-            bool mute =
-                !option2bool('enable-audio', data['enabled'].toString());
-            String currentDevice = data['current'];
-            List<String> devices = (data['devices'] as List<String>).toList();
-            _AudioInputType groupValue;
-            if (mute) {
-              groupValue = _AudioInputType.Mute;
-            } else if (devices.contains(currentDevice)) {
-              groupValue = _AudioInputType.Specify;
-            } else {
-              groupValue = _AudioInputType.Standard;
-            }
-            List deviceWidget = [].toList();
-            if (devices.isNotEmpty) {
-              var combo = _ComboBox(
-                keys: devices,
-                values: devices,
-                initialKey: devices.contains(currentDevice)
-                    ? currentDevice
-                    : devices[0],
-                onChanged: (key) {
-                  set_device(key);
-                },
-                enabled: groupValue == _AudioInputType.Specify,
-              );
-              deviceWidget.addAll([
-                _Radio<_AudioInputType>(
-                  context,
-                  value: _AudioInputType.Specify,
-                  groupValue: groupValue,
-                  label: 'Specify device',
-                  onChanged: (value) {
-                    set_device(combo.current);
-                    set_enabled(true);
-                    update();
-                  },
-                ),
-                combo.marginOnly(left: _kContentHSubMargin, top: 5),
-              ]);
-            }
-            return Column(children: [
-              _Radio<_AudioInputType>(
-                context,
-                value: _AudioInputType.Mute,
-                groupValue: groupValue,
-                label: 'Mute',
-                onChanged: (value) {
-                  set_enabled(false);
-                  update();
-                },
-              ),
-              _Radio(
-                context,
-                value: _AudioInputType.Standard,
-                groupValue: groupValue,
-                label: 'Use standard device',
-                onChanged: (value) {
-                  set_device('');
-                  set_enabled(true);
-                  update();
-                },
-              ),
-              ...deviceWidget,
-            ]);
-          }),
-        ],
-      )
-    ]).marginOnly(bottom: _kListViewBottomMargin);
+  Widget changeId() {
+    return _Button('Change ID', changeIdDialog);
   }
 }
 
@@ -665,13 +709,13 @@ class _AboutState extends State<_About> {
     }(), hasData: (data) {
       final license = data['license'].toString();
       final version = data['version'].toString();
-      final linkStyle = TextStyle(decoration: TextDecoration.underline);
-      return ListView(children: [
+      const linkStyle = TextStyle(decoration: TextDecoration.underline);
+      return ListView(controller: ScrollController(), children: [
         _Card(title: "About RustDesk", children: [
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              SizedBox(
+              const SizedBox(
                 height: 8.0,
               ),
               Text("Version: $version").marginSymmetric(vertical: 4.0),
@@ -679,7 +723,7 @@ class _AboutState extends State<_About> {
                   onTap: () {
                     launchUrlString("https://rustdesk.com/privacy");
                   },
-                  child: Text(
+                  child: const Text(
                     "Privacy Statement",
                     style: linkStyle,
                   ).marginSymmetric(vertical: 4.0)),
@@ -687,13 +731,14 @@ class _AboutState extends State<_About> {
                   onTap: () {
                     launchUrlString("https://rustdesk.com");
                   },
-                  child: Text(
+                  child: const Text(
                     "Website",
                     style: linkStyle,
                   ).marginSymmetric(vertical: 4.0)),
               Container(
-                decoration: BoxDecoration(color: Color(0xFF2c8cff)),
-                padding: EdgeInsets.symmetric(vertical: 24, horizontal: 8),
+                decoration: const BoxDecoration(color: Color(0xFF2c8cff)),
+                padding:
+                    const EdgeInsets.symmetric(vertical: 24, horizontal: 8),
                 child: Row(
                   children: [
                     Expanded(
@@ -702,9 +747,9 @@ class _AboutState extends State<_About> {
                         children: [
                           Text(
                             "Copyright &copy; 2022 Purslane Ltd.\n$license",
-                            style: TextStyle(color: Colors.white),
+                            style: const TextStyle(color: Colors.white),
                           ),
-                          Text(
+                          const Text(
                             "Made with heart in this chaotic world!",
                             style: TextStyle(
                                 fontWeight: FontWeight.w800,
@@ -728,10 +773,11 @@ class _AboutState extends State<_About> {
 
 //#region components
 
+// ignore: non_constant_identifier_names
 Widget _Card({required String title, required List<Widget> children}) {
   return Row(
     children: [
-      Container(
+      SizedBox(
         width: _kCardFixedWidth,
         child: Card(
           child: Column(
@@ -741,11 +787,11 @@ Widget _Card({required String title, required List<Widget> children}) {
                   Text(
                     translate(title),
                     textAlign: TextAlign.start,
-                    style: TextStyle(
+                    style: const TextStyle(
                       fontSize: _kTitleFontSize,
                     ),
                   ),
-                  Spacer(),
+                  const Spacer(),
                 ],
               ).marginOnly(left: _kContentHMargin, top: 10, bottom: 10),
               ...children
@@ -762,15 +808,19 @@ Color? _disabledTextColor(BuildContext context, bool enabled) {
   return enabled ? null : MyTheme.color(context).lighterText;
 }
 
+// ignore: non_constant_identifier_names
 Widget _OptionCheckBox(BuildContext context, String label, String key,
-    {Function()? update = null, bool reverse = false, bool enabled = true}) {
+    {Function()? update,
+    bool reverse = false,
+    bool enabled = true,
+    Icon? checkedIcon}) {
   return _futureBuilder(
       future: bind.mainGetOption(key: key),
       hasData: (data) {
         bool value = option2bool(key, data.toString());
         if (reverse) value = !value;
         var ref = value.obs;
-        var onChanged = (option) async {
+        onChanged(option) async {
           if (option != null) {
             ref.value = option;
             if (reverse) option = !option;
@@ -778,14 +828,19 @@ Widget _OptionCheckBox(BuildContext context, String label, String key,
             bind.mainSetOption(key: key, value: value);
             update?.call();
           }
-        };
+        }
+
         return GestureDetector(
           child: Obx(
             () => Row(
               children: [
                 Checkbox(
                         value: ref.value, onChanged: enabled ? onChanged : null)
-                    .marginOnly(right: 10),
+                    .marginOnly(right: 5),
+                Offstage(
+                  offstage: !ref.value || checkedIcon == null,
+                  child: checkedIcon?.marginOnly(right: 5),
+                ),
                 Expanded(
                     child: Text(
                   translate(label),
@@ -801,13 +856,14 @@ Widget _OptionCheckBox(BuildContext context, String label, String key,
       });
 }
 
+// ignore: non_constant_identifier_names
 Widget _Radio<T>(BuildContext context,
     {required T value,
     required T groupValue,
     required String label,
     required Function(T value) onChanged,
     bool enabled = true}) {
-  var on_change = enabled
+  var onChange = enabled
       ? (T? value) {
           if (value != null) {
             onChanged(value);
@@ -817,7 +873,7 @@ Widget _Radio<T>(BuildContext context,
   return GestureDetector(
     child: Row(
       children: [
-        Radio<T>(value: value, groupValue: groupValue, onChanged: on_change),
+        Radio<T>(value: value, groupValue: groupValue, onChanged: onChange),
         Expanded(
           child: Text(translate(label),
                   style: TextStyle(
@@ -827,10 +883,11 @@ Widget _Radio<T>(BuildContext context,
         ),
       ],
     ).marginOnly(left: _kRadioLeftMargin),
-    onTap: () => on_change?.call(value),
+    onTap: () => onChange?.call(value),
   );
 }
 
+// ignore: non_constant_identifier_names
 Widget _Button(String label, Function() onPressed,
     {bool enabled = true, String? tip}) {
   var button = ElevatedButton(
@@ -840,7 +897,7 @@ Widget _Button(String label, Function() onPressed,
           translate(label),
         ).marginSymmetric(horizontal: 15),
       ));
-  var child;
+  StatefulWidget child;
   if (tip == null) {
     child = button;
   } else {
@@ -851,6 +908,7 @@ Widget _Button(String label, Function() onPressed,
   ]).marginOnly(left: _kContentHMargin);
 }
 
+// ignore: non_constant_identifier_names
 Widget _SubButton(String label, Function() onPressed, [bool enabled = true]) {
   return Row(
     children: [
@@ -865,6 +923,7 @@ Widget _SubButton(String label, Function() onPressed, [bool enabled = true]) {
   ).marginOnly(left: _kContentHSubMargin);
 }
 
+// ignore: non_constant_identifier_names
 Widget _SubLabeledWidget(String label, Widget child, {bool enabled = true}) {
   RxBool hover = false.obs;
   return Row(
@@ -879,23 +938,23 @@ Widget _SubLabeledWidget(String label, Widget child, {bool enabled = true}) {
                   decoration: BoxDecoration(
                       border: Border.all(
                           color: hover.value && enabled
-                              ? Color(0xFFD7D7D7)
-                              : Color(0xFFCBCBCB),
+                              ? const Color(0xFFD7D7D7)
+                              : const Color(0xFFCBCBCB),
                           width: hover.value && enabled ? 2 : 1)),
                   child: Row(
                     children: [
                       Container(
                         height: 28,
                         color: (hover.value && enabled)
-                            ? Color(0xFFD7D7D7)
-                            : Color(0xFFCBCBCB),
-                        child: Text(
-                          label + ': ',
-                          style: TextStyle(fontWeight: FontWeight.w300),
-                        ),
+                            ? const Color(0xFFD7D7D7)
+                            : const Color(0xFFCBCBCB),
                         alignment: Alignment.center,
-                        padding:
-                            EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 5, vertical: 2),
+                        child: Text(
+                          '${translate(label)}: ',
+                          style: const TextStyle(fontWeight: FontWeight.w300),
+                        ),
                       ).paddingAll(2),
                       child,
                     ],
@@ -915,7 +974,7 @@ Widget _futureBuilder(
           return hasData(snapshot.data!);
         } else {
           if (snapshot.hasError) {
-            print(snapshot.error.toString());
+            debugPrint(snapshot.error.toString());
           }
           return Container();
         }
@@ -931,16 +990,16 @@ Widget _lock(
       offstage: !locked,
       child: Row(
         children: [
-          Container(
+          SizedBox(
             width: _kCardFixedWidth,
             child: Card(
               child: ElevatedButton(
-                child: Container(
+                child: SizedBox(
                     height: 25,
                     child: Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          Icon(
+                          const Icon(
                             Icons.security_sharp,
                             size: 20,
                           ),
@@ -996,7 +1055,7 @@ class _ComboBox extends StatelessWidget {
             underline: Container(
               height: 25,
             ),
-            icon: Icon(
+            icon: const Icon(
               Icons.expand_more_sharp,
               size: 20,
             ),
@@ -1014,7 +1073,7 @@ class _ComboBox extends StatelessWidget {
                 value: value,
                 child: Text(
                   value,
-                  style: TextStyle(fontSize: _kContentFontSize),
+                  style: const TextStyle(fontSize: _kContentFontSize),
                   overflow: TextOverflow.ellipsis,
                 ).marginOnly(left: 5),
               );
@@ -1047,9 +1106,9 @@ void changeServer() async {
   gFFI.dialogManager.show((setState, close) {
     submit() async {
       setState(() {
-        [idServerMsg, relayServerMsg, apiServerMsg].forEach((element) {
-          element = "";
-        });
+        idServerMsg = "";
+        relayServerMsg = "";
+        apiServerMsg = "";
         isInProgress = true;
       });
       cancel() {
@@ -1224,7 +1283,7 @@ void changeServer() async {
   });
 }
 
-void changeWhiteList() async {
+void changeWhiteList({Function()? callback}) async {
   Map<String, dynamic> oldOptions = jsonDecode(await bind.mainGetOptions());
   var newWhiteList = ((oldOptions['whitelist'] ?? "") as String).split(',');
   var newWhiteListField = newWhiteList.join('\n');
@@ -1263,11 +1322,14 @@ void changeWhiteList() async {
         ],
       ),
       actions: [
+        TextButton(onPressed: close, child: Text(translate("Cancel"))),
         TextButton(
-            onPressed: () {
+            onPressed: () async {
+              await bind.mainSetOption(key: 'whitelist', value: '');
+              callback?.call();
               close();
             },
-            child: Text(translate("Cancel"))),
+            child: Text(translate("Clear"))),
         TextButton(
             onPressed: () async {
               setState(() {
@@ -1296,6 +1358,7 @@ void changeWhiteList() async {
               }
               oldOptions['whitelist'] = newWhiteList;
               await bind.mainSetOptions(json: jsonEncode(oldOptions));
+              callback?.call();
               close();
             },
             child: Text(translate("OK"))),
@@ -1433,6 +1496,84 @@ void changeSocks5Proxy() async {
                 offstage: !isInProgress, child: const LinearProgressIndicator())
           ],
         ),
+      ),
+      actions: [
+        TextButton(onPressed: close, child: Text(translate("Cancel"))),
+        TextButton(onPressed: submit, child: Text(translate("OK"))),
+      ],
+      onSubmit: submit,
+      onCancel: close,
+    );
+  });
+}
+
+void changeIdDialog() {
+  var newId = "";
+  var msg = "";
+  var isInProgress = false;
+  TextEditingController controller = TextEditingController();
+  gFFI.dialogManager.show((setState, close) {
+    submit() async {
+      newId = controller.text.trim();
+      setState(() {
+        msg = "";
+        isInProgress = true;
+        bind.mainChangeId(newId: newId);
+      });
+
+      var status = await bind.mainGetAsyncStatus();
+      while (status == " ") {
+        await Future.delayed(const Duration(milliseconds: 100));
+        status = await bind.mainGetAsyncStatus();
+      }
+      if (status.isEmpty) {
+        // ok
+        close();
+        return;
+      }
+      setState(() {
+        isInProgress = false;
+        msg = translate(status);
+      });
+    }
+
+    return CustomAlertDialog(
+      title: Text(translate("Change ID")),
+      content: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(translate("id_change_tip")),
+          const SizedBox(
+            height: 8.0,
+          ),
+          Row(
+            children: [
+              const Text("ID:").marginOnly(bottom: 16.0),
+              const SizedBox(
+                width: 24.0,
+              ),
+              Expanded(
+                child: TextField(
+                  decoration: InputDecoration(
+                      border: const OutlineInputBorder(),
+                      errorText: msg.isEmpty ? null : translate(msg)),
+                  inputFormatters: [
+                    LengthLimitingTextInputFormatter(16),
+                    // FilteringTextInputFormatter(RegExp(r"[a-zA-z][a-zA-z0-9\_]*"), allow: true)
+                  ],
+                  maxLength: 16,
+                  controller: controller,
+                  focusNode: FocusNode()..requestFocus(),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(
+            height: 4.0,
+          ),
+          Offstage(
+              offstage: !isInProgress, child: const LinearProgressIndicator())
+        ],
       ),
       actions: [
         TextButton(onPressed: close, child: Text(translate("Cancel"))),

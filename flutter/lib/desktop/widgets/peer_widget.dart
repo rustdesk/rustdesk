@@ -85,6 +85,7 @@ class _PeerWidgetState extends State<_PeerWidget> with WindowListener {
                 child: Text(translate("Empty")),
               )
             : SingleChildScrollView(
+                controller: ScrollController(),
                 child: ObxValue<RxString>((searchText) {
                   return FutureBuilder<List<Peer>>(
                     builder: (context, snapshot) {

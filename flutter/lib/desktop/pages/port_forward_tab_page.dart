@@ -26,8 +26,8 @@ class _PortForwardTabPageState extends State<PortForwardTabPage> {
 
   _PortForwardTabPageState(Map<String, dynamic> params) {
     isRDP = params['isRDP'];
-    tabController = Get.put(DesktopTabController(
-        tabType: isRDP ? DesktopTabType.rdp : DesktopTabType.portForward));
+    tabController =
+        Get.put(DesktopTabController(tabType: DesktopTabType.portForward));
     tabController.add(TabInfo(
         key: params['id'],
         label: params['id'],
@@ -55,6 +55,11 @@ class _PortForwardTabPageState extends State<PortForwardTabPage> {
         final id = args['id'];
         final isRDP = args['isRDP'];
         window_on_top(windowId());
+        if (tabController.state.value.tabs.indexWhere((e) => e.key == id) >=
+            0) {
+          debugPrint("port forward $id exists");
+          return;
+        }
         tabController.add(TabInfo(
             key: id,
             label: id,

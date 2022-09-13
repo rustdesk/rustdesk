@@ -4,10 +4,11 @@ use crate::{
 };
 use hbb_common::{
     anyhow::{anyhow, Context},
+    bytes::Bytes,
     config::HwCodecConfig,
-    lazy_static, log,
+    get_time, lazy_static, log,
     message_proto::{EncodedVideoFrame, EncodedVideoFrames, Message, VideoFrame},
-    ResultType, bytes::Bytes,
+    ResultType,
 };
 use hwcodec::{
     decode::{DecodeContext, DecodeFrame, Decoder},
@@ -105,6 +106,7 @@ impl EncoderApi for HwEncoder {
                 DataFormat::H264 => vf.set_h264s(frames),
                 DataFormat::H265 => vf.set_h265s(frames),
             }
+            vf.timestamp = get_time();
             msg_out.set_video_frame(vf);
             Ok(msg_out)
         } else {
