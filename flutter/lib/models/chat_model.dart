@@ -128,7 +128,10 @@ class ChatModel with ChangeNotifier {
     if (overlayState == null) return;
     final overlay = OverlayEntry(builder: (context) {
       return DraggableChatWindow(
-          position: Offset(20, 80), width: 250, height: 350, chatModel: this);
+          position: const Offset(20, 80),
+          width: 250,
+          height: 350,
+          chatModel: this);
     });
     overlayState.insert(overlay);
     chatWindowOverlayEntry = overlay;
