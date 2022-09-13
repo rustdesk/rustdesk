@@ -121,20 +121,40 @@ def get_features(args):
     print("features:", features)
     return features
 
+def generate_control_file(version):
+    control_file_path = "../DEBIAN/control"
+    os.system('/bin/rm -rf %s' % control_file_path)
+
+    content = """Package: rustdesk
+Version: %s
+Architecture: amd64
+Maintainer: open-trade <info@rustdesk.com>
+Homepage: https://rustdesk.com
+Depends: libgtk-3-0, libxcb-randr0, libxdo3, libxfixes3, libxcb-shape0, libxcb-xfixes0, libasound2, libsystemd0, pulseaudio, curl
+Description: A remote control software.
+
+""" % version
+    file = open(control_file_path, "w")
+    file.write(content)
+    file.close()
 
 def build_flutter_deb(version):
     os.chdir('flutter')
-    os.system('/bin/rm -rf tmpdeb/')
     os.system('dpkg-deb -R rustdesk.deb tmpdeb')
     os.system('flutter build linux --release')
-    os.system('rm tmpdeb/usr/bin/rustdesk')
+    os.system('strip build/linux/x64/release/liblibrustdesk.so')
+
+    os.system('mkdir -p tmpdeb/usr/bin/')
     os.system('mkdir -p tmpdeb/usr/lib/rustdesk')
     os.system('mkdir -p tmpdeb/usr/share/rustdesk/files/systemd/')
-    os.system('mkdir -p tmpdeb/usr/share/polkit-1/actions')
+    os.system('mkdir -p tmpdeb/usr/share/applications/')
+
     os.system(
         'cp -r build/linux/x64/release/bundle/* tmpdeb/usr/lib/rustdesk/')
     os.system(
         'pushd tmpdeb && ln -s /usr/lib/rustdesk/flutter_hbb usr/bin/rustdesk && popd')
+    os.system(
+        'cp build/linux/x64/release/liblibrustdesk.so tmpdeb/usr/lib/rustdesk/librustdesk.so')
     os.system(
         'cp ../rustdesk.service tmpdeb/usr/share/rustdesk/files/systemd/')
     os.system(
@@ -143,14 +163,15 @@ def build_flutter_deb(version):
         'cp ../128x128@2x.png tmpdeb/usr/share/rustdesk/files/rustdesk.png')
     os.system(
         'cp ../rustdesk.desktop tmpdeb/usr/share/applications/rustdesk.desktop')
-    os.system(
-        'cp ../com.rustdesk.RustDesk.policy tmpdeb/usr/share/polkit-1/actions/')
-    os.system("echo \"#!/bin/sh\" >> tmpdeb/usr/share/rustdesk/files/polkit && chmod a+x tmpdeb/usr/share/rustdesk/files/polkit")
     os.system('mkdir -p tmpdeb/DEBIAN')
+    generate_control_file(version)
     os.system('cp -a ../DEBIAN/* tmpdeb/DEBIAN/')
     md5_file('usr/share/rustdesk/files/systemd/rustdesk.service')
     md5_file('usr/share/rustdesk/files/systemd/rustdesk.service.user')
-    os.system('dpkg-deb -b tmpdeb rustdesk.deb; /bin/rm -rf tmpdeb/')
+    os.system('dpkg-deb -b tmpdeb rustdesk.deb;')
+
+    os.system('/bin/rm -rf tmpdeb/')
+    os.system('/bin/rm -rf ../DEBIAN/control')
     os.rename('rustdesk.deb', '../rustdesk-%s.deb' % version)
     os.chdir("..")
 

@@ -22,7 +22,7 @@ use std::sync::{Arc, Mutex, RwLock};
 
 /// IS_IN KEYBOARD_HOOKED sciter only
 pub static IS_IN: AtomicBool = AtomicBool::new(false);
-static KEYBOARD_HOOKED: AtomicBool = AtomicBool::new(false);
+pub static KEYBOARD_HOOKED: AtomicBool = AtomicBool::new(true);
 
 #[cfg(windows)]
 static mut IS_ALT_GR: bool = false;
@@ -1166,7 +1166,7 @@ impl<T: InvokeUiSession> Session<T> {
         if self.is_port_forward() || self.is_file_transfer() {
             return;
         }
-        if KEYBOARD_HOOKED.swap(true, Ordering::SeqCst) {
+        if !KEYBOARD_HOOKED.load(Ordering::SeqCst){
             return;
         }
         log::info!("keyboard hooked");
