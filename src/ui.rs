@@ -93,7 +93,11 @@ pub fn start(args: &mut [String]) {
         let prefix = std::env::var("APPDIR").unwrap_or("".to_string());
         #[cfg(not(feature = "appimage"))]
         let prefix = "".to_string();
-        sciter::set_library(&(prefix + "/usr/lib/rustdesk/libsciter-gtk.so")).ok();
+        #[cfg(feature = "flatpak")]
+        let dir = "/app";
+        #[cfg(not(feature = "flatpak"))]
+        let dir = "/usr";
+        sciter::set_library(&(prefix + dir + "/lib/rustdesk/libsciter-gtk.so")).ok();
     }
     // https://github.com/c-smile/sciter-sdk/blob/master/include/sciter-x-types.h
     // https://github.com/rustdesk/rustdesk/issues/132#issuecomment-886069737
