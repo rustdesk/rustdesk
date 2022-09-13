@@ -411,7 +411,6 @@ impl sciter::EventHandler for SciterSession {
 impl SciterSession {
     pub fn new(cmd: String, id: String, password: String, args: Vec<String>) -> Self {
         let session: Session<SciterHandler> = Session {
-            cmd: cmd.clone(),
             id: id.clone(),
             password: password.clone(),
             args,

@@ -139,10 +139,6 @@ pub fn get_license() -> String {
 
 pub fn get_option(key: String) -> String {
     get_option_(&key)
-    // #[cfg(any(target_os = "android", target_os = "ios"))]
-    // return Config::get_option(&key);
-    // #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    // return get_option_(&key);
 }
 
 fn get_option_(key: &str) -> String {
@@ -208,7 +204,6 @@ pub fn get_sound_inputs() -> Vec<String> {
     let mut a = Vec::new();
     #[cfg(not(target_os = "linux"))]
     {
-        // TODO TEST
         fn get_sound_inputs_() -> Vec<String> {
             let mut out = Vec::new();
             use cpal::traits::{DeviceTrait, HostTrait};
@@ -236,7 +231,7 @@ pub fn get_sound_inputs() -> Vec<String> {
             a.push(name);
         }
     }
-    #[cfg(target_os = "linux")] // TODO
+    #[cfg(target_os = "linux")]
     {
         let inputs: Vec<String> = crate::platform::linux::get_pa_sources()
             .drain(..)

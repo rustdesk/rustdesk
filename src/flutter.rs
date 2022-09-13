@@ -365,7 +365,7 @@ pub mod connection_manager {
                 log::debug!("call_service_set_by_name fail,{}", e);
             }
             // send to UI, refresh widget
-            self.push_event("add_connection", vec![("client", &client_json)]); // TODO  use add_connection
+            self.push_event("add_connection", vec![("client", &client_json)]);
         }
 
         fn remove_connection(&self, id: i32) {

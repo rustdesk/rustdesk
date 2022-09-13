@@ -575,7 +575,6 @@ pub fn main_forget_password(id: String) {
     forget_password(id)
 }
 
-// TODO APP_DIR & ui_interface
 pub fn main_get_recent_peers() -> String {
     if !config::APP_DIR.read().unwrap().is_empty() {
         let peers: Vec<(String, config::PeerInfoSerde)> = PeerConfig::peers()
@@ -709,9 +708,6 @@ pub fn session_new_rdp(id: String) {
 }
 
 pub fn main_get_last_remote_id() -> String {
-    // if !config::APP_DIR.read().unwrap().is_empty() {
-    //     res = LocalConfig::get_remote_id();
-    // }
     LocalConfig::get_remote_id()
 }
 
