@@ -1,6 +1,6 @@
 use hbb_common::log;
 
-use crate::{start_os_service, flutter::connection_manager, start_server};
+use crate::{flutter::connection_manager, start_os_service, start_server};
 
 /// Main entry of the RustDesk Core.
 /// Return true if the app should continue running with UI(possibly Flutter), false if the app should exit.
@@ -14,6 +14,9 @@ pub fn core_main() -> bool {
             connection_manager::start_listen_ipc_thread();
             return true;
         }
+        
+        use hbb_common::env_logger::*;
+        init_from_env(Env::default().filter_or(DEFAULT_FILTER_ENV, "info"));
         if args[1] == "--service" {
             log::info!("start --service");
             start_os_service();
