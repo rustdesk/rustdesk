@@ -50,6 +50,8 @@ class _RemotePageState extends State<RemotePage>
   var _isPhysicalMouse = false;
   var _imageFocused = false;
 
+  final _onEnterOrLeaveImage = <Function(bool)>[];
+
   late FFI _ffi;
 
   void _updateTabBarHeight() {
@@ -421,11 +423,17 @@ class _RemotePageState extends State<RemotePage>
       _physicalFocusNode.requestFocus();
     }
     _cursorOverImage.value = true;
+    for (var f in _onEnterOrLeaveImage) {
+      f(true);
+    }
     _ffi.enterOrLeave(true);
   }
 
   void leaveView(PointerExitEvent evt) {
     _cursorOverImage.value = false;
+    for (var f in _onEnterOrLeaveImage) {
+      f(false);
+    }
     _ffi.enterOrLeave(false);
   }
 
@@ -469,6 +477,7 @@ class _RemotePageState extends State<RemotePage>
     paints.add(RemoteMenubar(
       id: widget.id,
       ffi: _ffi,
+      onEnterOrLeaveImage: _onEnterOrLeaveImage,
     ));
     return Stack(
       children: paints,
@@ -597,8 +606,8 @@ class ImagePaint extends StatelessWidget {
       return FlutterCustomMemoryImageCursor(
         pixbuf: cacheLinux.data,
         key: key,
-        hotx: 0.0,
-        hoty: 0.0,
+        hotx: cacheLinux.hotx,
+        hoty: cacheLinux.hoty,
         imageWidth: (cacheLinux.width * scale).toInt(),
         imageHeight: (cacheLinux.height * scale).toInt(),
       );

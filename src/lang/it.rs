@@ -343,5 +343,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Use IP Whitelisting", ""),
         ("Network", ""),
         ("Enable RDP", ""),
+        ("Pin menubar", "Blocca la barra dei menu"),
+        ("Unpin menubar", "Sblocca la barra dei menu"),
     ].iter().cloned().collect();
 }

@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -25,11 +26,13 @@ class _MenubarTheme {
 class RemoteMenubar extends StatefulWidget {
   final String id;
   final FFI ffi;
+  final List<Function(bool)> onEnterOrLeaveImage;
 
   const RemoteMenubar({
     Key? key,
     required this.id,
     required this.ffi,
+    required this.onEnterOrLeaveImage,
   }) : super(key: key);
 
   @override
@@ -39,10 +42,36 @@ class RemoteMenubar extends StatefulWidget {
 class _RemoteMenubarState extends State<RemoteMenubar> {
   final RxBool _show = false.obs;
   final Rx<Color> _hideColor = Colors.white12.obs;
+  final _rxHideReplay = rxdart.ReplaySubject<int>();
+  final _pinMenubar = false.obs;
+  bool _isCursorOverImage = false;
 
   bool get isFullscreen => Get.find<RxBool>(tag: 'fullscreen').isTrue;
-  void setFullscreen(bool v) {
+  void _setFullscreen(bool v) {
     Get.find<RxBool>(tag: 'fullscreen').value = v;
+  }
+
+  @override
+  void initState() {
+    super.initState();
+
+    widget.onEnterOrLeaveImage.add((enter) {
+      if (enter) {
+        _rxHideReplay.add(0);
+        _isCursorOverImage = true;
+      } else {
+        _isCursorOverImage = false;
+      }
+    });
+
+    _rxHideReplay
+        .throttleTime(const Duration(milliseconds: 5000),
+            trailing: true, leading: false)
+        .listen((int v) {
+      if (_pinMenubar.isFalse && _show.isTrue && _isCursorOverImage) {
+        _show.value = false;
+      }
+    });
   }
 
   @override
@@ -76,6 +105,7 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
   Widget _buildMenubar(BuildContext context) {
     final List<Widget> menubarItems = [];
     if (!isWebDesktop) {
+      menubarItems.add(_buildPinMenubar(context));
       menubarItems.add(_buildFullscreen(context));
       if (widget.ffi.ffiModel.isPeerAndroid) {
         menubarItems.add(IconButton(
@@ -111,11 +141,29 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
         ]));
   }
 
+  Widget _buildPinMenubar(BuildContext context) {
+    return Obx(() => IconButton(
+          tooltip:
+              translate(_pinMenubar.isTrue ? 'Unpin menubar' : 'Pin menubar'),
+          onPressed: () {
+            _pinMenubar.value = !_pinMenubar.value;
+          },
+          icon: Obx(() => Transform.rotate(
+              angle: _pinMenubar.isTrue ? math.pi / 4 : 0,
+              child: Icon(
+                Icons.push_pin,
+                color: _pinMenubar.isTrue
+                    ? _MenubarTheme.commonColor
+                    : Colors.grey,
+              ))),
+        ));
+  }
+
   Widget _buildFullscreen(BuildContext context) {
     return IconButton(
       tooltip: translate(isFullscreen ? 'Exit Fullscreen' : 'Fullscreen'),
       onPressed: () {
-        setFullscreen(!isFullscreen);
+        _setFullscreen(!isFullscreen);
       },
       icon: Obx(() => isFullscreen
           ? const Icon(
@@ -250,7 +298,6 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
       ),
       tooltip: translate('Display Settings'),
       position: mod_menu.PopupMenuPosition.under,
-      onSelected: (String item) {},
       itemBuilder: (BuildContext context) => _getDisplayMenu()
           .map((entry) => entry.build(
               context,
@@ -273,7 +320,6 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
       ),
       tooltip: translate('Keyboard Settings'),
       position: mod_menu.PopupMenuPosition.under,
-      onSelected: (String item) {},
       itemBuilder: (BuildContext context) => _getKeyboardMenu()
           .map((entry) => entry.build(
               context,
