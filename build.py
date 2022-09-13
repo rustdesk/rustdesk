@@ -71,7 +71,7 @@ def make_parser():
     parser.add_argument(
         '--hwcodec',
         action='store_true',
-        help='Enable feature hwcodec, windows only.'
+        help='Enable feature hwcodec'
     )
     return parser
 
@@ -124,26 +124,28 @@ def get_features(args):
 
 def build_flutter_deb(version):
     os.chdir('flutter')
+    os.system('/bin/rm -rf tmpdeb/')
     os.system('dpkg-deb -R rustdesk.deb tmpdeb')
-    # os.system('flutter build linux --release')
+    os.system('flutter build linux --release')
     os.system('rm tmpdeb/usr/bin/rustdesk')
-    os.system('strip build/linux/x64/release/liblibrustdesk.so')
     os.system('mkdir -p tmpdeb/usr/lib/rustdesk')
     os.system('mkdir -p tmpdeb/usr/share/rustdesk/files/systemd/')
+    os.system('mkdir -p tmpdeb/usr/share/polkit-1/actions')
     os.system(
         'cp -r build/linux/x64/release/bundle/* tmpdeb/usr/lib/rustdesk/')
     os.system(
         'pushd tmpdeb && ln -s /usr/lib/rustdesk/flutter_hbb usr/bin/rustdesk && popd')
     os.system(
-        'cp build/linux/x64/release/liblibrustdesk.so tmpdeb/usr/lib/rustdesk/librustdesk.so')
+        'cp ../rustdesk.service tmpdeb/usr/share/rustdesk/files/systemd/')
     os.system(
-        'cp rustdesk.service tmpdeb/usr/share/rustdesk/files/systemd/')
-    os.system(
-        'cp rustdesk.service.user tmpdeb/usr/share/rustdesk/files/systemd/')
+        'cp ../rustdesk.service.user tmpdeb/usr/share/rustdesk/files/systemd/')
     os.system(
         'cp ../128x128@2x.png tmpdeb/usr/share/rustdesk/files/rustdesk.png')
     os.system(
-        'cp rustdesk.desktop tmpdeb/usr/share/applications/rustdesk.desktop')
+        'cp ../rustdesk.desktop tmpdeb/usr/share/applications/rustdesk.desktop')
+    os.system(
+        'cp ../com.rustdesk.RustDesk.policy tmpdeb/usr/share/polkit-1/actions/')
+    os.system("echo \"#!/bin/sh\" >> tmpdeb/usr/share/rustdesk/files/polkit && chmod a+x tmpdeb/usr/share/rustdesk/files/polkit")
     os.system('mkdir -p tmpdeb/DEBIAN')
     os.system('cp -a ../DEBIAN/* tmpdeb/DEBIAN/')
     md5_file('usr/share/rustdesk/files/systemd/rustdesk.service')
