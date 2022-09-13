@@ -99,7 +99,7 @@ class _PeerCardState extends State<_PeerCard>
                 color: str2color('${peer.id}${peer.platform}', 0x7f),
               ),
               alignment: Alignment.center,
-              child: _getPlatformImage('${peer.platform}', 30).paddingAll(6),
+              child: getPlatformImage(peer.platform, size: 30).paddingAll(6),
             ),
             Expanded(
               child: Container(
@@ -196,7 +196,8 @@ class _PeerCardState extends State<_PeerCard>
                             children: [
                               Container(
                                 padding: const EdgeInsets.all(6),
-                                child: _getPlatformImage(peer.platform, 60),
+                                child:
+                                    getPlatformImage(peer.platform, size: 60),
                               ),
                               Row(
                                 children: [
@@ -285,17 +286,6 @@ class _PeerCardState extends State<_PeerCard>
       items: await super.widget.popupMenuEntryBuilder(context),
       elevation: 8,
     );
-  }
-
-  /// Get the image for the current [platform].
-  Widget _getPlatformImage(String platform, double size) {
-    platform = platform.toLowerCase();
-    if (platform == 'mac os') {
-      platform = 'mac';
-    } else if (platform != 'linux' && platform != 'android') {
-      platform = 'win';
-    }
-    return Image.asset('assets/$platform.png', height: size, width: size);
   }
 
   @override

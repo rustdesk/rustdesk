@@ -67,7 +67,7 @@ class _FileManagerPageState extends State<FileManagerPage>
     if (!Platform.isLinux) {
       Wakelock.enable();
     }
-    print("init success with id ${widget.id}");
+    debugPrint("File manager page init success with id ${widget.id}");
     // register location listener
     _locationNodeLocal.addListener(onLocalLocationFocusChanged);
     _locationNodeRemote.addListener(onRemoteLocationFocusChanged);
@@ -307,109 +307,6 @@ class _FileManagerPageState extends State<FileManagerPage>
               )
             ],
           )),
-          // Center(child: listTail(isLocal: isLocal)),
-          // Expanded(
-          //     child: ListView.builder(
-          //   controller: ScrollController(),
-          //   itemCount: entries.length + 1,
-          //   itemBuilder: (context, index) {
-          //     if (index >= entries.length) {
-          //       return listTail(isLocal: isLocal);
-          //     }
-          //     var selected = false;
-          //     if (model.selectMode) {
-          //       selected = _selectedItems.contains(entries[index]);
-          //     }
-          //
-          //     final sizeStr = entries[index].isFile
-          //         ? readableFileSize(entries[index].size.toDouble())
-          //         : "";
-          //     return Card(
-          //       child: ListTile(
-          //         leading: Icon(
-          //             entries[index].isFile ? Icons.feed_outlined : Icons.folder,
-          //             size: 40),
-          //         title: Text(entries[index].name),
-          //         selected: selected,
-          //         subtitle: Text(
-          //           entries[index]
-          //                   .lastModified()
-          //                   .toString()
-          //                   .replaceAll(".000", "") +
-          //               "   " +
-          //               sizeStr,
-          //           style: TextStyle(fontSize: 12, color: MyTheme.darkGray),
-          //         ),
-          //         trailing: needShowCheckBox()
-          //             ? Checkbox(
-          //                 value: selected,
-          //                 onChanged: (v) {
-          //                   if (v == null) return;
-          //                   if (v && !selected) {
-          //                     _selectedItems.add(isLocal, entries[index]);
-          //                   } else if (!v && selected) {
-          //                     _selectedItems.remove(entries[index]);
-          //                   }
-          //                   setState(() {});
-          //                 })
-          //             : PopupMenuButton<String>(
-          //                 icon: Icon(Icons.more_vert),
-          //                 itemBuilder: (context) {
-          //                   return [
-          //                     PopupMenuItem(
-          //                       child: Text(translate("Delete")),
-          //                       value: "delete",
-          //                     ),
-          //                     PopupMenuItem(
-          //                       child: Text(translate("Multi Select")),
-          //                       value: "multi_select",
-          //                     ),
-          //                     PopupMenuItem(
-          //                       child: Text(translate("Properties")),
-          //                       value: "properties",
-          //                       enabled: false,
-          //                     )
-          //                   ];
-          //                 },
-          //                 onSelected: (v) {
-          //                   if (v == "delete") {
-          //                     final items = SelectedItems();
-          //                     items.add(isLocal, entries[index]);
-          //                     model.removeAction(items);
-          //                   } else if (v == "multi_select") {
-          //                     _selectedItems.clear();
-          //                     model.toggleSelectMode();
-          //                   }
-          //                 }),
-          //         onTap: () {
-          //           if (model.selectMode && !_selectedItems.isOtherPage(isLocal)) {
-          //             if (selected) {
-          //               _selectedItems.remove(entries[index]);
-          //             } else {
-          //               _selectedItems.add(isLocal, entries[index]);
-          //             }
-          //             setState(() {});
-          //             return;
-          //           }
-          //           if (entries[index].isDirectory) {
-          //             openDirectory(entries[index].path, isLocal: isLocal);
-          //             breadCrumbScrollToEnd(isLocal);
-          //           } else {
-          //             // Perform file-related tasks.
-          //           }
-          //         },
-          //         onLongPress: () {
-          //           _selectedItems.clear();
-          //           model.toggleSelectMode();
-          //           if (model.selectMode) {
-          //             _selectedItems.add(isLocal, entries[index]);
-          //           }
-          //           setState(() {});
-          //         },
-          //       ),
-          //     );
-          //   },
-          // ))
         ]),
       ),
     );
@@ -736,42 +633,8 @@ class _FileManagerPageState extends State<FileManagerPage>
     ));
   }
 
-  Widget listTail({bool isLocal = false}) {
-    final dir = isLocal ? model.currentLocalDir : model.currentRemoteDir;
-    return Container(
-      height: 100,
-      child: Column(
-        children: [
-          Padding(
-            padding: EdgeInsets.fromLTRB(30, 5, 30, 0),
-            child: Text(
-              dir.path,
-              style: TextStyle(color: MyTheme.darkGray),
-            ),
-          ),
-          Padding(
-            padding: EdgeInsets.all(2),
-            child: Text(
-              "${translate("Total")}: ${dir.entries.length} ${translate("items")}",
-              style: TextStyle(color: MyTheme.darkGray),
-            ),
-          )
-        ],
-      ),
-    );
-  }
-
   @override
   bool get wantKeepAlive => true;
-
-  /// Get the image for the current [platform].
-  Widget getPlatformImage(String platform) {
-    platform = platform.toLowerCase();
-    if (platform == 'mac os')
-      platform = 'mac';
-    else if (platform != 'linux' && platform != 'android') platform = 'win';
-    return Image.asset('assets/$platform.png', width: 25, height: 25);
-  }
 
   void onLocalLocationFocusChanged() {
     debugPrint("focus changed on local");
@@ -861,7 +724,6 @@ class _FileManagerPageState extends State<FileManagerPage>
 
   openDirectory(String path, {bool isLocal = false}) {
     model.openDirectory(path, isLocal: isLocal).then((_) {
-      print("scroll");
       breadCrumbScrollToEnd(isLocal);
     });
   }

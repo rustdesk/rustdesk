@@ -52,7 +52,7 @@ class _PortForwardPageState extends State<PortForwardPage>
     if (!Platform.isLinux) {
       Wakelock.enable();
     }
-    debugPrint("init success with id ${widget.id}");
+    debugPrint("Port forward page init success with id ${widget.id}");
   }
 
   @override

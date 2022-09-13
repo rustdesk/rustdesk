@@ -98,13 +98,6 @@ class ConnectionManagerState extends State<ConnectionManager> {
     gFFI.serverModel.updateClientState();
     gFFI.serverModel.tabController.onSelected = (index) =>
         gFFI.chatModel.changeCurrentID(gFFI.serverModel.clients[index].id);
-    // test
-    // gFFI.serverModel.clients.forEach((client) {
-    //   DesktopTabBar.onAdd(
-    //       gFFI.serverModel.tabs,
-    //       TabInfo(
-    //           key: client.id.toString(), label: client.name, closable: false));
-    // });
     super.initState();
   }
 
