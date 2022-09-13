@@ -898,3 +898,14 @@ Future<List<Peer>>? matchPeers(String searchText, List<Peer> peers) async {
   }
   return filteredList;
 }
+
+/// Get the image for the current [platform].
+Widget getPlatformImage(String platform, {double size = 50}) {
+  platform = platform.toLowerCase();
+  if (platform == 'mac os') {
+    platform = 'mac';
+  } else if (platform != 'linux' && platform != 'android') {
+    platform = 'win';
+  }
+  return Image.asset('assets/$platform.png', height: size, width: size);
+}

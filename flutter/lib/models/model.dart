@@ -331,7 +331,7 @@ class ImageModel with ChangeNotifier {
 
   ui.Image? get image => _image;
 
-  String _id = '';
+  String id = '';
 
   WeakReference<FFI> parent;
 
@@ -375,7 +375,7 @@ class ImageModel with ChangeNotifier {
         await initializeCursorAndCanvas(parent.target!);
       }
       if (parent.target?.ffiModel.isPeerAndroid ?? false) {
-        bind.sessionPeerOption(id: _id, name: 'view-style', value: 'adaptive');
+        bind.sessionPeerOption(id: id, name: 'view-style', value: 'adaptive');
         parent.target?.canvasModel.updateViewStyle();
       }
     }
@@ -468,7 +468,7 @@ class CanvasModel with ChangeNotifier {
   double _scale = 1.0;
   // the tabbar over the image
   double tabBarHeight = 0.0;
-  // TODO multi canvas model
+  // remote id
   String id = '';
   // scroll offset x percent
   double _scrollX = 0.0;
@@ -681,7 +681,7 @@ class CursorModel with ChangeNotifier {
   double _hoty = 0;
   double _displayOriginX = 0;
   double _displayOriginY = 0;
-  String id = ''; // TODO multi cursor model
+  String id = '';
   WeakReference<FFI> parent;
 
   ui.Image? get image => _image;
@@ -991,7 +991,7 @@ extension ToString on MouseButtons {
 
 enum ConnType { defaultConn, fileTransfer, portForward, rdp }
 
-/// FFI class for communicating with the Rust core.
+/// Flutter state manager and data communication with the Rust core.
 class FFI {
   var id = '';
   var shift = false;
@@ -1020,7 +1020,7 @@ class FFI {
     ffiModel = FfiModel(WeakReference(this));
     cursorModel = CursorModel(WeakReference(this));
     canvasModel = CanvasModel(WeakReference(this));
-    serverModel = ServerModel(WeakReference(this)); // use global FFI
+    serverModel = ServerModel(WeakReference(this));
     chatModel = ChatModel(WeakReference(this));
     fileModel = FileModel(WeakReference(this));
     abModel = AbModel(WeakReference(this));
@@ -1041,12 +1041,6 @@ class FFI {
         msg: json
             .encode(modify({'id': id, 'type': 'wheel', 'y': y.toString()})));
   }
-
-  /// Reconnect to the remote peer.
-  // static reconnect() {
-  //   setByName('reconnect');
-  //   parent.target?.ffiModel.clearPermissions();
-  // }
 
   /// Reset key modifiers to false, including [shift], [ctrl], [alt] and [command].
   resetModifiers() {
@@ -1070,7 +1064,7 @@ class FFI {
         msg: json.encode(modify({'type': type, 'buttons': button.value})));
   }
 
-  // Raw Key
+  /// Send raw Key Event
   inputRawKey(String name, int keyCode, int scanCode, bool down) {
     bind.sessionHandleFlutterKeyEvent(
         id: id,
@@ -1078,10 +1072,6 @@ class FFI {
         keycode: keyCode,
         scancode: scanCode,
         downOrUp: down);
-  }
-
-  Future<String> getKeyboardMode() {
-    return bind.sessionGetKeyboardName(id: id);
   }
 
   enterOrLeave(bool enter) {
@@ -1097,18 +1087,6 @@ class FFI {
   /// [press] indicates a click event(down and up).
   inputKey(String name, {bool? down, bool? press}) {
     if (!ffiModel.keyboard()) return;
-    // final Map<String, String> out = Map();
-    // out['name'] = name;
-    // // default: down = false
-    // if (down == true) {
-    //   out['down'] = 'true';
-    // }
-    // // default: press = true
-    // if (press != false) {
-    //   out['press'] = 'true';
-    // }
-    // setByName('input_key', json.encode(modify(out)));
-    // TODO id
     bind.sessionInputKey(
         id: id,
         name: name,
@@ -1161,7 +1139,7 @@ class FFI {
     } else {
       chatModel.resetClientMode();
       canvasModel.id = id;
-      imageModel._id = id;
+      imageModel.id = id;
       cursorModel.id = id;
     }
     // ignore: unused_local_variable
@@ -1212,17 +1190,6 @@ class FFI {
     debugPrint('model $id closed');
   }
 
-  /// Send **get** command to the Rust core based on [name] and [arg].
-  /// Return the result as a string.
-  // String getByName(String name, [String arg = '']) {
-  //   return platformFFI.getByName(name, arg);
-  // }
-
-  /// Send **set** command to the Rust core based on [name] and [value].
-  // setByName(String name, [String value = '']) {
-  //   platformFFI.setByName(name, value);
-  // }
-
   handleMouse(Map<String, dynamic> evt, {double tabBarHeight = 0.0}) {
     var type = '';
     var isMove = false;
@@ -1240,8 +1207,8 @@ class FFI {
         return;
     }
     evt['type'] = type;
-    var x = evt['x'];
-    var y = max(0.0, (evt['y'] as double) - tabBarHeight);
+    double x = evt['x'];
+    double y = max(0.0, (evt['y'] as double) - tabBarHeight);
     if (isMove) {
       canvasModel.moveDesktopMouse(x, y);
     }
@@ -1264,9 +1231,6 @@ class FFI {
       y -= canvasModel.y;
     }
 
-    if (!isMove && (x < 0 || x > d.width || y < 0 || y > d.height)) {
-      return;
-    }
     x /= canvasModel.scale;
     y /= canvasModel.scale;
     x += d.x;
@@ -1275,6 +1239,9 @@ class FFI {
       x = 0;
       y = 0;
     }
+    // fix mouse out of bounds
+    x = min(max(0.0, x), d.width.toDouble());
+    y = min(max(0.0, y), d.height.toDouble());
     evt['x'] = '${x.round()}';
     evt['y'] = '${y.round()}';
     var buttons = '';

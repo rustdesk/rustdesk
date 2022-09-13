@@ -133,8 +133,6 @@ class ServerModel with ChangeNotifier {
       _fileOk = fileOption.isEmpty;
     }
 
-    // input (mouse control) false by default
-    bind.mainSetOption(key: "enable-keyboard", value: "N");
     notifyListeners();
   }
 

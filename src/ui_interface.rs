@@ -40,6 +40,7 @@ lazy_static::lazy_static! {
     pub static ref SENDER : Mutex<mpsc::UnboundedSender<ipc::Data>> = Mutex::new(check_connect_status(true));
 }
 
+#[inline]
 pub fn recent_sessions_updated() -> bool {
     let mut childs = CHILDS.lock().unwrap();
     if childs.0 {
@@ -50,6 +51,7 @@ pub fn recent_sessions_updated() -> bool {
     }
 }
 
+#[inline]
 pub fn get_id() -> String {
     #[cfg(any(target_os = "android", target_os = "ios"))]
     return Config::get_id();
@@ -57,18 +59,22 @@ pub fn get_id() -> String {
     return ipc::get_id();
 }
 
+#[inline]
 pub fn get_remote_id() -> String {
     LocalConfig::get_remote_id()
 }
 
+#[inline]
 pub fn set_remote_id(id: String) {
     LocalConfig::set_remote_id(&id);
 }
 
+#[inline]
 pub fn goto_install() {
     allow_err!(crate::run_me(vec!["--install"]));
 }
 
+#[inline]
 pub fn install_me(_options: String, _path: String, silent: bool, debug: bool) {
     #[cfg(windows)]
     std::thread::spawn(move || {
@@ -79,6 +85,7 @@ pub fn install_me(_options: String, _path: String, silent: bool, debug: bool) {
     });
 }
 
+#[inline]
 pub fn update_me(_path: String) {
     #[cfg(target_os = "linux")]
     {
@@ -105,11 +112,13 @@ pub fn update_me(_path: String) {
     }
 }
 
+#[inline]
 pub fn run_without_install() {
     crate::run_me(vec!["--noinstall"]).ok();
     std::process::exit(0);
 }
 
+#[inline]
 pub fn show_run_without_install() -> bool {
     let mut it = std::env::args();
     if let Some(tmp) = it.next() {
@@ -120,12 +129,14 @@ pub fn show_run_without_install() -> bool {
     false
 }
 
+#[inline]
 pub fn has_rendezvous_service() -> bool {
     #[cfg(all(windows, feature = "hbbs"))]
     return crate::platform::is_win_server() && crate::platform::windows::get_license().is_some();
     return false;
 }
 
+#[inline]
 pub fn get_license() -> String {
     #[cfg(windows)]
     if let Some(lic) = crate::platform::windows::get_license() {
@@ -137,14 +148,12 @@ pub fn get_license() -> String {
     Default::default()
 }
 
+#[inline]
 pub fn get_option(key: String) -> String {
     get_option_(&key)
-    // #[cfg(any(target_os = "android", target_os = "ios"))]
-    // return Config::get_option(&key);
-    // #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    // return get_option_(&key);
 }
 
+#[inline]
 fn get_option_(key: &str) -> String {
     let map = OPTIONS.lock().unwrap();
     if let Some(v) = map.get(key) {
@@ -154,29 +163,35 @@ fn get_option_(key: &str) -> String {
     }
 }
 
+#[inline]
 pub fn get_local_option(key: String) -> String {
     LocalConfig::get_option(&key)
 }
 
+#[inline]
 pub fn set_local_option(key: String, value: String) {
     LocalConfig::set_option(key, value);
 }
 
+#[inline]
 pub fn peer_has_password(id: String) -> bool {
     !PeerConfig::load(&id).password.is_empty()
 }
 
+#[inline]
 pub fn forget_password(id: String) {
     let mut c = PeerConfig::load(&id);
     c.password.clear();
     c.store(&id);
 }
 
+#[inline]
 pub fn get_peer_option(id: String, name: String) -> String {
     let c = PeerConfig::load(&id);
     c.options.get(&name).unwrap_or(&"".to_owned()).to_owned()
 }
 
+#[inline]
 pub fn set_peer_option(id: String, name: String, value: String) {
     let mut c = PeerConfig::load(&id);
     if value.is_empty() {
@@ -187,10 +202,12 @@ pub fn set_peer_option(id: String, name: String, value: String) {
     c.store(&id);
 }
 
+#[inline]
 pub fn using_public_server() -> bool {
     crate::get_custom_rendezvous_server(get_option_("custom-rendezvous-server")).is_empty()
 }
 
+#[inline]
 pub fn get_options() -> String {
     let options = OPTIONS.lock().unwrap();
     let mut m = serde_json::Map::new();
@@ -200,15 +217,16 @@ pub fn get_options() -> String {
     serde_json::to_string(&m).unwrap()
 }
 
+#[inline]
 pub fn test_if_valid_server(host: String) -> String {
     hbb_common::socket_client::test_if_valid_server(&host)
 }
 
+#[inline]
 pub fn get_sound_inputs() -> Vec<String> {
     let mut a = Vec::new();
     #[cfg(not(target_os = "linux"))]
     {
-        // TODO TEST
         fn get_sound_inputs_() -> Vec<String> {
             let mut out = Vec::new();
             use cpal::traits::{DeviceTrait, HostTrait};
@@ -236,7 +254,7 @@ pub fn get_sound_inputs() -> Vec<String> {
             a.push(name);
         }
     }
-    #[cfg(target_os = "linux")] // TODO
+    #[cfg(target_os = "linux")]
     {
         let inputs: Vec<String> = crate::platform::linux::get_pa_sources()
             .drain(..)
@@ -250,6 +268,7 @@ pub fn get_sound_inputs() -> Vec<String> {
     a
 }
 
+#[inline]
 pub fn set_options(m: HashMap<String, String>) {
     *OPTIONS.lock().unwrap() = m.clone();
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
@@ -258,6 +277,7 @@ pub fn set_options(m: HashMap<String, String>) {
     Config::set_options(m);
 }
 
+#[inline]
 pub fn set_option(key: String, value: String) {
     let mut options = OPTIONS.lock().unwrap();
     #[cfg(target_os = "macos")]
@@ -278,6 +298,7 @@ pub fn set_option(key: String, value: String) {
     Config::set_option(key, value);
 }
 
+#[inline]
 pub fn install_path() -> String {
     #[cfg(windows)]
     return crate::platform::windows::get_install_info().1;
@@ -285,6 +306,7 @@ pub fn install_path() -> String {
     return "".to_owned();
 }
 
+#[inline]
 pub fn get_socks() -> Vec<String> {
     #[cfg(any(target_os = "android", target_os = "ios"))]
     return Vec::new();
@@ -304,6 +326,7 @@ pub fn get_socks() -> Vec<String> {
     }
 }
 
+#[inline]
 pub fn set_socks(proxy: String, username: String, password: String) {
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     ipc::set_socks(config::Socks5Server {
@@ -315,10 +338,12 @@ pub fn set_socks(proxy: String, username: String, password: String) {
 }
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[inline]
 pub fn is_installed() -> bool {
     crate::platform::is_installed()
 }
 
+#[inline]
 pub fn is_rdp_service_open() -> bool {
     #[cfg(windows)]
     return is_installed() && crate::platform::windows::is_rdp_service_open();
@@ -326,6 +351,7 @@ pub fn is_rdp_service_open() -> bool {
     return false;
 }
 
+#[inline]
 pub fn is_share_rdp() -> bool {
     #[cfg(windows)]
     return crate::platform::windows::is_share_rdp();
@@ -333,11 +359,13 @@ pub fn is_share_rdp() -> bool {
     return false;
 }
 
+#[inline]
 pub fn set_share_rdp(_enable: bool) {
     #[cfg(windows)]
     crate::platform::windows::set_share_rdp(_enable);
 }
 
+#[inline]
 pub fn is_installed_lower_version() -> bool {
     #[cfg(not(windows))]
     return false;
@@ -350,12 +378,14 @@ pub fn is_installed_lower_version() -> bool {
     }
 }
 
+#[inline]
 pub fn closing(x: i32, y: i32, w: i32, h: i32) {
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     crate::server::input_service::fix_key_down_timeout_at_exit();
     LocalConfig::set_size(x, y, w, h);
 }
 
+#[inline]
 pub fn get_size() -> Vec<i32> {
     let s = LocalConfig::get_size();
     let mut v = Vec::new();
@@ -366,12 +396,14 @@ pub fn get_size() -> Vec<i32> {
     v
 }
 
+#[inline]
 pub fn get_mouse_time() -> f64 {
     let ui_status = UI_STATUS.lock().unwrap();
     let res = ui_status.2 as f64;
     return res;
 }
 
+#[inline]
 pub fn check_mouse_time() {
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     {
@@ -380,12 +412,14 @@ pub fn check_mouse_time() {
     }
 }
 
+#[inline]
 pub fn get_connect_status() -> Status {
     let ui_statue = UI_STATUS.lock().unwrap();
     let res = ui_statue.clone();
     res
 }
 
+#[inline]
 pub fn temporary_password() -> String {
     #[cfg(any(target_os = "android", target_os = "ios"))]
     return password_security::temporary_password();
@@ -393,6 +427,7 @@ pub fn temporary_password() -> String {
     return TEMPORARY_PASSWD.lock().unwrap().clone();
 }
 
+#[inline]
 pub fn update_temporary_password() {
     #[cfg(any(target_os = "android", target_os = "ios"))]
     password_security::update_temporary_password();
@@ -400,6 +435,7 @@ pub fn update_temporary_password() {
     allow_err!(ipc::update_temporary_password());
 }
 
+#[inline]
 pub fn permanent_password() -> String {
     #[cfg(any(target_os = "android", target_os = "ios"))]
     return Config::get_permanent_password();
@@ -407,6 +443,7 @@ pub fn permanent_password() -> String {
     return ipc::get_permanent_password();
 }
 
+#[inline]
 pub fn set_permanent_password(password: String) {
     #[cfg(any(target_os = "android", target_os = "ios"))]
     Config::set_permanent_password(&password);
@@ -414,31 +451,38 @@ pub fn set_permanent_password(password: String) {
     allow_err!(ipc::set_permanent_password(password));
 }
 
+#[inline]
 pub fn get_peer(id: String) -> PeerConfig {
     PeerConfig::load(&id)
 }
 
+#[inline]
 pub fn get_fav() -> Vec<String> {
     LocalConfig::get_fav()
 }
 
+#[inline]
 pub fn store_fav(fav: Vec<String>) {
     LocalConfig::set_fav(fav);
 }
 
+#[inline]
 pub fn get_recent_sessions() -> Vec<(String, SystemTime, PeerConfig)> {
     PeerConfig::peers()
 }
 
+#[inline]
 #[cfg(not(any(target_os = "android", target_os = "ios", feature = "cli")))]
 pub fn get_icon() -> String {
     crate::get_icon()
 }
 
+#[inline]
 pub fn remove_peer(id: String) {
     PeerConfig::remove(&id);
 }
 
+#[inline]
 pub fn new_remote(id: String, remote_type: String) {
     let mut lock = CHILDS.lock().unwrap();
     let args = vec![format!("--{}", remote_type), id.clone()];
@@ -467,6 +511,7 @@ pub fn new_remote(id: String, remote_type: String) {
     }
 }
 
+#[inline]
 pub fn is_process_trusted(_prompt: bool) -> bool {
     #[cfg(target_os = "macos")]
     return crate::platform::macos::is_process_trusted(_prompt);
@@ -474,6 +519,7 @@ pub fn is_process_trusted(_prompt: bool) -> bool {
     return true;
 }
 
+#[inline]
 pub fn is_can_screen_recording(_prompt: bool) -> bool {
     #[cfg(target_os = "macos")]
     return crate::platform::macos::is_can_screen_recording(_prompt);
@@ -481,6 +527,7 @@ pub fn is_can_screen_recording(_prompt: bool) -> bool {
     return true;
 }
 
+#[inline]
 pub fn is_installed_daemon(_prompt: bool) -> bool {
     #[cfg(target_os = "macos")]
     return crate::platform::macos::is_installed_daemon(_prompt);
@@ -488,6 +535,7 @@ pub fn is_installed_daemon(_prompt: bool) -> bool {
     return true;
 }
 
+#[inline]
 pub fn get_error() -> String {
     #[cfg(not(any(feature = "cli")))]
     #[cfg(target_os = "linux")]
@@ -508,6 +556,7 @@ pub fn get_error() -> String {
     return "".to_owned();
 }
 
+#[inline]
 pub fn is_login_wayland() -> bool {
     #[cfg(target_os = "linux")]
     return crate::platform::linux::is_login_wayland();
@@ -515,11 +564,13 @@ pub fn is_login_wayland() -> bool {
     return false;
 }
 
+#[inline]
 pub fn fix_login_wayland() {
     #[cfg(target_os = "linux")]
     crate::platform::linux::fix_login_wayland();
 }
 
+#[inline]
 pub fn current_is_wayland() -> bool {
     #[cfg(target_os = "linux")]
     return crate::platform::linux::current_is_wayland();
@@ -527,6 +578,7 @@ pub fn current_is_wayland() -> bool {
     return false;
 }
 
+#[inline]
 pub fn modify_default_login() -> String {
     #[cfg(target_os = "linux")]
     return crate::platform::linux::modify_default_login();
@@ -534,22 +586,27 @@ pub fn modify_default_login() -> String {
     return "".to_owned();
 }
 
+#[inline]
 pub fn get_software_update_url() -> String {
     SOFTWARE_UPDATE_URL.lock().unwrap().clone()
 }
 
+#[inline]
 pub fn get_new_version() -> String {
     hbb_common::get_version_from_url(&*SOFTWARE_UPDATE_URL.lock().unwrap())
 }
 
+#[inline]
 pub fn get_version() -> String {
     crate::VERSION.to_owned()
 }
 
+#[inline]
 pub fn get_app_name() -> String {
     crate::get_app_name()
 }
 
+#[inline]
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub fn get_software_ext() -> String {
     #[cfg(windows)]
@@ -561,6 +618,7 @@ pub fn get_software_ext() -> String {
     p.to_owned()
 }
 
+#[inline]
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub fn get_software_store_path() -> String {
     let mut p = std::env::temp_dir();
@@ -575,17 +633,20 @@ pub fn get_software_store_path() -> String {
     format!("{}.{}", p.to_string_lossy(), get_software_ext())
 }
 
+#[inline]
 pub fn create_shortcut(_id: String) {
     #[cfg(windows)]
     crate::platform::windows::create_shortcut(&_id).ok();
 }
 
+#[inline]
 pub fn discover() {
     std::thread::spawn(move || {
         allow_err!(crate::lan::discover());
     });
 }
 
+#[inline]
 pub fn get_lan_peers() -> Vec<(String, config::PeerInfoSerde)> {
     config::LanPeers::load()
         .peers
@@ -603,10 +664,12 @@ pub fn get_lan_peers() -> Vec<(String, config::PeerInfoSerde)> {
         .collect()
 }
 
+#[inline]
 pub fn get_uuid() -> String {
     base64::encode(hbb_common::get_uuid())
 }
 
+#[inline]
 #[cfg(not(any(target_os = "android", target_os = "ios", feature = "cli")))]
 pub fn open_url(url: String) {
     #[cfg(windows)]
@@ -622,6 +685,7 @@ pub fn open_url(url: String) {
     allow_err!(std::process::Command::new(p).arg(url).spawn());
 }
 
+#[inline]
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub fn change_id(id: String) {
     *ASYNC_JOB_STATUS.lock().unwrap() = " ".to_owned();
@@ -631,6 +695,7 @@ pub fn change_id(id: String) {
     });
 }
 
+#[inline]
 pub fn post_request(url: String, body: String, header: String) {
     *ASYNC_JOB_STATUS.lock().unwrap() = " ".to_owned();
     std::thread::spawn(move || {
@@ -641,28 +706,34 @@ pub fn post_request(url: String, body: String, header: String) {
     });
 }
 
+#[inline]
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub fn is_ok_change_id() -> bool {
     machine_uid::get().is_ok()
 }
 
+#[inline]
 pub fn get_async_job_status() -> String {
     ASYNC_JOB_STATUS.lock().unwrap().clone()
 }
 
+#[inline]
 #[cfg(not(any(target_os = "android", target_os = "ios", feature = "cli")))]
 pub fn t(name: String) -> String {
     crate::client::translate(name)
 }
 
+#[inline]
 pub fn get_langs() -> String {
     crate::lang::LANGS.to_string()
 }
 
+#[inline]
 pub fn is_xfce() -> bool {
     crate::platform::is_xfce()
 }
 
+#[inline]
 pub fn get_api_server() -> String {
     crate::get_api_server(
         get_option_("api-server"),
@@ -670,6 +741,7 @@ pub fn get_api_server() -> String {
     )
 }
 
+#[inline]
 pub fn has_hwcodec() -> bool {
     #[cfg(not(feature = "hwcodec"))]
     return false;
@@ -677,6 +749,7 @@ pub fn has_hwcodec() -> bool {
     return true;
 }
 
+#[inline]
 pub fn check_super_user_permission() -> bool {
     #[cfg(any(windows, target_os = "linux"))]
     return crate::platform::check_super_user_permission().unwrap_or(false);

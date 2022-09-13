@@ -215,15 +215,6 @@ class _ConnectionPageState extends State<ConnectionPage> {
     super.dispose();
   }
 
-  /// Get the image for the current [platform].
-  Widget getPlatformImage(String platform) {
-    platform = platform.toLowerCase();
-    if (platform == 'mac os')
-      platform = 'mac';
-    else if (platform != 'linux' && platform != 'android') platform = 'win';
-    return Image.asset('assets/$platform.png', width: 24, height: 24);
-  }
-
   /// Get all the saved peers.
   Widget getPeers() {
     final windowWidth = MediaQuery.of(context).size.width;

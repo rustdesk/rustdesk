@@ -8,17 +8,11 @@ import 'package:flutter_hbb/desktop/widgets/peer_widget.dart';
 import 'package:flutter_hbb/desktop/widgets/peercard_widget.dart';
 import 'package:flutter_hbb/utils/multi_window_manager.dart';
 import 'package:get/get.dart';
-import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher_string.dart';
 
 import '../../common.dart';
 import '../../common/formatter/id_formatter.dart';
-import '../../mobile/pages/scan_page.dart';
-import '../../mobile/pages/settings_page.dart';
-import '../../models/model.dart';
 import '../../models/platform_model.dart';
-
-// enum RemoteType { recently, favorite, discovered, addressBook }
 
 /// Connection page for connecting to a remote peer.
 class ConnectionPage extends StatefulWidget {
@@ -32,9 +26,6 @@ class ConnectionPage extends StatefulWidget {
 class _ConnectionPageState extends State<ConnectionPage> {
   /// Controller for the id input bar.
   final _idController = IDTextEditingController();
-
-  /// Update url. If it's not null, means an update is available.
-  final _updateUrl = '';
 
   Timer? _updateTimer;
 
@@ -67,7 +58,6 @@ class _ConnectionPageState extends State<ConnectionPage> {
             Expanded(
               child: Column(
                 children: [
-                  getUpdateUI(),
                   Row(
                     children: [
                       getSearchBarUI(context),
@@ -129,28 +119,6 @@ class _ConnectionPageState extends State<ConnectionPage> {
     if (!currentFocus.hasPrimaryFocus) {
       currentFocus.unfocus();
     }
-  }
-
-  /// UI for software update.
-  /// If [_updateUrl] is not empty, shows a button to update the software.
-  Widget getUpdateUI() {
-    return _updateUrl.isEmpty
-        ? SizedBox(height: 0)
-        : InkWell(
-            onTap: () async {
-              final url = _updateUrl + '.apk';
-              if (await canLaunchUrlString(url)) {
-                await launchUrlString(url);
-              }
-            },
-            child: Container(
-                alignment: AlignmentDirectional.center,
-                width: double.infinity,
-                color: Colors.pinkAccent,
-                padding: EdgeInsets.symmetric(vertical: 12),
-                child: Text(translate('Download new version'),
-                    style: TextStyle(
-                        color: Colors.white, fontWeight: FontWeight.bold))));
   }
 
   /// UI for the search bar.
@@ -328,86 +296,6 @@ class _ConnectionPageState extends State<ConnectionPage> {
     super.dispose();
   }
 
-  /// Get the image for the current [platform].
-  Widget getPlatformImage(String platform) {
-    platform = platform.toLowerCase();
-    if (platform == 'mac os')
-      platform = 'mac';
-    else if (platform != 'linux' && platform != 'android') platform = 'win';
-    return Image.asset('assets/$platform.png', height: 50);
-  }
-
-  bool hitTag(List<dynamic> selectedTags, List<dynamic> idents) {
-    if (selectedTags.isEmpty) {
-      return true;
-    }
-    if (idents.isEmpty) {
-      return false;
-    }
-    for (final tag in selectedTags) {
-      if (!idents.contains(tag)) {
-        return false;
-      }
-    }
-    return true;
-  }
-
-  // /// Show the peer menu and handle user's choice.
-  // /// User might remove the peer or send a file to the peer.
-  // void showPeerMenu(BuildContext context, String id, RemoteType rType) async {
-  //   var items = [
-  //     PopupMenuItem<String>(
-  //         child: Text(translate('Connect')), value: 'connect'),
-  //     PopupMenuItem<String>(
-  //         child: Text(translate('Transfer File')), value: 'file'),
-  //     PopupMenuItem<String>(
-  //         child: Text(translate('TCP Tunneling')), value: 'tcp-tunnel'),
-  //     PopupMenuItem<String>(child: Text(translate('Rename')), value: 'rename'),
-  //     rType == RemoteType.addressBook
-  //         ? PopupMenuItem<String>(
-  //             child: Text(translate('Remove')), value: 'ab-delete')
-  //         : PopupMenuItem<String>(
-  //             child: Text(translate('Remove')), value: 'remove'),
-  //     PopupMenuItem<String>(
-  //         child: Text(translate('Unremember Password')),
-  //         value: 'unremember-password'),
-  //   ];
-  //   if (rType == RemoteType.favorite) {
-  //     items.add(PopupMenuItem<String>(
-  //         child: Text(translate('Remove from Favorites')),
-  //         value: 'remove-fav'));
-  //   } else if (rType != RemoteType.addressBook) {
-  //     items.add(PopupMenuItem<String>(
-  //         child: Text(translate('Add to Favorites')), value: 'add-fav'));
-  //   } else {
-  //     items.add(PopupMenuItem<String>(
-  //         child: Text(translate('Edit Tag')), value: 'ab-edit-tag'));
-  //   }
-  //   var value = await showMenu(
-  //     context: context,
-  //     position: this._menuPos,
-  //     items: items,
-  //     elevation: 8,
-  //   );
-  //   if (value == 'remove') {
-  //     setState(() => gFFI.setByName('remove', '$id'));
-  //     () async {
-  //       removePreference(id);
-  //     }();
-  //   } else if (value == 'file') {
-  //     connect(id, isFileTransfer: true);
-  //   } else if (value == 'add-fav') {
-  //   } else if (value == 'connect') {
-  //     connect(id, isFileTransfer: false);
-  //   } else if (value == 'ab-delete') {
-  //     gFFI.abModel.deletePeer(id);
-  //     await gFFI.abModel.updateAb();
-  //     setState(() {});
-  //   } else if (value == 'ab-edit-tag') {
-  //     abEditTag(id);
-  //   }
-  // }
-
   var svcStopped = false.obs;
   var svcStatusCode = 0.obs;
   var svcIsUsingPublicServer = true.obs;
@@ -454,7 +342,7 @@ class _ConnectionPageState extends State<ConnectionPage> {
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
         light,
-        Text("${translate('Ready')}"),
+        Text(translate('Ready')),
         svcIsUsingPublicServer.value
             ? InkWell(
                 onTap: onUsePublicServerGuide,
@@ -469,7 +357,7 @@ class _ConnectionPageState extends State<ConnectionPage> {
   }
 
   void onUsePublicServerGuide() {
-    final url = "https://rustdesk.com/blog/id-relay-set/";
+    const url = "https://rustdesk.com/blog/id-relay-set/";
     canLaunchUrlString(url).then((can) {
       if (can) {
         launchUrlString(url);
@@ -854,100 +742,6 @@ class _ConnectionPageState extends State<ConnectionPage> {
         onCancel: close,
       );
     });
-  }
-}
-
-class WebMenu extends StatefulWidget {
-  @override
-  _WebMenuState createState() => _WebMenuState();
-}
-
-class _WebMenuState extends State<WebMenu> {
-  String? username;
-  String url = "";
-
-  @override
-  void initState() {
-    super.initState();
-    () async {
-      final usernameRes = await getUsername();
-      final urlRes = await getUrl();
-      var update = false;
-      if (usernameRes != username) {
-        username = usernameRes;
-        update = true;
-      }
-      if (urlRes != url) {
-        url = urlRes;
-        update = true;
-      }
-
-      if (update) {
-        setState(() {});
-      }
-    }();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    Provider.of<FfiModel>(context);
-    return PopupMenuButton<String>(
-        icon: Icon(Icons.more_vert),
-        itemBuilder: (context) {
-          return (isIOS
-                  ? [
-                      PopupMenuItem(
-                        child: Icon(Icons.qr_code_scanner, color: Colors.black),
-                        value: "scan",
-                      )
-                    ]
-                  : <PopupMenuItem<String>>[]) +
-              [
-                PopupMenuItem(
-                  child: Text(translate('ID/Relay Server')),
-                  value: "server",
-                )
-              ] +
-              (url.contains('admin.rustdesk.com')
-                  ? <PopupMenuItem<String>>[]
-                  : [
-                      PopupMenuItem(
-                        child: Text(username == null
-                            ? translate("Login")
-                            : translate("Logout") + ' ($username)'),
-                        value: "login",
-                      )
-                    ]) +
-              [
-                PopupMenuItem(
-                  child: Text(translate('About') + ' RustDesk'),
-                  value: "about",
-                )
-              ];
-        },
-        onSelected: (value) {
-          if (value == 'server') {
-            showServerSettings(gFFI.dialogManager);
-          }
-          if (value == 'about') {
-            showAbout(gFFI.dialogManager);
-          }
-          if (value == 'login') {
-            if (username == null) {
-              showLogin(gFFI.dialogManager);
-            } else {
-              logout(gFFI.dialogManager);
-            }
-          }
-          if (value == 'scan') {
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (BuildContext context) => ScanPage(),
-              ),
-            );
-          }
-        });
   }
 }
 

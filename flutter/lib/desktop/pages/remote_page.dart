@@ -10,16 +10,13 @@ import 'package:provider/provider.dart';
 import 'package:wakelock/wakelock.dart';
 import 'package:flutter_custom_cursor/flutter_custom_cursor.dart';
 
-// import 'package:window_manager/window_manager.dart';
-
+import '../../consts.dart';
 import '../widgets/remote_menubar.dart';
 import '../../common.dart';
 import '../../mobile/widgets/dialog.dart';
 import '../../models/model.dart';
 import '../../models/platform_model.dart';
 import '../../common/shared_state.dart';
-
-final initText = '\1' * 1024;
 
 class RemotePage extends StatefulWidget {
   const RemotePage({
@@ -38,15 +35,13 @@ class RemotePage extends StatefulWidget {
 class _RemotePageState extends State<RemotePage>
     with AutomaticKeepAliveClientMixin {
   Timer? _timer;
-  String _value = '';
   String keyboardMode = "legacy";
   final _cursorOverImage = false.obs;
   late RxBool _showRemoteCursor;
   late RxBool _remoteCursorMoved;
   late RxBool _keyboardEnabled;
 
-  final FocusNode _mobileFocusNode = FocusNode();
-  final FocusNode _physicalFocusNode = FocusNode();
+  final FocusNode _rawKeyFocusNode = FocusNode();
   var _isPhysicalMouse = false;
   var _imageFocused = false;
 
@@ -95,11 +90,9 @@ class _RemotePageState extends State<RemotePage>
     if (!Platform.isLinux) {
       Wakelock.enable();
     }
-    _physicalFocusNode.requestFocus();
+    _rawKeyFocusNode.requestFocus();
     _ffi.ffiModel.updateEventListener(widget.id);
-    _ffi.listenToMouse(true);
     _ffi.qualityMonitorModel.checkShowQualityMonitor(widget.id);
-    // WindowManager.instance.addListener(this);
     _showRemoteCursor.value = bind.sessionGetToggleOptionSync(
         id: widget.id, arg: 'show-remote-cursor');
   }
@@ -108,9 +101,7 @@ class _RemotePageState extends State<RemotePage>
   void dispose() {
     debugPrint("REMOTE PAGE dispose ${widget.id}");
     _ffi.dialogManager.hideMobileActionsOverlay();
-    _ffi.listenToMouse(false);
-    _mobileFocusNode.dispose();
-    _physicalFocusNode.dispose();
+    _rawKeyFocusNode.dispose();
     _ffi.close();
     _timer?.cancel();
     _ffi.dialogManager.dismissAll();
@@ -119,7 +110,6 @@ class _RemotePageState extends State<RemotePage>
     if (!Platform.isLinux) {
       Wakelock.disable();
     }
-    // WindowManager.instance.removeListener(this);
     Get.delete<FFI>(tag: widget.id);
     super.dispose();
     _removeStates(widget.id);
@@ -129,87 +119,10 @@ class _RemotePageState extends State<RemotePage>
     _ffi.resetModifiers();
   }
 
-  // handle mobile virtual keyboard
-  void handleInput(String newValue) {
-    var oldValue = _value;
-    _value = newValue;
-    if (isIOS) {
-      var i = newValue.length - 1;
-      for (; i >= 0 && newValue[i] != '\1'; --i) {}
-      var j = oldValue.length - 1;
-      for (; j >= 0 && oldValue[j] != '\1'; --j) {}
-      if (i < j) j = i;
-      newValue = newValue.substring(j + 1);
-      oldValue = oldValue.substring(j + 1);
-      var common = 0;
-      for (;
-          common < oldValue.length &&
-              common < newValue.length &&
-              newValue[common] == oldValue[common];
-          ++common) {}
-      for (i = 0; i < oldValue.length - common; ++i) {
-        _ffi.inputKey('VK_BACK');
-      }
-      if (newValue.length > common) {
-        var s = newValue.substring(common);
-        if (s.length > 1) {
-          bind.sessionInputString(id: widget.id, value: s);
-        } else {
-          inputChar(s);
-        }
-      }
-      return;
-    }
-    if (oldValue.isNotEmpty &&
-        newValue.isNotEmpty &&
-        oldValue[0] == '\1' &&
-        newValue[0] != '\1') {
-      // clipboard
-      oldValue = '';
-    }
-    if (newValue.length == oldValue.length) {
-      // ?
-    } else if (newValue.length < oldValue.length) {
-      const char = 'VK_BACK';
-      _ffi.inputKey(char);
-    } else {
-      final content = newValue.substring(oldValue.length);
-      if (content.length > 1) {
-        if (oldValue != '' &&
-            content.length == 2 &&
-            (content == '""' ||
-                content == '()' ||
-                content == '[]' ||
-                content == '<>' ||
-                content == "{}" ||
-                content == '”“' ||
-                content == '《》' ||
-                content == '（）' ||
-                content == '【】')) {
-          // can not only input content[0], because when input ], [ are also auo insert, which cause ] never be input
-          bind.sessionInputString(id: widget.id, value: content);
-          return;
-        }
-        bind.sessionInputString(id: widget.id, value: content);
-      } else {
-        inputChar(content);
-      }
-    }
-  }
-
-  void inputChar(String char) {
-    if (char == '\n') {
-      char = 'VK_RETURN';
-    } else if (char == ' ') {
-      char = 'VK_SPACE';
-    }
-    _ffi.inputKey(char);
-  }
-
   void sendRawKey(RawKeyEvent e, {bool? down, bool? press}) {
     // for maximum compatibility
-    final label = _logicalKeyMap[e.logicalKey.keyId] ??
-        _physicalKeyMap[e.physicalKey.usbHidUsage] ??
+    final label = logicalKeyMap[e.logicalKey.keyId] ??
+        physicalKeyMap[e.physicalKey.usbHidUsage] ??
         e.logicalKey.keyLabel;
     _ffi.inputKey(label, down: down, press: press ?? false);
   }
@@ -339,7 +252,7 @@ class _RemotePageState extends State<RemotePage>
         child: Focus(
             autofocus: true,
             canRequestFocus: true,
-            focusNode: _physicalFocusNode,
+            focusNode: _rawKeyFocusNode,
             onFocusChange: (bool v) {
               _imageFocused = v;
             },
@@ -347,15 +260,6 @@ class _RemotePageState extends State<RemotePage>
             child: child));
   }
 
-  /// touchMode only:
-  ///   LongPress -> right click
-  ///   OneFingerPan -> start/end -> left down start/end
-  ///   onDoubleTapDown -> move to
-  ///   onLongPressDown => move to
-  ///
-  /// mouseMode only:
-  ///   DoubleFiner -> right click
-  ///   HoldDrag -> left drag
   void _onPointHoverImage(PointerHoverEvent e) {
     if (e.kind != ui.PointerDeviceKind.mouse) return;
     if (!_isPhysicalMouse) {
@@ -420,7 +324,7 @@ class _RemotePageState extends State<RemotePage>
 
   void enterView(PointerEnterEvent evt) {
     if (!_imageFocused) {
-      _physicalFocusNode.requestFocus();
+      _rawKeyFocusNode.requestFocus();
     }
     _cursorOverImage.value = true;
     for (var f in _onEnterOrLeaveImage) {
@@ -503,21 +407,6 @@ class _RemotePageState extends State<RemotePage>
       out['buttons'] = lastMouseDownButtons;
     }
     return out;
-  }
-
-  @override
-  void onWindowEvent(String eventName) {
-    print("window event: $eventName");
-    switch (eventName) {
-      case 'resize':
-        _ffi.canvasModel.updateViewStyle();
-        break;
-      case 'maximize':
-        Future.delayed(const Duration(milliseconds: 100), () {
-          _ffi.canvasModel.updateViewStyle();
-        });
-        break;
-    }
   }
 
   @override
@@ -747,249 +636,3 @@ class QualityMonitor extends StatelessWidget {
                     )
                   : const SizedBox.shrink())));
 }
-
-void sendPrompt(String id, bool isMac, String key) {
-  FFI _ffi = ffi(id);
-  final old = isMac ? _ffi.command : _ffi.ctrl;
-  if (isMac) {
-    _ffi.command = true;
-  } else {
-    _ffi.ctrl = true;
-  }
-  _ffi.inputKey(key);
-  if (isMac) {
-    _ffi.command = old;
-  } else {
-    _ffi.ctrl = old;
-  }
-}
-
-/// flutter/packages/flutter/lib/src/services/keyboard_key.dart -> _keyLabels
-/// see [LogicalKeyboardKey.keyLabel]
-const Map<int, String> _logicalKeyMap = <int, String>{
-  0x00000000020: 'VK_SPACE',
-  0x00000000022: 'VK_QUOTE',
-  0x0000000002c: 'VK_COMMA',
-  0x0000000002d: 'VK_MINUS',
-  0x0000000002f: 'VK_SLASH',
-  0x00000000030: 'VK_0',
-  0x00000000031: 'VK_1',
-  0x00000000032: 'VK_2',
-  0x00000000033: 'VK_3',
-  0x00000000034: 'VK_4',
-  0x00000000035: 'VK_5',
-  0x00000000036: 'VK_6',
-  0x00000000037: 'VK_7',
-  0x00000000038: 'VK_8',
-  0x00000000039: 'VK_9',
-  0x0000000003b: 'VK_SEMICOLON',
-  0x0000000003d: 'VK_PLUS', // it is =
-  0x0000000005b: 'VK_LBRACKET',
-  0x0000000005c: 'VK_BACKSLASH',
-  0x0000000005d: 'VK_RBRACKET',
-  0x00000000061: 'VK_A',
-  0x00000000062: 'VK_B',
-  0x00000000063: 'VK_C',
-  0x00000000064: 'VK_D',
-  0x00000000065: 'VK_E',
-  0x00000000066: 'VK_F',
-  0x00000000067: 'VK_G',
-  0x00000000068: 'VK_H',
-  0x00000000069: 'VK_I',
-  0x0000000006a: 'VK_J',
-  0x0000000006b: 'VK_K',
-  0x0000000006c: 'VK_L',
-  0x0000000006d: 'VK_M',
-  0x0000000006e: 'VK_N',
-  0x0000000006f: 'VK_O',
-  0x00000000070: 'VK_P',
-  0x00000000071: 'VK_Q',
-  0x00000000072: 'VK_R',
-  0x00000000073: 'VK_S',
-  0x00000000074: 'VK_T',
-  0x00000000075: 'VK_U',
-  0x00000000076: 'VK_V',
-  0x00000000077: 'VK_W',
-  0x00000000078: 'VK_X',
-  0x00000000079: 'VK_Y',
-  0x0000000007a: 'VK_Z',
-  0x00100000008: 'VK_BACK',
-  0x00100000009: 'VK_TAB',
-  0x0010000000d: 'VK_ENTER',
-  0x0010000001b: 'VK_ESCAPE',
-  0x0010000007f: 'VK_DELETE',
-  0x00100000104: 'VK_CAPITAL',
-  0x00100000301: 'VK_DOWN',
-  0x00100000302: 'VK_LEFT',
-  0x00100000303: 'VK_RIGHT',
-  0x00100000304: 'VK_UP',
-  0x00100000305: 'VK_END',
-  0x00100000306: 'VK_HOME',
-  0x00100000307: 'VK_NEXT',
-  0x00100000308: 'VK_PRIOR',
-  0x00100000401: 'VK_CLEAR',
-  0x00100000407: 'VK_INSERT',
-  0x00100000504: 'VK_CANCEL',
-  0x00100000506: 'VK_EXECUTE',
-  0x00100000508: 'VK_HELP',
-  0x00100000509: 'VK_PAUSE',
-  0x0010000050c: 'VK_SELECT',
-  0x00100000608: 'VK_PRINT',
-  0x00100000705: 'VK_CONVERT',
-  0x00100000706: 'VK_FINAL',
-  0x00100000711: 'VK_HANGUL',
-  0x00100000712: 'VK_HANJA',
-  0x00100000713: 'VK_JUNJA',
-  0x00100000718: 'VK_KANA',
-  0x00100000719: 'VK_KANJI',
-  0x00100000801: 'VK_F1',
-  0x00100000802: 'VK_F2',
-  0x00100000803: 'VK_F3',
-  0x00100000804: 'VK_F4',
-  0x00100000805: 'VK_F5',
-  0x00100000806: 'VK_F6',
-  0x00100000807: 'VK_F7',
-  0x00100000808: 'VK_F8',
-  0x00100000809: 'VK_F9',
-  0x0010000080a: 'VK_F10',
-  0x0010000080b: 'VK_F11',
-  0x0010000080c: 'VK_F12',
-  0x00100000d2b: 'Apps',
-  0x00200000002: 'VK_SLEEP',
-  0x00200000100: 'VK_CONTROL',
-  0x00200000101: 'RControl',
-  0x00200000102: 'VK_SHIFT',
-  0x00200000103: 'RShift',
-  0x00200000104: 'VK_MENU',
-  0x00200000105: 'RAlt',
-  0x002000001f0: 'VK_CONTROL',
-  0x002000001f2: 'VK_SHIFT',
-  0x002000001f4: 'VK_MENU',
-  0x002000001f6: 'Meta',
-  0x0020000022a: 'VK_MULTIPLY',
-  0x0020000022b: 'VK_ADD',
-  0x0020000022d: 'VK_SUBTRACT',
-  0x0020000022e: 'VK_DECIMAL',
-  0x0020000022f: 'VK_DIVIDE',
-  0x00200000230: 'VK_NUMPAD0',
-  0x00200000231: 'VK_NUMPAD1',
-  0x00200000232: 'VK_NUMPAD2',
-  0x00200000233: 'VK_NUMPAD3',
-  0x00200000234: 'VK_NUMPAD4',
-  0x00200000235: 'VK_NUMPAD5',
-  0x00200000236: 'VK_NUMPAD6',
-  0x00200000237: 'VK_NUMPAD7',
-  0x00200000238: 'VK_NUMPAD8',
-  0x00200000239: 'VK_NUMPAD9',
-};
-
-/// flutter/packages/flutter/lib/src/services/keyboard_key.dart -> _debugName
-/// see [PhysicalKeyboardKey.debugName] -> _debugName
-const Map<int, String> _physicalKeyMap = <int, String>{
-  0x00010082: 'VK_SLEEP',
-  0x00070004: 'VK_A',
-  0x00070005: 'VK_B',
-  0x00070006: 'VK_C',
-  0x00070007: 'VK_D',
-  0x00070008: 'VK_E',
-  0x00070009: 'VK_F',
-  0x0007000a: 'VK_G',
-  0x0007000b: 'VK_H',
-  0x0007000c: 'VK_I',
-  0x0007000d: 'VK_J',
-  0x0007000e: 'VK_K',
-  0x0007000f: 'VK_L',
-  0x00070010: 'VK_M',
-  0x00070011: 'VK_N',
-  0x00070012: 'VK_O',
-  0x00070013: 'VK_P',
-  0x00070014: 'VK_Q',
-  0x00070015: 'VK_R',
-  0x00070016: 'VK_S',
-  0x00070017: 'VK_T',
-  0x00070018: 'VK_U',
-  0x00070019: 'VK_V',
-  0x0007001a: 'VK_W',
-  0x0007001b: 'VK_X',
-  0x0007001c: 'VK_Y',
-  0x0007001d: 'VK_Z',
-  0x0007001e: 'VK_1',
-  0x0007001f: 'VK_2',
-  0x00070020: 'VK_3',
-  0x00070021: 'VK_4',
-  0x00070022: 'VK_5',
-  0x00070023: 'VK_6',
-  0x00070024: 'VK_7',
-  0x00070025: 'VK_8',
-  0x00070026: 'VK_9',
-  0x00070027: 'VK_0',
-  0x00070028: 'VK_ENTER',
-  0x00070029: 'VK_ESCAPE',
-  0x0007002a: 'VK_BACK',
-  0x0007002b: 'VK_TAB',
-  0x0007002c: 'VK_SPACE',
-  0x0007002d: 'VK_MINUS',
-  0x0007002e: 'VK_PLUS', // it is =
-  0x0007002f: 'VK_LBRACKET',
-  0x00070030: 'VK_RBRACKET',
-  0x00070033: 'VK_SEMICOLON',
-  0x00070034: 'VK_QUOTE',
-  0x00070036: 'VK_COMMA',
-  0x00070038: 'VK_SLASH',
-  0x00070039: 'VK_CAPITAL',
-  0x0007003a: 'VK_F1',
-  0x0007003b: 'VK_F2',
-  0x0007003c: 'VK_F3',
-  0x0007003d: 'VK_F4',
-  0x0007003e: 'VK_F5',
-  0x0007003f: 'VK_F6',
-  0x00070040: 'VK_F7',
-  0x00070041: 'VK_F8',
-  0x00070042: 'VK_F9',
-  0x00070043: 'VK_F10',
-  0x00070044: 'VK_F11',
-  0x00070045: 'VK_F12',
-  0x00070049: 'VK_INSERT',
-  0x0007004a: 'VK_HOME',
-  0x0007004b: 'VK_PRIOR', // Page Up
-  0x0007004c: 'VK_DELETE',
-  0x0007004d: 'VK_END',
-  0x0007004e: 'VK_NEXT', // Page Down
-  0x0007004f: 'VK_RIGHT',
-  0x00070050: 'VK_LEFT',
-  0x00070051: 'VK_DOWN',
-  0x00070052: 'VK_UP',
-  0x00070053: 'Num Lock', // TODO rust not impl
-  0x00070054: 'VK_DIVIDE', // numpad
-  0x00070055: 'VK_MULTIPLY',
-  0x00070056: 'VK_SUBTRACT',
-  0x00070057: 'VK_ADD',
-  0x00070058: 'VK_ENTER', // num enter
-  0x00070059: 'VK_NUMPAD0',
-  0x0007005a: 'VK_NUMPAD1',
-  0x0007005b: 'VK_NUMPAD2',
-  0x0007005c: 'VK_NUMPAD3',
-  0x0007005d: 'VK_NUMPAD4',
-  0x0007005e: 'VK_NUMPAD5',
-  0x0007005f: 'VK_NUMPAD6',
-  0x00070060: 'VK_NUMPAD7',
-  0x00070061: 'VK_NUMPAD8',
-  0x00070062: 'VK_NUMPAD9',
-  0x00070063: 'VK_DECIMAL',
-  0x00070075: 'VK_HELP',
-  0x00070077: 'VK_SELECT',
-  0x00070088: 'VK_KANA',
-  0x0007008a: 'VK_CONVERT',
-  0x000700e0: 'VK_CONTROL',
-  0x000700e1: 'VK_SHIFT',
-  0x000700e2: 'VK_MENU',
-  0x000700e3: 'Meta',
-  0x000700e4: 'RControl',
-  0x000700e5: 'RShift',
-  0x000700e6: 'RAlt',
-  0x000700e7: 'RWin',
-  0x000c00b1: 'VK_PAUSE',
-  0x000c00cd: 'VK_PAUSE',
-  0x000c019e: 'LOCK_SCREEN',
-  0x000c0208: 'VK_PRINT',
-};

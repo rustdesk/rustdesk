@@ -35,7 +35,6 @@ lazy_static::lazy_static! {
 
 #[derive(Clone, Default)]
 pub struct Session<T: InvokeUiSession> {
-    pub cmd: String,
     pub id: String,
     pub password: String,
     pub args: Vec<String>,
@@ -53,7 +52,7 @@ impl<T: InvokeUiSession> Session<T> {
     pub fn get_image_quality(&self) -> String {
         self.lc.read().unwrap().image_quality.clone()
     }
-    /// Get custom image quality.
+
     pub fn get_custom_image_quality(&self) -> Vec<i32> {
         self.lc.read().unwrap().custom_image_quality.clone()
     }
@@ -1115,7 +1114,6 @@ impl<T: InvokeUiSession> Interface for Session<T> {
                 crate::platform::windows::add_recent_document(&path);
             }
         }
-        // TODO use event callbcak
         #[cfg(not(any(target_os = "android", target_os = "ios")))]
         self.start_keyboard_hook();
     }
@@ -1158,8 +1156,6 @@ impl<T: InvokeUiSession> Interface for Session<T> {
     }
 }
 
-// TODO use event callbcak
-// sciter only
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 impl<T: InvokeUiSession> Session<T> {
     fn start_keyboard_hook(&self) {
