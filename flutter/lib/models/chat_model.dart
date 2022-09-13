@@ -4,8 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_hbb/models/platform_model.dart';
 import 'package:window_manager/window_manager.dart';
 
-import '../../mobile/widgets/overlay.dart';
 import '../common.dart';
+import '../common/widgets/overlay.dart';
 import 'model.dart';
 
 class MessageBody {
@@ -128,7 +128,10 @@ class ChatModel with ChangeNotifier {
     if (overlayState == null) return;
     final overlay = OverlayEntry(builder: (context) {
       return DraggableChatWindow(
-          position: Offset(20, 80), width: 250, height: 350, chatModel: this);
+          position: const Offset(20, 80),
+          width: 250,
+          height: 350,
+          chatModel: this);
     });
     overlayState.insert(overlay);
     chatWindowOverlayEntry = overlay;

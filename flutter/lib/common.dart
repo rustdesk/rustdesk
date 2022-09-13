@@ -14,7 +14,7 @@ import 'package:get/get.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:window_manager/window_manager.dart';
 
-import 'mobile/widgets/overlay.dart';
+import 'common/widgets/overlay.dart';
 import 'models/model.dart';
 import 'models/platform_model.dart';
 

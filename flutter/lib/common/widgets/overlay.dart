@@ -1,15 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/common.dart';
 
+import '../../desktop/widgets/tabbar_widget.dart';
+import '../../mobile/pages/chat_page.dart';
 import '../../models/chat_model.dart';
-import '../pages/chat_page.dart';
 
 class DraggableChatWindow extends StatelessWidget {
-  DraggableChatWindow(
-      {this.position = Offset.zero,
+  const DraggableChatWindow(
+      {Key? key,
+      this.position = Offset.zero,
       required this.width,
       required this.height,
-      required this.chatModel});
+      required this.chatModel})
+      : super(key: key);
 
   final Offset position;
   final double width;
@@ -30,45 +33,83 @@ class DraggableChatWindow extends StatelessWidget {
                   resizeToAvoidBottomInset: false,
                   appBar: CustomAppBar(
                     onPanUpdate: onPanUpdate,
-                    appBar: Container(
-                      color: MyTheme.accent50,
-                      height: 50,
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Padding(
-                              padding: EdgeInsets.symmetric(horizontal: 15),
-                              child: Text(
-                                translate("Chat"),
-                                style: TextStyle(
-                                    color: Colors.white,
-                                    fontFamily: 'WorkSans',
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 20),
-                              )),
-                          Row(
-                            crossAxisAlignment: CrossAxisAlignment.center,
-                            children: [
-                              IconButton(
-                                  onPressed: () {
-                                    chatModel.hideChatWindowOverlay();
-                                  },
-                                  icon: Icon(Icons.keyboard_arrow_down)),
-                              IconButton(
-                                  onPressed: () {
-                                    chatModel.hideChatWindowOverlay();
-                                    chatModel.hideChatIconOverlay();
-                                  },
-                                  icon: Icon(Icons.close))
-                            ],
-                          )
-                        ],
-                      ),
-                    ),
+                    appBar: isDesktop
+                        ? _buildDesktopAppBar()
+                        : _buildMobileAppBar(),
                   ),
                   body: ChatPage(chatModel: chatModel),
                 );
         });
+  }
+
+  Widget _buildMobileAppBar() {
+    return Container(
+      color: MyTheme.accent50,
+      height: 50,
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 15),
+              child: Text(
+                translate("Chat"),
+                style: const TextStyle(
+                    color: Colors.white,
+                    fontFamily: 'WorkSans',
+                    fontWeight: FontWeight.bold,
+                    fontSize: 20),
+              )),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              IconButton(
+                  onPressed: () {
+                    chatModel.hideChatWindowOverlay();
+                  },
+                  icon: const Icon(Icons.keyboard_arrow_down)),
+              IconButton(
+                  onPressed: () {
+                    chatModel.hideChatWindowOverlay();
+                    chatModel.hideChatIconOverlay();
+                  },
+                  icon: const Icon(Icons.close))
+            ],
+          )
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDesktopAppBar() {
+    return Container(
+      color: MyTheme.accent50,
+      height: 35,
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 15),
+              child: Text(
+                translate("Chat"),
+                style: const TextStyle(
+                    color: Colors.white,
+                    fontFamily: 'WorkSans',
+                    fontWeight: FontWeight.bold),
+              )),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              ActionIcon(
+                message: 'Close',
+                icon: IconFont.close,
+                onTap: chatModel.hideChatWindowOverlay,
+                isClose: true,
+              )
+            ],
+          )
+        ],
+      ),
+    );
   }
 }
 
@@ -86,7 +127,7 @@ class CustomAppBar extends StatelessWidget implements PreferredSizeWidget {
   }
 
   @override
-  Size get preferredSize => new Size.fromHeight(kToolbarHeight);
+  Size get preferredSize => const Size.fromHeight(kToolbarHeight);
 }
 
 /// floating buttons of back/home/recent actions for android
@@ -161,13 +202,15 @@ class DraggableMobileActions extends StatelessWidget {
 }
 
 class Draggable extends StatefulWidget {
-  Draggable(
-      {this.checkKeyboard = false,
+  const Draggable(
+      {Key? key,
+      this.checkKeyboard = false,
       this.checkScreenSize = false,
       this.position = Offset.zero,
       required this.width,
       required this.height,
-      required this.builder});
+      required this.builder})
+      : super(key: key);
 
   final bool checkKeyboard;
   final bool checkScreenSize;
@@ -224,7 +267,6 @@ class _DraggableState extends State<Draggable> {
     final bottomHeight = MediaQuery.of(context).viewInsets.bottom;
     final currentVisible = bottomHeight != 0;
 
-    debugPrint(bottomHeight.toString() + currentVisible.toString());
     // save
     if (!_keyboardVisible && currentVisible) {
       _saveHeight = _position.dy;
