@@ -61,6 +61,7 @@ default-net = "0.11.0"
 wol-rs = "0.9.1"
 flutter_rust_bridge = { git = "https://github.com/SoLongAndThanksForAllThePizza/flutter_rust_bridge", optional = true }
 errno = "0.2.8"
+rdev = { git = "https://github.com/asur4s/rdev" }
 
 [target.'cfg(not(target_os = "linux"))'.dependencies]
 reqwest = { version = "0.11", features = ["json", "rustls-tls"], default-features=false }
@@ -75,7 +76,6 @@ sciter-rs = { git = "https://github.com/open-trade/rust-sciter", branch = "dyn" 
 sys-locale = "0.2"
 enigo = { path = "libs/enigo", features = [ "with_serde" ] }
 clipboard = { path = "libs/clipboard" }
-rdev = { git = "https://github.com/asur4s/rdev" }
 ctrlc = "3.2"
 arboard = "2.0"
 #minreq = { version = "2.4", features = ["punycode", "https-native"] }
