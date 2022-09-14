@@ -223,6 +223,7 @@ pub fn test_if_valid_server(host: String) -> String {
 }
 
 #[inline]
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub fn get_sound_inputs() -> Vec<String> {
     let mut a = Vec::new();
     #[cfg(not(target_os = "linux"))]
