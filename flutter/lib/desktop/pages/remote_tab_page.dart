@@ -98,7 +98,7 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
                   controller: tabController,
                   showTabBar: fullscreen.isFalse,
                   onWindowCloseButton: handleWindowCloseButton,
-                  tail: AddButton().paddingOnly(left: 10),
+                  tail: const AddButton().paddingOnly(left: 10),
                   pageViewBuilder: (pageView) {
                     WindowController.fromWindowId(windowId())
                         .setFullscreen(fullscreen.isTrue);

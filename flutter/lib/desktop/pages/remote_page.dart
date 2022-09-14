@@ -18,6 +18,8 @@ import '../../models/model.dart';
 import '../../models/platform_model.dart';
 import '../../common/shared_state.dart';
 
+bool _isCustomCursorInited = false;
+
 class RemotePage extends StatefulWidget {
   const RemotePage({
     Key? key,
@@ -45,7 +47,7 @@ class _RemotePageState extends State<RemotePage>
   var _isPhysicalMouse = false;
   var _imageFocused = false;
 
-  final _onEnterOrLeaveImage = <Function(bool)>[];
+  Function(bool)? _onEnterOrLeaveImage4Menubar;
 
   late FFI _ffi;
 
@@ -95,6 +97,14 @@ class _RemotePageState extends State<RemotePage>
     _ffi.qualityMonitorModel.checkShowQualityMonitor(widget.id);
     _showRemoteCursor.value = bind.sessionGetToggleOptionSync(
         id: widget.id, arg: 'show-remote-cursor');
+
+    if (!_isCustomCursorInited) {
+      customCursorController.registerNeedUpdateCursorCallback(
+          (String? lastKey, String? currentKey) async {
+        return lastKey == null || lastKey != currentKey;
+      });
+      _isCustomCursorInited = true;
+    }
   }
 
   @override
@@ -327,16 +337,24 @@ class _RemotePageState extends State<RemotePage>
       _rawKeyFocusNode.requestFocus();
     }
     _cursorOverImage.value = true;
-    for (var f in _onEnterOrLeaveImage) {
-      f(true);
+    if (_onEnterOrLeaveImage4Menubar != null) {
+      try {
+        _onEnterOrLeaveImage4Menubar!(true);
+      } catch (e) {
+        //
+      }
     }
     _ffi.enterOrLeave(true);
   }
 
   void leaveView(PointerExitEvent evt) {
     _cursorOverImage.value = false;
-    for (var f in _onEnterOrLeaveImage) {
-      f(false);
+    if (_onEnterOrLeaveImage4Menubar != null) {
+      try {
+        _onEnterOrLeaveImage4Menubar!(false);
+      } catch (e) {
+        //
+      }
     }
     _ffi.enterOrLeave(false);
   }
@@ -381,7 +399,8 @@ class _RemotePageState extends State<RemotePage>
     paints.add(RemoteMenubar(
       id: widget.id,
       ffi: _ffi,
-      onEnterOrLeaveImage: _onEnterOrLeaveImage,
+      onEnterOrLeaveImageSetter: (func) => _onEnterOrLeaveImage4Menubar = func,
+      onEnterOrLeaveImageCleaner: () => _onEnterOrLeaveImage4Menubar = null,
     ));
     return Stack(
       children: paints,
