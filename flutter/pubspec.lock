@@ -70,7 +70,7 @@ packages:
       name: build
       url: "https://pub.dartlang.org"
     source: hosted
-    version: "2.3.0"
+    version: "2.3.1"
   build_config:
     dependency: transitive
     description:
@@ -91,21 +91,21 @@ packages:
       name: build_resolvers
       url: "https://pub.dartlang.org"
     source: hosted
-    version: "2.0.9"
+    version: "2.0.10"
   build_runner:
     dependency: "direct dev"
     description:
       name: build_runner
       url: "https://pub.dartlang.org"
     source: hosted
-    version: "2.2.0"
+    version: "2.2.1"
   build_runner_core:
     dependency: transitive
     description:
       name: build_runner_core
       url: "https://pub.dartlang.org"
     source: hosted
-    version: "7.2.3"
+    version: "7.2.4"
   built_collection:
     dependency: transitive
     description:
@@ -418,8 +418,8 @@ packages:
     dependency: "direct main"
     description:
       path: "."
-      ref: "9021e21de36c84edf01d5034f38eda580463163b"
-      resolved-ref: "9021e21de36c84edf01d5034f38eda580463163b"
+      ref: "47179378523c993092f70d95f93d53f40af01f02"
+      resolved-ref: "47179378523c993092f70d95f93d53f40af01f02"
       url: "https://github.com/Kingtous/rustdesk_flutter_custom_cursor"
     source: git
     version: "0.0.1"
@@ -973,7 +973,7 @@ packages:
       name: source_gen
       url: "https://pub.dartlang.org"
     source: hosted
-    version: "1.2.2"
+    version: "1.2.3"
   source_span:
     dependency: transitive
     description:
