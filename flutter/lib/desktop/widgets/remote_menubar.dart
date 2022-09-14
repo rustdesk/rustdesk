@@ -26,13 +26,15 @@ class _MenubarTheme {
 class RemoteMenubar extends StatefulWidget {
   final String id;
   final FFI ffi;
-  final List<Function(bool)> onEnterOrLeaveImage;
+  final Function(Function(bool)) onEnterOrLeaveImageSetter;
+  final Function() onEnterOrLeaveImageCleaner;
 
   const RemoteMenubar({
     Key? key,
     required this.id,
     required this.ffi,
-    required this.onEnterOrLeaveImage,
+    required this.onEnterOrLeaveImageSetter,
+    required this.onEnterOrLeaveImageCleaner,
   }) : super(key: key);
 
   @override
@@ -52,10 +54,10 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
   }
 
   @override
-  void initState() {
+  initState() {
     super.initState();
 
-    widget.onEnterOrLeaveImage.add((enter) {
+    widget.onEnterOrLeaveImageSetter((enter) {
       if (enter) {
         _rxHideReplay.add(0);
         _isCursorOverImage = true;
@@ -75,6 +77,13 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
   }
 
   @override
+  dispose() {
+    super.dispose();
+
+    widget.onEnterOrLeaveImageCleaner();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Align(
       alignment: Alignment.topCenter,
@@ -85,21 +94,20 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
 
   Widget _buildShowHide(BuildContext context) {
     return Obx(() => Tooltip(
-          message: translate(_show.value ? "Hide Menubar" : "Show Menubar"),
-          child: SizedBox(
-              width: 100,
-              height: 5,
-              child: TextButton(
-                  onHover: (bool v) {
-                    _hideColor.value = v ? Colors.white60 : Colors.white24;
-                  },
-                  onPressed: () {
-                    _show.value = !_show.value;
-                  },
-                  child: Obx(() => Container(
-                        color: _hideColor.value,
-                      )))),
-        ));
+        message: translate(_show.value ? "Hide Menubar" : "Show Menubar"),
+        child: SizedBox(
+            width: 100,
+            height: 13,
+            child: TextButton(
+                onHover: (bool v) {
+                  _hideColor.value = v ? Colors.white60 : Colors.white24;
+                },
+                onPressed: () {
+                  _show.value = !_show.value;
+                },
+                child: Obx(() => Container(
+                      color: _hideColor.value,
+                    ).marginOnly(bottom: 8.0))))));
   }
 
   Widget _buildMenubar(BuildContext context) {
