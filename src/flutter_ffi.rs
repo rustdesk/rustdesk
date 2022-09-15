@@ -33,14 +33,6 @@ use crate::{
 
 fn initialize(app_dir: &str) {
     *config::APP_DIR.write().unwrap() = app_dir.to_owned();
-    #[cfg(feature = "cli")]
-    {
-        #[cfg(any(target_os = "android", target_os = "ios"))]
-        {
-            crate::common::test_rendezvous_server();
-            crate::common::test_nat_type();
-        }
-    }
     #[cfg(target_os = "android")]
     {
         android_logger::init_once(
@@ -58,13 +50,6 @@ fn initialize(app_dir: &str) {
     {
         crate::common::check_software_update();
     }
-    #[cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))]
-    {
-        use hbb_common::env_logger::*;
-        if let Err(e) = try_init_from_env(Env::default().filter_or(DEFAULT_FILTER_ENV, "debug")) {
-            log::debug!("{}", e);
-        }
-    }
 }
 
 /// FFI for rustdesk core's main entry.
@@ -72,7 +57,7 @@ fn initialize(app_dir: &str) {
 #[no_mangle]
 pub extern "C" fn rustdesk_core_main() -> bool {
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    return crate::core_main::core_main();
+    return crate::core_main::core_main().is_some();
     #[cfg(any(target_os = "android", target_os = "ios"))]
     false
 }
@@ -843,8 +828,6 @@ pub fn main_start_service() {
         config::Config::set_option("stop-service".into(), "".into());
         crate::rendezvous_mediator::RendezvousMediator::restart();
     }
-    #[cfg(not(target_os = "android"))]
-    std::thread::spawn(move || start_server(true));
 }
 
 pub fn main_update_temporary_password() {

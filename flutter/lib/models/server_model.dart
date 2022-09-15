@@ -259,7 +259,6 @@ class ServerModel with ChangeNotifier {
   Future<Null> startService() async {
     _isStart = true;
     notifyListeners();
-    // TODO
     parent.target?.ffiModel.updateEventListener("");
     await parent.target?.invokeMethod("init_service");
     await bind.mainStartService();
@@ -274,7 +273,6 @@ class ServerModel with ChangeNotifier {
   /// Stop the screen sharing service.
   Future<Null> stopService() async {
     _isStart = false;
-    // TODO
     closeAll();
     await parent.target?.invokeMethod("stop_service");
     await bind.mainStopService();

@@ -2,7 +2,6 @@ use std::sync::{Arc, Mutex};
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub use arboard::Clipboard as ClipboardContext;
-use serde_json::json;
 
 use hbb_common::{
     allow_err,
