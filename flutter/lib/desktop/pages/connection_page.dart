@@ -414,7 +414,7 @@ class _ConnectionPageState extends State<ConnectionPage> {
             );
           } else {
             if (model.abLoading) {
-              return Center(
+              return const Center(
                 child: CircularProgressIndicator(),
               );
             } else if (model.abError.isNotEmpty) {
