@@ -32,6 +32,8 @@ pub mod codec;
 mod convert;
 #[cfg(feature = "hwcodec")]
 pub mod hwcodec;
+#[cfg(feature = "mediacodec")]
+pub mod mediacodec;
 pub mod vpxcodec;
 pub use self::convert::*;
 pub const STRIDE_ALIGN: usize = 64; // commonly used in libvpx vpx_img_alloc caller

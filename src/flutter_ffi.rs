@@ -49,6 +49,8 @@ fn initialize(app_dir: &str) {
                 .with_min_level(log::Level::Debug) // limit log level
                 .with_tag("ffi"), // logs will show under mytag tag
         );
+        #[cfg(feature = "mediacodec")]
+        scrap::mediacodec::check_mediacodec();
     }
     #[cfg(target_os = "ios")]
     {

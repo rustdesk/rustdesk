@@ -11,6 +11,7 @@ edition = "2018"
 
 [features]
 wayland = ["gstreamer", "gstreamer-app", "gstreamer-video", "dbus", "tracing"]
+mediacodec = ["ndk"]
 
 [dependencies]
 block = "0.1"
@@ -31,6 +32,7 @@ jni = "0.19"
 lazy_static = "1.4"
 log = "0.4"
 serde_json = "1.0"
+ndk = { version = "0.7", features = ["media"], optional = true}
 
 [target.'cfg(not(target_os = "android"))'.dev-dependencies]
 repng = "0.2"
