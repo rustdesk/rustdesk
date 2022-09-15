@@ -266,7 +266,7 @@ class AddressBookPeerWidget extends BasePeerWidget {
           loadEvent: 'load_address_book_peers',
           offstageFunc: (Peer peer) =>
               !_hitTag(gFFI.abModel.selectedTags, peer.tags),
-          peerCardWidgetFunc: (Peer peer) => DiscoveredPeerCard(
+          peerCardWidgetFunc: (Peer peer) => AddressBookPeerCard(
             peer: peer,
           ),
           initPeers: _loadPeers(),
