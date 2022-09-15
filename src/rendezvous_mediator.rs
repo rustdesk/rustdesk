@@ -54,7 +54,7 @@ impl RendezvousMediator {
         let mut nat_tested = false;
         check_zombie();
         let server = new_server();
-        if Config::get_nat_type() == NatType::UNKNOWN_NAT as i32 {
+        if Config::get_nat_type() == NatType::UNKNOWN_NAT as i32 || Config::get_nat_type_ipv6() == NatType::UNKNOWN_NAT as i32 {
             crate::test_nat_type();
             nat_tested = true;
         }

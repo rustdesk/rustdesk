@@ -114,6 +114,8 @@ pub struct Config2 {
     #[serde(default)]
     nat_type: i32,
     #[serde(default)]
+    nat_type_ipv6: i32,
+    #[serde(default)]
     serial: i32,
 
     #[serde(default)]
@@ -554,8 +556,21 @@ impl Config {
         config.store();
     }
 
+    pub fn set_nat_type_ipv6(nat_type_ipv6: i32) {
+        let mut config = CONFIG2.write().unwrap();
+        if nat_type_ipv6 == config.nat_type_ipv6 {
+            return;
+        }
+        config.nat_type_ipv6 = nat_type_ipv6;
+        config.store();
+    }
+
     pub fn get_nat_type() -> i32 {
         CONFIG2.read().unwrap().nat_type
+    }
+
+    pub fn get_nat_type_ipv6() -> i32 {
+        CONFIG2.read().unwrap().nat_type_ipv6
     }
 
     pub fn set_serial(serial: i32) {

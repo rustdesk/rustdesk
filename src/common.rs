@@ -1,5 +1,5 @@
 use std::{
-    net::{IpAddr, SocketAddr},
+    net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, ToSocketAddrs},
     sync::{Arc, Mutex},
 };
 
@@ -8,7 +8,6 @@ pub use arboard::Clipboard as ClipboardContext;
 
 use hbb_common::{
     allow_err,
-    anyhow::bail,
     compress::{compress as compress_func, decompress},
     config::{self, Config, COMPRESS_LEVEL, RENDEZVOUS_TIMEOUT},
     get_version_number, log,
@@ -20,6 +19,9 @@ use hbb_common::{
 };
 // #[cfg(any(target_os = "android", target_os = "ios", feature = "cli"))]
 use hbb_common::{config::RENDEZVOUS_PORT, futures::future::join_all};
+
+// #[cfg(target_os = "linux")]
+use hbb_common::anyhow::bail;
 
 pub const CLIPBOARD_NAME: &'static str = "clipboard";
 pub const CLIPBOARD_INTERVAL: u64 = 333;
@@ -232,16 +234,50 @@ pub fn resample_channels(
 }
 
 pub fn test_nat_type() {
+    std::thread::spawn(move || {
+        loop_test_nat_type(
+            || {
+                test_nat_type_(
+                    |ip| ip.is_ipv4(),
+                    SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), 0),
+                    Config::set_nat_type,
+                )
+            },
+            Config::get_nat_type,
+            Config::set_nat_type,
+        )
+    });
+    std::thread::spawn(move || {
+        loop_test_nat_type(
+            || {
+                test_nat_type_(
+                    |ip| ip.is_ipv6(),
+                    SocketAddr::new(IpAddr::V6(Ipv6Addr::UNSPECIFIED), 0),
+                    Config::set_nat_type_ipv6,
+                )
+            },
+            Config::get_nat_type_ipv6,
+            Config::set_nat_type_ipv6,
+        )
+    });
+}
+
+fn loop_test_nat_type(
+    fn_test: fn() -> ResultType<bool>,
+    fn_get_nat: fn() -> i32,
+    fn_set_nat: fn(i32),
+) {
+    fn_set_nat(NatType::UNKNOWN_NAT as i32);
     let mut i = 0;
-    std::thread::spawn(move || loop {
-        match test_nat_type_() {
+    loop {
+        match fn_test() {
             Ok(true) => break,
             Err(err) => {
                 log::error!("test nat: {}", err);
             }
             _ => {}
         }
-        if Config::get_nat_type() != 0 {
+        if fn_get_nat() != 0 {
             break;
         }
         i = i * 2 + 1;
@@ -249,26 +285,31 @@ pub fn test_nat_type() {
             i = 300;
         }
         std::thread::sleep(std::time::Duration::from_secs(i));
-    });
+    }
 }
 
 #[tokio::main(flavor = "current_thread")]
-async fn test_nat_type_() -> ResultType<bool> {
+async fn test_nat_type_(
+    fn_check_ip: fn(IpAddr) -> bool,
+    mut addr: SocketAddr,
+    set_nat: fn(i32),
+) -> ResultType<bool> {
     log::info!("Testing nat ...");
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
     let is_direct = crate::ipc::get_socks_async(1_000).await.is_none(); // sync socks BTW
     #[cfg(any(target_os = "android", target_os = "ios"))]
     let is_direct = Config::get_socks().is_none(); // sync socks BTW
     if !is_direct {
-        Config::set_nat_type(NatType::SYMMETRIC as _);
+        set_nat(NatType::SYMMETRIC as _);
         return Ok(true);
     }
-    let start = std::time::Instant::now();
     let (rendezvous_server, _, _) = get_rendezvous_server(1_000).await?;
     let server1 = rendezvous_server;
     let server2 = match &server1 {
-        TargetAddr::Ip(socket_addr) => TargetAddr::Ip(SocketAddr::new(socket_addr.ip(), socket_addr.port() - 1)),
-        TargetAddr::Domain(host, port) => TargetAddr::Domain(host.clone(), port -1),
+        TargetAddr::Ip(socket_addr) => {
+            TargetAddr::Ip(SocketAddr::new(socket_addr.ip(), socket_addr.port() - 1))
+        }
+        TargetAddr::Domain(host, port) => TargetAddr::Domain(host.clone(), port - 1),
     };
 
     let mut msg_out = RendezvousMessage::new();
@@ -277,9 +318,30 @@ async fn test_nat_type_() -> ResultType<bool> {
         serial,
         ..Default::default()
     });
+
+    if server1
+        .to_socket_addrs()?
+        .map(|sa| sa.ip())
+        .any(fn_check_ip)
+    {
+        test_nat_type_task_(addr, server1, server2, msg_out, set_nat).await
+    } else {
+        Ok(true)
+    }
+}
+
+async fn test_nat_type_task_<'t>(
+    mut addr: SocketAddr,
+    server1: TargetAddr<'t>,
+    server2: TargetAddr<'t>,
+    msg_out: RendezvousMessage,
+    set_nat: fn(i32),
+) -> ResultType<bool> {
+    let start = std::time::Instant::now();
+    // TODO: try both ipv4 and ipv6
+    // let mut addr = Config::get_any_listen_addr();
     let mut port1 = 0;
     let mut port2 = 0;
-    let mut addr = Config::get_any_listen_addr();
     for i in 0..2 {
         let mut socket = socket_client::connect_tcp(
             if i == 0 {
@@ -322,7 +384,7 @@ async fn test_nat_type_() -> ResultType<bool> {
         } else {
             NatType::SYMMETRIC
         };
-        Config::set_nat_type(t as _);
+        set_nat(t as _);
         log::info!("Tested nat type: {:?} in {:?}", t, start.elapsed());
     }
     Ok(ok)
