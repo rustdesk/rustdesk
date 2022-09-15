@@ -124,7 +124,7 @@ pub fn core_main() -> Option<Vec<String>> {
             }
             #[cfg(target_os = "macos")]
             {
-                std::thread::spawn(move || start_server(true));
+                std::thread::spawn(move || crate::start_server(true));
                 // to-do: for flutter, starting tray not ready yet, or we can reuse sciter's tray implementation.
             }
         } else if args[0] == "--import-config" {

@@ -126,21 +126,21 @@ packages:
       name: cached_network_image
       url: "https://pub.dartlang.org"
     source: hosted
-    version: "3.2.1"
+    version: "3.2.2"
   cached_network_image_platform_interface:
     dependency: transitive
     description:
       name: cached_network_image_platform_interface
       url: "https://pub.dartlang.org"
     source: hosted
-    version: "1.0.0"
+    version: "2.0.0"
   cached_network_image_web:
     dependency: transitive
     description:
       name: cached_network_image_web
       url: "https://pub.dartlang.org"
     source: hosted
-    version: "1.0.1"
+    version: "1.0.2"
   characters:
     dependency: transitive
     description:
@@ -175,7 +175,7 @@ packages:
       name: code_builder
       url: "https://pub.dartlang.org"
     source: hosted
-    version: "4.2.0"
+    version: "4.3.0"
   collection:
     dependency: transitive
     description:
@@ -203,7 +203,7 @@ packages:
       name: cross_file
       url: "https://pub.dartlang.org"
     source: hosted
-    version: "0.3.3+1"
+    version: "0.3.3+2"
   crypto:
     dependency: transitive
     description:
@@ -339,48 +339,6 @@ packages:
       url: "https://pub.dartlang.org"
     source: hosted
     version: "6.1.4"
-  firebase_analytics:
-    dependency: "direct main"
-    description:
-      name: firebase_analytics
-      url: "https://pub.dartlang.org"
-    source: hosted
-    version: "9.3.4"
-  firebase_analytics_platform_interface:
-    dependency: transitive
-    description:
-      name: firebase_analytics_platform_interface
-      url: "https://pub.dartlang.org"
-    source: hosted
-    version: "3.3.4"
-  firebase_analytics_web:
-    dependency: transitive
-    description:
-      name: firebase_analytics_web
-      url: "https://pub.dartlang.org"
-    source: hosted
-    version: "0.4.2+4"
-  firebase_core:
-    dependency: transitive
-    description:
-      name: firebase_core
-      url: "https://pub.dartlang.org"
-    source: hosted
-    version: "1.22.0"
-  firebase_core_platform_interface:
-    dependency: transitive
-    description:
-      name: firebase_core_platform_interface
-      url: "https://pub.dartlang.org"
-    source: hosted
-    version: "4.5.1"
-  firebase_core_web:
-    dependency: transitive
-    description:
-      name: firebase_core_web
-      url: "https://pub.dartlang.org"
-    source: hosted
-    version: "1.7.2"
   fixnum:
     dependency: transitive
     description:
@@ -418,8 +376,8 @@ packages:
     dependency: "direct main"
     description:
       path: "."
-      ref: "47179378523c993092f70d95f93d53f40af01f02"
-      resolved-ref: "47179378523c993092f70d95f93d53f40af01f02"
+      ref: "527821d676017387be024dffd61898ff79b14c41"
+      resolved-ref: "527821d676017387be024dffd61898ff79b14c41"
       url: "https://github.com/Kingtous/rustdesk_flutter_custom_cursor"
     source: git
     version: "0.0.1"
@@ -1253,8 +1211,8 @@ packages:
     dependency: "direct main"
     description:
       path: "."
-      ref: "4627ba808ed08ff0c08706b01a7f9cc8b747accd"
-      resolved-ref: "4627ba808ed08ff0c08706b01a7f9cc8b747accd"
+      ref: "88487257cbafc501599ab4f82ec343b46acec020"
+      resolved-ref: "88487257cbafc501599ab4f82ec343b46acec020"
       url: "https://github.com/Kingtous/rustdesk_window_manager"
     source: git
     version: "0.2.7"
@@ -1287,5 +1245,5 @@ packages:
     source: hosted
     version: "0.1.0"
 sdks:
-  dart: ">=2.17.0 <3.0.0"
-  flutter: ">=3.0.0"
+  dart: ">=2.18.0 <3.0.0"
+  flutter: ">=3.3.0"

@@ -35,7 +35,7 @@ dependencies:
     tuple: ^2.0.0
     wakelock: ^0.5.2
     device_info_plus: ^4.1.2
-    firebase_analytics: ^9.1.5
+    #firebase_analytics: ^9.1.5
     package_info_plus: ^1.4.2
     url_launcher: ^6.0.9
     shared_preferences: ^2.0.6
@@ -58,7 +58,7 @@ dependencies:
     window_manager:
         git:
             url: https://github.com/Kingtous/rustdesk_window_manager
-            ref: 4627ba808ed08ff0c08706b01a7f9cc8b747accd
+            ref: 88487257cbafc501599ab4f82ec343b46acec020 
     desktop_multi_window:
         git:
             url: https://github.com/Kingtous/rustdesk_desktop_multi_window
@@ -71,7 +71,7 @@ dependencies:
     flutter_custom_cursor:
         git:
             url: https://github.com/Kingtous/rustdesk_flutter_custom_cursor
-            ref: 47179378523c993092f70d95f93d53f40af01f02
+            ref: 527821d676017387be024dffd61898ff79b14c41 
     get: ^4.6.5
     visibility_detector: ^0.3.3
     contextmenu: ^3.0.0

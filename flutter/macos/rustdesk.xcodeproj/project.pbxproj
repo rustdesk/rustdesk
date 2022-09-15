@@ -33,7 +33,6 @@
 
 /* Begin PBXFileReference section */
 		ADDEDBA66A6E1 /* libresolv.tbd */ = {isa = PBXFileReference; lastKnownFileType = "sourcecode.text-based-dylib-definition"; name = libresolv.tbd; path = usr/lib/libresolv.tbd; sourceTree = SDKROOT; };
-		CA603C4309E13EF4668187A5 /* Cargo.toml */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; name = Cargo.toml; path = /Users/mac/Documents/project/rustdesk/Cargo.toml; sourceTree = "<group>"; };
 		CA604C7415FB2A3731F5016A /* liblibrustdesk_static.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = liblibrustdesk_static.a; sourceTree = BUILT_PRODUCTS_DIR; };
 		CA6071B5A0F5A7A3EF2297AA /* librustdesk.dylib */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.dylib"; includeInIndex = 0; path = librustdesk.dylib; sourceTree = BUILT_PRODUCTS_DIR; };
 		CA60D3BC5386B357B2AB834F /* rustdesk */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = rustdesk; sourceTree = BUILT_PRODUCTS_DIR; };
