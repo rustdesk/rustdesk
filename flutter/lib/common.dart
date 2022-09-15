@@ -28,7 +28,7 @@ var isWeb = false;
 var isWebDesktop = false;
 var version = "";
 int androidVersion = 0;
-late final DesktopType? desktopType;
+DesktopType? desktopType;
 
 typedef F = String Function(String);
 typedef FMethod = String Function(String, dynamic);
