@@ -1415,11 +1415,9 @@ where
 
     let latency_controller = LatencyController::new();
     let latency_controller_cl = latency_controller.clone();
-    // Create video_handler out of the thread below to ensure that the handler exists before client start.
-    // It will take a few tenths of a second for the first time, and then tens of milliseconds.
-    let mut video_handler = VideoHandler::new(latency_controller);
 
     std::thread::spawn(move || {
+        let mut video_handler = VideoHandler::new(latency_controller);
         loop {
             if let Ok(data) = video_receiver.recv() {
                 match data {
