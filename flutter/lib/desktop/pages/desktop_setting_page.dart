@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_hbb/common.dart';
@@ -9,6 +10,7 @@ import 'package:flutter_hbb/models/platform_model.dart';
 import 'package:flutter_hbb/models/server_model.dart';
 import 'package:get/get.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:url_launcher/url_launcher_string.dart';
 import 'package:flutter_hbb/desktop/widgets/scroll_wrapper.dart';
 
@@ -199,6 +201,7 @@ class _GeneralState extends State<_General> {
             abr(),
             hwcodec(),
             audio(context),
+            record(context),
             _Card(title: 'Language', children: [language()]),
           ],
         ).marginOnly(bottom: _kListViewBottomMargin));
@@ -286,6 +289,59 @@ class _GeneralState extends State<_General> {
               setDevice(value);
               setState(() {});
             }))
+      ]);
+    });
+  }
+
+  Widget record(BuildContext context) {
+    return _futureBuilder(future: () async {
+      String customDirectory =
+          await bind.mainGetOption(key: 'video-save-directory');
+      String defaultDirectory = await bind.mainDefaultVideoSaveDirectory();
+      String dir;
+      if (customDirectory.isNotEmpty) {
+        dir = customDirectory;
+      } else {
+        dir = defaultDirectory;
+      }
+      final canlaunch = await canLaunchUrl(Uri.file(dir));
+      return {'dir': dir, 'canlaunch': canlaunch};
+    }(), hasData: (data) {
+      Map<String, dynamic> map = data as Map<String, dynamic>;
+      String dir = map['dir']!;
+      bool canlaunch = map['canlaunch']! as bool;
+
+      return _Card(title: 'Recording', children: [
+        _OptionCheckBox(context, 'Automatically record incoming sessions',
+            'allow-auto-record-incoming'),
+        Row(
+          children: [
+            Text('${translate('Directory')}:'),
+            Expanded(
+              child: GestureDetector(
+                  onTap: canlaunch ? () => launchUrl(Uri.file(dir)) : null,
+                  child: Text(
+                    dir,
+                    softWrap: true,
+                    style:
+                        const TextStyle(decoration: TextDecoration.underline),
+                  )).marginOnly(left: 10),
+            ),
+            ElevatedButton(
+                    onPressed: () async {
+                      String? selectedDirectory = await FilePicker.platform
+                          .getDirectoryPath(initialDirectory: dir);
+                      if (selectedDirectory != null) {
+                        await bind.mainSetOption(
+                            key: 'video-save-directory',
+                            value: selectedDirectory);
+                        setState(() {});
+                      }
+                    },
+                    child: Text(translate('Change')))
+                .marginOnly(left: 5),
+          ],
+        ).marginOnly(left: _kContentHMargin),
       ]);
     });
   }

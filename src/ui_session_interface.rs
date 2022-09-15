@@ -98,6 +98,10 @@ impl<T: InvokeUiSession> Session<T> {
         self.send(Data::Message(LoginConfigHandler::refresh()));
     }
 
+    pub fn record_screen(&self, start: bool, w: i32, h: i32) {
+        self.send(Data::RecordScreen(start, w, h, self.id.clone()));
+    }
+
     pub fn save_custom_image_quality(&mut self, custom_image_quality: i32) {
         let msg = self
             .lc

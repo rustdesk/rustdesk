@@ -359,5 +359,11 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Enable RDP", ""),
         ("Pin menubar", "Pin barra de menú"),
         ("Unpin menubar", "Desbloquear barra de menú"),
+        ("Recording", ""),
+        ("Directory", ""),
+        ("Automatically record incoming sessions", ""),
+        ("Change", ""),
+        ("Start session recording", ""),
+        ("Stop session recording", ""),
     ].iter().cloned().collect();
 }

@@ -197,6 +197,7 @@ class FfiModel with ChangeNotifier {
     _display.height = int.parse(evt['height']);
     if (old != _pi.currentDisplay) {
       parent.target?.cursorModel.updateDisplayOrigin(_display.x, _display.y);
+      parent.target?.recordingModel.switchDisplay();
     }
 
     // remote is mobile, and orientation changed
@@ -972,6 +973,41 @@ class QualityMonitorModel with ChangeNotifier {
   }
 }
 
+class RecordingModel with ChangeNotifier {
+  WeakReference<FFI> parent;
+  RecordingModel(this.parent);
+  bool _start = false;
+  get start => _start;
+
+  switchDisplay() {
+    if (!isDesktop || !_start) return;
+    var id = parent.target?.id;
+    int? width = parent.target?.canvasModel.getDisplayWidth();
+    int? height = parent.target?.canvasModel.getDisplayWidth();
+    if (id == null || width == null || height == null) return;
+    bind.sessionRecordScreen(
+        id: id, start: _start, width: width, height: height);
+  }
+
+  Future<void> toggle() async {
+    if (!isDesktop) return;
+    var id = parent.target?.id;
+    int? width = parent.target?.canvasModel.getDisplayWidth();
+    int? height = parent.target?.canvasModel.getDisplayWidth();
+    if (id == null || width == null || height == null) return;
+
+    await bind.sessionRecordScreen(
+        id: id, start: !_start, width: width, height: height);
+    _start = !_start;
+    notifyListeners();
+    if (_start) {
+      Future.delayed(const Duration(milliseconds: 100), () {
+        bind.sessionRefresh(id: id);
+      });
+    }
+  }
+}
+
 /// Mouse button enum.
 enum MouseButtons { left, right, wheel }
 
@@ -1013,6 +1049,7 @@ class FFI {
   late final AbModel abModel; // global
   late final UserModel userModel; // global
   late final QualityMonitorModel qualityMonitorModel; // session
+  late final RecordingModel recordingModel; // recording
 
   FFI() {
     imageModel = ImageModel(WeakReference(this));
@@ -1025,6 +1062,7 @@ class FFI {
     abModel = AbModel(WeakReference(this));
     userModel = UserModel(WeakReference(this));
     qualityMonitorModel = QualityMonitorModel(WeakReference(this));
+    recordingModel = RecordingModel(WeakReference(this));
   }
 
   /// Send a mouse tap event(down and up).

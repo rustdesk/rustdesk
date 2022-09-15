@@ -727,6 +727,11 @@ pub fn get_langs() -> String {
 }
 
 #[inline]
+pub fn default_video_save_directory() -> String {
+    scrap::record::RecorderContext::default_save_directory()
+}
+
+#[inline]
 pub fn is_xfce() -> bool {
     crate::platform::is_xfce()
 }

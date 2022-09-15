@@ -20,6 +20,9 @@ handler.setDisplay = function(x, y, w, h) {
     display_origin_x = x;
     display_origin_y = y;
     adaptDisplay();
+
+    if (recording && !recording_refresh) handler.record_screen(true, w, h);
+    recording_refresh = false;
 }
 
 // in case toolbar not shown correclty

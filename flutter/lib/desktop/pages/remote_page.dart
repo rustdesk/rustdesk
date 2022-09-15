@@ -166,6 +166,7 @@ class _RemotePageState extends State<RemotePage>
           ChangeNotifierProvider.value(value: _ffi.imageModel),
           ChangeNotifierProvider.value(value: _ffi.cursorModel),
           ChangeNotifierProvider.value(value: _ffi.canvasModel),
+          ChangeNotifierProvider.value(value: _ffi.recordingModel),
         ], child: buildBody(context)));
   }
 

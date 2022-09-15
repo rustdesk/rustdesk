@@ -19,13 +19,13 @@ use crate::ui_interface;
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use crate::ui_interface::get_sound_inputs;
 use crate::ui_interface::{
-    change_id, check_mouse_time, check_super_user_permission, discover, forget_password,
-    get_api_server, get_app_name, get_async_job_status, get_connect_status, get_fav, get_id,
-    get_lan_peers, get_langs, get_license, get_local_option, get_mouse_time, get_option,
-    get_options, get_peer, get_peer_option, get_socks, get_uuid, get_version, has_hwcodec,
-    has_rendezvous_service, post_request, send_to_cm, set_local_option, set_option, set_options,
-    set_peer_option, set_permanent_password, set_socks, store_fav, test_if_valid_server,
-    update_temporary_password, using_public_server,
+    change_id, check_mouse_time, check_super_user_permission, default_video_save_directory,
+    discover, forget_password, get_api_server, get_app_name, get_async_job_status,
+    get_connect_status, get_fav, get_id, get_lan_peers, get_langs, get_license, get_local_option,
+    get_mouse_time, get_option, get_options, get_peer, get_peer_option, get_socks, get_uuid,
+    get_version, has_hwcodec, has_rendezvous_service, post_request, send_to_cm, set_local_option,
+    set_option, set_options, set_peer_option, set_permanent_password, set_socks, store_fav,
+    test_if_valid_server, update_temporary_password, using_public_server,
 };
 use crate::{
     client::file_trait::FileManager,
@@ -159,6 +159,12 @@ pub fn session_close(id: String) {
 pub fn session_refresh(id: String) {
     if let Some(session) = SESSIONS.read().unwrap().get(&id) {
         session.refresh_video();
+    }
+}
+
+pub fn session_record_screen(id: String, start: bool, width: usize, height: usize) {
+    if let Some(session) = SESSIONS.read().unwrap().get(&id) {
+        session.record_screen(start, width as _, height as _);
     }
 }
 
@@ -703,6 +709,10 @@ pub fn main_change_theme(dark: String) {
 pub fn main_change_language(lang: String) {
     main_broadcast_message(&HashMap::from([("name", "language"), ("lang", &lang)]));
     send_to_cm(&crate::ipc::Data::Language(lang));
+}
+
+pub fn main_default_video_save_directory() -> String {
+    default_video_save_directory()
 }
 
 pub fn session_add_port_forward(

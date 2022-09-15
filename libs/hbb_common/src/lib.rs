@@ -38,6 +38,8 @@ pub use tokio_socks;
 pub use tokio_socks::IntoTargetAddr;
 pub use tokio_socks::TargetAddr;
 pub mod password_security;
+pub use chrono;
+pub use directories_next;
 
 #[cfg(feature = "quic")]
 pub type Stream = quic::Connection;

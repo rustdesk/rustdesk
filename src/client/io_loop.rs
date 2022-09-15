@@ -601,6 +601,11 @@ impl<T: InvokeUiSession> Remote<T> {
                     }
                 }
             }
+            Data::RecordScreen(start, w, h, id) => {
+                let _ = self
+                    .video_sender
+                    .send(MediaData::RecordScreen(start, w, h, id));
+            }
             _ => {}
         }
         true
@@ -794,13 +799,8 @@ impl<T: InvokeUiSession> Remote<T> {
                                     fs::transform_windows_path(&mut entries);
                                 }
                             }
-                            self.handler.update_folder_files(
-                                fd.id,
-                                &entries,
-                                fd.path,
-                                false,
-                                false,
-                            );
+                            self.handler
+                                .update_folder_files(fd.id, &entries, fd.path, false, false);
                             if let Some(job) = fs::get_job(fd.id, &mut self.write_jobs) {
                                 log::info!("job set_files: {:?}", entries);
                                 job.set_files(entries);

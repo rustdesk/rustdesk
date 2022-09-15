@@ -214,6 +214,7 @@ class Enhancements: Reactor.Component {
             <menu #enhancements-menu>
                 {has_hwcodec ? <li #enable-hwcodec><span>{svg_checkmark}</span>{translate("Hardware Codec")} (beta)</li> : ""}
                 <li #enable-abr><span>{svg_checkmark}</span>{translate("Adaptive Bitrate")} (beta)</li>
+                <li #screen-recording>{translate("Recording")}</li>
             </menu>
         </li>;
     }
@@ -232,6 +233,23 @@ class Enhancements: Reactor.Component {
         var v = me.id;
         if (v.indexOf("enable-") == 0) {
             handler.set_option(v, handler.get_option(v) != 'N' ? 'N' : '');
+        } else if (v == 'screen-recording') {
+            var dir = handler.get_option("video-save-directory");
+            if (!dir) dir = handler.default_video_save_directory();
+            var ts1 = handler.get_option("allow-auto-record-incoming") == 'Y' ? { checked: true } : {};
+            msgbox("custom-recording", translate('Recording'),
+                <div .form>
+                    <div><button|checkbox(auto_record_incoming) {ts1}>{translate('Automatically record incoming sessions')}</button></div>
+                    <div>
+                        <div style="word-wrap:break-word"><span>{translate("Directory")}:&nbsp;&nbsp;</span><span #folderPath>{dir}</span></div>
+                        <div> <button #select_directory .link>{translate('Change')}</button> </div>
+                    </div>
+                </div>
+                , function(res=null) {
+                if (!res) return;
+                handler.set_option("allow-auto-record-incoming", res.auto_record_incoming ? 'Y' : '');
+                handler.set_option("video-save-directory", $(#folderPath).text);
+            });
         }
         this.toggleMenuState();
     }
