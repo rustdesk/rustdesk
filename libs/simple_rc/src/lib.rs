@@ -81,7 +81,7 @@ pub fn get_outin_files<'a>(item: &'a ConfigItem) -> ResultType<HashMap<String, S
                 }
                 Some(s) => s.to_string(),
             };
-            if let Some(_) = outin_filemap.insert(outfile.clone(), infile) {
+            if let Some(..) = outin_filemap.insert(outfile.clone(), infile) {
                 bail!("outfile {} is set before", outfile);
             }
         }
@@ -117,7 +117,7 @@ use std::{
     let mut outin_files = HashMap::new();
     for item in conf.confs.iter() {
         for (o, i) in get_outin_files(item)?.into_iter() {
-            if let Some(_) = outin_files.insert(o.clone(), i) {
+            if let Some(..) = outin_files.insert(o.clone(), i) {
                 bail!("outfile {} is set before", o);
             }
         }

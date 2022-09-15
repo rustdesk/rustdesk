@@ -278,7 +278,7 @@ impl Drop for CheckIfRestart {
 
 async fn handle(data: Data, stream: &mut Connection) {
     match data {
-        Data::SystemInfo(_) => {
+        Data::SystemInfo(..) => {
             let info = format!(
                 "log_path: {}, config: {}, username: {}",
                 Config::log_path().to_str().unwrap_or(""),
@@ -287,11 +287,11 @@ async fn handle(data: Data, stream: &mut Connection) {
             );
             allow_err!(stream.send(&Data::SystemInfo(Some(info))).await);
         }
-        Data::ClickTime(_) => {
+        Data::ClickTime(..) => {
             let t = crate::server::CLICK_TIME.load(Ordering::SeqCst);
             allow_err!(stream.send(&Data::ClickTime(t)).await);
         }
-        Data::MouseMoveTime(_) => {
+        Data::MouseMoveTime(..) => {
             let t = crate::server::MOUSE_MOVE_TIME.load(Ordering::SeqCst);
             allow_err!(stream.send(&Data::MouseMoveTime(t)).await);
         }
@@ -301,7 +301,7 @@ async fn handle(data: Data, stream: &mut Connection) {
             crate::server::input_service::fix_key_down_timeout_at_exit();
             std::process::exit(0);
         }
-        Data::OnlineStatus(_) => {
+        Data::OnlineStatus(..) => {
             let x = config::ONLINE
                 .lock()
                 .unwrap()
@@ -386,7 +386,7 @@ async fn handle(data: Data, stream: &mut Connection) {
                 allow_err!(stream.send(&Data::Options(None)).await);
             }
         },
-        Data::NatType(_) => {
+        Data::NatType(..) => {
             let t = Config::get_nat_type();
             allow_err!(stream.send(&Data::NatType(Some(t))).await);
         }
@@ -462,7 +462,7 @@ pub async fn start_pa() {
                                 None, // Use default buffering attributes
                             ) {
                                 Ok(s) => loop {
-                                    if let Ok(_) = s.read(&mut buf) {
+                                    if let Ok(..) = s.read(&mut buf) {
                                         let out =
                                             if buf.iter().filter(|x| **x != 0).next().is_none() {
                                                 vec![]

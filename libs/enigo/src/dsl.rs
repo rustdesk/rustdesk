@@ -28,7 +28,7 @@ pub enum ParseError {
 impl Error for ParseError {
     fn description(&self) -> &str {
         match *self {
-            ParseError::UnknownTag(_) => "Unknown tag",
+            ParseError::UnknownTag(..) => "Unknown tag",
             ParseError::UnexpectedOpen => "Unescaped open bracket ({) found inside tag name",
             ParseError::UnmatchedOpen => "Unmatched open bracket ({). No matching close (})",
             ParseError::UnmatchedClose => "Unmatched close bracket (}). No previous open ({)",

@@ -35,11 +35,11 @@ pub fn test_if_valid_server(host: &str) -> String {
     match Config::get_network_type() {
         NetworkType::Direct => match to_socket_addr(&host) {
             Err(err) => err.to_string(),
-            Ok(_) => "".to_owned(),
+            Ok(..) => "".to_owned(),
         },
         NetworkType::ProxySocks => match &host.into_target_addr() {
             Err(err) => err.to_string(),
-            Ok(_) => "".to_owned(),
+            Ok(..) => "".to_owned(),
         },
     }
 }

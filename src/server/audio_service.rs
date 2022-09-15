@@ -354,7 +354,7 @@ fn send_f32(data: &[f32], encoder: &mut Encoder, sp: &GenericService) {
                         });
                         sp.send(msg_out);
                     }
-                    Err(_) => {}
+                    Err(..) => {}
                 }
             }
         } else {
@@ -374,6 +374,6 @@ fn send_f32(data: &[f32], encoder: &mut Encoder, sp: &GenericService) {
             });
             sp.send(msg_out);
         }
-        Err(_) => {}
+        Err(..) => {}
     }
 }

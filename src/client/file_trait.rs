@@ -10,7 +10,7 @@ pub trait FileManager: Interface {
     #[cfg(not(any(target_os = "android", target_os = "ios", feature = "cli")))]
     fn read_dir(&self, path: String, include_hidden: bool) -> sciter::Value {
         match fs::read_dir(&fs::get_path(&path), include_hidden) {
-            Err(_) => sciter::Value::null(),
+            Err(..) => sciter::Value::null(),
             Ok(fd) => {
                 use crate::ui::remote::make_fd;
                 let mut m = make_fd(0, &fd.entries.to_vec(), false);
@@ -25,7 +25,7 @@ pub trait FileManager: Interface {
         use crate::flutter::make_fd_to_json;
         match fs::read_dir(&fs::get_path(path), include_hidden) {
             Ok(fd) => make_fd_to_json(fd.id, fd.path, &fd.entries),
-            Err(_) => "".into(),
+            Err(..) => "".into(),
         }
     }
 

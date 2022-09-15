@@ -161,7 +161,7 @@ async fn connect_and_login_2(
     loop {
         tokio::select! {
             res = timeout(READ_TIMEOUT, stream.next()) => match res {
-                Err(_) => {
+                Err(..) => {
                     bail!("Timeout");
                 }
                 Ok(Some(Ok(bytes))) => {

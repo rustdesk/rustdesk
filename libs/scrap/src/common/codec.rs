@@ -101,12 +101,12 @@ impl Encoder {
     pub fn new(config: EncoderCfg) -> ResultType<Encoder> {
         log::info!("new encoder:{:?}", config);
         match config {
-            EncoderCfg::VPX(_) => Ok(Encoder {
+            EncoderCfg::VPX(..) => Ok(Encoder {
                 codec: Box::new(VpxEncoder::new(config)?),
             }),
 
             #[cfg(feature = "hwcodec")]
-            EncoderCfg::HW(_) => match HwEncoder::new(config) {
+            EncoderCfg::HW(..) => match HwEncoder::new(config) {
                 Ok(hw) => Ok(Encoder {
                     codec: Box::new(hw),
                 }),

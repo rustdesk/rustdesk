@@ -145,17 +145,17 @@ fn get_mac_by_ip(ip: &IpAddr) -> ResultType<String> {
 fn get_ipaddr_by_peer<A: ToSocketAddrs>(peer: A) -> Option<IpAddr> {
     let socket = match UdpSocket::bind("0.0.0.0:0") {
         Ok(s) => s,
-        Err(_) => return None,
+        Err(..) => return None,
     };
 
     match socket.connect(peer) {
         Ok(()) => (),
-        Err(_) => return None,
+        Err(..) => return None,
     };
 
     match socket.local_addr() {
         Ok(addr) => return Some(addr.ip()),
-        Err(_) => return None,
+        Err(..) => return None,
     };
 }
 

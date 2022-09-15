@@ -638,17 +638,11 @@ pub async fn query_online_states<F: FnOnce(Vec<String>, Vec<String>)>(ids: Vec<S
 }
 
 async fn create_online_stream() -> ResultType<FramedStream> {
-    let (rendezvous_server, _servers, _contained) = crate::get_rendezvous_server(1_000).await;
-    let tmp: Vec<&str> = rendezvous_server.split(":").collect();
-    if tmp.len() != 2 {
-        bail!("Invalid server address: {}", rendezvous_server);
-    }
-    let port: u16 = tmp[1].parse()?;
-    if port == 0 {
-        bail!("Invalid server address: {}", rendezvous_server);
-    }
-    let online_server = format!("{}:{}", tmp[0], port - 1);
-    let server_addr = socket_client::get_target_addr(&online_server)?;
+    let (rendezvous_server, _, _) = crate::get_rendezvous_server(1_000).await?;
+    let server_addr = match rendezvous_server {
+        TargetAddr::Ip(socket_addr) => TargetAddr::Ip(SocketAddr::new(socket_addr.ip(), socket_addr.port() - 1)),
+        TargetAddr::Domain(host, port) => TargetAddr::Domain(host, port -1),
+    };
     socket_client::connect_tcp(
         server_addr,
         Config::get_any_listen_addr(),

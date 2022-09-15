@@ -355,7 +355,7 @@ impl<T: InvokeUiSession> Session<T> {
                 }
                 string
             }
-            Err(_) => "".to_owned(),
+            Err(..) => "".to_owned(),
         };
 
         // maybe two string

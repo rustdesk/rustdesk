@@ -59,7 +59,7 @@ pub enum EventToUI {
 }
 
 pub fn start_global_event_stream(s: StreamSink<String>, app_type: String) -> ResultType<()> {
-    if let Some(_) = flutter::GLOBAL_EVENT_STREAM
+    if let Some(..) = flutter::GLOBAL_EVENT_STREAM
         .write()
         .unwrap()
         .insert(app_type.clone(), s)

@@ -106,7 +106,7 @@ impl Subscriber for ConnInner {
     #[inline]
     fn send(&mut self, msg: Arc<Message>) {
         match &msg.union {
-            Some(message::Union::VideoFrame(_)) => {
+            Some(message::Union::VideoFrame(..)) => {
                 self.tx_video.as_mut().map(|tx| {
                     allow_err!(tx.send((Instant::now(), msg)));
                 });
@@ -391,7 +391,7 @@ impl Connection {
 
                     if latency > 1000 {
                         match &msg.union {
-                            Some(message::Union::AudioFrame(_)) => {
+                            Some(message::Union::AudioFrame(..)) => {
                                 // log::info!("audio frame latency {}", instant.elapsed().as_secs_f32());
                                 continue;
                             }
@@ -1093,8 +1093,8 @@ impl Connection {
                         };
                         if is_press {
                             match me.union {
-                                Some(key_event::Union::Unicode(_))
-                                | Some(key_event::Union::Seq(_)) => {
+                                Some(key_event::Union::Unicode(..))
+                                | Some(key_event::Union::Seq(..)) => {
                                     self.input_key(me, false);
                                 }
                                 _ => {
@@ -1254,24 +1254,24 @@ impl Connection {
                             super::video_service::refresh();
                         }
                     }
-                    Some(misc::Union::VideoReceived(_)) => {
+                    Some(misc::Union::VideoReceived(..)) => {
                         video_service::notify_video_frame_feched(
                             self.inner.id,
                             Some(Instant::now().into()),
                         );
                     }
-                    Some(misc::Union::CloseReason(_)) => {
+                    Some(misc::Union::CloseReason(..)) => {
                         self.on_close("Peer close", true).await;
                         SESSIONS.lock().unwrap().remove(&self.lr.my_id);
                         return false;
                     }
 
-                    Some(misc::Union::RestartRemoteDevice(_)) =>
+                    Some(misc::Union::RestartRemoteDevice(..)) =>
                     {
                         #[cfg(not(any(target_os = "android", target_os = "ios")))]
                         if self.restart {
                             match system_shutdown::reboot() {
-                                Ok(_) => log::info!("Restart by the peer"),
+                                Ok(..) => log::info!("Restart by the peer"),
                                 Err(e) => log::error!("Failed to restart:{}", e),
                             }
                         }
@@ -1522,7 +1522,7 @@ async fn start_ipc(
                     }
                     Ok(Some(data)) => {
                         match data {
-                            ipc::Data::ClickTime(_)=> {
+                            ipc::Data::ClickTime(..)=> {
                                 let ct = CLICK_TIME.load(Ordering::SeqCst);
                                 let data = ipc::Data::ClickTime(ct);
                                 stream.send(&data).await?;
@@ -1577,7 +1577,7 @@ mod privacy_mode {
 
             let res = turn_off_privacy(_conn_id, None);
             match res {
-                Ok(_) => crate::common::make_privacy_mode_msg(
+                Ok(..) => crate::common::make_privacy_mode_msg(
                     back_notification::PrivacyModeState::PrvOffSucceeded,
                 ),
                 Err(e) => {

@@ -752,7 +752,7 @@ fn legacy_keyboard_mode(evt: &KeyEvent) {
         Some(key_event::Union::ControlKey(ck)) => {
             if let Some(key) = KEY_MAP.get(&ck.value()) {
                 #[cfg(windows)]
-                if let Some(_) = NUMPAD_KEY_MAP.get(&ck.value()) {
+                if let Some(..) = NUMPAD_KEY_MAP.get(&ck.value()) {
                     disable_numlock = en.get_key_state(Key::NumLock);
                     if disable_numlock {
                         en.key_down(Key::NumLock).ok();

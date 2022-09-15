@@ -39,7 +39,7 @@ fn main() {
     for lib in libraries.iter() {
         let libdir = match pkg_config::get_variable(lib, "libdir") {
             Ok(libdir) => format!("Some(\"{}\")", libdir),
-            Err(_) => "None".to_string(),
+            Err(..) => "None".to_string(),
         };
         config.push_str(&format!(
             "pub const {}: Option<&'static str> = {};\n",

@@ -37,12 +37,12 @@ impl Enigo {
     fn tfc_key_down_or_up(&mut self, key: Key, down: bool, up: bool) -> bool {
         if let Key::Layout(chr) = key {
             if down {
-                if let Err(_) = self.tfc.unicode_char_down(chr) {
+                if let Err(..) = self.tfc.unicode_char_down(chr) {
                     return false;
                 }
             }
             if up {
-                if let Err(_) = self.tfc.unicode_char_up(chr) {
+                if let Err(..) = self.tfc.unicode_char_up(chr) {
                     return false;
                 }
             }
@@ -57,12 +57,12 @@ impl Enigo {
         };
 
         if down {
-            if let Err(_) = self.tfc.key_down(key) {
+            if let Err(..) = self.tfc.key_down(key) {
                 return false;
             }
         };
         if up {
-            if let Err(_) = self.tfc.key_up(key) {
+            if let Err(..) = self.tfc.key_up(key) {
                 return false;
             }
         };

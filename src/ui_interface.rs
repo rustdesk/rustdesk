@@ -492,7 +492,7 @@ pub fn new_remote(id: String, remote_type: String) {
     let args = vec![format!("--{}", remote_type), id.clone()];
     let key = (id.clone(), remote_type.clone());
     if let Some(c) = lock.1.get_mut(&key) {
-        if let Ok(Some(_)) = c.try_wait() {
+        if let Ok(Some(..)) = c.try_wait() {
             lock.1.remove(&key);
         } else {
             if remote_type == "rdp" {
@@ -785,7 +785,7 @@ pub fn check_zombie(childs: Childs) {
         let mut lock = childs.lock().unwrap();
         let mut n = 0;
         for (id, c) in lock.1.iter_mut() {
-            if let Ok(Some(_)) = c.try_wait() {
+            if let Ok(Some(..)) = c.try_wait() {
                 deads.push(id.clone());
                 n += 1;
             }

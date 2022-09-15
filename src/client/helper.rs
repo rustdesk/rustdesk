@@ -74,9 +74,9 @@ pub enum CodecFormat {
 impl From<&VideoFrame> for CodecFormat {
     fn from(it: &VideoFrame) -> Self {
         match it.union {
-            Some(video_frame::Union::Vp9s(_)) => CodecFormat::VP9,
-            Some(video_frame::Union::H264s(_)) => CodecFormat::H264,
-            Some(video_frame::Union::H265s(_)) => CodecFormat::H265,
+            Some(video_frame::Union::Vp9s(..)) => CodecFormat::VP9,
+            Some(video_frame::Union::H264s(..)) => CodecFormat::H264,
+            Some(video_frame::Union::H265s(..)) => CodecFormat::H265,
             _ => CodecFormat::Unknown,
         }
     }

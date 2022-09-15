@@ -245,7 +245,7 @@ impl<T: InvokeUiSession> Remote<T> {
                 std::thread::spawn(move || loop {
                     std::thread::sleep(Duration::from_millis(CLIPBOARD_INTERVAL));
                     match rx.try_recv() {
-                        Ok(_) | Err(std::sync::mpsc::TryRecvError::Disconnected) => {
+                        Ok(..) | Err(std::sync::mpsc::TryRecvError::Disconnected) => {
                             log::debug!("Exit clipboard service of client");
                             break;
                         }

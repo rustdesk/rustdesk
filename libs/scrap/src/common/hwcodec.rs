@@ -61,7 +61,7 @@ impl EncoderApi for HwEncoder {
                 };
                 let format = match Encoder::format_from_name(config.codec_name.clone()) {
                     Ok(format) => format,
-                    Err(_) => {
+                    Err(..) => {
                         return Err(anyhow!(format!(
                             "failed to get format from name:{}",
                             config.codec_name
@@ -75,7 +75,7 @@ impl EncoderApi for HwEncoder {
                         format,
                         pixfmt: ctx.pixfmt,
                     }),
-                    Err(_) => Err(anyhow!(format!("Failed to create encoder"))),
+                    Err(..) => Err(anyhow!(format!("Failed to create encoder"))),
                 }
             }
             _ => Err(anyhow!("encoder type mismatch")),
@@ -165,7 +165,7 @@ impl HwEncoder {
                 data.append(v);
                 Ok(data)
             }
-            Err(_) => Ok(Vec::<EncodeFrame>::new()),
+            Err(..) => Ok(Vec::<EncodeFrame>::new()),
         }
     }
 }
@@ -219,13 +219,13 @@ impl HwDecoder {
         };
         match Decoder::new(ctx) {
             Ok(decoder) => Ok(HwDecoder { decoder, info }),
-            Err(_) => Err(anyhow!(format!("Failed to create decoder"))),
+            Err(..) => Err(anyhow!(format!("Failed to create decoder"))),
         }
     }
     pub fn decode(&mut self, data: &[u8]) -> ResultType<Vec<HwDecoderImage>> {
         match self.decoder.decode(data) {
             Ok(v) => Ok(v.iter().map(|f| HwDecoderImage { frame: f }).collect()),
-            Err(_) => Ok(vec![]),
+            Err(..) => Ok(vec![]),
         }
     }
 }
@@ -275,7 +275,7 @@ fn get_config(k: &str) -> ResultType<CodecInfos> {
         .to_owned();
     match CodecInfos::deserialize(&v) {
         Ok(v) => Ok(v),
-        Err(_) => Err(anyhow!("Failed to get config:{}", k)),
+        Err(..) => Err(anyhow!("Failed to get config:{}", k)),
     }
 }
 

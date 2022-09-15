@@ -240,7 +240,7 @@ impl Capturer {
             let result = {
                 if let Some(gdi_capturer) = &self.gdi_capturer {
                     match gdi_capturer.frame(&mut self.gdi_buffer) {
-                        Ok(_) => {
+                        Ok(..) => {
                             crate::would_block_if_equal(
                                 &mut self.saved_raw_data,
                                 &self.gdi_buffer,

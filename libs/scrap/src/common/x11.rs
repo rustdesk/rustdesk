@@ -42,7 +42,7 @@ impl Display {
     pub fn primary() -> io::Result<Display> {
         let server = match x11::Server::default() {
             Ok(server) => server,
-            Err(_) => return Err(io::ErrorKind::ConnectionRefused.into()),
+            Err(..) => return Err(io::ErrorKind::ConnectionRefused.into()),
         };
 
         let mut displays = x11::Server::displays(server);
@@ -60,7 +60,7 @@ impl Display {
     pub fn all() -> io::Result<Vec<Display>> {
         let server = match x11::Server::default() {
             Ok(server) => server,
-            Err(_) => return Err(io::ErrorKind::ConnectionRefused.into()),
+            Err(..) => return Err(io::ErrorKind::ConnectionRefused.into()),
         };
 
         Ok(x11::Server::displays(server).map(Display).collect())

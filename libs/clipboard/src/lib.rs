@@ -212,7 +212,7 @@ pub fn server_format_list(
                 } else {
                     let n = match CString::new(format.1) {
                         Ok(n) => n,
-                        Err(_) => CString::new("").unwrap(),
+                        Err(..) => CString::new("").unwrap(),
                     };
                     CLIPRDR_FORMAT {
                         formatId: format.0 as UINT32,
@@ -410,7 +410,7 @@ extern "C" fn client_format_list(
                 let format_name = CStr::from_ptr(format_data.formatName).to_str();
                 let format_name = match format_name {
                     Ok(n) => n.to_owned(),
-                    Err(_) => {
+                    Err(..) => {
                         log::warn!("failed to get format name");
                         "".to_owned()
                     }

@@ -473,7 +473,7 @@ pub fn start_os_service() {
             }
             if let Some(ps) = server.as_mut() {
                 match ps.try_wait() {
-                    Ok(Some(_)) => {
+                    Ok(Some(..)) => {
                         server = None;
                         start_new = true;
                     }

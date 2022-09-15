@@ -115,7 +115,7 @@ impl VideoFrameController {
         let timeout_dur = Duration::from_millis(timeout_millis as u64);
         match tokio::time::timeout(timeout_dur, FRAME_FETCHED_NOTIFIER.1.lock().await.recv()).await
         {
-            Err(_) => {
+            Err(..) => {
                 // break if timeout
                 // log::error!("blocking wait frame receiving timeout {}", timeout_millis);
             }
@@ -271,7 +271,7 @@ pub fn test_create_capturer(privacy_mode_id: i32, timeout_millis: u64) -> bool {
     let test_begin = Instant::now();
     while test_begin.elapsed().as_millis() < timeout_millis as _ {
         if let Ok((_, _, display)) = get_current_display() {
-            if let Ok(_) = create_capturer(privacy_mode_id, display, true) {
+            if let Ok(..) = create_capturer(privacy_mode_id, display, true) {
                 return true;
             }
         }
@@ -761,7 +761,7 @@ fn get_primary() -> usize {
         if !scrap::is_x11() {
             return match super::wayland::get_primary() {
                 Ok(n) => n,
-                Err(_) => 0,
+                Err(..) => 0,
             };
         }
     }

@@ -33,7 +33,7 @@ use hbb_common::{
     sodiumoxide::crypto::{box_, secretbox, sign},
     timeout,
     tokio::time::Duration,
-    AddrMangle, ResultType, Stream,
+    AddrMangle, IntoTargetAddr, ResultType, Stream,
 };
 pub use helper::LatencyController;
 pub use helper::*;
@@ -180,14 +180,17 @@ impl Client {
                 true,
             ));
         }
-        let (mut rendezvous_server, servers, contained) = crate::get_rendezvous_server(1_000).await;
+        let (mut rendezvous_server, servers, contained) =
+            crate::get_rendezvous_server(1_000).await?;
         let mut socket =
-            socket_client::connect_tcp(&*rendezvous_server, any_addr, RENDEZVOUS_TIMEOUT).await;
+            socket_client::connect_tcp(rendezvous_server.clone(), any_addr, RENDEZVOUS_TIMEOUT)
+                .await;
         debug_assert!(!servers.contains(&rendezvous_server));
         if socket.is_err() && !servers.is_empty() {
             log::info!("try the other servers: {:?}", servers);
             for server in servers {
-                socket = socket_client::connect_tcp(&*server, any_addr, RENDEZVOUS_TIMEOUT).await;
+                socket =
+                    socket_client::connect_tcp(server.clone(), any_addr, RENDEZVOUS_TIMEOUT).await;
                 if socket.is_ok() {
                     rendezvous_server = server;
                     break;
@@ -197,7 +200,7 @@ impl Client {
         } else if !contained {
             crate::refresh_rendezvous_server();
         }
-        log::info!("rendezvous server: {}", rendezvous_server);
+        log::info!("rendezvous server: {:?}", rendezvous_server);
         let mut socket = socket?;
         let my_addr = socket.local_addr();
         let mut signed_id_pk = Vec::new();
@@ -309,7 +312,7 @@ impl Client {
             peer,
             signed_id_pk,
             &relay_server,
-            &rendezvous_server,
+            rendezvous_server,
             time_used,
             peer_nat_type,
             my_nat_type,
@@ -323,13 +326,13 @@ impl Client {
     }
 
     /// Connect to the peer.
-    async fn connect(
+    async fn connect<'t, T: IntoTargetAddr<'t> + Clone>(
         local_addr: SocketAddr,
         peer: SocketAddr,
         peer_id: &str,
         signed_id_pk: Vec<u8>,
         relay_server: &str,
-        rendezvous_server: &str,
+        rendezvous_server: T,
         punch_time_used: u64,
         peer_nat_type: NatType,
         my_nat_type: i32,
@@ -498,10 +501,10 @@ impl Client {
     }
 
     /// Request a relay connection to the server.
-    async fn request_relay(
+    async fn request_relay<'t, T: IntoTargetAddr<'t> + Clone>(
         peer: &str,
         relay_server: String,
-        rendezvous_server: &str,
+        rendezvous_server: T,
         secure: bool,
         key: &str,
         token: &str,
@@ -513,7 +516,7 @@ impl Client {
         for i in 1..=3 {
             // use different socket due to current hbbs implement requiring different nat address for each attempt
             let mut socket =
-                socket_client::connect_tcp(rendezvous_server, any_addr, RENDEZVOUS_TIMEOUT)
+                socket_client::connect_tcp(rendezvous_server.clone(), any_addr, RENDEZVOUS_TIMEOUT)
                     .await
                     .with_context(|| "Failed to connect to rendezvous server")?;
 

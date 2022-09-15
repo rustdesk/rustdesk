@@ -44,7 +44,7 @@ fn main() {
             Err(ref e) if e.kind() == WouldBlock => {
                 // Wait for the frame.
             }
-            Err(_) => {
+            Err(..) => {
                 // We're done here.
                 break;
             }

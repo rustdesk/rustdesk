@@ -457,6 +457,20 @@ impl Config {
         SocketAddr::new(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)), 0)
     }
 
+    fn try_set_port(host: String, port: u16) -> String {
+        if host.parse::<std::net::SocketAddr>().is_ok() {
+            return host;
+        }
+        if host.parse::<std::net::IpAddr>().is_ok() {
+            return format!("{}:{}", host, port);
+        }
+        if !host.contains(":") {
+            format!("{}:{}", host, port)
+        } else {
+            host
+        }
+    }
+
     pub fn get_rendezvous_server() -> String {
         let mut rendezvous_server = Self::get_option("custom-rendezvous-server");
         if rendezvous_server.is_empty() {
@@ -471,10 +485,7 @@ impl Config {
                 .next()
                 .unwrap_or("".to_owned());
         }
-        if !rendezvous_server.contains(":") {
-            rendezvous_server = format!("{}:{}", rendezvous_server, RENDEZVOUS_PORT);
-        }
-        rendezvous_server
+        Self::try_set_port(rendezvous_server, RENDEZVOUS_PORT as _)
     }
 
     pub fn get_rendezvous_servers() -> Vec<String> {
@@ -754,7 +765,7 @@ impl Config {
     pub fn get_network_type() -> NetworkType {
         match &CONFIG2.read().unwrap().socks {
             None => NetworkType::Direct,
-            Some(_) => NetworkType::ProxySocks,
+            Some(..) => NetworkType::ProxySocks,
         }
     }
 

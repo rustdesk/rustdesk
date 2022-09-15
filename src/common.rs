@@ -1,4 +1,7 @@
-use std::sync::{Arc, Mutex};
+use std::{
+    net::{IpAddr, SocketAddr},
+    sync::{Arc, Mutex},
+};
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub use arboard::Clipboard as ClipboardContext;
@@ -13,7 +16,7 @@ use hbb_common::{
     protobuf::Enum,
     protobuf::Message as _,
     rendezvous_proto::*,
-    sleep, socket_client, tokio, ResultType,
+    sleep, socket_client, tokio, IntoTargetAddr, ResultType, TargetAddr,
 };
 // #[cfg(any(target_os = "android", target_os = "ios", feature = "cli"))]
 use hbb_common::{config::RENDEZVOUS_PORT, futures::future::join_all};
@@ -261,17 +264,13 @@ async fn test_nat_type_() -> ResultType<bool> {
         return Ok(true);
     }
     let start = std::time::Instant::now();
-    let (rendezvous_server, _, _) = get_rendezvous_server(1_000).await;
+    let (rendezvous_server, _, _) = get_rendezvous_server(1_000).await?;
     let server1 = rendezvous_server;
-    let tmp: Vec<&str> = server1.split(":").collect();
-    if tmp.len() != 2 {
-        bail!("Invalid server address: {}", server1);
-    }
-    let port: u16 = tmp[1].parse()?;
-    if port == 0 {
-        bail!("Invalid server address: {}", server1);
-    }
-    let server2 = format!("{}:{}", tmp[0], port - 1);
+    let server2 = match &server1 {
+        TargetAddr::Ip(socket_addr) => TargetAddr::Ip(SocketAddr::new(socket_addr.ip(), socket_addr.port() - 1)),
+        TargetAddr::Domain(host, port) => TargetAddr::Domain(host.clone(), port -1),
+    };
+
     let mut msg_out = RendezvousMessage::new();
     let serial = Config::get_serial();
     msg_out.set_test_nat_request(TestNatRequest {
@@ -280,8 +279,6 @@ async fn test_nat_type_() -> ResultType<bool> {
     });
     let mut port1 = 0;
     let mut port2 = 0;
-    let server1 = socket_client::get_target_addr(&server1)?;
-    let server2 = socket_client::get_target_addr(&server2)?;
     let mut addr = Config::get_any_listen_addr();
     for i in 0..2 {
         let mut socket = socket_client::connect_tcp(
@@ -331,18 +328,24 @@ async fn test_nat_type_() -> ResultType<bool> {
     Ok(ok)
 }
 
-pub async fn get_rendezvous_server(ms_timeout: u64) -> (String, Vec<String>, bool) {
+pub async fn get_rendezvous_server(
+    ms_timeout: u64,
+) -> ResultType<(TargetAddr<'static>, Vec<TargetAddr<'static>>, bool)> {
     #[cfg(any(target_os = "android", target_os = "ios"))]
     let (mut a, mut b) = get_rendezvous_server_(ms_timeout);
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    let (mut a, mut b) = get_rendezvous_server_(ms_timeout).await;
-    let mut b: Vec<String> = b
-        .drain(..)
-        .map(|x| {
-            if !x.contains(":") {
-                format!("{}:{}", x, config::RENDEZVOUS_PORT)
+    let (a, b) = get_rendezvous_server_(ms_timeout).await;
+    let mut a = a.into_target_addr()?;
+    let mut b: Vec<TargetAddr<'static>> = b
+        .into_iter()
+        .filter_map(|x| {
+            if let Ok(addr) = x.clone().into_target_addr() {
+                Some(addr)
+            } else if let Ok(addr) = format!("{}:{}", x, config::RENDEZVOUS_PORT).into_target_addr()
+            {
+                Some(addr)
             } else {
-                x
+                None
             }
         })
         .collect();
@@ -353,7 +356,7 @@ pub async fn get_rendezvous_server(ms_timeout: u64) -> (String, Vec<String>, boo
         a = b.pop().unwrap_or(a);
         false
     };
-    (a, b, c)
+    Ok((a, b, c))
 }
 
 #[inline]

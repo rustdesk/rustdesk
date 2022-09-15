@@ -501,7 +501,7 @@ async fn run_service(_arguments: Vec<OsString>) -> ResultType<()> {
                 }
                 _ => {}
             },
-            Err(_) => {
+            Err(..) => {
                 // timeout
                 unsafe {
                     let tmp = get_current_session(share_rdp());
@@ -1254,7 +1254,7 @@ pub fn is_installed() -> bool {
     }
     let manager_access = ServiceManagerAccess::CONNECT;
     if let Ok(service_manager) = ServiceManager::local_computer(None::<&str>, manager_access) {
-        if let Ok(_) =
+        if let Ok(..) =
             service_manager.open_service(crate::get_app_name(), ServiceAccess::QUERY_CONFIG)
         {
             return true;

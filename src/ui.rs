@@ -676,7 +676,7 @@ pub fn check_zombie(childs: Childs) {
         let mut lock = childs.lock().unwrap();
         let mut n = 0;
         for (id, c) in lock.1.iter_mut() {
-            if let Ok(Some(_)) = c.try_wait() {
+            if let Ok(Some(..)) = c.try_wait() {
                 deads.push(id.clone());
                 n += 1;
             }

@@ -296,7 +296,7 @@ pub fn check_zombie() {
         let mut i = 0;
         while i != lock.len() {
             let c = &mut (*lock)[i];
-            if let Ok(Some(_)) = c.try_wait() {
+            if let Ok(Some(..)) = c.try_wait() {
                 lock.remove(i);
             } else {
                 i += 1;
@@ -446,7 +446,7 @@ async fn sync_and_watch_config_dir() {
                     }
                 }
             }
-            Err(_) => {
+            Err(..) => {
                 log::info!("#{} try: failed to connect to ipc_service", i);
             }
         }
