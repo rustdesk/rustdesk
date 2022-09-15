@@ -782,6 +782,7 @@ class _PeerTabbedPageState extends State<_PeerTabbedPage>
         bind.mainDiscover();
         break;
       case 3:
+        gFFI.abModel.updateAb();
         break;
     }
   }
