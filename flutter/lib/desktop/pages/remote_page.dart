@@ -5,6 +5,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_hbb/models/input_model.dart';
 import 'package:get/get.dart';
 import 'package:provider/provider.dart';
 import 'package:wakelock/wakelock.dart';
@@ -50,9 +51,12 @@ class _RemotePageState extends State<RemotePage>
   Function(bool)? _onEnterOrLeaveImage4Menubar;
 
   late FFI _ffi;
+  late Keyboard _keyboard_input;
+  late Mouse _mouse_input;
 
   void _updateTabBarHeight() {
     _ffi.canvasModel.tabBarHeight = widget.tabBarHeight;
+    _mouse_input.tabBarHeight = widget.tabBarHeight;
   }
 
   void _initStates(String id) {
@@ -80,7 +84,11 @@ class _RemotePageState extends State<RemotePage>
   void initState() {
     super.initState();
     _initStates(widget.id);
+
     _ffi = FFI();
+    _keyboard_input = Keyboard(_ffi, widget.id);
+    _mouse_input = Mouse(_ffi, widget.id, widget.tabBarHeight);
+
     _updateTabBarHeight();
     Get.put(_ffi, tag: widget.id);
     _ffi.connect(widget.id, tabBarHeight: super.widget.tabBarHeight);
@@ -97,7 +105,6 @@ class _RemotePageState extends State<RemotePage>
     _ffi.qualityMonitorModel.checkShowQualityMonitor(widget.id);
     _showRemoteCursor.value = bind.sessionGetToggleOptionSync(
         id: widget.id, arg: 'show-remote-cursor');
-
     if (!_isCustomCursorInited) {
       customCursorController.registerNeedUpdateCursorCallback(
           (String? lastKey, String? currentKey) async {
@@ -127,14 +134,6 @@ class _RemotePageState extends State<RemotePage>
 
   void resetTool() {
     _ffi.resetModifiers();
-  }
-
-  void sendRawKey(RawKeyEvent e, {bool? down, bool? press}) {
-    // for maximum compatibility
-    final label = logicalKeyMap[e.logicalKey.keyId] ??
-        physicalKeyMap[e.physicalKey.usbHidUsage] ??
-        e.logicalKey.keyLabel;
-    _ffi.inputKey(label, down: down, press: press ?? false);
   }
 
   Widget buildBody(BuildContext context) {
@@ -170,92 +169,6 @@ class _RemotePageState extends State<RemotePage>
         ], child: buildBody(context)));
   }
 
-  KeyEventResult handleRawKeyEvent(FocusNode data, RawKeyEvent e) {
-    bind.sessionGetKeyboardName(id: widget.id).then((result) {
-      setState(() {
-        keyboardMode = result.toString();
-      });
-    });
-
-    if (keyboardMode == 'map') {
-      mapKeyboardMode(e);
-    } else if (keyboardMode == 'translate') {
-      legacyKeyboardMode(e);
-    } else {
-      legacyKeyboardMode(e);
-    }
-
-    return KeyEventResult.handled;
-  }
-
-  void mapKeyboardMode(RawKeyEvent e) {
-    int scanCode;
-    int keyCode;
-    bool down;
-
-    if (e.data is RawKeyEventDataMacOs) {
-      RawKeyEventDataMacOs newData = e.data as RawKeyEventDataMacOs;
-      scanCode = newData.keyCode;
-      keyCode = newData.keyCode;
-    } else if (e.data is RawKeyEventDataWindows) {
-      RawKeyEventDataWindows newData = e.data as RawKeyEventDataWindows;
-      scanCode = newData.scanCode;
-      keyCode = newData.keyCode;
-    } else if (e.data is RawKeyEventDataLinux) {
-      RawKeyEventDataLinux newData = e.data as RawKeyEventDataLinux;
-      scanCode = newData.scanCode;
-      keyCode = newData.keyCode;
-    } else {
-      scanCode = -1;
-      keyCode = -1;
-    }
-
-    if (e is RawKeyDownEvent) {
-      down = true;
-    } else {
-      down = false;
-    }
-
-    _ffi.inputRawKey(e.character ?? "", keyCode, scanCode, down);
-  }
-
-  void legacyKeyboardMode(RawKeyEvent e) {
-    final key = e.logicalKey;
-    if (e is RawKeyDownEvent) {
-      if (e.repeat) {
-        sendRawKey(e, press: true);
-      } else {
-        if (e.isAltPressed && !_ffi.alt) {
-          _ffi.alt = true;
-        } else if (e.isControlPressed && !_ffi.ctrl) {
-          _ffi.ctrl = true;
-        } else if (e.isShiftPressed && !_ffi.shift) {
-          _ffi.shift = true;
-        } else if (e.isMetaPressed && !_ffi.command) {
-          _ffi.command = true;
-        }
-        sendRawKey(e, down: true);
-      }
-    }
-    if (e is RawKeyUpEvent) {
-      if (key == LogicalKeyboardKey.altLeft ||
-          key == LogicalKeyboardKey.altRight) {
-        _ffi.alt = false;
-      } else if (key == LogicalKeyboardKey.controlLeft ||
-          key == LogicalKeyboardKey.controlRight) {
-        _ffi.ctrl = false;
-      } else if (key == LogicalKeyboardKey.shiftRight ||
-          key == LogicalKeyboardKey.shiftLeft) {
-        _ffi.shift = false;
-      } else if (key == LogicalKeyboardKey.metaLeft ||
-          key == LogicalKeyboardKey.metaRight ||
-          key == LogicalKeyboardKey.superKey) {
-        _ffi.command = false;
-      }
-      sendRawKey(e);
-    }
-  }
-
   Widget getRawPointerAndKeyBody(Widget child) {
     return FocusScope(
         autofocus: true,
@@ -266,70 +179,8 @@ class _RemotePageState extends State<RemotePage>
             onFocusChange: (bool v) {
               _imageFocused = v;
             },
-            onKey: handleRawKeyEvent,
+            onKey: _keyboard_input.handleRawKeyEvent,
             child: child));
-  }
-
-  void _onPointHoverImage(PointerHoverEvent e) {
-    if (e.kind != ui.PointerDeviceKind.mouse) return;
-    if (!_isPhysicalMouse) {
-      setState(() {
-        _isPhysicalMouse = true;
-      });
-    }
-    if (_isPhysicalMouse) {
-      _ffi.handleMouse(getEvent(e, 'mousemove'),
-          tabBarHeight: widget.tabBarHeight);
-    }
-  }
-
-  void _onPointDownImage(PointerDownEvent e) {
-    if (e.kind != ui.PointerDeviceKind.mouse) {
-      if (_isPhysicalMouse) {
-        setState(() {
-          _isPhysicalMouse = false;
-        });
-      }
-    }
-    if (_isPhysicalMouse) {
-      _ffi.handleMouse(getEvent(e, 'mousedown'),
-          tabBarHeight: widget.tabBarHeight);
-    }
-  }
-
-  void _onPointUpImage(PointerUpEvent e) {
-    if (e.kind != ui.PointerDeviceKind.mouse) return;
-    if (_isPhysicalMouse) {
-      _ffi.handleMouse(getEvent(e, 'mouseup'),
-          tabBarHeight: widget.tabBarHeight);
-    }
-  }
-
-  void _onPointMoveImage(PointerMoveEvent e) {
-    if (e.kind != ui.PointerDeviceKind.mouse) return;
-    if (_isPhysicalMouse) {
-      _ffi.handleMouse(getEvent(e, 'mousemove'),
-          tabBarHeight: widget.tabBarHeight);
-    }
-  }
-
-  void _onPointerSignalImage(PointerSignalEvent e) {
-    if (e is PointerScrollEvent) {
-      var dx = e.scrollDelta.dx.toInt();
-      var dy = e.scrollDelta.dy.toInt();
-      if (dx > 0) {
-        dx = -1;
-      } else if (dx < 0) {
-        dx = 1;
-      }
-      if (dy > 0) {
-        dy = -1;
-      } else if (dy < 0) {
-        dy = 1;
-      }
-      bind.sessionSendMouse(
-          id: widget.id, msg: '{"type": "wheel", "x": "$dx", "y": "$dy"}');
-    }
   }
 
   void enterView(PointerEnterEvent evt) {
@@ -361,11 +212,11 @@ class _RemotePageState extends State<RemotePage>
 
   Widget _buildImageListener(Widget child) {
     return Listener(
-        onPointerHover: _onPointHoverImage,
-        onPointerDown: _onPointDownImage,
-        onPointerUp: _onPointUpImage,
-        onPointerMove: _onPointMoveImage,
-        onPointerSignal: _onPointerSignalImage,
+        onPointerHover: _mouse_input.onPointHoverImage,
+        onPointerDown: _mouse_input.onPointDownImage,
+        onPointerUp: _mouse_input.onPointUpImage,
+        onPointerMove: _mouse_input.onPointMoveImage,
+        onPointerSignal: _mouse_input.onPointerSignalImage,
         child:
             MouseRegion(onEnter: enterView, onExit: leaveView, child: child));
   }
@@ -405,27 +256,6 @@ class _RemotePageState extends State<RemotePage>
     return Stack(
       children: paints,
     );
-  }
-
-  int lastMouseDownButtons = 0;
-
-  Map<String, dynamic> getEvent(PointerEvent evt, String type) {
-    final Map<String, dynamic> out = {};
-    out['type'] = type;
-    out['x'] = evt.position.dx;
-    out['y'] = evt.position.dy;
-    if (_ffi.alt) out['alt'] = 'true';
-    if (_ffi.shift) out['shift'] = 'true';
-    if (_ffi.ctrl) out['ctrl'] = 'true';
-    if (_ffi.command) out['command'] = 'true';
-    out['buttons'] = evt
-        .buttons; // left button: 1, right button: 2, middle button: 4, 1 | 2 = 3 (left + right)
-    if (evt.buttons != 0) {
-      lastMouseDownButtons = evt.buttons;
-    } else {
-      out['buttons'] = lastMouseDownButtons;
-    }
-    return out;
   }
 
   @override
