@@ -271,7 +271,7 @@ _keepScaleBuilder() {
 }
 
 _registerEventHandler() {
-  if (desktopType != DesktopType.main) {
+  if (isDesktop && desktopType != DesktopType.main) {
     platformFFI.registerEventHandler('theme', 'theme', (evt) async {
       String? dark = evt['dark'];
       if (dark != null) {
