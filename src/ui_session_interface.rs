@@ -11,7 +11,9 @@ use async_trait::async_trait;
 use hbb_common::config::{Config, LocalConfig, PeerConfig};
 use hbb_common::rendezvous_proto::ConnType;
 use hbb_common::tokio::{self, sync::mpsc};
-use rdev::{Event, EventType::*, Key as RdevKey, Keyboard as RdevKeyboard, KeyboardState};
+use rdev::{Event, EventType::*, Key as RdevKey, KeyboardState};
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+use rdev::Keyboard as RdevKeyboard;
 
 use hbb_common::{allow_err, message_proto::*};
 use hbb_common::{fs, get_version_number, log, Stream};
@@ -27,9 +29,12 @@ pub static KEYBOARD_HOOKED: AtomicBool = AtomicBool::new(true);
 #[cfg(windows)]
 static mut IS_ALT_GR: bool = false;
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
 lazy_static::lazy_static! {
     static ref TO_RELEASE: Arc<Mutex<HashSet<RdevKey>>> = Arc::new(Mutex::new(HashSet::<RdevKey>::new()));
+}
+
+#[cfg(not(any(target_os = "android", target_os = "ios")))]
+lazy_static::lazy_static! {
     static ref KEYBOARD: Arc<Mutex<RdevKeyboard>> = Arc::new(Mutex::new(RdevKeyboard::new().unwrap()));
 }
 
@@ -268,6 +273,7 @@ impl<T: InvokeUiSession> Session<T> {
 
     #[allow(dead_code)]
     fn convert_numpad_keys(&self, key: RdevKey) -> RdevKey {
+        #[cfg(not(any(target_os = "android", target_os = "ios")))]
         if get_key_state(enigo::Key::NumLock) {
             return key;
         }
@@ -315,10 +321,11 @@ impl<T: InvokeUiSession> Session<T> {
 
         key_event.set_chr(keycode);
         key_event.down = down_or_up;
-
+        #[cfg(not(any(target_os = "android", target_os = "ios")))]
         if get_key_state(enigo::Key::CapsLock) {
             key_event.modifiers.push(ControlKey::CapsLock.into());
         }
+        #[cfg(not(any(target_os = "android", target_os = "ios")))]
         if get_key_state(enigo::Key::NumLock) {
             key_event.modifiers.push(ControlKey::NumLock.into());
         }
@@ -326,6 +333,7 @@ impl<T: InvokeUiSession> Session<T> {
         self.send_key_event(key_event, KeyboardMode::Map);
     }
 
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
     fn translate_keyboard_mode(&self, down_or_up: bool, key: RdevKey, evt: Event) {
         // translate mode(2): locally generated characters are send to the peer.
 
@@ -407,10 +415,11 @@ impl<T: InvokeUiSession> Session<T> {
         {
             key_event.modifiers.push(ControlKey::Meta.into());
         }
-
+        #[cfg(not(any(target_os = "android", target_os = "ios")))]
         if get_key_state(enigo::Key::CapsLock) {
             key_event.modifiers.push(ControlKey::CapsLock.into());
         }
+        #[cfg(not(any(target_os = "android", target_os = "ios")))]
         if self.peer_platform() != "Mac OS" {
             if get_key_state(enigo::Key::NumLock) {
                 key_event.modifiers.push(ControlKey::NumLock.into());
@@ -418,6 +427,7 @@ impl<T: InvokeUiSession> Session<T> {
         }
     }
 
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
     fn legacy_keyboard_mode(&self, down_or_up: bool, key: RdevKey, evt: Event) {
         // legacy mode(0): Generate characters locally, look for keycode on other side.
         let peer = self.peer_platform();
@@ -648,11 +658,18 @@ impl<T: InvokeUiSession> Session<T> {
                 }
                 self.map_keyboard_mode(down_or_up, key, Some(evt));
             }
-            KeyboardMode::Legacy => self.legacy_keyboard_mode(down_or_up, key, evt),
+            KeyboardMode::Legacy => {
+                #[cfg(not(any(target_os = "android", target_os = "ios")))]
+                self.legacy_keyboard_mode(down_or_up, key, evt)
+            },
             KeyboardMode::Translate => {
+                #[cfg(not(any(target_os = "android", target_os = "ios")))]
                 self.translate_keyboard_mode(down_or_up, key, evt);
             }
-            _ => self.legacy_keyboard_mode(down_or_up, key, evt),
+            _ => {
+                #[cfg(not(any(target_os = "android", target_os = "ios")))]
+                self.legacy_keyboard_mode(down_or_up, key, evt)
+            },
         }
     }
 
@@ -742,7 +759,6 @@ impl<T: InvokeUiSession> Session<T> {
         let keycode: u32 = keycode as u32;
         let scancode: u32 = scancode as u32;
 
-        #[cfg(not(target_os = "windows"))]
         let key = rdev::key_from_scancode(scancode) as RdevKey;
         // Windows requires special handling
         #[cfg(target_os = "windows")]

@@ -43,7 +43,7 @@ class _PeerWidgetState extends State<_PeerWidget> with WindowListener {
   final _curPeers = <String>{};
   var _lastChangeTime = DateTime.now();
   var _lastQueryPeers = <String>{};
-  var _lastQueryTime = DateTime.now().subtract(Duration(hours: 1));
+  var _lastQueryTime = DateTime.now().subtract(const Duration(hours: 1));
   var _queryCoun = 0;
   var _exit = false;
 
@@ -143,8 +143,8 @@ class _PeerWidgetState extends State<_PeerWidget> with WindowListener {
       while (!_exit) {
         final now = DateTime.now();
         if (!setEquals(_curPeers, _lastQueryPeers)) {
-          if (now.difference(_lastChangeTime) > Duration(seconds: 1)) {
-            if (_curPeers.length > 0) {
+          if (now.difference(_lastChangeTime) > const Duration(seconds: 1)) {
+            if (_curPeers.isNotEmpty) {
               platformFFI.ffiBind
                   .queryOnlines(ids: _curPeers.toList(growable: false));
               _lastQueryPeers = {..._curPeers};
@@ -154,8 +154,8 @@ class _PeerWidgetState extends State<_PeerWidget> with WindowListener {
           }
         } else {
           if (_queryCoun < _maxQueryCount) {
-            if (now.difference(_lastQueryTime) > Duration(seconds: 20)) {
-              if (_curPeers.length > 0) {
+            if (now.difference(_lastQueryTime) > const Duration(seconds: 20)) {
+              if (_curPeers.isNotEmpty) {
                 platformFFI.ffiBind
                     .queryOnlines(ids: _curPeers.toList(growable: false));
                 _lastQueryTime = DateTime.now();
@@ -164,7 +164,7 @@ class _PeerWidgetState extends State<_PeerWidget> with WindowListener {
             }
           }
         }
-        await Future.delayed(Duration(milliseconds: 300));
+        await Future.delayed(const Duration(milliseconds: 300));
       }
     }();
   }
@@ -266,7 +266,7 @@ class AddressBookPeerWidget extends BasePeerWidget {
           loadEvent: 'load_address_book_peers',
           offstageFunc: (Peer peer) =>
               !_hitTag(gFFI.abModel.selectedTags, peer.tags),
-          peerCardWidgetFunc: (Peer peer) => DiscoveredPeerCard(
+          peerCardWidgetFunc: (Peer peer) => AddressBookPeerCard(
             peer: peer,
           ),
           initPeers: _loadPeers(),
@@ -291,5 +291,12 @@ class AddressBookPeerWidget extends BasePeerWidget {
       }
     }
     return true;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final widget = super.build(context);
+    gFFI.abModel.updateAb();
+    return widget;
   }
 }

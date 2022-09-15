@@ -142,12 +142,12 @@ def build_flutter_deb(version):
     os.chdir('flutter')
     os.system('dpkg-deb -R rustdesk.deb tmpdeb')
     os.system('flutter build linux --release')
-    os.system('strip build/linux/x64/release/liblibrustdesk.so')
 
     os.system('mkdir -p tmpdeb/usr/bin/')
     os.system('mkdir -p tmpdeb/usr/lib/rustdesk')
     os.system('mkdir -p tmpdeb/usr/share/rustdesk/files/systemd/')
     os.system('mkdir -p tmpdeb/usr/share/applications/')
+    os.system('mkdir -p tmpdeb/usr/share/polkit-1/actions')
 
     os.system(
         'cp -r build/linux/x64/release/bundle/* tmpdeb/usr/lib/rustdesk/')
@@ -163,6 +163,10 @@ def build_flutter_deb(version):
         'cp ../128x128@2x.png tmpdeb/usr/share/rustdesk/files/rustdesk.png')
     os.system(
         'cp ../rustdesk.desktop tmpdeb/usr/share/applications/rustdesk.desktop')
+    os.system(
+        'cp ../com.rustdesk.RustDesk.policy tmpdeb/usr/share/polkit-1/actions/')
+    os.system("echo \"#!/bin/sh\" >> tmpdeb/usr/share/rustdesk/files/polkit && chmod a+x tmpdeb/usr/share/rustdesk/files/polkit")
+
     os.system('mkdir -p tmpdeb/DEBIAN')
     generate_control_file(version)
     os.system('cp -a ../DEBIAN/* tmpdeb/DEBIAN/')

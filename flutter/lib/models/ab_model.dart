@@ -28,21 +28,26 @@ class AbModel with ChangeNotifier {
     try {
       final resp =
           await http.post(Uri.parse(api), headers: await _getHeaders());
-      Map<String, dynamic> json = jsonDecode(resp.body);
-      if (json.containsKey('error')) {
-        abError = json['error'];
-      } else if (json.containsKey('data')) {
-        final data = jsonDecode(json['data']);
-        tags.value = data['tags'];
-        peers.value = data['peers'];
+      if (resp.body.isNotEmpty && resp.body.toLowerCase() != "null") {
+        Map<String, dynamic> json = jsonDecode(resp.body);
+        if (json.containsKey('error')) {
+          abError = json['error'];
+        } else if (json.containsKey('data')) {
+          final data = jsonDecode(json['data']);
+          tags.value = data['tags'];
+          peers.value = data['peers'];
+        }
+        notifyListeners();
+        return resp.body;
+      } else {
+        return "";
       }
-      return resp.body;
     } catch (err) {
       abError = err.toString();
     } finally {
+      notifyListeners();
       abLoading = false;
     }
-    notifyListeners();
     return null;
   }
 
@@ -60,7 +65,6 @@ class AbModel with ChangeNotifier {
     return _ffi?.getHttpHeaders();
   }
 
-  ///
   void addId(String id) async {
     if (idContainBy(id)) {
       return;

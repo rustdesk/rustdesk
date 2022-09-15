@@ -17,14 +17,15 @@ use crate::flutter::{self, SESSIONS};
 use crate::start_server;
 use crate::ui_interface;
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
+use crate::ui_interface::{change_id, get_sound_inputs};
 use crate::ui_interface::{
-    change_id, check_mouse_time, check_super_user_permission, discover, forget_password,
-    get_api_server, get_app_name, get_async_job_status, get_connect_status, get_fav, get_id,
-    get_lan_peers, get_langs, get_license, get_local_option, get_mouse_time, get_option,
-    get_options, get_peer, get_peer_option, get_socks, get_sound_inputs, get_uuid, get_version,
-    has_hwcodec, has_rendezvous_service, post_request, send_to_cm, set_local_option, set_option,
-    set_options, set_peer_option, set_permanent_password, set_socks, store_fav,
-    test_if_valid_server, update_temporary_password, using_public_server,
+    check_mouse_time, check_super_user_permission, discover, forget_password, get_api_server,
+    get_app_name, get_async_job_status, get_connect_status, get_fav, get_id, get_lan_peers,
+    get_langs, get_license, get_local_option, get_mouse_time, get_option, get_options, get_peer,
+    get_peer_option, get_socks, get_uuid, get_version, has_hwcodec, has_rendezvous_service,
+    post_request, send_to_cm, set_local_option, set_option, set_options, set_peer_option,
+    set_permanent_password, set_socks, store_fav, test_if_valid_server, update_temporary_password,
+    using_public_server,
 };
 use crate::{
     client::file_trait::FileManager,
@@ -416,7 +417,10 @@ pub fn session_resume_job(id: String, act_id: i32, is_remote: bool) {
 }
 
 pub fn main_get_sound_inputs() -> Vec<String> {
-    get_sound_inputs()
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    return get_sound_inputs();
+    #[cfg(any(target_os = "android", target_os = "linux"))]
+    vec![String::from("")]
 }
 
 pub fn main_change_id(new_id: String) {

@@ -113,15 +113,16 @@ class _PeerCardState extends State<_PeerCard>
                         children: [
                           Row(children: [
                             Padding(
-                                padding: EdgeInsets.fromLTRB(0, 4, 4, 4),
+                                padding: const EdgeInsets.fromLTRB(0, 4, 4, 4),
                                 child: CircleAvatar(
                                     radius: 5,
                                     backgroundColor: peer.online
                                         ? Colors.green
                                         : Colors.yellow)),
                             Text(
-                              formatID('${peer.id}'),
-                              style: TextStyle(fontWeight: FontWeight.w400),
+                              formatID(peer.id),
+                              style:
+                                  const TextStyle(fontWeight: FontWeight.w400),
                             ),
                           ]),
                           Align(
@@ -136,7 +137,7 @@ class _PeerCardState extends State<_PeerCard>
                                       : snapshot.data!;
                                   return Tooltip(
                                     message: name,
-                                    waitDuration: Duration(seconds: 1),
+                                    waitDuration: const Duration(seconds: 1),
                                     child: Text(
                                       name,
                                       style: greyStyle,
@@ -208,10 +209,11 @@ class _PeerCardState extends State<_PeerCard>
                                           : widget.alias.value;
                                       return Tooltip(
                                         message: name,
-                                        waitDuration: Duration(seconds: 1),
+                                        waitDuration:
+                                            const Duration(seconds: 1),
                                         child: Text(
                                           name,
-                                          style: TextStyle(
+                                          style: const TextStyle(
                                               color: Colors.white70,
                                               fontSize: 12),
                                           textAlign: TextAlign.center,
@@ -236,7 +238,7 @@ class _PeerCardState extends State<_PeerCard>
                     children: [
                       Row(children: [
                         Padding(
-                            padding: EdgeInsets.fromLTRB(0, 4, 8, 4),
+                            padding: const EdgeInsets.fromLTRB(0, 4, 8, 4),
                             child: CircleAvatar(
                                 radius: 5,
                                 backgroundColor: peer.online
@@ -501,7 +503,7 @@ abstract class BasePeerCard extends StatelessWidget {
           final favs = (await bind.mainGetFav()).toList();
           if (!favs.contains(id)) {
             favs.add(id);
-            bind.mainStoreFav(favs: favs);
+            await bind.mainStoreFav(favs: favs);
           }
         }();
       },
@@ -510,7 +512,8 @@ abstract class BasePeerCard extends StatelessWidget {
   }
 
   @protected
-  MenuEntryBase<String> _rmFavAction(String id) {
+  MenuEntryBase<String> _rmFavAction(
+      String id, Future<void> Function() reloadFunc) {
     return MenuEntryButton<String>(
       childBuilder: (TextStyle? style) => Text(
         translate('Remove from Favorites'),
@@ -520,8 +523,9 @@ abstract class BasePeerCard extends StatelessWidget {
         () async {
           final favs = (await bind.mainGetFav()).toList();
           if (favs.remove(id)) {
-            bind.mainStoreFav(favs: favs);
-            Get.forceAppUpdate(); // TODO use inner model / state
+            await bind.mainStoreFav(favs: favs);
+            await reloadFunc();
+            // Get.forceAppUpdate(); // TODO use inner model / state
           }
         }();
       },
@@ -646,7 +650,9 @@ class FavoritePeerCard extends BasePeerCard {
       await bind.mainLoadFavPeers();
     }));
     menuItems.add(_unrememberPasswordAction(peer.id));
-    menuItems.add(_rmFavAction(peer.id));
+    menuItems.add(_rmFavAction(peer.id, () async {
+      await bind.mainLoadFavPeers();
+    }));
     return menuItems;
   }
 }
@@ -817,8 +823,8 @@ class AddressBookPeerCard extends BasePeerCard {
                 color: rxTags.contains(tagName) ? Colors.blue : null,
                 border: Border.all(color: MyTheme.darkGray),
                 borderRadius: BorderRadius.circular(10)),
-            margin: EdgeInsets.symmetric(horizontal: 4.0, vertical: 8.0),
-            padding: EdgeInsets.symmetric(vertical: 2.0, horizontal: 8.0),
+            margin: const EdgeInsets.symmetric(horizontal: 4.0, vertical: 8.0),
+            padding: const EdgeInsets.symmetric(vertical: 2.0, horizontal: 8.0),
             child: Text(
               tagName,
               style: TextStyle(
@@ -829,38 +835,6 @@ class AddressBookPeerCard extends BasePeerCard {
       ),
     );
   }
-}
-
-Future<PopupMenuItem<String>> _forceAlwaysRelayMenuItem(String id) async {
-  bool force_always_relay =
-      (await bind.mainGetPeerOption(id: id, key: 'force-always-relay'))
-          .isNotEmpty;
-  return PopupMenuItem<String>(
-      child: Row(
-        children: [
-          Offstage(
-            offstage: !force_always_relay,
-            child: Icon(Icons.check),
-          ),
-          Text(translate('Always connect via relay')),
-        ],
-      ),
-      value: 'force-always-relay');
-}
-
-PopupMenuItem<String> _rdpMenuItem(String id) {
-  return PopupMenuItem<String>(
-      child: Row(
-        children: [
-          Text('RDP'),
-          SizedBox(width: 20),
-          IconButton(
-            icon: Icon(Icons.edit),
-            onPressed: () => _rdpDialog(id),
-          )
-        ],
-      ),
-      value: 'RDP');
 }
 
 void _rdpDialog(String id) async {

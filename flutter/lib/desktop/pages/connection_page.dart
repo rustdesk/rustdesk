@@ -414,7 +414,7 @@ class _ConnectionPageState extends State<ConnectionPage> {
             );
           } else {
             if (model.abLoading) {
-              return Center(
+              return const Center(
                 child: CircularProgressIndicator(),
               );
             } else if (model.abError.isNotEmpty) {
@@ -782,6 +782,7 @@ class _PeerTabbedPageState extends State<_PeerTabbedPage>
         bind.mainDiscover();
         break;
       case 3:
+        gFFI.abModel.updateAb();
         break;
     }
   }
