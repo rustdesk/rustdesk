@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="logo-header.svg" alt="RustDesk - Seu desktop remoto"><br>
+  <img src="../logo-header.svg" alt="RustDesk - Seu desktop remoto"><br>
   <a href="#servidores-públicos-grátis">Servidores</a> •
   <a href="#compilação-crua">Compilar</a> •
   <a href="#como-compilar-com-docker">Docker</a> •

@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="logo-header.svg" alt="RustDesk - Phần mềm điểu khiển máy tính từ xa dành cho bạn"><br>
+  <img src="../logo-header.svg" alt="RustDesk - Phần mềm điểu khiển máy tính từ xa dành cho bạn"><br>
   <a href="#free-public-servers">Máy chủ</a> •
   <a href="#raw-steps-to-build">Build</a> •
   <a href="#how-to-build-with-docker">Docker</a> •

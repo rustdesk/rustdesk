@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="logo-header.svg" alt="RustDesk - Your remote desktop"><br>
+  <img src="../logo-header.svg" alt="RustDesk - Your remote desktop"><br>
   <a dir="rtl" href="#اسکرین-شات-ها">اسنپ شات</a> •
   <a dir="rtl" href="#ساختار-پوشه-ها">ساختار</a> •
   <a dir="rtl" href="#نحوه-ساخت-با-داکر">داکر</a> •

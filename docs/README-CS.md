@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="logo-header.svg" alt="RustDesk – vaše vzdálená plocha"><br>
+  <img src="../logo-header.svg" alt="RustDesk – vaše vzdálená plocha"><br>
   <a href="#free-public-servers">Servery</a> •
   <a href="#raw-steps-to-build">Sestavení ze zdrojových kódů</a> •
   <a href="#how-to-build-with-docker">Docker</a> •
