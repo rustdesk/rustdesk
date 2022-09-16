@@ -24,9 +24,9 @@ import 'models/platform_model.dart';
 
 int? windowId;
 
-Future<Null> main(List<String> args) async {
+Future<void> main(List<String> args) async {
   WidgetsFlutterBinding.ensureInitialized();
-  print("launch args: $args");
+  debugPrint("launch args: $args");
 
   if (!isDesktop) {
     runMobileApp();
@@ -37,7 +37,7 @@ Future<Null> main(List<String> args) async {
     windowId = int.parse(args[1]);
     WindowController.fromWindowId(windowId!).showTitleBar(false);
     final argument = args[2].isEmpty
-        ? Map<String, dynamic>()
+        ? <String, dynamic>{}
         : jsonDecode(args[2]) as Map<String, dynamic>;
     int type = argument['type'] ?? -1;
     argument['windowId'] = windowId;
@@ -60,7 +60,7 @@ Future<Null> main(List<String> args) async {
         break;
     }
   } else if (args.isNotEmpty && args.first == '--cm') {
-    print("--cm started");
+    debugPrint("--cm started");
     desktopType = DesktopType.cm;
     await windowManager.ensureInitialized();
     runConnectionManagerScreen();
@@ -123,7 +123,7 @@ void runRemoteScreen(Map<String, dynamic> argument) async {
     home: DesktopRemoteScreen(
       params: argument,
     ),
-    navigatorObservers: [
+    navigatorObservers: const [
       // FirebaseAnalyticsObserver(analytics: analytics),
     ],
     builder: _keepScaleBuilder(),
@@ -141,7 +141,7 @@ void runFileTransferScreen(Map<String, dynamic> argument) async {
       darkTheme: MyTheme.darkTheme,
       themeMode: MyTheme.initialThemeMode(),
       home: DesktopFileTransferScreen(params: argument),
-      navigatorObservers: [
+      navigatorObservers: const [
         // FirebaseAnalyticsObserver(analytics: analytics),
       ],
       builder: _keepScaleBuilder(),
@@ -160,7 +160,7 @@ void runPortForwardScreen(Map<String, dynamic> argument) async {
       darkTheme: MyTheme.darkTheme,
       themeMode: MyTheme.initialThemeMode(),
       home: DesktopPortForwardScreen(params: argument),
-      navigatorObservers: [
+      navigatorObservers: const [
         // FirebaseAnalyticsObserver(analytics: analytics),
       ],
       builder: _keepScaleBuilder(),
@@ -186,7 +186,7 @@ void runConnectionManagerScreen() async {
       theme: MyTheme.lightTheme,
       darkTheme: MyTheme.darkTheme,
       themeMode: MyTheme.initialThemeMode(),
-      home: DesktopServerPage(),
+      home: const DesktopServerPage(),
       builder: _keepScaleBuilder()));
 }
 
@@ -246,7 +246,7 @@ class _AppState extends State<App> {
             : !isAndroid
                 ? WebHomePage()
                 : HomePage(),
-        navigatorObservers: [
+        navigatorObservers: const [
           // FirebaseAnalyticsObserver(analytics: analytics),
         ],
         builder: isAndroid
