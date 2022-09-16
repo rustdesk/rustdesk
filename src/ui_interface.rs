@@ -687,7 +687,6 @@ pub fn open_url(url: String) {
 }
 
 #[inline]
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub fn change_id(id: String) {
     *ASYNC_JOB_STATUS.lock().unwrap() = " ".to_owned();
     let old_id = get_id();
@@ -744,9 +743,9 @@ pub fn get_api_server() -> String {
 
 #[inline]
 pub fn has_hwcodec() -> bool {
-    #[cfg(not(feature = "hwcodec"))]
+    #[cfg(not(any(feature = "hwcodec", feature = "mediacodec")))]
     return false;
-    #[cfg(feature = "hwcodec")]
+    #[cfg(any(feature = "hwcodec", feature = "mediacodec"))]
     return true;
 }
 
@@ -864,17 +863,27 @@ pub(crate) async fn send_to_cm(data: &ipc::Data) {
 const INVALID_FORMAT: &'static str = "Invalid format";
 const UNKNOWN_ERROR: &'static str = "Unknown error";
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
 #[tokio::main(flavor = "current_thread")]
 async fn change_id_(id: String, old_id: String) -> &'static str {
     if !hbb_common::is_valid_custom_id(&id) {
         return INVALID_FORMAT;
     }
+
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
     let uuid = machine_uid::get().unwrap_or("".to_owned());
+    #[cfg(any(target_os = "android", target_os = "ios"))]
+    let uuid = base64::encode(hbb_common::get_uuid());
+
     if uuid.is_empty() {
+        log::error!("Failed to change id, uuid is_empty");
         return UNKNOWN_ERROR;
     }
+
+    #[cfg(not(any(target_os = "android", target_os = "ios")))]
     let rendezvous_servers = crate::ipc::get_rendezvous_servers(1_000).await;
+    #[cfg(any(target_os = "android", target_os = "ios"))]
+    let rendezvous_servers = Config::get_rendezvous_servers();
+
     let mut futs = Vec::new();
     let err: Arc<Mutex<&str>> = Default::default();
     for rendezvous_server in rendezvous_servers {
@@ -892,7 +901,13 @@ async fn change_id_(id: String, old_id: String) -> &'static str {
     join_all(futs).await;
     let err = *err.lock().unwrap();
     if err.is_empty() {
+        #[cfg(not(any(target_os = "android", target_os = "ios")))]
         crate::ipc::set_config_async("id", id.to_owned()).await.ok();
+        #[cfg(any(target_os = "android", target_os = "ios"))]
+        {
+            Config::set_key_confirmed(false);
+            Config::set_id(&id);
+        }
     }
     err
 }
@@ -936,6 +951,9 @@ async fn check_id(
                                 }
                                 register_pk_response::Result::NOT_SUPPORT => {
                                     return "server_not_support";
+                                }
+                                register_pk_response::Result::SERVER_ERROR => {
+                                    return "Server error";
                                 }
                                 register_pk_response::Result::INVALID_ID_FORMAT => {
                                     return INVALID_FORMAT;

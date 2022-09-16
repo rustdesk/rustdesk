@@ -3,6 +3,7 @@ import 'package:flutter_hbb/mobile/widgets/dialog.dart';
 import 'package:provider/provider.dart';
 
 import '../../common.dart';
+import '../../common/widgets/dialog.dart';
 import '../../models/platform_model.dart';
 import '../../models/server_model.dart';
 import 'home_page.dart';
@@ -12,51 +13,49 @@ class ServerPage extends StatefulWidget implements PageShape {
   final title = translate("Share Screen");
 
   @override
-  final icon = Icon(Icons.mobile_screen_share);
+  final icon = const Icon(Icons.mobile_screen_share);
 
   @override
   final appBarActions = [
     PopupMenuButton<String>(
-        icon: Icon(Icons.more_vert),
+        icon: const Icon(Icons.more_vert),
         itemBuilder: (context) {
           return [
             PopupMenuItem(
-              child: Text(translate("Change ID")),
-              padding: EdgeInsets.symmetric(horizontal: 16.0),
+              padding: const EdgeInsets.symmetric(horizontal: 16.0),
               value: "changeID",
-              enabled: false,
+              child: Text(translate("Change ID")),
             ),
             PopupMenuItem(
-              child: Text(translate("Set permanent password")),
-              padding: EdgeInsets.symmetric(horizontal: 16.0),
+              padding: const EdgeInsets.symmetric(horizontal: 16.0),
               value: "setPermanentPassword",
               enabled:
                   gFFI.serverModel.verificationMethod != kUseTemporaryPassword,
+              child: Text(translate("Set permanent password")),
             ),
             PopupMenuItem(
-              child: Text(translate("Set temporary password length")),
-              padding: EdgeInsets.symmetric(horizontal: 16.0),
+              padding: const EdgeInsets.symmetric(horizontal: 16.0),
               value: "setTemporaryPasswordLength",
               enabled:
                   gFFI.serverModel.verificationMethod != kUsePermanentPassword,
+              child: Text(translate("Set temporary password length")),
             ),
             const PopupMenuDivider(),
             PopupMenuItem(
-              padding: EdgeInsets.symmetric(horizontal: 0.0),
+              padding: const EdgeInsets.symmetric(horizontal: 0.0),
               value: kUseTemporaryPassword,
-              child: Container(
-                  child: ListTile(
-                      title: Text(translate("Use temporary password")),
-                      trailing: Icon(
-                        Icons.check,
-                        color: gFFI.serverModel.verificationMethod ==
-                                kUseTemporaryPassword
-                            ? null
-                            : Color(0xFFFFFFFF),
-                      ))),
+              child: ListTile(
+                  title: Text(translate("Use temporary password")),
+                  trailing: Icon(
+                    Icons.check,
+                    color: gFFI.serverModel.verificationMethod ==
+                            kUseTemporaryPassword
+                        ? null
+                        : Colors.transparent,
+                  )),
             ),
             PopupMenuItem(
-              padding: EdgeInsets.symmetric(horizontal: 0.0),
+              padding: const EdgeInsets.symmetric(horizontal: 0.0),
               value: kUsePermanentPassword,
               child: ListTile(
                   title: Text(translate("Use permanent password")),
@@ -65,11 +64,11 @@ class ServerPage extends StatefulWidget implements PageShape {
                     color: gFFI.serverModel.verificationMethod ==
                             kUsePermanentPassword
                         ? null
-                        : Color(0xFFFFFFFF),
+                        : Colors.transparent,
                   )),
             ),
             PopupMenuItem(
-              padding: EdgeInsets.symmetric(horizontal: 0.0),
+              padding: const EdgeInsets.symmetric(horizontal: 0.0),
               value: kUseBothPasswords,
               child: ListTile(
                   title: Text(translate("Use both passwords")),
@@ -80,14 +79,14 @@ class ServerPage extends StatefulWidget implements PageShape {
                             gFFI.serverModel.verificationMethod !=
                                 kUsePermanentPassword
                         ? null
-                        : Color(0xFFFFFFFF),
+                        : Colors.transparent,
                   )),
             ),
           ];
         },
         onSelected: (value) {
           if (value == "changeID") {
-            // TODO
+            changeIdDialog();
           } else if (value == "setPermanentPassword") {
             setPermanentPasswordDialog(gFFI.dialogManager);
           } else if (value == "setTemporaryPasswordLength") {
@@ -100,6 +99,8 @@ class ServerPage extends StatefulWidget implements PageShape {
           }
         })
   ];
+
+  ServerPage({Key? key}) : super(key: key);
 
   @override
   State<StatefulWidget> createState() => _ServerPageState();
@@ -125,9 +126,9 @@ class _ServerPageState extends State<ServerPage> {
                       mainAxisAlignment: MainAxisAlignment.start,
                       children: [
                         ServerInfo(),
-                        PermissionChecker(),
-                        ConnectionManager(),
-                        SizedBox.fromSize(size: Size(0, 15.0)),
+                        const PermissionChecker(),
+                        const ConnectionManager(),
+                        SizedBox.fromSize(size: const Size(0, 15.0)),
                       ],
                     ),
                   ),
@@ -148,6 +149,8 @@ class ServerInfo extends StatelessWidget {
   final model = gFFI.serverModel;
   final emptyController = TextEditingController(text: "-");
 
+  ServerInfo({Key? key}) : super(key: key);
+
   @override
   Widget build(BuildContext context) {
     final isPermanent = model.verificationMethod == kUsePermanentPassword;
@@ -158,7 +161,7 @@ class ServerInfo extends StatelessWidget {
             children: [
               TextFormField(
                 readOnly: true,
-                style: TextStyle(
+                style: const TextStyle(
                     fontSize: 25.0,
                     fontWeight: FontWeight.bold,
                     color: MyTheme.accent),
@@ -166,14 +169,14 @@ class ServerInfo extends StatelessWidget {
                 decoration: InputDecoration(
                   icon: const Icon(Icons.perm_identity),
                   labelText: translate("ID"),
-                  labelStyle: TextStyle(
+                  labelStyle: const TextStyle(
                       fontWeight: FontWeight.bold, color: MyTheme.accent50),
                 ),
                 onSaved: (String? value) {},
               ),
               TextFormField(
                 readOnly: true,
-                style: TextStyle(
+                style: const TextStyle(
                     fontSize: 25.0,
                     fontWeight: FontWeight.bold,
                     color: MyTheme.accent),
@@ -181,7 +184,7 @@ class ServerInfo extends StatelessWidget {
                 decoration: InputDecoration(
                     icon: const Icon(Icons.lock),
                     labelText: translate("Password"),
-                    labelStyle: TextStyle(
+                    labelStyle: const TextStyle(
                         fontWeight: FontWeight.bold, color: MyTheme.accent50),
                     suffix: isPermanent
                         ? null
@@ -200,13 +203,13 @@ class ServerInfo extends StatelessWidget {
               Center(
                   child: Row(
                 children: [
-                  Icon(Icons.warning_amber_sharp,
+                  const Icon(Icons.warning_amber_sharp,
                       color: Colors.redAccent, size: 24),
-                  SizedBox(width: 10),
+                  const SizedBox(width: 10),
                   Expanded(
                       child: Text(
                     translate("Service is not running"),
-                    style: TextStyle(
+                    style: const TextStyle(
                       fontFamily: 'WorkSans',
                       fontWeight: FontWeight.bold,
                       fontSize: 18,
@@ -215,11 +218,11 @@ class ServerInfo extends StatelessWidget {
                   ))
                 ],
               )),
-              SizedBox(height: 5),
+              const SizedBox(height: 5),
               Center(
                   child: Text(
                 translate("android_start_service_tip"),
-                style: TextStyle(fontSize: 12, color: MyTheme.darkGray),
+                style: const TextStyle(fontSize: 12, color: MyTheme.darkGray),
               ))
             ],
           ));
@@ -227,8 +230,10 @@ class ServerInfo extends StatelessWidget {
 }
 
 class PermissionChecker extends StatefulWidget {
+  const PermissionChecker({Key? key}) : super(key: key);
+
   @override
-  _PermissionCheckerState createState() => _PermissionCheckerState();
+  State<PermissionChecker> createState() => _PermissionCheckerState();
 }
 
 class _PermissionCheckerState extends State<PermissionChecker> {
@@ -236,7 +241,7 @@ class _PermissionCheckerState extends State<PermissionChecker> {
   Widget build(BuildContext context) {
     final serverModel = Provider.of<ServerModel>(context);
     final hasAudioPermission = androidVersion >= 30;
-    final status;
+    final String status;
     if (serverModel.connectStatus == -1) {
       status = 'not_ready_status';
     } else if (serverModel.connectStatus == 0) {
@@ -260,9 +265,9 @@ class _PermissionCheckerState extends State<PermissionChecker> {
                     serverModel.toggleAudio)
                 : Text(
                     "* ${translate("android_version_audio_tip")}",
-                    style: TextStyle(color: MyTheme.darkGray),
+                    style: const TextStyle(color: MyTheme.darkGray),
                   ),
-            SizedBox(height: 8),
+            const SizedBox(height: 8),
             Row(
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
@@ -273,11 +278,11 @@ class _PermissionCheckerState extends State<PermissionChecker> {
                             style: ButtonStyle(
                                 backgroundColor:
                                     MaterialStateProperty.all(Colors.red)),
-                            icon: Icon(Icons.stop),
+                            icon: const Icon(Icons.stop),
                             onPressed: serverModel.toggleService,
                             label: Text(translate("Stop service")))
                         : ElevatedButton.icon(
-                            icon: Icon(Icons.play_arrow),
+                            icon: const Icon(Icons.play_arrow),
                             onPressed: serverModel.toggleService,
                             label: Text(translate("Start Service")))),
                 Expanded(
@@ -287,8 +292,8 @@ class _PermissionCheckerState extends State<PermissionChecker> {
                               Expanded(
                                   flex: 0,
                                   child: Padding(
-                                      padding:
-                                          EdgeInsets.only(left: 20, right: 5),
+                                      padding: const EdgeInsets.only(
+                                          left: 20, right: 5),
                                       child: Icon(Icons.circle,
                                           color: serverModel.connectStatus > 0
                                               ? Colors.greenAccent
@@ -297,12 +302,12 @@ class _PermissionCheckerState extends State<PermissionChecker> {
                               Expanded(
                                   child: Text(translate(status),
                                       softWrap: true,
-                                      style: TextStyle(
+                                      style: const TextStyle(
                                           fontSize: 14.0,
                                           color: MyTheme.accent50)))
                             ],
                           )
-                        : SizedBox.shrink())
+                        : const SizedBox.shrink())
               ],
             ),
           ],
@@ -311,7 +316,8 @@ class _PermissionCheckerState extends State<PermissionChecker> {
 }
 
 class PermissionRow extends StatelessWidget {
-  PermissionRow(this.name, this.isOk, this.onPressed);
+  const PermissionRow(this.name, this.isOk, this.onPressed, {Key? key})
+      : super(key: key);
 
   final String name;
   final bool isOk;
@@ -327,8 +333,8 @@ class PermissionRow extends StatelessWidget {
                 fit: BoxFit.scaleDown,
                 alignment: Alignment.centerLeft,
                 child: Text(name,
-                    style:
-                        TextStyle(fontSize: 16.0, color: MyTheme.accent50)))),
+                    style: const TextStyle(
+                        fontSize: 16.0, color: MyTheme.accent50)))),
         Expanded(
           flex: 2,
           child: FittedBox(
@@ -347,7 +353,7 @@ class PermissionRow extends StatelessWidget {
                     onPressed: onPressed,
                     child: Text(
                       translate(isOk ? "CLOSE" : "OPEN"),
-                      style: TextStyle(fontWeight: FontWeight.bold),
+                      style: const TextStyle(fontWeight: FontWeight.bold),
                     )))),
       ],
     );
@@ -355,6 +361,8 @@ class PermissionRow extends StatelessWidget {
 }
 
 class ConnectionManager extends StatelessWidget {
+  const ConnectionManager({Key? key}) : super(key: key);
+
   @override
   Widget build(BuildContext context) {
     final serverModel = Provider.of<ServerModel>(context);
@@ -377,7 +385,7 @@ class ConnectionManager extends StatelessWidget {
                         Expanded(
                             flex: -1,
                             child: client.isFileTransfer || !client.authorized
-                                ? SizedBox.shrink()
+                                ? const SizedBox.shrink()
                                 : IconButton(
                                     onPressed: () {
                                       gFFI.chatModel.changeCurrentID(client.id);
@@ -388,24 +396,24 @@ class ConnectionManager extends StatelessWidget {
                                         bar.onTap!(1);
                                       }
                                     },
-                                    icon: Icon(
+                                    icon: const Icon(
                                       Icons.chat,
                                       color: MyTheme.accent80,
                                     )))
                       ],
                     ),
                     client.authorized
-                        ? SizedBox.shrink()
+                        ? const SizedBox.shrink()
                         : Text(
                             translate("android_new_connection_tip"),
-                            style: TextStyle(color: Colors.black54),
+                            style: const TextStyle(color: Colors.black54),
                           ),
                     client.authorized
                         ? ElevatedButton.icon(
                             style: ButtonStyle(
                                 backgroundColor:
                                     MaterialStateProperty.all(Colors.red)),
-                            icon: Icon(Icons.close),
+                            icon: const Icon(Icons.close),
                             onPressed: () {
                               bind.cmCloseConnection(connId: client.id);
                               gFFI.invokeMethod(
@@ -418,7 +426,7 @@ class ConnectionManager extends StatelessWidget {
                                 onPressed: () {
                                   serverModel.sendLoginResponse(client, false);
                                 }),
-                            SizedBox(width: 20),
+                            const SizedBox(width: 20),
                             ElevatedButton(
                                 child: Text(translate("Accept")),
                                 onPressed: () {
@@ -432,7 +440,8 @@ class ConnectionManager extends StatelessWidget {
 }
 
 class PaddingCard extends StatelessWidget {
-  PaddingCard({required this.child, this.title, this.titleIcon});
+  const PaddingCard({Key? key, required this.child, this.title, this.titleIcon})
+      : super(key: key);
 
   final String? title;
   final IconData? titleIcon;
@@ -445,18 +454,18 @@ class PaddingCard extends StatelessWidget {
       children.insert(
           0,
           Padding(
-              padding: EdgeInsets.symmetric(vertical: 5.0),
+              padding: const EdgeInsets.symmetric(vertical: 5.0),
               child: Row(
                 children: [
                   titleIcon != null
                       ? Padding(
-                          padding: EdgeInsets.only(right: 10),
+                          padding: const EdgeInsets.only(right: 10),
                           child: Icon(titleIcon,
                               color: MyTheme.accent80, size: 30))
-                      : SizedBox.shrink(),
+                      : const SizedBox.shrink(),
                   Text(
                     title!,
-                    style: TextStyle(
+                    style: const TextStyle(
                       fontFamily: 'WorkSans',
                       fontWeight: FontWeight.bold,
                       fontSize: 20,
@@ -466,12 +475,13 @@ class PaddingCard extends StatelessWidget {
                 ],
               )));
     }
-    return Container(
+    return SizedBox(
         width: double.maxFinite,
         child: Card(
-          margin: EdgeInsets.fromLTRB(15.0, 15.0, 15.0, 0),
+          margin: const EdgeInsets.fromLTRB(15.0, 15.0, 15.0, 0),
           child: Padding(
-            padding: EdgeInsets.symmetric(vertical: 15.0, horizontal: 30.0),
+            padding:
+                const EdgeInsets.symmetric(vertical: 15.0, horizontal: 30.0),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: children,
@@ -483,27 +493,29 @@ class PaddingCard extends StatelessWidget {
 
 Widget clientInfo(Client client) {
   return Padding(
-      padding: EdgeInsets.symmetric(vertical: 8),
+      padding: const EdgeInsets.symmetric(vertical: 8),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Row(
           children: [
             Expanded(
                 flex: -1,
                 child: Padding(
-                    padding: EdgeInsets.only(right: 12),
+                    padding: const EdgeInsets.only(right: 12),
                     child: CircleAvatar(
-                        child: Text(client.name[0]),
-                        backgroundColor: MyTheme.border))),
+                        backgroundColor: MyTheme.border,
+                        child: Text(client.name[0])))),
             Expanded(
                 child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                   Text(client.name,
-                      style: TextStyle(color: MyTheme.idColor, fontSize: 18)),
-                  SizedBox(width: 8),
+                      style: const TextStyle(
+                          color: MyTheme.idColor, fontSize: 18)),
+                  const SizedBox(width: 8),
                   Text(client.peerId,
-                      style: TextStyle(color: MyTheme.idColor, fontSize: 10))
+                      style:
+                          const TextStyle(color: MyTheme.idColor, fontSize: 10))
                 ]))
           ],
         ),

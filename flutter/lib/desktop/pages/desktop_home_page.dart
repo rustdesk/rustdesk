@@ -19,6 +19,8 @@ import 'package:tray_manager/tray_manager.dart';
 import 'package:url_launcher/url_launcher_string.dart';
 import 'package:window_manager/window_manager.dart';
 
+import '../../common/widgets/dialog.dart';
+
 class _MenubarTheme {
   static const Color commonColor = MyTheme.accent;
   // kMinInteractiveDimension

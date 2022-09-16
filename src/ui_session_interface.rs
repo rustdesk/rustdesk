@@ -11,9 +11,9 @@ use async_trait::async_trait;
 use hbb_common::config::{Config, LocalConfig, PeerConfig};
 use hbb_common::rendezvous_proto::ConnType;
 use hbb_common::tokio::{self, sync::mpsc};
-use rdev::{Event, EventType::*, Key as RdevKey, KeyboardState};
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use rdev::Keyboard as RdevKeyboard;
+use rdev::{Event, EventType::*, Key as RdevKey, KeyboardState};
 
 use hbb_common::{allow_err, message_proto::*};
 use hbb_common::{fs, get_version_number, log, Stream};
@@ -136,11 +136,19 @@ impl<T: InvokeUiSession> Session<T> {
         true
     }
 
-    pub fn has_hwcodec(&self) -> bool {
-        #[cfg(not(feature = "hwcodec"))]
-        return false;
-        #[cfg(feature = "hwcodec")]
-        return true;
+    pub fn supported_hwcodec(&self) -> (bool, bool) {
+        #[cfg(any(feature = "hwcodec", feature = "mediacodec"))]
+        {
+            let decoder = scrap::codec::Decoder::video_codec_state(&self.id);
+            let mut h264 = decoder.score_h264 > 0;
+            let mut h265 = decoder.score_h265 > 0;
+            if let Some((encoding_264, encoding_265)) = self.lc.read().unwrap().supported_encoding {
+                h264 = h264 && encoding_264;
+                h265 = h265 && encoding_265;
+            }
+            return (h264, h265);
+        }
+        (false, false)
     }
 
     pub fn change_prefer_codec(&self) {
@@ -658,18 +666,20 @@ impl<T: InvokeUiSession> Session<T> {
                 }
                 self.map_keyboard_mode(down_or_up, key, Some(evt));
             }
-            KeyboardMode::Legacy => {
+            KeyboardMode::Legacy =>
+            {
                 #[cfg(not(any(target_os = "android", target_os = "ios")))]
                 self.legacy_keyboard_mode(down_or_up, key, evt)
-            },
+            }
             KeyboardMode::Translate => {
                 #[cfg(not(any(target_os = "android", target_os = "ios")))]
                 self.translate_keyboard_mode(down_or_up, key, evt);
             }
-            _ => {
+            _ =>
+            {
                 #[cfg(not(any(target_os = "android", target_os = "ios")))]
                 self.legacy_keyboard_mode(down_or_up, key, evt)
-            },
+            }
         }
     }
 
@@ -1178,7 +1188,7 @@ impl<T: InvokeUiSession> Session<T> {
         if self.is_port_forward() || self.is_file_transfer() {
             return;
         }
-        if !KEYBOARD_HOOKED.load(Ordering::SeqCst){
+        if !KEYBOARD_HOOKED.load(Ordering::SeqCst) {
             return;
         }
         log::info!("keyboard hooked");
