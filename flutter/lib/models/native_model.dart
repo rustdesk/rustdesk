@@ -136,9 +136,15 @@ class PlatformFFI {
         name = linuxInfo.name;
         id = linuxInfo.machineId ?? linuxInfo.id;
       } else if (Platform.isWindows) {
-        WindowsDeviceInfo winInfo = await deviceInfo.windowsInfo;
-        name = winInfo.computerName;
-        id = winInfo.computerName;
+        try {
+          WindowsDeviceInfo winInfo = await deviceInfo.windowsInfo;
+          name = winInfo.computerName;
+          id = winInfo.computerName;
+        } catch (e) {
+          debugPrint("$e");
+          name = "unknown";
+          id = "unknown";
+        }
       } else if (Platform.isMacOS) {
         MacOsDeviceInfo macOsInfo = await deviceInfo.macOsInfo;
         name = macOsInfo.computerName;

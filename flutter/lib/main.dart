@@ -172,15 +172,7 @@ void runConnectionManagerScreen() async {
   // initialize window
   WindowOptions windowOptions =
       getHiddenTitleBarWindowOptions(size: const Size(300, 400));
-  await Future.wait([
-    initEnv(kAppTypeMain),
-    windowManager.waitUntilReadyToShow(windowOptions, () async {
-      await windowManager.setAlignment(Alignment.topRight);
-      await windowManager.show();
-      await windowManager.focus();
-      await windowManager.setAlignment(Alignment.topRight); // ensure
-    })
-  ]);
+  await initEnv(kAppTypeMain);
   runApp(GetMaterialApp(
       debugShowCheckedModeBanner: false,
       theme: MyTheme.lightTheme,
@@ -188,6 +180,12 @@ void runConnectionManagerScreen() async {
       themeMode: MyTheme.initialThemeMode(),
       home: const DesktopServerPage(),
       builder: _keepScaleBuilder()));
+  windowManager.waitUntilReadyToShow(windowOptions, () async {
+      await windowManager.setAlignment(Alignment.topRight);
+      await windowManager.show();
+      await windowManager.focus();
+      await windowManager.setAlignment(Alignment.topRight); // ensure
+    });
 }
 
 WindowOptions getHiddenTitleBarWindowOptions({Size? size}) {
