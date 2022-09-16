@@ -39,7 +39,7 @@ For specific git instructions, see [GitHub workflow 101](https://github.com/serv
 
 ## Conduct
 
-https://github.com/rustdesk/rustdesk/blob/master/CODE_OF_CONDUCT.md
+https://github.com/rustdesk/rustdesk/blob/master/docs/CODE_OF_CONDUCT.md
 
 ## Communication
 

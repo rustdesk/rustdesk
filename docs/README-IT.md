@@ -5,7 +5,7 @@
   <a href="#come-compilare-con-docker">Docker</a> •
   <a href="#struttura-dei-file">Struttura</a> •
   <a href="#screenshots">Screenshots</a><br>
-  [<a href="README-CS.md">česky</a>] | [<a href="README-ZH.md">中文</a>] | | [<a href="README-HU.md">Magyar</a>] | [<a href="README-ES.md">Español</a>] | [<a href="README-FA.md">فارسی</a>] | [<a href="README-FR.md">Français</a>] | [<a href="README-DE.md">Deutsch</a>] | [<a href="README-PL.md">Polski</a>] | [<a href="README-ID.md">Indonesian</a>] | [<a href="README-FI.md">Suomi</a>] | [<a href="README-ML.md">മലയാളം</a>] | [<a href="README-JP.md">日本語</a>] | [<a href="README-NL.md">Nederlands</a>] | [<a href="README-IT.md">Italiano</a>] | [<a href="README-RU.md">Русский</a>] | [<a href="README-PTBR.md">Português (Brasil)</a>] | [<a href="README-EO.md">Esperanto</a>] | [<a href="README-KR.md">한국어</a>] | [<a href="README-AR.md">العربي</a>] | [<a href="README-VN.md">Tiếng Việt</a>]<br>
+  [<a href="docs/README-CS.md">česky</a>] | [<a href="docs/README-ZH.md">中文</a>] | | [<a href="docs/README-HU.md">Magyar</a>] | [<a href="docs/README-ES.md">Español</a>] | [<a href="docs/README-FA.md">فارسی</a>] | [<a href="docs/README-FR.md">Français</a>] | [<a href="docs/README-DE.md">Deutsch</a>] | [<a href="docs/README-PL.md">Polski</a>] | [<a href="docs/README-ID.md">Indonesian</a>] | [<a href="docs/README-FI.md">Suomi</a>] | [<a href="docs/README-ML.md">മലയാളം</a>] | [<a href="docs/README-JP.md">日本語</a>] | [<a href="docs/README-NL.md">Nederlands</a>] | [<a href="docs/README-IT.md">Italiano</a>] | [<a href="docs/README-RU.md">Русский</a>] | [<a href="docs/README-PTBR.md">Português (Brasil)</a>] | [<a href="docs/README-EO.md">Esperanto</a>] | [<a href="docs/README-KR.md">한국어</a>] | [<a href="docs/README-AR.md">العربي</a>] | [<a href="docs/README-VN.md">Tiếng Việt</a>]<br>
   <b>Abbiamo bisogno del tuo aiuto per tradurre questo README e la <a href="https://github.com/rustdesk/rustdesk/tree/master/src/lang">RustDesk UI</a> nella tua lingua nativa</b>
 </p>
 
@@ -15,7 +15,7 @@ Chatta con noi: [Discord](https://discord.gg/nDceKgxnkV) | [Twitter](https://twi
 
 Ancora un altro software per il controllo remoto del desktop, scritto in Rust. Funziona immediatamente, nessuna configurazione richiesta. Hai il pieno controllo dei tuoi dati, senza preoccupazioni per la sicurezza. Puoi utilizzare il nostro server rendezvous/relay, [configurare il tuo](https://rustdesk.com/server) o [scrivere il tuo rendezvous/relay server](https://github.com/rustdesk/rustdesk-server-demo).
 
-RustDesk accoglie il contributo di tutti. Per ulteriori informazioni su come inizare a contribuire, vedere [`CONTRIBUTING.md`](CONTRIBUTING.md).
+RustDesk accoglie il contributo di tutti. Per ulteriori informazioni su come inizare a contribuire, vedere [`docs/CONTRIBUTING.md`](docs/CONTRIBUTING.md).
 
 [**BINARY DOWNLOAD**](https://github.com/rustdesk/rustdesk/releases)
 
