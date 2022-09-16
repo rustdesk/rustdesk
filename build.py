@@ -160,7 +160,7 @@ def build_flutter_deb(version):
     os.system(
         'cp ../rustdesk.service.user tmpdeb/usr/share/rustdesk/files/systemd/')
     os.system(
-        'cp ../128x128@2x.png tmpdeb/usr/share/rustdesk/files/rustdesk.png')
+        'cp ../src/128x128@2x.png tmpdeb/usr/share/rustdesk/files/rustdesk.png')
     os.system(
         'cp ../rustdesk.desktop tmpdeb/usr/share/applications/rustdesk.desktop')
     os.system(

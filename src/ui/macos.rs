@@ -238,10 +238,10 @@ pub fn make_tray() {
     let mut icon_path = "";
     match mode {
         dark_light::Mode::Dark => {
-            icon_path = "mac-tray-light.png";
+            icon_path = "src/mac-tray-light.png";
         },
         dark_light::Mode::Light => {
-            icon_path = "mac-tray-dark.png";
+            icon_path = "src/mac-tray-dark.png";
         },
     }
     if let Ok(mut tray) = TrayItem::new(&crate::get_app_name(), icon_path) {
