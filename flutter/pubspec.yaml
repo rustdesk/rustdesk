@@ -80,7 +80,7 @@ dependencies:
     rxdart: ^0.27.5
 
 dev_dependencies:
-    flutter_launcher_icons: ^0.9.1
+    icons_launcher: ^2.0.5
     flutter_test:
         sdk: flutter
     build_runner: ^2.1.11
@@ -88,10 +88,19 @@ dev_dependencies:
     flutter_lints: ^2.0.0
 
 # rerun: flutter pub run flutter_launcher_icons:main
-flutter_icons:
-    android: "ic_launcher"
-    ios: true
-    image_path: "../1024-rec.png"
+icons_launcher:
+    image_path: "../128x128@2x.png"
+    platforms:
+        android:
+            enable: true
+        ios:
+            enable: true
+        windows:
+            enable: true
+        macos:
+            enable: true
+        linux:
+            enable: true
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
