@@ -744,9 +744,9 @@ pub fn get_api_server() -> String {
 
 #[inline]
 pub fn has_hwcodec() -> bool {
-    #[cfg(not(feature = "hwcodec"))]
+    #[cfg(not(any(feature = "hwcodec", feature = "mediacodec")))]
     return false;
-    #[cfg(feature = "hwcodec")]
+    #[cfg(any(feature = "hwcodec", feature = "mediacodec"))]
     return true;
 }
 

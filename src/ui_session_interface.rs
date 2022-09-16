@@ -136,15 +136,8 @@ impl<T: InvokeUiSession> Session<T> {
         true
     }
 
-    pub fn has_hwcodec(&self) -> bool {
-        #[cfg(not(feature = "hwcodec"))]
-        return false;
-        #[cfg(feature = "hwcodec")]
-        return true;
-    }
-
     pub fn supported_hwcodec(&self) -> (bool, bool) {
-        #[cfg(feature = "hwcodec")]
+        #[cfg(any(feature = "hwcodec", feature = "mediacodec"))]
         {
             let decoder = scrap::codec::Decoder::video_codec_state(&self.id);
             let mut h264 = decoder.score_h264 > 0;
@@ -154,10 +147,6 @@ impl<T: InvokeUiSession> Session<T> {
                 h265 = h265 && encoding_265;
             }
             return (h264, h265);
-        }
-        #[cfg(feature = "mediacodec")]
-        {
-            todo!();
         }
         (false, false)
     }
