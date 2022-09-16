@@ -46,7 +46,10 @@ class _DesktopHomePageState extends State<DesktopHomePage>
     // close all sub windows
     if (await windowManager.isPreventClose()) {
       try {
-        await rustDeskWinManager.closeAllSubWindows();
+        await Future.wait([
+          saveWindowPosition(WindowType.Main),
+          rustDeskWinManager.closeAllSubWindows()
+        ]);
       } catch (err) {
         debugPrint("$err");
       } finally {
