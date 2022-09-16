@@ -3,6 +3,7 @@ import 'package:flutter_hbb/mobile/widgets/dialog.dart';
 import 'package:provider/provider.dart';
 
 import '../../common.dart';
+import '../../common/widgets/dialog.dart';
 import '../../models/platform_model.dart';
 import '../../models/server_model.dart';
 import 'home_page.dart';
@@ -23,7 +24,6 @@ class ServerPage extends StatefulWidget implements PageShape {
             PopupMenuItem(
               padding: const EdgeInsets.symmetric(horizontal: 16.0),
               value: "changeID",
-              enabled: false,
               child: Text(translate("Change ID")),
             ),
             PopupMenuItem(
@@ -86,7 +86,7 @@ class ServerPage extends StatefulWidget implements PageShape {
         },
         onSelected: (value) {
           if (value == "changeID") {
-            // TODO
+            changeIdDialog();
           } else if (value == "setPermanentPassword") {
             setPermanentPasswordDialog(gFFI.dialogManager);
           } else if (value == "setTemporaryPasswordLength") {

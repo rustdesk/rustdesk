@@ -11,6 +11,8 @@ import 'package:get/get.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher_string.dart';
 
+import '../../common/widgets/dialog.dart';
+
 const double _kTabWidth = 235;
 const double _kTabHeight = 42;
 const double _kCardFixedWidth = 560;
@@ -1485,84 +1487,6 @@ void changeSocks5Proxy() async {
                 offstage: !isInProgress, child: const LinearProgressIndicator())
           ],
         ),
-      ),
-      actions: [
-        TextButton(onPressed: close, child: Text(translate("Cancel"))),
-        TextButton(onPressed: submit, child: Text(translate("OK"))),
-      ],
-      onSubmit: submit,
-      onCancel: close,
-    );
-  });
-}
-
-void changeIdDialog() {
-  var newId = "";
-  var msg = "";
-  var isInProgress = false;
-  TextEditingController controller = TextEditingController();
-  gFFI.dialogManager.show((setState, close) {
-    submit() async {
-      newId = controller.text.trim();
-      setState(() {
-        msg = "";
-        isInProgress = true;
-        bind.mainChangeId(newId: newId);
-      });
-
-      var status = await bind.mainGetAsyncStatus();
-      while (status == " ") {
-        await Future.delayed(const Duration(milliseconds: 100));
-        status = await bind.mainGetAsyncStatus();
-      }
-      if (status.isEmpty) {
-        // ok
-        close();
-        return;
-      }
-      setState(() {
-        isInProgress = false;
-        msg = translate(status);
-      });
-    }
-
-    return CustomAlertDialog(
-      title: Text(translate("Change ID")),
-      content: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(translate("id_change_tip")),
-          const SizedBox(
-            height: 8.0,
-          ),
-          Row(
-            children: [
-              const Text("ID:").marginOnly(bottom: 16.0),
-              const SizedBox(
-                width: 24.0,
-              ),
-              Expanded(
-                child: TextField(
-                  decoration: InputDecoration(
-                      border: const OutlineInputBorder(),
-                      errorText: msg.isEmpty ? null : translate(msg)),
-                  inputFormatters: [
-                    LengthLimitingTextInputFormatter(16),
-                    // FilteringTextInputFormatter(RegExp(r"[a-zA-z][a-zA-z0-9\_]*"), allow: true)
-                  ],
-                  maxLength: 16,
-                  controller: controller,
-                  focusNode: FocusNode()..requestFocus(),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(
-            height: 4.0,
-          ),
-          Offstage(
-              offstage: !isInProgress, child: const LinearProgressIndicator())
-        ],
       ),
       actions: [
         TextButton(onPressed: close, child: Text(translate("Cancel"))),
