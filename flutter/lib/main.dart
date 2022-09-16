@@ -10,6 +10,7 @@ import 'package:flutter_hbb/desktop/screen/desktop_remote_screen.dart';
 import 'package:flutter_hbb/utils/multi_window_manager.dart';
 import 'package:get/get.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:window_manager/window_manager.dart';
 
 // import 'package:window_manager/window_manager.dart';
@@ -41,6 +42,7 @@ Future<Null> main(List<String> args) async {
     int type = argument['type'] ?? -1;
     argument['windowId'] = windowId;
     WindowType wType = type.windowType;
+    restoreWindowPosition(wType, windowId: windowId);
     switch (wType) {
       case WindowType.RemoteDesktop:
         desktopType = DesktopType.remote;
@@ -71,6 +73,8 @@ Future<Null> main(List<String> args) async {
 }
 
 Future<void> initEnv(String appType) async {
+  // global shared preference
+  await Get.putAsync(() => SharedPreferences.getInstance());
   await platformFFI.init(appType);
   // global FFI, use this **ONLY** for global configuration
   // for convenience, use global FFI on mobile platform
@@ -93,9 +97,9 @@ void runMainApp(bool startService) async {
   }
   runApp(App());
   // set window option
-  WindowOptions windowOptions =
-      getHiddenTitleBarWindowOptions(const Size(1280, 720));
+  WindowOptions windowOptions = getHiddenTitleBarWindowOptions();
   windowManager.waitUntilReadyToShow(windowOptions, () async {
+    restoreWindowPosition(WindowType.Main);
     await windowManager.show();
     await windowManager.focus();
   });
@@ -166,7 +170,8 @@ void runPortForwardScreen(Map<String, dynamic> argument) async {
 
 void runConnectionManagerScreen() async {
   // initialize window
-  WindowOptions windowOptions = getHiddenTitleBarWindowOptions(Size(300, 400));
+  WindowOptions windowOptions =
+      getHiddenTitleBarWindowOptions(size: const Size(300, 400));
   await Future.wait([
     initEnv(kAppTypeMain),
     windowManager.waitUntilReadyToShow(windowOptions, () async {
@@ -185,7 +190,7 @@ void runConnectionManagerScreen() async {
       builder: _keepScaleBuilder()));
 }
 
-WindowOptions getHiddenTitleBarWindowOptions(Size size) {
+WindowOptions getHiddenTitleBarWindowOptions({Size? size}) {
   return WindowOptions(
     size: size,
     center: true,

@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
+import 'dart:ui';
 
 import 'package:back_button_interceptor/back_button_interceptor.dart';
 import 'package:desktop_multi_window/desktop_multi_window.dart';
@@ -10,6 +11,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_hbb/desktop/widgets/tabbar_widget.dart';
 import 'package:flutter_hbb/models/peer_model.dart';
+import 'package:flutter_hbb/utils/multi_window_manager.dart';
 import 'package:get/get.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:window_manager/window_manager.dart';
@@ -28,6 +30,7 @@ var isWeb = false;
 var isWebDesktop = false;
 var version = "";
 int androidVersion = 0;
+const windowPrefix = "wm_";
 DesktopType? desktopType;
 
 typedef F = String Function(String);
@@ -821,8 +824,6 @@ Future<void> initGlobalFFI() async {
   debugPrint("_globalFFI init end");
   // after `put`, can also be globally found by Get.find<FFI>();
   Get.put(_globalFFI, permanent: true);
-  // global shared preference
-  await Get.putAsync(() => SharedPreferences.getInstance());
 }
 
 String translate(String name) {
@@ -908,4 +909,101 @@ Widget getPlatformImage(String platform, {double size = 50}) {
     platform = 'win';
   }
   return Image.asset('assets/$platform.png', height: size, width: size);
+}
+
+class LastWindowPosition {
+  double? width;
+  double? height;
+  double? offsetWidth;
+  double? offsetHeight;
+
+  LastWindowPosition(
+      this.width, this.height, this.offsetWidth, this.offsetHeight);
+
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      "width": width,
+      "height": height,
+      "offsetWidth": offsetWidth,
+      "offsetHeight": offsetHeight
+    };
+  }
+
+  @override
+  String toString() {
+    return jsonEncode(toJson());
+  }
+
+  static LastWindowPosition? loadFromString(String content) {
+    if (content.isEmpty) {
+      return null;
+    }
+    try {
+      final m = jsonDecode(content);
+      return LastWindowPosition(
+          m["width"], m["height"], m["offsetWidth"], m["offsetHeight"]);
+    } catch (e) {
+      debugPrint(e.toString());
+      return null;
+    }
+  }
+}
+
+/// Save window position and size on exit
+/// Note that windowId must be provided if it's subwindow
+Future<void> saveWindowPosition(WindowType type, {int? windowId}) async {
+  if (type != WindowType.Main && windowId == null) {
+    debugPrint(
+        "Error: windowId cannot be null when saving positions for sub window");
+  }
+  switch (type) {
+    case WindowType.Main:
+      List resp = await Future.wait(
+          [windowManager.getPosition(), windowManager.getSize()]);
+      Offset position = resp[0];
+      Size sz = resp[1];
+      final pos =
+          LastWindowPosition(sz.width, sz.height, position.dx, position.dy);
+      await Get.find<SharedPreferences>()
+          .setString(windowPrefix + type.name, pos.toString());
+      break;
+    default:
+      // TODO: implement window
+      break;
+  }
+}
+
+/// Save window position and size on exit
+/// Note that windowId must be provided if it's subwindow
+Future<bool> restoreWindowPosition(WindowType type, {int? windowId}) async {
+  if (type != WindowType.Main && windowId == null) {
+    debugPrint(
+        "Error: windowId cannot be null when saving positions for sub window");
+  }
+  switch (type) {
+    case WindowType.Main:
+      var pos =
+          Get.find<SharedPreferences>().getString(windowPrefix + type.name);
+      if (pos == null) {
+        debugPrint("no window position saved, ignore restore");
+        return false;
+      }
+      var lpos = LastWindowPosition.loadFromString(pos);
+      if (lpos == null) {
+        debugPrint("window position saved, but cannot be parsed");
+        return false;
+      }
+      await windowManager.setSize(Size(lpos.width ?? 1280, lpos.height ?? 720));
+      if (lpos.offsetWidth == null || lpos.offsetHeight == null) {
+        await windowManager.center();
+      } else {
+        await windowManager
+            .setPosition(Offset(lpos.offsetWidth!, lpos.offsetHeight!));
+      }
+      return true;
+    default:
+      // TODO: implement subwindow
+      break;
+  }
+  return false;
 }
