@@ -449,27 +449,11 @@ impl SciterSession {
     }
 
     fn supported_hwcodec(&self) -> Value {
-        #[cfg(feature = "hwcodec")]
-        {
-            let mut v = Value::array(0);
-            let decoder = scrap::codec::Decoder::video_codec_state(&self.id);
-            let mut h264 = decoder.score_h264 > 0;
-            let mut h265 = decoder.score_h265 > 0;
-            if let Some((encoding_264, encoding_265)) = self.lc.read().unwrap().supported_encoding {
-                h264 = h264 && encoding_264;
-                h265 = h265 && encoding_265;
-            }
-            v.push(h264);
-            v.push(h265);
-            v
-        }
-        #[cfg(not(feature = "hwcodec"))]
-        {
-            let mut v = Value::array(0);
-            v.push(false);
-            v.push(false);
-            v
-        }
+        let (h264, h265) = self.0.supported_hwcodec();
+        let mut v = Value::array(0);
+        v.push(h264);
+        v.push(h265);
+        v
     }
 
     fn save_size(&mut self, x: i32, y: i32, w: i32, h: i32) {

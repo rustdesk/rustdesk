@@ -219,17 +219,12 @@ class _GeneralState extends State<_General> {
   }
 
   Widget hwcodec() {
-    return _futureBuilder(
-        future: bind.mainHasHwcodec(),
-        hasData: (data) {
-          return Offstage(
-            offstage: !(data as bool),
-            child: _Card(title: 'Hardware Codec', children: [
-              _OptionCheckBox(
-                  context, 'Enable hardware codec', 'enable-hwcodec'),
-            ]),
-          );
-        });
+    return Offstage(
+      offstage: !bind.mainHasHwcodec(),
+      child: _Card(title: 'Hardware Codec', children: [
+        _OptionCheckBox(context, 'Enable hardware codec', 'enable-hwcodec'),
+      ]),
+    );
   }
 
   Widget audio(BuildContext context) {

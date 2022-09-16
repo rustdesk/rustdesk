@@ -754,8 +754,8 @@ pub fn main_remove_peer(id: String) {
     PeerConfig::remove(&id);
 }
 
-pub fn main_has_hwcodec() -> bool {
-    has_hwcodec()
+pub fn main_has_hwcodec() -> SyncReturn<bool> {
+    SyncReturn(has_hwcodec())
 }
 
 pub fn session_send_mouse(id: String, msg: String) {
@@ -813,6 +813,22 @@ pub fn session_get_audit_server_sync(id: String) -> SyncReturn<String> {
 pub fn session_send_note(id: String, note: String) {
     if let Some(session) = SESSIONS.read().unwrap().get(&id) {
         session.send_note(note)
+    }
+}
+
+pub fn session_supported_hwcodec(id: String) -> String {
+    if let Some(session) = SESSIONS.read().unwrap().get(&id) {
+        let (h264, h265) = session.supported_hwcodec();
+        let msg = HashMap::from([("h264", h264), ("h265", h265)]);
+        serde_json::ser::to_string(&msg).unwrap_or("".to_owned())
+    } else {
+        String::new()
+    }
+}
+
+pub fn session_change_prefer_codec(id: String) {
+    if let Some(session) = SESSIONS.read().unwrap().get(&id) {
+        session.change_prefer_codec();
     }
 }
 
