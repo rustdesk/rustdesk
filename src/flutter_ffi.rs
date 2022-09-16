@@ -17,15 +17,15 @@ use crate::flutter::{self, SESSIONS};
 use crate::start_server;
 use crate::ui_interface;
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
-use crate::ui_interface::{change_id, get_sound_inputs};
+use crate::ui_interface::get_sound_inputs;
 use crate::ui_interface::{
-    check_mouse_time, check_super_user_permission, discover, forget_password, get_api_server,
-    get_app_name, get_async_job_status, get_connect_status, get_fav, get_id, get_lan_peers,
-    get_langs, get_license, get_local_option, get_mouse_time, get_option, get_options, get_peer,
-    get_peer_option, get_socks, get_uuid, get_version, has_hwcodec, has_rendezvous_service,
-    post_request, send_to_cm, set_local_option, set_option, set_options, set_peer_option,
-    set_permanent_password, set_socks, store_fav, test_if_valid_server, update_temporary_password,
-    using_public_server,
+    change_id, check_mouse_time, check_super_user_permission, discover, forget_password,
+    get_api_server, get_app_name, get_async_job_status, get_connect_status, get_fav, get_id,
+    get_lan_peers, get_langs, get_license, get_local_option, get_mouse_time, get_option,
+    get_options, get_peer, get_peer_option, get_socks, get_uuid, get_version, has_hwcodec,
+    has_rendezvous_service, post_request, send_to_cm, set_local_option, set_option, set_options,
+    set_peer_option, set_permanent_password, set_socks, store_fav, test_if_valid_server,
+    update_temporary_password, using_public_server,
 };
 use crate::{
     client::file_trait::FileManager,
@@ -426,7 +426,6 @@ pub fn main_get_sound_inputs() -> Vec<String> {
 }
 
 pub fn main_change_id(new_id: String) {
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
     change_id(new_id)
 }
 
@@ -754,8 +753,8 @@ pub fn main_remove_peer(id: String) {
     PeerConfig::remove(&id);
 }
 
-pub fn main_has_hwcodec() -> bool {
-    has_hwcodec()
+pub fn main_has_hwcodec() -> SyncReturn<bool> {
+    SyncReturn(has_hwcodec())
 }
 
 pub fn session_send_mouse(id: String, msg: String) {
@@ -813,6 +812,22 @@ pub fn session_get_audit_server_sync(id: String) -> SyncReturn<String> {
 pub fn session_send_note(id: String, note: String) {
     if let Some(session) = SESSIONS.read().unwrap().get(&id) {
         session.send_note(note)
+    }
+}
+
+pub fn session_supported_hwcodec(id: String) -> String {
+    if let Some(session) = SESSIONS.read().unwrap().get(&id) {
+        let (h264, h265) = session.supported_hwcodec();
+        let msg = HashMap::from([("h264", h264), ("h265", h265)]);
+        serde_json::ser::to_string(&msg).unwrap_or("".to_owned())
+    } else {
+        String::new()
+    }
+}
+
+pub fn session_change_prefer_codec(id: String) {
+    if let Some(session) = SESSIONS.read().unwrap().get(&id) {
+        session.change_prefer_codec();
     }
 }
 

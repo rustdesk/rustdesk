@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 import 'dart:math' as math;
 
@@ -298,25 +299,35 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
   }
 
   Widget _buildDisplay(BuildContext context) {
-    return mod_menu.PopupMenuButton(
-      padding: EdgeInsets.zero,
-      icon: const Icon(
-        Icons.tv,
-        color: _MenubarTheme.commonColor,
-      ),
-      tooltip: translate('Display Settings'),
-      position: mod_menu.PopupMenuPosition.under,
-      itemBuilder: (BuildContext context) => _getDisplayMenu()
-          .map((entry) => entry.build(
-              context,
-              const MenuConfig(
-                commonColor: _MenubarTheme.commonColor,
-                height: _MenubarTheme.height,
-                dividerHeight: _MenubarTheme.dividerHeight,
-              )))
-          .expand((i) => i)
-          .toList(),
-    );
+    return FutureBuilder(future: () async {
+      final supportedHwcodec =
+          await bind.sessionSupportedHwcodec(id: widget.id);
+      return {'supportedHwcodec': supportedHwcodec};
+    }(), builder: (context, snapshot) {
+      if (snapshot.hasData) {
+        return mod_menu.PopupMenuButton(
+          padding: EdgeInsets.zero,
+          icon: const Icon(
+            Icons.tv,
+            color: _MenubarTheme.commonColor,
+          ),
+          tooltip: translate('Display Settings'),
+          position: mod_menu.PopupMenuPosition.under,
+          itemBuilder: (BuildContext context) => _getDisplayMenu(snapshot.data!)
+              .map((entry) => entry.build(
+                  context,
+                  const MenuConfig(
+                    commonColor: _MenubarTheme.commonColor,
+                    height: _MenubarTheme.height,
+                    dividerHeight: _MenubarTheme.dividerHeight,
+                  )))
+              .expand((i) => i)
+              .toList(),
+        );
+      } else {
+        return const Offstage();
+      }
+    });
   }
 
   Widget _buildKeyboard(BuildContext context) {
@@ -532,7 +543,7 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
     return displayMenu;
   }
 
-  List<MenuEntryBase<String>> _getDisplayMenu() {
+  List<MenuEntryBase<String>> _getDisplayMenu(dynamic futureData) {
     final displayMenu = [
       MenuEntryRadios<String>(
           text: translate('Ratio'),
@@ -653,33 +664,74 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
             }
           }),
       MenuEntryDivider<String>(),
-      // {show_codec ? <div>
-      // MenuEntryDivider<String>(),
-      () {
-        final state = ShowRemoteCursorState.find(widget.id);
-        return MenuEntrySwitch2<String>(
-            text: translate('Show remote cursor'),
-            getter: () {
-              return state;
+    ];
+
+    /// Show Codec Preference
+    if (bind.mainHasHwcodec()) {
+      final List<bool> codecs = [];
+      try {
+        final Map codecsJson = jsonDecode(futureData['supportedHwcodec']);
+        final h264 = codecsJson['h264'] ?? false;
+        final h265 = codecsJson['h265'] ?? false;
+        codecs.add(h264);
+        codecs.add(h265);
+      } finally {}
+      if (codecs.length == 2 && (codecs[0] || codecs[1])) {
+        displayMenu.add(MenuEntryRadios<String>(
+            text: translate('Codec Preference'),
+            optionsGetter: () {
+              final list = [
+                MenuEntryRadioOption(text: translate('Auto'), value: 'auto'),
+                MenuEntryRadioOption(text: 'VP9', value: 'vp9'),
+              ];
+              if (codecs[0]) {
+                list.add(MenuEntryRadioOption(text: 'H264', value: 'h264'));
+              }
+              if (codecs[1]) {
+                list.add(MenuEntryRadioOption(text: 'H265', value: 'h265'));
+              }
+              return list;
             },
-            setter: (bool v) async {
-              state.value = v;
-              await bind.sessionToggleOption(
-                  id: widget.id, value: 'show-remote-cursor');
-            });
-      }(),
-      MenuEntrySwitch<String>(
-          text: translate('Show quality monitor'),
-          getter: () async {
-            return bind.sessionGetToggleOptionSync(
-                id: widget.id, arg: 'show-quality-monitor');
+            curOptionGetter: () async {
+              return await bind.sessionGetOption(
+                      id: widget.id, arg: 'codec-preference') ??
+                  'auto';
+            },
+            optionSetter: (String oldValue, String newValue) async {
+              await bind.sessionPeerOption(
+                  id: widget.id, name: "codec-preference", value: newValue);
+              bind.sessionChangePreferCodec(id: widget.id);
+            }));
+      }
+    }
+
+    /// Show remote cursor
+    displayMenu.add(() {
+      final state = ShowRemoteCursorState.find(widget.id);
+      return MenuEntrySwitch2<String>(
+          text: translate('Show remote cursor'),
+          getter: () {
+            return state;
           },
           setter: (bool v) async {
+            state.value = v;
             await bind.sessionToggleOption(
-                id: widget.id, value: 'show-quality-monitor');
-            widget.ffi.qualityMonitorModel.checkShowQualityMonitor(widget.id);
-          }),
-    ];
+                id: widget.id, value: 'show-remote-cursor');
+          });
+    }());
+
+    /// Show quality monitor
+    displayMenu.add(MenuEntrySwitch<String>(
+        text: translate('Show quality monitor'),
+        getter: () async {
+          return bind.sessionGetToggleOptionSync(
+              id: widget.id, arg: 'show-quality-monitor');
+        },
+        setter: (bool v) async {
+          await bind.sessionToggleOption(
+              id: widget.id, value: 'show-quality-monitor');
+          widget.ffi.qualityMonitorModel.checkShowQualityMonitor(widget.id);
+        }));
 
     final perms = widget.ffi.ffiModel.permissions;
     final pi = widget.ffi.ffiModel.pi;

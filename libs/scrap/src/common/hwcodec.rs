@@ -267,7 +267,7 @@ impl HwDecoderImage<'_> {
 }
 
 fn get_config(k: &str) -> ResultType<CodecInfos> {
-    let v = HwCodecConfig::load()
+    let v = HwCodecConfig::get()
         .options
         .get(k)
         .unwrap_or(&"".to_owned())
@@ -323,7 +323,8 @@ pub fn check_config_process(force_reset: bool) {
             std::process::Command::new(exe)
                 .arg("--check-hwcodec-config")
                 .status()
-                .ok()
+                .ok();
+            HwCodecConfig::refresh();
         });
     };
 }

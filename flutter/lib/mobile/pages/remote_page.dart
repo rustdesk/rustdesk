@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:ui' as ui;
 
 import 'package:flutter/gestures.dart';
@@ -1011,17 +1012,22 @@ class QualityMonitor extends StatelessWidget {
 void showOptions(String id, OverlayDialogManager dialogManager) async {
   String quality = await bind.sessionGetImageQuality(id: id) ?? 'balanced';
   if (quality == '') quality = 'balanced';
+  String codec =
+      await bind.sessionGetOption(id: id, arg: 'codec-preference') ?? 'auto';
+  if (codec == '') codec = 'auto';
   String viewStyle =
       await bind.sessionGetOption(id: id, arg: 'view-style') ?? '';
+
   var displays = <Widget>[];
   final pi = gFFI.ffiModel.pi;
   final image = gFFI.ffiModel.getConnectionImage();
-  if (image != null)
+  if (image != null) {
     displays.add(Padding(padding: const EdgeInsets.only(top: 8), child: image));
+  }
   if (pi.displays.length > 1) {
     final cur = pi.currentDisplay;
     final children = <Widget>[];
-    for (var i = 0; i < pi.displays.length; ++i)
+    for (var i = 0; i < pi.displays.length; ++i) {
       children.add(InkWell(
           onTap: () {
             if (i == cur) return;
@@ -1038,6 +1044,7 @@ void showOptions(String id, OverlayDialogManager dialogManager) async {
                   child: Text((i + 1).toString(),
                       style: TextStyle(
                           color: i == cur ? Colors.white : Colors.black87))))));
+    }
     displays.add(Padding(
         padding: const EdgeInsets.only(top: 8),
         child: Wrap(
@@ -1047,9 +1054,21 @@ void showOptions(String id, OverlayDialogManager dialogManager) async {
         )));
   }
   if (displays.isNotEmpty) {
-    displays.add(Divider(color: MyTheme.border));
+    displays.add(const Divider(color: MyTheme.border));
   }
   final perms = gFFI.ffiModel.permissions;
+  final hasHwcodec = bind.mainHasHwcodec();
+  final List<bool> codecs = [];
+  if (hasHwcodec) {
+    try {
+      final Map codecsJson =
+          jsonDecode(await bind.sessionSupportedHwcodec(id: id));
+      final h264 = codecsJson['h264'] ?? false;
+      final h265 = codecsJson['h265'] ?? false;
+      codecs.add(h264);
+      codecs.add(h265);
+    } finally {}
+  }
 
   dialogManager.show((setState, close) {
     final more = <Widget>[];
@@ -1057,50 +1076,77 @@ void showOptions(String id, OverlayDialogManager dialogManager) async {
       more.add(getToggle(id, setState, 'disable-audio', 'Mute'));
     }
     if (perms['keyboard'] != false) {
-      if (perms['clipboard'] != false)
+      if (perms['clipboard'] != false) {
         more.add(
             getToggle(id, setState, 'disable-clipboard', 'Disable clipboard'));
+      }
       more.add(getToggle(
           id, setState, 'lock-after-session-end', 'Lock after session end'));
       if (pi.platform == 'Windows') {
         more.add(getToggle(id, setState, 'privacy-mode', 'Privacy mode'));
       }
     }
-    var setQuality = (String? value) {
+    setQuality(String? value) {
       if (value == null) return;
       setState(() {
         quality = value;
         bind.sessionSetImageQuality(id: id, value: value);
       });
-    };
-    var setViewStyle = (String? value) {
+    }
+
+    setViewStyle(String? value) {
       if (value == null) return;
       setState(() {
         viewStyle = value;
-        bind.sessionPeerOption(id: id, name: "view-style", value: value);
-        gFFI.canvasModel.updateViewStyle();
+        bind
+            .sessionPeerOption(id: id, name: "view-style", value: value)
+            .then((_) => gFFI.canvasModel.updateViewStyle());
       });
-    };
+    }
+
+    setCodec(String? value) {
+      if (value == null) return;
+      setState(() {
+        codec = value;
+        bind
+            .sessionPeerOption(id: id, name: "codec-preference", value: value)
+            .then((_) => bind.sessionChangePreferCodec(id: id));
+      });
+    }
+
+    final radios = [
+      getRadio('Scale original', 'original', viewStyle, setViewStyle),
+      getRadio('Scale adaptive', 'adaptive', viewStyle, setViewStyle),
+      const Divider(color: MyTheme.border),
+      getRadio('Good image quality', 'best', quality, setQuality),
+      getRadio('Balanced', 'balanced', quality, setQuality),
+      getRadio('Optimize reaction time', 'low', quality, setQuality),
+      const Divider(color: MyTheme.border)
+    ];
+
+    if (hasHwcodec && codecs.length == 2 && (codecs[0] || codecs[1])) {
+      radios.addAll([
+        getRadio(translate('Auto'), 'auto', codec, setCodec),
+        getRadio('VP9', 'vp9', codec, setCodec),
+      ]);
+      if (codecs[0]) {
+        radios.add(getRadio('H264', 'h264', codec, setCodec));
+      }
+      if (codecs[1]) {
+        radios.add(getRadio('H265', 'h265', codec, setCodec));
+      }
+      radios.add(const Divider(color: MyTheme.border));
+    }
+
+    final toggles = [
+      getToggle(id, setState, 'show-remote-cursor', 'Show remote cursor'),
+      getToggle(id, setState, 'show-quality-monitor', 'Show quality monitor'),
+    ];
+
     return CustomAlertDialog(
-      title: SizedBox.shrink(),
       content: Column(
           mainAxisSize: MainAxisSize.min,
-          children: displays +
-              <Widget>[
-                getRadio('Scale Original', 'original', viewStyle, setViewStyle),
-                getRadio('Scale adaptive', 'adaptive', viewStyle, setViewStyle),
-                Divider(color: MyTheme.border),
-                getRadio('Good image quality', 'best', quality, setQuality),
-                getRadio('Balanced', 'balanced', quality, setQuality),
-                getRadio('Optimize reaction time', 'low', quality, setQuality),
-                Divider(color: MyTheme.border),
-                getToggle(
-                    id, setState, 'show-remote-cursor', 'Show remote cursor'),
-                getToggle(id, setState, 'show-quality-monitor',
-                    'Show quality monitor'),
-              ] +
-              more),
-      actions: [],
+          children: displays + radios + toggles + more),
       contentPadding: 0,
     );
   }, clickMaskDismiss: true, backDismiss: true);
