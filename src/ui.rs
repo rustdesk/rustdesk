@@ -1,8 +1,12 @@
 use std::{
     collections::HashMap,
     iter::FromIterator,
+    net::SocketAddr,
     process::Child,
-    sync::{Arc, Mutex},
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc, Mutex,
+    },
 };
 
 use sciter::Value;
@@ -16,6 +20,7 @@ use hbb_common::{
     rendezvous_proto::*,
     tcp::FramedStream,
     tokio::{self, sync::mpsc, time},
+    try_set_port, ResultType,
 };
 
 use crate::common::get_app_name;
@@ -293,7 +298,7 @@ impl UI {
     }
 
     fn test_if_valid_server(&self, host: String) -> String {
-        test_if_valid_server(host)
+        test_if_valid_server(host, |x| x.is_ipv4())
     }
 
     fn get_sound_inputs(&self) -> Value {
@@ -759,14 +764,21 @@ async fn check_id(
     id: String,
     uuid: String,
 ) -> &'static str {
-    let any_addr = Config::get_any_listen_addr();
-    if let Ok(mut socket) = FramedStream::new(
-        crate::check_port(rendezvous_server, RENDEZVOUS_PORT),
-        any_addr,
+    let server_addr = try_set_port(&rendezvous_server, RENDEZVOUS_PORT as _);
+    let socket = FramedStream::new(
+        server_addr.clone(),
+        Config::get_any_listen_addr_ipv6(),
         RENDEZVOUS_TIMEOUT,
     )
     .await
-    {
+    .or(FramedStream::new(
+        server_addr,
+        Config::get_any_listen_addr_ipv4(),
+        RENDEZVOUS_TIMEOUT,
+    )
+    .await);
+
+    if let Ok(mut socket) = socket {
         let mut msg_out = Message::new();
         msg_out.set_register_pk(RegisterPk {
             old_id,

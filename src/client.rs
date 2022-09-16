@@ -6,13 +6,13 @@ use cpal::{
 };
 use magnum_opus::{Channels::*, Decoder as AudioDecoder};
 use sha2::{Digest, Sha256};
-use std::sync::atomic::Ordering;
 use std::{
     collections::HashMap,
     net::SocketAddr,
     ops::{Deref, Not},
     sync::{atomic::AtomicBool, mpsc, Arc, Mutex, RwLock},
 };
+use std::{net::IpAddr, sync::atomic::Ordering};
 use uuid::Uuid;
 
 pub use file_trait::FileManager;
@@ -33,7 +33,7 @@ use hbb_common::{
     sodiumoxide::crypto::{box_, secretbox, sign},
     timeout,
     tokio::time::Duration,
-    AddrMangle, IntoTargetAddr, ResultType, Stream,
+    try_set_port, AddrMangle, IntoTargetAddr, ResultType, Stream,
 };
 pub use helper::LatencyController;
 pub use helper::*;
@@ -168,11 +168,14 @@ impl Client {
         interface: impl Interface,
     ) -> ResultType<(Stream, bool)> {
         // to-do: remember the port for each peer, so that we can retry easier
-        let any_addr = Config::get_any_listen_addr();
-        if crate::is_ip(peer) {
+        if let Ok(peer_ip) = peer.parse::<IpAddr>() {
+            let any_addr = match peer_ip {
+                IpAddr::V4(..) => Config::get_any_listen_addr_ipv4(),
+                IpAddr::V6(..) => Config::get_any_listen_addr_ipv6(),
+            };
             return Ok((
                 socket_client::connect_tcp(
-                    crate::check_port(peer, RELAY_PORT + 1),
+                    try_set_port(peer, (RELAY_PORT + 1) as _),
                     any_addr,
                     RENDEZVOUS_TIMEOUT,
                 )
@@ -180,17 +183,37 @@ impl Client {
                 true,
             ));
         }
+
         let (mut rendezvous_server, servers, contained) =
             crate::get_rendezvous_server(1_000).await?;
-        let mut socket =
-            socket_client::connect_tcp(rendezvous_server.clone(), any_addr, RENDEZVOUS_TIMEOUT)
-                .await;
+        let mut socket = socket_client::connect_tcp(
+            rendezvous_server.clone(),
+            Config::get_any_listen_addr_ipv6(),
+            RENDEZVOUS_TIMEOUT,
+        )
+        .await
+        .or(socket_client::connect_tcp(
+            rendezvous_server.clone(),
+            Config::get_any_listen_addr_ipv4(),
+            RENDEZVOUS_TIMEOUT,
+        )
+        .await);
         debug_assert!(!servers.contains(&rendezvous_server));
         if socket.is_err() && !servers.is_empty() {
             log::info!("try the other servers: {:?}", servers);
             for server in servers {
-                socket =
-                    socket_client::connect_tcp(server.clone(), any_addr, RENDEZVOUS_TIMEOUT).await;
+                socket = socket_client::connect_tcp(
+                    server.clone(),
+                    Config::get_any_listen_addr_ipv6(),
+                    RENDEZVOUS_TIMEOUT,
+                )
+                .await
+                .or(socket_client::connect_tcp(
+                    server.clone(),
+                    Config::get_any_listen_addr_ipv4(),
+                    RENDEZVOUS_TIMEOUT,
+                )
+                .await);
                 if socket.is_ok() {
                     rendezvous_server = server;
                     break;
@@ -205,9 +228,13 @@ impl Client {
         let my_addr = socket.local_addr();
         let mut signed_id_pk = Vec::new();
         let mut relay_server = "".to_owned();
+        let any_addr = match &my_addr {
+            SocketAddr::V4(..) => Config::get_any_listen_addr_ipv4(),
+            SocketAddr::V6(..) => Config::get_any_listen_addr_ipv6(),
+        };
 
         let start = std::time::Instant::now();
-        let mut peer_addr = any_addr;
+        let mut peer_addr = Config::get_any_listen_addr_ipv4();
         let mut peer_nat_type = NatType::UNKNOWN_NAT;
         let my_nat_type = crate::get_nat_type(100).await;
         let mut is_local = false;
@@ -268,9 +295,15 @@ impl Client {
                                 rr.relay_server
                             );
                             signed_id_pk = rr.pk().into();
-                            let mut conn =
-                                Self::create_relay(peer, rr.uuid, rr.relay_server, key, conn_type)
-                                    .await?;
+                            let mut conn = Self::create_relay(
+                                peer,
+                                rr.uuid,
+                                rr.relay_server,
+                                any_addr,
+                                key,
+                                conn_type,
+                            )
+                            .await?;
                             Self::secure_connection(
                                 peer,
                                 signed_id_pk,
@@ -385,6 +418,7 @@ impl Client {
                     peer_id,
                     relay_server.to_owned(),
                     rendezvous_server,
+                    local_addr,
                     !signed_id_pk.is_empty(),
                     key,
                     token,
@@ -505,12 +539,16 @@ impl Client {
         peer: &str,
         relay_server: String,
         rendezvous_server: T,
+        local_addr: SocketAddr,
         secure: bool,
         key: &str,
         token: &str,
         conn_type: ConnType,
     ) -> ResultType<Stream> {
-        let any_addr = Config::get_any_listen_addr();
+        let any_addr = match &local_addr {
+            SocketAddr::V4(..) => Config::get_any_listen_addr_ipv4(),
+            SocketAddr::V6(..) => Config::get_any_listen_addr_ipv6(),
+        };
         let mut succeed = false;
         let mut uuid = "".to_owned();
         for i in 1..=3 {
@@ -554,7 +592,7 @@ impl Client {
         if !succeed {
             bail!("Timeout");
         }
-        Self::create_relay(peer, uuid, relay_server, key, conn_type).await
+        Self::create_relay(peer, uuid, relay_server, any_addr, key, conn_type).await
     }
 
     /// Create a relay connection to the server.
@@ -562,12 +600,13 @@ impl Client {
         peer: &str,
         uuid: String,
         relay_server: String,
+        local_addr: SocketAddr,
         key: &str,
         conn_type: ConnType,
     ) -> ResultType<Stream> {
         let mut conn = socket_client::connect_tcp(
-            crate::check_port(relay_server, RELAY_PORT),
-            Config::get_any_listen_addr(),
+            try_set_port(&relay_server, RELAY_PORT as _),
+            local_addr,
             CONNECT_TIMEOUT,
         )
         .await

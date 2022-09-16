@@ -1,4 +1,5 @@
 use crate::ipc::Data;
+use bytes::Bytes;
 pub use connection::*;
 use hbb_common::{
     allow_err,
@@ -11,7 +12,7 @@ use hbb_common::{
     rendezvous_proto::*,
     socket_client,
     sodiumoxide::crypto::{box_, secretbox, sign},
-    timeout, tokio, ResultType, Stream,
+    timeout, tokio, try_set_port, ResultType, Stream,
 };
 use service::{GenericService, Service, ServiceTmpl, Subscriber};
 use std::{
@@ -20,7 +21,6 @@ use std::{
     sync::{Arc, Mutex, RwLock, Weak},
     time::Duration,
 };
-use bytes::Bytes;
 
 pub mod audio_service;
 cfg_if::cfg_if! {
@@ -83,11 +83,12 @@ pub fn new() -> ServerPtr {
 }
 
 async fn accept_connection_(server: ServerPtr, socket: Stream, secure: bool) -> ResultType<()> {
+    // to-do: why not drop socket and fetch local_addr earlier
     let local_addr = socket.local_addr();
     drop(socket);
     // even we drop socket, below still may fail if not use reuse_addr,
     // there is TIME_WAIT before socket really released, so sometimes we
-    // see “Only one usage of each socket address is normally permitted” on windows sometimes,
+    // see "Only one usage of each socket address is normally permitted" on windows sometimes,
     let listener = new_listener(local_addr, true).await?;
     log::info!("Server listening on: {}", &listener.local_addr()?);
     if let Ok((stream, addr)) = timeout(CONNECT_TIMEOUT, listener.accept()).await? {
@@ -138,7 +139,8 @@ pub async fn create_tcp_connection(
                 .write_to_bytes()
                 .unwrap_or_default(),
                 &sk,
-            ).into(),
+            )
+            .into(),
             ..Default::default()
         });
         timeout(CONNECT_TIMEOUT, stream.send(&msg_out)).await??;
@@ -200,12 +202,20 @@ pub async fn accept_connection(
 pub async fn create_relay_connection(
     server: ServerPtr,
     relay_server: String,
+    local_addr: SocketAddr,
     uuid: String,
     peer_addr: SocketAddr,
     secure: bool,
 ) {
-    if let Err(err) =
-        create_relay_connection_(server, relay_server, uuid.clone(), peer_addr, secure).await
+    if let Err(err) = create_relay_connection_(
+        server,
+        relay_server,
+        local_addr,
+        uuid.clone(),
+        peer_addr,
+        secure,
+    )
+    .await
     {
         log::error!(
             "Failed to create relay connection for {} with uuid {}: {}",
@@ -219,13 +229,14 @@ pub async fn create_relay_connection(
 async fn create_relay_connection_(
     server: ServerPtr,
     relay_server: String,
+    local_addr: SocketAddr,
     uuid: String,
     peer_addr: SocketAddr,
     secure: bool,
 ) -> ResultType<()> {
     let mut stream = socket_client::connect_tcp(
-        crate::check_port(relay_server, RELAY_PORT),
-        Config::get_any_listen_addr(),
+        try_set_port(&relay_server, RELAY_PORT as _),
+        local_addr,
         CONNECT_TIMEOUT,
     )
     .await?;
@@ -308,9 +319,9 @@ pub fn check_zombie() {
 }
 
 /// Start the host server that allows the remote peer to control the current machine.
-/// 
+///
 /// # Arguments
-/// 
+///
 /// * `is_server` - Whether the current client is definitely the server.
 /// If true, the server will be started.
 /// Otherwise, client will check if there's already a server and start one if not.
@@ -321,9 +332,9 @@ pub async fn start_server(is_server: bool) {
 }
 
 /// Start the host server that allows the remote peer to control the current machine.
-/// 
+///
 /// # Arguments
-/// 
+///
 /// * `is_server` - Whether the current client is definitely the server.
 /// If true, the server will be started.
 /// Otherwise, client will check if there's already a server and start one if not.

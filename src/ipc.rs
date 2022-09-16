@@ -330,7 +330,8 @@ async fn handle(data: Data, stream: &mut Connection) {
                 } else {
                     Config::set_socks(Some(data));
                 }
-                crate::common::test_nat_type();
+                crate::common::test_nat_type_ipv4();
+                crate::common::test_nat_type_ipv6();
                 RendezvousMediator::restart();
                 log::info!("socks updated");
             }

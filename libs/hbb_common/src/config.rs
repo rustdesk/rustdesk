@@ -1,7 +1,7 @@
 use std::{
     collections::HashMap,
     fs,
-    net::{IpAddr, Ipv4Addr, SocketAddr},
+    net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr},
     path::{Path, PathBuf},
     sync::{Arc, Mutex, RwLock},
     time::SystemTime,
@@ -455,22 +455,13 @@ impl Config {
     }
 
     #[inline]
-    pub fn get_any_listen_addr() -> SocketAddr {
-        SocketAddr::new(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)), 0)
+    pub fn get_any_listen_addr_ipv4() -> SocketAddr {
+        SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), 0)
     }
 
-    fn try_set_port(host: String, port: u16) -> String {
-        if host.parse::<std::net::SocketAddr>().is_ok() {
-            return host;
-        }
-        if host.parse::<std::net::IpAddr>().is_ok() {
-            return format!("{}:{}", host, port);
-        }
-        if !host.contains(":") {
-            format!("{}:{}", host, port)
-        } else {
-            host
-        }
+    #[inline]
+    pub fn get_any_listen_addr_ipv6() -> SocketAddr {
+        SocketAddr::new(IpAddr::V6(Ipv6Addr::UNSPECIFIED), 0)
     }
 
     pub fn get_rendezvous_server() -> String {
@@ -487,7 +478,7 @@ impl Config {
                 .next()
                 .unwrap_or("".to_owned());
         }
-        Self::try_set_port(rendezvous_server, RENDEZVOUS_PORT as _)
+        crate::try_set_port(&rendezvous_server, RENDEZVOUS_PORT as _)
     }
 
     pub fn get_rendezvous_servers() -> Vec<String> {

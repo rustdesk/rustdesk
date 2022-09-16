@@ -1,6 +1,9 @@
 use std::{
     net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, ToSocketAddrs},
-    sync::{Arc, Mutex},
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc, Mutex,
+    },
 };
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
@@ -15,12 +18,12 @@ use hbb_common::{
     protobuf::Enum,
     protobuf::Message as _,
     rendezvous_proto::*,
-    sleep, socket_client, tokio, IntoTargetAddr, ResultType, TargetAddr,
+    sleep, socket_client, tokio, try_set_port, IntoTargetAddr, ResultType, TargetAddr,
 };
 // #[cfg(any(target_os = "android", target_os = "ios", feature = "cli"))]
 use hbb_common::{config::RENDEZVOUS_PORT, futures::future::join_all};
 
-// #[cfg(target_os = "linux")]
+#[cfg(target_os = "linux")]
 use hbb_common::anyhow::bail;
 
 pub const CLIPBOARD_NAME: &'static str = "clipboard";
@@ -233,7 +236,7 @@ pub fn resample_channels(
     .unwrap_or_default()
 }
 
-pub fn test_nat_type() {
+pub fn test_nat_type_ipv4() {
     std::thread::spawn(move || {
         loop_test_nat_type(
             || {
@@ -247,6 +250,9 @@ pub fn test_nat_type() {
             Config::set_nat_type,
         )
     });
+}
+
+pub fn test_nat_type_ipv6() {
     std::thread::spawn(move || {
         loop_test_nat_type(
             || {
@@ -265,9 +271,10 @@ pub fn test_nat_type() {
 fn loop_test_nat_type(
     fn_test: fn() -> ResultType<bool>,
     fn_get_nat: fn() -> i32,
-    fn_set_nat: fn(i32),
+    _fn_set_nat: fn(i32),
 ) {
-    fn_set_nat(NatType::UNKNOWN_NAT as i32);
+    // Should nat type be set to unknown first?
+    // fn_set_nat(NatType::UNKNOWN_NAT as i32);
     let mut i = 0;
     loop {
         match fn_test() {
@@ -291,7 +298,7 @@ fn loop_test_nat_type(
 #[tokio::main(flavor = "current_thread")]
 async fn test_nat_type_(
     fn_check_ip: fn(IpAddr) -> bool,
-    mut addr: SocketAddr,
+    addr: SocketAddr,
     set_nat: fn(i32),
 ) -> ResultType<bool> {
     log::info!("Testing nat ...");
@@ -311,20 +318,12 @@ async fn test_nat_type_(
         }
         TargetAddr::Domain(host, port) => TargetAddr::Domain(host.clone(), port - 1),
     };
-
-    let mut msg_out = RendezvousMessage::new();
-    let serial = Config::get_serial();
-    msg_out.set_test_nat_request(TestNatRequest {
-        serial,
-        ..Default::default()
-    });
-
     if server1
         .to_socket_addrs()?
         .map(|sa| sa.ip())
         .any(fn_check_ip)
     {
-        test_nat_type_task_(addr, server1, server2, msg_out, set_nat).await
+        test_nat_type_task_(addr, server1, server2, set_nat).await
     } else {
         Ok(true)
     }
@@ -334,12 +333,15 @@ async fn test_nat_type_task_<'t>(
     mut addr: SocketAddr,
     server1: TargetAddr<'t>,
     server2: TargetAddr<'t>,
-    msg_out: RendezvousMessage,
     set_nat: fn(i32),
 ) -> ResultType<bool> {
     let start = std::time::Instant::now();
-    // TODO: try both ipv4 and ipv6
-    // let mut addr = Config::get_any_listen_addr();
+    let mut msg_out = RendezvousMessage::new();
+    let serial = Config::get_serial();
+    msg_out.set_test_nat_request(TestNatRequest {
+        serial,
+        ..Default::default()
+    });
     let mut port1 = 0;
     let mut port2 = 0;
     for i in 0..2 {
@@ -353,6 +355,7 @@ async fn test_nat_type_task_<'t>(
             RENDEZVOUS_TIMEOUT,
         )
         .await?;
+
         addr = socket.local_addr();
         socket.send(&msg_out).await?;
         if let Some(Ok(bytes)) = socket.next_timeout(RENDEZVOUS_TIMEOUT).await {
@@ -456,19 +459,25 @@ async fn test_rendezvous_server_() {
     let mut futs = Vec::new();
     for host in servers {
         futs.push(tokio::spawn(async move {
-            let tm = std::time::Instant::now();
-            if socket_client::connect_tcp(
-                crate::check_port(&host, RENDEZVOUS_PORT),
-                Config::get_any_listen_addr(),
-                RENDEZVOUS_TIMEOUT,
-            )
-            .await
-            .is_ok()
-            {
-                let elapsed = tm.elapsed().as_micros();
-                Config::update_latency(&host, elapsed as _);
-            } else {
-                Config::update_latency(&host, -1);
+            for local_addr in [
+                Config::get_any_listen_addr_ipv6(),
+                Config::get_any_listen_addr_ipv4(),
+            ] {
+                let tm = std::time::Instant::now();
+                if socket_client::connect_tcp(
+                    try_set_port(&host, RENDEZVOUS_PORT as _),
+                    local_addr,
+                    RENDEZVOUS_TIMEOUT,
+                )
+                .await
+                .is_ok()
+                {
+                    let elapsed = tm.elapsed().as_micros();
+                    Config::update_latency(&host, elapsed as _);
+                    break;
+                } else {
+                    Config::update_latency(&host, -1);
+                }
             }
         }));
     }
@@ -514,15 +523,6 @@ pub fn username() -> String {
     return DEVICE_NAME.lock().unwrap().clone();
 }
 
-#[inline]
-pub fn check_port<T: std::string::ToString>(host: T, port: i32) -> String {
-    let host = host.to_string();
-    if !host.contains(":") {
-        return format!("{}:{}", host, port);
-    }
-    return host;
-}
-
 pub const POSTFIX_SERVICE: &'static str = "_service";
 
 #[inline]
@@ -559,10 +559,12 @@ pub fn check_software_update() {
 async fn check_software_update_() -> hbb_common::ResultType<()> {
     sleep(3.).await;
 
-    let rendezvous_server =
-        socket_client::get_target_addr(&format!("rs-sg.rustdesk.com:{}", config::RENDEZVOUS_PORT))?;
+    let rendezvous_server = socket_client::get_target_addr(
+        &format!("rs-sg.rustdesk.com:{}", config::RENDEZVOUS_PORT),
+        |x| x.is_ipv4(),
+    )?;
     let mut socket =
-        socket_client::new_udp(Config::get_any_listen_addr(), RENDEZVOUS_TIMEOUT).await?;
+        socket_client::new_udp(Config::get_any_listen_addr_ipv4(), RENDEZVOUS_TIMEOUT).await?;
 
     let mut msg_out = RendezvousMessage::new();
     msg_out.set_software_update(SoftwareUpdate {

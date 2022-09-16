@@ -1,4 +1,4 @@
-use crate::{bail, ResultType};
+use crate::{bail, socket_client::to_socket_addr, ResultType};
 use anyhow::anyhow;
 use bytes::{Bytes, BytesMut};
 use futures::{SinkExt, StreamExt};
@@ -105,9 +105,19 @@ impl FramedSocket {
         let addr = addr.into_target_addr()?.to_owned();
         let send_data = Bytes::from(msg.write_to_bytes()?);
         let _ = match self {
-            Self::Direct(f) => match addr {
-                TargetAddr::Ip(addr) => f.send((send_data, addr)).await?,
-                _ => {}
+            Self::Direct(f) => match &addr {
+                TargetAddr::Ip(addr) => f.send((send_data, addr.clone())).await?,
+                TargetAddr::Domain(..) => {
+                    if let Ok(local_addr) = f.get_ref().local_addr() {
+                        let addr = addr.to_string();
+                        let addr = if local_addr.is_ipv6() {
+                            to_socket_addr(&addr, |x| x.is_ipv6())?
+                        } else {
+                            to_socket_addr(&addr, |x| x.is_ipv4())?
+                        };
+                        f.send((send_data, addr)).await?
+                    }
+                }
             },
             Self::ProxySocks(f) => f.send((send_data, addr)).await?,
         };

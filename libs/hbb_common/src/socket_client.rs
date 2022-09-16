@@ -2,38 +2,35 @@ use crate::{
     config::{Config, NetworkType},
     tcp::FramedStream,
     udp::FramedSocket,
-    ResultType,
+    ResultType, try_set_port,
 };
 use anyhow::Context;
 use std::net::SocketAddr;
 use tokio::net::ToSocketAddrs;
 use tokio_socks::{IntoTargetAddr, TargetAddr};
 
-fn to_socket_addr(host: &str) -> ResultType<SocketAddr> {
+pub fn to_socket_addr(host: &str, fn_filter: fn(&SocketAddr)->bool) -> ResultType<SocketAddr> {
     use std::net::ToSocketAddrs;
     host.to_socket_addrs()?
-        .filter(|x| x.is_ipv4())
+        .filter(fn_filter)
         .next()
         .context("Failed to solve")
 }
 
-pub fn get_target_addr(host: &str) -> ResultType<TargetAddr<'static>> {
+pub fn get_target_addr(host: &str, fn_filter: fn(&SocketAddr)->bool) -> ResultType<TargetAddr<'static>> {
     let addr = match Config::get_network_type() {
-        NetworkType::Direct => to_socket_addr(&host)?.into_target_addr()?,
+        NetworkType::Direct => to_socket_addr(&host, fn_filter)?.into_target_addr()?,
         NetworkType::ProxySocks => host.into_target_addr()?,
     }
     .to_owned();
     Ok(addr)
 }
 
-pub fn test_if_valid_server(host: &str) -> String {
-    let mut host = host.to_owned();
-    if !host.contains(":") {
-        host = format!("{}:{}", host, 0);
-    }
+pub fn test_if_valid_server(host: &str, fn_filter: fn(&SocketAddr)->bool) -> String {
+    let host = try_set_port(&host, 0);
 
     match Config::get_network_type() {
-        NetworkType::Direct => match to_socket_addr(&host) {
+        NetworkType::Direct => match to_socket_addr(&host, fn_filter) {
             Err(err) => err.to_string(),
             Ok(..) => "".to_owned(),
         },

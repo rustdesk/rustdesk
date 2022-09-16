@@ -1,5 +1,6 @@
 use std::{
     collections::HashMap,
+    net::SocketAddr,
     process::Child,
     sync::{Arc, Mutex},
     time::SystemTime,
@@ -17,6 +18,7 @@ use hbb_common::{
     sleep,
     tcp::FramedStream,
     tokio::{self, sync::mpsc, time},
+    try_set_port,
 };
 
 use crate::common::SOFTWARE_UPDATE_URL;
@@ -218,8 +220,8 @@ pub fn get_options() -> String {
 }
 
 #[inline]
-pub fn test_if_valid_server(host: String) -> String {
-    hbb_common::socket_client::test_if_valid_server(&host)
+pub fn test_if_valid_server(host: String, fn_filter: fn(&SocketAddr) -> bool) -> String {
+    hbb_common::socket_client::test_if_valid_server(&host, fn_filter)
 }
 
 #[inline]
@@ -939,14 +941,21 @@ async fn check_id(
     id: String,
     uuid: String,
 ) -> &'static str {
-    let any_addr = Config::get_any_listen_addr();
-    if let Ok(mut socket) = FramedStream::new(
-        crate::check_port(rendezvous_server, RENDEZVOUS_PORT),
-        any_addr,
+    let server_addr = try_set_port(&rendezvous_server, RENDEZVOUS_PORT as _);
+    let socket = FramedStream::new(
+        server_addr.clone(),
+        Config::get_any_listen_addr_ipv6(),
         RENDEZVOUS_TIMEOUT,
     )
     .await
-    {
+    .or(FramedStream::new(
+        server_addr,
+        Config::get_any_listen_addr_ipv4(),
+        RENDEZVOUS_TIMEOUT,
+    )
+    .await);
+
+    if let Ok(mut socket) = socket {
         let mut msg_out = Message::new();
         msg_out.set_register_pk(RegisterPk {
             old_id,
