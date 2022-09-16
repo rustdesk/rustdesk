@@ -28,6 +28,7 @@ use hbb_common::{
 use crate::clipboard_file::*;
 use crate::{
     client::*,
+    ui_interface::has_hwcodec,
     ui_session_interface::{InvokeUiSession, Session},
 };
 
@@ -438,6 +439,10 @@ impl SciterSession {
             v.push(x);
         }
         v
+    }
+
+    fn has_hwcodec(&self) -> bool {
+        has_hwcodec()
     }
 
     pub fn t(&self, name: String) -> String {
