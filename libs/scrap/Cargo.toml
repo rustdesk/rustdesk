@@ -49,7 +49,7 @@ bindgen = "0.59"
 dbus = { version = "0.9", optional = true }
 tracing = { version = "0.1", optional = true }
 gstreamer = { version = "0.16", optional = true }
-gstreamer-app = { version = "0.16", features = ["v1_10"], optional = true }
+gstreamer-app = { version = "0.18", features = ["v1_10"], optional = true }
 gstreamer-video = { version = "0.16", optional = true }
 
 [target.'cfg(any(target_os = "windows", target_os = "linux"))'.dependencies]

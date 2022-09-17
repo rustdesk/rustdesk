@@ -2066,47 +2066,68 @@ dependencies = [
  "glib 0.10.3",
  "glib-sys 0.10.1",
  "gobject-sys 0.10.0",
- "gstreamer-sys",
+ "gstreamer-sys 0.9.1",
  "libc",
- "muldiv",
- "num-rational",
+ "muldiv 0.2.1",
+ "num-rational 0.3.2",
  "once_cell",
  "paste",
- "pretty-hex",
+ "pretty-hex 0.2.1",
+ "thiserror",
+]
+
+[[package]]
+name = "gstreamer"
+version = "0.18.8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d66363bacf5e4f6eb281564adc2902e44c52ae5c45082423e7439e9012b75456"
+dependencies = [
+ "bitflags",
+ "cfg-if 1.0.0",
+ "futures-channel",
+ "futures-core",
+ "futures-util",
+ "glib 0.15.12",
+ "gstreamer-sys 0.18.0",
+ "libc",
+ "muldiv 1.0.0",
+ "num-integer",
+ "num-rational 0.4.1",
+ "once_cell",
+ "option-operations",
+ "paste",
+ "pretty-hex 0.3.0",
  "thiserror",
 ]
 
 [[package]]
 name = "gstreamer-app"
-version = "0.16.5"
+version = "0.18.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cc80888271338c3ede875d8cafc452eb207476ff5539dcbe0018a8f5b827af0e"
+checksum = "664adf6abc6546c1ad54492a067dcbc605032c9c789ce8f6f78cb9ddeef4b684"
 dependencies = [
  "bitflags",
  "futures-core",
  "futures-sink",
- "glib 0.10.3",
- "glib-sys 0.10.1",
- "gobject-sys 0.10.0",
- "gstreamer",
+ "glib 0.15.12",
+ "gstreamer 0.18.8",
  "gstreamer-app-sys",
- "gstreamer-base",
- "gstreamer-sys",
+ "gstreamer-base 0.18.0",
  "libc",
  "once_cell",
 ]
 
 [[package]]
 name = "gstreamer-app-sys"
-version = "0.9.1"
+version = "0.18.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "813f64275c9e7b33b828b9efcf9dfa64b95996766d4de996e84363ac65b87e3d"
+checksum = "c3b401f21d731b3e5de802487f25507fabd34de2dd007d582f440fb1c66a4fbb"
 dependencies = [
- "glib-sys 0.10.1",
- "gstreamer-base-sys",
- "gstreamer-sys",
+ "glib-sys 0.15.10",
+ "gstreamer-base-sys 0.18.0",
+ "gstreamer-sys 0.18.0",
  "libc",
- "system-deps 1.3.2",
+ "system-deps 6.0.2",
 ]
 
 [[package]]
@@ -2119,9 +2140,23 @@ dependencies = [
  "glib 0.10.3",
  "glib-sys 0.10.1",
  "gobject-sys 0.10.0",
- "gstreamer",
- "gstreamer-base-sys",
- "gstreamer-sys",
+ "gstreamer 0.16.7",
+ "gstreamer-base-sys 0.9.1",
+ "gstreamer-sys 0.9.1",
+ "libc",
+]
+
+[[package]]
+name = "gstreamer-base"
+version = "0.18.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "224f35f36582407caf58ded74854526beeecc23d0cf64b8d1c3e00584ed6863f"
+dependencies = [
+ "bitflags",
+ "cfg-if 1.0.0",
+ "glib 0.15.12",
+ "gstreamer 0.18.8",
+ "gstreamer-base-sys 0.18.0",
  "libc",
 ]
 
@@ -2133,9 +2168,22 @@ checksum = "a4b7b6dc2d6e160a1ae28612f602bd500b3fa474ce90bf6bb2f08072682beef5"
 dependencies = [
  "glib-sys 0.10.1",
  "gobject-sys 0.10.0",
- "gstreamer-sys",
+ "gstreamer-sys 0.9.1",
  "libc",
  "system-deps 1.3.2",
+]
+
+[[package]]
+name = "gstreamer-base-sys"
+version = "0.18.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a083493c3c340e71fa7c66eebda016e9fafc03eb1b4804cf9b2bad61994b078e"
+dependencies = [
+ "glib-sys 0.15.10",
+ "gobject-sys 0.15.10",
+ "gstreamer-sys 0.18.0",
+ "libc",
+ "system-deps 6.0.2",
 ]
 
 [[package]]
@@ -2151,6 +2199,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "gstreamer-sys"
+version = "0.18.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e3517a65d3c2e6f8905b456eba5d53bda158d664863aef960b44f651cb7d33e2"
+dependencies = [
+ "glib-sys 0.15.10",
+ "gobject-sys 0.15.10",
+ "libc",
+ "system-deps 6.0.2",
+]
+
+[[package]]
 name = "gstreamer-video"
 version = "0.16.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2162,10 +2222,10 @@ dependencies = [
  "glib 0.10.3",
  "glib-sys 0.10.1",
  "gobject-sys 0.10.0",
- "gstreamer",
- "gstreamer-base",
- "gstreamer-base-sys",
- "gstreamer-sys",
+ "gstreamer 0.16.7",
+ "gstreamer-base 0.16.5",
+ "gstreamer-base-sys 0.9.1",
+ "gstreamer-sys 0.9.1",
  "gstreamer-video-sys",
  "libc",
  "once_cell",
@@ -2179,8 +2239,8 @@ checksum = "92347e46438007d6a2386302125f62cb9df6769cdacb931af5c0f12c1ee21de4"
 dependencies = [
  "glib-sys 0.10.1",
  "gobject-sys 0.10.0",
- "gstreamer-base-sys",
- "gstreamer-sys",
+ "gstreamer-base-sys 0.9.1",
+ "gstreamer-sys 0.9.1",
  "libc",
  "system-deps 1.3.2",
 ]
@@ -2479,7 +2539,7 @@ dependencies = [
  "byteorder",
  "color_quant",
  "num-iter",
- "num-rational",
+ "num-rational 0.3.2",
  "num-traits 0.2.15",
  "png",
  "tiff",
@@ -2982,6 +3042,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0419348c027fa7be448d2ae7ea0e4e04c2334c31dc4e74ab29f00a2a7ca69204"
 
 [[package]]
+name = "muldiv"
+version = "1.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b5136edda114182728ccdedb9f5eda882781f35fa6e80cc360af12a8932507f3"
+
+[[package]]
 name = "ndk"
 version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3227,6 +3293,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "num-rational"
+version = "0.4.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0638a1c9d0a3c0914158145bc76cff373a75a627e6ecbfb71cbe6f453a5a19b0"
+dependencies = [
+ "autocfg 1.1.0",
+ "num-integer",
+ "num-traits 0.2.15",
+]
+
+[[package]]
 name = "num-traits"
 version = "0.1.43"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3356,6 +3433,15 @@ name = "openssl-probe"
 version = "0.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ff011a302c396a5197692431fc1948019154afc178baf7d8e37367442a4601cf"
+
+[[package]]
+name = "option-operations"
+version = "0.4.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "42b01597916c91a493b1e8a2fde64fec1764be3259abc1f06efc99c274f150a2"
+dependencies = [
+ "paste",
+]
 
 [[package]]
 name = "ordered-multimap"
@@ -3630,6 +3716,12 @@ name = "pretty-hex"
 version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bc5c99d529f0d30937f6f4b8a86d988047327bb88d04d2c4afc356de74722131"
+
+[[package]]
+name = "pretty-hex"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c6fa0831dd7cc608c38a5e323422a0077678fa5744aa2be4ad91c4ece8eec8d5"
 
 [[package]]
 name = "primal-check"
@@ -4435,7 +4527,7 @@ dependencies = [
  "cfg-if 1.0.0",
  "dbus",
  "docopt",
- "gstreamer",
+ "gstreamer 0.16.7",
  "gstreamer-app",
  "gstreamer-video",
  "hbb_common",
