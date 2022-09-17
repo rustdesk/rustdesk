@@ -137,7 +137,7 @@ simple_rc = { path = "libs/simple_rc", optional = true }
 flutter_rust_bridge_codegen = { git = "https://github.com/SoLongAndThanksForAllThePizza/flutter_rust_bridge" }
 
 [dev-dependencies]
-hound = "3.4"
+hound = "3.5"
 
 [package.metadata.bundle]
 name = "RustDesk"
