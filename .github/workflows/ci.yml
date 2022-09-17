@@ -24,7 +24,7 @@ jobs:
   #       default: true
   #       profile: minimal
   #       components: rustfmt
-  #   - uses: actions/checkout@v2
+  #   - uses: actions/checkout@v3
   #   - run: cargo fmt -- --check
 
   # min_version:
@@ -32,7 +32,7 @@ jobs:
   #   runs-on: ubuntu-20.04
   #   steps:
   #   - name: Checkout source code
-  #     uses: actions/checkout@v2
+  #     uses: actions/checkout@v3
 
   #   - name: Install rust toolchain (v${{ env.MIN_SUPPORTED_RUST_VERSION }})
   #     uses: actions-rs/toolchain@v1
@@ -72,7 +72,7 @@ jobs:
           # - { target: x86_64-unknown-linux-musl   , os: ubuntu-20.04, use-cross: true }
     steps:
     - name: Checkout source code
-      uses: actions/checkout@v2
+      uses: actions/checkout@v3
 
     - name: Install prerequisites
       shell: bash
