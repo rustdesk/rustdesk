@@ -15,7 +15,7 @@ bytes = { version = "1.2", features = ["serde"] }
 log = "0.4"
 env_logger = "0.9"
 socket2 = { version = "0.3", features = ["reuseport"] }
-zstd = "0.9"
+zstd = "0.11"
 quinn = {version = "0.8", optional = true }
 anyhow = "1.0"
 futures-util = "0.3"
