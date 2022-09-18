@@ -122,7 +122,7 @@ def get_features(args):
     return features
 
 def generate_control_file(version):
-    control_file_path = "../DEBIAN/control"
+    control_file_path = "../res/DEBIAN/control"
     os.system('/bin/rm -rf %s' % control_file_path)
 
     content = """Package: rustdesk
@@ -156,26 +156,26 @@ def build_flutter_deb(version):
     os.system(
         'cp build/linux/x64/release/liblibrustdesk.so tmpdeb/usr/lib/rustdesk/librustdesk.so')
     os.system(
-        'cp ../rustdesk.service tmpdeb/usr/share/rustdesk/files/systemd/')
+        'cp ../res/rustdesk.service tmpdeb/usr/share/rustdesk/files/systemd/')
     os.system(
-        'cp ../rustdesk.service.user tmpdeb/usr/share/rustdesk/files/systemd/')
+        'cp ../res/rustdesk.service.user tmpdeb/usr/share/rustdesk/files/systemd/')
     os.system(
         'cp ../res/128x128@2x.png tmpdeb/usr/share/rustdesk/files/rustdesk.png')
     os.system(
-        'cp ../rustdesk.desktop tmpdeb/usr/share/applications/rustdesk.desktop')
+        'cp ../res/rustdesk.desktop tmpdeb/usr/share/applications/rustdesk.desktop')
     os.system(
         'cp ../res/com.rustdesk.RustDesk.policy tmpdeb/usr/share/polkit-1/actions/')
     os.system("echo \"#!/bin/sh\" >> tmpdeb/usr/share/rustdesk/files/polkit && chmod a+x tmpdeb/usr/share/rustdesk/files/polkit")
 
     os.system('mkdir -p tmpdeb/DEBIAN')
     generate_control_file(version)
-    os.system('cp -a ../DEBIAN/* tmpdeb/DEBIAN/')
+    os.system('cp -a ../res/DEBIAN/* tmpdeb/DEBIAN/')
     md5_file('usr/share/rustdesk/files/systemd/rustdesk.service')
     md5_file('usr/share/rustdesk/files/systemd/rustdesk.service.user')
     os.system('dpkg-deb -b tmpdeb rustdesk.deb;')
 
     os.system('/bin/rm -rf tmpdeb/')
-    os.system('/bin/rm -rf ../DEBIAN/control')
+    os.system('/bin/rm -rf ../res/DEBIAN/control')
     os.rename('rustdesk.deb', '../rustdesk-%s.deb' % version)
     os.chdir("..")
 
@@ -301,10 +301,14 @@ def main():
                 os.system('dpkg-deb -R rustdesk.deb tmpdeb')
                 os.system('mkdir -p tmpdeb/usr/share/rustdesk/files/systemd/')
                 os.system(
-                    'cp rustdesk.service tmpdeb/usr/share/rustdesk/files/systemd/')
+                    'cp res/rustdesk.service tmpdeb/usr/share/rustdesk/files/systemd/')
                 os.system(
-                    'cp rustdesk.service.user tmpdeb/usr/share/rustdesk/files/systemd/')
-                os.system('cp -a DEBIAN/* tmpdeb/DEBIAN/')
+                    'cp res/rustdesk.service.user tmpdeb/usr/share/rustdesk/files/systemd/')
+                os.system(
+                    'cp res/128x128@2x.png tmpdeb/usr/share/rustdesk/files/rustdesk.png')
+                os.system(
+                    'cp res/rustdesk.desktop tmpdeb/usr/share/applications/rustdesk.desktop')
+                os.system('cp -a res/DEBIAN/* tmpdeb/DEBIAN/')
                 os.system('strip tmpdeb/usr/bin/rustdesk')
                 os.system('mkdir -p tmpdeb/usr/lib/rustdesk')
                 os.system('cp libsciter-gtk.so tmpdeb/usr/lib/rustdesk/')
