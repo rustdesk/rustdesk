@@ -956,13 +956,18 @@ impl LocalConfig {
 
 #[derive(Debug, Default, Serialize, Deserialize, Clone)]
 pub struct DiscoveryPeer {
+    #[serde(default)]
     pub id: String,
-    #[serde(with = "serde_with::rust::map_as_tuple_list")]
-    pub ip_mac: HashMap<String, String>,
+    #[serde(default)]
     pub username: String,
+    #[serde(default)]
     pub hostname: String,
+    #[serde(default)]
     pub platform: String,
+    #[serde(default)]
     pub online: bool,
+    #[serde(default)]
+    pub ip_mac: HashMap<String, String>,
 }
 
 impl DiscoveryPeer {

@@ -76,6 +76,7 @@ fn install_oboe() {
     //cc::Build::new().file("oboe.cc").include(include).compile("oboe_wrapper");
 }
 
+#[cfg(feature = "flutter")]
 fn gen_flutter_rust_bridge() {
     let llvm_path = match std::env::var("LLVM_HOME") {
         Ok(path) => Some(vec![path]),

@@ -23,7 +23,6 @@ directories-next = "2.0"
 rand = "0.8"
 serde_derive = "1.0"
 serde = "1.0"
-serde_with = "1.14.0"
 lazy_static = "1.4"
 confy = { git = "https://github.com/open-trade/confy" }
 dirs-next = "2.0"
