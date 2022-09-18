@@ -89,7 +89,7 @@ dev_dependencies:
 
 # rerun: flutter pub run flutter_launcher_icons:main
 icons_launcher:
-    image_path: "../128x128@2x.png"
+    image_path: "../res/icon.png"
     platforms:
         android:
             enable: true
