@@ -7,7 +7,6 @@ post_install() {
 	# do something here
 	cp /usr/share/rustdesk/files/rustdesk.service /etc/systemd/system/rustdesk.service
 	cp /usr/share/rustdesk/files/rustdesk.desktop /usr/share/applications/
-  sudo -H pip3 install
 	systemctl daemon-reload
 	systemctl enable rustdesk
 	systemctl start rustdesk
