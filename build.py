@@ -201,7 +201,7 @@ def main():
                 '//#![windows_subsystem', '#![windows_subsystem'))
     if os.path.exists(exe_path):
         os.unlink(exe_path)
-    os.system('python3 inline-sciter.py')
+    os.system('python3 res/inline-sciter.py')
     if os.path.isfile('/usr/bin/pacman'):
         os.system('git checkout src/ui/common.tis')
     version = get_version()
