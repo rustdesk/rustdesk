@@ -30,5 +30,5 @@ package() {
   pushd ${pkgdir} && ln -s /usr/lib/rustdesk/flutter_hbb usr/bin/rustdesk && popd
   install -Dm 644 $HBB/rustdesk.service -t "${pkgdir}/usr/share/rustdesk/files"
   install -Dm 644 $HBB/rustdesk.desktop -t "${pkgdir}/usr/share/rustdesk/files"
-  install -Dm 644 $HBB/128x128@2x.png "${pkgdir}/usr/share/rustdesk/files/rustdesk.png"
+  install -Dm 644 $HBB/res/128x128@2x.png "${pkgdir}/usr/share/rustdesk/files/rustdesk.png"
 }
