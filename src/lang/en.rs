@@ -29,5 +29,6 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("server_not_support", "Not yet supported by the server"),
         ("android_open_battery_optimizations_tip", "If you want to disable this feature, please go to the next RustDesk application settings page, find and enter [Battery], Uncheck [Unrestricted]"),
         ("remote_restarting_tip", "Remote device is restarting, please close this message box and reconnect with permanent password after a while"),
+        ("Are you sure to close the connection?", "Are you sure you want to close the connection?"),
     ].iter().cloned().collect();
 }

@@ -6,7 +6,7 @@ import '../../models/model.dart';
 import '../../models/platform_model.dart';
 
 void clientClose(OverlayDialogManager dialogManager) {
-  msgBox('', 'Close', 'Are you sure you want to close the connection?',
+  msgBox('', 'Close', 'Are you sure to close the connection?',
     dialogManager);
 }
 
