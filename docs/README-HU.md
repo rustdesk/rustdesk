@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="../logo-header.svg" alt="RustDesk - Your remote desktop"><br>
+  <img src="../res/logo-header.svg" alt="RustDesk - Your remote desktop"><br>
   <a href="#ingyenes-publikus-szerverek">Szerverek</a> •
   <a href="#építési-pontok">Építés</a> •
   <a href="#hogyan-éptís-dockerrel">Docker</a> •
