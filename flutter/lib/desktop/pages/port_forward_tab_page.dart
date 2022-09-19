@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:desktop_multi_window/desktop_multi_window.dart';
 import 'package:flutter/material.dart';
@@ -74,23 +75,26 @@ class _PortForwardTabPageState extends State<PortForwardTabPage> {
 
   @override
   Widget build(BuildContext context) {
-    return SubWindowDragToResizeArea(
-      windowId: windowId(),
-      child: Container(
-        decoration: BoxDecoration(
-            border: Border.all(color: MyTheme.color(context).border!)),
-        child: Scaffold(
-            backgroundColor: MyTheme.color(context).bg,
-            body: DesktopTab(
-              controller: tabController,
-              onWindowCloseButton: () async {
-                tabController.clear();
-                return true;
-              },
-              tail: AddButton().paddingOnly(left: 10),
-            )),
-      ),
+    final tabWidget = Container(
+      decoration: BoxDecoration(
+          border: Border.all(color: MyTheme.color(context).border!)),
+      child: Scaffold(
+          backgroundColor: MyTheme.color(context).bg,
+          body: DesktopTab(
+            controller: tabController,
+            onWindowCloseButton: () async {
+              tabController.clear();
+              return true;
+            },
+            tail: AddButton().paddingOnly(left: 10),
+          )),
     );
+    return Platform.isMacOS
+        ? tabWidget
+        : SubWindowDragToResizeArea(
+            windowId: windowId(),
+            child: tabWidget,
+          );
   }
 
   void onRemoveId(String id) {
