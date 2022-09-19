@@ -13,7 +13,7 @@ class DesktopScrollWrapper extends StatelessWidget {
   Widget build(BuildContext context) {
     return ImprovedScrolling(
       scrollController: scrollController,
-      enableCustomMouseWheelScrolling: false,
+      enableCustomMouseWheelScrolling: true,
       customMouseWheelScrollConfig: const CustomMouseWheelScrollConfig(
           scrollAmountMultiplier: kDefaultScrollAmountMultiplier),
       child: child,
