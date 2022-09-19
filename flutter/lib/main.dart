@@ -8,6 +8,7 @@ import 'package:flutter_hbb/desktop/screen/desktop_file_transfer_screen.dart';
 import 'package:flutter_hbb/desktop/screen/desktop_port_forward_screen.dart';
 import 'package:flutter_hbb/desktop/screen/desktop_remote_screen.dart';
 import 'package:flutter_hbb/utils/multi_window_manager.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:get/get.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -123,6 +124,12 @@ void runRemoteScreen(Map<String, dynamic> argument) async {
     home: DesktopRemoteScreen(
       params: argument,
     ),
+    localizationsDelegates: const [
+      GlobalMaterialLocalizations.delegate,
+      GlobalWidgetsLocalizations.delegate,
+      GlobalCupertinoLocalizations.delegate,
+    ],
+    supportedLocales: supportedLocales,
     navigatorObservers: const [
       // FirebaseAnalyticsObserver(analytics: analytics),
     ],
@@ -141,6 +148,12 @@ void runFileTransferScreen(Map<String, dynamic> argument) async {
       darkTheme: MyTheme.darkTheme,
       themeMode: MyTheme.initialThemeMode(),
       home: DesktopFileTransferScreen(params: argument),
+      localizationsDelegates: const [
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
+      supportedLocales: supportedLocales,
       navigatorObservers: const [
         // FirebaseAnalyticsObserver(analytics: analytics),
       ],
@@ -160,6 +173,12 @@ void runPortForwardScreen(Map<String, dynamic> argument) async {
       darkTheme: MyTheme.darkTheme,
       themeMode: MyTheme.initialThemeMode(),
       home: DesktopPortForwardScreen(params: argument),
+      localizationsDelegates: const [
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
+      supportedLocales: supportedLocales,
       navigatorObservers: const [
         // FirebaseAnalyticsObserver(analytics: analytics),
       ],
@@ -178,14 +197,20 @@ void runConnectionManagerScreen() async {
       theme: MyTheme.lightTheme,
       darkTheme: MyTheme.darkTheme,
       themeMode: MyTheme.initialThemeMode(),
+      localizationsDelegates: const [
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
+      supportedLocales: supportedLocales,
       home: const DesktopServerPage(),
       builder: _keepScaleBuilder()));
   windowManager.waitUntilReadyToShow(windowOptions, () async {
-      await windowManager.setAlignment(Alignment.topRight);
-      await windowManager.show();
-      await windowManager.focus();
-      await windowManager.setAlignment(Alignment.topRight); // ensure
-    });
+    await windowManager.setAlignment(Alignment.topRight);
+    await windowManager.show();
+    await windowManager.focus();
+    await windowManager.setAlignment(Alignment.topRight); // ensure
+  });
 }
 
 WindowOptions getHiddenTitleBarWindowOptions({Size? size}) {
@@ -247,6 +272,12 @@ class _AppState extends State<App> {
         navigatorObservers: const [
           // FirebaseAnalyticsObserver(analytics: analytics),
         ],
+        localizationsDelegates: const [
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+        ],
+        supportedLocales: supportedLocales,
         builder: isAndroid
             ? (context, child) => AccessibilityListener(
                   child: MediaQuery(
