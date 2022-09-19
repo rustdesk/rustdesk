@@ -852,7 +852,9 @@ class _PeerTabbedPageState extends State<_PeerTabbedPage>
   Widget _createTabBarView() {
     return Expanded(
         child: PageView(
-                controller: _pageController, children: super.widget.children)
+                physics: NeverScrollableScrollPhysics(),
+                controller: _pageController,
+                children: super.widget.children)
             .marginSymmetric(vertical: 12));
   }
 

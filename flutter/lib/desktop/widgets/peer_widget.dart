@@ -89,7 +89,7 @@ class _PeerWidgetState extends State<_PeerWidget> with WindowListener {
             : DesktopScrollWrapper(
                 scrollController: _scrollController,
                 child: SingleChildScrollView(
-                  physics: const NeverScrollableScrollPhysics(),
+                  physics: NeverScrollableScrollPhysics(),
                   controller: _scrollController,
                   child: ObxValue<RxString>((searchText) {
                     return FutureBuilder<List<Peer>>(
