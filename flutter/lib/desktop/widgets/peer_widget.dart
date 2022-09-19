@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_hbb/desktop/widgets/scroll_wrapper.dart';
 import 'package:get/get.dart';
 import 'package:provider/provider.dart';
 import 'package:visibility_detector/visibility_detector.dart';
@@ -41,6 +42,7 @@ class _PeerWidgetState extends State<_PeerWidget> with WindowListener {
   static const int _maxQueryCount = 3;
 
   final _curPeers = <String>{};
+  final _scrollController = ScrollController();
   var _lastChangeTime = DateTime.now();
   var _lastQueryPeers = <String>{};
   var _lastQueryTime = DateTime.now().subtract(const Duration(hours: 1));
@@ -84,53 +86,58 @@ class _PeerWidgetState extends State<_PeerWidget> with WindowListener {
             ? Center(
                 child: Text(translate("Empty")),
               )
-            : SingleChildScrollView(
-                controller: ScrollController(),
-                child: ObxValue<RxString>((searchText) {
-                  return FutureBuilder<List<Peer>>(
-                    builder: (context, snapshot) {
-                      if (snapshot.hasData) {
-                        final peers = snapshot.data!;
-                        final cards = <Widget>[];
-                        for (final peer in peers) {
-                          cards.add(Offstage(
-                              key: ValueKey("off${peer.id}"),
-                              offstage: widget.offstageFunc(peer),
-                              child: Obx(
-                                () => SizedBox(
-                                  width: 220,
-                                  height:
-                                      peerCardUiType.value == PeerUiType.grid
-                                          ? 140
-                                          : 42,
-                                  child: VisibilityDetector(
-                                    key: ValueKey(peer.id),
-                                    onVisibilityChanged: (info) {
-                                      final peerId =
-                                          (info.key as ValueKey).value;
-                                      if (info.visibleFraction > 0.00001) {
-                                        _curPeers.add(peerId);
-                                      } else {
-                                        _curPeers.remove(peerId);
-                                      }
-                                      _lastChangeTime = DateTime.now();
-                                    },
-                                    child: widget.peerCardWidgetFunc(peer),
+            : DesktopScrollWrapper(
+                scrollController: _scrollController,
+                child: SingleChildScrollView(
+                  controller: _scrollController,
+                  child: ObxValue<RxString>((searchText) {
+                    return FutureBuilder<List<Peer>>(
+                      builder: (context, snapshot) {
+                        if (snapshot.hasData) {
+                          final peers = snapshot.data!;
+                          final cards = <Widget>[];
+                          for (final peer in peers) {
+                            cards.add(Offstage(
+                                key: ValueKey("off${peer.id}"),
+                                offstage: widget.offstageFunc(peer),
+                                child: Obx(
+                                  () => SizedBox(
+                                    width: 220,
+                                    height:
+                                        peerCardUiType.value == PeerUiType.grid
+                                            ? 140
+                                            : 42,
+                                    child: VisibilityDetector(
+                                      key: ValueKey(peer.id),
+                                      onVisibilityChanged: (info) {
+                                        final peerId =
+                                            (info.key as ValueKey).value;
+                                        if (info.visibleFraction > 0.00001) {
+                                          _curPeers.add(peerId);
+                                        } else {
+                                          _curPeers.remove(peerId);
+                                        }
+                                        _lastChangeTime = DateTime.now();
+                                      },
+                                      child: widget.peerCardWidgetFunc(peer),
+                                    ),
                                   ),
-                                ),
-                              )));
+                                )));
+                          }
+                          return Wrap(
+                              spacing: space,
+                              runSpacing: space,
+                              children: cards);
+                        } else {
+                          return const Center(
+                            child: CircularProgressIndicator(),
+                          );
                         }
-                        return Wrap(
-                            spacing: space, runSpacing: space, children: cards);
-                      } else {
-                        return const Center(
-                          child: CircularProgressIndicator(),
-                        );
-                      }
-                    },
-                    future: matchPeers(searchText.value, peers.peers),
-                  );
-                }, peerSearchText),
+                      },
+                      future: matchPeers(searchText.value, peers.peers),
+                    );
+                  }, peerSearchText),
+                ),
               ),
       ),
     );

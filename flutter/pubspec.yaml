@@ -80,6 +80,7 @@ dependencies:
     desktop_drop: ^0.3.3
     scroll_pos: ^0.3.0
     rxdart: ^0.27.5
+    flutter_improved_scrolling: ^0.0.3
 
 dev_dependencies:
     icons_launcher: ^2.0.4

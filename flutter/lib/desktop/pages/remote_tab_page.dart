@@ -143,7 +143,8 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
     return Platform.isMacOS
         ? tabWidget
         : Obx(() => SubWindowDragToResizeArea(
-            resizeEdgeSize: fullscreen.value ? 1.0 : 8.0,
+            resizeEdgeSize:
+                fullscreen.value ? kFullScreenEdgeSize : kWindowEdgeSize,
             windowId: windowId(),
             child: tabWidget));
   }
