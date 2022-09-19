@@ -1,3 +1,5 @@
+// main window right pane
+
 import 'dart:async';
 import 'dart:convert';
 
