@@ -81,6 +81,7 @@ class _FileManagerTabPageState extends State<FileManagerTabPage> {
     return Platform.isMacOS
         ? tabWidget
         : SubWindowDragToResizeArea(
+            resizeEdgeSize: 4.0,
             windowId: windowId(),
             child: tabWidget,
           );

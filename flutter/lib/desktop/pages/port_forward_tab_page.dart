@@ -92,6 +92,7 @@ class _PortForwardTabPageState extends State<PortForwardTabPage> {
     return Platform.isMacOS
         ? tabWidget
         : SubWindowDragToResizeArea(
+            resizeEdgeSize: 4.0,
             windowId: windowId(),
             child: tabWidget,
           );

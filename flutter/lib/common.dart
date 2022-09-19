@@ -248,6 +248,7 @@ List<Locale> supportedLocales = const [
   // specify CN/TW to fix CJK issue in flutter
   Locale('zh', 'CN'),
   Locale('zh', 'TW'),
+  Locale('zh', 'SG'),
   Locale('fr'),
   Locale('de'),
   Locale('it'),
