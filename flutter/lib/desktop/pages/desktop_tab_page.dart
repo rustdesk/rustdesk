@@ -57,9 +57,9 @@ class _DesktopTabPageState extends State<DesktopTabPage> {
         })
       ]),
     );
-    return Obx(() => Platform.isMacOS
+    return Platform.isMacOS
         ? tabWidget
-        : DragToResizeArea(
+        : Obx(() => DragToResizeArea(
             resizeEdgeSize: fullscreen.value ? 1.0 : 8.0, child: tabWidget));
   }
 
