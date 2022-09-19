@@ -33,7 +33,7 @@ dependencies:
     external_path: ^1.0.1
     provider: ^6.0.3
     tuple: ^2.0.0
-    wakelock: ^0.5.2
+    wakelock: ^0.6.2
     device_info_plus: ^4.1.2
     #firebase_analytics: ^9.1.5
     package_info_plus: ^1.4.2
