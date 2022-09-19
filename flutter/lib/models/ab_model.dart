@@ -45,8 +45,8 @@ class AbModel with ChangeNotifier {
     } catch (err) {
       abError = err.toString();
     } finally {
-      notifyListeners();
       abLoading = false;
+      notifyListeners();
     }
     return null;
   }
@@ -98,12 +98,18 @@ class AbModel with ChangeNotifier {
     final body = jsonEncode({
       "data": jsonEncode({"tags": tags, "peers": peers})
     });
-    final resp =
-        await http.post(Uri.parse(api), headers: authHeaders, body: body);
-    abLoading = false;
-    await getAb();
+    try {
+      final resp =
+          await http.post(Uri.parse(api), headers: authHeaders, body: body);
+      abError = "";
+      await getAb();
+      debugPrint("resp: ${resp.body}");
+    } catch (e) {
+      abError = e.toString();
+    } finally {
+      abLoading = false;
+    }
     notifyListeners();
-    debugPrint("resp: ${resp.body}");
   }
 
   bool idContainBy(String id) {
