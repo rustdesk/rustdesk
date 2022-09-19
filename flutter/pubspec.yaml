@@ -80,7 +80,10 @@ dependencies:
     desktop_drop: ^0.3.3
     scroll_pos: ^0.3.0
     rxdart: ^0.27.5
-    flutter_improved_scrolling: ^0.0.3
+    flutter_improved_scrolling: 
+        git:
+            url: https://github.com/Kingtous/flutter_improved_scrolling
+            ref: 62f09545149f320616467c306c8c5f71714a18e6
 
 dev_dependencies:
     icons_launcher: ^2.0.4
