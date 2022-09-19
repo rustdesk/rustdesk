@@ -106,7 +106,21 @@ impl FramedSocket {
         let send_data = Bytes::from(msg.write_to_bytes()?);
         let _ = match self {
             Self::Direct(f) => match &addr {
-                TargetAddr::Ip(addr) => f.send((send_data, addr.clone())).await?,
+                TargetAddr::Ip(addr) => {
+                    if let Ok(local_addr) = f.get_ref().local_addr() {
+                        match (local_addr, addr) {
+                            (SocketAddr::V4(..), SocketAddr::V4(..)) => {
+                                f.send((send_data, *addr)).await?
+                            }
+                            (SocketAddr::V6(..), SocketAddr::V6(..)) => {
+                                f.send((send_data, *addr)).await?
+                            }
+                            _ => {
+                                // mismatch
+                            }
+                        }
+                    }
+                }
                 TargetAddr::Domain(..) => {
                     if let Ok(local_addr) = f.get_ref().local_addr() {
                         let addr = addr.to_string();

@@ -1,15 +1,16 @@
 use crate::{
     config::{Config, NetworkType},
     tcp::FramedStream,
+    try_set_port,
     udp::FramedSocket,
-    ResultType, try_set_port,
+    ResultType,
 };
 use anyhow::Context;
 use std::net::SocketAddr;
 use tokio::net::ToSocketAddrs;
 use tokio_socks::{IntoTargetAddr, TargetAddr};
 
-pub fn to_socket_addr(host: &str, fn_filter: fn(&SocketAddr)->bool) -> ResultType<SocketAddr> {
+pub fn to_socket_addr(host: &str, fn_filter: fn(&SocketAddr) -> bool) -> ResultType<SocketAddr> {
     use std::net::ToSocketAddrs;
     host.to_socket_addrs()?
         .filter(fn_filter)
@@ -17,7 +18,10 @@ pub fn to_socket_addr(host: &str, fn_filter: fn(&SocketAddr)->bool) -> ResultTyp
         .context("Failed to solve")
 }
 
-pub fn get_target_addr(host: &str, fn_filter: fn(&SocketAddr)->bool) -> ResultType<TargetAddr<'static>> {
+pub fn get_target_addr(
+    host: &str,
+    fn_filter: fn(&SocketAddr) -> bool,
+) -> ResultType<TargetAddr<'static>> {
     let addr = match Config::get_network_type() {
         NetworkType::Direct => to_socket_addr(&host, fn_filter)?.into_target_addr()?,
         NetworkType::ProxySocks => host.into_target_addr()?,
@@ -26,7 +30,7 @@ pub fn get_target_addr(host: &str, fn_filter: fn(&SocketAddr)->bool) -> ResultTy
     Ok(addr)
 }
 
-pub fn test_if_valid_server(host: &str, fn_filter: fn(&SocketAddr)->bool) -> String {
+pub fn test_if_valid_server(host: &str, fn_filter: fn(&SocketAddr) -> bool) -> String {
     let host = try_set_port(&host, 0);
 
     match Config::get_network_type() {
@@ -59,10 +63,15 @@ pub async fn connect_tcp<'t, T: IntoTargetAddr<'t>>(
         )
         .await
     } else {
+        let fn_filter = if local.is_ipv4() {
+            |x: &SocketAddr| x.is_ipv4()
+        } else {
+            |x: &SocketAddr| x.is_ipv6()
+        };
         let addr = std::net::ToSocketAddrs::to_socket_addrs(&target_addr)?
-            .filter(|x| x.is_ipv4())
+            .filter(fn_filter)
             .next()
-            .context("Invalid target addr, no valid ipv4 address can be resolved.")?;
+            .context("Invalid target addr, no valid address can be resolved.")?;
         Ok(FramedStream::new(addr, local, ms_timeout).await?)
     }
 }

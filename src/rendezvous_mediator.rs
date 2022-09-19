@@ -111,13 +111,19 @@ impl RendezvousMediator {
 
     pub async fn start(server: ServerPtr, host: String) -> ResultType<()> {
         let rendezvous_addr = try_set_port(&host, RENDEZVOUS_PORT as _);
-        let ipv6_supported = socket_client::connect_tcp(
+        let ipv6_supported = match socket_client::connect_tcp(
             &rendezvous_addr as &str,
             Config::get_any_listen_addr_ipv6(),
             300,
         )
         .await
-        .is_ok();
+        {
+            Err(e) => {
+                log::debug!("try test if ipv6 is supported {}", e);
+                false
+            }
+            Ok(_) => true,
+        };
 
         log::info!("start rendezvous mediator of {}", host);
         let host_prefix: String = host
@@ -145,6 +151,7 @@ impl RendezvousMediator {
         };
 
         rz.addr = rendezvous_addr.clone().into_target_addr()?;
+        log::info!("REMOVE ME ======================================= bind udp to {:?} ", &any_addr);
         let mut socket = socket_client::new_udp(any_addr, RENDEZVOUS_TIMEOUT).await?;
 
         const TIMER_OUT: Duration = Duration::from_secs(1);

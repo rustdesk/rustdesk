@@ -8,11 +8,13 @@ use magnum_opus::{Channels::*, Decoder as AudioDecoder};
 use sha2::{Digest, Sha256};
 use std::{
     collections::HashMap,
-    net::SocketAddr,
+    net::{IpAddr, SocketAddr},
     ops::{Deref, Not},
-    sync::{atomic::AtomicBool, mpsc, Arc, Mutex, RwLock},
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        mpsc, Arc, Mutex, RwLock,
+    },
 };
-use std::{net::IpAddr, sync::atomic::Ordering};
 use uuid::Uuid;
 
 pub use file_trait::FileManager;
@@ -31,6 +33,7 @@ use hbb_common::{
     rendezvous_proto::*,
     socket_client,
     sodiumoxide::crypto::{box_, secretbox, sign},
+    tcp::FramedStream,
     timeout,
     tokio::time::Duration,
     try_set_port, AddrMangle, IntoTargetAddr, ResultType, Stream,
@@ -42,6 +45,7 @@ use scrap::{
     record::{Recorder, RecorderContext},
     VpxDecoderConfig, VpxVideoCodecId,
 };
+use async_recursion::async_recursion;
 
 pub use super::lang::*;
 
@@ -184,36 +188,54 @@ impl Client {
             ));
         }
 
+        Self::_start_with_id(peer, key, token, conn_type, interface, true).await
+    }
+
+    async fn connect_tcp_<'t, T: IntoTargetAddr<'t> + Clone>(
+        target: T,
+        try_ipv6: bool,
+    ) -> ResultType<FramedStream> {
+        if try_ipv6 {
+            socket_client::connect_tcp(
+                target.clone(),
+                Config::get_any_listen_addr_ipv6(),
+                RENDEZVOUS_TIMEOUT,
+            )
+            .await
+            .or(socket_client::connect_tcp(
+                target,
+                Config::get_any_listen_addr_ipv4(),
+                RENDEZVOUS_TIMEOUT,
+            )
+            .await)
+        } else {
+            socket_client::connect_tcp(
+                target,
+                Config::get_any_listen_addr_ipv4(),
+                RENDEZVOUS_TIMEOUT,
+            )
+            .await
+        }
+    }
+
+    #[async_recursion]
+    async fn _start_with_id(
+        peer: &str,
+        key: &str,
+        token: &str,
+        conn_type: ConnType,
+        interface: impl Interface,
+        try_ipv6: bool,
+    ) -> ResultType<(Stream, bool)> {
         let (mut rendezvous_server, servers, contained) =
             crate::get_rendezvous_server(1_000).await?;
-        let mut socket = socket_client::connect_tcp(
-            rendezvous_server.clone(),
-            Config::get_any_listen_addr_ipv6(),
-            RENDEZVOUS_TIMEOUT,
-        )
-        .await
-        .or(socket_client::connect_tcp(
-            rendezvous_server.clone(),
-            Config::get_any_listen_addr_ipv4(),
-            RENDEZVOUS_TIMEOUT,
-        )
-        .await);
+        let mut socket = Self::connect_tcp_(rendezvous_server.clone(), try_ipv6).await;
         debug_assert!(!servers.contains(&rendezvous_server));
+
         if socket.is_err() && !servers.is_empty() {
             log::info!("try the other servers: {:?}", servers);
             for server in servers {
-                socket = socket_client::connect_tcp(
-                    server.clone(),
-                    Config::get_any_listen_addr_ipv6(),
-                    RENDEZVOUS_TIMEOUT,
-                )
-                .await
-                .or(socket_client::connect_tcp(
-                    server.clone(),
-                    Config::get_any_listen_addr_ipv4(),
-                    RENDEZVOUS_TIMEOUT,
-                )
-                .await);
+                socket = Self::connect_tcp_(server.clone(), try_ipv6).await;
                 if socket.is_ok() {
                     rendezvous_server = server;
                     break;
@@ -276,6 +298,14 @@ impl Client {
                                     }
                                     punch_hole_response::Failure::LICENSE_OVERUSE => {
                                         bail!("Key overuse");
+                                    }
+                                    punch_hole_response::Failure::IPV6_UNSUPPORTED => {
+                                        drop(socket);
+                                        log::info!("peer {} does not support ipv6, try ipv4", peer);
+                                        return Self::_start_with_id(
+                                            peer, key, token, conn_type, interface, false,
+                                        )
+                                        .await;
                                     }
                                 }
                             } else {
