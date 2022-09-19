@@ -768,20 +768,33 @@ class _PeerTabbedPage extends StatefulWidget {
 
 class _PeerTabbedPageState extends State<_PeerTabbedPage>
     with SingleTickerProviderStateMixin {
-  late PageController _pageController = PageController();
-  RxInt _tabIndex = 0.obs;
+  late final PageController _pageController = PageController();
+  final RxInt _tabIndex = 0.obs;
 
   @override
   void initState() {
+    () async {
+      await bind.mainGetLocalOption(key: 'peer_tab_index').then((value) {
+        if (value == '') return;
+        final tab = int.parse(value);
+        _tabIndex.value = tab;
+        _pageController.jumpToPage(tab);
+      });
+    }();
     super.initState();
   }
 
   // hard code for now
   void _handleTabSelection(int index) {
+    if (index == _tabIndex.value) return;
     // reset search text
     peerSearchText.value = "";
     peerSearchTextController.clear();
     _tabIndex.value = index;
+    () async {
+      await bind.mainSetLocalOption(
+          key: 'peer_tab_index', value: index.toString());
+    }();
     _pageController.jumpToPage(index);
     switch (index) {
       case 0:
