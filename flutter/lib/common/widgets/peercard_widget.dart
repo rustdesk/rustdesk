@@ -8,9 +8,8 @@ import '../../common/formatter/id_formatter.dart';
 import '../../models/model.dart';
 import '../../models/peer_model.dart';
 import '../../models/platform_model.dart';
-import './material_mod_popup_menu.dart' as mod_menu;
-import './popup_menu.dart';
-import './utils.dart';
+import '../../desktop/widgets/material_mod_popup_menu.dart' as mod_menu;
+import '../../desktop/widgets/popup_menu.dart';
 
 class _PopupMenuTheme {
   static const Color commonColor = MyTheme.accent;
@@ -55,6 +54,50 @@ class _PeerCardState extends State<_PeerCard>
   @override
   Widget build(BuildContext context) {
     super.build(context);
+    if (isDesktop) {
+      return _buildDesktop();
+    } else {
+      return _buildMobile();
+    }
+  }
+
+  Widget _buildMobile() {
+    final peer = super.widget.peer;
+    return Card(
+        margin: EdgeInsets.zero,
+        child: GestureDetector(
+            onTap: !isWebDesktop ? () => connect(context, peer.id) : null,
+            onDoubleTap: isWebDesktop ? () => connect(context, peer.id) : null,
+            onLongPressStart: (details) {
+              final x = details.globalPosition.dx;
+              final y = details.globalPosition.dy;
+              _menuPos = RelativeRect.fromLTRB(x, y, x, y);
+              _showPeerMenu(peer.id);
+            },
+            child: ListTile(
+              contentPadding: const EdgeInsets.only(left: 12),
+              subtitle: Text('${peer.username}@${peer.hostname}'),
+              title: Text(peer.id),
+              leading: Container(
+                  padding: const EdgeInsets.all(6),
+                  color: str2color('${peer.id}${peer.platform}', 0x7f),
+                  child: getPlatformImage(peer.platform)),
+              trailing: InkWell(
+                  child: const Padding(
+                      padding: EdgeInsets.all(12),
+                      child: Icon(Icons.more_vert)),
+                  onTapDown: (e) {
+                    final x = e.globalPosition.dx;
+                    final y = e.globalPosition.dy;
+                    _menuPos = RelativeRect.fromLTRB(x, y, x, y);
+                  },
+                  onTap: () {
+                    _showPeerMenu(peer.id);
+                  }),
+            )));
+  }
+
+  Widget _buildDesktop() {
     final peer = super.widget.peer;
     var deco = Rx<BoxDecoration?>(BoxDecoration(
         border: Border.all(color: Colors.transparent, width: _borderWidth),
@@ -264,7 +307,7 @@ class _PeerCardState extends State<_PeerCard>
         final y = e.position.dy;
         _menuPos = RelativeRect.fromLTRB(x, y, x, y);
       },
-      onPointerUp: (_) => _showPeerMenu(context, peer.id),
+      onPointerUp: (_) => _showPeerMenu(peer.id),
       child: MouseRegion(
           onEnter: (_) => _iconMoreHover.value = true,
           onExit: (_) => _iconMoreHover.value = false,
@@ -281,7 +324,7 @@ class _PeerCardState extends State<_PeerCard>
 
   /// Show the peer menu and handle user's choice.
   /// User might remove the peer or send a file to the peer.
-  void _showPeerMenu(BuildContext context, String id) async {
+  void _showPeerMenu(String id) async {
     await mod_menu.showMenu(
       context: context,
       position: _menuPos,

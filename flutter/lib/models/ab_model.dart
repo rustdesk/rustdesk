@@ -101,7 +101,7 @@ class AbModel with ChangeNotifier {
     final resp =
         await http.post(Uri.parse(api), headers: authHeaders, body: body);
     abLoading = false;
-    await getAb();
+    // await getAb(); // TODO
     notifyListeners();
     debugPrint("resp: ${resp.body}");
   }

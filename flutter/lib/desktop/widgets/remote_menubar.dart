@@ -15,7 +15,6 @@ import '../../models/platform_model.dart';
 import '../../common/shared_state.dart';
 import './popup_menu.dart';
 import './material_mod_popup_menu.dart' as mod_menu;
-import './utils.dart';
 
 class _MenubarTheme {
   static const Color commonColor = MyTheme.accent;

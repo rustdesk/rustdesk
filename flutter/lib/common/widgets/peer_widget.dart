@@ -39,13 +39,24 @@ class _PeerWidget extends StatefulWidget {
 /// State for the peer widget.
 class _PeerWidgetState extends State<_PeerWidget> with WindowListener {
   static const int _maxQueryCount = 3;
-
+  final space = isDesktop ? 12.0 : 8.0;
   final _curPeers = <String>{};
   var _lastChangeTime = DateTime.now();
   var _lastQueryPeers = <String>{};
   var _lastQueryTime = DateTime.now().subtract(const Duration(hours: 1));
   var _queryCoun = 0;
   var _exit = false;
+
+  late final mobileWidth = () {
+    const minWidth = 320.0;
+    final windowWidth = MediaQuery.of(context).size.width;
+    var width = windowWidth - 2 * space;
+    if (windowWidth > minWidth + 2 * space) {
+      final n = (windowWidth / (minWidth + 2 * space)).floor();
+      width = windowWidth / n - 2 * space;
+    }
+    return width;
+  }();
 
   _PeerWidgetState() {
     _startCheckOnlines();
@@ -76,7 +87,6 @@ class _PeerWidgetState extends State<_PeerWidget> with WindowListener {
 
   @override
   Widget build(BuildContext context) {
-    const space = 12.0;
     return ChangeNotifierProvider<Peers>(
       create: (context) => widget.peers,
       child: Consumer<Peers>(
@@ -93,32 +103,36 @@ class _PeerWidgetState extends State<_PeerWidget> with WindowListener {
                         final peers = snapshot.data!;
                         final cards = <Widget>[];
                         for (final peer in peers) {
+                          final visibilityChild = VisibilityDetector(
+                            key: ValueKey(peer.id),
+                            onVisibilityChanged: (info) {
+                              final peerId = (info.key as ValueKey).value;
+                              if (info.visibleFraction > 0.00001) {
+                                _curPeers.add(peerId);
+                              } else {
+                                _curPeers.remove(peerId);
+                              }
+                              _lastChangeTime = DateTime.now();
+                            },
+                            child: widget.peerCardWidgetFunc(peer),
+                          );
                           cards.add(Offstage(
                               key: ValueKey("off${peer.id}"),
                               offstage: widget.offstageFunc(peer),
-                              child: Obx(
-                                () => SizedBox(
-                                  width: 220,
-                                  height:
-                                      peerCardUiType.value == PeerUiType.grid
-                                          ? 140
-                                          : 42,
-                                  child: VisibilityDetector(
-                                    key: ValueKey(peer.id),
-                                    onVisibilityChanged: (info) {
-                                      final peerId =
-                                          (info.key as ValueKey).value;
-                                      if (info.visibleFraction > 0.00001) {
-                                        _curPeers.add(peerId);
-                                      } else {
-                                        _curPeers.remove(peerId);
-                                      }
-                                      _lastChangeTime = DateTime.now();
-                                    },
-                                    child: widget.peerCardWidgetFunc(peer),
-                                  ),
-                                ),
-                              )));
+                              child: isDesktop
+                                  ? Obx(
+                                      () => SizedBox(
+                                        width: 220,
+                                        height: peerCardUiType.value ==
+                                                PeerUiType.grid
+                                            ? 140
+                                            : 42,
+                                        child: visibilityChild,
+                                      ),
+                                    )
+                                  : SizedBox(
+                                      width: mobileWidth,
+                                      child: visibilityChild)));
                         }
                         return Wrap(
                             spacing: space, runSpacing: space, children: cards);
@@ -273,6 +287,7 @@ class AddressBookPeerWidget extends BasePeerWidget {
         );
 
   static List<Peer> _loadPeers() {
+    debugPrint("_loadPeers : ${gFFI.abModel.peers.toString()}");
     return gFFI.abModel.peers.map((e) {
       return Peer.fromJson(e['id'], e);
     }).toList();
@@ -296,7 +311,7 @@ class AddressBookPeerWidget extends BasePeerWidget {
   @override
   Widget build(BuildContext context) {
     final widget = super.build(context);
-    gFFI.abModel.updateAb();
+    // gFFI.abModel.updateAb();
     return widget;
   }
 }
