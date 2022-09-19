@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:desktop_multi_window/desktop_multi_window.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/common.dart';
+import 'package:flutter_hbb/consts.dart';
 import 'package:flutter_hbb/desktop/pages/file_manager_page.dart';
 import 'package:flutter_hbb/desktop/widgets/tabbar_widget.dart';
 import 'package:flutter_hbb/utils/multi_window_manager.dart';
@@ -81,7 +82,7 @@ class _FileManagerTabPageState extends State<FileManagerTabPage> {
     return Platform.isMacOS
         ? tabWidget
         : SubWindowDragToResizeArea(
-            resizeEdgeSize: 4.0,
+            resizeEdgeSize: kWindowEdgeSize,
             windowId: windowId(),
             child: tabWidget,
           );

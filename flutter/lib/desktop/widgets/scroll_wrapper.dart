@@ -1,4 +1,5 @@
 import 'package:flutter/widgets.dart';
+import 'package:flutter_hbb/consts.dart';
 import 'package:flutter_improved_scrolling/flutter_improved_scrolling.dart';
 
 class DesktopScrollWrapper extends StatelessWidget {
@@ -13,8 +14,8 @@ class DesktopScrollWrapper extends StatelessWidget {
     return ImprovedScrolling(
       scrollController: scrollController,
       enableCustomMouseWheelScrolling: false,
-      customMouseWheelScrollConfig:
-          const CustomMouseWheelScrollConfig(scrollAmountMultiplier: 3.0),
+      customMouseWheelScrollConfig: const CustomMouseWheelScrollConfig(
+          scrollAmountMultiplier: kDefaultScrollAmountMultiplier),
       child: child,
     );
   }

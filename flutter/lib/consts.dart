@@ -15,6 +15,11 @@ const int kMobileDefaultDisplayHeight = 1280;
 const int kDesktopDefaultDisplayWidth = 1080;
 const int kDesktopDefaultDisplayHeight = 720;
 
+/// [kDefaultScrollAmountMultiplier] indicates how many rows can be scrolled after a minimum scroll action of mouse
+const kDefaultScrollAmountMultiplier = 3.0;
+const kFullScreenEdgeSize = 1.0;
+const kWindowEdgeSize = 4.0;
+
 const kInvalidValueStr = "InvalidValueStr";
 
 /// flutter/packages/flutter/lib/src/services/keyboard_key.dart -> _keyLabels
