@@ -244,6 +244,31 @@ final ButtonStyle flatButtonStyle = TextButton.styleFrom(
   ),
 );
 
+List<Locale> supportedLocales = const [
+  // specify CN/TW to fix CJK issue in flutter
+  Locale('zh', 'CN'),
+  Locale('zh', 'TW'),
+  Locale('fr'),
+  Locale('de'),
+  Locale('it'),
+  Locale('ja'),
+  Locale('cs'),
+  Locale('pl'),
+  Locale('ko'),
+  Locale('hu'),
+  Locale('pt'),
+  Locale('ru'),
+  Locale('sk'),
+  Locale('id'),
+  Locale('da'),
+  Locale('eo'),
+  Locale('tr'),
+  Locale('vi'),
+  Locale('pl'),
+  Locale('kz'),
+  Locale('en', 'US'),
+];
+
 String formatDurationToTime(Duration duration) {
   var totalTime = duration.inSeconds;
   final secs = totalTime % 60;
