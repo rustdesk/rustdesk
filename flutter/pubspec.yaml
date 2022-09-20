@@ -80,10 +80,14 @@ dependencies:
     desktop_drop: ^0.3.3
     scroll_pos: ^0.3.0
     rxdart: ^0.27.5
-    flutter_improved_scrolling: 
-        git:
-            url: https://github.com/Kingtous/flutter_improved_scrolling
-            ref: 62f09545149f320616467c306c8c5f71714a18e6
+    flutter_improved_scrolling: ^0.0.3
+        # currently, we use flutter 3.0.5 for windows build, latest for other builds.
+        #
+        # for flutter 3.0.5, please use official version(just comment code below).
+        # if build rustdesk by flutter >=3.3, please use our custom pub below (uncomment code below).
+        # git:
+        #     url: https://github.com/Kingtous/flutter_improved_scrolling
+        #     ref: 62f09545149f320616467c306c8c5f71714a18e6
 
 dev_dependencies:
     icons_launcher: ^2.0.4

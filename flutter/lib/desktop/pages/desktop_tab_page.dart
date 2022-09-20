@@ -38,8 +38,6 @@ class _DesktopTabPageState extends State<DesktopTabPage> {
     RxBool fullscreen = false.obs;
     Get.put(fullscreen, tag: 'fullscreen');
     final tabWidget = Container(
-      decoration: BoxDecoration(
-          border: Border.all(color: MyTheme.color(context).border!)),
       child: Overlay(initialEntries: [
         OverlayEntry(builder: (context) {
           gFFI.dialogManager.setOverlayState(Overlay.of(context));
