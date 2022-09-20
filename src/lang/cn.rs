@@ -189,7 +189,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("x11 expected", "请切换到 x11"),
         ("Port", "端口"),
         ("Settings", "设置"),
-        ("Username", " 用户名"),
+        ("Username", "用户名"),
         ("Invalid port", "无效端口"),
         ("Closed manually by the peer", "被对方手动关闭"),
         ("Enable remote configuration modification", "允许远程修改配置"),

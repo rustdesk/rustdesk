@@ -19,8 +19,8 @@ const int kDesktopDefaultDisplayHeight = 720;
 const kDefaultScrollAmountMultiplier = 5.0;
 const kDefaultScrollDuration = Duration(milliseconds: 50);
 const kDefaultMouseWhellThrottleDuration = Duration(milliseconds: 50);
-const kFullScreenEdgeSize = 1.0;
-const kWindowEdgeSize = 4.0;
+const kFullScreenEdgeSize = 0.0;
+const kWindowEdgeSize = 1.0;
 
 const kInvalidValueStr = "InvalidValueStr";
 

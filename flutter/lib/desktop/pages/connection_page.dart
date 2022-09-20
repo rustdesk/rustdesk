@@ -774,27 +774,31 @@ class _PeerTabbedPageState extends State<_PeerTabbedPage>
   @override
   void initState() {
     () async {
-      await bind.mainGetLocalOption(key: 'peer_tab_index').then((value) {
+      await bind.mainGetLocalOption(key: 'peer-tab-index').then((value) {
         if (value == '') return;
         final tab = int.parse(value);
         _tabIndex.value = tab;
         _pageController.jumpToPage(tab);
+      });
+      await bind.mainGetLocalOption(key: 'peer-card-ui-type').then((value) {
+        if (value == '') return;
+        final tab = int.parse(value);
+        peerCardUiType.value =
+            tab == PeerUiType.list.index ? PeerUiType.list : PeerUiType.grid;
       });
     }();
     super.initState();
   }
 
   // hard code for now
-  void _handleTabSelection(int index) {
+  Future<void> _handleTabSelection(int index) async {
     if (index == _tabIndex.value) return;
     // reset search text
     peerSearchText.value = "";
     peerSearchTextController.clear();
     _tabIndex.value = index;
-    () async {
-      await bind.mainSetLocalOption(
-          key: 'peer_tab_index', value: index.toString());
-    }();
+    await bind.mainSetLocalOption(
+        key: 'peer-tab-index', value: index.toString());
     _pageController.jumpToPage(index);
     switch (index) {
       case 0:
@@ -845,7 +849,7 @@ class _PeerTabbedPageState extends State<_PeerTabbedPage>
         shrinkWrap: true,
         controller: ScrollController(),
         children: super.widget.tabs.asMap().entries.map((t) {
-          return Obx(() => GestureDetector(
+          return Obx(() => InkWell(
                 child: Container(
                     padding: EdgeInsets.symmetric(horizontal: 8),
                     decoration: BoxDecoration(
@@ -867,7 +871,7 @@ class _PeerTabbedPageState extends State<_PeerTabbedPage>
                                 : MyTheme.color(context).lightText),
                       ),
                     )),
-                onTap: () => _handleTabSelection(t.key),
+                onTap: () async => await _handleTabSelection(t.key),
               ));
         }).toList());
   }
@@ -959,44 +963,30 @@ class _PeerTabbedPageState extends State<_PeerTabbedPage>
   _createPeerViewTypeSwitch(BuildContext context) {
     final activeDeco = BoxDecoration(color: MyTheme.color(context).bg);
     return Row(
-      children: [
-        Obx(
-          () => Container(
-            padding: EdgeInsets.all(4.0),
-            decoration:
-                peerCardUiType.value == PeerUiType.grid ? activeDeco : null,
-            child: InkWell(
-                onTap: () {
-                  peerCardUiType.value = PeerUiType.grid;
-                },
-                child: Icon(
-                  Icons.grid_view_rounded,
-                  size: 18,
-                  color: peerCardUiType.value == PeerUiType.grid
-                      ? MyTheme.color(context).text
-                      : MyTheme.color(context).lightText,
-                )),
-          ),
-        ),
-        Obx(
-          () => Container(
-            padding: EdgeInsets.all(4.0),
-            decoration:
-                peerCardUiType.value == PeerUiType.list ? activeDeco : null,
-            child: InkWell(
-                onTap: () {
-                  peerCardUiType.value = PeerUiType.list;
-                },
-                child: Icon(
-                  Icons.list,
-                  size: 18,
-                  color: peerCardUiType.value == PeerUiType.list
-                      ? MyTheme.color(context).text
-                      : MyTheme.color(context).lightText,
-                )),
-          ),
-        ),
-      ],
+      children: [PeerUiType.grid, PeerUiType.list]
+          .map((type) => Obx(
+                () => Container(
+                  padding: EdgeInsets.all(4.0),
+                  decoration: peerCardUiType.value == type ? activeDeco : null,
+                  child: InkWell(
+                      onTap: () async {
+                        await bind.mainSetLocalOption(
+                            key: 'peer-card-ui-type',
+                            value: type.index.toString());
+                        peerCardUiType.value = type;
+                      },
+                      child: Icon(
+                        type == PeerUiType.grid
+                            ? Icons.grid_view_rounded
+                            : Icons.list,
+                        size: 18,
+                        color: peerCardUiType.value == type
+                            ? MyTheme.color(context).text
+                            : MyTheme.color(context).lightText,
+                      )),
+                ),
+              ))
+          .toList(),
     );
   }
 }
