@@ -151,7 +151,6 @@ impl RendezvousMediator {
         };
 
         rz.addr = rendezvous_addr.clone().into_target_addr()?;
-        log::info!("REMOVE ME ======================================= bind udp to {:?} ", &any_addr);
         let mut socket = socket_client::new_udp(any_addr, RENDEZVOUS_TIMEOUT).await?;
 
         const TIMER_OUT: Duration = Duration::from_secs(1);

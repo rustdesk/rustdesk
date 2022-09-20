@@ -26,9 +26,12 @@ use hbb_common::{
 use scrap::android::call_main_service_mouse_input;
 use serde_json::{json, value::Value};
 use sha2::{Digest, Sha256};
-use std::sync::{
-    atomic::{AtomicI64, Ordering},
-    mpsc as std_mpsc,
+use std::{
+    net::IpAddr,
+    sync::{
+        atomic::{AtomicI64, Ordering},
+        mpsc as std_mpsc,
+    },
 };
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 use system_shutdown;
@@ -592,7 +595,10 @@ impl Connection {
         if !whitelist.is_empty()
             && whitelist
                 .iter()
-                .filter(|x| x == &"0.0.0.0")
+                .filter(|x| match (*x).parse::<IpAddr>() {
+                    Ok(addr) => addr.is_unspecified(),
+                    Err(_) => true,
+                })
                 .next()
                 .is_none()
             && whitelist

@@ -17,6 +17,7 @@ use std::{
 };
 use uuid::Uuid;
 
+use async_recursion::async_recursion;
 pub use file_trait::FileManager;
 use hbb_common::{
     allow_err,
@@ -45,7 +46,6 @@ use scrap::{
     record::{Recorder, RecorderContext},
     VpxDecoderConfig, VpxVideoCodecId,
 };
-use async_recursion::async_recursion;
 
 pub use super::lang::*;
 
