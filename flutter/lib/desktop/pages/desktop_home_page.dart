@@ -290,7 +290,7 @@ class _DesktopHomePageState extends State<DesktopHomePage>
 
   @override
   void onTrayMenuItemClick(MenuItem menuItem) {
-    print('click ${menuItem.key}');
+    debugPrint('click ${menuItem.key}');
     switch (menuItem.key) {
       case "quit":
         exit(0);
@@ -308,8 +308,8 @@ class _DesktopHomePageState extends State<DesktopHomePage>
     trayManager.addListener(this);
     windowManager.addListener(this);
     rustDeskWinManager.setMethodHandler((call, fromWindowId) async {
-      print(
-          "call ${call.method} with args ${call.arguments} from window ${fromWindowId}");
+      debugPrint(
+          "call ${call.method} with args ${call.arguments} from window $fromWindowId");
       if (call.method == "main_window_on_top") {
         window_on_top(null);
       }
@@ -373,8 +373,7 @@ Future<bool> loginDialog() async {
         debugPrint("$resp");
         completer.complete(true);
       } catch (err) {
-        // ignore: avoid_print
-        print(err.toString());
+        debugPrint(err.toString());
         cancel();
         return;
       }

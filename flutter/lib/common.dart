@@ -760,8 +760,9 @@ class PermissionManager {
     if (isDesktop) {
       return Future.value(true);
     }
-    if (!permissions.contains(type))
+    if (!permissions.contains(type)) {
       return Future.error("Wrong permission!$type");
+    }
     return gFFI.invokeMethod("check_permission", type);
   }
 
@@ -769,8 +770,9 @@ class PermissionManager {
     if (isDesktop) {
       return Future.value(true);
     }
-    if (!permissions.contains(type))
+    if (!permissions.contains(type)) {
       return Future.error("Wrong permission!$type");
+    }
 
     gFFI.invokeMethod("request_permission", type);
     if (type == "ignore_battery_optimizations") {

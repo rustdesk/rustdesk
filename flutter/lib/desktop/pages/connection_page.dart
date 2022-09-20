@@ -215,7 +215,7 @@ class _ConnectionPageState extends State<ConnectionPage> {
                           onConnect(isFileTransfer: true);
                         },
                         child: Container(
-                          height: 24,
+                          height: 27,
                           alignment: Alignment.center,
                           decoration: BoxDecoration(
                             color: ftPressed.value
@@ -252,31 +252,36 @@ class _ConnectionPageState extends State<ConnectionPage> {
                       onTapCancel: () => connPressed.value = false,
                       onHover: (value) => connHover.value = value,
                       onTap: onConnect,
-                      child: Container(
-                        height: 24,
-                        decoration: BoxDecoration(
-                          color: connPressed.value
-                              ? MyTheme.accent
-                              : MyTheme.button,
-                          border: Border.all(
-                            color: connPressed.value
-                                ? MyTheme.accent
-                                : connHover.value
-                                    ? MyTheme.hoverBorder
-                                    : MyTheme.button,
+                      child: ConstrainedBox(
+                          constraints: BoxConstraints(
+                            minWidth: 80.0,
                           ),
-                          borderRadius: BorderRadius.circular(5),
-                        ),
-                        child: Center(
-                          child: Text(
-                            translate(
-                              "Connect",
+                          child: Container(
+                            height: 27,
+                            decoration: BoxDecoration(
+                              color: connPressed.value
+                                  ? MyTheme.accent
+                                  : MyTheme.button,
+                              border: Border.all(
+                                color: connPressed.value
+                                    ? MyTheme.accent
+                                    : connHover.value
+                                        ? MyTheme.hoverBorder
+                                        : MyTheme.button,
+                              ),
+                              borderRadius: BorderRadius.circular(5),
                             ),
-                            style: TextStyle(
-                                fontSize: 12, color: MyTheme.color(context).bg),
-                          ),
-                        ).marginSymmetric(horizontal: 12),
-                      ),
+                            child: Center(
+                              child: Text(
+                                translate(
+                                  "Connect",
+                                ),
+                                style: TextStyle(
+                                    fontSize: 12,
+                                    color: MyTheme.color(context).bg),
+                              ),
+                            ).marginSymmetric(horizontal: 12),
+                          )),
                     ),
                   ),
                 ],

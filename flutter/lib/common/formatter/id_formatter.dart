@@ -33,6 +33,7 @@ class IDTextInputFormatter extends TextInputFormatter {
 
 String formatID(String id) {
   String id2 = id.replaceAll(' ', '');
+  if (int.tryParse(id2) == null) return id;
   String newID = '';
   if (id2.length <= 3) {
     newID = id2;
