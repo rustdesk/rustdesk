@@ -60,7 +60,7 @@ class _ConnectionPageState extends State<ConnectionPage> {
                 children: [
                   Row(
                     children: [
-                      getSearchBarUI(context),
+                      _buildRemoteIDTextField(context),
                     ],
                   ).marginOnly(top: 22),
                   SizedBox(height: 12),
@@ -97,9 +97,9 @@ class _ConnectionPageState extends State<ConnectionPage> {
     connect(context, id, isFileTransfer: isFileTransfer);
   }
 
-  /// UI for the search bar.
+  /// UI for the remote ID TextField.
   /// Search for a peer and connect to it if the id exists.
-  Widget getSearchBarUI(BuildContext context) {
+  Widget _buildRemoteIDTextField(BuildContext context) {
     RxBool ftHover = false.obs;
     RxBool ftPressed = false.obs;
     RxBool connHover = false.obs;

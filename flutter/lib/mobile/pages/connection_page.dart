@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_hbb/common/formatter/id_formatter.dart';
 import 'package:flutter_hbb/mobile/pages/file_manager_page.dart';
 import 'package:get/get.dart';
 import 'package:provider/provider.dart';
@@ -38,7 +39,7 @@ class ConnectionPage extends StatefulWidget implements PageShape {
 /// State for the connection page.
 class _ConnectionPageState extends State<ConnectionPage> {
   /// Controller for the id input bar.
-  final _idController = TextEditingController();
+  final _idController = IDTextEditingController();
 
   /// Update url. If it's not null, means an update is available.
   var _updateUrl = '';
@@ -49,9 +50,9 @@ class _ConnectionPageState extends State<ConnectionPage> {
     if (_idController.text.isEmpty) {
       () async {
         final lastRemoteId = await bind.mainGetLastRemoteId();
-        if (lastRemoteId != _idController.text) {
+        if (lastRemoteId != _idController.id) {
           setState(() {
-            _idController.text = lastRemoteId;
+            _idController.id = lastRemoteId;
           });
         }
       }();
@@ -72,8 +73,8 @@ class _ConnectionPageState extends State<ConnectionPage> {
         mainAxisSize: MainAxisSize.max,
         crossAxisAlignment: CrossAxisAlignment.center,
         children: <Widget>[
-          getUpdateUI(),
-          getSearchBarUI(),
+          _buildUpdateUI(),
+          _buildRemoteIDTextField(),
           Expanded(
               child: PeerTabPage(
             tabs: [
@@ -95,7 +96,7 @@ class _ConnectionPageState extends State<ConnectionPage> {
   /// Callback for the connect button.
   /// Connects to the selected peer.
   void onConnect() {
-    var id = _idController.text.trim();
+    var id = _idController.id;
     connect(id);
   }
 
@@ -132,7 +133,7 @@ class _ConnectionPageState extends State<ConnectionPage> {
 
   /// UI for software update.
   /// If [_updateUrl] is not empty, shows a button to update the software.
-  Widget getUpdateUI() {
+  Widget _buildUpdateUI() {
     return _updateUrl.isEmpty
         ? const SizedBox(height: 0)
         : InkWell(
@@ -152,9 +153,9 @@ class _ConnectionPageState extends State<ConnectionPage> {
                         color: Colors.white, fontWeight: FontWeight.bold))));
   }
 
-  /// UI for the search bar.
+  /// UI for the remote ID TextField.
   /// Search for a peer and connect to it if the id exists.
-  Widget getSearchBarUI() {
+  Widget _buildRemoteIDTextField() {
     final w = SizedBox(
       height: 84,
       child: Padding(
@@ -197,6 +198,7 @@ class _ConnectionPageState extends State<ConnectionPage> {
                       ),
                     ),
                     controller: _idController,
+                    inputFormatters: [IDTextInputFormatter()],
                   ),
                 ),
               ),

@@ -77,7 +77,7 @@ class _PeerCardState extends State<_PeerCard>
             child: ListTile(
               contentPadding: const EdgeInsets.only(left: 12),
               subtitle: Text('${peer.username}@${peer.hostname}'),
-              title: Text(peer.id),
+              title: Text(formatID(peer.id)),
               leading: Container(
                   padding: const EdgeInsets.all(6),
                   color: str2color('${peer.id}${peer.platform}', 0x7f),
