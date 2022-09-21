@@ -303,7 +303,7 @@ class AddressBookPeerWidget extends BasePeerWidget {
   static List<Peer> _loadPeers() {
     debugPrint("_loadPeers : ${gFFI.abModel.peers.toString()}");
     return gFFI.abModel.peers.map((e) {
-      return Peer.fromJson(e['id'], e);
+      return Peer.fromJson(e);
     }).toList();
   }
 

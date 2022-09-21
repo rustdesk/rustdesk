@@ -648,19 +648,17 @@ pub fn discover() {
 }
 
 #[inline]
-pub fn get_lan_peers() -> Vec<(String, config::PeerInfoSerde)> {
+pub fn get_lan_peers() -> Vec<HashMap<&'static str, String>> {
     config::LanPeers::load()
         .peers
         .iter()
         .map(|peer| {
-            (
-                peer.id.clone(),
-                config::PeerInfoSerde {
-                    username: peer.username.clone(),
-                    hostname: peer.hostname.clone(),
-                    platform: peer.platform.clone(),
-                },
-            )
+            HashMap::<&str, String>::from_iter([
+                ("id", peer.id.clone()),
+                ("username", peer.username.clone()),
+                ("hostname", peer.hostname.clone()),
+                ("platform", peer.platform.clone()),
+            ])
         })
         .collect()
 }
