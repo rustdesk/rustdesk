@@ -376,8 +376,8 @@ impl RendezvousMediator {
             socket_client::connect_tcp(self.addr.to_owned(), local_addr, RENDEZVOUS_TIMEOUT)
                 .await?;
         let local_addr = socket.local_addr();
-        let local_addr: SocketAddr =
-            format!("{}:{}", local_addr.ip(), local_addr.port()).parse()?;
+        // let local_addr: SocketAddr =
+        //     format!("{}:{}", local_addr.ip(), local_addr.port()).parse()?;
         let mut msg_out = Message::new();
         let relay_server = self.get_relay_server(fla.relay_server);
         msg_out.set_local_addr(LocalAddr {
