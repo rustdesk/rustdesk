@@ -89,7 +89,7 @@ class _ConnectionPageState extends State<ConnectionPage> {
               const AddressBook(),
             ],
           )),
-        ]).marginOnly(top: 2, left: 12, right: 12);
+        ]).marginOnly(top: 2, left: 10, right: 10);
   }
 
   /// Callback for the connect button.
@@ -158,7 +158,7 @@ class _ConnectionPageState extends State<ConnectionPage> {
     final w = SizedBox(
       height: 84,
       child: Padding(
-        padding: const EdgeInsets.only(top: 8, bottom: 8),
+        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 2),
         child: Ink(
           decoration: const BoxDecoration(
             color: MyTheme.white,

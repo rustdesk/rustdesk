@@ -64,7 +64,7 @@ class _PeerCardState extends State<_PeerCard>
   Widget _buildMobile() {
     final peer = super.widget.peer;
     return Card(
-        margin: EdgeInsets.zero,
+        margin: EdgeInsets.symmetric(horizontal: 2),
         child: GestureDetector(
             onTap: !isWebDesktop ? () => connect(context, peer.id) : null,
             onDoubleTap: isWebDesktop ? () => connect(context, peer.id) : null,

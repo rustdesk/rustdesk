@@ -80,6 +80,7 @@ class _PeerTabPageState extends State<PeerTabPage>
         SizedBox(
           height: 28,
           child: Container(
+              padding: isDesktop ? null : EdgeInsets.symmetric(horizontal: 2),
               constraints: isDesktop ? null : kMobilePageConstraints,
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.center,
