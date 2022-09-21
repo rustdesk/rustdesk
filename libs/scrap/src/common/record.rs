@@ -161,7 +161,7 @@ impl Recorder {
                     })?;
                 }
                 if self.ctx.codec_id == RecodeCodecID::H264 {
-                    h264s.frames.last().map(|f| self.write_video(f));
+                    h264s.frames.iter().map(|f| self.write_video(f)).count();
                 }
             }
             #[cfg(feature = "hwcodec")]
@@ -173,7 +173,7 @@ impl Recorder {
                     })?;
                 }
                 if self.ctx.codec_id == RecodeCodecID::H265 {
-                    h265s.frames.last().map(|f| self.write_video(f));
+                    h265s.frames.iter().map(|f| self.write_video(f)).count();
                 }
             }
             _ => bail!("unsupported frame type"),
@@ -255,6 +255,7 @@ struct HwRecorder {
     muxer: Muxer,
     ctx: RecorderContext,
     written: bool,
+    key: bool,
     start: Instant,
 }
 
@@ -273,25 +274,35 @@ impl RecorderApi for HwRecorder {
             muxer,
             ctx,
             written: false,
+            key: false,
             start: Instant::now(),
         })
     }
 
     fn write_video(&mut self, frame: &EncodedVideoFrame) -> bool {
-        let ok = self.muxer.write_video(&frame.data, frame.pts).is_ok();
-        if ok {
-            self.written = true;
+        if frame.key {
+            self.key = true;
         }
-        ok
+        if self.key {
+            let ok = self.muxer.write_video(&frame.data, frame.key).is_ok();
+            if ok {
+                self.written = true;
+            }
+            ok
+        } else {
+            false
+        }
     }
 }
 
 #[cfg(feature = "hwcodec")]
 impl Drop for HwRecorder {
     fn drop(&mut self) {
+        log::info!("DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD {}", self.ctx.filename);
         self.muxer.write_tail().ok();
         if !self.written || self.start.elapsed().as_secs() < MIN_SECS {
             std::fs::remove_file(&self.ctx.filename).ok();
         }
+        log::info!("DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD ok");
     }
 }

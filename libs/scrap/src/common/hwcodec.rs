@@ -94,6 +94,7 @@ impl EncoderApi for HwEncoder {
             frames.push(EncodedVideoFrame {
                 data: Bytes::from(frame.data),
                 pts: frame.pts as _,
+                key:frame.key == 1,
                 ..Default::default()
             });
         }
