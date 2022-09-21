@@ -295,11 +295,11 @@ class _GeneralState extends State<_General> {
       Map<String, String> langsMap = {for (var v in langsList) v[0]: v[1]};
       List<String> keys = langsMap.keys.toList();
       List<String> values = langsMap.values.toList();
-      keys.insert(0, "default");
+      keys.insert(0, "");
       values.insert(0, "Default");
       String currentKey = data["lang"]!;
       if (!keys.contains(currentKey)) {
-        currentKey = "default";
+        currentKey = "";
       }
       return _ComboBox(
         keys: keys,
@@ -1023,6 +1023,7 @@ class _ComboBox extends StatelessWidget {
     required this.values,
     required this.initialKey,
     required this.onChanged,
+    // ignore: unused_element
     this.enabled = true,
   }) : super(key: key);
 
@@ -1030,7 +1031,6 @@ class _ComboBox extends StatelessWidget {
   Widget build(BuildContext context) {
     var index = keys.indexOf(initialKey);
     if (index < 0) {
-      assert(false);
       index = 0;
     }
     var ref = values[index].obs;
