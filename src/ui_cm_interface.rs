@@ -61,7 +61,7 @@ pub trait InvokeUiCM: Send + Clone + 'static + Sized {
 
     fn new_message(&self, id: i32, text: String);
 
-    fn change_theme(&self, dark: bool);
+    fn change_theme(&self, dark: String);
 
     fn change_language(&self);
 }

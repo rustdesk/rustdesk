@@ -247,7 +247,7 @@ class _PortForwardPageState extends State<PortForwardPage>
       height: _kRowHeight,
       decoration: BoxDecoration(
           color: index % 2 == 0
-              ? isDarkTheme()
+              ? MyTheme.currentThemeMode() == ThemeMode.dark
                   ? const Color(0xFF202020)
                   : const Color(0xFFF4F5F6)
               : MyTheme.color(context).bg),

@@ -7,13 +7,16 @@ class Peer {
   final String username;
   final String hostname;
   final String platform;
+  final String alias;
   final List<dynamic> tags;
   bool online = false;
 
-  Peer.fromJson(this.id, Map<String, dynamic> json)
-      : username = json['username'] ?? '',
+  Peer.fromJson(Map<String, dynamic> json)
+      : id = json['id'] ?? '',
+        username = json['username'] ?? '',
         hostname = json['hostname'] ?? '',
         platform = json['platform'] ?? '',
+        alias = json['alias'] ?? '',
         tags = json['tags'] ?? [];
 
   Peer({
@@ -21,6 +24,7 @@ class Peer {
     required this.username,
     required this.hostname,
     required this.platform,
+    required this.alias,
     required this.tags,
   });
 
@@ -30,6 +34,7 @@ class Peer {
             username: '...',
             hostname: '...',
             platform: '...',
+            alias: '',
             tags: []);
 }
 
@@ -109,11 +114,9 @@ class Peers extends ChangeNotifier {
     try {
       if (peersStr == "") return [];
       List<dynamic> peers = json.decode(peersStr);
-      return peers
-          .map((s) => s as List<dynamic>)
-          .map((s) =>
-              Peer.fromJson(s[0] as String, s[1] as Map<String, dynamic>))
-          .toList();
+      return peers.map((peer) {
+        return Peer.fromJson(peer as Map<String, dynamic>);
+      }).toList();
     } catch (e) {
       debugPrint('peers(): $e');
     }

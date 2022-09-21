@@ -7,11 +7,11 @@ use std::{
 use flutter_rust_bridge::{StreamSink, SyncReturn, ZeroCopyBuffer};
 use serde_json::json;
 
-use hbb_common::ResultType;
 use hbb_common::{
     config::{self, LocalConfig, PeerConfig, ONLINE},
     fs, log,
 };
+use hbb_common::{message_proto::Hash, ResultType};
 
 use crate::flutter::{self, SESSIONS};
 use crate::start_server;
@@ -567,9 +567,20 @@ pub fn main_forget_password(id: String) {
 
 pub fn main_get_recent_peers() -> String {
     if !config::APP_DIR.read().unwrap().is_empty() {
-        let peers: Vec<(String, config::PeerInfoSerde)> = PeerConfig::peers()
+        let peers: Vec<HashMap<&str, String>> = PeerConfig::peers()
             .drain(..)
-            .map(|(id, _, p)| (id, p.info))
+            .map(|(id, _, p)| {
+                HashMap::<&str, String>::from_iter([
+                    ("id", id),
+                    ("username", p.info.username.clone()),
+                    ("hostname", p.info.hostname.clone()),
+                    ("platform", p.info.platform.clone()),
+                    (
+                        "alias",
+                        p.options.get("alias").unwrap_or(&"".to_owned()).to_owned(),
+                    ),
+                ])
+            })
             .collect();
         serde_json::ser::to_string(&peers).unwrap_or("".to_owned())
     } else {
@@ -579,9 +590,20 @@ pub fn main_get_recent_peers() -> String {
 
 pub fn main_load_recent_peers() {
     if !config::APP_DIR.read().unwrap().is_empty() {
-        let peers: Vec<(String, config::PeerInfoSerde)> = PeerConfig::peers()
+        let peers: Vec<HashMap<&str, String>> = PeerConfig::peers()
             .drain(..)
-            .map(|(id, _, p)| (id, p.info))
+            .map(|(id, _, p)| {
+                HashMap::<&str, String>::from_iter([
+                    ("id", id),
+                    ("username", p.info.username.clone()),
+                    ("hostname", p.info.hostname.clone()),
+                    ("platform", p.info.platform.clone()),
+                    (
+                        "alias",
+                        p.options.get("alias").unwrap_or(&"".to_owned()).to_owned(),
+                    ),
+                ])
+            })
             .collect();
         if let Some(s) = flutter::GLOBAL_EVENT_STREAM
             .read()
@@ -603,11 +625,20 @@ pub fn main_load_recent_peers() {
 pub fn main_load_fav_peers() {
     if !config::APP_DIR.read().unwrap().is_empty() {
         let favs = get_fav();
-        let peers: Vec<(String, config::PeerInfoSerde)> = PeerConfig::peers()
+        let peers: Vec<HashMap<&str, String>> = PeerConfig::peers()
             .into_iter()
-            .filter_map(|(id, _, peer)| {
+            .filter_map(|(id, _, p)| {
                 if favs.contains(&id) {
-                    Some((id, peer.info))
+                    Some(HashMap::<&str, String>::from_iter([
+                        ("id", id),
+                        ("username", p.info.username.clone()),
+                        ("hostname", p.info.hostname.clone()),
+                        ("platform", p.info.platform.clone()),
+                        (
+                            "alias",
+                            p.options.get("alias").unwrap_or(&"".to_owned()).to_owned(),
+                        ),
+                    ]))
                 } else {
                     None
                 }
@@ -661,10 +692,10 @@ fn main_broadcast_message(data: &HashMap<&str, &str>) {
     }
 }
 
-pub fn main_change_theme(dark: bool) {
+pub fn main_change_theme(dark: String) {
     main_broadcast_message(&HashMap::from([
         ("name", "theme"),
-        ("dark", &dark.to_string()),
+        ("dark", &dark),
     ]));
     send_to_cm(&crate::ipc::Data::Theme(dark));
 }

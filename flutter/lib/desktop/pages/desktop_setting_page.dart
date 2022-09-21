@@ -205,22 +205,28 @@ class _GeneralState extends State<_General> {
   }
 
   Widget theme() {
-    change() {
-      MyTheme.changeTo(!isDarkTheme());
+    final current = MyTheme.getThemeModePreference().toShortString();
+    onChanged(String value) {
+      MyTheme.changeDarkMode(MyTheme.themeModeFromString(value));
       setState(() {});
     }
 
     return _Card(title: 'Theme', children: [
-      GestureDetector(
-        onTap: change,
-        child: Row(
-          children: [
-            Checkbox(value: isDarkTheme(), onChanged: (_) => change())
-                .marginOnly(right: 5),
-            Expanded(child: Text(translate('Dark Theme'))),
-          ],
-        ).marginOnly(left: _kCheckBoxLeftMargin),
-      )
+      _Radio<String>(context,
+          value: "light",
+          groupValue: current,
+          label: "Light",
+          onChanged: onChanged),
+      _Radio<String>(context,
+          value: "dark",
+          groupValue: current,
+          label: "Dark",
+          onChanged: onChanged),
+      _Radio<String>(context,
+          value: "system",
+          groupValue: current,
+          label: "Follow System",
+          onChanged: onChanged),
     ]);
   }
 

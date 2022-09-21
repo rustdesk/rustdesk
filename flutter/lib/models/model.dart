@@ -22,7 +22,6 @@ import '../common.dart';
 import '../common/shared_state.dart';
 import '../utils/image.dart' as img;
 import '../mobile/widgets/dialog.dart';
-import 'peer_model.dart';
 import 'platform_model.dart';
 
 typedef HandleMsgBox = Function(Map<String, dynamic> evt, String id);
@@ -1105,23 +1104,6 @@ class FFI {
     var y2 = y.toInt();
     bind.sessionSendMouse(
         id: id, msg: json.encode(modify({'x': '$x2', 'y': '$y2'})));
-  }
-
-  /// List the saved peers.
-  Future<List<Peer>> peers() async {
-    try {
-      var str = await bind.mainGetRecentPeers();
-      if (str == '') return [];
-      List<dynamic> peers = json.decode(str);
-      return peers
-          .map((s) => s as List<dynamic>)
-          .map((s) =>
-              Peer.fromJson(s[0] as String, s[1] as Map<String, dynamic>))
-          .toList();
-    } catch (e) {
-      debugPrint('peers(): $e');
-    }
-    return [];
   }
 
   /// Connect with the given [id]. Only transfer file if [isFileTransfer], only port forward if [isPortForward].

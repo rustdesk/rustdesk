@@ -120,7 +120,7 @@ void runRemoteScreen(Map<String, dynamic> argument) async {
     title: 'RustDesk - Remote Desktop',
     theme: MyTheme.lightTheme,
     darkTheme: MyTheme.darkTheme,
-    themeMode: MyTheme.initialThemeMode(),
+    themeMode: MyTheme.currentThemeMode(),
     home: DesktopRemoteScreen(
       params: argument,
     ),
@@ -146,7 +146,7 @@ void runFileTransferScreen(Map<String, dynamic> argument) async {
       title: 'RustDesk - File Transfer',
       theme: MyTheme.lightTheme,
       darkTheme: MyTheme.darkTheme,
-      themeMode: MyTheme.initialThemeMode(),
+      themeMode: MyTheme.currentThemeMode(),
       home: DesktopFileTransferScreen(params: argument),
       localizationsDelegates: const [
         GlobalMaterialLocalizations.delegate,
@@ -171,7 +171,7 @@ void runPortForwardScreen(Map<String, dynamic> argument) async {
       title: 'RustDesk - Port Forward',
       theme: MyTheme.lightTheme,
       darkTheme: MyTheme.darkTheme,
-      themeMode: MyTheme.initialThemeMode(),
+      themeMode: MyTheme.currentThemeMode(),
       home: DesktopPortForwardScreen(params: argument),
       localizationsDelegates: const [
         GlobalMaterialLocalizations.delegate,
@@ -196,7 +196,7 @@ void runConnectionManagerScreen() async {
       debugShowCheckedModeBanner: false,
       theme: MyTheme.lightTheme,
       darkTheme: MyTheme.darkTheme,
-      themeMode: MyTheme.initialThemeMode(),
+      themeMode: MyTheme.currentThemeMode(),
       localizationsDelegates: const [
         GlobalMaterialLocalizations.delegate,
         GlobalWidgetsLocalizations.delegate,
@@ -233,12 +233,21 @@ class _AppState extends State<App> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.window.onPlatformBrightnessChanged = () {
+      final userPreference = MyTheme.getThemeModePreference();
+      if (userPreference != ThemeMode.system) return;
       WidgetsBinding.instance.handlePlatformBrightnessChanged();
-      var system =
-          WidgetsBinding.instance.platformDispatcher.platformBrightness;
-      var current = isDarkTheme() ? Brightness.dark : Brightness.light;
-      if (current != system) {
-        MyTheme.changeTo(system == Brightness.dark);
+      final systemIsDark =
+          WidgetsBinding.instance.platformDispatcher.platformBrightness ==
+              Brightness.dark;
+      final ThemeMode to;
+      if (systemIsDark) {
+        to = ThemeMode.dark;
+      } else {
+        to = ThemeMode.light;
+      }
+      Get.changeThemeMode(to);
+      if (desktopType == DesktopType.main) {
+        bind.mainChangeTheme(dark: to.toShortString());
       }
     };
   }
@@ -263,7 +272,7 @@ class _AppState extends State<App> {
         title: 'RustDesk',
         theme: MyTheme.lightTheme,
         darkTheme: MyTheme.darkTheme,
-        themeMode: MyTheme.initialThemeMode(mainPage: true),
+        themeMode: MyTheme.currentThemeMode(),
         home: isDesktop
             ? const DesktopTabPage()
             : !isAndroid
@@ -309,7 +318,7 @@ _registerEventHandler() {
     platformFFI.registerEventHandler('theme', 'theme', (evt) async {
       String? dark = evt['dark'];
       if (dark != null) {
-        MyTheme.changeTo(dark == 'true');
+        MyTheme.changeDarkMode(MyTheme.themeModeFromString(dark));
       }
     });
     platformFFI.registerEventHandler('language', 'language', (_) async {

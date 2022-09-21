@@ -18,7 +18,7 @@ use hbb_common::{
     tokio::{self, sync::mpsc, time},
 };
 
-use crate::common::{get_app_name};
+use crate::common::get_app_name;
 use crate::ipc;
 use crate::ui_interface::{
     check_mouse_time, closing, create_shortcut, current_is_wayland, fix_login_wayland,
@@ -73,9 +73,7 @@ fn check_connect_status(
     let (tx, rx) = mpsc::unbounded_channel::<ipc::Data>();
     let password = Arc::new(Mutex::new(String::default()));
     let cloned_password = password.clone();
-    std::thread::spawn(move || {
-        crate::ui_interface::check_connect_status_(reconnect, rx)
-    });
+    std::thread::spawn(move || crate::ui_interface::check_connect_status_(reconnect, rx));
     (status, options, tx, password)
 }
 
@@ -525,9 +523,16 @@ impl UI {
     fn get_lan_peers(&self) -> String {
         let peers = get_lan_peers()
             .into_iter()
-            .map(|(id, peer)| (id, peer.username, peer.hostname, peer.platform))
+            .map(|mut peer| {
+                (
+                    peer.remove("id").unwrap_or_default(),
+                    peer.remove("username").unwrap_or_default(),
+                    peer.remove("hostname").unwrap_or_default(),
+                    peer.remove("platform").unwrap_or_default(),
+                )
+            })
             .collect::<Vec<(String, String, String, String)>>();
-        serde_json::to_string(&peers).unwrap_or_default()
+        serde_json::to_string(&get_lan_peers()).unwrap_or_default()
     }
 
     fn get_uuid(&self) -> String {

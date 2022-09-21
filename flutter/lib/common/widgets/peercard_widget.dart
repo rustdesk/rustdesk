@@ -27,13 +27,11 @@ final peerCardUiType = PeerUiType.grid.obs;
 
 class _PeerCard extends StatefulWidget {
   final Peer peer;
-  final RxString alias;
   final Function(BuildContext, String) connect;
   final PopupMenuEntryBuilder popupMenuEntryBuilder;
 
   const _PeerCard(
       {required this.peer,
-      required this.alias,
       required this.connect,
       required this.popupMenuEntryBuilder,
       Key? key})
@@ -77,7 +75,7 @@ class _PeerCardState extends State<_PeerCard>
             child: ListTile(
               contentPadding: const EdgeInsets.only(left: 12),
               subtitle: Text('${peer.username}@${peer.hostname}'),
-              title: Text(formatID(peer.id)),
+              title: Text(peer.alias.isEmpty ? formatID(peer.id) : peer.alias),
               leading: Container(
                   padding: const EdgeInsets.all(6),
                   color: str2color('${peer.id}${peer.platform}', 0x7f),
@@ -216,6 +214,7 @@ class _PeerCardState extends State<_PeerCard>
 
   Widget _buildPeerCard(
       BuildContext context, Peer peer, Rx<BoxDecoration?> deco) {
+    final name = '${peer.username}@${peer.hostname}';
     return Card(
       color: Colors.transparent,
       elevation: 0,
@@ -246,24 +245,18 @@ class _PeerCardState extends State<_PeerCard>
                               Row(
                                 children: [
                                   Expanded(
-                                    child: Obx(() {
-                                      final name = widget.alias.value.isEmpty
-                                          ? '${peer.username}@${peer.hostname}'
-                                          : widget.alias.value;
-                                      return Tooltip(
-                                        message: name,
-                                        waitDuration:
-                                            const Duration(seconds: 1),
-                                        child: Text(
-                                          name,
-                                          style: const TextStyle(
-                                              color: Colors.white70,
-                                              fontSize: 12),
-                                          textAlign: TextAlign.center,
-                                          overflow: TextOverflow.ellipsis,
-                                        ),
-                                      );
-                                    }),
+                                    child: Tooltip(
+                                      message: name,
+                                      waitDuration: const Duration(seconds: 1),
+                                      child: Text(
+                                        name,
+                                        style: const TextStyle(
+                                            color: Colors.white70,
+                                            fontSize: 12),
+                                        textAlign: TextAlign.center,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
                                   ),
                                 ],
                               ),
@@ -287,7 +280,8 @@ class _PeerCardState extends State<_PeerCard>
                                 backgroundColor: peer.online
                                     ? Colors.green
                                     : Colors.yellow)),
-                        Text(formatID(peer.id))
+                        Text(
+                            peer.alias.isEmpty ? formatID(peer.id) : peer.alias)
                       ]).paddingSymmetric(vertical: 8),
                       _actionMore(peer),
                     ],
@@ -338,20 +332,14 @@ class _PeerCardState extends State<_PeerCard>
 }
 
 abstract class BasePeerCard extends StatelessWidget {
-  final RxString alias = ''.obs;
   final Peer peer;
 
-  BasePeerCard({required this.peer, Key? key}) : super(key: key) {
-    bind
-        .mainGetPeerOption(id: peer.id, key: 'alias')
-        .then((value) => alias.value = value);
-  }
+  BasePeerCard({required this.peer, Key? key}) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
     return _PeerCard(
       peer: peer,
-      alias: alias,
       connect: (BuildContext context, String id) => connect(context, id),
       popupMenuEntryBuilder: _buildPopupMenuEntry,
     );
@@ -379,7 +367,7 @@ abstract class BasePeerCard extends StatelessWidget {
       bool isRDP = false}) {
     return MenuEntryButton<String>(
       childBuilder: (TextStyle? style) => Text(
-        translate(title),
+        title,
         style: style,
       ),
       proc: () {
@@ -396,8 +384,13 @@ abstract class BasePeerCard extends StatelessWidget {
   }
 
   @protected
-  MenuEntryBase<String> _connectAction(BuildContext context, String id) {
-    return _connectCommonAction(context, id, 'Connect');
+  MenuEntryBase<String> _connectAction(BuildContext context, Peer peer) {
+    return _connectCommonAction(
+        context,
+        peer.id,
+        peer.alias.isEmpty
+            ? translate('Connect')
+            : "${translate('Connect')} ${peer.id}");
   }
 
   @protected
@@ -405,7 +398,7 @@ abstract class BasePeerCard extends StatelessWidget {
     return _connectCommonAction(
       context,
       id,
-      'Transfer File',
+      translate('Transfer File'),
       isFileTransfer: true,
     );
   }
@@ -415,7 +408,7 @@ abstract class BasePeerCard extends StatelessWidget {
     return _connectCommonAction(
       context,
       id,
-      'TCP Tunneling',
+      translate('TCP Tunneling'),
       isTcpTunneling: true,
     );
   }
@@ -578,7 +571,7 @@ abstract class BasePeerCard extends StatelessWidget {
 
   void _rename(String id, bool isAddressBook) async {
     RxBool isInProgress = false.obs;
-    var name = await bind.mainGetPeerOption(id: id, key: 'alias');
+    var name = peer.alias;
     var controller = TextEditingController(text: name);
     if (isAddressBook) {
       final peer = gFFI.abModel.peers.firstWhere((p) => id == p['id']);
@@ -597,7 +590,12 @@ abstract class BasePeerCard extends StatelessWidget {
           gFFI.abModel.setPeerOption(id, 'alias', name);
           await gFFI.abModel.updateAb();
         }
-        alias.value = await bind.mainGetPeerOption(id: peer.id, key: 'alias');
+        if (isAddressBook) {
+          gFFI.abModel.getAb();
+        } else {
+          bind.mainLoadRecentPeers();
+          bind.mainLoadFavPeers();
+        }
         close();
         isInProgress.value = false;
       }
@@ -642,7 +640,7 @@ class RecentPeerCard extends BasePeerCard {
   Future<List<MenuEntryBase<String>>> _buildMenuItems(
       BuildContext context) async {
     final List<MenuEntryBase<String>> menuItems = [
-      _connectAction(context, peer.id),
+      _connectAction(context, peer),
       _transferFileAction(context, peer.id),
       _tcpTunnelingAction(context, peer.id),
     ];
@@ -674,7 +672,7 @@ class FavoritePeerCard extends BasePeerCard {
   Future<List<MenuEntryBase<String>>> _buildMenuItems(
       BuildContext context) async {
     final List<MenuEntryBase<String>> menuItems = [
-      _connectAction(context, peer.id),
+      _connectAction(context, peer),
       _transferFileAction(context, peer.id),
       _tcpTunnelingAction(context, peer.id),
     ];
@@ -708,7 +706,7 @@ class DiscoveredPeerCard extends BasePeerCard {
   Future<List<MenuEntryBase<String>>> _buildMenuItems(
       BuildContext context) async {
     final List<MenuEntryBase<String>> menuItems = [
-      _connectAction(context, peer.id),
+      _connectAction(context, peer),
       _transferFileAction(context, peer.id),
       _tcpTunnelingAction(context, peer.id),
     ];
@@ -739,7 +737,7 @@ class AddressBookPeerCard extends BasePeerCard {
   Future<List<MenuEntryBase<String>>> _buildMenuItems(
       BuildContext context) async {
     final List<MenuEntryBase<String>> menuItems = [
-      _connectAction(context, peer.id),
+      _connectAction(context, peer),
       _transferFileAction(context, peer.id),
       _tcpTunnelingAction(context, peer.id),
     ];
