@@ -348,7 +348,7 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
                     permissions(context),
                     password(context),
                     _Card(title: 'ID', children: [changeId()]),
-                    connection(context),
+                    more(context),
                   ]),
                 ),
               ],
@@ -462,13 +462,13 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
         })));
   }
 
-  Widget connection(BuildContext context) {
+  Widget more(BuildContext context) {
     bool enabled = !locked;
     return _Card(title: 'Security', children: [
       _OptionCheckBox(context, 'Deny remote access', 'stop-service',
           checkedIcon: const Icon(
-            Icons.warning,
-            color: Colors.yellowAccent,
+            Icons.warning_amber_rounded,
+            color: Color.fromARGB(255, 255, 204, 0),
           ),
           enabled: enabled),
       Offstage(
@@ -571,7 +571,8 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
                       .marginOnly(right: 5),
                   Offstage(
                     offstage: !hasWhitelist.value,
-                    child: const Icon(Icons.warning, color: Colors.yellowAccent)
+                    child: const Icon(Icons.warning_amber_rounded,
+                            color: Color.fromARGB(255, 255, 204, 0))
                         .marginOnly(right: 5),
                   ),
                   Expanded(
