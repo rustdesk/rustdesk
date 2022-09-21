@@ -359,9 +359,7 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
               tooltip: value.start
                   ? translate('Stop session recording')
                   : translate('Start session recording'),
-              onPressed: () async {
-                await value.toggle();
-              },
+              onPressed: () => value.toggle(),
               icon: Icon(
                 value.start
                     ? Icons.pause_circle_filled

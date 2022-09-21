@@ -298,11 +298,9 @@ impl RecorderApi for HwRecorder {
 #[cfg(feature = "hwcodec")]
 impl Drop for HwRecorder {
     fn drop(&mut self) {
-        log::info!("DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD {}", self.ctx.filename);
         self.muxer.write_tail().ok();
         if !self.written || self.start.elapsed().as_secs() < MIN_SECS {
             std::fs::remove_file(&self.ctx.filename).ok();
         }
-        log::info!("DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD ok");
     }
 }

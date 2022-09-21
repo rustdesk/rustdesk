@@ -257,7 +257,7 @@ impl InvokeUiSession for FlutterHandler {
         self.push_event(
             "switch_display",
             vec![
-                ("display", &display.to_string()),
+                ("display", &display.display.to_string()),
                 ("x", &display.x.to_string()),
                 ("y", &display.y.to_string()),
                 ("width", &display.width.to_string()),

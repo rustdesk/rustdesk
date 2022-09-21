@@ -93,7 +93,6 @@ function editOSPassword(login=false) {
 }
 
 var recording = false;
-var recording_refresh = false;
 
 class Header: Reactor.Component {
     this var conn_note = "";
@@ -286,10 +285,12 @@ class Header: Reactor.Component {
     }
 
     event click $(span#recording) (_, me) {
-        handler.record_screen(!recording, display_width, display_height);
         recording = !recording;
         header.update();
-        if (recording) self.timer(100ms,  function() { recording_refresh = true; handler.refresh_video(); });
+        if (recording)
+            handler.refresh_video();
+        else
+            handler.record_screen(false, display_width, display_height);
     }
 
     event click $(#screen) (_, me) {

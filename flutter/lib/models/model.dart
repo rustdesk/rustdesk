@@ -197,13 +197,13 @@ class FfiModel with ChangeNotifier {
     _display.height = int.parse(evt['height']);
     if (old != _pi.currentDisplay) {
       parent.target?.cursorModel.updateDisplayOrigin(_display.x, _display.y);
-      parent.target?.recordingModel.switchDisplay();
     }
 
     // remote is mobile, and orientation changed
     if ((_display.width > _display.height) != oldOrientation) {
       gFFI.canvasModel.updateViewStyle();
     }
+    parent.target?.recordingModel.onSwitchDisplay();
     notifyListeners();
   }
 
@@ -979,32 +979,34 @@ class RecordingModel with ChangeNotifier {
   bool _start = false;
   get start => _start;
 
-  switchDisplay() {
+  onSwitchDisplay() {
     if (!isDesktop || !_start) return;
     var id = parent.target?.id;
     int? width = parent.target?.canvasModel.getDisplayWidth();
     int? height = parent.target?.canvasModel.getDisplayWidth();
     if (id == null || width == null || height == null) return;
-    bind.sessionRecordScreen(
-        id: id, start: _start, width: width, height: height);
+    bind.sessionRecordScreen(id: id, start: true, width: width, height: height);
   }
 
-  Future<void> toggle() async {
+  toggle() {
     if (!isDesktop) return;
     var id = parent.target?.id;
-    int? width = parent.target?.canvasModel.getDisplayWidth();
-    int? height = parent.target?.canvasModel.getDisplayWidth();
-    if (id == null || width == null || height == null) return;
-
-    await bind.sessionRecordScreen(
-        id: id, start: !_start, width: width, height: height);
+    if (id == null) return;
     _start = !_start;
     notifyListeners();
     if (_start) {
-      Future.delayed(const Duration(milliseconds: 100), () {
-        bind.sessionRefresh(id: id);
-      });
+      bind.sessionRefresh(id: id);
+    } else {
+      bind.sessionRecordScreen(id: id, start: false, width: 0, height: 0);
     }
+  }
+
+  onClose() {
+    if (!isDesktop) return;
+    var id = parent.target?.id;
+    if (id == null) return;
+    _start = false;
+    bind.sessionRecordScreen(id: id, start: false, width: 0, height: 0);
   }
 }
 
@@ -1174,7 +1176,7 @@ class FFI {
             Map<String, dynamic> event = json.decode(message.field0);
             await cb(event);
           } catch (e) {
-            debugPrint('json.decode fail(): $e');
+            debugPrint('json.decode fail1(): $e, ${message.field0}');
           }
         } else if (message is Rgba) {
           imageModel.onRgba(message.field0, tabBarHeight);
