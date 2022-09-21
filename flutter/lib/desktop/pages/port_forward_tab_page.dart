@@ -1,8 +1,10 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:desktop_multi_window/desktop_multi_window.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/common.dart';
+import 'package:flutter_hbb/consts.dart';
 import 'package:flutter_hbb/desktop/pages/port_forward_page.dart';
 import 'package:flutter_hbb/desktop/widgets/tabbar_widget.dart';
 import 'package:flutter_hbb/utils/multi_window_manager.dart';
@@ -74,23 +76,27 @@ class _PortForwardTabPageState extends State<PortForwardTabPage> {
 
   @override
   Widget build(BuildContext context) {
-    return SubWindowDragToResizeArea(
-      windowId: windowId(),
-      child: Container(
-        decoration: BoxDecoration(
-            border: Border.all(color: MyTheme.color(context).border!)),
-        child: Scaffold(
-            backgroundColor: MyTheme.color(context).bg,
-            body: DesktopTab(
-              controller: tabController,
-              onWindowCloseButton: () async {
-                tabController.clear();
-                return true;
-              },
-              tail: AddButton().paddingOnly(left: 10),
-            )),
-      ),
+    final tabWidget = Container(
+      decoration: BoxDecoration(
+          border: Border.all(color: MyTheme.color(context).border!)),
+      child: Scaffold(
+          backgroundColor: MyTheme.color(context).bg,
+          body: DesktopTab(
+            controller: tabController,
+            onWindowCloseButton: () async {
+              tabController.clear();
+              return true;
+            },
+            tail: AddButton().paddingOnly(left: 10),
+          )),
     );
+    return Platform.isMacOS
+        ? tabWidget
+        : SubWindowDragToResizeArea(
+            resizeEdgeSize: kWindowEdgeSize,
+            windowId: windowId(),
+            child: tabWidget,
+          );
   }
 
   void onRemoveId(String id) {

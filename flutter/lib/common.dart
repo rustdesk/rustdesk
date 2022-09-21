@@ -244,6 +244,32 @@ final ButtonStyle flatButtonStyle = TextButton.styleFrom(
   ),
 );
 
+List<Locale> supportedLocales = const [
+  // specify CN/TW to fix CJK issue in flutter
+  Locale('zh', 'CN'),
+  Locale('zh', 'TW'),
+  Locale('zh', 'SG'),
+  Locale('fr'),
+  Locale('de'),
+  Locale('it'),
+  Locale('ja'),
+  Locale('cs'),
+  Locale('pl'),
+  Locale('ko'),
+  Locale('hu'),
+  Locale('pt'),
+  Locale('ru'),
+  Locale('sk'),
+  Locale('id'),
+  Locale('da'),
+  Locale('eo'),
+  Locale('tr'),
+  Locale('vi'),
+  Locale('pl'),
+  Locale('kz'),
+  Locale('en', 'US'),
+];
+
 String formatDurationToTime(Duration duration) {
   var totalTime = duration.inSeconds;
   final secs = totalTime % 60;
@@ -734,8 +760,9 @@ class PermissionManager {
     if (isDesktop) {
       return Future.value(true);
     }
-    if (!permissions.contains(type))
+    if (!permissions.contains(type)) {
       return Future.error("Wrong permission!$type");
+    }
     return gFFI.invokeMethod("check_permission", type);
   }
 
@@ -743,8 +770,9 @@ class PermissionManager {
     if (isDesktop) {
       return Future.value(true);
     }
-    if (!permissions.contains(type))
+    if (!permissions.contains(type)) {
       return Future.error("Wrong permission!$type");
+    }
 
     gFFI.invokeMethod("request_permission", type);
     if (type == "ignore_battery_optimizations") {

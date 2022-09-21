@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:desktop_multi_window/desktop_multi_window.dart';
 import 'package:flutter/material.dart';
@@ -86,63 +87,66 @@ class _ConnectionTabPageState extends State<ConnectionTabPage> {
   @override
   Widget build(BuildContext context) {
     final RxBool fullscreen = Get.find(tag: 'fullscreen');
-    return Obx(() => SubWindowDragToResizeArea(
-          resizeEdgeSize: fullscreen.value ? 1.0 : 8.0,
-          windowId: windowId(),
-          child: Container(
-            decoration: BoxDecoration(
-                border: Border.all(color: MyTheme.color(context).border!)),
-            child: Scaffold(
-                backgroundColor: MyTheme.color(context).bg,
-                body: DesktopTab(
-                  controller: tabController,
-                  showTabBar: fullscreen.isFalse,
-                  onWindowCloseButton: handleWindowCloseButton,
-                  tail: const AddButton().paddingOnly(left: 10),
-                  pageViewBuilder: (pageView) {
-                    WindowController.fromWindowId(windowId())
-                        .setFullscreen(fullscreen.isTrue);
-                    return pageView;
-                  },
-                  tabBuilder: (key, icon, label, themeConf) => Obx(() {
-                    final connectionType = ConnectionTypeState.find(key);
-                    if (!connectionType.isValid()) {
-                      return Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          icon,
-                          label,
-                        ],
-                      );
-                    } else {
-                      final msgDirect = translate(connectionType.direct.value ==
-                              ConnectionType.strDirect
-                          ? 'Direct Connection'
-                          : 'Relay Connection');
-                      final msgSecure = translate(connectionType.secure.value ==
-                              ConnectionType.strSecure
-                          ? 'Secure Connection'
-                          : 'Insecure Connection');
-                      return Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          icon,
-                          Tooltip(
-                            message: '$msgDirect\n$msgSecure',
-                            child: Image.asset(
-                              'assets/${connectionType.secure.value}${connectionType.direct.value}.png',
-                              width: themeConf.iconSize,
-                              height: themeConf.iconSize,
-                            ).paddingOnly(right: 5),
-                          ),
-                          label,
-                        ],
-                      );
-                    }
-                  }),
-                )),
-          ),
-        ));
+    final tabWidget = Container(
+      decoration: BoxDecoration(
+          border: Border.all(color: MyTheme.color(context).border!)),
+      child: Scaffold(
+          backgroundColor: MyTheme.color(context).bg,
+          body: DesktopTab(
+            controller: tabController,
+            showTabBar: fullscreen.isFalse,
+            onWindowCloseButton: handleWindowCloseButton,
+            tail: const AddButton().paddingOnly(left: 10),
+            pageViewBuilder: (pageView) {
+              WindowController.fromWindowId(windowId())
+                  .setFullscreen(fullscreen.isTrue);
+              return pageView;
+            },
+            tabBuilder: (key, icon, label, themeConf) => Obx(() {
+              final connectionType = ConnectionTypeState.find(key);
+              if (!connectionType.isValid()) {
+                return Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    icon,
+                    label,
+                  ],
+                );
+              } else {
+                final msgDirect = translate(
+                    connectionType.direct.value == ConnectionType.strDirect
+                        ? 'Direct Connection'
+                        : 'Relay Connection');
+                final msgSecure = translate(
+                    connectionType.secure.value == ConnectionType.strSecure
+                        ? 'Secure Connection'
+                        : 'Insecure Connection');
+                return Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    icon,
+                    Tooltip(
+                      message: '$msgDirect\n$msgSecure',
+                      child: Image.asset(
+                        'assets/${connectionType.secure.value}${connectionType.direct.value}.png',
+                        width: themeConf.iconSize,
+                        height: themeConf.iconSize,
+                      ).paddingOnly(right: 5),
+                    ),
+                    label,
+                  ],
+                );
+              }
+            }),
+          )),
+    );
+    return Platform.isMacOS
+        ? tabWidget
+        : Obx(() => SubWindowDragToResizeArea(
+            resizeEdgeSize:
+                fullscreen.value ? kFullScreenEdgeSize : kWindowEdgeSize,
+            windowId: windowId(),
+            child: tabWidget));
   }
 
   void onRemoveId(String id) {

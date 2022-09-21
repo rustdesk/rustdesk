@@ -1,3 +1,5 @@
+// main window right pane
+
 import 'dart:async';
 import 'dart:convert';
 
@@ -82,8 +84,8 @@ class _ConnectionPageState extends State<ConnectionPage> {
               ).marginSymmetric(horizontal: 22),
             ),
             const Divider(),
-            SizedBox(height: 50, child: Obx(() => buildStatus()))
-                .paddingSymmetric(horizontal: 12.0)
+            SizedBox(child: Obx(() => buildStatus()))
+                .paddingOnly(bottom: 12, top: 6),
           ]),
     );
   }
@@ -187,7 +189,7 @@ class _ConnectionPageState extends State<ConnectionPage> {
                           onConnect(isFileTransfer: true);
                         },
                         child: Container(
-                          height: 24,
+                          height: 27,
                           alignment: Alignment.center,
                           decoration: BoxDecoration(
                             color: ftPressed.value
@@ -224,31 +226,36 @@ class _ConnectionPageState extends State<ConnectionPage> {
                       onTapCancel: () => connPressed.value = false,
                       onHover: (value) => connHover.value = value,
                       onTap: onConnect,
-                      child: Container(
-                        height: 24,
-                        decoration: BoxDecoration(
-                          color: connPressed.value
-                              ? MyTheme.accent
-                              : MyTheme.button,
-                          border: Border.all(
-                            color: connPressed.value
-                                ? MyTheme.accent
-                                : connHover.value
-                                    ? MyTheme.hoverBorder
-                                    : MyTheme.button,
+                      child: ConstrainedBox(
+                          constraints: BoxConstraints(
+                            minWidth: 80.0,
                           ),
-                          borderRadius: BorderRadius.circular(5),
-                        ),
-                        child: Center(
-                          child: Text(
-                            translate(
-                              "Connect",
+                          child: Container(
+                            height: 27,
+                            decoration: BoxDecoration(
+                              color: connPressed.value
+                                  ? MyTheme.accent
+                                  : MyTheme.button,
+                              border: Border.all(
+                                color: connPressed.value
+                                    ? MyTheme.accent
+                                    : connHover.value
+                                        ? MyTheme.hoverBorder
+                                        : MyTheme.button,
+                              ),
+                              borderRadius: BorderRadius.circular(5),
                             ),
-                            style: TextStyle(
-                                fontSize: 12, color: MyTheme.color(context).bg),
-                          ),
-                        ).marginSymmetric(horizontal: 12),
-                      ),
+                            child: Center(
+                              child: Text(
+                                translate(
+                                  "Connect",
+                                ),
+                                style: TextStyle(
+                                    fontSize: 12,
+                                    color: MyTheme.color(context).bg),
+                              ),
+                            ).marginSymmetric(horizontal: 12),
+                          )),
                     ),
                   ),
                 ],
@@ -275,6 +282,8 @@ class _ConnectionPageState extends State<ConnectionPage> {
   var svcIsUsingPublicServer = true.obs;
 
   Widget buildStatus() {
+    final fontSize = 14.0;
+    final textStyle = TextStyle(fontSize: fontSize);
     final light = Container(
       height: 8,
       width: 8,
@@ -282,13 +291,13 @@ class _ConnectionPageState extends State<ConnectionPage> {
         borderRadius: BorderRadius.circular(20),
         color: svcStopped.value ? Colors.redAccent : Colors.green,
       ),
-    ).paddingSymmetric(horizontal: 10.0);
+    ).paddingSymmetric(horizontal: 12.0);
     if (svcStopped.value) {
       return Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           light,
-          Text(translate("Service is not running")),
+          Text(translate("Service is not running"), style: textStyle),
           TextButton(
               onPressed: () async {
                 bool checked = await bind.mainCheckSuperUserPermission();
@@ -296,19 +305,25 @@ class _ConnectionPageState extends State<ConnectionPage> {
                   bind.mainSetOption(key: "stop-service", value: "");
                 }
               },
-              child: Text(translate("Start Service")))
+              child: Text(translate("Start Service"), style: textStyle))
         ],
       );
     } else {
       if (svcStatusCode.value == 0) {
         return Row(
           crossAxisAlignment: CrossAxisAlignment.center,
-          children: [light, Text(translate("connecting_status"))],
+          children: [
+            light,
+            Text(translate("connecting_status"), style: textStyle)
+          ],
         );
       } else if (svcStatusCode.value == -1) {
         return Row(
           crossAxisAlignment: CrossAxisAlignment.center,
-          children: [light, Text(translate("not_ready_status"))],
+          children: [
+            light,
+            Text(translate("not_ready_status"), style: textStyle)
+          ],
         );
       }
     }
@@ -316,13 +331,15 @@ class _ConnectionPageState extends State<ConnectionPage> {
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
         light,
-        Text(translate('Ready')),
+        Text(translate('Ready'), style: textStyle),
+        Text(', ', style: textStyle),
         svcIsUsingPublicServer.value
             ? InkWell(
                 onTap: onUsePublicServerGuide,
                 child: Text(
-                  ', ${translate('setup_server_tip')}',
-                  style: TextStyle(decoration: TextDecoration.underline),
+                  translate('setup_server_tip'),
+                  style: TextStyle(
+                      decoration: TextDecoration.underline, fontSize: fontSize),
                 ),
               )
             : Offstage()

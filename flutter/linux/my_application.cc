@@ -51,7 +51,7 @@ static void my_application_activate(GApplication* application) {
 
   // auto bdw = bitsdojo_window_from(window); // <--- add this line
   // bdw->setCustomFrame(true);               // <-- add this line
-  gtk_window_set_default_size(window, 1280, 720);   // <-- comment this line
+  gtk_window_set_default_size(window, 800, 600);   // <-- comment this line
   gtk_widget_show(GTK_WIDGET(window));
 
   g_autoptr(FlDartProject) project = fl_dart_project_new();
