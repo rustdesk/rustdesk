@@ -10,6 +10,7 @@ import 'package:flutter_hbb/models/server_model.dart';
 import 'package:get/get.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher_string.dart';
+import 'package:flutter_hbb/desktop/widgets/scroll_wrapper.dart';
 
 import '../../common/widgets/dialog.dart';
 
@@ -44,7 +45,6 @@ class _DesktopSettingPageState extends State<DesktopSettingPage>
     with TickerProviderStateMixin, AutomaticKeepAliveClientMixin {
   final List<_TabInfo> settingTabs = <_TabInfo>[
     _TabInfo('General', Icons.settings_outlined, Icons.settings),
-    _TabInfo('Language', Icons.language_outlined, Icons.language),
     _TabInfo('Security', Icons.enhanced_encryption_outlined,
         Icons.enhanced_encryption),
     _TabInfo('Network', Icons.link_outlined, Icons.link),
@@ -84,17 +84,18 @@ class _DesktopSettingPageState extends State<DesktopSettingPage>
           Expanded(
             child: Container(
               color: MyTheme.color(context).grayBg,
-              child: PageView(
-                controller: controller,
-                children: const [
-                  _General(),
-                  _Language(),
-                  _Safety(),
-                  _Network(),
-                  _Acount(),
-                  _About(),
-                ],
-              ),
+              child: DesktopScrollWrapper(
+                  scrollController: controller,
+                  child: PageView(
+                    controller: controller,
+                    children: const [
+                      _General(),
+                      _Safety(),
+                      _Network(),
+                      _Acount(),
+                      _About(),
+                    ],
+                  )),
             ),
           )
         ],
@@ -123,14 +124,18 @@ class _DesktopSettingPageState extends State<DesktopSettingPage>
   }
 
   Widget _listView({required List<_TabInfo> tabs}) {
-    return ListView(
-      controller: ScrollController(),
-      children: tabs
-          .asMap()
-          .entries
-          .map((tab) => _listItem(tab: tab.value, index: tab.key))
-          .toList(),
-    );
+    final scrollController = ScrollController();
+    return DesktopScrollWrapper(
+        scrollController: scrollController,
+        child: ListView(
+          physics: NeverScrollableScrollPhysics(),
+          controller: scrollController,
+          children: tabs
+              .asMap()
+              .entries
+              .map((tab) => _listItem(tab: tab.value, index: tab.key))
+              .toList(),
+        ));
   }
 
   Widget _listItem({required _TabInfo tab, required int index}) {
@@ -183,15 +188,20 @@ class _General extends StatefulWidget {
 class _GeneralState extends State<_General> {
   @override
   Widget build(BuildContext context) {
-    return ListView(
-      controller: ScrollController(),
-      children: [
-        theme(),
-        abr(),
-        hwcodec(),
-        audio(context),
-      ],
-    ).marginOnly(bottom: _kListViewBottomMargin);
+    final scrollController = ScrollController();
+    return DesktopScrollWrapper(
+        scrollController: scrollController,
+        child: ListView(
+          physics: NeverScrollableScrollPhysics(),
+          controller: scrollController,
+          children: [
+            theme(),
+            abr(),
+            hwcodec(),
+            audio(context),
+            _Card(title: 'Language', children: [language()]),
+          ],
+        ).marginOnly(bottom: _kListViewBottomMargin));
   }
 
   Widget theme() {
@@ -273,30 +283,6 @@ class _GeneralState extends State<_General> {
       ]);
     });
   }
-}
-
-class _Language extends StatefulWidget {
-  const _Language({Key? key}) : super(key: key);
-
-  @override
-  State<_Language> createState() => _LanguageState();
-}
-
-class _LanguageState extends State<_Language>
-    with AutomaticKeepAliveClientMixin {
-  @override
-  bool get wantKeepAlive => true;
-
-  @override
-  Widget build(BuildContext context) {
-    super.build(context);
-    return ListView(
-      controller: ScrollController(),
-      children: [
-        _Card(title: 'Language', children: [language()]),
-      ],
-    ).marginOnly(bottom: _kListViewBottomMargin);
-  }
 
   Widget language() {
     return _futureBuilder(future: () async {
@@ -340,31 +326,37 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
   @override
   bool get wantKeepAlive => true;
   bool locked = true;
+  final scrollController = ScrollController();
 
   @override
   Widget build(BuildContext context) {
     super.build(context);
-    return ListView(
-      controller: ScrollController(),
-      children: [
-        Column(
-          children: [
-            _lock(locked, 'Unlock Security Settings', () {
-              locked = false;
-              setState(() => {});
-            }),
-            AbsorbPointer(
-              absorbing: locked,
-              child: Column(children: [
-                permissions(context),
-                password(context),
-                connection(context),
-              ]),
-            ),
-          ],
-        )
-      ],
-    ).marginOnly(bottom: _kListViewBottomMargin);
+    return DesktopScrollWrapper(
+        scrollController: scrollController,
+        child: SingleChildScrollView(
+            physics: NeverScrollableScrollPhysics(),
+            controller: scrollController,
+            child: Column(
+              children: [
+                _lock(locked, 'Unlock Security Settings', () {
+                  locked = false;
+                  setState(() => {});
+                }),
+                AbsorbPointer(
+                  absorbing: locked,
+                  child: Column(children: [
+                    permissions(context),
+                    password(context),
+                    _Card(title: 'ID', children: [changeId()]),
+                    connection(context),
+                  ]),
+                ),
+              ],
+            )).marginOnly(bottom: _kListViewBottomMargin));
+  }
+
+  Widget changeId() {
+    return _Button('Change ID', changeIdDialog, enabled: !locked);
   }
 
   Widget permissions(context) {
@@ -377,6 +369,8 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
       _OptionCheckBox(context, 'Enable File Transfer', 'enable-file-transfer',
           enabled: enabled),
       _OptionCheckBox(context, 'Enable Audio', 'enable-audio',
+          enabled: enabled),
+      _OptionCheckBox(context, 'Enable TCP Tunneling', 'enable-tunnel',
           enabled: enabled),
       _OptionCheckBox(context, 'Enable Remote Restart', 'enable-remote-restart',
           enabled: enabled),
@@ -470,14 +464,12 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
 
   Widget connection(BuildContext context) {
     bool enabled = !locked;
-    return _Card(title: 'Connection', children: [
+    return _Card(title: 'Security', children: [
       _OptionCheckBox(context, 'Deny remote access', 'stop-service',
           checkedIcon: const Icon(
             Icons.warning,
             color: Colors.yellowAccent,
           ),
-          enabled: enabled),
-      _OptionCheckBox(context, 'Enable TCP Tunneling', 'enable-tunnel',
           enabled: enabled),
       Offstage(
         offstage: !Platform.isWindows,
@@ -615,27 +607,30 @@ class _NetworkState extends State<_Network> with AutomaticKeepAliveClientMixin {
   Widget build(BuildContext context) {
     super.build(context);
     bool enabled = !locked;
-    return ListView(controller: ScrollController(), children: [
-      Column(
-        children: [
-          _lock(locked, 'Unlock Network Settings', () {
-            locked = false;
-            setState(() => {});
-          }),
-          AbsorbPointer(
-            absorbing: locked,
-            child: Column(children: [
-              _Card(title: 'Server', children: [
-                _Button('ID/Relay Server', changeServer, enabled: enabled),
-              ]),
-              _Card(title: 'Proxy', children: [
-                _Button('Socks5 Proxy', changeSocks5Proxy, enabled: enabled),
-              ]),
-            ]),
-          ),
-        ],
-      )
-    ]).marginOnly(bottom: _kListViewBottomMargin);
+    final scrollController = ScrollController();
+    return DesktopScrollWrapper(
+        scrollController: scrollController,
+        child: ListView(
+            controller: scrollController,
+            physics: NeverScrollableScrollPhysics(),
+            children: [
+              _lock(locked, 'Unlock Network Settings', () {
+                locked = false;
+                setState(() => {});
+              }),
+              AbsorbPointer(
+                absorbing: locked,
+                child: Column(children: [
+                  _Card(title: 'Server', children: [
+                    _Button('ID/Relay Server', changeServer, enabled: enabled),
+                  ]),
+                  _Card(title: 'Proxy', children: [
+                    _Button('Socks5 Proxy', changeSocks5Proxy,
+                        enabled: enabled),
+                  ]),
+                ]),
+              ),
+            ]).marginOnly(bottom: _kListViewBottomMargin));
   }
 }
 
@@ -649,13 +644,16 @@ class _Acount extends StatefulWidget {
 class _AcountState extends State<_Acount> {
   @override
   Widget build(BuildContext context) {
-    return ListView(
-      controller: ScrollController(),
-      children: [
-        _Card(title: 'Acount', children: [login()]),
-        _Card(title: 'ID', children: [changeId()]),
-      ],
-    ).marginOnly(bottom: _kListViewBottomMargin);
+    final scrollController = ScrollController();
+    return DesktopScrollWrapper(
+        scrollController: scrollController,
+        child: ListView(
+          physics: NeverScrollableScrollPhysics(),
+          controller: scrollController,
+          children: [
+            _Card(title: 'Acount', children: [login()]),
+          ],
+        ).marginOnly(bottom: _kListViewBottomMargin));
   }
 
   Widget login() {
@@ -674,10 +672,6 @@ class _AcountState extends State<_Acount> {
                 })
               });
     });
-  }
-
-  Widget changeId() {
-    return _Button('Change ID', changeIdDialog);
   }
 }
 
@@ -699,61 +693,66 @@ class _AboutState extends State<_About> {
       final license = data['license'].toString();
       final version = data['version'].toString();
       const linkStyle = TextStyle(decoration: TextDecoration.underline);
-      return ListView(controller: ScrollController(), children: [
-        _Card(title: "About RustDesk", children: [
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const SizedBox(
-                height: 8.0,
-              ),
-              Text("Version: $version").marginSymmetric(vertical: 4.0),
-              InkWell(
-                  onTap: () {
-                    launchUrlString("https://rustdesk.com/privacy");
-                  },
-                  child: const Text(
-                    "Privacy Statement",
-                    style: linkStyle,
-                  ).marginSymmetric(vertical: 4.0)),
-              InkWell(
-                  onTap: () {
-                    launchUrlString("https://rustdesk.com");
-                  },
-                  child: const Text(
-                    "Website",
-                    style: linkStyle,
-                  ).marginSymmetric(vertical: 4.0)),
-              Container(
-                decoration: const BoxDecoration(color: Color(0xFF2c8cff)),
-                padding:
-                    const EdgeInsets.symmetric(vertical: 24, horizontal: 8),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            "Copyright &copy; 2022 Purslane Ltd.\n$license",
-                            style: const TextStyle(color: Colors.white),
+      final scrollController = ScrollController();
+      return DesktopScrollWrapper(
+          scrollController: scrollController,
+          child: SingleChildScrollView(
+            controller: scrollController,
+            physics: NeverScrollableScrollPhysics(),
+            child: _Card(title: "About RustDesk", children: [
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const SizedBox(
+                    height: 8.0,
+                  ),
+                  Text("Version: $version").marginSymmetric(vertical: 4.0),
+                  InkWell(
+                      onTap: () {
+                        launchUrlString("https://rustdesk.com/privacy");
+                      },
+                      child: const Text(
+                        "Privacy Statement",
+                        style: linkStyle,
+                      ).marginSymmetric(vertical: 4.0)),
+                  InkWell(
+                      onTap: () {
+                        launchUrlString("https://rustdesk.com");
+                      },
+                      child: const Text(
+                        "Website",
+                        style: linkStyle,
+                      ).marginSymmetric(vertical: 4.0)),
+                  Container(
+                    decoration: const BoxDecoration(color: Color(0xFF2c8cff)),
+                    padding:
+                        const EdgeInsets.symmetric(vertical: 24, horizontal: 8),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                "Copyright &copy; 2022 Purslane Ltd.\n$license",
+                                style: const TextStyle(color: Colors.white),
+                              ),
+                              const Text(
+                                "Made with heart in this chaotic world!",
+                                style: TextStyle(
+                                    fontWeight: FontWeight.w800,
+                                    color: Colors.white),
+                              )
+                            ],
                           ),
-                          const Text(
-                            "Made with heart in this chaotic world!",
-                            style: TextStyle(
-                                fontWeight: FontWeight.w800,
-                                color: Colors.white),
-                          )
-                        ],
-                      ),
+                        ),
+                      ],
                     ),
-                  ],
-                ),
-              ).marginSymmetric(vertical: 4.0)
-            ],
-          ).marginOnly(left: _kContentHMargin)
-        ]),
-      ]);
+                  ).marginSymmetric(vertical: 4.0)
+                ],
+              ).marginOnly(left: _kContentHMargin)
+            ]),
+          ));
     });
   }
 }
