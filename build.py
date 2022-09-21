@@ -73,6 +73,11 @@ def make_parser():
         action='store_true',
         help='Enable feature hwcodec'
     )
+    parser.add_argument(
+        '--portable',
+        action='store_true',
+        help='Build windows portable'
+    )
     return parser
 
 
@@ -187,6 +192,20 @@ def build_flutter_arch_manjaro():
     os.chdir('..')
     os.system('HBB=`pwd` FLUTTER=1 makepkg -f')
 
+def build_flutter_windows_portable():
+    os.system("cargo build --lib --features flutter --release")
+    os.chdir('flutter')
+    os.system("flutter build windows --release")
+    os.chdir('..')
+    os.chdir("libs/portable")
+    os.system("pip3 install -r requirements.txt")
+    os.system("python3 .\\generate.py -f ..\\..\\flutter\\build\\windows\\runner\Release\ -o . -e ..\\..\\flutter\\build\\windows\\runner\\Release\\rustdesk.exe")
+    os.chdir("../..")
+    if os.path.exists("./rustdesk_portable.exe"):
+        os.replace("./target/release/rustdesk-portable-packer.exe", "./rustdesk_portable.exe")
+    else:
+        os.rename("./target/release/rustdesk-portable-packer.exe", "./rustdesk_portable.exe")
+    print(f"output location: {os.path.abspath(os.curdir)}/rustdesk_portable.exe")
 
 def main():
     parser = make_parser()
@@ -201,13 +220,19 @@ def main():
                 '//#![windows_subsystem', '#![windows_subsystem'))
     if os.path.exists(exe_path):
         os.unlink(exe_path)
-    os.system('python3 res/inline-sciter.py')
     if os.path.isfile('/usr/bin/pacman'):
         os.system('git checkout src/ui/common.tis')
     version = get_version()
     features = ",".join(get_features(args))
     flutter = args.flutter
+    if not flutter:
+        # not flutter, is sciter
+        os.system('python3 res/inline-sciter.py')
+    portable = args.portable
     if windows:
+        if portable:
+            build_flutter_windows_portable()
+            return
         os.system('cargo build --release --features ' + features)
         # os.system('upx.exe target/release/rustdesk.exe')
         os.system('mv target/release/rustdesk.exe target/release/RustDesk.exe')
