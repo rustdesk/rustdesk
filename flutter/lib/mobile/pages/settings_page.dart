@@ -60,7 +60,7 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
         _enableAbr = enableAbrRes;
       }
 
-      _enableAbr = isDarkTheme();
+      // _isDarkMode = MyTheme.currentDarkMode(); // TODO
 
       if (update) {
         setState(() {});
@@ -184,7 +184,7 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
             onToggle: (v) {
               setState(() {
                 _isDarkMode = !_isDarkMode;
-                MyTheme.changeTo(_isDarkMode);
+                // MyTheme.changeDarkMode(_isDarkMode); // TODO
               });
             },
           )

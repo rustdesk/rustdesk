@@ -692,10 +692,10 @@ fn main_broadcast_message(data: &HashMap<&str, &str>) {
     }
 }
 
-pub fn main_change_theme(dark: bool) {
+pub fn main_change_theme(dark: String) {
     main_broadcast_message(&HashMap::from([
         ("name", "theme"),
-        ("dark", &dark.to_string()),
+        ("dark", &dark),
     ]));
     send_to_cm(&crate::ipc::Data::Theme(dark));
 }

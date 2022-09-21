@@ -197,30 +197,39 @@ class MyTheme {
     ],
   );
 
-  static changeTo(bool dark) {
-    if (isDarkTheme() != dark) {
-      Get.find<SharedPreferences>().setString("darkTheme", dark ? "Y" : "");
-      Get.changeThemeMode(dark ? ThemeMode.dark : ThemeMode.light);
+  static ThemeMode getThemeModePreference() {
+    return themeModeFromString(
+        Get.find<SharedPreferences>().getString("themeMode") ?? "");
+  }
+
+  static void changeDarkMode(ThemeMode mode) {
+    final preference = getThemeModePreference();
+    if (preference != mode) {
+      if (mode == ThemeMode.system) {
+        Get.find<SharedPreferences>().setString("themeMode", "");
+      } else {
+        Get.find<SharedPreferences>()
+            .setString("themeMode", mode.toShortString());
+      }
+      Get.changeThemeMode(mode);
       if (desktopType == DesktopType.main) {
-        bind.mainChangeTheme(dark: dark);
+        bind.mainChangeTheme(dark: currentThemeMode().toShortString());
       }
     }
   }
 
-  static bool _themeInitialed = false;
-
-  static ThemeMode initialThemeMode({bool mainPage = false}) {
-    bool dark;
-    // Brightnesss is always light on windows, Flutter 3.0.5
-    if (_themeInitialed || !mainPage || Platform.isWindows) {
-      dark = isDarkTheme();
+  static ThemeMode currentThemeMode() {
+    final preference = getThemeModePreference();
+    if (preference == ThemeMode.system) {
+      if (WidgetsBinding.instance.platformDispatcher.platformBrightness ==
+          Brightness.light) {
+        return ThemeMode.light;
+      } else {
+        return ThemeMode.dark;
+      }
     } else {
-      dark = WidgetsBinding.instance.platformDispatcher.platformBrightness ==
-          Brightness.dark;
-      Get.find<SharedPreferences>().setString("darkTheme", dark ? "Y" : "");
+      return preference;
     }
-    _themeInitialed = true;
-    return dark ? ThemeMode.dark : ThemeMode.light;
   }
 
   static ColorThemeExtension color(BuildContext context) {
@@ -230,10 +239,23 @@ class MyTheme {
   static TabbarTheme tabbar(BuildContext context) {
     return Theme.of(context).extension<TabbarTheme>()!;
   }
+
+  static ThemeMode themeModeFromString(String v) {
+    switch (v) {
+      case "light":
+        return ThemeMode.light;
+      case "dark":
+        return ThemeMode.dark;
+      default:
+        return ThemeMode.system;
+    }
+  }
 }
 
-bool isDarkTheme() {
-  return "Y" == Get.find<SharedPreferences>().getString("darkTheme");
+extension ParseToString on ThemeMode {
+  String toShortString() {
+    return toString().split('.').last;
+  }
 }
 
 final ButtonStyle flatButtonStyle = TextButton.styleFrom(
