@@ -32,6 +32,7 @@ const url = 'https://rustdesk.com/';
 final _hasIgnoreBattery = androidVersion >= 26;
 var _ignoreBatteryOpt = false;
 var _enableAbr = false;
+var _isDarkMode = false;
 
 class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
   String? username;
@@ -58,6 +59,8 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
         update = true;
         _enableAbr = enableAbrRes;
       }
+
+      _enableAbr = isDarkTheme();
 
       if (update) {
         setState(() {});
@@ -173,7 +176,18 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
               leading: Icon(Icons.translate),
               onPressed: (context) {
                 showLanguageSettings(gFFI.dialogManager);
-              })
+              }),
+          SettingsTile.switchTile(
+            title: Text(translate('Dark Theme')),
+            leading: Icon(Icons.dark_mode),
+            initialValue: _isDarkMode,
+            onToggle: (v) {
+              setState(() {
+                _isDarkMode = !_isDarkMode;
+                MyTheme.changeTo(_isDarkMode);
+              });
+            },
+          )
         ]),
         SettingsSection(
           title: Text(translate("Enhancements")),

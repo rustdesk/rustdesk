@@ -40,7 +40,7 @@ class _PeerWidget extends StatefulWidget {
 /// State for the peer widget.
 class _PeerWidgetState extends State<_PeerWidget> with WindowListener {
   static const int _maxQueryCount = 3;
-
+  final space = isDesktop ? 12.0 : 8.0;
   final _curPeers = <String>{};
   final _scrollController = ScrollController();
   var _lastChangeTime = DateTime.now();
@@ -48,6 +48,17 @@ class _PeerWidgetState extends State<_PeerWidget> with WindowListener {
   var _lastQueryTime = DateTime.now().subtract(const Duration(hours: 1));
   var _queryCoun = 0;
   var _exit = false;
+
+  late final mobileWidth = () {
+    const minWidth = 320.0;
+    final windowWidth = MediaQuery.of(context).size.width;
+    var width = windowWidth - 2 * space;
+    if (windowWidth > minWidth + 2 * space) {
+      final n = (windowWidth / (minWidth + 2 * space)).floor();
+      width = windowWidth / n - 2 * space;
+    }
+    return width;
+  }();
 
   _PeerWidgetState() {
     _startCheckOnlines();
@@ -78,70 +89,79 @@ class _PeerWidgetState extends State<_PeerWidget> with WindowListener {
 
   @override
   Widget build(BuildContext context) {
-    const space = 12.0;
     return ChangeNotifierProvider<Peers>(
       create: (context) => widget.peers,
       child: Consumer<Peers>(
-        builder: (context, peers, child) => peers.peers.isEmpty
-            ? Center(
-                child: Text(translate("Empty")),
-              )
-            : DesktopScrollWrapper(
-                scrollController: _scrollController,
-                child: SingleChildScrollView(
-                  physics: NeverScrollableScrollPhysics(),
-                  controller: _scrollController,
-                  child: ObxValue<RxString>((searchText) {
-                    return FutureBuilder<List<Peer>>(
-                      builder: (context, snapshot) {
-                        if (snapshot.hasData) {
-                          final peers = snapshot.data!;
-                          final cards = <Widget>[];
-                          for (final peer in peers) {
-                            cards.add(Offstage(
-                                key: ValueKey("off${peer.id}"),
-                                offstage: widget.offstageFunc(peer),
-                                child: Obx(
-                                  () => SizedBox(
-                                    width: 220,
-                                    height:
-                                        peerCardUiType.value == PeerUiType.grid
-                                            ? 140
-                                            : 42,
-                                    child: VisibilityDetector(
-                                      key: ValueKey(peer.id),
-                                      onVisibilityChanged: (info) {
-                                        final peerId =
-                                            (info.key as ValueKey).value;
-                                        if (info.visibleFraction > 0.00001) {
-                                          _curPeers.add(peerId);
-                                        } else {
-                                          _curPeers.remove(peerId);
-                                        }
-                                        _lastChangeTime = DateTime.now();
-                                      },
-                                      child: widget.peerCardWidgetFunc(peer),
-                                    ),
-                                  ),
-                                )));
-                          }
-                          return Wrap(
-                              spacing: space,
-                              runSpacing: space,
-                              children: cards);
-                        } else {
-                          return const Center(
-                            child: CircularProgressIndicator(),
-                          );
-                        }
-                      },
-                      future: matchPeers(searchText.value, peers.peers),
-                    );
-                  }, peerSearchText),
-                ),
-              ),
-      ),
+          builder: (context, peers, child) => peers.peers.isEmpty
+              ? Center(
+                  child: Text(translate("Empty")),
+                )
+              : _buildPeersView(peers)),
     );
+  }
+
+  Widget _buildPeersView(Peers peers) {
+    final body = ObxValue<RxString>((searchText) {
+      return FutureBuilder<List<Peer>>(
+        builder: (context, snapshot) {
+          if (snapshot.hasData) {
+            final peers = snapshot.data!;
+            final cards = <Widget>[];
+            for (final peer in peers) {
+              final visibilityChild = VisibilityDetector(
+                key: ValueKey(peer.id),
+                onVisibilityChanged: (info) {
+                  final peerId = (info.key as ValueKey).value;
+                  if (info.visibleFraction > 0.00001) {
+                    _curPeers.add(peerId);
+                  } else {
+                    _curPeers.remove(peerId);
+                  }
+                  _lastChangeTime = DateTime.now();
+                },
+                child: widget.peerCardWidgetFunc(peer),
+              );
+              cards.add(Offstage(
+                  key: ValueKey("off${peer.id}"),
+                  offstage: widget.offstageFunc(peer),
+                  child: isDesktop
+                      ? Obx(
+                          () => SizedBox(
+                            width: 220,
+                            height: peerCardUiType.value == PeerUiType.grid
+                                ? 140
+                                : 42,
+                            child: visibilityChild,
+                          ),
+                        )
+                      : SizedBox(width: mobileWidth, child: visibilityChild)));
+            }
+            return Wrap(spacing: space, runSpacing: space, children: cards);
+          } else {
+            return const Center(
+              child: CircularProgressIndicator(),
+            );
+          }
+        },
+        future: matchPeers(searchText.value, peers.peers),
+      );
+    }, peerSearchText);
+
+    if (isDesktop) {
+      return DesktopScrollWrapper(
+        scrollController: _scrollController,
+        child: SingleChildScrollView(
+            physics: NeverScrollableScrollPhysics(),
+            controller: _scrollController,
+            child: body),
+      );
+    } else {
+      return SingleChildScrollView(
+        physics: BouncingScrollPhysics(),
+        controller: _scrollController,
+        child: body,
+      );
+    }
   }
 
   // ignore: todo
@@ -281,6 +301,7 @@ class AddressBookPeerWidget extends BasePeerWidget {
         );
 
   static List<Peer> _loadPeers() {
+    debugPrint("_loadPeers : ${gFFI.abModel.peers.toString()}");
     return gFFI.abModel.peers.map((e) {
       return Peer.fromJson(e['id'], e);
     }).toList();
@@ -304,7 +325,7 @@ class AddressBookPeerWidget extends BasePeerWidget {
   @override
   Widget build(BuildContext context) {
     final widget = super.build(context);
-    gFFI.abModel.updateAb();
+    // gFFI.abModel.updateAb();
     return widget;
   }
 }

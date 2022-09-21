@@ -1,13 +1,18 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_hbb/common/formatter/id_formatter.dart';
 import 'package:flutter_hbb/mobile/pages/file_manager_page.dart';
+import 'package:get/get.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../common.dart';
+import '../../common/widgets/address_book.dart';
+import '../../common/widgets/peer_tab_page.dart';
+import '../../common/widgets/peer_widget.dart';
+import '../../consts.dart';
 import '../../models/model.dart';
-import '../../models/peer_model.dart';
 import '../../models/platform_model.dart';
 import 'home_page.dart';
 import 'remote_page.dart';
@@ -19,26 +24,25 @@ class ConnectionPage extends StatefulWidget implements PageShape {
   ConnectionPage({Key? key}) : super(key: key);
 
   @override
-  final icon = Icon(Icons.connected_tv);
+  final icon = const Icon(Icons.connected_tv);
 
   @override
   final title = translate("Connection");
 
   @override
-  final appBarActions = !isAndroid ? <Widget>[WebMenu()] : <Widget>[];
+  final appBarActions = !isAndroid ? <Widget>[const WebMenu()] : <Widget>[];
 
   @override
-  _ConnectionPageState createState() => _ConnectionPageState();
+  State<ConnectionPage> createState() => _ConnectionPageState();
 }
 
 /// State for the connection page.
 class _ConnectionPageState extends State<ConnectionPage> {
   /// Controller for the id input bar.
-  final _idController = TextEditingController();
+  final _idController = IDTextEditingController();
 
   /// Update url. If it's not null, means an update is available.
   var _updateUrl = '';
-  var _menuPos;
 
   @override
   void initState() {
@@ -46,17 +50,16 @@ class _ConnectionPageState extends State<ConnectionPage> {
     if (_idController.text.isEmpty) {
       () async {
         final lastRemoteId = await bind.mainGetLastRemoteId();
-        if (lastRemoteId != _idController.text) {
+        if (lastRemoteId != _idController.id) {
           setState(() {
-            _idController.text = lastRemoteId;
+            _idController.id = lastRemoteId;
           });
         }
       }();
     }
     if (isAndroid) {
-      Timer(Duration(seconds: 5), () async {
+      Timer(const Duration(seconds: 5), () async {
         _updateUrl = await bind.mainGetSoftwareUpdateUrl();
-        ;
         if (_updateUrl.isNotEmpty) setState(() {});
       });
     }
@@ -65,25 +68,35 @@ class _ConnectionPageState extends State<ConnectionPage> {
   @override
   Widget build(BuildContext context) {
     Provider.of<FfiModel>(context);
-    return SingleChildScrollView(
-      controller: ScrollController(),
-      child: Column(
-          mainAxisAlignment: MainAxisAlignment.start,
-          mainAxisSize: MainAxisSize.max,
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: <Widget>[
-            getUpdateUI(),
-            getSearchBarUI(),
-            Container(height: 12),
-            getPeers(),
-          ]),
-    );
+    return Column(
+        mainAxisAlignment: MainAxisAlignment.start,
+        mainAxisSize: MainAxisSize.max,
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: <Widget>[
+          _buildUpdateUI(),
+          _buildRemoteIDTextField(),
+          Expanded(
+              child: PeerTabPage(
+            tabs: [
+              translate('Recent Sessions'),
+              translate('Favorites'),
+              translate('Discovered'),
+              translate('Address Book')
+            ],
+            children: [
+              RecentPeerWidget(),
+              FavoritePeerWidget(),
+              DiscoveredPeerWidget(),
+              const AddressBook(),
+            ],
+          )),
+        ]).marginOnly(top: 2, left: 10, right: 10);
   }
 
   /// Callback for the connect button.
   /// Connects to the selected peer.
   void onConnect() {
-    var id = _idController.text.trim();
+    var id = _idController.id;
     connect(id);
   }
 
@@ -120,12 +133,12 @@ class _ConnectionPageState extends State<ConnectionPage> {
 
   /// UI for software update.
   /// If [_updateUrl] is not empty, shows a button to update the software.
-  Widget getUpdateUI() {
+  Widget _buildUpdateUI() {
     return _updateUrl.isEmpty
-        ? SizedBox(height: 0)
+        ? const SizedBox(height: 0)
         : InkWell(
             onTap: () async {
-              final url = _updateUrl + '.apk';
+              final url = '$_updateUrl.apk';
               if (await canLaunchUrl(Uri.parse(url))) {
                 await launchUrl(Uri.parse(url));
               }
@@ -134,79 +147,78 @@ class _ConnectionPageState extends State<ConnectionPage> {
                 alignment: AlignmentDirectional.center,
                 width: double.infinity,
                 color: Colors.pinkAccent,
-                padding: EdgeInsets.symmetric(vertical: 12),
+                padding: const EdgeInsets.symmetric(vertical: 12),
                 child: Text(translate('Download new version'),
-                    style: TextStyle(
+                    style: const TextStyle(
                         color: Colors.white, fontWeight: FontWeight.bold))));
   }
 
-  /// UI for the search bar.
+  /// UI for the remote ID TextField.
   /// Search for a peer and connect to it if the id exists.
-  Widget getSearchBarUI() {
-    var w = Padding(
-      padding: const EdgeInsets.fromLTRB(16.0, 8.0, 16.0, 0.0),
-      child: Container(
-        height: 84,
-        child: Padding(
-          padding: const EdgeInsets.only(top: 8, bottom: 8),
-          child: Ink(
-            decoration: BoxDecoration(
-              color: MyTheme.white,
-              borderRadius: const BorderRadius.all(Radius.circular(13)),
-            ),
-            child: Row(
-              children: <Widget>[
-                Expanded(
-                  child: Container(
-                    padding: const EdgeInsets.only(left: 16, right: 16),
-                    child: TextField(
-                      autocorrect: false,
-                      enableSuggestions: false,
-                      keyboardType: TextInputType.visiblePassword,
-                      // keyboardType: TextInputType.number,
-                      style: TextStyle(
-                        fontFamily: 'WorkSans',
-                        fontWeight: FontWeight.bold,
-                        fontSize: 30,
-                        color: MyTheme.idColor,
-                      ),
-                      decoration: InputDecoration(
-                        labelText: translate('Remote ID'),
-                        // hintText: 'Enter your remote ID',
-                        border: InputBorder.none,
-                        helperStyle: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 16,
-                          color: MyTheme.darkGray,
-                        ),
-                        labelStyle: TextStyle(
-                          fontWeight: FontWeight.w600,
-                          fontSize: 16,
-                          letterSpacing: 0.2,
-                          color: MyTheme.darkGray,
-                        ),
-                      ),
-                      controller: _idController,
+  Widget _buildRemoteIDTextField() {
+    final w = SizedBox(
+      height: 84,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 2),
+        child: Ink(
+          decoration: const BoxDecoration(
+            color: MyTheme.white,
+            borderRadius: BorderRadius.all(Radius.circular(13)),
+          ),
+          child: Row(
+            children: <Widget>[
+              Expanded(
+                child: Container(
+                  padding: const EdgeInsets.only(left: 16, right: 16),
+                  child: TextField(
+                    autocorrect: false,
+                    enableSuggestions: false,
+                    keyboardType: TextInputType.visiblePassword,
+                    // keyboardType: TextInputType.number,
+                    style: const TextStyle(
+                      fontFamily: 'WorkSans',
+                      fontWeight: FontWeight.bold,
+                      fontSize: 30,
+                      color: MyTheme.idColor,
                     ),
+                    decoration: InputDecoration(
+                      labelText: translate('Remote ID'),
+                      // hintText: 'Enter your remote ID',
+                      border: InputBorder.none,
+                      helperStyle: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                        color: MyTheme.darkGray,
+                      ),
+                      labelStyle: const TextStyle(
+                        fontWeight: FontWeight.w600,
+                        fontSize: 16,
+                        letterSpacing: 0.2,
+                        color: MyTheme.darkGray,
+                      ),
+                    ),
+                    controller: _idController,
+                    inputFormatters: [IDTextInputFormatter()],
                   ),
                 ),
-                SizedBox(
-                  width: 60,
-                  height: 60,
-                  child: IconButton(
-                    icon: Icon(Icons.arrow_forward,
-                        color: MyTheme.darkGray, size: 45),
-                    onPressed: onConnect,
-                  ),
+              ),
+              SizedBox(
+                width: 60,
+                height: 60,
+                child: IconButton(
+                  icon: const Icon(Icons.arrow_forward,
+                      color: MyTheme.darkGray, size: 45),
+                  onPressed: onConnect,
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
       ),
     );
-    return Center(
-        child: Container(constraints: BoxConstraints(maxWidth: 600), child: w));
+    return Align(
+        alignment: Alignment.topLeft,
+        child: Container(constraints: kMobilePageConstraints, child: w));
   }
 
   @override
@@ -214,97 +226,13 @@ class _ConnectionPageState extends State<ConnectionPage> {
     _idController.dispose();
     super.dispose();
   }
-
-  /// Get all the saved peers.
-  Widget getPeers() {
-    final windowWidth = MediaQuery.of(context).size.width;
-    final space = 8.0;
-    var width = windowWidth - 2 * space;
-    final minWidth = 320.0;
-    if (windowWidth > minWidth + 2 * space) {
-      final n = (windowWidth / (minWidth + 2 * space)).floor();
-      width = windowWidth / n - 2 * space;
-    }
-    return FutureBuilder<List<Peer>>(
-        future: gFFI.peers(),
-        builder: (context, snapshot) {
-          final cards = <Widget>[];
-          if (snapshot.hasData) {
-            final peers = snapshot.data!;
-            peers.forEach((p) {
-              cards.add(Container(
-                  width: width,
-                  child: Card(
-                      child: GestureDetector(
-                          onTap:
-                              !isWebDesktop ? () => connect('${p.id}') : null,
-                          onDoubleTap:
-                              isWebDesktop ? () => connect('${p.id}') : null,
-                          onLongPressStart: (details) {
-                            final x = details.globalPosition.dx;
-                            final y = details.globalPosition.dy;
-                            _menuPos = RelativeRect.fromLTRB(x, y, x, y);
-                            showPeerMenu(context, p.id);
-                          },
-                          child: ListTile(
-                            contentPadding: const EdgeInsets.only(left: 12),
-                            subtitle: Text('${p.username}@${p.hostname}'),
-                            title: Text('${p.id}'),
-                            leading: Container(
-                                padding: const EdgeInsets.all(6),
-                                child: getPlatformImage('${p.platform}'),
-                                color: str2color('${p.id}${p.platform}', 0x7f)),
-                            trailing: InkWell(
-                                child: Padding(
-                                    padding: const EdgeInsets.all(12),
-                                    child: Icon(Icons.more_vert)),
-                                onTapDown: (e) {
-                                  final x = e.globalPosition.dx;
-                                  final y = e.globalPosition.dy;
-                                  _menuPos = RelativeRect.fromLTRB(x, y, x, y);
-                                },
-                                onTap: () {
-                                  showPeerMenu(context, p.id);
-                                }),
-                          )))));
-            });
-          }
-          return Wrap(children: cards, spacing: space, runSpacing: space);
-        });
-  }
-
-  /// Show the peer menu and handle user's choice.
-  /// User might remove the peer or send a file to the peer.
-  void showPeerMenu(BuildContext context, String id) async {
-    var value = await showMenu(
-      context: context,
-      position: this._menuPos,
-      items: [
-            PopupMenuItem<String>(
-                child: Text(translate('Remove')), value: 'remove')
-          ] +
-          (!isAndroid
-              ? []
-              : [
-                  PopupMenuItem<String>(
-                      child: Text(translate('Transfer File')), value: 'file')
-                ]),
-      elevation: 8,
-    );
-    if (value == 'remove') {
-      setState(() => bind.mainRemovePeer(id: id));
-      () async {
-        removePreference(id);
-      }();
-    } else if (value == 'file') {
-      connect(id, isFileTransfer: true);
-    }
-  }
 }
 
 class WebMenu extends StatefulWidget {
+  const WebMenu({Key? key}) : super(key: key);
+
   @override
-  _WebMenuState createState() => _WebMenuState();
+  State<WebMenu> createState() => _WebMenuState();
 }
 
 class _WebMenuState extends State<WebMenu> {
@@ -337,36 +265,36 @@ class _WebMenuState extends State<WebMenu> {
   Widget build(BuildContext context) {
     Provider.of<FfiModel>(context);
     return PopupMenuButton<String>(
-        icon: Icon(Icons.more_vert),
+        icon: const Icon(Icons.more_vert),
         itemBuilder: (context) {
           return (isIOS
                   ? [
-                      PopupMenuItem(
-                        child: Icon(Icons.qr_code_scanner, color: Colors.black),
+                      const PopupMenuItem(
                         value: "scan",
+                        child: Icon(Icons.qr_code_scanner, color: Colors.black),
                       )
                     ]
                   : <PopupMenuItem<String>>[]) +
               [
                 PopupMenuItem(
-                  child: Text(translate('ID/Relay Server')),
                   value: "server",
+                  child: Text(translate('ID/Relay Server')),
                 )
               ] +
               (url.contains('admin.rustdesk.com')
                   ? <PopupMenuItem<String>>[]
                   : [
                       PopupMenuItem(
+                        value: "login",
                         child: Text(username == null
                             ? translate("Login")
-                            : translate("Logout") + ' ($username)'),
-                        value: "login",
+                            : '${translate("Logout")} ($username)'),
                       )
                     ]) +
               [
                 PopupMenuItem(
-                  child: Text(translate('About') + ' RustDesk'),
                   value: "about",
+                  child: Text('${translate('About')} RustDesk'),
                 )
               ];
         },
