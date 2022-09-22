@@ -331,7 +331,7 @@ Future<bool> loginDialog() async {
   var userNameMsg = "";
   String pass = "";
   var passMsg = "";
-  var userContontroller = TextEditingController(text: userName);
+  var userController = TextEditingController(text: userName);
   var pwdController = TextEditingController(text: pass);
 
   var isInProgress = false;
@@ -349,7 +349,7 @@ Future<bool> loginDialog() async {
         });
       }
 
-      userName = userContontroller.text;
+      userName = userController.text;
       pass = pwdController.text;
       if (userName.isEmpty) {
         userNameMsg = translate("Username missed");
@@ -385,6 +385,7 @@ Future<bool> loginDialog() async {
       close();
     }
 
+    // 登录dialog
     return CustomAlertDialog(
       title: Text(translate("Login")),
       content: ConstrainedBox(
@@ -411,7 +412,7 @@ Future<bool> loginDialog() async {
                     decoration: InputDecoration(
                         border: const OutlineInputBorder(),
                         errorText: userNameMsg.isNotEmpty ? userNameMsg : null),
-                    controller: userContontroller,
+                    controller: userController,
                     focusNode: FocusNode()..requestFocus(),
                   ),
                 ),

@@ -451,7 +451,7 @@ void showLogin(OverlayDialogManager dialogManager) {
           ),
           controller: nameController,
         ),
-        PasswordWidget(controller: passwordController),
+        PasswordWidget(controller: passwordController, autoFocus: false),
       ]),
       actions: (loading
               ? <Widget>[CircularProgressIndicator()]

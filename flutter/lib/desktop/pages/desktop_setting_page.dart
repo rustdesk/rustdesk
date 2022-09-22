@@ -48,7 +48,7 @@ class _DesktopSettingPageState extends State<DesktopSettingPage>
     _TabInfo('Security', Icons.enhanced_encryption_outlined,
         Icons.enhanced_encryption),
     _TabInfo('Network', Icons.link_outlined, Icons.link),
-    _TabInfo('Acount', Icons.person_outline, Icons.person),
+    _TabInfo('Account', Icons.person_outline, Icons.person),
     _TabInfo('About', Icons.info_outline, Icons.info)
   ];
 
@@ -92,7 +92,7 @@ class _DesktopSettingPageState extends State<DesktopSettingPage>
                       _General(),
                       _Safety(),
                       _Network(),
-                      _Acount(),
+                      _Account(),
                       _About(),
                     ],
                   )),
@@ -641,14 +641,14 @@ class _NetworkState extends State<_Network> with AutomaticKeepAliveClientMixin {
   }
 }
 
-class _Acount extends StatefulWidget {
-  const _Acount({Key? key}) : super(key: key);
+class _Account extends StatefulWidget {
+  const _Account({Key? key}) : super(key: key);
 
   @override
-  State<_Acount> createState() => _AcountState();
+  State<_Account> createState() => _AccountState();
 }
 
-class _AcountState extends State<_Acount> {
+class _AccountState extends State<_Account> {
   @override
   Widget build(BuildContext context) {
     final scrollController = ScrollController();
@@ -658,12 +658,12 @@ class _AcountState extends State<_Acount> {
           physics: NeverScrollableScrollPhysics(),
           controller: scrollController,
           children: [
-            _Card(title: 'Acount', children: [login()]),
+            _Card(title: 'Account', children: [accountAction()]),
           ],
         ).marginOnly(bottom: _kListViewBottomMargin));
   }
 
-  Widget login() {
+  Widget accountAction() {
     return _futureBuilder(future: () async {
       return await gFFI.userModel.getUserName();
     }(), hasData: (data) {
@@ -671,12 +671,14 @@ class _AcountState extends State<_Acount> {
       return _Button(
           username.isEmpty ? 'Login' : 'Logout',
           () => {
-                loginDialog().then((success) {
-                  if (success) {
-                    // refresh frame
-                    setState(() {});
-                  }
-                })
+                username.isEmpty
+                    ? loginDialog().then((success) {
+                        if (success) {
+                          // refresh frame
+                          setState(() {});
+                        }
+                      })
+                    : gFFI.userModel.logOut()
               });
     });
   }

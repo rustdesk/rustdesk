@@ -590,8 +590,6 @@ abstract class BasePeerCard extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
               child: Form(
                 child: TextFormField(
                   controller: controller,

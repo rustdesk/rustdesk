@@ -7,6 +7,7 @@ import 'package:provider/provider.dart';
 
 import '../../common.dart';
 import '../../desktop/pages/desktop_home_page.dart';
+import '../../mobile/pages/settings_page.dart';
 import '../../models/platform_model.dart';
 
 class AddressBook extends StatefulWidget {
@@ -37,11 +38,16 @@ class _AddressBookState extends State<AddressBook> {
       });
 
   handleLogin() {
-    loginDialog().then((success) {
-      if (success) {
-        setState(() {});
-      }
-    });
+    // TODO refactor login dialog for desktop and mobile
+    if (isDesktop) {
+      loginDialog().then((success) {
+        if (success) {
+          setState(() {});
+        }
+      });
+    } else {
+      showLogin(gFFI.dialogManager);
+    }
   }
 
   Future<Widget> buildAddressBook(BuildContext context) async {
