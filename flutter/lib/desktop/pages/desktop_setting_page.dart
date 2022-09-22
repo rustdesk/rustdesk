@@ -331,7 +331,7 @@ class _Safety extends StatefulWidget {
 class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
   @override
   bool get wantKeepAlive => true;
-  bool locked = true;
+  bool locked = bind.mainIsInstalled();
   final scrollController = ScrollController();
 
   @override
