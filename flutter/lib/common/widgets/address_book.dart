@@ -1,6 +1,6 @@
 import 'package:contextmenu/contextmenu.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_hbb/common/widgets/peer_widget.dart';
+import 'package:flutter_hbb/common/widgets/peers_view.dart';
 import 'package:flutter_hbb/models/ab_model.dart';
 import 'package:get/get.dart';
 import 'package:provider/provider.dart';
@@ -174,7 +174,7 @@ class _AddressBookState extends State<AddressBook> {
                 Expanded(
                   child: Align(
                       alignment: Alignment.topLeft,
-                      child: AddressBookPeerWidget()),
+                      child: AddressBookPeersView()),
                 )
               ],
             ));

@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_hbb/common/widgets/peer_widget.dart';
-import 'package:flutter_hbb/common/widgets/peercard_widget.dart';
+import 'package:flutter_hbb/common/widgets/peers_view.dart';
+import 'package:flutter_hbb/common/widgets/peer_card.dart';
 import 'package:flutter_hbb/consts.dart';
 import 'package:get/get.dart';
 

@@ -10,7 +10,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../common.dart';
 import '../../common/widgets/address_book.dart';
 import '../../common/widgets/peer_tab_page.dart';
-import '../../common/widgets/peer_widget.dart';
+import '../../common/widgets/peers_view.dart';
 import '../../consts.dart';
 import '../../models/model.dart';
 import '../../models/platform_model.dart';
@@ -84,9 +84,9 @@ class _ConnectionPageState extends State<ConnectionPage> {
               translate('Address Book')
             ],
             children: [
-              RecentPeerWidget(),
-              FavoritePeerWidget(),
-              DiscoveredPeerWidget(),
+              RecentPeersView(),
+              FavoritePeersView(),
+              DiscoveredPeersView(),
               const AddressBook(),
             ],
           )),
