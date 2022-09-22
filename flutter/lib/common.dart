@@ -17,6 +17,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:window_manager/window_manager.dart';
 
 import 'common/widgets/overlay.dart';
+import 'mobile/pages/file_manager_page.dart';
+import 'mobile/pages/remote_page.dart';
 import 'models/model.dart';
 import 'models/platform_model.dart';
 
@@ -1071,14 +1073,38 @@ void connect(BuildContext context, String id,
   assert(!(isFileTransfer && isTcpTunneling && isRDP),
       "more than one connect type");
 
-  FocusScopeNode currentFocus = FocusScope.of(context);
-  if (isFileTransfer) {
-    await rustDeskWinManager.newFileTransfer(id);
-  } else if (isTcpTunneling || isRDP) {
-    await rustDeskWinManager.newPortForward(id, isRDP);
+  if (isDesktop) {
+    if (isFileTransfer) {
+      await rustDeskWinManager.newFileTransfer(id);
+    } else if (isTcpTunneling || isRDP) {
+      await rustDeskWinManager.newPortForward(id, isRDP);
+    } else {
+      await rustDeskWinManager.newRemoteDesktop(id);
+    }
   } else {
-    await rustDeskWinManager.newRemoteDesktop(id);
+    if (isFileTransfer) {
+      if (!await PermissionManager.check("file")) {
+        if (!await PermissionManager.request("file")) {
+          return;
+        }
+      }
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (BuildContext context) => FileManagerPage(id: id),
+        ),
+      );
+    } else {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (BuildContext context) => RemotePage(id: id),
+        ),
+      );
+    }
   }
+
+  FocusScopeNode currentFocus = FocusScope.of(context);
   if (!currentFocus.hasPrimaryFocus) {
     currentFocus.unfocus();
   }

@@ -11,34 +11,34 @@ import 'package:window_manager/window_manager.dart';
 import '../../common.dart';
 import '../../models/peer_model.dart';
 import '../../models/platform_model.dart';
-import 'peercard_widget.dart';
+import 'peer_card.dart';
 
 typedef OffstageFunc = bool Function(Peer peer);
-typedef PeerCardWidgetFunc = Widget Function(Peer peer);
+typedef PeerCardBuilder = BasePeerCard Function(Peer peer);
 
 /// for peer search text, global obs value
 final peerSearchText = "".obs;
 final peerSearchTextController =
     TextEditingController(text: peerSearchText.value);
 
-class _PeerWidget extends StatefulWidget {
+class _PeersView extends StatefulWidget {
   final Peers peers;
   final OffstageFunc offstageFunc;
-  final PeerCardWidgetFunc peerCardWidgetFunc;
+  final PeerCardBuilder peerCardBuilder;
 
-  const _PeerWidget(
+  const _PeersView(
       {required this.peers,
       required this.offstageFunc,
-      required this.peerCardWidgetFunc,
+      required this.peerCardBuilder,
       Key? key})
       : super(key: key);
 
   @override
-  _PeerWidgetState createState() => _PeerWidgetState();
+  _PeersViewState createState() => _PeersViewState();
 }
 
 /// State for the peer widget.
-class _PeerWidgetState extends State<_PeerWidget> with WindowListener {
+class _PeersViewState extends State<_PeersView> with WindowListener {
   static const int _maxQueryCount = 3;
   final space = isDesktop ? 12.0 : 8.0;
   final _curPeers = <String>{};
@@ -60,7 +60,7 @@ class _PeerWidgetState extends State<_PeerWidget> with WindowListener {
     return width;
   }();
 
-  _PeerWidgetState() {
+  _PeersViewState() {
     _startCheckOnlines();
   }
 
@@ -119,7 +119,7 @@ class _PeerWidgetState extends State<_PeerWidget> with WindowListener {
                   }
                   _lastChangeTime = DateTime.now();
                 },
-                child: widget.peerCardWidgetFunc(peer),
+                child: widget.peerCardBuilder(peer),
               );
               cards.add(Offstage(
                   key: ValueKey("off${peer.id}"),
@@ -198,39 +198,39 @@ class _PeerWidgetState extends State<_PeerWidget> with WindowListener {
   }
 }
 
-abstract class BasePeerWidget extends StatelessWidget {
+abstract class BasePeersView extends StatelessWidget {
   final String name;
   final String loadEvent;
   final OffstageFunc offstageFunc;
-  final PeerCardWidgetFunc peerCardWidgetFunc;
+  final PeerCardBuilder peerCardBuilder;
   final List<Peer> initPeers;
 
-  const BasePeerWidget({
+  const BasePeersView({
     Key? key,
     required this.name,
     required this.loadEvent,
     required this.offstageFunc,
-    required this.peerCardWidgetFunc,
+    required this.peerCardBuilder,
     required this.initPeers,
   }) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
-    return _PeerWidget(
+    return _PeersView(
         peers: Peers(name: name, loadEvent: loadEvent, peers: initPeers),
         offstageFunc: offstageFunc,
-        peerCardWidgetFunc: peerCardWidgetFunc);
+        peerCardBuilder: peerCardBuilder);
   }
 }
 
-class RecentPeerWidget extends BasePeerWidget {
-  RecentPeerWidget({Key? key})
+class RecentPeersView extends BasePeersView {
+  RecentPeersView({Key? key})
       : super(
           key: key,
           name: 'recent peer',
           loadEvent: 'load_recent_peers',
           offstageFunc: (Peer peer) => false,
-          peerCardWidgetFunc: (Peer peer) => RecentPeerCard(
+          peerCardBuilder: (Peer peer) => RecentPeerCard(
             peer: peer,
           ),
           initPeers: [],
@@ -244,14 +244,14 @@ class RecentPeerWidget extends BasePeerWidget {
   }
 }
 
-class FavoritePeerWidget extends BasePeerWidget {
-  FavoritePeerWidget({Key? key})
+class FavoritePeersView extends BasePeersView {
+  FavoritePeersView({Key? key})
       : super(
           key: key,
           name: 'favorite peer',
           loadEvent: 'load_fav_peers',
           offstageFunc: (Peer peer) => false,
-          peerCardWidgetFunc: (Peer peer) => FavoritePeerCard(
+          peerCardBuilder: (Peer peer) => FavoritePeerCard(
             peer: peer,
           ),
           initPeers: [],
@@ -265,14 +265,14 @@ class FavoritePeerWidget extends BasePeerWidget {
   }
 }
 
-class DiscoveredPeerWidget extends BasePeerWidget {
-  DiscoveredPeerWidget({Key? key})
+class DiscoveredPeersView extends BasePeersView {
+  DiscoveredPeersView({Key? key})
       : super(
           key: key,
           name: 'discovered peer',
           loadEvent: 'load_lan_peers',
           offstageFunc: (Peer peer) => false,
-          peerCardWidgetFunc: (Peer peer) => DiscoveredPeerCard(
+          peerCardBuilder: (Peer peer) => DiscoveredPeerCard(
             peer: peer,
           ),
           initPeers: [],
@@ -286,15 +286,15 @@ class DiscoveredPeerWidget extends BasePeerWidget {
   }
 }
 
-class AddressBookPeerWidget extends BasePeerWidget {
-  AddressBookPeerWidget({Key? key})
+class AddressBookPeersView extends BasePeersView {
+  AddressBookPeersView({Key? key})
       : super(
           key: key,
           name: 'address book peer',
           loadEvent: 'load_address_book_peers',
           offstageFunc: (Peer peer) =>
               !_hitTag(gFFI.abModel.selectedTags, peer.tags),
-          peerCardWidgetFunc: (Peer peer) => AddressBookPeerCard(
+          peerCardBuilder: (Peer peer) => AddressBookPeerCard(
             peer: peer,
           ),
           initPeers: _loadPeers(),

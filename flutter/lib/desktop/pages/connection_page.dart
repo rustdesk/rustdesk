@@ -11,7 +11,7 @@ import 'package:url_launcher/url_launcher_string.dart';
 import '../../common.dart';
 import '../../common/formatter/id_formatter.dart';
 import '../../common/widgets/peer_tab_page.dart';
-import '../../common/widgets/peer_widget.dart';
+import '../../common/widgets/peers_view.dart';
 import '../../models/platform_model.dart';
 
 /// Connection page for connecting to a remote peer.
@@ -74,9 +74,9 @@ class _ConnectionPageState extends State<ConnectionPage> {
                       translate('Address Book')
                     ],
                     children: [
-                      RecentPeerWidget(),
-                      FavoritePeerWidget(),
-                      DiscoveredPeerWidget(),
+                      RecentPeersView(),
+                      FavoritePeersView(),
+                      DiscoveredPeersView(),
                       const AddressBook(),
                     ],
                   )),

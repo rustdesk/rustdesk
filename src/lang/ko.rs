@@ -318,7 +318,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Scale adaptive", "맞는 창"),
         ("General", ""),
         ("Security", ""),
-        ("Acount", ""),
+        ("Account", ""),
         ("Theme", ""),
         ("Dark Theme", ""),
         ("Enable hardware codec", ""),

@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_hbb/common/widgets/peer_widget.dart';
-import 'package:flutter_hbb/common/widgets/peercard_widget.dart';
+import 'package:flutter_hbb/common/widgets/peers_view.dart';
+import 'package:flutter_hbb/common/widgets/peer_card.dart';
 import 'package:flutter_hbb/consts.dart';
 import 'package:get/get.dart';
 
@@ -113,7 +113,7 @@ class _PeerTabPageState extends State<PeerTabPage>
                       color: _tabIndex.value == t.key
                           ? MyTheme.color(context).bg
                           : null,
-                      borderRadius: BorderRadius.circular(2),
+                      borderRadius: BorderRadius.circular(isDesktop ? 2 : 6),
                     ),
                     child: Align(
                       alignment: Alignment.center,

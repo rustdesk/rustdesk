@@ -6,8 +6,7 @@ import '../../models/model.dart';
 import '../../models/platform_model.dart';
 
 void clientClose(OverlayDialogManager dialogManager) {
-  msgBox('', 'Close', 'Are you sure to close the connection?',
-    dialogManager);
+  msgBox('', 'Close', 'Are you sure to close the connection?', dialogManager);
 }
 
 void showSuccess() {
@@ -131,7 +130,7 @@ void setTemporaryPasswordLengthDialog(
   if (index < 0) index = 0;
   length = lengths[index];
   dialogManager.show((setState, close) {
-    final setLength = (newValue) {
+    setLength(newValue) {
       final oldValue = length;
       if (oldValue == newValue) return;
       setState(() {
@@ -143,7 +142,8 @@ void setTemporaryPasswordLengthDialog(
         close();
         showSuccess();
       });
-    };
+    }
+
     return CustomAlertDialog(
       title: Text(translate("Set temporary password length")),
       content: Column(
@@ -230,12 +230,14 @@ void wrongPasswordDialog(String id, OverlayDialogManager dialogManager) {
 }
 
 class PasswordWidget extends StatefulWidget {
-  PasswordWidget({Key? key, required this.controller}) : super(key: key);
+  PasswordWidget({Key? key, required this.controller, this.autoFocus = true})
+      : super(key: key);
 
   final TextEditingController controller;
+  final bool autoFocus;
 
   @override
-  _PasswordWidgetState createState() => _PasswordWidgetState();
+  State<PasswordWidget> createState() => _PasswordWidgetState();
 }
 
 class _PasswordWidgetState extends State<PasswordWidget> {
@@ -245,7 +247,9 @@ class _PasswordWidgetState extends State<PasswordWidget> {
   @override
   void initState() {
     super.initState();
-    Timer(Duration(milliseconds: 50), () => _focusNode.requestFocus());
+    if (widget.autoFocus) {
+      Timer(Duration(milliseconds: 50), () => _focusNode.requestFocus());
+    }
   }
 
   @override
