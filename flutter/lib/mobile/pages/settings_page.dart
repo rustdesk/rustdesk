@@ -25,14 +25,13 @@ class SettingsPage extends StatefulWidget implements PageShape {
   final appBarActions = [ScanButton()];
 
   @override
-  _SettingsState createState() => _SettingsState();
+  State<SettingsPage> createState() => _SettingsState();
 }
 
 const url = 'https://rustdesk.com/';
 final _hasIgnoreBattery = androidVersion >= 26;
 var _ignoreBatteryOpt = false;
 var _enableAbr = false;
-var _isDarkMode = false;
 
 class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
   String? username;
@@ -59,8 +58,6 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
         update = true;
         _enableAbr = enableAbrRes;
       }
-
-      // _isDarkMode = MyTheme.currentDarkMode(); // TODO
 
       if (update) {
         setState(() {});
@@ -100,7 +97,7 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
     Provider.of<FfiModel>(context);
     final enhancementsTiles = [
       SettingsTile.switchTile(
-        title: Text(translate('Adaptive Bitrate') + ' (beta)'),
+        title: Text('${translate('Adaptive Bitrate')} (beta)'),
         initialValue: _enableAbr,
         onToggle: (v) {
           bind.mainSetOption(key: "enable-abr", value: v ? "" : "N");
@@ -152,7 +149,7 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
             SettingsTile.navigation(
               title: Text(username == null
                   ? translate("Login")
-                  : translate("Logout") + ' ($username)'),
+                  : '${translate("Logout")} ($username)'),
               leading: Icon(Icons.person),
               onPressed: (context) {
                 if (username == null) {
@@ -177,15 +174,11 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
               onPressed: (context) {
                 showLanguageSettings(gFFI.dialogManager);
               }),
-          SettingsTile.switchTile(
+          SettingsTile.navigation(
             title: Text(translate('Dark Theme')),
             leading: Icon(Icons.dark_mode),
-            initialValue: _isDarkMode,
-            onToggle: (v) {
-              setState(() {
-                _isDarkMode = !_isDarkMode;
-                // MyTheme.changeDarkMode(_isDarkMode); // TODO
-              });
+            onPressed: (context) {
+              showThemeSettings(gFFI.dialogManager);
             },
           )
         ]),
@@ -232,7 +225,7 @@ void showLanguageSettings(OverlayDialogManager dialogManager) async {
     final langs = json.decode(await bind.mainGetLangs()) as List<dynamic>;
     var lang = await bind.mainGetLocalOption(key: "lang");
     dialogManager.show((setState, close) {
-      final setLang = (v) {
+      setLang(v) {
         if (lang != v) {
           setState(() {
             lang = v;
@@ -241,7 +234,8 @@ void showLanguageSettings(OverlayDialogManager dialogManager) async {
           HomePage.homeKey.currentState?.refreshPages();
           Future.delayed(Duration(milliseconds: 200), close);
         }
-      };
+      }
+
       return CustomAlertDialog(
           title: SizedBox.shrink(),
           content: Column(
@@ -257,13 +251,41 @@ void showLanguageSettings(OverlayDialogManager dialogManager) async {
           ),
           actions: []);
     }, backDismiss: true, clickMaskDismiss: true);
-  } catch (_e) {}
+  } catch (e) {
+    //
+  }
+}
+
+void showThemeSettings(OverlayDialogManager dialogManager) async {
+  var themeMode = MyTheme.getThemeModePreference();
+
+  dialogManager.show((setState, close) {
+    setTheme(v) {
+      if (themeMode != v) {
+        setState(() {
+          themeMode = v;
+        });
+        MyTheme.changeDarkMode(themeMode);
+        Future.delayed(Duration(milliseconds: 200), close);
+      }
+    }
+
+    return CustomAlertDialog(
+        title: SizedBox.shrink(),
+        contentPadding: 10,
+        content: Column(children: [
+          getRadio('Light', ThemeMode.light, themeMode, setTheme),
+          getRadio('Dark', ThemeMode.dark, themeMode, setTheme),
+          getRadio('Follow System', ThemeMode.system, themeMode, setTheme)
+        ]),
+        actions: []);
+  }, backDismiss: true, clickMaskDismiss: true);
 }
 
 void showAbout(OverlayDialogManager dialogManager) {
   dialogManager.show((setState, close) {
     return CustomAlertDialog(
-      title: Text(translate('About') + ' RustDesk'),
+      title: Text('${translate('About')} RustDesk'),
       content: Wrap(direction: Axis.vertical, spacing: 12, children: [
         Text('Version: $version'),
         InkWell(
