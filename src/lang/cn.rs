@@ -352,5 +352,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Change", "更改"),
         ("Start session recording", "开始录屏"),
         ("Stop session recording", "结束录屏"),
+        ("Enable Recording Session", "允许录制会话"),
+        ("Allow recording session", "允许录制会话"),
     ].iter().cloned().collect();
 }

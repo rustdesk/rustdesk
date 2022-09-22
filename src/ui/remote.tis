@@ -12,6 +12,7 @@ var clipboard_enabled = true; // server side
 var audio_enabled = true; // server side
 var file_enabled = true; // server side
 var restart_enabled = true; // server side
+var recording_enabled = true; // server side
 var scroll_body = $(body);
 
 handler.setDisplay = function(x, y, w, h) {
@@ -521,6 +522,7 @@ handler.setPermission = function(name, enabled) {
     if (name == "file") file_enabled = enabled;
     if (name == "clipboard") clipboard_enabled = enabled;
     if (name == "restart") restart_enabled = enabled;
+    if (name == "recording") recording_enabled = enabled;
     input_blocked = false;
     header.update();
     });

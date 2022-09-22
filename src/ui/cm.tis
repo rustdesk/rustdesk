@@ -41,13 +41,16 @@ class Body: Reactor.Component
                 </div>
                 <div />
                 {c.is_file_transfer || c.port_forward ? "" : <div>{translate('Permissions')}</div>}
-                {c.is_file_transfer || c.port_forward ? "" : <div .permissions>
+                {c.is_file_transfer || c.port_forward ? "" : <div> <div .permissions>
                     <div class={!c.keyboard ? "disabled" : ""} title={translate('Allow using keyboard and mouse')}><icon .keyboard /></div>
                     <div class={!c.clipboard ? "disabled" : ""} title={translate('Allow using clipboard')}><icon .clipboard /></div>
                     <div class={!c.audio ? "disabled" : ""} title={translate('Allow hearing sound')}><icon .audio /></div>
                     <div class={!c.file ? "disabled" : ""} title={translate('Allow file copy and paste')}><icon .file /></div>
                     <div class={!c.restart ? "disabled" : ""} title={translate('Allow remote restart')}><icon .restart /></div>
-                </div>}
+                </div> <div .permissions style="margin-top:8px;" >
+                    <div class={!c.recording ? "disabled" : ""} title={translate('Allow recording session')}><icon .recording /></div>
+                </div></div>
+                }
                 {c.port_forward ? <div>Port Forwarding: {c.port_forward}</div> : ""}
                 <div style="size:*"/>
                 <div .buttons>
@@ -115,6 +118,15 @@ class Body: Reactor.Component
             connection.restart = !connection.restart;
             body.update();
             handler.switch_permission(cid, "restart", connection.restart);
+        });
+    }
+
+    event click $(icon.recording) {
+        var { cid, connection } = this;
+        checkClickTime(function() {
+            connection.recording = !connection.recording;
+            body.update();
+            handler.switch_permission(cid, "recording", connection.recording);
         });
     }
 
@@ -276,7 +288,7 @@ function bring_to_top(idx=-1) {
     }
 }
 
-handler.addConnection = function(id, is_file_transfer, port_forward, peer_id, name, authorized, keyboard, clipboard, audio, file, restart) {
+handler.addConnection = function(id, is_file_transfer, port_forward, peer_id, name, authorized, keyboard, clipboard, audio, file, restart, recording) {
     stdout.println("new connection #" + id + ": " + peer_id);
     var conn;
     connections.map(function(c) {
@@ -293,7 +305,7 @@ handler.addConnection = function(id, is_file_transfer, port_forward, peer_id, na
         port_forward: port_forward,
         name: name, authorized: authorized, time: new Date(),
         keyboard: keyboard, clipboard: clipboard, msgs: [], unreaded: 0,
-        audio: audio, file: file, restart: restart
+        audio: audio, file: file, restart: restart, recording: recording
     });
     body.cur = connections.length - 1;
     bring_to_top();

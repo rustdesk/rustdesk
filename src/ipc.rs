@@ -146,6 +146,7 @@ pub enum Data {
         file: bool,
         file_transfer_enabled: bool,
         restart: bool,
+        recording: bool,
     },
     ChatMessage {
         text: String,

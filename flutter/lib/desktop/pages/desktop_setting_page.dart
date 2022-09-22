@@ -436,6 +436,9 @@ class _SafetyState extends State<_Safety> with AutomaticKeepAliveClientMixin {
           enabled: enabled),
       _OptionCheckBox(context, 'Enable Remote Restart', 'enable-remote-restart',
           enabled: enabled),
+      _OptionCheckBox(
+          context, 'Enable Recording Session', 'enable-record-session',
+          enabled: enabled),
       _OptionCheckBox(context, 'Enable remote configuration modification',
           'allow-remote-config-modification',
           enabled: enabled),

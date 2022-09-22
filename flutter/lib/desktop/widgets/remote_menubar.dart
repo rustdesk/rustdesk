@@ -354,19 +354,25 @@ class _RemoteMenubarState extends State<RemoteMenubar> {
   }
 
   Widget _buildRecording(BuildContext context) {
-    return Consumer<RecordingModel>(
-        builder: (context, value, child) => IconButton(
-              tooltip: value.start
-                  ? translate('Stop session recording')
-                  : translate('Start session recording'),
-              onPressed: () => value.toggle(),
-              icon: Icon(
-                value.start
-                    ? Icons.pause_circle_filled
-                    : Icons.videocam_outlined,
-                color: _MenubarTheme.commonColor,
-              ),
-            ));
+    return Consumer<FfiModel>(builder: ((context, value, child) {
+      if (value.permissions['recording'] != false) {
+        return Consumer<RecordingModel>(
+            builder: (context, value, child) => IconButton(
+                  tooltip: value.start
+                      ? translate('Stop session recording')
+                      : translate('Start session recording'),
+                  onPressed: () => value.toggle(),
+                  icon: Icon(
+                    value.start
+                        ? Icons.pause_circle_filled
+                        : Icons.videocam_outlined,
+                    color: _MenubarTheme.commonColor,
+                  ),
+                ));
+      } else {
+        return Offstage();
+      }
+    }));
   }
 
   Widget _buildClose(BuildContext context) {

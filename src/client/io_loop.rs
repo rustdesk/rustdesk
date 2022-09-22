@@ -958,6 +958,9 @@ impl<T: InvokeUiSession> Remote<T> {
                             Permission::Restart => {
                                 self.handler.set_permission("restart", p.enabled);
                             }
+                            Permission::Recording => {
+                                self.handler.set_permission("recording", p.enabled);
+                            }
                         }
                     }
                     Some(misc::Union::SwitchDisplay(s)) => {

@@ -236,9 +236,11 @@ class Enhancements: Reactor.Component {
         } else if (v == 'screen-recording') {
             var dir = handler.get_option("video-save-directory");
             if (!dir) dir = handler.default_video_save_directory();
+            var ts0 = handler.get_option("enable-record-session") == '' ? { checked: true } : {};
             var ts1 = handler.get_option("allow-auto-record-incoming") == 'Y' ? { checked: true } : {};
             msgbox("custom-recording", translate('Recording'),
                 <div .form>
+                    <div><button|checkbox(enable_record_session) {ts0}>{translate('Enable Recording Session')}</button></div>
                     <div><button|checkbox(auto_record_incoming) {ts1}>{translate('Automatically record incoming sessions')}</button></div>
                     <div>
                         <div style="word-wrap:break-word"><span>{translate("Directory")}:&nbsp;&nbsp;</span><span #folderPath>{dir}</span></div>
@@ -247,6 +249,7 @@ class Enhancements: Reactor.Component {
                 </div>
                 , function(res=null) {
                 if (!res) return;
+                handler.set_option("enable-record-session", res.enable_record_session ? '' : 'N');
                 handler.set_option("allow-auto-record-incoming", res.auto_record_incoming ? 'Y' : '');
                 handler.set_option("video-save-directory", $(#folderPath).text);
             });

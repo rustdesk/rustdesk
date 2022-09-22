@@ -81,6 +81,7 @@ pub struct Connection {
     audio: bool,
     file: bool,
     restart: bool,
+    recording: bool,
     last_test_delay: i64,
     lock_after_session_end: bool,
     show_remote_cursor: bool, // by peer
@@ -169,6 +170,7 @@ impl Connection {
             audio: Config::get_option("enable-audio").is_empty(),
             file: Config::get_option("enable-file-transfer").is_empty(),
             restart: Config::get_option("enable-remote-restart").is_empty(),
+            recording: Config::get_option("enable-record-session").is_empty(),
             last_test_delay: 0,
             lock_after_session_end: false,
             show_remote_cursor: false,
@@ -209,6 +211,9 @@ impl Connection {
         }
         if !conn.restart {
             conn.send_permission(Permission::Restart, false).await;
+        }
+        if !conn.recording {
+            conn.send_permission(Permission::Recording, false).await;
         }
         let mut test_delay_timer =
             time::interval_at(Instant::now() + TEST_DELAY_TIMEOUT, TEST_DELAY_TIMEOUT);
@@ -290,6 +295,9 @@ impl Connection {
                             } else if &name == "restart" {
                                 conn.restart = enabled;
                                 conn.send_permission(Permission::Restart, enabled).await;
+                            } else if &name == "recording" {
+                                conn.recording = enabled;
+                                conn.send_permission(Permission::Recording, enabled).await;
                             }
                         }
                         ipc::Data::RawMessage(bytes) => {
@@ -777,6 +785,7 @@ impl Connection {
             file: self.file,
             file_transfer_enabled: self.file_transfer_enabled(),
             restart: self.restart,
+            recording: self.recording,
         });
     }
 

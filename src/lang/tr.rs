@@ -365,5 +365,7 @@ pub static ref T: std::collections::HashMap<&'static str, &'static str> =
         ("Change", ""),
         ("Start session recording", ""),
         ("Stop session recording", ""),
+        ("Enable Recording Session", ""),
+        ("Allow recording session", ""),
     ].iter().cloned().collect();
 }
